@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 15:05-0500\n"
+"POT-Creation-Date: 2026-09-01 16:04-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -94,6 +94,14 @@ msgstr ""
 
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
+msgstr ""
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:834
+msgid "Auto"
+msgstr ""
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+msgid "Off"
 msgstr ""
 
 #: src/ctlpanel.c:437
@@ -545,7 +553,7 @@ msgid ""
 "you click away. Esc always closes"
 msgstr ""
 
-#: src/ctlpanel.c:736
+#: src/ctlpanel.c:736 src/ctlpanel.c:2734
 msgid "Control panel"
 msgstr ""
 
@@ -553,7 +561,7 @@ msgstr ""
 msgid "How this panel itself behaves"
 msgstr ""
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276
+#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
 msgid "Task manager"
 msgstr ""
 
@@ -780,7 +788,7 @@ msgid ""
 "The dock's own analog clock has one design"
 msgstr ""
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
 msgid "Start menu"
 msgstr ""
 
@@ -832,6 +840,10 @@ msgstr ""
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
+msgstr ""
+
+#: src/ctlpanel.c:1007
+msgid "Follow the theme"
 msgstr ""
 
 #: src/ctlpanel.c:1009
@@ -950,7 +962,7 @@ msgstr ""
 msgid "Cursor size"
 msgstr ""
 
-#: src/ctlpanel.c:1095
+#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
 msgid "Display settings"
 msgstr ""
 
@@ -979,7 +991,7 @@ msgstr ""
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr ""
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128
+#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
 msgid "Night light"
 msgstr ""
 
@@ -1005,7 +1017,7 @@ msgid ""
 "still come through"
 msgstr ""
 
-#: src/ctlpanel.c:1145 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
 msgid "Event sounds"
 msgstr ""
 
@@ -1065,7 +1077,7 @@ msgstr ""
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr ""
 
-#: src/ctlpanel.c:1188
+#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr ""
 
@@ -1109,7 +1121,7 @@ msgstr ""
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr ""
 
-#: src/ctlpanel.c:1209
+#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
 msgid "Lock screen"
 msgstr ""
 
@@ -1121,7 +1133,7 @@ msgstr ""
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr ""
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231
+#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
 msgid "Game mode"
 msgstr ""
 
@@ -1197,7 +1209,7 @@ msgstr ""
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr ""
 
-#: src/ctlpanel.c:1265
+#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
 msgid "AI backend"
 msgstr ""
 
@@ -1209,7 +1221,7 @@ msgstr ""
 msgid "Which device synapd runs inference on"
 msgstr ""
 
-#: src/ctlpanel.c:1268
+#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
 msgid "AI model"
 msgstr ""
 
@@ -1233,7 +1245,7 @@ msgstr ""
 msgid "Tools"
 msgstr ""
 
-#: src/ctlpanel.c:1278
+#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
 msgid "Clipboard history"
 msgstr ""
 
@@ -1257,7 +1269,7 @@ msgstr ""
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr ""
 
-#: src/ctlpanel.c:1298
+#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
 msgid "About OS"
 msgstr ""
 
@@ -1269,16 +1281,724 @@ msgstr ""
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr ""
 
-#: src/ctlpanel.c:3613
+#: src/ctlpanel.c:1398
+msgid "device default"
+msgstr ""
+
+#: src/ctlpanel.c:1896
+#, c-format
+msgid "glass off · bar, dock and widgets solid · windows opaque"
+msgstr ""
+
+#: src/ctlpanel.c:1952
+#, c-format
+msgid "glass full · bar and dock clear · ink off the wallpaper"
+msgstr ""
+
+#: src/ctlpanel.c:2293
+#, c-format
+msgid "RGB lights: off"
+msgstr ""
+
+#: src/ctlpanel.c:2294
+#, c-format
+msgid "RGB lights: following the accent"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: off"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: on"
+msgstr ""
+
+#: src/ctlpanel.c:2367
+#, c-format
+msgid "No longer listening · the microphone is closed"
+msgstr ""
+
+#: src/ctlpanel.c:2368
+#, c-format
+msgid "Listening for \"Synapse\" · the microphone is open"
+msgstr ""
+
+#: src/ctlpanel.c:2406
+#, c-format
+msgid "always on"
+msgstr ""
+
+#: src/ctlpanel.c:2407
+#, c-format
+msgid "always off"
+msgstr ""
+
+#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#, c-format
+msgid "auto (%s)"
+msgstr ""
+
+#: src/ctlpanel.c:2521
+#, c-format
+msgid "on — %d missed"
+msgstr ""
+
+#: src/ctlpanel.c:2529
+msgid "desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "DNxHR ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "off (H.264 mp4)"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "on · laptop"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "off · desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2570
+#, c-format
+msgid "Built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2729
+msgid "Terminal"
+msgstr ""
+
+#: src/ctlpanel.c:2730
+msgid "AI command bar"
+msgstr ""
+
+#: src/ctlpanel.c:2731
+msgid "Ask the AI about the window"
+msgstr ""
+
+#: src/ctlpanel.c:2732
+msgid "Neural overlay"
+msgstr ""
+
+#: src/ctlpanel.c:2733
+msgid "Welcome menu"
+msgstr ""
+
+#: src/ctlpanel.c:2735
+msgid "Keyboard shortcuts (this list)"
+msgstr ""
+
+#: src/ctlpanel.c:2739
+msgid "System settings (syn-settings)"
+msgstr ""
+
+#: src/ctlpanel.c:2740
+msgid "Find and add network printers"
+msgstr ""
+
+#: src/ctlpanel.c:2741
+msgid "Mission control (all windows)"
+msgstr ""
+
+#: src/ctlpanel.c:2742
+msgid "Rebind a shortcut"
+msgstr ""
+
+#: src/ctlpanel.c:2744
+msgid "Do Not Disturb (mute notifications)"
+msgstr ""
+
+#: src/ctlpanel.c:2745
+msgid "Record screen"
+msgstr ""
+
+#: src/ctlpanel.c:2747
+msgid "Brightness up"
+msgstr ""
+
+#: src/ctlpanel.c:2748
+msgid "Brightness down"
+msgstr ""
+
+#: src/ctlpanel.c:2750
+msgid "Start button: text/logo"
+msgstr ""
+
+#: src/ctlpanel.c:2751
+msgid "Close window"
+msgstr ""
+
+#: src/ctlpanel.c:2752
+msgid "Quit synui"
+msgstr ""
+
+#: src/ctlpanel.c:2753
+msgid "Cycle layout"
+msgstr ""
+
+#: src/ctlpanel.c:2754
+msgid "Tile this desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2755
+msgid "Cascade this desktop (overlapping piles)"
+msgstr ""
+
+#: src/ctlpanel.c:2756
+msgid "Arrange floating windows"
+msgstr ""
+
+#: src/ctlpanel.c:2757
+msgid "Shrink master area"
+msgstr ""
+
+#: src/ctlpanel.c:2758
+msgid "Grow master area"
+msgstr ""
+
+#: src/ctlpanel.c:2759
+msgid "niri: pull window into the left column"
+msgstr ""
+
+#: src/ctlpanel.c:2760
+msgid "niri: push window out to its own column"
+msgstr ""
+
+#: src/ctlpanel.c:2761
+msgid "Focus next window"
+msgstr ""
+
+#: src/ctlpanel.c:2762
+msgid "Focus previous window"
+msgstr ""
+
+#: src/ctlpanel.c:2763
+msgid "Switch window (Alt+Tab)"
+msgstr ""
+
+#: src/ctlpanel.c:2764
+msgid "Switch window, backwards"
+msgstr ""
+
+#: src/ctlpanel.c:2765
+msgid "Move window down the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2766
+msgid "Move window up the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2767
+msgid "Move window left (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2768
+msgid "Move window right (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2769
+msgid "Move window up (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2770
+msgid "Move window down (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2771
+msgid "Float window"
+msgstr ""
+
+#: src/ctlpanel.c:2772
+msgid "Fullscreen window"
+msgstr ""
+
+#: src/ctlpanel.c:2773
+msgid "Maximize window"
+msgstr ""
+
+#: src/ctlpanel.c:2774
+msgid "Fill screen height (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2775
+msgid "Fill screen width (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2776
+msgid "Minimize window"
+msgstr ""
+
+#: src/ctlpanel.c:2777
+msgid "Restore minimized window"
+msgstr ""
+
+#: src/ctlpanel.c:2778
+msgid "Titlebars on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2780
+msgid "Screens: extend / duplicate / built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2781
+msgid "Scale the whole desktop (accessibility)"
+msgstr ""
+
+#: src/ctlpanel.c:2782
+msgid "Wallpaper picker"
+msgstr ""
+
+#: src/ctlpanel.c:2783
+msgid "Reload wallpaper / config"
+msgstr ""
+
+#: src/ctlpanel.c:2784
+msgid "Visual effects (CRT + window)"
+msgstr ""
+
+#: src/ctlpanel.c:2785
+msgid "Desktop widget manager"
+msgstr ""
+
+#: src/ctlpanel.c:2787
+msgid "CRT effects on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2788
+msgid "Power saving panel"
+msgstr ""
+
+#: src/ctlpanel.c:2789
+msgid "Screensaver + lock screen"
+msgstr ""
+
+#: src/ctlpanel.c:2795
+msgid "AI backend (GPU/CPU/off)"
+msgstr ""
+
+#: src/ctlpanel.c:2796
+msgid "Move window to next output"
+msgstr ""
+
+#: src/ctlpanel.c:2837
+msgid "Start menu (application page)"
+msgstr ""
+
+#: src/ctlpanel.c:2838
+msgid "Start menu (rofi)"
+msgstr ""
+
+#: src/ctlpanel.c:2840
+msgid "Start menu (bar menu)"
+msgstr ""
+
+#: src/ctlpanel.c:2848
+msgid "Move window to previous output"
+msgstr ""
+
+#: src/ctlpanel.c:2878
+msgid "Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2879
+msgid "KP Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2880
+msgid "Space"
+msgstr ""
+
+#: src/ctlpanel.c:2881
+msgid "Esc"
+msgstr ""
+
+#: src/ctlpanel.c:2882
+msgid "Del"
+msgstr ""
+
+#: src/ctlpanel.c:2883
+msgid "Backspace"
+msgstr ""
+
+#: src/ctlpanel.c:2884
+msgid "Tab"
+msgstr ""
+
+#: src/ctlpanel.c:2948
+msgid "Super"
+msgstr ""
+
+#: src/ctlpanel.c:2949
+msgid "Ctrl"
+msgstr ""
+
+#: src/ctlpanel.c:2950
+msgid "Alt"
+msgstr ""
+
+#: src/ctlpanel.c:2951
+msgid "Shift"
+msgstr ""
+
+#: src/ctlpanel.c:3047
+#, c-format
+msgid "Switch to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3053
+#, c-format
+msgid "Move window to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3141
+#, c-format
+msgid "loading · the AI pauses until it is up"
+msgstr ""
+
+#: src/ctlpanel.c:3231
+#, c-format
+msgid "%s: still %s · switch did not land"
+msgstr ""
+
+#: src/ctlpanel.c:3631
 msgid "position"
 msgstr ""
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:3637
+msgid "turn the cell on first"
+msgstr ""
+
+#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
+#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#, c-format
+msgid "dock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3754
+#, c-format
+msgid "no GLES renderer · effects unavailable here"
+msgstr ""
+
+#: src/ctlpanel.c:3765
+msgid "CRT effects on"
+msgstr ""
+
+#: src/ctlpanel.c:3766
+msgid "CRT effects off"
+msgstr ""
+
+#: src/ctlpanel.c:3777
+#, c-format
+msgid "game mode: always on"
+msgstr ""
+
+#: src/ctlpanel.c:3778
+#, c-format
+msgid "game mode: always off"
+msgstr ""
+
+#: src/ctlpanel.c:3779
+#, c-format
+msgid "game mode: auto · a game is running"
+msgstr ""
+
+#: src/ctlpanel.c:3780
+#, c-format
+msgid "game mode: auto · no game running"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar on"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar off"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock on"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock off"
+msgstr ""
+
+#: src/ctlpanel.c:3870
+msgid "dock auto-hide on"
+msgstr ""
+
+#: src/ctlpanel.c:3871
+msgid "dock auto-hide off"
+msgstr ""
+
+#: src/ctlpanel.c:3890
+#, c-format
+msgid "an auto-hiding dock is always on top"
+msgstr ""
+
+#: src/ctlpanel.c:3899
+msgid "dock above windows"
+msgstr ""
+
+#: src/ctlpanel.c:3900
+msgid "dock below windows"
+msgstr ""
+
+#: src/ctlpanel.c:3907
+#, c-format
+msgid "the dock clock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3917
+#, c-format
+msgid "dock clock %s"
+msgstr ""
+
+#: src/ctlpanel.c:3936
+msgid "magnify"
+msgstr ""
+
+#: src/ctlpanel.c:3938
+msgid "clock"
+msgstr ""
+
+#: src/ctlpanel.c:3940
+msgid "all-apps button"
+msgstr ""
+
+#: src/ctlpanel.c:3942
+msgid "power button"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+#, c-format
+msgid "dock %s %s"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+msgid "on"
+msgstr ""
+
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
+#: src/render.c:5370 src/render.c:6171
+#, c-format
+msgid "off"
+msgstr ""
+
+#: src/ctlpanel.c:3962
+#, c-format
+msgid "the bar is off"
+msgstr ""
+
+#: src/ctlpanel.c:3973
+msgid "bar auto-hide on for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3974
+msgid "bar auto-hide off for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3988
+#, c-format
+msgid "notifications are silenced"
+msgstr ""
+
+#: src/ctlpanel.c:3989
+#, c-format
+msgid "notifications are back on"
+msgstr ""
+
+#: src/ctlpanel.c:4001
+#, c-format
+msgid "recordings capture desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:4002
+#, c-format
+msgid "recordings are silent"
+msgstr ""
+
+#: src/ctlpanel.c:4013
+#, c-format
+msgid "recordings open in a video editor · ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:4014
+#, c-format
+msgid "recordings are H.264 mp4 · small, share anywhere"
+msgstr ""
+
+#: src/ctlpanel.c:4024
+msgid "titlebars off"
+msgstr ""
+
+#: src/ctlpanel.c:4025
+msgid "titlebars on"
+msgstr ""
+
+#: src/ctlpanel.c:4034
+#, c-format
+msgid "start button: %s"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency on · %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency off"
+msgstr ""
+
+#: src/ctlpanel.c:4054
+msgid "night light on"
+msgstr ""
+
+#: src/ctlpanel.c:4055
+msgid "night light off"
+msgstr ""
+
+#: src/ctlpanel.c:4071
+#, c-format
+msgid "switching AI backend …"
+msgstr ""
+
+#: src/ctlpanel.c:4213
+#, c-format
+msgid "transparency %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#, c-format
+msgid "%s is at its %s"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
 msgstr ""
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "maximum"
+msgstr ""
+
+#: src/ctlpanel.c:4274
+#, c-format
+msgid "%s: %d %s · applies when you stop"
+msgstr ""
+
+#: src/ctlpanel.c:4309
+#, c-format
+msgid "%s: %s · default"
+msgstr ""
+
+#: src/ctlpanel.c:4350
+msgid "no models in /var/lib/synapd/models"
+msgstr ""
+
+#: src/ctlpanel.c:4360
+#, c-format
+msgid "loads when you stop · Esc cancels"
+msgstr ""
+
+#: src/ctlpanel.c:4629
+#, c-format
+msgid "Rebind cancelled"
+msgstr ""
+
+#: src/ctlpanel.c:4698
+#, c-format
+msgid "nothing to reset on this row"
+msgstr ""
+
+#: src/ctlpanel.c:4703
+#, c-format
+msgid "%s reset to %s"
+msgstr ""
+
+#: src/ctlpanel.c:4706
+#, c-format
+msgid "%s is already at its default"
+msgstr ""
+
+#: src/ctlpanel.c:4732
+#, c-format
+msgid "Rebinding lives in the Shortcuts category"
+msgstr ""
+
+#: src/ctlpanel.c:4744
+#, c-format
+msgid "The tap is set from the Shortcuts category"
+msgstr ""
+
+#: src/deskmenu.c:77
+msgid "Open Terminal"
+msgstr ""
+
+#: src/deskmenu.c:78
+msgid "Open File Manager"
+msgstr ""
+
+#: src/deskmenu.c:79
+msgid "Applications…"
+msgstr ""
+
+#: src/deskmenu.c:81
+msgid "Change Wallpaper…"
+msgstr ""
+
+#: src/deskmenu.c:82
+msgid "Appearance…"
+msgstr ""
+
+#: src/deskmenu.c:83
+msgid "Display Settings…"
+msgstr ""
+
+#: src/deskmenu.c:84
+msgid "Desktop Widgets…"
+msgstr ""
+
+#: src/deskmenu.c:85
+msgid "Show Desktop Icons"
+msgstr ""
+
+#: src/deskmenu.c:86
+msgid "Refresh"
+msgstr ""
+
+#: src/deskmenu.c:87
+msgid "Arrange by Name"
+msgstr ""
+
+#: src/deskmenu.c:88
+msgid "Arrange by Type"
+msgstr ""
+
+#: src/deskmenu.c:89
+msgid "Arrange by Size"
+msgstr ""
+
+#: src/deskmenu.c:90
+msgid "Arrange by Date"
+msgstr ""
+
+#: src/deskmenu.c:91
+msgid "Task Manager"
+msgstr ""
+
+#: src/deskmenu.c:92 src/render.c:8194
+msgid "Open"
+msgstr ""
+
+#: src/deskmenu.c:93
+msgid "Move to Trash"
 msgstr ""
 
 #: src/dock.c:3418
@@ -1445,12 +2165,6 @@ msgstr ""
 
 #: src/render.c:1247
 msgid "no outputs connected"
-msgstr ""
-
-#: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
-#: src/render.c:6171
-#, c-format
-msgid "off"
 msgstr ""
 
 #: src/render.c:1319
@@ -2581,10 +3295,6 @@ msgstr ""
 
 #: src/render.c:8193
 msgid "Unpin from Dock"
-msgstr ""
-
-#: src/render.c:8194
-msgid "Open"
 msgstr ""
 
 #: src/render.c:8195

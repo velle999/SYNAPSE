@@ -1118,6 +1118,64 @@ static void test_rgb_row_owns_no_key(void)
     printf("  rgb row is external ....... ok (%s)\n", v);
 }
 
+/* ── the DISPLAY chord, which is a different string on purpose ─────────────
+ *
+ * test_bind_combo_round_trip above pins syn_bind_format_combo(), the spelling
+ * synuirc is written in. This pins the other one: ctlpanel_combo_str(), the
+ * spelling a keycap uses, which the shortcuts column, the palette and
+ * `synctl binds` all print.
+ *
+ * ⛔ AND THE TWO MUST NEVER CONVERGE. The keycap words are translated — a
+ * German keyboard says Entf, not Del — so the day someone wraps the config
+ * formatter in _() by the same reflex, synuirc is written in German and every
+ * shortcut on the machine is lost at the next read.
+ *
+ * ⚠ THE TEST THAT CATCHES THAT IS test_bind_combo_round_trip ABOVE, which pins
+ * the exact bytes ("super+shift+q"). Nothing extra is needed here and an extra
+ * check here would be worse than nothing: the obvious one — "the config combo
+ * is plain ASCII" — passes a German translation, because "umschalt" is ASCII.
+ * It is also unfalsifiable by inspection, since syn_bind_format_combo() ends
+ * with a tolower() pass over the whole string, so a wrongly-cased literal is
+ * folded back and looks correct. Both facts were learned by trying to make the
+ * weak check fail and being unable to.
+ *
+ * Runs under LC_ALL=C, so _() returns the English msgid and these stay stable.
+ */
+static void test_display_combo(void)
+{
+    static const struct { uint32_t mods; xkb_keysym_t sym; const char *want; } cases[] = {
+        { WLR_MODIFIER_LOGO, XKB_KEY_w, "Super+W" },
+        { WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT, XKB_KEY_q, "Super+Shift+Q" },
+        { WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_Delete, "Ctrl+Alt+Del" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_equal, "Super+=" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_space, "Super+Space" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_Escape, "Super+Esc" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_slash, "Super+/" },
+        { 0, XKB_KEY_Return, "Enter" },
+    };
+
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char out[64];
+        ctlpanel_combo_str(cases[i].mods, cases[i].sym, out, sizeof(out));
+        if (strcmp(out, cases[i].want) != 0) {
+            printf("    displayed '%s', expected '%s'\n", out, cases[i].want);
+            assert(0);
+        }
+    }
+    printf("  display chord ............ ok (%u chords)\n",
+           (unsigned)(sizeof(cases) / sizeof(cases[0])));
+
+    /* The modifier word is spelled once, not once per call site: the chord's
+     * prefix and the tap row's value have to be the same word. */
+    char out[64];
+    ctlpanel_combo_str(WLR_MODIFIER_CTRL, XKB_KEY_a, out, sizeof(out));
+    assert(strncmp(out, ctlpanel_tap_key_label(WLR_MODIFIER_CTRL),
+                   strlen(ctlpanel_tap_key_label(WLR_MODIFIER_CTRL))) == 0);
+    printf("  chord and tap agree ...... ok (%s)\n",
+           ctlpanel_tap_key_label(WLR_MODIFIER_CTRL));
+
+}
+
 int main(void)
 {
     /* Unbuffered: every failure here prints WHICH row and why, immediately
@@ -1141,6 +1199,7 @@ int main(void)
     test_search();
     test_apply_hooks();
     test_bind_combo_round_trip();
+    test_display_combo();
     test_bind_move();
 
     rig_cleanup();

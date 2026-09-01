@@ -657,7 +657,7 @@ static int rebind_apply_tap(syn_server_t *s, const syn_ctl_shortcut_t *sc,
     wlr_log(WLR_INFO, "synui: start-menu tap -> %s", syn_tap_mod_name(mod));
     if (mod)
         snprintf(status, status_n, "Start menu opens on a %s tap",
-                 ctlpanel_tap_key_name(mod));
+                 ctlpanel_tap_key_label(mod));
     else
         snprintf(status, status_n, "Start menu no longer opens on a tap");
     return 1;
@@ -869,13 +869,13 @@ int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
      * disappearing line needs to be accounted for. */
     if (freed && changed)
         snprintf(status, status_n, "A %s tap now opens %s — %s freed",
-                 ctlpanel_tap_key_name(s->config.tap_mod), sc->desc, sc->combo);
+                 ctlpanel_tap_key_label(s->config.tap_mod), sc->desc, sc->combo);
     else if (freed)
         snprintf(status, status_n, "%s freed — the %s tap already opens %s",
-                 sc->combo, ctlpanel_tap_key_name(s->config.tap_mod), sc->desc);
+                 sc->combo, ctlpanel_tap_key_label(s->config.tap_mod), sc->desc);
     else if (s->config.tap_mod)
         snprintf(status, status_n, "A %s tap now opens %s",
-                 ctlpanel_tap_key_name(s->config.tap_mod), sc->desc);
+                 ctlpanel_tap_key_label(s->config.tap_mod), sc->desc);
     else
         snprintf(status, status_n,
                  "Tap set to %s — no tap key yet, press F2 on the tap row",

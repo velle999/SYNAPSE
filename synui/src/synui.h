@@ -9095,7 +9095,7 @@ const char *ctlpanel_action_desc(syn_server_t *s, const char *action,
  * for no tap. Exposed for the same reason as the line above: keys.c's status
  * line names the tap key the user just chose, and a third spelling of "Super"
  * is a third one to keep in step. syn_tap_mod_name() is the synuirc half. */
-const char *ctlpanel_tap_key_name(uint32_t mod);
+const char *ctlpanel_tap_key_label(uint32_t mod);
 /* A chord as a keyboard says it — "Super+Shift+C", "Ctrl+Alt+Delete". The
  * display half of syn_bind_format_combo(), which spells what synuirc TAKES
  * ("super+shift+c"). It is also what `synctl binds` renders each chord with, so

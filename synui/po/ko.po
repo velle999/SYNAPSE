@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 15:05-0500\n"
+"POT-Creation-Date: 2026-09-01 16:04-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -97,6 +97,14 @@ msgstr "유리"
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
 msgstr "활성 창의 불투명도. 좌우로 조절하고 Enter로 끕니다"
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:834
+msgid "Auto"
+msgstr ""
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+msgid "Off"
+msgstr ""
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -582,7 +590,7 @@ msgstr ""
 "창: 머리글을 잡아 옮기고 다른 곳은 자유롭게 누릅니다. 바깥 클릭으로 닫기: 옆"
 "을 누르면 닫힙니다. Esc는 항상 닫습니다"
 
-#: src/ctlpanel.c:736
+#: src/ctlpanel.c:736 src/ctlpanel.c:2734
 msgid "Control panel"
 msgstr "제어판"
 
@@ -590,7 +598,7 @@ msgstr "제어판"
 msgid "How this panel itself behaves"
 msgstr "이 패널 자체의 동작"
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276
+#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
 msgid "Task manager"
 msgstr "작업 관리자"
 
@@ -830,7 +838,7 @@ msgstr ""
 "아날로그 시계 위젯이 그리는 문자판 — 위젯에서 놓는 데스크톱 쪽입니다. 독의 아"
 "날로그 시계는 디자인이 하나뿐입니다"
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
 msgid "Start menu"
 msgstr "시작 메뉴"
 
@@ -889,6 +897,10 @@ msgstr ""
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
 msgstr "막대 불투명도"
+
+#: src/ctlpanel.c:1007
+msgid "Follow the theme"
+msgstr ""
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1012,7 +1024,7 @@ msgstr ""
 msgid "Cursor size"
 msgstr "커서 크기"
 
-#: src/ctlpanel.c:1095
+#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
 msgid "Display settings"
 msgstr "디스플레이 설정"
 
@@ -1042,7 +1054,7 @@ msgstr "모니터 설정"
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr "커넥터, EDID, 그리고 하드웨어가 제공하는 모드 (syn-settings)"
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128
+#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
 msgid "Night light"
 msgstr "야간 조명"
 
@@ -1070,7 +1082,7 @@ msgstr ""
 "어디서든 Super+Shift+M. 알림 표시를 감추고 소리를 끕니다. 중요한 경고는 그래"
 "도 옵니다"
 
-#: src/ctlpanel.c:1145 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
 msgid "Event sounds"
 msgstr "이벤트 소리"
 
@@ -1130,7 +1142,7 @@ msgstr "편집용으로 녹화"
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr "영상 편집 프로그램이 바로 읽는 DNxHR .mov. 분당 약 1.1 GB"
 
-#: src/ctlpanel.c:1188
+#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "네트워크 / Wi-Fi"
 
@@ -1174,7 +1186,7 @@ msgstr "화면 보호기"
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr "쉬는 동안 화면이 보여 주는 것과 잠금 화면의 모습"
 
-#: src/ctlpanel.c:1209
+#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
 msgid "Lock screen"
 msgstr "잠금 화면"
 
@@ -1187,7 +1199,7 @@ msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr ""
 "fprintd를 설치하고 fprintd-enroll을 실행하세요. 비밀번호도 언제나 됩니다"
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231
+#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
 msgid "Game mode"
 msgstr "게임 모드"
 
@@ -1265,7 +1277,7 @@ msgstr "게임 중에는 커널 감시 조용히"
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr "아끼는 양은 아주 적고, 보안 감시도 함께 멈춥니다"
 
-#: src/ctlpanel.c:1265
+#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
 msgid "AI backend"
 msgstr "AI 백엔드"
 
@@ -1277,7 +1289,7 @@ msgstr "AI"
 msgid "Which device synapd runs inference on"
 msgstr "synapd가 어느 장치에서 추론하는지"
 
-#: src/ctlpanel.c:1268
+#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
 msgid "AI model"
 msgstr "AI 모델"
 
@@ -1301,7 +1313,7 @@ msgstr "AI가 그 창의 문맥을 들고 있는 동안 테두리에 색을 입�
 msgid "Tools"
 msgstr "도구"
 
-#: src/ctlpanel.c:1278
+#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
 msgid "Clipboard history"
 msgstr "클립보드 기록"
 
@@ -1325,7 +1337,7 @@ msgstr "시스템 설정"
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr "시계, 언어, 커널, 기본 프로그램 — 시스템이 어떻게 맞춰져 있는지"
 
-#: src/ctlpanel.c:1298
+#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
 msgid "About OS"
 msgstr "운영체제 정보"
 
@@ -1337,17 +1349,726 @@ msgstr "정보"
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr "표식과 이 기계와, 이 데스크톱이 지금 어떻게 맞춰져 있는지"
 
-#: src/ctlpanel.c:3613
+#: src/ctlpanel.c:1398
+msgid "device default"
+msgstr ""
+
+#: src/ctlpanel.c:1896
+#, c-format
+msgid "glass off · bar, dock and widgets solid · windows opaque"
+msgstr ""
+
+#: src/ctlpanel.c:1952
+#, c-format
+msgid "glass full · bar and dock clear · ink off the wallpaper"
+msgstr ""
+
+#: src/ctlpanel.c:2293
+#, c-format
+msgid "RGB lights: off"
+msgstr ""
+
+#: src/ctlpanel.c:2294
+#, c-format
+msgid "RGB lights: following the accent"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: off"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: on"
+msgstr ""
+
+#: src/ctlpanel.c:2367
+#, c-format
+msgid "No longer listening · the microphone is closed"
+msgstr ""
+
+#: src/ctlpanel.c:2368
+#, c-format
+msgid "Listening for \"Synapse\" · the microphone is open"
+msgstr ""
+
+#: src/ctlpanel.c:2406
+#, c-format
+msgid "always on"
+msgstr ""
+
+#: src/ctlpanel.c:2407
+#, c-format
+msgid "always off"
+msgstr ""
+
+#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#, c-format
+msgid "auto (%s)"
+msgstr ""
+
+#: src/ctlpanel.c:2521
+#, c-format
+msgid "on — %d missed"
+msgstr ""
+
+#: src/ctlpanel.c:2529
+msgid "desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "DNxHR ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "off (H.264 mp4)"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "on · laptop"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "off · desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2570
+#, c-format
+msgid "Built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2729
+msgid "Terminal"
+msgstr ""
+
+#: src/ctlpanel.c:2730
+msgid "AI command bar"
+msgstr ""
+
+#: src/ctlpanel.c:2731
+msgid "Ask the AI about the window"
+msgstr ""
+
+#: src/ctlpanel.c:2732
+msgid "Neural overlay"
+msgstr ""
+
+#: src/ctlpanel.c:2733
+msgid "Welcome menu"
+msgstr ""
+
+#: src/ctlpanel.c:2735
+msgid "Keyboard shortcuts (this list)"
+msgstr ""
+
+#: src/ctlpanel.c:2739
+msgid "System settings (syn-settings)"
+msgstr ""
+
+#: src/ctlpanel.c:2740
+msgid "Find and add network printers"
+msgstr ""
+
+#: src/ctlpanel.c:2741
+msgid "Mission control (all windows)"
+msgstr ""
+
+#: src/ctlpanel.c:2742
+msgid "Rebind a shortcut"
+msgstr ""
+
+#: src/ctlpanel.c:2744
+msgid "Do Not Disturb (mute notifications)"
+msgstr ""
+
+#: src/ctlpanel.c:2745
+msgid "Record screen"
+msgstr ""
+
+#: src/ctlpanel.c:2747
+msgid "Brightness up"
+msgstr ""
+
+#: src/ctlpanel.c:2748
+msgid "Brightness down"
+msgstr ""
+
+#: src/ctlpanel.c:2750
+msgid "Start button: text/logo"
+msgstr ""
+
+#: src/ctlpanel.c:2751
+msgid "Close window"
+msgstr ""
+
+#: src/ctlpanel.c:2752
+msgid "Quit synui"
+msgstr ""
+
+#: src/ctlpanel.c:2753
+msgid "Cycle layout"
+msgstr ""
+
+#: src/ctlpanel.c:2754
+msgid "Tile this desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2755
+msgid "Cascade this desktop (overlapping piles)"
+msgstr ""
+
+#: src/ctlpanel.c:2756
+msgid "Arrange floating windows"
+msgstr ""
+
+#: src/ctlpanel.c:2757
+msgid "Shrink master area"
+msgstr ""
+
+#: src/ctlpanel.c:2758
+msgid "Grow master area"
+msgstr ""
+
+#: src/ctlpanel.c:2759
+msgid "niri: pull window into the left column"
+msgstr ""
+
+#: src/ctlpanel.c:2760
+msgid "niri: push window out to its own column"
+msgstr ""
+
+#: src/ctlpanel.c:2761
+msgid "Focus next window"
+msgstr ""
+
+#: src/ctlpanel.c:2762
+msgid "Focus previous window"
+msgstr ""
+
+#: src/ctlpanel.c:2763
+msgid "Switch window (Alt+Tab)"
+msgstr ""
+
+#: src/ctlpanel.c:2764
+msgid "Switch window, backwards"
+msgstr ""
+
+#: src/ctlpanel.c:2765
+msgid "Move window down the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2766
+msgid "Move window up the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2767
+msgid "Move window left (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2768
+msgid "Move window right (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2769
+msgid "Move window up (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2770
+msgid "Move window down (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2771
+msgid "Float window"
+msgstr ""
+
+#: src/ctlpanel.c:2772
+msgid "Fullscreen window"
+msgstr ""
+
+#: src/ctlpanel.c:2773
+msgid "Maximize window"
+msgstr ""
+
+#: src/ctlpanel.c:2774
+msgid "Fill screen height (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2775
+msgid "Fill screen width (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2776
+msgid "Minimize window"
+msgstr ""
+
+#: src/ctlpanel.c:2777
+msgid "Restore minimized window"
+msgstr ""
+
+#: src/ctlpanel.c:2778
+msgid "Titlebars on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2780
+msgid "Screens: extend / duplicate / built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2781
+msgid "Scale the whole desktop (accessibility)"
+msgstr ""
+
+#: src/ctlpanel.c:2782
+msgid "Wallpaper picker"
+msgstr ""
+
+#: src/ctlpanel.c:2783
+msgid "Reload wallpaper / config"
+msgstr ""
+
+#: src/ctlpanel.c:2784
+msgid "Visual effects (CRT + window)"
+msgstr ""
+
+#: src/ctlpanel.c:2785
+msgid "Desktop widget manager"
+msgstr ""
+
+#: src/ctlpanel.c:2787
+msgid "CRT effects on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2788
+msgid "Power saving panel"
+msgstr ""
+
+#: src/ctlpanel.c:2789
+msgid "Screensaver + lock screen"
+msgstr ""
+
+#: src/ctlpanel.c:2795
+msgid "AI backend (GPU/CPU/off)"
+msgstr ""
+
+#: src/ctlpanel.c:2796
+msgid "Move window to next output"
+msgstr ""
+
+#: src/ctlpanel.c:2837
+msgid "Start menu (application page)"
+msgstr ""
+
+#: src/ctlpanel.c:2838
+msgid "Start menu (rofi)"
+msgstr ""
+
+#: src/ctlpanel.c:2840
+msgid "Start menu (bar menu)"
+msgstr ""
+
+#: src/ctlpanel.c:2848
+msgid "Move window to previous output"
+msgstr ""
+
+#: src/ctlpanel.c:2878
+msgid "Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2879
+msgid "KP Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2880
+msgid "Space"
+msgstr ""
+
+#: src/ctlpanel.c:2881
+msgid "Esc"
+msgstr ""
+
+#: src/ctlpanel.c:2882
+msgid "Del"
+msgstr ""
+
+#: src/ctlpanel.c:2883
+msgid "Backspace"
+msgstr ""
+
+#: src/ctlpanel.c:2884
+msgid "Tab"
+msgstr ""
+
+#: src/ctlpanel.c:2948
+msgid "Super"
+msgstr ""
+
+#: src/ctlpanel.c:2949
+msgid "Ctrl"
+msgstr ""
+
+#: src/ctlpanel.c:2950
+msgid "Alt"
+msgstr ""
+
+#: src/ctlpanel.c:2951
+msgid "Shift"
+msgstr ""
+
+#: src/ctlpanel.c:3047
+#, c-format
+msgid "Switch to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3053
+#, c-format
+msgid "Move window to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3141
+#, c-format
+msgid "loading · the AI pauses until it is up"
+msgstr ""
+
+#: src/ctlpanel.c:3231
+#, c-format
+msgid "%s: still %s · switch did not land"
+msgstr ""
+
+#: src/ctlpanel.c:3631
 msgid "position"
 msgstr "위치"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:3637
+msgid "turn the cell on first"
+msgstr ""
+
+#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
+#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#, c-format
+msgid "dock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3754
+#, c-format
+msgid "no GLES renderer · effects unavailable here"
+msgstr ""
+
+#: src/ctlpanel.c:3765
+msgid "CRT effects on"
+msgstr ""
+
+#: src/ctlpanel.c:3766
+msgid "CRT effects off"
+msgstr ""
+
+#: src/ctlpanel.c:3777
+#, c-format
+msgid "game mode: always on"
+msgstr ""
+
+#: src/ctlpanel.c:3778
+#, c-format
+msgid "game mode: always off"
+msgstr ""
+
+#: src/ctlpanel.c:3779
+#, c-format
+msgid "game mode: auto · a game is running"
+msgstr ""
+
+#: src/ctlpanel.c:3780
+#, c-format
+msgid "game mode: auto · no game running"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar on"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar off"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock on"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock off"
+msgstr ""
+
+#: src/ctlpanel.c:3870
+msgid "dock auto-hide on"
+msgstr ""
+
+#: src/ctlpanel.c:3871
+msgid "dock auto-hide off"
+msgstr ""
+
+#: src/ctlpanel.c:3890
+#, c-format
+msgid "an auto-hiding dock is always on top"
+msgstr ""
+
+#: src/ctlpanel.c:3899
+msgid "dock above windows"
+msgstr ""
+
+#: src/ctlpanel.c:3900
+msgid "dock below windows"
+msgstr ""
+
+#: src/ctlpanel.c:3907
+#, c-format
+msgid "the dock clock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3917
+#, c-format
+msgid "dock clock %s"
+msgstr ""
+
+#: src/ctlpanel.c:3936
+msgid "magnify"
+msgstr ""
+
+#: src/ctlpanel.c:3938
+#, fuzzy
+msgid "clock"
+msgstr "시계"
+
+#: src/ctlpanel.c:3940
+msgid "all-apps button"
+msgstr ""
+
+#: src/ctlpanel.c:3942
+msgid "power button"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+#, c-format
+msgid "dock %s %s"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+msgid "on"
+msgstr ""
+
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
+#: src/render.c:5370 src/render.c:6171
+#, c-format
+msgid "off"
+msgstr "끔"
+
+#: src/ctlpanel.c:3962
+#, c-format
+msgid "the bar is off"
+msgstr ""
+
+#: src/ctlpanel.c:3973
+msgid "bar auto-hide on for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3974
+msgid "bar auto-hide off for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3988
+#, c-format
+msgid "notifications are silenced"
+msgstr ""
+
+#: src/ctlpanel.c:3989
+#, c-format
+msgid "notifications are back on"
+msgstr ""
+
+#: src/ctlpanel.c:4001
+#, c-format
+msgid "recordings capture desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:4002
+#, c-format
+msgid "recordings are silent"
+msgstr ""
+
+#: src/ctlpanel.c:4013
+#, c-format
+msgid "recordings open in a video editor · ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:4014
+#, c-format
+msgid "recordings are H.264 mp4 · small, share anywhere"
+msgstr ""
+
+#: src/ctlpanel.c:4024
+msgid "titlebars off"
+msgstr ""
+
+#: src/ctlpanel.c:4025
+msgid "titlebars on"
+msgstr ""
+
+#: src/ctlpanel.c:4034
+#, c-format
+msgid "start button: %s"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency on · %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency off"
+msgstr ""
+
+#: src/ctlpanel.c:4054
+msgid "night light on"
+msgstr ""
+
+#: src/ctlpanel.c:4055
+msgid "night light off"
+msgstr ""
+
+#: src/ctlpanel.c:4071
+#, c-format
+msgid "switching AI backend …"
+msgstr ""
+
+#: src/ctlpanel.c:4213
+#, c-format
+msgid "transparency %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#, c-format
+msgid "%s is at its %s"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
 msgstr "최솟값"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "maximum"
 msgstr "최댓값"
+
+#: src/ctlpanel.c:4274
+#, c-format
+msgid "%s: %d %s · applies when you stop"
+msgstr ""
+
+#: src/ctlpanel.c:4309
+#, c-format
+msgid "%s: %s · default"
+msgstr ""
+
+#: src/ctlpanel.c:4350
+msgid "no models in /var/lib/synapd/models"
+msgstr ""
+
+#: src/ctlpanel.c:4360
+#, c-format
+msgid "loads when you stop · Esc cancels"
+msgstr ""
+
+#: src/ctlpanel.c:4629
+#, c-format
+msgid "Rebind cancelled"
+msgstr ""
+
+#: src/ctlpanel.c:4698
+#, c-format
+msgid "nothing to reset on this row"
+msgstr ""
+
+#: src/ctlpanel.c:4703
+#, c-format
+msgid "%s reset to %s"
+msgstr ""
+
+#: src/ctlpanel.c:4706
+#, c-format
+msgid "%s is already at its default"
+msgstr ""
+
+#: src/ctlpanel.c:4732
+#, c-format
+msgid "Rebinding lives in the Shortcuts category"
+msgstr ""
+
+#: src/ctlpanel.c:4744
+#, c-format
+msgid "The tap is set from the Shortcuts category"
+msgstr ""
+
+#: src/deskmenu.c:77
+msgid "Open Terminal"
+msgstr ""
+
+#: src/deskmenu.c:78
+msgid "Open File Manager"
+msgstr ""
+
+#: src/deskmenu.c:79
+msgid "Applications…"
+msgstr ""
+
+#: src/deskmenu.c:81
+msgid "Change Wallpaper…"
+msgstr ""
+
+#: src/deskmenu.c:82
+msgid "Appearance…"
+msgstr ""
+
+#: src/deskmenu.c:83
+msgid "Display Settings…"
+msgstr ""
+
+#: src/deskmenu.c:84
+msgid "Desktop Widgets…"
+msgstr ""
+
+#: src/deskmenu.c:85
+msgid "Show Desktop Icons"
+msgstr ""
+
+#: src/deskmenu.c:86
+msgid "Refresh"
+msgstr ""
+
+#: src/deskmenu.c:87
+msgid "Arrange by Name"
+msgstr ""
+
+#: src/deskmenu.c:88
+msgid "Arrange by Type"
+msgstr ""
+
+#: src/deskmenu.c:89
+msgid "Arrange by Size"
+msgstr ""
+
+#: src/deskmenu.c:90
+msgid "Arrange by Date"
+msgstr ""
+
+#: src/deskmenu.c:91
+msgid "Task Manager"
+msgstr ""
+
+#: src/deskmenu.c:92 src/render.c:8194
+msgid "Open"
+msgstr "열기"
+
+#: src/deskmenu.c:93
+msgid "Move to Trash"
+msgstr ""
 
 #: src/dock.c:3418
 msgid "top"
@@ -1513,12 +2234,6 @@ msgstr "확장"
 msgid "no outputs connected"
 msgstr "연결된 화면이 없습니다"
 
-#: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
-#: src/render.c:6171
-#, c-format
-msgid "off"
-msgstr "끔"
-
 #: src/render.c:1319
 msgid "PRIMARY"
 msgstr "주 화면"
@@ -1540,7 +2255,8 @@ msgstr "HDR10 켬"
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr "%s은(는) HDR10으로 구동 · PQ · %s 원색 · SDR 백색 %d cd/m² ([ ]) · %s 출력%s"
+msgstr ""
+"%s은(는) HDR10으로 구동 · PQ · %s 원색 · SDR 백색 %d cd/m² ([ ]) · %s 출력%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
@@ -1572,14 +2288,18 @@ msgstr "%s의 EDID에 HDR 전달 함수가 없습니다 (SDR 패널)"
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr "위/아래 선택 · 왼쪽/오른쪽 회전 · −/+ 이 화면 배율 · p 주 화면으로 지정 (X11·게임 기본) · m 배치"
+msgstr ""
+"위/아래 선택 · 왼쪽/오른쪽 회전 · −/+ 이 화면 배율 · p 주 화면으로 지정 (X11·"
+"게임 기본) · m 배치"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr "Shift+화살표로 격자에서 이동 (자리 바꿈) · d 10비트 색 (딥 컬러, HDR 아님) · Shift+D HDR10 출력 · [ ] SDR 백색 · Super+Ctrl+= 모든 화면 배율 · Esc 닫기"
+msgstr ""
+"Shift+화살표로 격자에서 이동 (자리 바꿈) · d 10비트 색 (딥 컬러, HDR 아님) · "
+"Shift+D HDR10 출력 · [ ] SDR 백색 · Super+Ctrl+= 모든 화면 배율 · Esc 닫기"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
@@ -1784,7 +2504,8 @@ msgstr "사진, 배경 화면, 다운로드 폴더에 이미지가 없습니다.
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr "r을 눌러 다시 검색하거나 파일을 직접 여세요: synctl dispatch view <경로>"
+msgstr ""
+"r을 눌러 다시 검색하거나 파일을 직접 여세요: synctl dispatch view <경로>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
@@ -1811,7 +2532,9 @@ msgstr "← → 다음과 이전 · 끌거나 스크롤해서 확대"
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr "스크롤로 확대·축소 · + − 배율 · 0 창에 맞춤 · 1 실제 크기 · c 자르기 · r 다시 검색 · Esc 또는 ×로 %s"
+msgstr ""
+"스크롤로 확대·축소 · + − 배율 · 0 창에 맞춤 · 1 실제 크기 · c 자르기 · r 다"
+"시 검색 · Esc 또는 ×로 %s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
@@ -1829,14 +2552,17 @@ msgstr "자르기"
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr "끌어서 선택 · 모서리를 끌어 조정 · Tab으로 화살표가 움직일 모서리를 고릅니다"
+msgstr ""
+"끌어서 선택 · 모서리를 끌어 조정 · Tab으로 화살표가 움직일 모서리를 고릅니다"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr "화살표로 크기 조정 · Ctrl+화살표로 이동 · Shift 25배 · a 전체 · Enter 사본 저장 · Esc %s"
+msgstr ""
+"화살표로 크기 조정 · Ctrl+화살표로 이동 · Shift 25배 · a 전체 · Enter 사본 저"
+"장 · Esc %s"
 
 #: src/render.c:3961
 msgid "cancel"
@@ -1884,7 +2610,9 @@ msgstr "바탕 화면 위젯"
 
 #: src/render.c:4217
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
-msgstr "각각 따로 움직입니다 · 손잡이를 잡고 끄세요 · 스페이스는 전부 아니면 전무입니다"
+msgstr ""
+"각각 따로 움직입니다 · 손잡이를 잡고 끄세요 · 스페이스는 전부 아니면 전무입니"
+"다"
 
 #: src/render.c:4263
 msgid "needs cava"
@@ -2093,12 +2821,14 @@ msgstr "한 번 더 삭제하면 확정됩니다 · Esc로 취소 · 이동해�
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr "위/아래 선택 · Enter 불러오기 · Del 삭제 · / 검색 · R 다시 검색 · Esc 닫기"
+msgstr ""
+"위/아래 선택 · Enter 불러오기 · Del 삭제 · / 검색 · R 다시 검색 · Esc 닫기"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr "내려받기는 시스템 서비스로 동작합니다 — 이 창을 닫아도 취소되지 않습니다"
+msgstr ""
+"내려받기는 시스템 서비스로 동작합니다 — 이 창을 닫아도 취소되지 않습니다"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
@@ -2139,7 +2869,8 @@ msgstr "위/아래 선택 · Enter 전환 · 왼쪽/오른쪽 끔/켬 · [ ] 소
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr "t 재생 · 스페이스 모든 소리 켬/끔 · Esc 닫기 · 자세히: synui-sound --help"
+msgstr ""
+"t 재생 · 스페이스 모든 소리 켬/끔 · Esc 닫기 · 자세히: synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
@@ -2274,7 +3005,8 @@ msgstr "위/아래 분류 · Enter 또는 오른쪽으로 열기 · / 찾기 · 
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr "Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
+msgstr ""
+"Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
@@ -2283,7 +3015,9 @@ msgstr "이 단축키에 쓸 새 키를 누르세요 · Esc 취소"
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr "F2 다시 지정 · F3 한 번 누르기로 옮기기 · Ctrl+Shift+R 전체 되돌리기 · Esc 뒤로"
+msgstr ""
+"F2 다시 지정 · F3 한 번 누르기로 옮기기 · Ctrl+Shift+R 전체 되돌리기 · Esc 뒤"
+"로"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
@@ -2316,7 +3050,8 @@ msgstr "해당하는 단축키가 없습니다."
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr "Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
+msgstr ""
+"Super, Ctrl, Alt, Shift 중 하나를 누르세요 · Del은 지정 안 함 · Esc 취소"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
@@ -2326,7 +3061,9 @@ msgstr "Super, Ctrl, Alt가 들어간 조합을 누르세요 · Esc 취소"
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr "거르기 · Enter 실행 · F2 키 지정 · Del 해제 · F3 한 번 누르기 · Ctrl+Shift+R 되돌리기"
+msgstr ""
+"거르기 · Enter 실행 · F2 키 지정 · Del 해제 · F3 한 번 누르기 · Ctrl+Shift+R "
+"되돌리기"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
@@ -2499,12 +3236,15 @@ msgstr "신뢰함"
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr "Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 간추리기 · Esc"
+msgstr ""
+"Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 간추리기 · "
+"Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr "Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 전체 · Esc"
+msgstr ""
+"Enter 연결 · p 페어링 · t 신뢰 · r 지우기 · s 검색 · o 무선 · a 전체 · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
@@ -2556,7 +3296,9 @@ msgstr "메모리"
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr "j/k 이동 · 줄에서 오른쪽 클릭 · c/m/g/p 정렬 · u 내 것 · x 종료 · X 강제 종료 · Esc 닫기"
+msgstr ""
+"j/k 이동 · 줄에서 오른쪽 클릭 · c/m/g/p 정렬 · u 내 것 · x 종료 · X 강제 종"
+"료 · Esc 닫기"
 
 #: src/render.c:7984
 msgid "NEWS"
@@ -2607,7 +3349,9 @@ msgstr "입력해서 거르기 · Enter 유지 · Esc 지우기"
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr "j/k 이동 · Enter 열기 · o 뒤에서 열기 · c 댓글 · y 복사 · Tab 출처 · / 검색 · s 정렬 · m 읽음 · r 새로 고침 · Esc 닫기"
+msgstr ""
+"j/k 이동 · Enter 열기 · o 뒤에서 열기 · c 댓글 · y 복사 · Tab 출처 · / 검색 "
+"· s 정렬 · m 읽음 · r 새로 고침 · Esc 닫기"
 
 #: src/render.c:8152
 msgid "Bottom"
@@ -2646,10 +3390,6 @@ msgstr "독에 고정"
 #: src/render.c:8193
 msgid "Unpin from Dock"
 msgstr "독에서 빼기"
-
-#: src/render.c:8194
-msgid "Open"
-msgstr "열기"
 
 #: src/render.c:8195
 msgid "New Window"
@@ -2749,7 +3489,9 @@ msgstr "이 바탕 화면에는 열린 것이 없습니다."
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr "화살표나 클릭으로 창을 고릅니다 · Enter로 열고 · Del로 닫습니다 · 1–9로 바탕 화면 전환 · Esc 닫기"
+msgstr ""
+"화살표나 클릭으로 창을 고릅니다 · Enter로 열고 · Del로 닫습니다 · 1–9로 바탕 "
+"화면 전환 · Esc 닫기"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2846,10 +3588,6 @@ msgstr "음악 재생기"
 #, fuzzy
 #~ msgid "visualizer"
 #~ msgstr "이퀄라이저"
-
-#, fuzzy
-#~ msgid "clock"
-#~ msgstr "시계"
 
 #, fuzzy
 #~ msgid "corner_radius"

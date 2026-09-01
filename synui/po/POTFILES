@@ -5,6 +5,7 @@
 # never reach a .pot, so no translator is ever offered them. tests/i18n.sh
 # fails on a source file that uses _() and is not listed.
 src/ctlpanel.c
+src/deskmenu.c
 src/dock.c
 src/filters.c
 src/lock.c

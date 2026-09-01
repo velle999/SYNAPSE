@@ -433,7 +433,7 @@ static const struct ctl_item ctl_items[] = {
        * 5% upward. */
       .key = "glass_level", .off = CFG(glass_level), .vtype = CTL_VAL_INT,
       .vmin = 0.0f, .vmax = 100.0f, .vstep = 5.0f, .unit = "%",
-      .vauto = "Auto", .vzero = "Off", .apply = CTL_APPLY_GLASS,
+      .vauto = N_("Auto"), .vzero = N_("Off"), .apply = CTL_APPLY_GLASS,
       .help = N_("Auto follows the theme \xc2\xb7 Off is never glass \xc2\xb7 or set how much you see through") },
     /* What makes the row above a MASTER rather than a fourth opinion. On, the
      * five rows it drives — the two window opacities, the terminal, the bar and
@@ -831,7 +831,7 @@ static const struct ctl_item ctl_items[] = {
        * never touched this row follows whatever theme is on it. Same rung and
        * same word Bar opacity has, because they are the same question about
        * two strips. */
-      .vauto = "Auto",
+      .vauto = N_("Auto"),
       /* Down to a real 0.00: the icons are painted over the body at full
        * opacity, so the bottom of this range is a row of icons floating on the
        * wallpaper rather than a dock nobody can find. The 0.20 that used to be
@@ -1004,7 +1004,7 @@ static const struct ctl_item ctl_items[] = {
      * still, correctly, look solid. */
     { CTL_ROW_BAR_OPACITY,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Bar opacity"), NULL,
       .key = "bar_opacity", .off = CFG(bar_opacity), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .vauto = "Follow the theme",
+      .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .vauto = N_("Follow the theme"),
       .apply = CTL_APPLY_NONE,
       .help = N_("0.00 is a clear bar, inked off the wallpaper; 1.00 hides it "
               "completely") },
@@ -1395,7 +1395,7 @@ static void ctl_format(const struct ctl_item *it, float v, int for_config,
         /* -1 is not "off": it means synui has no opinion and libinput's own
          * default for that device stands. A tri-state drawn as a checkbox is
          * the classic way to lose that distinction, so it is named. */
-        if (v < 0)       snprintf(buf, n, "%s", for_config ? "default" : "device default");
+        if (v < 0)       snprintf(buf, n, "%s", for_config ? "default" : _("device default"));
         else if (v == 0) snprintf(buf, n, "off");
         else             snprintf(buf, n, "on");
         break;
@@ -1435,7 +1435,7 @@ static void ctl_format(const struct ctl_item *it, float v, int for_config,
     case CTL_VAL_INT:
     case CTL_VAL_FLOAT: {
         if (it->vauto && v < it->vmin) {
-            snprintf(buf, n, "%s", for_config ? "auto" : it->vauto);
+            snprintf(buf, n, "%s", for_config ? "auto" : _(it->vauto));
             break;
         }
         /* And the other end of the same confusion: a row whose zero is a MODE
@@ -1443,7 +1443,7 @@ static void ctl_format(const struct ctl_item *it, float v, int for_config,
          * keeps the number, because 0 is a perfectly good value for it and
          * inventing a token would be a second spelling to parse. */
         if (it->vzero && !for_config && v == 0.0f) {
-            snprintf(buf, n, "%s", it->vzero);
+            snprintf(buf, n, "%s", _(it->vzero));
             break;
         }
         if (it->vtype == CTL_VAL_INT) {
@@ -1893,7 +1893,7 @@ void synui_effects_solid(syn_server_t *s)
     if (wg) ctl_commit(s, wg, (float)SYN_WIDGET_GLASS_OFF);
 
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "glass off \xc2\xb7 bar, dock and widgets solid \xc2\xb7 windows opaque");
+             _("glass off \xc2\xb7 bar, dock and widgets solid \xc2\xb7 windows opaque"));
     ctlpanel_repaint(s);
 }
 
@@ -1949,7 +1949,7 @@ void synui_effects_clear(syn_server_t *s)
     if (wg) ctl_commit(s, wg, (float)SYN_WIDGET_GLASS_ON);
 
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "glass full \xc2\xb7 bar and dock clear \xc2\xb7 ink off the wallpaper");
+             _("glass full \xc2\xb7 bar and dock clear \xc2\xb7 ink off the wallpaper"));
     ctlpanel_repaint(s);
 }
 
@@ -2290,8 +2290,8 @@ static void synrgb_toggle(syn_server_t *s)
      * wallpaper, which reads as the switch not working. */
     synui_spawn(on ? "syn-rgb off" : "syn-rgb on");
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             on ? "RGB lights: off"
-                : "RGB lights: following the accent");
+             on ? _("RGB lights: off")
+                : _("RGB lights: following the accent"));
     ctlpanel_repaint(s);
 }
 
@@ -2352,7 +2352,7 @@ static void speak_toggle(syn_server_t *s)
      * desktop silent — which reads as the switch not working. */
     synui_spawn("syn-speak toggle");
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             on ? "Screen reader: off" : "Screen reader: on");
+             on ? _("Screen reader: off") : _("Screen reader: on"));
     ctlpanel_repaint(s);
 }
 
@@ -2364,8 +2364,8 @@ static void wake_toggle(syn_server_t *s)
      * the panel whose "on" leaves a device open, and a person who pressed it by
      * accident should be told what they just did in the same breath. */
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             on ? "No longer listening \xc2\xb7 the microphone is closed"
-                : "Listening for \"Synapse\" \xc2\xb7 the microphone is open");
+             on ? _("No longer listening \xc2\xb7 the microphone is closed")
+                : _("Listening for \"Synapse\" \xc2\xb7 the microphone is open"));
     ctlpanel_repaint(s);
 }
 
@@ -2403,9 +2403,9 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * which of the three override positions is selected, and whether a
          * game is running right now. Auto is the only one where the second is
          * not implied by the first, so only auto spells it out. */
-        if      (s->game.forced > 0) snprintf(buf, n, "always on");
-        else if (s->game.forced < 0) snprintf(buf, n, "always off");
-        else snprintf(buf, n, "auto (%s)", s->game.active ? "on" : "off");
+        if      (s->game.forced > 0) snprintf(buf, n, _("always on"));
+        else if (s->game.forced < 0) snprintf(buf, n, _("always off"));
+        else snprintf(buf, n, _("auto (%s)"), s->game.active ? "on" : "off");
         break;
     case CTL_ROW_AI_BACKEND:
         snprintf(buf, n, "%s", ai_backend_label());
@@ -2518,7 +2518,7 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * part nobody can get from anywhere else — the whole point of the mode
          * is that those toasts were never drawn. */
         if (s->config.notif_dnd && s->notifs.missed > 0)
-            snprintf(buf, n, "on \xe2\x80\x94 %d missed", s->notifs.missed);
+            snprintf(buf, n, _("on \xe2\x80\x94 %d missed"), s->notifs.missed);
         else
             snprintf(buf, n, "%s", s->config.notif_dnd ? "on" : "off");
         break;
@@ -2526,7 +2526,7 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         /* Name the source, not just on/off: "on" alone is exactly the ambiguity
          * this setting exists to remove — desktop sound, not the microphone. */
         snprintf(buf, n, "%s",
-                 s->config.record_audio ? "desktop sound" : "off");
+                 s->config.record_audio ? _("desktop sound") : "off");
         break;
     case CTL_ROW_RECORD_EDIT:
         /* Name the FORMAT, and name the cost. "on" would hide both the reason
@@ -2534,7 +2534,7 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * disk in under an hour, and this row is where that is still cheap to
          * notice. */
         snprintf(buf, n, "%s",
-                 s->config.record_edit ? "DNxHR ~1.1 GB/min" : "off (H.264 mp4)");
+                 s->config.record_edit ? _("DNxHR ~1.1 GB/min") : _("off (H.264 mp4)"));
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -2555,8 +2555,8 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * answer differs per machine by design. */
         if (s->config.hdmi_audio > 0)       snprintf(buf, n, "on");
         else if (s->config.hdmi_audio == 0) snprintf(buf, n, "off");
-        else snprintf(buf, n, "auto (%s)",
-                      power_has_battery() ? "on \xc2\xb7 laptop" : "off \xc2\xb7 desktop");
+        else snprintf(buf, n, _("auto (%s)"),
+                      power_has_battery() ? _("on \xc2\xb7 laptop") : _("off \xc2\xb7 desktop"));
         break;
     case CTL_ROW_DISPLAY_MODE:
         /* Words, not the config spellings: "external" is what the file says and
@@ -2567,7 +2567,7 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * syn_display_mode_names[] itself. */
         switch (s->config.display_mode) {
         case SYN_DISPLAY_MIRROR:   snprintf(buf, n, "Duplicate");    break;
-        case SYN_DISPLAY_EXTERNAL: snprintf(buf, n, "Built-in off"); break;
+        case SYN_DISPLAY_EXTERNAL: snprintf(buf, n, _("Built-in off")); break;
         default:                   snprintf(buf, n, "Extend");       break;
         }
         break;
@@ -2726,74 +2726,74 @@ int ctlpanel_row_options(int row)
  * would be a second roster, and a second roster is one that goes stale.
  */
 static const struct { const char *action, *desc; } action_tbl[] = {
-        { "term",              "Terminal" },
-        { "cmdbar",            "AI command bar" },
-        { "ai_ask",            "Ask the AI about the window" },
-        { "overlay",           "Neural overlay" },
-        { "menu",              "Welcome menu" },
-        { "control",           "Control panel" },
-        { "keys",              "Keyboard shortcuts (this list)" },
+        { "term",              N_("Terminal") },
+        { "cmdbar",            N_("AI command bar") },
+        { "ai_ask",            N_("Ask the AI about the window") },
+        { "overlay",           N_("Neural overlay") },
+        { "menu",              N_("Welcome menu") },
+        { "control",           N_("Control panel") },
+        { "keys",              N_("Keyboard shortcuts (this list)") },
         { "bluetooth",         "Bluetooth" },
         { "printers",          "Printers" },
-        { "about",             "About OS" },
-        { "settings",          "System settings (syn-settings)" },
-        { "printers_scan",     "Find and add network printers" },
-        { "overview",          "Mission control (all windows)" },   /* unbound: Alt+Tab */
-        { "keybinds",          "Rebind a shortcut" },
-        { "night_light",       "Night light" },
-        { "dnd",               "Do Not Disturb (mute notifications)" },
-        { "record",            "Record screen" },
-        { "clipboard",         "Clipboard history" },
-        { "brightness_up",     "Brightness up" },
-        { "brightness_down",   "Brightness down" },
-        { "start_menu",        "Start menu" },
-        { "launcher_style",    "Start button: text/logo" },
-        { "close",             "Close window" },
-        { "quit",              "Quit synui" },
-        { "layout_cycle",      "Cycle layout" },
-        { "retile",            "Tile this desktop" },
-        { "cascade",           "Cascade this desktop (overlapping piles)" },
-        { "float_arrange",     "Arrange floating windows" },
-        { "master_shrink",     "Shrink master area" },
-        { "master_grow",       "Grow master area" },
-        { "column_consume",    "niri: pull window into the left column" },
-        { "column_expel",      "niri: push window out to its own column" },
-        { "focus_next",        "Focus next window" },
-        { "focus_prev",        "Focus previous window" },
-        { "alt_tab",           "Switch window (Alt+Tab)" },
-        { "alt_tab_prev",      "Switch window, backwards" },
-        { "stack_next",        "Move window down the stack" },
-        { "stack_prev",        "Move window up the stack" },
-        { "move_left",         "Move window left (or earlier in the layout)" },
-        { "move_right",        "Move window right (or later in the layout)" },
-        { "move_up",           "Move window up (or earlier in the layout)" },
-        { "move_down",         "Move window down (or later in the layout)" },
-        { "float_toggle",      "Float window" },
-        { "fullscreen_toggle", "Fullscreen window" },
-        { "maximize_toggle",   "Maximize window" },
-        { "expand_v_toggle",   "Fill screen height (or put it back)" },
-        { "expand_h_toggle",   "Fill screen width (or put it back)" },
-        { "minimize_toggle",   "Minimize window" },
-        { "minimize_restore",  "Restore minimized window" },
-        { "decorations_toggle","Titlebars on/off" },
-        { "displays",          "Display settings" },
-        { "display_mode",      "Screens: extend / duplicate / built-in off" },
-        { "display_scale",     "Scale the whole desktop (accessibility)" },
-        { "wallpaper",         "Wallpaper picker" },
-        { "wallpaper_reload",  "Reload wallpaper / config" },
-        { "filters",           "Visual effects (CRT + window)" },
-        { "widgets",           "Desktop widget manager" },
-        { "sounds",            "Event sounds" },
-        { "effects_toggle",    "CRT effects on/off" },
-        { "power",             "Power saving panel" },
-        { "saver",             "Screensaver + lock screen" },
-        { "taskmgr",           "Task manager" },
-        { "aimodel",           "AI model" },
-        { "network",           "Network / Wi-Fi" },
-        { "game",              "Game mode" },
-        { "lock",              "Lock screen" },
-        { "ai_backend",        "AI backend (GPU/CPU/off)" },
-    { "move_output",       "Move window to next output" },
+        { "about",             N_("About OS") },
+        { "settings",          N_("System settings (syn-settings)") },
+        { "printers_scan",     N_("Find and add network printers") },
+        { "overview",          N_("Mission control (all windows)") },   /* unbound: Alt+Tab */
+        { "keybinds",          N_("Rebind a shortcut") },
+        { "night_light",       N_("Night light") },
+        { "dnd",               N_("Do Not Disturb (mute notifications)") },
+        { "record",            N_("Record screen") },
+        { "clipboard",         N_("Clipboard history") },
+        { "brightness_up",     N_("Brightness up") },
+        { "brightness_down",   N_("Brightness down") },
+        { "start_menu",        N_("Start menu") },
+        { "launcher_style",    N_("Start button: text/logo") },
+        { "close",             N_("Close window") },
+        { "quit",              N_("Quit synui") },
+        { "layout_cycle",      N_("Cycle layout") },
+        { "retile",            N_("Tile this desktop") },
+        { "cascade",           N_("Cascade this desktop (overlapping piles)") },
+        { "float_arrange",     N_("Arrange floating windows") },
+        { "master_shrink",     N_("Shrink master area") },
+        { "master_grow",       N_("Grow master area") },
+        { "column_consume",    N_("niri: pull window into the left column") },
+        { "column_expel",      N_("niri: push window out to its own column") },
+        { "focus_next",        N_("Focus next window") },
+        { "focus_prev",        N_("Focus previous window") },
+        { "alt_tab",           N_("Switch window (Alt+Tab)") },
+        { "alt_tab_prev",      N_("Switch window, backwards") },
+        { "stack_next",        N_("Move window down the stack") },
+        { "stack_prev",        N_("Move window up the stack") },
+        { "move_left",         N_("Move window left (or earlier in the layout)") },
+        { "move_right",        N_("Move window right (or later in the layout)") },
+        { "move_up",           N_("Move window up (or earlier in the layout)") },
+        { "move_down",         N_("Move window down (or later in the layout)") },
+        { "float_toggle",      N_("Float window") },
+        { "fullscreen_toggle", N_("Fullscreen window") },
+        { "maximize_toggle",   N_("Maximize window") },
+        { "expand_v_toggle",   N_("Fill screen height (or put it back)") },
+        { "expand_h_toggle",   N_("Fill screen width (or put it back)") },
+        { "minimize_toggle",   N_("Minimize window") },
+        { "minimize_restore",  N_("Restore minimized window") },
+        { "decorations_toggle",N_("Titlebars on/off") },
+        { "displays",          N_("Display settings") },
+        { "display_mode",      N_("Screens: extend / duplicate / built-in off") },
+        { "display_scale",     N_("Scale the whole desktop (accessibility)") },
+        { "wallpaper",         N_("Wallpaper picker") },
+        { "wallpaper_reload",  N_("Reload wallpaper / config") },
+        { "filters",           N_("Visual effects (CRT + window)") },
+        { "widgets",           N_("Desktop widget manager") },
+        { "sounds",            N_("Event sounds") },
+        { "effects_toggle",    N_("CRT effects on/off") },
+        { "power",             N_("Power saving panel") },
+        { "saver",             N_("Screensaver + lock screen") },
+        { "taskmgr",           N_("Task manager") },
+        { "aimodel",           N_("AI model") },
+        { "network",           N_("Network / Wi-Fi") },
+        { "game",              N_("Game mode") },
+        { "lock",              N_("Lock screen") },
+        { "ai_backend",        N_("AI backend (GPU/CPU/off)") },
+    { "move_output",       N_("Move window to next output") },
 };
 #define ACTION_TBL_N ((int)(sizeof action_tbl / sizeof action_tbl[0]))
 
@@ -2811,7 +2811,7 @@ int ctlpanel_action_count(void) { return ACTION_TBL_N; }
 const char *ctlpanel_action_at(int i, const char **desc)
 {
     if (i < 0 || i >= ACTION_TBL_N) return NULL;
-    if (desc) *desc = action_tbl[i].desc;
+    if (desc) *desc = _(action_tbl[i].desc);
     return action_tbl[i].action;
 }
 
@@ -2834,10 +2834,10 @@ static const char *action_desc(syn_server_t *s, const char *action,
      * from the live config, not from a word compiled in here. */
     if (s && strcmp(action, "start_menu") == 0) {
         switch (s->config.start_menu_style) {
-        case SYN_START_MENU_APPGRID: return "Start menu (application page)";
-        case SYN_START_MENU_ROFI:    return "Start menu (rofi)";
+        case SYN_START_MENU_APPGRID: return _("Start menu (application page)");
+        case SYN_START_MENU_ROFI:    return _("Start menu (rofi)");
         case SYN_START_MENU_BAR:
-        default:                     return "Start menu (bar menu)";
+        default:                     return _("Start menu (bar menu)");
         }
     }
 
@@ -2845,8 +2845,8 @@ static const char *action_desc(syn_server_t *s, const char *action,
         if (strcmp(action, action_tbl[i].action) == 0) {
             /* move_output takes a direction; "prev" is a different line. */
             if (strcmp(action, "move_output") == 0 && arg && strcmp(arg, "prev") == 0)
-                return "Move window to previous output";
-            return action_tbl[i].desc;
+                return _("Move window to previous output");
+            return _(action_tbl[i].desc);
         }
     return action;
 }
@@ -2863,17 +2863,25 @@ const char *ctlpanel_action_desc(syn_server_t *s, const char *action,
 }
 
 /* xkbcommon spells keys for machines ("Return", "space", "e"). Spell them the
- * way a keycap does, or the column reads like a config file. */
-static void key_name(xkb_keysym_t sym, char *out, size_t n)
+ * way a keycap does, or the column reads like a config file.
+ *
+ * ⚠ AND THE KEYCAP IS IN THE USER'S LANGUAGE: a German keyboard says Entf, not
+ * Del. Translated for the same reason the words exist at all — and safe to
+ * translate, which is not obvious and is worth stating. What synuirc reads is
+ * built by syn_bind_format_combo() in config.c, a different function on the
+ * machine side of the line; this one only ever reaches a screen. Renamed from
+ * key_name() so tests/i18n.sh's rule still means something: a _name() is read
+ * by a protocol or a file, a _label() by a person. */
+static void key_label(xkb_keysym_t sym, char *out, size_t n)
 {
     switch (sym) {
-    case XKB_KEY_Return:    snprintf(out, n, "Enter");     return;
-    case XKB_KEY_KP_Enter:  snprintf(out, n, "KP Enter");  return;
-    case XKB_KEY_space:     snprintf(out, n, "Space");     return;
-    case XKB_KEY_Escape:    snprintf(out, n, "Esc");       return;
-    case XKB_KEY_Delete:    snprintf(out, n, "Del");       return;
-    case XKB_KEY_BackSpace: snprintf(out, n, "Backspace"); return;
-    case XKB_KEY_Tab:       snprintf(out, n, "Tab");       return;
+    case XKB_KEY_Return:    snprintf(out, n, "%s", _("Enter"));     return;
+    case XKB_KEY_KP_Enter:  snprintf(out, n, "%s", _("KP Enter"));  return;
+    case XKB_KEY_space:     snprintf(out, n, "%s", _("Space"));     return;
+    case XKB_KEY_Escape:    snprintf(out, n, "%s", _("Esc"));       return;
+    case XKB_KEY_Delete:    snprintf(out, n, "%s", _("Del"));       return;
+    case XKB_KEY_BackSpace: snprintf(out, n, "%s", _("Backspace")); return;
+    case XKB_KEY_Tab:       snprintf(out, n, "%s", _("Tab"));       return;
     /* The cmdbar's key. xkbcommon spells it "equal", which is how it has to be
      * WRITTEN in a bind (the combo is split on '+', so a literal '=' cannot be
      * the key name) — but the keycap says '='. */
@@ -2903,20 +2911,30 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
 /* Modifier order matches how the binds are written in synuirc (super+shift+q),
  * so the panel and the config spell the same combo the same way.
  *
- * Exported (as ctlpanel_combo_str) for ctlpanel_tap_key_name()'s reason: the
+ * Exported (as ctlpanel_combo_str) for ctlpanel_tap_key_label()'s reason: the
  * shortcut palette names the keys too, and so does `synctl binds` — which is
  * how the welcome guide gets them from outside the process. A second spelling
  * of "Super+Shift+C" is a second one to keep in step. */
 void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
 {
     char key[64];
-    key_name(sym, key, sizeof(key));
-    snprintf(out, n, "%s%s%s%s%s",
-             (mods & WLR_MODIFIER_LOGO)  ? "Super+" : "",
-             (mods & WLR_MODIFIER_CTRL)  ? "Ctrl+"  : "",
-             (mods & WLR_MODIFIER_ALT)   ? "Alt+"   : "",
-             (mods & WLR_MODIFIER_SHIFT) ? "Shift+" : "",
-             key);
+    key_label(sym, key, sizeof(key));
+
+    /* ⚠ THE MODIFIER WORDS COME FROM ctlpanel_tap_key_label(), not from four
+     * more literals here. They used to be spelled twice — "Super" in the tap
+     * row and "Super+" in the chord — which is two things to translate and two
+     * to keep in step, in a file whose own comments are about not spelling a
+     * combo twice. The '+' is punctuation and stays out of the catalog. */
+    char mod[128] = "";
+    static const uint32_t order[] = { WLR_MODIFIER_LOGO, WLR_MODIFIER_CTRL,
+                                      WLR_MODIFIER_ALT,  WLR_MODIFIER_SHIFT };
+    for (unsigned i = 0; i < sizeof(order) / sizeof(*order); i++) {
+        if (!(mods & order[i])) continue;
+        size_t used = strlen(mod);
+        snprintf(mod + used, sizeof(mod) - used, "%s+",
+                 ctlpanel_tap_key_label(order[i]));
+    }
+    snprintf(out, n, "%s%s", mod, key);
 }
 
 /* The keycap word for a tap modifier, and "Off" for no tap at all. Here rather
@@ -2924,14 +2942,14 @@ void ctlpanel_combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
  * beside syn_bind_format_combo(): that one spells what synuirc takes ("super"),
  * this one spells what a keyboard says ("Super"). Exported because keys.c's
  * status line names the new tap key and must not spell it a third way. */
-const char *ctlpanel_tap_key_name(uint32_t mod)
+const char *ctlpanel_tap_key_label(uint32_t mod)
 {
     switch (mod) {
-    case WLR_MODIFIER_LOGO:  return "Super";
-    case WLR_MODIFIER_CTRL:  return "Ctrl";
-    case WLR_MODIFIER_ALT:   return "Alt";
-    case WLR_MODIFIER_SHIFT: return "Shift";
-    default:                 return "Off";
+    case WLR_MODIFIER_LOGO:  return _("Super");
+    case WLR_MODIFIER_CTRL:  return _("Ctrl");
+    case WLR_MODIFIER_ALT:   return _("Alt");
+    case WLR_MODIFIER_SHIFT: return _("Shift");
+    default:                 return _("Off");
     }
 }
 
@@ -2976,7 +2994,7 @@ int ctlpanel_shortcuts_ex(syn_server_t *s, syn_ctl_shortcut_t *out, int max,
         memset(&out[n], 0, sizeof(out[n]));
         if (s->config.tap_mod)
             snprintf(out[n].combo, sizeof(out[n].combo), "%s (tap)",
-                     ctlpanel_tap_key_name(s->config.tap_mod));
+                     ctlpanel_tap_key_label(s->config.tap_mod));
         else
             snprintf(out[n].combo, sizeof(out[n].combo), "Off");
         /* What it opens comes from the live config too, for the same reason the
@@ -3026,13 +3044,13 @@ int ctlpanel_shortcuts_ex(syn_server_t *s, syn_ctl_shortcut_t *out, int max,
     if (saw_ws && n < max) {
         memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super+1\xe2\x80\x93""9");
-        snprintf(out[n].desc,  sizeof(out[n].desc),  "Switch to workspace");
+        snprintf(out[n].desc,  sizeof(out[n].desc),  _("Switch to workspace"));
         n++;
     }
     if (saw_movews && n < max) {
         memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super+Shift+1\xe2\x80\x93""9");
-        snprintf(out[n].desc,  sizeof(out[n].desc),  "Move window to workspace");
+        snprintf(out[n].desc,  sizeof(out[n].desc),  _("Move window to workspace"));
         n++;
     }
 
@@ -3120,7 +3138,7 @@ static void ctlpanel_model_commit(syn_server_t *s)
          * swap stops the AI answering for as long as it takes, and that is
          * worth a sentence the first time someone flips this row. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "loading \xc2\xb7 the AI pauses until it is up");
+                 _("loading \xc2\xb7 the AI pauses until it is up"));
     } else {
         /* Refused, or already loaded. aimodel.c has written the reason —
          * synapd's own words when it refused — and a blank one means there was
@@ -3191,7 +3209,7 @@ int ctlpanel_tick(syn_server_t *s)
     /* Only the AI backend polls now: it is the one row whose value is set by a
      * helper this panel cannot wait on. The desktop-widget row used to, back
      * when it flipped the widgets in place; it opens the manager instead. */
-    const char *poll_name = "AI backend";
+    const char *poll_name = _("AI backend");
 
     char now_val[16];
     ctlpanel_row_value(s, s->ctlpanel.poll_row, now_val, sizeof(now_val));
@@ -3210,7 +3228,7 @@ int ctlpanel_tick(syn_server_t *s)
          * case where a stuck spinner reads as "it worked". */
         s->ctlpanel.backend_poll_until = 0.0;
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s: still %s \xc2\xb7 switch did not land", poll_name, now_val);
+                 _("%s: still %s \xc2\xb7 switch did not land"), poll_name, now_val);
         synui_render_ctlpanel(s);
         return 0;
     }
@@ -3616,8 +3634,8 @@ static int ctlpanel_dock_pos_step(syn_server_t *s, int row, int dir)
         /* Says WHICH thing is off. "n/a" in the value column with nothing in
          * the status line is a key that appears to be dead. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status), "%s",
-                 s->config.dock_enabled ? "turn the cell on first"
-                                        : "dock is off");
+                 s->config.dock_enabled ? _("turn the cell on first")
+                                        : _("dock is off"));
         return 1;
     }
 
@@ -3733,7 +3751,7 @@ static void ctlpanel_activate(syn_server_t *s)
     case CTL_ROW_EFFECTS:
         if (!s->effects) {   /* no GLES pass — say so rather than lie */
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "no GLES renderer \xc2\xb7 effects unavailable here");
+                     _("no GLES renderer \xc2\xb7 effects unavailable here"));
             return;
         }
         s->config.effects = !s->config.effects;
@@ -3744,7 +3762,8 @@ static void ctlpanel_activate(syn_server_t *s)
          * back on the next time anything reloaded the config. */
         filters_state_save(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "CRT effects %s", s->config.effects ? "on" : "off");
+                 "%s", s->config.effects ? _("CRT effects on")
+                                        : _("CRT effects off"));
         ctlpanel_repaint(s);
         return;
 
@@ -3755,10 +3774,10 @@ static void ctlpanel_activate(syn_server_t *s)
          * status line reading "game mode off" made that look like the row had
          * refused rather than moved. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 s->game.forced > 0 ? "game mode: always on" :
-                 s->game.forced < 0 ? "game mode: always off" :
-                 s->game.active     ? "game mode: auto \xc2\xb7 a game is running"
-                                    : "game mode: auto \xc2\xb7 no game running");
+                 s->game.forced > 0 ? _("game mode: always on") :
+                 s->game.forced < 0 ? _("game mode: always off") :
+                 s->game.active     ? _("game mode: auto \xc2\xb7 a game is running")
+                                    : _("game mode: auto \xc2\xb7 no game running"));
         return;
 
     case CTL_ROW_LAYOUT: {
@@ -3814,7 +3833,7 @@ static void ctlpanel_activate(syn_server_t *s)
         if (cmd && *cmd) synui_spawn(cmd);
 
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "bar %s", s->config.bar_enabled ? "on" : "off");
+                 "%s", s->config.bar_enabled ? _("bar on") : _("bar off"));
         ctlpanel_repaint(s);
         return;
     }
@@ -3830,7 +3849,7 @@ static void ctlpanel_activate(syn_server_t *s)
          * "on"/"off" is the spelling config_parse_kv reads back. */
         settings_state_set("dock_enabled", s->config.dock_enabled ? "on" : "off");
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock %s", s->config.dock_enabled ? "on" : "off");
+                 "%s", s->config.dock_enabled ? _("dock on") : _("dock off"));
         ctlpanel_repaint(s);
         return;
 
@@ -3839,7 +3858,7 @@ static void ctlpanel_activate(syn_server_t *s)
          * a hidden dock's hide-behaviour would only confuse. */
         if (!s->config.dock_enabled) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "dock is off");
+                     _("dock is off"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3848,7 +3867,8 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_relayout(s);     /* the canvas changed shape; repaint every mirror */
         dock_wake(s);         /* pin or release the bar on the next frame */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock auto-hide %s", s->config.dock_autohide ? "on" : "off");
+                 "%s", s->config.dock_autohide ? _("dock auto-hide on")
+                                              : _("dock auto-hide off"));
         ctlpanel_repaint(s);
         return;
 
@@ -3859,7 +3879,7 @@ static void ctlpanel_activate(syn_server_t *s)
     case CTL_ROW_DOCK_ON_TOP:
         if (!s->config.dock_enabled) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "dock is off");
+                     _("dock is off"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3867,7 +3887,7 @@ static void ctlpanel_activate(syn_server_t *s)
             /* Not a silent no-op: the row reads "always" in this state, and a
              * key that appeared to do nothing would read as a broken row. */
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "an auto-hiding dock is always on top");
+                     _("an auto-hiding dock is always on top"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3876,16 +3896,16 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_relayout(s);
         dock_wake(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock %s windows",
-                 s->config.dock_on_top ? "above" : "below");
+                 "%s", s->config.dock_on_top ? _("dock above windows")
+                                             : _("dock below windows"));
         ctlpanel_repaint(s);
         return;
 
     case CTL_ROW_DOCK_CLOCK_ANALOG:
         if (!s->config.dock_enabled || !s->config.dock_clock) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     s->config.dock_enabled ? "the dock clock is off"
-                                            : "dock is off");
+                     s->config.dock_enabled ? _("the dock clock is off")
+                                            : _("dock is off"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3894,7 +3914,7 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_relayout(s);
         dock_wake(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock clock %s",
+                 _("dock clock %s"),
                  s->config.dock_clock_analog ? "analog" : "digital");
         ctlpanel_repaint(s);
         return;
@@ -3905,7 +3925,7 @@ static void ctlpanel_activate(syn_server_t *s)
     case CTL_ROW_DOCK_POWER: {
         if (!s->config.dock_enabled) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "dock is off");
+                     _("dock is off"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3913,20 +3933,20 @@ static void ctlpanel_activate(syn_server_t *s)
         const char *what;
         switch (row) {
         case CTL_ROW_DOCK_MAGNIFY:
-            flag = &s->config.dock_magnify;     what = "magnify"; break;
+            flag = &s->config.dock_magnify;     what = _("magnify"); break;
         case CTL_ROW_DOCK_CLOCK:
-            flag = &s->config.dock_clock;       what = "clock";   break;
+            flag = &s->config.dock_clock;       what = _("clock");   break;
         case CTL_ROW_DOCK_APPS:
-            flag = &s->config.dock_apps_button; what = "all-apps button"; break;
+            flag = &s->config.dock_apps_button; what = _("all-apps button"); break;
         default:
-            flag = &s->config.dock_power_button; what = "power button"; break;
+            flag = &s->config.dock_power_button; what = _("power button"); break;
         }
         *flag = !*flag;
         dock_state_save(s);
         dock_relayout(s);
         dock_wake(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "dock %s %s", what, *flag ? "on" : "off");
+                 _("dock %s %s"), what, *flag ? _("on") : _("off"));
         ctlpanel_repaint(s);
         return;
     }
@@ -3939,7 +3959,7 @@ static void ctlpanel_activate(syn_server_t *s)
         const char *now = bar_autohide_label(s);
         if (strcmp(now, "n/a") == 0) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "the bar is off");
+                     _("the bar is off"));
             ctlpanel_repaint(s);
             return;
         }
@@ -3950,7 +3970,8 @@ static void ctlpanel_activate(syn_server_t *s)
          * own once the bar has written — which is why the status line says what
          * was ASKED for rather than claiming it is done. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "bar auto-hide %s on every monitor", want ? "on" : "off");
+                 "%s", want ? _("bar auto-hide on for every monitor")
+                            : _("bar auto-hide off for every monitor"));
         ctlpanel_repaint(s);
         return;
     }
@@ -3964,8 +3985,8 @@ static void ctlpanel_activate(syn_server_t *s)
         notif_dnd_toggle(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  s->config.notif_dnd
-                     ? "notifications are silenced"
-                     : "notifications are back on");
+                     ? _("notifications are silenced")
+                     : _("notifications are back on"));
         ctlpanel_repaint(s);
         return;
 
@@ -3977,8 +3998,8 @@ static void ctlpanel_activate(syn_server_t *s)
         record_audio_toggle(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  s->config.record_audio
-                     ? "recordings capture desktop sound"
-                     : "recordings are silent");
+                     ? _("recordings capture desktop sound")
+                     : _("recordings are silent"));
         ctlpanel_repaint(s);
         return;
 
@@ -3989,8 +4010,8 @@ static void ctlpanel_activate(syn_server_t *s)
         record_edit_toggle(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  s->config.record_edit
-                     ? "recordings open in a video editor · ~1.1 GB/min"
-                     : "recordings are H.264 mp4 · small, share anywhere");
+                     ? _("recordings open in a video editor · ~1.1 GB/min")
+                     : _("recordings are H.264 mp4 · small, share anywhere"));
         ctlpanel_repaint(s);
         return;
 
@@ -4000,7 +4021,8 @@ static void ctlpanel_activate(syn_server_t *s)
          * be resized for the titlebar that just came or went. */
         deco_toggle_titlebars(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "titlebars %s", s->titlebars_hidden ? "off" : "on");
+                 "%s", s->titlebars_hidden ? _("titlebars off")
+                                           : _("titlebars on"));
         return;
 
     case CTL_ROW_LAUNCHER:
@@ -4009,7 +4031,7 @@ static void ctlpanel_activate(syn_server_t *s)
          * launcher.state. Repaint after so this row's value reads the new style. */
         launcher_toggle_style(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "start button: %s",
+                 _("start button: %s"),
                  s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
         ctlpanel_repaint(s);
         return;
@@ -4020,7 +4042,7 @@ static void ctlpanel_activate(syn_server_t *s)
          * opaque desktop visibly translucent so "on" is not a no-op. */
         transparency_set_enabled(s, !s->config.transparency);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 s->config.transparency ? "transparency on \xc2\xb7 %d%%" : "transparency off",
+                 s->config.transparency ? _("transparency on \xc2\xb7 %d%%") : _("transparency off"),
                  (int)(s->config.active_opacity * 100 + 0.5f));
         return;
 
@@ -4029,7 +4051,8 @@ static void ctlpanel_activate(syn_server_t *s)
          * output, so there is nothing to repaint by hand here. */
         nightlight_toggle(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "night light %s", s->config.night_light ? "on" : "off");
+                 "%s", s->config.night_light ? _("night light on")
+                                             : _("night light off"));
         ctlpanel_repaint(s);
         return;
 
@@ -4045,7 +4068,7 @@ static void ctlpanel_activate(syn_server_t *s)
         s->ctlpanel.poll_row = CTL_ROW_AI_BACKEND;
         s->ctlpanel.backend_poll_until = ctl_now_secs() + CTL_BACKEND_POLL_SECS;
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "switching AI backend \xe2\x80\xa6");
+                 _("switching AI backend \xe2\x80\xa6"));
         return;
 
     default:
@@ -4187,7 +4210,7 @@ static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
     if (!s->config.transparency) transparency_set_enabled(s, 1);
     transparency_set_opacity(s, s->config.active_opacity + dir * 0.05f);
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "transparency %d%%", (int)(s->config.active_opacity * 100 + 0.5f));
+             _("transparency %d%%"), (int)(s->config.active_opacity * 100 + 0.5f));
 }
 
 /* Left/Right on a CHOICE row step through its options. Only the AI-model row is
@@ -4237,7 +4260,7 @@ static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
     if (v > (int)it->vmax) v = (int)it->vmax;
     if (v == cur) {
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s is at its %s", _(it->label), dir < 0 ? _("minimum") : _("maximum"));
+                 _("%s is at its %s"), _(it->label), dir < 0 ? _("minimum") : _("maximum"));
         return 1;
     }
 
@@ -4248,7 +4271,7 @@ static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
      * a row showing 14pt while the desktop is still at 10 and nothing saying
      * why — is the same confusion the AI-model row's message exists to avoid. */
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "%s: %d %s \xc2\xb7 applies when you stop",
+             _("%s: %d %s \xc2\xb7 applies when you stop"),
              _(it->label), v, is_size ? "pt" : "%");
     return 1;
 }
@@ -4275,7 +4298,7 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
         /* Already at the end of the range. Say so once rather than leaving the
          * previous message up, which reads as the key having done something. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s is at its %s", _(it->label), dir < 0 ? _("minimum") : _("maximum"));
+                 _("%s is at its %s"), _(it->label), dir < 0 ? _("minimum") : _("maximum"));
         return 1;
     }
 
@@ -4283,7 +4306,7 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
     ctlpanel_row_value(s, row, v, sizeof(v));
     if (ctlpanel_row_is_default(s, row))
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s: %s \xc2\xb7 default", _(it->label), v);
+                 _("%s: %s \xc2\xb7 default"), _(it->label), v);
     else
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "%s: %s", _(it->label), v);
@@ -4324,7 +4347,7 @@ static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
          * it does not consider worth a sentence but this row does. */
         const char *why = aimodel_status_text(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status), "%s",
-                 why[0] ? why : "no models in /var/lib/synapd/models");
+                 why[0] ? why : _("no models in /var/lib/synapd/models"));
         s->ctlpanel.model_commit_at = 0.0;
         return;
     }
@@ -4334,7 +4357,7 @@ static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
      * a row that changed under the cursor and then loaded several GB with no
      * warning is the one thing this affordance must not feel like. */
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-             "loads when you stop \xc2\xb7 Esc cancels");
+             _("loads when you stop \xc2\xb7 Esc cancels"));
 }
 
 /* ── Pointer ─────────────────────────────────────────────────
@@ -4603,7 +4626,7 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         if (sym == XKB_KEY_Escape) {
             s->ctlpanel.sc_capturing = 0;
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "Rebind cancelled");
+                     _("Rebind cancelled"));
         } else {
             ctlpanel_rebind_finish(s, sym, mods);
         }
@@ -4672,15 +4695,15 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         const struct ctl_item *it = r >= 0 ? ctl_item(r) : NULL;
         if (!it || it->vtype == CTL_VAL_NONE) {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "nothing to reset on this row");
+                     _("nothing to reset on this row"));
         } else if (ctl_reset(s, it)) {
             char v[64];
             ctlpanel_row_value(s, r, v, sizeof(v));
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "%s reset to %s", _(it->label), v);
+                     _("%s reset to %s"), _(it->label), v);
         } else {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "%s is already at its default", _(it->label));
+                     _("%s is already at its default"), _(it->label));
         }
         synui_render_ctlpanel(s);
         return 1;
@@ -4706,7 +4729,7 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             synui_render_ctlpanel(s);
         } else {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "Rebinding lives in the Shortcuts category");
+                     _("Rebinding lives in the Shortcuts category"));
             synui_render_ctlpanel(s);
         }
         return 1;
@@ -4718,7 +4741,7 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             ctlpanel_tap_action_set(s);
         } else {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "The tap is set from the Shortcuts category");
+                     _("The tap is set from the Shortcuts category"));
         }
         synui_render_ctlpanel(s);
         return 1;

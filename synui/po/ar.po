@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 15:05-0500\n"
+"POT-Creation-Date: 2026-09-01 16:04-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,7 +15,8 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -96,6 +97,14 @@ msgstr "الزجاج"
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
 msgstr "عتامة النافذة النشطة. اليسار/اليمين يضبطان، وEnter يُطفئها"
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:834
+msgid "Auto"
+msgstr ""
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+msgid "Off"
+msgstr ""
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -573,7 +582,7 @@ msgstr ""
 "«نافذة»: اسحبها من رأسها وانقر في غيره بحرية. «إغلاق بالنقر خارجها»: تُغلق "
 "حين تنقر بجوارها. وEsc يغلق دائمًا"
 
-#: src/ctlpanel.c:736
+#: src/ctlpanel.c:736 src/ctlpanel.c:2734
 msgid "Control panel"
 msgstr "لوحة التحكم"
 
@@ -581,7 +590,7 @@ msgstr "لوحة التحكم"
 msgid "How this panel itself behaves"
 msgstr "كيف تتصرف هذه اللوحة نفسها"
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276
+#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
 msgid "Task manager"
 msgstr "مدير المهام"
 
@@ -823,7 +832,7 @@ msgstr ""
 "أي ميناء ترسمه ودجة الساعة العقربية — تلك التي على سطح المكتب، من «الودجات». "
 "أما ساعة الرصيف العقربية فلها تصميم واحد"
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
 msgid "Start menu"
 msgstr "قائمة ابدأ"
 
@@ -882,6 +891,10 @@ msgstr ""
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
 msgstr "عتامة الشريط"
+
+#: src/ctlpanel.c:1007
+msgid "Follow the theme"
+msgstr ""
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1003,7 +1016,7 @@ msgstr ""
 msgid "Cursor size"
 msgstr "حجم المؤشر"
 
-#: src/ctlpanel.c:1095
+#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
 msgid "Display settings"
 msgstr "إعدادات العرض"
 
@@ -1034,7 +1047,7 @@ msgstr "إعدادات الشاشة"
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr "الموصّلات وEDID والأوضاع التي يتيحها العتاد (syn-settings)"
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128
+#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
 msgid "Night light"
 msgstr "الإضاءة الليلية"
 
@@ -1062,7 +1075,7 @@ msgstr ""
 "‏Super+Shift+M من أي مكان. يخفي الإشعارات المنبثقة ويكتم الرنّة؛ أما التنبيهات "
 "الحرجة فتصل رغم ذلك"
 
-#: src/ctlpanel.c:1145 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
 msgid "Event sounds"
 msgstr "أصوات الأحداث"
 
@@ -1123,7 +1136,7 @@ msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr ""
 "ملف DNxHR بصيغة ‎.mov تقرأه برامج المونتاج مباشرة. نحو 1.1 غيغابايت في الدقيقة"
 
-#: src/ctlpanel.c:1188
+#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "الشبكة / واي-فاي"
 
@@ -1167,7 +1180,7 @@ msgstr "حافظة الشاشة"
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr "ما تعرضه الشاشة عند الخمول، وكيف تبدو شاشة القفل"
 
-#: src/ctlpanel.c:1209
+#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
 msgid "Lock screen"
 msgstr "شاشة القفل"
 
@@ -1179,7 +1192,7 @@ msgstr "الفتح ببصمة الإصبع"
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr "ثبّت fprintd ونفّذ fprintd-enroll؛ وكلمة سرك تعمل دائمًا كذلك"
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231
+#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
 msgid "Game mode"
 msgstr "وضع الألعاب"
 
@@ -1255,7 +1268,7 @@ msgstr "أسكِت مراقبة النواة أثناء اللعب"
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr "التوفير ضئيل جدًا، ومراقبة الأمان تتوقف معه"
 
-#: src/ctlpanel.c:1265
+#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
 msgid "AI backend"
 msgstr "محرّك الذكاء الاصطناعي"
 
@@ -1267,7 +1280,7 @@ msgstr "الذكاء الاصطناعي"
 msgid "Which device synapd runs inference on"
 msgstr "على أي جهاز ينفّذ synapd الاستدلال"
 
-#: src/ctlpanel.c:1268
+#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
 msgid "AI model"
 msgstr "نموذج الذكاء الاصطناعي"
 
@@ -1291,7 +1304,7 @@ msgstr "يلوّن حافة النافذة ما دام الذكاء الاصطن
 msgid "Tools"
 msgstr "الأدوات"
 
-#: src/ctlpanel.c:1278
+#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
 msgid "Clipboard history"
 msgstr "سجل الحافظة"
 
@@ -1315,7 +1328,7 @@ msgstr "إعدادات النظام"
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr "الساعة واللغة والنواة والتطبيقات الافتراضية — أي ما ضُبط عليه النظام"
 
-#: src/ctlpanel.c:1298
+#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
 msgid "About OS"
 msgstr "عن النظام"
 
@@ -1327,17 +1340,726 @@ msgstr "عن"
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr "العلامة، والجهاز، وما ضُبط عليه سطح المكتب هذا الآن"
 
-#: src/ctlpanel.c:3613
+#: src/ctlpanel.c:1398
+msgid "device default"
+msgstr ""
+
+#: src/ctlpanel.c:1896
+#, c-format
+msgid "glass off · bar, dock and widgets solid · windows opaque"
+msgstr ""
+
+#: src/ctlpanel.c:1952
+#, c-format
+msgid "glass full · bar and dock clear · ink off the wallpaper"
+msgstr ""
+
+#: src/ctlpanel.c:2293
+#, c-format
+msgid "RGB lights: off"
+msgstr ""
+
+#: src/ctlpanel.c:2294
+#, c-format
+msgid "RGB lights: following the accent"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: off"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: on"
+msgstr ""
+
+#: src/ctlpanel.c:2367
+#, c-format
+msgid "No longer listening · the microphone is closed"
+msgstr ""
+
+#: src/ctlpanel.c:2368
+#, c-format
+msgid "Listening for \"Synapse\" · the microphone is open"
+msgstr ""
+
+#: src/ctlpanel.c:2406
+#, c-format
+msgid "always on"
+msgstr ""
+
+#: src/ctlpanel.c:2407
+#, c-format
+msgid "always off"
+msgstr ""
+
+#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#, c-format
+msgid "auto (%s)"
+msgstr ""
+
+#: src/ctlpanel.c:2521
+#, c-format
+msgid "on — %d missed"
+msgstr ""
+
+#: src/ctlpanel.c:2529
+msgid "desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "DNxHR ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "off (H.264 mp4)"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "on · laptop"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "off · desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2570
+#, c-format
+msgid "Built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2729
+msgid "Terminal"
+msgstr ""
+
+#: src/ctlpanel.c:2730
+msgid "AI command bar"
+msgstr ""
+
+#: src/ctlpanel.c:2731
+msgid "Ask the AI about the window"
+msgstr ""
+
+#: src/ctlpanel.c:2732
+msgid "Neural overlay"
+msgstr ""
+
+#: src/ctlpanel.c:2733
+msgid "Welcome menu"
+msgstr ""
+
+#: src/ctlpanel.c:2735
+msgid "Keyboard shortcuts (this list)"
+msgstr ""
+
+#: src/ctlpanel.c:2739
+msgid "System settings (syn-settings)"
+msgstr ""
+
+#: src/ctlpanel.c:2740
+msgid "Find and add network printers"
+msgstr ""
+
+#: src/ctlpanel.c:2741
+msgid "Mission control (all windows)"
+msgstr ""
+
+#: src/ctlpanel.c:2742
+msgid "Rebind a shortcut"
+msgstr ""
+
+#: src/ctlpanel.c:2744
+msgid "Do Not Disturb (mute notifications)"
+msgstr ""
+
+#: src/ctlpanel.c:2745
+msgid "Record screen"
+msgstr ""
+
+#: src/ctlpanel.c:2747
+msgid "Brightness up"
+msgstr ""
+
+#: src/ctlpanel.c:2748
+msgid "Brightness down"
+msgstr ""
+
+#: src/ctlpanel.c:2750
+msgid "Start button: text/logo"
+msgstr ""
+
+#: src/ctlpanel.c:2751
+msgid "Close window"
+msgstr ""
+
+#: src/ctlpanel.c:2752
+msgid "Quit synui"
+msgstr ""
+
+#: src/ctlpanel.c:2753
+msgid "Cycle layout"
+msgstr ""
+
+#: src/ctlpanel.c:2754
+msgid "Tile this desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2755
+msgid "Cascade this desktop (overlapping piles)"
+msgstr ""
+
+#: src/ctlpanel.c:2756
+msgid "Arrange floating windows"
+msgstr ""
+
+#: src/ctlpanel.c:2757
+msgid "Shrink master area"
+msgstr ""
+
+#: src/ctlpanel.c:2758
+msgid "Grow master area"
+msgstr ""
+
+#: src/ctlpanel.c:2759
+msgid "niri: pull window into the left column"
+msgstr ""
+
+#: src/ctlpanel.c:2760
+msgid "niri: push window out to its own column"
+msgstr ""
+
+#: src/ctlpanel.c:2761
+msgid "Focus next window"
+msgstr ""
+
+#: src/ctlpanel.c:2762
+msgid "Focus previous window"
+msgstr ""
+
+#: src/ctlpanel.c:2763
+msgid "Switch window (Alt+Tab)"
+msgstr ""
+
+#: src/ctlpanel.c:2764
+msgid "Switch window, backwards"
+msgstr ""
+
+#: src/ctlpanel.c:2765
+msgid "Move window down the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2766
+msgid "Move window up the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2767
+msgid "Move window left (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2768
+msgid "Move window right (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2769
+msgid "Move window up (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2770
+msgid "Move window down (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2771
+msgid "Float window"
+msgstr ""
+
+#: src/ctlpanel.c:2772
+msgid "Fullscreen window"
+msgstr ""
+
+#: src/ctlpanel.c:2773
+msgid "Maximize window"
+msgstr ""
+
+#: src/ctlpanel.c:2774
+msgid "Fill screen height (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2775
+msgid "Fill screen width (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2776
+msgid "Minimize window"
+msgstr ""
+
+#: src/ctlpanel.c:2777
+msgid "Restore minimized window"
+msgstr ""
+
+#: src/ctlpanel.c:2778
+msgid "Titlebars on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2780
+msgid "Screens: extend / duplicate / built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2781
+msgid "Scale the whole desktop (accessibility)"
+msgstr ""
+
+#: src/ctlpanel.c:2782
+msgid "Wallpaper picker"
+msgstr ""
+
+#: src/ctlpanel.c:2783
+msgid "Reload wallpaper / config"
+msgstr ""
+
+#: src/ctlpanel.c:2784
+msgid "Visual effects (CRT + window)"
+msgstr ""
+
+#: src/ctlpanel.c:2785
+msgid "Desktop widget manager"
+msgstr ""
+
+#: src/ctlpanel.c:2787
+msgid "CRT effects on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2788
+msgid "Power saving panel"
+msgstr ""
+
+#: src/ctlpanel.c:2789
+msgid "Screensaver + lock screen"
+msgstr ""
+
+#: src/ctlpanel.c:2795
+msgid "AI backend (GPU/CPU/off)"
+msgstr ""
+
+#: src/ctlpanel.c:2796
+msgid "Move window to next output"
+msgstr ""
+
+#: src/ctlpanel.c:2837
+msgid "Start menu (application page)"
+msgstr ""
+
+#: src/ctlpanel.c:2838
+msgid "Start menu (rofi)"
+msgstr ""
+
+#: src/ctlpanel.c:2840
+msgid "Start menu (bar menu)"
+msgstr ""
+
+#: src/ctlpanel.c:2848
+msgid "Move window to previous output"
+msgstr ""
+
+#: src/ctlpanel.c:2878
+msgid "Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2879
+msgid "KP Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2880
+msgid "Space"
+msgstr ""
+
+#: src/ctlpanel.c:2881
+msgid "Esc"
+msgstr ""
+
+#: src/ctlpanel.c:2882
+msgid "Del"
+msgstr ""
+
+#: src/ctlpanel.c:2883
+msgid "Backspace"
+msgstr ""
+
+#: src/ctlpanel.c:2884
+msgid "Tab"
+msgstr ""
+
+#: src/ctlpanel.c:2948
+msgid "Super"
+msgstr ""
+
+#: src/ctlpanel.c:2949
+msgid "Ctrl"
+msgstr ""
+
+#: src/ctlpanel.c:2950
+msgid "Alt"
+msgstr ""
+
+#: src/ctlpanel.c:2951
+msgid "Shift"
+msgstr ""
+
+#: src/ctlpanel.c:3047
+#, c-format
+msgid "Switch to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3053
+#, c-format
+msgid "Move window to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3141
+#, c-format
+msgid "loading · the AI pauses until it is up"
+msgstr ""
+
+#: src/ctlpanel.c:3231
+#, c-format
+msgid "%s: still %s · switch did not land"
+msgstr ""
+
+#: src/ctlpanel.c:3631
 msgid "position"
 msgstr "الموضع"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:3637
+msgid "turn the cell on first"
+msgstr ""
+
+#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
+#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#, c-format
+msgid "dock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3754
+#, c-format
+msgid "no GLES renderer · effects unavailable here"
+msgstr ""
+
+#: src/ctlpanel.c:3765
+msgid "CRT effects on"
+msgstr ""
+
+#: src/ctlpanel.c:3766
+msgid "CRT effects off"
+msgstr ""
+
+#: src/ctlpanel.c:3777
+#, c-format
+msgid "game mode: always on"
+msgstr ""
+
+#: src/ctlpanel.c:3778
+#, c-format
+msgid "game mode: always off"
+msgstr ""
+
+#: src/ctlpanel.c:3779
+#, c-format
+msgid "game mode: auto · a game is running"
+msgstr ""
+
+#: src/ctlpanel.c:3780
+#, c-format
+msgid "game mode: auto · no game running"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar on"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar off"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock on"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock off"
+msgstr ""
+
+#: src/ctlpanel.c:3870
+msgid "dock auto-hide on"
+msgstr ""
+
+#: src/ctlpanel.c:3871
+msgid "dock auto-hide off"
+msgstr ""
+
+#: src/ctlpanel.c:3890
+#, c-format
+msgid "an auto-hiding dock is always on top"
+msgstr ""
+
+#: src/ctlpanel.c:3899
+msgid "dock above windows"
+msgstr ""
+
+#: src/ctlpanel.c:3900
+msgid "dock below windows"
+msgstr ""
+
+#: src/ctlpanel.c:3907
+#, c-format
+msgid "the dock clock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3917
+#, c-format
+msgid "dock clock %s"
+msgstr ""
+
+#: src/ctlpanel.c:3936
+msgid "magnify"
+msgstr ""
+
+#: src/ctlpanel.c:3938
+#, fuzzy
+msgid "clock"
+msgstr "الساعة"
+
+#: src/ctlpanel.c:3940
+msgid "all-apps button"
+msgstr ""
+
+#: src/ctlpanel.c:3942
+msgid "power button"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+#, c-format
+msgid "dock %s %s"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+msgid "on"
+msgstr ""
+
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
+#: src/render.c:5370 src/render.c:6171
+#, c-format
+msgid "off"
+msgstr "مُعطَّل"
+
+#: src/ctlpanel.c:3962
+#, c-format
+msgid "the bar is off"
+msgstr ""
+
+#: src/ctlpanel.c:3973
+msgid "bar auto-hide on for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3974
+msgid "bar auto-hide off for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3988
+#, c-format
+msgid "notifications are silenced"
+msgstr ""
+
+#: src/ctlpanel.c:3989
+#, c-format
+msgid "notifications are back on"
+msgstr ""
+
+#: src/ctlpanel.c:4001
+#, c-format
+msgid "recordings capture desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:4002
+#, c-format
+msgid "recordings are silent"
+msgstr ""
+
+#: src/ctlpanel.c:4013
+#, c-format
+msgid "recordings open in a video editor · ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:4014
+#, c-format
+msgid "recordings are H.264 mp4 · small, share anywhere"
+msgstr ""
+
+#: src/ctlpanel.c:4024
+msgid "titlebars off"
+msgstr ""
+
+#: src/ctlpanel.c:4025
+msgid "titlebars on"
+msgstr ""
+
+#: src/ctlpanel.c:4034
+#, c-format
+msgid "start button: %s"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency on · %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency off"
+msgstr ""
+
+#: src/ctlpanel.c:4054
+msgid "night light on"
+msgstr ""
+
+#: src/ctlpanel.c:4055
+msgid "night light off"
+msgstr ""
+
+#: src/ctlpanel.c:4071
+#, c-format
+msgid "switching AI backend …"
+msgstr ""
+
+#: src/ctlpanel.c:4213
+#, c-format
+msgid "transparency %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#, c-format
+msgid "%s is at its %s"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
 msgstr "الأدنى"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "maximum"
 msgstr "الأقصى"
+
+#: src/ctlpanel.c:4274
+#, c-format
+msgid "%s: %d %s · applies when you stop"
+msgstr ""
+
+#: src/ctlpanel.c:4309
+#, c-format
+msgid "%s: %s · default"
+msgstr ""
+
+#: src/ctlpanel.c:4350
+msgid "no models in /var/lib/synapd/models"
+msgstr ""
+
+#: src/ctlpanel.c:4360
+#, c-format
+msgid "loads when you stop · Esc cancels"
+msgstr ""
+
+#: src/ctlpanel.c:4629
+#, c-format
+msgid "Rebind cancelled"
+msgstr ""
+
+#: src/ctlpanel.c:4698
+#, c-format
+msgid "nothing to reset on this row"
+msgstr ""
+
+#: src/ctlpanel.c:4703
+#, c-format
+msgid "%s reset to %s"
+msgstr ""
+
+#: src/ctlpanel.c:4706
+#, c-format
+msgid "%s is already at its default"
+msgstr ""
+
+#: src/ctlpanel.c:4732
+#, c-format
+msgid "Rebinding lives in the Shortcuts category"
+msgstr ""
+
+#: src/ctlpanel.c:4744
+#, c-format
+msgid "The tap is set from the Shortcuts category"
+msgstr ""
+
+#: src/deskmenu.c:77
+msgid "Open Terminal"
+msgstr ""
+
+#: src/deskmenu.c:78
+msgid "Open File Manager"
+msgstr ""
+
+#: src/deskmenu.c:79
+msgid "Applications…"
+msgstr ""
+
+#: src/deskmenu.c:81
+msgid "Change Wallpaper…"
+msgstr ""
+
+#: src/deskmenu.c:82
+msgid "Appearance…"
+msgstr ""
+
+#: src/deskmenu.c:83
+msgid "Display Settings…"
+msgstr ""
+
+#: src/deskmenu.c:84
+msgid "Desktop Widgets…"
+msgstr ""
+
+#: src/deskmenu.c:85
+msgid "Show Desktop Icons"
+msgstr ""
+
+#: src/deskmenu.c:86
+msgid "Refresh"
+msgstr ""
+
+#: src/deskmenu.c:87
+msgid "Arrange by Name"
+msgstr ""
+
+#: src/deskmenu.c:88
+msgid "Arrange by Type"
+msgstr ""
+
+#: src/deskmenu.c:89
+msgid "Arrange by Size"
+msgstr ""
+
+#: src/deskmenu.c:90
+msgid "Arrange by Date"
+msgstr ""
+
+#: src/deskmenu.c:91
+msgid "Task Manager"
+msgstr ""
+
+#: src/deskmenu.c:92 src/render.c:8194
+msgid "Open"
+msgstr "فتح"
+
+#: src/deskmenu.c:93
+msgid "Move to Trash"
+msgstr ""
 
 #: src/dock.c:3418
 msgid "top"
@@ -1513,12 +2235,6 @@ msgstr "توسيع"
 msgid "no outputs connected"
 msgstr "لا توجد شاشات موصولة"
 
-#: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
-#: src/render.c:6171
-#, c-format
-msgid "off"
-msgstr "مُعطَّل"
-
 #: src/render.c:1319
 msgid "PRIMARY"
 msgstr "الرئيسية"
@@ -1540,7 +2256,9 @@ msgstr "HDR10 مُفعَّل"
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr "%s تعمل بـ HDR10 · PQ · الألوان الأساسية %s · الأبيض SDR ‏%d cd/m² ‏([ ]) · الإخراج %s%s"
+msgstr ""
+"%s تعمل بـ HDR10 · PQ · الألوان الأساسية %s · الأبيض SDR ‏%d cd/m² ‏([ ]) · "
+"الإخراج %s%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
@@ -1572,14 +2290,18 @@ msgstr "%s لا تعلن عن أي دالة نقل HDR في بيانات EDID ا
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr "أعلى/أسفل للاختيار · يسار/يمين للتدوير · −/+ لتحجيم هذه الشاشة · p لجعلها الرئيسية (الافتراضية لـ X11 والألعاب) · m للترتيب"
+msgstr ""
+"أعلى/أسفل للاختيار · يسار/يمين للتدوير · −/+ لتحجيم هذه الشاشة · p لجعلها "
+"الرئيسية (الافتراضية لـ X11 والألعاب) · m للترتيب"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr "‏Shift+الأسهم تنقل داخل الشبكة (تبادل) · d لون بعمق 10 بت (ليس HDR) · Shift+D إخراج HDR10 · [ ] الأبيض SDR · Super+Ctrl+= يحجّم كل الشاشات · Esc للإغلاق"
+msgstr ""
+"‏Shift+الأسهم تنقل داخل الشبكة (تبادل) · d لون بعمق 10 بت (ليس HDR) · Shift+D "
+"إخراج HDR10 · [ ] الأبيض SDR · Super+Ctrl+= يحجّم كل الشاشات · Esc للإغلاق"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
@@ -1595,7 +2317,9 @@ msgstr "لا توجد معاينة"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr "أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · Enter/Esc للإغلاق"
+msgstr ""
+"أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · Enter/Esc "
+"للإغلاق"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
@@ -1668,7 +2392,8 @@ msgstr "‏synui-cursor install <أرشيف>   ثم اضغط r"
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr "أعلى/أسفل للمعاينة · -/+ للحجم · r لإعادة الفحص · Enter للتطبيق · Esc للإلغاء"
+msgstr ""
+"أعلى/أسفل للمعاينة · -/+ للحجم · r لإعادة الفحص · Enter للتطبيق · Esc للإلغاء"
 
 #: src/render.c:2237
 msgid "UI FONT"
@@ -1688,7 +2413,9 @@ msgstr "ليس ثابت العرض · قد لا يظهر kitty وfoot بشكل �
 
 #: src/render.c:2390
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
-msgstr "أعلى/أسفل للمعاينة · d للافتراضي · r لإعادة الفحص · Enter للتطبيق · Esc للإلغاء"
+msgstr ""
+"أعلى/أسفل للمعاينة · d للافتراضي · r لإعادة الفحص · Enter للتطبيق · Esc "
+"للإلغاء"
 
 #: src/render.c:2522
 msgid "Type to search"
@@ -1821,7 +2548,9 @@ msgstr "← → للتالي والسابق · اسحب أو مرِّر للتك
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr "التمرير يكبّر · + − للتكبير · 0 للملاءمة · 1 للحجم الأصلي · c للقص · r لإعادة الفحص · Esc أو × %s"
+msgstr ""
+"التمرير يكبّر · + − للتكبير · 0 للملاءمة · 1 للحجم الأصلي · c للقص · r لإعادة "
+"الفحص · Esc أو × %s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
@@ -1839,14 +2568,17 @@ msgstr "قص"
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr "اسحب للتحديد · اسحب زاوية لضبطها · Tab يختار الزاوية التي تحركها الأسهم"
+msgstr ""
+"اسحب للتحديد · اسحب زاوية لضبطها · Tab يختار الزاوية التي تحركها الأسهم"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr "الأسهم تغيّر الحجم · Ctrl+الأسهم تحرّك · Shift ×‏ 25 · a للكل · Enter يحفظ نسخة · Esc %s"
+msgstr ""
+"الأسهم تغيّر الحجم · Ctrl+الأسهم تحرّك · Shift ×‏ 25 · a للكل · Enter يحفظ نسخة "
+"· Esc %s"
 
 #: src/render.c:3961
 msgid "cancel"
@@ -2094,7 +2826,9 @@ msgstr "اكتب للبحث · Enter يبحث · Esc للإلغاء"
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
-msgstr "أعلى/أسفل للاختيار · يسار/يمين للتكميم · Enter للتنزيل · / للبحث · Esc للإغلاق"
+msgstr ""
+"أعلى/أسفل للاختيار · يسار/يمين للتكميم · Enter للتنزيل · / للبحث · Esc "
+"للإغلاق"
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
@@ -2103,7 +2837,9 @@ msgstr "احذف مرة أخرى للتأكيد · Esc يلغي · وأي حرك
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr "أعلى/أسفل للاختيار · Enter للتحميل · Del للحذف · / للبحث · R لإعادة الفحص · Esc للإغلاق"
+msgstr ""
+"أعلى/أسفل للاختيار · Enter للتحميل · Del للحذف · / للبحث · R لإعادة الفحص · "
+"Esc للإغلاق"
 
 #: src/render.c:5235
 msgid ""
@@ -2145,11 +2881,15 @@ msgstr "غير موجود في هذه السمة"
 
 #: src/render.c:5435
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
-msgstr "أعلى/أسفل للاختيار · Enter للتبديل · يسار/يمين للإيقاف والتشغيل · [ ] لاختيار الصوت"
+msgstr ""
+"أعلى/أسفل للاختيار · Enter للتبديل · يسار/يمين للإيقاف والتشغيل · [ ] "
+"لاختيار الصوت"
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr "‏t للتشغيل · المسافة لكل الأصوات تشغيلًا وإيقافًا · Esc للإغلاق · للمزيد: synui-sound --help"
+msgstr ""
+"‏t للتشغيل · المسافة لكل الأصوات تشغيلًا وإيقافًا · Esc للإغلاق · للمزيد: synui-"
+"sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
@@ -2293,7 +3033,9 @@ msgstr "اضغط المفتاح الجديد لهذا الاختصار · Esc ي
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr "‏F2 لإعادة التعيين · F3 ينقله إلى النقرة · Ctrl+Shift+R لإعادة ضبط الكل · Esc للرجوع"
+msgstr ""
+"‏F2 لإعادة التعيين · F3 ينقله إلى النقرة · Ctrl+Shift+R لإعادة ضبط الكل · Esc "
+"للرجوع"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
@@ -2336,7 +3078,9 @@ msgstr "اضغط أي تركيبة مع Super أو Ctrl أو Alt · Esc يلغي
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr "تصفية · Enter يشغّل · F2 يعيّن مفتاحًا · Del يحرّره · F3 للنقرة · Ctrl+Shift+R يعيد الضبط"
+msgstr ""
+"تصفية · Enter يشغّل · F2 يعيّن مفتاحًا · Del يحرّره · F3 للنقرة · Ctrl+Shift+R "
+"يعيد الضبط"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
@@ -2509,12 +3253,16 @@ msgstr "موثوق"
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr "‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a لعرض أقل · Esc"
+msgstr ""
+"‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a "
+"لعرض أقل · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr "‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a للكل · Esc"
+msgstr ""
+"‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a "
+"للكل · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
@@ -2566,7 +3314,9 @@ msgstr "الذاكرة"
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr "‏j/k للتنقل · نقر يمين على صف · c/m/g/p للترتيب · u لعملياتي · x للإنهاء · X للقتل · Esc للإغلاق"
+msgstr ""
+"‏j/k للتنقل · نقر يمين على صف · c/m/g/p للترتيب · u لعملياتي · x للإنهاء · X "
+"للقتل · Esc للإغلاق"
 
 #: src/render.c:7984
 msgid "NEWS"
@@ -2617,7 +3367,9 @@ msgstr "اكتب للتصفية · Enter للإبقاء · Esc للمسح"
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr "‏j/k للتنقل · Enter للفتح · o في الخلفية · c للتعليقات · y للنسخ · Tab للمصدر · / للبحث · s للترتيب · m كمقروء · r للتحديث · Esc للإغلاق"
+msgstr ""
+"‏j/k للتنقل · Enter للفتح · o في الخلفية · c للتعليقات · y للنسخ · Tab للمصدر "
+"· / للبحث · s للترتيب · m كمقروء · r للتحديث · Esc للإغلاق"
 
 #: src/render.c:8152
 msgid "Bottom"
@@ -2656,10 +3408,6 @@ msgstr "تثبيت في الرصيف"
 #: src/render.c:8193
 msgid "Unpin from Dock"
 msgstr "إزالة من الرصيف"
-
-#: src/render.c:8194
-msgid "Open"
-msgstr "فتح"
 
 #: src/render.c:8195
 msgid "New Window"
@@ -2764,7 +3512,9 @@ msgstr "لا شيء مفتوح على سطح المكتب هذا."
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr "الأسهم أو النقر تختار نافذة · Enter يفتحها · Del يغلقها · 1–9 تبدّل سطح المكتب · Esc للإغلاق"
+msgstr ""
+"الأسهم أو النقر تختار نافذة · Enter يفتحها · Del يغلقها · 1–9 تبدّل سطح "
+"المكتب · Esc للإغلاق"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2861,10 +3611,6 @@ msgstr "مشغّل الموسيقى"
 #, fuzzy
 #~ msgid "visualizer"
 #~ msgstr "المعادل"
-
-#, fuzzy
-#~ msgid "clock"
-#~ msgstr "الساعة"
 
 #, fuzzy
 #~ msgid "corner_radius"

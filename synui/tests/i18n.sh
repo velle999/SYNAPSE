@@ -83,6 +83,26 @@ for po in "$root"/po/*.po; do
 done
 check "every .po declares Plural-Forms" "" "$noplural"
 
+# ── 3d. the enum option tables are NOT translated ─────────
+# ⛔ ctl_names_*[] IS THE CONFIG SPELLING. ctlpanel.c's own comments say it:
+# "ctl_format() persists the DISPLAYED name lower-cased", which is why
+# ctl_names_start_menu carries "App-overlay" with its hyphen — `app overlay` is
+# a word config.c would not parse. Translate one of these and settings.state is
+# written in German: `start_menu_style = app-overlagerung`, and the row silently
+# loses its setting at the next login.
+#
+# They look exactly like labels, they sit in the same file as 160 real ones, and
+# the only thing separating them is which function reads them back.
+optbad=$(cd "$root" && awk '/static const char \*const ctl_names_/,/};/' \
+         src/ctlpanel.c | grep -n '_("' || true)
+check "no ctl_names_ option table is translated" "" "$optbad"
+
+# ⛔ AND NEITHER IS ctl_format()'s BOOL CASE, for the same reason: it is not
+# guarded by for_config, so the one string serves both the row and the file.
+boolbad=$(cd "$root" && sed -n '/^static void ctl_format(/,/^}/p' src/ctlpanel.c |
+          grep -n 'v != 0.0f ? _(' || true)
+check "ctl_format's bool value stays machine-spelled" "" "$boolbad"
+
 # ── 4. a marked string is actually looked up ──────────────
 check "N_() is paired with a _() lookup in ctlpanel.c" yes \
       "$(grep -q 'N_("Theme")' "$root/src/ctlpanel.c" &&

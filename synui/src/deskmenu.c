@@ -41,6 +41,7 @@
  */
 
 #define _GNU_SOURCE
+#include "i18n.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -73,23 +74,23 @@ static void deskicons_state_save(syn_server_t *s);
 const char *deskact_label(syn_deskact_t a)
 {
     switch (a) {
-    case SYN_DESKACT_TERMINAL:  return "Open Terminal";
-    case SYN_DESKACT_FILES:     return "Open File Manager";
-    case SYN_DESKACT_APPS:      return "Applications…";
+    case SYN_DESKACT_TERMINAL:  return _("Open Terminal");
+    case SYN_DESKACT_FILES:     return _("Open File Manager");
+    case SYN_DESKACT_APPS:      return _("Applications…");
     case SYN_DESKACT_SEP:       return "";
-    case SYN_DESKACT_WALLPAPER: return "Change Wallpaper…";
-    case SYN_DESKACT_THEME:     return "Appearance…";
-    case SYN_DESKACT_DISPLAY:   return "Display Settings…";
-    case SYN_DESKACT_WIDGETS:   return "Desktop Widgets…";
-    case SYN_DESKACT_ICONS:     return "Show Desktop Icons";
-    case SYN_DESKACT_REFRESH:   return "Refresh";
-    case SYN_DESKACT_ARRANGE_NAME: return "Arrange by Name";
-    case SYN_DESKACT_ARRANGE_TYPE: return "Arrange by Type";
-    case SYN_DESKACT_ARRANGE_SIZE: return "Arrange by Size";
-    case SYN_DESKACT_ARRANGE_DATE: return "Arrange by Date";
-    case SYN_DESKACT_TASKMGR:   return "Task Manager";
-    case SYN_DESKACT_ICON_OPEN: return "Open";
-    case SYN_DESKACT_ICON_TRASH:return "Move to Trash";
+    case SYN_DESKACT_WALLPAPER: return _("Change Wallpaper…");
+    case SYN_DESKACT_THEME:     return _("Appearance…");
+    case SYN_DESKACT_DISPLAY:   return _("Display Settings…");
+    case SYN_DESKACT_WIDGETS:   return _("Desktop Widgets…");
+    case SYN_DESKACT_ICONS:     return _("Show Desktop Icons");
+    case SYN_DESKACT_REFRESH:   return _("Refresh");
+    case SYN_DESKACT_ARRANGE_NAME: return _("Arrange by Name");
+    case SYN_DESKACT_ARRANGE_TYPE: return _("Arrange by Type");
+    case SYN_DESKACT_ARRANGE_SIZE: return _("Arrange by Size");
+    case SYN_DESKACT_ARRANGE_DATE: return _("Arrange by Date");
+    case SYN_DESKACT_TASKMGR:   return _("Task Manager");
+    case SYN_DESKACT_ICON_OPEN: return _("Open");
+    case SYN_DESKACT_ICON_TRASH:return _("Move to Trash");
     }
     return "";
 }

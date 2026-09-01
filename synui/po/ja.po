@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 15:05-0500\n"
+"POT-Creation-Date: 2026-09-01 16:04-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -96,6 +96,14 @@ msgstr "ガラス"
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
 msgstr "選択中のウィンドウの不透明度。左右で調整、Enter で切ります"
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:834
+msgid "Auto"
+msgstr ""
+
+#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+msgid "Off"
+msgstr ""
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -580,7 +588,7 @@ msgstr ""
 "ウィンドウ: 見出しでつかんで動かし、他は自由にクリック。外側で閉じる: 離れて"
 "クリックすると閉じます。Esc は常に閉じます"
 
-#: src/ctlpanel.c:736
+#: src/ctlpanel.c:736 src/ctlpanel.c:2734
 msgid "Control panel"
 msgstr "コントロールパネル"
 
@@ -588,7 +596,7 @@ msgstr "コントロールパネル"
 msgid "How this panel itself behaves"
 msgstr "このパネル自体のふるまい"
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276
+#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
 msgid "Task manager"
 msgstr "タスクマネージャー"
 
@@ -828,7 +836,7 @@ msgstr ""
 "アナログ時計ウィジェットが描く文字盤 — ウィジェットから置くデスクトップの方で"
 "す。ドックのアナログ時計の意匠は一つだけです"
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
 msgid "Start menu"
 msgstr "スタートメニュー"
 
@@ -887,6 +895,10 @@ msgstr ""
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
 msgstr "バーの不透明度"
+
+#: src/ctlpanel.c:1007
+msgid "Follow the theme"
+msgstr ""
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1009,7 +1021,7 @@ msgstr ""
 msgid "Cursor size"
 msgstr "カーソルの大きさ"
 
-#: src/ctlpanel.c:1095
+#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
 msgid "Display settings"
 msgstr "ディスプレイの設定"
 
@@ -1041,7 +1053,7 @@ msgstr "モニターの設定"
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr "コネクター、EDID、ハードウェアが出せるモード (syn-settings)"
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128
+#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
 msgid "Night light"
 msgstr "ナイトライト"
 
@@ -1068,7 +1080,7 @@ msgid ""
 msgstr ""
 "どこでも Super+Shift+M。通知の表示を隠し、音を消します。重大な警告は届きます"
 
-#: src/ctlpanel.c:1145 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
 msgid "Event sounds"
 msgstr "イベント音"
 
@@ -1131,7 +1143,7 @@ msgstr "編集用に録画する"
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr "映像編集ソフトがそのまま読める DNxHR の .mov。毎分およそ 1.1 GB"
 
-#: src/ctlpanel.c:1188
+#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "ネットワーク / Wi-Fi"
 
@@ -1176,7 +1188,7 @@ msgstr "スクリーンセーバー"
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr "操作がないときに画面が映すものと、ロック画面の見た目"
 
-#: src/ctlpanel.c:1209
+#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
 msgid "Lock screen"
 msgstr "ロック画面"
 
@@ -1189,7 +1201,7 @@ msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr ""
 "fprintd を入れて fprintd-enroll を実行してください。パスワードも常に使えます"
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231
+#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
 msgid "Game mode"
 msgstr "ゲームモード"
 
@@ -1268,7 +1280,7 @@ msgstr "ゲーム中はカーネル監視を静める"
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr "節約はごくわずかで、セキュリティ監視も一緒に止まります"
 
-#: src/ctlpanel.c:1265
+#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
 msgid "AI backend"
 msgstr "AI のバックエンド"
 
@@ -1280,7 +1292,7 @@ msgstr "AI"
 msgid "Which device synapd runs inference on"
 msgstr "synapd がどの装置で推論するか"
 
-#: src/ctlpanel.c:1268
+#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
 msgid "AI model"
 msgstr "AI モデル"
 
@@ -1304,7 +1316,7 @@ msgstr "そのウィンドウの文脈を AI が持っている間、枠に色�
 msgid "Tools"
 msgstr "ツール"
 
-#: src/ctlpanel.c:1278
+#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
 msgid "Clipboard history"
 msgstr "クリップボードの履歴"
 
@@ -1328,7 +1340,7 @@ msgstr "システム設定"
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr "時計、地域、カーネル、既定のアプリ — システム側の設定です"
 
-#: src/ctlpanel.c:1298
+#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
 msgid "About OS"
 msgstr "OS について"
 
@@ -1340,17 +1352,726 @@ msgstr "情報"
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr "この印と、この機械と、このデスクトップのいまの設定"
 
-#: src/ctlpanel.c:3613
+#: src/ctlpanel.c:1398
+msgid "device default"
+msgstr ""
+
+#: src/ctlpanel.c:1896
+#, c-format
+msgid "glass off · bar, dock and widgets solid · windows opaque"
+msgstr ""
+
+#: src/ctlpanel.c:1952
+#, c-format
+msgid "glass full · bar and dock clear · ink off the wallpaper"
+msgstr ""
+
+#: src/ctlpanel.c:2293
+#, c-format
+msgid "RGB lights: off"
+msgstr ""
+
+#: src/ctlpanel.c:2294
+#, c-format
+msgid "RGB lights: following the accent"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: off"
+msgstr ""
+
+#: src/ctlpanel.c:2355
+#, c-format
+msgid "Screen reader: on"
+msgstr ""
+
+#: src/ctlpanel.c:2367
+#, c-format
+msgid "No longer listening · the microphone is closed"
+msgstr ""
+
+#: src/ctlpanel.c:2368
+#, c-format
+msgid "Listening for \"Synapse\" · the microphone is open"
+msgstr ""
+
+#: src/ctlpanel.c:2406
+#, c-format
+msgid "always on"
+msgstr ""
+
+#: src/ctlpanel.c:2407
+#, c-format
+msgid "always off"
+msgstr ""
+
+#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#, c-format
+msgid "auto (%s)"
+msgstr ""
+
+#: src/ctlpanel.c:2521
+#, c-format
+msgid "on — %d missed"
+msgstr ""
+
+#: src/ctlpanel.c:2529
+msgid "desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "DNxHR ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:2537
+msgid "off (H.264 mp4)"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "on · laptop"
+msgstr ""
+
+#: src/ctlpanel.c:2559
+msgid "off · desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2570
+#, c-format
+msgid "Built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2729
+msgid "Terminal"
+msgstr ""
+
+#: src/ctlpanel.c:2730
+msgid "AI command bar"
+msgstr ""
+
+#: src/ctlpanel.c:2731
+msgid "Ask the AI about the window"
+msgstr ""
+
+#: src/ctlpanel.c:2732
+msgid "Neural overlay"
+msgstr ""
+
+#: src/ctlpanel.c:2733
+msgid "Welcome menu"
+msgstr ""
+
+#: src/ctlpanel.c:2735
+msgid "Keyboard shortcuts (this list)"
+msgstr ""
+
+#: src/ctlpanel.c:2739
+msgid "System settings (syn-settings)"
+msgstr ""
+
+#: src/ctlpanel.c:2740
+msgid "Find and add network printers"
+msgstr ""
+
+#: src/ctlpanel.c:2741
+msgid "Mission control (all windows)"
+msgstr ""
+
+#: src/ctlpanel.c:2742
+msgid "Rebind a shortcut"
+msgstr ""
+
+#: src/ctlpanel.c:2744
+msgid "Do Not Disturb (mute notifications)"
+msgstr ""
+
+#: src/ctlpanel.c:2745
+msgid "Record screen"
+msgstr ""
+
+#: src/ctlpanel.c:2747
+msgid "Brightness up"
+msgstr ""
+
+#: src/ctlpanel.c:2748
+msgid "Brightness down"
+msgstr ""
+
+#: src/ctlpanel.c:2750
+msgid "Start button: text/logo"
+msgstr ""
+
+#: src/ctlpanel.c:2751
+msgid "Close window"
+msgstr ""
+
+#: src/ctlpanel.c:2752
+msgid "Quit synui"
+msgstr ""
+
+#: src/ctlpanel.c:2753
+msgid "Cycle layout"
+msgstr ""
+
+#: src/ctlpanel.c:2754
+msgid "Tile this desktop"
+msgstr ""
+
+#: src/ctlpanel.c:2755
+msgid "Cascade this desktop (overlapping piles)"
+msgstr ""
+
+#: src/ctlpanel.c:2756
+msgid "Arrange floating windows"
+msgstr ""
+
+#: src/ctlpanel.c:2757
+msgid "Shrink master area"
+msgstr ""
+
+#: src/ctlpanel.c:2758
+msgid "Grow master area"
+msgstr ""
+
+#: src/ctlpanel.c:2759
+msgid "niri: pull window into the left column"
+msgstr ""
+
+#: src/ctlpanel.c:2760
+msgid "niri: push window out to its own column"
+msgstr ""
+
+#: src/ctlpanel.c:2761
+msgid "Focus next window"
+msgstr ""
+
+#: src/ctlpanel.c:2762
+msgid "Focus previous window"
+msgstr ""
+
+#: src/ctlpanel.c:2763
+msgid "Switch window (Alt+Tab)"
+msgstr ""
+
+#: src/ctlpanel.c:2764
+msgid "Switch window, backwards"
+msgstr ""
+
+#: src/ctlpanel.c:2765
+msgid "Move window down the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2766
+msgid "Move window up the stack"
+msgstr ""
+
+#: src/ctlpanel.c:2767
+msgid "Move window left (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2768
+msgid "Move window right (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2769
+msgid "Move window up (or earlier in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2770
+msgid "Move window down (or later in the layout)"
+msgstr ""
+
+#: src/ctlpanel.c:2771
+msgid "Float window"
+msgstr ""
+
+#: src/ctlpanel.c:2772
+msgid "Fullscreen window"
+msgstr ""
+
+#: src/ctlpanel.c:2773
+msgid "Maximize window"
+msgstr ""
+
+#: src/ctlpanel.c:2774
+msgid "Fill screen height (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2775
+msgid "Fill screen width (or put it back)"
+msgstr ""
+
+#: src/ctlpanel.c:2776
+msgid "Minimize window"
+msgstr ""
+
+#: src/ctlpanel.c:2777
+msgid "Restore minimized window"
+msgstr ""
+
+#: src/ctlpanel.c:2778
+msgid "Titlebars on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2780
+msgid "Screens: extend / duplicate / built-in off"
+msgstr ""
+
+#: src/ctlpanel.c:2781
+msgid "Scale the whole desktop (accessibility)"
+msgstr ""
+
+#: src/ctlpanel.c:2782
+msgid "Wallpaper picker"
+msgstr ""
+
+#: src/ctlpanel.c:2783
+msgid "Reload wallpaper / config"
+msgstr ""
+
+#: src/ctlpanel.c:2784
+msgid "Visual effects (CRT + window)"
+msgstr ""
+
+#: src/ctlpanel.c:2785
+msgid "Desktop widget manager"
+msgstr ""
+
+#: src/ctlpanel.c:2787
+msgid "CRT effects on/off"
+msgstr ""
+
+#: src/ctlpanel.c:2788
+msgid "Power saving panel"
+msgstr ""
+
+#: src/ctlpanel.c:2789
+msgid "Screensaver + lock screen"
+msgstr ""
+
+#: src/ctlpanel.c:2795
+msgid "AI backend (GPU/CPU/off)"
+msgstr ""
+
+#: src/ctlpanel.c:2796
+msgid "Move window to next output"
+msgstr ""
+
+#: src/ctlpanel.c:2837
+msgid "Start menu (application page)"
+msgstr ""
+
+#: src/ctlpanel.c:2838
+msgid "Start menu (rofi)"
+msgstr ""
+
+#: src/ctlpanel.c:2840
+msgid "Start menu (bar menu)"
+msgstr ""
+
+#: src/ctlpanel.c:2848
+msgid "Move window to previous output"
+msgstr ""
+
+#: src/ctlpanel.c:2878
+msgid "Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2879
+msgid "KP Enter"
+msgstr ""
+
+#: src/ctlpanel.c:2880
+msgid "Space"
+msgstr ""
+
+#: src/ctlpanel.c:2881
+msgid "Esc"
+msgstr ""
+
+#: src/ctlpanel.c:2882
+msgid "Del"
+msgstr ""
+
+#: src/ctlpanel.c:2883
+msgid "Backspace"
+msgstr ""
+
+#: src/ctlpanel.c:2884
+msgid "Tab"
+msgstr ""
+
+#: src/ctlpanel.c:2948
+msgid "Super"
+msgstr ""
+
+#: src/ctlpanel.c:2949
+msgid "Ctrl"
+msgstr ""
+
+#: src/ctlpanel.c:2950
+msgid "Alt"
+msgstr ""
+
+#: src/ctlpanel.c:2951
+msgid "Shift"
+msgstr ""
+
+#: src/ctlpanel.c:3047
+#, c-format
+msgid "Switch to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3053
+#, c-format
+msgid "Move window to workspace"
+msgstr ""
+
+#: src/ctlpanel.c:3141
+#, c-format
+msgid "loading · the AI pauses until it is up"
+msgstr ""
+
+#: src/ctlpanel.c:3231
+#, c-format
+msgid "%s: still %s · switch did not land"
+msgstr ""
+
+#: src/ctlpanel.c:3631
 msgid "position"
 msgstr "位置"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:3637
+msgid "turn the cell on first"
+msgstr ""
+
+#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
+#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#, c-format
+msgid "dock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3754
+#, c-format
+msgid "no GLES renderer · effects unavailable here"
+msgstr ""
+
+#: src/ctlpanel.c:3765
+msgid "CRT effects on"
+msgstr ""
+
+#: src/ctlpanel.c:3766
+msgid "CRT effects off"
+msgstr ""
+
+#: src/ctlpanel.c:3777
+#, c-format
+msgid "game mode: always on"
+msgstr ""
+
+#: src/ctlpanel.c:3778
+#, c-format
+msgid "game mode: always off"
+msgstr ""
+
+#: src/ctlpanel.c:3779
+#, c-format
+msgid "game mode: auto · a game is running"
+msgstr ""
+
+#: src/ctlpanel.c:3780
+#, c-format
+msgid "game mode: auto · no game running"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar on"
+msgstr ""
+
+#: src/ctlpanel.c:3836
+msgid "bar off"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock on"
+msgstr ""
+
+#: src/ctlpanel.c:3852
+msgid "dock off"
+msgstr ""
+
+#: src/ctlpanel.c:3870
+msgid "dock auto-hide on"
+msgstr ""
+
+#: src/ctlpanel.c:3871
+msgid "dock auto-hide off"
+msgstr ""
+
+#: src/ctlpanel.c:3890
+#, c-format
+msgid "an auto-hiding dock is always on top"
+msgstr ""
+
+#: src/ctlpanel.c:3899
+msgid "dock above windows"
+msgstr ""
+
+#: src/ctlpanel.c:3900
+msgid "dock below windows"
+msgstr ""
+
+#: src/ctlpanel.c:3907
+#, c-format
+msgid "the dock clock is off"
+msgstr ""
+
+#: src/ctlpanel.c:3917
+#, c-format
+msgid "dock clock %s"
+msgstr ""
+
+#: src/ctlpanel.c:3936
+msgid "magnify"
+msgstr ""
+
+#: src/ctlpanel.c:3938
+#, fuzzy
+msgid "clock"
+msgstr "時計"
+
+#: src/ctlpanel.c:3940
+msgid "all-apps button"
+msgstr ""
+
+#: src/ctlpanel.c:3942
+msgid "power button"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+#, c-format
+msgid "dock %s %s"
+msgstr ""
+
+#: src/ctlpanel.c:3949
+msgid "on"
+msgstr ""
+
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
+#: src/render.c:5370 src/render.c:6171
+#, c-format
+msgid "off"
+msgstr "オフ"
+
+#: src/ctlpanel.c:3962
+#, c-format
+msgid "the bar is off"
+msgstr ""
+
+#: src/ctlpanel.c:3973
+msgid "bar auto-hide on for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3974
+msgid "bar auto-hide off for every monitor"
+msgstr ""
+
+#: src/ctlpanel.c:3988
+#, c-format
+msgid "notifications are silenced"
+msgstr ""
+
+#: src/ctlpanel.c:3989
+#, c-format
+msgid "notifications are back on"
+msgstr ""
+
+#: src/ctlpanel.c:4001
+#, c-format
+msgid "recordings capture desktop sound"
+msgstr ""
+
+#: src/ctlpanel.c:4002
+#, c-format
+msgid "recordings are silent"
+msgstr ""
+
+#: src/ctlpanel.c:4013
+#, c-format
+msgid "recordings open in a video editor · ~1.1 GB/min"
+msgstr ""
+
+#: src/ctlpanel.c:4014
+#, c-format
+msgid "recordings are H.264 mp4 · small, share anywhere"
+msgstr ""
+
+#: src/ctlpanel.c:4024
+msgid "titlebars off"
+msgstr ""
+
+#: src/ctlpanel.c:4025
+msgid "titlebars on"
+msgstr ""
+
+#: src/ctlpanel.c:4034
+#, c-format
+msgid "start button: %s"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency on · %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4045
+#, c-format
+msgid "transparency off"
+msgstr ""
+
+#: src/ctlpanel.c:4054
+msgid "night light on"
+msgstr ""
+
+#: src/ctlpanel.c:4055
+msgid "night light off"
+msgstr ""
+
+#: src/ctlpanel.c:4071
+#, c-format
+msgid "switching AI backend …"
+msgstr ""
+
+#: src/ctlpanel.c:4213
+#, c-format
+msgid "transparency %d%%"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#, c-format
+msgid "%s is at its %s"
+msgstr ""
+
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
 msgstr "最小値"
 
-#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "maximum"
 msgstr "最大値"
+
+#: src/ctlpanel.c:4274
+#, c-format
+msgid "%s: %d %s · applies when you stop"
+msgstr ""
+
+#: src/ctlpanel.c:4309
+#, c-format
+msgid "%s: %s · default"
+msgstr ""
+
+#: src/ctlpanel.c:4350
+msgid "no models in /var/lib/synapd/models"
+msgstr ""
+
+#: src/ctlpanel.c:4360
+#, c-format
+msgid "loads when you stop · Esc cancels"
+msgstr ""
+
+#: src/ctlpanel.c:4629
+#, c-format
+msgid "Rebind cancelled"
+msgstr ""
+
+#: src/ctlpanel.c:4698
+#, c-format
+msgid "nothing to reset on this row"
+msgstr ""
+
+#: src/ctlpanel.c:4703
+#, c-format
+msgid "%s reset to %s"
+msgstr ""
+
+#: src/ctlpanel.c:4706
+#, c-format
+msgid "%s is already at its default"
+msgstr ""
+
+#: src/ctlpanel.c:4732
+#, c-format
+msgid "Rebinding lives in the Shortcuts category"
+msgstr ""
+
+#: src/ctlpanel.c:4744
+#, c-format
+msgid "The tap is set from the Shortcuts category"
+msgstr ""
+
+#: src/deskmenu.c:77
+msgid "Open Terminal"
+msgstr ""
+
+#: src/deskmenu.c:78
+msgid "Open File Manager"
+msgstr ""
+
+#: src/deskmenu.c:79
+msgid "Applications…"
+msgstr ""
+
+#: src/deskmenu.c:81
+msgid "Change Wallpaper…"
+msgstr ""
+
+#: src/deskmenu.c:82
+msgid "Appearance…"
+msgstr ""
+
+#: src/deskmenu.c:83
+msgid "Display Settings…"
+msgstr ""
+
+#: src/deskmenu.c:84
+msgid "Desktop Widgets…"
+msgstr ""
+
+#: src/deskmenu.c:85
+msgid "Show Desktop Icons"
+msgstr ""
+
+#: src/deskmenu.c:86
+msgid "Refresh"
+msgstr ""
+
+#: src/deskmenu.c:87
+msgid "Arrange by Name"
+msgstr ""
+
+#: src/deskmenu.c:88
+msgid "Arrange by Type"
+msgstr ""
+
+#: src/deskmenu.c:89
+msgid "Arrange by Size"
+msgstr ""
+
+#: src/deskmenu.c:90
+msgid "Arrange by Date"
+msgstr ""
+
+#: src/deskmenu.c:91
+msgid "Task Manager"
+msgstr ""
+
+#: src/deskmenu.c:92 src/render.c:8194
+msgid "Open"
+msgstr "開く"
+
+#: src/deskmenu.c:93
+msgid "Move to Trash"
+msgstr ""
 
 #: src/dock.c:3418
 msgid "top"
@@ -1516,12 +2237,6 @@ msgstr "拡張"
 msgid "no outputs connected"
 msgstr "接続されているディスプレイがありません"
 
-#: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
-#: src/render.c:6171
-#, c-format
-msgid "off"
-msgstr "オフ"
-
 #: src/render.c:1319
 msgid "PRIMARY"
 msgstr "メイン"
@@ -1575,14 +2290,19 @@ msgstr "%s は EDID に HDR 伝達関数を示していません (SDR パネル)
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr "上下 選択 · 左右 回転 · −/+ この画面の拡大率 · p メインに設定 (X11・ゲームの既定) · m 配置"
+msgstr ""
+"上下 選択 · 左右 回転 · −/+ この画面の拡大率 · p メインに設定 (X11・ゲームの"
+"既定) · m 配置"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr "Shift+矢印 で格子内を移動 (入れ替え) · d 10 ビットカラー (ディープカラー、HDR ではありません) · Shift+D HDR10 出力 · [ ] SDR 白 · Super+Ctrl+= すべての画面を拡大縮小 · Esc 閉じる"
+msgstr ""
+"Shift+矢印 で格子内を移動 (入れ替え) · d 10 ビットカラー (ディープカラー、"
+"HDR ではありません) · Shift+D HDR10 出力 · [ ] SDR 白 · Super+Ctrl+= すべての"
+"画面を拡大縮小 · Esc 閉じる"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
@@ -1598,7 +2318,8 @@ msgstr "プレビューなし"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr "上下 プレビュー · Tab 画面 · m 拡大率 · r 再読み込み · Enter/Esc 閉じる"
+msgstr ""
+"上下 プレビュー · Tab 画面 · m 拡大率 · r 再読み込み · Enter/Esc 閉じる"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
@@ -1671,7 +2392,8 @@ msgstr "synui-cursor install <アーカイブ>   そのあと r を押してく�
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr "上下 プレビュー · -/+ 大きさ · r 再読み込み · Enter 適用 · Esc 取り消し"
+msgstr ""
+"上下 プレビュー · -/+ 大きさ · r 再読み込み · Enter 適用 · Esc 取り消し"
 
 #: src/render.c:2237
 msgid "UI FONT"
@@ -1729,7 +2451,8 @@ msgstr "ここにはまだ何もありません。"
 
 #: src/render.c:2865
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
-msgstr "入力して検索 · クリックまたは Tab で分類 · Enter 挿入 · Esc 消去・閉じる"
+msgstr ""
+"入力して検索 · クリックまたは Tab で分類 · Enter 挿入 · Esc 消去・閉じる"
 
 #: src/render.c:3010
 msgid "CALCULATOR"
@@ -1787,7 +2510,9 @@ msgstr "ピクチャ、壁紙、ダウンロードに画像がありません。
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr "r で再読み込み、またはファイルを直接開いてください: synctl dispatch view <パス>"
+msgstr ""
+"r で再読み込み、またはファイルを直接開いてください: synctl dispatch view <パ"
+"ス>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
@@ -1814,7 +2539,9 @@ msgstr "← → 次と前 · ドラッグまたはスクロールで拡大"
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr "スクロールで拡大縮小 · + − 拡大率 · 0 全体表示 · 1 原寸 · c 切り抜き · r 再読み込み · Esc または × で%s"
+msgstr ""
+"スクロールで拡大縮小 · + − 拡大率 · 0 全体表示 · 1 原寸 · c 切り抜き · r 再読"
+"み込み · Esc または × で%s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
@@ -1839,7 +2566,9 @@ msgstr "ドラッグで選択 · 角をドラッグして調整 · Tab で矢印
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr "矢印で大きさを変更 · Ctrl+矢印で移動 · Shift で 25 倍 · a 全体 · Enter で複製を保存 · Esc で%s"
+msgstr ""
+"矢印で大きさを変更 · Ctrl+矢印で移動 · Shift で 25 倍 · a 全体 · Enter で複製"
+"を保存 · Esc で%s"
 
 #: src/render.c:3961
 msgid "cancel"
@@ -1923,7 +2652,8 @@ msgstr "モデルがインストールされていません。"
 
 #: src/render.c:4550
 msgid "A model may still be loaded · see the message below."
-msgstr "モデルがまだ読み込まれている可能性があります · 下のメッセージをご覧ください。"
+msgstr ""
+"モデルがまだ読み込まれている可能性があります · 下のメッセージをご覧ください。"
 
 #: src/render.c:4551
 msgid "Pick one from AVAILABLE below and press Enter."
@@ -2091,17 +2821,21 @@ msgstr "上下 選択 · 左右 量子化 · Enter ダウンロード · / 検�
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
-msgstr "もう一度削除すると確定します · Esc で取り消し · 移動しても取り消されます"
+msgstr ""
+"もう一度削除すると確定します · Esc で取り消し · 移動しても取り消されます"
 
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr "上下 選択 · Enter 読み込み · Del 削除 · / 検索 · R 再読み込み · Esc 閉じる"
+msgstr ""
+"上下 選択 · Enter 読み込み · Del 削除 · / 検索 · R 再読み込み · Esc 閉じる"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr "ダウンロードはシステムサービスとして動きます — このパネルを閉じても中止されません"
+msgstr ""
+"ダウンロードはシステムサービスとして動きます — このパネルを閉じても中止されま"
+"せん"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
@@ -2142,7 +2876,8 @@ msgstr "上下 選択 · Enter 切り替え · 左右 オフ/オン · [ ] 音�
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr "t 再生 · スペース 全部の音をオン/オフ · Esc 閉じる · 詳細: synui-sound --help"
+msgstr ""
+"t 再生 · スペース 全部の音をオン/オフ · Esc 閉じる · 詳細: synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
@@ -2277,7 +3012,9 @@ msgstr "上下 分類 · Enter または右で開く · / 検索 · Esc 閉じ�
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr "Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · Esc で取り消し"
+msgstr ""
+"Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · "
+"Esc で取り消し"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
@@ -2319,17 +3056,22 @@ msgstr "該当するショートカットはありません。"
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr "Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · Esc で取り消し"
+msgstr ""
+"Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · "
+"Esc で取り消し"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
-msgstr "Super、Ctrl、Alt のいずれかを含む組み合わせを押してください · Esc で取り消し"
+msgstr ""
+"Super、Ctrl、Alt のいずれかを含む組み合わせを押してください · Esc で取り消し"
 
 #: src/render.c:6542
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr "絞り込み · Enter 実行 · F2 キーを割り当て · Del 解除 · F3 単押し · Ctrl+Shift+R すべて戻す"
+msgstr ""
+"絞り込み · Enter 実行 · F2 キーを割り当て · Del 解除 · F3 単押し · "
+"Ctrl+Shift+R すべて戻す"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
@@ -2502,12 +3244,15 @@ msgstr "信頼済み"
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr "Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a 絞る · Esc"
+msgstr ""
+"Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a 絞る · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr "Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a すべて · Esc"
+msgstr ""
+"Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a すべて · "
+"Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
@@ -2559,7 +3304,9 @@ msgstr "メモリ"
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr "j/k 移動 · 行を右クリック · c/m/g/p 並べ替え · u 自分のもの · x 終了 · X 強制終了 · Esc 閉じる"
+msgstr ""
+"j/k 移動 · 行を右クリック · c/m/g/p 並べ替え · u 自分のもの · x 終了 · X 強制"
+"終了 · Esc 閉じる"
 
 #: src/render.c:7984
 msgid "NEWS"
@@ -2596,7 +3343,9 @@ msgstr "この絞り込みに一致するものはありません"
 
 #: src/render.c:8038
 msgid "no feeds answered — check the network, then press r"
-msgstr "どのフィードからも応答がありません — ネットワークを確認して r を押してください"
+msgstr ""
+"どのフィードからも応答がありません — ネットワークを確認して r を押してくださ"
+"い"
 
 #: src/render.c:8039
 msgid "no items yet — press r to fetch"
@@ -2610,7 +3359,9 @@ msgstr "入力して絞り込み · Enter 確定 · Esc 消去"
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr "j/k 移動 · Enter 開く · o 背面で開く · c コメント · y コピー · Tab 配信元 · / 検索 · s 並べ替え · m 既読 · r 更新 · Esc 閉じる"
+msgstr ""
+"j/k 移動 · Enter 開く · o 背面で開く · c コメント · y コピー · Tab 配信元 "
+"· / 検索 · s 並べ替え · m 既読 · r 更新 · Esc 閉じる"
 
 #: src/render.c:8152
 msgid "Bottom"
@@ -2649,10 +3400,6 @@ msgstr "ドックに固定"
 #: src/render.c:8193
 msgid "Unpin from Dock"
 msgstr "ドックから外す"
-
-#: src/render.c:8194
-msgid "Open"
-msgstr "開く"
 
 #: src/render.c:8195
 msgid "New Window"
@@ -2752,7 +3499,9 @@ msgstr "このデスクトップには何も開いていません。"
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr "矢印またはクリックでウィンドウを選びます · Enter で開く · Del で閉じる · 1–9 でデスクトップ切り替え · Esc 閉じる"
+msgstr ""
+"矢印またはクリックでウィンドウを選びます · Enter で開く · Del で閉じる · 1–9 "
+"でデスクトップ切り替え · Esc 閉じる"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2849,10 +3598,6 @@ msgstr "音楽プレーヤー"
 #, fuzzy
 #~ msgid "visualizer"
 #~ msgstr "イコライザー"
-
-#, fuzzy
-#~ msgid "clock"
-#~ msgstr "時計"
 
 #, fuzzy
 #~ msgid "corner_radius"
