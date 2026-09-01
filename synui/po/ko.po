@@ -19,1263 +19,1263 @@ msgstr ""
 
 #: src/ctlpanel.c:359
 msgid "Theme"
-msgstr ""
+msgstr "테마"
 
 #: src/ctlpanel.c:360
 msgid "Look"
-msgstr ""
+msgstr "모양"
 
 #: src/ctlpanel.c:361
 msgid "Colour preset for window chrome and synui's own panels"
-msgstr ""
+msgstr "창 테두리와 synui 자체 패널의 색 구성"
 
 #: src/ctlpanel.c:362
 msgid "Wallpaper"
-msgstr ""
+msgstr "배경 화면"
 
 #: src/ctlpanel.c:368
 msgid "Wallpaper accent"
-msgstr ""
+msgstr "배경 화면에서 강조색"
 
 #: src/ctlpanel.c:371
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr ""
+msgstr "강조색을 테마가 아니라 배경 화면에서 가져옵니다. 자동은 그 위에 세워진 Prism(밝게 또는 어둡게)이며, 그 밖에는 없습니다"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
-msgstr ""
+msgstr "RGB 조명"
 
 #: src/ctlpanel.c:388
 msgid "Put the wallpaper's accent on RGB hardware (needs openrgb)"
-msgstr ""
+msgstr "배경 화면의 강조색을 RGB 장치로 보냅니다 (openrgb 필요)"
 
 #: src/ctlpanel.c:389
 msgid "Cursor theme"
-msgstr ""
+msgstr "커서 테마"
 
 #: src/ctlpanel.c:391
 msgid "UI font"
-msgstr ""
+msgstr "인터페이스 글꼴"
 
 #: src/ctlpanel.c:392
 msgid "Text"
-msgstr ""
+msgstr "글자"
 
 #: src/ctlpanel.c:393
 msgid "The family every synui panel draws in. Previews live; Esc puts it back"
-msgstr ""
+msgstr "synui의 모든 패널이 그리는 글꼴. 미리 보기는 즉시 반영되고 Esc로 되돌립니다"
 
 #: src/ctlpanel.c:406
 msgid "Font size"
-msgstr ""
+msgstr "글자 크기"
 
 #: src/ctlpanel.c:409
 msgid "Applications: GTK, Qt and the terminal. Applies when you stop"
-msgstr ""
+msgstr "응용 프로그램: GTK, Qt, 터미널. 손을 멈추면 적용됩니다"
 
 #: src/ctlpanel.c:410
 msgid "Text scale"
-msgstr ""
+msgstr "글자 배율"
 
 #: src/ctlpanel.c:413
 msgid "The bar and the SYNAPSE apps — Files, Settings, Disks, Software"
-msgstr ""
+msgstr "막대와 SYNAPSE 프로그램들 — 파일, 설정, 디스크, 소프트웨어"
 
 #: src/ctlpanel.c:415
 msgid "Transparency"
-msgstr ""
+msgstr "투명도"
 
 #: src/ctlpanel.c:416 src/ctlpanel.c:428
 msgid "Glass"
-msgstr ""
+msgstr "유리"
 
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
-msgstr ""
+msgstr "활성 창의 불투명도. 좌우로 조절하고 Enter로 끕니다"
 
 #: src/ctlpanel.c:437
 msgid ""
 "Auto follows the theme · Off is never glass · or set how much you see through"
-msgstr ""
+msgstr "자동은 테마를 따르고, 끔은 절대 유리가 아니며, 아니면 얼마나 비칠지 직접 정합니다"
 
 #: src/ctlpanel.c:443
 msgid "Sync all glass"
-msgstr ""
+msgstr "모든 유리 맞추기"
 
 #: src/ctlpanel.c:446
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr ""
+msgstr "모든 면이 위의 유리를 따릅니다. 하나를 바꾸면 이걸 다시 켤 때까지 그 면은 자기 값을 지킵니다"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
-msgstr ""
+msgstr "가독성 보정"
 
 #: src/ctlpanel.c:451
 msgid ""
 "Surfaces go less see-through where their text would not read. Off draws "
 "exactly what you asked for"
-msgstr ""
+msgstr "글자가 읽히지 않을 자리에서는 면이 덜 비치게 됩니다. 끄면 요청한 그대로 그립니다"
 
 #: src/ctlpanel.c:467
 msgid "Live backdrop"
-msgstr ""
+msgstr "살아 있는 배경"
 
 #: src/ctlpanel.c:470
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr ""
+msgstr "메뉴와 패널이 가린 배경 화면이 아니라 뒤에 있는 창에서 색을 가져옵니다. 1초 안에 반영됩니다"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
-msgstr ""
+msgstr "비활성 창의 불투명도"
 
 #: src/ctlpanel.c:475
 msgid "How far windows you are not using fade back"
-msgstr ""
+msgstr "쓰지 않는 창이 얼마나 물러나는지"
 
 #: src/ctlpanel.c:476
 msgid "Terminal glass"
-msgstr ""
+msgstr "터미널 유리"
 
 #: src/ctlpanel.c:479
 msgid "foot draws its own background alpha, so it needs its own level"
-msgstr ""
+msgstr "foot은 배경 투명도를 스스로 그리므로 자기 값이 따로 필요합니다"
 
 #: src/ctlpanel.c:489
 msgid "Make it all solid"
-msgstr ""
+msgstr "전부 불투명하게"
 
 #: src/ctlpanel.c:490
 msgid "Glass off and windows opaque, in one press. The rows above put it back"
-msgstr ""
+msgstr "유리를 끄고 창을 불투명하게, 한 번에. 위의 줄들로 되돌립니다"
 
 #: src/ctlpanel.c:509
 msgid "Make it all clear"
-msgstr ""
+msgstr "전부 투명하게"
 
 #: src/ctlpanel.c:510
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr ""
+msgstr "막대와 독과 메뉴가 배경을 완전히 잃고 배경 화면에서 색을 가져옵니다. 위의 줄들로 되돌립니다"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
-msgstr ""
+msgstr "CRT 효과"
 
 #: src/ctlpanel.c:515
 msgid "The GLES post-process pass. Off on renderers that have none"
-msgstr ""
+msgstr "GLES 후처리 단계. 이를 갖추지 못한 렌더러에서는 꺼집니다"
 
 #: src/ctlpanel.c:516
 msgid "All filters"
-msgstr ""
+msgstr "모든 필터"
 
 #: src/ctlpanel.c:517
 msgid "Scanlines"
-msgstr ""
+msgstr "주사선"
 
 #: src/ctlpanel.c:520
 msgid "Screen curve"
-msgstr ""
+msgstr "화면 곡률"
 
 #: src/ctlpanel.c:523
 msgid "Chromatic aberration"
-msgstr ""
+msgstr "색수차"
 
 #: src/ctlpanel.c:526
 msgid "Glitch on alert"
-msgstr ""
+msgstr "경보 시 화면 깨짐"
 
 #: src/ctlpanel.c:530
 msgid "Phosphor tint"
-msgstr ""
+msgstr "인광 색"
 
 #: src/ctlpanel.c:531
 msgid "Phosphor"
-msgstr ""
+msgstr "인광"
 
 #: src/ctlpanel.c:534
 msgid "Off leaves the picture in colour; the blend below is what applies it"
-msgstr ""
+msgstr "끄면 화면은 컬러로 남고, 실제로 입히는 것은 아래의 혼합입니다"
 
 #: src/ctlpanel.c:535
 msgid "Phosphor blend"
-msgstr ""
+msgstr "인광 혼합"
 
 #: src/ctlpanel.c:538
 msgid "Blend toward the phosphor tint. Bloom only bites once this is up"
-msgstr ""
+msgstr "인광 색 쪽으로 섞습니다. 번짐은 이 값을 올려야 비로소 나타납니다"
 
 #: src/ctlpanel.c:539
 msgid "Phosphor glow"
-msgstr ""
+msgstr "인광 광채"
 
 #: src/ctlpanel.c:542
 msgid "Phosphor lift"
-msgstr ""
+msgstr "인광 바탕"
 
 #: src/ctlpanel.c:545
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
-msgstr ""
+msgstr "꺼진 면이 얼마나 빛나는지: 0은 검게 두고, 올리면 주사면이 밝아집니다"
 
 #: src/ctlpanel.c:546
 msgid "Phosphor hue"
-msgstr ""
+msgstr "인광 색조"
 
 #: src/ctlpanel.c:549
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr ""
+msgstr "색을 돌립니다: 내리면 붉게(호박에서 주황으로), 올리면 노랗게. 0.50이 기본값입니다"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
-msgstr ""
+msgstr "제목 표시줄"
 
 #: src/ctlpanel.c:558
 msgid "Frame"
-msgstr ""
+msgstr "테두리"
 
 #: src/ctlpanel.c:559
 msgid "Server-side titlebars, on every window at once"
-msgstr ""
+msgstr "서버 쪽 제목 표시줄을 모든 창에 한꺼번에"
 
 #: src/ctlpanel.c:560
 msgid "Titlebar height"
-msgstr ""
+msgstr "제목 표시줄 높이"
 
 #: src/ctlpanel.c:563
 msgid "0 removes the titlebar; below 14 there is no room for a button"
-msgstr ""
+msgstr "0이면 제목 표시줄이 사라지고, 14 아래로는 단추 자리가 없습니다"
 
 #: src/ctlpanel.c:564
 msgid "Border width"
-msgstr ""
+msgstr "테두리 두께"
 
 #: src/ctlpanel.c:567
 msgid "Corner radius"
-msgstr ""
+msgstr "모서리 둥글기"
 
 #: src/ctlpanel.c:570
 msgid "Forced square while maximized, so nothing pokes past the output"
-msgstr ""
+msgstr "최대화하면 강제로 각지게 합니다. 화면 밖으로 삐져나오지 않도록"
 
 #: src/ctlpanel.c:572
 msgid "Tiling gap"
-msgstr ""
+msgstr "타일 간격"
 
 #: src/ctlpanel.c:573 src/ctlpanel.c:747
 msgid "Layout"
-msgstr ""
+msgstr "배치"
 
 #: src/ctlpanel.c:576
 msgid "Master area"
-msgstr ""
+msgstr "주 영역"
 
 #: src/ctlpanel.c:579
 msgid "Share of the screen the master window takes when tiling"
-msgstr ""
+msgstr "타일로 배치할 때 주 창이 차지하는 화면 비율"
 
 #: src/ctlpanel.c:580
 msgid "Cascade pile size"
-msgstr ""
+msgstr "계단식 더미 크기"
 
 #: src/ctlpanel.c:584
 msgid "How deep a cascade pile may get once the grid of piles is full"
-msgstr ""
+msgstr "더미 격자가 가득 찬 뒤 한 더미를 얼마나 깊이 쌓을 수 있는지"
 
 #: src/ctlpanel.c:586
 msgid "Drop shadow"
-msgstr ""
+msgstr "그림자"
 
 #: src/ctlpanel.c:587
 msgid "Shadow"
-msgstr ""
+msgstr "그림자"
 
 #: src/ctlpanel.c:590
 msgid "Shadow softness"
-msgstr ""
+msgstr "그림자 부드러움"
 
 #: src/ctlpanel.c:593
 msgid "Shadow spread"
-msgstr ""
+msgstr "그림자 퍼짐"
 
 #: src/ctlpanel.c:596
 msgid "Solid shadow before the falloff starts — what gives it weight"
-msgstr ""
+msgstr "감쇠가 시작되기 전의 짙은 그림자 — 무게를 주는 부분입니다"
 
 #: src/ctlpanel.c:597
 msgid "Shadow offset X"
-msgstr ""
+msgstr "그림자 X 오프셋"
 
 #: src/ctlpanel.c:600
 msgid "Shadow offset Y"
-msgstr ""
+msgstr "그림자 Y 오프셋"
 
 #: src/ctlpanel.c:603
 msgid "Crop client shadows"
-msgstr ""
+msgstr "클라이언트 그림자 잘라내기"
 
 #: src/ctlpanel.c:606
 msgid "Hides the invisible margin apps like Firefox draw their own shadow in"
-msgstr ""
+msgstr "Firefox 같은 프로그램이 자기 그림자를 그리는 보이지 않는 여백을 숨깁니다"
 
 #: src/ctlpanel.c:608
 msgid "Backdrop blur"
-msgstr ""
+msgstr "배경 흐리게"
 
 #: src/ctlpanel.c:609
 msgid "Blur"
-msgstr ""
+msgstr "흐림"
 
 #: src/ctlpanel.c:612
 msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
-msgstr ""
+msgstr "반투명한 창 뒤를 젖빛으로 만듭니다. 불투명한 창은 비용이 없습니다"
 
 #: src/ctlpanel.c:613
 msgid "Blur passes"
-msgstr ""
+msgstr "흐림 횟수"
 
 #: src/ctlpanel.c:616
 msgid "Blur radius"
-msgstr ""
+msgstr "흐림 반경"
 
 #: src/ctlpanel.c:619
 msgid "Blur noise"
-msgstr ""
+msgstr "흐림 잡음"
 
 #: src/ctlpanel.c:622
 msgid "Blur brightness"
-msgstr ""
+msgstr "흐림 밝기"
 
 #: src/ctlpanel.c:625
 msgid "Blur contrast"
-msgstr ""
+msgstr "흐림 대비"
 
 #: src/ctlpanel.c:628
 msgid "Blur saturation"
-msgstr ""
+msgstr "흐림 채도"
 
 #: src/ctlpanel.c:631
 msgid "Blur halo"
-msgstr ""
+msgstr "흐림 번짐"
 
 #: src/ctlpanel.c:634
 msgid "How far the blur reaches past the window. 0 keeps it inside the frame"
-msgstr ""
+msgstr "흐림이 창 밖으로 얼마나 나가는지. 0이면 테두리 안에 머무릅니다"
 
 #: src/ctlpanel.c:641
 msgid "Window open"
-msgstr ""
+msgstr "창 열기"
 
 #: src/ctlpanel.c:642
 msgid "Animation"
-msgstr ""
+msgstr "애니메이션"
 
 #: src/ctlpanel.c:645
 msgid ""
 "How a window arrives. Closing is not animated: the client's buffer is gone "
 "the moment it unmaps"
-msgstr ""
+msgstr "창이 나타나는 방식. 닫기는 움직이지 않습니다: 매핑이 풀리는 순간 클라이언트의 버퍼가 사라지기 때문입니다"
 
 #: src/ctlpanel.c:647
 msgid "Window length"
-msgstr ""
+msgstr "창 지속 시간"
 
 #: src/ctlpanel.c:650
 msgid "0 jumps straight to the end state. Also times the niri strip slide"
-msgstr ""
+msgstr "0이면 곧장 최종 상태로 건너뜁니다. niri 띠의 미끄러짐도 이 값이 정합니다"
 
 #: src/ctlpanel.c:651
 msgid "Rise distance"
-msgstr ""
+msgstr "떠오르는 거리"
 
 #: src/ctlpanel.c:654
 msgid ""
 "How far a Rise window travels up into place. Ignored by the other styles"
-msgstr ""
+msgstr "떠오르는 창이 제자리까지 얼마나 올라오는지. 다른 방식은 무시합니다"
 
 #: src/ctlpanel.c:655
 msgid "Desktop switch"
-msgstr ""
+msgstr "데스크톱 전환"
 
 #: src/ctlpanel.c:658
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr ""
+msgstr "페이드는 두 데스크톱을 겹치고, 밀기는 전환한 방향으로 보내며, 큐브는 데스크톱을 3D로 돌립니다"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
-msgstr ""
+msgstr "전환 지속 시간"
 
 #: src/ctlpanel.c:663
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr ""
+msgstr "밀기는 페이드보다 길어야 합니다 — 눈이 따라가야 하니까요 — 큐브는 더 길게. 400-600을 시도해 보세요"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
-msgstr ""
+msgstr "가감속 곡선"
 
 #: src/ctlpanel.c:668
 msgid ""
 "Shared by both, and by the strip slide: two easings read as two desktops"
-msgstr ""
+msgstr "둘 다와 띠의 미끄러짐이 함께 씁니다: 곡선이 둘이면 데스크톱이 둘로 보입니다"
 
 #: src/ctlpanel.c:669
 msgid "Desktops span"
-msgstr ""
+msgstr "데스크톱 범위"
 
 #: src/ctlpanel.c:672
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr ""
+msgstr "공유: 모든 화면에 하나의 데스크톱. 화면별: 각 화면이 자기 것을 기억하고, 전환은 활성 화면만 움직입니다"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
-msgstr ""
+msgstr "초점 따라가기"
 
 #: src/ctlpanel.c:679
 msgid "Behaviour"
-msgstr ""
+msgstr "동작"
 
 #: src/ctlpanel.c:682
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr ""
+msgstr "클릭: 클릭해야만 초점이 갑니다. 느슨함과 엄격함은 포인터를 따르며, 데스크톱 위에서는 엄격함이 초점을 놓고 느슨함은 유지합니다"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
-msgstr ""
+msgstr "초점 지연"
 
 #: src/ctlpanel.c:687
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr ""
+msgstr "포인터가 얼마나 머문 뒤 초점이 따라가는지. 0은 즉시라서 스쳐 지나간 창에도 초점이 갑니다"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
-msgstr ""
+msgstr "가장자리 스냅"
 
 #: src/ctlpanel.c:691
 msgid "Drag a window to an edge to fill that half or quarter"
-msgstr ""
+msgstr "창을 가장자리로 끌면 그 절반이나 사분면을 채웁니다"
 
 #: src/ctlpanel.c:692
 msgid "Snap zone"
-msgstr ""
+msgstr "스냅 영역"
 
 #: src/ctlpanel.c:695
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr ""
+msgstr "끌기가 가장자리에 얼마나 가까워야 스냅이 걸리는지. 고해상도 화면이거나 빠른 포인터가 띠를 건너뛰면 올리세요"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
-msgstr ""
+msgstr "창 크기 기억"
 
 #: src/ctlpanel.c:699
 msgid "Reopen each app where and how big it was when it closed"
-msgstr ""
+msgstr "각 프로그램을 닫을 때의 위치와 크기로 다시 엽니다"
 
 #: src/ctlpanel.c:701
 msgid "Alt+Tab is mission control"
-msgstr ""
+msgstr "Alt+Tab을 전체 보기로"
 
 #: src/ctlpanel.c:702
 msgid "Alt+Tab"
-msgstr ""
+msgstr "Alt+Tab"
 
 #: src/ctlpanel.c:704
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr ""
+msgstr "켜면 Alt+Tab이 데스크톱 전체를 엽니다. 끄면 최근 사용 순 축소판 띠이고, 아래 세 줄이 그 띠에 대한 설정입니다"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
-msgstr ""
+msgstr "Alt+Tab 미리 보기"
 
 #: src/ctlpanel.c:708
 msgid "The thumbnail grid. Off, Alt+Tab still cycles — silently"
-msgstr ""
+msgstr "축소판 격자. 꺼도 Alt+Tab은 계속 전환합니다 — 보여 주지 않을 뿐입니다"
 
 #: src/ctlpanel.c:709
 msgid "Alt+Tab across desktops"
-msgstr ""
+msgstr "Alt+Tab이 데스크톱을 넘나듦"
 
 #: src/ctlpanel.c:711
 msgid "Alt+Tab reaches minimized"
-msgstr ""
+msgstr "Alt+Tab이 최소화된 창까지"
 
 #: src/ctlpanel.c:721
 msgid "Panels follow the pointer"
-msgstr ""
+msgstr "패널이 포인터를 따라감"
 
 #: src/ctlpanel.c:722
 msgid "Panels"
-msgstr ""
+msgstr "패널"
 
 #: src/ctlpanel.c:725
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr ""
+msgstr "켜면 열려 있는 패널이 포인터가 있는 화면으로 옮겨갑니다. 끄면 연 화면에 그대로 남습니다"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
-msgstr ""
+msgstr "계산기"
 
 #: src/ctlpanel.c:734
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr ""
+msgstr "창: 머리글을 잡아 옮기고 다른 곳은 자유롭게 누릅니다. 바깥 클릭으로 닫기: 옆을 누르면 닫힙니다. Esc는 항상 닫습니다"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
-msgstr ""
+msgstr "제어판"
 
 #: src/ctlpanel.c:739
 msgid "How this panel itself behaves"
-msgstr ""
+msgstr "이 패널 자체의 동작"
 
 #: src/ctlpanel.c:740 src/ctlpanel.c:1276
 msgid "Task manager"
-msgstr ""
+msgstr "작업 관리자"
 
 #: src/ctlpanel.c:743
 msgid "How the task manager behaves"
-msgstr ""
+msgstr "작업 관리자의 동작"
 
 #: src/ctlpanel.c:748
 msgid "Desktop"
-msgstr ""
+msgstr "데스크톱"
 
 #: src/ctlpanel.c:749
 msgid "Of the desktop you are on — layout is per-desktop, not global"
-msgstr ""
+msgstr "지금 있는 데스크톱의 설정 — 배치는 데스크톱마다이며 전체가 아닙니다"
 
 #: src/ctlpanel.c:750
 msgid "Mission control"
-msgstr ""
+msgstr "전체 보기"
 
 #: src/ctlpanel.c:751
 msgid "Every window on this desktop at once, and the desktops themselves"
-msgstr ""
+msgstr "이 데스크톱의 모든 창을 한 번에, 그리고 데스크톱 자체도"
 
 #: src/ctlpanel.c:752
 msgid "Desktop icons"
-msgstr ""
+msgstr "데스크톱 아이콘"
 
 #: src/ctlpanel.c:754
 msgid "Draw ~/Desktop on the wallpaper"
-msgstr ""
+msgstr "~/Desktop을 배경 화면 위에 그립니다"
 
 #: src/ctlpanel.c:755
 msgid "Icon order"
-msgstr ""
+msgstr "아이콘 순서"
 
 #: src/ctlpanel.c:758
 msgid "Desktop widgets"
-msgstr ""
+msgstr "데스크톱 위젯"
 
 #: src/ctlpanel.c:769
 msgid "Widget glass"
-msgstr ""
+msgstr "위젯 유리"
 
 #: src/ctlpanel.c:772
 msgid "Desktop widgets take the dock's glass instead of the HUD panel"
-msgstr ""
+msgstr "데스크톱 위젯이 HUD 패널이 아니라 독의 유리를 씁니다"
 
 #: src/ctlpanel.c:774 src/ctlpanel.c:775
 msgid "Dock"
-msgstr ""
+msgstr "독"
 
 #: src/ctlpanel.c:776
 msgid "Dock auto-hide"
-msgstr ""
+msgstr "독 자동 숨기기"
 
 #: src/ctlpanel.c:780
 msgid "Dock above windows"
-msgstr ""
+msgstr "독을 창 위에"
 
 #: src/ctlpanel.c:781
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr ""
+msgstr "끄면 고정된 독을 창이 덮습니다. 자동으로 숨는 쪽은 언제나 맨 위에 옵니다 — 무엇이 있든 그 위로 불려 나옵니다"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
-msgstr ""
+msgstr "독의 가장자리"
 
 #: src/ctlpanel.c:786
 msgid "Dock size"
-msgstr ""
+msgstr "독 크기"
 
 #: src/ctlpanel.c:792
 msgid "The slab AND the icons in it — the icons are this minus 16"
-msgstr ""
+msgstr "판과 그 안의 아이콘 모두 — 아이콘은 이 값에서 16을 뺀 크기입니다"
 
 #: src/ctlpanel.c:793
 msgid "Dock reveal strip"
-msgstr ""
+msgstr "독을 부르는 띠"
 
 #: src/ctlpanel.c:796
 msgid "How close to the edge the pointer must get to bring it back"
-msgstr ""
+msgstr "포인터가 가장자리에 얼마나 가까워야 다시 나오는지"
 
 #: src/ctlpanel.c:797
 msgid "Dock magnify"
-msgstr ""
+msgstr "독 확대"
 
 #: src/ctlpanel.c:798
 msgid "The icons under the pointer swell and the row slides apart to make room"
-msgstr ""
+msgstr "포인터 아래의 아이콘이 부풀고, 줄이 벌어져 자리를 냅니다"
 
 #: src/ctlpanel.c:806
 msgid "Dock magnify amount"
-msgstr ""
+msgstr "확대 정도"
 
 #: src/ctlpanel.c:813
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr ""
+msgstr "포인터 아래 아이콘이 얼마나 커지는지. 독이 자리를 내주므로 크게 부풀수록 독도 높아집니다"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
-msgstr ""
+msgstr "독 스타일"
 
 #: src/ctlpanel.c:823
 msgid "Dock look"
-msgstr ""
+msgstr "독 모양새"
 
 #: src/ctlpanel.c:826
 msgid "Glass frosts the wallpaper behind the bar. Auto follows the theme"
-msgstr ""
+msgstr "유리는 막대 뒤의 배경 화면을 젖빛으로 만듭니다. 자동은 테마를 따릅니다"
 
 #: src/ctlpanel.c:827
 msgid "Dock opacity"
-msgstr ""
+msgstr "독 불투명도"
 
 #: src/ctlpanel.c:841
 msgid "0.00 leaves the icons alone on the wallpaper; 1.00 hides it completely"
-msgstr ""
+msgstr "0.00이면 배경 화면 위에 아이콘만 남고, 1.00이면 완전히 가립니다"
 
 #: src/ctlpanel.c:843
 msgid "Dock corners"
-msgstr ""
+msgstr "독 모서리"
 
 #: src/ctlpanel.c:849
 msgid "Its own, not the window radius. Caps at half the dock's size"
-msgstr ""
+msgstr "독 자신의 값이며 창 둥글기가 아닙니다. 독 크기의 절반이 상한입니다"
 
 #: src/ctlpanel.c:851
 msgid "Show all apps button"
-msgstr ""
+msgstr "모든 프로그램 단추 표시"
 
 #: src/ctlpanel.c:852
 msgid "Dock buttons"
-msgstr ""
+msgstr "독 단추"
 
 #: src/ctlpanel.c:853
 msgid ""
 "A grid of dots at the end of the dock. Always opens the application overlay"
-msgstr ""
+msgstr "독 끝의 점 격자. 언제나 프로그램 전체 보기를 엽니다"
 
 #: src/ctlpanel.c:870
 msgid "Apps button position"
-msgstr ""
+msgstr "프로그램 단추 위치"
 
 #: src/ctlpanel.c:871
 msgid ""
 "Where the all-apps button sits along the run. Dragging the button on the "
 "dock sets the same thing"
-msgstr ""
+msgstr "단추가 독을 따라 어디에 놓이는지. 독 위에서 단추를 끌어도 같습니다"
 
 #: src/ctlpanel.c:873
 msgid "Show power button"
-msgstr ""
+msgstr "전원 단추 표시"
 
 #: src/ctlpanel.c:874
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr ""
+msgstr "프로그램 단추 뒤의 전원 표시. 누르면 메뉴가 열립니다 — 잠금, 로그아웃, 절전, 다시 시작, 끄기"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
-msgstr ""
+msgstr "전원 단추 위치"
 
 #: src/ctlpanel.c:877
 msgid ""
 "Where the power button sits along the run. Dragging the button on the dock "
 "sets the same thing"
-msgstr ""
+msgstr "전원 단추가 독을 따라 어디에 놓이는지. 독 위에서 단추를 끌어도 같습니다"
 
 #: src/ctlpanel.c:897
 msgid "Date & time"
-msgstr ""
+msgstr "날짜와 시간"
 
 #: src/ctlpanel.c:898
 msgid "Clock"
-msgstr ""
+msgstr "시계"
 
 #: src/ctlpanel.c:899
 msgid "12/24-hour and the date format, for the dock clock and the widget"
-msgstr ""
+msgstr "12/24시간제와 날짜 형식. 독 시계와 위젯에 적용됩니다"
 
 #: src/ctlpanel.c:900
 msgid "Dock clock"
-msgstr ""
+msgstr "독 시계"
 
 #: src/ctlpanel.c:901
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr ""
+msgstr "시간과 날짜를 자기 칸에 — 칸을 끌어 줄 안 어디로든 옮길 수 있습니다. 12/24시간제는 날짜와 시간을 따릅니다"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
-msgstr ""
+msgstr "아날로그 독 시계"
 
 #: src/ctlpanel.c:904
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr ""
+msgstr "독 시계를 문자판으로 그립니다. 왼쪽이나 오른쪽 독에 들어가는 유일한 시계입니다 — 세로 열은 시각 문자열에 맞춰 넓어질 수 없습니다"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
-msgstr ""
+msgstr "시계 위치"
 
 #: src/ctlpanel.c:912
 msgid ""
 "Where the dock clock sits along the run. Dragging the clock on the dock sets "
 "the same thing"
-msgstr ""
+msgstr "독 시계가 독을 따라 어디에 놓이는지. 독 위에서 시계를 끌어도 같습니다"
 
 #: src/ctlpanel.c:914
 msgid "Analog clock face"
-msgstr ""
+msgstr "아날로그 시계 문자판"
 
 #: src/ctlpanel.c:918
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr ""
+msgstr "아날로그 시계 위젯이 그리는 문자판 — 위젯에서 놓는 데스크톱 쪽입니다. 독의 아날로그 시계는 디자인이 하나뿐입니다"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
-msgstr ""
+msgstr "시작 메뉴"
 
 #: src/ctlpanel.c:939
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr ""
+msgstr "Super를 톡 누르거나 Super+Esc를 누를 때 열리는 것. 단축키 목록은 이 줄을 따르지만 독의 프로그램 단추는 따르지 않습니다"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
-msgstr ""
+msgstr "시작 단추"
 
 #: src/ctlpanel.c:955 src/ctlpanel.c:956
 msgid "Bar"
-msgstr ""
+msgstr "막대"
 
 #: src/ctlpanel.c:957
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr ""
+msgstr "위쪽 막대만 — 위젯과 메모와 시작 메뉴는 남습니다. waybar 데스크톱에는 bar_stop_cmd/bar_start_cmd가 필요합니다"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
-msgstr ""
+msgstr "막대 종류"
 
 #: src/ctlpanel.c:967
 msgid "Antiquity is the diinki port; takes effect at the next login"
-msgstr ""
+msgstr "Antiquity는 diinki 이식판입니다. 다음 로그인부터 적용됩니다"
 
 #: src/ctlpanel.c:979
 msgid "Bar edge"
-msgstr ""
+msgstr "막대의 가장자리"
 
 #: src/ctlpanel.c:982
 msgid "Which edge the bar sits on. The bar picks this up live"
-msgstr ""
+msgstr "막대가 어느 가장자리에 붙는지. 막대는 이를 즉시 반영합니다"
 
 #: src/ctlpanel.c:987
 msgid "Bar auto-hide"
-msgstr ""
+msgstr "막대 자동 숨기기"
 
 #: src/ctlpanel.c:989
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr ""
+msgstr "모든 화면의 막대를 한꺼번에. 화면별 설정은 막대 자체의 오른쪽 클릭 메뉴에 있고, ‘혼합’은 서로 다르다는 뜻입니다"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
-msgstr ""
+msgstr "막대 불투명도"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
-msgstr ""
+msgstr "0.00이면 배경 화면에서 색을 가져온 투명한 막대, 1.00이면 완전히 가립니다"
 
 #: src/ctlpanel.c:1017
 msgid "Bar shape"
-msgstr ""
+msgstr "막대 모양"
 
 #: src/ctlpanel.c:1020
 msgid "Shape when corners are on; needs Window effects ▸ Corner radius"
-msgstr ""
+msgstr "모서리를 켰을 때의 모양. 창 효과 ▸ 모서리 둥글기가 필요합니다"
 
 #: src/ctlpanel.c:1022
 msgid "Welcome menu at login"
-msgstr ""
+msgstr "로그인 시 환영 메뉴"
 
 #: src/ctlpanel.c:1023
 msgid "Login"
-msgstr ""
+msgstr "로그인"
 
 #: src/ctlpanel.c:1025
 msgid "Neural overlay at login"
-msgstr ""
+msgstr "로그인 시 신경망 오버레이"
 
 #: src/ctlpanel.c:1028
 msgid "Desktop cat at login"
-msgstr ""
+msgstr "로그인 시 데스크톱 고양이"
 
 #: src/ctlpanel.c:1029
 msgid "Desktop cat"
-msgstr ""
+msgstr "데스크톱 고양이"
 
 #: src/ctlpanel.c:1031
 msgid "Super+Shift+C toggles it any time; this is only the login state"
-msgstr ""
+msgstr "Super+Shift+C로 언제든 켜고 끕니다. 여기서는 로그인 시의 상태만 정합니다"
 
 #: src/ctlpanel.c:1032
 msgid "Desktop cat breed"
-msgstr ""
+msgstr "고양이 품종"
 
 #: src/ctlpanel.c:1035
 msgid "Coat and markings only; every breed walks the same"
-msgstr ""
+msgstr "털색과 무늬만 다르고, 걷는 모습은 모두 같습니다"
 
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
-msgstr ""
+msgstr "키 반복 속도"
 
 #: src/ctlpanel.c:1044
 msgid "Keyboard"
-msgstr ""
+msgstr "키보드"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
-msgstr ""
+msgstr "키 반복 지연"
 
 #: src/ctlpanel.c:1056
 msgid "Keyboard shortcuts"
-msgstr ""
+msgstr "키보드 단축키"
 
 #: src/ctlpanel.c:1057
 msgid "Searchable. F2 moves a shortcut to another key, F3 onto the tap"
-msgstr ""
+msgstr "검색할 수 있습니다. F2는 단축키를 다른 키로, F3은 톡 누르기로 옮깁니다"
 
 #: src/ctlpanel.c:1058
 msgid "NumLock on at login"
-msgstr ""
+msgstr "로그인 시 NumLock 켜기"
 
 #: src/ctlpanel.c:1061
 msgid "A fresh xkb state has it off, which leaves the numpad on arrows"
-msgstr ""
+msgstr "새 xkb 상태는 꺼져 있어서 숫자판이 화살표로 남습니다"
 
 #: src/ctlpanel.c:1063
 msgid "Tap to click"
-msgstr ""
+msgstr "탭하여 클릭"
 
 #: src/ctlpanel.c:1064
 msgid "Pointer"
-msgstr ""
+msgstr "포인터"
 
 #: src/ctlpanel.c:1067
 msgid "Natural scrolling"
-msgstr ""
+msgstr "자연스러운 스크롤"
 
 #: src/ctlpanel.c:1070
 msgid "Left-handed buttons"
-msgstr ""
+msgstr "왼손잡이 단추"
 
 #: src/ctlpanel.c:1073
 msgid "Pointer speed"
-msgstr ""
+msgstr "포인터 속도"
 
 #: src/ctlpanel.c:1079
 msgid "Pointer acceleration"
-msgstr ""
+msgstr "포인터 가속"
 
 #: src/ctlpanel.c:1082
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr ""
+msgstr "적응형은 빠르게 움직일수록 더 멀리 갑니다. 평탄형은 1:1입니다. 기본값은 libinput이 그 장치에 맞게 고른 값입니다"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
-msgstr ""
+msgstr "포인터 다듬기"
 
 #: src/ctlpanel.c:1087
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr ""
+msgstr "떨리거나 잡음이 있는 포인터를 경로 평균으로 안정시킵니다. 약간의 지연이 생기고 0이면 끕니다. 원시 움직임을 읽는 게임에는 영향이 없습니다"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
-msgstr ""
+msgstr "커서 크기"
 
 #: src/ctlpanel.c:1095
 msgid "Display settings"
-msgstr ""
+msgstr "디스플레이 설정"
 
 #: src/ctlpanel.c:1096 src/ctlpanel.c:1103
 msgid "Screens"
-msgstr ""
+msgstr "화면"
 
 #: src/ctlpanel.c:1104
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
-msgstr ""
+msgstr "확장, 복제, 또는 내장 화면 끄기(덮개 닫음). Super+D에서 m으로도 됩니다"
 
 #: src/ctlpanel.c:1114
 msgid "Scale everything"
-msgstr ""
+msgstr "전체 배율"
 
 #: src/ctlpanel.c:1115
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
-msgstr ""
+msgstr "모든 화면, 모든 프로그램, 커서. Super+Ctrl+= / -, Super+Ctrl+0으로 되돌립니다"
 
 #: src/ctlpanel.c:1124
 msgid "Monitor settings"
-msgstr ""
+msgstr "모니터 설정"
 
 #: src/ctlpanel.c:1125
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
-msgstr ""
+msgstr "커넥터, EDID, 그리고 하드웨어가 제공하는 모드 (syn-settings)"
 
 #: src/ctlpanel.c:1127 src/ctlpanel.c:1128
 msgid "Night light"
-msgstr ""
+msgstr "야간 조명"
 
 #: src/ctlpanel.c:1129
 msgid "Colour temperature"
-msgstr ""
+msgstr "색온도"
 
 #: src/ctlpanel.c:1133
 msgid "6500K is daylight — the identity ramp. Lower is warmer"
-msgstr ""
+msgstr "6500K는 주광 — 손대지 않은 곡선입니다. 낮출수록 따뜻해집니다"
 
 #: src/ctlpanel.c:1141
 msgid "Do Not Disturb"
-msgstr ""
+msgstr "방해 금지"
 
 #: src/ctlpanel.c:1142
 msgid "Notifications"
-msgstr ""
+msgstr "알림"
 
 #: src/ctlpanel.c:1143
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr ""
+msgstr "어디서든 Super+Shift+M. 알림 표시를 감추고 소리를 끕니다. 중요한 경고는 그래도 옵니다"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
-msgstr ""
+msgstr "이벤트 소리"
 
 #: src/ctlpanel.c:1152
 msgid "Screen audio"
-msgstr ""
+msgstr "화면으로 소리 보내기"
 
 #: src/ctlpanel.c:1153
 msgid "Audio"
-msgstr ""
+msgstr "소리"
 
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
-msgstr ""
+msgstr "TV나 모니터를 연결하면 소리를 그쪽으로 옮깁니다. 자동 = 노트북"
 
 #: src/ctlpanel.c:1157
 msgid "Equalizer"
-msgstr ""
+msgstr "이퀄라이저"
 
 #: src/ctlpanel.c:1158
 msgid "10-band system equalizer. Adds an output device while it is on"
-msgstr ""
+msgstr "시스템 10밴드 이퀄라이저. 켜져 있는 동안 출력 장치가 하나 늘어납니다"
 
 #: src/ctlpanel.c:1173
 msgid "Screen reader"
-msgstr ""
+msgstr "화면 낭독기"
 
 #: src/ctlpanel.c:1174
 msgid "Speech"
-msgstr ""
+msgstr "음성"
 
 #: src/ctlpanel.c:1175
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
-msgstr ""
+msgstr "초점이 옮겨갈 때마다 그 창을 읽어 줍니다. Super+Shift+U로 켜고 끕니다"
 
 #: src/ctlpanel.c:1176
 msgid "Answer to its name"
-msgstr ""
+msgstr "이름을 부르면 대답"
 
 #: src/ctlpanel.c:1178
 msgid "Listen for \"Synapse\" and answer out loud. Holds the microphone open"
-msgstr ""
+msgstr "“Synapse”를 듣고 소리 내어 답합니다. 마이크를 계속 열어 둡니다"
 
 #: src/ctlpanel.c:1180
 msgid "Record audio"
-msgstr ""
+msgstr "소리 녹음"
 
 #: src/ctlpanel.c:1181
 msgid "Recording"
-msgstr ""
+msgstr "녹화"
 
 #: src/ctlpanel.c:1182
 msgid "Record for editing"
-msgstr ""
+msgstr "편집용으로 녹화"
 
 #: src/ctlpanel.c:1183
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
-msgstr ""
+msgstr "영상 편집 프로그램이 바로 읽는 DNxHR .mov. 분당 약 1.1 GB"
 
 #: src/ctlpanel.c:1188
 msgid "Network / Wi-Fi"
-msgstr ""
+msgstr "네트워크 / Wi-Fi"
 
 #: src/ctlpanel.c:1189
 msgid "Network"
-msgstr ""
+msgstr "네트워크"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
-msgstr ""
+msgstr "블루투스"
 
 #: src/ctlpanel.c:1192 src/ctlpanel.c:1193
 msgid "Printers"
-msgstr ""
+msgstr "프린터"
 
 #: src/ctlpanel.c:1199
 msgid "Find printers"
-msgstr ""
+msgstr "프린터 찾기"
 
 #: src/ctlpanel.c:1201
 msgid "Add every network printer that is not set up yet, driverless"
-msgstr ""
+msgstr "아직 설정하지 않은 네트워크 프린터를 드라이버 없이 모두 추가합니다"
 
 #: src/ctlpanel.c:1204
 msgid "Power saving"
-msgstr ""
+msgstr "절전"
 
 #: src/ctlpanel.c:1205
 msgid "Power"
-msgstr ""
+msgstr "전원"
 
 #: src/ctlpanel.c:1206
 msgid "Idle timeouts for dim, blank, lock and suspend"
-msgstr ""
+msgstr "어둡게, 끄기, 잠금, 절전까지의 대기 시간"
 
 #: src/ctlpanel.c:1207
 msgid "Screensaver"
-msgstr ""
+msgstr "화면 보호기"
 
 #: src/ctlpanel.c:1208
 msgid "What the screen shows when idle, and how the lock screen looks"
-msgstr ""
+msgstr "쉬는 동안 화면이 보여 주는 것과 잠금 화면의 모습"
 
 #: src/ctlpanel.c:1209
 msgid "Lock screen"
-msgstr ""
+msgstr "잠금 화면"
 
 #: src/ctlpanel.c:1213
 msgid "Unlock with fingerprint"
-msgstr ""
+msgstr "지문으로 잠금 해제"
 
 #: src/ctlpanel.c:1222
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
-msgstr ""
+msgstr "fprintd를 설치하고 fprintd-enroll을 실행하세요. 비밀번호도 언제나 됩니다"
 
 #: src/ctlpanel.c:1230 src/ctlpanel.c:1231
 msgid "Game mode"
-msgstr ""
+msgstr "게임 모드"
 
 #: src/ctlpanel.c:1232
 msgid "Enter cycles auto / always on / always off — same as Super+G"
-msgstr ""
+msgstr "Enter로 자동 / 항상 켜기 / 항상 끄기를 오갑니다 — Super+G와 같습니다"
 
 #: src/ctlpanel.c:1233
 msgid "Detect games"
-msgstr ""
+msgstr "게임 감지"
 
 #: src/ctlpanel.c:1235
 msgid "Treat a fullscreen game window as a game unless it is excluded"
-msgstr ""
+msgstr "전체 화면 게임 창을, 제외하지 않은 한 게임으로 다룹니다"
 
 #: src/ctlpanel.c:1236
 msgid "Open games on"
-msgstr ""
+msgstr "게임을 열 화면"
 
 #: src/ctlpanel.c:1239
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
-msgstr ""
+msgstr "주 화면 = Super+D에서 PRIMARY로 표시한 화면. 물어보기는 게임의 지정을 따릅니다"
 
 #: src/ctlpanel.c:1240
 msgid "Stop the AI while gaming"
-msgstr ""
+msgstr "게임 중에는 AI 멈추기"
 
 #: src/ctlpanel.c:1242
 msgid "Hold off idle while gaming"
-msgstr ""
+msgstr "게임 중에는 유휴 미루기"
 
 #: src/ctlpanel.c:1244
 msgid "A gamepad is not input as far as the idle timer is concerned"
-msgstr ""
+msgstr "유휴 시간을 재는 쪽에서 보면 게임패드는 입력이 아닙니다"
 
 #: src/ctlpanel.c:1248
 msgid "Drop screen effects while gaming"
-msgstr ""
+msgstr "게임 중에는 화면 효과 끄기"
 
 #: src/ctlpanel.c:1250
 msgid "The biggest win: lets the game draw straight to the display"
-msgstr ""
+msgstr "가장 큰 이득: 게임이 화면에 바로 그릴 수 있게 합니다"
 
 #: src/ctlpanel.c:1251
 msgid "Pause the wallpaper while gaming"
-msgstr ""
+msgstr "게임 중에는 배경 화면 멈추기"
 
 #: src/ctlpanel.c:1253
 msgid "Animated wallpapers keep rendering behind a fullscreen game"
-msgstr ""
+msgstr "움직이는 배경 화면은 전체 화면 게임 뒤에서도 계속 그려집니다"
 
 #: src/ctlpanel.c:1254
 msgid "Stop the bar while gaming"
-msgstr ""
+msgstr "게임 중에는 막대 멈추기"
 
 #: src/ctlpanel.c:1256
 msgid "Frees memory, but the bar takes a moment to come back"
-msgstr ""
+msgstr "메모리는 비지만 막대가 돌아오는 데 잠깐 걸립니다"
 
 #: src/ctlpanel.c:1257
 msgid "Keep the mouse on the game's screen"
-msgstr ""
+msgstr "마우스를 게임 화면에 붙들기"
 
 #: src/ctlpanel.c:1259
 msgid "Games rarely ask for it themselves; Alt-Tab still frees it"
-msgstr ""
+msgstr "게임이 스스로 요청하는 일은 드뭅니다. Alt-Tab으로는 여전히 풀립니다"
 
 #: src/ctlpanel.c:1260
 msgid "Quiet the kernel monitor while gaming"
-msgstr ""
+msgstr "게임 중에는 커널 감시 조용히"
 
 #: src/ctlpanel.c:1262
 msgid "Saves very little, and security monitoring pauses with it"
-msgstr ""
+msgstr "아끼는 양은 아주 적고, 보안 감시도 함께 멈춥니다"
 
 #: src/ctlpanel.c:1265
 msgid "AI backend"
-msgstr ""
+msgstr "AI 백엔드"
 
 #: src/ctlpanel.c:1266
 msgid "AI"
-msgstr ""
+msgstr "AI"
 
 #: src/ctlpanel.c:1267
 msgid "Which device synapd runs inference on"
-msgstr ""
+msgstr "synapd가 어느 장치에서 추론하는지"
 
 #: src/ctlpanel.c:1268
 msgid "AI model"
-msgstr ""
+msgstr "AI 모델"
 
 #: src/ctlpanel.c:1269
 msgid "AI window placement"
-msgstr ""
+msgstr "AI가 창을 배치"
 
 #: src/ctlpanel.c:1271
 msgid "Let the AI layout decide where a new window goes"
-msgstr ""
+msgstr "새 창을 어디에 둘지 AI 배치가 정하게 합니다"
 
 #: src/ctlpanel.c:1272
 msgid "AI context in borders"
-msgstr ""
+msgstr "테두리에 AI 문맥 표시"
 
 #: src/ctlpanel.c:1274
 msgid "Tint a window's border when the AI is holding context for it"
-msgstr ""
+msgstr "AI가 그 창의 문맥을 들고 있는 동안 테두리에 색을 입힙니다"
 
 #: src/ctlpanel.c:1277
 msgid "Tools"
-msgstr ""
+msgstr "도구"
 
 #: src/ctlpanel.c:1278
 msgid "Clipboard history"
-msgstr ""
+msgstr "클립보드 기록"
 
 #: src/ctlpanel.c:1279
 msgid "News"
-msgstr ""
+msgstr "뉴스"
 
 #: src/ctlpanel.c:1280
 msgid "News refresh"
-msgstr ""
+msgstr "뉴스 새로 고침"
 
 #: src/ctlpanel.c:1283
 msgid "How often a feed may be re-fetched at most"
-msgstr ""
+msgstr "한 피드를 다시 가져올 수 있는 최소 간격"
 
 #: src/ctlpanel.c:1295
 msgid "System settings"
-msgstr ""
+msgstr "시스템 설정"
 
 #: src/ctlpanel.c:1296
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
-msgstr ""
+msgstr "시계, 언어, 커널, 기본 프로그램 — 시스템이 어떻게 맞춰져 있는지"
 
 #: src/ctlpanel.c:1298
 msgid "About OS"
-msgstr ""
+msgstr "운영체제 정보"
 
 #: src/ctlpanel.c:1299
 msgid "About"
-msgstr ""
+msgstr "정보"
 
 #: src/ctlpanel.c:1300
 msgid "The mark, the machine, and what this desktop is currently set to"
-msgstr ""
+msgstr "표식과 이 기계와, 이 데스크톱이 지금 어떻게 맞춰져 있는지"
 
 #: src/ctlpanel.c:3613
 msgid "position"
-msgstr ""
+msgstr "위치"
 
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "minimum"
-msgstr ""
+msgstr "최솟값"
 
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
-msgstr ""
+msgstr "최댓값"
