@@ -271,6 +271,25 @@ jobs:
       - name: Configure each component from its source tarball
         run: |
           set -e
+
+          # tools/collect-source.sh asks git what is source, and git refuses a
+          # checkout it does not own — which is every checkout inside a
+          # container. Without this it answers "nothing is tracked" and the
+          # tarball comes out with no src/ at all.
+          git config --global --add safe.directory "$PWD"
+
+          # ⚠ EXTRACTED BESIDE llama-staging, NOT IN /tmp. synapd/meson.build
+          # resolves libllama from the SIBLING directory ../llama-staging when
+          # the system package is not installed, which is the case here — the
+          # step above builds llama into the workspace rather than installing
+          # it. Unpacked anywhere else the tarball configures against a sibling
+          # that does not exist, and the failure looks like a packing bug when
+          # it is only a relocated tree.
+          rm -rf _tbcheck && mkdir -p _tbcheck
+          # Relative on purpose: an absolute link would bake the runner's workspace
+          # path into the tree, which is the thing the symlink check guards against.
+          [ -d llama-staging ] && ln -s ../llama-staging _tbcheck/llama-staging
+
           for c in synapd synsh synguard synnet synui; do
             if [ -x "$c/mktarball.sh" ]; then
               ( cd "$c" && ./mktarball.sh >/dev/null )
@@ -278,9 +297,8 @@ jobs:
             else
               tb=$(tools/collect-source.sh "$c")
             fi
-            rm -rf "/tmp/tb-$c" && mkdir -p "/tmp/tb-$c"
-            tar xzf "$tb" -C "/tmp/tb-$c"
-            d=$(echo "/tmp/tb-$c"/*/)
+            tar xzf "$tb" -C _tbcheck
+            d=$(echo _tbcheck/"$c"-*/)
             meson setup "$d/_tb" "$d" --buildtype=release >"/tmp/tb-$c.log" 2>&1 || {
               echo "::error::$c does not configure from its source tarball — a file its meson.build needs is not on the tarball's list"
               tail -40 "/tmp/tb-$c.log"
@@ -288,6 +306,7 @@ jobs:
             }
             echo "$c configures from its tarball"
           done
+          rm -rf _tbcheck
 
       # synstudio: the darkroom and edit suite. Its own component, built and
       # tested separately because it needs no wayland, no GPU and no daemon —

@@ -61,6 +61,19 @@ prefix="$name-$pkgver"
 
 cd "$BASE"
 
+# ⛔ GIT HAS TO ANSWER, OR THIS SHIPS AN EMPTY TARBALL IN SILENCE. Two of the
+# selections below ask git which files are source: whether src/ is tracked, and
+# which loose top-level files a script component is made of. A git that REFUSES
+# — "detected dubious ownership", the checkout owned by another uid, which is
+# the normal state inside a CI container — makes both answer "nothing", and the
+# tarball comes out with a meson.build and no code. tar's own `|| true` below
+# then hides the rest. Ask once, loudly, before believing any of it.
+if ! git -C "$BASE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "collect-source: git cannot read $BASE — refusing to guess at what is source" >&2
+    echo "  (in a container this is usually: git config --global --add safe.directory $BASE)" >&2
+    exit 1
+fi
+
 # Collect directories that exist.
 dirs=()
 # ⛔ src/ IS SOURCE FOR ONE KIND OF COMPONENT AND MAKEPKG'S STAGING FOR THE
