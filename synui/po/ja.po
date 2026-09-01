@@ -99,11 +99,11 @@ msgstr "選択中のウィンドウの不透明度。左右で調整、Enter で
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:834
 msgid "Auto"
-msgstr ""
+msgstr "自動"
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:2952
 msgid "Off"
-msgstr ""
+msgstr "オフ"
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -898,7 +898,7 @@ msgstr "バーの不透明度"
 
 #: src/ctlpanel.c:1007
 msgid "Follow the theme"
-msgstr ""
+msgstr "テーマに従う"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1354,388 +1354,388 @@ msgstr "この印と、この機械と、このデスクトップのいまの設
 
 #: src/ctlpanel.c:1398
 msgid "device default"
-msgstr ""
+msgstr "デバイスの既定"
 
 #: src/ctlpanel.c:1896
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
-msgstr ""
+msgstr "ガラスなし · バー、ドック、ウィジェットは不透明 · ウィンドウも不透明"
 
 #: src/ctlpanel.c:1952
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
-msgstr ""
+msgstr "ガラス最大 · バーとドックは透明 · 色は壁紙から"
 
 #: src/ctlpanel.c:2293
 #, c-format
 msgid "RGB lights: off"
-msgstr ""
+msgstr "RGB ライト: オフ"
 
 #: src/ctlpanel.c:2294
 #, c-format
 msgid "RGB lights: following the accent"
-msgstr ""
+msgstr "RGB ライト: アクセント色に追従"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: off"
-msgstr ""
+msgstr "スクリーンリーダー: オフ"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: on"
-msgstr ""
+msgstr "スクリーンリーダー: オン"
 
 #: src/ctlpanel.c:2367
 #, c-format
 msgid "No longer listening · the microphone is closed"
-msgstr ""
+msgstr "待ち受けを終了しました · マイクは閉じています"
 
 #: src/ctlpanel.c:2368
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
-msgstr ""
+msgstr "「Synapse」を待ち受け中 · マイクは開いています"
 
 #: src/ctlpanel.c:2406
 #, c-format
 msgid "always on"
-msgstr ""
+msgstr "常にオン"
 
 #: src/ctlpanel.c:2407
 #, c-format
 msgid "always off"
-msgstr ""
+msgstr "常にオフ"
 
 #: src/ctlpanel.c:2408 src/ctlpanel.c:2558
 #, c-format
 msgid "auto (%s)"
-msgstr ""
+msgstr "自動 (%s)"
 
 #: src/ctlpanel.c:2521
 #, c-format
 msgid "on — %d missed"
-msgstr ""
+msgstr "オン — %d 件見逃し"
 
 #: src/ctlpanel.c:2529
 msgid "desktop sound"
-msgstr ""
+msgstr "デスクトップの音"
 
 #: src/ctlpanel.c:2537
 msgid "DNxHR ~1.1 GB/min"
-msgstr ""
+msgstr "DNxHR 約 1.1 GB/分"
 
 #: src/ctlpanel.c:2537
 msgid "off (H.264 mp4)"
-msgstr ""
+msgstr "オフ (H.264 mp4)"
 
 #: src/ctlpanel.c:2559
 msgid "on · laptop"
-msgstr ""
+msgstr "オン · ノート PC"
 
 #: src/ctlpanel.c:2559
 msgid "off · desktop"
-msgstr ""
+msgstr "オフ · デスクトップ PC"
 
 #: src/ctlpanel.c:2570
 #, c-format
 msgid "Built-in off"
-msgstr ""
+msgstr "内蔵ディスプレイをオフ"
 
 #: src/ctlpanel.c:2729
 msgid "Terminal"
-msgstr ""
+msgstr "端末"
 
 #: src/ctlpanel.c:2730
 msgid "AI command bar"
-msgstr ""
+msgstr "AI コマンドバー"
 
 #: src/ctlpanel.c:2731
 msgid "Ask the AI about the window"
-msgstr ""
+msgstr "このウィンドウについて AI に尋ねる"
 
 #: src/ctlpanel.c:2732
 msgid "Neural overlay"
-msgstr ""
+msgstr "ニューラルオーバーレイ"
 
 #: src/ctlpanel.c:2733
 msgid "Welcome menu"
-msgstr ""
+msgstr "ようこそメニュー"
 
 #: src/ctlpanel.c:2735
 msgid "Keyboard shortcuts (this list)"
-msgstr ""
+msgstr "キーボードショートカット (この一覧)"
 
 #: src/ctlpanel.c:2739
 msgid "System settings (syn-settings)"
-msgstr ""
+msgstr "システム設定 (syn-settings)"
 
 #: src/ctlpanel.c:2740
 msgid "Find and add network printers"
-msgstr ""
+msgstr "ネットワークプリンターを探して追加"
 
 #: src/ctlpanel.c:2741
 msgid "Mission control (all windows)"
-msgstr ""
+msgstr "ウィンドウ一覧 (すべてのウィンドウ)"
 
 #: src/ctlpanel.c:2742
 msgid "Rebind a shortcut"
-msgstr ""
+msgstr "ショートカットを割り当て直す"
 
 #: src/ctlpanel.c:2744
 msgid "Do Not Disturb (mute notifications)"
-msgstr ""
+msgstr "通知オフ (通知を消音)"
 
 #: src/ctlpanel.c:2745
 msgid "Record screen"
-msgstr ""
+msgstr "画面を録画"
 
 #: src/ctlpanel.c:2747
 msgid "Brightness up"
-msgstr ""
+msgstr "明るくする"
 
 #: src/ctlpanel.c:2748
 msgid "Brightness down"
-msgstr ""
+msgstr "暗くする"
 
 #: src/ctlpanel.c:2750
 msgid "Start button: text/logo"
-msgstr ""
+msgstr "スタートボタン: 文字/ロゴ"
 
 #: src/ctlpanel.c:2751
 msgid "Close window"
-msgstr ""
+msgstr "ウィンドウを閉じる"
 
 #: src/ctlpanel.c:2752
 msgid "Quit synui"
-msgstr ""
+msgstr "synui を終了"
 
 #: src/ctlpanel.c:2753
 msgid "Cycle layout"
-msgstr ""
+msgstr "レイアウトを切り替え"
 
 #: src/ctlpanel.c:2754
 msgid "Tile this desktop"
-msgstr ""
+msgstr "このデスクトップをタイル表示"
 
 #: src/ctlpanel.c:2755
 msgid "Cascade this desktop (overlapping piles)"
-msgstr ""
+msgstr "このデスクトップを重ねて表示 (重なった山)"
 
 #: src/ctlpanel.c:2756
 msgid "Arrange floating windows"
-msgstr ""
+msgstr "浮いているウィンドウを整列"
 
 #: src/ctlpanel.c:2757
 msgid "Shrink master area"
-msgstr ""
+msgstr "メイン領域を狭める"
 
 #: src/ctlpanel.c:2758
 msgid "Grow master area"
-msgstr ""
+msgstr "メイン領域を広げる"
 
 #: src/ctlpanel.c:2759
 msgid "niri: pull window into the left column"
-msgstr ""
+msgstr "niri: ウィンドウを左の列に入れる"
 
 #: src/ctlpanel.c:2760
 msgid "niri: push window out to its own column"
-msgstr ""
+msgstr "niri: ウィンドウを独立した列に出す"
 
 #: src/ctlpanel.c:2761
 msgid "Focus next window"
-msgstr ""
+msgstr "次のウィンドウへ"
 
 #: src/ctlpanel.c:2762
 msgid "Focus previous window"
-msgstr ""
+msgstr "前のウィンドウへ"
 
 #: src/ctlpanel.c:2763
 msgid "Switch window (Alt+Tab)"
-msgstr ""
+msgstr "ウィンドウを切り替え (Alt+Tab)"
 
 #: src/ctlpanel.c:2764
 msgid "Switch window, backwards"
-msgstr ""
+msgstr "ウィンドウを逆順に切り替え"
 
 #: src/ctlpanel.c:2765
 msgid "Move window down the stack"
-msgstr ""
+msgstr "ウィンドウを重ね順で下げる"
 
 #: src/ctlpanel.c:2766
 msgid "Move window up the stack"
-msgstr ""
+msgstr "ウィンドウを重ね順で上げる"
 
 #: src/ctlpanel.c:2767
 msgid "Move window left (or earlier in the layout)"
-msgstr ""
+msgstr "ウィンドウを左へ (レイアウト上では前へ)"
 
 #: src/ctlpanel.c:2768
 msgid "Move window right (or later in the layout)"
-msgstr ""
+msgstr "ウィンドウを右へ (レイアウト上では後ろへ)"
 
 #: src/ctlpanel.c:2769
 msgid "Move window up (or earlier in the layout)"
-msgstr ""
+msgstr "ウィンドウを上へ (レイアウト上では前へ)"
 
 #: src/ctlpanel.c:2770
 msgid "Move window down (or later in the layout)"
-msgstr ""
+msgstr "ウィンドウを下へ (レイアウト上では後ろへ)"
 
 #: src/ctlpanel.c:2771
 msgid "Float window"
-msgstr ""
+msgstr "ウィンドウを浮かせる"
 
 #: src/ctlpanel.c:2772
 msgid "Fullscreen window"
-msgstr ""
+msgstr "ウィンドウを全画面に"
 
 #: src/ctlpanel.c:2773
 msgid "Maximize window"
-msgstr ""
+msgstr "ウィンドウを最大化"
 
 #: src/ctlpanel.c:2774
 msgid "Fill screen height (or put it back)"
-msgstr ""
+msgstr "画面の高さいっぱいに (または元に戻す)"
 
 #: src/ctlpanel.c:2775
 msgid "Fill screen width (or put it back)"
-msgstr ""
+msgstr "画面の幅いっぱいに (または元に戻す)"
 
 #: src/ctlpanel.c:2776
 msgid "Minimize window"
-msgstr ""
+msgstr "ウィンドウを最小化"
 
 #: src/ctlpanel.c:2777
 msgid "Restore minimized window"
-msgstr ""
+msgstr "最小化したウィンドウを戻す"
 
 #: src/ctlpanel.c:2778
 msgid "Titlebars on/off"
-msgstr ""
+msgstr "タイトルバーのオン/オフ"
 
 #: src/ctlpanel.c:2780
 msgid "Screens: extend / duplicate / built-in off"
-msgstr ""
+msgstr "画面: 拡張 / 複製 / 内蔵をオフ"
 
 #: src/ctlpanel.c:2781
 msgid "Scale the whole desktop (accessibility)"
-msgstr ""
+msgstr "デスクトップ全体を拡大縮小 (アクセシビリティ)"
 
 #: src/ctlpanel.c:2782
 msgid "Wallpaper picker"
-msgstr ""
+msgstr "壁紙の選択"
 
 #: src/ctlpanel.c:2783
 msgid "Reload wallpaper / config"
-msgstr ""
+msgstr "壁紙と設定を読み込み直す"
 
 #: src/ctlpanel.c:2784
 msgid "Visual effects (CRT + window)"
-msgstr ""
+msgstr "視覚効果 (CRT + ウィンドウ)"
 
 #: src/ctlpanel.c:2785
 msgid "Desktop widget manager"
-msgstr ""
+msgstr "デスクトップウィジェットの管理"
 
 #: src/ctlpanel.c:2787
 msgid "CRT effects on/off"
-msgstr ""
+msgstr "CRT 効果のオン/オフ"
 
 #: src/ctlpanel.c:2788
 msgid "Power saving panel"
-msgstr ""
+msgstr "省電力パネル"
 
 #: src/ctlpanel.c:2789
 msgid "Screensaver + lock screen"
-msgstr ""
+msgstr "スクリーンセーバーとロック画面"
 
 #: src/ctlpanel.c:2795
 msgid "AI backend (GPU/CPU/off)"
-msgstr ""
+msgstr "AI バックエンド (GPU/CPU/オフ)"
 
 #: src/ctlpanel.c:2796
 msgid "Move window to next output"
-msgstr ""
+msgstr "ウィンドウを次の画面へ"
 
 #: src/ctlpanel.c:2837
 msgid "Start menu (application page)"
-msgstr ""
+msgstr "スタートメニュー (アプリのページ)"
 
 #: src/ctlpanel.c:2838
 msgid "Start menu (rofi)"
-msgstr ""
+msgstr "スタートメニュー (rofi)"
 
 #: src/ctlpanel.c:2840
 msgid "Start menu (bar menu)"
-msgstr ""
+msgstr "スタートメニュー (バーのメニュー)"
 
 #: src/ctlpanel.c:2848
 msgid "Move window to previous output"
-msgstr ""
+msgstr "ウィンドウを前の画面へ"
 
 #: src/ctlpanel.c:2878
 msgid "Enter"
-msgstr ""
+msgstr "Enter"
 
 #: src/ctlpanel.c:2879
 msgid "KP Enter"
-msgstr ""
+msgstr "Enter (テンキー)"
 
 #: src/ctlpanel.c:2880
 msgid "Space"
-msgstr ""
+msgstr "スペース"
 
 #: src/ctlpanel.c:2881
 msgid "Esc"
-msgstr ""
+msgstr "Esc"
 
 #: src/ctlpanel.c:2882
 msgid "Del"
-msgstr ""
+msgstr "Del"
 
 #: src/ctlpanel.c:2883
 msgid "Backspace"
-msgstr ""
+msgstr "Backspace"
 
 #: src/ctlpanel.c:2884
 msgid "Tab"
-msgstr ""
+msgstr "Tab"
 
 #: src/ctlpanel.c:2948
 msgid "Super"
-msgstr ""
+msgstr "Super"
 
 #: src/ctlpanel.c:2949
 msgid "Ctrl"
-msgstr ""
+msgstr "Ctrl"
 
 #: src/ctlpanel.c:2950
 msgid "Alt"
-msgstr ""
+msgstr "Alt"
 
 #: src/ctlpanel.c:2951
 msgid "Shift"
-msgstr ""
+msgstr "Shift"
 
 #: src/ctlpanel.c:3047
 #, c-format
 msgid "Switch to workspace"
-msgstr ""
+msgstr "ワークスペースへ切り替え"
 
 #: src/ctlpanel.c:3053
 #, c-format
 msgid "Move window to workspace"
-msgstr ""
+msgstr "ウィンドウをワークスペースへ移動"
 
 #: src/ctlpanel.c:3141
 #, c-format
 msgid "loading · the AI pauses until it is up"
-msgstr ""
+msgstr "読み込み中 · 準備できるまで AI は停止します"
 
 #: src/ctlpanel.c:3231
 #, c-format
 msgid "%s: still %s · switch did not land"
-msgstr ""
+msgstr "%s: まだ %s のままです · 切り替えは反映されませんでした"
 
 #: src/ctlpanel.c:3631
 msgid "position"
@@ -1743,119 +1743,118 @@ msgstr "位置"
 
 #: src/ctlpanel.c:3637
 msgid "turn the cell on first"
-msgstr ""
+msgstr "先にこの項目をオンにしてください"
 
 #: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
 #: src/ctlpanel.c:3908 src/ctlpanel.c:3928
 #, c-format
 msgid "dock is off"
-msgstr ""
+msgstr "ドックはオフです"
 
 #: src/ctlpanel.c:3754
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
-msgstr ""
+msgstr "GLES レンダラーがありません · ここでは効果を使えません"
 
 #: src/ctlpanel.c:3765
 msgid "CRT effects on"
-msgstr ""
+msgstr "CRT 効果オン"
 
 #: src/ctlpanel.c:3766
 msgid "CRT effects off"
-msgstr ""
+msgstr "CRT 効果オフ"
 
 #: src/ctlpanel.c:3777
 #, c-format
 msgid "game mode: always on"
-msgstr ""
+msgstr "ゲームモード: 常にオン"
 
 #: src/ctlpanel.c:3778
 #, c-format
 msgid "game mode: always off"
-msgstr ""
+msgstr "ゲームモード: 常にオフ"
 
 #: src/ctlpanel.c:3779
 #, c-format
 msgid "game mode: auto · a game is running"
-msgstr ""
+msgstr "ゲームモード: 自動 · ゲームが動作中"
 
 #: src/ctlpanel.c:3780
 #, c-format
 msgid "game mode: auto · no game running"
-msgstr ""
+msgstr "ゲームモード: 自動 · ゲームは動作していません"
 
 #: src/ctlpanel.c:3836
 msgid "bar on"
-msgstr ""
+msgstr "バーをオン"
 
 #: src/ctlpanel.c:3836
 msgid "bar off"
-msgstr ""
+msgstr "バーをオフ"
 
 #: src/ctlpanel.c:3852
 msgid "dock on"
-msgstr ""
+msgstr "ドックをオン"
 
 #: src/ctlpanel.c:3852
 msgid "dock off"
-msgstr ""
+msgstr "ドックをオフ"
 
 #: src/ctlpanel.c:3870
 msgid "dock auto-hide on"
-msgstr ""
+msgstr "ドックの自動的に隠す: オン"
 
 #: src/ctlpanel.c:3871
 msgid "dock auto-hide off"
-msgstr ""
+msgstr "ドックの自動的に隠す: オフ"
 
 #: src/ctlpanel.c:3890
 #, c-format
 msgid "an auto-hiding dock is always on top"
-msgstr ""
+msgstr "自動的に隠れるドックは常に手前になります"
 
 #: src/ctlpanel.c:3899
 msgid "dock above windows"
-msgstr ""
+msgstr "ドックをウィンドウの手前に"
 
 #: src/ctlpanel.c:3900
 msgid "dock below windows"
-msgstr ""
+msgstr "ドックをウィンドウの奥に"
 
 #: src/ctlpanel.c:3907
 #, c-format
 msgid "the dock clock is off"
-msgstr ""
+msgstr "ドックの時計はオフです"
 
 #: src/ctlpanel.c:3917
 #, c-format
 msgid "dock clock %s"
-msgstr ""
+msgstr "ドックの時計 %s"
 
 #: src/ctlpanel.c:3936
 msgid "magnify"
-msgstr ""
+msgstr "拡大"
 
 #: src/ctlpanel.c:3938
-#, fuzzy
 msgid "clock"
 msgstr "時計"
 
 #: src/ctlpanel.c:3940
 msgid "all-apps button"
-msgstr ""
+msgstr "「すべてのアプリ」ボタン"
 
 #: src/ctlpanel.c:3942
 msgid "power button"
-msgstr ""
+msgstr "電源ボタン"
 
 #: src/ctlpanel.c:3949
 #, c-format
 msgid "dock %s %s"
-msgstr ""
+msgstr "ドック %s %s"
 
 #: src/ctlpanel.c:3949
 msgid "on"
-msgstr ""
+msgstr "オン"
 
 #: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
 #: src/render.c:5370 src/render.c:6171
@@ -1866,91 +1865,91 @@ msgstr "オフ"
 #: src/ctlpanel.c:3962
 #, c-format
 msgid "the bar is off"
-msgstr ""
+msgstr "バーはオフです"
 
 #: src/ctlpanel.c:3973
 msgid "bar auto-hide on for every monitor"
-msgstr ""
+msgstr "すべての画面でバーの自動的に隠すをオン"
 
 #: src/ctlpanel.c:3974
 msgid "bar auto-hide off for every monitor"
-msgstr ""
+msgstr "すべての画面でバーの自動的に隠すをオフ"
 
 #: src/ctlpanel.c:3988
 #, c-format
 msgid "notifications are silenced"
-msgstr ""
+msgstr "通知は消音されています"
 
 #: src/ctlpanel.c:3989
 #, c-format
 msgid "notifications are back on"
-msgstr ""
+msgstr "通知が戻りました"
 
 #: src/ctlpanel.c:4001
 #, c-format
 msgid "recordings capture desktop sound"
-msgstr ""
+msgstr "録画はデスクトップの音も収録します"
 
 #: src/ctlpanel.c:4002
 #, c-format
 msgid "recordings are silent"
-msgstr ""
+msgstr "録画は無音です"
 
 #: src/ctlpanel.c:4013
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
-msgstr ""
+msgstr "録画は動画編集ソフトで開けます · 約 1.1 GB/分"
 
 #: src/ctlpanel.c:4014
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
-msgstr ""
+msgstr "録画は H.264 mp4 · 小さく、どこでも共有できます"
 
 #: src/ctlpanel.c:4024
 msgid "titlebars off"
-msgstr ""
+msgstr "タイトルバーをオフ"
 
 #: src/ctlpanel.c:4025
 msgid "titlebars on"
-msgstr ""
+msgstr "タイトルバーをオン"
 
 #: src/ctlpanel.c:4034
 #, c-format
 msgid "start button: %s"
-msgstr ""
+msgstr "スタートボタン: %s"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency on · %d%%"
-msgstr ""
+msgstr "透明度オン · %d%%"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency off"
-msgstr ""
+msgstr "透明度オフ"
 
 #: src/ctlpanel.c:4054
 msgid "night light on"
-msgstr ""
+msgstr "ナイトライトオン"
 
 #: src/ctlpanel.c:4055
 msgid "night light off"
-msgstr ""
+msgstr "ナイトライトオフ"
 
 #: src/ctlpanel.c:4071
 #, c-format
 msgid "switching AI backend …"
-msgstr ""
+msgstr "AI バックエンドを切り替え中 …"
 
 #: src/ctlpanel.c:4213
 #, c-format
 msgid "transparency %d%%"
-msgstr ""
+msgstr "透明度 %d%%"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 #, c-format
 msgid "%s is at its %s"
-msgstr ""
+msgstr "%s は%sです"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
@@ -1963,107 +1962,107 @@ msgstr "最大値"
 #: src/ctlpanel.c:4274
 #, c-format
 msgid "%s: %d %s · applies when you stop"
-msgstr ""
+msgstr "%s: %d %s · 手を止めると反映されます"
 
 #: src/ctlpanel.c:4309
 #, c-format
 msgid "%s: %s · default"
-msgstr ""
+msgstr "%s: %s · 既定"
 
 #: src/ctlpanel.c:4350
 msgid "no models in /var/lib/synapd/models"
-msgstr ""
+msgstr "/var/lib/synapd/models にモデルがありません"
 
 #: src/ctlpanel.c:4360
 #, c-format
 msgid "loads when you stop · Esc cancels"
-msgstr ""
+msgstr "手を止めると読み込みます · Esc で取り消し"
 
 #: src/ctlpanel.c:4629
 #, c-format
 msgid "Rebind cancelled"
-msgstr ""
+msgstr "割り当て直しを取り消しました"
 
 #: src/ctlpanel.c:4698
 #, c-format
 msgid "nothing to reset on this row"
-msgstr ""
+msgstr "この行には戻すものがありません"
 
 #: src/ctlpanel.c:4703
 #, c-format
 msgid "%s reset to %s"
-msgstr ""
+msgstr "%s を %s に戻しました"
 
 #: src/ctlpanel.c:4706
 #, c-format
 msgid "%s is already at its default"
-msgstr ""
+msgstr "%s はすでに既定値です"
 
 #: src/ctlpanel.c:4732
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
-msgstr ""
+msgstr "割り当て直しは「ショートカット」の分類にあります"
 
 #: src/ctlpanel.c:4744
 #, c-format
 msgid "The tap is set from the Shortcuts category"
-msgstr ""
+msgstr "単押しは「ショートカット」の分類で設定します"
 
 #: src/deskmenu.c:77
 msgid "Open Terminal"
-msgstr ""
+msgstr "端末を開く"
 
 #: src/deskmenu.c:78
 msgid "Open File Manager"
-msgstr ""
+msgstr "ファイルマネージャーを開く"
 
 #: src/deskmenu.c:79
 msgid "Applications…"
-msgstr ""
+msgstr "アプリケーション…"
 
 #: src/deskmenu.c:81
 msgid "Change Wallpaper…"
-msgstr ""
+msgstr "壁紙を変更…"
 
 #: src/deskmenu.c:82
 msgid "Appearance…"
-msgstr ""
+msgstr "外観…"
 
 #: src/deskmenu.c:83
 msgid "Display Settings…"
-msgstr ""
+msgstr "ディスプレイ設定…"
 
 #: src/deskmenu.c:84
 msgid "Desktop Widgets…"
-msgstr ""
+msgstr "デスクトップウィジェット…"
 
 #: src/deskmenu.c:85
 msgid "Show Desktop Icons"
-msgstr ""
+msgstr "デスクトップアイコンを表示"
 
 #: src/deskmenu.c:86
 msgid "Refresh"
-msgstr ""
+msgstr "更新"
 
 #: src/deskmenu.c:87
 msgid "Arrange by Name"
-msgstr ""
+msgstr "名前順に並べる"
 
 #: src/deskmenu.c:88
 msgid "Arrange by Type"
-msgstr ""
+msgstr "種類順に並べる"
 
 #: src/deskmenu.c:89
 msgid "Arrange by Size"
-msgstr ""
+msgstr "サイズ順に並べる"
 
 #: src/deskmenu.c:90
 msgid "Arrange by Date"
-msgstr ""
+msgstr "日付順に並べる"
 
 #: src/deskmenu.c:91
 msgid "Task Manager"
-msgstr ""
+msgstr "タスクマネージャー"
 
 #: src/deskmenu.c:92 src/render.c:8194
 msgid "Open"
@@ -2071,7 +2070,7 @@ msgstr "開く"
 
 #: src/deskmenu.c:93
 msgid "Move to Trash"
-msgstr ""
+msgstr "ゴミ箱に移動"
 
 #: src/dock.c:3418
 msgid "top"

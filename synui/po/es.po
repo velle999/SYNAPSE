@@ -104,11 +104,11 @@ msgstr ""
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:834
 msgid "Auto"
-msgstr ""
+msgstr "Automático"
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:2952
 msgid "Off"
-msgstr ""
+msgstr "Desactivado"
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -937,7 +937,7 @@ msgstr "Opacidad de la barra"
 
 #: src/ctlpanel.c:1007
 msgid "Follow the theme"
-msgstr ""
+msgstr "Seguir el tema"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1413,388 +1413,388 @@ msgstr ""
 
 #: src/ctlpanel.c:1398
 msgid "device default"
-msgstr ""
+msgstr "Predeterminado del dispositivo"
 
 #: src/ctlpanel.c:1896
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
-msgstr ""
+msgstr "Cristal desactivado · barra, dock y widgets sólidos · ventanas opacas"
 
 #: src/ctlpanel.c:1952
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
-msgstr ""
+msgstr "Cristal completo · barra y dock transparentes · color tomado del fondo"
 
 #: src/ctlpanel.c:2293
 #, c-format
 msgid "RGB lights: off"
-msgstr ""
+msgstr "Luces RGB: desactivadas"
 
 #: src/ctlpanel.c:2294
 #, c-format
 msgid "RGB lights: following the accent"
-msgstr ""
+msgstr "Luces RGB: siguiendo el color de acento"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: off"
-msgstr ""
+msgstr "Lector de pantalla: desactivado"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: on"
-msgstr ""
+msgstr "Lector de pantalla: activado"
 
 #: src/ctlpanel.c:2367
 #, c-format
 msgid "No longer listening · the microphone is closed"
-msgstr ""
+msgstr "Ya no está escuchando · el micrófono está cerrado"
 
 #: src/ctlpanel.c:2368
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
-msgstr ""
+msgstr "A la escucha de «Synapse» · el micrófono está abierto"
 
 #: src/ctlpanel.c:2406
 #, c-format
 msgid "always on"
-msgstr ""
+msgstr "siempre activado"
 
 #: src/ctlpanel.c:2407
 #, c-format
 msgid "always off"
-msgstr ""
+msgstr "siempre desactivado"
 
 #: src/ctlpanel.c:2408 src/ctlpanel.c:2558
 #, c-format
 msgid "auto (%s)"
-msgstr ""
+msgstr "automático (%s)"
 
 #: src/ctlpanel.c:2521
 #, c-format
 msgid "on — %d missed"
-msgstr ""
+msgstr "activado — %d perdidas"
 
 #: src/ctlpanel.c:2529
 msgid "desktop sound"
-msgstr ""
+msgstr "sonido del escritorio"
 
 #: src/ctlpanel.c:2537
 msgid "DNxHR ~1.1 GB/min"
-msgstr ""
+msgstr "DNxHR ~1,1 GB/min"
 
 #: src/ctlpanel.c:2537
 msgid "off (H.264 mp4)"
-msgstr ""
+msgstr "desactivado (H.264 mp4)"
 
 #: src/ctlpanel.c:2559
 msgid "on · laptop"
-msgstr ""
+msgstr "activado · portátil"
 
 #: src/ctlpanel.c:2559
 msgid "off · desktop"
-msgstr ""
+msgstr "desactivado · sobremesa"
 
 #: src/ctlpanel.c:2570
 #, c-format
 msgid "Built-in off"
-msgstr ""
+msgstr "Pantalla integrada apagada"
 
 #: src/ctlpanel.c:2729
 msgid "Terminal"
-msgstr ""
+msgstr "Terminal"
 
 #: src/ctlpanel.c:2730
 msgid "AI command bar"
-msgstr ""
+msgstr "Barra de comandos de IA"
 
 #: src/ctlpanel.c:2731
 msgid "Ask the AI about the window"
-msgstr ""
+msgstr "Preguntar a la IA sobre la ventana"
 
 #: src/ctlpanel.c:2732
 msgid "Neural overlay"
-msgstr ""
+msgstr "Superposición neuronal"
 
 #: src/ctlpanel.c:2733
 msgid "Welcome menu"
-msgstr ""
+msgstr "Menú de bienvenida"
 
 #: src/ctlpanel.c:2735
 msgid "Keyboard shortcuts (this list)"
-msgstr ""
+msgstr "Atajos de teclado (esta lista)"
 
 #: src/ctlpanel.c:2739
 msgid "System settings (syn-settings)"
-msgstr ""
+msgstr "Ajustes del sistema (syn-settings)"
 
 #: src/ctlpanel.c:2740
 msgid "Find and add network printers"
-msgstr ""
+msgstr "Buscar y añadir impresoras de red"
 
 #: src/ctlpanel.c:2741
 msgid "Mission control (all windows)"
-msgstr ""
+msgstr "Vista general (todas las ventanas)"
 
 #: src/ctlpanel.c:2742
 msgid "Rebind a shortcut"
-msgstr ""
+msgstr "Reasignar un atajo"
 
 #: src/ctlpanel.c:2744
 msgid "Do Not Disturb (mute notifications)"
-msgstr ""
+msgstr "No molestar (silenciar notificaciones)"
 
 #: src/ctlpanel.c:2745
 msgid "Record screen"
-msgstr ""
+msgstr "Grabar la pantalla"
 
 #: src/ctlpanel.c:2747
 msgid "Brightness up"
-msgstr ""
+msgstr "Subir el brillo"
 
 #: src/ctlpanel.c:2748
 msgid "Brightness down"
-msgstr ""
+msgstr "Bajar el brillo"
 
 #: src/ctlpanel.c:2750
 msgid "Start button: text/logo"
-msgstr ""
+msgstr "Botón de inicio: texto/logotipo"
 
 #: src/ctlpanel.c:2751
 msgid "Close window"
-msgstr ""
+msgstr "Cerrar la ventana"
 
 #: src/ctlpanel.c:2752
 msgid "Quit synui"
-msgstr ""
+msgstr "Salir de synui"
 
 #: src/ctlpanel.c:2753
 msgid "Cycle layout"
-msgstr ""
+msgstr "Cambiar de disposición"
 
 #: src/ctlpanel.c:2754
 msgid "Tile this desktop"
-msgstr ""
+msgstr "Poner en mosaico este escritorio"
 
 #: src/ctlpanel.c:2755
 msgid "Cascade this desktop (overlapping piles)"
-msgstr ""
+msgstr "Poner en cascada este escritorio (pilas superpuestas)"
 
 #: src/ctlpanel.c:2756
 msgid "Arrange floating windows"
-msgstr ""
+msgstr "Ordenar las ventanas flotantes"
 
 #: src/ctlpanel.c:2757
 msgid "Shrink master area"
-msgstr ""
+msgstr "Reducir el área principal"
 
 #: src/ctlpanel.c:2758
 msgid "Grow master area"
-msgstr ""
+msgstr "Ampliar el área principal"
 
 #: src/ctlpanel.c:2759
 msgid "niri: pull window into the left column"
-msgstr ""
+msgstr "niri: traer la ventana a la columna izquierda"
 
 #: src/ctlpanel.c:2760
 msgid "niri: push window out to its own column"
-msgstr ""
+msgstr "niri: sacar la ventana a su propia columna"
 
 #: src/ctlpanel.c:2761
 msgid "Focus next window"
-msgstr ""
+msgstr "Enfocar la ventana siguiente"
 
 #: src/ctlpanel.c:2762
 msgid "Focus previous window"
-msgstr ""
+msgstr "Enfocar la ventana anterior"
 
 #: src/ctlpanel.c:2763
 msgid "Switch window (Alt+Tab)"
-msgstr ""
+msgstr "Cambiar de ventana (Alt+Tab)"
 
 #: src/ctlpanel.c:2764
 msgid "Switch window, backwards"
-msgstr ""
+msgstr "Cambiar de ventana, hacia atrás"
 
 #: src/ctlpanel.c:2765
 msgid "Move window down the stack"
-msgstr ""
+msgstr "Bajar la ventana en la pila"
 
 #: src/ctlpanel.c:2766
 msgid "Move window up the stack"
-msgstr ""
+msgstr "Subir la ventana en la pila"
 
 #: src/ctlpanel.c:2767
 msgid "Move window left (or earlier in the layout)"
-msgstr ""
+msgstr "Mover la ventana a la izquierda (o antes en la disposición)"
 
 #: src/ctlpanel.c:2768
 msgid "Move window right (or later in the layout)"
-msgstr ""
+msgstr "Mover la ventana a la derecha (o después en la disposición)"
 
 #: src/ctlpanel.c:2769
 msgid "Move window up (or earlier in the layout)"
-msgstr ""
+msgstr "Mover la ventana arriba (o antes en la disposición)"
 
 #: src/ctlpanel.c:2770
 msgid "Move window down (or later in the layout)"
-msgstr ""
+msgstr "Mover la ventana abajo (o después en la disposición)"
 
 #: src/ctlpanel.c:2771
 msgid "Float window"
-msgstr ""
+msgstr "Hacer flotar la ventana"
 
 #: src/ctlpanel.c:2772
 msgid "Fullscreen window"
-msgstr ""
+msgstr "Ventana a pantalla completa"
 
 #: src/ctlpanel.c:2773
 msgid "Maximize window"
-msgstr ""
+msgstr "Maximizar la ventana"
 
 #: src/ctlpanel.c:2774
 msgid "Fill screen height (or put it back)"
-msgstr ""
+msgstr "Ocupar el alto de la pantalla (o deshacer)"
 
 #: src/ctlpanel.c:2775
 msgid "Fill screen width (or put it back)"
-msgstr ""
+msgstr "Ocupar el ancho de la pantalla (o deshacer)"
 
 #: src/ctlpanel.c:2776
 msgid "Minimize window"
-msgstr ""
+msgstr "Minimizar la ventana"
 
 #: src/ctlpanel.c:2777
 msgid "Restore minimized window"
-msgstr ""
+msgstr "Restaurar la ventana minimizada"
 
 #: src/ctlpanel.c:2778
 msgid "Titlebars on/off"
-msgstr ""
+msgstr "Barras de título activadas/desactivadas"
 
 #: src/ctlpanel.c:2780
 msgid "Screens: extend / duplicate / built-in off"
-msgstr ""
+msgstr "Pantallas: extender / duplicar / integrada apagada"
 
 #: src/ctlpanel.c:2781
 msgid "Scale the whole desktop (accessibility)"
-msgstr ""
+msgstr "Escalar todo el escritorio (accesibilidad)"
 
 #: src/ctlpanel.c:2782
 msgid "Wallpaper picker"
-msgstr ""
+msgstr "Selector de fondo de pantalla"
 
 #: src/ctlpanel.c:2783
 msgid "Reload wallpaper / config"
-msgstr ""
+msgstr "Recargar el fondo de pantalla / la configuración"
 
 #: src/ctlpanel.c:2784
 msgid "Visual effects (CRT + window)"
-msgstr ""
+msgstr "Efectos visuales (CRT + ventana)"
 
 #: src/ctlpanel.c:2785
 msgid "Desktop widget manager"
-msgstr ""
+msgstr "Gestor de widgets del escritorio"
 
 #: src/ctlpanel.c:2787
 msgid "CRT effects on/off"
-msgstr ""
+msgstr "Efectos CRT activados/desactivados"
 
 #: src/ctlpanel.c:2788
 msgid "Power saving panel"
-msgstr ""
+msgstr "Panel de ahorro de energía"
 
 #: src/ctlpanel.c:2789
 msgid "Screensaver + lock screen"
-msgstr ""
+msgstr "Salvapantallas + pantalla de bloqueo"
 
 #: src/ctlpanel.c:2795
 msgid "AI backend (GPU/CPU/off)"
-msgstr ""
+msgstr "Motor de IA (GPU/CPU/desactivado)"
 
 #: src/ctlpanel.c:2796
 msgid "Move window to next output"
-msgstr ""
+msgstr "Mover la ventana a la pantalla siguiente"
 
 #: src/ctlpanel.c:2837
 msgid "Start menu (application page)"
-msgstr ""
+msgstr "Menú de inicio (página de aplicaciones)"
 
 #: src/ctlpanel.c:2838
 msgid "Start menu (rofi)"
-msgstr ""
+msgstr "Menú de inicio (rofi)"
 
 #: src/ctlpanel.c:2840
 msgid "Start menu (bar menu)"
-msgstr ""
+msgstr "Menú de inicio (menú de la barra)"
 
 #: src/ctlpanel.c:2848
 msgid "Move window to previous output"
-msgstr ""
+msgstr "Mover la ventana a la pantalla anterior"
 
 #: src/ctlpanel.c:2878
 msgid "Enter"
-msgstr ""
+msgstr "Intro"
 
 #: src/ctlpanel.c:2879
 msgid "KP Enter"
-msgstr ""
+msgstr "Intro (teclado num.)"
 
 #: src/ctlpanel.c:2880
 msgid "Space"
-msgstr ""
+msgstr "Espacio"
 
 #: src/ctlpanel.c:2881
 msgid "Esc"
-msgstr ""
+msgstr "Esc"
 
 #: src/ctlpanel.c:2882
 msgid "Del"
-msgstr ""
+msgstr "Supr"
 
 #: src/ctlpanel.c:2883
 msgid "Backspace"
-msgstr ""
+msgstr "Retroceso"
 
 #: src/ctlpanel.c:2884
 msgid "Tab"
-msgstr ""
+msgstr "Tab"
 
 #: src/ctlpanel.c:2948
 msgid "Super"
-msgstr ""
+msgstr "Super"
 
 #: src/ctlpanel.c:2949
 msgid "Ctrl"
-msgstr ""
+msgstr "Ctrl"
 
 #: src/ctlpanel.c:2950
 msgid "Alt"
-msgstr ""
+msgstr "Alt"
 
 #: src/ctlpanel.c:2951
 msgid "Shift"
-msgstr ""
+msgstr "Mayús"
 
 #: src/ctlpanel.c:3047
 #, c-format
 msgid "Switch to workspace"
-msgstr ""
+msgstr "Cambiar al espacio de trabajo"
 
 #: src/ctlpanel.c:3053
 #, c-format
 msgid "Move window to workspace"
-msgstr ""
+msgstr "Mover la ventana al espacio de trabajo"
 
 #: src/ctlpanel.c:3141
 #, c-format
 msgid "loading · the AI pauses until it is up"
-msgstr ""
+msgstr "cargando · la IA se detiene hasta que esté lista"
 
 #: src/ctlpanel.c:3231
 #, c-format
 msgid "%s: still %s · switch did not land"
-msgstr ""
+msgstr "%s: sigue %s · el cambio no se aplicó"
 
 #: src/ctlpanel.c:3631
 msgid "position"
@@ -1802,119 +1802,118 @@ msgstr "posición"
 
 #: src/ctlpanel.c:3637
 msgid "turn the cell on first"
-msgstr ""
+msgstr "active primero la casilla"
 
 #: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
 #: src/ctlpanel.c:3908 src/ctlpanel.c:3928
 #, c-format
 msgid "dock is off"
-msgstr ""
+msgstr "el dock está desactivado"
 
 #: src/ctlpanel.c:3754
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
-msgstr ""
+msgstr "sin renderizador GLES · efectos no disponibles aquí"
 
 #: src/ctlpanel.c:3765
 msgid "CRT effects on"
-msgstr ""
+msgstr "Efectos CRT activados"
 
 #: src/ctlpanel.c:3766
 msgid "CRT effects off"
-msgstr ""
+msgstr "Efectos CRT desactivados"
 
 #: src/ctlpanel.c:3777
 #, c-format
 msgid "game mode: always on"
-msgstr ""
+msgstr "modo de juego: siempre activado"
 
 #: src/ctlpanel.c:3778
 #, c-format
 msgid "game mode: always off"
-msgstr ""
+msgstr "modo de juego: siempre desactivado"
 
 #: src/ctlpanel.c:3779
 #, c-format
 msgid "game mode: auto · a game is running"
-msgstr ""
+msgstr "modo de juego: automático · hay un juego en marcha"
 
 #: src/ctlpanel.c:3780
 #, c-format
 msgid "game mode: auto · no game running"
-msgstr ""
+msgstr "modo de juego: automático · no hay ningún juego"
 
 #: src/ctlpanel.c:3836
 msgid "bar on"
-msgstr ""
+msgstr "barra activada"
 
 #: src/ctlpanel.c:3836
 msgid "bar off"
-msgstr ""
+msgstr "barra desactivada"
 
 #: src/ctlpanel.c:3852
 msgid "dock on"
-msgstr ""
+msgstr "dock activado"
 
 #: src/ctlpanel.c:3852
 msgid "dock off"
-msgstr ""
+msgstr "dock desactivado"
 
 #: src/ctlpanel.c:3870
 msgid "dock auto-hide on"
-msgstr ""
+msgstr "ocultar el dock automáticamente activado"
 
 #: src/ctlpanel.c:3871
 msgid "dock auto-hide off"
-msgstr ""
+msgstr "ocultar el dock automáticamente desactivado"
 
 #: src/ctlpanel.c:3890
 #, c-format
 msgid "an auto-hiding dock is always on top"
-msgstr ""
+msgstr "un dock que se oculta solo siempre queda por encima"
 
 #: src/ctlpanel.c:3899
 msgid "dock above windows"
-msgstr ""
+msgstr "dock sobre las ventanas"
 
 #: src/ctlpanel.c:3900
 msgid "dock below windows"
-msgstr ""
+msgstr "dock bajo las ventanas"
 
 #: src/ctlpanel.c:3907
 #, c-format
 msgid "the dock clock is off"
-msgstr ""
+msgstr "el reloj del dock está desactivado"
 
 #: src/ctlpanel.c:3917
 #, c-format
 msgid "dock clock %s"
-msgstr ""
+msgstr "reloj del dock %s"
 
 #: src/ctlpanel.c:3936
 msgid "magnify"
-msgstr ""
+msgstr "ampliación"
 
 #: src/ctlpanel.c:3938
-#, fuzzy
 msgid "clock"
-msgstr "Reloj"
+msgstr "reloj"
 
 #: src/ctlpanel.c:3940
 msgid "all-apps button"
-msgstr ""
+msgstr "botón Todas las aplicaciones"
 
 #: src/ctlpanel.c:3942
 msgid "power button"
-msgstr ""
+msgstr "botón de encendido"
 
 #: src/ctlpanel.c:3949
 #, c-format
 msgid "dock %s %s"
-msgstr ""
+msgstr "dock %s %s"
 
 #: src/ctlpanel.c:3949
 msgid "on"
-msgstr ""
+msgstr "activado"
 
 #: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
 #: src/render.c:5370 src/render.c:6171
@@ -1925,91 +1924,91 @@ msgstr "desactivado"
 #: src/ctlpanel.c:3962
 #, c-format
 msgid "the bar is off"
-msgstr ""
+msgstr "la barra está desactivada"
 
 #: src/ctlpanel.c:3973
 msgid "bar auto-hide on for every monitor"
-msgstr ""
+msgstr "ocultar la barra automáticamente activado en todas las pantallas"
 
 #: src/ctlpanel.c:3974
 msgid "bar auto-hide off for every monitor"
-msgstr ""
+msgstr "ocultar la barra automáticamente desactivado en todas las pantallas"
 
 #: src/ctlpanel.c:3988
 #, c-format
 msgid "notifications are silenced"
-msgstr ""
+msgstr "las notificaciones están silenciadas"
 
 #: src/ctlpanel.c:3989
 #, c-format
 msgid "notifications are back on"
-msgstr ""
+msgstr "las notificaciones vuelven a estar activas"
 
 #: src/ctlpanel.c:4001
 #, c-format
 msgid "recordings capture desktop sound"
-msgstr ""
+msgstr "las grabaciones capturan el sonido del escritorio"
 
 #: src/ctlpanel.c:4002
 #, c-format
 msgid "recordings are silent"
-msgstr ""
+msgstr "las grabaciones son mudas"
 
 #: src/ctlpanel.c:4013
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
-msgstr ""
+msgstr "las grabaciones se abren en un editor de vídeo · ~1,1 GB/min"
 
 #: src/ctlpanel.c:4014
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
-msgstr ""
+msgstr "las grabaciones son H.264 mp4 · pequeñas, se comparten en cualquier sitio"
 
 #: src/ctlpanel.c:4024
 msgid "titlebars off"
-msgstr ""
+msgstr "barras de título desactivadas"
 
 #: src/ctlpanel.c:4025
 msgid "titlebars on"
-msgstr ""
+msgstr "barras de título activadas"
 
 #: src/ctlpanel.c:4034
 #, c-format
 msgid "start button: %s"
-msgstr ""
+msgstr "botón de inicio: %s"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency on · %d%%"
-msgstr ""
+msgstr "transparencia activada · %d %%"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency off"
-msgstr ""
+msgstr "transparencia desactivada"
 
 #: src/ctlpanel.c:4054
 msgid "night light on"
-msgstr ""
+msgstr "luz nocturna activada"
 
 #: src/ctlpanel.c:4055
 msgid "night light off"
-msgstr ""
+msgstr "luz nocturna desactivada"
 
 #: src/ctlpanel.c:4071
 #, c-format
 msgid "switching AI backend …"
-msgstr ""
+msgstr "cambiando el motor de IA …"
 
 #: src/ctlpanel.c:4213
 #, c-format
 msgid "transparency %d%%"
-msgstr ""
+msgstr "transparencia %d %%"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 #, c-format
 msgid "%s is at its %s"
-msgstr ""
+msgstr "%s está en su %s"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
@@ -2022,107 +2021,107 @@ msgstr "máximo"
 #: src/ctlpanel.c:4274
 #, c-format
 msgid "%s: %d %s · applies when you stop"
-msgstr ""
+msgstr "%s: %d %s · se aplica cuando deje de pulsar"
 
 #: src/ctlpanel.c:4309
 #, c-format
 msgid "%s: %s · default"
-msgstr ""
+msgstr "%s: %s · predeterminado"
 
 #: src/ctlpanel.c:4350
 msgid "no models in /var/lib/synapd/models"
-msgstr ""
+msgstr "no hay modelos en /var/lib/synapd/models"
 
 #: src/ctlpanel.c:4360
 #, c-format
 msgid "loads when you stop · Esc cancels"
-msgstr ""
+msgstr "carga cuando deje de pulsar · Esc cancela"
 
 #: src/ctlpanel.c:4629
 #, c-format
 msgid "Rebind cancelled"
-msgstr ""
+msgstr "Reasignación cancelada"
 
 #: src/ctlpanel.c:4698
 #, c-format
 msgid "nothing to reset on this row"
-msgstr ""
+msgstr "no hay nada que restablecer en esta fila"
 
 #: src/ctlpanel.c:4703
 #, c-format
 msgid "%s reset to %s"
-msgstr ""
+msgstr "%s restablecido a %s"
 
 #: src/ctlpanel.c:4706
 #, c-format
 msgid "%s is already at its default"
-msgstr ""
+msgstr "%s ya está en su valor predeterminado"
 
 #: src/ctlpanel.c:4732
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
-msgstr ""
+msgstr "La reasignación está en la categoría Atajos"
 
 #: src/ctlpanel.c:4744
 #, c-format
 msgid "The tap is set from the Shortcuts category"
-msgstr ""
+msgstr "La pulsación se configura desde la categoría Atajos"
 
 #: src/deskmenu.c:77
 msgid "Open Terminal"
-msgstr ""
+msgstr "Abrir una terminal"
 
 #: src/deskmenu.c:78
 msgid "Open File Manager"
-msgstr ""
+msgstr "Abrir el gestor de archivos"
 
 #: src/deskmenu.c:79
 msgid "Applications…"
-msgstr ""
+msgstr "Aplicaciones…"
 
 #: src/deskmenu.c:81
 msgid "Change Wallpaper…"
-msgstr ""
+msgstr "Cambiar el fondo de pantalla…"
 
 #: src/deskmenu.c:82
 msgid "Appearance…"
-msgstr ""
+msgstr "Apariencia…"
 
 #: src/deskmenu.c:83
 msgid "Display Settings…"
-msgstr ""
+msgstr "Ajustes de pantalla…"
 
 #: src/deskmenu.c:84
 msgid "Desktop Widgets…"
-msgstr ""
+msgstr "Widgets del escritorio…"
 
 #: src/deskmenu.c:85
 msgid "Show Desktop Icons"
-msgstr ""
+msgstr "Mostrar los iconos del escritorio"
 
 #: src/deskmenu.c:86
 msgid "Refresh"
-msgstr ""
+msgstr "Actualizar"
 
 #: src/deskmenu.c:87
 msgid "Arrange by Name"
-msgstr ""
+msgstr "Ordenar por nombre"
 
 #: src/deskmenu.c:88
 msgid "Arrange by Type"
-msgstr ""
+msgstr "Ordenar por tipo"
 
 #: src/deskmenu.c:89
 msgid "Arrange by Size"
-msgstr ""
+msgstr "Ordenar por tamaño"
 
 #: src/deskmenu.c:90
 msgid "Arrange by Date"
-msgstr ""
+msgstr "Ordenar por fecha"
 
 #: src/deskmenu.c:91
 msgid "Task Manager"
-msgstr ""
+msgstr "Administrador de tareas"
 
 #: src/deskmenu.c:92 src/render.c:8194
 msgid "Open"
@@ -2130,7 +2129,7 @@ msgstr "Abrir"
 
 #: src/deskmenu.c:93
 msgid "Move to Trash"
-msgstr ""
+msgstr "Mover a la papelera"
 
 #: src/dock.c:3418
 msgid "top"

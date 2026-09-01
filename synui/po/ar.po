@@ -100,11 +100,11 @@ msgstr "عتامة النافذة النشطة. اليسار/اليمين يضب
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:834
 msgid "Auto"
-msgstr ""
+msgstr "تلقائي"
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:2952
 msgid "Off"
-msgstr ""
+msgstr "مُعطَّل"
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -894,7 +894,7 @@ msgstr "عتامة الشريط"
 
 #: src/ctlpanel.c:1007
 msgid "Follow the theme"
-msgstr ""
+msgstr "اتباع السمة"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1342,388 +1342,388 @@ msgstr "العلامة، والجهاز، وما ضُبط عليه سطح الم
 
 #: src/ctlpanel.c:1398
 msgid "device default"
-msgstr ""
+msgstr "افتراضي الجهاز"
 
 #: src/ctlpanel.c:1896
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
-msgstr ""
+msgstr "الزجاج مُعطَّل · الشريط والرصيف والودجات معتمة · والنوافذ معتمة"
 
 #: src/ctlpanel.c:1952
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
-msgstr ""
+msgstr "الزجاج كامل · الشريط والرصيف شفافان · واللون مأخوذ من الخلفية"
 
 #: src/ctlpanel.c:2293
 #, c-format
 msgid "RGB lights: off"
-msgstr ""
+msgstr "إضاءة RGB: مُعطَّلة"
 
 #: src/ctlpanel.c:2294
 #, c-format
 msgid "RGB lights: following the accent"
-msgstr ""
+msgstr "إضاءة RGB: تتبع اللون المميز"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: off"
-msgstr ""
+msgstr "قارئ الشاشة: مُعطَّل"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: on"
-msgstr ""
+msgstr "قارئ الشاشة: مُفعَّل"
 
 #: src/ctlpanel.c:2367
 #, c-format
 msgid "No longer listening · the microphone is closed"
-msgstr ""
+msgstr "لم يعد يستمع · الميكروفون مغلق"
 
 #: src/ctlpanel.c:2368
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
-msgstr ""
+msgstr "ينتظر كلمة «Synapse» · الميكروفون مفتوح"
 
 #: src/ctlpanel.c:2406
 #, c-format
 msgid "always on"
-msgstr ""
+msgstr "مُفعَّل دائمًا"
 
 #: src/ctlpanel.c:2407
 #, c-format
 msgid "always off"
-msgstr ""
+msgstr "مُعطَّل دائمًا"
 
 #: src/ctlpanel.c:2408 src/ctlpanel.c:2558
 #, c-format
 msgid "auto (%s)"
-msgstr ""
+msgstr "تلقائي (%s)"
 
 #: src/ctlpanel.c:2521
 #, c-format
 msgid "on — %d missed"
-msgstr ""
+msgstr "مُفعَّل — %d فائتة"
 
 #: src/ctlpanel.c:2529
 msgid "desktop sound"
-msgstr ""
+msgstr "صوت سطح المكتب"
 
 #: src/ctlpanel.c:2537
 msgid "DNxHR ~1.1 GB/min"
-msgstr ""
+msgstr "DNxHR ‏~1.1 غ.بايت/دقيقة"
 
 #: src/ctlpanel.c:2537
 msgid "off (H.264 mp4)"
-msgstr ""
+msgstr "مُعطَّل (H.264 mp4)"
 
 #: src/ctlpanel.c:2559
 msgid "on · laptop"
-msgstr ""
+msgstr "مُفعَّل · حاسوب محمول"
 
 #: src/ctlpanel.c:2559
 msgid "off · desktop"
-msgstr ""
+msgstr "مُعطَّل · حاسوب مكتبي"
 
 #: src/ctlpanel.c:2570
 #, c-format
 msgid "Built-in off"
-msgstr ""
+msgstr "الشاشة الداخلية مطفأة"
 
 #: src/ctlpanel.c:2729
 msgid "Terminal"
-msgstr ""
+msgstr "الطرفية"
 
 #: src/ctlpanel.c:2730
 msgid "AI command bar"
-msgstr ""
+msgstr "شريط أوامر الذكاء الاصطناعي"
 
 #: src/ctlpanel.c:2731
 msgid "Ask the AI about the window"
-msgstr ""
+msgstr "اسأل الذكاء الاصطناعي عن هذه النافذة"
 
 #: src/ctlpanel.c:2732
 msgid "Neural overlay"
-msgstr ""
+msgstr "الطبقة العصبية"
 
 #: src/ctlpanel.c:2733
 msgid "Welcome menu"
-msgstr ""
+msgstr "قائمة الترحيب"
 
 #: src/ctlpanel.c:2735
 msgid "Keyboard shortcuts (this list)"
-msgstr ""
+msgstr "اختصارات لوحة المفاتيح (هذه القائمة)"
 
 #: src/ctlpanel.c:2739
 msgid "System settings (syn-settings)"
-msgstr ""
+msgstr "إعدادات النظام (syn-settings)"
 
 #: src/ctlpanel.c:2740
 msgid "Find and add network printers"
-msgstr ""
+msgstr "البحث عن طابعات الشبكة وإضافتها"
 
 #: src/ctlpanel.c:2741
 msgid "Mission control (all windows)"
-msgstr ""
+msgstr "نظرة عامة (كل النوافذ)"
 
 #: src/ctlpanel.c:2742
 msgid "Rebind a shortcut"
-msgstr ""
+msgstr "إعادة تعيين اختصار"
 
 #: src/ctlpanel.c:2744
 msgid "Do Not Disturb (mute notifications)"
-msgstr ""
+msgstr "عدم الإزعاج (كتم الإشعارات)"
 
 #: src/ctlpanel.c:2745
 msgid "Record screen"
-msgstr ""
+msgstr "تسجيل الشاشة"
 
 #: src/ctlpanel.c:2747
 msgid "Brightness up"
-msgstr ""
+msgstr "زيادة السطوع"
 
 #: src/ctlpanel.c:2748
 msgid "Brightness down"
-msgstr ""
+msgstr "خفض السطوع"
 
 #: src/ctlpanel.c:2750
 msgid "Start button: text/logo"
-msgstr ""
+msgstr "زر البدء: نص أو شعار"
 
 #: src/ctlpanel.c:2751
 msgid "Close window"
-msgstr ""
+msgstr "إغلاق النافذة"
 
 #: src/ctlpanel.c:2752
 msgid "Quit synui"
-msgstr ""
+msgstr "إنهاء synui"
 
 #: src/ctlpanel.c:2753
 msgid "Cycle layout"
-msgstr ""
+msgstr "تبديل التخطيط"
 
 #: src/ctlpanel.c:2754
 msgid "Tile this desktop"
-msgstr ""
+msgstr "ترتيب هذا السطح بلاطًا"
 
 #: src/ctlpanel.c:2755
 msgid "Cascade this desktop (overlapping piles)"
-msgstr ""
+msgstr "ترتيب هذا السطح متتابعًا (أكوام متداخلة)"
 
 #: src/ctlpanel.c:2756
 msgid "Arrange floating windows"
-msgstr ""
+msgstr "ترتيب النوافذ الطافية"
 
 #: src/ctlpanel.c:2757
 msgid "Shrink master area"
-msgstr ""
+msgstr "تصغير المنطقة الرئيسية"
 
 #: src/ctlpanel.c:2758
 msgid "Grow master area"
-msgstr ""
+msgstr "توسيع المنطقة الرئيسية"
 
 #: src/ctlpanel.c:2759
 msgid "niri: pull window into the left column"
-msgstr ""
+msgstr "niri: سحب النافذة إلى العمود الأيسر"
 
 #: src/ctlpanel.c:2760
 msgid "niri: push window out to its own column"
-msgstr ""
+msgstr "niri: دفع النافذة إلى عمود خاص بها"
 
 #: src/ctlpanel.c:2761
 msgid "Focus next window"
-msgstr ""
+msgstr "التركيز على النافذة التالية"
 
 #: src/ctlpanel.c:2762
 msgid "Focus previous window"
-msgstr ""
+msgstr "التركيز على النافذة السابقة"
 
 #: src/ctlpanel.c:2763
 msgid "Switch window (Alt+Tab)"
-msgstr ""
+msgstr "تبديل النافذة (Alt+Tab)"
 
 #: src/ctlpanel.c:2764
 msgid "Switch window, backwards"
-msgstr ""
+msgstr "تبديل النافذة للخلف"
 
 #: src/ctlpanel.c:2765
 msgid "Move window down the stack"
-msgstr ""
+msgstr "إنزال النافذة في الكومة"
 
 #: src/ctlpanel.c:2766
 msgid "Move window up the stack"
-msgstr ""
+msgstr "رفع النافذة في الكومة"
 
 #: src/ctlpanel.c:2767
 msgid "Move window left (or earlier in the layout)"
-msgstr ""
+msgstr "نقل النافذة يسارًا (أو قبلها في التخطيط)"
 
 #: src/ctlpanel.c:2768
 msgid "Move window right (or later in the layout)"
-msgstr ""
+msgstr "نقل النافذة يمينًا (أو بعدها في التخطيط)"
 
 #: src/ctlpanel.c:2769
 msgid "Move window up (or earlier in the layout)"
-msgstr ""
+msgstr "نقل النافذة لأعلى (أو قبلها في التخطيط)"
 
 #: src/ctlpanel.c:2770
 msgid "Move window down (or later in the layout)"
-msgstr ""
+msgstr "نقل النافذة لأسفل (أو بعدها في التخطيط)"
 
 #: src/ctlpanel.c:2771
 msgid "Float window"
-msgstr ""
+msgstr "جعل النافذة طافية"
 
 #: src/ctlpanel.c:2772
 msgid "Fullscreen window"
-msgstr ""
+msgstr "النافذة بملء الشاشة"
 
 #: src/ctlpanel.c:2773
 msgid "Maximize window"
-msgstr ""
+msgstr "تكبير النافذة"
 
 #: src/ctlpanel.c:2774
 msgid "Fill screen height (or put it back)"
-msgstr ""
+msgstr "ملء ارتفاع الشاشة (أو الإرجاع)"
 
 #: src/ctlpanel.c:2775
 msgid "Fill screen width (or put it back)"
-msgstr ""
+msgstr "ملء عرض الشاشة (أو الإرجاع)"
 
 #: src/ctlpanel.c:2776
 msgid "Minimize window"
-msgstr ""
+msgstr "تصغير النافذة"
 
 #: src/ctlpanel.c:2777
 msgid "Restore minimized window"
-msgstr ""
+msgstr "استعادة النافذة المصغَّرة"
 
 #: src/ctlpanel.c:2778
 msgid "Titlebars on/off"
-msgstr ""
+msgstr "أشرطة العنوان تفعيلًا وتعطيلًا"
 
 #: src/ctlpanel.c:2780
 msgid "Screens: extend / duplicate / built-in off"
-msgstr ""
+msgstr "الشاشات: توسيع / استنساخ / إطفاء الداخلية"
 
 #: src/ctlpanel.c:2781
 msgid "Scale the whole desktop (accessibility)"
-msgstr ""
+msgstr "تحجيم سطح المكتب كله (إمكانية الوصول)"
 
 #: src/ctlpanel.c:2782
 msgid "Wallpaper picker"
-msgstr ""
+msgstr "منتقي خلفية الشاشة"
 
 #: src/ctlpanel.c:2783
 msgid "Reload wallpaper / config"
-msgstr ""
+msgstr "إعادة تحميل الخلفية والإعدادات"
 
 #: src/ctlpanel.c:2784
 msgid "Visual effects (CRT + window)"
-msgstr ""
+msgstr "المؤثرات البصرية (CRT والنوافذ)"
 
 #: src/ctlpanel.c:2785
 msgid "Desktop widget manager"
-msgstr ""
+msgstr "مدير ودجات سطح المكتب"
 
 #: src/ctlpanel.c:2787
 msgid "CRT effects on/off"
-msgstr ""
+msgstr "مؤثرات CRT تفعيلًا وتعطيلًا"
 
 #: src/ctlpanel.c:2788
 msgid "Power saving panel"
-msgstr ""
+msgstr "لوحة توفير الطاقة"
 
 #: src/ctlpanel.c:2789
 msgid "Screensaver + lock screen"
-msgstr ""
+msgstr "حافظة الشاشة وشاشة القفل"
 
 #: src/ctlpanel.c:2795
 msgid "AI backend (GPU/CPU/off)"
-msgstr ""
+msgstr "محرك الذكاء الاصطناعي (معالج رسوميات/معالج/معطَّل)"
 
 #: src/ctlpanel.c:2796
 msgid "Move window to next output"
-msgstr ""
+msgstr "نقل النافذة إلى الشاشة التالية"
 
 #: src/ctlpanel.c:2837
 msgid "Start menu (application page)"
-msgstr ""
+msgstr "قائمة البدء (صفحة التطبيقات)"
 
 #: src/ctlpanel.c:2838
 msgid "Start menu (rofi)"
-msgstr ""
+msgstr "قائمة البدء (rofi)"
 
 #: src/ctlpanel.c:2840
 msgid "Start menu (bar menu)"
-msgstr ""
+msgstr "قائمة البدء (قائمة الشريط)"
 
 #: src/ctlpanel.c:2848
 msgid "Move window to previous output"
-msgstr ""
+msgstr "نقل النافذة إلى الشاشة السابقة"
 
 #: src/ctlpanel.c:2878
 msgid "Enter"
-msgstr ""
+msgstr "Enter"
 
 #: src/ctlpanel.c:2879
 msgid "KP Enter"
-msgstr ""
+msgstr "Enter (لوحة الأرقام)"
 
 #: src/ctlpanel.c:2880
 msgid "Space"
-msgstr ""
+msgstr "المسافة"
 
 #: src/ctlpanel.c:2881
 msgid "Esc"
-msgstr ""
+msgstr "Esc"
 
 #: src/ctlpanel.c:2882
 msgid "Del"
-msgstr ""
+msgstr "Del"
 
 #: src/ctlpanel.c:2883
 msgid "Backspace"
-msgstr ""
+msgstr "Backspace"
 
 #: src/ctlpanel.c:2884
 msgid "Tab"
-msgstr ""
+msgstr "Tab"
 
 #: src/ctlpanel.c:2948
 msgid "Super"
-msgstr ""
+msgstr "Super"
 
 #: src/ctlpanel.c:2949
 msgid "Ctrl"
-msgstr ""
+msgstr "Ctrl"
 
 #: src/ctlpanel.c:2950
 msgid "Alt"
-msgstr ""
+msgstr "Alt"
 
 #: src/ctlpanel.c:2951
 msgid "Shift"
-msgstr ""
+msgstr "Shift"
 
 #: src/ctlpanel.c:3047
 #, c-format
 msgid "Switch to workspace"
-msgstr ""
+msgstr "الانتقال إلى مساحة العمل"
 
 #: src/ctlpanel.c:3053
 #, c-format
 msgid "Move window to workspace"
-msgstr ""
+msgstr "نقل النافذة إلى مساحة العمل"
 
 #: src/ctlpanel.c:3141
 #, c-format
 msgid "loading · the AI pauses until it is up"
-msgstr ""
+msgstr "جارٍ التحميل · يتوقف الذكاء الاصطناعي حتى يجهز"
 
 #: src/ctlpanel.c:3231
 #, c-format
 msgid "%s: still %s · switch did not land"
-msgstr ""
+msgstr "%s: ما زال %s · لم يُطبَّق التبديل"
 
 #: src/ctlpanel.c:3631
 msgid "position"
@@ -1731,119 +1731,118 @@ msgstr "الموضع"
 
 #: src/ctlpanel.c:3637
 msgid "turn the cell on first"
-msgstr ""
+msgstr "فعّل الخانة أولًا"
 
 #: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
 #: src/ctlpanel.c:3908 src/ctlpanel.c:3928
 #, c-format
 msgid "dock is off"
-msgstr ""
+msgstr "الرصيف مُعطَّل"
 
 #: src/ctlpanel.c:3754
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
-msgstr ""
+msgstr "لا يوجد مُصيِّر GLES · المؤثرات غير متاحة هنا"
 
 #: src/ctlpanel.c:3765
 msgid "CRT effects on"
-msgstr ""
+msgstr "مؤثرات CRT مُفعَّلة"
 
 #: src/ctlpanel.c:3766
 msgid "CRT effects off"
-msgstr ""
+msgstr "مؤثرات CRT مُعطَّلة"
 
 #: src/ctlpanel.c:3777
 #, c-format
 msgid "game mode: always on"
-msgstr ""
+msgstr "وضع الألعاب: مُفعَّل دائمًا"
 
 #: src/ctlpanel.c:3778
 #, c-format
 msgid "game mode: always off"
-msgstr ""
+msgstr "وضع الألعاب: مُعطَّل دائمًا"
 
 #: src/ctlpanel.c:3779
 #, c-format
 msgid "game mode: auto · a game is running"
-msgstr ""
+msgstr "وضع الألعاب: تلقائي · توجد لعبة قيد التشغيل"
 
 #: src/ctlpanel.c:3780
 #, c-format
 msgid "game mode: auto · no game running"
-msgstr ""
+msgstr "وضع الألعاب: تلقائي · لا توجد لعبة قيد التشغيل"
 
 #: src/ctlpanel.c:3836
 msgid "bar on"
-msgstr ""
+msgstr "الشريط مُفعَّل"
 
 #: src/ctlpanel.c:3836
 msgid "bar off"
-msgstr ""
+msgstr "الشريط مُعطَّل"
 
 #: src/ctlpanel.c:3852
 msgid "dock on"
-msgstr ""
+msgstr "الرصيف مُفعَّل"
 
 #: src/ctlpanel.c:3852
 msgid "dock off"
-msgstr ""
+msgstr "الرصيف مُعطَّل"
 
 #: src/ctlpanel.c:3870
 msgid "dock auto-hide on"
-msgstr ""
+msgstr "إخفاء الرصيف تلقائيًا مُفعَّل"
 
 #: src/ctlpanel.c:3871
 msgid "dock auto-hide off"
-msgstr ""
+msgstr "إخفاء الرصيف تلقائيًا مُعطَّل"
 
 #: src/ctlpanel.c:3890
 #, c-format
 msgid "an auto-hiding dock is always on top"
-msgstr ""
+msgstr "الرصيف الذي يختفي تلقائيًا يبقى دائمًا فوق النوافذ"
 
 #: src/ctlpanel.c:3899
 msgid "dock above windows"
-msgstr ""
+msgstr "الرصيف فوق النوافذ"
 
 #: src/ctlpanel.c:3900
 msgid "dock below windows"
-msgstr ""
+msgstr "الرصيف تحت النوافذ"
 
 #: src/ctlpanel.c:3907
 #, c-format
 msgid "the dock clock is off"
-msgstr ""
+msgstr "ساعة الرصيف مُعطَّلة"
 
 #: src/ctlpanel.c:3917
 #, c-format
 msgid "dock clock %s"
-msgstr ""
+msgstr "ساعة الرصيف %s"
 
 #: src/ctlpanel.c:3936
 msgid "magnify"
-msgstr ""
+msgstr "التكبير"
 
 #: src/ctlpanel.c:3938
-#, fuzzy
 msgid "clock"
 msgstr "الساعة"
 
 #: src/ctlpanel.c:3940
 msgid "all-apps button"
-msgstr ""
+msgstr "زر «كل التطبيقات»"
 
 #: src/ctlpanel.c:3942
 msgid "power button"
-msgstr ""
+msgstr "زر الطاقة"
 
 #: src/ctlpanel.c:3949
 #, c-format
 msgid "dock %s %s"
-msgstr ""
+msgstr "الرصيف %s %s"
 
 #: src/ctlpanel.c:3949
 msgid "on"
-msgstr ""
+msgstr "مُفعَّل"
 
 #: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
 #: src/render.c:5370 src/render.c:6171
@@ -1854,91 +1853,91 @@ msgstr "مُعطَّل"
 #: src/ctlpanel.c:3962
 #, c-format
 msgid "the bar is off"
-msgstr ""
+msgstr "الشريط مُعطَّل"
 
 #: src/ctlpanel.c:3973
 msgid "bar auto-hide on for every monitor"
-msgstr ""
+msgstr "إخفاء الشريط تلقائيًا مُفعَّل على كل الشاشات"
 
 #: src/ctlpanel.c:3974
 msgid "bar auto-hide off for every monitor"
-msgstr ""
+msgstr "إخفاء الشريط تلقائيًا مُعطَّل على كل الشاشات"
 
 #: src/ctlpanel.c:3988
 #, c-format
 msgid "notifications are silenced"
-msgstr ""
+msgstr "الإشعارات مكتومة"
 
 #: src/ctlpanel.c:3989
 #, c-format
 msgid "notifications are back on"
-msgstr ""
+msgstr "عادت الإشعارات"
 
 #: src/ctlpanel.c:4001
 #, c-format
 msgid "recordings capture desktop sound"
-msgstr ""
+msgstr "التسجيلات تلتقط صوت سطح المكتب"
 
 #: src/ctlpanel.c:4002
 #, c-format
 msgid "recordings are silent"
-msgstr ""
+msgstr "التسجيلات صامتة"
 
 #: src/ctlpanel.c:4013
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
-msgstr ""
+msgstr "تُفتح التسجيلات في محرر فيديو · ~1.1 غ.بايت/دقيقة"
 
 #: src/ctlpanel.c:4014
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
-msgstr ""
+msgstr "التسجيلات بصيغة H.264 mp4 · صغيرة وتُشارَك في أي مكان"
 
 #: src/ctlpanel.c:4024
 msgid "titlebars off"
-msgstr ""
+msgstr "أشرطة العنوان مُعطَّلة"
 
 #: src/ctlpanel.c:4025
 msgid "titlebars on"
-msgstr ""
+msgstr "أشرطة العنوان مُفعَّلة"
 
 #: src/ctlpanel.c:4034
 #, c-format
 msgid "start button: %s"
-msgstr ""
+msgstr "زر البدء: %s"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency on · %d%%"
-msgstr ""
+msgstr "الشفافية مُفعَّلة · %d%%"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency off"
-msgstr ""
+msgstr "الشفافية مُعطَّلة"
 
 #: src/ctlpanel.c:4054
 msgid "night light on"
-msgstr ""
+msgstr "الإضاءة الليلية مُفعَّلة"
 
 #: src/ctlpanel.c:4055
 msgid "night light off"
-msgstr ""
+msgstr "الإضاءة الليلية مُعطَّلة"
 
 #: src/ctlpanel.c:4071
 #, c-format
 msgid "switching AI backend …"
-msgstr ""
+msgstr "جارٍ تبديل محرك الذكاء الاصطناعي …"
 
 #: src/ctlpanel.c:4213
 #, c-format
 msgid "transparency %d%%"
-msgstr ""
+msgstr "الشفافية %d%%"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 #, c-format
 msgid "%s is at its %s"
-msgstr ""
+msgstr "%s عند %s"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
@@ -1951,107 +1950,107 @@ msgstr "الأقصى"
 #: src/ctlpanel.c:4274
 #, c-format
 msgid "%s: %d %s · applies when you stop"
-msgstr ""
+msgstr "%s: %d %s · يُطبَّق عندما تتوقف"
 
 #: src/ctlpanel.c:4309
 #, c-format
 msgid "%s: %s · default"
-msgstr ""
+msgstr "%s: %s · الافتراضي"
 
 #: src/ctlpanel.c:4350
 msgid "no models in /var/lib/synapd/models"
-msgstr ""
+msgstr "لا توجد نماذج في ‎/var/lib/synapd/models"
 
 #: src/ctlpanel.c:4360
 #, c-format
 msgid "loads when you stop · Esc cancels"
-msgstr ""
+msgstr "يُحمَّل عندما تتوقف · Esc يلغي"
 
 #: src/ctlpanel.c:4629
 #, c-format
 msgid "Rebind cancelled"
-msgstr ""
+msgstr "أُلغيت إعادة التعيين"
 
 #: src/ctlpanel.c:4698
 #, c-format
 msgid "nothing to reset on this row"
-msgstr ""
+msgstr "لا شيء لإعادة ضبطه في هذا الصف"
 
 #: src/ctlpanel.c:4703
 #, c-format
 msgid "%s reset to %s"
-msgstr ""
+msgstr "أُعيد ضبط %s إلى %s"
 
 #: src/ctlpanel.c:4706
 #, c-format
 msgid "%s is already at its default"
-msgstr ""
+msgstr "%s عند قيمته الافتراضية أصلًا"
 
 #: src/ctlpanel.c:4732
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
-msgstr ""
+msgstr "إعادة التعيين موجودة في فئة «الاختصارات»"
 
 #: src/ctlpanel.c:4744
 #, c-format
 msgid "The tap is set from the Shortcuts category"
-msgstr ""
+msgstr "تُضبط النقرة من فئة «الاختصارات»"
 
 #: src/deskmenu.c:77
 msgid "Open Terminal"
-msgstr ""
+msgstr "فتح الطرفية"
 
 #: src/deskmenu.c:78
 msgid "Open File Manager"
-msgstr ""
+msgstr "فتح مدير الملفات"
 
 #: src/deskmenu.c:79
 msgid "Applications…"
-msgstr ""
+msgstr "التطبيقات…"
 
 #: src/deskmenu.c:81
 msgid "Change Wallpaper…"
-msgstr ""
+msgstr "تغيير خلفية الشاشة…"
 
 #: src/deskmenu.c:82
 msgid "Appearance…"
-msgstr ""
+msgstr "المظهر…"
 
 #: src/deskmenu.c:83
 msgid "Display Settings…"
-msgstr ""
+msgstr "إعدادات الشاشة…"
 
 #: src/deskmenu.c:84
 msgid "Desktop Widgets…"
-msgstr ""
+msgstr "ودجات سطح المكتب…"
 
 #: src/deskmenu.c:85
 msgid "Show Desktop Icons"
-msgstr ""
+msgstr "إظهار أيقونات سطح المكتب"
 
 #: src/deskmenu.c:86
 msgid "Refresh"
-msgstr ""
+msgstr "تحديث"
 
 #: src/deskmenu.c:87
 msgid "Arrange by Name"
-msgstr ""
+msgstr "الترتيب حسب الاسم"
 
 #: src/deskmenu.c:88
 msgid "Arrange by Type"
-msgstr ""
+msgstr "الترتيب حسب النوع"
 
 #: src/deskmenu.c:89
 msgid "Arrange by Size"
-msgstr ""
+msgstr "الترتيب حسب الحجم"
 
 #: src/deskmenu.c:90
 msgid "Arrange by Date"
-msgstr ""
+msgstr "الترتيب حسب التاريخ"
 
 #: src/deskmenu.c:91
 msgid "Task Manager"
-msgstr ""
+msgstr "مدير المهام"
 
 #: src/deskmenu.c:92 src/render.c:8194
 msgid "Open"
@@ -2059,7 +2058,7 @@ msgstr "فتح"
 
 #: src/deskmenu.c:93
 msgid "Move to Trash"
-msgstr ""
+msgstr "النقل إلى المهملات"
 
 #: src/dock.c:3418
 msgid "top"

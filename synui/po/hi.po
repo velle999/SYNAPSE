@@ -101,11 +101,11 @@ msgstr "चालू खिड़की की अपारदर्शिता
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:834
 msgid "Auto"
-msgstr ""
+msgstr "स्वतः"
 
 #: src/ctlpanel.c:436 src/ctlpanel.c:2952
 msgid "Off"
-msgstr ""
+msgstr "बंद"
 
 #: src/ctlpanel.c:437
 msgid ""
@@ -897,7 +897,7 @@ msgstr "पट्टी की अपारदर्शिता"
 
 #: src/ctlpanel.c:1007
 msgid "Follow the theme"
-msgstr ""
+msgstr "थीम के अनुसार"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
@@ -1345,388 +1345,388 @@ msgstr "यह चिह्न, यह मशीन, और यह डेस्�
 
 #: src/ctlpanel.c:1398
 msgid "device default"
-msgstr ""
+msgstr "उपकरण की चूक"
 
 #: src/ctlpanel.c:1896
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
-msgstr ""
+msgstr "काँच बंद · पट्टी, डॉक और विजेट ठोस · खिड़कियाँ अपारदर्शी"
 
 #: src/ctlpanel.c:1952
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
-msgstr ""
+msgstr "काँच पूरा · पट्टी और डॉक पारदर्शी · रंग वॉलपेपर से"
 
 #: src/ctlpanel.c:2293
 #, c-format
 msgid "RGB lights: off"
-msgstr ""
+msgstr "RGB रोशनी: बंद"
 
 #: src/ctlpanel.c:2294
 #, c-format
 msgid "RGB lights: following the accent"
-msgstr ""
+msgstr "RGB रोशनी: उभार रंग के अनुसार"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: off"
-msgstr ""
+msgstr "स्क्रीन रीडर: बंद"
 
 #: src/ctlpanel.c:2355
 #, c-format
 msgid "Screen reader: on"
-msgstr ""
+msgstr "स्क्रीन रीडर: चालू"
 
 #: src/ctlpanel.c:2367
 #, c-format
 msgid "No longer listening · the microphone is closed"
-msgstr ""
+msgstr "अब नहीं सुन रहा · माइक्रोफ़ोन बंद है"
 
 #: src/ctlpanel.c:2368
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
-msgstr ""
+msgstr "«Synapse» सुनने को तैयार · माइक्रोफ़ोन खुला है"
 
 #: src/ctlpanel.c:2406
 #, c-format
 msgid "always on"
-msgstr ""
+msgstr "हमेशा चालू"
 
 #: src/ctlpanel.c:2407
 #, c-format
 msgid "always off"
-msgstr ""
+msgstr "हमेशा बंद"
 
 #: src/ctlpanel.c:2408 src/ctlpanel.c:2558
 #, c-format
 msgid "auto (%s)"
-msgstr ""
+msgstr "स्वतः (%s)"
 
 #: src/ctlpanel.c:2521
 #, c-format
 msgid "on — %d missed"
-msgstr ""
+msgstr "चालू — %d छूटीं"
 
 #: src/ctlpanel.c:2529
 msgid "desktop sound"
-msgstr ""
+msgstr "डेस्कटॉप की ध्वनि"
 
 #: src/ctlpanel.c:2537
 msgid "DNxHR ~1.1 GB/min"
-msgstr ""
+msgstr "DNxHR ~1.1 GB/मिनट"
 
 #: src/ctlpanel.c:2537
 msgid "off (H.264 mp4)"
-msgstr ""
+msgstr "बंद (H.264 mp4)"
 
 #: src/ctlpanel.c:2559
 msgid "on · laptop"
-msgstr ""
+msgstr "चालू · लैपटॉप"
 
 #: src/ctlpanel.c:2559
 msgid "off · desktop"
-msgstr ""
+msgstr "बंद · डेस्कटॉप"
 
 #: src/ctlpanel.c:2570
 #, c-format
 msgid "Built-in off"
-msgstr ""
+msgstr "अंतर्निर्मित स्क्रीन बंद"
 
 #: src/ctlpanel.c:2729
 msgid "Terminal"
-msgstr ""
+msgstr "टर्मिनल"
 
 #: src/ctlpanel.c:2730
 msgid "AI command bar"
-msgstr ""
+msgstr "AI कमांड पट्टी"
 
 #: src/ctlpanel.c:2731
 msgid "Ask the AI about the window"
-msgstr ""
+msgstr "इस खिड़की के बारे में AI से पूछें"
 
 #: src/ctlpanel.c:2732
 msgid "Neural overlay"
-msgstr ""
+msgstr "न्यूरल ओवरले"
 
 #: src/ctlpanel.c:2733
 msgid "Welcome menu"
-msgstr ""
+msgstr "स्वागत मेन्यू"
 
 #: src/ctlpanel.c:2735
 msgid "Keyboard shortcuts (this list)"
-msgstr ""
+msgstr "कीबोर्ड शॉर्टकट (यही सूची)"
 
 #: src/ctlpanel.c:2739
 msgid "System settings (syn-settings)"
-msgstr ""
+msgstr "सिस्टम सेटिंग्स (syn-settings)"
 
 #: src/ctlpanel.c:2740
 msgid "Find and add network printers"
-msgstr ""
+msgstr "नेटवर्क प्रिंटर खोजें और जोड़ें"
 
 #: src/ctlpanel.c:2741
 msgid "Mission control (all windows)"
-msgstr ""
+msgstr "विहंगम दृश्य (सभी खिड़कियाँ)"
 
 #: src/ctlpanel.c:2742
 msgid "Rebind a shortcut"
-msgstr ""
+msgstr "कोई शॉर्टकट फिर से जोड़ें"
 
 #: src/ctlpanel.c:2744
 msgid "Do Not Disturb (mute notifications)"
-msgstr ""
+msgstr "परेशान न करें (सूचनाएँ चुप)"
 
 #: src/ctlpanel.c:2745
 msgid "Record screen"
-msgstr ""
+msgstr "स्क्रीन रिकॉर्ड करें"
 
 #: src/ctlpanel.c:2747
 msgid "Brightness up"
-msgstr ""
+msgstr "चमक बढ़ाएँ"
 
 #: src/ctlpanel.c:2748
 msgid "Brightness down"
-msgstr ""
+msgstr "चमक घटाएँ"
 
 #: src/ctlpanel.c:2750
 msgid "Start button: text/logo"
-msgstr ""
+msgstr "आरंभ बटन: पाठ/लोगो"
 
 #: src/ctlpanel.c:2751
 msgid "Close window"
-msgstr ""
+msgstr "खिड़की बंद करें"
 
 #: src/ctlpanel.c:2752
 msgid "Quit synui"
-msgstr ""
+msgstr "synui से बाहर निकलें"
 
 #: src/ctlpanel.c:2753
 msgid "Cycle layout"
-msgstr ""
+msgstr "विन्यास बदलें"
 
 #: src/ctlpanel.c:2754
 msgid "Tile this desktop"
-msgstr ""
+msgstr "इस डेस्कटॉप को टाइल करें"
 
 #: src/ctlpanel.c:2755
 msgid "Cascade this desktop (overlapping piles)"
-msgstr ""
+msgstr "इस डेस्कटॉप को सोपान में रखें (ऊपर-नीचे ढेर)"
 
 #: src/ctlpanel.c:2756
 msgid "Arrange floating windows"
-msgstr ""
+msgstr "तैरती खिड़कियाँ जमाएँ"
 
 #: src/ctlpanel.c:2757
 msgid "Shrink master area"
-msgstr ""
+msgstr "मुख्य क्षेत्र छोटा करें"
 
 #: src/ctlpanel.c:2758
 msgid "Grow master area"
-msgstr ""
+msgstr "मुख्य क्षेत्र बड़ा करें"
 
 #: src/ctlpanel.c:2759
 msgid "niri: pull window into the left column"
-msgstr ""
+msgstr "niri: खिड़की को बाएँ स्तंभ में लाएँ"
 
 #: src/ctlpanel.c:2760
 msgid "niri: push window out to its own column"
-msgstr ""
+msgstr "niri: खिड़की को अपने स्तंभ में भेजें"
 
 #: src/ctlpanel.c:2761
 msgid "Focus next window"
-msgstr ""
+msgstr "अगली खिड़की पर जाएँ"
 
 #: src/ctlpanel.c:2762
 msgid "Focus previous window"
-msgstr ""
+msgstr "पिछली खिड़की पर जाएँ"
 
 #: src/ctlpanel.c:2763
 msgid "Switch window (Alt+Tab)"
-msgstr ""
+msgstr "खिड़की बदलें (Alt+Tab)"
 
 #: src/ctlpanel.c:2764
 msgid "Switch window, backwards"
-msgstr ""
+msgstr "खिड़की बदलें, उलटे क्रम में"
 
 #: src/ctlpanel.c:2765
 msgid "Move window down the stack"
-msgstr ""
+msgstr "ढेर में खिड़की नीचे करें"
 
 #: src/ctlpanel.c:2766
 msgid "Move window up the stack"
-msgstr ""
+msgstr "ढेर में खिड़की ऊपर करें"
 
 #: src/ctlpanel.c:2767
 msgid "Move window left (or earlier in the layout)"
-msgstr ""
+msgstr "खिड़की बाएँ ले जाएँ (या विन्यास में पहले)"
 
 #: src/ctlpanel.c:2768
 msgid "Move window right (or later in the layout)"
-msgstr ""
+msgstr "खिड़की दाएँ ले जाएँ (या विन्यास में बाद में)"
 
 #: src/ctlpanel.c:2769
 msgid "Move window up (or earlier in the layout)"
-msgstr ""
+msgstr "खिड़की ऊपर ले जाएँ (या विन्यास में पहले)"
 
 #: src/ctlpanel.c:2770
 msgid "Move window down (or later in the layout)"
-msgstr ""
+msgstr "खिड़की नीचे ले जाएँ (या विन्यास में बाद में)"
 
 #: src/ctlpanel.c:2771
 msgid "Float window"
-msgstr ""
+msgstr "खिड़की को तैराएँ"
 
 #: src/ctlpanel.c:2772
 msgid "Fullscreen window"
-msgstr ""
+msgstr "खिड़की पूरे परदे पर"
 
 #: src/ctlpanel.c:2773
 msgid "Maximize window"
-msgstr ""
+msgstr "खिड़की बड़ी करें"
 
 #: src/ctlpanel.c:2774
 msgid "Fill screen height (or put it back)"
-msgstr ""
+msgstr "परदे की ऊँचाई भरें (या वापस करें)"
 
 #: src/ctlpanel.c:2775
 msgid "Fill screen width (or put it back)"
-msgstr ""
+msgstr "परदे की चौड़ाई भरें (या वापस करें)"
 
 #: src/ctlpanel.c:2776
 msgid "Minimize window"
-msgstr ""
+msgstr "खिड़की छोटी करें"
 
 #: src/ctlpanel.c:2777
 msgid "Restore minimized window"
-msgstr ""
+msgstr "छोटी की गई खिड़की लौटाएँ"
 
 #: src/ctlpanel.c:2778
 msgid "Titlebars on/off"
-msgstr ""
+msgstr "शीर्षक पट्टियाँ चालू/बंद"
 
 #: src/ctlpanel.c:2780
 msgid "Screens: extend / duplicate / built-in off"
-msgstr ""
+msgstr "स्क्रीनें: विस्तार / नक़ल / अंतर्निर्मित बंद"
 
 #: src/ctlpanel.c:2781
 msgid "Scale the whole desktop (accessibility)"
-msgstr ""
+msgstr "पूरे डेस्कटॉप का आकार बदलें (सुगम्यता)"
 
 #: src/ctlpanel.c:2782
 msgid "Wallpaper picker"
-msgstr ""
+msgstr "वॉलपेपर चुनाव"
 
 #: src/ctlpanel.c:2783
 msgid "Reload wallpaper / config"
-msgstr ""
+msgstr "वॉलपेपर / विन्यास फिर से लोड करें"
 
 #: src/ctlpanel.c:2784
 msgid "Visual effects (CRT + window)"
-msgstr ""
+msgstr "दृश्य प्रभाव (CRT + खिड़की)"
 
 #: src/ctlpanel.c:2785
 msgid "Desktop widget manager"
-msgstr ""
+msgstr "डेस्कटॉप विजेट प्रबंधक"
 
 #: src/ctlpanel.c:2787
 msgid "CRT effects on/off"
-msgstr ""
+msgstr "CRT प्रभाव चालू/बंद"
 
 #: src/ctlpanel.c:2788
 msgid "Power saving panel"
-msgstr ""
+msgstr "ऊर्जा बचत पटल"
 
 #: src/ctlpanel.c:2789
 msgid "Screensaver + lock screen"
-msgstr ""
+msgstr "स्क्रीनसेवर + लॉक स्क्रीन"
 
 #: src/ctlpanel.c:2795
 msgid "AI backend (GPU/CPU/off)"
-msgstr ""
+msgstr "AI बैकएंड (GPU/CPU/बंद)"
 
 #: src/ctlpanel.c:2796
 msgid "Move window to next output"
-msgstr ""
+msgstr "खिड़की अगली स्क्रीन पर भेजें"
 
 #: src/ctlpanel.c:2837
 msgid "Start menu (application page)"
-msgstr ""
+msgstr "आरंभ मेन्यू (ऐप पृष्ठ)"
 
 #: src/ctlpanel.c:2838
 msgid "Start menu (rofi)"
-msgstr ""
+msgstr "आरंभ मेन्यू (rofi)"
 
 #: src/ctlpanel.c:2840
 msgid "Start menu (bar menu)"
-msgstr ""
+msgstr "आरंभ मेन्यू (पट्टी का मेन्यू)"
 
 #: src/ctlpanel.c:2848
 msgid "Move window to previous output"
-msgstr ""
+msgstr "खिड़की पिछली स्क्रीन पर भेजें"
 
 #: src/ctlpanel.c:2878
 msgid "Enter"
-msgstr ""
+msgstr "Enter"
 
 #: src/ctlpanel.c:2879
 msgid "KP Enter"
-msgstr ""
+msgstr "Enter (अंक पटल)"
 
 #: src/ctlpanel.c:2880
 msgid "Space"
-msgstr ""
+msgstr "स्पेस"
 
 #: src/ctlpanel.c:2881
 msgid "Esc"
-msgstr ""
+msgstr "Esc"
 
 #: src/ctlpanel.c:2882
 msgid "Del"
-msgstr ""
+msgstr "Del"
 
 #: src/ctlpanel.c:2883
 msgid "Backspace"
-msgstr ""
+msgstr "Backspace"
 
 #: src/ctlpanel.c:2884
 msgid "Tab"
-msgstr ""
+msgstr "Tab"
 
 #: src/ctlpanel.c:2948
 msgid "Super"
-msgstr ""
+msgstr "Super"
 
 #: src/ctlpanel.c:2949
 msgid "Ctrl"
-msgstr ""
+msgstr "Ctrl"
 
 #: src/ctlpanel.c:2950
 msgid "Alt"
-msgstr ""
+msgstr "Alt"
 
 #: src/ctlpanel.c:2951
 msgid "Shift"
-msgstr ""
+msgstr "Shift"
 
 #: src/ctlpanel.c:3047
 #, c-format
 msgid "Switch to workspace"
-msgstr ""
+msgstr "कार्यक्षेत्र पर जाएँ"
 
 #: src/ctlpanel.c:3053
 #, c-format
 msgid "Move window to workspace"
-msgstr ""
+msgstr "खिड़की कार्यक्षेत्र में भेजें"
 
 #: src/ctlpanel.c:3141
 #, c-format
 msgid "loading · the AI pauses until it is up"
-msgstr ""
+msgstr "लोड हो रहा है · तैयार होने तक AI रुका रहेगा"
 
 #: src/ctlpanel.c:3231
 #, c-format
 msgid "%s: still %s · switch did not land"
-msgstr ""
+msgstr "%s: अब भी %s · बदलाव लागू नहीं हुआ"
 
 #: src/ctlpanel.c:3631
 msgid "position"
@@ -1734,119 +1734,118 @@ msgstr "स्थिति"
 
 #: src/ctlpanel.c:3637
 msgid "turn the cell on first"
-msgstr ""
+msgstr "पहले यह खाना चालू करें"
 
 #: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
 #: src/ctlpanel.c:3908 src/ctlpanel.c:3928
 #, c-format
 msgid "dock is off"
-msgstr ""
+msgstr "डॉक बंद है"
 
 #: src/ctlpanel.c:3754
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
-msgstr ""
+msgstr "कोई GLES रेंडरर नहीं · यहाँ प्रभाव उपलब्ध नहीं"
 
 #: src/ctlpanel.c:3765
 msgid "CRT effects on"
-msgstr ""
+msgstr "CRT प्रभाव चालू"
 
 #: src/ctlpanel.c:3766
 msgid "CRT effects off"
-msgstr ""
+msgstr "CRT प्रभाव बंद"
 
 #: src/ctlpanel.c:3777
 #, c-format
 msgid "game mode: always on"
-msgstr ""
+msgstr "गेम मोड: हमेशा चालू"
 
 #: src/ctlpanel.c:3778
 #, c-format
 msgid "game mode: always off"
-msgstr ""
+msgstr "गेम मोड: हमेशा बंद"
 
 #: src/ctlpanel.c:3779
 #, c-format
 msgid "game mode: auto · a game is running"
-msgstr ""
+msgstr "गेम मोड: स्वतः · एक गेम चल रहा है"
 
 #: src/ctlpanel.c:3780
 #, c-format
 msgid "game mode: auto · no game running"
-msgstr ""
+msgstr "गेम मोड: स्वतः · कोई गेम नहीं चल रहा"
 
 #: src/ctlpanel.c:3836
 msgid "bar on"
-msgstr ""
+msgstr "पट्टी चालू"
 
 #: src/ctlpanel.c:3836
 msgid "bar off"
-msgstr ""
+msgstr "पट्टी बंद"
 
 #: src/ctlpanel.c:3852
 msgid "dock on"
-msgstr ""
+msgstr "डॉक चालू"
 
 #: src/ctlpanel.c:3852
 msgid "dock off"
-msgstr ""
+msgstr "डॉक बंद"
 
 #: src/ctlpanel.c:3870
 msgid "dock auto-hide on"
-msgstr ""
+msgstr "डॉक अपने आप छिपाना चालू"
 
 #: src/ctlpanel.c:3871
 msgid "dock auto-hide off"
-msgstr ""
+msgstr "डॉक अपने आप छिपाना बंद"
 
 #: src/ctlpanel.c:3890
 #, c-format
 msgid "an auto-hiding dock is always on top"
-msgstr ""
+msgstr "अपने आप छिपने वाला डॉक हमेशा ऊपर रहता है"
 
 #: src/ctlpanel.c:3899
 msgid "dock above windows"
-msgstr ""
+msgstr "डॉक खिड़कियों के ऊपर"
 
 #: src/ctlpanel.c:3900
 msgid "dock below windows"
-msgstr ""
+msgstr "डॉक खिड़कियों के नीचे"
 
 #: src/ctlpanel.c:3907
 #, c-format
 msgid "the dock clock is off"
-msgstr ""
+msgstr "डॉक की घड़ी बंद है"
 
 #: src/ctlpanel.c:3917
 #, c-format
 msgid "dock clock %s"
-msgstr ""
+msgstr "डॉक की घड़ी %s"
 
 #: src/ctlpanel.c:3936
 msgid "magnify"
-msgstr ""
+msgstr "बड़ा करना"
 
 #: src/ctlpanel.c:3938
-#, fuzzy
 msgid "clock"
 msgstr "घड़ी"
 
 #: src/ctlpanel.c:3940
 msgid "all-apps button"
-msgstr ""
+msgstr "«सभी ऐप» बटन"
 
 #: src/ctlpanel.c:3942
 msgid "power button"
-msgstr ""
+msgstr "पावर बटन"
 
 #: src/ctlpanel.c:3949
 #, c-format
 msgid "dock %s %s"
-msgstr ""
+msgstr "डॉक %s %s"
 
 #: src/ctlpanel.c:3949
 msgid "on"
-msgstr ""
+msgstr "चालू"
 
 #: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
 #: src/render.c:5370 src/render.c:6171
@@ -1857,91 +1856,91 @@ msgstr "बंद"
 #: src/ctlpanel.c:3962
 #, c-format
 msgid "the bar is off"
-msgstr ""
+msgstr "पट्टी बंद है"
 
 #: src/ctlpanel.c:3973
 msgid "bar auto-hide on for every monitor"
-msgstr ""
+msgstr "हर स्क्रीन पर पट्टी अपने आप छिपाना चालू"
 
 #: src/ctlpanel.c:3974
 msgid "bar auto-hide off for every monitor"
-msgstr ""
+msgstr "हर स्क्रीन पर पट्टी अपने आप छिपाना बंद"
 
 #: src/ctlpanel.c:3988
 #, c-format
 msgid "notifications are silenced"
-msgstr ""
+msgstr "सूचनाएँ चुप कर दी गई हैं"
 
 #: src/ctlpanel.c:3989
 #, c-format
 msgid "notifications are back on"
-msgstr ""
+msgstr "सूचनाएँ फिर से चालू हैं"
 
 #: src/ctlpanel.c:4001
 #, c-format
 msgid "recordings capture desktop sound"
-msgstr ""
+msgstr "रिकॉर्डिंग डेस्कटॉप की ध्वनि भी लेती है"
 
 #: src/ctlpanel.c:4002
 #, c-format
 msgid "recordings are silent"
-msgstr ""
+msgstr "रिकॉर्डिंग में ध्वनि नहीं है"
 
 #: src/ctlpanel.c:4013
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
-msgstr ""
+msgstr "रिकॉर्डिंग वीडियो संपादक में खुलती है · ~1.1 GB/मिनट"
 
 #: src/ctlpanel.c:4014
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
-msgstr ""
+msgstr "रिकॉर्डिंग H.264 mp4 है · छोटी, कहीं भी साझा करें"
 
 #: src/ctlpanel.c:4024
 msgid "titlebars off"
-msgstr ""
+msgstr "शीर्षक पट्टियाँ बंद"
 
 #: src/ctlpanel.c:4025
 msgid "titlebars on"
-msgstr ""
+msgstr "शीर्षक पट्टियाँ चालू"
 
 #: src/ctlpanel.c:4034
 #, c-format
 msgid "start button: %s"
-msgstr ""
+msgstr "आरंभ बटन: %s"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency on · %d%%"
-msgstr ""
+msgstr "पारदर्शिता चालू · %d%%"
 
 #: src/ctlpanel.c:4045
 #, c-format
 msgid "transparency off"
-msgstr ""
+msgstr "पारदर्शिता बंद"
 
 #: src/ctlpanel.c:4054
 msgid "night light on"
-msgstr ""
+msgstr "रात्रि प्रकाश चालू"
 
 #: src/ctlpanel.c:4055
 msgid "night light off"
-msgstr ""
+msgstr "रात्रि प्रकाश बंद"
 
 #: src/ctlpanel.c:4071
 #, c-format
 msgid "switching AI backend …"
-msgstr ""
+msgstr "AI बैकएंड बदला जा रहा है …"
 
 #: src/ctlpanel.c:4213
 #, c-format
 msgid "transparency %d%%"
-msgstr ""
+msgstr "पारदर्शिता %d%%"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 #, c-format
 msgid "%s is at its %s"
-msgstr ""
+msgstr "%s अपने %s पर है"
 
 #: src/ctlpanel.c:4263 src/ctlpanel.c:4301
 msgid "minimum"
@@ -1954,107 +1953,107 @@ msgstr "अधिकतम"
 #: src/ctlpanel.c:4274
 #, c-format
 msgid "%s: %d %s · applies when you stop"
-msgstr ""
+msgstr "%s: %d %s · रुकने पर लागू होगा"
 
 #: src/ctlpanel.c:4309
 #, c-format
 msgid "%s: %s · default"
-msgstr ""
+msgstr "%s: %s · चूक"
 
 #: src/ctlpanel.c:4350
 msgid "no models in /var/lib/synapd/models"
-msgstr ""
+msgstr "/var/lib/synapd/models में कोई मॉडल नहीं"
 
 #: src/ctlpanel.c:4360
 #, c-format
 msgid "loads when you stop · Esc cancels"
-msgstr ""
+msgstr "रुकने पर लोड होगा · Esc रद्द करता है"
 
 #: src/ctlpanel.c:4629
 #, c-format
 msgid "Rebind cancelled"
-msgstr ""
+msgstr "फिर से जोड़ना रद्द किया गया"
 
 #: src/ctlpanel.c:4698
 #, c-format
 msgid "nothing to reset on this row"
-msgstr ""
+msgstr "इस पंक्ति में लौटाने को कुछ नहीं है"
 
 #: src/ctlpanel.c:4703
 #, c-format
 msgid "%s reset to %s"
-msgstr ""
+msgstr "%s को %s पर लौटाया गया"
 
 #: src/ctlpanel.c:4706
 #, c-format
 msgid "%s is already at its default"
-msgstr ""
+msgstr "%s पहले से ही अपनी चूक पर है"
 
 #: src/ctlpanel.c:4732
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
-msgstr ""
+msgstr "फिर से जोड़ना «शॉर्टकट» श्रेणी में है"
 
 #: src/ctlpanel.c:4744
 #, c-format
 msgid "The tap is set from the Shortcuts category"
-msgstr ""
+msgstr "एक बार दबाना «शॉर्टकट» श्रेणी से तय होता है"
 
 #: src/deskmenu.c:77
 msgid "Open Terminal"
-msgstr ""
+msgstr "टर्मिनल खोलें"
 
 #: src/deskmenu.c:78
 msgid "Open File Manager"
-msgstr ""
+msgstr "फ़ाइल प्रबंधक खोलें"
 
 #: src/deskmenu.c:79
 msgid "Applications…"
-msgstr ""
+msgstr "ऐप्लिकेशन…"
 
 #: src/deskmenu.c:81
 msgid "Change Wallpaper…"
-msgstr ""
+msgstr "वॉलपेपर बदलें…"
 
 #: src/deskmenu.c:82
 msgid "Appearance…"
-msgstr ""
+msgstr "रूप-रंग…"
 
 #: src/deskmenu.c:83
 msgid "Display Settings…"
-msgstr ""
+msgstr "डिस्प्ले सेटिंग्स…"
 
 #: src/deskmenu.c:84
 msgid "Desktop Widgets…"
-msgstr ""
+msgstr "डेस्कटॉप विजेट…"
 
 #: src/deskmenu.c:85
 msgid "Show Desktop Icons"
-msgstr ""
+msgstr "डेस्कटॉप के आइकन दिखाएँ"
 
 #: src/deskmenu.c:86
 msgid "Refresh"
-msgstr ""
+msgstr "ताज़ा करें"
 
 #: src/deskmenu.c:87
 msgid "Arrange by Name"
-msgstr ""
+msgstr "नाम से जमाएँ"
 
 #: src/deskmenu.c:88
 msgid "Arrange by Type"
-msgstr ""
+msgstr "प्रकार से जमाएँ"
 
 #: src/deskmenu.c:89
 msgid "Arrange by Size"
-msgstr ""
+msgstr "आकार से जमाएँ"
 
 #: src/deskmenu.c:90
 msgid "Arrange by Date"
-msgstr ""
+msgstr "तारीख़ से जमाएँ"
 
 #: src/deskmenu.c:91
 msgid "Task Manager"
-msgstr ""
+msgstr "कार्य प्रबंधक"
 
 #: src/deskmenu.c:92 src/render.c:8194
 msgid "Open"
@@ -2062,7 +2061,7 @@ msgstr "खोलें"
 
 #: src/deskmenu.c:93
 msgid "Move to Trash"
-msgstr ""
+msgstr "रद्दी में डालें"
 
 #: src/dock.c:3418
 msgid "top"
