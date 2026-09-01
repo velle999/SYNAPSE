@@ -1354,53 +1354,49 @@ msgstr "最大値"
 
 #: src/dock.c:3418
 msgid "top"
-msgstr ""
+msgstr "上"
 
 #: src/dock.c:3418
 msgid "left"
-msgstr ""
+msgstr "左"
 
 #: src/dock.c:3419
 msgid "centre"
-msgstr ""
+msgstr "中央"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "bottom"
-msgstr ""
+msgstr "下"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "right"
-msgstr ""
+msgstr "右"
 
 #: src/dock.c:3425
 #, c-format
 msgid "after %d icon"
 msgid_plural "after %d icons"
-msgstr[0] ""
+msgstr[0] "アイコン %d 個のあと"
 
 #: src/filters.c:84
-#, fuzzy
 msgid "CRT filters"
-msgstr "すべてのフィルター"
+msgstr "CRT フィルター"
 
 #: src/filters.c:86
-#, fuzzy
 msgid "Screen curvature"
 msgstr "画面の湾曲"
 
 #: src/filters.c:88
-#, fuzzy
 msgid "Glitch strength"
-msgstr "警告時のグリッチ"
+msgstr "ノイズの強さ"
 
 #: src/filters.c:90
 msgid "Monochrome"
 msgstr "モノクロ"
 
 #: src/filters.c:91
-#, fuzzy
 msgid "Phosphor bloom"
-msgstr "蛍光体の輝き"
+msgstr "蛍光体のにじみ"
 
 #: src/lock.c:413 src/lock.c:846
 msgid "Wrong password"
@@ -1421,18 +1417,16 @@ msgid "Fingerprint not recognised"
 msgstr "指紋を認識できませんでした"
 
 #: src/power.c:112
-#, fuzzy
 msgid "Dim screen"
-msgstr "ロック画面"
+msgstr "画面を暗くする"
 
 #: src/power.c:113
 msgid "Blank displays"
 msgstr "画面を消す"
 
 #: src/power.c:114
-#, fuzzy
 msgid "Lock session"
-msgstr "ロック画面"
+msgstr "セッションをロック"
 
 #: src/power.c:115
 msgid "Suspend system"
@@ -1454,1311 +1448,1311 @@ msgstr "ふたを閉じたとき（ドック接続）"
 #, c-format
 msgid "+%d more line"
 msgid_plural "+%d more lines"
-msgstr[0] ""
+msgstr[0] "他 %d 行"
 
 #: src/render.c:971
 msgid "NEURAL OVERLAY"
-msgstr ""
+msgstr "ニューラルオーバーレイ"
 
 #: src/render.c:979 src/render.c:5164
 msgid "loaded"
-msgstr ""
+msgstr "読み込み済み"
 
 #: src/render.c:981
 msgid "loading"
-msgstr ""
+msgstr "読み込み中"
 
 #: src/render.c:984
 msgid "○ no model"
-msgstr ""
+msgstr "○ モデルなし"
 
 #: src/render.c:1004
 #, c-format
 msgid "req %lu    active %lu"
-msgstr ""
+msgstr "要求 %lu    実行中 %lu"
 
 #: src/render.c:1021
 #, c-format
 msgid "ctx %u / %u tok"
-msgstr ""
+msgstr "文脈 %u / %u トークン"
 
 #: src/render.c:1046
 msgid "live activity"
-msgstr ""
+msgstr "ライブ活動"
 
 #: src/render.c:1057
 msgid "(idle — no recent events)"
-msgstr ""
+msgstr "(待機中 — 最近のイベントなし)"
 
 #: src/render.c:1058
 msgid "(synapd unavailable)"
-msgstr ""
+msgstr "(synapd に接続できません)"
 
 #: src/render.c:1080
 msgid "normal"
-msgstr ""
+msgstr "標準"
 
 #: src/render.c:1084
 msgid "flipped"
-msgstr ""
+msgstr "反転"
 
 #: src/render.c:1174
 msgid "DISPLAY SETTINGS"
-msgstr ""
+msgstr "ディスプレイ設定"
 
 #: src/render.c:1183
 msgid "DUPLICATE"
-msgstr ""
+msgstr "複製"
 
 #: src/render.c:1185
 msgid "BUILT-IN OFF"
-msgstr ""
+msgstr "内蔵オフ"
 
 #: src/render.c:1186
 msgid "EXTEND"
-msgstr ""
+msgstr "拡張"
 
 #: src/render.c:1247
 msgid "no outputs connected"
-msgstr ""
+msgstr "接続されているディスプレイがありません"
 
 #: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
 #: src/render.c:6171
 #, c-format
 msgid "off"
-msgstr ""
+msgstr "オフ"
 
 #: src/render.c:1319
 msgid "PRIMARY"
-msgstr ""
+msgstr "メイン"
 
 #: src/render.c:1319
 msgid "primary (auto)"
-msgstr ""
+msgstr "メイン (自動)"
 
 #: src/render.c:1330
 msgid "8-bit (only)"
-msgstr ""
+msgstr "8 ビット (のみ)"
 
 #: src/render.c:1348
 msgid "HDR10 ON"
-msgstr ""
+msgstr "HDR10 オン"
 
 #: src/render.c:1387
 #, c-format
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr ""
+msgstr "%s は HDR10 で駆動 · PQ · 原色 %s · SDR 白 %d cd/m² ([ ]) · 走査 %s%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
-msgstr ""
+msgstr " — 色域は変換されていません。色が広がって出ます"
 
 #: src/render.c:1405
 #, c-format
 msgid " · %.0f cd/m² peak"
-msgstr ""
+msgstr " · ピーク %.0f cd/m²"
 
 #: src/render.c:1410
 msgid "HDR10 (PQ)"
-msgstr ""
+msgstr "HDR10 (PQ)"
 
 #: src/render.c:1414
 msgid "Shift+D drives it in HDR10"
-msgstr ""
+msgstr "Shift+D で HDR10 駆動になります"
 
 #: src/render.c:1415
 msgid "this link or mode will not carry an HDR10 signal"
-msgstr ""
+msgstr "この接続またはモードでは HDR10 信号を送れません"
 
 #: src/render.c:1422
 #, c-format
 msgid "%s advertises no HDR transfer function in its EDID (SDR panel)"
-msgstr ""
+msgstr "%s は EDID に HDR 伝達関数を示していません (SDR パネル)"
 
 #: src/render.c:1432
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr ""
+msgstr "上下 選択 · 左右 回転 · −/+ この画面の拡大率 · p メインに設定 (X11・ゲームの既定) · m 配置"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr ""
+msgstr "Shift+矢印 で格子内を移動 (入れ替え) · d 10 ビットカラー (ディープカラー、HDR ではありません) · Shift+D HDR10 出力 · [ ] SDR 白 · Super+Ctrl+= すべての画面を拡大縮小 · Esc 閉じる"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
-msgstr ""
+msgstr "壁紙"
 
 #: src/render.c:1657
 msgid "Preview unavailable"
-msgstr ""
+msgstr "プレビューを表示できません"
 
 #: src/render.c:1657
 msgid "No preview"
-msgstr ""
+msgstr "プレビューなし"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr ""
+msgstr "上下 プレビュー · Tab 画面 · m 拡大率 · r 再読み込み · Enter/Esc 閉じる"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
-msgstr ""
+msgstr "省電力"
 
 #: src/render.c:1760
 #, c-format
 msgid "no lid switch"
-msgstr ""
+msgstr "ふたのセンサーがありません"
 
 #: src/render.c:1763
 msgid "closed"
-msgstr ""
+msgstr "閉じています"
 
 #: src/render.c:1763
 msgid "open"
-msgstr ""
+msgstr "開いています"
 
 #: src/render.c:1779
 msgid "idle inhibited (media playing) · timers held"
-msgstr ""
+msgstr "待機を抑止中 (メディア再生中) · タイマー停止中"
 
 #: src/render.c:1783
 msgid "disabled · no stage will fire"
-msgstr ""
+msgstr "無効 · どの段階も動作しません"
 
 #: src/render.c:1830
 msgid "Up/Down select · Left/Right adjust · Space toggle"
-msgstr ""
+msgstr "上下 選択 · 左右 調整 · スペース 切り替え"
 
 #: src/render.c:1832 src/render.c:1955
 msgid "s save (unsaved changes) · Esc close"
-msgstr ""
+msgstr "s 保存 (未保存の変更あり) · Esc 閉じる"
 
 #: src/render.c:1833 src/render.c:1956
 msgid "s save · Esc close"
-msgstr ""
+msgstr "s 保存 · Esc 閉じる"
 
 #: src/render.c:1888
 msgid "SCREENSAVER"
-msgstr ""
+msgstr "スクリーンセーバー"
 
 #: src/render.c:1898
 msgid "idle inhibited (media playing) · saver held"
-msgstr ""
+msgstr "待機を抑止中 (メディア再生中) · セーバー停止中"
 
 #: src/render.c:1905
 msgid "power saving is off (Super+P) · saver disabled"
-msgstr ""
+msgstr "省電力がオフです (Super+P) · セーバーは無効"
 
 #: src/render.c:1909
 msgid "no timeout set · p previews the current mode"
-msgstr ""
+msgstr "待ち時間が未設定 · p で今のモードを確認できます"
 
 #: src/render.c:1953
 msgid "Up/Down select · Left/Right adjust · p preview"
-msgstr ""
+msgstr "上下 選択 · 左右 調整 · p プレビュー"
 
 #: src/render.c:2074
 msgid "CURSOR THEME"
-msgstr ""
+msgstr "カーソルテーマ"
 
 #: src/render.c:2104
 msgid "No cursor themes installed."
-msgstr ""
+msgstr "カーソルテーマがインストールされていません。"
 
 #: src/render.c:2108
 msgid "synui-cursor install <archive>   then press r"
-msgstr ""
+msgstr "synui-cursor install <アーカイブ>   そのあと r を押してください"
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "上下 プレビュー · -/+ 大きさ · r 再読み込み · Enter 適用 · Esc 取り消し"
 
 #: src/render.c:2237
 msgid "UI FONT"
-msgstr ""
+msgstr "画面のフォント"
 
 #: src/render.c:2267
 msgid "No font families found."
-msgstr ""
+msgstr "フォントファミリーが見つかりません。"
 
 #: src/render.c:2335
 msgid "Handgloves 0123"
-msgstr ""
+msgstr "いろはにほへと 0123"
 
 #: src/render.c:2383
 msgid "Not monospaced · kitty and foot may not render correctly in it"
-msgstr ""
+msgstr "等幅ではありません · kitty と foot が正しく表示されないことがあります"
 
 #: src/render.c:2390
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "上下 プレビュー · d 既定 · r 再読み込み · Enter 適用 · Esc 取り消し"
 
 #: src/render.c:2522
 msgid "Type to search"
-msgstr ""
+msgstr "入力して検索"
 
 #: src/render.c:2533
 msgid "No applications match"
-msgstr ""
+msgstr "一致するアプリはありません"
 
 #: src/render.c:2534
 msgid "No applications found"
-msgstr ""
+msgstr "アプリが見つかりません"
 
 #: src/render.c:2629
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
-msgstr[0] ""
+msgstr[0] "アプリ %d 個 · 入力して検索 · Enter で開く · Esc で閉じる"
 
 #: src/render.c:2721
 msgid "EMOJI"
-msgstr ""
+msgstr "絵文字"
 
 #: src/render.c:2743
 msgid "type to search"
-msgstr ""
+msgstr "入力して検索"
 
 #: src/render.c:2802
 msgid "No emoji match that search."
-msgstr ""
+msgstr "その検索に一致する絵文字はありません。"
 
 #: src/render.c:2803
 msgid "Nothing here yet."
-msgstr ""
+msgstr "ここにはまだ何もありません。"
 
 #: src/render.c:2865
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
-msgstr ""
+msgstr "入力して検索 · クリックまたは Tab で分類 · Enter 挿入 · Esc 消去・閉じる"
 
 #: src/render.c:3010
 msgid "CALCULATOR"
-msgstr ""
+msgstr "電卓"
 
 #: src/render.c:3050
 msgid "Anything you work out is kept here."
-msgstr ""
+msgstr "計算した内容はここに残ります。"
 
 #: src/render.c:3092
 msgid "type an expression"
-msgstr ""
+msgstr "式を入力してください"
 
 #: src/render.c:3197
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
-msgstr ""
+msgstr "Enter で計算 · Ctrl+C でコピー · Ctrl+V で貼り付け"
 
 #: src/render.c:3199
 msgid "Up/Down recall the tape · Esc clears, then closes"
-msgstr ""
+msgstr "上下で履歴を呼び出します · Esc で消去し、もう一度で閉じます"
 
 #: src/render.c:3268
 msgid "EQUALIZER"
-msgstr ""
+msgstr "イコライザー"
 
 #: src/render.c:3277
 msgid "output routed through the equalizer sink"
-msgstr ""
+msgstr "出力はイコライザーを経由しています"
 
 #: src/render.c:3278
 msgid "off — audio goes straight to your device"
-msgstr ""
+msgstr "オフ — 音声は機器へ直接送られます"
 
 #: src/render.c:3354
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
-msgstr ""
+msgstr "上下 行 · 左右 調整 · r フラット · Esc 閉じる"
 
 #: src/render.c:3424
 msgid "CROP — RECENT IMAGES"
-msgstr ""
+msgstr "切り抜き — 最近の画像"
 
 #: src/render.c:3425
 msgid "IMAGES — RECENT"
-msgstr ""
+msgstr "画像 — 最近"
 
 #: src/render.c:3430
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
-msgstr[0] ""
+msgstr[0] "画像 %d 枚"
 
 #: src/render.c:3449
 msgid "No images in Pictures, Wallpapers or Downloads."
-msgstr ""
+msgstr "ピクチャ、壁紙、ダウンロードに画像がありません。"
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr ""
+msgstr "r で再読み込み、またはファイルを直接開いてください: synctl dispatch view <パス>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 切り抜き · v 表示 · r 再読み込み · Esc 閉じる"
 
 #: src/render.c:3511
 msgid "Enter view · c crop · r rescan · Esc close"
-msgstr ""
+msgstr "Enter 表示 · c 切り抜き · r 再読み込み · Esc 閉じる"
 
 #: src/render.c:3621
 msgid "VIEW"
-msgstr ""
+msgstr "表示"
 
 #: src/render.c:3758
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
-msgstr ""
+msgstr "ドラッグで移動 · 矢印でスクロール · Shift で 4 倍 · n / p 次と前"
 
 #: src/render.c:3760
 msgid "← → next and previous · drag or scroll to zoom in"
-msgstr ""
+msgstr "← → 次と前 · ドラッグまたはスクロールで拡大"
 
 #: src/render.c:3765
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr ""
+msgstr "スクロールで拡大縮小 · + − 拡大率 · 0 全体表示 · 1 原寸 · c 切り抜き · r 再読み込み · Esc または × で%s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
-msgstr ""
+msgstr "一覧に戻る"
 
 #: src/render.c:3768
 msgid "close"
-msgstr ""
+msgstr "閉じる"
 
 #: src/render.c:3918
 msgid "CROP"
-msgstr ""
+msgstr "切り抜き"
 
 #: src/render.c:3951
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr ""
+msgstr "ドラッグで選択 · 角をドラッグして調整 · Tab で矢印が動かす角を選びます"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr ""
+msgstr "矢印で大きさを変更 · Ctrl+矢印で移動 · Shift で 25 倍 · a 全体 · Enter で複製を保存 · Esc で%s"
 
 #: src/render.c:3961
 msgid "cancel"
-msgstr ""
+msgstr "取り消し"
 
 #: src/render.c:4060
 msgid "WINDOW EFFECTS"
-msgstr ""
+msgstr "ウィンドウ効果"
 
 #: src/render.c:4060
 msgid "CRT FILTERS"
-msgstr ""
+msgstr "CRT フィルター"
 
 #: src/render.c:4067
 msgid "Tab → CRT filters"
-msgstr ""
+msgstr "Tab → CRT フィルター"
 
 #: src/render.c:4068
 msgid "Tab → window effects"
-msgstr ""
+msgstr "Tab → ウィンドウ効果"
 
 #: src/render.c:4084
 msgid "no GLES renderer · filters unavailable on this display"
-msgstr ""
+msgstr "GLES レンダラーがありません · この画面ではフィルターを使えません"
 
 #: src/render.c:4088
 msgid "filters off · Space to turn them on"
-msgstr ""
+msgstr "フィルターはオフです · スペースで有効になります"
 
 #: src/render.c:4151
 msgid "Up/Down select · Left/Right adjust · Space on/off"
-msgstr ""
+msgstr "上下 選択 · 左右 調整 · スペース オン/オフ"
 
 #: src/render.c:4153
 msgid "s save (unsaved changes) · Tab page · Esc close"
-msgstr ""
+msgstr "s 保存 (未保存の変更あり) · Tab ページ · Esc 閉じる"
 
 #: src/render.c:4154
 msgid "s save · Tab page · Esc close"
-msgstr ""
+msgstr "s 保存 · Tab ページ · Esc 閉じる"
 
 #: src/render.c:4212
 msgid "DESKTOP WIDGETS"
-msgstr ""
+msgstr "デスクトップウィジェット"
 
 #: src/render.c:4217
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
-msgstr ""
+msgstr "どれも個別に動きます · つまみでドラッグ · スペースは全部か何もかです"
 
 #: src/render.c:4263
 msgid "needs cava"
-msgstr ""
+msgstr "cava が必要です"
 
 #: src/render.c:4277
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
-msgstr ""
+msgstr "上下 選択 · Enter 切り替え · 左右 オフ/オン"
 
 #: src/render.c:4279
 msgid "Space all on/off · R reset positions · Esc close"
-msgstr ""
+msgstr "スペース 全部オン/オフ · R 位置を戻す · Esc 閉じる"
 
 #: src/render.c:4438
 msgid "done"
-msgstr ""
+msgstr "完了"
 
 #: src/render.c:4439
 msgid "failed"
-msgstr ""
+msgstr "失敗"
 
 #: src/render.c:4440
 msgid "starting"
-msgstr ""
+msgstr "開始中"
 
 #: src/render.c:4541
 msgid "Cannot read the model directory."
-msgstr ""
+msgstr "モデルのフォルダーを読み取れません。"
 
 #: src/render.c:4542
 msgid "No models installed."
-msgstr ""
+msgstr "モデルがインストールされていません。"
 
 #: src/render.c:4550
 msgid "A model may still be loaded · see the message below."
-msgstr ""
+msgstr "モデルがまだ読み込まれている可能性があります · 下のメッセージをご覧ください。"
 
 #: src/render.c:4551
 msgid "Pick one from AVAILABLE below and press Enter."
-msgstr ""
+msgstr "下の「利用可能」から選んで Enter を押してください。"
 
 #: src/render.c:4619
 msgid "Size"
-msgstr ""
+msgstr "サイズ"
 
 #: src/render.c:4620 src/render.c:4776
 msgid "Params"
-msgstr ""
+msgstr "パラメーター"
 
 #: src/render.c:4621
 msgid "Quant"
-msgstr ""
+msgstr "量子化"
 
 #: src/render.c:4622
 msgid "Context"
-msgstr ""
+msgstr "文脈長"
 
 #: src/render.c:4623
 msgid "Arch"
-msgstr ""
+msgstr "構成"
 
 #: src/render.c:4646
 msgid "no chat template · synapd will guess the turn format"
-msgstr ""
+msgstr "チャットテンプレートがありません · synapd が発話の形式を推測します"
 
 #: src/render.c:4651
 msgid "unreadable header"
-msgstr ""
+msgstr "ヘッダーを読み取れません"
 
 #: src/render.c:4674 src/render.c:4810
 msgid "ABOUT"
-msgstr ""
+msgstr "情報"
 
 #: src/render.c:4686 src/render.c:4817
 msgid "Good at"
-msgstr ""
+msgstr "得意なこと"
 
 #: src/render.c:4687
 msgid "Speaks"
-msgstr ""
+msgstr "話せる言語"
 
 #: src/render.c:4688 src/render.c:4779
 msgid "License"
-msgstr ""
+msgstr "ライセンス"
 
 #: src/render.c:4689 src/render.c:4818
 msgid "Based on"
-msgstr ""
+msgstr "基となるモデル"
 
 #: src/render.c:4737
 msgid "this is the model synapd is running"
-msgstr ""
+msgstr "これは synapd が動かしているモデルです"
 
 #: src/render.c:4741
 msgid "[ Enter: load this model ]"
-msgstr ""
+msgstr "[ Enter: このモデルを読み込む ]"
 
 #: src/render.c:4777
 msgid "Download"
-msgstr ""
+msgstr "ダウンロード"
 
 #: src/render.c:4778
 msgid "Quality"
-msgstr ""
+msgstr "品質"
 
 #: src/render.c:4780
 msgid "Pulls"
-msgstr ""
+msgstr "取得数"
 
 #: src/render.c:4861
 msgid "QUANTISATION"
-msgstr ""
+msgstr "量子化"
 
 #: src/render.c:4867
 msgid "reading the repository …"
-msgstr ""
+msgstr "リポジトリを読み込み中 …"
 
 #: src/render.c:4872
 msgid "could not read the repository"
-msgstr ""
+msgstr "リポジトリを読み込めませんでした"
 
 #: src/render.c:4877
 msgid "no single-file GGUF here"
-msgstr ""
+msgstr "ここには単一ファイルの GGUF がありません"
 
 #: src/render.c:4926 src/render.c:5780
 #, c-format
 msgid "+%d more"
-msgstr ""
+msgstr "他 %d 件"
 
 #: src/render.c:4934
 msgid "[ Enter: download ]"
-msgstr ""
+msgstr "[ Enter: ダウンロード ]"
 
 #: src/render.c:5011
 msgid "AI MODEL"
-msgstr ""
+msgstr "AI モデル"
 
 #: src/render.c:5022
 msgid "Loaded"
-msgstr ""
+msgstr "読み込み済み"
 
 #: src/render.c:5023
 msgid "synapd not responding"
-msgstr ""
+msgstr "synapd が応答しません"
 
 #: src/render.c:5026
 msgid "Format"
-msgstr ""
+msgstr "形式"
 
 #: src/render.c:5028
 msgid "Profile"
-msgstr ""
+msgstr "プロファイル"
 
 #: src/render.c:5047
 msgid "legacy"
-msgstr ""
+msgstr "旧式"
 
 #: src/render.c:5051
 msgid "GGUF declares no chat template"
-msgstr ""
+msgstr "GGUF にチャットテンプレートの記載がありません"
 
 #: src/render.c:5056
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
-msgstr ""
+msgstr "温度 %.2f  ·  top_p %.2f  ·  top_k %d"
 
 #: src/render.c:5064
 msgid "Sampling"
-msgstr ""
+msgstr "サンプリング"
 
 #: src/render.c:5094
 msgid "search huggingface"
-msgstr ""
+msgstr "Hugging Face を検索"
 
 #: src/render.c:5109
 msgid "INSTALLED"
-msgstr ""
+msgstr "インストール済み"
 
 #: src/render.c:5109
 msgid "INSTALLED · none"
-msgstr ""
+msgstr "インストール済み · なし"
 
 #: src/render.c:5154
 msgid "delete?"
-msgstr ""
+msgstr "削除しますか？"
 
 #: src/render.c:5160
 msgid "loading …"
-msgstr ""
+msgstr "読み込み中 …"
 
 #: src/render.c:5220
 msgid "type to search · Enter search · Esc cancel"
-msgstr ""
+msgstr "入力して検索 · Enter で検索 · Esc 取り消し"
 
 #: src/render.c:5222
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
-msgstr ""
+msgstr "上下 選択 · 左右 量子化 · Enter ダウンロード · / 検索 · Esc 閉じる"
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
-msgstr ""
+msgstr "もう一度削除すると確定します · Esc で取り消し · 移動しても取り消されます"
 
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr ""
+msgstr "上下 選択 · Enter 読み込み · Del 削除 · / 検索 · R 再読み込み · Esc 閉じる"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr ""
+msgstr "ダウンロードはシステムサービスとして動きます — このパネルを閉じても中止されません"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
-msgstr ""
+msgstr "切り替えるとモデルを読み込み直します — その間 AI は停止します"
 
 #: src/render.c:5299
 msgid "EVENT SOUNDS"
-msgstr ""
+msgstr "イベント音"
 
 #: src/render.c:5308
 msgid "silent · Space turns event sounds on"
-msgstr ""
+msgstr "無音 · スペースでイベント音が有効になります"
 
 #: src/render.c:5312
 msgid "t plays the selected sound without enabling it"
-msgstr ""
+msgstr "t は選んだ音を、有効にせずに再生します"
 
 #: src/render.c:5357
 msgid "Volume"
-msgstr ""
+msgstr "音量"
 
 #: src/render.c:5360
 msgid "Sound theme"
-msgstr ""
+msgstr "サウンドテーマ"
 
 #: src/render.c:5364
 #, c-format
 msgid "%s — not a sound theme"
-msgstr ""
+msgstr "%s — サウンドテーマではありません"
 
 #: src/render.c:5421
 msgid "not in this theme"
-msgstr ""
+msgstr "このテーマにはありません"
 
 #: src/render.c:5435
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
-msgstr ""
+msgstr "上下 選択 · Enter 切り替え · 左右 オフ/オン · [ ] 音を選ぶ"
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr ""
+msgstr "t 再生 · スペース 全部の音をオン/オフ · Esc 閉じる · 詳細: synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
-msgstr ""
+msgstr "日付と時刻"
 
 #: src/render.c:5505
 #, c-format
 msgid "system zone · %s"
-msgstr ""
+msgstr "システムのタイムゾーン · %s"
 
 #: src/render.c:5538
 msgid "WORLD CLOCK"
-msgstr ""
+msgstr "世界時計"
 
 #: src/render.c:5563
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
-msgstr ""
+msgstr "上下 選択 · スペース 切り替え · c カレンダー · Esc 閉じる"
 
 #: src/render.c:5631
 msgid "January"
-msgstr ""
+msgstr "1月"
 
 #: src/render.c:5631
 msgid "February"
-msgstr ""
+msgstr "2月"
 
 #: src/render.c:5631
 msgid "March"
-msgstr ""
+msgstr "3月"
 
 #: src/render.c:5631
 msgid "April"
-msgstr ""
+msgstr "4月"
 
 #: src/render.c:5632
 msgid "May"
-msgstr ""
+msgstr "5月"
 
 #: src/render.c:5632
 msgid "June"
-msgstr ""
+msgstr "6月"
 
 #: src/render.c:5632
 msgid "July"
-msgstr ""
+msgstr "7月"
 
 #: src/render.c:5632
 msgid "August"
-msgstr ""
+msgstr "8月"
 
 #: src/render.c:5633
 msgid "September"
-msgstr ""
+msgstr "9月"
 
 #: src/render.c:5633
 msgid "October"
-msgstr ""
+msgstr "10月"
 
 #: src/render.c:5633
 msgid "November"
-msgstr ""
+msgstr "11月"
 
 #: src/render.c:5633
 msgid "December"
-msgstr ""
+msgstr "12月"
 
 #: src/render.c:5755
 msgid "loading…"
-msgstr ""
+msgstr "読み込み中…"
 
 #: src/render.c:5765
 msgid "nothing on"
-msgstr ""
+msgstr "何も動いていません"
 
 #: src/render.c:5770
 #, c-format
 msgid "all day  %s"
-msgstr ""
+msgstr "終日  %s"
 
 #: src/render.c:5792
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
-msgstr ""
+msgstr "←→ 日 · PgUp/PgDn 月 · t 今日 · Esc"
 
 #: src/render.c:5881
 msgid "CONTROL PANEL"
-msgstr ""
+msgstr "コントロールパネル"
 
 #: src/render.c:5900
 msgid "Search"
-msgstr ""
+msgstr "検索"
 
 #: src/render.c:5927
 msgid "CATEGORIES"
-msgstr ""
+msgstr "分類"
 
 #: src/render.c:5932 src/render.c:6418
 msgid "FIND  "
-msgstr ""
+msgstr "検索  "
 
 #: src/render.c:5939 src/render.c:6365
 msgid "KEYBOARD SHORTCUTS"
-msgstr ""
+msgstr "キーボードショートカット"
 
 #: src/render.c:5940
 msgid "SETTINGS"
-msgstr ""
+msgstr "設定"
 
 #: src/render.c:6015
 msgid "Press a key…"
-msgstr ""
+msgstr "キーを押してください…"
 
 #: src/render.c:6035 src/render.c:6211 src/render.c:6506
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
-msgstr ""
+msgstr "%d–%d / %d 件 · PgUp/PgDn"
 
 #: src/render.c:6172
 msgid "none"
-msgstr ""
+msgstr "なし"
 
 #: src/render.c:6221
 msgid "No setting matches that."
-msgstr ""
+msgstr "該当する設定はありません。"
 
 #: src/render.c:6256
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
-msgstr ""
+msgstr "入力して絞り込み · 上下 選択 · Del 既定に戻す · Esc 戻る"
 
 #: src/render.c:6258
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
-msgstr ""
+msgstr "上下 分類 · Enter または右で開く · / 検索 · Esc 閉じる"
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr ""
+msgstr "Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · Esc で取り消し"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
-msgstr ""
+msgstr "このショートカットに割り当てるキーを押してください · Esc で取り消し"
 
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr ""
+msgstr "F2 割り当て直す · F3 単押しに移す · Ctrl+Shift+R すべて戻す · Esc 戻る"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
-msgstr ""
+msgstr "左右 調整 · Del 既定 · / 検索 · Tab 列 · Esc 戻る"
 
 #: src/render.c:6281
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
-msgstr ""
+msgstr "左右 切り替え · Enter 詳細 · Tab 列 · Esc 戻る"
 
 #: src/render.c:6283
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
-msgstr ""
+msgstr "上下 選択 · Enter 実行 · / 検索 · 左または Esc で戻る"
 
 #: src/render.c:6405
 msgid "PRESS THE NEW KEY  "
-msgstr ""
+msgstr "新しいキーを押してください  "
 
 #: src/render.c:6412
 #, c-format
 msgid "for %s  ·  Esc cancels"
-msgstr ""
+msgstr "%s 用  ·  Esc で取り消し"
 
 #: src/render.c:6431
 msgid "_  a key, what it does, an app, or a command"
-msgstr ""
+msgstr "_  キー、その働き、アプリ、またはコマンド"
 
 #: src/render.c:6487
 msgid "No shortcut matches that."
-msgstr ""
+msgstr "該当するショートカットはありません。"
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr ""
+msgstr "Super、Ctrl、Alt、Shift のいずれかを押してください · Del で割り当てなし · Esc で取り消し"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
-msgstr ""
+msgstr "Super、Ctrl、Alt のいずれかを含む組み合わせを押してください · Esc で取り消し"
 
 #: src/render.c:6542
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr ""
+msgstr "絞り込み · Enter 実行 · F2 キーを割り当て · Del 解除 · F3 単押し · Ctrl+Shift+R すべて戻す"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
-msgstr ""
+msgstr "ネオンの夜道、既定のテーマ · アプリは暗色"
 
 #: src/render.c:6563
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
-msgstr ""
+msgstr "平面的で今風の暗色 · アプリ + Dolphin + Firefox も暗色"
 
 #: src/render.c:6564
 msgid "Luna blue, gradient captions · apps beige"
-msgstr ""
+msgstr "Luna の青、グラデーションのタイトル · アプリはベージュ"
 
 #: src/render.c:6565
 msgid "Silver 3D bevels, navy titles · apps grey"
-msgstr ""
+msgstr "銀色の立体的な縁、紺色のタイトル · アプリは灰色"
 
 #: src/render.c:6566
 msgid "Mocha · mauve on soft black · glassy"
-msgstr ""
+msgstr "モカ · やわらかい黒に藤色 · ガラス調"
 
 #: src/render.c:6567
 msgid "Retro warm · orange on brown · glassy"
-msgstr ""
+msgstr "暖かいレトロ · 茶色に橙 · ガラス調"
 
 #: src/render.c:6568
 msgid "Storm · blue + purple on navy · glassy"
-msgstr ""
+msgstr "嵐 · 紺地に青と紫 · ガラス調"
 
 #: src/render.c:6569
 msgid "Arctic · frost blue on slate · glassy"
-msgstr ""
+msgstr "北極 · スレート地に氷青 · ガラス調"
 
 #: src/render.c:6570
 msgid "Purple + pink on charcoal · glassy"
-msgstr ""
+msgstr "炭色に紫と桃色 · ガラス調"
 
 #: src/render.c:6571
 msgid "Pastel pink, hot-pink titles · apps light"
-msgstr ""
+msgstr "淡い桃色、鮮やかな桃色のタイトル · アプリは明色"
 
 #: src/render.c:6572
 msgid "Liquid glass · rounded, translucent · apps light"
-msgstr ""
+msgstr "リキッドグラス · 丸みがあり半透明 · アプリは明色"
 
 #: src/render.c:6573
 msgid "Pinstripes + traffic lights · apps light grey"
-msgstr ""
+msgstr "細縞と信号ボタン · アプリは明るい灰色"
 
 #: src/render.c:6574
 msgid "Racing stripes, square boxes · apps grey"
-msgstr ""
+msgstr "レーシングストライプ、角張った枠 · アプリは灰色"
 
 #: src/render.c:6580
 msgid "House glass · accent off the wallpaper · apps dark"
-msgstr ""
+msgstr "ハウスガラス · 壁紙から取ったアクセント色 · アプリは暗色"
 
 #: src/render.c:6581
 msgid "The same glass in daylight · apps + Files light"
-msgstr ""
+msgstr "同じガラスを昼の光で · アプリと「ファイル」は明色"
 
 #: src/render.c:6652
 msgid "THEME MANAGER"
-msgstr ""
+msgstr "テーマ管理"
 
 #: src/render.c:6757
 #, c-format
 msgid "Transparency  %d%%"
-msgstr ""
+msgstr "透明度  %d%%"
 
 #: src/render.c:6759
 #, c-format
 msgid "Transparency  off"
-msgstr ""
+msgstr "透明度  オフ"
 
 #: src/render.c:6789
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
-msgstr ""
+msgstr "上下 テーマ · ←/→ 不透明度 · T 透明度 · Enter 適用 · Esc"
 
 #: src/render.c:6856
 msgid "CLIPBOARD"
-msgstr ""
+msgstr "クリップボード"
 
 #: src/render.c:6873
 msgid "Nothing copied yet"
-msgstr ""
+msgstr "まだ何もコピーしていません"
 
 #: src/render.c:6919
 msgid "Enter copy · Del clear all · Esc close"
-msgstr ""
+msgstr "Enter コピー · Del すべて消去 · Esc 閉じる"
 
 #: src/render.c:7260
 msgid "connected"
-msgstr ""
+msgstr "接続済み"
 
 #: src/render.c:7261
 msgid "paired"
-msgstr ""
+msgstr "ペアリング済み"
 
 #: src/render.c:7321
 msgid "BLUETOOTH"
-msgstr ""
+msgstr "Bluetooth"
 
 #: src/render.c:7334
 msgid "No Bluetooth adapter found"
-msgstr ""
+msgstr "Bluetooth アダプターが見つかりません"
 
 #: src/render.c:7339
 msgid "Radio on"
-msgstr ""
+msgstr "無線オン"
 
 #: src/render.c:7339
 msgid "Radio off"
-msgstr ""
+msgstr "無線オフ"
 
 #: src/render.c:7344
 msgid "· scanning…"
-msgstr ""
+msgstr "· 検索中…"
 
 #: src/render.c:7354
 msgid "A device"
-msgstr ""
+msgstr "機器"
 
 #: src/render.c:7362
 #, c-format
 msgid "Passkey %06u · does it match the device?"
-msgstr ""
+msgstr "パスキー %06u · 機器の表示と一致しますか？"
 
 #: src/render.c:7365
 #, c-format
 msgid "wants to connect%s"
-msgstr ""
+msgstr "が接続しようとしています%s"
 
 #: src/render.c:7368
 #, c-format
 msgid "Type %06u on the device, then Enter"
-msgstr ""
+msgstr "機器で %06u を入力し、Enter を押してください"
 
 #: src/render.c:7371
 #, c-format
 msgid "Enter PIN %s on the device"
-msgstr ""
+msgstr "機器で PIN %s を入力してください"
 
 #: src/render.c:7379
 msgid "Any key to dismiss"
-msgstr ""
+msgstr "どれかキーを押すと閉じます"
 
 #: src/render.c:7380
 msgid "y accept · n reject"
-msgstr ""
+msgstr "y 許可 · n 拒否"
 
 #: src/render.c:7393
 msgid "Radio is off · press o"
-msgstr ""
+msgstr "無線がオフです · o を押してください"
 
 #: src/render.c:7398
 #, c-format
 msgid "%d hidden · press a to show"
-msgstr ""
+msgstr "%d 件を非表示中 · a で表示します"
 
 #: src/render.c:7401
 msgid "No devices · press s to scan"
-msgstr ""
+msgstr "機器がありません · s で検索します"
 
 #: src/render.c:7438
 msgid "trusted"
-msgstr ""
+msgstr "信頼済み"
 
 #: src/render.c:7471
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr ""
+msgstr "Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a 絞る · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr ""
+msgstr "Enter 接続 · p ペアリング · t 信頼 · r 削除 · s 検索 · o 無線 · a すべて · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
-msgstr ""
+msgstr "タスクマネージャー"
 
 #: src/render.c:7639
 #, c-format
 msgid "%d procs · sort: %s%s"
-msgstr ""
+msgstr "%d プロセス · 並び順: %s%s"
 
 #: src/render.c:7650
 #, c-format
 msgid "%.0f%%  (%ld cores)"
-msgstr ""
+msgstr "%.0f%%  (%ld コア)"
 
 #: src/render.c:7652
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: src/render.c:7663
 msgid "RAM"
-msgstr ""
+msgstr "メモリ"
 
 #: src/render.c:7666 src/render.c:7674
 msgid "GPU"
-msgstr ""
+msgstr "GPU"
 
 #: src/render.c:7666
 msgid "no GPU telemetry available"
-msgstr ""
+msgstr "GPU の計測値を取得できません"
 
 #: src/render.c:7691 src/render.c:7710
 msgid "VRAM"
-msgstr ""
+msgstr "VRAM"
 
 #: src/render.c:7705
 msgid "PID"
-msgstr ""
+msgstr "PID"
 
 #: src/render.c:7707
 msgid "NAME"
-msgstr ""
+msgstr "名前"
 
 #: src/render.c:7709
 msgid "MEM"
-msgstr ""
+msgstr "メモリ"
 
 #: src/render.c:7818
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr ""
+msgstr "j/k 移動 · 行を右クリック · c/m/g/p 並べ替え · u 自分のもの · x 終了 · X 強制終了 · Esc 閉じる"
 
 #: src/render.c:7984
 msgid "NEWS"
-msgstr ""
+msgstr "ニュース"
 
 #: src/render.c:7992
 msgid "all sources"
-msgstr ""
+msgstr "すべての配信元"
 
 #: src/render.c:7993
 msgid "by time"
-msgstr ""
+msgstr "時刻順"
 
 #: src/render.c:7993
 msgid "by source"
-msgstr ""
+msgstr "配信元順"
 
 #: src/render.c:7996
 msgid "never fetched"
-msgstr ""
+msgstr "未取得"
 
 #: src/render.c:8023
 #, c-format
 msgid "filter: /%s"
-msgstr ""
+msgstr "絞り込み: /%s"
 
 #: src/render.c:8036
 msgid "fetching feeds…"
-msgstr ""
+msgstr "フィードを取得中…"
 
 #: src/render.c:8037
 msgid "nothing matches this filter"
-msgstr ""
+msgstr "この絞り込みに一致するものはありません"
 
 #: src/render.c:8038
 msgid "no feeds answered — check the network, then press r"
-msgstr ""
+msgstr "どのフィードからも応答がありません — ネットワークを確認して r を押してください"
 
 #: src/render.c:8039
 msgid "no items yet — press r to fetch"
-msgstr ""
+msgstr "まだ項目がありません — r で取得します"
 
 #: src/render.c:8125
 msgid "type to filter · Enter keep · Esc clear"
-msgstr ""
+msgstr "入力して絞り込み · Enter 確定 · Esc 消去"
 
 #: src/render.c:8126
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr ""
+msgstr "j/k 移動 · Enter 開く · o 背面で開く · c コメント · y コピー · Tab 配信元 · / 検索 · s 並べ替え · m 既読 · r 更新 · Esc 閉じる"
 
 #: src/render.c:8152
 msgid "Bottom"
-msgstr ""
+msgstr "下"
 
 #: src/render.c:8152
 msgid "Top"
-msgstr ""
+msgstr "上"
 
 #: src/render.c:8152
 msgid "Left"
-msgstr ""
+msgstr "左"
 
 #: src/render.c:8152
 msgid "Right"
-msgstr ""
+msgstr "右"
 
 #: src/render.c:8162
 msgid "Apps"
-msgstr ""
+msgstr "アプリ"
 
 #: src/render.c:8165
 #, c-format
 msgid "Dock Edge: %s"
-msgstr ""
+msgstr "ドックの位置: %s"
 
 #: src/render.c:8179
 #, c-format
 msgid "%s At: %s"
-msgstr ""
+msgstr "%s の位置: %s"
 
 #: src/render.c:8191
 msgid "Pin to Dock"
-msgstr ""
+msgstr "ドックに固定"
 
 #: src/render.c:8193
 msgid "Unpin from Dock"
-msgstr ""
+msgstr "ドックから外す"
 
 #: src/render.c:8194
 msgid "Open"
-msgstr ""
+msgstr "開く"
 
 #: src/render.c:8195
 msgid "New Window"
-msgstr ""
+msgstr "新しいウィンドウ"
 
 #: src/render.c:8196
 msgid "Close Window"
-msgstr ""
+msgstr "ウィンドウを閉じる"
 
 #: src/render.c:8197
 msgid "Quit All Windows"
-msgstr ""
+msgstr "すべてのウィンドウを閉じる"
 
 #: src/render.c:8201
 msgid "Auto-hide Dock"
-msgstr ""
+msgstr "ドックを自動的に隠す"
 
 #: src/render.c:8202
 msgid "Dock Above Windows"
-msgstr ""
+msgstr "ドックをウィンドウの手前に"
 
 #: src/render.c:8203
 msgid "Magnify Icons"
-msgstr ""
+msgstr "アイコンを拡大"
 
 #: src/render.c:8204
 msgid "Show Clock"
-msgstr ""
+msgstr "時計を表示"
 
 #: src/render.c:8205
 msgid "Analog Clock Face"
-msgstr ""
+msgstr "アナログ文字盤"
 
 #: src/render.c:8206
 msgid "Show All Apps Button"
-msgstr ""
+msgstr "「すべてのアプリ」ボタンを表示"
 
 #: src/render.c:8207
 msgid "Show Power Button"
-msgstr ""
+msgstr "電源ボタンを表示"
 
 #: src/render.c:8208
 msgid "Dock Settings…"
-msgstr ""
+msgstr "ドックの設定…"
 
 #: src/render.c:8212
 msgid "Lock Screen"
-msgstr ""
+msgstr "画面をロック"
 
 #: src/render.c:8213
 msgid "Log Out"
-msgstr ""
+msgstr "ログアウト"
 
 #: src/render.c:8214
 msgid "Suspend"
-msgstr ""
+msgstr "スリープ"
 
 #: src/render.c:8215
 msgid "Restart"
-msgstr ""
+msgstr "再起動"
 
 #: src/render.c:8216
 msgid "Shut Down"
-msgstr ""
+msgstr "シャットダウン"
 
 #: src/render.c:8839
 msgid "minimized"
-msgstr ""
+msgstr "最小化中"
 
 #: src/render.c:8839 src/render.c:9333 src/render.c:9336
 msgid "MIN"
-msgstr ""
+msgstr "最小"
 
 #: src/render.c:8944
 msgid "WINDOWS"
-msgstr ""
+msgstr "ウィンドウ"
 
 #: src/render.c:9101
 msgid "Alt+Tab next · Alt+Shift+Tab back"
-msgstr ""
+msgstr "Alt+Tab 次へ · Alt+Shift+Tab 前へ"
 
 #: src/render.c:9218
 msgid "MISSION CONTROL"
-msgstr ""
+msgstr "ウィンドウ一覧"
 
 #: src/render.c:9223
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
-msgstr[0] ""
+msgstr[0] "デスクトップ %d · ウィンドウ %d 個"
 
 #: src/render.c:9360
 msgid "Nothing open on this desktop."
-msgstr ""
+msgstr "このデスクトップには何も開いていません。"
 
 #: src/render.c:9415
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr ""
+msgstr "矢印またはクリックでウィンドウを選びます · Enter で開く · Del で閉じる · 1–9 でデスクトップ切り替え · Esc 閉じる"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2777,28 +2771,24 @@ msgid "Slide interval"
 msgstr "切り替え間隔"
 
 #: src/saver.c:841
-#, fuzzy
 msgid "Lock background"
-msgstr "ロック画面"
+msgstr "ロック画面の背景"
 
 #: src/saver.c:842
-#, fuzzy
 msgid "Lock image"
-msgstr "ドックの拡大"
+msgstr "ロック画面の画像"
 
 #: src/saver.c:843
 msgid "Lock dim"
 msgstr "ロック画面を暗く"
 
 #: src/saver.c:844
-#, fuzzy
 msgid "Lock blur"
-msgstr "背景のぼかし"
+msgstr "ロック画面のぼかし"
 
 #: src/saver.c:845
-#, fuzzy
 msgid "Lock colours"
-msgstr "ドックの角"
+msgstr "ロック画面の色"
 
 #: src/saver.c:846
 msgid "Now playing"
@@ -2809,19 +2799,16 @@ msgid "Weather"
 msgstr "天気"
 
 #: src/saver.c:848
-#, fuzzy
 msgid "Temperature in"
-msgstr "色温度"
+msgstr "温度の単位"
 
 #: src/saver.c:849
-#, fuzzy
 msgid "Keyboard layout"
-msgstr "キーボードショートカット"
+msgstr "キーボード配列"
 
 #: src/widgets.c:60
-#, fuzzy
 msgid "All widgets"
-msgstr "すべてのフィルター"
+msgstr "すべてのウィジェット"
 
 #: src/widgets.c:61
 msgid "Audio visualiser"
@@ -2832,9 +2819,8 @@ msgid "System monitor"
 msgstr "システムモニター"
 
 #: src/widgets.c:63
-#, fuzzy
 msgid "Desktop clock"
-msgstr "デスクトップのアイコン"
+msgstr "デスクトップの時計"
 
 #: src/widgets.c:64
 msgid "Quick launch"
@@ -2853,9 +2839,8 @@ msgid "Tuxagotchi"
 msgstr "たぬきごっち"
 
 #: src/widgets.c:68
-#, fuzzy
 msgid "Analog clock"
-msgstr "アナログ時計の文字盤"
+msgstr "アナログ時計"
 
 #: src/widgets.c:69
 msgid "Music player"
