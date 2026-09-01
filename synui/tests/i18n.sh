@@ -55,11 +55,33 @@ check "every file in po/POTFILES exists" "" "$gone"
 # Regenerated into a temp file and compared on msgids alone: the .pot carries a
 # POT-Creation-Date that changes every run, so a plain diff always differs.
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-( cd "$root" && xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=_opt \
+( cd "$root" && xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=_opt --keyword=P_:1,2 \
     -o "$tmp/new.pot" $(grep -vE '^\s*#|^\s*$' po/POTFILES) 2>/dev/null )
 have=$(grep -c '^msgid "' "$root/po/synui.pot" 2>/dev/null || echo 0)
 now=$(grep -c '^msgid "' "$tmp/new.pot" 2>/dev/null || echo 0)
 check "po/synui.pot is current ($have msgids)" "$now" "$have"
+
+# ── 3b. no English plural glued on with %s ────────────────
+# ⛔ "%d window%s" with "" or "s" is English grammar written into the format
+# string, and no catalog can reach it: the translation replaces the sentence,
+# not the letter the C code appends afterwards. German reads "3 Fensters";
+# Polish and Russian need three forms and Arabic six, so there is no msgstr
+# that can be right. P_() (ngettext) is the fix — see src/i18n.h.
+#
+# ⚠ Only files in POTFILES are checked. The rest of the compositor is not
+# translated yet, and failing on it would be a gate on work nobody has started.
+hack=$(cd "$root" && grep -n '== 1 ? "" : "s"' \
+        $(grep -vE '^\s*#|^\s*$' po/POTFILES) 2>/dev/null || true)
+check "no \"%s\" plural hack in a translated file" "" "$hack"
+
+# ── 3c. every catalog declares its plural rule ────────────
+# A .po with plural entries and no Plural-Forms header makes msgfmt guess, and
+# a language that needs three forms silently gets two.
+noplural=""
+for po in "$root"/po/*.po; do
+    grep -q 'Plural-Forms' "$po" || noplural="$noplural $(basename "$po")"
+done
+check "every .po declares Plural-Forms" "" "$noplural"
 
 # ── 4. a marked string is actually looked up ──────────────
 check "N_() is paired with a _() lookup in ctlpanel.c" yes \

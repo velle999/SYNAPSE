@@ -2,12 +2,14 @@
 #
 # ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER. Its _() calls still
 # compile and still look up at runtime, so nothing warns — the strings simply
-# never reach a .pot, so no translator is ever offered them. tools/i18n-check.sh
+# never reach a .pot, so no translator is ever offered them. tests/i18n.sh
 # fails on a source file that uses _() and is not listed.
 src/ctlpanel.c
-src/lock.c
-src/saver.c
-src/power.c
+src/dock.c
 src/filters.c
-src/widgets.c
+src/lock.c
+src/power.c
+src/render.c
+src/saver.c
 src/uifx.c
+src/widgets.c

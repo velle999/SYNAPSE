@@ -21,6 +21,7 @@
  */
 
 #define _GNU_SOURCE
+#include "i18n.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
@@ -3414,13 +3415,14 @@ const char *dock_slot_label(syn_server_t *s, dock_cell_t c)
     bool vert = edge_is_vertical(s->config.dock_edge);
 
     switch (slot) {
-    case DOCK_SLOT_START:  return vert ? "top" : "left";
-    case DOCK_SLOT_CENTER: return "centre";
-    case DOCK_SLOT_END:    return vert ? "bottom" : "right";
+    case DOCK_SLOT_START:  return vert ? _("top") : _("left");
+    case DOCK_SLOT_CENTER: return _("centre");
+    case DOCK_SLOT_END:    return vert ? _("bottom") : _("right");
     default: break;
     }
-    if (slot < 0) return vert ? "bottom" : "right";   /* an unknown sentinel */
-    snprintf(buf, sizeof(buf), "after %d icon%s", slot, slot == 1 ? "" : "s");
+    if (slot < 0) return vert ? _("bottom") : _("right");   /* an unknown sentinel */
+    snprintf(buf, sizeof(buf),
+             P_("after %d icon", "after %d icons", slot), slot);
     return buf;
 }
 

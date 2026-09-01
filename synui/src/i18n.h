@@ -45,6 +45,25 @@
 #define N_(s) (s)
 
 /*
+ * P_(singular, plural, n) — a string that counts something.
+ *
+ * ⛔ NOT "%d window%s" WITH "" OR "s". That trick is English grammar written
+ * into the format string, and a translator cannot reach it: the catalog can
+ * only replace the sentence, not the `s` the C code appends afterwards. German
+ * would read "3 Fensters", and the languages this desktop ships are worse than
+ * that — Polish and Russian pick between THREE forms by the last two digits of
+ * the number, Arabic between SIX. There is no msgstr that can be right.
+ *
+ * ngettext takes both English forms and the count, and each catalog declares
+ * its own Plural-Forms rule in the .po header, so the language decides how many
+ * forms it has and which one this n selects.
+ *
+ * ⚠ THE COUNT IS PASSED TWICE — once to P_() to choose the form, and again to
+ * printf to be printed. Both English forms must carry the same specifiers.
+ */
+#define P_(sing, plur, n) ngettext(sing, plur, n)
+
+/*
  * _() for a string that may be NULL.
  *
  * ⚠ gettext(NULL) IS UNDEFINED BEHAVIOUR, and most rows of a UI table leave

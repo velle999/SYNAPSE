@@ -15,5 +15,9 @@ i18n.gettext('synui',
     # every table entry in the UI is invisible to it. See src/i18n.h.
     '--keyword=_',
     '--keyword=N_',
+    '--keyword=_opt',
+    # P_() is ngettext: xgettext must be told BOTH argument positions or the
+    # plural form never reaches the catalog and every language gets English.
+    '--keyword=P_:1,2',
     '--add-comments=TRANSLATORS:',
   ])

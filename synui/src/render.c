@@ -15,6 +15,7 @@
  */
 
 #define _GNU_SOURCE
+#include "i18n.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -903,8 +904,9 @@ void synui_render_cmdbar(syn_server_t *s)
         }
         if (s->cmdbar.out_more > 0) {
             char more[64];
-            snprintf(more, sizeof more, "+%d more line%s",
-                     s->cmdbar.out_more, s->cmdbar.out_more == 1 ? "" : "s");
+            snprintf(more, sizeof more,
+                     P_("+%d more line", "+%d more lines", s->cmdbar.out_more),
+                     s->cmdbar.out_more);
             set_ink(cr, INK_LABEL, 0.9);
             cairo_move_to(cr, 34, y);
             syn_show_text(cr, more);
@@ -966,7 +968,7 @@ void synui_render_overlay(syn_server_t *s)
     cairo_set_font_size(cr, 13);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 14, 24);
-    syn_show_text(cr, "NEURAL OVERLAY");
+    syn_show_text(cr, _("NEURAL OVERLAY"));
 
     /* Model badge, right-aligned on the title row. Colour tracks state:
      * teal = loaded, amber = loading, grey = none/offline. */
@@ -974,12 +976,12 @@ void synui_render_overlay(syn_server_t *s)
     double br, bg, bb;
     if (!ov->mon_online) {
         badge = "\xe2\x97\x8b offline"; br = 0.55; bg = 0.55; bb = 0.60;
-    } else if (strcmp(ov->model, "loaded") == 0) {
+    } else if (strcmp(ov->model, _("loaded")) == 0) {
         badge = "\xe2\x9a\xa1 loaded";  br = 0.0;  bg = 0.85; bb = 0.55;
-    } else if (strcmp(ov->model, "loading") == 0) {
+    } else if (strcmp(ov->model, _("loading")) == 0) {
         badge = "\xe2\x97\x8b loading"; br = 0.95; bg = 0.70; bb = 0.20;
     } else {
-        badge = "\xe2\x97\x8b no model"; br = 0.55; bg = 0.55; bb = 0.60;
+        badge = _("\xe2\x97\x8b no model"); br = 0.55; bg = 0.55; bb = 0.60;
     }
     cairo_text_extents_t bext;
     syn_text_extents(cr, badge, &bext);
@@ -999,7 +1001,7 @@ void synui_render_overlay(syn_server_t *s)
     /* Request counters */
     cairo_set_font_size(cr, 13);
     char stat[96];
-    snprintf(stat, sizeof(stat), "req %lu    active %lu",
+    snprintf(stat, sizeof(stat), _("req %lu    active %lu"),
              ov->requests, ov->active);
     set_ink(cr, 0.89, 1.0);
     cairo_move_to(cr, 14, y);
@@ -1016,7 +1018,7 @@ void synui_render_overlay(syn_server_t *s)
     /* Context-window gauge */
     if (ov->ctx_window > 0) {
         char cbuf[64];
-        snprintf(cbuf, sizeof(cbuf), "ctx %u / %u tok",
+        snprintf(cbuf, sizeof(cbuf), _("ctx %u / %u tok"),
                  ov->ctx_used, ov->ctx_window);
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 14, y);
@@ -1041,7 +1043,7 @@ void synui_render_overlay(syn_server_t *s)
     cairo_set_font_size(cr, 11);
     set_ink(cr, INK_LABEL, 0.9);
     cairo_move_to(cr, 14, y);
-    syn_show_text(cr, "live activity");
+    syn_show_text(cr, _("live activity"));
     set_ink(cr, INK_RULE, 0.4);
     cairo_move_to(cr, 92, y - 4);
     cairo_line_to(cr, pw - 14, y - 4);
@@ -1052,8 +1054,8 @@ void synui_render_overlay(syn_server_t *s)
     if (ov->activity_n == 0) {
         set_ink(cr, INK_DIM, 0.7);
         cairo_move_to(cr, 14, y);
-        syn_show_text(cr, ov->mon_online ? "(idle — no recent events)"
-                                           : "(synapd unavailable)");
+        syn_show_text(cr, ov->mon_online ? _("(idle — no recent events)")
+                                           : _("(synapd unavailable)"));
     } else {
         cairo_set_font_size(cr, 11);
         for (int i = 0; i < ov->activity_n; i++) {
@@ -1072,14 +1074,14 @@ void synui_render_overlay(syn_server_t *s)
 
 /* ── Display settings panel ──────────────────────────────── */
 
-static const char *transform_name(enum wl_output_transform t)
+static const char *transform_label(enum wl_output_transform t)
 {
     switch (t) {
-    case WL_OUTPUT_TRANSFORM_NORMAL:      return "normal";
+    case WL_OUTPUT_TRANSFORM_NORMAL:      return _("normal");
     case WL_OUTPUT_TRANSFORM_90:          return "90\xc2\xb0";
     case WL_OUTPUT_TRANSFORM_180:         return "180\xc2\xb0";
     case WL_OUTPUT_TRANSFORM_270:         return "270\xc2\xb0";
-    case WL_OUTPUT_TRANSFORM_FLIPPED:     return "flipped";
+    case WL_OUTPUT_TRANSFORM_FLIPPED:     return _("flipped");
     case WL_OUTPUT_TRANSFORM_FLIPPED_90:  return "flip-90\xc2\xb0";
     case WL_OUTPUT_TRANSFORM_FLIPPED_180: return "flip-180\xc2\xb0";
     case WL_OUTPUT_TRANSFORM_FLIPPED_270: return "flip-270\xc2\xb0";
@@ -1169,7 +1171,7 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "DISPLAY SETTINGS");
+    syn_show_text(cr, _("DISPLAY SETTINGS"));
 
     /* The arrangement, beside the title. It changes what every row below
      * MEANS — in Duplicate the positions are all (0,0) by design, and in
@@ -1178,10 +1180,10 @@ void synui_render_dispcfg(syn_server_t *s)
      * two of its three states. */
     {
         const char *m = s->config.display_mode == SYN_DISPLAY_MIRROR
-                            ? "DUPLICATE"
+                            ? _("DUPLICATE")
                       : s->config.display_mode == SYN_DISPLAY_EXTERNAL
-                            ? "BUILT-IN OFF"
-                            : "EXTEND";
+                            ? _("BUILT-IN OFF")
+                            : _("EXTEND");
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 210, 30);
@@ -1242,7 +1244,7 @@ void synui_render_dispcfg(syn_server_t *s)
     if (d->count == 0) {
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 40, y);
-        syn_show_text(cr, "no outputs connected");
+        syn_show_text(cr, _("no outputs connected"));
         y += 28;
     }
     for (int i = 0; i < d->count; i++) {
@@ -1271,7 +1273,7 @@ void synui_render_dispcfg(syn_server_t *s)
          * what is true instead, in the column the reader is already looking at
          * for "what is this screen doing". */
         if (d->order[i]->detached)
-            snprintf(col, sizeof(col), "off");
+            snprintf(col, sizeof(col), _("off"));
         else
             snprintf(col, sizeof(col), "%dx%d", w, h);
         cairo_move_to(cr, 190, y);
@@ -1295,7 +1297,7 @@ void synui_render_dispcfg(syn_server_t *s)
 
         set_ink(cr, sel ? INK_STRONG : INK_MUTED, 1.0);
         cairo_move_to(cr, 340, y);
-        syn_show_text(cr, transform_name(wo->transform));
+        syn_show_text(cr, transform_label(wo->transform));
 
         set_ink(cr, INK_LABEL, 1.0);
         snprintf(col, sizeof(col), "grid(%d,%d)",
@@ -1314,7 +1316,7 @@ void synui_render_dispcfg(syn_server_t *s)
             int explicit_choice = d->order[i]->primary;
             set_accent(cr, explicit_choice ? 0.95 : 0.45);
             cairo_move_to(cr, 630, y);
-            syn_show_text(cr, explicit_choice ? "PRIMARY" : "primary (auto)");
+            syn_show_text(cr, explicit_choice ? _("PRIMARY") : _("primary (auto)"));
         }
 
         /* Colour depth. Three distinct states, because "off" and "this
@@ -1325,7 +1327,7 @@ void synui_render_dispcfg(syn_server_t *s)
         else if (o->deep_color_capable){ set_ink(cr, INK_LABEL, 1.0);
                                          depth = "8-bit"; }
         else                           { set_ink(cr, 0.38, 1.0);
-                                         depth = "8-bit (only)"; }
+                                         depth = _("8-bit (only)"); }
         cairo_move_to(cr, 760, y);
         syn_show_text(cr, depth);
 
@@ -1343,7 +1345,7 @@ void synui_render_dispcfg(syn_server_t *s)
          * all: EDID alone reads as a mode you switched on. */
         const char *hdr_txt = NULL;
         if (o->hdr_on)                    { set_accent(cr, 0.95);
-                                            hdr_txt = "HDR10 ON"; }
+                                            hdr_txt = _("HDR10 ON"); }
         else if (o->hdr_capable)          { set_hue(cr, 0.62, 0.58, 0.78, 1.0);
                                             hdr_txt = o->hdr_pq ? "HDR10" : "HLG"; }
         else if (o->hdr_pq || o->hdr_hlg) { set_hue(cr, 0.62, 0.58, 0.78, 0.45);
@@ -1382,16 +1384,16 @@ void synui_render_dispcfg(syn_server_t *s)
          * this line to tell them it is known and why. */
         char line[224];
         snprintf(line, sizeof(line),
-                 "%s driven in HDR10 \xc2\xb7 PQ \xc2\xb7 %s primaries "
+                 _("%s driven in HDR10 \xc2\xb7 PQ \xc2\xb7 %s primaries "
                  "\xc2\xb7 %d cd/m\xc2\xb2 SDR white ([ ]) \xc2\xb7 %s scanout"
-                 "%s",
+                 "%s"),
                  selo->wlr_output->name,
                  selo->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_BT2020
                      ? "BT.2020" : "sRGB",
                  hdr_white_clamp(selo->hdr_white),
                  selo->deep_color ? "10-bit" : "8-bit",
                  selo->hdr_primaries == WLR_COLOR_NAMED_PRIMARIES_BT2020
-                     ? " \xe2\x80\x94 gamut not converted, colours run wide"
+                     ? _(" \xe2\x80\x94 gamut not converted, colours run wide")
                      : "");
         set_accent(cr, 0.95);
         cairo_move_to(cr, 18, ph - 62);
@@ -1400,25 +1402,25 @@ void synui_render_dispcfg(syn_server_t *s)
         char line[224];
         char nits[32] = "";
         if (selo->hdr_max_nits > 0.0f)
-            snprintf(nits, sizeof(nits), " \xc2\xb7 %.0f cd/m\xc2\xb2 peak",
+            snprintf(nits, sizeof(nits), _(" \xc2\xb7 %.0f cd/m\xc2\xb2 peak"),
                      (double)selo->hdr_max_nits);
         snprintf(line, sizeof(line),
                  "%s reports %s%s%s%s \xe2\x80\x94 %s",
                  selo->wlr_output->name,
-                 selo->hdr_pq ? "HDR10 (PQ)" : "HLG",
+                 selo->hdr_pq ? _("HDR10 (PQ)") : "HLG",
                  (selo->hdr_pq && selo->hdr_hlg) ? " + HLG" : "",
                  selo->wide_gamut ? " \xc2\xb7 BT.2020" : "", nits,
                  selo->hdr_capable
-                     ? "Shift+D drives it in HDR10"
-                     : "this link or mode will not carry an HDR10 signal");
+                     ? _("Shift+D drives it in HDR10")
+                     : _("this link or mode will not carry an HDR10 signal"));
         set_hue(cr, 0.62, 0.58, 0.78, 0.95);
         cairo_move_to(cr, 18, ph - 62);
         syn_show_text(cr, line);
     } else if (selo) {
         char line[192];
         snprintf(line, sizeof(line),
-                 "%s advertises no HDR transfer function in its EDID "
-                 "(SDR panel)", selo->wlr_output->name);
+                 _("%s advertises no HDR transfer function in its EDID "
+                 "(SDR panel)"), selo->wlr_output->name);
         set_ink(cr, 0.38, 0.9);
         cairo_move_to(cr, 18, ph - 62);
         syn_show_text(cr, line);
@@ -1427,16 +1429,16 @@ void synui_render_dispcfg(syn_server_t *s)
     /* Controls legend */
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 40);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
                         "\xe2\x88\x92/+ scale this screen \xc2\xb7 "
                         "p set primary (X11/game default) \xc2\xb7 "
-                        "m arrangement");
+                        "m arrangement"));
     cairo_move_to(cr, 18, ph - 20);
-    syn_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
+    syn_show_text(cr, _("Shift+arrows move in grid (swaps) \xc2\xb7 "
                         "d 10-bit colour (deep colour, not HDR) \xc2\xb7 "
                         "Shift+D HDR10 output \xc2\xb7 [ ] SDR white \xc2\xb7 "
                         "Super+Ctrl+= scales EVERY screen \xc2\xb7 "
-                        "Esc close");
+                        "Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);
@@ -1510,7 +1512,7 @@ void synui_render_wppick(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "WALLPAPER");
+    syn_show_text(cr, _("WALLPAPER"));
 
     /* The title row packs its extras from the right edge inward: the scaling
      * mode first, then the scroll counter beside it. Both used to be placed
@@ -1652,7 +1654,7 @@ void synui_render_wppick(syn_server_t *s)
             /* Say which of the two it is. "No preview" on a Workshop row whose
              * file failed to decode and on "None", which has nothing to show by
              * definition, would read as the same bug. */
-            const char *why = ppath ? "Preview unavailable" : "No preview";
+            const char *why = ppath ? _("Preview unavailable") : _("No preview");
             cairo_set_font_size(cr, 12);
             set_ink(cr, 0.38, 1.0);
             cairo_text_extents_t te;
@@ -1683,8 +1685,8 @@ void synui_render_wppick(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
-    syn_show_text(cr, "Up/Down preview \xc2\xb7 Tab monitor \xc2\xb7 m scaling "
-                        "\xc2\xb7 r rescan \xc2\xb7 Enter/Esc close");
+    syn_show_text(cr, _("Up/Down preview \xc2\xb7 Tab monitor \xc2\xb7 m scaling "
+                        "\xc2\xb7 r rescan \xc2\xb7 Enter/Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);
@@ -1743,7 +1745,7 @@ void synui_render_power(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "POWER SAVING");
+    syn_show_text(cr, _("POWER SAVING"));
 
     /* Lid state, right-aligned on the title line. Without it the two lid rows
      * are a puzzle on a desktop — they would sit there configurable and never
@@ -1755,10 +1757,10 @@ void synui_render_power(syn_server_t *s)
          * battery, and this says which one a lid close would use right now. */
         char lid[64];
         if (!s->power.lid_seen)
-            snprintf(lid, sizeof(lid), "no lid switch");
+            snprintf(lid, sizeof(lid), _("no lid switch"));
         else
             snprintf(lid, sizeof(lid), "lid %s \xc2\xb7 %s",
-                     p->lid_closed ? "closed" : "open", power_lid_case(s));
+                     p->lid_closed ? _("closed") : _("open"), power_lid_case(s));
 
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;
@@ -1774,11 +1776,11 @@ void synui_render_power(syn_server_t *s)
     if (idle_inhibited(s)) {
         set_hue(cr, 0.95, 0.75, 0.25, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "idle inhibited (media playing) \xc2\xb7 timers held");
+        syn_show_text(cr, _("idle inhibited (media playing) \xc2\xb7 timers held"));
     } else if (!s->config.power_enabled) {
         set_hue(cr, 0.75, 0.45, 0.45, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "disabled \xc2\xb7 no stage will fire");
+        syn_show_text(cr, _("disabled \xc2\xb7 no stage will fire"));
     }
 
     set_ink(cr, INK_RULE, 0.5);
@@ -1825,10 +1827,10 @@ void synui_render_power(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space toggle");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space toggle"));
     cairo_move_to(cr, 18, ph - 16);
-    syn_show_text(cr, p->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
-                                 : "s save \xc2\xb7 Esc close");
+    syn_show_text(cr, p->dirty ? _("s save (unsaved changes) \xc2\xb7 Esc close")
+                                 : _("s save \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->power_ui.text_buf, s->power_ui.tree, buf);
@@ -1883,7 +1885,7 @@ void synui_render_saver(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "SCREENSAVER");
+    syn_show_text(cr, _("SCREENSAVER"));
 
     /* An inhibitor beats the timeout exactly as it beats the power stages, and
      * a saver that never appears because Firefox is playing a video is the
@@ -1893,18 +1895,18 @@ void synui_render_saver(syn_server_t *s)
     if (idle_inhibited(s)) {
         set_hue(cr, 0.95, 0.75, 0.25, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "idle inhibited (media playing) \xc2\xb7 saver held");
+        syn_show_text(cr, _("idle inhibited (media playing) \xc2\xb7 saver held"));
     } else if (!s->config.power_enabled) {
         /* The saver is armed by power.c, so the master switch on the OTHER
          * panel silently governs this one. Without this line the timeout row
          * would read as active while nothing could ever fire. */
         set_hue(cr, 0.75, 0.45, 0.45, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "power saving is off (Super+P) \xc2\xb7 saver disabled");
+        syn_show_text(cr, _("power saving is off (Super+P) \xc2\xb7 saver disabled"));
     } else if (s->config.saver_timeout <= 0) {
         set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "no timeout set \xc2\xb7 p previews the current mode");
+        syn_show_text(cr, _("no timeout set \xc2\xb7 p previews the current mode"));
     }
 
     set_ink(cr, INK_RULE, 0.5);
@@ -1948,10 +1950,10 @@ void synui_render_saver(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 p preview");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 p preview"));
     cairo_move_to(cr, 18, ph - 16);
-    syn_show_text(cr, v->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
-                               : "s save \xc2\xb7 Esc close");
+    syn_show_text(cr, v->dirty ? _("s save (unsaved changes) \xc2\xb7 Esc close")
+                               : _("s save \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->saver_ui.text_buf, s->saver_ui.tree, buf);
@@ -2069,7 +2071,7 @@ void synui_render_curpick(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "CURSOR THEME");
+    syn_show_text(cr, _("CURSOR THEME"));
 
     double right_edge = pw - 18;
 
@@ -2099,11 +2101,11 @@ void synui_render_curpick(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, pad, top + 24);
-        syn_show_text(cr, "No cursor themes installed.");
+        syn_show_text(cr, _("No cursor themes installed."));
         cairo_set_font_size(cr, 12);
         set_ink(cr, 0.49, 1.0);
         cairo_move_to(cr, pad, top + 46);
-        syn_show_text(cr, "synui-cursor install <archive>   then press r");
+        syn_show_text(cr, _("synui-cursor install <archive>   then press r"));
     }
 
     for (int r = 0; r < shown && total > 0; r++) {
@@ -2161,7 +2163,7 @@ void synui_render_curpick(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr,
-        "Up/Down preview \xc2\xb7 -/+ size \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel");
+        _("Up/Down preview \xc2\xb7 -/+ size \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->curpick_ui.text_buf, s->curpick_ui.tree, buf);
@@ -2232,7 +2234,7 @@ void synui_render_fontpick(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "UI FONT");
+    syn_show_text(cr, _("UI FONT"));
 
     double right_edge = pw - 18;
 
@@ -2262,7 +2264,7 @@ void synui_render_fontpick(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, pad, top + 24);
-        syn_show_text(cr, "No font families found.");
+        syn_show_text(cr, _("No font families found."));
     }
 
     for (int r = 0; r < shown && total > 0; r++) {
@@ -2330,7 +2332,7 @@ void synui_render_fontpick(syn_server_t *s)
         cairo_set_font_size(cr, 15);
         set_ink(cr, sel ? INK_STRONG : INK_MUTED, 1.0);
         cairo_move_to(cr, pad + 270, ry + 20);
-        syn_show_text(cr, "Handgloves 0123");
+        syn_show_text(cr, _("Handgloves 0123"));
 
         cairo_restore(cr);
 
@@ -2378,14 +2380,14 @@ void synui_render_fontpick(syn_server_t *s)
         set_hue(cr, 0.98, 0.72, 0.25, 1.0);
         cairo_move_to(cr, 18, ph - 38);
         syn_show_text(cr,
-            "Not monospaced \xc2\xb7 kitty and foot may not render correctly in it");
+            _("Not monospaced \xc2\xb7 kitty and foot may not render correctly in it"));
     }
 
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr,
-        "Up/Down preview \xc2\xb7 d default \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel");
+        _("Up/Down preview \xc2\xb7 d default \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->fontpick_ui.text_buf, s->fontpick_ui.tree, buf);
@@ -2517,7 +2519,7 @@ void synui_render_appgrid(syn_server_t *s)
     } else {
         set_ink(cr, INK_DIM, 0.85);
         cairo_move_to(cr, search_x + 22, search_y + SEARCH_H / 2 + 6);
-        syn_show_text(cr, "Type to search");
+        syn_show_text(cr, _("Type to search"));
     }
 
     /* ── Nothing matched ──
@@ -2528,8 +2530,8 @@ void synui_render_appgrid(syn_server_t *s)
     if (total == 0) {
         cairo_set_font_size(cr, 15);
         set_ink(cr, INK_MUTED, 0.9);
-        const char *msg = g->search_len > 0 ? "No applications match"
-                                            : "No applications found";
+        const char *msg = g->search_len > 0 ? _("No applications match")
+                                            : _("No applications found");
         cairo_text_extents_t ext;
         syn_text_extents(cr, msg, &ext);
         cairo_move_to(cr, (ob.width - ext.width) / 2.0, grid_y + cell_h);
@@ -2624,9 +2626,11 @@ void synui_render_appgrid(syn_server_t *s)
     {
         char foot[128];
         snprintf(foot, sizeof(foot),
-                 "%d application%s \xc2\xb7 type to search \xc2\xb7 Enter opens "
-                 "\xc2\xb7 Esc closes",
-                 total, total == 1 ? "" : "s");
+                 P_("%d application \xc2\xb7 type to search \xc2\xb7 Enter opens "
+                    "\xc2\xb7 Esc closes",
+                    "%d applications \xc2\xb7 type to search \xc2\xb7 Enter opens "
+                    "\xc2\xb7 Esc closes", total),
+                 total);
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_LABEL, 0.85);
         cairo_text_extents_t ext;
@@ -2714,7 +2718,7 @@ void synui_render_emoji(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, pad + 2, 28);
-    syn_show_text(cr, "EMOJI");
+    syn_show_text(cr, _("EMOJI"));
 
     /* The search box, always visible — typing goes straight to it, so a box
      * that only appeared once you had typed would leave the first keystroke
@@ -2736,7 +2740,7 @@ void synui_render_emoji(syn_server_t *s)
         } else {
             set_ink(cr, INK_DIM, 0.8);
             cairo_move_to(cr, pad + 78, 28);
-            syn_show_text(cr, "type to search");
+            syn_show_text(cr, _("type to search"));
         }
     }
 
@@ -2795,8 +2799,8 @@ void synui_render_emoji(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, pad + 2, top + 30);
-        syn_show_text(cr, s->emoji.search[0] ? "No emoji match that search."
-                                             : "Nothing here yet.");
+        syn_show_text(cr, s->emoji.search[0] ? _("No emoji match that search.")
+                                             : _("Nothing here yet."));
     }
 
     /* The grid. */
@@ -2858,7 +2862,7 @@ void synui_render_emoji(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, pad + 2, ph - 14);
     syn_show_text(cr,
-        "Type to search \xc2\xb7 Click or Tab category \xc2\xb7 Enter insert \xc2\xb7 Esc clear/close");
+        _("Type to search \xc2\xb7 Click or Tab category \xc2\xb7 Enter insert \xc2\xb7 Esc clear/close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->emoji_ui.text_buf, s->emoji_ui.tree, buf);
@@ -3003,7 +3007,7 @@ void synui_render_calc(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, y_title);
-    syn_show_text(cr, "CALCULATOR");
+    syn_show_text(cr, _("CALCULATOR"));
 
     /* The corner button, and how much room it leaves the title row. This is the
      * panel the switch exists for: a keypad is thirty small targets, and a
@@ -3043,7 +3047,7 @@ void synui_render_calc(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_DIM, 0.75);
         draw_clipped(cr, pad, y_tape + 2 * tape_step, pw - pad * 2,
-                     "Anything you work out is kept here.");
+                     _("Anything you work out is kept here."));
     }
 
     for (int r = 0; r < CALC_TAPE_ROWS; r++) {
@@ -3085,7 +3089,7 @@ void synui_render_calc(syn_server_t *s)
         if (s->calc.entry_len == 0) {
             set_ink(cr, INK_DIM, 1.0);
             cairo_move_to(cr, tx, ty);
-            syn_show_text(cr, "type an expression");
+            syn_show_text(cr, _("type an expression"));
         } else {
             set_ink(cr, INK_STRONG, 1.0);
             /* draw_clipped rather than syn_show_text: the entry can hold more
@@ -3190,9 +3194,9 @@ void synui_render_calc(syn_server_t *s)
      * reads better and comes to 462px, which loses "Esc clears, then closes"
      * off the edge — the one instruction a modal panel cannot leave unsaid. */
     draw_clipped(cr, 18, ph - 28, pw - 36,
-                 "Enter works it out \xc2\xb7 Ctrl+C copies \xc2\xb7 Ctrl+V pastes");
+                 _("Enter works it out \xc2\xb7 Ctrl+C copies \xc2\xb7 Ctrl+V pastes"));
     draw_clipped(cr, 18, ph - 12, pw - 36,
-                 "Up/Down recall the tape \xc2\xb7 Esc clears, then closes");
+                 _("Up/Down recall the tape \xc2\xb7 Esc clears, then closes"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->calc_ui.text_buf, s->calc_ui.tree, buf);
@@ -3261,7 +3265,7 @@ void synui_render_eq(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "EQUALIZER");
+    syn_show_text(cr, _("EQUALIZER"));
 
     /* Say plainly that this adds an output device. It is the one surprising
      * thing about the feature — the equalizer shows up in every application's
@@ -3270,8 +3274,8 @@ void synui_render_eq(syn_server_t *s)
     {
         cairo_set_font_size(cr, 11);
         set_ink(cr, INK_DIM, 0.85);
-        const char *note = s->eq.enabled ? "output routed through the equalizer sink"
-                                         : "off — audio goes straight to your device";
+        const char *note = s->eq.enabled ? _("output routed through the equalizer sink")
+                                         : _("off — audio goes straight to your device");
         cairo_text_extents_t te;
         syn_text_extents(cr, note, &te);
         cairo_move_to(cr, pw - 18 - te.x_advance, 30);
@@ -3347,7 +3351,7 @@ void synui_render_eq(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 16);
     syn_show_text(cr,
-        "Up/Down row \xc2\xb7 Left/Right adjust \xc2\xb7 r flat \xc2\xb7 Esc close");
+        _("Up/Down row \xc2\xb7 Left/Right adjust \xc2\xb7 r flat \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->eq_ui.text_buf, s->eq_ui.tree, buf);
@@ -3417,12 +3421,13 @@ static void render_crop_pick(syn_server_t *s)
     /* Titled by what Enter will do with a row. The list is shared by the viewer
      * and the cropper (see crop.c), and a picker that does not say which one it
      * is feeding is a picker you have to press a key to identify. */
-    syn_show_text(cr, s->crop.pick_for_crop ? "CROP \xe2\x80\x94 RECENT IMAGES"
-                                            : "IMAGES \xe2\x80\x94 RECENT");
+    syn_show_text(cr, s->crop.pick_for_crop ? _("CROP \xe2\x80\x94 RECENT IMAGES")
+                                            : _("IMAGES \xe2\x80\x94 RECENT"));
 
     {
         char count[48];
-        snprintf(count, sizeof(count), "%d image%s", total, total == 1 ? "" : "s");
+        snprintf(count, sizeof(count),
+                 P_("%d image", "%d images", total), total);
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;
         syn_text_extents(cr, count, &te);
@@ -3441,12 +3446,12 @@ static void render_crop_pick(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, pad, top + 24);
-        syn_show_text(cr, "No images in Pictures, Wallpapers or Downloads.");
+        syn_show_text(cr, _("No images in Pictures, Wallpapers or Downloads."));
         cairo_set_font_size(cr, 12);
         set_ink(cr, 0.49, 1.0);
         cairo_move_to(cr, pad, top + 46);
-        syn_show_text(cr, "Press r to rescan, or open a file directly: "
-                          "synctl dispatch view <path>");
+        syn_show_text(cr, _("Press r to rescan, or open a file directly: "
+                          "synctl dispatch view <path>"));
     }
 
     for (int r = 0; r < shown && total > 0; r++) {
@@ -3502,8 +3507,8 @@ static void render_crop_pick(syn_server_t *s)
         set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, pad, ph - 18);
         syn_show_text(cr, s->crop.pick_for_crop
-            ? "Enter crop \xc2\xb7 v view \xc2\xb7 r rescan \xc2\xb7 Esc close"
-            : "Enter view \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 Esc close");
+            ? _("Enter crop \xc2\xb7 v view \xc2\xb7 r rescan \xc2\xb7 Esc close")
+            : _("Enter view \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 Esc close"));
     }
 
     cairo_destroy(cr);
@@ -3613,7 +3618,7 @@ static void render_crop_view(syn_server_t *s)
         cairo_set_font_size(cr, 15);
         set_accent(cr, 1.0);
         cairo_move_to(cr, 24, 32);
-        syn_show_text(cr, "VIEW");
+        syn_show_text(cr, _("VIEW"));
 
         /* ── A WAY OUT THAT IS NOT A KEY ─────────────────────
          *
@@ -3750,17 +3755,17 @@ static void render_crop_view(syn_server_t *s)
 
         cairo_move_to(cr, 24, ph - 40);
         syn_show_text(cr, panning
-            ? "Drag to move \xc2\xb7 arrows pan \xc2\xb7 Shift \xc3\x97 4 \xc2\xb7 "
-              "n / p next and previous"
-            : "\xe2\x86\x90 \xe2\x86\x92 next and previous \xc2\xb7 "
-              "drag or scroll to zoom in");
+            ? _("Drag to move \xc2\xb7 arrows pan \xc2\xb7 Shift \xc3\x97 4 \xc2\xb7 "
+              "n / p next and previous")
+            : _("\xe2\x86\x90 \xe2\x86\x92 next and previous \xc2\xb7 "
+              "drag or scroll to zoom in"));
 
         char keys[220];
         snprintf(keys, sizeof(keys),
-            "Scroll zooms \xc2\xb7 + \xe2\x88\x92 zoom \xc2\xb7 0 fit \xc2\xb7 "
+            _("Scroll zooms \xc2\xb7 + \xe2\x88\x92 zoom \xc2\xb7 0 fit \xc2\xb7 "
             "1 actual size \xc2\xb7 c crop \xc2\xb7 r rescan \xc2\xb7 "
-            "Esc or \xc3\x97 %s",
-            s->crop.from_pick ? "back to the list" : "close");
+            "Esc or \xc3\x97 %s"),
+            s->crop.from_pick ? _("back to the list") : _("close"));
         cairo_move_to(cr, 24, ph - 22);
         syn_show_text(cr, keys);
     }
@@ -3910,7 +3915,7 @@ void synui_render_crop(syn_server_t *s)
         cairo_set_font_size(cr, 15);
         set_accent(cr, 1.0);
         cairo_move_to(cr, 24, 32);
-        syn_show_text(cr, "CROP");
+        syn_show_text(cr, _("CROP"));
 
         char info[160];
         snprintf(info, sizeof(info), "%d \xc3\x97 %d  of  %d \xc3\x97 %d",
@@ -3943,17 +3948,17 @@ void synui_render_crop(syn_server_t *s)
          * teaches nothing. Gestures on top, keys underneath. */
         cairo_move_to(cr, 24, ph - 40);
         syn_show_text(cr,
-            "Drag to select \xc2\xb7 drag a corner to adjust it \xc2\xb7 "
-            "Tab picks the corner the arrows move");
+            _("Drag to select \xc2\xb7 drag a corner to adjust it \xc2\xb7 "
+            "Tab picks the corner the arrows move"));
 
         /* Esc means different things depending on how you got here, and saying
          * "cancel" when it goes back to the list is a small lie the footer is
          * well placed to avoid. */
         char keys[200];
         snprintf(keys, sizeof(keys),
-            "Arrows resize \xc2\xb7 Ctrl+Arrows move \xc2\xb7 Shift \xc3\x97 25 \xc2\xb7 "
-            "a all \xc2\xb7 Enter save a copy \xc2\xb7 Esc %s",
-            s->crop.from_pick ? "back to the list" : "cancel");
+            _("Arrows resize \xc2\xb7 Ctrl+Arrows move \xc2\xb7 Shift \xc3\x97 25 \xc2\xb7 "
+            "a all \xc2\xb7 Enter save a copy \xc2\xb7 Esc %s"),
+            s->crop.from_pick ? _("back to the list") : _("cancel"));
 
         cairo_move_to(cr, 24, ph - 22);
         syn_show_text(cr, keys);
@@ -4052,15 +4057,15 @@ void synui_render_filters(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, uifx ? "WINDOW EFFECTS" : "CRT FILTERS");
+    syn_show_text(cr, uifx ? _("WINDOW EFFECTS") : _("CRT FILTERS"));
 
     /* The page you are NOT on, named at the top right, because a panel that
      * hides half of itself behind an unadvertised Tab has hidden it. */
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, pw - 210, 30);
-    syn_show_text(cr, uifx ? "Tab \xe2\x86\x92 CRT filters"
-                             : "Tab \xe2\x86\x92 window effects");
+    syn_show_text(cr, uifx ? _("Tab \xe2\x86\x92 CRT filters")
+                             : _("Tab \xe2\x86\x92 window effects"));
 
     /* Why a row on this page might be doing nothing. The CRT page has two such
      * reasons (master off, or no GLES pass at all — pixman); the window page
@@ -4076,11 +4081,11 @@ void synui_render_filters(syn_server_t *s)
     } else if (!s->effects) {
         set_hue(cr, 0.75, 0.45, 0.45, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "no GLES renderer \xc2\xb7 filters unavailable on this display");
+        syn_show_text(cr, _("no GLES renderer \xc2\xb7 filters unavailable on this display"));
     } else if (!s->config.effects) {
         set_hue(cr, 0.95, 0.75, 0.25, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "filters off \xc2\xb7 Space to turn them on");
+        syn_show_text(cr, _("filters off \xc2\xb7 Space to turn them on"));
     }
 
     set_ink(cr, INK_RULE, 0.5);
@@ -4143,10 +4148,10 @@ void synui_render_filters(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space on/off");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space on/off"));
     cairo_move_to(cr, 18, ph - 16);
-    syn_show_text(cr, page_dirty ? "s save (unsaved changes) \xc2\xb7 Tab page \xc2\xb7 Esc close"
-                                   : "s save \xc2\xb7 Tab page \xc2\xb7 Esc close");
+    syn_show_text(cr, page_dirty ? _("s save (unsaved changes) \xc2\xb7 Tab page \xc2\xb7 Esc close")
+                                   : _("s save \xc2\xb7 Tab page \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);
@@ -4204,12 +4209,12 @@ void synui_render_widgets(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "DESKTOP WIDGETS");
+    syn_show_text(cr, _("DESKTOP WIDGETS"));
 
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, 18, 50);
-    syn_show_text(cr, "each one on its own \xc2\xb7 drag by the grip \xc2\xb7 Space is all-or-nothing");
+    syn_show_text(cr, _("each one on its own \xc2\xb7 drag by the grip \xc2\xb7 Space is all-or-nothing"));
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -4242,7 +4247,7 @@ void synui_render_widgets(syn_server_t *s)
         syn_show_text(cr, widget_row_label(i));
 
         const char *val = widgets_row_value(s, i);
-        if (strcmp(val, "off") == 0)
+        if (strcmp(val, _("off")) == 0)
             set_ink(cr, INK_DIM, 1.0);
         else
             set_accent(cr, 1.0);
@@ -4255,7 +4260,7 @@ void synui_render_widgets(syn_server_t *s)
             cairo_set_font_size(cr, 11);
             set_hue(cr, 0.75, 0.55, 0.35, 1.0);
             cairo_move_to(cr, 390, ry + 4);
-            syn_show_text(cr, "needs cava");
+            syn_show_text(cr, _("needs cava"));
         }
     }
 
@@ -4269,9 +4274,9 @@ void synui_render_widgets(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on"));
     cairo_move_to(cr, 18, ph - 16);
-    syn_show_text(cr, "Space all on/off \xc2\xb7 R reset positions \xc2\xb7 Esc close");
+    syn_show_text(cr, _("Space all on/off \xc2\xb7 R reset positions \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->widgets_ui.text_buf, s->widgets_ui.tree, buf);
@@ -4430,9 +4435,9 @@ static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
     aimodel_fit(cr, am->dl.file, w - 60);
 
     const char *state =
-        am->dl.state == AIMODEL_DL_DONE     ? "done"     :
-        am->dl.state == AIMODEL_DL_FAILED   ? "failed"   :
-        am->dl.state == AIMODEL_DL_STARTING ? "starting" : "";
+        am->dl.state == AIMODEL_DL_DONE     ? _("done")     :
+        am->dl.state == AIMODEL_DL_FAILED   ? _("failed")   :
+        am->dl.state == AIMODEL_DL_STARTING ? _("starting") : "";
     if (state[0]) {
         cairo_set_font_size(cr, 11);
         if (am->dl.state == AIMODEL_DL_FAILED)
@@ -4533,8 +4538,8 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             cairo_set_font_size(cr, 13);
             set_ink(cr, 0.61, 1.0);
             cairo_move_to(cr, x, y);
-            syn_show_text(cr, am->scan_err ? "Cannot read the model directory."
-                                             : "No models installed.");
+            syn_show_text(cr, am->scan_err ? _("Cannot read the model directory.")
+                                             : _("No models installed."));
             cairo_set_font_size(cr, 12);
             set_ink(cr, 0.49, 1.0);
             cairo_move_to(cr, x, y + 24);
@@ -4542,8 +4547,8 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
              * it means, since a permission error here is a packaging fault and
              * not something the user did wrong. */
             syn_show_text(cr, am->scan_err == EACCES
-                ? "A model may still be loaded \xc2\xb7 see the message below."
-                : "Pick one from AVAILABLE below and press Enter.");
+                ? _("A model may still be loaded \xc2\xb7 see the message below.")
+                : _("Pick one from AVAILABLE below and press Enter."));
         } else if (am->selected >= 0 && am->selected < am->count) {
             const syn_aimodel_entry_t *m = &am->models[am->selected];
 
@@ -4611,11 +4616,11 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             }
 
             struct { const char *k, *v; } rows[5];
-            rows[0].k = "Size";    rows[0].v = sz;
-            rows[1].k = "Params";  rows[1].v = params;
-            rows[2].k = "Quant";   rows[2].v = quant;
-            rows[3].k = "Context"; rows[3].v = ctx;
-            rows[4].k = "Arch";    rows[4].v = arch;
+            rows[0].k = _("Size");    rows[0].v = sz;
+            rows[1].k = _("Params");  rows[1].v = params;
+            rows[2].k = _("Quant");   rows[2].v = quant;
+            rows[3].k = _("Context"); rows[3].v = ctx;
+            rows[4].k = _("Arch");    rows[4].v = arch;
 
             for (int i = 0; i < 5; i++) {
                 int rry = y + 44 + i * 20;
@@ -4638,12 +4643,12 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             if (g && g->ok && !g->has_template) {
                 set_hue(cr, 0.75, 0.55, 0.35, 1.0);
                 cairo_move_to(cr, x, wy);
-                aimodel_fit(cr, "no chat template \xc2\xb7 synapd will guess "
-                                "the turn format", w);
+                aimodel_fit(cr, _("no chat template \xc2\xb7 synapd will guess "
+                                "the turn format"), w);
             } else if (g && !g->ok) {
                 set_hue(cr, 0.75, 0.55, 0.35, 1.0);
                 cairo_move_to(cr, x, wy);
-                aimodel_fit(cr, g->err[0] ? g->err : "unreadable header", w);
+                aimodel_fit(cr, g->err[0] ? g->err : _("unreadable header"), w);
             }
 
             /*
@@ -4666,7 +4671,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             cairo_set_font_size(cr, 11);
             set_ink(cr, 0.40, 1.0);
             cairo_move_to(cr, x, by);
-            syn_show_text(cr, "ABOUT");
+            syn_show_text(cr, _("ABOUT"));
 
             /* The three facts that are lists rather than prose. Each is
              * skipped when the file did not say — a row of dashes here would
@@ -4678,10 +4683,10 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             gguf_based_on(g, based, sizeof(based));
 
             struct { const char *k, *v; } about[4] = {
-                { "Good at",  good              },
-                { "Speaks",   langs             },
-                { "License",  g ? g->license : "" },
-                { "Based on", based             },
+                { _("Good at"),  good              },
+                { _("Speaks"),   langs             },
+                { _("License"),  g ? g->license : "" },
+                { _("Based on"), based             },
             };
 
             /* The rows below are counted BEFORE the paragraph is drawn, and
@@ -4729,11 +4734,11 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                 set_accent(cr, 1.0);
                 cairo_move_to(cr, x, body_bottom + 22);
                 syn_show_text(cr, am->switching ? "loading \xe2\x80\xa6"
-                                                  : "this is the model synapd is running");
+                                                  : _("this is the model synapd is running"));
             } else {
                 set_ink(cr, 0.61, 1.0);
                 cairo_move_to(cr, x, body_bottom + 22);
-                syn_show_text(cr, "[ Enter: load this model ]");
+                syn_show_text(cr, _("[ Enter: load this model ]"));
             }
         }
         aimodel_render_dl(cr, am, x, w, ph);
@@ -4768,11 +4773,11 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     snprintf(qual, sizeof(qual), "%s", qe ? qe : "\xe2\x80\x94");
 
     struct { const char *k, *v; } det[5];
-    det[0].k = "Params";   det[0].v = c->params[0] ? c->params : "\xe2\x80\x94";
-    det[1].k = "Download"; det[1].v = f ? szbuf : "\xe2\x80\x94";
-    det[2].k = "Quality";  det[2].v = qual;
-    det[3].k = "License";  det[3].v = c->license[0] ? c->license : "\xe2\x80\x94";
-    det[4].k = "Pulls";    det[4].v = dls;
+    det[0].k = _("Params");   det[0].v = c->params[0] ? c->params : "\xe2\x80\x94";
+    det[1].k = _("Download"); det[1].v = f ? szbuf : "\xe2\x80\x94";
+    det[2].k = _("Quality");  det[2].v = qual;
+    det[3].k = _("License");  det[3].v = c->license[0] ? c->license : "\xe2\x80\x94";
+    det[4].k = _("Pulls");    det[4].v = dls;
 
     for (int i = 0; i < 5; i++) {
         int ry = y + 46 + i * 20;
@@ -4802,15 +4807,15 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     cairo_set_font_size(cr, 11);
     set_ink(cr, 0.40, 1.0);
     cairo_move_to(cr, x, ay);
-    syn_show_text(cr, "ABOUT");
+    syn_show_text(cr, _("ABOUT"));
 
     char cgood[160], cbased[160];
     aimodel_cat_good_at(c, cgood, sizeof(cgood));
     aimodel_cat_based_on(c, cbased, sizeof(cbased));
 
     struct { const char *k, *v; } cabout[2] = {
-        { "Good at",  cgood  },
-        { "Based on", cbased },
+        { _("Good at"),  cgood  },
+        { _("Based on"), cbased },
     };
     int c_rows = 0;
     for (int i = 0; i < 2; i++)
@@ -4853,23 +4858,23 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     cairo_set_font_size(cr, 11);
     set_ink(cr, 0.40, 1.0);
     cairo_move_to(cr, x, fy);
-    syn_show_text(cr, "QUANTISATION");
+    syn_show_text(cr, _("QUANTISATION"));
 
     if (c->detail == AIMODEL_DETAIL_BUSY || c->detail == AIMODEL_DETAIL_WANT) {
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, x, fy + 24);
-        syn_show_text(cr, "reading the repository \xe2\x80\xa6");
+        syn_show_text(cr, _("reading the repository \xe2\x80\xa6"));
     } else if (c->detail == AIMODEL_DETAIL_FAIL) {
         cairo_set_font_size(cr, 12);
         set_hue(cr, 0.75, 0.55, 0.35, 1.0);
         cairo_move_to(cr, x, fy + 24);
-        syn_show_text(cr, "could not read the repository");
+        syn_show_text(cr, _("could not read the repository"));
     } else if (c->n_files == 0) {
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, x, fy + 24);
-        syn_show_text(cr, "no single-file GGUF here");
+        syn_show_text(cr, _("no single-file GGUF here"));
     } else {
         const int frow_h = 22;
         int max_rows = (body_bottom - (fy + 12)) / frow_h;
@@ -4918,7 +4923,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             cairo_set_font_size(cr, 10);
             set_ink(cr, 0.38, 1.0);
             char more[48];
-            snprintf(more, sizeof(more), "+%d more", c->n_files - max_rows);
+            snprintf(more, sizeof(more), _("+%d more"), c->n_files - max_rows);
             cairo_move_to(cr, x + w - 60, fy);
             syn_show_text(cr, more);
         }
@@ -4926,7 +4931,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
         cairo_set_font_size(cr, 12);
         set_ink(cr, 0.61, 1.0);
         cairo_move_to(cr, x, body_bottom + 22);
-        syn_show_text(cr, "[ Enter: download ]");
+        syn_show_text(cr, _("[ Enter: download ]"));
     }
 
     aimodel_render_dl(cr, am, x, w, ph);
@@ -5003,7 +5008,7 @@ void synui_render_aimodel(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "AI MODEL");
+    syn_show_text(cr, _("AI MODEL"));
 
     /* ── What synapd detected ────────────────────────────────────────────
      * The reason this panel exists. Every line is what the DAEMON reported,
@@ -5014,13 +5019,13 @@ void synui_render_aimodel(syn_server_t *s)
     int online = ov->mon_online;
 
     struct { const char *k; const char *v; } det[3];
-    det[0].k = "Loaded";
-    det[0].v = !online              ? "synapd not responding"
+    det[0].k = _("Loaded");
+    det[0].v = !online              ? _("synapd not responding")
              : ov->model_name[0]    ? ov->model_name
              : "\xe2\x80\x94";
-    det[1].k = "Format";
+    det[1].k = _("Format");
     det[1].v = ov->format[0] ? ov->format : "\xe2\x80\x94";
-    det[2].k = "Profile";
+    det[2].k = _("Profile");
     det[2].v = ov->profile[0] ? ov->profile : "\xe2\x80\x94";
 
     for (int i = 0; i < 3; i++) {
@@ -5039,16 +5044,16 @@ void synui_render_aimodel(syn_server_t *s)
     /* "legacy" is not a format the model asked for — it is synapd falling back
      * because the GGUF declared none, and it is worth flagging rather than
      * printing as though it were a detected answer. */
-    if (strcmp(ov->format, "legacy") == 0) {
+    if (strcmp(ov->format, _("legacy")) == 0) {
         cairo_set_font_size(cr, 11);
         set_hue(cr, 0.75, 0.55, 0.35, 1.0);
         cairo_move_to(cr, pad + 76 + 60, 76);
-        syn_show_text(cr, "GGUF declares no chat template");
+        syn_show_text(cr, _("GGUF declares no chat template"));
     }
 
     char samp[96];
     if (online && ov->top_k > 0)
-        snprintf(samp, sizeof(samp), "temp %.2f  \xc2\xb7  top_p %.2f  \xc2\xb7  top_k %d",
+        snprintf(samp, sizeof(samp), _("temp %.2f  \xc2\xb7  top_p %.2f  \xc2\xb7  top_k %d"),
                  (double)ov->temperature, (double)ov->top_p, ov->top_k);
     else
         snprintf(samp, sizeof(samp), "\xe2\x80\x94");
@@ -5056,7 +5061,7 @@ void synui_render_aimodel(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, pad, 116);
-    syn_show_text(cr, "Sampling");
+    syn_show_text(cr, _("Sampling"));
     set_ink(cr, INK_TITLE, 1.0);
     cairo_move_to(cr, pad + 76, 116);
     syn_show_text(cr, samp);
@@ -5086,7 +5091,7 @@ void synui_render_aimodel(syn_server_t *s)
         syn_show_text(cr, q);
     } else {
         set_ink(cr, INK_DIM, 1.0);
-        syn_show_text(cr, am->typing ? "_" : "search huggingface");
+        syn_show_text(cr, am->typing ? "_" : _("search huggingface"));
     }
 
     /* ── The list ────────────────────────────────────────────────────── */
@@ -5101,7 +5106,7 @@ void synui_render_aimodel(syn_server_t *s)
             set_ink(cr, 0.40, 1.0);
             cairo_move_to(cr, list_x + 6, ry);
             if (slot == 0) {
-                syn_show_text(cr, am->count ? "INSTALLED" : "INSTALLED \xc2\xb7 none");
+                syn_show_text(cr, am->count ? _("INSTALLED") : _("INSTALLED \xc2\xb7 none"));
             } else {
                 char head[128];
                 if (am->search_msg[0])
@@ -5146,17 +5151,17 @@ void synui_render_aimodel(syn_server_t *s)
                 cairo_set_font_size(cr, 10);
                 set_hue(cr, 0.90, 0.45, 0.40, 1.0);
                 cairo_move_to(cr, list_x + list_w - 100, ry);
-                syn_show_text(cr, "delete?");
+                syn_show_text(cr, _("delete?"));
             } else if (i == am->loaded_idx) {
                 cairo_set_font_size(cr, 10);
                 if (am->switching) {
                     set_hue(cr, 0.75, 0.55, 0.35, 1.0);
                     cairo_move_to(cr, list_x + list_w - 100, ry);
-                    syn_show_text(cr, "loading \xe2\x80\xa6");
+                    syn_show_text(cr, _("loading \xe2\x80\xa6"));
                 } else {
                     set_accent(cr, 1.0);
                     cairo_move_to(cr, list_x + list_w - 92, ry);
-                    syn_show_text(cr, "loaded");
+                    syn_show_text(cr, _("loaded"));
                 }
             }
         } else {
@@ -5212,25 +5217,25 @@ void synui_render_aimodel(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 32);
     if (am->typing)
-        syn_show_text(cr, "type to search \xc2\xb7 Enter search \xc2\xb7 Esc cancel");
+        syn_show_text(cr, _("type to search \xc2\xb7 Enter search \xc2\xb7 Esc cancel"));
     else if (am->cat_sel >= 0)
-        syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right quantisation \xc2\xb7 "
-                            "Enter download \xc2\xb7 / search \xc2\xb7 Esc close");
+        syn_show_text(cr, _("Up/Down select \xc2\xb7 Left/Right quantisation \xc2\xb7 "
+                            "Enter download \xc2\xb7 / search \xc2\xb7 Esc close"));
     else if (am->del_armed >= 0)
         /* While a confirmation is up, the only three keys that matter are the
          * three named here. Listing the usual set as well would bury the one
          * that removes several gigabytes among five that do not. */
-        syn_show_text(cr, "Delete again to confirm \xc2\xb7 Esc cancels \xc2\xb7 "
-                            "any move cancels");
+        syn_show_text(cr, _("Delete again to confirm \xc2\xb7 Esc cancels \xc2\xb7 "
+                            "any move cancels"));
     else
-        syn_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 Del delete \xc2\xb7 "
-                            "/ search \xc2\xb7 R rescan \xc2\xb7 Esc close");
+        syn_show_text(cr, _("Up/Down select \xc2\xb7 Enter load \xc2\xb7 Del delete \xc2\xb7 "
+                            "/ search \xc2\xb7 R rescan \xc2\xb7 Esc close"));
     cairo_move_to(cr, 18, ph - 14);
     if (am->cat_sel >= 0)
-        syn_show_text(cr, "downloads run as a system service \xe2\x80\x94 "
-                            "closing this panel does not cancel one");
+        syn_show_text(cr, _("downloads run as a system service \xe2\x80\x94 "
+                            "closing this panel does not cancel one"));
     else
-        syn_show_text(cr, "switching reloads the model \xe2\x80\x94 the AI pauses while it loads");
+        syn_show_text(cr, _("switching reloads the model \xe2\x80\x94 the AI pauses while it loads"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->aimodel_ui.text_buf, s->aimodel_ui.tree, buf);
@@ -5291,7 +5296,7 @@ void synui_render_sound(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "EVENT SOUNDS");
+    syn_show_text(cr, _("EVENT SOUNDS"));
 
     /* The master switch off is the shipped default, not a fault — so it is
      * stated plainly rather than in the warning colour the filters panel uses
@@ -5300,11 +5305,11 @@ void synui_render_sound(syn_server_t *s)
     if (!snd->enabled) {
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "silent \xc2\xb7 Space turns event sounds on");
+        syn_show_text(cr, _("silent \xc2\xb7 Space turns event sounds on"));
     } else {
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 18, 50);
-        syn_show_text(cr, "t plays the selected sound without enabling it");
+        syn_show_text(cr, _("t plays the selected sound without enabling it"));
     }
 
     set_ink(cr, INK_RULE, 0.5);
@@ -5345,24 +5350,24 @@ void synui_render_sound(syn_server_t *s)
         int  picked = 0, missing = 0;
 
         if (i == SOUND_ROW_ENABLED) {
-            label = "Event sounds";
-            snprintf(value, sizeof(value), "%s", snd->enabled ? "on" : "off");
+            label = _("Event sounds");
+            snprintf(value, sizeof(value), "%s", snd->enabled ? "on" : _("off"));
             on = snd->enabled;
         } else if (i == SOUND_ROW_VOLUME) {
-            label = "Volume";
+            label = _("Volume");
             snprintf(value, sizeof(value), "%d%%", snd->volume);
         } else if (i == SOUND_ROW_THEME) {
-            label = "Sound theme";
+            label = _("Sound theme");
             if (sound_theme_installed(snd->theme))
                 snprintf(value, sizeof(value), "%s", snd->theme);
             else
-                snprintf(value, sizeof(value), "%s \xe2\x80\x94 not a sound theme",
+                snprintf(value, sizeof(value), _("%s \xe2\x80\x94 not a sound theme"),
                          snd->theme);
         } else {
             int evt = i - SOUND_ROW_EVENT;
             label = sound_event_label(evt);
             on = snd->on[evt];
-            snprintf(value, sizeof(value), "%s", on ? "on" : "off");
+            snprintf(value, sizeof(value), "%s", on ? "on" : _("off"));
             is_event = 1;
             picked  = snd->sample[evt][0] != '\0';
             missing = !sound_resolved_id(snd, evt, sample, sizeof(sample));
@@ -5413,7 +5418,7 @@ void synui_render_sound(syn_server_t *s)
                 set_ink(cr, INK_DIM, 1.0);
 
             cairo_move_to(cr, 350, ry + 4);
-            syn_show_text(cr, missing ? "not in this theme" : sample);
+            syn_show_text(cr, missing ? _("not in this theme") : sample);
         }
     }
 
@@ -5427,9 +5432,9 @@ void synui_render_sound(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on \xc2\xb7 [ ] pick sound");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on \xc2\xb7 [ ] pick sound"));
     cairo_move_to(cr, 18, ph - 16);
-    syn_show_text(cr, "t play \xc2\xb7 Space all sounds on/off \xc2\xb7 Esc close \xc2\xb7 more: synui-sound --help");
+    syn_show_text(cr, _("t play \xc2\xb7 Space all sounds on/off \xc2\xb7 Esc close \xc2\xb7 more: synui-sound --help"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->sound_ui.text_buf, s->sound_ui.tree, buf);
@@ -5484,7 +5489,7 @@ void synui_render_clock(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, pad, 30);
-    syn_show_text(cr, "DATE & TIME");
+    syn_show_text(cr, _("DATE & TIME"));
 
     char local[128];
     clock_local_string(s, local, sizeof(local));
@@ -5497,7 +5502,7 @@ void synui_render_clock(syn_server_t *s)
     set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, pad, 90);
     char tzline[168];
-    snprintf(tzline, sizeof(tzline), "system zone \xc2\xb7 %s", c->tz);
+    snprintf(tzline, sizeof(tzline), _("system zone \xc2\xb7 %s"), c->tz);
     syn_show_text(cr, tzline);
 
     set_ink(cr, INK_RULE, 0.5);
@@ -5530,7 +5535,7 @@ void synui_render_clock(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, pad, wy);
-    syn_show_text(cr, "WORLD CLOCK");
+    syn_show_text(cr, _("WORLD CLOCK"));
     wy += 22;
     for (int i = 0; i < c->nzones; i++) {
         char zs[64];
@@ -5555,7 +5560,7 @@ void synui_render_clock(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, pad, ph - 18);
-    syn_show_text(cr, "Up/Down select \xc2\xb7 Space toggle \xc2\xb7 c calendar \xc2\xb7 Esc close");
+    syn_show_text(cr, _("Up/Down select \xc2\xb7 Space toggle \xc2\xb7 c calendar \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->clock_ui.text_buf, s->clock_ui.tree, buf);
@@ -5623,11 +5628,12 @@ void synui_render_calendar(syn_server_t *s)
     cairo_begin(cr);
 
     static const char *mon_name[] = {
-        "January","February","March","April","May","June",
-        "July","August","September","October","November","December" };
+        N_("January"), N_("February"), N_("March"),     N_("April"),
+        N_("May"),     N_("June"),     N_("July"),      N_("August"),
+        N_("September"), N_("October"), N_("November"), N_("December") };
 
     char hdr[64];
-    snprintf(hdr, sizeof(hdr), "%s %d", mon_name[cal->mon], cal->year);
+    snprintf(hdr, sizeof(hdr), "%s %d", _(mon_name[cal->mon]), cal->year);
     cairo_set_font_size(cr, 17);
     set_accent(cr, 1.0);
     cairo_text_extents_t ext;
@@ -5746,7 +5752,7 @@ void synui_render_calendar(syn_server_t *s)
         if (cal->loading) {
             set_ink(cr, INK_DIM, 0.9);
             cairo_move_to(cr, 14, ey);
-            syn_show_text(cr, "loading\xe2\x80\xa6");
+            syn_show_text(cr, _("loading\xe2\x80\xa6"));
         } else if (cal->loaded_year != cal->year || cal->loaded_mon != cal->mon) {
             /* Nothing has been asked for this month yet — which is not the same
              * as nothing being on it. */
@@ -5756,12 +5762,12 @@ void synui_render_calendar(syn_server_t *s)
         } else if (total == 0) {
             set_ink(cr, INK_DIM, 0.9);
             cairo_move_to(cr, 14, ey);
-            syn_show_text(cr, "nothing on");
+            syn_show_text(cr, _("nothing on"));
         } else {
             for (int i = 0; i < nd; i++) {
                 char line[128];
                 if (day_ev[i]->all_day)
-                    snprintf(line, sizeof line, "all day  %s", day_ev[i]->summary);
+                    snprintf(line, sizeof line, _("all day  %s"), day_ev[i]->summary);
                 else
                     snprintf(line, sizeof line, "%02d:%02d    %s",
                              day_ev[i]->hour, day_ev[i]->min, day_ev[i]->summary);
@@ -5771,7 +5777,7 @@ void synui_render_calendar(syn_server_t *s)
             }
             if (total > nd) {
                 char more[48];
-                snprintf(more, sizeof more, "+%d more", total - nd);
+                snprintf(more, sizeof more, _("+%d more"), total - nd);
                 set_ink(cr, INK_DIM, 0.9);
                 cairo_move_to(cr, 14, ey + nd * 15);
                 syn_show_text(cr, more);
@@ -5783,7 +5789,7 @@ void synui_render_calendar(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 14, ph - 12);
     syn_show_text(cr,
-        "\xe2\x86\x90\xe2\x86\x92 day \xc2\xb7 PgUp/PgDn month \xc2\xb7 t today \xc2\xb7 Esc");
+        _("\xe2\x86\x90\xe2\x86\x92 day \xc2\xb7 PgUp/PgDn month \xc2\xb7 t today \xc2\xb7 Esc"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->cal_ui.text_buf, s->cal_ui.tree, buf);
@@ -5872,7 +5878,7 @@ void synui_render_ctlpanel(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "CONTROL PANEL");
+    syn_show_text(cr, _("CONTROL PANEL"));
 
     /* The corner button. Its width is discarded here and nowhere else: this
      * title row draws a breadcrumb from the LEFT and nothing right-aligned, so
@@ -5891,7 +5897,7 @@ void synui_render_ctlpanel(syn_server_t *s)
          * category — saying "Appearance" over a list of rows from six of them
          * would be the panel's only outright lie. */
         set_ink(cr, INK_TITLE, 1.0);
-        syn_show_text(cr, "Search");
+        syn_show_text(cr, _("Search"));
     } else {
         set_ink(cr, INK_TITLE, 1.0);
         syn_show_text(cr, ctlpanel_cat_name(cp->cat));
@@ -5918,20 +5924,20 @@ void synui_render_ctlpanel(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, 18, 70);
-    syn_show_text(cr, "CATEGORIES");
+    syn_show_text(cr, _("CATEGORIES"));
     cairo_move_to(cr, CTL_COL_RIGHT, 70);
     if (cp->searching) {
         /* The box IS the column heading while it is open: it sits exactly where
          * "SETTINGS" would, so nothing moves down the pane when you open it. */
-        syn_show_text(cr, "FIND  ");
+        syn_show_text(cr, _("FIND  "));
         set_accent(cr, 1.0);
         cairo_set_font_size(cr, 13);
         char box[80];
         snprintf(box, sizeof(box), "%s_", cp->search);
         syn_show_text(cr, box);
     } else {
-        syn_show_text(cr, cp->cat == CTL_CAT_SHORTCUTS ? "KEYBOARD SHORTCUTS"
-                                                         : "SETTINGS");
+        syn_show_text(cr, cp->cat == CTL_CAT_SHORTCUTS ? _("KEYBOARD SHORTCUTS")
+                                                         : _("SETTINGS"));
     }
 
     /* Divider between the columns */
@@ -6006,7 +6012,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             /* While armed, the row shows what it is waiting for instead of the
              * key it currently has: the old key is about to stop being true,
              * and leaving it there reads as "nothing happened". */
-            syn_show_text(cr, (sel && cp->sc_capturing) ? "Press a key\xe2\x80\xa6"
+            syn_show_text(cr, (sel && cp->sc_capturing) ? _("Press a key\xe2\x80\xa6")
                                                         : sc[idx].combo);
 
             /* +200 rather than the +172 the old narrow column used: the widest
@@ -6026,7 +6032,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             cairo_set_font_size(cr, 11);
             set_ink(cr, INK_DIM, 0.9);
             char more[64];
-            snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+            snprintf(more, sizeof(more), _("%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn"),
                      first + 1,
                      first + CTL_SHORTCUT_ROWS < n ? first + CTL_SHORTCUT_ROWS : n,
                      n);
@@ -6162,8 +6168,8 @@ void synui_render_ctlpanel(syn_server_t *s)
 
             if (value[0]) {
                 /* "on" reads as live, everything else (off/n/a) as inert. */
-                if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0 ||
-                    strcmp(value, "none") == 0)
+                if (strcmp(value, _("off")) == 0 || strcmp(value, "n/a") == 0 ||
+                    strcmp(value, _("none")) == 0)
                     set_ink(cr, INK_DIM, 1.0);
                 else
                     set_accent(cr, 1.0);
@@ -6202,7 +6208,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             cairo_set_font_size(cr, 11);
             set_ink(cr, INK_DIM, 0.9);
             char more[80];
-            snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+            snprintf(more, sizeof(more), _("%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn"),
                      first + 1, first + drawn, nrows);
             cairo_move_to(cr, CTL_COL_RIGHT, CTL_TOP + CTL_ROW_ROWS * CTL_ROW_H + 6);
             syn_show_text(cr, more);
@@ -6212,7 +6218,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             cairo_set_font_size(cr, 13);
             set_ink(cr, INK_DIM, 0.9);
             cairo_move_to(cr, CTL_COL_RIGHT, CTL_TOP);
-            syn_show_text(cr, "No setting matches that.");
+            syn_show_text(cr, _("No setting matches that."));
         }
     }
 
@@ -6247,34 +6253,34 @@ void synui_render_ctlpanel(syn_server_t *s)
      * that reads as a typo. "›" (U+203A), used above, it does have. */
     const char *hint;
     if (cp->searching)
-        hint = "Type to filter \xc2\xb7 Up/Down select \xc2\xb7 Del reset \xc2\xb7 Esc back";
+        hint = _("Type to filter \xc2\xb7 Up/Down select \xc2\xb7 Del reset \xc2\xb7 Esc back");
     else if (cats_focused)
-        hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 / find \xc2\xb7 Esc close";
+        hint = _("Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 / find \xc2\xb7 Esc close");
     else if (cp->cat == CTL_CAT_SHORTCUTS && cp->sc_capturing)
         /* While armed there is exactly one thing to say, and every other hint
          * would be naming a key that is currently being captured rather than
          * obeyed. */
         hint = cp->sc_capture.tap
-             ? "Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for no tap \xc2\xb7 Esc cancels"
-             : "Press the new key for this shortcut \xc2\xb7 Esc cancels";
+             ? _("Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for no tap \xc2\xb7 Esc cancels")
+             : _("Press the new key for this shortcut \xc2\xb7 Esc cancels");
     else if (cp->cat == CTL_CAT_SHORTCUTS)
-        hint = "F2 rebind \xc2\xb7 F3 moves it onto the tap \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back";
+        hint = _("F2 rebind \xc2\xb7 F3 moves it onto the tap \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back");
     else if (ctlpanel_selected_row(s) >= 0 &&
              ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_VALUE)
         /* Left/Right are the value here, so the usual "Left goes back" would be
          * naming a key that does something else entirely. Tab is the way out,
          * and Del is the way back to the default — worth saying on exactly the
          * rows where there is a default to go back to. */
-        hint = "Left/Right adjust \xc2\xb7 Del default \xc2\xb7 / find \xc2\xb7 Tab column \xc2\xb7 Esc back";
+        hint = _("Left/Right adjust \xc2\xb7 Del default \xc2\xb7 / find \xc2\xb7 Tab column \xc2\xb7 Esc back");
     else if (ctlpanel_selected_row(s) >= 0 &&
              ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_CHOICE)
         /* On a choice row Left/Right are the choice, so the usual hint would be
          * naming a key that does something else entirely. Tab is the way out of
          * the column here, and it is worth saying so on the one row where Left
          * is not. */
-        hint = "Left/Right switch \xc2\xb7 Enter details \xc2\xb7 Tab column \xc2\xb7 Esc back";
+        hint = _("Left/Right switch \xc2\xb7 Enter details \xc2\xb7 Tab column \xc2\xb7 Esc back");
     else
-        hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 / find \xc2\xb7 Left or Esc back";
+        hint = _("Up/Down select \xc2\xb7 Enter activate \xc2\xb7 / find \xc2\xb7 Left or Esc back");
 
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
@@ -6356,7 +6362,7 @@ void synui_render_keys(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "KEYBOARD SHORTCUTS");
+    syn_show_text(cr, _("KEYBOARD SHORTCUTS"));
 
     /* The count, right-aligned against the title. It is the only thing that
      * says a filter is doing something when the query matches nearly all of
@@ -6396,20 +6402,20 @@ void synui_render_keys(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         set_accent(cr, 1.0);
         cairo_move_to(cr, 18, 70);
-        syn_show_text(cr, "PRESS THE NEW KEY  ");
+        syn_show_text(cr, _("PRESS THE NEW KEY  "));
 
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_STRONG, 1.0);
         char safe[sizeof(sc->desc)];
         syn_utf8_copy(safe, sizeof(safe), sc->desc);
         char prompt[sizeof(safe) + 32];
-        snprintf(prompt, sizeof(prompt), "for %s  \xc2\xb7  Esc cancels", safe);
+        snprintf(prompt, sizeof(prompt), _("for %s  \xc2\xb7  Esc cancels"), safe);
         syn_show_text(cr, prompt);
     } else {
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, 18, 70);
-        syn_show_text(cr, "FIND  ");
+        syn_show_text(cr, _("FIND  "));
 
         cairo_set_font_size(cr, 13);
         if (k->query_len > 0) {
@@ -6422,7 +6428,7 @@ void synui_render_keys(syn_server_t *s)
             /* The three things the query now answers: a chord, a description,
              * an application name — and anything at all, as the command row at
              * the bottom of the list. */
-            syn_show_text(cr, "_  a key, what it does, an app, or a command");
+            syn_show_text(cr, _("_  a key, what it does, an app, or a command"));
         }
     }
 
@@ -6478,7 +6484,7 @@ void synui_render_keys(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, KEYS_COMBO_X, KEYS_TOP);
-        syn_show_text(cr, "No shortcut matches that.");
+        syn_show_text(cr, _("No shortcut matches that."));
     }
 
     /* The last rebind's outcome, where the scroll position would go. It WINS
@@ -6497,7 +6503,7 @@ void synui_render_keys(syn_server_t *s)
         cairo_set_font_size(cr, 11);
         set_ink(cr, INK_DIM, 0.9);
         char more[64];
-        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+        snprintf(more, sizeof(more), _("%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn"),
                  first + 1, first + drawn, k->n_view);
         cairo_move_to(cr, KEYS_COMBO_X, KEYS_TOP + KEYS_ROWS * KEYS_ROW_H + 6);
         syn_show_text(cr, more);
@@ -6515,9 +6521,9 @@ void synui_render_keys(syn_server_t *s)
      * chord to press one. */
     const char *foot;
     if (k->capturing && k->all[k->capture_all].tap)
-        foot = "Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for none \xc2\xb7 Esc cancels";
+        foot = _("Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for none \xc2\xb7 Esc cancels");
     else if (k->capturing)
-        foot = "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels";
+        foot = _("Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels");
     else
         /* Delete earns its place in the line: it is the one key here that
          * REMOVES something, and a destructive key nobody is told about is
@@ -6533,7 +6539,7 @@ void synui_render_keys(syn_server_t *s)
          * here — the footer is drawn with syn_show_text() and would simply run
          * off the panel, which is why the "type a command" half of the news is
          * in the FIND placeholder instead, where there is room for it. */
-        foot = "Filter \xc2\xb7 Enter runs \xc2\xb7 F2 sets a key \xc2\xb7 Del frees it \xc2\xb7 F3 tap \xc2\xb7 Ctrl+Shift+R resets";
+        foot = _("Filter \xc2\xb7 Enter runs \xc2\xb7 F2 sets a key \xc2\xb7 Del frees it \xc2\xb7 F3 tap \xc2\xb7 Ctrl+Shift+R resets");
     syn_show_text(cr, foot);
 
     cairo_destroy(cr);
@@ -6553,26 +6559,26 @@ void synui_render_keys(syn_server_t *s)
 static const char *thememgr_blurb(syn_theme_t t)
 {
     switch (t) {
-    case SYN_THEME_SYNAPSE:    return "The neon night-drive default \xc2\xb7 apps dark";
-    case SYN_THEME_DARK:       return "Flat modern dark \xc2\xb7 apps + Dolphin + Firefox dark";
-    case SYN_THEME_WINXP:      return "Luna blue, gradient captions \xc2\xb7 apps beige";
-    case SYN_THEME_WIN95:      return "Silver 3D bevels, navy titles \xc2\xb7 apps grey";
-    case SYN_THEME_CATPPUCCIN: return "Mocha \xc2\xb7 mauve on soft black \xc2\xb7 glassy";
-    case SYN_THEME_GRUVBOX:    return "Retro warm \xc2\xb7 orange on brown \xc2\xb7 glassy";
-    case SYN_THEME_TOKYONIGHT: return "Storm \xc2\xb7 blue + purple on navy \xc2\xb7 glassy";
-    case SYN_THEME_NORD:       return "Arctic \xc2\xb7 frost blue on slate \xc2\xb7 glassy";
-    case SYN_THEME_DRACULA:    return "Purple + pink on charcoal \xc2\xb7 glassy";
-    case SYN_THEME_BUBBLEGUM:  return "Pastel pink, hot-pink titles \xc2\xb7 apps light";
-    case SYN_THEME_MACOS26:    return "Liquid glass \xc2\xb7 rounded, translucent \xc2\xb7 apps light";
-    case SYN_THEME_AQUA:       return "Pinstripes + traffic lights \xc2\xb7 apps light grey";
-    case SYN_THEME_PLATINUM:   return "Racing stripes, square boxes \xc2\xb7 apps grey";
+    case SYN_THEME_SYNAPSE:    return _("The neon night-drive default \xc2\xb7 apps dark");
+    case SYN_THEME_DARK:       return _("Flat modern dark \xc2\xb7 apps + Dolphin + Firefox dark");
+    case SYN_THEME_WINXP:      return _("Luna blue, gradient captions \xc2\xb7 apps beige");
+    case SYN_THEME_WIN95:      return _("Silver 3D bevels, navy titles \xc2\xb7 apps grey");
+    case SYN_THEME_CATPPUCCIN: return _("Mocha \xc2\xb7 mauve on soft black \xc2\xb7 glassy");
+    case SYN_THEME_GRUVBOX:    return _("Retro warm \xc2\xb7 orange on brown \xc2\xb7 glassy");
+    case SYN_THEME_TOKYONIGHT: return _("Storm \xc2\xb7 blue + purple on navy \xc2\xb7 glassy");
+    case SYN_THEME_NORD:       return _("Arctic \xc2\xb7 frost blue on slate \xc2\xb7 glassy");
+    case SYN_THEME_DRACULA:    return _("Purple + pink on charcoal \xc2\xb7 glassy");
+    case SYN_THEME_BUBBLEGUM:  return _("Pastel pink, hot-pink titles \xc2\xb7 apps light");
+    case SYN_THEME_MACOS26:    return _("Liquid glass \xc2\xb7 rounded, translucent \xc2\xb7 apps light");
+    case SYN_THEME_AQUA:       return _("Pinstripes + traffic lights \xc2\xb7 apps light grey");
+    case SYN_THEME_PLATINUM:   return _("Racing stripes, square boxes \xc2\xb7 apps grey");
     /* The two that had none. A blank line under a name is not a neutral
      * default here: every other row says what the pick DOES to the apps,
      * and the two rows at the bottom of the list — the house theme and its
      * light twin — were the two where that question actually has two
      * answers. */
-    case SYN_THEME_PRISM:      return "House glass \xc2\xb7 accent off the wallpaper \xc2\xb7 apps dark";
-    case SYN_THEME_PRISM_LIGHT: return "The same glass in daylight \xc2\xb7 apps + Files light";
+    case SYN_THEME_PRISM:      return _("House glass \xc2\xb7 accent off the wallpaper \xc2\xb7 apps dark");
+    case SYN_THEME_PRISM_LIGHT: return _("The same glass in daylight \xc2\xb7 apps + Files light");
     default:                   return "";
     }
 }
@@ -6643,7 +6649,7 @@ void synui_render_thememgr(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, THM_PAD, 34);
-    syn_show_text(cr, "THEME MANAGER");
+    syn_show_text(cr, _("THEME MANAGER"));
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -6748,9 +6754,9 @@ void synui_render_thememgr(syn_server_t *s)
 
         cairo_set_font_size(cr, 12);
         char lbl[48];
-        if (on) snprintf(lbl, sizeof lbl, "Transparency  %d%%",
+        if (on) snprintf(lbl, sizeof lbl, _("Transparency  %d%%"),
                          (int)(s->config.active_opacity * 100 + 0.5f));
-        else    snprintf(lbl, sizeof lbl, "Transparency  off");
+        else    snprintf(lbl, sizeof lbl, _("Transparency  off"));
         if (on) set_accent(cr, 0.95);
         else    set_ink(cr, INK_LABEL, 0.9);
         cairo_move_to(cr, tx0, sy - 8);
@@ -6780,7 +6786,7 @@ void synui_render_thememgr(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, THM_PAD, ph - 14);
     syn_show_text(cr,
-        "Up/Down theme \xc2\xb7 \xe2\x86\x90/\xe2\x86\x92 opacity \xc2\xb7 T transparency \xc2\xb7 Enter apply \xc2\xb7 Esc");
+        _("Up/Down theme \xc2\xb7 \xe2\x86\x90/\xe2\x86\x92 opacity \xc2\xb7 T transparency \xc2\xb7 Enter apply \xc2\xb7 Esc"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->thememgr_ui.text_buf, s->thememgr_ui.tree, buf);
@@ -6847,7 +6853,7 @@ void synui_render_clipboard(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, CLIP_PAD, 30);
-    syn_show_text(cr, "CLIPBOARD");
+    syn_show_text(cr, _("CLIPBOARD"));
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -6864,7 +6870,7 @@ void synui_render_clipboard(syn_server_t *s)
         cairo_set_font_size(cr, 13);
         set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, CLIP_PAD, CLIP_TOP);
-        syn_show_text(cr, "Nothing copied yet");
+        syn_show_text(cr, _("Nothing copied yet"));
     }
 
     for (int i = 0; i < CLIP_ROWS && first + i < c->count; i++) {
@@ -6910,7 +6916,7 @@ void synui_render_clipboard(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, CLIP_PAD, ph - 14);
-    syn_show_text(cr, "Enter copy \xc2\xb7 Del clear all \xc2\xb7 Esc close");
+    syn_show_text(cr, _("Enter copy \xc2\xb7 Del clear all \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->clip_ui.text_buf, s->clip_ui.tree, buf);
@@ -7251,8 +7257,8 @@ void synui_render_notifs(syn_server_t *s)
  * only thing worth shouting about; the rest is context. */
 static const char *bt_dev_state(const syn_bt_dev_t *d, double rgb[3])
 {
-    if (d->connected) { rgb[0] = 0.00; rgb[1] = 0.85; rgb[2] = 0.75; return "connected"; }
-    if (d->paired)    { rgb[0] = 0.60; rgb[1] = 0.60; rgb[2] = 0.70; return "paired"; }
+    if (d->connected) { rgb[0] = 0.00; rgb[1] = 0.85; rgb[2] = 0.75; return _("connected"); }
+    if (d->paired)    { rgb[0] = 0.60; rgb[1] = 0.60; rgb[2] = 0.70; return _("paired"); }
     rgb[0] = 0.45; rgb[1] = 0.45; rgb[2] = 0.55;
     return "";
 }
@@ -7312,7 +7318,7 @@ void synui_render_bt(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, BT_PAD, 30);
-    syn_show_text(cr, "BLUETOOTH");
+    syn_show_text(cr, _("BLUETOOTH"));
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -7325,17 +7331,17 @@ void synui_render_bt(syn_server_t *s)
     if (!b->has_adapter) {
         set_hue(cr, 0.85, 0.45, 0.45, 1.0);
         cairo_move_to(cr, BT_PAD, 70);
-        syn_show_text(cr, "No Bluetooth adapter found");
+        syn_show_text(cr, _("No Bluetooth adapter found"));
     } else {
         cairo_set_source_rgba(cr, b->powered ? 0.0 : 0.45, b->powered ? 0.85 : 0.45,
                               b->powered ? 0.75 : 0.55, 1.0);
         cairo_move_to(cr, BT_PAD, 70);
-        syn_show_text(cr, b->powered ? "Radio on" : "Radio off");
+        syn_show_text(cr, b->powered ? _("Radio on") : _("Radio off"));
 
         if (b->discovering) {
             set_accent(cr, 1.0);
             cairo_move_to(cr, BT_PAD + 110, 70);
-            syn_show_text(cr, "\xc2\xb7 scanning\xe2\x80\xa6");
+            syn_show_text(cr, _("\xc2\xb7 scanning\xe2\x80\xa6"));
         }
     }
 
@@ -7345,7 +7351,7 @@ void synui_render_bt(syn_server_t *s)
         cairo_set_font_size(cr, 14);
         set_ink(cr, INK_STRONG, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP + 6);
-        syn_show_text(cr, b->ask_dev[0] ? b->ask_dev : "A device");
+        syn_show_text(cr, b->ask_dev[0] ? b->ask_dev : _("A device"));
 
         char l2[128];
         cairo_set_font_size(cr, 13);
@@ -7353,16 +7359,16 @@ void synui_render_bt(syn_server_t *s)
         cairo_move_to(cr, BT_PAD, BT_TOP + 32);
 
         if (b->ask_kind == BT_ASK_CONFIRM) {
-            snprintf(l2, sizeof(l2), "Passkey %06u \xc2\xb7 does it match the device?",
+            snprintf(l2, sizeof(l2), _("Passkey %06u \xc2\xb7 does it match the device?"),
                      b->ask_passkey);
         } else if (b->ask_kind == BT_ASK_AUTHORIZE) {
-            snprintf(l2, sizeof(l2), "wants to connect%s",
+            snprintf(l2, sizeof(l2), _("wants to connect%s"),
                      b->ask_detail[0] ? " (service)" : "");
         } else if (b->ask_passkey) {
-            snprintf(l2, sizeof(l2), "Type %06u on the device, then Enter",
+            snprintf(l2, sizeof(l2), _("Type %06u on the device, then Enter"),
                      b->ask_passkey);
         } else {
-            snprintf(l2, sizeof(l2), "Enter PIN %s on the device", b->ask_detail);
+            snprintf(l2, sizeof(l2), _("Enter PIN %s on the device"), b->ask_detail);
         }
         draw_clipped(cr, BT_PAD, BT_TOP + 32, pw - 2 * BT_PAD, l2);
 
@@ -7370,8 +7376,8 @@ void synui_render_bt(syn_server_t *s)
         set_accent(cr, 0.9);
         cairo_move_to(cr, BT_PAD, ph - 14);
         syn_show_text(cr, b->ask_kind == BT_ASK_DISPLAY
-                        ? "Any key to dismiss"
-                        : "y accept \xc2\xb7 n reject");
+                        ? _("Any key to dismiss")
+                        : _("y accept \xc2\xb7 n reject"));
         cairo_destroy(cr);
         set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);
         return;
@@ -7384,15 +7390,15 @@ void synui_render_bt(syn_server_t *s)
         set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP);
         if (!b->powered) {
-            syn_show_text(cr, "Radio is off \xc2\xb7 press o");
+            syn_show_text(cr, _("Radio is off \xc2\xb7 press o"));
         } else if (b->count > 0) {
             /* Devices are there, just filtered: say so, or an empty panel next
              * to a phone that is plainly in range reads as broken. */
             char msg[64];
-            snprintf(msg, sizeof(msg), "%d hidden \xc2\xb7 press a to show", b->count);
+            snprintf(msg, sizeof(msg), _("%d hidden \xc2\xb7 press a to show"), b->count);
             syn_show_text(cr, msg);
         } else {
-            syn_show_text(cr, "No devices \xc2\xb7 press s to scan");
+            syn_show_text(cr, _("No devices \xc2\xb7 press s to scan"));
         }
     }
 
@@ -7429,7 +7435,7 @@ void synui_render_bt(syn_server_t *s)
             cairo_set_font_size(cr, 11);
             set_ink(cr, INK_DIM, 1.0);
             cairo_move_to(cr, 372, ry);
-            syn_show_text(cr, "trusted");
+            syn_show_text(cr, _("trusted"));
         }
 
         char right[32] = {0};
@@ -7462,10 +7468,10 @@ void synui_render_bt(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, BT_PAD, ph - 14);
     syn_show_text(cr, b->show_all
-        ? "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
-          "s scan \xc2\xb7 o radio \xc2\xb7 a fewer \xc2\xb7 Esc"
-        : "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
-          "s scan \xc2\xb7 o radio \xc2\xb7 a all \xc2\xb7 Esc");
+        ? _("Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
+          "s scan \xc2\xb7 o radio \xc2\xb7 a fewer \xc2\xb7 Esc")
+        : _("Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
+          "s scan \xc2\xb7 o radio \xc2\xb7 a all \xc2\xb7 Esc"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);
@@ -7624,13 +7630,13 @@ void synui_render_taskmgr(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "TASK MANAGER");
+    syn_show_text(cr, _("TASK MANAGER"));
 
     /* The corner button, and the room it takes from the summary beside it. */
     int close_pad = panel_close_draw(s, cr, SYN_PDRAG_TASKMGR, pw, 44);
 
     char sub[96];
-    snprintf(sub, sizeof(sub), "%d procs \xc2\xb7 sort: %s%s",
+    snprintf(sub, sizeof(sub), _("%d procs \xc2\xb7 sort: %s%s"),
              t->n, taskmgr_sort_label(t->sort), t->own_only ? " \xc2\xb7 mine" : "");
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 1.0);
@@ -7641,9 +7647,9 @@ void synui_render_taskmgr(syn_server_t *s)
     char val[96];
 
     double cpu_frac = t->cpu_pct / 100.0;
-    snprintf(val, sizeof(val), "%.0f%%  (%ld cores)", t->cpu_pct,
+    snprintf(val, sizeof(val), _("%.0f%%  (%ld cores)"), t->cpu_pct,
              sysconf(_SC_NPROCESSORS_ONLN));
-    y = draw_meter(cr, y, "CPU", cpu_frac, val);
+    y = draw_meter(cr, y, _("CPU"), cpu_frac, val);
 
     double mem_frac = t->mem_total_kb
                         ? (double)t->mem_used_kb / (double)t->mem_total_kb : 0;
@@ -7654,10 +7660,10 @@ void synui_render_taskmgr(syn_server_t *s)
         size_t used = strlen(val);
         snprintf(val + used, sizeof(val) - used, "  \xc2\xb7 swap %s", sw);
     }
-    y = draw_meter(cr, y, "RAM", mem_frac, val);
+    y = draw_meter(cr, y, _("RAM"), mem_frac, val);
 
     if (!s->gpu_n) {
-        y = draw_meter(cr, y, "GPU", -1.0, "no GPU telemetry available");
+        y = draw_meter(cr, y, _("GPU"), -1.0, _("no GPU telemetry available"));
     } else {
         for (int i = 0; i < s->gpu_n; i++) {
             syn_gpu_t *g = &s->gpu[i];
@@ -7665,7 +7671,7 @@ void synui_render_taskmgr(syn_server_t *s)
             if (g->util >= 0) snprintf(val, sizeof(val), "%d%%  \xc2\xb7 %s",
                                        g->util, g->name);
             else              snprintf(val, sizeof(val), "n/a  \xc2\xb7 %s", g->name);
-            y = draw_meter(cr, y, "GPU", g->util >= 0 ? g->util / 100.0 : -1.0,
+            y = draw_meter(cr, y, _("GPU"), g->util >= 0 ? g->util / 100.0 : -1.0,
                            val);
 
             double vf = g->vram_total_kb
@@ -7682,7 +7688,7 @@ void synui_render_taskmgr(syn_server_t *s)
             if (g->power_w >= 0)
                 snprintf(val + used, sizeof(val) - used, "  %dW", g->power_w);
 
-            y = draw_meter(cr, y, "VRAM", vf, val);
+            y = draw_meter(cr, y, _("VRAM"), vf, val);
         }
     }
 
@@ -7696,12 +7702,12 @@ void synui_render_taskmgr(syn_server_t *s)
     cairo_set_font_size(cr, 11);
     set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, TM_COL_PID, table_top - 8);
-    syn_show_text(cr, "PID");
+    syn_show_text(cr, _("PID"));
     cairo_move_to(cr, TM_COL_NAME, table_top - 8);
-    syn_show_text(cr, "NAME");
+    syn_show_text(cr, _("NAME"));
     draw_right(cr, TM_COL_CPU,  table_top - 8, "CPU%");
-    draw_right(cr, TM_COL_MEM,  table_top - 8, "MEM");
-    draw_right(cr, TM_COL_VRAM, table_top - 8, "VRAM");
+    draw_right(cr, TM_COL_MEM,  table_top - 8, _("MEM"));
+    draw_right(cr, TM_COL_VRAM, table_top - 8, _("VRAM"));
 
     for (int row = 0; row < TASKMGR_ROWS; row++) {
         int i = t->scroll + row;
@@ -7809,8 +7815,8 @@ void synui_render_taskmgr(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
-    syn_show_text(cr, "j/k move \xc2\xb7 right-click a row \xc2\xb7 c/m/g/p sort "
-                        "\xc2\xb7 u mine \xc2\xb7 x term \xc2\xb7 X kill \xc2\xb7 Esc close");
+    syn_show_text(cr, _("j/k move \xc2\xb7 right-click a row \xc2\xb7 c/m/g/p sort "
+                        "\xc2\xb7 u mine \xc2\xb7 x term \xc2\xb7 X kill \xc2\xb7 Esc close"));
 
     /* ---- the right-click menu ----
      *
@@ -7975,7 +7981,7 @@ void synui_render_news(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    syn_show_text(cr, "NEWS");
+    syn_show_text(cr, _("NEWS"));
 
     /* Right of the title: what this list currently *is* — which source, how
      * fresh, and whether a fetch is in flight. */
@@ -7983,11 +7989,11 @@ void synui_render_news(syn_server_t *s)
     char age[16];
     news_age(n->updated, age, sizeof(age));
     snprintf(sub, sizeof(sub), "%s \xc2\xb7 %s \xc2\xb7 %d/%d \xc2\xb7 %s",
-             n->filter < 0 ? "all sources" : n->sources[n->filter].name,
-             n->sort == NEWS_SORT_TIME ? "by time" : "by source",
+             n->filter < 0 ? _("all sources") : n->sources[n->filter].name,
+             n->sort == NEWS_SORT_TIME ? _("by time") : _("by source"),
              n->n_view, n->n,
              n->fetching ? "refreshing\xe2\x80\xa6"
-                         : (n->updated ? age : "never fetched"));
+                         : (n->updated ? age : _("never fetched")));
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 1.0);
     draw_right(cr, pw - 18, 30, sub);
@@ -8014,7 +8020,7 @@ void synui_render_news(syn_server_t *s)
             cairo_set_font_size(cr, 12);
             set_accent(cr, 0.9);
             char q[80];
-            snprintf(q, sizeof(q), "filter: /%s", n->query);
+            snprintf(q, sizeof(q), _("filter: /%s"), n->query);
             cairo_move_to(cr, 18, 66);
             syn_show_text(cr, q);
         }
@@ -8027,10 +8033,10 @@ void synui_render_news(syn_server_t *s)
         set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 18, NW_TOP + 24);
         syn_show_text(cr,
-            n->fetching  ? "fetching feeds\xe2\x80\xa6"
-          : n->n         ? "nothing matches this filter"
-          : n->failed    ? "no feeds answered \xe2\x80\x94 check the network, then press r"
-                         : "no items yet \xe2\x80\x94 press r to fetch");
+            n->fetching  ? _("fetching feeds\xe2\x80\xa6")
+          : n->n         ? _("nothing matches this filter")
+          : n->failed    ? _("no feeds answered \xe2\x80\x94 check the network, then press r")
+                         : _("no items yet \xe2\x80\x94 press r to fetch"));
     }
 
     for (int r = 0; r < NEWS_ROWS; r++) {
@@ -8116,10 +8122,10 @@ void synui_render_news(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr, n->searching
-        ? "type to filter \xc2\xb7 Enter keep \xc2\xb7 Esc clear"
-        : "j/k move \xc2\xb7 Enter open \xc2\xb7 o background \xc2\xb7 c comments \xc2\xb7 "
+        ? _("type to filter \xc2\xb7 Enter keep \xc2\xb7 Esc clear")
+        : _("j/k move \xc2\xb7 Enter open \xc2\xb7 o background \xc2\xb7 c comments \xc2\xb7 "
           "y copy \xc2\xb7 Tab source \xc2\xb7 / search \xc2\xb7 s sort \xc2\xb7 "
-          "m read \xc2\xb7 r refresh \xc2\xb7 Esc close");
+          "m read \xc2\xb7 r refresh \xc2\xb7 Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->news_ui.text_buf, s->news_ui.tree, buf);
@@ -8143,7 +8149,7 @@ static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
 {
     static char buf[64];
     static const char *const edge_word[] =
-        { "Bottom", "Top", "Left", "Right" };
+        { N_("Bottom"), N_("Top"), N_("Left"), N_("Right") };
 
     /* The cell rows print the shared word dock_slot_label() picks, with its
      * first letter raised to match the Title Case every other row is in. One
@@ -8152,20 +8158,25 @@ static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
     dock_cell_t cell = DOCK_CELL_N;
     const char *what = NULL;
     switch (a) {
-    case SYN_DOCKACT_CLOCK_POS: cell = DOCK_CELL_CLOCK; what = "Clock";  break;
-    case SYN_DOCKACT_APPS_POS:  cell = DOCK_CELL_APPS;  what = "Apps";   break;
-    case SYN_DOCKACT_POWER_POS: cell = DOCK_CELL_POWER; what = "Power";  break;
+    case SYN_DOCKACT_CLOCK_POS: cell = DOCK_CELL_CLOCK; what = _("Clock");  break;
+    case SYN_DOCKACT_APPS_POS:  cell = DOCK_CELL_APPS;  what = _("Apps");   break;
+    case SYN_DOCKACT_POWER_POS: cell = DOCK_CELL_POWER; what = _("Power");  break;
     case SYN_DOCKACT_EDGE:
-        snprintf(buf, sizeof(buf), "Dock Edge: %s",
-                 edge_word[s->config.dock_edge % 4]);
+        snprintf(buf, sizeof(buf), _("Dock Edge: %s"),
+                 _(edge_word[s->config.dock_edge % 4]));
         return buf;
     default: break;
     }
     if (what) {
         char v[32];
         snprintf(v, sizeof(v), "%s", dock_slot_label(s, cell));
+        /* ⚠ ASCII on purpose, and safe on a translated word: a UTF-8 lead byte
+         * is 0xC0 or above, which is outside 'a'..'z' whether char is signed or
+         * unsigned, so this skips rather than cutting the first character in
+         * half. A locale whose word starts multi-byte simply keeps its own
+         * casing, which is right for the ones that have no case at all. */
         if (v[0] >= 'a' && v[0] <= 'z') v[0] = (char)(v[0] - 'a' + 'A');
-        snprintf(buf, sizeof(buf), "%s At: %s", what, v);
+        snprintf(buf, sizeof(buf), _("%s At: %s"), what, v);
         return buf;
     }
 
@@ -8177,32 +8188,32 @@ static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
      * the application's fault, which is exactly what a silent no-op looks like
      * from outside. */
     case SYN_DOCKACT_PIN:
-        return dock_pin_room(s) ? "Pin to Dock"
+        return dock_pin_room(s) ? _("Pin to Dock")
                                 : "Pin to Dock — the dock is full";
-    case SYN_DOCKACT_UNPIN:  return "Unpin from Dock";
-    case SYN_DOCKACT_OPEN:   return "Open";
-    case SYN_DOCKACT_NEWWIN:   return "New Window";
-    case SYN_DOCKACT_CLOSEWIN: return "Close Window";
-    case SYN_DOCKACT_QUIT:     return "Quit All Windows";
+    case SYN_DOCKACT_UNPIN:  return _("Unpin from Dock");
+    case SYN_DOCKACT_OPEN:   return _("Open");
+    case SYN_DOCKACT_NEWWIN:   return _("New Window");
+    case SYN_DOCKACT_CLOSEWIN: return _("Close Window");
+    case SYN_DOCKACT_QUIT:     return _("Quit All Windows");
     /* Named for what they DO, not for the flag they set — "Dock above windows"
      * checked and unchecked says which way round it is, where "Windows cover the
      * dock" checked would be a double negative to read past. */
-    case SYN_DOCKACT_AUTOHIDE: return "Auto-hide Dock";
-    case SYN_DOCKACT_ONTOP:    return "Dock Above Windows";
-    case SYN_DOCKACT_MAGNIFY:  return "Magnify Icons";
-    case SYN_DOCKACT_CLOCK:    return "Show Clock";
-    case SYN_DOCKACT_CLOCK_ANALOG: return "Analog Clock Face";
-    case SYN_DOCKACT_APPS:     return "Show All Apps Button";
-    case SYN_DOCKACT_POWER:    return "Show Power Button";
-    case SYN_DOCKACT_SETTINGS: return "Dock Settings…";
+    case SYN_DOCKACT_AUTOHIDE: return _("Auto-hide Dock");
+    case SYN_DOCKACT_ONTOP:    return _("Dock Above Windows");
+    case SYN_DOCKACT_MAGNIFY:  return _("Magnify Icons");
+    case SYN_DOCKACT_CLOCK:    return _("Show Clock");
+    case SYN_DOCKACT_CLOCK_ANALOG: return _("Analog Clock Face");
+    case SYN_DOCKACT_APPS:     return _("Show All Apps Button");
+    case SYN_DOCKACT_POWER:    return _("Show Power Button");
+    case SYN_DOCKACT_SETTINGS: return _("Dock Settings…");
     /* The power button's own menu. "Shut Down" and "Restart" rather than
      * poweroff/reboot: those are the words on every other desktop's menu, and
      * this is not the place to be technically correct at the user's expense. */
-    case SYN_DOCKACT_LOCK:     return "Lock Screen";
-    case SYN_DOCKACT_LOGOUT:   return "Log Out";
-    case SYN_DOCKACT_SUSPEND:  return "Suspend";
-    case SYN_DOCKACT_REBOOT:   return "Restart";
-    case SYN_DOCKACT_POWEROFF: return "Shut Down";
+    case SYN_DOCKACT_LOCK:     return _("Lock Screen");
+    case SYN_DOCKACT_LOGOUT:   return _("Log Out");
+    case SYN_DOCKACT_SUSPEND:  return _("Suspend");
+    case SYN_DOCKACT_REBOOT:   return _("Restart");
+    case SYN_DOCKACT_POWEROFF: return _("Shut Down");
     case SYN_DOCKACT_SEP:      return "";
     /* Handled above, off the live config — listed so -Wswitch keeps covering
      * this table when the next row is added. */
@@ -8825,7 +8836,7 @@ static void alttab_where(syn_server_t *s, syn_view_t *v, bool longform,
         snprintf(ws, sizeof ws, longform ? "Desktop %d" : "D%d",
                  v->workspace->index + 1);
     if (v->minimized)
-        snprintf(mn, sizeof mn, "%s", longform ? "minimized" : "MIN");
+        snprintf(mn, sizeof mn, "%s", longform ? _("minimized") : _("MIN"));
 
     snprintf(out, n, "%s%s%s", ws,
              (ws[0] && mn[0]) ? (longform ? ", " : " ") : "", mn);
@@ -8930,7 +8941,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, ATB_PAD, 30);
-    syn_show_text(cr, "WINDOWS");
+    syn_show_text(cr, _("WINDOWS"));
 
     if (n > page) {
         char count[48];
@@ -9087,7 +9098,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
         snprintf(fbuf + fl, sizeof(fbuf) - fl, "  \xc2\xb7  %s", fwhere);
     }
 
-    const char *hint = "Alt+Tab next \xc2\xb7 Alt+Shift+Tab back";
+    const char *hint = _("Alt+Tab next \xc2\xb7 Alt+Shift+Tab back");
     cairo_set_font_size(cr, 12);
     cairo_text_extents_t hext;
     syn_text_extents(cr, hint, &hext);
@@ -9204,12 +9215,14 @@ void synui_render_overview(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, OVERVIEW_MARGIN, OVERVIEW_MARGIN + 4);
-    syn_show_text(cr, "MISSION CONTROL");
+    syn_show_text(cr, _("MISSION CONTROL"));
 
     {
         char head[96];
-        snprintf(head, sizeof(head), "Desktop %d \xc2\xb7 %d window%s",
-                 s->active_workspace + 1, n, n == 1 ? "" : "s");
+        snprintf(head, sizeof(head),
+                 P_("Desktop %d \xc2\xb7 %d window",
+                    "Desktop %d \xc2\xb7 %d windows", n),
+                 s->active_workspace + 1, n);
         cairo_set_font_size(cr, 12);
         set_ink(cr, INK_DIM, 0.9);
         draw_right(cr, ob.width - OVERVIEW_MARGIN, OVERVIEW_MARGIN + 4, head);
@@ -9317,10 +9330,10 @@ void synui_render_overview(syn_server_t *s)
          * so anything drawn in the tile area is behind the client's picture. */
         if (v->minimized) {
             cairo_text_extents_t wext;
-            syn_text_extents(cr, "MIN", &wext);
+            syn_text_extents(cr, _("MIN"), &wext);
             /* own plate — the label row sits on the tile, see below. */
             cairo_set_source_rgba(cr, 0.55, 0.58, 0.70, 1.0);
-            draw_right(cr, lr, lry, "MIN");
+            draw_right(cr, lr, lry, _("MIN"));
             lr -= wext.width + 8;
         }
 
@@ -9344,7 +9357,7 @@ void synui_render_overview(syn_server_t *s)
     if (n == 0) {
         cairo_set_font_size(cr, 14);
         set_ink(cr, INK_DIM, 0.9);
-        const char *msg = "Nothing open on this desktop.";
+        const char *msg = _("Nothing open on this desktop.");
         cairo_text_extents_t e;
         syn_text_extents(cr, msg, &e);
         cairo_move_to(cr, (ob.width - e.width) / 2.0, ob.height / 2.0);
@@ -9399,11 +9412,11 @@ void synui_render_overview(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, OVERVIEW_MARGIN, ob.height - OVERVIEW_STRIP_H - 14);
     syn_show_text(cr,
-        "Arrows or click pick a window \xc2\xb7 Enter opens it \xc2\xb7 "
+        _("Arrows or click pick a window \xc2\xb7 Enter opens it \xc2\xb7 "
         /* The literal has to BREAK after the en dash: "\x939" is a three-digit
          * hex escape, not "\x93" followed by a 9, so the unsplit form is a
          * compile error rather than a stray glyph. */
-        "Del closes it \xc2\xb7 1\xe2\x80\x93" "9 switch desktop \xc2\xb7 Esc close");
+        "Del closes it \xc2\xb7 1\xe2\x80\x93" "9 switch desktop \xc2\xb7 Esc close"));
 
     overlay_surface_pop(&saved_ink);
     cairo_destroy(cr);

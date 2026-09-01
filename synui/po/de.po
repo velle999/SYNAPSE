@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 11:26-0500\n"
+"POT-Creation-Date: 2026-09-01 15:05-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -805,7 +805,7 @@ msgstr ""
 msgid "Date & time"
 msgstr "Datum und Uhrzeit"
 
-#: src/ctlpanel.c:898
+#: src/ctlpanel.c:898 src/render.c:8161
 msgid "Clock"
 msgstr "Uhr"
 
@@ -1113,7 +1113,7 @@ msgstr ""
 "Super+Umschalt+M überall. Verbirgt Einblendungen und schaltet den Ton stumm; "
 "kritische Warnungen kommen trotzdem durch"
 
-#: src/ctlpanel.c:1145
+#: src/ctlpanel.c:1145 src/render.c:5353
 msgid "Event sounds"
 msgstr "Ereignistöne"
 
@@ -1208,7 +1208,7 @@ msgstr ""
 msgid "Power saving"
 msgstr "Energiesparen"
 
-#: src/ctlpanel.c:1205
+#: src/ctlpanel.c:1205 src/render.c:8163
 msgid "Power"
 msgstr "Energie"
 
@@ -1404,6 +1404,53 @@ msgstr "Minimum"
 msgid "maximum"
 msgstr "Maximum"
 
+#: src/dock.c:3418
+msgid "top"
+msgstr "oben"
+
+#: src/dock.c:3418
+msgid "left"
+msgstr "links"
+
+#: src/dock.c:3419
+msgid "centre"
+msgstr "mittig"
+
+#: src/dock.c:3420 src/dock.c:3423
+msgid "bottom"
+msgstr "unten"
+
+#: src/dock.c:3420 src/dock.c:3423
+msgid "right"
+msgstr "rechts"
+
+#: src/dock.c:3425
+#, c-format
+msgid "after %d icon"
+msgid_plural "after %d icons"
+msgstr[0] "nach %d Symbol"
+msgstr[1] "nach %d Symbolen"
+
+#: src/filters.c:84
+msgid "CRT filters"
+msgstr "CRT-Filter"
+
+#: src/filters.c:86
+msgid "Screen curvature"
+msgstr "Bildschirmwölbung"
+
+#: src/filters.c:88
+msgid "Glitch strength"
+msgstr "Störungsstärke"
+
+#: src/filters.c:90
+msgid "Monochrome"
+msgstr "Schwarzweiß"
+
+#: src/filters.c:91
+msgid "Phosphor bloom"
+msgstr "Phosphorleuchten"
+
 #: src/lock.c:413 src/lock.c:846
 msgid "Wrong password"
 msgstr "Falsches Passwort"
@@ -1422,77 +1469,17 @@ msgstr "Fingerabdruck deaktiviert — nimm dein Passwort"
 msgid "Fingerprint not recognised"
 msgstr "Fingerabdruck nicht erkannt"
 
-#: src/saver.c:411
-msgid "No wallpapers found for the slideshow"
-msgstr "Keine Hintergrundbilder für die Diaschau gefunden"
-
-#: src/saver.c:838
-msgid "Show after"
-msgstr "Anzeigen nach"
-
-#: src/saver.c:839
-msgid "Lock on wake"
-msgstr "Beim Aufwachen sperren"
-
-#: src/saver.c:840
-msgid "Slide interval"
-msgstr "Bildwechsel"
-
-#: src/saver.c:841
-#, fuzzy
-msgid "Lock background"
-msgstr "Sperrbildschirm"
-
-#: src/saver.c:842
-#, fuzzy
-msgid "Lock image"
-msgstr "Dock vergrößern"
-
-#: src/saver.c:843
-msgid "Lock dim"
-msgstr "Sperrbildschirm abdunkeln"
-
-#: src/saver.c:844
-#, fuzzy
-msgid "Lock blur"
-msgstr "Hintergrundunschärfe"
-
-#: src/saver.c:845
-#, fuzzy
-msgid "Lock colours"
-msgstr "Dock-Ecken"
-
-#: src/saver.c:846
-msgid "Now playing"
-msgstr "Aktuelle Wiedergabe"
-
-#: src/saver.c:847 src/widgets.c:70
-msgid "Weather"
-msgstr "Wetter"
-
-#: src/saver.c:848
-#, fuzzy
-msgid "Temperature in"
-msgstr "Farbtemperatur"
-
-#: src/saver.c:849
-#, fuzzy
-msgid "Keyboard layout"
-msgstr "Tastenkürzel"
-
 #: src/power.c:112
-#, fuzzy
 msgid "Dim screen"
-msgstr "Sperrbildschirm"
+msgstr "Bildschirm abdunkeln"
 
 #: src/power.c:113
 msgid "Blank displays"
 msgstr "Bildschirme abschalten"
 
 #: src/power.c:114
-#, fuzzy
 msgid "Lock session"
-msgstr "Sperrbildschirm"
+msgstr "Sitzung sperren"
 
 #: src/power.c:115
 msgid "Suspend system"
@@ -1510,34 +1497,1375 @@ msgstr "Deckel zu (am Netz)"
 msgid "Lid closed (docked)"
 msgstr "Deckel zu (angedockt)"
 
-#: src/filters.c:84
-#, fuzzy
-msgid "CRT filters"
-msgstr "Alle Filter"
+#: src/render.c:908
+#, c-format
+msgid "+%d more line"
+msgid_plural "+%d more lines"
+msgstr[0] "+%d weitere Zeile"
+msgstr[1] "+%d weitere Zeilen"
 
-#: src/filters.c:86
-#, fuzzy
-msgid "Screen curvature"
-msgstr "Bildschirmwölbung"
+#: src/render.c:971
+msgid "NEURAL OVERLAY"
+msgstr "NEURONALE ÜBERLAGERUNG"
 
-#: src/filters.c:88
-#, fuzzy
-msgid "Glitch strength"
-msgstr "Bildstörung bei Warnung"
+#: src/render.c:979 src/render.c:5164
+msgid "loaded"
+msgstr "geladen"
 
-#: src/filters.c:90
-msgid "Monochrome"
-msgstr "Schwarzweiß"
+#: src/render.c:981
+msgid "loading"
+msgstr "lädt"
 
-#: src/filters.c:91
-#, fuzzy
-msgid "Phosphor bloom"
-msgstr "Phosphorleuchten"
+#: src/render.c:984
+msgid "○ no model"
+msgstr "○ kein Modell"
+
+#: src/render.c:1004
+#, c-format
+msgid "req %lu    active %lu"
+msgstr "Anfr. %lu    aktiv %lu"
+
+#: src/render.c:1021
+#, c-format
+msgid "ctx %u / %u tok"
+msgstr "Ktx %u / %u Tok"
+
+#: src/render.c:1046
+msgid "live activity"
+msgstr "Live-Aktivität"
+
+#: src/render.c:1057
+msgid "(idle — no recent events)"
+msgstr "(untätig — keine aktuellen Ereignisse)"
+
+#: src/render.c:1058
+msgid "(synapd unavailable)"
+msgstr "(synapd nicht erreichbar)"
+
+#: src/render.c:1080
+msgid "normal"
+msgstr "normal"
+
+#: src/render.c:1084
+msgid "flipped"
+msgstr "gespiegelt"
+
+#: src/render.c:1174
+msgid "DISPLAY SETTINGS"
+msgstr "BILDSCHIRMEINSTELLUNGEN"
+
+#: src/render.c:1183
+msgid "DUPLICATE"
+msgstr "DUPLIZIEREN"
+
+#: src/render.c:1185
+msgid "BUILT-IN OFF"
+msgstr "INTERN AUS"
+
+#: src/render.c:1186
+msgid "EXTEND"
+msgstr "ERWEITERN"
+
+#: src/render.c:1247
+msgid "no outputs connected"
+msgstr "keine Bildschirme angeschlossen"
+
+#: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
+#: src/render.c:6171
+#, c-format
+msgid "off"
+msgstr "aus"
+
+#: src/render.c:1319
+msgid "PRIMARY"
+msgstr "PRIMÄR"
+
+#: src/render.c:1319
+msgid "primary (auto)"
+msgstr "primär (automatisch)"
+
+#: src/render.c:1330
+msgid "8-bit (only)"
+msgstr "8 Bit (nur)"
+
+#: src/render.c:1348
+msgid "HDR10 ON"
+msgstr "HDR10 AN"
+
+#: src/render.c:1387
+#, c-format
+msgid ""
+"%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
+"scanout%s"
+msgstr "%s läuft in HDR10 · PQ · %s Primärfarben · %d cd/m² SDR-Weiß ([ ]) · %s Scanout%s"
+
+#: src/render.c:1396
+msgid " — gamut not converted, colours run wide"
+msgstr " — Farbraum nicht konvertiert, Farben laufen weit"
+
+#: src/render.c:1405
+#, c-format
+msgid " · %.0f cd/m² peak"
+msgstr " · %.0f cd/m² Spitze"
+
+#: src/render.c:1410
+msgid "HDR10 (PQ)"
+msgstr "HDR10 (PQ)"
+
+#: src/render.c:1414
+msgid "Shift+D drives it in HDR10"
+msgstr "Umschalt+D schaltet HDR10 ein"
+
+#: src/render.c:1415
+msgid "this link or mode will not carry an HDR10 signal"
+msgstr "diese Verbindung oder dieser Modus überträgt kein HDR10-Signal"
+
+#: src/render.c:1422
+#, c-format
+msgid "%s advertises no HDR transfer function in its EDID (SDR panel)"
+msgstr "%s meldet in seiner EDID keine HDR-Übertragungsfunktion (SDR-Panel)"
+
+#: src/render.c:1432
+msgid ""
+"Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
+"(X11/game default) · m arrangement"
+msgstr "Auf/Ab wählen · Links/Rechts drehen · −/+ diesen Bildschirm skalieren · p primär setzen (X11-/Spiel-Standard) · m Anordnung"
+
+#: src/render.c:1437
+msgid ""
+"Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
+"Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
+"Esc close"
+msgstr "Umschalt+Pfeile im Raster verschieben (tauscht) · d 10-Bit-Farbe (Deep Colour, kein HDR) · Umschalt+D HDR10-Ausgabe · [ ] SDR-Weiß · Super+Strg+= skaliert JEDEN Bildschirm · Esc schließen"
+
+#: src/render.c:1515
+msgid "WALLPAPER"
+msgstr "HINTERGRUNDBILD"
+
+#: src/render.c:1657
+msgid "Preview unavailable"
+msgstr "Vorschau nicht verfügbar"
+
+#: src/render.c:1657
+msgid "No preview"
+msgstr "Keine Vorschau"
+
+#: src/render.c:1688
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgstr "Auf/Ab Vorschau · Tab Bildschirm · m Skalierung · r neu einlesen · Eingabe/Esc schließen"
+
+#: src/render.c:1748
+msgid "POWER SAVING"
+msgstr "ENERGIESPAREN"
+
+#: src/render.c:1760
+#, c-format
+msgid "no lid switch"
+msgstr "kein Deckelschalter"
+
+#: src/render.c:1763
+msgid "closed"
+msgstr "geschlossen"
+
+#: src/render.c:1763
+msgid "open"
+msgstr "offen"
+
+#: src/render.c:1779
+msgid "idle inhibited (media playing) · timers held"
+msgstr "Leerlauf blockiert (Medien laufen) · Zeitgeber angehalten"
+
+#: src/render.c:1783
+msgid "disabled · no stage will fire"
+msgstr "deaktiviert · keine Stufe wird ausgelöst"
+
+#: src/render.c:1830
+msgid "Up/Down select · Left/Right adjust · Space toggle"
+msgstr "Auf/Ab wählen · Links/Rechts ändern · Leertaste umschalten"
+
+#: src/render.c:1832 src/render.c:1955
+msgid "s save (unsaved changes) · Esc close"
+msgstr "s speichern (ungespeicherte Änderungen) · Esc schließen"
+
+#: src/render.c:1833 src/render.c:1956
+msgid "s save · Esc close"
+msgstr "s speichern · Esc schließen"
+
+#: src/render.c:1888
+msgid "SCREENSAVER"
+msgstr "BILDSCHIRMSCHONER"
+
+#: src/render.c:1898
+msgid "idle inhibited (media playing) · saver held"
+msgstr "Leerlauf blockiert (Medien laufen) · Schoner angehalten"
+
+#: src/render.c:1905
+msgid "power saving is off (Super+P) · saver disabled"
+msgstr "Energiesparen ist aus (Super+P) · Schoner deaktiviert"
+
+#: src/render.c:1909
+msgid "no timeout set · p previews the current mode"
+msgstr "keine Wartezeit gesetzt · p zeigt den aktuellen Modus"
+
+#: src/render.c:1953
+msgid "Up/Down select · Left/Right adjust · p preview"
+msgstr "Auf/Ab wählen · Links/Rechts ändern · p Vorschau"
+
+#: src/render.c:2074
+msgid "CURSOR THEME"
+msgstr "ZEIGERTHEMA"
+
+#: src/render.c:2104
+msgid "No cursor themes installed."
+msgstr "Keine Zeigerthemen installiert."
+
+#: src/render.c:2108
+msgid "synui-cursor install <archive>   then press r"
+msgstr "synui-cursor install <Archiv>   dann r drücken"
+
+#: src/render.c:2166
+msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
+msgstr "Auf/Ab Vorschau · -/+ Größe · r neu einlesen · Eingabe anwenden · Esc abbrechen"
+
+#: src/render.c:2237
+msgid "UI FONT"
+msgstr "OBERFLÄCHENSCHRIFT"
+
+#: src/render.c:2267
+msgid "No font families found."
+msgstr "Keine Schriftfamilien gefunden."
+
+#: src/render.c:2335
+msgid "Handgloves 0123"
+msgstr "Handschuhe 0123"
+
+#: src/render.c:2383
+msgid "Not monospaced · kitty and foot may not render correctly in it"
+msgstr "Nicht dicktengleich · kitty und foot werden damit evtl. falsch dargestellt"
+
+#: src/render.c:2390
+msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
+msgstr "Auf/Ab Vorschau · d Standard · r neu einlesen · Eingabe anwenden · Esc abbrechen"
+
+#: src/render.c:2522
+msgid "Type to search"
+msgstr "Zum Suchen tippen"
+
+#: src/render.c:2533
+msgid "No applications match"
+msgstr "Keine passenden Anwendungen"
+
+#: src/render.c:2534
+msgid "No applications found"
+msgstr "Keine Anwendungen gefunden"
+
+#: src/render.c:2629
+#, c-format
+msgid "%d application · type to search · Enter opens · Esc closes"
+msgid_plural "%d applications · type to search · Enter opens · Esc closes"
+msgstr[0] "%d Anwendung · zum Suchen tippen · Eingabe öffnet · Esc schließt"
+msgstr[1] "%d Anwendungen · zum Suchen tippen · Eingabe öffnet · Esc schließt"
+
+#: src/render.c:2721
+msgid "EMOJI"
+msgstr "EMOJI"
+
+#: src/render.c:2743
+msgid "type to search"
+msgstr "zum Suchen tippen"
+
+#: src/render.c:2802
+msgid "No emoji match that search."
+msgstr "Keine Emoji passen zu dieser Suche."
+
+#: src/render.c:2803
+msgid "Nothing here yet."
+msgstr "Noch nichts vorhanden."
+
+#: src/render.c:2865
+msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
+msgstr "Zum Suchen tippen · Klick oder Tab Kategorie · Eingabe einfügen · Esc leeren/schließen"
+
+#: src/render.c:3010
+msgid "CALCULATOR"
+msgstr "RECHNER"
+
+#: src/render.c:3050
+msgid "Anything you work out is kept here."
+msgstr "Alles, was Sie ausrechnen, bleibt hier stehen."
+
+#: src/render.c:3092
+msgid "type an expression"
+msgstr "Ausdruck eingeben"
+
+#: src/render.c:3197
+msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
+msgstr "Eingabe rechnet · Strg+C kopiert · Strg+V fügt ein"
+
+#: src/render.c:3199
+msgid "Up/Down recall the tape · Esc clears, then closes"
+msgstr "Auf/Ab holen den Verlauf zurück · Esc leert, dann schließt"
+
+#: src/render.c:3268
+msgid "EQUALIZER"
+msgstr "EQUALIZER"
+
+#: src/render.c:3277
+msgid "output routed through the equalizer sink"
+msgstr "Ausgabe läuft über den Equalizer"
+
+#: src/render.c:3278
+msgid "off — audio goes straight to your device"
+msgstr "aus — der Ton geht direkt an Ihr Gerät"
+
+#: src/render.c:3354
+msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
+msgstr "Auf/Ab Zeile · Links/Rechts ändern · r zurücksetzen · Esc schließen"
+
+#: src/render.c:3424
+msgid "CROP — RECENT IMAGES"
+msgstr "ZUSCHNEIDEN — LETZTE BILDER"
+
+#: src/render.c:3425
+msgid "IMAGES — RECENT"
+msgstr "BILDER — LETZTE"
+
+#: src/render.c:3430
+#, c-format
+msgid "%d image"
+msgid_plural "%d images"
+msgstr[0] "%d Bild"
+msgstr[1] "%d Bilder"
+
+#: src/render.c:3449
+msgid "No images in Pictures, Wallpapers or Downloads."
+msgstr "Keine Bilder in Bilder, Hintergrundbilder oder Downloads."
+
+#: src/render.c:3453
+msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
+msgstr "r drücken zum neu Einlesen, oder eine Datei direkt öffnen: synctl dispatch view <Pfad>"
+
+#: src/render.c:3510
+msgid "Enter crop · v view · r rescan · Esc close"
+msgstr "Eingabe zuschneiden · v ansehen · r neu einlesen · Esc schließen"
+
+#: src/render.c:3511
+msgid "Enter view · c crop · r rescan · Esc close"
+msgstr "Eingabe ansehen · c zuschneiden · r neu einlesen · Esc schließen"
+
+#: src/render.c:3621
+msgid "VIEW"
+msgstr "ANSICHT"
+
+#: src/render.c:3758
+msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
+msgstr "Ziehen verschiebt · Pfeile schwenken · Umschalt × 4 · n / p weiter und zurück"
+
+#: src/render.c:3760
+msgid "← → next and previous · drag or scroll to zoom in"
+msgstr "← → weiter und zurück · ziehen oder scrollen zum Vergrößern"
+
+#: src/render.c:3765
+#, c-format
+msgid ""
+"Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
+"× %s"
+msgstr "Scrollen zoomt · + − Zoom · 0 einpassen · 1 Originalgröße · c zuschneiden · r neu einlesen · Esc oder × %s"
+
+#: src/render.c:3768 src/render.c:3961
+msgid "back to the list"
+msgstr "zurück zur Liste"
+
+#: src/render.c:3768
+msgid "close"
+msgstr "schließen"
+
+#: src/render.c:3918
+msgid "CROP"
+msgstr "ZUSCHNEIDEN"
+
+#: src/render.c:3951
+msgid ""
+"Drag to select · drag a corner to adjust it · Tab picks the corner the "
+"arrows move"
+msgstr "Ziehen wählt aus · eine Ecke ziehen passt an · Tab wählt die Ecke, die die Pfeile bewegen"
+
+#: src/render.c:3959
+#, c-format
+msgid ""
+"Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
+"Esc %s"
+msgstr "Pfeile ändern die Größe · Strg+Pfeile verschieben · Umschalt × 25 · a alles · Eingabe speichert eine Kopie · Esc %s"
+
+#: src/render.c:3961
+msgid "cancel"
+msgstr "abbrechen"
+
+#: src/render.c:4060
+msgid "WINDOW EFFECTS"
+msgstr "FENSTEREFFEKTE"
+
+#: src/render.c:4060
+msgid "CRT FILTERS"
+msgstr "CRT-FILTER"
+
+#: src/render.c:4067
+msgid "Tab → CRT filters"
+msgstr "Tab → CRT-Filter"
+
+#: src/render.c:4068
+msgid "Tab → window effects"
+msgstr "Tab → Fenstereffekte"
+
+#: src/render.c:4084
+msgid "no GLES renderer · filters unavailable on this display"
+msgstr "kein GLES-Renderer · Filter auf diesem Bildschirm nicht verfügbar"
+
+#: src/render.c:4088
+msgid "filters off · Space to turn them on"
+msgstr "Filter aus · Leertaste schaltet sie ein"
+
+#: src/render.c:4151
+msgid "Up/Down select · Left/Right adjust · Space on/off"
+msgstr "Auf/Ab wählen · Links/Rechts ändern · Leertaste an/aus"
+
+#: src/render.c:4153
+msgid "s save (unsaved changes) · Tab page · Esc close"
+msgstr "s speichern (ungespeicherte Änderungen) · Tab Seite · Esc schließen"
+
+#: src/render.c:4154
+msgid "s save · Tab page · Esc close"
+msgstr "s speichern · Tab Seite · Esc schließen"
+
+#: src/render.c:4212
+msgid "DESKTOP WIDGETS"
+msgstr "ARBEITSFLÄCHEN-WIDGETS"
+
+#: src/render.c:4217
+msgid "each one on its own · drag by the grip · Space is all-or-nothing"
+msgstr "jedes einzeln · am Griff ziehen · Leertaste ist alles oder nichts"
+
+#: src/render.c:4263
+msgid "needs cava"
+msgstr "benötigt cava"
+
+#: src/render.c:4277
+msgid "Up/Down select · Enter toggle · Left/Right off/on"
+msgstr "Auf/Ab wählen · Eingabe umschalten · Links/Rechts aus/an"
+
+#: src/render.c:4279
+msgid "Space all on/off · R reset positions · Esc close"
+msgstr "Leertaste alle an/aus · R Positionen zurücksetzen · Esc schließen"
+
+#: src/render.c:4438
+msgid "done"
+msgstr "fertig"
+
+#: src/render.c:4439
+msgid "failed"
+msgstr "fehlgeschlagen"
+
+#: src/render.c:4440
+msgid "starting"
+msgstr "startet"
+
+#: src/render.c:4541
+msgid "Cannot read the model directory."
+msgstr "Das Modellverzeichnis kann nicht gelesen werden."
+
+#: src/render.c:4542
+msgid "No models installed."
+msgstr "Keine Modelle installiert."
+
+#: src/render.c:4550
+msgid "A model may still be loaded · see the message below."
+msgstr "Möglicherweise ist noch ein Modell geladen · siehe Meldung unten."
+
+#: src/render.c:4551
+msgid "Pick one from AVAILABLE below and press Enter."
+msgstr "Wählen Sie unten unter VERFÜGBAR eines aus und drücken Sie die Eingabetaste."
+
+#: src/render.c:4619
+msgid "Size"
+msgstr "Größe"
+
+#: src/render.c:4620 src/render.c:4776
+msgid "Params"
+msgstr "Parameter"
+
+#: src/render.c:4621
+msgid "Quant"
+msgstr "Quant."
+
+#: src/render.c:4622
+msgid "Context"
+msgstr "Kontext"
+
+#: src/render.c:4623
+msgid "Arch"
+msgstr "Arch."
+
+#: src/render.c:4646
+msgid "no chat template · synapd will guess the turn format"
+msgstr "keine Chat-Vorlage · synapd rät das Format der Sprecherwechsel"
+
+#: src/render.c:4651
+msgid "unreadable header"
+msgstr "unlesbarer Kopf"
+
+#: src/render.c:4674 src/render.c:4810
+msgid "ABOUT"
+msgstr "ÜBER"
+
+#: src/render.c:4686 src/render.c:4817
+msgid "Good at"
+msgstr "Gut in"
+
+#: src/render.c:4687
+msgid "Speaks"
+msgstr "Spricht"
+
+#: src/render.c:4688 src/render.c:4779
+msgid "License"
+msgstr "Lizenz"
+
+#: src/render.c:4689 src/render.c:4818
+msgid "Based on"
+msgstr "Basiert auf"
+
+#: src/render.c:4737
+msgid "this is the model synapd is running"
+msgstr "dies ist das Modell, das synapd ausführt"
+
+#: src/render.c:4741
+msgid "[ Enter: load this model ]"
+msgstr "[ Eingabe: dieses Modell laden ]"
+
+#: src/render.c:4777
+msgid "Download"
+msgstr "Download"
+
+#: src/render.c:4778
+msgid "Quality"
+msgstr "Qualität"
+
+#: src/render.c:4780
+msgid "Pulls"
+msgstr "Downloads"
+
+#: src/render.c:4861
+msgid "QUANTISATION"
+msgstr "QUANTISIERUNG"
+
+#: src/render.c:4867
+msgid "reading the repository …"
+msgstr "Repository wird gelesen …"
+
+#: src/render.c:4872
+msgid "could not read the repository"
+msgstr "Repository konnte nicht gelesen werden"
+
+#: src/render.c:4877
+msgid "no single-file GGUF here"
+msgstr "kein einteiliges GGUF hier"
+
+#: src/render.c:4926 src/render.c:5780
+#, c-format
+msgid "+%d more"
+msgstr "+%d weitere"
+
+#: src/render.c:4934
+msgid "[ Enter: download ]"
+msgstr "[ Eingabe: herunterladen ]"
+
+#: src/render.c:5011
+msgid "AI MODEL"
+msgstr "KI-MODELL"
+
+#: src/render.c:5022
+msgid "Loaded"
+msgstr "Geladen"
+
+#: src/render.c:5023
+msgid "synapd not responding"
+msgstr "synapd antwortet nicht"
+
+#: src/render.c:5026
+msgid "Format"
+msgstr "Format"
+
+#: src/render.c:5028
+msgid "Profile"
+msgstr "Profil"
+
+#: src/render.c:5047
+msgid "legacy"
+msgstr "veraltet"
+
+#: src/render.c:5051
+msgid "GGUF declares no chat template"
+msgstr "GGUF gibt keine Chat-Vorlage an"
+
+#: src/render.c:5056
+#, c-format
+msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
+msgstr "Temp. %.2f  ·  top_p %.2f  ·  top_k %d"
+
+#: src/render.c:5064
+msgid "Sampling"
+msgstr "Sampling"
+
+#: src/render.c:5094
+msgid "search huggingface"
+msgstr "Hugging Face durchsuchen"
+
+#: src/render.c:5109
+msgid "INSTALLED"
+msgstr "INSTALLIERT"
+
+#: src/render.c:5109
+msgid "INSTALLED · none"
+msgstr "INSTALLIERT · keine"
+
+#: src/render.c:5154
+msgid "delete?"
+msgstr "löschen?"
+
+#: src/render.c:5160
+msgid "loading …"
+msgstr "lädt …"
+
+#: src/render.c:5220
+msgid "type to search · Enter search · Esc cancel"
+msgstr "zum Suchen tippen · Eingabe sucht · Esc abbrechen"
+
+#: src/render.c:5222
+msgid ""
+"Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
+"close"
+msgstr "Auf/Ab wählen · Links/Rechts Quantisierung · Eingabe herunterladen · / suchen · Esc schließen"
+
+#: src/render.c:5228
+msgid "Delete again to confirm · Esc cancels · any move cancels"
+msgstr "Zum Bestätigen erneut löschen · Esc bricht ab · jede Bewegung bricht ab"
+
+#: src/render.c:5231
+msgid ""
+"Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
+msgstr "Auf/Ab wählen · Eingabe laden · Entf löschen · / suchen · R neu einlesen · Esc schließen"
+
+#: src/render.c:5235
+msgid ""
+"downloads run as a system service — closing this panel does not cancel one"
+msgstr "Downloads laufen als Systemdienst — dieses Fenster zu schließen bricht keinen ab"
+
+#: src/render.c:5238
+msgid "switching reloads the model — the AI pauses while it loads"
+msgstr "Ein Wechsel lädt das Modell neu — die KI pausiert währenddessen"
+
+#: src/render.c:5299
+msgid "EVENT SOUNDS"
+msgstr "EREIGNISKLÄNGE"
+
+#: src/render.c:5308
+msgid "silent · Space turns event sounds on"
+msgstr "stumm · Leertaste schaltet Ereignisklänge ein"
+
+#: src/render.c:5312
+msgid "t plays the selected sound without enabling it"
+msgstr "t spielt den gewählten Klang ab, ohne ihn zu aktivieren"
+
+#: src/render.c:5357
+msgid "Volume"
+msgstr "Lautstärke"
+
+#: src/render.c:5360
+msgid "Sound theme"
+msgstr "Klangthema"
+
+#: src/render.c:5364
+#, c-format
+msgid "%s — not a sound theme"
+msgstr "%s — kein Klangthema"
+
+#: src/render.c:5421
+msgid "not in this theme"
+msgstr "nicht in diesem Thema"
+
+#: src/render.c:5435
+msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
+msgstr "Auf/Ab wählen · Eingabe umschalten · Links/Rechts aus/an · [ ] Klang wählen"
+
+#: src/render.c:5437
+msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
+msgstr "t abspielen · Leertaste alle Klänge an/aus · Esc schließen · mehr: synui-sound --help"
+
+#: src/render.c:5492
+msgid "DATE & TIME"
+msgstr "DATUM & UHRZEIT"
+
+#: src/render.c:5505
+#, c-format
+msgid "system zone · %s"
+msgstr "Systemzone · %s"
+
+#: src/render.c:5538
+msgid "WORLD CLOCK"
+msgstr "WELTZEITUHR"
+
+#: src/render.c:5563
+msgid "Up/Down select · Space toggle · c calendar · Esc close"
+msgstr "Auf/Ab wählen · Leertaste umschalten · c Kalender · Esc schließen"
+
+#: src/render.c:5631
+msgid "January"
+msgstr "Januar"
+
+#: src/render.c:5631
+msgid "February"
+msgstr "Februar"
+
+#: src/render.c:5631
+msgid "March"
+msgstr "März"
+
+#: src/render.c:5631
+msgid "April"
+msgstr "April"
+
+#: src/render.c:5632
+msgid "May"
+msgstr "Mai"
+
+#: src/render.c:5632
+msgid "June"
+msgstr "Juni"
+
+#: src/render.c:5632
+msgid "July"
+msgstr "Juli"
+
+#: src/render.c:5632
+msgid "August"
+msgstr "August"
+
+#: src/render.c:5633
+msgid "September"
+msgstr "September"
+
+#: src/render.c:5633
+msgid "October"
+msgstr "Oktober"
+
+#: src/render.c:5633
+msgid "November"
+msgstr "November"
+
+#: src/render.c:5633
+msgid "December"
+msgstr "Dezember"
+
+#: src/render.c:5755
+msgid "loading…"
+msgstr "lädt…"
+
+#: src/render.c:5765
+msgid "nothing on"
+msgstr "nichts aktiv"
+
+#: src/render.c:5770
+#, c-format
+msgid "all day  %s"
+msgstr "ganztägig  %s"
+
+#: src/render.c:5792
+msgid "←→ day · PgUp/PgDn month · t today · Esc"
+msgstr "←→ Tag · Bild↑/Bild↓ Monat · t heute · Esc"
+
+#: src/render.c:5881
+msgid "CONTROL PANEL"
+msgstr "SYSTEMSTEUERUNG"
+
+#: src/render.c:5900
+msgid "Search"
+msgstr "Suchen"
+
+#: src/render.c:5927
+msgid "CATEGORIES"
+msgstr "KATEGORIEN"
+
+#: src/render.c:5932 src/render.c:6418
+msgid "FIND  "
+msgstr "SUCHEN  "
+
+#: src/render.c:5939 src/render.c:6365
+msgid "KEYBOARD SHORTCUTS"
+msgstr "TASTENKÜRZEL"
+
+#: src/render.c:5940
+msgid "SETTINGS"
+msgstr "EINSTELLUNGEN"
+
+#: src/render.c:6015
+msgid "Press a key…"
+msgstr "Taste drücken…"
+
+#: src/render.c:6035 src/render.c:6211 src/render.c:6506
+#, c-format
+msgid "%d–%d of %d · PgUp/PgDn"
+msgstr "%d–%d von %d · Bild↑/Bild↓"
+
+#: src/render.c:6172
+msgid "none"
+msgstr "keine"
+
+#: src/render.c:6221
+msgid "No setting matches that."
+msgstr "Keine Einstellung passt dazu."
+
+#: src/render.c:6256
+msgid "Type to filter · Up/Down select · Del reset · Esc back"
+msgstr "Zum Filtern tippen · Auf/Ab wählen · Entf zurücksetzen · Esc zurück"
+
+#: src/render.c:6258
+msgid "Up/Down category · Enter or Right opens · / find · Esc close"
+msgstr "Auf/Ab Kategorie · Eingabe oder Rechts öffnet · / suchen · Esc schließen"
+
+#: src/render.c:6264
+msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
+msgstr "Super, Strg, Alt oder Umschalt antippen · Entf für keins · Esc bricht ab"
+
+#: src/render.c:6265
+msgid "Press the new key for this shortcut · Esc cancels"
+msgstr "Neue Taste für dieses Kürzel drücken · Esc bricht ab"
+
+#: src/render.c:6267
+msgid ""
+"F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
+msgstr "F2 neu belegen · F3 legt es aufs Antippen · Strg+Umschalt+R alles zurücksetzen · Esc zurück"
+
+#: src/render.c:6274
+msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
+msgstr "Links/Rechts ändern · Entf Standard · / suchen · Tab Spalte · Esc zurück"
+
+#: src/render.c:6281
+msgid "Left/Right switch · Enter details · Tab column · Esc back"
+msgstr "Links/Rechts wechseln · Eingabe Details · Tab Spalte · Esc zurück"
+
+#: src/render.c:6283
+msgid "Up/Down select · Enter activate · / find · Left or Esc back"
+msgstr "Auf/Ab wählen · Eingabe aktivieren · / suchen · Links oder Esc zurück"
+
+#: src/render.c:6405
+msgid "PRESS THE NEW KEY  "
+msgstr "NEUE TASTE DRÜCKEN  "
+
+#: src/render.c:6412
+#, c-format
+msgid "for %s  ·  Esc cancels"
+msgstr "für %s  ·  Esc bricht ab"
+
+#: src/render.c:6431
+msgid "_  a key, what it does, an app, or a command"
+msgstr "_  eine Taste, ihre Funktion, eine Anwendung oder ein Befehl"
+
+#: src/render.c:6487
+msgid "No shortcut matches that."
+msgstr "Kein Tastenkürzel passt dazu."
+
+#: src/render.c:6524
+msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
+msgstr "Super, Strg, Alt oder Umschalt antippen · Entf für keines · Esc bricht ab"
+
+#: src/render.c:6526
+msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
+msgstr "Beliebige Kombination mit Super, Strg oder Alt drücken · Esc bricht ab"
+
+#: src/render.c:6542
+msgid ""
+"Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
+"resets"
+msgstr "Filter · Eingabe führt aus · F2 legt eine Taste fest · Entf gibt sie frei · F3 Antippen · Strg+Umschalt+R setzt zurück"
+
+#: src/render.c:6562
+msgid "The neon night-drive default · apps dark"
+msgstr "Der Neon-Nachtfahrt-Standard · Anwendungen dunkel"
+
+#: src/render.c:6563
+msgid "Flat modern dark · apps + Dolphin + Firefox dark"
+msgstr "Flach, modern, dunkel · Anwendungen + Dolphin + Firefox dunkel"
+
+#: src/render.c:6564
+msgid "Luna blue, gradient captions · apps beige"
+msgstr "Luna-Blau, Titel mit Farbverlauf · Anwendungen beige"
+
+#: src/render.c:6565
+msgid "Silver 3D bevels, navy titles · apps grey"
+msgstr "Silberne 3D-Kanten, marineblaue Titel · Anwendungen grau"
+
+#: src/render.c:6566
+msgid "Mocha · mauve on soft black · glassy"
+msgstr "Mokka · Malve auf sanftem Schwarz · gläsern"
+
+#: src/render.c:6567
+msgid "Retro warm · orange on brown · glassy"
+msgstr "Retro-warm · Orange auf Braun · gläsern"
+
+#: src/render.c:6568
+msgid "Storm · blue + purple on navy · glassy"
+msgstr "Sturm · Blau + Violett auf Marineblau · gläsern"
+
+#: src/render.c:6569
+msgid "Arctic · frost blue on slate · glassy"
+msgstr "Arktis · Frostblau auf Schiefer · gläsern"
+
+#: src/render.c:6570
+msgid "Purple + pink on charcoal · glassy"
+msgstr "Violett + Rosa auf Anthrazit · gläsern"
+
+#: src/render.c:6571
+msgid "Pastel pink, hot-pink titles · apps light"
+msgstr "Pastellrosa, knallrosa Titel · Anwendungen hell"
+
+#: src/render.c:6572
+msgid "Liquid glass · rounded, translucent · apps light"
+msgstr "Flüssiges Glas · abgerundet, durchscheinend · Anwendungen hell"
+
+#: src/render.c:6573
+msgid "Pinstripes + traffic lights · apps light grey"
+msgstr "Nadelstreifen + Ampelknöpfe · Anwendungen hellgrau"
+
+#: src/render.c:6574
+msgid "Racing stripes, square boxes · apps grey"
+msgstr "Rennstreifen, eckige Kästen · Anwendungen grau"
+
+#: src/render.c:6580
+msgid "House glass · accent off the wallpaper · apps dark"
+msgstr "Hausglas · Akzent vom Hintergrundbild · Anwendungen dunkel"
+
+#: src/render.c:6581
+msgid "The same glass in daylight · apps + Files light"
+msgstr "Dasselbe Glas bei Tageslicht · Anwendungen + Dateien hell"
+
+#: src/render.c:6652
+msgid "THEME MANAGER"
+msgstr "THEMENVERWALTUNG"
+
+#: src/render.c:6757
+#, c-format
+msgid "Transparency  %d%%"
+msgstr "Transparenz  %d%%"
+
+#: src/render.c:6759
+#, c-format
+msgid "Transparency  off"
+msgstr "Transparenz  aus"
+
+#: src/render.c:6789
+msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
+msgstr "Auf/Ab Thema · ←/→ Deckkraft · T Transparenz · Eingabe anwenden · Esc"
+
+#: src/render.c:6856
+msgid "CLIPBOARD"
+msgstr "ZWISCHENABLAGE"
+
+#: src/render.c:6873
+msgid "Nothing copied yet"
+msgstr "Noch nichts kopiert"
+
+#: src/render.c:6919
+msgid "Enter copy · Del clear all · Esc close"
+msgstr "Eingabe kopieren · Entf alles löschen · Esc schließen"
+
+#: src/render.c:7260
+msgid "connected"
+msgstr "verbunden"
+
+#: src/render.c:7261
+msgid "paired"
+msgstr "gekoppelt"
+
+#: src/render.c:7321
+msgid "BLUETOOTH"
+msgstr "BLUETOOTH"
+
+#: src/render.c:7334
+msgid "No Bluetooth adapter found"
+msgstr "Kein Bluetooth-Adapter gefunden"
+
+#: src/render.c:7339
+msgid "Radio on"
+msgstr "Funk an"
+
+#: src/render.c:7339
+msgid "Radio off"
+msgstr "Funk aus"
+
+#: src/render.c:7344
+msgid "· scanning…"
+msgstr "· suche…"
+
+#: src/render.c:7354
+msgid "A device"
+msgstr "Ein Gerät"
+
+#: src/render.c:7362
+#, c-format
+msgid "Passkey %06u · does it match the device?"
+msgstr "Kopplungscode %06u · stimmt er mit dem Gerät überein?"
+
+#: src/render.c:7365
+#, c-format
+msgid "wants to connect%s"
+msgstr "möchte sich verbinden%s"
+
+#: src/render.c:7368
+#, c-format
+msgid "Type %06u on the device, then Enter"
+msgstr "%06u auf dem Gerät eingeben, dann Eingabe"
+
+#: src/render.c:7371
+#, c-format
+msgid "Enter PIN %s on the device"
+msgstr "PIN %s auf dem Gerät eingeben"
+
+#: src/render.c:7379
+msgid "Any key to dismiss"
+msgstr "Beliebige Taste zum Schließen"
+
+#: src/render.c:7380
+msgid "y accept · n reject"
+msgstr "y annehmen · n ablehnen"
+
+#: src/render.c:7393
+msgid "Radio is off · press o"
+msgstr "Funk ist aus · o drücken"
+
+#: src/render.c:7398
+#, c-format
+msgid "%d hidden · press a to show"
+msgstr "%d ausgeblendet · a drücken zum Anzeigen"
+
+#: src/render.c:7401
+msgid "No devices · press s to scan"
+msgstr "Keine Geräte · s drücken zum Suchen"
+
+#: src/render.c:7438
+msgid "trusted"
+msgstr "vertraut"
+
+#: src/render.c:7471
+msgid ""
+"Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
+"Esc"
+msgstr "Eingabe verbinden · p koppeln · t vertrauen · r vergessen · s suchen · o Funk · a weniger · Esc"
+
+#: src/render.c:7473
+msgid ""
+"Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
+msgstr "Eingabe verbinden · p koppeln · t vertrauen · r vergessen · s suchen · o Funk · a alle · Esc"
+
+#: src/render.c:7633
+msgid "TASK MANAGER"
+msgstr "TASK-MANAGER"
+
+#: src/render.c:7639
+#, c-format
+msgid "%d procs · sort: %s%s"
+msgstr "%d Prozesse · Sortierung: %s%s"
+
+#: src/render.c:7650
+#, c-format
+msgid "%.0f%%  (%ld cores)"
+msgstr "%.0f%%  (%ld Kerne)"
+
+#: src/render.c:7652
+msgid "CPU"
+msgstr "CPU"
+
+#: src/render.c:7663
+msgid "RAM"
+msgstr "RAM"
+
+#: src/render.c:7666 src/render.c:7674
+msgid "GPU"
+msgstr "GPU"
+
+#: src/render.c:7666
+msgid "no GPU telemetry available"
+msgstr "keine GPU-Telemetrie verfügbar"
+
+#: src/render.c:7691 src/render.c:7710
+msgid "VRAM"
+msgstr "VRAM"
+
+#: src/render.c:7705
+msgid "PID"
+msgstr "PID"
+
+#: src/render.c:7707
+msgid "NAME"
+msgstr "NAME"
+
+#: src/render.c:7709
+msgid "MEM"
+msgstr "SPEICHER"
+
+#: src/render.c:7818
+msgid ""
+"j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
+"close"
+msgstr "j/k bewegen · Rechtsklick auf eine Zeile · c/m/g/p sortieren · u eigene · x beenden · X abschießen · Esc schließen"
+
+#: src/render.c:7984
+msgid "NEWS"
+msgstr "NACHRICHTEN"
+
+#: src/render.c:7992
+msgid "all sources"
+msgstr "alle Quellen"
+
+#: src/render.c:7993
+msgid "by time"
+msgstr "nach Zeit"
+
+#: src/render.c:7993
+msgid "by source"
+msgstr "nach Quelle"
+
+#: src/render.c:7996
+msgid "never fetched"
+msgstr "nie abgerufen"
+
+#: src/render.c:8023
+#, c-format
+msgid "filter: /%s"
+msgstr "Filter: /%s"
+
+#: src/render.c:8036
+msgid "fetching feeds…"
+msgstr "Feeds werden abgerufen…"
+
+#: src/render.c:8037
+msgid "nothing matches this filter"
+msgstr "nichts passt zu diesem Filter"
+
+#: src/render.c:8038
+msgid "no feeds answered — check the network, then press r"
+msgstr "kein Feed hat geantwortet — Netzwerk prüfen, dann r drücken"
+
+#: src/render.c:8039
+msgid "no items yet — press r to fetch"
+msgstr "noch keine Einträge — r drücken zum Abrufen"
+
+#: src/render.c:8125
+msgid "type to filter · Enter keep · Esc clear"
+msgstr "zum Filtern tippen · Eingabe übernehmen · Esc leeren"
+
+#: src/render.c:8126
+msgid ""
+"j/k move · Enter open · o background · c comments · y copy · Tab source · / "
+"search · s sort · m read · r refresh · Esc close"
+msgstr "j/k bewegen · Eingabe öffnen · o im Hintergrund · c Kommentare · y kopieren · Tab Quelle · / suchen · s sortieren · m gelesen · r aktualisieren · Esc schließen"
+
+#: src/render.c:8152
+msgid "Bottom"
+msgstr "Unten"
+
+#: src/render.c:8152
+msgid "Top"
+msgstr "Oben"
+
+#: src/render.c:8152
+msgid "Left"
+msgstr "Links"
+
+#: src/render.c:8152
+msgid "Right"
+msgstr "Rechts"
+
+#: src/render.c:8162
+msgid "Apps"
+msgstr "Anwendungen"
+
+#: src/render.c:8165
+#, c-format
+msgid "Dock Edge: %s"
+msgstr "Dock-Kante: %s"
+
+#: src/render.c:8179
+#, c-format
+msgid "%s At: %s"
+msgstr "%s an: %s"
+
+#: src/render.c:8191
+msgid "Pin to Dock"
+msgstr "An Dock anheften"
+
+#: src/render.c:8193
+msgid "Unpin from Dock"
+msgstr "Vom Dock lösen"
+
+#: src/render.c:8194
+msgid "Open"
+msgstr "Öffnen"
+
+#: src/render.c:8195
+msgid "New Window"
+msgstr "Neues Fenster"
+
+#: src/render.c:8196
+msgid "Close Window"
+msgstr "Fenster schließen"
+
+#: src/render.c:8197
+msgid "Quit All Windows"
+msgstr "Alle Fenster beenden"
+
+#: src/render.c:8201
+msgid "Auto-hide Dock"
+msgstr "Dock automatisch ausblenden"
+
+#: src/render.c:8202
+msgid "Dock Above Windows"
+msgstr "Dock über Fenstern"
+
+#: src/render.c:8203
+msgid "Magnify Icons"
+msgstr "Symbole vergrößern"
+
+#: src/render.c:8204
+msgid "Show Clock"
+msgstr "Uhr anzeigen"
+
+#: src/render.c:8205
+msgid "Analog Clock Face"
+msgstr "Analoges Zifferblatt"
+
+#: src/render.c:8206
+msgid "Show All Apps Button"
+msgstr "Schaltfläche „Alle Anwendungen“ anzeigen"
+
+#: src/render.c:8207
+msgid "Show Power Button"
+msgstr "Ein/Aus-Schaltfläche anzeigen"
+
+#: src/render.c:8208
+msgid "Dock Settings…"
+msgstr "Dock-Einstellungen…"
+
+#: src/render.c:8212
+msgid "Lock Screen"
+msgstr "Bildschirm sperren"
+
+#: src/render.c:8213
+msgid "Log Out"
+msgstr "Abmelden"
+
+#: src/render.c:8214
+msgid "Suspend"
+msgstr "Bereitschaft"
+
+#: src/render.c:8215
+msgid "Restart"
+msgstr "Neu starten"
+
+#: src/render.c:8216
+msgid "Shut Down"
+msgstr "Herunterfahren"
+
+#: src/render.c:8839
+msgid "minimized"
+msgstr "minimiert"
+
+#: src/render.c:8839 src/render.c:9333 src/render.c:9336
+msgid "MIN"
+msgstr "MIN"
+
+#: src/render.c:8944
+msgid "WINDOWS"
+msgstr "FENSTER"
+
+#: src/render.c:9101
+msgid "Alt+Tab next · Alt+Shift+Tab back"
+msgstr "Alt+Tab weiter · Alt+Umschalt+Tab zurück"
+
+#: src/render.c:9218
+msgid "MISSION CONTROL"
+msgstr "ÜBERSICHT"
+
+#: src/render.c:9223
+#, c-format
+msgid "Desktop %d · %d window"
+msgid_plural "Desktop %d · %d windows"
+msgstr[0] "Arbeitsfläche %d · %d Fenster"
+msgstr[1] "Arbeitsfläche %d · %d Fenster"
+
+#: src/render.c:9360
+msgid "Nothing open on this desktop."
+msgstr "Nichts auf dieser Arbeitsfläche geöffnet."
+
+#: src/render.c:9415
+msgid ""
+"Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
+"desktop · Esc close"
+msgstr "Pfeile oder Klick wählen ein Fenster · Eingabe öffnet es · Entf schließt es · 1–9 wechselt die Arbeitsfläche · Esc schließen"
+
+#: src/saver.c:411
+msgid "No wallpapers found for the slideshow"
+msgstr "Keine Hintergrundbilder für die Diaschau gefunden"
+
+#: src/saver.c:838
+msgid "Show after"
+msgstr "Anzeigen nach"
+
+#: src/saver.c:839
+msgid "Lock on wake"
+msgstr "Beim Aufwachen sperren"
+
+#: src/saver.c:840
+msgid "Slide interval"
+msgstr "Bildwechsel"
+
+#: src/saver.c:841
+msgid "Lock background"
+msgstr "Sperrbildschirm-Hintergrund"
+
+#: src/saver.c:842
+msgid "Lock image"
+msgstr "Sperrbildschirm-Bild"
+
+#: src/saver.c:843
+msgid "Lock dim"
+msgstr "Sperrbildschirm abdunkeln"
+
+#: src/saver.c:844
+msgid "Lock blur"
+msgstr "Sperrbildschirm-Unschärfe"
+
+#: src/saver.c:845
+msgid "Lock colours"
+msgstr "Sperrbildschirm-Farben"
+
+#: src/saver.c:846
+msgid "Now playing"
+msgstr "Aktuelle Wiedergabe"
+
+#: src/saver.c:847 src/widgets.c:70
+msgid "Weather"
+msgstr "Wetter"
+
+#: src/saver.c:848
+msgid "Temperature in"
+msgstr "Temperatur in"
+
+#: src/saver.c:849
+msgid "Keyboard layout"
+msgstr "Tastaturbelegung"
 
 #: src/widgets.c:60
-#, fuzzy
 msgid "All widgets"
-msgstr "Alle Filter"
+msgstr "Alle Widgets"
 
 #: src/widgets.c:61
 msgid "Audio visualiser"
@@ -1548,9 +2876,8 @@ msgid "System monitor"
 msgstr "Systemmonitor"
 
 #: src/widgets.c:63
-#, fuzzy
 msgid "Desktop clock"
-msgstr "Symbole auf der Arbeitsfläche"
+msgstr "Arbeitsflächenuhr"
 
 #: src/widgets.c:64
 msgid "Quick launch"
@@ -1569,9 +2896,8 @@ msgid "Tuxagotchi"
 msgstr "Tuxagotchi"
 
 #: src/widgets.c:68
-#, fuzzy
 msgid "Analog clock"
-msgstr "Analoges Zifferblatt"
+msgstr "Analoge Uhr"
 
 #: src/widgets.c:69
 msgid "Music player"
