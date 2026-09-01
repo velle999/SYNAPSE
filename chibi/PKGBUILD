@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=19
+pkgrel=20
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -142,10 +142,29 @@ sha256sums=(
 # Walks the declared `depends` closure with plain pacman (no pacman-contrib /
 # pactree makedepend) and reports every soname a vendored extension needs that
 # neither pydeps itself nor that closure provides. See the call site.
+#
+# ⛔ EVERY pacman CALL WHOSE OUTPUT IS PARSED RUNS UNDER LC_ALL=C. `pacman -Qi`
+# prints its FIELD NAMES through gettext, so on a Japanese install the line
+# reads `依存パッケージ : …` and `/^Depends On/` matches nothing. The walk then
+# never leaves the sixteen directly declared packages, libstdc++ and zlib —
+# which are reached transitively, through gcc-libs — never enter `provided`,
+# and the check reports thirty vendored extensions as missing a dependency.
+#
+# That is not a hypothetical: it is what a Japanese VM did on 2026-09-01, and
+# it failed the build with thirty "add 'libstdc++' to depends" lines that were
+# all wrong. pacman translates "Depends On" in ten of the thirteen languages
+# SynapseOS ships, so the same build breaks in German, French, Spanish,
+# Portuguese, Italian, Dutch, Polish, Russian, Japanese, Korean and Hindi. It
+# passes in English, Chinese and Arabic only because those three msgstrs are
+# empty and fall back.
+#
+# ⚠ NOT `LANG=C`. LC_ALL is the one that cannot be overridden by a more
+# specific LC_MESSAGES already in the build environment.
 _check_vendored_sonames() {
     local pydir="$1"
     local -A provided=() seen=()
     local queue=("${depends[@]}") p real f d soname sofile owner rc=0
+    local edges=0
 
     while read -r f; do
         [[ -n $f ]] && provided["$f"]=1
@@ -166,10 +185,22 @@ _check_vendored_sonames() {
             f="${f%/}"; [[ -n ${f##*/} ]] && provided["${f##*/}"]=1
         done < <(pacman -Qlq "$real" 2>/dev/null | grep '\.so')
         while read -r d; do
-            [[ -n $d && $d != None ]] && queue+=("$d")
-        done < <(pacman -Qi "$real" 2>/dev/null |
+            [[ -n $d && $d != None ]] && { queue+=("$d"); edges=$((edges + 1)); }
+        done < <(LC_ALL=C pacman -Qi "$real" 2>/dev/null |
                  awk '/^Depends On/{sub(/^[^:]*: /,""); print}' | tr ' ' '\n')
     done
+
+    # ⛔ A CHECK THAT FAILS FOR THE WRONG REASON IS WORSE THAN NO CHECK, and
+    # this one's wrong reason is silent: a truncated closure looks exactly like
+    # a package that really is missing a dependency, and says so thirty times.
+    # Sixteen real packages cannot have zero dependencies between them, so zero
+    # edges means the parse above matched nothing — not that the closure is a
+    # flat list. Name that, rather than blaming the vendored wheels for it.
+    if ((edges == 0)); then
+        error "the 'pacman -Qi' dependency parse matched nothing — the soname check cannot run"
+        error "  (LC_ALL is '${LC_ALL:-unset}', LANG is '${LANG:-unset}'; pacman translates its field names)"
+        return 1
+    fi
 
     while read -r soname sofile; do
         [[ -n ${provided[$soname]:-} ]] && continue

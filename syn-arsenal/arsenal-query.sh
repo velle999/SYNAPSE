@@ -106,7 +106,14 @@ cmd_packages() {
     local installed
     installed=$(pacman -Qq 2>/dev/null)
 
-    pacman -Si "${members[@]}" 2>/dev/null | awk -v inst="$installed" '
+    # ⛔ LC_ALL=C, BECAUSE THE FIELD NAMES BELOW GO THROUGH gettext. `pacman -Si`
+    # prints `名前 : …` on a Japanese install and `Nombre : …` on a Spanish one,
+    # so /^Name +:/ matches nothing and every row comes out blank — an Arsenal
+    # window that lists no software at all, on ten of the thirteen languages
+    # SynapseOS ships. (English, Chinese and Arabic survive only because those
+    # msgstrs are empty and fall back.) The DESCRIPTIONS are package metadata
+    # and are English either way; this pins the labels, not the content.
+    LC_ALL=C pacman -Si "${members[@]}" 2>/dev/null | awk -v inst="$installed" '
         BEGIN {
             FS = " *: "
             n = split(inst, a, "\n"); for (i = 1; i <= n; i++) have[a[i]] = 1
