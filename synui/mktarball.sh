@@ -25,14 +25,33 @@ pkgver=$(sed -n 's/^pkgver=//p' PKGBUILD)
 top="synui-$pkgver"
 out="$top.tar.gz"
 
-# What actually gets compiled and installed. Adding a new top-level dir to
-# meson.build means adding it here as well, or it silently will not ship.
-contents=(config data hooks meson.build protocols quickshell quickshell-antiquity
+# What actually gets compiled and installed.
+contents=(config data hooks meson.build po protocols quickshell quickshell-antiquity
           src systemd tests tools)
 
 for c in "${contents[@]}"; do
     [[ -e $c ]] || { echo "mktarball: missing $c" >&2; exit 1; }
 done
+
+# ⛔ AND CROSS-CHECKED AGAINST meson.build, BECAUSE ASKING A HUMAN TO REMEMBER
+# DID NOT WORK. This spot held a comment reading "adding a new top-level dir to
+# meson.build means adding it here as well, or it silently will not ship" — and
+# then po/ was added to meson.build and not to the list. Every check upstream of
+# the build passed: git tracked all 17 files, preflight was green, the package
+# built HERE because this working copy has the directory on disk regardless of
+# what the tarball holds. It failed on the only machine that starts from the
+# tarball, with meson saying "Nonexistent build file 'po/meson.build'", after
+# the commit had already been pushed and published.
+#
+# A comment cannot fail a build. This can: whatever meson enters, the tarball
+# carries. ⚠ cut -d/ because only the TOP-LEVEL name is what contents=() names.
+while IFS= read -r d; do
+    [[ " ${contents[*]} " == *" $d "* ]] && continue
+    echo "mktarball: meson.build enters $d/ but contents=() does not carry it —" >&2
+    echo "           the build would fail wherever the tarball is the whole tree" >&2
+    exit 1
+done < <(grep -oE "subdir\('[^']+'\)" meson.build \
+         | sed "s/subdir('//; s/')//" | cut -d/ -f1 | sort -u)
 
 tmp=$(mktemp -t "synui-tarball-XXXXXX.tar.gz")
 trap 'rm -f "$tmp"' EXIT

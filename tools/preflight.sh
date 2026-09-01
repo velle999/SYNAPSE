@@ -1179,6 +1179,54 @@ check_localsrc() {
         ok localsrc "$n component(s) — every local source= entry is shipped or generated"
 }
 
+check_subdir() {
+    local c d n=0 bad=$FINDINGS ships owner
+    # ⛔ THE TARBALL IS THE WHOLE TREE ON EVERY MACHINE BUT THIS ONE. Both
+    # collectors build from a LIST of top-level directories, and a dir the list
+    # does not name is simply absent — makepkg is green, nothing warns, and the
+    # build dies only where the tarball is all there is. synui's mktarball.sh
+    # carried a comment asking a human to remember; po/ was added to meson.build
+    # and not to the list, and the push and the publish both went out before
+    # anyone saw "Nonexistent build file 'po/meson.build'".
+    #
+    # ⚠ THE TOP-LEVEL meson.build ONLY. A subdir() inside src/meson.build names
+    # src/<x>, which ships with src/ already; only the root file can name a
+    # top-level dir that a list has to carry.
+    #
+    # Neither list is restated here — they are read back out of the scripts that
+    # own them, because a second copy of a list is a second thing to forget.
+    while IFS= read -r c; do
+        [ -f "$c/meson.build" ] || continue
+
+        if [ -f "$c/mktarball.sh" ]; then
+            owner="$c/mktarball.sh"
+            ships=$(awk '/^contents=\(/,/\)/' "$c/mktarball.sh" |
+                    tr ' \t' '\n\n' | sed 's/contents=(//; s/)//' | grep -v '^$')
+        else
+            owner="tools/collect-source.sh"
+            ships=$(sed -n 's|.*dirs+=("\$name/\([A-Za-z0-9_.-]*\)/\?").*|\1|p' \
+                    tools/collect-source.sh | sort -u)
+        fi
+
+        for d in $(sed -n "s/.*subdir('\([^']*\)').*/\1/p" "$c/meson.build" |
+                   cut -d/ -f1 | sort -u); do
+            printf '%s\n' "$ships" | grep -qxF "$d" && continue
+            fail subdir \
+                "$c: meson.build enters $d/, and the source tarball drops it" \
+                "$owner decides what the tarball holds, and $d/ is not on its" \
+                "list. The package builds HERE because the directory is on" \
+                "disk either way; it fails wherever the tarball is the whole" \
+                "tree, with meson saying \"Nonexistent build file" \
+                "'$d/meson.build'\" — after the commit has shipped." \
+                "Fix: add $d to the list in $owner."
+        done
+        n=$((n + 1))
+    done < <(printf '%s\n' "${KNOWN[@]}")
+
+    [ "$FINDINGS" -eq "$bad" ] &&
+        ok subdir "$n meson component(s) — every subdir() is carried by the tarball"
+}
+
 check_tarball() {
     local c f bad=$FINDINGS n=0
     # ⚠ THE ALLOWLIST MOVED, AND THIS CHECK HAS TO MOVE WITH IT. It lived inline
@@ -1404,6 +1452,7 @@ check_uifont
 check_scrollbar
 check_leavings
 check_localsrc
+check_subdir
 check_tarball
 check_external_membership
 check_external
