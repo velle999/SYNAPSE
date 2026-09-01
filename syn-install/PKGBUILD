@@ -245,7 +245,7 @@ pkgver=0.1.0
 #   terminal at all.
 #   Seven checks in layout_test.sh, against BOTH lists — the installer's and
 #   the ISO's are independent collectors and have drifted before.
-pkgrel=109
+pkgrel=110
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -268,28 +268,33 @@ optdepends=('quickshell: the graphical installer (syn-install-gui)')
 # The tarball-based components (synui, synpkg, syn-disks) are unaffected and do
 # use data/ — their paths live inside the tarball. This one builds in place
 # from local files.
-# ⚠ EVERY CATALOG IS NAMED, and they cannot be globbed. makepkg copies a local
-# source to its BASENAME (see the note above), so lang/de.sh lands as
-# $srcdir/de.sh — there is no lang/ directory on the other side to glob over.
+# ⛔ EVERY CATALOG IS NAMED, AND FLAT, AND THAT IS NOT A STYLE CHOICE.
+# makepkg resolves a LOCAL source entry to its BASENAME and looks for it beside
+# this file — `source=("lang/de.sh")` fails outright with "de.sh was not found
+# in the build directory and is not a URL", which is exactly how this broke on
+# 2026-09-01. The `name::path` rename syntax is URL-only, so a subdirectory
+# cannot be carried; the directory goes in the FILENAME instead and package()
+# gives it back. syn/ carries the same scar (nix-flake.nix, nix-home.nix).
+#
 # A catalog missing from this list is simply not shipped, and the installer
 # then prints English for that language with nothing said about it.
 source=("syn-install.sh"
         "syn-crypt.sh"
         "syn-install-gui.sh"
         "syn-install-gui.qml"
-        "lang/de.sh"
-        "lang/fr.sh"
-        "lang/es.sh"
-        "lang/pt.sh"
-        "lang/it.sh"
-        "lang/nl.sh"
-        "lang/pl.sh"
-        "lang/ru.sh"
-        "lang/ja.sh"
-        "lang/zh.sh"
-        "lang/ko.sh"
-        "lang/hi.sh"
-        "lang/ar.sh")
+        "lang-de.sh"
+        "lang-fr.sh"
+        "lang-es.sh"
+        "lang-pt.sh"
+        "lang-it.sh"
+        "lang-nl.sh"
+        "lang-pl.sh"
+        "lang-ru.sh"
+        "lang-ja.sh"
+        "lang-zh.sh"
+        "lang-ko.sh"
+        "lang-hi.sh"
+        "lang-ar.sh")
 sha256sums=('SKIP'
             'SKIP'
             'SKIP'
@@ -327,14 +332,11 @@ package() {
     # between an installer that says one screen in the wrong language and one
     # that cannot start — and this runs on a live ISO, where "cannot start" has
     # nowhere to go.
-    # ⚠ FLAT IN $srcdir, EVEN THOUGH THEY ARE IN lang/ HERE. makepkg copies a
-    # local source to its BASENAME — the same reason the note above source=
-    # gives for this component not having a data/ directory — so lang/de.sh
-    # arrives as $srcdir/de.sh and a glob over "$srcdir"/lang/ would match
-    # nothing and install no translations at all, silently.
+    # Flat beside the PKGBUILD, a directory once installed — see the note above
+    # source=. This is where syn_lang_load() looks.
     for _code in de fr es pt it nl pl ru ja zh ko hi ar; do
-        [ -e "$srcdir/$_code.sh" ] || continue
-        install -Dm644 "$srcdir/$_code.sh" \
+        [ -e "$srcdir/lang-$_code.sh" ] || continue
+        install -Dm644 "$srcdir/lang-$_code.sh" \
             "$pkgdir/usr/share/syn-install/lang/$_code.sh"
     done
 }

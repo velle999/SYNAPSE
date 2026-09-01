@@ -51,7 +51,7 @@ check "the extractor finds the translatable strings" yes \
 
 # ── Every catalog: no orphans, and report coverage ────────
 shopt -s nullglob
-cats=("$root"/lang/*.sh)
+cats=("$root"/lang-*.sh)
 check "at least one catalog is shipped" yes \
       "$([ "${#cats[@]}" -gt 0 ] && echo yes || echo no)"
 
@@ -83,7 +83,7 @@ def sig(s):
     return sorted(c for c in conv.findall(s) if c != "%")
 
 bad = 0
-for cat in sorted((root / "lang").glob("*.sh")):
+for cat in sorted(root.glob("lang-*.sh")):
     text = cat.read_text(encoding="utf-8")
     # One entry per ["key"]="value", value possibly spanning lines.
     for m in re.finditer(r'^\s*\["((?:[^"\\]|\\.)*)"\]="((?:[^"\\]|\\.)*)"$',
@@ -107,7 +107,7 @@ for cat in sorted((root / "lang").glob("*.sh")):
 # string. A handful legitimately are — proper nouns and technical words that do
 # not change ("Bootloader", "Desktop:", "Boot:") — so it is a warning with a
 # threshold rather than a hard failure on the first one.
-for cat in sorted((root / "lang").glob("*.sh")):
+for cat in sorted(root.glob("lang-*.sh")):
     text = cat.read_text(encoding="utf-8")
     keyset = set(keys)
     echoes = []

@@ -100,8 +100,8 @@ def main():
         n += 1
     out.append(")")
 
-    dest = root / "lang" / ("%s.sh" % code)
-    dest.parent.mkdir(exist_ok=True)
+    dest = root / ("lang-%s.sh" % code)
+    
     dest.write_text("\n".join(out) + "\n", encoding="utf-8")
     print("%s: %d/%d strings" % (dest, n, len(keys)))
     return 0

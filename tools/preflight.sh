@@ -1107,6 +1107,59 @@ check_leavings() {
 # option the tarball no longer defines, and `meson setup` stops with
 # `Unknown option`. syn-cal shipped an OAuth client id that way and every
 # installed machine's syn-update died on it.
+# ── localsrc: a source= entry makepkg cannot resolve ─────────
+#
+# ⛔ makepkg RESOLVES A LOCAL source() ENTRY TO ITS BASENAME and looks for it
+# beside the PKGBUILD. So `source=("lang/de.sh")` does not name a file in a
+# subdirectory — it names `de.sh` in the component directory, is not found, and
+# the build stops at "Retrieving sources" with:
+#
+#     ==> ERROR: de.sh was not found in the build directory and is not a URL
+#
+# The `name::path` rename syntax is URL-only, so the subdirectory cannot be
+# carried at all; the convention here is to flatten and put the directory in
+# the filename (syn/nix-flake.nix, syn-install/lang-de.sh) and give it its real
+# name in package().
+#
+# ⚠ NOTHING ELSE CATCHES THIS. It is not a syntax error, shellcheck is happy,
+# the file plainly exists in the tree, and every test that reads it passes —
+# the only thing that disagrees is makepkg, on the user's machine, mid
+# `syn-update`. Hit twice: syn/ on 2026-08-06 and syn-install/ on 2026-09-01.
+check_localsrc() {
+    local c f base n=0 bad=$FINDINGS
+    while IFS= read -r c; do
+        [ -f "$c/PKGBUILD" ] || continue
+        # The source array as bash sees it, so a composed entry resolves.
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # Anything with a scheme is fetched, not looked up beside the file.
+            case "$f" in *://*) continue ;; esac
+            # `name::thing` — only legal for a URL, and caught as one above.
+            f=${f##*::}
+            base=${f##*/}
+            [ -e "$c/$base" ] && continue
+            fail localsrc \
+                "$c: source() names '$f', and makepkg will look for '$base'" \
+                "makepkg resolves a local source to its BASENAME beside the" \
+                "PKGBUILD, so this fails at \"Retrieving sources\" with" \
+                "\"$base was not found in the build directory and is not a URL\"." \
+                "Fix: flatten it — keep the file as $c/${f//\//-} and give it" \
+                "its real name in package() with install -Dm644."
+        done < <(
+            (
+                set +u
+                # shellcheck disable=SC1090
+                . "$c/PKGBUILD" >/dev/null 2>&1 || exit 0
+                printf '%s\n' "${source[@]}"
+            ) 2>/dev/null
+        )
+        n=$((n + 1))
+    done < <(printf '%s\n' "${KNOWN[@]}")
+
+    [ "$FINDINGS" -eq "$bad" ] &&
+        ok localsrc "$n component(s) — every local source= entry is a real file beside its PKGBUILD"
+}
+
 check_tarball() {
     local c f bad=$FINDINGS n=0
     # ⚠ THE ALLOWLIST MOVED, AND THIS CHECK HAS TO MOVE WITH IT. It lived inline
@@ -1331,6 +1384,7 @@ check_icons
 check_uifont
 check_scrollbar
 check_leavings
+check_localsrc
 check_tarball
 check_external_membership
 check_external

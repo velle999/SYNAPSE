@@ -55,8 +55,12 @@ COLS=$(tput cols 2>/dev/null || echo 80)
 # installer could describe its own failure to find them, and an installer's
 # error messages are the last thing that should have a dependency.
 SYN_LANG_DIR="${SYN_LANG_DIR:-/usr/share/syn-install/lang}"
-[ -d "$SYN_LANG_DIR" ] ||
-    SYN_LANG_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lang"
+# ⛔ TWO LAYOUTS, BECAUSE makepkg FORCES ONE OF THEM. Installed, the catalogs
+# are a directory: /usr/share/syn-install/lang/de.sh. In the checkout they are
+# FLAT and prefixed — lang-de.sh beside this script — because makepkg resolves
+# a local source() entry to its basename and cannot take `lang/de.sh` at all.
+# Both are searched, so the script runs the same from either.
+SYN_LANG_SRC="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 declare -A SYN_T=()
 SYN_LANG=en
@@ -76,12 +80,16 @@ syn_lang_load() {
     # this twice (a boot answer, then a step-7 locale typed by hand) meant the
     # typed answer was ignored in silence. Empty is different and is handled
     # above: it means "no opinion", and keeps what is loaded.
-    if [ ! -r "$SYN_LANG_DIR/$code.sh" ]; then
+    local file=""
+    [ -r "$SYN_LANG_DIR/$code.sh" ]     && file="$SYN_LANG_DIR/$code.sh"
+    [ -n "$file" ] || { [ -r "$SYN_LANG_SRC/lang-$code.sh" ] &&
+                        file="$SYN_LANG_SRC/lang-$code.sh"; }
+    if [ -z "$file" ]; then
         SYN_LANG=en; SYN_T=(); return 0
     fi
     SYN_T=()
     # shellcheck source=/dev/null
-    . "$SYN_LANG_DIR/$code.sh" || { SYN_T=(); return 0; }
+    . "$file" || { SYN_T=(); return 0; }
     SYN_LANG=$code
 }
 

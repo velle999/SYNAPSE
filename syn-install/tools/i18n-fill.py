@@ -96,7 +96,7 @@ def main():
     code = sys.argv[1]
     root = pathlib.Path(__file__).resolve().parent.parent
     keys = load_keys(root)
-    dest = root / "lang" / ("%s.sh" % code)
+    dest = root / ("lang-%s.sh" % code)
     cat = read_catalog(dest)
 
     problems, added = [], 0
@@ -136,7 +136,7 @@ def main():
     for k in sorted(cat, key=lambda k: order.get(k, 1 << 30)):
         body.append('  ["%s"]="%s"' % (esc(k), esc(cat[k])))
     body.append(")")
-    dest.parent.mkdir(exist_ok=True)
+    
     dest.write_text("\n".join(body) + "\n", encoding="utf-8")
     print("%s: %d entries (%d from this pass), %d strings in the script"
           % (dest.name, len(cat), added, len(keys)))
