@@ -1,0 +1,19 @@
+# The languages the BAR has catalogs for, one per line.
+#
+# ⚠ THE SAME THIRTEEN AS po/LINGUAS, AND THAT IS A REQUIREMENT, not a
+# coincidence. The bar and the compositor's panels are on screen together — a
+# German control panel beside an English bar reads as the bar being broken.
+# tests/i18n_bar.sh fails when the two lists disagree.
+de
+fr
+es
+pt
+it
+nl
+pl
+ru
+ja
+zh
+ko
+hi
+ar

@@ -76,7 +76,7 @@ QtObject {
     // is filtering but not this desktop's audio (the default moved away).
     readonly property string status: {
         if (!root.enabled) return "off"
-        if (!root.running) return "not running"
+        if (!root.running) return I18n.tr("not running")
         if (!root.active)  return "bypassed"
         return "on"
     }

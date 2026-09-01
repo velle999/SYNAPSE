@@ -1,0 +1,41 @@
+# The QML files tools/qml-xgettext.py reads, one per line.
+#
+# ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER — its I18n.tr() calls
+# still compile and still look up at runtime, so nothing warns; the strings just
+# never reach a catalog. tests/i18n_bar.sh fails on a .qml under quickshell/
+# that calls I18n.tr() and is not listed.
+BarConfig.qml
+EqState.qml
+I18n.qml
+MusicLibrary.qml
+StartMenu.qml
+Ui/ConfirmDialog.qml
+Ui/SearchableDropdown.qml
+WeatherState.qml
+components/BarMenu.qml
+components/Mixer.qml
+components/MixerEqRow.qml
+modules/Assistant.qml
+modules/Battery.qml
+modules/Bluetooth.qml
+modules/Clock.qml
+modules/Cpu.qml
+modules/Media.qml
+modules/Memory.qml
+modules/Network.qml
+modules/Pomodoro.qml
+modules/Recording.qml
+modules/Updates.qml
+modules/Volume.qml
+modules/Weather.qml
+welcome/Guide.qml
+widgets/AnalogClock.qml
+widgets/BigClock.qml
+widgets/MusicPlayer.qml
+widgets/Pizza.qml
+widgets/PostIt.qml
+widgets/PostItEditor.qml
+widgets/QuickLaunch.qml
+widgets/SysMonitor.qml
+widgets/Tuxagotchi.qml
+widgets/Weather.qml

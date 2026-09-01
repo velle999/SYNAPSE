@@ -1,5 +1,10 @@
 import QtQuick
 import qs.Commons
+// ⚠ THE SHELL ROOT, for I18n. quickshell resolves `qs.Ui` to <shell
+// root>/Ui, so `..` from here is the root module and its qmldir — the
+// same directory `qs.Commons` sits beside. It is not reachable as
+// `qs.something` because the root is the shell itself, not a submodule.
+import ".."
 
 /*
  * ConfirmDialog — "are you sure", over the panel that asked.
@@ -25,8 +30,8 @@ Item {
 
     property bool opened: false
     property string message: ""
-    property string cancelText: "Cancel"
-    property string confirmText: "Confirm"
+    property string cancelText: I18n.tr("Cancel")
+    property string confirmText: I18n.tr("Confirm")
     /* 1 — the destructive one — is where the eye is going anyway; a dialog that
      * lands on Cancel makes every deliberate confirmation two keys. */
     property int selectedIndex: 1

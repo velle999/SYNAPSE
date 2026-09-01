@@ -462,7 +462,49 @@ PanelWindow {
                 return out
             }
 
+            /*
+             * The DISPLAY name for a category bucket.
+             *
+             * ⛔ THE BUCKET NAME IS A KEY, WHICH IS WHY THIS FUNCTION EXISTS
+             * RATHER THAN A TRANSLATED catTable. `apps` is keyed by it, a row's
+             * `page:` addresses a page by it, and the sort below tests
+             * `a === "Other"` — so a translated table would make a German menu
+             * open a page that does not exist and file every app under Other.
+             * The strings stay English everywhere except the last step before
+             * drawing, which is here.
+             *
+             * ⚠ A CLOSED SET, SPELLED OUT. catTable, catTable2, the Wine rule
+             * and the "Other" fallback are the only writers, so no other bucket
+             * can arise — and listing them means a bucket added there without a
+             * translation shows up as English rather than silently passing
+             * through a lookup that returns its argument.
+             */
+            function catLabel(name) {
+                switch (name) {
+                case "Games":        return I18n.tr("Games")
+                case "Development":  return I18n.tr("Development")
+                case "Graphics":     return I18n.tr("Graphics")
+                case "Multimedia":   return I18n.tr("Multimedia")
+                case "Office":       return I18n.tr("Office")
+                case "Science":      return I18n.tr("Science")
+                case "Education":    return I18n.tr("Education")
+                case "Internet":     return I18n.tr("Internet")
+                case "Settings":     return I18n.tr("Settings")
+                case "System":       return I18n.tr("System")
+                case "Accessories":  return I18n.tr("Accessories")
+                case "System Tools": return I18n.tr("System Tools")
+                // ⛔ Wine is a product name and stays as it is in every language.
+                case "Wine":         return "Wine"
+                case "Other":        return I18n.tr("Other")
+                }
+                return name
+            }
+
             // "Other" sinks to the bottom; the rest are alphabetical.
+            // ⚠ SORTED ON THE KEY, NOT THE LABEL. Sorting a translated list
+            // would be more correct for a reader and would also reorder the
+            // menu the moment the language changed; the keys are what menu.c
+            // ordered by and what the test compares against.
             readonly property var categoryNames: {
                 const names = Object.keys(rowModel.apps)
                 names.sort((a, b) => a === "Other" ?  1
@@ -477,14 +519,14 @@ PanelWindow {
                 const p = {}
 
                 p[""] = [
-                    { kind: "header", label: "SYSTEM" },
-                    { kind: "action", label: "Control Panel", action: "control" },
-                    { kind: "action", label: "Task Manager",  action: "taskmgr" },
-                    { kind: "exec",   label: "Terminal",      argv: ["syntty"] }
+                    { kind: "header", label: I18n.tr("SYSTEM") },
+                    { kind: "action", label: I18n.tr("Control Panel"), action: "control" },
+                    { kind: "action", label: I18n.tr("Task Manager"),  action: "taskmgr" },
+                    { kind: "exec",   label: I18n.tr("Terminal"),      argv: ["syntty"] }
                 ]
 
                 p["System Tools"] = [
-                    { kind: "exec", label: "AI Shell (synsh)", argv: ["syntty", "-e", "synsh"] },
+                    { kind: "exec", label: I18n.tr("AI Shell (synsh)"), argv: ["syntty", "-e", "synsh"] },
                     // ⚠ --hold, because the whole value of this row is the
                     // output STAYING on screen after the command finishes. It
                     // was pinned to kitty for exactly that flag while syntty
@@ -495,9 +537,9 @@ PanelWindow {
                     // command after -e; handed it positionally it reads `syn`
                     // as a subcommand and dies on the next argument, so the
                     // window never opens and the row silently does nothing.
-                    { kind: "exec", label: "System Status",
+                    { kind: "exec", label: I18n.tr("System Status"),
                       argv: ["syntty", "--hold", "-e", "syn", "status"] },
-                    { kind: "exec", label: "Network Setup",    argv: ["syntty", "-e", "nmtui"] },
+                    { kind: "exec", label: I18n.tr("Network Setup"),    argv: ["syntty", "-e", "nmtui"] },
                     // synpkg, our own manager. A GUI (Terminal=false in its
                     // .desktop), so it runs bare, no terminal wrapper.
                     //
@@ -514,7 +556,7 @@ PanelWindow {
                     // filtered below, MenuState probes for the package, and
                     // `pages` is a binding, so the row appears on its own when
                     // synpkg lands mid-session, with no relog.
-                    { kind: "exec", label: "Software Manager",
+                    { kind: "exec", label: I18n.tr("Software Manager"),
                       needs: "synpkg", argv: ["synpkg", "gui"] },
                     // The full-system upgrade, same libalpm engine the Software
                     // Manager GUI drives, so CLI and GUI stay in agreement —
@@ -528,7 +570,7 @@ PanelWindow {
                     // are newer than its packages — every later install then
                     // 404s on a filename the mirror has already rotated away.
                     // ⚠ --hold and -e, for the reasons on System Status above.
-                    { kind: "exec", label: "Update System",
+                    { kind: "exec", label: I18n.tr("Update System"),
                       argv: MenuState.synpkgPresent
                           ? ["syntty", "--hold", "-e", "synpkg", "upgrade"]
                           : ["syntty", "--hold", "-e", "sudo", "pacman", "-Syu"] },
@@ -545,7 +587,7 @@ PanelWindow {
                     // same check under `synpkg system check`, but applying it
                     // needs a terminal (build-all.sh runs sudo mid-build), and
                     // this GUI is the thing that owns that.
-                    { kind: "exec", label: "SynapseOS Updates", argv: ["syn-update-gui"] }
+                    { kind: "exec", label: I18n.tr("SynapseOS Updates"), argv: ["syn-update-gui"] }
                 ].filter(r => r.needs !== "synpkg" || MenuState.synpkgPresent)
 
                 // The control panel's categories, not a second list of settings.
@@ -580,22 +622,22 @@ PanelWindow {
                 // anywhere said so. tests/menu_cats.sh now compares this list
                 // against ctlpanel.c and fails if a category is not here.
                 p["Settings"] = [
-                    { kind: "action", label: "Control Panel",  action: "control" },
-                    { kind: "action", label: "Appearance",     action: "control", arg: "appearance" },
-                    { kind: "action", label: "Windows",        action: "control", arg: "windows" },
-                    { kind: "action", label: "Desktop",        action: "control", arg: "desktop" },
-                    { kind: "action", label: "Input",          action: "control", arg: "input" },
-                    { kind: "action", label: "Display",        action: "control", arg: "display" },
-                    { kind: "action", label: "Sound",          action: "control", arg: "sound" },
-                    { kind: "action", label: "Network",        action: "control", arg: "network" },
-                    { kind: "action", label: "Power",          action: "control", arg: "power" },
-                    { kind: "action", label: "System",         action: "control", arg: "system" },
-                    { kind: "action", label: "Shortcuts",      action: "control", arg: "shortcuts" },
+                    { kind: "action", label: I18n.tr("Control Panel"),  action: "control" },
+                    { kind: "action", label: I18n.tr("Appearance"),     action: "control", arg: "appearance" },
+                    { kind: "action", label: I18n.tr("Windows"),        action: "control", arg: "windows" },
+                    { kind: "action", label: I18n.tr("Desktop"),        action: "control", arg: "desktop" },
+                    { kind: "action", label: I18n.tr("Input"),          action: "control", arg: "input" },
+                    { kind: "action", label: I18n.tr("Display"),        action: "control", arg: "display" },
+                    { kind: "action", label: I18n.tr("Sound"),          action: "control", arg: "sound" },
+                    { kind: "action", label: I18n.tr("Network"),        action: "control", arg: "network" },
+                    { kind: "action", label: I18n.tr("Power"),          action: "control", arg: "power" },
+                    { kind: "action", label: I18n.tr("System"),         action: "control", arg: "system" },
+                    { kind: "action", label: I18n.tr("Shortcuts"),      action: "control", arg: "shortcuts" },
                     // Lock stays a direct row. It is the one thing on this page
                     // nobody wants two clicks away, and it is an action rather
                     // than a setting — the control panel lists it under Power
                     // for findability, not because it belongs to a category.
-                    { kind: "action", label: "Lock Screen",    action: "lock" }
+                    { kind: "action", label: I18n.tr("Lock Screen"),    action: "lock" }
                 ]
 
                 for (const c of rowModel.categoryNames) {
@@ -663,7 +705,7 @@ PanelWindow {
                      */
                     if (MenuState.pkgTerm === MenuState.search
                         && MenuState.pkgResults.length > 0) {
-                        hits.push({ kind: "header", label: "AVAILABLE TO INSTALL" })
+                        hits.push({ kind: "header", label: I18n.tr("AVAILABLE TO INSTALL") })
                         for (const p of MenuState.pkgResults)
                             hits.push({
                                 kind:  "install",
@@ -679,7 +721,7 @@ PanelWindow {
                     // come up empty.
                     hits.push({
                         kind:  "exec",
-                        label: "Search every source for “" + MenuState.search + "”…",
+                        label: I18n.tr("Search every source for “%1”…").arg(MenuState.search),
                         argv:  ["synpkg", "gui", "all",
                                 "--search", MenuState.search]
                     })
@@ -688,30 +730,36 @@ PanelWindow {
 
                 const page = MenuState.page
                 const out = []
-                if (page !== "") out.push({ kind: "back", label: "Back" })
+                if (page !== "") out.push({ kind: "back", label: I18n.tr("Back") })
 
                 for (const r of (rowModel.pages[page] || [])) out.push(r)
 
                 if (page === "") {
                     // The two fixed submenus sit under SYSTEM, before the
                     // scanned categories — same order menu.c emitted them in.
-                    out.push({ kind: "page", label: "System Tools", page: "System Tools" })
-                    out.push({ kind: "page", label: "Settings",     page: "Settings" })
+                    // ⛔ `page` IS THE KEY rowModel.pages is indexed by. Only
+                    // `label` is drawn — see catLabel().
+                    out.push({ kind: "page", label: I18n.tr("System Tools"),
+                               page: "System Tools" })
+                    out.push({ kind: "page", label: I18n.tr("Settings"),
+                               page: "Settings" })
 
-                    out.push({ kind: "header", label: "APPLICATIONS" })
+                    out.push({ kind: "header", label: I18n.tr("APPLICATIONS") })
                     for (const c of rowModel.categoryNames) {
                         // Settings already has its fixed root row above; a
                         // second one from a Settings-category .desktop would
                         // double it.
                         if (c === "Settings") continue
-                        out.push({ kind: "page", label: c, page: c })
+                        out.push({ kind: "page", label: rowModel.catLabel(c), page: c })
                     }
 
-                    out.push({ kind: "header", label: "POWER" })
-                    out.push({ kind: "action", label: "Lock Screen", action: "lock" })
-                    out.push({ kind: "action", label: "Log Out",     action: "quit" })
-                    out.push({ kind: "exec",   label: "Reboot",      argv: ["sudo", "systemctl", "reboot"] })
-                    out.push({ kind: "exec",   label: "Shut Down",   argv: ["sudo", "systemctl", "poweroff"] })
+                    out.push({ kind: "header", label: I18n.tr("POWER") })
+                    out.push({ kind: "action", label: I18n.tr("Lock Screen"), action: "lock" })
+                    out.push({ kind: "action", label: I18n.tr("Log Out"),     action: "quit" })
+                    out.push({ kind: "exec",   label: I18n.tr("Reboot"),
+                               argv: ["sudo", "systemctl", "reboot"] })
+                    out.push({ kind: "exec",   label: I18n.tr("Shut Down"),
+                               argv: ["sudo", "systemctl", "poweroff"] })
                 }
 
                 return out
@@ -981,7 +1029,7 @@ PanelWindow {
                 elide: Text.ElideRight
                 text: MenuState.search !== "" ? MenuState.search
                     : MenuState.page   !== "" ? MenuState.page
-                                              : "Type to search…"
+                                              : I18n.tr("Type to search…")
                 color: MenuState.search !== "" ? Theme.popupFgOn(panel.backdrop)
                                                : Theme.popupFgDimOn(panel.backdrop)
                 font.family: Theme.fontFamily
@@ -1050,7 +1098,7 @@ PanelWindow {
                     // and the section header scrolls out of sight the moment
                     // there is more than a screenful.
                     text: rowItem.modelData.kind === "page" ? rowItem.modelData.label + "  ▸"
-                        : rowItem.modelData.kind === "back" ? "◂  Back"
+                        : rowItem.modelData.kind === "back" ? I18n.tr("◂  Back")
                         : rowItem.modelData.kind === "install" ? "+  " + rowItem.modelData.label
                                                             : rowItem.modelData.label
                     color: rowItem.header ? Theme.magenta : Theme.popupFgOn(panel.backdrop)

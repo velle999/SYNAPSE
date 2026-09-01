@@ -86,17 +86,25 @@ BarModule {
 
     tooltipText: {
         if (root.errored)
-            return "Could not check for updates\n"
+            // ⛔ `syn-update ping` IS A COMMAND TO TYPE and stays spelled that
+            // way in every language — a translated one names a binary that is
+            // not on the system. Same rule the compositor's own footers follow.
+            return I18n.tr("Could not check for updates\n")
                  + (root.reason !== "" ? root.reason + "\n" : "")
-                 + "syn-update ping   to try now"
+                 + I18n.tr("syn-update ping   to try now")
         const bits = []
-        if (root.updates > 0)  bits.push(root.updates + " to rebuild")
-        if (root.newComps > 0) bits.push(root.newComps + " new")
-        if (root.held > 0)     bits.push(root.held + " held back")
-        let t = "SynapseOS updates: " + bits.join(", ")
-        if (root.rev !== "") t += "\nupstream at " + root.rev
-        if (root.checkedAt > 0) t += "\nchecked " + root.ago(root.checkedAt)
-        return t + "\nClick to open Updates \xc2\xb7 right-click for more"
+        if (root.updates > 0)
+            bits.push(I18n.trn("%1 to rebuild", "%1 to rebuild", root.updates).arg(root.updates))
+        if (root.newComps > 0)
+            bits.push(I18n.trn("%1 new", "%1 new", root.newComps).arg(root.newComps))
+        if (root.held > 0)
+            bits.push(I18n.trn("%1 held back", "%1 held back", root.held).arg(root.held))
+        let t = I18n.tr("SynapseOS updates: %1").arg(bits.join(", "))
+        // ⛔ rev is a GIT SHA. Not translated, and not formatted either.
+        if (root.rev !== "") t += "\n" + I18n.tr("upstream at %1").arg(root.rev)
+        if (root.checkedAt > 0)
+            t += "\n" + I18n.tr("checked %1").arg(root.ago(root.checkedAt))
+        return t + "\n" + I18n.tr("Click to open Updates \xc2\xb7 right-click for more")
     }
 
     // The window that actually installs them. `syn-update-gui` and not
@@ -137,18 +145,21 @@ BarModule {
         id: menu
         // A PopupWindow cannot find its own window — see ModuleMenu.barWindow.
         barWindow: root.QsWindow.window
-        title: "Updates"
+        title: I18n.tr("Updates")
 
+        // ⛔ THE `key` IS NOT A LABEL. onTriggered switches on it and it never
+        // reaches a screen — translating one silently disconnects the row from
+        // what it does. Same trap ctlpanel.c's settings keys document, in QML.
         rows: [
-            { key: "open",  label: "Open Updates" },
-            { key: "check", label: "Check now",
+            { key: "open",  label: I18n.tr("Open Updates") },
+            { key: "check", label: I18n.tr("Check now"),
               detail: root.checkedAt > 0 ? root.sinceChecked : "" },
-            { key: "apply", label: "Apply in a terminal",
+            { key: "apply", label: I18n.tr("Apply in a terminal"),
               // Nothing to build is not a reason to hide the row — a greyed
               // row still says the command exists — but it is a reason not to
               // start a sudo build that would print "nothing to build".
               enabled: root.pending > 0 },
-            { key: "held",  label: "Held back",
+            { key: "held",  label: I18n.tr("Held back"),
               detail: String(root.held), enabled: root.held > 0 }
         ]
 
@@ -168,9 +179,10 @@ BarModule {
     function ago(when) {
         if (!when || when <= 0) return ""
         const mins = Math.floor((Date.now() / 1000 - when) / 60)
-        return mins < 1 ? "just now"
-             : mins < 60 ? mins + " min ago"
-             : Math.floor(mins / 60) + "h ago"
+        return mins < 1 ? I18n.tr("just now")
+             : mins < 60 ? I18n.trn("%1 min ago", "%1 min ago", mins).arg(mins)
+             : I18n.trn("%1h ago", "%1h ago", Math.floor(mins / 60))
+                   .arg(Math.floor(mins / 60))
     }
 
     Process {

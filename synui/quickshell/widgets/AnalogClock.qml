@@ -36,7 +36,7 @@ WidgetFrame {
 
     widgetId: "analog"
     shown: WidgetState.analog
-    label: "CLOCK"
+    label: I18n.tr("CLOCK")
     accent: Theme.clock
 
     // The hour markings and the hands are the theme's ink on whatever this card

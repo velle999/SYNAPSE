@@ -73,7 +73,7 @@ WidgetFrame {
 
     widgetId: "music"
     shown: WidgetState.music
-    label: "NOW PLAYING"
+    label: I18n.tr("NOW PLAYING")
     accent: Theme.magenta
     interactive: true
 
@@ -245,7 +245,7 @@ WidgetFrame {
         if (!haveAny) return ""
         const named = MusicLibrary.nameFor(root.wantNamed)
         if (named) return named
-        return MusicLibrary.displayTitle(player.trackTitle) || "(unknown track)"
+        return MusicLibrary.displayTitle(player.trackTitle) || I18n.tr("(unknown track)")
     }
     readonly property string artistText: {
         if (!haveAny) return ""
@@ -390,8 +390,8 @@ WidgetFrame {
             Text {
                 width: parent.width
                 text: root.haveAny ? root.titleText
-                    : root.driveCliamp ? "nothing playing yet"
-                                       : "nothing is playing"
+                    : root.driveCliamp ? I18n.tr("nothing playing yet")
+                                       : I18n.tr("nothing is playing")
                 color: root.haveAny ? root.ink : root.inkDim
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
@@ -405,9 +405,10 @@ WidgetFrame {
                 // button WILL do, so the quiet card answers the question it
                 // used to leave hanging.
                 text: root.haveAny ? root.artistText
-                    : root.driveCliamp ? "press play to start " +
-                                         (MusicLibrary.sourceName || "a source")
-                                       : ""
+                    : root.driveCliamp
+                        ? I18n.tr("press play to start %1")
+                              .arg(MusicLibrary.sourceName || I18n.tr("a source"))
+                        : ""
                 visible: text !== ""
                 color: root.inkDim
                 font.family: Theme.fontFamily
@@ -596,7 +597,7 @@ WidgetFrame {
                 // Before the first fetch comes back there is no name yet, and
                 // the chip still has to say what pressing it is for.
                 text: MusicLibrary.sourceName !== "" ? MusicLibrary.sourceName
-                                                     : "choose a source"
+                                                     : I18n.tr("choose a source")
                 color: root.ink
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -853,9 +854,9 @@ WidgetFrame {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: MusicLibrary.loading ? "loading…"
+                text: MusicLibrary.loading ? I18n.tr("loading…")
                     : MusicLibrary.status !== "" ? MusicLibrary.status
-                                                 : "nothing to show for this source"
+                                                 : I18n.tr("nothing to show for this source")
                 color: root.inkDim
                 font.family: Theme.fontFamily
                 font.pixelSize: 10

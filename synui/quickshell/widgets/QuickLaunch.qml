@@ -23,7 +23,7 @@ WidgetFrame {
 
     widgetId: "launcher"
     shown: WidgetState.launcher
-    label: "LAUNCH"
+    label: I18n.tr("LAUNCH")
     accent: Theme.cyan
     interactive: true
 
@@ -69,10 +69,13 @@ WidgetFrame {
         // things synui DRAWS, and rofi is an external program. This row used
         // to run `synctl dispatch menu`, which opens synui's own menu panel —
         // a different thing from the app launcher the row is labelled as.
-        { name: "app launcher", sub: "rofi",              exec: ["rofi", "-show", "drun"] },
-        { name: "files",        sub: "file manager",      exec: ["synui-open-folder"] },
+        // ⛔ `sub` NAMES THE BINARY THAT RUNS and is not a description — rofi is
+        // rofi in every language, and so is the file manager's own name below.
+        { name: I18n.tr("app launcher"), sub: "rofi",     exec: ["rofi", "-show", "drun"] },
+        { name: I18n.tr("files"), sub: I18n.tr("file manager"), exec: ["synui-open-folder"] },
         { name: "browser",      sub: "firefox",           exec: ["firefox"] },
-        { name: "select wall",  sub: "wallpaper library", exec: ["synctl", "dispatch", "wallpaper"] }
+        { name: I18n.tr("select wall"), sub: I18n.tr("wallpaper library"),
+          exec: ["synctl", "dispatch", "wallpaper"] }
     ]
 
     Column {

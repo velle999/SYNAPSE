@@ -50,12 +50,14 @@ BarModule {
     // also where a chain that says it is on but is not gets noticed, since the
     // mixer has to be opened to see the row itself.
     tooltipText: {
-        let s = (sink && sink.description ? sink.description : "Audio")
-        s += "\n" + (muted ? "muted" : volume + "%")
+        // ⛔ sink.description is PipeWire's name for the device. Not translated:
+        // it has to match what the mixer and pavucontrol call the same sink.
+        let s = (sink && sink.description ? sink.description : I18n.tr("Audio"))
+        s += "\n" + (muted ? I18n.tr("muted") : volume + "%")
         if (EqState.enabled)
-            s += "\nEqualizer: " + EqState.status
+            s += "\n" + I18n.tr("Equalizer: %1").arg(EqState.status)
                  + (EqState.warning ? "" : "  ·  " + EqState.preset)
-        return s + "\nClick to mute · scroll to adjust · right-click for mixer"
+        return s + "\n" + I18n.tr("Click to mute · scroll to adjust · right-click for mixer")
     }
 
     onClicked: if (audio) audio.muted = !audio.muted

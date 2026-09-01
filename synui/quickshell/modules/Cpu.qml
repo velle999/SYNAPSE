@@ -22,7 +22,7 @@ BarModule {
     icon: Icons.cpu
     iconColor: usage >= 90 ? root.pal.red : (usage >= 60 ? root.pal.clock : root.pal.glyph)
     text: usage + "%"
-    tooltipText: "CPU " + usage + "%\nClick for the task manager"
+    tooltipText: I18n.tr("CPU %1%\nClick for the task manager").arg(usage)
 
     onClicked: taskmgr.running = true
 

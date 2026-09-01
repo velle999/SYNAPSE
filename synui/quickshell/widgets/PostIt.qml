@@ -42,7 +42,7 @@ WidgetFrame {
     // what gives each one a position that survives a restart.
     widgetId: noteId
     shown: WidgetState.postit
-    label: "NOTE"
+    label: I18n.tr("NOTE")
     accent: Theme.yellow
     interactive: true
 
@@ -100,7 +100,7 @@ WidgetFrame {
         id: note
         anchors { top: parent.top; left: parent.left; right: parent.right; bottom: foot.top }
         anchors.bottomMargin: 4
-        text: root.empty ? "click to write something" : root.text
+        text: root.empty ? I18n.tr("click to write something") : root.text
         color: root.empty ? root.inkDim : root.ink
         font.family: Theme.fontFamily
         font.pixelSize: 12
@@ -129,7 +129,7 @@ WidgetFrame {
         // strip of the card that is not the note itself.
         text: plus.hovered ? plus.hint
             : del.hovered  ? del.hint
-            : hover.containsMouse ? "click to edit" : ""
+            : hover.containsMouse ? I18n.tr("click to edit") : ""
         color: root.inkDim
         font.family: Theme.fontFamily
         font.pixelSize: 9
@@ -154,7 +154,7 @@ WidgetFrame {
             id: plus
             glyph: "+"
             tint: Theme.yellow
-            hint: "another note"
+            hint: I18n.tr("another note")
             onActivated: PostItState.add()
         }
 
@@ -167,7 +167,7 @@ WidgetFrame {
             visible: PostItState.ids.length > 1
             glyph: root.armed ? "!" : "×"
             tint: root.armed ? Theme.red : root.inkDim
-            hint: root.armed ? "again to delete" : "delete this note"
+            hint: root.armed ? I18n.tr("again to delete") : I18n.tr("delete this note")
             onActivated: {
                 // Two presses, because this throws away something only the user
                 // could have written and there is no undo for a deleted file.

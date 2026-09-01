@@ -205,7 +205,7 @@ PopupWindow {
 
             Text {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                text: "MIXER"
+                text: I18n.tr("MIXER")
                 color: Theme.magenta
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -221,7 +221,7 @@ PopupWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Done"
+                    text: I18n.tr("Done")
                     color: Theme.fg
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
@@ -259,7 +259,7 @@ PopupWindow {
                 spacing: 4
 
                 // ── Output devices ───────────────────────
-                MixerHeading { width: col.width; text: "Output" }
+                MixerHeading { width: col.width; text: I18n.tr("Output") }
 
                 Repeater {
                     model: mixer.sinks
@@ -295,7 +295,7 @@ PopupWindow {
                 // The row is a LINK, not an editor — the ten bands live in
                 // synui's own panel, and the button opens that rather than this
                 // popup growing a second copy of synui-eq's preset table.
-                MixerHeading { width: col.width; text: "Equalizer" }
+                MixerHeading { width: col.width; text: I18n.tr("Equalizer") }
 
                 MixerEqRow {
                     width: col.width
@@ -320,7 +320,7 @@ PopupWindow {
                 // ── Input devices ────────────────────────
                 MixerHeading {
                     width: col.width
-                    text: "Input"
+                    text: I18n.tr("Input")
                     visible: mixer.sources.length > 0
                 }
 
@@ -345,13 +345,13 @@ PopupWindow {
                 }
 
                 // ── Application streams ──────────────────
-                MixerHeading { width: col.width; text: "Applications" }
+                MixerHeading { width: col.width; text: I18n.tr("Applications") }
 
                 Text {
                     visible: mixer.playback.length === 0
                     width: col.width
                     leftPadding: 22
-                    text: "Nothing is playing"
+                    text: I18n.tr("Nothing is playing")
                     color: Theme.fgDim
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
@@ -379,7 +379,7 @@ PopupWindow {
                 // heading over nothing invites the reader to wonder what is.
                 MixerHeading {
                     width: col.width
-                    text: "Recording"
+                    text: I18n.tr("Recording")
                     visible: mixer.capture.length > 0
                 }
 

@@ -1,0 +1,3 @@
+# The blocking file reader I18n.qml uses. `blockLoading` is what makes the real
+# one synchronous; here every read is synchronous anyway.
+FileView 1.0 FileView.qml

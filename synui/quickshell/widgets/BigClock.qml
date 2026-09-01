@@ -23,7 +23,7 @@ WidgetFrame {
 
     widgetId: "clock"
     shown: WidgetState.clock
-    label: "CLOCK"
+    label: I18n.tr("CLOCK")
     /* The clock's own colour, not the glyph one — see Theme.qml's `clock`. On a
      * desktop taking its palette off the wallpaper this is the SECOND measured
      * hue, which is what keeps a clock the size of this one from being the same
@@ -129,7 +129,7 @@ WidgetFrame {
                                            : (parts.length > 1 ? parts[1] : ""))
                 } catch (e) {
                     root.timeText = "--:--:--"
-                    root.dateText = "clock unavailable"
+                    root.dateText = I18n.tr("clock unavailable")
                 }
             }
         }

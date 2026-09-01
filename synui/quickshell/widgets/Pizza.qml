@@ -102,7 +102,7 @@ WidgetFrame {
     // What the caption says the click will do. The host is enough to tell a
     // configured slice from a default one at a glance, and short enough to fit.
     readonly property string destination: {
-        if (root.url === root.defaultUrl) return "pizza near me"
+        if (root.url === root.defaultUrl) return I18n.tr("pizza near me")
         const m = /^[a-z]+:\/\/(?:www\.)?([^/?#]+)/i.exec(root.url)
         return m ? m[1] : "pizza"
     }
@@ -219,7 +219,7 @@ WidgetFrame {
         // and the width is a real one, so this is not the elide-against-an-
         // anchored-height case that paints nothing.
         elide: Text.ElideRight
-        text: root.opening ? "opening…" : root.destination
+        text: root.opening ? I18n.tr("opening…") : root.destination
         color: root.opening ? Theme.yellow : Theme.fg
         font.family: Theme.fontFamily
         font.pixelSize: 10

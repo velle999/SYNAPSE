@@ -2,6 +2,10 @@
 # turns OFF implicit sibling resolution — every type in here has to be listed
 # or `Bar is not a type`. That is the whole reason this file has more than one
 # line.
+# ⚠ I18n FIRST, and it is the one singleton every other file may reach for.
+# quickshell has no translator machinery, so `qsTr()` compiles and translates
+# nothing; I18n.tr() reads a JSON catalog instead. See I18n.qml.
+singleton I18n 1.0 I18n.qml
 singleton Theme 1.0 Theme.qml
 singleton Icons 1.0 Icons.qml
 singleton OsdState 1.0 OsdState.qml

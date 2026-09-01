@@ -54,18 +54,21 @@ QtObject {
 
     // Human labels for the menu, in menu order.
     readonly property var rows: [
-        { key: "autohide",   label: "Auto-hide bar" },
-        { key: "workspaces", label: "Desktop switcher" },
-        { key: "media",      label: "Media preview" },
-        { key: "clock",      label: "Clock" },
-        { key: "tray",       label: "System tray" },
-        { key: "updates",    label: "Update notifier" },
-        { key: "weather",    label: "Weather" },
-        { key: "assistant",  label: "Assistant" },
-        { key: "pomodoro",   label: "Focus timer" },
-        { key: "sysinfo",    label: "CPU + memory" },
-        { key: "volume",     label: "Volume" },
-        { key: "netbt",      label: "Network + Bluetooth" }
+        // ⛔ `key` IS THE bar.json SPELLING and is written to that file; only
+        // `label` reaches a screen. Translating a key writes German into the
+        // config and silently loses the row — ctlpanel.c's trap, in QML.
+        { key: "autohide",   label: I18n.tr("Auto-hide bar") },
+        { key: "workspaces", label: I18n.tr("Desktop switcher") },
+        { key: "media",      label: I18n.tr("Media preview") },
+        { key: "clock",      label: I18n.tr("Clock") },
+        { key: "tray",       label: I18n.tr("System tray") },
+        { key: "updates",    label: I18n.tr("Update notifier") },
+        { key: "weather",    label: I18n.tr("Weather") },
+        { key: "assistant",  label: I18n.tr("Assistant") },
+        { key: "pomodoro",   label: I18n.tr("Focus timer") },
+        { key: "sysinfo",    label: I18n.tr("CPU + memory") },
+        { key: "volume",     label: I18n.tr("Volume") },
+        { key: "netbt",      label: I18n.tr("Network + Bluetooth") }
     ]
 
     property var perOutput: ({})

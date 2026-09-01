@@ -31,6 +31,30 @@ import "tuxart.js" as TuxArt
 Item {
     id: shell
 
+    /*
+     * The words on the screen.
+     *
+     * ⛔ TAKEN AS A PROPERTY, NEVER LOOKED UP HERE. This file and TuxScreen import QtQuick
+     * and the sprite table and NOTHING else — no Theme, no Quickshell, no
+     * singleton — which is what lets tests/tux_screen.sh render sixteen moods
+     * side by side with the `qml` tool and no compositor. Reaching for I18n
+     * would put a desktop back in the dependency list of a picture, and the
+     * first version of this did exactly that: `import ".."` made the standalone
+     * harness exit 2 with no line number.
+     *
+     * The defaults are English, so the harness draws real words. Tuxagotchi.qml
+     * fills in the translated ones — the same route the five colours and two
+     * font families already take.
+     */
+    property var words: ({
+        lived: "lived %1d %2h", anEgg: "an egg", ageWeight: "%1d %2h  ·  %3oz",
+        fed: "FED", fun: "FUN", newEgg: "press for a new egg",
+        stage: "STAGE", age: "AGE", weight: "WEIGHT", discipline: "DISCIPLINE",
+        mess: "MESS", health: "HEALTH", mistakes: "MISTAKES",
+        well: "well", ill: "ill", veryIll: "very ill",
+        ageFmt: "%1d %2h", ozFmt: "%1 oz"
+    })
+
     // TuxState in the widget, a stub in the test rig. Everything below reads
     // its properties and calls its functions; nothing here keeps a copy.
     property var pet: null
@@ -222,6 +246,7 @@ Item {
             warn: shell.warn
             isLight: shell.isLight
             fontFamily: shell.fontFamily
+            words: shell.words
 
             onHatchRequested: shell.pet.newEgg()
         }
@@ -291,11 +316,13 @@ Item {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 text: !shell.pet ? ""
                       : shell.pet.stage === "gone"
-                        ? "lived " + shell.pet.ageDays + "d " + shell.pet.ageHours + "h"
+                        ? shell.words.lived.arg(shell.pet.ageDays)
+                                           .arg(shell.pet.ageHours)
                       : shell.pet.stage === "egg"
-                        ? "an egg"
-                        : shell.pet.ageDays + "d " + shell.pet.ageHours + "h  ·  "
-                          + shell.pet.weight + "oz"
+                        ? shell.words.anEgg
+                        : shell.words.ageWeight.arg(shell.pet.ageDays)
+                                               .arg(shell.pet.ageHours)
+                                               .arg(shell.pet.weight)
                 color: shell.label
                 font.family: shell.fontFamily
                 font.pixelSize: 9

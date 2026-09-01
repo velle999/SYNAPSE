@@ -2811,7 +2811,76 @@ pkgver=0.1.0
 #   two-tone footer as consecutive syn_show_text() calls with no move_to.
 #   Its contact sheet draws real msgstrs out of po/ar.po and po/hi.po, not
 #   strings invented for a test.
-pkgrel=581
+# 582: the bar speaks, or at least it can now — the QML translation bridge.
+#   ⛔ qsTr() IS A TRAP AND THAT IS WHY THIS FILE EXISTS AT ALL. Qt's
+#   translation path needs someone to call QTranslator::load() and
+#   installTranslator() before the QML engine starts, and quickshell 0.3.1 does
+#   neither — there is no installTranslator anywhere in the binary and no way to
+#   reach one from QML. So qsTr("Volume") compiles, returns "Volume", and
+#   translates nothing in every language forever, while reading in a diff
+#   exactly like a marked string. Marking the bar up with it would have been a
+#   day's work that ships an English bar and reports success. Checked, not
+#   assumed, and tests/i18n_bar.sh fails on a qsTr( anywhere under quickshell/.
+#   So the catalogs are carried as JSON and looked up in quickshell/I18n.qml.
+#   po-bar/ holds ordinary gettext .po files — msgmerge, msgfmt -c and
+#   tools/po-fill.py all work on them, and po-fill grew a --dir so one tool
+#   serves both sets rather than a second copy that drifts. Only the last mile
+#   changes: tools/po2json.py compiles each to a small JSON object and a
+#   blocking FileView reads it.
+#   ⚠ THE READ HAS TO BE SYNCHRONOUS. A FileView is async by default and
+#   onLoaded arrives a turn later — by which time every label in the bar has
+#   been laid out from the English it got on the first pass, with no signal to
+#   rebind to because tr() is a function and not a binding. blockLoading plus a
+#   text() call inside the loader is the whole reason this works.
+#   ⛔ AND xgettext CANNOT READ QML. There is no --language=QML, and
+#   --language=JavaScript chokes on the object syntax and extracts a silent
+#   subset — a partial .pot being the worst outcome available, since it looks
+#   like a successful run. tools/qml-xgettext.py reads the tree instead, folds
+#   adjacent and +-joined literals so a sentence can wrap, skips both comment
+#   forms, and treats a NON-LITERAL argument as an ERROR rather than a skip:
+#   I18n.tr(someVariable) is the QML shape of the N_() trap src/i18n.h
+#   documents, marked-looking and English.
+#   201 msgids across 35 files. What was deliberately NOT marked is the larger
+#   half of the work: bar.json keys, dispatch actions, page ids, panel args,
+#   connector names, SSIDs, PipeWire sink descriptions, EQ preset names, git
+#   SHAs, commands a person is meant to type, and the start menu's category
+#   buckets — which are the keys rowModel.apps is indexed by and which the sort
+#   tests with `a === "Other"`, so they are translated only at the draw step, in
+#   a new catLabel(). A translated bucket would file every application under
+#   Other and open a page that does not exist.
+#   ⛔ AND THE PET STAYS A PICTURE. TuxScreen and TuxShell import QtQuick and
+#   the sprite table and nothing else, which is what lets tests/tux_screen.sh
+#   draw sixteen moods with the `qml` tool and no compositor. The first version
+#   of this reached for I18n in both and the harness exited 2 with no line
+#   number. Their words arrive as a `words` property with English defaults, the
+#   same route the five colours and two font families already take, and
+#   Tuxagotchi.qml fills them in.
+#   Two gates. tests/i18n_bar.sh is the reachability half — no qsTr, every
+#   marking file listed, every argument a literal, the template current, the two
+#   LINGUAS in step, and the keys untouched. tests/i18n_bar_runtime.sh is the
+#   half nothing covered before: it EXECUTES quickshell/I18n.qml against stub
+#   Quickshell types under Qt's own qml and checks that a catalog on disk
+#   changes the answer — twenty cases including glibc's LANGUAGE precedence, the
+#   C-locale veto, Russian's three plural forms at 1/3/11/100, malformed JSON,
+#   and every fallback to English.
+#   ⚠ NOT UNDER quickshell, and that is not a shortcut: quickshell connects to
+#   Wayland at startup and on this box that is the LIVE session — `env -u
+#   WAYLAND_DISPLAY` does not prevent it, it falls back to the running
+#   compositor's socket. A test that has to be run carefully stops being run.
+#   ⛔ TWO CATALOGS WERE BORN WRONG AND NOTHING SAID SO. `msginit -l ar` and
+#   `-l zh` could not resolve those bare codes to a locale and silently fell
+#   back to the template's English default, so Arabic got two plural forms
+#   instead of six and Chinese two instead of one. Both are perfectly valid
+#   rules that pass every property check. The gate now compares each rule
+#   against po/'s for the same language — the two sets cover the same thirteen,
+#   so a disagreement is a bug by construction — and runs every rule through
+#   Qt's engine, which also proves `new Function` is available there.
+#   The thirteen catalogs are EMPTY at this pkgrel. That is a coherent state:
+#   every lookup falls through to the msgid, so the bar is exactly the English
+#   bar it was, and the mechanism can be reviewed without 2,600 translations on
+#   top of it. Filling them is the next pkgrel, the way po/ was filled at
+#   572-580.
+pkgrel=582
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

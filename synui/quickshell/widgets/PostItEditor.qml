@@ -168,7 +168,7 @@ PanelWindow {
             anchors { top: parent.top; left: parent.left; margins: 10 }
             // Which note, once there is more than one to be confused about.
             text: PostItState.ids.length > 1
-                  ? "note " + (PostItState.indexOf(root.active) + 1)
+                  ? I18n.tr("note %1").arg(PostItState.indexOf(root.active) + 1)
                   : "note"
             color: Theme.yellow
             font.family: Theme.fontFamily
@@ -280,7 +280,7 @@ PanelWindow {
         Text {
             id: foot
             anchors { bottom: parent.bottom; left: parent.left; margins: 8 }
-            text: "esc saves and closes · right-click to copy and paste"
+            text: I18n.tr("esc saves and closes · right-click to copy and paste")
             color: Theme.fgDim
             font.family: Theme.fontFamily
             font.pixelSize: 9
@@ -385,7 +385,7 @@ PanelWindow {
                 onChosen: { root.pasteInto(); menu.open = false }
             }
             MenuRow {
-                label: "select all"; enabled: edit.text !== ""
+                label: I18n.tr("select all"); enabled: edit.text !== ""
                 onChosen: { edit.selectAll(); menu.open = false }
             }
         }

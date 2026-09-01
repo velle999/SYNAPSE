@@ -40,11 +40,13 @@ BarModule {
 
     tooltipText: {
         switch (kind) {
-        case "wifi":     return ssid + " (" + signal_ + "%)\n" + ipaddr
-                              + "\nClick to pick a network"
-        case "ethernet": return "Wired\n" + ipaddr + "\nClick for network settings"
-        case "disabled": return "Wi-Fi is switched off\nMiddle-click to turn it back on"
-        default:         return "Disconnected\nClick to pick a network"
+        // ⛔ ssid IS THE NETWORK'S OWN NAME and is never translated — it is
+        // what the router broadcasts and what the picker lists.
+        case "wifi":     return I18n.tr("%1 (%2%)\n%3\nClick to pick a network")
+                                    .arg(ssid).arg(signal_).arg(ipaddr)
+        case "ethernet": return I18n.tr("Wired\n%1\nClick for network settings").arg(ipaddr)
+        case "disabled": return I18n.tr("Wi-Fi is switched off\nMiddle-click to turn it back on")
+        default:         return I18n.tr("Disconnected\nClick to pick a network")
         }
     }
 
@@ -101,7 +103,7 @@ BarModule {
                 for (const line of this.text.split("\n")) {
                     const p = line.split(":")
                     if (p[0] === "yes") {
-                        root.ssid = p[1] || "(hidden)"
+                        root.ssid = p[1] || I18n.tr("(hidden)")
                         root.signal_ = parseInt(p[2] || "0", 10)
                         break
                     }
@@ -116,7 +118,7 @@ BarModule {
         command: ["sh", "-c",
                   "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1"]
         stdout: StdioCollector {
-            onStreamFinished: root.ipaddr = this.text.trim() || "no address"
+            onStreamFinished: root.ipaddr = this.text.trim() || I18n.tr("no address")
         }
     }
 

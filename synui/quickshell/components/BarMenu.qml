@@ -150,7 +150,8 @@ PopupWindow {
             spacing: 1
 
             Text {
-                text: "Bar · " + menu.output
+                // ⛔ menu.output is a CONNECTOR NAME (DP-3). Never translated.
+                text: I18n.tr("Bar · %1").arg(menu.output)
                 color: Theme.magenta
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -243,7 +244,7 @@ PopupWindow {
              */
             Text {
                 visible: menu.hostablePlugins.length > 0
-                text: "Plugins"
+                text: I18n.tr("Plugins")
                 color: Theme.magenta
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -353,7 +354,7 @@ PopupWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Done"
+                    text: I18n.tr("Done")
                     color: Theme.popupFgOn(menu.backdrop)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11

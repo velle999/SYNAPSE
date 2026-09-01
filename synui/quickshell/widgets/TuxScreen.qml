@@ -24,6 +24,29 @@ import "tuxart.js" as TuxArt
 Rectangle {
     id: lcd
 
+    /*
+     * The words on the screen.
+     *
+     * ⛔ TAKEN AS A PROPERTY, NEVER LOOKED UP HERE. This file imports QtQuick
+     * and the sprite table and NOTHING else — no Theme, no Quickshell, no
+     * singleton — which is what lets tests/tux_screen.sh render sixteen moods
+     * side by side with the `qml` tool and no compositor. Reaching for I18n
+     * would put a desktop back in the dependency list of a picture, and the
+     * first version of this did exactly that: `import ".."` made the standalone
+     * harness exit 2 with no line number.
+     *
+     * The defaults are English, so the harness draws real words. Tuxagotchi.qml
+     * fills in the translated ones — the same route the five colours and two
+     * font families already take.
+     */
+    property var words: ({
+        fed: "FED", fun: "FUN", newEgg: "press for a new egg",
+        stage: "STAGE", age: "AGE", weight: "WEIGHT", discipline: "DISCIPLINE",
+        mess: "MESS", health: "HEALTH", mistakes: "MISTAKES",
+        well: "well", ill: "ill", veryIll: "very ill",
+        ageFmt: "%1d %2h", ozFmt: "%1 oz"
+    })
+
     // The pet: TuxState in the widget, a stub in the test rig.
     property var pet: null
 
@@ -125,7 +148,7 @@ Rectangle {
     }
     Text {
         anchors { left: hungerRow.left; top: hungerRow.bottom; topMargin: 1 }
-        text: "FED"
+        text: lcd.words.fed
         color: lcd.ink
         opacity: 0.55
         font.family: lcd.fontFamily
@@ -150,7 +173,7 @@ Rectangle {
     }
     Text {
         anchors { right: happyRow.right; top: happyRow.bottom; topMargin: 1 }
-        text: "FUN"
+        text: lcd.words.fun
         color: lcd.ink
         opacity: 0.55
         font.family: lcd.fontFamily
@@ -290,7 +313,7 @@ Rectangle {
     Text {
         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 8 }
         visible: lcd.pet && lcd.pet.stage === "gone"
-        text: "press for a new egg"
+        text: lcd.words.newEgg
         color: lcd.ink
         opacity: 0.75
         font.family: lcd.fontFamily
@@ -349,14 +372,18 @@ Rectangle {
 
             Repeater {
                 model: !lcd.pet ? [] : [
-                    { k: "STAGE",      v: lcd.pet.stage },
-                    { k: "AGE",        v: lcd.pet.ageDays + "d " + lcd.pet.ageHours + "h" },
-                    { k: "WEIGHT",     v: lcd.pet.weight + " oz" },
-                    { k: "DISCIPLINE", v: lcd.pet.discipline + "%" },
-                    { k: "MESS",       v: lcd.pet.poops + " / 4" },
-                    { k: "HEALTH",     v: lcd.pet.sick === 0 ? "well"
-                                        : lcd.pet.sick === 1 ? "ill" : "very ill" },
-                    { k: "MISTAKES",   v: String(lcd.pet.careMisses) }
+                    // The pet's LCD stat sheet. `k` is drawn and translated;
+                    // `stage` is the pet's own state name, which TuxState writes
+                    // to disk and reads back, so it stays as it is.
+                    { k: lcd.words.stage,      v: lcd.pet.stage },
+                    { k: lcd.words.age,        v: lcd.words.ageFmt.arg(lcd.pet.ageDays)
+                                                                  .arg(lcd.pet.ageHours) },
+                    { k: lcd.words.weight,     v: lcd.words.ozFmt.arg(lcd.pet.weight) },
+                    { k: lcd.words.discipline, v: lcd.pet.discipline + "%" },
+                    { k: lcd.words.mess,       v: lcd.pet.poops + " / 4" },
+                    { k: lcd.words.health,     v: lcd.pet.sick === 0 ? lcd.words.well
+                                        : lcd.pet.sick === 1 ? lcd.words.ill : lcd.words.veryIll },
+                    { k: lcd.words.mistakes,   v: String(lcd.pet.careMisses) }
                 ]
                 delegate: Item {
                     id: statRow

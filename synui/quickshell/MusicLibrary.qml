@@ -297,7 +297,7 @@ QtObject {
                  * pressable() answers for both from the one place.
                  */
                 if (root.drill !== "")
-                    out.unshift({ id: "", name: "‹ back", note: "",
+                    out.unshift({ id: "", name: I18n.tr("‹ back"), note: "",
                                   kind: "back" })
 
                 root.items = out
@@ -309,7 +309,7 @@ QtObject {
                 // signed-in session is a real answer worth showing — see
                 // yt_mine(), which says the same thing on the television.
                 if (root.drill === "mine" && out.length <= 1)
-                    root.status = "nothing came back from that YouTube session"
+                    root.status = I18n.tr("nothing came back from that YouTube session")
             }
         }
     }
@@ -351,8 +351,8 @@ QtObject {
             root.itemsFor = root.sourceId
             root.status = root.sourceNote !== "" ? root.sourceNote
                         : root.sourceAction === "play"
-                          ? "press play to start this source"
-                          : "this source opens in cliamp"
+                          ? I18n.tr("press play to start this source")
+                          : I18n.tr("this source opens in cliamp")
             return
         }
         if (itemsJob.running) return
@@ -541,7 +541,7 @@ QtObject {
         }
         // ⚠ A full pool SAYS SO. Dropping the press silently is how the
         // original bug read from the outside.
-        root.status = "still working on the last one"
+        root.status = I18n.tr("still working on the last one")
         return false
     }
 
@@ -576,14 +576,14 @@ QtObject {
     function errand(args) {
         if (!root.have) return false
         if (errandProc.running) {
-            root.status = "that is already open — look for the terminal"
+            root.status = I18n.tr("that is already open — look for the terminal")
             return false
         }
         errandProc.command = ["syn-arcade", "big", "music"].concat(args)
         errandProc.running = true
         // A terminal takes a moment to map, and a button that appears to do
         // nothing for a second is the bug being fixed here.
-        root.status = "opening a terminal…"
+        root.status = I18n.tr("opening a terminal…")
         return true
     }
 
@@ -598,9 +598,11 @@ QtObject {
      * in C. The label only has to say what the press DOES.
      */
     readonly property string sourceErrand:
-          sourceAction === "setup"   ? "Sign in"
-        : sourceAction === "install" ? "Install it"
-        : sourceAction === "browse"  ? "Open in cliamp"
+        // ⛔ sourceAction IS THE STATE NAME the library reports, matched here.
+        // Only the answers are words.
+          sourceAction === "setup"   ? I18n.tr("Sign in")
+        : sourceAction === "install" ? I18n.tr("Install it")
+        : sourceAction === "browse"  ? I18n.tr("Open in cliamp")
         : ""
 
     function runSourceErrand() {
@@ -701,7 +703,7 @@ QtObject {
                 return root.errand(["yt", it.id])
 
             root.status = it.note !== ""
-                        ? it.note : "that one has to be done on the television"
+                        ? it.note : I18n.tr("that one has to be done on the television")
             return false
         }
 

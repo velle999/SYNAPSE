@@ -1,6 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+// ⚠ THE SHELL ROOT, for I18n. quickshell resolves `qs.Ui` to <shell
+// root>/Ui, so `..` from here is the root module and its qmldir — the
+// same directory `qs.Commons` sits beside. It is not reachable as
+// `qs.something` because the root is the shell itself, not a submodule.
+import ".."
 import ".."
 
 /*
@@ -24,8 +29,8 @@ Item {
     property string label: ""
     property string value: ""
     property var options: []
-    property string placeholderText: "Search..."
-    property string emptyText: "No matches"
+    property string placeholderText: I18n.tr("Search...")
+    property string emptyText: I18n.tr("No matches")
     property string triggerLabel: ""
 
     property color foreground: Color.popups.text

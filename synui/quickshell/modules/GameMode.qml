@@ -19,6 +19,10 @@ BarModule {
     moduleVisible: on              // invisible when off, like waybar's empty text
     icon: Icons.game
     iconColor: root.pal.clock
+    // ⛔ NOT TRANSLATED, AND THAT IS THE DECISION. This is a four-letter badge
+    // in a fixed-width slot beside the clock, not a sentence: "SPIELMODUS" and
+    // "ゲームモード" do not fit, and the tooltip below carries the meaning in
+    // the user's language. Same rule the compositor applies to its own badges.
     text: "GAME"
     textColor: root.pal.clock
     active: on

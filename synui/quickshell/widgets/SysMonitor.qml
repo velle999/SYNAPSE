@@ -26,7 +26,7 @@ WidgetFrame {
 
     widgetId: "sysmon"
     shown: WidgetState.sysmon
-    label: "SYS://MONITOR"
+    label: I18n.tr("SYS://MONITOR")
     accent: Theme.magenta
 
     /*
@@ -75,9 +75,11 @@ WidgetFrame {
 
         Repeater {
             model: [
-                { key: "CPU", value: root.cpu, show: true },
-                { key: "MEM", value: root.mem, show: true },
-                { key: "BAT", value: root.bat, show: root.hasBattery }
+                // Three-letter meter labels in a fixed-width column. Translated
+                // because they are read, not matched — nothing switches on them.
+                { key: I18n.tr("CPU"), value: root.cpu, show: true },
+                { key: I18n.tr("MEM"), value: root.mem, show: true },
+                { key: I18n.tr("BAT"), value: root.bat, show: root.hasBattery }
             ]
 
             delegate: Item {
@@ -163,7 +165,8 @@ WidgetFrame {
             width: col.width
             horizontalAlignment: Text.AlignRight
             text: root.memTotalGiB > 0
-                  ? root.memUsedGiB.toFixed(1) + " / " + root.memTotalGiB.toFixed(1) + " GiB"
+                  ? I18n.tr("%1 / %2 GiB").arg(root.memUsedGiB.toFixed(1))
+                                          .arg(root.memTotalGiB.toFixed(1))
                   : ""
             color: root.inkDim
             font.family: Theme.fontFamily

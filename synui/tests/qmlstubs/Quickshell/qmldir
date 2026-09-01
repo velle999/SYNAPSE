@@ -1,0 +1,10 @@
+# A stub Quickshell singleton, for testing a shell file under Qt's own qml
+# runtime instead of under quickshell.
+#
+# ⛔ WHY NOT JUST RUN quickshell? Because it connects to Wayland at startup, and
+# on this desktop that means the LIVE session — `env -u WAYLAND_DISPLAY` does
+# not prevent it, it falls back to the running compositor's socket. A test that
+# has to be run carefully is a test that stops being run.
+#
+# What is stubbed is deliberately tiny: the two things I18n.qml touches.
+singleton Quickshell 1.0 Quickshell.qml

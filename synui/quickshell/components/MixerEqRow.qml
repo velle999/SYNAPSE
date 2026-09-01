@@ -78,7 +78,7 @@ Item {
     Text {
         id: name
         anchors { left: glyph.right; leftMargin: 6; verticalCenter: parent.verticalCenter }
-        text: "Equalizer"
+        text: I18n.tr("Equalizer")
         color: root.on ? Theme.fg : Theme.fgDim
         font.family: Theme.fontFamily
         font.pixelSize: 11
@@ -98,7 +98,9 @@ Item {
         elide: Text.ElideRight
         text: {
             if (root.warning) return root.status
-            if (!root.on) return "off"
+            if (!root.on) return I18n.tr("off")
+            // ⛔ preset is the EQ preset's own name, which synctl writes and
+            // reads back; dB is the unit symbol. Neither is a sentence.
             return root.preset + (root.preamp !== 0
                                   ? "  ·  " + (root.preamp > 0 ? "+" : "") + root.preamp + " dB"
                                   : "")
@@ -129,7 +131,7 @@ Item {
 
         Text {
             anchors.centerIn: parent
-            text: "Adjust"
+            text: I18n.tr("Adjust")
             color: Theme.fg
             font.family: Theme.fontFamily
             font.pixelSize: 10

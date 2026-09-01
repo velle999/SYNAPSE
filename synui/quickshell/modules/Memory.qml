@@ -22,8 +22,8 @@ BarModule {
     icon: Icons.memory
     iconColor: percent >= 90 ? root.pal.red : (percent >= 75 ? root.pal.clock : root.pal.glyph)
     text: percent + "%"
-    tooltipText: "Memory " + usedGiB.toFixed(1) + " / " + totalGiB.toFixed(1) + " GiB"
-                 + "\nClick for the task manager"
+    tooltipText: I18n.tr("Memory %1 / %2 GiB\nClick for the task manager")
+                     .arg(usedGiB.toFixed(1)).arg(totalGiB.toFixed(1))
 
     onClicked: taskmgr.running = true
 

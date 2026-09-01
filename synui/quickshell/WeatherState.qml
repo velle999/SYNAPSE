@@ -61,9 +61,9 @@ QtObject {
     readonly property string ageText: {
         if (!root.have) return ""
         const m = Math.floor(root.age / 60)
-        if (m < 1)  return "just now"
-        if (m < 60) return m + " min ago"
-        return Math.floor(m / 60) + "h ago"
+        if (m < 1)  return I18n.tr("just now")
+        if (m < 60) return I18n.trn("%1 min ago", "%1 min ago", m).arg(m)
+        return I18n.trn("%1h ago", "%1h ago", Math.floor(m / 60)).arg(Math.floor(m / 60))
     }
 
     property Timer ageTimer: Timer {

@@ -35,24 +35,30 @@ BarModule {
                       : Icons.batEmpty)
     iconColor: charging ? root.pal.green
                         : (pct <= 10 ? root.pal.red : pct <= 20 ? root.pal.clock : root.pal.glyph)
-    text: full ? "full" : (pct + "%")
+    text: full ? I18n.tr("full") : (pct + "%")
     textColor: (!charging && pct <= 10) ? root.pal.red : root.pal.fg
 
     tooltipText: {
-        if (!dev) return "Battery"
-        let s = "Battery " + pct + "%"
+        if (!dev) return I18n.tr("Battery")
+        let s = I18n.tr("Battery %1%").arg(pct)
         if (charging && dev.timeToFull > 0)
-            s += "\n" + fmt(dev.timeToFull) + " until full"
+            s += "\n" + I18n.tr("%1 until full").arg(fmt(dev.timeToFull))
         else if (!charging && dev.timeToEmpty > 0)
-            s += "\n" + fmt(dev.timeToEmpty) + " remaining"
+            s += "\n" + I18n.tr("%1 remaining").arg(fmt(dev.timeToEmpty))
+        // ⚠ W is the SI symbol for a watt and is not translated — it is the
+        // same three strokes in every language this desktop ships.
         if (dev.changeRate) s += "\n" + dev.changeRate.toFixed(1) + " W"
-        if (dev.healthSupported) s += "\nHealth " + Math.round(dev.healthPercentage) + "%"
+        if (dev.healthSupported)
+            s += "\n" + I18n.tr("Health %1%").arg(Math.round(dev.healthPercentage))
         return s
     }
 
     function fmt(seconds) {
         const h = Math.floor(seconds / 3600)
         const m = Math.floor((seconds % 3600) / 60)
-        return h > 0 ? (h + "h " + m + "m") : (m + "m")
+        // The unit letters are part of the sentence a translator sees, because
+        // "2h 30m" is "2 Std. 30 Min." in German and "2時間30分" in Japanese —
+        // gluing a translated letter onto a number here would not reach either.
+        return h > 0 ? I18n.tr("%1h %2m").arg(h).arg(m) : I18n.tr("%1m").arg(m)
     }
 }

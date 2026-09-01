@@ -29,7 +29,7 @@ WidgetFrame {
 
     widgetId: "weather"
     shown: WidgetState.weather
-    label: "WEATHER"
+    label: I18n.tr("WEATHER")
     accent: Theme.cyan
 
     /*
@@ -134,8 +134,9 @@ WidgetFrame {
             width: col.width
             visible: !root.empty
             height: visible ? implicitHeight : 0
-            text: WeatherState.stale ? "last reading " + WeatherState.ageText
-                                     : "updated " + WeatherState.ageText
+            text: WeatherState.stale
+                  ? I18n.tr("last reading %1").arg(WeatherState.ageText)
+                  : I18n.tr("updated %1").arg(WeatherState.ageText)
             color: root.inkDim
             font.family: Theme.fontFamily
             font.pixelSize: 10
@@ -152,7 +153,9 @@ WidgetFrame {
             width: col.width
             visible: root.empty
             height: visible ? implicitHeight : 0
-            text: "No reading yet\nsynctl weather on"
+            // ⛔ `synctl weather on` is a COMMAND TO TYPE and stays spelled that
+            // way — a translated one names a verb synctl does not have.
+            text: I18n.tr("No reading yet\nsynctl weather on")
             color: root.inkDim
             font.family: Theme.fontFamily
             font.pixelSize: 11

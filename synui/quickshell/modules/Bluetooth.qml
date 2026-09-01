@@ -31,16 +31,20 @@ BarModule {
     active: anyConnected
 
     tooltipText: {
-        if (!adapter) return "No Bluetooth adapter"
-        if (!on) return "Bluetooth off\nMiddle-click to switch it on"
-        let s = adapter.name || "Bluetooth"
+        if (!adapter) return I18n.tr("No Bluetooth adapter")
+        if (!on) return I18n.tr("Bluetooth off\nMiddle-click to switch it on")
+        // ⛔ adapter.name is the ADAPTER'S OWN NAME, from BlueZ. Not translated:
+        // it is a device identity, and a person reading it has to be able to
+        // match it against what bluetoothctl says.
+        let s = adapter.name || I18n.tr("Bluetooth")
         if (anyConnected) {
-            s += "\n" + connectedDevices.length + " connected"
+            s += "\n" + I18n.trn("%1 connected", "%1 connected",
+                                 connectedDevices.length).arg(connectedDevices.length)
             for (const d of connectedDevices) s += "\n  " + (d.name || d.address)
         } else {
-            s += "\nno devices connected"
+            s += "\n" + I18n.tr("no devices connected")
         }
-        return s + "\nClick for the Bluetooth panel · middle-click toggles the radio"
+        return s + "\n" + I18n.tr("Click for the Bluetooth panel · middle-click toggles the radio")
     }
 
     onClicked: panel.running = true

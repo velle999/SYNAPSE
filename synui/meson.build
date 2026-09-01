@@ -2544,3 +2544,32 @@ i18n_test = find_program('tests/i18n.sh')
 test('i18n', i18n_test, timeout : 60)
 
 subdir('po')
+
+# The bar's own catalogs. A separate domain from po/ above because the last mile
+# is different — JSON read by a FileView, not a .mo read by libintl — and the
+# reason is in po-bar/meson.build.
+#
+# ⚠ A UI STRING IN QML THAT NO TRANSLATOR CAN REACH IS SILENTLY ENGLISH FOREVER,
+# the same failure po/POTFILES has, with one extra way in: qsTr() looks like the
+# marking and is not. tests/i18n_bar.sh fails on a qsTr( anywhere under
+# quickshell/, on a .qml that calls I18n.tr() and is not in po-bar/POTFILES, and
+# on a stale template.
+i18n_bar_test = find_program('tests/i18n_bar.sh')
+test('i18n_bar', i18n_bar_test,
+     args    : [meson.current_source_dir()],
+     timeout : 60)
+
+# ⛔ AND THE BRIDGE ITSELF, EXECUTED. i18n_bar above proves every string is
+# REACHABLE by a translator; this proves a catalog on disk changes what the bar
+# would draw. Until it existed nothing ran a line of quickshell/I18n.qml.
+#
+# ⚠ It runs under Qt's own qml with tests/qmlstubs/, NOT under quickshell —
+# quickshell connects to Wayland at startup and on a developer's box that is the
+# LIVE session, which `env -u WAYLAND_DISPLAY` does not prevent. Skips (77)
+# where Qt 6's qml runtime is absent.
+i18n_bar_runtime = find_program('tests/i18n_bar_runtime.sh')
+test('i18n_bar_runtime', i18n_bar_runtime,
+     args    : [meson.current_source_dir()],
+     timeout : 120)
+
+subdir('po-bar')

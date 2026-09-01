@@ -79,12 +79,12 @@ BarModule {
 
     tooltipText: {
         if (!player) return ""
-        const title = root.trackName || "(unknown track)"
+        const title = root.trackName || I18n.tr("(unknown track)")
         const artist = clean(player.trackArtist)
         let s = title
         if (artist) s += "\n" + artist
         if (player.identity) s += "\n" + clean(player.identity)
-        return s + "\nClick play/pause · scroll to change track"
+        return s + "\n" + I18n.tr("Click play/pause · scroll to change track")
     }
 
     // Strip control characters and collapse whitespace. Cairo is not in this

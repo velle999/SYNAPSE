@@ -40,7 +40,7 @@ WidgetFrame {
 
     widgetId: "tux"
     shown: WidgetState.tux
-    label: "TUXAGOTCHI"
+    label: I18n.tr("TUXAGOTCHI")
     accent: Theme.cyan
     interactive: true
 
@@ -119,6 +119,43 @@ WidgetFrame {
         isLight: Theme.isLight
         fontFamily: Theme.fontFamily
         iconFamily: Theme.iconFamily
+
+        /*
+         * The words on the toy, in the user's language.
+         *
+         * ⛔ THEY ARE LOOKED UP HERE AND NOWHERE INSIDE IT. TuxShell and
+         * TuxScreen import QtQuick and the sprite table and nothing else, which
+         * is what lets tests/tux_screen.sh draw sixteen moods with the `qml`
+         * tool and no compositor; an I18n reference in either would end that,
+         * and did — the harness exited 2 with no line number. This file is
+         * already where the five colours and two font families are filled in,
+         * so it is where the words belong too.
+         *
+         * ⚠ The %1 forms are Qt's .arg() placeholders, applied INSIDE the toy.
+         * They are in the catalog so a translator can move them: "%1d %2h" is
+         * "%1 j %2 h" in French and "%1日%2時間" in Japanese, and neither is
+         * reachable by gluing a letter onto a number.
+         */
+        words: ({
+            lived:      I18n.tr("lived %1d %2h"),
+            anEgg:      I18n.tr("an egg"),
+            ageWeight:  I18n.tr("%1d %2h  ·  %3oz"),
+            fed:        I18n.tr("FED"),
+            fun:        I18n.tr("FUN"),
+            newEgg:     I18n.tr("press for a new egg"),
+            stage:      I18n.tr("STAGE"),
+            age:        I18n.tr("AGE"),
+            weight:     I18n.tr("WEIGHT"),
+            discipline: I18n.tr("DISCIPLINE"),
+            mess:       I18n.tr("MESS"),
+            health:     I18n.tr("HEALTH"),
+            mistakes:   I18n.tr("MISTAKES"),
+            well:       I18n.tr("well"),
+            ill:        I18n.tr("ill"),
+            veryIll:    I18n.tr("very ill"),
+            ageFmt:     I18n.tr("%1d %2h"),
+            ozFmt:      I18n.tr("%1 oz")
+        })
         soundGlyph: Icons.volHigh
         muteGlyph: Icons.volMuted
     }

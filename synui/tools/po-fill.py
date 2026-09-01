@@ -2,7 +2,8 @@
 """
 po-fill.py — fill a .po from `msgid<TAB>msgstr` lines.
 
-    tools/po-fill.py de < de.tsv
+    tools/po-fill.py de < de.tsv                 # po/de.po
+    tools/po-fill.py de --dir=po-bar < de.tsv    # po-bar/de.po
 
 ⚠ MATCHED ON THE msgid, NEVER ON POSITION. A translation list paired by line
 number slipped once already, in syn-install's Italian catalog: sixteen labels
@@ -80,9 +81,20 @@ def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
-    code = sys.argv[1]
+    # ⚠ A DIRECTORY, BECAUSE THERE ARE TWO CATALOG SETS NOW. po/ is the
+    # compositor's, po-bar/ is the bar's — different domains and different last
+    # miles (.mo read by libintl vs JSON read by a FileView), but identical .po
+    # files, so this tool serves both. A second copy of it would drift, and the
+    # thing it protects against is a translation landing on its neighbour.
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    opts = [a for a in sys.argv[1:] if a.startswith("--")]
+    code = args[0]
+    subdir = "po"
+    for o in opts:
+        if o.startswith("--dir="):
+            subdir = o.split("=", 1)[1]
     root = pathlib.Path(__file__).resolve().parent.parent
-    po = root / "po" / ("%s.po" % code)
+    po = root / subdir / ("%s.po" % code)
     text = po.read_text(encoding="utf-8")
     blocks = parse_po(text)
     nplurals = nplurals_of(text)

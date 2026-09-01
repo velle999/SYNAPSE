@@ -423,7 +423,7 @@ PanelWindow {
                     id: checkLabel
                     anchors { left: checkBox.right; leftMargin: 10
                               verticalCenter: parent.verticalCenter }
-                    text: "Don't show this guide at startup"
+                    text: I18n.tr("Don't show this guide at startup")
                     color: check.selected ? Theme.fg : Theme.fgDim
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize
@@ -457,7 +457,7 @@ PanelWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Back"
+                        text: I18n.tr("Back")
                         color: GuideState.onFirst
                                ? Qt.rgba(Theme.fgDim.r, Theme.fgDim.g,
                                          Theme.fgDim.b, 0.5)
@@ -484,7 +484,7 @@ PanelWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: GuideState.onLast ? "Done" : "Next"
+                        text: GuideState.onLast ? I18n.tr("Done") : I18n.tr("Next")
                         color: Theme.fg
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSize

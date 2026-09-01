@@ -57,9 +57,10 @@ BarModule {
         let t = WeatherState.label
         if (WeatherState.cond !== "")  t += "  ·  " + WeatherState.cond
         if (WeatherState.place !== "") t += "\n" + WeatherState.place
-        t += "\n" + (WeatherState.stale ? "last reading " + WeatherState.ageText
-                                        : "updated " + WeatherState.ageText)
-        return t + "\nClick to refresh"
+        t += "\n" + (WeatherState.stale
+                     ? I18n.tr("last reading %1").arg(WeatherState.ageText)
+                     : I18n.tr("updated %1").arg(WeatherState.ageText))
+        return t + "\n" + I18n.tr("Click to refresh")
     }
 
     /*

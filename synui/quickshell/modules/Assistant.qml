@@ -41,9 +41,9 @@ BarModule {
                               : (root.active ? root.pal.accent : root.pal.glyph)
     active: chat.running || root.listening
     tooltipText: root.listening
-        ? "Assistant is LISTENING for its name — click to open it and stop"
-        : (chat.running ? "Assistant — click to close"
-                        : "Assistant — ask, or say what you want done")
+        ? I18n.tr("Assistant is LISTENING for its name — click to open it and stop")
+        : (chat.running ? I18n.tr("Assistant — click to close")
+                        : I18n.tr("Assistant — ask, or say what you want done"))
 
     // Hidden where vibe is not installed, rather than drawn as a button that
     // reports a missing package when pressed. An optdepend that is absent is

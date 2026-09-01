@@ -66,7 +66,7 @@ BarModule {
                ? Qt.rgba(root.pal.red.r, root.pal.red.g, root.pal.red.b, 0.3)
                : root.pal.red
 
-    text: root.stopping ? "SAVING" : root.clock
+    text: root.stopping ? I18n.tr("SAVING") : root.clock
     textColor: root.pal.red
 
     // The magenta wash and hairline BarModule draws for "on". A recording IS
@@ -115,18 +115,20 @@ BarModule {
 
     readonly property string tip: {
         if (root.stopping)
-            return "Stopping — finishing the file…\nwf-recorder is still writing"
-        let t = root.outputName !== "" ? "Recording " + root.outputName
-                                       : "Recording"
+            return I18n.tr("Stopping — finishing the file…\nwf-recorder is still writing")
+        // ⛔ outputName is a CONNECTOR NAME (DP-3, HDMI-A-1). Never translated:
+        // it is what synctl outputs prints and what the display panel lists.
+        let t = root.outputName !== "" ? I18n.tr("Recording %1").arg(root.outputName)
+                                       : I18n.tr("Recording")
         t += " · " + root.clock
         if (root.file !== "")
             t += "\n" + root.file
         // Named, not just "on": which device is recorded is the difference
         // between capturing the game and capturing the room, and it is the one
         // thing that cannot be checked after the fact without playing the file.
-        t += root.audioDev !== "" ? "\nAudio: " + root.audioDev
-                                  : "\nNo audio"
-        t += "\nClick to stop (or Super+Shift+R)"
+        t += root.audioDev !== "" ? "\n" + I18n.tr("Audio: %1").arg(root.audioDev)
+                                  : "\n" + I18n.tr("No audio")
+        t += "\n" + I18n.tr("Click to stop (or Super+Shift+R)")
         return t
     }
 

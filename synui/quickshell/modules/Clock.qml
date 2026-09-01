@@ -48,8 +48,8 @@ BarModule {
                 } catch (e) {
                     // A malformed line must not wedge the clock at its last
                     // value with no explanation.
-                    root.clockText = "clock?"
-                    root.clockTip  = "synui-clock returned unparseable output"
+                    root.clockText = I18n.tr("clock?")
+                    root.clockTip  = I18n.tr("synui-clock returned unparseable output")
                 }
             }
         }

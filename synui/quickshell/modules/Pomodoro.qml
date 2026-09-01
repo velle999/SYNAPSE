@@ -47,14 +47,18 @@ BarModule {
     iconColor: root.done ? root.pal.red : root.pal.accent
     text: {
         if (root.ends <= 0) return ""
-        if (root.done) return "done"
+        if (root.done) return I18n.tr("done")
         const m = Math.floor(root.remain / 60), s = root.remain % 60
         return m + ":" + (s < 10 ? "0" : "") + s
     }
+    // ⚠ TWO SENTENCES, NOT ONE WITH A HOLE IN IT. The task name is optional,
+    // and "Focus — %1" with an empty %1 would leave a dangling dash in every
+    // language. A translator gets the whole sentence either way.
     tooltipText: root.done
-        ? "Focus timer finished" + (root.task ? " — " + root.task : "")
-        : "Focus" + (root.task ? " — " + root.task : "")
-          + " · click to stop"
+        ? (root.task ? I18n.tr("Focus timer finished — %1").arg(root.task)
+                     : I18n.tr("Focus timer finished"))
+        : (root.task ? I18n.tr("Focus — %1 · click to stop").arg(root.task)
+                     : I18n.tr("Focus · click to stop"))
 
     /* A stray click costs a focus session, so the tooltip says what the click
      * does before it is made — and stopping is recoverable, which is why this
