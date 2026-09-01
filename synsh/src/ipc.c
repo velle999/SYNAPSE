@@ -9,7 +9,6 @@
  * https://github.com/velle999/SYNAPSE
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,6 +65,12 @@ int synapd_connect(synsh_state_t *s) {
     }
 
     s->synapd_connected = 1;
+    /* ⚠ synapd_online IS WHAT `syn status` READS, and nothing ever set it: the
+     * status line said "offline" on a shell that was translating happily. Two
+     * fields for one fact is the bug; keeping them in step here is the smaller
+     * change, because synapd_online is also what builtin_syn's context dump
+     * guards on. */
+    s->synapd_online = 1;
     return 0;
 }
 
@@ -76,6 +81,7 @@ void synapd_disconnect(synsh_state_t *s) {
         s->synapd_fd = -1;
     }
     s->synapd_connected = 0;
+    s->synapd_online    = 0;
 }
 
 /* ── Send a message ───────────────────────────────────────── */

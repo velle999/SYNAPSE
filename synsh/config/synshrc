@@ -8,6 +8,19 @@ set ai_confirm on      # ask before running AI-generated commands
 set ai_explain on      # show exit codes
 set color on
 
+# The language synsh speaks: its messages, its help, and the language the AI
+# writes its one-line explanations in. Left unset it follows the session —
+# LC_ALL, then LC_MESSAGES, then LANG — which is what the installer's language
+# step already set, so most machines need nothing here.
+#
+# What it does NOT change is what gets run: `ls` is `ls` in every language, and
+# so is every exit code. Requests are understood in all fourteen whatever this
+# says, so a German who types "list files" out of habit still gets it.
+#
+#   en de fr es pt it nl pl ru ja zh ko hi ar
+#
+#set language de
+
 # What the AI is told to call you. Off by default so a fresh install ships no
 # identity: the login account name used to go into every prompt, and the model
 # answered "hello" by name. Uncomment and put your own name here to turn it

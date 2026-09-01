@@ -27,7 +27,9 @@
 #define SYN_MSG_RESPONSE    0x80
 #define SYN_MSG_CONTEXT_GET 0x03
 #define SYN_MSG_STATUS      0x06
-#define SYN_MAX_PAYLOAD     4096
+/* synapd's own cap is 1 MiB (synapd.h). This was 4096 and unused, which is
+ * exactly how a stale constant gets believed by the next person to need one. */
+#define SYN_MAX_PAYLOAD     (1024 * 1024)
 
 /* The COL_ and COLOR_ palettes live in color.h — they are runtime pointers,
  * so that a single switch turns colour off everywhere. */
@@ -137,32 +139,5 @@ int   synsh_init(synsh_state_t *s, int argc, char *argv[]);
 void  synsh_destroy(synsh_state_t *s);
 void  synsh_load_rc(synsh_state_t *s);
 bool  synsh_is_builtin(const char *cmd);
-
-static inline int execute_builtin_line(synsh_state_t *s, const char *line) {
-    char buf[SYNSH_MAX_LINE];
-    char *av[SYNSH_MAX_ARGS];
-    int ac = 0;
-    strncpy(buf, line, sizeof(buf)-1); buf[sizeof(buf)-1] = '\0';
-    /* Quote-aware split: 'ls -la' stays one token with the quotes
-     * stripped — plain strtok broke every quoted alias/export in
-     * synshrc into "alias: -la: not found" noise at startup. */
-    char *r = buf, *w = buf;
-    while (*r && ac < SYNSH_MAX_ARGS-1) {
-        while (*r == ' ' || *r == '\t') r++;
-        if (!*r) break;
-        av[ac++] = w;
-        char q = 0;
-        while (*r && (q || (*r != ' ' && *r != '\t'))) {
-            if (q && *r == q)                { q = 0;  r++; }
-            else if (!q && (*r == '\'' || *r == '"')) { q = *r++; }
-            else                             { *w++ = *r++; }
-        }
-        if (*r) r++;
-        *w++ = '\0';
-    }
-    av[ac] = NULL;
-    if (ac == 0) return 0;
-    return synsh_builtin(s, ac, av);
-}
 
 /* history aliases — must come after readline includes */

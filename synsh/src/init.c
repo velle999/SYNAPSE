@@ -6,7 +6,6 @@
  * https://github.com/velle999/SYNAPSE
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +17,7 @@
 #include "synsh.h"
 #include "color.h"
 #include "exec.h"
+#include "i18n.h"
 
 /* ── Init ─────────────────────────────────────────────────── */
 int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
@@ -31,6 +31,14 @@ int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
     memset(s->alias_values, 0, sizeof(s->alias_values));
     s->ai_confirm = 1;   /* ask before running AI commands by default */
     s->ai_explain = 1;
+    /* ⚠ THESE THREE WERE NEVER INITIALISED, so `syn status` reported
+     * "ai: disabled / explain: off" on a shell whose AI was working and whose
+     * explanations were printing. memset() had zeroed them and nothing set
+     * them again: the defaults lived only in the two fields above, under
+     * different names. They mirror those, here, once. */
+    s->ai_enabled   = 1;
+    s->explain_mode = s->ai_explain;
+    s->safe_mode    = s->ai_confirm;
     s->ai_user_name[0] = '\0';   /* the AI is told no name unless you set one */
     s->color      = synsh_color_supported();
     s->pid        = getpid();
@@ -115,6 +123,19 @@ void synsh_load_rc(synsh_state_t *s) {
                     }
                     else if (strcmp(key, "verbose") == 0)
                         s->verbose = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
+                    else if (strcmp(key, "language") == 0) {
+                        /* `set language de` — the shell's own language,
+                         * independent of the session locale, so one terminal
+                         * can differ from the desktop. Resolved immediately so
+                         * that anything the rest of this file prints is
+                         * already in it. An unknown name is left as it was and
+                         * reported, rather than silently ignored. */
+                        if (synsh_lang_from_string(val) == LANG_COUNT)
+                            fprintf(stderr, "synsh: %s %s '%s'\n",
+                                    rc_paths[pi], T(M_LANG_UNKNOWN), val);
+                        else
+                            synsh_i18n_init(val);
+                    }
                     else if (strcmp(key, "ai_user_name") == 0) {
                         /* `set ai_user_name off` (or empty) clears it again, so a
                          * user RC can undo a name a system RC set. */
@@ -152,6 +173,7 @@ void synsh_reload_rc(synsh_state_t *s) {
 
 /* ── Destroy ──────────────────────────────────────────────── */
 void synsh_destroy(synsh_state_t *s) {
+    synsh_jobs_free(s);
     for (int i = 0; i < s->history_count; i++)
         free(s->history[i]);
     free(s->history);

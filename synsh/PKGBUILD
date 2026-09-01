@@ -1,8 +1,8 @@
 # Maintainer: SynapseOS Project <dev@synapseos.dev>
 pkgname=synsh
 pkgver=0.1.0
-pkgrel=26
-pkgdesc="SynapseOS natural language shell — AI-native command interface"
+pkgrel=27
+pkgdesc="SynapseOS natural language shell — AI-native command interface, in 14 languages"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')

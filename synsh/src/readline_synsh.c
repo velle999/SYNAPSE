@@ -10,7 +10,6 @@
  * https://github.com/velle999/SYNAPSE
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

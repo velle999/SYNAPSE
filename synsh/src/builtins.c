@@ -5,7 +5,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +14,7 @@
 
 #include "synsh.h"
 #include "intents.h"
+#include "i18n.h"
 
 /* ── cd ───────────────────────────────────────────────────── */
 static int builtin_cd(synsh_state_t *s, int argc, char **argv) {
@@ -92,8 +92,10 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
             "  %ssyn safe on/off%s  — require confirmation for all AI commands\n"
             "  %ssyn stats%s        — show session statistics\n"
             "  %ssyn context%s      — show current AI context\n"
-            "  %ssyn model%s        — show loaded model info\n",
+            "  %ssyn model%s        — show loaded model info\n"
+            "  %ssyn lang [CODE]%s  — show or change the language synsh speaks\n",
             COL_BCYAN, COL_RESET, SYNSH_VERSION,
+            COL_BGREEN, COL_RESET,
             COL_BGREEN, COL_RESET,
             COL_BGREEN, COL_RESET,
             COL_BGREEN, COL_RESET,
@@ -108,12 +110,38 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
     if (strcmp(argv[1], "status") == 0) {
         printf("synapd: %s%s%s\n",
             s->synapd_online ? COL_BGREEN : COL_YELLOW,
-            s->synapd_online ? "online" : "offline",
+            s->synapd_online ? T(M_STATUS_ONLINE) : T(M_STATUS_OFFLINE),
             COL_RESET);
         printf("socket: %s\n", SYN_SOCKET_PATH);
-        printf("ai: %s\n", s->ai_enabled ? "enabled" : "disabled");
-        printf("explain: %s\n", s->explain_mode ? "on" : "off");
-        printf("safe mode: %s\n", s->safe_mode ? "on" : "off");
+        printf("ai: %s\n", s->ai_enabled ? T(M_STATUS_ENABLED) : T(M_STATUS_DISABLED));
+        printf("explain: %s\n", s->explain_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
+        printf("safe mode: %s\n", s->safe_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
+        printf("%s %s (%s)\n", T(M_LANG_IS),
+               synsh_lang_name(synsh_lang()), synsh_lang_code(synsh_lang()));
+        return 0;
+    }
+
+    /*
+     * `syn lang` — what synsh is speaking, and how to change it for this
+     * session. The durable answer is `set language` in ~/.synshrc; this is the
+     * one that does not need a file, which is what somebody who has just been
+     * greeted in a language they do not read is looking for.
+     */
+    if (strcmp(argv[1], "lang") == 0) {
+        if (argc < 3) {
+            printf("%s %s (%s)\n", T(M_LANG_IS),
+                   synsh_lang_name(synsh_lang()), synsh_lang_code(synsh_lang()));
+            printf("  en de fr es pt it nl pl ru ja zh ko hi ar\n");
+            return 0;
+        }
+        if (synsh_lang_from_string(argv[2]) == LANG_COUNT) {
+            fprintf(stderr, "syn: %s %s\n", T(M_LANG_UNKNOWN),
+                    "en de fr es pt it nl pl ru ja zh ko hi ar");
+            return 1;
+        }
+        synsh_i18n_init(argv[2]);
+        printf("%s %s (%s)\n", T(M_LANG_IS),
+               synsh_lang_name(synsh_lang()), synsh_lang_code(synsh_lang()));
         return 0;
     }
 
@@ -136,16 +164,16 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "stats") == 0) {
-        printf("Commands run:    %lu\n", s->commands_run);
-        printf("NL queries:      %lu\n", s->nl_queries);
-        printf("AI assists:      %lu\n", s->ai_assists);
+        printf("%-28s %lu\n", T(M_STAT_COMMANDS), s->commands_run);
+        printf("%-28s %lu\n", T(M_STAT_NL),       s->nl_queries);
+        printf("%-28s %lu\n", T(M_STAT_ASSISTS),  s->ai_assists);
         return 0;
     }
 
     if (strcmp(argv[1], "context") == 0) {
         /* Request context dump from synapd */
         if (!s->synapd_online) {
-            fprintf(stderr, "syn: synapd offline\n");
+            fprintf(stderr, "%s\n", T(M_SYNAPD_OFFLINE));
             return 1;
         }
         syn_msg_header_t hdr = {
@@ -177,23 +205,29 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
 /* ── help ─────────────────────────────────────────────────── */
 static int builtin_help(synsh_state_t *s, int argc, char **argv) {
     (void)s; (void)argc; (void)argv;
+    /* ⚠ THE BUILT-IN LIST NAMED fg AND bg, WHICH DO NOT EXIST — they are not
+     * in BUILTIN_TABLE and never were, so `fg` reported "command not found"
+     * from a shell whose own help had just promised it. A help screen is a
+     * claim about the program; this one now lists what is actually there. */
     printf(
         "\n%ssynsh — SynapseOS Natural Language Shell%s\n\n"
-        "Type commands normally, or just speak naturally:\n\n"
-        "  %s$ ls -la%s                        — regular command\n"
-        "  %s$ show me disk usage%s             — natural language\n"
-        "  %s$ what's using port 8080?%s        — question\n"
-        "  %s$ find all logs older than 7 days%s — plain English\n\n"
-        "Prefix with %s!%s to force command, %s?%s to force AI.\n\n"
-        "Built-ins: cd, export, jobs, fg, bg, syn, help, exit\n"
-        "Meta:      syn status | syn ai on/off | syn safe on/off\n\n",
+        "%s\n\n"
+        "  %s$ ls -la%s                        — %s\n"
+        "  %s$ show me disk usage%s             — %s\n"
+        "  %s$ what's using port 8080?%s        — %s\n"
+        "  %s$ wie viel speicher ist frei%s     — %s\n\n"
+        "%s\n\n"
+        "%s cd, alias, unalias, export, jobs, syn, help, exit\n"
+        "%s      syn status | syn ai on/off | syn safe on/off | syn lang\n\n",
         COL_BCYAN, COL_RESET,
-        COL_BGREEN, COL_RESET,
-        COL_BCYAN,  COL_RESET,
-        COL_BCYAN,  COL_RESET,
-        COL_BCYAN,  COL_RESET,
-        COL_BOLD, COL_RESET,
-        COL_BOLD, COL_RESET
+        T(M_HELP_HEADLINE),
+        COL_BGREEN, COL_RESET, T(M_HELP_REGULAR),
+        COL_BCYAN,  COL_RESET, T(M_HELP_NATURAL),
+        COL_BCYAN,  COL_RESET, T(M_HELP_QUESTION),
+        COL_BCYAN,  COL_RESET, T(M_HELP_NATURAL),
+        T(M_HELP_PREFIX),
+        T(M_HELP_BUILTINS),
+        T(M_HELP_META)
     );
     /* What synsh answers itself, built from what is actually installed — so
      * this list tells you "no music player" instead of promising one. */

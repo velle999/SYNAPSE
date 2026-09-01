@@ -20,7 +20,6 @@
  * https://github.com/velle999/SYNAPSE
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +31,7 @@
 #include <getopt.h>
 #include <termios.h>
 #include <pwd.h>
+#include <locale.h>
 
 #include "synsh.h"
 #include "ipc.h"
@@ -41,6 +41,7 @@
 #include "readline_synsh.h"
 #include "builtins.h"
 #include "color.h"
+#include "i18n.h"
 
 /* ── Global state ─────────────────────────────────────────── */
 static synsh_state_t g_state;
@@ -53,24 +54,26 @@ static void sigint_handler(int sig) {
     write(STDOUT_FILENO, "\n", 1);
 }
 
-static void sigchld_handler(int sig) {
-    (void)sig;
-    /* Reap background children */
-    int status;
-    while (waitpid(-1, &status, WNOHANG) > 0)
-        ;
-}
-
+/*
+ * ⚠ THERE IS NO SIGCHLD HANDLER, AND THAT IS THE FIX, NOT AN OMISSION.
+ *
+ * The old one called waitpid(-1, &status, WNOHANG) in a loop, which reaps
+ * ANY child — including the foreground command the shell was at that moment
+ * blocked in waitpid() for. When the signal arrived first, the handler took
+ * the child, the shell's own waitpid returned -1/ECHILD, and `status` was
+ * read UNINITIALISED: the exit code of that command was whatever happened to
+ * be on the stack. Intermittent, invisible, and the thing `&&` and `||`
+ * branch on.
+ *
+ * Background children are reaped at the prompt instead, by synsh_reap_jobs(),
+ * which is where a shell is supposed to announce that a job has finished.
+ */
 static void setup_signals(void) {
     struct sigaction sa = {0};
     sigemptyset(&sa.sa_mask);
 
     sa.sa_handler = sigint_handler;
     sigaction(SIGINT, &sa, NULL);
-
-    sa.sa_handler = sigchld_handler;
-    sa.sa_flags   = SA_RESTART;
-    sigaction(SIGCHLD, &sa, NULL);
 
     /* Ignore job-control signals we don't handle yet */
     sa.sa_handler = SIG_IGN;
@@ -103,6 +106,8 @@ static void usage(const char *prog) {
         "                 Print what LINE is — shell, builtin, ai, hybrid — and\n"
         "                 exit 0. Runs nothing.\n"
         "  --toolinfo     Print the tools resolved from $PATH (for AI prompts)\n"
+        "  --lang CODE    Speak CODE (en, de, fr, es, pt, it, nl, pl, ru,\n"
+        "                 ja, zh, ko, hi, ar). Default: from LANG.\n"
         "  --no-ai        Disable AI translation (pure shell mode)\n"
         "  --no-confirm   Run AI-suggested commands without confirmation\n"
         "  --no-color     Disable colored output\n"
@@ -130,12 +135,17 @@ static int run_interactive(synsh_state_t *s) {
     char *line;
 
     while (s->running) {
+        /* Anything backgrounded with '&' that has since finished is collected
+         * and announced here — there is no SIGCHLD handler to do it (see the
+         * note above setup_signals). */
+        synsh_reap_jobs(s);
+
         /* Read a line */
         line = synsh_readline(s);
         if (!line) {
             /* EOF (Ctrl+D) */
             if (s->interactive)
-                printf("\nexit\n");
+                printf("\n%s\n", T(M_EXIT));
             break;
         }
 
@@ -197,13 +207,11 @@ static int run_interactive(synsh_state_t *s) {
             /* The startup connect races synapd's boot — retry here so a
              * shell opened before the daemon was up heals on first use. */
             if (!s->synapd_connected && synapd_connect(s) == 0) {
-                fprintf(stderr, "%ssynsh: connected to synapd — AI online\n%s",
-                        COLOR_OK, COLOR_RESET);
+                fprintf(stderr, "%s%s\n%s", COLOR_OK, T(M_CONNECTED), COLOR_RESET);
             }
             if (!s->synapd_connected) {
-                fprintf(stderr,
-                    "%ssynsh: synapd not connected — running in shell-only mode\n%s",
-                    COLOR_WARN, COLOR_RESET);
+                fprintf(stderr, "%s%s\n%s",
+                        COLOR_WARN, T(M_NOT_CONNECTED), COLOR_RESET);
                 s->last_exit = execute_command_line(s, line);
                 break;
             }
@@ -214,8 +222,8 @@ static int run_interactive(synsh_state_t *s) {
             int r = ai_translate(s, line, cmd_buf, sizeof(cmd_buf),
                                  explain_buf, sizeof(explain_buf));
             if (r < 0) {
-                fprintf(stderr, "%ssynsh: AI translation failed\n%s",
-                        COLOR_ERR, COLOR_RESET);
+                fprintf(stderr, "%s%s\n%s",
+                        COLOR_ERR, T(M_AI_FAILED), COLOR_RESET);
                 break;
             }
 
@@ -228,8 +236,7 @@ static int run_interactive(synsh_state_t *s) {
             /* Hybrid: try as shell, fall back to AI if it fails */
             s->last_exit = execute_command_line(s, line);
             if (s->last_exit != 0 && s->synapd_connected) {
-                printf("%s  ↯ command failed, asking AI...\n%s",
-                       COLOR_AI, COLOR_RESET);
+                printf("%s  ↯ %s\n%s", COLOR_AI, T(M_ASKING_AI), COLOR_RESET);
 
                 char cmd_buf[SYNSH_MAX_LINE]     = {0};
                 char explain_buf[SYNSH_MAX_LINE] = {0};
@@ -292,10 +299,29 @@ static int run_script(synsh_state_t *s, const char *path) {
 
 /* ── Entry point ──────────────────────────────────────────── */
 int main(int argc, char *argv[]) {
+    /*
+     * ⚠ setlocale() WAS NEVER CALLED, and three separate things were broken by
+     * its absence, none of which looked like a locale problem:
+     *
+     *   - readline handles multi-byte input only in a multi-byte locale.
+     *     Without this, typing "spät" moved the cursor two columns for the ä
+     *     and backspace ate half a character.
+     *   - strerror(3), strftime(3) and the rest answer in C, so a French
+     *     system's shell reported its errors and printed its dates in English
+     *     while every other program on the machine did not.
+     *   - ctype(3) classified every byte above 127 as neither letter nor
+     *     space.
+     *
+     * First statement in the program: everything after it depends on it.
+     */
+    setlocale(LC_ALL, "");
+    synsh_i18n_init(NULL);
+
     int force_interactive = 0;
     int no_ai = 0;
     int no_color = 0;
     int cmd_intents = 0;
+    char *lang_arg = NULL;
     char *intent_check = NULL;
     char *cmd_string = NULL;
     char *script_path = NULL;
@@ -308,6 +334,7 @@ int main(int argc, char *argv[]) {
         {"intent-check", required_argument, 0, 0},
         {"classify",    required_argument, 0, 0},
         {"toolinfo",    no_argument,       0, 0},
+        {"lang",        required_argument, 0, 0},
         {"verbose",    no_argument,       0, 'v'},
         {"version",    no_argument,       0, 'V'},
         {"help",       no_argument,       0, 'h'},
@@ -328,6 +355,10 @@ int main(int argc, char *argv[]) {
                 cmd_intents = 1;
             else if (strcmp(long_opts[longidx].name, "intent-check") == 0)
                 intent_check = optarg;
+            else if (strcmp(long_opts[longidx].name, "lang") == 0)
+                /* Applied after the rc load, so the command line wins — the
+                 * same precedence, for the same reason, as --no-color. */
+                lang_arg = optarg;
             else if (strcmp(long_opts[longidx].name, "classify") == 0) {
                 /*
                  * What synsh thinks a line IS, for a caller that has to route
@@ -405,8 +436,16 @@ int main(int argc, char *argv[]) {
 
     setup_signals();
 
-    /* Load config */
+    /* Load config. `set language` in an rc file is resolved as it is read. */
     synsh_load_rc(&g_state);
+
+    /* --lang last, so it beats both the rc files and the environment. An
+     * unknown code is reported rather than silently ignored — being answered
+     * in the wrong language with no explanation is the failure this whole
+     * layer exists to remove. */
+    if (lang_arg && synsh_i18n_init(lang_arg) != synsh_lang_from_string(lang_arg))
+        fprintf(stderr, "synsh: %s en de fr es pt it nl pl ru ja zh ko hi ar\n",
+                T(M_LANG_UNKNOWN));
 
     /* Colour precedence, lowest to highest: auto-detect (tty/NO_COLOR/TERM),
      * then the rc file, then the command line. --no-color is applied last so
@@ -422,9 +461,8 @@ int main(int argc, char *argv[]) {
             if (g_state.verbose)
                 printf("%ssynsh: connected to synapd\n%s", COLOR_OK, COLOR_RESET);
         } else {
-            fprintf(stderr,
-                "%ssynsh: warning — synapd not available, AI features disabled\n%s",
-                COLOR_WARN, COLOR_RESET);
+            fprintf(stderr, "%s%s\n%s",
+                    COLOR_WARN, T(M_AI_UNAVAILABLE), COLOR_RESET);
         }
     }
 
@@ -456,11 +494,11 @@ int main(int argc, char *argv[]) {
             COLOR_RESET
         );
         if (g_state.synapd_connected)
-            printf("%s  ⚡ AI online%s — type naturally or use shell commands\n\n",
-                   COLOR_AI, COLOR_RESET);
+            printf("%s  ⚡ %s%s — %s\n\n",
+                   COLOR_AI, T(M_AI_ONLINE), COLOR_RESET, T(M_TYPE_NATURALLY));
         else
-            printf("%s  ⚠  AI offline%s — shell-only mode\n\n",
-                   COLOR_WARN, COLOR_RESET);
+            printf("%s  ⚠  %s%s — %s\n\n",
+                   COLOR_WARN, T(M_AI_OFFLINE), COLOR_RESET, T(M_SHELL_ONLY));
     }
 
     int exit_code = 0;
@@ -500,6 +538,9 @@ int main(int argc, char *argv[]) {
     if (g_state.interactive)
         synsh_history_save(&g_state);
 
+    /* Anything still in the background is reported before we go, so a job
+     * that finished during the last command is not simply forgotten. */
+    synsh_reap_jobs(&g_state);
     synapd_disconnect(&g_state);
     synsh_destroy(&g_state);
 

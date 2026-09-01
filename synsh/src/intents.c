@@ -40,6 +40,8 @@
 
 #include "synsh.h"
 #include "intents.h"
+#include "i18n.h"
+#include "phrases.h"
 #include "exec.h"
 #include "color.h"
 
@@ -132,45 +134,27 @@ const char *synsh_intent_toolinfo(void)
     return buf;
 }
 
-/* ── Matching ─────────────────────────────────────────────── */
-
-/* Normalise for matching: lowercase, collapse runs of whitespace, drop leading
- * '?' (the force-AI prefix) and trailing '?' or '.'. */
-static void normalize(char *dst, size_t n, const char *src)
-{
-    while (*src == '?' || isspace((unsigned char)*src)) src++;
-
-    size_t i = 0;
-    bool sp = false;
-    for (; *src && i + 1 < n; src++) {
-        if (isspace((unsigned char)*src)) { sp = i > 0; continue; }
-        if (sp) { dst[i++] = ' '; sp = false; if (i + 1 >= n) break; }
-        dst[i++] = (char)tolower((unsigned char)*src);
-    }
-    while (i > 0 && (dst[i-1] == '?' || dst[i-1] == '.' || dst[i-1] == '!')) i--;
-    dst[i] = '\0';
-}
-
-/* Whole-line match against a NULL-terminated phrase list.
+/* ── Matching ────────────────────────────────────────────── */
+/*
+ * ⚠ THE MATCHING MOVED TO i18n.c, and this note is here because what was
+ * removed looked correct.
  *
- * Exact, NOT substring. `play` is a real program (sox ships it, chibi pulls sox
- * in), so a substring match on "play music" would hijack `play music.wav` away
- * from sox and into this file. An intent may only claim a line that is nothing
- * but the phrase; anything with arguments is somebody's actual command. */
-static bool line_is(const char *line, const char *const *phrases)
-{
-    for (int i = 0; phrases[i]; i++)
-        if (strcmp(line, phrases[i]) == 0) return true;
-    return false;
-}
-
-/* Line starts with the phrase and has more after it — for the parameterised
- * intents ("set alarm for 7:30am"). */
-static bool line_starts(const char *line, const char *phrase)
-{
-    size_t n = strlen(phrase);
-    return strncmp(line, phrase, n) == 0 && (line[n] == '\0' || line[n] == ' ');
-}
+ * normalize() lowercased with tolower(3), one byte at a time. That is an
+ * ASCII-only operation: every byte of "WIE SPÄT IST ES" above 127 came through
+ * untouched, and a phrase list written in lower case could not match a line
+ * the person typed in any case at all. It also stripped only '?' and '.',
+ * which is the punctuation of one language — "¿qué hora es?" kept its opening
+ * '¿' and matched nothing.
+ *
+ * synsh_fold() decodes UTF-8, lowercases across Latin-1/Latin Extended-A/
+ * Greek/Cyrillic, strips diacritics so an unaccented typist still matches, and
+ * trims the sentence marks of every language here including ¿ ¡ 。 ？ ؟ and ।
+ *
+ * The whole-line rule is unchanged and still load-bearing: an intent may claim
+ * a line that is nothing but the phrase, never a line that merely starts with
+ * it. `play` is a real program (sox ships it, chibi pulls sox in), and a
+ * substring match on "play music" would hijack `play music.wav`.
+ */
 
 /* ── Launching ────────────────────────────────────────────── */
 
@@ -561,7 +545,10 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
             if (*q == '{') { has_entries = true; break; }
     }
 
-    char tmp[512];
+    /* Sized to hold `path` AND the suffix: at 512 each, gcc was right that a
+     * full-length home directory would have silently truncated the temporary
+     * name — and a truncated name is a rename() onto the wrong file. */
+    char tmp[sizeof(path) + 16];
     snprintf(tmp, sizeof(tmp), "%s.synsh.tmp", path);
     FILE *out = fopen(tmp, "w");
     if (!out) {
@@ -602,16 +589,6 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
 }
 
 /* ── Intent: packages ─────────────────────────────────────── */
-
-/* The words after `verb`, or NULL if the line does not start with it. */
-static const char *rest_after(const char *line, const char *verb)
-{
-    size_t n = strlen(verb);
-    if (strncmp(line, verb, n) != 0 || line[n] != ' ') return NULL;
-    const char *p = line + n;
-    while (*p == ' ') p++;
-    return *p ? p : NULL;
-}
 
 /* Do these arguments look like package names, or somebody's real command?
  *
@@ -669,84 +646,18 @@ static int intent_pkg(synsh_state_t *s, const char *prefix, const char *args)
     return run_pkg(s, cmd);
 }
 
-/* ── Plain English for the commands people run constantly ─── */
-
+/* ── The everyday commands ───────────────────────────────── */
 /*
- * Every one of these already worked: they classify as natural language and
- * synapd turns them into the same command. But paying half a second and a 7B
- * model to be told what `pwd` says is silly, and the answer should not change
- * because the model had a bad day.
+ * The table is SYNSH_EVERYDAY in phrases.c now, and it is no longer only
+ * English — see the note at the top of that file for why every language lives
+ * in one list rather than one list per language.
  *
- * READ-ONLY, deliberately. Nothing here deletes, moves or overwrites anything.
- * "delete the logs" stays on the synapd path, which prints the command and
- * waits for you — a deterministic `rm` would be a worse idea than a slow one,
- * not a better one. The rule for adding to this table: if being wrong would
- * cost you data, it does not belong here.
+ * The rule for what may go in it has not changed and is the important part:
+ * READ-ONLY. Nothing there deletes, moves or overwrites anything. "delete the
+ * logs" stays on the synapd path, which prints the command and waits for you —
+ * a deterministic `rm` would be a worse idea than a slow one, not a better
+ * one. If being wrong would cost you data, it does not belong in the table.
  */
-static const struct {
-    const char *const *phrases;
-    const char *cmd;
-} english_cmds[] = {
-    { (const char *const[]){ "list files", "show files", "list the files",
-                             "show me the files", "what files are here",
-                             "whats in here", "what's in here",
-                             "what is in this directory", "list directory", NULL },
-      "ls -lh --color=auto" },
-
-    { (const char *const[]){ "list all files", "show hidden files",
-                             "show all files", "list everything", NULL },
-      "ls -lha --color=auto" },
-
-    { (const char *const[]){ "where am i", "what directory am i in",
-                             "current directory", "print working directory",
-                             "which directory is this", NULL },
-      "pwd" },
-
-    { (const char *const[]){ "disk space", "free space", "how much disk space",
-                             "how much space is left", "show disk usage",
-                             "disk usage", "df", NULL },
-      "df -h" },
-
-    { (const char *const[]){ "memory usage", "how much memory", "how much ram",
-                             "ram usage", "free memory", "show memory", NULL },
-      "free -h" },
-
-    { (const char *const[]){ "whats running", "what's running",
-                             "show processes", "list processes",
-                             "what is running", NULL },
-      "ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -15" },
-
-    { (const char *const[]){ "who am i", "what user am i", "my username", NULL },
-      "whoami" },
-
-    { (const char *const[]){ "my ip", "my ip address", "what's my ip",
-                             "whats my ip", "ip address", "show my ip", NULL },
-      "ip -brief address" },
-
-    { (const char *const[]){ "uptime", "how long has this been up",
-                             "how long has the system been running", NULL },
-      "uptime -p" },
-
-    { (const char *const[]){ "kernel version", "what kernel", "what kernel am i running",
-                             "kernel", NULL },
-      "uname -r" },
-
-    { (const char *const[]){ "show the log", "show the logs", "system log",
-                             "recent errors", "show errors", NULL },
-      /* journalctl, never /var/log/syslog — this is not Debian. */
-      "journalctl -p err -n 30 --no-pager" },
-
-    { (const char *const[]){ "failed services", "what failed", "show failed", NULL },
-      "systemctl --failed --no-pager" },
-
-    { (const char *const[]){ "gpu", "gpu usage", "show gpu", "graphics card", NULL },
-      "nvidia-smi" },
-
-    { (const char *const[]){ "temperature", "temps", "how hot", "cpu temperature", NULL },
-      "sensors" },
-
-    { NULL, NULL }
-};
 
 /* ── Dispatch ─────────────────────────────────────────────── */
 
@@ -771,109 +682,104 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
                  bool check_only)
 {
     char p[SYNSH_MAX_LINE];
-    normalize(p, sizeof(p), line);
+    synsh_fold(p, sizeof(p), line);
     if (!*p) return 0;
 
-    /* Whole-line phrases only — see line_is(). Every one of these is a
-     * complete sentence a person types; none is a prefix of a real command. */
-    static const char *const time_p[]  = {
-        "what time is it", "whats the time", "what's the time",
-        "what is the time", "time", "the time", NULL };
-    static const char *const date_p[]  = {
-        "what day is it", "whats the date", "what's the date",
-        "what is the date", "what's today", "whats today", "date",
-        "todays date", "today's date", NULL };
-    static const char *const music_p[] = {
-        "play music", "play some music", "play my music",
-        "put on music", "put on some music", NULL };
-    static const char *const files_p[] = {
-        "open the file browser", "open file browser", "open the file manager",
-        "open file manager", "open files", "browse files",
-        "file browser", "file manager", NULL };
-    static const char *const yt_p[]    = {
-        "open youtube", "youtube", "open yt", "launch youtube", NULL };
+    /* Whole-line phrases — see the note above line_is()'s replacement. Every
+     * list is in phrases.c and holds every language at once. */
+    if (synsh_fold_in(p, SYNSH_P_TIME))    CLAIM(intent_time(s, false));
+    if (synsh_fold_in(p, SYNSH_P_DATE))    CLAIM(intent_time(s, true));
+    if (synsh_fold_in(p, SYNSH_P_MUSIC))   CLAIM(intent_music(s));
+    if (synsh_fold_in(p, SYNSH_P_FILES))   CLAIM(intent_files(s));
+    if (synsh_fold_in(p, SYNSH_P_YOUTUBE)) CLAIM(intent_url(s, "https://www.youtube.com"));
 
-    if (line_is(p, time_p))  CLAIM(intent_time(s, false));
-    if (line_is(p, date_p))  CLAIM(intent_time(s, true));
-    if (line_is(p, music_p)) CLAIM(intent_music(s));
-    if (line_is(p, files_p)) CLAIM(intent_files(s));
-    if (line_is(p, yt_p))    CLAIM(intent_url(s, "https://www.youtube.com"));
+    /* "what can you do" / "hilfe" / "ayuda". Bare "help" is deliberately NOT
+     * in that list — it is a built-in, and intents run before the classifier,
+     * so an entry for it would take the built-in away from itself. */
+    if (synsh_fold_in(p, SYNSH_P_CANDO)) {
+        if (check_only) return 1;
+        synsh_intent_help(s);
+        *exit_code = 0;
+        return 1;
+    }
 
-    /* Parameterised: "set alarm for 7:30am", "wake me at 7". */
-    if (line_starts(p, "set alarm") || line_starts(p, "set an alarm") ||
-        line_starts(p, "wake me"))
+    char arg[SYNSH_MAX_LINE];
+
+    /* Parameterised: "set alarm for 7:30am", "weck mich um 7", "7時に起こして". */
+    if (synsh_phrase_arg(p, SYNSH_C_ALARM, arg, sizeof(arg)))
         CLAIM(intent_alarm(s, p));
 
     /* ── Packages ──
      * Arch syntax, which is most of the reason these are here at all: asked to
      * install something, a model trained on the whole internet reaches for
      * apt-get, and the suggestion looks perfectly reasonable right up until you
-     * run it. Package names on Arch are lowercase, so normalising the line does
-     * not cost us anything here.
+     * run it. Package names on Arch are lowercase, so folding the line does not
+     * cost us anything here.
      *
      * -S --needed, not plain -S: re-installing something already at the right
      * version is a pointless download and, mid-upgrade, a partial-upgrade risk. */
-    const char *a;
-    if ((a = rest_after(p, "install")) && looks_like_packages(a))
-        CLAIM(intent_pkg(s, "sudo pacman -S --needed", a));
-    if ((a = rest_after(p, "uninstall")) || (a = rest_after(p, "remove package")))
+    if (synsh_phrase_arg(p, SYNSH_C_INSTALL, arg, sizeof(arg)) &&
+        looks_like_packages(arg))
+        CLAIM(intent_pkg(s, "sudo pacman -S --needed", arg));
+
+    if (synsh_phrase_arg(p, SYNSH_C_UNINSTALL, arg, sizeof(arg)) &&
+        looks_like_packages(arg))
         /* -Rns: the package, its now-orphaned deps, and its config. Plain -R
          * leaves both behind and that is never what "uninstall" means. */
-        CLAIM(intent_pkg(s, "sudo pacman -Rns", a));
-    if ((a = rest_after(p, "search for")) || (a = rest_after(p, "search")))
-        CLAIM(intent_pkg(s, "pacman -Ss", a));
-    if ((a = rest_after(p, "is")) && line_starts(p, "is")) {
-        /* "is firefox installed" */
-        size_t la = strlen(a);
-        const char *suffix = " installed";
-        size_t ls = strlen(suffix);
-        if (la > ls && strcmp(a + la - ls, suffix) == 0) {
-            char pkg[256];
-            size_t n = la - ls;
-            if (n < sizeof(pkg)) {
-                memcpy(pkg, a, n); pkg[n] = '\0';
-                if (looks_like_packages(pkg))
-                    CLAIM(intent_pkg(s, "pacman -Q", pkg));
-            }
-        }
-    }
+        CLAIM(intent_pkg(s, "sudo pacman -Rns", arg));
 
-    static const char *const update_p[] = {
-        "update", "update system", "update the system", "upgrade",
-        "upgrade system", "upgrade the system", "update everything",
-        "check for updates", "system update", NULL };
-    if (line_is(p, update_p))
+    /* Before the search verbs, because "is firefox installed" opens with a
+     * word that is not one of them but closes with one that decides it. */
+    if (synsh_phrase_arg(p, SYNSH_C_ISINSTALLED, arg, sizeof(arg)) &&
+        looks_like_packages(arg))
+        CLAIM(intent_pkg(s, "pacman -Q", arg));
+
+    /* ⚠ looks_like_packages() HERE TOO, not just on install. `search` is not
+     * a program, but a person who types `search /tmp -name x` means find(1),
+     * and answering them with `pacman -Ss /tmp -name x` is the same
+     * substitution of our intent for theirs that the install guard exists to
+     * prevent. A flag or a path means they were not asking about packages. */
+    if (synsh_phrase_arg(p, SYNSH_C_SEARCH, arg, sizeof(arg)) &&
+        looks_like_packages(arg))
+        CLAIM(intent_pkg(s, "pacman -Ss", arg));
+
+    if (synsh_fold_in(p, SYNSH_P_UPDATE))
         /* Always -Syu. A bare -Sy syncs the databases without upgrading, which
          * is a partial upgrade, which is how Arch breaks. */
         CLAIM(intent_pkg(s, "sudo pacman -Syu", NULL));
 
-    /* Plain English for the everyday commands. Last, so a more specific intent
-     * above always wins. */
-    for (int i = 0; english_cmds[i].phrases; i++) {
-        if (line_is(p, english_cmds[i].phrases)) {
-            if (check_only) return 1;
-            const char *cmd = english_cmds[i].cmd;
-            /* Say what it ran. The point of a natural-language shell is that
-             * you learn the command, not that it stays hidden. */
-            char first[64] = {0};
-            sscanf(cmd, "%63s", first);
-            if (*first && !have(first) && strchr(first, '|') == NULL) {
-                fprintf(stderr, "  synsh: %s is not installed\n", first);
-                *exit_code = 127;
-                return 1;
-            }
-            printf("  %s%s%s\n", COLOR_DIM, cmd, COLOR_RESET);
-            fflush(stdout);   /* see run_pkg(): child output would race ours */
-            *exit_code = execute_command_line(s, cmd);
+    /* The everyday commands. Last, so a more specific intent above always
+     * wins. */
+    for (int i = 0; SYNSH_EVERYDAY[i].phrases; i++) {
+        if (!synsh_fold_in(p, SYNSH_EVERYDAY[i].phrases)) continue;
+        if (check_only) return 1;
+
+        const char *cmd = SYNSH_EVERYDAY[i].cmd;
+        /* Say what it ran. The point of a natural-language shell is that you
+         * learn the command, not that it stays hidden. */
+        char first[64] = {0};
+        sscanf(cmd, "%63s", first);
+        if (*first && !have(first) && strchr(first, '|') == NULL) {
+            fprintf(stderr, "  synsh: %s %s\n", first, T(M_NOT_INSTALLED));
+            *exit_code = 127;
             return 1;
         }
+        printf("  %s%s%s\n", COLOR_DIM, cmd, COLOR_RESET);
+        fflush(stdout);   /* see run_pkg(): child output would race ours */
+        *exit_code = execute_command_line(s, cmd);
+        return 1;
     }
 
-    static const char *const orphan_p[] = {
-        "remove orphans", "clean orphans", "remove orphaned packages", NULL };
-    if (line_is(p, orphan_p))
+    if (synsh_fold_in(p, SYNSH_P_ORPHANS))
         /* pacman -Qtdq lists true orphans; the guard keeps -Rns from being run
-         * with an empty argument list, which would make it prompt for stdin. */
+         * with an empty argument list, which would make it prompt for stdin.
+         *
+         * ⚠ THIS LINE NEEDED A SHELL THAT COULD RUN IT, and until the expansion
+         * layer landed synsh could not: `$(pacman -Qtdq)` reached pacman as the
+         * literal word "$(pacman", and `>/dev/null 2>&1` reached it as two more
+         * package names. Every invocation errored out and fell through to the
+         * `||`, so this intent had answered "no orphaned packages" on every
+         * machine, always, whatever was installed. */
         CLAIM(run_pkg(s,
             "pacman -Qtdq >/dev/null 2>&1 && sudo pacman -Rns $(pacman -Qtdq) "
             "|| echo '  no orphaned packages'"));
@@ -883,31 +789,48 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
 
 void synsh_intent_help(synsh_state_t *s)
 {
-    printf("\n  %sAsk in plain English%s — these are answered directly:\n",
-           COLOR_BOLD, COLOR_RESET);
-    printf("    what time is it        the time\n");
-    printf("    what day is it         the date\n");
-    printf("    open youtube           %s\n",
-           first_present(browsers) ? "in your browser" : "(no browser installed)");
-    printf("    open the file browser  %s\n",
-           first_present(file_managers) ? first_present(file_managers) : "(none installed)");
-    printf("    play music             %s\n",
-           first_present(music_players) ? first_present(music_players)
-                                        : "(no player installed — sudo pacman -S mpv)");
-    printf("    set alarm for 7:30am   chibi rings it\n");
-    printf("\n  %sPackages%s (Arch syntax, so you don't have to remember it):\n",
-           COLOR_BOLD, COLOR_RESET);
-    printf("    install mpv            pacman -S --needed\n");
-    printf("    uninstall mpv          pacman -Rns\n");
-    printf("    search mpv             pacman -Ss\n");
-    printf("    update                 pacman -Syu\n");
-    printf("    is firefox installed   pacman -Q\n");
-    printf("\n  %sEveryday commands%s, in English:\n", COLOR_BOLD, COLOR_RESET);
+    (void)s;
+    const char *br = first_present(browsers);
+    const char *fm = first_present(file_managers);
+    const char *mp = first_present(music_players);
+
+    printf("\n  %s%s%s — %s:\n", COLOR_BOLD, T(M_HELP_ASK), COLOR_RESET,
+           T(M_HELP_ANSWERED));
+    printf("    %-22s %s\n", "what time is it",       T(M_HELP_THE_TIME));
+    printf("    %-22s %s\n", "what day is it",        T(M_HELP_THE_DATE));
+    printf("    %-22s %s\n", "open youtube",
+           br ? T(M_HELP_IN_BROWSER) : T(M_HELP_NO_BROWSER));
+    printf("    %-22s %s\n", "open the file browser", fm ? fm : T(M_HELP_NONE));
+    printf("    %-22s %s\n", "play music",            mp ? mp : T(M_HELP_NO_PLAYER));
+    printf("    %-22s %s\n", "set alarm for 7:30am",  T(M_HELP_ALARM));
+
+    printf("\n  %s%s%s (%s):\n", COLOR_BOLD, T(M_HELP_PACKAGES), COLOR_RESET,
+           T(M_HELP_ARCH_SYNTAX));
+    printf("    %-22s %s\n", "install mpv",           "pacman -S --needed");
+    printf("    %-22s %s\n", "uninstall mpv",         "pacman -Rns");
+    printf("    %-22s %s\n", "search mpv",            "pacman -Ss");
+    printf("    %-22s %s\n", "update",                "pacman -Syu");
+    printf("    %-22s %s\n", "is firefox installed",  "pacman -Q");
+
+    printf("\n  %s%s%s:\n", COLOR_BOLD, T(M_HELP_EVERYDAY), COLOR_RESET);
     printf("    where am i · list files · disk space · how much memory\n");
     printf("    what's running · my ip · uptime · what kernel\n");
     printf("    show the logs · failed services · gpu · temperature\n");
-    printf("\n  Anything else goes to synapd, which answers for %sthis%s machine.\n"
-           "  Destructive things stay there on purpose: it shows you the command\n"
-           "  and waits, rather than guessing at your files.\n\n",
-           COLOR_BOLD, COLOR_RESET);
+
+    /*
+     * ⚠ THE EXAMPLES ABOVE STAY IN ENGLISH ON PURPOSE, in every language.
+     *
+     * They are not descriptions, they are LINES YOU CAN TYPE, and the tables
+     * accept all of these in every language at once. Printing the German
+     * wording to a German user would be honest but useless the moment they
+     * read an English forum post; printing both would double the length of the
+     * one screen someone reads when they are already lost. So the examples are
+     * the lingua-franca spelling, and the line below says the rest are
+     * understood too — which is the fact a non-English speaker actually needs.
+     */
+    printf("\n  %s %s\n", T(M_HELP_LANGUAGES),
+           "English · Deutsch · Français · Español · Português · Italiano ·\n"
+           "  Nederlands · Polski · Русский · 日本語 · 中文 · 한국어 · हिन्दी · العربية");
+
+    printf("\n  %s\n  %s\n\n", T(M_HELP_ELSEWHERE), T(M_HELP_DESTRUCTIVE));
 }
