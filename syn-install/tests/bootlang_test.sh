@@ -117,5 +117,25 @@ check "the GUI record has five fields" "5" \
       "$(boot_locale_row | tr '|' '\t' | awk -F'\t' '{print NF}')"
 
 echo
+echo "  the answer reaches the places that REPORT it"
+
+# ⚠ localectl SAID "(unset)" ON A WORKING JAPANESE INSTALL. The layout was
+# applied — synui had it and the keyboard worked — but nothing wrote it where
+# localectl reads, so syn-settings' region pane (which parses exactly that
+# `localectl status` line) called the desktop keyboard unknown on every non-US
+# install. Asserted against the source, because the write-out is deep in the
+# install path rather than in a function this can call.
+src="$here/../syn-install.sh"
+check "the desktop layout is written where localectl reads it" yes \
+      "$(grep -q 'xorg.conf.d/00-keyboard.conf' "$src" && echo yes || echo no)"
+
+# ⚠ AND IT MUST BE THE VALIDATED NAME. $XKB_LAYOUT is what the table or the
+# user said; $SYNUI_XKB is that after the "does xkbcommon know this layout"
+# check, which falls back to 'us'. Writing the raw one would put a layout
+# xkbcommon rejects into the file that describes the machine.
+check "it writes the VALIDATED layout, not the raw one" yes \
+      "$(awk '/00-keyboard.conf/,/^XKBCONF$/' "$src" | grep -q 'XkbLayout" "\$SYNUI_XKB' && echo yes || echo no)"
+
+echo
 if [ "$fails" -eq 0 ]; then echo "all boot-language checks passed"; else echo "$fails failed"; fi
 exit $(( fails > 0 ))

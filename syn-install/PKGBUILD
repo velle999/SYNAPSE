@@ -245,7 +245,7 @@ pkgver=0.1.0
 #   terminal at all.
 #   Seven checks in layout_test.sh, against BOTH lists — the installer's and
 #   the ISO's are independent collectors and have drifted before.
-pkgrel=108
+pkgrel=109
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

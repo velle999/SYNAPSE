@@ -25,6 +25,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <locale.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
@@ -3012,6 +3013,32 @@ static void syn_log_sink(enum wlr_log_importance importance,
 
 int main(int argc, char *argv[])
 {
+    /*
+     * ⚠ THE COMPOSITOR HAD NO LOCALE, so everything it drew that depends on
+     * one was English on a machine that is not.
+     *
+     * clock.c offers a date layout called "Follow the locale" (%x, "%A, %x").
+     * Without this call strftime runs in the C locale, where %x is 09/01/26
+     * and %A is "Monday" — forever, in every language. The setting was
+     * offered, was chosen, and could not do the thing its own label promises.
+     * The lock screen and the screensaver print "%A, %B %-d" and were English
+     * for the same reason, and strerror() was too.
+     *
+     * ⛔ AND LC_NUMERIC IS PINNED BACK TO C, WHICH IS NOT OPTIONAL HERE.
+     * config.c parses this compositor's own settings with atof() — 22 of them:
+     * active_opacity, blur_noise, blur_brightness, every scale and alpha. In
+     * any comma-decimal locale (de, fr, pl, ru, pt, es …) atof("0.95") stops
+     * at the '.' and returns 0. Setting LC_ALL alone would mean that picking
+     * French made the dock, the bar and every window fully transparent, and
+     * nothing anywhere would say why. The user's language is for what they
+     * READ; the numbers this program parses are its own and stay in C.
+     *
+     * First statement in the program: the config load and every strftime
+     * after it depend on it.
+     */
+    setlocale(LC_ALL, "");
+    setlocale(LC_NUMERIC, "C");
+
     int debug = 0;
     int no_ai = 0;
     int start_overlay = 0;

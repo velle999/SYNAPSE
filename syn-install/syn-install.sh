@@ -4374,6 +4374,35 @@ if [ -d /usr/share/X11/xkb/symbols ] \
   xkb_layout in ~/.config/synui/synuirc after boot."
     SYNUI_XKB="us"
 fi
+
+# ⚠ AND WHERE localectl CAN SEE IT, which synuirc is not.
+#
+# `localectl status` on a Japanese install reported "X11 Layout: (unset)" —
+# the layout WAS applied, synui had it, the keyboard worked, and the one place
+# that reports the answer did not know. syn-settings' region pane reads exactly
+# that line (syn-settings/src/region.c), so its keyboard row said "unknown" on
+# every install that picked a non-US language: a setting correctly applied and
+# then reported as absent, which is the same "asked and then ignored" failure
+# the two-column keyboard table exists to prevent, one layer further out.
+#
+# Written as the file rather than run through `localectl set-x11-keymap`,
+# because localectl talks to systemd-localed over D-Bus and there is no such
+# bus inside arch-chroot. This is the file localectl writes and the file it
+# reads back, so the two agree.
+mkdir -p /mnt/etc/X11/xorg.conf.d
+cat > /mnt/etc/X11/xorg.conf.d/00-keyboard.conf << XKBCONF
+# Written by syn-install. This is what \`localectl status\` reports as the
+# X11 Layout, and what syn-settings shows as the desktop keyboard.
+#
+# synui reads its layout from synuirc, not from here — this file is the
+# machine's ANSWER about itself, and XWayland clients use it too.
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "$SYNUI_XKB"
+EndSection
+XKBCONF
+
 success "Locale: $LOCALE   Console: $KEYMAP   Desktop layout: $SYNUI_XKB"
 
 # The language pack. Fonts are the whole point: without them the locale is set

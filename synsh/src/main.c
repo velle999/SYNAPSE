@@ -315,6 +315,15 @@ int main(int argc, char *argv[]) {
      * First statement in the program: everything after it depends on it.
      */
     setlocale(LC_ALL, "");
+    /*
+     * ⛔ BUT NOT THE NUMBERS. A comma-decimal locale (de, fr, pl, ru …) makes
+     * atof/strtod/printf("%f") use ',' — so a program that parses its own
+     * config or protocol floats reads 0 out of "0.95" and says nothing.
+     * synsh parses none today, and this is here so that the day one is added
+     * it is already safe: synui had exactly this hazard waiting behind 22
+     * atof() calls on its own settings file.
+     */
+    setlocale(LC_NUMERIC, "C");
     synsh_i18n_init(NULL);
 
     int force_interactive = 0;
