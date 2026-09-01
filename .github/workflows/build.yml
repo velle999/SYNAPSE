@@ -413,6 +413,14 @@ jobs:
           test -f synapse_kmod/synapse_kmod.ko
           echo "synapse_kmod.ko built"
 
+          # Ask the built module what it needs from the kernel. This runner's
+          # kernel is ahead of any development box, and that is how the
+          # strncpy() removal in 7.2 was found: an error here, a clean build
+          # there. check-symbols answers on ANY kernel, so the next removal is
+          # caught before it reaches this step.
+          make -C synapse_kmod KERNELDIR="$KDIR" check-symbols \
+              || { echo "::error::synapse_kmod references a removed kernel API"; exit 1; }
+
           # The package builds a userspace tool against the same headers, and
           # this step used to stop at the .ko — so a commit could delete
           # something from include/synapse_kmod.h, pass CI green, and only fail

@@ -32,14 +32,6 @@
 #include "synapse_sched.h"
 #include "synapse_probe.h"
 
-extern void synapse_daemon_heartbeat(void);
-extern void synapse_daemon_shutdown(void);
-extern void synapse_get_stats(struct synapse_stats *);
-extern bool synapse_events_enabled(void);
-extern bool synapse_sched_enabled(void);
-extern int  synapse_kmod_set_pinned(bool pin);
-extern bool synapse_kmod_is_pinned(void);
-extern u64  synapse_integrity_alert_count(void);
 
 /* ── /sys/kernel/synapse/status ──────────────────────────── */
 /*
@@ -378,8 +370,16 @@ int synapse_sysfs_init(struct kobject **kobj_out)
 
     *kobj_out = kobj;
 
-    /* Write initial status */
-    strncpy(status_buf, "MODULE_LOADED", sizeof(status_buf) - 1);
+    /* Write initial status.
+     *
+     * ⚠ strscpy(), NOT strncpy(). Linux 7.2 REMOVED strncpy() from
+     * <linux/string.h> — it does not deprecate here, it fails to compile, and
+     * only in CI: this machine is on 7.1, where the declaration is still
+     * there. The two are not interchangeable in general (strncpy zero-PADS the
+     * tail and may leave the result unterminated); they are here, because
+     * status_buf is a file-scope static and so starts as zeros, and its only
+     * reader is a scnprintf("%s") that stops at the NUL. */
+    strscpy(status_buf, "MODULE_LOADED", sizeof(status_buf));
 
     return 0;
 }

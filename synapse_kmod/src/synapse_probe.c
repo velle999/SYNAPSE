@@ -47,9 +47,6 @@
 #include "synapse_kmod.h"
 #include "synapse_probe.h"
 
-extern void synapse_stat_event(void);
-extern void synapse_stat_syscall(void);
-extern bool synapse_events_enabled(void);
 
 /* ── Ring buffer ──────────────────────────────────────────── */
 struct synapse_ring {
@@ -574,7 +571,11 @@ static int openat_ret_handler(struct kretprobe_instance *ri,
      * report for an access that did occur. */
     fill_event(&e, __NR_openat, SYNAPSE_EVT_OPEN);
     e.args[0] = (u64)(unsigned int)ctx->oflags;   /* open flags → wire arg0 */
-    strncpy(e.filename, ctx->kbuf, sizeof(e.filename) - 1);
+    /* ⚠ strscpy(), NOT strncpy() — removed from <linux/string.h> in 7.2. The
+     * padding strncpy did is not lost: `e` is declared `= {0}` and this event
+     * goes to USERSPACE, so the tail past the filename must be zeros rather
+     * than whatever was on the stack. It already is. */
+    strscpy(e.filename, ctx->kbuf, sizeof(e.filename));
 
     e.ret     = (int32_t)regs_return_value(regs);
     e.has_ret = 1;

@@ -42,6 +42,45 @@ endif
 all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
+# ── the check that would have caught the 7.2 break ────────────────────────
+#
+# ⚠ THIS MACHINE'S KERNEL IS NOT CI'S KERNEL, AND FOR A MODULE THAT MATTERS.
+# Linux 7.2 REMOVED strncpy() from <linux/string.h>. The module built fine here
+# on 7.1 — where the declaration is still there — and failed in CI with
+# `implicit declaration of function 'strncpy'`, which for a kernel build is an
+# error and not a warning. "It builds on my box" says nothing at all about a
+# kernel API that has been deleted upstream.
+#
+# So ask the BUILT MODULE what it needs from the kernel, which is a question
+# with an answer on any kernel: `nm -u` lists exactly the symbols the loader
+# will have to resolve. A name on this list is one the kernel has removed or is
+# removing, and a module that references it is already broken on a kernel
+# somebody is running — it just has not reached them yet.
+#
+# ⚠ THE LIST IS OF SYMBOLS, NOT OF SOURCE TEXT. Grepping the .c files finds the
+# word in a comment and misses a call that arrived through a macro; this sees
+# what the linker sees. Verified to fail: putting the strncpy() back makes
+# `U strncpy` reappear and this target reports it.
+#
+# strncpy_from_user() is a DIFFERENT function, still present and still correct
+# for copying a path in from userspace — hence the word boundaries.
+DEPRECATED_SYMS := strcpy strncpy strlcpy strcat strncat
+
+check-symbols: $(MODULE_NAME).ko
+	@bad=""; \
+	for s in $(DEPRECATED_SYMS); do \
+	    if nm -u $(MODULE_NAME).ko | grep -qE "^ +U $$s$$"; then \
+	        bad="$$bad $$s"; \
+	    fi; \
+	done; \
+	if [ -n "$$bad" ]; then \
+	    echo "synapse_kmod: needs kernel symbol(s) the kernel has removed:$$bad"; \
+	    echo "  strncpy/strcpy went in 7.2, strlcpy earlier. Use strscpy()," ; \
+	    echo "  or strscpy_pad() where the zero padding was load-bearing."; \
+	    exit 1; \
+	fi; \
+	echo "synapse_kmod: no removed kernel string API referenced"
+
 modules_install:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install
 	depmod -a

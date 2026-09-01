@@ -159,3 +159,54 @@ struct synapse_stats {
     uint32_t  active_contexts;   /* PIDs carrying a scheduling hint */
     uint32_t  kmod_version;
 };
+
+
+/* ── what synapse_main.c owns, for the rest of the module ───────────────────
+ *
+ * ⚠ THIS IS THE ONLY DECLARATION OF ANY OF THESE, AND IT USED TO BE THREE.
+ * Every one of them is defined in synapse_main.c and called from another
+ * translation unit, and each caller carried its OWN `extern` line at the top
+ * of its file — synapse_sysfs.c had eight, synapse_sched.c six,
+ * synapse_probe.c three. Nothing checked any of them against the definition:
+ * a signature that changed on one side would link cleanly and go wrong at run
+ * time, in a kernel module, where "go wrong" is the whole machine.
+ *
+ * The compiler was saying so the entire time — seventeen `no previous
+ * prototype` warnings on every build, one per function, which is exactly what
+ * that warning is for. Declaring them here silences it by fixing it.
+ *
+ * ⚠ KERNEL SIDE ONLY. This header is included by synapd and the syn tools as
+ * well; `u64` and `struct workqueue_struct` do not exist out there.
+ */
+#ifdef __KERNEL__
+
+struct workqueue_struct;
+
+/* Module state, and the pin that keeps it loaded. */
+int   synapse_kmod_set_pinned(bool pin);
+bool  synapse_kmod_is_pinned(void);
+u64   synapse_integrity_alert_count(void);
+
+/* The daemon's heartbeat, as seen from in here. */
+void  synapse_daemon_heartbeat(void);
+void  synapse_daemon_shutdown(void);
+bool  synapse_daemon_is_alive(void);
+
+/* The two runtime switches every hot path checks first. */
+bool  synapse_events_enabled(void);
+bool  synapse_sched_enabled(void);
+
+/* Counters. Each is one atomic increment; they are functions so the state
+ * stays private to synapse_main.c. */
+void  synapse_stat_event(void);
+void  synapse_stat_hint_ok(void);
+void  synapse_stat_hint_fail(void);
+void  synapse_stat_syscall(void);
+void  synapse_stat_query(void);
+void  synapse_ctx_inc(void);
+void  synapse_ctx_dec(void);
+
+struct workqueue_struct *synapse_get_wq(void);
+void  synapse_get_stats(struct synapse_stats *out);
+
+#endif /* __KERNEL__ */

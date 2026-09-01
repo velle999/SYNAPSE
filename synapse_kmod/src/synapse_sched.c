@@ -43,12 +43,6 @@
 #include "synapse_kmod.h"
 #include "synapse_sched.h"
 
-extern void synapse_stat_hint_ok(void);
-extern void synapse_stat_hint_fail(void);
-extern bool synapse_sched_enabled(void);
-extern void synapse_ctx_inc(void);
-extern void synapse_ctx_dec(void);
-extern struct workqueue_struct *synapse_get_wq(void);
 
 /* ── Per-PID hint record ──────────────────────────────────── */
 #define SYNAPSE_HINT_HASH_BITS  8   /* 256-bucket hash table */

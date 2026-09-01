@@ -1,6 +1,41 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=26
+# ── 0.1.0-27: the kernel removed strncpy(), and only CI could tell ─────────
+#
+# ⛔ THIS BUILT CLEANLY ON THE DEVELOPMENT MACHINE AND FAILED IN CI, and the
+# difference was the kernel: 7.1 here, 7.2.2 on the runner. Linux 7.2 REMOVED
+# strncpy() from <linux/string.h>. For a module build that is not a
+# deprecation warning, it is `error: implicit declaration of function
+# 'strncpy'` and the build stops.
+#
+# Two call sites, both replaced with strscpy(). They are NOT interchangeable in
+# general — strncpy() zero-PADS the tail and can leave the result
+# unterminated, strscpy() always terminates and never pads — so each was
+# checked rather than swapped:
+#
+#   synapse_sysfs.c  status_buf is a file-scope static, so it starts as zeros,
+#                    and its only reader is a scnprintf("%s").
+#   synapse_probe.c  the event is declared `= {0}` and goes to USERSPACE, so
+#                    the tail past the filename must be zeros. It already is.
+#
+# ⚠ AND THE MODULE NOW SAYS WHAT IT NEEDS FROM THE KERNEL. `make
+# check-symbols` reads `nm -u` on the built .ko against the list of string
+# APIs the kernel has removed — a question with an answer on ANY kernel, so
+# the next removal is caught on a development box instead of in CI. It is
+# wired into the build workflow, and it was verified to FAIL: putting the
+# strncpy() back makes `U strncpy` reappear and the target reports it.
+#
+# ── ...and seventeen warnings that were describing a real hazard ────────────
+#
+# Every build printed seventeen `no previous prototype` warnings. Each named a
+# function defined in synapse_main.c and called from another translation unit,
+# and each caller carried its OWN `extern` line — synapse_sysfs.c eight,
+# synapse_sched.c six, synapse_probe.c three. Nothing checked any of them
+# against the definition, so a signature that changed on one side would link
+# and go wrong at run time, in ring 0. They are declared once in
+# include/synapse_kmod.h now, inside `#ifdef __KERNEL__` because synapd and the
+# syn tools include that header too.
+pkgrel=27
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')
