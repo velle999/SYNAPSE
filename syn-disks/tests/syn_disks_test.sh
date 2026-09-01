@@ -1098,19 +1098,40 @@ sdp mktable nvme1n1 --yes >/dev/null 2>&1
 # megabyte. An unaligned partition on an SSD or a 4Kn drive turns every write
 # into a read-modify-write of the block underneath it, and the cost is
 # invisible — it looks like a slow disk, for the life of the partition.
-saysp mkpart sdz -n | grep -q 'start=700043264'
-check "mkpart picks the largest free space, not the first one" $?
+# ⚠ THESE THREE SAY WHAT THEY GOT, and the other assertions in this file do
+# not, because these are the three that failed on a machine nobody could reach.
+# A `grep -q` on an exact number answers "no" identically whether the geometry
+# was off by one megabyte, whether the wrong gap was chosen, or whether the
+# command printed an error instead of a script — and the first two of those are
+# a bug in this program while the third is a bug in the fixture. On 2026-09-01
+# two of them failed inside a VM during an update and the report was two lines
+# with no numbers in them, against a suite that passes 217/217 here in English
+# and in Japanese. The value is cheap to print and it is the whole diagnosis.
+want_field() {  # want_field <label> <expected> <output>
+    if printf '%s' "$3" | grep -q "$2"; then
+        ok "$1"
+    else
+        bad "$1"
+        printf '        wanted %s\n' "$2" >&2
+        printf '        got    %s\n' \
+            "$(printf '%s' "$3" | tr '\n' ' ' | cut -c1-160)" >&2
+    fi
+}
+
+out=$(saysp mkpart sdz -n)
+want_field "mkpart picks the largest free space, not the first one" \
+           'start=700043264' "$out"
 
 # ...and the size is rounded DOWN, out of the same gap. Rounded up, a partition
 # placed at an aligned start would end one megabyte past the free space it was
 # put in — which sfdisk refuses, after the confirmation.
-saysp mkpart sdz -n | grep -q 'size=199956480'
-check "...aligned at the start, and still inside the gap at the end" $?
+want_field "...aligned at the start, and still inside the gap at the end" \
+           'size=199956480' "$out"
 
 # Aligned at both ends: the start rounded up to a megabyte, the size rounded
 # down so it still fits in the gap afterwards.
-saysp mkpart sdz --size=10GiB -n | grep -q 'size=20971520'
-check "a requested size is rounded down to a megabyte boundary" $?
+want_field "a requested size is rounded down to a megabyte boundary" \
+           'size=20971520' "$(saysp mkpart sdz --size=10GiB -n)"
 
 sdp mkpart sdz --size=500G -n >/dev/null 2>&1
 [ $? -eq 1 ] && ok "mkpart refuses a size larger than the free space" \
@@ -1539,7 +1560,11 @@ check "a missing smartmontools says so rather than guessing" $?
 
 # ── info, and the walk down to hardware ─────────────────────────────────────
 
-"$SD" --no-color info dm-0 | grep -q 'physical disk *\/dev\/nvme1n1'
+# ⚠ NO BACKSLASH BEFORE THE SLASHES. / is not special in a POSIX basic
+# regular expression, so \/ is an undefined escape: GNU grep 3.8 and later print
+# "warning: stray \\ before /" for each one, twice per run, into the stderr of
+# every build that runs this suite. It matched anyway, which is why it survived.
+"$SD" --no-color info dm-0 | grep -q 'physical disk */dev/nvme1n1'
 check "info walks a volume down to the disk underneath it" $?
 
 "$SD" --no-color info sdz2 | grep -q 'holds this system *no'
