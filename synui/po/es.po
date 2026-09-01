@@ -1413,52 +1413,48 @@ msgstr "máximo"
 
 #: src/dock.c:3418
 msgid "top"
-msgstr ""
+msgstr "arriba"
 
 #: src/dock.c:3418
 msgid "left"
-msgstr ""
+msgstr "izquierda"
 
 #: src/dock.c:3419
 msgid "centre"
-msgstr ""
+msgstr "centro"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "bottom"
-msgstr ""
+msgstr "abajo"
 
 #: src/dock.c:3420 src/dock.c:3423
 msgid "right"
-msgstr ""
+msgstr "derecha"
 
 #: src/dock.c:3425
 #, c-format
 msgid "after %d icon"
 msgid_plural "after %d icons"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "después de %d icono"
+msgstr[1] "después de %d iconos"
 
 #: src/filters.c:84
-#, fuzzy
 msgid "CRT filters"
-msgstr "Todos los filtros"
+msgstr "Filtros CRT"
 
 #: src/filters.c:86
-#, fuzzy
 msgid "Screen curvature"
-msgstr "Curvatura de pantalla"
+msgstr "Curvatura de la pantalla"
 
 #: src/filters.c:88
-#, fuzzy
 msgid "Glitch strength"
-msgstr "Fallo al alertar"
+msgstr "Intensidad de la interferencia"
 
 #: src/filters.c:90
 msgid "Monochrome"
 msgstr "Monocromo"
 
 #: src/filters.c:91
-#, fuzzy
 msgid "Phosphor bloom"
 msgstr "Brillo del fósforo"
 
@@ -1481,18 +1477,16 @@ msgid "Fingerprint not recognised"
 msgstr "Huella no reconocida"
 
 #: src/power.c:112
-#, fuzzy
 msgid "Dim screen"
-msgstr "Pantalla de bloqueo"
+msgstr "Atenuar la pantalla"
 
 #: src/power.c:113
 msgid "Blank displays"
 msgstr "Apagar pantallas"
 
 #: src/power.c:114
-#, fuzzy
 msgid "Lock session"
-msgstr "Pantalla de bloqueo"
+msgstr "Bloquear la sesión"
 
 #: src/power.c:115
 msgid "Suspend system"
@@ -1514,1315 +1508,1315 @@ msgstr "Tapa cerrada (acoplado)"
 #, c-format
 msgid "+%d more line"
 msgid_plural "+%d more lines"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "+%d línea más"
+msgstr[1] "+%d líneas más"
 
 #: src/render.c:971
 msgid "NEURAL OVERLAY"
-msgstr ""
+msgstr "SUPERPOSICIÓN NEURONAL"
 
 #: src/render.c:979 src/render.c:5164
 msgid "loaded"
-msgstr ""
+msgstr "cargado"
 
 #: src/render.c:981
 msgid "loading"
-msgstr ""
+msgstr "cargando"
 
 #: src/render.c:984
 msgid "○ no model"
-msgstr ""
+msgstr "○ sin modelo"
 
 #: src/render.c:1004
 #, c-format
 msgid "req %lu    active %lu"
-msgstr ""
+msgstr "sol. %lu    activas %lu"
 
 #: src/render.c:1021
 #, c-format
 msgid "ctx %u / %u tok"
-msgstr ""
+msgstr "ctx %u / %u tok"
 
 #: src/render.c:1046
 msgid "live activity"
-msgstr ""
+msgstr "actividad en directo"
 
 #: src/render.c:1057
 msgid "(idle — no recent events)"
-msgstr ""
+msgstr "(inactivo — sin eventos recientes)"
 
 #: src/render.c:1058
 msgid "(synapd unavailable)"
-msgstr ""
+msgstr "(synapd no disponible)"
 
 #: src/render.c:1080
 msgid "normal"
-msgstr ""
+msgstr "normal"
 
 #: src/render.c:1084
 msgid "flipped"
-msgstr ""
+msgstr "invertido"
 
 #: src/render.c:1174
 msgid "DISPLAY SETTINGS"
-msgstr ""
+msgstr "AJUSTES DE PANTALLA"
 
 #: src/render.c:1183
 msgid "DUPLICATE"
-msgstr ""
+msgstr "DUPLICAR"
 
 #: src/render.c:1185
 msgid "BUILT-IN OFF"
-msgstr ""
+msgstr "INTEGRADA APAGADA"
 
 #: src/render.c:1186
 msgid "EXTEND"
-msgstr ""
+msgstr "EXTENDER"
 
 #: src/render.c:1247
 msgid "no outputs connected"
-msgstr ""
+msgstr "no hay pantallas conectadas"
 
 #: src/render.c:1276 src/render.c:4250 src/render.c:5354 src/render.c:5370
 #: src/render.c:6171
 #, c-format
 msgid "off"
-msgstr ""
+msgstr "desactivado"
 
 #: src/render.c:1319
 msgid "PRIMARY"
-msgstr ""
+msgstr "PRINCIPAL"
 
 #: src/render.c:1319
 msgid "primary (auto)"
-msgstr ""
+msgstr "principal (automática)"
 
 #: src/render.c:1330
 msgid "8-bit (only)"
-msgstr ""
+msgstr "8 bits (solo)"
 
 #: src/render.c:1348
 msgid "HDR10 ON"
-msgstr ""
+msgstr "HDR10 ACTIVADO"
 
 #: src/render.c:1387
 #, c-format
 msgid ""
 "%s driven in HDR10 · PQ · %s primaries · %d cd/m² SDR white ([ ]) · %s "
 "scanout%s"
-msgstr ""
+msgstr "%s en HDR10 · PQ · primarios %s · blanco SDR %d cd/m² ([ ]) · barrido %s%s"
 
 #: src/render.c:1396
 msgid " — gamut not converted, colours run wide"
-msgstr ""
+msgstr " — gama no convertida, los colores se desbordan"
 
 #: src/render.c:1405
 #, c-format
 msgid " · %.0f cd/m² peak"
-msgstr ""
+msgstr " · pico %.0f cd/m²"
 
 #: src/render.c:1410
 msgid "HDR10 (PQ)"
-msgstr ""
+msgstr "HDR10 (PQ)"
 
 #: src/render.c:1414
 msgid "Shift+D drives it in HDR10"
-msgstr ""
+msgstr "Mayús+D la pone en HDR10"
 
 #: src/render.c:1415
 msgid "this link or mode will not carry an HDR10 signal"
-msgstr ""
+msgstr "este enlace o modo no transportará una señal HDR10"
 
 #: src/render.c:1422
 #, c-format
 msgid "%s advertises no HDR transfer function in its EDID (SDR panel)"
-msgstr ""
+msgstr "%s no declara ninguna función de transferencia HDR en su EDID (panel SDR)"
 
 #: src/render.c:1432
 msgid ""
 "Up/Down select · Left/Right rotate · −/+ scale this screen · p set primary "
 "(X11/game default) · m arrangement"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Izquierda/Derecha girar · −/+ escalar esta pantalla · p marcar como principal (predeterminada de X11/juegos) · m disposición"
 
 #: src/render.c:1437
 msgid ""
 "Shift+arrows move in grid (swaps) · d 10-bit colour (deep colour, not HDR) · "
 "Shift+D HDR10 output · [ ] SDR white · Super+Ctrl+= scales EVERY screen · "
 "Esc close"
-msgstr ""
+msgstr "Mayús+flechas mueven en la cuadrícula (intercambia) · d color de 10 bits (deep colour, no HDR) · Mayús+D salida HDR10 · [ ] blanco SDR · Super+Ctrl+= escala TODAS las pantallas · Esc cerrar"
 
 #: src/render.c:1515
 msgid "WALLPAPER"
-msgstr ""
+msgstr "FONDO DE PANTALLA"
 
 #: src/render.c:1657
 msgid "Preview unavailable"
-msgstr ""
+msgstr "Vista previa no disponible"
 
 #: src/render.c:1657
 msgid "No preview"
-msgstr ""
+msgstr "Sin vista previa"
 
 #: src/render.c:1688
 msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr ""
+msgstr "Arriba/Abajo vista previa · Tab pantalla · m escalado · r volver a explorar · Intro/Esc cerrar"
 
 #: src/render.c:1748
 msgid "POWER SAVING"
-msgstr ""
+msgstr "AHORRO DE ENERGÍA"
 
 #: src/render.c:1760
 #, c-format
 msgid "no lid switch"
-msgstr ""
+msgstr "sin sensor de tapa"
 
 #: src/render.c:1763
 msgid "closed"
-msgstr ""
+msgstr "cerrada"
 
 #: src/render.c:1763
 msgid "open"
-msgstr ""
+msgstr "abierta"
 
 #: src/render.c:1779
 msgid "idle inhibited (media playing) · timers held"
-msgstr ""
+msgstr "inactividad bloqueada (reproduciendo) · temporizadores detenidos"
 
 #: src/render.c:1783
 msgid "disabled · no stage will fire"
-msgstr ""
+msgstr "desactivado · no se activará ninguna fase"
 
 #: src/render.c:1830
 msgid "Up/Down select · Left/Right adjust · Space toggle"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Izquierda/Derecha ajustar · Espacio alternar"
 
 #: src/render.c:1832 src/render.c:1955
 msgid "s save (unsaved changes) · Esc close"
-msgstr ""
+msgstr "s guardar (cambios sin guardar) · Esc cerrar"
 
 #: src/render.c:1833 src/render.c:1956
 msgid "s save · Esc close"
-msgstr ""
+msgstr "s guardar · Esc cerrar"
 
 #: src/render.c:1888
 msgid "SCREENSAVER"
-msgstr ""
+msgstr "SALVAPANTALLAS"
 
 #: src/render.c:1898
 msgid "idle inhibited (media playing) · saver held"
-msgstr ""
+msgstr "inactividad bloqueada (reproduciendo) · salvapantallas detenido"
 
 #: src/render.c:1905
 msgid "power saving is off (Super+P) · saver disabled"
-msgstr ""
+msgstr "el ahorro de energía está desactivado (Super+P) · salvapantallas desactivado"
 
 #: src/render.c:1909
 msgid "no timeout set · p previews the current mode"
-msgstr ""
+msgstr "sin tiempo de espera · p muestra el modo actual"
 
 #: src/render.c:1953
 msgid "Up/Down select · Left/Right adjust · p preview"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Izquierda/Derecha ajustar · p vista previa"
 
 #: src/render.c:2074
 msgid "CURSOR THEME"
-msgstr ""
+msgstr "TEMA DE CURSOR"
 
 #: src/render.c:2104
 msgid "No cursor themes installed."
-msgstr ""
+msgstr "No hay temas de cursor instalados."
 
 #: src/render.c:2108
 msgid "synui-cursor install <archive>   then press r"
-msgstr ""
+msgstr "synui-cursor install <archivo>   luego pulse r"
 
 #: src/render.c:2166
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "Arriba/Abajo vista previa · -/+ tamaño · r volver a explorar · Intro aplicar · Esc cancelar"
 
 #: src/render.c:2237
 msgid "UI FONT"
-msgstr ""
+msgstr "FUENTE DE LA INTERFAZ"
 
 #: src/render.c:2267
 msgid "No font families found."
-msgstr ""
+msgstr "No se han encontrado familias de fuentes."
 
 #: src/render.c:2335
 msgid "Handgloves 0123"
-msgstr ""
+msgstr "El veloz murciélago 0123"
 
 #: src/render.c:2383
 msgid "Not monospaced · kitty and foot may not render correctly in it"
-msgstr ""
+msgstr "No monoespaciada · kitty y foot podrían no mostrarse bien con ella"
 
 #: src/render.c:2390
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
-msgstr ""
+msgstr "Arriba/Abajo vista previa · d predeterminada · r volver a explorar · Intro aplicar · Esc cancelar"
 
 #: src/render.c:2522
 msgid "Type to search"
-msgstr ""
+msgstr "Escriba para buscar"
 
 #: src/render.c:2533
 msgid "No applications match"
-msgstr ""
+msgstr "Ninguna aplicación coincide"
 
 #: src/render.c:2534
 msgid "No applications found"
-msgstr ""
+msgstr "No se han encontrado aplicaciones"
 
 #: src/render.c:2629
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%d aplicación · escriba para buscar · Intro abre · Esc cierra"
+msgstr[1] "%d aplicaciones · escriba para buscar · Intro abre · Esc cierra"
 
 #: src/render.c:2721
 msgid "EMOJI"
-msgstr ""
+msgstr "EMOJIS"
 
 #: src/render.c:2743
 msgid "type to search"
-msgstr ""
+msgstr "escriba para buscar"
 
 #: src/render.c:2802
 msgid "No emoji match that search."
-msgstr ""
+msgstr "Ningún emoji coincide con esa búsqueda."
 
 #: src/render.c:2803
 msgid "Nothing here yet."
-msgstr ""
+msgstr "Todavía no hay nada aquí."
 
 #: src/render.c:2865
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
-msgstr ""
+msgstr "Escriba para buscar · Clic o Tab categoría · Intro insertar · Esc limpiar/cerrar"
 
 #: src/render.c:3010
 msgid "CALCULATOR"
-msgstr ""
+msgstr "CALCULADORA"
 
 #: src/render.c:3050
 msgid "Anything you work out is kept here."
-msgstr ""
+msgstr "Todo lo que calcule se conserva aquí."
 
 #: src/render.c:3092
 msgid "type an expression"
-msgstr ""
+msgstr "escriba una expresión"
 
 #: src/render.c:3197
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
-msgstr ""
+msgstr "Intro lo calcula · Ctrl+C copia · Ctrl+V pega"
 
 #: src/render.c:3199
 msgid "Up/Down recall the tape · Esc clears, then closes"
-msgstr ""
+msgstr "Arriba/Abajo recuperan el historial · Esc limpia y luego cierra"
 
 #: src/render.c:3268
 msgid "EQUALIZER"
-msgstr ""
+msgstr "ECUALIZADOR"
 
 #: src/render.c:3277
 msgid "output routed through the equalizer sink"
-msgstr ""
+msgstr "la salida pasa por el ecualizador"
 
 #: src/render.c:3278
 msgid "off — audio goes straight to your device"
-msgstr ""
+msgstr "desactivado — el audio va directo a su dispositivo"
 
 #: src/render.c:3354
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
-msgstr ""
+msgstr "Arriba/Abajo fila · Izquierda/Derecha ajustar · r plano · Esc cerrar"
 
 #: src/render.c:3424
 msgid "CROP — RECENT IMAGES"
-msgstr ""
+msgstr "RECORTAR — IMÁGENES RECIENTES"
 
 #: src/render.c:3425
 msgid "IMAGES — RECENT"
-msgstr ""
+msgstr "IMÁGENES — RECIENTES"
 
 #: src/render.c:3430
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%d imagen"
+msgstr[1] "%d imágenes"
 
 #: src/render.c:3449
 msgid "No images in Pictures, Wallpapers or Downloads."
-msgstr ""
+msgstr "No hay imágenes en Imágenes, Fondos de pantalla ni Descargas."
 
 #: src/render.c:3453
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
-msgstr ""
+msgstr "Pulse r para volver a explorar, o abra un archivo directamente: synctl dispatch view <ruta>"
 
 #: src/render.c:3510
 msgid "Enter crop · v view · r rescan · Esc close"
-msgstr ""
+msgstr "Intro recortar · v ver · r volver a explorar · Esc cerrar"
 
 #: src/render.c:3511
 msgid "Enter view · c crop · r rescan · Esc close"
-msgstr ""
+msgstr "Intro ver · c recortar · r volver a explorar · Esc cerrar"
 
 #: src/render.c:3621
 msgid "VIEW"
-msgstr ""
+msgstr "VER"
 
 #: src/render.c:3758
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
-msgstr ""
+msgstr "Arrastre para mover · las flechas desplazan · Mayús × 4 · n / p siguiente y anterior"
 
 #: src/render.c:3760
 msgid "← → next and previous · drag or scroll to zoom in"
-msgstr ""
+msgstr "← → siguiente y anterior · arrastre o desplace para ampliar"
 
 #: src/render.c:3765
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
 "× %s"
-msgstr ""
+msgstr "La rueda amplía · + − zoom · 0 ajustar · 1 tamaño real · c recortar · r volver a explorar · Esc o × %s"
 
 #: src/render.c:3768 src/render.c:3961
 msgid "back to the list"
-msgstr ""
+msgstr "volver a la lista"
 
 #: src/render.c:3768
 msgid "close"
-msgstr ""
+msgstr "cerrar"
 
 #: src/render.c:3918
 msgid "CROP"
-msgstr ""
+msgstr "RECORTAR"
 
 #: src/render.c:3951
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
-msgstr ""
+msgstr "Arrastre para seleccionar · arrastre una esquina para ajustarla · Tab elige la esquina que mueven las flechas"
 
 #: src/render.c:3959
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
 "Esc %s"
-msgstr ""
+msgstr "Las flechas redimensionan · Ctrl+flechas mueven · Mayús × 25 · a todo · Intro guarda una copia · Esc %s"
 
 #: src/render.c:3961
 msgid "cancel"
-msgstr ""
+msgstr "cancelar"
 
 #: src/render.c:4060
 msgid "WINDOW EFFECTS"
-msgstr ""
+msgstr "EFECTOS DE VENTANA"
 
 #: src/render.c:4060
 msgid "CRT FILTERS"
-msgstr ""
+msgstr "FILTROS CRT"
 
 #: src/render.c:4067
 msgid "Tab → CRT filters"
-msgstr ""
+msgstr "Tab → filtros CRT"
 
 #: src/render.c:4068
 msgid "Tab → window effects"
-msgstr ""
+msgstr "Tab → efectos de ventana"
 
 #: src/render.c:4084
 msgid "no GLES renderer · filters unavailable on this display"
-msgstr ""
+msgstr "sin renderizador GLES · filtros no disponibles en esta pantalla"
 
 #: src/render.c:4088
 msgid "filters off · Space to turn them on"
-msgstr ""
+msgstr "filtros desactivados · Espacio para activarlos"
 
 #: src/render.c:4151
 msgid "Up/Down select · Left/Right adjust · Space on/off"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Izquierda/Derecha ajustar · Espacio activar/desactivar"
 
 #: src/render.c:4153
 msgid "s save (unsaved changes) · Tab page · Esc close"
-msgstr ""
+msgstr "s guardar (cambios sin guardar) · Tab página · Esc cerrar"
 
 #: src/render.c:4154
 msgid "s save · Tab page · Esc close"
-msgstr ""
+msgstr "s guardar · Tab página · Esc cerrar"
 
 #: src/render.c:4212
 msgid "DESKTOP WIDGETS"
-msgstr ""
+msgstr "WIDGETS DE ESCRITORIO"
 
 #: src/render.c:4217
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
-msgstr ""
+msgstr "cada uno por separado · arrastre por el asa · Espacio es todo o nada"
 
 #: src/render.c:4263
 msgid "needs cava"
-msgstr ""
+msgstr "necesita cava"
 
 #: src/render.c:4277
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Intro alternar · Izquierda/Derecha desactivar/activar"
 
 #: src/render.c:4279
 msgid "Space all on/off · R reset positions · Esc close"
-msgstr ""
+msgstr "Espacio todos activados/desactivados · R restablecer posiciones · Esc cerrar"
 
 #: src/render.c:4438
 msgid "done"
-msgstr ""
+msgstr "hecho"
 
 #: src/render.c:4439
 msgid "failed"
-msgstr ""
+msgstr "fallido"
 
 #: src/render.c:4440
 msgid "starting"
-msgstr ""
+msgstr "iniciando"
 
 #: src/render.c:4541
 msgid "Cannot read the model directory."
-msgstr ""
+msgstr "No se puede leer el directorio de modelos."
 
 #: src/render.c:4542
 msgid "No models installed."
-msgstr ""
+msgstr "No hay modelos instalados."
 
 #: src/render.c:4550
 msgid "A model may still be loaded · see the message below."
-msgstr ""
+msgstr "Puede que todavía haya un modelo cargado · vea el mensaje de abajo."
 
 #: src/render.c:4551
 msgid "Pick one from AVAILABLE below and press Enter."
-msgstr ""
+msgstr "Elija uno de DISPONIBLES abajo y pulse Intro."
 
 #: src/render.c:4619
 msgid "Size"
-msgstr ""
+msgstr "Tamaño"
 
 #: src/render.c:4620 src/render.c:4776
 msgid "Params"
-msgstr ""
+msgstr "Parámetros"
 
 #: src/render.c:4621
 msgid "Quant"
-msgstr ""
+msgstr "Cuant."
 
 #: src/render.c:4622
 msgid "Context"
-msgstr ""
+msgstr "Contexto"
 
 #: src/render.c:4623
 msgid "Arch"
-msgstr ""
+msgstr "Arq."
 
 #: src/render.c:4646
 msgid "no chat template · synapd will guess the turn format"
-msgstr ""
+msgstr "sin plantilla de conversación · synapd adivinará el formato de los turnos"
 
 #: src/render.c:4651
 msgid "unreadable header"
-msgstr ""
+msgstr "cabecera ilegible"
 
 #: src/render.c:4674 src/render.c:4810
 msgid "ABOUT"
-msgstr ""
+msgstr "ACERCA DE"
 
 #: src/render.c:4686 src/render.c:4817
 msgid "Good at"
-msgstr ""
+msgstr "Bueno en"
 
 #: src/render.c:4687
 msgid "Speaks"
-msgstr ""
+msgstr "Habla"
 
 #: src/render.c:4688 src/render.c:4779
 msgid "License"
-msgstr ""
+msgstr "Licencia"
 
 #: src/render.c:4689 src/render.c:4818
 msgid "Based on"
-msgstr ""
+msgstr "Basado en"
 
 #: src/render.c:4737
 msgid "this is the model synapd is running"
-msgstr ""
+msgstr "este es el modelo que synapd está ejecutando"
 
 #: src/render.c:4741
 msgid "[ Enter: load this model ]"
-msgstr ""
+msgstr "[ Intro: cargar este modelo ]"
 
 #: src/render.c:4777
 msgid "Download"
-msgstr ""
+msgstr "Descarga"
 
 #: src/render.c:4778
 msgid "Quality"
-msgstr ""
+msgstr "Calidad"
 
 #: src/render.c:4780
 msgid "Pulls"
-msgstr ""
+msgstr "Descargas"
 
 #: src/render.c:4861
 msgid "QUANTISATION"
-msgstr ""
+msgstr "CUANTIZACIÓN"
 
 #: src/render.c:4867
 msgid "reading the repository …"
-msgstr ""
+msgstr "leyendo el repositorio …"
 
 #: src/render.c:4872
 msgid "could not read the repository"
-msgstr ""
+msgstr "no se ha podido leer el repositorio"
 
 #: src/render.c:4877
 msgid "no single-file GGUF here"
-msgstr ""
+msgstr "aquí no hay un GGUF de un solo archivo"
 
 #: src/render.c:4926 src/render.c:5780
 #, c-format
 msgid "+%d more"
-msgstr ""
+msgstr "+%d más"
 
 #: src/render.c:4934
 msgid "[ Enter: download ]"
-msgstr ""
+msgstr "[ Intro: descargar ]"
 
 #: src/render.c:5011
 msgid "AI MODEL"
-msgstr ""
+msgstr "MODELO DE IA"
 
 #: src/render.c:5022
 msgid "Loaded"
-msgstr ""
+msgstr "Cargado"
 
 #: src/render.c:5023
 msgid "synapd not responding"
-msgstr ""
+msgstr "synapd no responde"
 
 #: src/render.c:5026
 msgid "Format"
-msgstr ""
+msgstr "Formato"
 
 #: src/render.c:5028
 msgid "Profile"
-msgstr ""
+msgstr "Perfil"
 
 #: src/render.c:5047
 msgid "legacy"
-msgstr ""
+msgstr "antiguo"
 
 #: src/render.c:5051
 msgid "GGUF declares no chat template"
-msgstr ""
+msgstr "el GGUF no declara ninguna plantilla de conversación"
 
 #: src/render.c:5056
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
-msgstr ""
+msgstr "temp. %.2f  ·  top_p %.2f  ·  top_k %d"
 
 #: src/render.c:5064
 msgid "Sampling"
-msgstr ""
+msgstr "Muestreo"
 
 #: src/render.c:5094
 msgid "search huggingface"
-msgstr ""
+msgstr "buscar en Hugging Face"
 
 #: src/render.c:5109
 msgid "INSTALLED"
-msgstr ""
+msgstr "INSTALADOS"
 
 #: src/render.c:5109
 msgid "INSTALLED · none"
-msgstr ""
+msgstr "INSTALADOS · ninguno"
 
 #: src/render.c:5154
 msgid "delete?"
-msgstr ""
+msgstr "¿eliminar?"
 
 #: src/render.c:5160
 msgid "loading …"
-msgstr ""
+msgstr "cargando …"
 
 #: src/render.c:5220
 msgid "type to search · Enter search · Esc cancel"
-msgstr ""
+msgstr "escriba para buscar · Intro busca · Esc cancelar"
 
 #: src/render.c:5222
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Izquierda/Derecha cuantización · Intro descargar · / buscar · Esc cerrar"
 
 #: src/render.c:5228
 msgid "Delete again to confirm · Esc cancels · any move cancels"
-msgstr ""
+msgstr "Elimine de nuevo para confirmar · Esc cancela · cualquier movimiento cancela"
 
 #: src/render.c:5231
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Intro cargar · Supr eliminar · / buscar · R volver a explorar · Esc cerrar"
 
 #: src/render.c:5235
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
-msgstr ""
+msgstr "las descargas son un servicio del sistema — cerrar este panel no cancela ninguna"
 
 #: src/render.c:5238
 msgid "switching reloads the model — the AI pauses while it loads"
-msgstr ""
+msgstr "cambiar recarga el modelo — la IA se detiene mientras carga"
 
 #: src/render.c:5299
 msgid "EVENT SOUNDS"
-msgstr ""
+msgstr "SONIDOS DE EVENTOS"
 
 #: src/render.c:5308
 msgid "silent · Space turns event sounds on"
-msgstr ""
+msgstr "en silencio · Espacio activa los sonidos de eventos"
 
 #: src/render.c:5312
 msgid "t plays the selected sound without enabling it"
-msgstr ""
+msgstr "t reproduce el sonido seleccionado sin activarlo"
 
 #: src/render.c:5357
 msgid "Volume"
-msgstr ""
+msgstr "Volumen"
 
 #: src/render.c:5360
 msgid "Sound theme"
-msgstr ""
+msgstr "Tema de sonido"
 
 #: src/render.c:5364
 #, c-format
 msgid "%s — not a sound theme"
-msgstr ""
+msgstr "%s — no es un tema de sonido"
 
 #: src/render.c:5421
 msgid "not in this theme"
-msgstr ""
+msgstr "no está en este tema"
 
 #: src/render.c:5435
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Intro alternar · Izquierda/Derecha desactivar/activar · [ ] elegir sonido"
 
 #: src/render.c:5437
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
-msgstr ""
+msgstr "t reproducir · Espacio todos los sonidos activados/desactivados · Esc cerrar · más: synui-sound --help"
 
 #: src/render.c:5492
 msgid "DATE & TIME"
-msgstr ""
+msgstr "FECHA Y HORA"
 
 #: src/render.c:5505
 #, c-format
 msgid "system zone · %s"
-msgstr ""
+msgstr "zona del sistema · %s"
 
 #: src/render.c:5538
 msgid "WORLD CLOCK"
-msgstr ""
+msgstr "RELOJ MUNDIAL"
 
 #: src/render.c:5563
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Espacio alternar · c calendario · Esc cerrar"
 
 #: src/render.c:5631
 msgid "January"
-msgstr ""
+msgstr "enero"
 
 #: src/render.c:5631
 msgid "February"
-msgstr ""
+msgstr "febrero"
 
 #: src/render.c:5631
 msgid "March"
-msgstr ""
+msgstr "marzo"
 
 #: src/render.c:5631
 msgid "April"
-msgstr ""
+msgstr "abril"
 
 #: src/render.c:5632
 msgid "May"
-msgstr ""
+msgstr "mayo"
 
 #: src/render.c:5632
 msgid "June"
-msgstr ""
+msgstr "junio"
 
 #: src/render.c:5632
 msgid "July"
-msgstr ""
+msgstr "julio"
 
 #: src/render.c:5632
 msgid "August"
-msgstr ""
+msgstr "agosto"
 
 #: src/render.c:5633
 msgid "September"
-msgstr ""
+msgstr "septiembre"
 
 #: src/render.c:5633
 msgid "October"
-msgstr ""
+msgstr "octubre"
 
 #: src/render.c:5633
 msgid "November"
-msgstr ""
+msgstr "noviembre"
 
 #: src/render.c:5633
 msgid "December"
-msgstr ""
+msgstr "diciembre"
 
 #: src/render.c:5755
 msgid "loading…"
-msgstr ""
+msgstr "cargando…"
 
 #: src/render.c:5765
 msgid "nothing on"
-msgstr ""
+msgstr "nada activo"
 
 #: src/render.c:5770
 #, c-format
 msgid "all day  %s"
-msgstr ""
+msgstr "todo el día  %s"
 
 #: src/render.c:5792
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
-msgstr ""
+msgstr "←→ día · RePág/AvPág mes · t hoy · Esc"
 
 #: src/render.c:5881
 msgid "CONTROL PANEL"
-msgstr ""
+msgstr "PANEL DE CONTROL"
 
 #: src/render.c:5900
 msgid "Search"
-msgstr ""
+msgstr "Buscar"
 
 #: src/render.c:5927
 msgid "CATEGORIES"
-msgstr ""
+msgstr "CATEGORÍAS"
 
 #: src/render.c:5932 src/render.c:6418
 msgid "FIND  "
-msgstr ""
+msgstr "BUSCAR  "
 
 #: src/render.c:5939 src/render.c:6365
 msgid "KEYBOARD SHORTCUTS"
-msgstr ""
+msgstr "ATAJOS DE TECLADO"
 
 #: src/render.c:5940
 msgid "SETTINGS"
-msgstr ""
+msgstr "AJUSTES"
 
 #: src/render.c:6015
 msgid "Press a key…"
-msgstr ""
+msgstr "Pulse una tecla…"
 
 #: src/render.c:6035 src/render.c:6211 src/render.c:6506
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
-msgstr ""
+msgstr "%d–%d de %d · RePág/AvPág"
 
 #: src/render.c:6172
 msgid "none"
-msgstr ""
+msgstr "ninguno"
 
 #: src/render.c:6221
 msgid "No setting matches that."
-msgstr ""
+msgstr "Ningún ajuste coincide con eso."
 
 #: src/render.c:6256
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
-msgstr ""
+msgstr "Escriba para filtrar · Arriba/Abajo seleccionar · Supr restablecer · Esc atrás"
 
 #: src/render.c:6258
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
-msgstr ""
+msgstr "Arriba/Abajo categoría · Intro o Derecha abre · / buscar · Esc cerrar"
 
 #: src/render.c:6264
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
-msgstr ""
+msgstr "Pulse Super, Ctrl, Alt o Mayús · Supr para ninguna · Esc cancela"
 
 #: src/render.c:6265
 msgid "Press the new key for this shortcut · Esc cancels"
-msgstr ""
+msgstr "Pulse la nueva tecla para este atajo · Esc cancela"
 
 #: src/render.c:6267
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
-msgstr ""
+msgstr "F2 reasignar · F3 lo pasa a la pulsación · Ctrl+Mayús+R restablecer todo · Esc atrás"
 
 #: src/render.c:6274
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
-msgstr ""
+msgstr "Izquierda/Derecha ajustar · Supr predeterminado · / buscar · Tab columna · Esc atrás"
 
 #: src/render.c:6281
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
-msgstr ""
+msgstr "Izquierda/Derecha cambiar · Intro detalles · Tab columna · Esc atrás"
 
 #: src/render.c:6283
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
-msgstr ""
+msgstr "Arriba/Abajo seleccionar · Intro activar · / buscar · Izquierda o Esc atrás"
 
 #: src/render.c:6405
 msgid "PRESS THE NEW KEY  "
-msgstr ""
+msgstr "PULSE LA NUEVA TECLA  "
 
 #: src/render.c:6412
 #, c-format
 msgid "for %s  ·  Esc cancels"
-msgstr ""
+msgstr "para %s  ·  Esc cancela"
 
 #: src/render.c:6431
 msgid "_  a key, what it does, an app, or a command"
-msgstr ""
+msgstr "_  una tecla, lo que hace, una aplicación o un comando"
 
 #: src/render.c:6487
 msgid "No shortcut matches that."
-msgstr ""
+msgstr "Ningún atajo coincide con eso."
 
 #: src/render.c:6524
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
-msgstr ""
+msgstr "Pulse Super, Ctrl, Alt o Mayús · Supr para ninguna · Esc cancela"
 
 #: src/render.c:6526
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
-msgstr ""
+msgstr "Pulse cualquier combinación con Super, Ctrl o Alt · Esc cancela"
 
 #: src/render.c:6542
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
-msgstr ""
+msgstr "Filtrar · Intro ejecuta · F2 asigna una tecla · Supr la libera · F3 pulsación · Ctrl+Mayús+R restablece"
 
 #: src/render.c:6562
 msgid "The neon night-drive default · apps dark"
-msgstr ""
+msgstr "El predeterminado de neón nocturno · aplicaciones oscuras"
 
 #: src/render.c:6563
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
-msgstr ""
+msgstr "Oscuro, plano y moderno · aplicaciones + Dolphin + Firefox oscuros"
 
 #: src/render.c:6564
 msgid "Luna blue, gradient captions · apps beige"
-msgstr ""
+msgstr "Azul Luna, títulos con degradado · aplicaciones beige"
 
 #: src/render.c:6565
 msgid "Silver 3D bevels, navy titles · apps grey"
-msgstr ""
+msgstr "Biseles 3D plateados, títulos azul marino · aplicaciones grises"
 
 #: src/render.c:6566
 msgid "Mocha · mauve on soft black · glassy"
-msgstr ""
+msgstr "Moca · malva sobre negro suave · vidrioso"
 
 #: src/render.c:6567
 msgid "Retro warm · orange on brown · glassy"
-msgstr ""
+msgstr "Retro cálido · naranja sobre marrón · vidrioso"
 
 #: src/render.c:6568
 msgid "Storm · blue + purple on navy · glassy"
-msgstr ""
+msgstr "Tormenta · azul + morado sobre azul marino · vidrioso"
 
 #: src/render.c:6569
 msgid "Arctic · frost blue on slate · glassy"
-msgstr ""
+msgstr "Ártico · azul escarcha sobre pizarra · vidrioso"
 
 #: src/render.c:6570
 msgid "Purple + pink on charcoal · glassy"
-msgstr ""
+msgstr "Morado + rosa sobre carbón · vidrioso"
 
 #: src/render.c:6571
 msgid "Pastel pink, hot-pink titles · apps light"
-msgstr ""
+msgstr "Rosa pastel, títulos rosa intenso · aplicaciones claras"
 
 #: src/render.c:6572
 msgid "Liquid glass · rounded, translucent · apps light"
-msgstr ""
+msgstr "Vidrio líquido · redondeado, translúcido · aplicaciones claras"
 
 #: src/render.c:6573
 msgid "Pinstripes + traffic lights · apps light grey"
-msgstr ""
+msgstr "Rayas finas + semáforos · aplicaciones gris claro"
 
 #: src/render.c:6574
 msgid "Racing stripes, square boxes · apps grey"
-msgstr ""
+msgstr "Franjas de carreras, cajas cuadradas · aplicaciones grises"
 
 #: src/render.c:6580
 msgid "House glass · accent off the wallpaper · apps dark"
-msgstr ""
+msgstr "Vidrio de la casa · acento tomado del fondo · aplicaciones oscuras"
 
 #: src/render.c:6581
 msgid "The same glass in daylight · apps + Files light"
-msgstr ""
+msgstr "El mismo vidrio a la luz del día · aplicaciones + Archivos claros"
 
 #: src/render.c:6652
 msgid "THEME MANAGER"
-msgstr ""
+msgstr "GESTOR DE TEMAS"
 
 #: src/render.c:6757
 #, c-format
 msgid "Transparency  %d%%"
-msgstr ""
+msgstr "Transparencia  %d%%"
 
 #: src/render.c:6759
 #, c-format
 msgid "Transparency  off"
-msgstr ""
+msgstr "Transparencia  desactivada"
 
 #: src/render.c:6789
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
-msgstr ""
+msgstr "Arriba/Abajo tema · ←/→ opacidad · T transparencia · Intro aplicar · Esc"
 
 #: src/render.c:6856
 msgid "CLIPBOARD"
-msgstr ""
+msgstr "PORTAPAPELES"
 
 #: src/render.c:6873
 msgid "Nothing copied yet"
-msgstr ""
+msgstr "Todavía no se ha copiado nada"
 
 #: src/render.c:6919
 msgid "Enter copy · Del clear all · Esc close"
-msgstr ""
+msgstr "Intro copiar · Supr borrar todo · Esc cerrar"
 
 #: src/render.c:7260
 msgid "connected"
-msgstr ""
+msgstr "conectado"
 
 #: src/render.c:7261
 msgid "paired"
-msgstr ""
+msgstr "emparejado"
 
 #: src/render.c:7321
 msgid "BLUETOOTH"
-msgstr ""
+msgstr "BLUETOOTH"
 
 #: src/render.c:7334
 msgid "No Bluetooth adapter found"
-msgstr ""
+msgstr "No se ha encontrado ningún adaptador Bluetooth"
 
 #: src/render.c:7339
 msgid "Radio on"
-msgstr ""
+msgstr "Radio activada"
 
 #: src/render.c:7339
 msgid "Radio off"
-msgstr ""
+msgstr "Radio desactivada"
 
 #: src/render.c:7344
 msgid "· scanning…"
-msgstr ""
+msgstr "· buscando…"
 
 #: src/render.c:7354
 msgid "A device"
-msgstr ""
+msgstr "Un dispositivo"
 
 #: src/render.c:7362
 #, c-format
 msgid "Passkey %06u · does it match the device?"
-msgstr ""
+msgstr "Clave de acceso %06u · ¿coincide con la del dispositivo?"
 
 #: src/render.c:7365
 #, c-format
 msgid "wants to connect%s"
-msgstr ""
+msgstr "quiere conectarse%s"
 
 #: src/render.c:7368
 #, c-format
 msgid "Type %06u on the device, then Enter"
-msgstr ""
+msgstr "Escriba %06u en el dispositivo y pulse Intro"
 
 #: src/render.c:7371
 #, c-format
 msgid "Enter PIN %s on the device"
-msgstr ""
+msgstr "Introduzca el PIN %s en el dispositivo"
 
 #: src/render.c:7379
 msgid "Any key to dismiss"
-msgstr ""
+msgstr "Cualquier tecla para descartar"
 
 #: src/render.c:7380
 msgid "y accept · n reject"
-msgstr ""
+msgstr "y aceptar · n rechazar"
 
 #: src/render.c:7393
 msgid "Radio is off · press o"
-msgstr ""
+msgstr "La radio está desactivada · pulse o"
 
 #: src/render.c:7398
 #, c-format
 msgid "%d hidden · press a to show"
-msgstr ""
+msgstr "%d ocultos · pulse a para mostrarlos"
 
 #: src/render.c:7401
 msgid "No devices · press s to scan"
-msgstr ""
+msgstr "Sin dispositivos · pulse s para buscar"
 
 #: src/render.c:7438
 msgid "trusted"
-msgstr ""
+msgstr "de confianza"
 
 #: src/render.c:7471
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
-msgstr ""
+msgstr "Intro conectar · p emparejar · t confiar · r olvidar · s buscar · o radio · a menos · Esc"
 
 #: src/render.c:7473
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
-msgstr ""
+msgstr "Intro conectar · p emparejar · t confiar · r olvidar · s buscar · o radio · a todos · Esc"
 
 #: src/render.c:7633
 msgid "TASK MANAGER"
-msgstr ""
+msgstr "ADMINISTRADOR DE TAREAS"
 
 #: src/render.c:7639
 #, c-format
 msgid "%d procs · sort: %s%s"
-msgstr ""
+msgstr "%d proc. · orden: %s%s"
 
 #: src/render.c:7650
 #, c-format
 msgid "%.0f%%  (%ld cores)"
-msgstr ""
+msgstr "%.0f%%  (%ld núcleos)"
 
 #: src/render.c:7652
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: src/render.c:7663
 msgid "RAM"
-msgstr ""
+msgstr "RAM"
 
 #: src/render.c:7666 src/render.c:7674
 msgid "GPU"
-msgstr ""
+msgstr "GPU"
 
 #: src/render.c:7666
 msgid "no GPU telemetry available"
-msgstr ""
+msgstr "no hay telemetría de GPU disponible"
 
 #: src/render.c:7691 src/render.c:7710
 msgid "VRAM"
-msgstr ""
+msgstr "VRAM"
 
 #: src/render.c:7705
 msgid "PID"
-msgstr ""
+msgstr "PID"
 
 #: src/render.c:7707
 msgid "NAME"
-msgstr ""
+msgstr "NOMBRE"
 
 #: src/render.c:7709
 msgid "MEM"
-msgstr ""
+msgstr "MEM."
 
 #: src/render.c:7818
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
-msgstr ""
+msgstr "j/k mover · clic derecho en una fila · c/m/g/p ordenar · u los míos · x terminar · X matar · Esc cerrar"
 
 #: src/render.c:7984
 msgid "NEWS"
-msgstr ""
+msgstr "NOTICIAS"
 
 #: src/render.c:7992
 msgid "all sources"
-msgstr ""
+msgstr "todas las fuentes"
 
 #: src/render.c:7993
 msgid "by time"
-msgstr ""
+msgstr "por fecha"
 
 #: src/render.c:7993
 msgid "by source"
-msgstr ""
+msgstr "por fuente"
 
 #: src/render.c:7996
 msgid "never fetched"
-msgstr ""
+msgstr "nunca descargadas"
 
 #: src/render.c:8023
 #, c-format
 msgid "filter: /%s"
-msgstr ""
+msgstr "filtro: /%s"
 
 #: src/render.c:8036
 msgid "fetching feeds…"
-msgstr ""
+msgstr "descargando fuentes…"
 
 #: src/render.c:8037
 msgid "nothing matches this filter"
-msgstr ""
+msgstr "nada coincide con este filtro"
 
 #: src/render.c:8038
 msgid "no feeds answered — check the network, then press r"
-msgstr ""
+msgstr "ninguna fuente ha respondido — compruebe la red y pulse r"
 
 #: src/render.c:8039
 msgid "no items yet — press r to fetch"
-msgstr ""
+msgstr "todavía no hay elementos — pulse r para descargar"
 
 #: src/render.c:8125
 msgid "type to filter · Enter keep · Esc clear"
-msgstr ""
+msgstr "escriba para filtrar · Intro conservar · Esc limpiar"
 
 #: src/render.c:8126
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
-msgstr ""
+msgstr "j/k mover · Intro abrir · o en segundo plano · c comentarios · y copiar · Tab fuente · / buscar · s ordenar · m leído · r actualizar · Esc cerrar"
 
 #: src/render.c:8152
 msgid "Bottom"
-msgstr ""
+msgstr "Abajo"
 
 #: src/render.c:8152
 msgid "Top"
-msgstr ""
+msgstr "Arriba"
 
 #: src/render.c:8152
 msgid "Left"
-msgstr ""
+msgstr "Izquierda"
 
 #: src/render.c:8152
 msgid "Right"
-msgstr ""
+msgstr "Derecha"
 
 #: src/render.c:8162
 msgid "Apps"
-msgstr ""
+msgstr "Aplicaciones"
 
 #: src/render.c:8165
 #, c-format
 msgid "Dock Edge: %s"
-msgstr ""
+msgstr "Borde del dock: %s"
 
 #: src/render.c:8179
 #, c-format
 msgid "%s At: %s"
-msgstr ""
+msgstr "%s en: %s"
 
 #: src/render.c:8191
 msgid "Pin to Dock"
-msgstr ""
+msgstr "Anclar al dock"
 
 #: src/render.c:8193
 msgid "Unpin from Dock"
-msgstr ""
+msgstr "Desanclar del dock"
 
 #: src/render.c:8194
 msgid "Open"
-msgstr ""
+msgstr "Abrir"
 
 #: src/render.c:8195
 msgid "New Window"
-msgstr ""
+msgstr "Ventana nueva"
 
 #: src/render.c:8196
 msgid "Close Window"
-msgstr ""
+msgstr "Cerrar ventana"
 
 #: src/render.c:8197
 msgid "Quit All Windows"
-msgstr ""
+msgstr "Salir de todas las ventanas"
 
 #: src/render.c:8201
 msgid "Auto-hide Dock"
-msgstr ""
+msgstr "Ocultar el dock automáticamente"
 
 #: src/render.c:8202
 msgid "Dock Above Windows"
-msgstr ""
+msgstr "Dock sobre las ventanas"
 
 #: src/render.c:8203
 msgid "Magnify Icons"
-msgstr ""
+msgstr "Ampliar los iconos"
 
 #: src/render.c:8204
 msgid "Show Clock"
-msgstr ""
+msgstr "Mostrar el reloj"
 
 #: src/render.c:8205
 msgid "Analog Clock Face"
-msgstr ""
+msgstr "Esfera analógica"
 
 #: src/render.c:8206
 msgid "Show All Apps Button"
-msgstr ""
+msgstr "Mostrar el botón Todas las aplicaciones"
 
 #: src/render.c:8207
 msgid "Show Power Button"
-msgstr ""
+msgstr "Mostrar el botón de encendido"
 
 #: src/render.c:8208
 msgid "Dock Settings…"
-msgstr ""
+msgstr "Ajustes del dock…"
 
 #: src/render.c:8212
 msgid "Lock Screen"
-msgstr ""
+msgstr "Bloquear la pantalla"
 
 #: src/render.c:8213
 msgid "Log Out"
-msgstr ""
+msgstr "Cerrar sesión"
 
 #: src/render.c:8214
 msgid "Suspend"
-msgstr ""
+msgstr "Suspender"
 
 #: src/render.c:8215
 msgid "Restart"
-msgstr ""
+msgstr "Reiniciar"
 
 #: src/render.c:8216
 msgid "Shut Down"
-msgstr ""
+msgstr "Apagar"
 
 #: src/render.c:8839
 msgid "minimized"
-msgstr ""
+msgstr "minimizada"
 
 #: src/render.c:8839 src/render.c:9333 src/render.c:9336
 msgid "MIN"
-msgstr ""
+msgstr "MIN"
 
 #: src/render.c:8944
 msgid "WINDOWS"
-msgstr ""
+msgstr "VENTANAS"
 
 #: src/render.c:9101
 msgid "Alt+Tab next · Alt+Shift+Tab back"
-msgstr ""
+msgstr "Alt+Tab siguiente · Alt+Mayús+Tab anterior"
 
 #: src/render.c:9218
 msgid "MISSION CONTROL"
-msgstr ""
+msgstr "VISTA GENERAL"
 
 #: src/render.c:9223
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Escritorio %d · %d ventana"
+msgstr[1] "Escritorio %d · %d ventanas"
 
 #: src/render.c:9360
 msgid "Nothing open on this desktop."
-msgstr ""
+msgstr "No hay nada abierto en este escritorio."
 
 #: src/render.c:9415
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
-msgstr ""
+msgstr "Las flechas o un clic eligen una ventana · Intro la abre · Supr la cierra · 1–9 cambian de escritorio · Esc cerrar"
 
 #: src/saver.c:411
 msgid "No wallpapers found for the slideshow"
@@ -2841,28 +2835,24 @@ msgid "Slide interval"
 msgstr "Intervalo del pase"
 
 #: src/saver.c:841
-#, fuzzy
 msgid "Lock background"
-msgstr "Pantalla de bloqueo"
+msgstr "Fondo de la pantalla de bloqueo"
 
 #: src/saver.c:842
-#, fuzzy
 msgid "Lock image"
-msgstr "Ampliar el dock"
+msgstr "Imagen de la pantalla de bloqueo"
 
 #: src/saver.c:843
 msgid "Lock dim"
 msgstr "Atenuar la pantalla de bloqueo"
 
 #: src/saver.c:844
-#, fuzzy
 msgid "Lock blur"
-msgstr "Desenfoque del fondo"
+msgstr "Desenfoque de la pantalla de bloqueo"
 
 #: src/saver.c:845
-#, fuzzy
 msgid "Lock colours"
-msgstr "Esquinas del dock"
+msgstr "Colores de la pantalla de bloqueo"
 
 #: src/saver.c:846
 msgid "Now playing"
@@ -2873,19 +2863,16 @@ msgid "Weather"
 msgstr "Tiempo"
 
 #: src/saver.c:848
-#, fuzzy
 msgid "Temperature in"
-msgstr "Temperatura de color"
+msgstr "Temperatura en"
 
 #: src/saver.c:849
-#, fuzzy
 msgid "Keyboard layout"
-msgstr "Atajos de teclado"
+msgstr "Distribución del teclado"
 
 #: src/widgets.c:60
-#, fuzzy
 msgid "All widgets"
-msgstr "Todos los filtros"
+msgstr "Todos los widgets"
 
 #: src/widgets.c:61
 msgid "Audio visualiser"
@@ -2896,9 +2883,8 @@ msgid "System monitor"
 msgstr "Monitor del sistema"
 
 #: src/widgets.c:63
-#, fuzzy
 msgid "Desktop clock"
-msgstr "Iconos del escritorio"
+msgstr "Reloj del escritorio"
 
 #: src/widgets.c:64
 msgid "Quick launch"
@@ -2917,9 +2903,8 @@ msgid "Tuxagotchi"
 msgstr "Tuxagotchi"
 
 #: src/widgets.c:68
-#, fuzzy
 msgid "Analog clock"
-msgstr "Esfera del reloj analógico"
+msgstr "Reloj analógico"
 
 #: src/widgets.c:69
 msgid "Music player"
