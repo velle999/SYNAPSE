@@ -581,6 +581,36 @@ FloatingWindow {
         }
     }
     /*
+     * The language already chosen this boot — by the bootloader's `lang=`, or
+     * by the live image's own picker before this window was started.
+     *
+     * ⚠ WITHOUT THIS THE WINDOW OVERRULES THE BOOT MENU IN SILENCE. It writes
+     * a profile, and a profile beats the recorded boot answer on purpose (it is
+     * a written instruction about this install) — so a GUI install would carry
+     * this window's default, English, however carefully the language was picked
+     * thirty seconds earlier. Reading it back is what makes the two agree.
+     *
+     * Runs after --list-locales for no ordering reason: it sets the answers
+     * directly and does not need the list.
+     */
+    Process {
+        command: [root.bin, "--boot-language"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const f = this.text.split("\n")[0].split("\t")
+                if (f.length < 4 || !f[1].trim()) return
+                root.aLangLabel = f[0]
+                root.aLocale    = f[1]
+                root.aKeymap    = f[2]
+                root.aXkb       = f[3]
+                root.aFonts     = f.length > 4 ? f[4] : ""
+                root.aLangKnown = true
+            }
+        }
+    }
+
+    /*
      * ── Connectivity ────────────────────────────────────────────────────────
      *
      * syn-install downloads the base system, so an offline install cannot

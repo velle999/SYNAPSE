@@ -78,7 +78,12 @@ check "the Minimal preset body was located" yes "$([ -n "$min_body" ]  && echo y
 # so has no padding space before its colon. A test that is fussy about
 # whitespace fails on correct code, which is worse than not having it.
 summary_line=$(grep -n 'Install this selection?' "$script" | head -1 | cut -d: -f1)
-header_line=$(grep -n "bold 'Installing:'" "$script" | head -1 | cut -d: -f1)
+# ⚠ ANCHORED ON THE TEXT, NOT ON HOW IT IS PRINTED. This used to look for
+# `bold 'Installing:'` and stopped matching the day the header went through the
+# translation helper and became `bold "$(t 'Installing:')"` — at which point
+# header_line was empty, the slice was empty, and every group was reported
+# missing from a summary that had not changed at all.
+header_line=$(grep -n "Installing:'" "$script" | head -1 | cut -d: -f1)
 summary=$(sed -n "${header_line},${summary_line}p" "$script")
 
 # Everything from the confirm prompt onward is "after the choice is made",

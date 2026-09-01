@@ -215,6 +215,19 @@
   desktop = "synui";           # synui | kde | gnome | tty
 
   # ── Locale and time ─────────────────────────────────────────────────────
+  # The live image asks for a language before anything else — its first screen,
+  # or `lang=de_DE.UTF-8` from the bootloader's language submenu answering it
+  # before that. `live_language` is that question's key, and it is here only so
+  # that an unattended run off this profile is not stopped by it. It is a MENU
+  # NUMBER, which is why it should normally be left out: the number means
+  # whatever that row happens to be on the day you install, and the four keys
+  # below say the same thing durably and are what the install actually uses.
+  #
+  # Setting `language` at all also makes the installer ignore whatever was
+  # picked at boot — deliberately: a profile is a written instruction about
+  # this install, and the boot answer was about the live session it runs from.
+  # live_language = 1;
+
   # `language` also accepts a menu number, but do not use one in a profile:
   # the number means whatever that row is on the day you install. "other" plus
   # the three explicit keys below says the same thing and keeps saying it.

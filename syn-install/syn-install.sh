@@ -24,7 +24,109 @@ RELEASE="${RELEASE:-$VERSION}"
 
 COLS=$(tput cols 2>/dev/null || echo 80)
 
+# ── Speaking the user's language ──────────────────────────
+#
+# The image asks which language before it asks anything else (live_language_step
+# further down), and until this existed that answer set the SYSTEM's language and
+# left the installer itself talking English for the next fifteen screens — so the
+# question appeared to promise something it did not deliver, which is worse than
+# not asking.
+#
+# ⚠ THE KEY IS THE ENGLISH SENTENCE, NOT AN ID. Three reasons, and the third is
+# the one that decided it:
+#
+#   1. The script stays readable. `die "Disk $DISK not found"` still says what it
+#      says; there is no table to cross-reference to find out what MSG_DISK_404
+#      prints.
+#   2. A missing translation is automatically the English, because the key IS
+#      the English. There is no state where a screen can show an id.
+#   3. THIS SCRIPT PARTITIONS DISKS. With ids, one wrong id renumbers a warning
+#      onto the wrong screen and the sentence next to "ALL DATA WILL BE ERASED"
+#      is silently somebody else's. With the sentence as the key, a wrong key
+#      cannot resolve at all, and prints the English it was written as.
+#
+# The cost is that editing an English string orphans its translations. That is
+# what tests/i18n_test.sh is for: it extracts every translatable string from
+# this file and fails on a catalog key that matches nothing.
+#
+# Catalogs are one file per language, each a single associative array, sourced
+# once for the chosen language only. Not gettext: the live ISO would then need
+# the gettext runtime and a compiled .mo tree present and correct before the
+# installer could describe its own failure to find them, and an installer's
+# error messages are the last thing that should have a dependency.
+SYN_LANG_DIR="${SYN_LANG_DIR:-/usr/share/syn-install/lang}"
+[ -d "$SYN_LANG_DIR" ] ||
+    SYN_LANG_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lang"
+
+declare -A SYN_T=()
+SYN_LANG=en
+
+# syn_lang_load <locale|code> — swap the catalog. Anything unknown, and
+# anything English, leaves the strings as they are written here.
+syn_lang_load() {
+    local want=${1:-} code
+    code=${want%%[_.@-]*}
+    code=${code,,}
+    [ -n "$code" ] || return 0
+    case "$code" in c|posix|en) SYN_LANG=en; SYN_T=(); return 0 ;; esac
+    # ⚠ AN UNKNOWN LANGUAGE FALLS BACK TO ENGLISH, IT DOES NOT KEEP THE LAST
+    # ONE. This used to return with the previous catalog still loaded, so a
+    # second call naming a language we have no file for left the installer
+    # speaking whatever it had been speaking — which on the one path that calls
+    # this twice (a boot answer, then a step-7 locale typed by hand) meant the
+    # typed answer was ignored in silence. Empty is different and is handled
+    # above: it means "no opinion", and keeps what is loaded.
+    if [ ! -r "$SYN_LANG_DIR/$code.sh" ]; then
+        SYN_LANG=en; SYN_T=(); return 0
+    fi
+    SYN_T=()
+    # shellcheck source=/dev/null
+    . "$SYN_LANG_DIR/$code.sh" || { SYN_T=(); return 0; }
+    SYN_LANG=$code
+}
+
+# What language should this run be in? In precedence order, and each of the
+# three is a real case: a profile written away from the machine, an answer
+# already given at boot, and a live session that was started some other way.
+syn_lang_pick() {
+    local row
+    # ANSWERS is declared below these helpers, and `set -u` is on: a `+set` test
+    # on an undeclared associative array is itself an error in some bash
+    # builds. Ask whether the array exists first.
+    if declare -p ANSWERS >/dev/null 2>&1; then
+    if [ -n "${ANSWERS[locale]+set}" ]; then printf '%s' "${ANSWERS[locale]}"; return 0; fi
+    if [ -n "${ANSWERS[language]+set}" ]; then
+        row=$(locale_row_for "${ANSWERS[language]}")
+        [ -n "$row" ] && { echo "$row" | cut -d'|' -f2; return 0; }
+    fi
+    fi
+    row=$(boot_locale_row)
+    [ -n "$row" ] && { echo "$row" | cut -d'|' -f2; return 0; }
+    printf '%s' "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+}
+
+# t <english> — the translation, or the English.
+t() { local k=$1; printf '%s' "${SYN_T[$k]-$k}"; }
+
+# tf <english-format> [args...] — for a sentence with something in it.
+#
+# ⚠ THE FORMAT IS THE KEY, so a translation must keep the same conversions in
+# a form printf accepts. Where a language needs them in another order it can
+# say %2$s and %1$s; that is exactly why printf has them.
+#
+# ⚠ AND THE ARRAY IS READ DIRECTLY, NOT THROUGH $(t ...). Command substitution
+# strips trailing newlines: every one of these formats ends in one, so a
+# translation stored with a real newline came back without it and the next line
+# of output ran on. English survived it by accident — its formats carry a
+# literal backslash-n that printf expands afterwards, which is exactly the kind
+# of difference that makes a bug look like "only the translations are broken".
+tf() { local f=$1; shift; printf "${SYN_T[$f]-$f}" "$@"; }
+
 # ── UI helpers ────────────────────────────────────────────
+#
+# step/success/fail/warn/prompt translate what they are handed, so several
+# hundred call sites needed no change at all — and a new one is translated the
+# day it is written rather than the day somebody remembers.
 cyan()  { printf '\033[1;36m%s\033[0m' "$*"; }
 green() { printf '\033[1;32m%s\033[0m' "$*"; }
 red()   { printf '\033[1;31m%s\033[0m' "$*"; }
@@ -61,10 +163,14 @@ header() {
     echo ""
 }
 
-step()    { echo ""; cyan "  ▶ $*"; echo ""; }
-success() { echo ""; green "  ✓ $*"; echo ""; }
-fail()    { echo ""; red "  ✗ $*"; echo ""; }
-warn()    { echo ""; yellow "  ⚠ $*"; echo ""; }
+step()    { echo ""; cyan "  ▶ $(t "$*")"; echo ""; }
+success() { echo ""; green "  ✓ $(t "$*")"; echo ""; }
+fail()    { echo ""; red "  ✗ $(t "$*")"; echo ""; }
+warn()    { echo ""; yellow "  ⚠ $(t "$*")"; echo ""; }
+# say — a line of prose. `echo` stays `echo` for everything that is not prose:
+# a path, a device name, a table row built out of data. Translating those would
+# be translating the machine's own output back at it.
+say()     { echo "$(t "$*")"; }
 # Every interactive question in this script prints through here, which makes it
 # the one place that can drop typeahead — and it has to.
 #
@@ -92,7 +198,7 @@ prompt() {
     # default. DECTCEM rather than `tput cnorm`, which needs a terminfo entry
     # this console may not have.
     printf '\033[?25h'
-    printf "  $(bold "$1") "
+    printf "  $(bold "$(t "$1")") "
 }
 
 # Unmount the target on failure so a stale /mnt doesn't block a retry — and turn
@@ -429,14 +535,15 @@ part_usable() {   # part_usable <dev> <role> [min-bytes]
         *)    echo "$dev is not a partition"; return 1 ;;
     esac
     if lsblk -nro MOUNTPOINT "$dev" 2>/dev/null | grep -q .; then
-        echo "$dev is mounted — unmount it first"; return 1
+        tf '%s is mounted — unmount it first\n' "$dev"; return 1
     fi
     if is_live_disk "$(lsblk -no PKNAME "$dev" 2>/dev/null | head -1 | sed 's|^|/dev/|')"; then
-        echo "$dev is on the live/boot device — that is the installer's own media"; return 1
+        tf "%s is on the live/boot device — that is the installer's own media\n" "$dev"; return 1
     fi
     sz="$(lsblk -bdno SIZE "$dev" 2>/dev/null)"
     if [ "$min" -gt 0 ] && [[ "$sz" =~ ^[0-9]+$ ]] && [ "$sz" -lt "$min" ]; then
-        echo "$dev is $((sz / 1024 / 1024)) MiB — $role needs at least $((min / 1024 / 1024)) MiB"
+        tf '%s is %s MiB — %s needs at least %s MiB\n' \
+        "$dev" "$((sz / 1024 / 1024))" "$role" "$((min / 1024 / 1024))"
         return 1
     fi
     return 0
@@ -914,6 +1021,217 @@ list_locales() {
         [ -n "$row" ] || continue
         printf '%s\n' "${row//|/$'\t'}"
     done <<<"$LOCALE_ROWS"
+}
+
+# ── The language chosen at boot ────────────────────────────
+#
+# A SynapseOS image used to reach its first question in English and stay there
+# until step 7, most of the way through an install: the live menu, the desktop
+# it can start, and the shell inside it were all English whatever the machine
+# was going to become. For somebody who does not read English that is not a
+# rough edge, it is the whole thing being unusable up to the point where it
+# finally asks.
+#
+# So the language is the FIRST question now, and there are two ways to answer
+# it before the installer's own step 7 ever runs:
+#
+#   `lang=` on the kernel command line  — the bootloader menus put it there
+#                                         (grub/grub.cfg, syslinux/archiso_lang.cfg)
+#   the picker in live_language_step()  — shown when nothing did
+#
+# Either way the answer is written to /run/synapseos/language as one whole
+# LOCALE_ROWS line, which is what step 7 reads instead of asking again, and
+# what the graphical installer reads to preselect its own list. One recorded
+# answer, read by three things, rather than three of them asking.
+#
+# ⚠ THE INSTALLER'S OWN PROSE IS STILL ENGLISH. What this sets is the SYSTEM's
+# language — console keymap, locale, desktop keyboard layout, the fonts that
+# get installed, and the language synsh speaks — not the wording of the next
+# fifteen screens. Saying so here because a language step that appears to
+# promise a translated installer and does not deliver one is worse than no
+# language step: the next person to read this should know it is a gap, not a
+# decision that was made and forgotten.
+
+# The file the boot-time answer lands in. Overridable so the tests can point it
+# somewhere writable; /run is tmpfs on the live image and gone after a reboot,
+# which is right — it describes THIS boot.
+SYN_BOOT_LANG_FILE="${SYN_BOOT_LANG_FILE:-/run/synapseos/language}"
+
+# locale_row_for <want> — the LOCALE_ROWS line `want` names, or nothing.
+#
+# Takes any of the three things a person or a boot entry might supply: a row
+# number ("3"), a full locale ("de_DE.UTF-8"), or a bare language ("de"). The
+# bare form matches the first row of that language, which is why English (US)
+# is above English (UK) in the table — `lang=en` has to mean something.
+#
+# Prints nothing for anything it does not recognise, and that is deliberate:
+# an unknown `lang=` falls through to the picker, which asks. A boot entry with
+# a typo in it should cost a question, not an install in the wrong language.
+locale_row_for() {
+    local want=$1 row code
+    [ -n "$want" ] || return 0
+
+    case "$want" in
+        ''|*[!0-9]*) ;;
+        *) echo "$LOCALE_ROWS" | sed -n "$((want + 1))p"; return 0 ;;
+    esac
+
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        code=$(echo "$row" | cut -d'|' -f2)
+        if [ "${want,,}" = "${code,,}" ]; then printf '%s\n' "$row"; return 0; fi
+    done <<<"$LOCALE_ROWS"
+
+    # No exact locale: try the language part, first row wins.
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        code=$(echo "$row" | cut -d'|' -f2)
+        if [ "${want%%[_.@-]*}" = "${code%%_*}" ]; then
+            printf '%s\n' "$row"; return 0
+        fi
+    done <<<"$LOCALE_ROWS"
+    return 0
+}
+
+# `lang=` off the kernel command line, or nothing.
+#
+# Read with `set --` on the whole line rather than a glob against the file,
+# because a value is only a value when it is its own word: `nolang=de` and
+# `blang=de` must not match, and `grep -o 'lang=[^ ]*'` matches both.
+cmdline_lang() {
+    local w line
+    line=$(cat "${SYN_CMDLINE_FILE:-/proc/cmdline}" 2>/dev/null) || return 0
+    for w in $line; do
+        case "$w" in lang=?*) printf '%s\n' "${w#lang=}"; return 0 ;; esac
+    done
+    return 0
+}
+
+# The row recorded by whoever asked first, or nothing.
+boot_locale_row() {
+    [ -f "$SYN_BOOT_LANG_FILE" ] || return 0
+    head -1 "$SYN_BOOT_LANG_FILE" 2>/dev/null
+}
+
+# live_language_apply <locale> <console-keymap> <xkb-layout>
+#
+# Makes the choice real for the SESSION THAT IS RUNNING, which is a different
+# job from writing it into /mnt later: the console keymap has to load now or
+# the next thing typed is wrong, and the locale has to exist before anything
+# can be set to it.
+live_language_apply() {
+    local locale=$1 keymap=$2 xkb=$3
+
+    # The console keymap, immediately and for any later vconsole run.
+    if [ -n "$keymap" ]; then
+        loadkeys "$keymap" >/dev/null 2>&1 ||
+            warn "Console keymap '$keymap' would not load. The text console stays on US;
+  the installed system is unaffected."
+        printf 'KEYMAP=%s\n' "$keymap" > /etc/vconsole.conf 2>/dev/null || true
+    fi
+
+    # ⚠ A LOCALE HAS TO BE GENERATED BEFORE IT EXISTS. The ISO ships exactly one
+    # (en_US.UTF-8 — see archiso/airootfs/etc/locale.gen), so setting LANG to
+    # anything else without this leaves every program falling back to C and
+    # nothing saying why. Tested by asking for the charmap rather than by
+    # grepping `locale -a`, whose spelling ("de_DE.utf8") is not the spelling
+    # anybody writes.
+    if [ -n "$locale" ] && ! LC_ALL="$locale" locale charmap >/dev/null 2>&1; then
+        tf '  Generating %s (a few seconds)...\n' "$locale"
+        grep -qxF "$locale ${locale#*.}" /etc/locale.gen 2>/dev/null ||
+            printf '%s %s\n' "$locale" "${locale#*.}" >> /etc/locale.gen
+        locale-gen >/dev/null 2>&1 ||
+            warn "locale-gen failed. The live session stays in English; the install is
+  unaffected, because it generates the locale inside the target."
+    fi
+
+    if [ -n "$locale" ] && LC_ALL="$locale" locale charmap >/dev/null 2>&1; then
+        printf 'LANG=%s\n' "$locale" > /etc/locale.conf 2>/dev/null || true
+        export LANG="$locale"
+        # ⚠ BUT NOT THE COLLATION. This script sorts package names, device
+        # names and locale lists, and a non-C LC_COLLATE changes what `sort`
+        # and a `[a-z]` glob mean — quietly, and differently per language.
+        # The user's language is for what they read; the script's comparisons
+        # stay where they were written and tested.
+        export LC_COLLATE=C
+    fi
+
+    # A console font that can draw the alphabet. Terminus (ter-116n, what the
+    # ISO sets) is Latin-1 only, so Cyrillic came out as lookalike rubbish.
+    # There is no equivalent for CJK, Devanagari or Arabic and there cannot be:
+    # a VT font holds at most 512 glyphs. Those languages get their alphabet in
+    # the graphical session, which is also why every label in LOCALE_ROWS is
+    # ASCII — see the note on that table.
+    case "$locale" in
+        ru_*|uk_*|bg_*|sr_*|mk_*|el_*)
+            if setfont latarcyrheb-sun16 >/dev/null 2>&1; then
+                printf 'FONT=%s\n' latarcyrheb-sun16 >> /etc/vconsole.conf
+            fi ;;
+    esac
+
+    # The live DESKTOP's keyboard. synui reads its layout from synuirc and
+    # knows nothing about the console keymap, so without this the live desktop
+    # stays on US however the text console was set — the exact half-applied
+    # state the two-column keyboard table exists to prevent.
+    if [ -n "$xkb" ] && [ -f /etc/synui/synuirc ]; then
+        sed -i '/^[[:space:]]*xkb_layout[[:space:]]*=/d' /etc/synui/synuirc 2>/dev/null || true
+        printf 'xkb_layout = %s\n' "$xkb" >> /etc/synui/synuirc 2>/dev/null || true
+    fi
+}
+
+# The first screen of the live image, and the first thing after the bootloader.
+#
+# Skipped without a word when `lang=` already answered it — a person who picked
+# Deutsch in the boot menu has answered this question and must not be asked it
+# again in a language they did not choose.
+live_language_step() {
+    local want row r n i label locale keymap xkb
+
+    want=$(cmdline_lang)
+    row=$(locale_row_for "$want")
+    [ -n "$row" ] || row=$(boot_locale_row)
+
+    if [ -z "$row" ]; then
+        header
+        step "Language / Sprache / Langue / Idioma"
+        say "  The keyboard, the clock, the fonts and the shell all follow this.
+  You can change any of it later."
+        echo ""
+        i=0
+        while IFS= read -r r; do
+            [ -n "$r" ] || continue
+            i=$((i + 1))
+            printf '  %2d) %s\n' "$i" "${r%%|*}"
+        done <<<"$LOCALE_ROWS"
+        echo ""
+        # Counted, not typed — a hardcoded range beside a list it is not
+        # derived from is wrong the first time anyone adds a language.
+        n=$(echo "$LOCALE_ROWS" | grep -c '|')
+        pick "Language [1-${n}, default=1]:" live_language _live_lang 1 \
+             "$(seq 1 "$n" | tr '\n' ' ')"
+        row=$(echo "$LOCALE_ROWS" | sed -n "$((_live_lang + 1))p")
+    fi
+    [ -n "$row" ] || return 0
+
+    label=${row%%|*}
+    locale=$(echo "$row" | cut -d'|' -f2)
+    keymap=$(echo "$row" | cut -d'|' -f3)
+    xkb=$(echo "$row" | cut -d'|' -f4)
+
+    # Recorded before it is applied: if locale-gen or loadkeys goes wrong the
+    # answer is still the answer, and step 7 must not go back to asking.
+    mkdir -p "$(dirname "$SYN_BOOT_LANG_FILE")" 2>/dev/null || true
+    printf '%s\n' "$row" > "$SYN_BOOT_LANG_FILE" 2>/dev/null || true
+
+    live_language_apply "$locale" "$keymap" "$xkb"
+
+    # ⚠ AND THE INSTALLER ITSELF, which is the whole point of asking first.
+    # Everything printed from here on — this line included — is in the language
+    # just chosen; anything the catalog has no entry for stays English rather
+    # than becoming an id.
+    syn_lang_load "$locale"
+
+    tf 'Language: %s  (%s, keyboard %s)\n' "$label" "$locale" "$keymap"
 }
 
 # `--list-timezones` — `name  label`, the shortlist first (labelled) and then
@@ -1515,10 +1833,15 @@ syn-install $VERSION — install SynapseOS $RELEASE to disk
 
   syn-install                    ask every question (the normal way)
   syn-install --config FILE      answer them from an install profile
-  syn-install --live             open with the live image's menu — install
-                                 here, install graphically, or try the
-                                 desktop. syn-firstboot passes this; you
-                                 would not.
+  syn-install --live             open with the live image's menu — pick a
+                                 language, then install here, install
+                                 graphically, or try the desktop.
+                                 syn-firstboot passes this; you would not.
+
+The language is asked FIRST, before anything else, and `lang=de_DE.UTF-8` on
+the kernel command line answers it before that — which is what the language
+submenu in the bootloader does. Whichever answers it, the installer does not
+ask again.
 
 FILE is either key=value lines, or a .nix profile evaluated through
 /usr/share/syn/nix/render.nix (needs nix). Questions the profile leaves
@@ -1543,6 +1866,13 @@ USAGE
         # place, and the window renders what they say. Queries, so they are
         # answered before the root check too.
         --list-locales)     list_locales; exit 0 ;;
+        # The row already chosen this boot — by the bootloader's `lang=` or by
+        # the live image's own picker — in the same TAB-separated shape as
+        # --list-locales, or nothing. The graphical installer asks so that it
+        # opens on the language the person has already chosen; without it a GUI
+        # install would write language=<its own default> into the profile and
+        # silently overrule the boot menu.
+        --boot-language)    boot_locale_row | tr '|' '\t'; exit 0 ;;
         --list-timezones)   list_timezones; exit 0 ;;
         --list-keymaps)     list_keymaps; exit 0 ;;
         --list-xkb-layouts) list_xkb_layouts; exit 0 ;;
@@ -1554,6 +1884,11 @@ done
 [ "$(id -u)" = "0" ] || die "syn-install must be run as root"
 
 [ -n "${_CONFIG_ARG:-}" ] && config_load "$_CONFIG_ARG"
+
+# From here on the installer speaks whatever was already decided — a profile's
+# locale, or the answer given at boot. Called again after live_language_step,
+# which is where that answer is usually given.
+syn_lang_load "$(syn_lang_pick)"
 
 # Best-effort unmount of the target area on any unexpected exit.
 trap cleanup EXIT
@@ -1572,12 +1907,19 @@ trap cleanup EXIT
 # anyone who wants the text installer can decline it.
 WELCOME_ACK=1
 if [ "${LIVE_MENU:-0}" = 1 ]; then
+    # ⚠ BEFORE THE MENU, not after it. The menu below is the first thing a
+    # person reads, and until this ran it was in English on every machine on
+    # earth — including the one whose owner picked their language in the boot
+    # menu thirty seconds earlier. Asking which language first costs one screen
+    # and makes every screen after it the right one.
+    live_language_step
+
     header
-    echo "  SynapseOS is running from the live image."
+    say "  SynapseOS is running from the live image."
     echo ""
-    echo "    $(bold '1)') Install SynapseOS     — right here, in this terminal"
-    echo "    $(bold '2)') Install graphically   — starts the desktop first"
-    echo "    $(bold '3)') Try the live desktop  — look around; install later"
+    echo "    $(bold '1)') $(t 'Install SynapseOS     — right here, in this terminal')"
+    echo "    $(bold '2)') $(t 'Install graphically   — starts the desktop first')"
+    echo "    $(bold '3)') $(t 'Try the live desktop  — look around; install later')"
     echo ""
     pick "Choice [1-3, default=3]:" live_start _live 3 "1 2 3" \
          -m text=1,tui=1,gui=2,graphical=2,live=3,desktop=3
@@ -1602,13 +1944,13 @@ fi
 # ── Welcome ───────────────────────────────────────────────
 if [ "$WELCOME_ACK" = 1 ]; then
     header
-    echo "  This installer will:"
-    echo "    1. Partition a disk"
-    echo "    2. Install SynapseOS base system"
-    echo "    3. Install SynapseOS packages"
-    echo "    4. Create user account"
-    echo "    5. Choose desktop environment"
-    echo "    6. Configure system & bootloader"
+    say "  This installer will:
+    1. Partition a disk
+    2. Install SynapseOS base system
+    3. Install SynapseOS packages
+    4. Create user account
+    5. Choose desktop environment
+    6. Configure system & bootloader"
     echo ""
     warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
     echo ""
@@ -1622,7 +1964,7 @@ step "Checking network"
 if have_net; then
     success "Network is up"
 else
-    echo "  No network detected. Starting NetworkManager..."
+    say "  No network detected. Starting NetworkManager..."
     systemctl start NetworkManager 2>/dev/null || true
 
     # NM needs a moment to bring a wired link up or reconnect a known network.
@@ -1640,7 +1982,7 @@ else
         if ls /sys/class/net/*/wireless >/dev/null 2>&1 && \
            command -v nmtui >/dev/null 2>&1; then
             echo ""
-            echo "  No connection — but this machine has Wi-Fi."
+            say "  No connection — but this machine has Wi-Fi."
             prompt "Open the Wi-Fi picker (nmtui)? [Y/n]:"
             answer wifi_picker wifi_ans -m yes=y,no=n,true=y,false=n
             case "${wifi_ans:-y}" in
@@ -1673,7 +2015,7 @@ fi
 header
 step "Step 1 — Select Target Disk"
 
-echo "  Available disks:"
+say "  Available disks:"
 echo ""
 lsblk -d -o NAME,SIZE,TYPE,MODEL | grep disk | while read -r line; do
     echo "    $line"
@@ -1711,7 +2053,7 @@ if disk_busy "$DISK"; then
 fi
 
 echo ""
-echo "  $(bold 'Target:') $DISK"
+echo "  $(bold "$(t 'Target:')") $DISK"
 lsblk "$DISK"
 echo ""
 
@@ -1745,12 +2087,12 @@ INSTALL_MODE="erase"
 if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] \
    && [ -n "$ESP_DEV" ] && [ "$FREE_MIB" -ge "$MIN_ROOT_MIB" ]; then
     echo ""
-    echo "  This disk already holds $NUM_PARTS partition(s), an EFI System"
-    echo "  Partition ($ESP_DEV), and $((FREE_MIB / 1024)) GiB of free space."
+    tf '  This disk already holds %s partition(s), an EFI System\n  Partition (%s), and %s GiB of free space.\n' \
+        "$NUM_PARTS" "$ESP_DEV" "$((FREE_MIB / 1024))"
     echo ""
-    echo "    1) Install $(bold 'ALONGSIDE') — use the free space, keep everything else"
-    echo "    2) $(bold 'ERASE') the whole disk — delete every partition and all data"
-    echo "    3) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
+    tf '    1) Install %s — use the free space, keep everything else\n' "$(bold "$(t 'ALONGSIDE')")"
+    tf '    2) %s the whole disk — delete every partition and all data\n' "$(bold "$(t 'ERASE')")"
+    tf '    3) %s — partition this disk yourself, then pick the partitions\n' "$(bold "$(t 'ADVANCED')")"
     echo ""
     pick "Install mode [1-3]:" install_mode _mode 1 "1 2 3" \
          -m alongside=1,erase=2,manual=3
@@ -1773,8 +2115,8 @@ else
     # separate /home, a reused ESP that the alongside path's conditions rejected,
     # a partition left over from another distro.
     echo ""
-    echo "    1) $(bold 'ERASE') the whole disk — delete every partition and all data  (default)"
-    echo "    2) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
+    tf '    1) %s the whole disk — delete every partition and all data  (default)\n' "$(bold "$(t 'ERASE')")"
+    tf '    2) %s — partition this disk yourself, then pick the partitions\n' "$(bold "$(t 'ADVANCED')")"
     echo ""
     pick "Install mode [1/2]:" install_mode _mode 1 "1 2" \
          -m erase=1,manual=2
@@ -1813,13 +2155,13 @@ ENCRYPT="no"
 CRYPT_NAME="cryptroot"
 if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo ""
-    echo "  $(bold 'Encrypt this installation?')"
+    echo "  $(bold "$(t 'Encrypt this installation?')")"
     echo ""
-    echo "  Encrypts the root filesystem with LUKS2. You will be asked for the"
-    echo "  passphrase at every boot, before the system starts."
+    say "  Encrypts the root filesystem with LUKS2. You will be asked for the
+  passphrase at every boot, before the system starts."
     echo ""
-    echo "  $(bold 'There is no recovery.') If you forget the passphrase the data is"
-    echo "  gone — no password reset, no support call, nothing."
+    tf '  %s If you forget the passphrase the data is\n  gone — no password reset, no support call, nothing.\n' \
+        "$(bold "$(t 'There is no recovery.')")"
     echo ""
     prompt "Encrypt the disk? [y/N]:"
     answer encrypt _enc -m yes=y,no=n,true=y,false=n
@@ -1842,15 +2184,15 @@ ROOT_FS="ext4"
 SNAPSHOTS="no"
 if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo ""
-    echo "  $(bold 'Root filesystem')"
+    echo "  $(bold "$(t 'Root filesystem')")"
     echo ""
-    echo "    $(bold '1)') ext4   — the default. Boring, proven, repairable by anything."
-    echo "    $(bold '2)') btrfs  — snapshots + zstd compression. Roll back a bad update"
-    echo "                    from the boot menu. Uses more RAM and more CPU."
-    echo "    $(bold '3)') xfs    — fast on large files. No snapshots, and it cannot be"
-    echo "                    SHRUNK once created."
-    echo "    $(bold '4)') f2fs   — built for flash. Good on SD cards and cheap SSDs;"
-    echo "                    unusual enough that fewer rescue tools know it."
+    echo "    $(bold '1)') $(t 'ext4   — the default. Boring, proven, repairable by anything.')"
+    echo "    $(bold '2)') $(t 'btrfs  — snapshots + zstd compression. Roll back a bad update
+                    from the boot menu. Uses more RAM and more CPU.')"
+    echo "    $(bold '3)') $(t 'xfs    — fast on large files. No snapshots, and it cannot be
+                    SHRUNK once created.')"
+    echo "    $(bold '4)') $(t 'f2fs   — built for flash. Good on SD cards and cheap SSDs;
+                    unusual enough that fewer rescue tools know it.')"
     echo ""
     pick "Filesystem [1-4, default 1]:" filesystem _fs 1 "1 2 3 4" \
          -m ext4=1,btrfs=2,xfs=3,f2fs=4
@@ -1871,22 +2213,22 @@ fi
 BOOTLOADER="grub"
 if { [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; } && [ "$BOOT_MODE" = "uefi" ]; then
     echo ""
-    echo "  $(bold 'Bootloader')"
+    echo "  $(bold "$(t 'Bootloader')")"
     echo ""
-    echo "    $(bold '1)') GRUB          — the default. Detects other operating systems,"
-    echo "                          and the only one here that can boot a btrfs"
-    echo "                          snapshot."
-    echo "    $(bold '2)') systemd-boot  — minimal. No OS detection, no snapshot menu."
+    echo "    $(bold '1)') $(t 'GRUB          — the default. Detects other operating systems,
+                          and the only one here that can boot a btrfs
+                          snapshot.')"
+    echo "    $(bold '2)') $(t 'systemd-boot  — minimal. No OS detection, no snapshot menu.')"
     if [ "$ENCRYPT" = "yes" ]; then
-        echo "                          With encryption it is the BETTER choice: the"
-        echo "                          kernel lives on the EFI partition and only the"
-        echo "                          initramfs unlocks, so /boot needs no separate"
-        echo "                          unencrypted partition."
+        say "                          With encryption it is the BETTER choice: the
+                          kernel lives on the EFI partition and only the
+                          initramfs unlocks, so /boot needs no separate
+                          unencrypted partition."
     fi
-    echo "    $(bold '3)') limine        — modern and fast, and it CAN boot snapshots."
-    echo "                          It copies each snapshot's kernel onto the EFI"
-    echo "                          partition, so that partition is made much"
-    echo "                          larger when snapshots are enabled."
+    echo "    $(bold '3)') $(t 'limine        — modern and fast, and it CAN boot snapshots.')"
+    say "                          It copies each snapshot's kernel onto the EFI
+                          partition, so that partition is made much
+                          larger when snapshots are enabled."
     echo ""
     pick "Bootloader [1-3, default 1]:" bootloader _bl 1 "1 2 3" \
          -m grub=1,systemd-boot=2,limine=3
@@ -1915,14 +2257,13 @@ bootloader_supported "$BOOTLOADER" "$BOOT_MODE" \
 if fs_supports_snapshots "$ROOT_FS"; then
     if bootloader_supports_snapshots "$BOOTLOADER"; then
         echo ""
-        echo "  $(bold 'Automatic snapshots?')"
+        echo "  $(bold "$(t 'Automatic snapshots?')")"
         echo ""
-        echo "  snapper takes a snapshot before and after every pacman"
-        echo "  transaction, and $BOOTLOADER grows a menu to boot any of them. A"
-        echo "  bad upgrade becomes a reboot instead of a rescue USB."
+        tf '  snapper takes a snapshot before and after every pacman\n  transaction, and %s grows a menu to boot any of them. A\n  bad upgrade becomes a reboot instead of a rescue USB.\n' \
+            "$BOOTLOADER"
         echo ""
-        echo "  Snapshots are cheap but not free: they hold the old copy of"
-        echo "  anything that changes, so a disk near full stays near full."
+        say "  Snapshots are cheap but not free: they hold the old copy of
+  anything that changes, so a disk near full stays near full."
         echo ""
         prompt "Enable snapshots? [Y/n]:"
         answer snapshots _sn -m yes=y,no=n,true=y,false=n
@@ -1982,20 +2323,20 @@ fi
 # The passphrase is asked AFTER this on purpose — no point typing it twice to
 # find out the disk was wrong.
 echo ""
-echo "  $(bold 'Review the plan — nothing has been written yet:')"
+echo "  $(bold "$(t 'Review the plan — nothing has been written yet:')")"
 echo ""
-echo "    Disk          : $DISK"
+tf '    Disk          : %s\n' "$DISK"
 case "$INSTALL_MODE" in
     erase)  echo "    Mode          : ERASE the whole disk" ;;
     manual) echo "    Mode          : ADVANCED — you partition, then pick the partitions" ;;
     *)      echo "    Mode          : install alongside, into $((FREE_MIB / 1024)) GiB of free space" ;;
 esac
-echo "    Firmware      : $BOOT_MODE"
-echo "    Filesystem    : $ROOT_FS"
-echo "    Bootloader    : $BOOTLOADER"
-echo "    Separate /boot: $SEPARATE_BOOT"
-echo "    Encryption    : $ENCRYPT"
-echo "    Snapshots     : $SNAPSHOTS"
+tf '    Firmware      : %s\n' "$BOOT_MODE"
+tf '    Filesystem    : %s\n' "$ROOT_FS"
+tf '    Bootloader    : %s\n' "$BOOTLOADER"
+tf '    Separate /boot: %s\n' "$SEPARATE_BOOT"
+tf '    Encryption    : %s\n' "$ENCRYPT"
+tf '    Snapshots     : %s\n' "$SNAPSHOTS"
 echo ""
 prompt "Are these correct? [Y/n]:"
 answer disk_plan_ok _plan_ok -m yes=y,no=n,true=y,false=n || true
@@ -2055,7 +2396,7 @@ luks_format_root() {
     ROOT_FS_DEV="$PART_ROOT"
     [ "$ENCRYPT" = "yes" ] || return 0
 
-    echo "  Encrypting $PART_ROOT (LUKS2)..."
+    tf '  Encrypting %s (LUKS2)...\n' "$PART_ROOT"
     printf '%s' "$LUKS_PASS" | cryptsetup luksFormat \
         --type luks2 --batch-mode --key-file - "$PART_ROOT" \
         || die "cryptsetup luksFormat failed on $PART_ROOT"
@@ -2084,7 +2425,7 @@ luks_format_root() {
 # the root and everything else beneath it. Duplicating that is how the two
 # branches drift until one of them produces a system snapper cannot roll back.
 format_and_mount_root() {
-    echo "  Formatting root partition ($ROOT_FS)..."
+    tf '  Formatting root partition (%s)...\n' "$ROOT_FS"
     $(fs_mkfs_cmd "$ROOT_FS") "$ROOT_FS_DEV" \
         || die "Failed to format root partition as $ROOT_FS"
 
@@ -2097,7 +2438,7 @@ format_and_mount_root() {
     # The names and the /.snapshots mount point are what `snapper rollback`
     # expects. A layout that merely looks similar gives you snapshots that
     # cannot be rolled back to, which is discovered on the day it matters.
-    echo "  Creating btrfs subvolumes..."
+    say "  Creating btrfs subvolumes..."
     btrfs subvolume create /mnt/@          >/dev/null || die "btrfs: could not create @"
     btrfs subvolume create /mnt/@home      >/dev/null || die "btrfs: could not create @home"
     btrfs subvolume create /mnt/@snapshots >/dev/null || die "btrfs: could not create @snapshots"
@@ -2134,10 +2475,10 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     R_START=$((FREE_START + 1))          # 1 MiB inset off the preceding partition
     R_END=$FREE_END
     echo ""
-    echo "  Plan — $(bold 'nothing else is touched'):"
-    echo "    • KEEP   all $NUM_PARTS existing partition(s), including Windows"
-    echo "    • REUSE  $ESP_DEV as the EFI partition (mounted, $(bold 'not') formatted)"
-    echo "    • CREATE a new ext4 root of ~$(( (R_END - R_START) / 1024 )) GiB in the free space"
+    echo "  Plan — $(bold "$(t 'nothing else is touched')"):"
+    tf '    • KEEP   all %s existing partition(s), including Windows\n' "$NUM_PARTS"
+    tf '    • REUSE  %s as the EFI partition (mounted, %s formatted)\n' "$ESP_DEV" "$(bold "$(t 'not')")"
+    tf '    • CREATE a new ext4 root of ~%s GiB in the free space\n' "$(( (R_END - R_START) / 1024 ))"
     echo ""
     lsblk -o NAME,SIZE,FSTYPE,PARTTYPENAME,MOUNTPOINTS "$DISK" 2>/dev/null | sed 's/^/    /' \
         || lsblk "$DISK" | sed 's/^/    /'
@@ -2150,7 +2491,7 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     # Snapshot the partition list so we can identify the one parted creates — its
     # number is whatever GPT slot is free, not necessarily the highest.
     _before=$(lsblk -rno NAME "$DISK" | sort)
-    echo "  Creating root partition in free space (${R_START}MiB–${R_END}MiB)..."
+    tf '  Creating root partition in free space (%sMiB–%sMiB)...\n' "$R_START" "$R_END"
     parted -s "$DISK" mkpart SYNAPSE_ROOT ext4 "${R_START}MiB" "${R_END}MiB" \
         || die "Failed to create the root partition"
     partprobe "$DISK" 2>/dev/null || true
@@ -2166,7 +2507,7 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     # rather than inherited, because a later change that offers the choice on
     # this path would otherwise silently start writing btrfs into free space
     # beside someone's Windows install with none of the layout below adjusted.
-    echo "  Formatting new root ($PART_ROOT, ext4)..."
+    tf '  Formatting new root (%s, ext4)...\n' "$PART_ROOT"
     mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
 
     echo "  Mounting..."
@@ -2194,16 +2535,17 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     [ -n "$_editors" ] || die "no partition editor on this image (cfdisk, fdisk and parted are all missing)"
 
     echo ""
-    echo "  $(bold 'Partition') $DISK $(bold 'now.') The installer will re-read the table when you exit."
+    tf '  %s %s %s The installer will re-read the table when you exit.\n' \
+        "$(bold "$(t 'Partition')")" "$DISK" "$(bold "$(t 'now.')")"
     echo ""
     echo "  Available editors:$(printf ' %s' $_editors)"
     echo ""
-    echo "  What this install needs:"
-    echo "    • a root partition, at least $((MIN_DISK_BYTES / 1024 / 1024 / 1024)) GiB"
+    say "  What this install needs:"
+    tf '    • a root partition, at least %s GiB\n' "$((MIN_DISK_BYTES / 1024 / 1024 / 1024))"
     [ "$BOOT_MODE" = "uefi" ] && \
-    echo "    • an EFI System Partition (type EF00 / 'esp' flag) — an existing one can be reused"
+    say "    • an EFI System Partition (type EF00 / 'esp' flag) — an existing one can be reused"
     [ "$SEPARATE_BOOT" = "yes" ] && \
-    echo "    • a separate /boot of ~1 GiB — $BOOTLOADER with this layout cannot read the root"
+    tf '    • a separate /boot of ~1 GiB — %s with this layout cannot read the root\n' "$BOOTLOADER"
     echo ""
     _ed="${_editors%% *}"
     prompt "Editor to run [$_ed]:"
@@ -2225,10 +2567,10 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     # program waiting for a keystroke nobody is there to press.
     case "${_ed_pick:-}" in
         skip|none)
-            echo "  Skipping the partition editor (--config)."
+            say "  Skipping the partition editor (--config)."
             ;;
         *)
-            echo "  Starting $_ed on $DISK — write your changes before quitting."
+            tf '  Starting %s on %s — write your changes before quitting.\n' "$_ed" "$DISK"
             sleep 1
             "$_ed" "$DISK" || warn "$_ed exited non-zero — check the table below before continuing"
             ;;
@@ -2238,7 +2580,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     sleep 2
 
     echo ""
-    echo "  $(bold 'Partitions now on') $DISK:"
+    tf '  %s %s:\n' "$(bold "$(t 'Partitions now on')")" "$DISK"
     lsblk -o NAME,SIZE,FSTYPE,PARTTYPENAME,MOUNTPOINTS "$DISK" 2>/dev/null | sed 's/^/    /' \
         || lsblk "$DISK" | sed 's/^/    /'
     echo ""
@@ -2269,7 +2611,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
             # formatting it would take Windows' with it. Ask, default to keeping.
             FORMAT_ESP="yes"
             if [ "$(blkid -s TYPE -o value "$PART_EFI" 2>/dev/null)" = "vfat" ]; then
-                echo "    $PART_EFI is already FAT — it may hold another OS's bootloader."
+                tf "    %s is already FAT — it may hold another OS's bootloader.\n" "$PART_EFI"
                 prompt "Format it? Everything on it is lost [y/N]:"
                 answer format_esp _fmt -m yes=y,no=n,true=y,false=n || true
                 case "${_fmt,,}" in y|yes) FORMAT_ESP="yes" ;; *) FORMAT_ESP="no" ;; esac
@@ -2314,7 +2656,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         # it a new UUID — which is exactly what that system's fstab and its
         # hibernation resume= point at. Default to leaving it alone.
         if [ "$(blkid -s TYPE -o value "$PART_SWAP" 2>/dev/null)" = "swap" ]; then
-            echo "    $PART_SWAP is already swap — another system may resume from it."
+            tf '    %s is already swap — another system may resume from it.\n' "$PART_SWAP"
             prompt "Re-make it? Its UUID changes, breaking that system's fstab [y/N]:"
             answer remake_swap _mk -m yes=y,no=n,true=y,false=n || true
             case "${_mk,,}" in y|yes) FORMAT_SWAP="yes" ;; *) FORMAT_SWAP="no" ;; esac
@@ -2324,7 +2666,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
 
     # Say exactly which devices are about to be written, and nothing implied.
     echo ""
-    echo "  $(bold 'These partitions will be FORMATTED') — everything on them is lost:"
+    echo "  $(bold "$(t 'These partitions will be FORMATTED')") — everything on them is lost:"
     echo "    root : $PART_ROOT  → $ROOT_FS$([ "$ENCRYPT" = "yes" ] && echo " inside LUKS2")"
     [ -n "$PART_BOOT" ] && echo "    /boot: $PART_BOOT  → ext4"
     if [ -n "$PART_SWAP" ]; then
@@ -2342,21 +2684,21 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         fi
     fi
     echo ""
-    echo "  Everything else on $DISK is left untouched."
+    tf '  Everything else on %s is left untouched.\n' "$DISK"
     echo ""
     prompt "Type 'yes' to format these:"
     answer confirm_format confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
     if [ -n "$PART_EFI" ] && [ "$FORMAT_ESP" = "yes" ]; then
-        echo "  Formatting EFI partition..."
+        say "  Formatting EFI partition..."
         mkfs.fat -F32 "$PART_EFI" || die "Failed to format $PART_EFI"
     fi
     luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
     format_and_mount_root       # mkfs + mount, and btrfs subvolumes if chosen
 
     if [ -n "$PART_BOOT" ]; then
-        echo "  Formatting /boot partition..."
+        say "  Formatting /boot partition..."
         mkfs.ext4 -F "$PART_BOOT" || die "Failed to format $PART_BOOT"
         mkdir -p /mnt/boot
         mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
@@ -2375,7 +2717,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     # until the machine starts OOM-killing.
     if [ -n "$PART_SWAP" ]; then
         if [ "$FORMAT_SWAP" = "yes" ]; then
-            echo "  Making swap on $PART_SWAP..."
+            tf '  Making swap on %s...\n' "$PART_SWAP"
             mkswap "$PART_SWAP" >/dev/null || die "mkswap failed on $PART_SWAP"
         fi
         swapon "$PART_SWAP" || die "swapon $PART_SWAP failed"
@@ -2388,7 +2730,7 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     answer confirm_erase confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
-    echo "  Creating GPT partition table..."
+    say "  Creating GPT partition table..."
     ESP_MIB="$(layout_esp_size_mib "$BOOTLOADER" "$SNAPSHOTS")"
     ESP_END=$((1 + ESP_MIB))
     parted -s "$DISK" mklabel gpt
@@ -2411,13 +2753,13 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
-    echo "  Formatting EFI partition (${ESP_MIB} MiB)..."
+    tf '  Formatting EFI partition (%s MiB)...\n' "$ESP_MIB"
     mkfs.fat -F32 "$PART_EFI" || die "Failed to format EFI partition"
     luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
     format_and_mount_root       # mkfs + mount, and btrfs subvolumes if chosen
 
     if [ "$SEPARATE_BOOT" = "yes" ]; then
-        echo "  Formatting /boot partition..."
+        say "  Formatting /boot partition..."
         mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
         mkdir -p /mnt/boot
         mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
@@ -2435,7 +2777,7 @@ else
     answer confirm_erase confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
-    echo "  Creating MBR partition table..."
+    say "  Creating MBR partition table..."
     parted -s "$DISK" mklabel msdos
     if [ "$SEPARATE_BOOT" = "yes" ]; then
         # Same split as UEFI, minus the ESP: GRUB's core reads a plain /boot.
@@ -2456,7 +2798,7 @@ else
     luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
     format_and_mount_root
     if [ "$SEPARATE_BOOT" = "yes" ]; then
-        echo "  Formatting /boot partition..."
+        say "  Formatting /boot partition..."
         mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
         mkdir -p /mnt/boot
         mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
@@ -2477,11 +2819,11 @@ MIRROREOF
 
 pacman -Sy --noconfirm 2>/dev/null || true
 
-echo "  Initializing pacman keyring..."
+say "  Initializing pacman keyring..."
 pacman-key --init
 pacman-key --populate archlinux
 
-echo "  Running pacstrap (this may take several minutes)..."
+say "  Running pacstrap (this may take several minutes)..."
 # Only things every install needs go here — this runs BEFORE step 4 asks what to
 # install, so anything in this list is unconditional by construction.
 #
@@ -2628,21 +2970,21 @@ while :; do
     # /usr/share/synapse/wallpapers/431960 whether or not anything can render
     # what it finds. Same for synguard and its kernel module.
 
-    echo "  What should be installed alongside the SynapseOS core?"
+    say "  What should be installed alongside the SynapseOS core?"
     echo ""
     # Name what DIFFERS, not what they share. Both of these lines used to list
     # the same six shared items and put the only difference — Steam — at the
     # far right, past 100 columns, where a terminal cut it off: Full and
     # Standard read as the same preset. Every line here stays under 80.
-    echo "    $(bold '1)') Full      — Standard + Steam + Nix + more software"
-    echo "    $(bold '2)') Standard  — the SynapseOS suite, Firefox, AI model,"
-    echo "                   Bluetooth, printing, Wine, phone   (default)"
-    echo "    $(bold '3)') Minimal   — core daemons only: none of the above"
-    echo "    $(bold '4)') Custom    — tick every package yourself, ours and"
-    echo "                   the ordinary software people install anyway"
+    echo "    $(bold '1)') $(t 'Full      — Standard + Steam + Nix + more software')"
+    echo "    $(bold '2)') $(t 'Standard  — the SynapseOS suite, Firefox, AI model,')"
+    say "                   Bluetooth, printing, Wine, phone   (default)"
+    echo "    $(bold '3)') $(t 'Minimal   — core daemons only: none of the above')"
+    echo "    $(bold '4)') $(t 'Custom    — tick every package yourself, ours and')"
+    say "                   the ordinary software people install anyway"
     echo ""
-    echo "  Every preset except Minimal then asks WHICH AI model to download,"
-    echo "  and skipping it is one of the answers."
+    say "  Every preset except Minimal then asks WHICH AI model to download,
+  and skipping it is one of the answers."
     echo ""
     pick "Choice [1-4, default=2]:" preset install_preset 2 "1 2 3 4" \
          -m full=1,standard=2,minimal=3,custom=4
@@ -2673,9 +3015,9 @@ while :; do
             ;;
         4)
             echo ""
-            echo "  Two kinds of question. First the packages, as pages of"
-            echo "  checkboxes; then the handful of options that are a whole"
-            echo "  subsystem rather than a package."
+            say "  Two kinds of question. First the packages, as pages of
+  checkboxes; then the handful of options that are a whole
+  subsystem rather than a package."
             echo ""
 
             # ── The checkbox pages ────────────────────────
@@ -2692,8 +3034,8 @@ while :; do
             multi_select "SynapseOS packages — everything the system is made of" \
                          SEL_COMPONENTS
             echo ""
-            echo "  And the software people install on the first evening anyway."
-            echo "  All of it is in the Arch repositories; none of it is ours."
+            say "  And the software people install on the first evening anyway.
+  All of it is in the Arch repositories; none of it is ours."
             multi_select "Web and communication" SEL_SW_WEB
             multi_select "Audio and video"       SEL_SW_MEDIA
             multi_select "Office and graphics"   SEL_SW_OFFICE
@@ -2707,7 +3049,7 @@ while :; do
             # installs — and each has a sentence of consequence that does not
             # fit in a 15-column description.
             echo ""
-            echo "  The rest is y/n. The default (shown in caps) is Standard."
+            say "  The rest is y/n. The default (shown in caps) is Standard."
             echo ""
             ask_opt() {   # ask_opt <varname> <default 0|1> <description>
                 local __var=$1 __def=$2 __desc=$3 __hint __ans
@@ -2781,24 +3123,24 @@ while :; do
 
     if [ "$WANT_MODEL" = 1 ]; then
         echo ""
-        echo "  $(bold 'Which AI model should this machine run?')"
+        echo "  $(bold "$(t 'Which AI model should this machine run?')")"
         echo ""
-        echo "  synapd loads one model and everything AI in SynapseOS talks to it:"
-        echo "  synsh, the desktop's AI panel, Chibi, Vibe. It is downloaded now,"
-        echo "  over this connection, onto the disk you are installing to."
+        say "  synapd loads one model and everything AI in SynapseOS talks to it:
+  synsh, the desktop's AI panel, Chibi, Vibe. It is downloaded now,
+  over this connection, onto the disk you are installing to."
         echo ""
-        echo "    $(bold '1)') Mistral 7B Instruct   ~4.1 GB   recommended — what SynapseOS is tuned against"
-        echo "    $(bold '2)') Phi-3 Mini 4K         ~2.2 GB   half the size, and noticeably weaker"
-        echo "    $(bold '3)') Qwen2 0.5B            ~0.4 GB   fits anywhere, answers like it"
-        echo "    $(bold '4)') None                            skip it — nothing else changes"
+        echo "    $(bold '1)') $(t 'Mistral 7B Instruct   ~4.1 GB   recommended — what SynapseOS is tuned against')"
+        echo "    $(bold '2)') $(t 'Phi-3 Mini 4K         ~2.2 GB   half the size, and noticeably weaker')"
+        echo "    $(bold '3)') $(t 'Qwen2 0.5B            ~0.4 GB   fits anywhere, answers like it')"
+        echo "    $(bold '4)') $(t 'None                            skip it — nothing else changes')"
         echo ""
-        echo "  A smaller model is not just faster and lighter: it follows"
-        echo "  instructions worse. synsh mistakes what you asked for, Vibe's code"
-        echo "  needs more fixing, Chibi loses the thread. Take the default unless"
-        echo "  the disk or the RAM says otherwise — 7B wants ~6 GB of RAM free."
+        say "  A smaller model is not just faster and lighter: it follows
+  instructions worse. synsh mistakes what you asked for, Vibe's code
+  needs more fixing, Chibi loses the thread. Take the default unless
+  the disk or the RAM says otherwise — 7B wants ~6 GB of RAM free."
         echo ""
-        echo "  Whatever you pick, it can be changed later: 'syn model download',"
-        echo "  or Super+C ▸ System ▸ AI model on the desktop."
+        say "  Whatever you pick, it can be changed later: 'syn model download',
+  or Super+C ▸ System ▸ AI model on the desktop."
         echo ""
         pick "Choice [1-4, default=1]:" ai_model model_pick 1 "1 2 3 4" -m mistral-7b=1,mistral=1,phi3=2,phi=2,tiny=3,qwen=3,none=4,no=4,skip=4
         # Enter is the recommendation, so an empty answer and a typed 1 are the
@@ -2840,7 +3182,7 @@ while :; do
     # Read the selection back before touching the disk. A picker whose result you
     # only discover afterwards is worse than no picker.
     echo ""
-    echo "  $(bold 'Installing:')"
+    echo "  $(bold "$(t 'Installing:')")"
     echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
     echo "    Apps     : ${SEL_APPS:-none}"
     echo "    Software : ${SEL_SOFTWARE:-none}"
@@ -2920,7 +3262,7 @@ if [ "$WANT_STEAM" = 1 ]; then
         printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /mnt/etc/pacman.conf
     fi
     if grep -q '^\[multilib\]' /mnt/etc/pacman.conf; then
-        echo "  Enabling [multilib] (32-bit repo, needed by Steam)..."
+        say "  Enabling [multilib] (32-bit repo, needed by Steam)..."
         arch-chroot /mnt pacman -Sy --noconfirm 2>&1 \
             || warn "Could not sync the multilib database — Steam may fail to install"
     else
@@ -3033,7 +3375,7 @@ success "Component selection recorded in /etc/synapseos/components.conf"
 header
 step "Step 5 — Create User Account"
 
-echo "  Create a user account for the installed system."
+say "  Create a user account for the installed system."
 echo ""
 prompt "Username [default: syn]:"
 answer username NEW_USER || true
@@ -3059,20 +3401,20 @@ success "User '$NEW_USER' will be created"
 header
 step "Step 6 — Desktop Environment"
 
-echo "  Choose a desktop environment:"
+say "  Choose a desktop environment:"
 echo ""
 # Row 1 is only honest while synui is on the disk. Deselecting it in step 4 is
 # now a supported answer, and offering "SynapseUI" afterwards would install
 # greetd, quickshell and a session that has no compositor to start — a machine
 # that boots to a login screen and cannot get past it.
 if sel_on comp_synui; then
-    echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+    echo "    $(bold '1)') $(t 'SynapseUI  — AI-native Wayland compositor  (default)')"
 else
-    echo "    $(bold '1)') SynapseUI  — NOT AVAILABLE: synui was not selected"
+    echo "    $(bold '1)') $(t 'SynapseUI  — NOT AVAILABLE: synui was not selected')"
 fi
-echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
-echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
-echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
+echo "    $(bold '2)') $(t 'KDE Plasma — Full-featured Wayland desktop')"
+echo "    $(bold '3)') $(t 'GNOME      — Clean, modern Wayland desktop')"
+echo "    $(bold '4)') $(t 'TTY only   — No GUI (headless/server)')"
 echo ""
 if sel_on comp_synui; then
     pick "Choice [1-4, default=1]:" desktop de_choice 1 "1 2 3 4" \
@@ -3096,14 +3438,14 @@ case "$DE_CHOICE" in
         # Dolphin — same shape as bluez arriving via synui's depends. That is
         # the KDE desktop's own file manager, not a SynapseOS default: nothing
         # else in the install pulls it in any more.
-        echo "  Installing KDE Plasma..."
+        say "  Installing KDE Plasma..."
         arch-chroot /mnt pacman -S --noconfirm \
             plasma-meta sddm kde-applications-meta \
             2>&1 || warn "Some KDE packages failed to install"
         success "KDE Plasma installed"
         ;;
     3)
-        echo "  Installing GNOME..."
+        say "  Installing GNOME..."
         # NOT the `gnome` group. The group is 58 packages and roughly a third
         # of them are a second copy of something SynapseOS already ships, which
         # is what an app grid holding both Files and Nautilus, both Text Editor
@@ -3138,7 +3480,7 @@ case "$DE_CHOICE" in
         ;;
     4) echo "  No GUI will be installed." ;;
     *)
-        echo "  Installing greetd (login screen) + desktop extras..."
+        say "  Installing greetd (login screen) + desktop extras..."
         # wtype is not optional decoration: it is how the bar's start menu asks
         # synui to open the control panel (virtual-keyboard-v1 is the only IPC
         # into the compositor). Without it that menu entry silently does nothing.
@@ -3235,7 +3577,7 @@ done
 
 if grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' \
         /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    echo "  Virtual machine — installing mesa (synui uses pixman here)..."
+    say "  Virtual machine — installing mesa (synui uses pixman here)..."
     [ "$WANT_STEAM" = 1 ] && LIB32_PKGS="lib32-mesa lib32-vulkan-icd-loader"
     arch-chroot /mnt pacman -S --noconfirm --needed mesa $LIB32_PKGS 2>&1 \
         || warn "mesa failed to install"
@@ -3244,7 +3586,7 @@ elif [ -n "$HAS_NVIDIA" ]; then
     # older cards need the proprietary kernel module.
     NVIDIA_PKG="nvidia-dkms"
     [ "$NVIDIA_DEVID" -ge $((0x1e00)) ] && NVIDIA_PKG="nvidia-open-dkms"
-    echo "  NVIDIA GPU detected — installing $NVIDIA_PKG (builds the module, takes a while)..."
+    tf '  NVIDIA GPU detected — installing %s (builds the module, takes a while)...\n' "$NVIDIA_PKG"
     # lib32-nvidia-utils provides both lib32-libgl and lib32-vulkan-driver, so
     # it alone satisfies steam's 32-bit graphics deps on this card. lib32-mesa
     # rides along to mirror the 64-bit `mesa` on the same line — libglvnd
@@ -3314,8 +3656,8 @@ elif [ -n "$HAS_NVIDIA" ]; then
     # machine that quietly never uses it.
     if arch-chroot /mnt pacman -Si synapse-llama-cuda &>/dev/null; then
         echo ""
-        echo "  synapd can run inference on this GPU instead of the CPU."
-        echo "  This downloads the CUDA runtime (~4.7 GiB installed)."
+        say "  synapd can run inference on this GPU instead of the CPU.
+  This downloads the CUDA runtime (~4.7 GiB installed)."
         prompt "Enable GPU inference? [Y/n]:"
         answer gpu_inference gpu_ans -m yes=y,no=n,true=y,false=n
         case "${gpu_ans:-y}" in
@@ -3323,7 +3665,7 @@ elif [ -n "$HAS_NVIDIA" ]; then
                 warn "Keeping CPU inference. Switch later with:
   sudo pacman -S synapse-llama-cuda" ;;
             *)
-                echo "  Installing synapse-llama-cuda (this takes a while)..."
+                say "  Installing synapse-llama-cuda (this takes a while)..."
                 swap_llama_backend synapse-llama-cuda libggml-cuda.so ;;
         esac
     else
@@ -3344,7 +3686,7 @@ else
         [ -n "$HAS_AMD" ]   && LIB32_PKGS="$LIB32_PKGS lib32-vulkan-radeon"
         [ -n "$HAS_INTEL" ] && LIB32_PKGS="$LIB32_PKGS lib32-vulkan-intel"
     fi
-    echo "  Installing video stack: $GPU_PKGS $LIB32_PKGS..."
+    tf '  Installing video stack: %s %s...\n' "$GPU_PKGS" "$LIB32_PKGS"
     arch-chroot /mnt pacman -S --noconfirm --needed $GPU_PKGS $LIB32_PKGS 2>&1 \
         || warn "Video driver install failed — synui may fall back to software rendering"
     success "Video drivers installed"
@@ -3363,7 +3705,7 @@ else
     # failure this whole path exists to prevent.
     if [ -n "$HAS_AMD" ] || [ -n "$HAS_INTEL" ]; then
         if arch-chroot /mnt pacman -Si synapse-llama-vulkan &>/dev/null; then
-            echo "  Enabling GPU inference (synapse-llama-vulkan)..."
+            say "  Enabling GPU inference (synapse-llama-vulkan)..."
             swap_llama_backend synapse-llama-vulkan libggml-vulkan.so
         else
             warn "This ISO ships no Vulkan build of llama, so synapd will run on the CPU
@@ -3393,7 +3735,7 @@ fi
 # better outcome than a died-at-98% install, and the recovery is one command.
 if [ "$WANT_STEAM" = 1 ]; then
     step "Installing Steam and the game stack"
-    echo "  Installing steam and the 32-bit runtime libraries..."
+    say "  Installing steam and the 32-bit runtime libraries..."
     if arch-chroot /mnt pacman -S --noconfirm --needed steam 2>&1; then
         success "Steam installed (native multilib package)"
     else
@@ -3421,7 +3763,7 @@ if [ "$WANT_STEAM" = 1 ]; then
     # Separate transaction from steam above so a failure here is reported as
     # itself — folded into one -S, a missing gamescope would read as "Steam
     # failed to install".
-    echo "  Installing the game stack (overlay, governor, micro-compositor)..."
+    say "  Installing the game stack (overlay, governor, micro-compositor)..."
     if arch-chroot /mnt pacman -S --noconfirm --needed \
             mangohud lib32-mangohud gamemode lib32-gamemode gamescope 2>&1; then
         success "Game stack installed (mangohud, gamemode, gamescope)"
@@ -3507,7 +3849,7 @@ if [ "$WANT_STEAM" = 1 ]; then
     if grep -q '^\[cachyos\]' /mnt/etc/pacman.conf; then
         cachy_ok=1          # already enabled (a re-run); nothing to add
     else
-        echo "  Fetching the CachyOS keyring and mirrorlist..."
+        say "  Fetching the CachyOS keyring and mirrorlist..."
         cachy_keyring=$(cachy_pkg_url cachyos-keyring cachyos-keyring-20240331-1-any.pkg.tar.zst)
         cachy_mirrors=$(cachy_pkg_url cachyos-mirrorlist cachyos-mirrorlist-27-1-any.pkg.tar.zst)
 
@@ -3533,7 +3875,7 @@ if [ "$WANT_STEAM" = 1 ]; then
         # cannot satisfy it. lsign-key then trusts THAT key and nothing else;
         # --populate below still imports the rest of the keyring, which is why
         # the check on the delivered file stays.
-        echo "  Trusting the CachyOS master key..."
+        say "  Trusting the CachyOS master key..."
         arch-chroot /mnt pacman-key --recv-keys "$CACHY_FPR" \
             --keyserver keyserver.ubuntu.com >/dev/null 2>&1 || true
         # Verify rather than believe the exit status: --recv-keys can report
@@ -3563,7 +3905,7 @@ if [ "$WANT_STEAM" = 1 ]; then
             if gpg --with-colons --show-keys \
                    /mnt/usr/share/pacman/keyrings/cachyos.gpg 2>/dev/null \
                | grep -q "^fpr:::::::::${CACHY_FPR}:"; then
-                echo "  Master key pinned as expected — trusting it..."
+                say "  Master key pinned as expected — trusting it..."
                 arch-chroot /mnt pacman-key --populate cachyos >/dev/null 2>&1 || true
 
                 # Appended, so it lands after [core], [extra], [multilib] and
@@ -3585,7 +3927,7 @@ CACHYEOF
                 cachy_count=$(arch-chroot /mnt pacman -Sl cachyos 2>/dev/null | wc -l)
                 if [ "${cachy_count:-0}" -gt 0 ]; then
                     cachy_ok=1
-                    echo "  [cachyos] enabled ($cachy_count packages available)"
+                    tf '  [cachyos] enabled (%s packages available)\n' "$cachy_count"
                 else
                     # TAKE THE SECTION BACK OUT. A repo pacman cannot sync is
                     # not a dormant extra — pacman aborts the WHOLE -Syu when
@@ -3612,7 +3954,7 @@ $(sed 's/^/    /' "$cachy_log" | tail -5)"
     fi
 
     if [ "$cachy_ok" = 1 ]; then
-        echo "  Installing proton-cachyos-slr (~340 MB download)..."
+        say "  Installing proton-cachyos-slr (~340 MB download)..."
         if arch-chroot /mnt pacman -S --noconfirm --needed proton-cachyos-slr 2>&1; then
             # The name in the dropdown is the vdf's display_name, which is
             # "proton-cachyos-<ver> (steam linux runtime)" — NOT "Proton-CachyOS",
@@ -3664,12 +4006,12 @@ if [ "$WANT_BLACKARCH" = 1 ]; then
 
     BA_FPR="4345771566D76038C7FEB43863EC0ADBEA87E4E3"
     ba_ok=0
-    echo "  Fetching the BlackArch bootstrap..."
+    say "  Fetching the BlackArch bootstrap..."
     if curl -fsS --proto '=https' --tlsv1.2 -o /mnt/tmp/strap.sh \
             https://blackarch.org/strap.sh 2>/dev/null; then
         if grep -qF "$BA_FPR" /mnt/tmp/strap.sh; then
             chmod +x /mnt/tmp/strap.sh
-            echo "  Master key pinned as expected — running bootstrap..."
+            say "  Master key pinned as expected — running bootstrap..."
             if arch-chroot /mnt /tmp/strap.sh >/dev/null 2>&1 \
                && grep -q '^\[blackarch\]' /mnt/etc/pacman.conf; then
                 # Verify it is USABLE, not merely present: a configured repo
@@ -3796,7 +4138,7 @@ step "Configuring System"
 
 # fstab
 genfstab -U /mnt >> /mnt/etc/fstab
-echo "  fstab generated"
+say "  fstab generated"
 
 # genfstab records the swap only because the ADVANCED path turned it on before
 # reaching here. Check rather than assume: a swap the installer set up and fstab
@@ -3879,7 +4221,7 @@ cat > /mnt/etc/hosts << 'EOF'
 ::1         localhost
 127.0.1.1   synapse.localdomain synapse
 EOF
-echo "  Hostname: synapse"
+say "  Hostname: synapse"
 
 # ── Language, keyboard, timezone ──────────────────────────
 #
@@ -3898,13 +4240,36 @@ echo "  Hostname: synapse"
 header
 step "Step 7 — Language & Region"
 
+# ⚠ ALREADY ANSWERED? THEN DO NOT ASK. The live image opens with the language
+# picker (live_language_step), and the boot menu can answer it before that with
+# `lang=`; either way the chosen row is in $SYN_BOOT_LANG_FILE. Asking a second
+# time, twenty minutes later, in the language they already picked, is the
+# "asked and then ignored" failure this table's own notes are about — and it is
+# how a language step ends up disagreeing with itself.
+#
+# A --config profile still wins: it is a written instruction about THIS install,
+# and the boot answer was about the live session it is running from.
+_boot_row=""
+[ -n "${ANSWERS[language]+set}" ] || _boot_row=$(boot_locale_row)
+
+if [ -n "$_boot_row" ]; then
+    LOCALE=$(echo "$_boot_row" | cut -d'|' -f2)
+    KEYMAP=$(echo "$_boot_row" | cut -d'|' -f3)
+    XKB_LAYOUT=$(echo "$_boot_row" | cut -d'|' -f4)
+    LANG_FONTS=$(echo "$_boot_row" | cut -d'|' -f5)
+    tf '  Language: %s  (chosen at boot)\n' "${_boot_row%%|*}"
+    tf '  Locale:   %s   Keyboard: %s (console) / %s (desktop)\n' \
+        "$LOCALE" "$KEYMAP" "$XKB_LAYOUT"
+    echo ""
+else
+
 i=0
 echo "$LOCALE_ROWS" | while IFS= read -r row; do
     [ -n "$row" ] || continue
     i=$((i + 1))
     printf '  %2d) %s\n' "$i" "${row%%|*}"
 done
-echo "   0) Other — enter a locale by hand"
+say "   0) Other — enter a locale by hand"
 echo ""
 # Counted, not typed: a hardcoded range beside a list it is not derived from
 # is wrong the first time anyone adds a language.
@@ -3961,6 +4326,14 @@ else
     fi
 fi
 
+fi   # end of "was it already answered at boot"
+
+# The rest of the install speaks it too. A run that reached step 7 without a
+# boot answer — syn-install started from an installed desktop, say — has only
+# just found out what language it is in, and the screens after this are most of
+# the ones that matter.
+syn_lang_load "$LOCALE"
+
 # locale.gen needs every locale that will be used. en_US stays generated
 # alongside: a great deal of software falls back to it, and a system with only
 # one locale generated fails in odd ways when anything asks for C.UTF-8's
@@ -4008,7 +4381,7 @@ success "Locale: $LOCALE   Console: $KEYMAP   Desktop layout: $SYNUI_XKB"
 # would have.
 FONT_PKGS="noto-fonts"
 [ -n "$LANG_FONTS" ] && FONT_PKGS="$FONT_PKGS $LANG_FONTS"
-echo "  Installing fonts ($FONT_PKGS)..."
+tf '  Installing fonts (%s)...\n' "$FONT_PKGS"
 arch-chroot /mnt pacman -S --noconfirm --needed $FONT_PKGS 2>&1 | tail -2 \
     || warn "Font install failed — $LOCALE may render as boxes"
 
@@ -4068,7 +4441,7 @@ echo "$TZ_ROWS" | while IFS= read -r row; do
     i=$((i + 1))
     printf '  %2d) %-22s %s\n' "$i" "${row%%|*}" "${row#*|}"
 done
-echo "   0) Other — enter any tzdata name (e.g. Europe/Lisbon)"
+say "   0) Other — enter any tzdata name (e.g. Europe/Lisbon)"
 echo ""
 _n_tz=$(echo "$TZ_ROWS" | grep -c '|')
 
@@ -4121,10 +4494,10 @@ while [ -z "$TZ_CHOICE" ]; do
         fi
         warn "Not a timezone: '$tz_input'"
         if [ -n "$near" ]; then
-            echo "  Did you mean:"
+            say "  Did you mean:"
             echo "$near" | sed 's/^/    /'
         else
-            echo "  Pick a number from the list, or see: ls /mnt/usr/share/zoneinfo"
+            say "  Pick a number from the list, or see: ls /mnt/usr/share/zoneinfo"
         fi
         echo ""
     fi
@@ -4148,7 +4521,7 @@ success "Timezone: $TZ_CHOICE"
 # package-provided file if for some reason the live one is missing.
 if [ -f /etc/os-release ]; then
     cp /etc/os-release /mnt/etc/os-release
-    echo "  os-release: copied from live system"
+    say "  os-release: copied from live system"
 fi
 
 # issue — the same reasoning as os-release. Without this the installed system
@@ -4165,7 +4538,7 @@ fi
 # on a console where only the person who typed a password reads it.
 if [ -f /etc/issue ]; then
     cp /etc/issue /mnt/etc/issue
-    echo "  issue: copied from live system"
+    say "  issue: copied from live system"
 fi
 
 # Branding — the fastfetch console mark and the raster/vector logos beside it.
@@ -4212,7 +4585,7 @@ fi
 # outcome — the target fs can flip read-only mid-install (disk errors,
 # errors=remount-ro) and a masked useradd/chpasswd here delivered exactly
 # that: a locked-out "successful" install.
-echo "  Creating user '$NEW_USER'..."
+tf "  Creating user '%s'...\n" "$NEW_USER"
 
 # The target fs may have remounted read-only since pacstrap; catch it now
 # with a clear message instead of a cascade of masked failures.
@@ -4383,7 +4756,7 @@ esac
 success "Password set for '$NEW_USER' (verified in shadow)"
 
 USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
-echo "  User '$NEW_USER' created (uid=$USER_UID)"
+tf "  User '%s' created (uid=%s)\n" "$NEW_USER" "$USER_UID"
 
 # syn-update's source tree, created HERE and owned by the user who will run it.
 #
@@ -4473,7 +4846,7 @@ GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 Current=breeze
 SDDMEOF
         arch-chroot /mnt systemctl enable sddm.service 2>/dev/null || true
-        echo "  Desktop: KDE Plasma (SDDM login screen)"
+        say "  Desktop: KDE Plasma (SDDM login screen)"
         ;;
     3)
         echo "DE=gnome" > /mnt/etc/synapseos/desktop.conf
@@ -4501,13 +4874,13 @@ logo='/usr/share/pixmaps/synapseos-logo.svg'
 banner-message-enable=false
 GDMDCONF
             arch-chroot /mnt dconf update 2>/dev/null || true
-            echo "  GDM: SynapseOS logo on the login screen"
+            say "  GDM: SynapseOS logo on the login screen"
         fi
-        echo "  Desktop: GNOME (GDM login screen)"
+        say "  Desktop: GNOME (GDM login screen)"
         ;;
     4)
         echo "DE=tty" > /mnt/etc/synapseos/desktop.conf
-        echo "  Desktop: TTY only"
+        say "  Desktop: TTY only"
         ;;
     *)
         echo "DE=synui" > /mnt/etc/synapseos/desktop.conf
@@ -4642,7 +5015,7 @@ command = "/usr/local/bin/synui-greeter"
 user = "greeter"
 GREETD_EOF
         arch-chroot /mnt systemctl enable greetd.service 2>/dev/null || true
-        echo "  Desktop: SynapseUI (synui greeter — login mirrors the lock screen)"
+        say "  Desktop: SynapseUI (synui greeter — login mirrors the lock screen)"
         ;;
 esac
 
@@ -4716,7 +5089,7 @@ esac
     printf '  Updates:   syn-update          Help:      syn --help\n'
 } > /mnt/etc/motd
 unset _motd_de
-echo "  motd: written for this installation"
+say "  motd: written for this installation"
 
 # synui config
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
@@ -5192,7 +5565,7 @@ if [ -f /mnt/usr/lib/systemd/user/syn-rgb.path ]; then
     ln -sf /usr/lib/systemd/user/syn-rgb.path \
         "/mnt/home/$NEW_USER/.config/systemd/user/default.target.wants/syn-rgb.path"
 else
-    echo "  note: syn-rgb.path is not installed; RGB lights stay off"
+    say "  note: syn-rgb.path is not installed; RGB lights stay off"
 fi
 
 arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
@@ -5223,7 +5596,7 @@ arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
 step "AI model"
 
 if [ "$WANT_MODEL" != 1 ] || [ "$MODEL_CHOICE" = none ]; then
-    echo "  AI model skipped — install one later with: syn model download"
+    say "  AI model skipped — install one later with: syn model download"
 else
     MODEL_SRC=""
     if [ "$MODEL_CHOICE" = mistral-7b ]; then
@@ -5244,8 +5617,8 @@ else
   Once the new system is up:  syn model download $MODEL_CHOICE"
         fi
     elif [ -x /mnt/usr/bin/syn-model ]; then
-        echo "  Downloading the AI model ($MODEL_CHOICE) — this is the long part of"
-        echo "  the install, and everything else on the disk is already done."
+        tf '  Downloading the AI model (%s) — this is the long part of\n' "$MODEL_CHOICE"
+        say "  the install, and everything else on the disk is already done."
         echo ""
         # SYN_MODEL_NO_RESTART: there is no running synapd to restart in here,
         # and systemctl in a chroot would only print about it.
@@ -5295,10 +5668,10 @@ if [ "$WANT_NIX" = 1 ]; then
         if [ -x /mnt/usr/bin/syn ]; then
             arch-chroot /mnt syn nix init 2>&1 | sed 's/^/  /'
             success "Nix configured — /etc/synapseos/nix"
-            echo "  Nothing is built yet. As $NEW_USER, after the first boot:"
+            tf '  Nothing is built yet. As %s, after the first boot:\n' "$NEW_USER"
             echo "      syn nix apply"
-            echo "  That is the download — a few hundred MB before any packages"
-            echo "  you add to home.nix. 'syn nix edit' opens it."
+            say "  That is the download — a few hundred MB before any packages
+  you add to home.nix. 'syn nix edit' opens it."
         else
             warn "nix installed, but the 'syn' package is not on the target, so
   the configurator was not set up. Nix itself works; the
@@ -5360,7 +5733,7 @@ if [ "$ENCRYPT" = "yes" ]; then
     else
         CRYPT_HOOK="encrypt"
     fi
-    echo "  Adding the $CRYPT_HOOK hook to mkinitcpio..."
+    tf '  Adding the %s hook to mkinitcpio...\n' "$CRYPT_HOOK"
 
     grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
         || sed -i "/^HOOKS=/s/\bfilesystems\b/$CRYPT_HOOK filesystems/" \
@@ -5377,7 +5750,7 @@ if [ "$ENCRYPT" = "yes" ]; then
     fi
 fi
 
-echo "  Generating initramfs..."
+say "  Generating initramfs..."
 # /usr/bin/mkinitcpio by ABSOLUTE PATH, not `mkinitcpio`.
 #
 # limine-mkinitcpio-hook installs a wrapper at /usr/local/bin/mkinitcpio, which
@@ -5431,7 +5804,7 @@ EOF
 
     mkdir -p /mnt/boot/grub
 
-    echo "  Installing GRUB ($BOOT_MODE)..."
+    tf '  Installing GRUB (%s)...\n' "$BOOT_MODE"
     if [ "$BOOT_MODE" = "uefi" ]; then
         arch-chroot /mnt grub-install \
             --target=x86_64-efi \
@@ -5447,7 +5820,7 @@ EOF
             2>&1 || die "grub-install (BIOS) failed"
     fi
 
-    echo "  Generating GRUB config..."
+    say "  Generating GRUB config..."
     arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
         || die "grub-mkconfig failed"
 
@@ -5520,7 +5893,7 @@ elif [ "$BOOTLOADER" = "systemd-boot" ]; then
     # No filesystem drivers, no config generator, no OS prober: it reads the ESP
     # and boots what it finds. That is the whole appeal, and it is why the ESP is
     # mounted at /boot here — the kernels have to live where it can see them.
-    echo "  Installing systemd-boot..."
+    say "  Installing systemd-boot..."
     arch-chroot /mnt bootctl --esp-path=/boot install 2>&1 \
         || die "bootctl install failed"
 
@@ -5542,7 +5915,7 @@ elif [ "$BOOTLOADER" = "systemd-boot" ]; then
         _esp_disk="$(lsblk -no PKNAME "$PART_EFI" 2>/dev/null | head -1)"
         _esp_num="$(lsblk -no PARTN "$PART_EFI" 2>/dev/null | head -1)"
         if [ -n "$_esp_disk" ] && [ -n "$_esp_num" ]; then
-            echo "  Registering systemd-boot with the firmware..."
+            say "  Registering systemd-boot with the firmware..."
             arch-chroot /mnt efibootmgr --create --disk "/dev/$_esp_disk" \
                 --part "$_esp_num" --loader '\EFI\systemd\systemd-bootx64.efi' \
                 --label "SynapseOS" --unicode >/dev/null 2>&1 \
@@ -5663,7 +6036,7 @@ else
     # /usr/share/limine; installing it means copying that onto the ESP, which is
     # why the ESP is mounted at /boot for this loader — limine expects the
     # kernels on FAT32 beside it rather than reading the root filesystem.
-    echo "  Installing limine..."
+    say "  Installing limine..."
     mkdir -p /mnt/boot/EFI/BOOT
     cp /usr/share/limine/BOOTX64.EFI /mnt/boot/EFI/BOOT/BOOTX64.EFI \
         || die "could not copy limine's EFI binary to the ESP"
@@ -5814,7 +6187,7 @@ fi
 # with an install that partitions, formats and reports success, then drops to a
 # rescue shell on first boot — which is the worst possible time to find out.
 if [ "$ENCRYPT" = "yes" ]; then
-    echo "  Verifying the encrypted boot path..."
+    say "  Verifying the encrypted boot path..."
 
     cryptsetup isLuks "$PART_ROOT" \
         || die "$PART_ROOT is not a LUKS volume after install"
@@ -5993,37 +6366,37 @@ case "$DE_CHOICE" in
     3) DE_NAME="GNOME" ;;
     4) DE_NAME="TTY only" ;;
 esac
-echo "  $(bold 'Disk:')     $DISK"
-echo "  $(bold 'Boot:')     $BOOT_MODE"
+echo "  $(bold "$(t 'Disk:')")     $DISK"
+echo "  $(bold "$(t 'Boot:')")     $BOOT_MODE"
 if [ "$ENCRYPT" = "yes" ]; then
-    echo "  $(bold 'Encrypted:') yes — LUKS2 on $PART_ROOT"
+    tf '  %s %s\n' "$(bold "$(t 'Encrypted:')")" "$(tf 'yes — LUKS2 on %s' "$PART_ROOT")"
 fi
-echo "  $(bold 'Desktop:')  $DE_NAME"
-echo "  $(bold 'User:')     $NEW_USER"
-echo "  $(bold 'Hostname:') synapse"
+echo "  $(bold "$(t 'Desktop:')")  $DE_NAME"
+echo "  $(bold "$(t 'User:')")     $NEW_USER"
+echo "  $(bold "$(t 'Hostname:')") synapse"
 echo ""
 line
 echo ""
-echo "  Log in as '$(bold "$NEW_USER")' after reboot."
-echo "  Type '$(bold "syn ask anything")' to get started."
+tf "  Log in as '%s' after reboot.\n" "$(bold "$NEW_USER")"
+tf "  Type '%s' to get started.\n" "$(bold "syn ask anything")"
 echo ""
-echo "  Admin: use $(bold "sudo") with your user password."
-echo "  The root account is locked (no root login / su)."
-echo "  Note: 3 wrong password attempts lock the account for 10 minutes."
+tf '  Admin: use %s with your user password.\n' "$(bold "sudo")"
+say "  The root account is locked (no root login / su).
+  Note: 3 wrong password attempts lock the account for 10 minutes."
 echo ""
 
 if [ "$ENCRYPT" = "yes" ]; then
     warn "You will be asked for the encryption passphrase at every boot,
   BEFORE the login screen. There is no way to recover it."
     echo ""
-    echo "  Manage it later with $(bold 'syn-crypt'):"
-    echo "    syn-crypt status                    is this disk encrypted, and how"
-    echo "    sudo syn-crypt change-key           replace the passphrase"
-    echo "    sudo syn-crypt add-key              add a second one"
-    echo "    sudo syn-crypt backup-header FILE   save the LUKS header"
+    tf '  Manage it later with %s:\n' "$(bold 'syn-crypt')"
+    say "    syn-crypt status                    is this disk encrypted, and how
+    sudo syn-crypt change-key           replace the passphrase
+    sudo syn-crypt add-key              add a second one
+    sudo syn-crypt backup-header FILE   save the LUKS header"
     echo ""
-    echo "  $(bold 'Back up the header to another machine.') A damaged LUKS header"
-    echo "  means the data is unrecoverable even with the right passphrase."
+    tf '  %s A damaged LUKS header\n' "$(bold "$(t 'Back up the header to another machine.')")"
+    say "  means the data is unrecoverable even with the right passphrase."
     echo ""
 fi
 
