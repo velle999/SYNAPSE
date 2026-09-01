@@ -31,6 +31,10 @@
 
 #define SYNTTY_VERSION "0.1.0"
 
+/* ⚠ TWO STRINGS, AND NOT FOR TIDINESS. A C99 compiler is only required to
+ * support a 4095-byte string literal, and this one had reached 4093 — so the
+ * next line anybody documented made the build warn. Split at the options, and
+ * printed by usage(), so there is still one place to add a line to. */
 static const char *usage_text =
 "syntty " SYNTTY_VERSION " — the SynapseOS terminal\n"
 "\n"
@@ -50,7 +54,9 @@ static const char *usage_text =
 "  syntty config --example   a commented config to start from\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
-"Options, before the subcommand:\n"
+"Options, before the subcommand:\n";
+
+static const char *usage_opts =
 "  --cols=N --rows=N         the grid to parse into (default 80x24)\n"
 "  --scrollback=N            scrollback lines to keep (default 1000)\n"
 "  --styled                  dump the style index under each row\n"
@@ -77,6 +83,7 @@ static const char *usage_text =
 "                            with its status — for a window opened to run one\n"
 "                            thing, where the output is the point\n"
 "  --resize=COLSxROWS        resize the grid after the stream, before dumping\n"
+"                            — repeatable, in order, so a DRAG can be tested\n"
 "\n"
 "fit WxH [--bar=PX] [--cell=WxH]   the cells a window that many pixels across\n"
 "                            holds, floor included — the arithmetic a\n"
@@ -97,6 +104,12 @@ static const char *usage_text =
 "  selects even while a program is reading the mouse\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
+
+static void usage(FILE *out)
+{
+	fputs(usage_text, out);
+	fputs(usage_opts, out);
+}
 
 typedef struct {
 	/* ⚠ ZERO AND NULL MEAN "NOT GIVEN", not "the default". The config file is
@@ -126,7 +139,13 @@ typedef struct {
 	const char *app_id;      /* --app-id=NAME: what the window calls itself */
 	int      tabs;           /* --tabs=N: open N at startup */
 	bool     hold;           /* --hold: keep the window after the command */
-	const char *resize;      /* --resize=COLSxROWS, applied after the stream */
+	/* --resize=COLSxROWS, and REPEATABLE: a drag is not one resize, it is
+	 * hundreds, and every resize fault this terminal has shipped needed more
+	 * than one to show itself — text destroyed on the way narrow is only
+	 * visible once the window is wide again. One `--resize` could never
+	 * express that, so the suite could not express it either. */
+	const char *resize[512];
+	int         nresize;
 	const char *config;      /* --config=FILE, or NULL for the usual place */
 	bool        no_config;   /* ignore the file entirely — what tests use */
 	const st_config_t *cfg;  /* what was read, for whatever paints */
@@ -186,12 +205,12 @@ static uint8_t *slurp(const char *path, size_t *out_len)
  * cursor survived three releases because of it. */
 static void apply_resize(const opts_t *o, st_grid_t *g)
 {
-	if (!o->resize)
-		return;
-	int c = 0, r = 0;
-	if (sscanf(o->resize, "%dx%d", &c, &r) != 2 || c < 1 || r < 1)
-		die("--resize wants COLSxROWS");
-	st_grid_resize(g, (uint16_t)c, (uint16_t)r);
+	for (int i = 0; i < o->nresize; i++) {
+		int c = 0, r = 0;
+		if (sscanf(o->resize[i], "%dx%d", &c, &r) != 2 || c < 1 || r < 1)
+			die("--resize wants COLSxROWS");
+		st_grid_resize(g, (uint16_t)c, (uint16_t)r);
+	}
 }
 
 static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
@@ -1556,7 +1575,11 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--tabs=", 7))        o.tabs = atoi(a + 7);
 		else if (!strcmp(a, "--hold"))             o.hold = true;
 		else if (!strncmp(a, "--app-id=", 9))      o.app_id = a + 9;
-		else if (!strncmp(a, "--resize=", 9))      o.resize = a + 9;
+		else if (!strncmp(a, "--resize=", 9)) {
+			if (o.nresize == (int)(sizeof o.resize / sizeof *o.resize))
+				die("--resize: too many");
+			o.resize[o.nresize++] = a + 9;
+		}
 		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
 		else if (!strcmp(a, "--no-config"))        o.no_config = true;
 		else if (!strncmp(a, "--click=", 8))       o.click = a + 8;
@@ -1566,7 +1589,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;
 		else if (!strcmp(a, "--version"))          { printf("syntty %s\n", SYNTTY_VERSION); return 0; }
-		else if (!strcmp(a, "--help") || !strcmp(a, "-h")) { fputs(usage_text, stdout); return 0; }
+		else if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(stdout); return 0; }
 		else if (a[0] == '-' && a[1])              die("unknown option '%s'", a);
 		else if (!cmd)                             cmd = a;
 		else if (!file)                            file = a;

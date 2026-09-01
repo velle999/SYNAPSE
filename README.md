@@ -618,6 +618,14 @@ reporting, copy and paste in both directions including `OSC 52`, key repeat,
 `Ctrl`+`I` and `Tab` are finally distinguishable, and `icat` puts an image in
 the window.
 
+Resizing the window **re-wraps the text** rather than cutting it: the screen
+and the scrollback are one sequence of logical lines, and a narrower window
+pushes the overflow onto a second row instead of deleting the end of it. Drag a
+window narrow and wide again and you get back exactly the screen you started
+with, history included — and growing it pulls rows back out of the scrollback
+rather than adding blank ones underneath. The alternate screen is deliberately
+left alone: that is `vim`'s canvas, and the program redraws it itself.
+
 `syntty` and `synsh` ship **OSC 133** together — the de-facto semantic-prompt
 protocol, so the terminal knows where a prompt, its input and its output begin.
 They are the standard's marks rather than ours, so any terminal that already

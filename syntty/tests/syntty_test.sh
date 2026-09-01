@@ -826,6 +826,123 @@ printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
     | "$ST" --cols=10 --rows=3 dump - --resize=20x6 >/dev/null 2>&1
 check "...and does not abort on the way out" $?
 
+# ── a resize must not change what the terminal says ─────────────────────────
+#
+# ⚠ EVERY ASSERTION ABOVE THIS POINT IS ABOUT ROWS, AND THE COLUMNS WERE WHERE
+# THE TEXT WAS BEING DESTROYED. Narrowing REALLOC'd every row down to the new
+# width and set `len` to it, so one column narrower deleted the last column of
+# every line on the screen — permanently, and not into the scrollback either.
+# Widening gave the space back and not the text.
+#
+# Reported from a real window: `fastfetch` output came back from a corner drag
+# reading `Resoluti`, with the rest of the line gone for good. A minimum window
+# size (0.1.0-35) narrowed the range this happened in and did not stop it: at
+# any width at all, one column narrower is one column of text destroyed.
+#
+# ⚠ AND IT TAKES TWO RESIZES TO SEE. Narrow alone looks like a narrow window;
+# the loss only shows when it is wide again — which is why `--resize` is
+# repeatable, and why nothing here could express a DRAG until it was.
+# The repeatability itself, asserted before anything leans on it: a build that
+# took only the LAST --resize would pass every round trip below for the wrong
+# reason, because it would never perform the narrow step at all. A scrollback
+# too small to hold the re-wrap is what makes the intermediate size leave a
+# mark — and is the one honest limit of all this, worth saying out loud: a drag
+# through a very short window can still outrun a small history.
+ordered=$(printf 'L1\r\nL2\r\nL3\r\nL4\r\nL5\r\nL6' \
+    | "$ST" --cols=6 --rows=6 --scrollback=2 --scrollback-too dump - \
+            --resize=6x1 --resize=6x6 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF' | wc -l)
+expect "--resize is repeatable and applied IN ORDER, not last-one-wins" "3" "$ordered"
+
+LONGLINE='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd'
+narrowed=$(printf '%s\r\n' "$LONGLINE" \
+    | "$ST" --cols=40 --rows=6 dump - --resize=20x6 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "narrowing WRAPS a line onto a second row rather than cutting it off" \
+    "ABCDEFGHIJKLMNOPQRST
+UVWXYZ0123456789abcd" "$narrowed"
+
+back=$(printf '%s\r\n' "$LONGLINE" \
+    | "$ST" --cols=40 --rows=6 dump - --resize=20x6 --resize=12x4 --resize=20x6 --resize=40x6 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "...and a drag narrow and wide again gives the whole line back" \
+    "$LONGLINE" "$back"
+
+# The reported gesture, end to end: a full screen of output dragged down to a
+# small window and back to the size it started at. Byte for byte, or the drag
+# ate something.
+drag_in=$(awk 'BEGIN{for(i=1;i<=22;i++)printf "line %02d %s\r\n", i, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}')
+drag_before=$(printf '%s' "$drag_in" | "$ST" --cols=80 --rows=24 dump -)
+drag_after=$(printf '%s' "$drag_in" | "$ST" --cols=80 --rows=24 dump - \
+    --resize=60x18 --resize=40x12 --resize=30x8 --resize=20x5 \
+    --resize=30x8 --resize=40x12 --resize=60x18 --resize=80x24)
+expect "a corner drag out and back leaves the screen exactly as it was" \
+    "$drag_before" "$drag_after"
+
+# ⚠ AND ROWS COME BACK OUT OF THE SCROLLBACK. Growing added BLANK rows at the
+# BOTTOM, so a drag that dipped short and came back left a band of nothing
+# where the text had been — the text was in the history, which is not where the
+# person put it. Three lines on a two-row screen: one is pushed off, and
+# growing back to three must pull it back rather than invent a blank.
+regrown=$(printf 'TOP\r\nMID\r\nBOT' \
+    | "$ST" --cols=10 --rows=3 dump - --resize=10x2 --resize=10x3 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "growing pulls rows back OUT of the scrollback, not blanks out of thin air" \
+    "TOP
+MID
+BOT" "$regrown"
+
+# ⚠ ...BUT ONLY WHEN THE SCREEN WAS FULL. What absorbs a height change is the
+# BLANK TAIL below the last line of output: a shell with three lines on a
+# forty-row window must not have its history hauled onto the screen and its
+# prompt shoved to the bottom every time the window moves a pixel.
+tail_abs=$(printf 'ONE\r\nTWO\r\nTHREE' \
+    | "$ST" --cols=10 --rows=8 --scrollback-too dump - --resize=10x7 --resize=10x9 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "a blank tail absorbs a height change; the text does not move" \
+    "ONE
+TWO
+THREE" "$tail_abs"
+
+# A double-width glyph will not straddle the right edge, so st_put wraps it
+# whole and leaves the last column of the row unwritten. That column is
+# PADDING, not a space anybody typed: joining the line back up with it in place
+# put a space in the middle of a word.
+wide_rt=$(printf '日本語テキスト\r\n' \
+    | "$ST" --cols=14 --rows=4 dump - --resize=9x4 --resize=14x4 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "a wide glyph survives a re-wrap without gaining a space" \
+    "日本語テキスト" "$wide_rt"
+
+# ...and is never cut in half on the way. Nine columns holds FOUR of these —
+# eight columns — and the fifth needs two more than are left, so it must move
+# to the next row whole rather than leave half a glyph on each.
+wide_split=$(printf '日本語テキスト\r\n' \
+    | "$ST" --cols=14 --rows=4 dump - --resize=9x4 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "...and wraps whole rather than being split across two rows" \
+    "日本語テ
+キスト" "$wide_split"
+
+# ⚠ THE ALTERNATE SCREEN IS NOT REFLOWED, and that is deliberate. It is vim's
+# canvas; the program redraws all of it the moment SIGWINCH arrives, so
+# carrying its text across would only show a stale frame for one repaint — and
+# joining its rows into logical lines would put an editor's layout into the
+# shell's history.
+alt_rt=$(printf 'SHELL-A\r\nSHELL-B\r\n\033[?1049hALTLINE\033[?1049l' \
+    | "$ST" --cols=12 --rows=4 dump - --resize=6x3 --resize=12x4 \
+    | sed -e 's/[[:space:]]*$//' | awk 'NF')
+expect "coming back from the alternate screen after a drag restores the shell's text" \
+    "SHELL-A
+SHELL-B" "$alt_rt"
+
+# One column is not a size any window reaches — the floor below is twenty — but
+# st_grid_resize takes what it is given, and a wide glyph fits in no row at
+# all at that width. It used to write the glyph's tail one cell past the end of
+# a one-cell row; AddressSanitizer found it, no screen ever looked wrong.
+printf '日本語\r\n' | "$ST" --cols=8 --rows=4 dump - --resize=1x1 --resize=8x4 >/dev/null 2>&1
+check "a one-column grid does not write a wide glyph past the end of a row" $?
+
 # ── how small a drag may make the window ────────────────────────────────────
 #
 # ⚠ EVERY ASSERTION ABOVE HANDS st_grid_resize THE SIZE ITSELF, AND THAT IS THE

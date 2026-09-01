@@ -237,6 +237,12 @@ static st_row_t make_row(st_grid_t *g, uint16_t cols)
 	r.hi = 0;
 	r.wrapped = false;
 	r.dirty = true;
+	/* ⚠ AND THE MARK, WHICH WAS LEFT UNINITIALISED. Rows are returned by
+	 * value from here into the screen array and into the reflow's output, so
+	 * whatever was on the stack became a row's OSC 133 mark — and
+	 * st_grid_find_prompt walks marks to answer Ctrl+Up. A jump that lands
+	 * somewhere with no prompt on it is this. */
+	r.mark = ST_MARK_NONE;
 	return r;
 }
 
@@ -1186,16 +1192,17 @@ void st_delete_chars(st_grid_t *g, int n)
 	g->wrap_next = false;
 }
 
-/* Rebuild ONE screen's rows for a new size, freeing what it drops.
+/* Rebuild the ALTERNATE screen's rows for a new size, freeing what it drops.
  *
- * Split out of st_grid_resize() so the alternate screen gets exactly the same
- * treatment as the visible one — see the note at its only other call site. It
- * reads the old geometry from arguments rather than from `g`, because it runs
- * twice before g->cols/g->rows are updated.
+ * ⚠ THE ALTERNATE SCREEN IS THE ONLY SCREEN THAT STILL WORKS THIS WAY, and it
+ * is right that it does. It is vim's canvas or less's, the program redraws the
+ * whole of it the instant SIGWINCH arrives, and nothing on it is history — so
+ * carrying its text across a resize would only mean showing a stale frame for
+ * one repaint. The PRIMARY screen is reflowed instead: see reflow_primary.
  */
-static st_row_t *rows_resize(st_grid_t *g, st_row_t *old,
-                             uint16_t oldrows, uint16_t oldcols,
-                             uint16_t cols, uint16_t rows, bool keep_history)
+static st_row_t *alt_rows_resize(st_grid_t *g, st_row_t *old,
+                                 uint16_t oldrows, uint16_t oldcols,
+                                 uint16_t cols, uint16_t rows)
 {
 	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
 	int keep  = oldrows < rows ? oldrows : rows;
@@ -1219,49 +1226,275 @@ static st_row_t *rows_resize(st_grid_t *g, st_row_t *old,
 			ns[y] = make_row(g, cols);
 		}
 	}
-	/*
-	 * ⚠ THE ROWS SHRINKING DROPS OFF THE TOP ARE HISTORY, NOT RUBBISH.
-	 *
-	 * They used to be freed here, and freeing them is destroying the user's
-	 * text: a window dragged narrow and wide again came back with the top of
-	 * the screen permanently gone, and not in the scrollback either, so there
-	 * was no way to get it back. Reported as text sliding off the screen
-	 * during a resize until it was gone — which is exactly what it is, because
-	 * a drag delivers a continuous stream of sizes and every step of it ate
-	 * another band of rows. One drag that dips to a short window (a real one
-	 * measured 56 rows down to 1) destroys the whole screen.
-	 *
-	 * push_scrollback trims the row, hands the full-width buffer back to the
-	 * pool and NULLs the pointer, so the free below stays correct for the rows
-	 * that are not pushed. It also handles limit == 0 by freeing, so a grid
-	 * with no scrollback behaves exactly as it did.
-	 *
-	 * ⚠ ONLY THE PRIMARY SCREEN. The alternate screen is vim's or less's, and
-	 * a full-screen program's canvas has never belonged in the shell's
-	 * history — no terminal puts it there. The caller decides, because
-	 * st_grid_alt_screen() is a pointer swap: `g->screen` is whichever screen
-	 * is on show, so which POINTER holds the primary depends on g->on_alt.
-	 *
-	 * Trailing blanks are dropped rather than pushed. Shrinking a screen that
-	 * is mostly empty — a fresh terminal with three lines on it — would
-	 * otherwise push fifty blank rows, and the person scrolling back to find
-	 * their text would have to walk through all of them. Blank rows BETWEEN
-	 * content are kept: those are the output's own spacing.
-	 */
-	int pushed_upto = -1;
-	if (keep_history) {
-		for (int y = 0; y < first; y++)
-			if (row_used(&old[y]) > 0)
-				pushed_upto = y;
-		for (int y = 0; y <= pushed_upto; y++)
-			push_scrollback(g, &old[y]);
-	}
 	for (int y = 0; y < first; y++)
 		free(old[y].cells);
 	for (int y = first + keep; y < oldrows; y++)
 		free(old[y].cells);
 	free(old);
 	return ns;
+}
+
+/* ── reflow ─────────────────────────────────────────────────────────────────
+ *
+ * ⚠ A RESIZE MUST NOT CHANGE WHAT THE TERMINAL SAYS. That is the whole
+ * requirement, and for three releases this file did not meet it: rows were
+ * REALLOC'D to the new width and `len` was set to it, so narrowing a window by
+ * one column deleted the last column of every row on screen — permanently, and
+ * not into the scrollback either. Widening it back gave the space back and not
+ * the text. Reported as `fastfetch` output that came back from a drag reading
+ * `Resoluti`, with the rest of the line gone; the same drag left the window
+ * full of empty prompts, because a shell whose prompt no longer fits redraws
+ * it in pieces separated by line feeds and every one of those scrolls.
+ *
+ * A minimum window size (0.1.0-35) narrowed the range the damage happened in
+ * and did not stop it happening: at any width at all, one column narrower is
+ * still one column of everybody's text destroyed.
+ *
+ * So the text is REFLOWED, the way every other terminal has done it for
+ * thirty years. The screen and the scrollback are one sequence of LOGICAL
+ * lines — a run of rows joined by the `wrapped` flag, which is the flag that
+ * records where the terminal invented a break rather than the program sending
+ * one — and a resize re-wraps that sequence at the new width. Narrowing
+ * pushes the overflow onto a second row instead of deleting it; widening pulls
+ * it back up. Nothing is lost in either direction, and a drag out and back
+ * lands on the text it started from.
+ *
+ * ⚠ AND ROWS COME BACK OUT OF THE SCROLLBACK. Growing the window used to add
+ * BLANK rows at the bottom, so a drag that dipped short and came back left the
+ * screen with a band of nothing where the text had been — the text was in the
+ * history, unreachable without scrolling, which is not where the person put
+ * it. What absorbs a height change is the BLANK TAIL below the last line of
+ * output; only when there is none does the top of the screen move, and then it
+ * moves into and back out of the scrollback symmetrically.
+ */
+
+/* Rows being assembled at the NEW width. */
+typedef struct {
+	st_grid_t *g;
+	st_row_t  *v;
+	int        n, cap;
+	uint16_t   cols;
+	int        col;     /* the next free column of v[n - 1] */
+} emit_t;
+
+/* Start another row. `cont` says the row before it is the same logical line,
+ * which is exactly what `wrapped` means and what the next resize reads back. */
+static void em_row(emit_t *e, bool cont)
+{
+	if (e->n > 0 && cont)
+		e->v[e->n - 1].wrapped = true;
+	if (e->n == e->cap) {
+		e->cap = e->cap ? e->cap * 2 : 64;
+		e->v = xrealloc(e->v, (size_t)e->cap * sizeof *e->v);
+	}
+	e->v[e->n++] = make_row(e->g, e->cols);
+	e->col = 0;
+}
+
+/* One cell of the source line, at whatever width it needs.
+ *
+ * ⚠ A WIDE GLYPH IS TWO CELLS AND THEY MOVE TOGETHER. Copying them one at a
+ * time puts the lead in the last column and its tail on the next row, which is
+ * a glyph cut in half — the renderer draws the lead clipped and the row below
+ * starts with a cell that has no lead to belong to. */
+static int em_cell(emit_t *e, const st_row_t *r, int x, int n)
+{
+	const st_cell_t *c = &r->cells[x];
+	int src_w = (c->width == 2) ? 2 : 1;
+	int w = src_w;
+	/* ⚠ AND A ONE-COLUMN GRID CANNOT HOLD ONE AT ALL. Two columns is not a
+	 * size any window reaches — SYN_MIN_COLS is twenty — but st_grid_resize
+	 * is called with whatever it is given, and `dump --resize=1x1` gives it
+	 * this. Wrapping to a fresh row does not help when no row is wide enough:
+	 * the tail was written one cell past the end of a one-cell row. Caught by
+	 * AddressSanitizer, not by any screen looking wrong. */
+	if (w > (int)e->cols)
+		w = 1;
+	if (e->col + w > (int)e->cols)
+		em_row(e, true);
+
+	st_row_t *o = &e->v[e->n - 1];
+	o->cells[e->col] = *c;
+	if (w == 2) {
+		/* The tail carries the lead's STYLE, which is what paints the cell's
+		 * background — a memset here loses the second half of a highlighted
+		 * wide glyph. */
+		if (x + 1 < n && r->cells[x + 1].width == 0)
+			o->cells[e->col + 1] = r->cells[x + 1];
+		else
+			memset(&o->cells[e->col + 1], 0, sizeof(st_cell_t));
+	} else if (src_w == 2) {
+		o->cells[e->col].width = 1;
+	}
+	e->col += w;
+	if (e->col > (int)o->hi)
+		o->hi = (uint16_t)e->col;
+
+	/* The tail in the SOURCE belongs to the lead and has just been dealt with
+	 * either way; stepping over it is what keeps it from being emitted as a
+	 * cell of its own on the next row. */
+	if (src_w == 2 && x + 1 < n && r->cells[x + 1].width == 0)
+		x++;
+	return x + 1;
+}
+
+/* Re-wrap the primary screen AND the scrollback at the new width, then decide
+ * which of the result is on screen and which is history.
+ *
+ * The cursor is carried in and out: it is on a row of TEXT, that row has just
+ * moved and may have become two rows, and clamping it instead — which is what
+ * this did before — leaves it pointing at whatever text now happens to be at
+ * that index. */
+static void reflow_primary(st_grid_t *g, st_row_t **prim_p,
+                           uint16_t oldrows, uint16_t cols, uint16_t rows,
+                           uint16_t *cx_io, uint16_t *cy_io)
+{
+	st_row_t *prim = *prim_p;
+
+	/* ── take the history, oldest first ─────────────────────────────────── */
+	uint32_t nsb = g->limit ? g->count : 0;
+	st_row_t *sb = NULL;
+	if (nsb) {
+		sb = xmalloc((size_t)nsb * sizeof *sb);
+		for (uint32_t i = 0; i < nsb; i++)
+			sb[i] = g->scroll[(g->head + g->limit - nsb + i) % g->limit];
+	}
+	/* Rows the ring has already thrown away. `scrolled` is what gives a line
+	 * an address, and re-wrapping changes how many rows the same text is —
+	 * but it must not go BACKWARDS, or every absolute line number in the
+	 * program means something older than it did a moment ago. */
+	uint64_t evicted = g->scrolled - nsb;
+	g->count = 0;
+	g->head  = 0;
+	g->scrolled = 0;
+
+	/* ── how much of the screen is real ─────────────────────────────────── */
+	int last_sig = *cy_io;              /* the cursor's row always counts */
+	for (int y = oldrows - 1; y >= 0; y--)
+		if (row_used(&prim[y]) > 0) {
+			if (y > last_sig)
+				last_sig = y;
+			break;
+		}
+	int nscr = last_sig + 1;
+	/* Blank rows below the last line of output. This is the slack a height
+	 * change is taken out of before anything scrolls. */
+	int blank_tail = oldrows - nscr;
+
+	/* ── re-wrap ────────────────────────────────────────────────────────── */
+	emit_t e = { g, NULL, 0, 0, cols, 0 };
+	int screen_first = -1;    /* the emitted row the screen's first row is on */
+	int cur_row = -1, cur_col = 0;
+	int total = (int)nsb + nscr;
+	bool prev_wrapped = false;
+
+	for (int i = 0; i < total; i++) {
+		st_row_t *r = (i < (int)nsb) ? &sb[i] : &prim[i - (int)nsb];
+		bool on_cursor_row = i >= (int)nsb && i - (int)nsb == (int)*cy_io;
+
+		if (!prev_wrapped) {
+			em_row(&e, false);
+			/* The mark describes where a PROMPT or its output began, so it
+			 * belongs on the FIRST row of the line, not on every piece the
+			 * re-wrap breaks the line into — jump-to-prompt walks these, and
+			 * a line that became three rows would otherwise be three stops. */
+			e.v[e.n - 1].mark = r->mark;
+		}
+		if (i == (int)nsb)
+			screen_first = e.n - 1;
+
+		/* A wrapped row runs to its full width by definition; only the row
+		 * that ENDS a line has padding on the right to drop.
+		 *
+		 * ⚠ EXCEPT FOR THE ONE COLUMN A WIDE GLYPH WOULD NOT FIT IN. st_put
+		 * refuses to straddle a double-width glyph across the right edge, so
+		 * it wraps the glyph WHOLE and leaves the last column of the row
+		 * unwritten. That column is padding, not a space anybody typed, and
+		 * joining the line back up with it in place inserts a space into the
+		 * middle of a word: `日本語テキスト` came back from a drag through a
+		 * 27-column window as `日本語テキ スト`. Never more than one column,
+		 * and only one that was never written to. */
+		int n = r->wrapped ? r->len : row_used(r);
+		if (r->wrapped && n > 0 &&
+		    r->cells[n - 1].cp == 0 && r->cells[n - 1].width == 0)
+			n--;
+		int x = 0;
+		while (x < n) {
+			if (on_cursor_row && x == (int)*cx_io && cur_row < 0) {
+				cur_row = e.n - 1;
+				cur_col = e.col;
+			}
+			x = em_cell(&e, r, x, n);
+		}
+		if (on_cursor_row && cur_row < 0) {
+			/* Past the text on its own row — a cursor on a blank line, or
+			 * parked at the end of a prompt whose padding was dropped. */
+			int over = (int)*cx_io - n;
+			if (over < 0)
+				over = 0;
+			cur_row = e.n - 1;
+			cur_col = e.col + over;
+			while (cur_col >= cols) {
+				cur_col -= cols;
+				cur_row++;
+			}
+		}
+		prev_wrapped = r->wrapped;
+	}
+
+	for (uint32_t i = 0; i < nsb; i++)
+		free(sb[i].cells);
+	free(sb);
+	for (uint16_t y = 0; y < oldrows; y++)
+		free(prim[y].cells);
+	free(prim);
+
+	/* ── screen or history ──────────────────────────────────────────────── */
+	int C = e.n;
+	if (screen_first < 0)
+		screen_first = 0;
+	int shown = C - screen_first;   /* rows the screen's text now needs */
+
+	int start;
+	if (shown >= rows || blank_tail == 0)
+		start = C - rows;      /* full: the top moves, symmetrically both ways */
+	else
+		start = screen_first;  /* the blank tail takes it; the text stays put */
+	if (start < 0)
+		start = 0;
+	if (cur_row >= 0 && cur_row - start > rows - 1)
+		start = cur_row - (rows - 1);
+	if (start < 0)
+		start = 0;
+
+	for (int i = 0; i < start; i++)
+		push_scrollback(g, &e.v[i]);
+	g->scrolled += evicted;
+
+	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
+	int k = 0;
+	for (int i = start; i < C && k < rows; i++, k++) {
+		ns[k] = e.v[i];
+		ns[k].dirty = true;
+	}
+	for (int i = start + k; i < C; i++)
+		free(e.v[i].cells);
+	for (; k < rows; k++)
+		ns[k] = make_row(g, cols);
+	free(e.v);
+	*prim_p = ns;
+
+	if (cur_row < 0) {
+		*cx_io = 0;
+		*cy_io = 0;
+	} else {
+		int cy = cur_row - start;
+		if (cy < 0)        cy = 0;
+		if (cy > rows - 1) cy = rows - 1;
+		if (cur_col > cols - 1) cur_col = cols - 1;
+		*cx_io = (uint16_t)cur_col;
+		*cy_io = (uint16_t)cy;
+	}
 }
 
 void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
@@ -1271,74 +1504,61 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	if (cols == 0 || rows == 0 || (cols == g->cols && rows == g->rows))
 		return;
 
-	/* ⚠ THE SELECTION DOES NOT SURVIVE A RESIZE, and it is dropped rather than
-	 * adjusted. Shrinking the window discards rows off the TOP of the screen
-	 * without pushing them to the scrollback, so the absolute line every
-	 * highlighted end is pinned to no longer means what it meant — the
-	 * highlight would land on text a few rows away from the one it was made
+	/* ⚠ THE SELECTION DOES NOT SURVIVE A RESIZE, and it is dropped rather
+	 * than adjusted. Re-wrapping moves every line to a new absolute number,
+	 * so the ends a highlight is pinned to no longer mean what they meant —
+	 * the highlight would land on text a few rows from the one it was made
 	 * on. A selection that quietly moves is worse than one that goes away
 	 * while the person is dragging the window edge. */
 	g->sel.active = false;
 
-	/* ⚠ SHRINKING DROPS FROM THE TOP, GROWING ADDS AT THE BOTTOM, and the
-	 * CURSOR MOVES WITH THE TEXT either way.
-	 *
-	 * Shrinking keeps the bottom because that is where a shell's prompt is:
-	 * a resize that kept the top would throw away the line being typed on.
-	 *
-	 * Growing used to keep the bottom as well — old content was pushed DOWN by
-	 * the number of rows gained. The cursor was only clamped, not moved, so it
-	 * stayed where it had been while every line of text slid away from it. On a
-	 * tiling compositor, which resizes a window the instant it appears, that is
-	 * every window: the terminal came up with the shell's output sitting at the
-	 * bottom of the screen and the cursor blinking at the top, and whatever was
-	 * typed next overwrote the top while the answers appeared at the bottom.
-	 * It took a screenshot to see; nothing in the suite could resize a grid. */
 	uint16_t oldrows = g->rows, oldcols = g->cols;
-	int keep  = oldrows < rows ? oldrows : rows;
-	int first = oldrows - keep;     /* rows dropped off the top; 0 when growing */
 
-	/* Whichever pointer currently holds the PRIMARY screen is the one whose
-	 * dropped rows are history. See rows_resize. */
-	g->screen = rows_resize(g, g->screen, oldrows, oldcols, cols, rows,
-	                        !g->on_alt);
+	/* ⚠ st_grid_alt_screen() IS A POINTER SWAP: `alt` holds whichever screen
+	 * is NOT on show, so which pointer holds the PRIMARY depends on on_alt.
+	 * Getting this backwards reflows an editor's canvas into the shell's
+	 * history and truncates the shell's text instead. */
+	st_row_t **prim  = g->on_alt ? &g->alt    : &g->screen;
+	st_row_t **other = g->on_alt ? &g->screen : &g->alt;
+	uint16_t   pcx   = g->on_alt ? g->alt_cx  : g->cx;
+	uint16_t   pcy   = g->on_alt ? g->alt_cy  : g->cy;
 
-	/* ⚠ AND THE SCREEN THAT IS NOT ON SHOW. st_grid_alt_screen() is a POINTER
-	 * SWAP — `alt` always holds whichever screen is not current — so after this
-	 * function ran on `screen` alone, `alt` was left at the OLD row count while
-	 * g->rows described the new one. Everything that walks the stashed screen
-	 * reads g->rows rows out of a shorter array: st_grid_free() frees
-	 * g->alt[y].cells past the end, and swapping back hands the terminal rows
-	 * that were never allocated.
-	 *
-	 * It aborts. `free(): invalid pointer`, on resizing a window with ANY
-	 * full-screen program in it — lynx, vim, less, htop, man — because those
-	 * are exactly the programs that are on the alternate screen. Reported as
-	 * "syntty not autoresizing when the window is resized": the resize did not
-	 * fail to happen, it took the terminal down on the way.
-	 *
-	 * Same rule for both screens, deliberately. The stashed one is a screen
-	 * somebody is coming back to, and it should be the size of the window they
-	 * come back into. */
-	if (g->alt)
-		g->alt = rows_resize(g, g->alt, oldrows, oldcols, cols, rows,
-		                     g->on_alt);
-
-	g->cols = cols;
-	g->rows = rows;
+	/* The pool holds buffers of the OLD width; a row_alloc that handed one
+	 * out now would return a buffer too short for a row. */
 	for (uint32_t i = 0; i < g->npool; i++)
 		free(g->pool[i]);
 	g->npool = 0;
 	g->pool_cols = cols;
-	g->top = 0;
-	g->bot = (uint16_t)(rows - 1);
-	if (g->cx > cols - 1) g->cx = (uint16_t)(cols - 1);
-	/* The cursor is on a ROW OF TEXT, and that row has just moved. Clamping
-	 * alone leaves it pointing at whatever text happens to be at that index
-	 * now — see the note above the loop. */
-	g->cy = (g->cy > first) ? (uint16_t)(g->cy - first) : 0;
-	if (g->cy > rows - 1) g->cy = (uint16_t)(rows - 1);
+
+	reflow_primary(g, prim, oldrows, cols, rows, &pcx, &pcy);
+
+	/* ⚠ AND THE SCREEN THAT IS NOT ON SHOW. After this ran on one screen
+	 * alone, the other was left at the OLD row count while g->rows described
+	 * the new one; everything that walks the stashed screen then reads
+	 * g->rows rows out of a shorter array. It aborts — `free(): invalid
+	 * pointer`, on resizing a window with any full-screen program in it. */
+	if (*other)
+		*other = alt_rows_resize(g, *other, oldrows, oldcols, cols, rows);
+
+	g->cols = cols;
+	g->rows = rows;
+	g->top  = 0;
+	g->bot  = (uint16_t)(rows - 1);
+
+	if (g->on_alt) {
+		g->alt_cx = pcx;
+		g->alt_cy = pcy;
+		if (g->cx > cols - 1) g->cx = (uint16_t)(cols - 1);
+		if (g->cy > rows - 1) g->cy = (uint16_t)(rows - 1);
+	} else {
+		g->cx = pcx;
+		g->cy = pcy;
+	}
 	g->wrap_next = false;
+	/* Reading history while the window changes shape: the row that offset
+	 * named is not that row any more. Snap to live rather than to a
+	 * neighbour of what they were looking at. */
+	g->view = 0;
 }
 
 /* ── dumping ────────────────────────────────────────────────────────────── */

@@ -190,13 +190,56 @@
 # because fit_grid runs only under a compositor. The arithmetic is now
 # st_win_fit_cells and `syntty fit WxH --cell=WxH` runs it, so the six new
 # assertions exercise the shipped path — they fail against 0.1.0-34.
+# ── 0.1.0-36: a resize destroyed the text, and now it reflows ───────────────
+#
+# ⚠ THE MINIMUM SIZE IN -35 WAS A SYMPTOM'S FIX, NOT THE BUG'S. It narrowed the
+# range the damage happened in and did not stop it happening: reported again
+# the same evening, "when you resize a terminal window it shouldn't have any
+# effect on the contents of the terminal".
+#
+# It had every effect. Narrowing REALLOC'd every row down to the new width and
+# set `len` to it, so ONE COLUMN NARROWER deleted the last column of every line
+# on the screen — permanently, not into the scrollback, and widening gave the
+# space back and not the text. `fastfetch`'s `Resolution` line came back from a
+# drag reading `Resoluti`. Growing added BLANK rows at the BOTTOM, so a drag
+# that dipped short and came back left a band of nothing where the text had
+# been — it was in the history, which is not where the person put it.
+#
+# ⚠ SO THE TEXT IS REFLOWED, the way every other terminal has done it for
+# thirty years. The screen and the scrollback are ONE sequence of LOGICAL
+# lines, joined on the `wrapped` flag that already recorded where the terminal
+# invented a break, and a resize re-wraps that sequence at the new width.
+# Narrowing pushes the overflow onto a second row; widening pulls it back up
+# and pulls rows back OUT of the scrollback. What absorbs a height change is
+# the blank tail below the last line of output — only when there is none does
+# the top of the screen move, and then it moves both ways symmetrically.
+#
+# The alternate screen is deliberately NOT reflowed: it is vim's canvas, the
+# program redraws all of it on SIGWINCH, and joining its rows into logical
+# lines would put an editor's layout into the shell's history.
+#
+# ⚠ AND `--resize` IS REPEATABLE NOW, which is what let any of this be tested.
+# A drag is not one resize, it is hundreds, and the loss was only ever visible
+# on the way BACK — narrow alone just looks like a narrow window. One --resize
+# could not express a drag, so neither could the suite. Ten new assertions,
+# three of which fail against 0.1.0-35; verified end to end in a nested
+# headless synui driven by a virtual pointer, where a drag to the 20-column
+# floor and back leaves the terminal's text area pixel-identical (0.1.0-35:
+# 4520 pixels of it gone).
+#
+# Two other faults fell out of it. A wide glyph will not straddle the right
+# edge, so st_put wraps it whole and leaves the last column unwritten — that
+# padding was being joined back in as a SPACE, and `日本語テキスト` came back
+# from a 27-column window as `日本語テキ スト`. And make_row() never
+# initialised `mark`, so rows arrived in the screen carrying whatever OSC 133
+# mark was on the stack, which is what jump-to-prompt walks.
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=35
+pkgrel=36
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
