@@ -483,6 +483,36 @@ t=$(fp --tsv search --all firefox 2>/dev/null \
 "$SYNPKG" --tsv search --all zzzznosuchthing >/dev/null 2>&1
 check "search --all exits 0 when a source has nothing (or is absent)" $?
 
+# ⛔ AND THE ASSERTION ABOVE PASSES ON A MACHINE THAT HAS flatpak WHETHER OR NOT
+# THE CODE IS RIGHT, which is why it shipped a `search --all` that exited 1 on
+# every box without it. flatpak_search() does not RETURN when flatpak is
+# missing — it calls flatpak_required(), which dies — and the `(void)` cast at
+# the call site made that look handled. Found in a VM, in this suite, on the
+# assertion written to prevent it.
+#
+# So the absence is staged rather than waited for. have_cmd() walks $PATH and
+# nothing else, so a PATH holding only what synpkg genuinely needs is a faithful
+# "flatpak is not installed" — and the same rig covers curl, whose absence took
+# the AUR half down the same way.
+NOTOOLS=$(mktemp -d); trap 'rm -rf "$NOTOOLS"' EXIT
+for b in pacman sh awk sed grep cut sort head tr cat; do
+    src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$NOTOOLS/$b"
+done
+
+PATH="$NOTOOLS" "$SYNPKG" --tsv search --all zzzznosuchthing >/dev/null 2>&1
+check "search --all exits 0 with neither flatpak nor curl installed" $?
+
+ln -sf "$(command -v curl)" "$NOTOOLS/curl" 2>/dev/null
+PATH="$NOTOOLS" "$SYNPKG" --tsv search --all zzzznosuchthing >/dev/null 2>&1
+check "search --all exits 0 with flatpak alone missing" $?
+
+# ⚠ AND THE VERB THAT ASKED FOR FLATPAK STILL REFUSES. Skipping the source is
+# right when it is one of several; it would be wrong here, where flatpak is the
+# thing that was named, and a silent exit 0 would look like "no results".
+PATH="$NOTOOLS" "$SYNPKG" flatpak search firefox >/dev/null 2>&1
+[ $? -ne 0 ] && ok "synpkg flatpak search still refuses when flatpak is absent" \
+             || bad "synpkg flatpak search was silent about a missing flatpak"
+
 # The two flags ask opposite questions and saying both is a mistake, not a
 # preference — silently letting either win would answer something nobody asked.
 "$SYNPKG" --tsv search --all --installed firefox >/dev/null 2>&1

@@ -221,33 +221,51 @@ int cmd_search(int argc, char **argv)
 	 * Only the first term is sent. The AUR RPC's search takes one string, and
 	 * quietly searching for just one of several words the user typed would be
 	 * worse than saying so. */
+	/*
+	 * ⛔ AND curl IS ASKED FOR BEFORE THE AUR HALF RUNS, because aur_search_term()
+	 * DIES without it — "curl is required for AUR access" — which is right for
+	 * `synpkg search --aur`, where the AUR is the thing that was asked for, and
+	 * wrong here, where it is one source of several. A box with no curl would
+	 * lose the repository rows it had already printed, to an exit status.
+	 */
 	if (aur) {
-		if (needles->next)
-			warn("the AUR search takes one term — using '%s'",
-			     (const char *)needles->data);
-		aur_search_term(needles->data);
+		if (!have_cmd("curl")) {
+			if (g_out == OUT_HUMAN)
+				warn("curl is not installed — skipping the AUR");
+		} else {
+			if (needles->next)
+				warn("the AUR search takes one term — using '%s'",
+				     (const char *)needles->data);
+			aur_search_term(needles->data);
+		}
 	}
 
 	/*
 	 * ── Flathub, last, and never fatal ─────────────────────────────────────
 	 *
 	 * ⚠ EVERY SOURCE IN A SUPER SEARCH FAILS ALONE. flatpak_search() returns
-	 * non-zero when flatpak is not installed, when no remote is configured and
-	 * when the appstream index has never been fetched — all three ordinary on
-	 * a machine that simply does not use Flatpak. Letting any of them decide
-	 * the exit status would make `search --all` fail on a box where the
-	 * repositories answered perfectly well, and a GUI reading the exit code
-	 * would throw away rows it had already been given.
+	 * non-zero when no remote is configured and when the appstream index has
+	 * never been fetched — both ordinary on a machine that simply does not use
+	 * Flatpak. Letting either decide the exit status would make `search --all`
+	 * fail on a box where the repositories answered perfectly well, and a GUI
+	 * reading the exit code would throw away rows it had already been given.
 	 *
-	 * The same rule is why the AUR half above is not checked either: it warns
-	 * on stderr when it cannot reach the network and returns, and the
-	 * repository hits are already on screen.
+	 * ⛔ AND WHEN flatpak IS NOT INSTALLED AT ALL IT DOES NOT RETURN — it calls
+	 * flatpak_required(), which dies. This comment used to claim otherwise and
+	 * the `(void)` cast below made it look handled, so `search --all` exited 1
+	 * on every machine without Flatpak while printing every repository row
+	 * first. It failed nowhere on a developer's box, because a developer's box
+	 * has flatpak; it failed in a VM, inside synpkg's own suite, on the
+	 * assertion written to prevent exactly this.
+	 *
+	 * Dying is RIGHT for `synpkg flatpak search`, where flatpak is the thing
+	 * that was asked for. It is wrong here, so the question is asked first.
 	 *
 	 * Ordered fast to slow on purpose — local databases, then one AUR round
 	 * trip, then flatpak's own search — so the rows a human is most likely to
 	 * want are printed while the network halves are still working.
 	 */
-	if (all)
+	if (all && sp_flatpak_present())
 		(void)flatpak_search((const char *)needles->data);
 
 	alpm_list_free(needles);
