@@ -1137,12 +1137,31 @@ check_localsrc() {
             # `name::thing` — only legal for a URL, and caught as one above.
             f=${f##*::}
             base=${f##*/}
-            [ -e "$c/$base" ] && continue
+
+            # ⛔ ASK GIT, NOT THE DISK. Whether the file happens to be lying in
+            # the working tree is the wrong question twice over:
+            #
+            #   - build-all.sh runs tools/collect-source.sh, which DROPS
+            #     <component>/<component>-<pkgver>.tar.gz beside the PKGBUILD
+            #     before makepkg ever runs. It is .gitignore'd and absent from
+            #     a clean checkout, and demanding it fails every tarball
+            #     component in CI while passing on a machine that has built.
+            #   - and the converse: a stale tarball from an old build makes a
+            #     genuinely missing source look present. That is exactly how
+            #     this check passed here and failed in CI on its first run.
+            #
+            # Tracked means it ships. Ignored means something generates it.
+            # Neither means makepkg will not find it.
+            git ls-files --error-unmatch -- "$c/$base" >/dev/null 2>&1 && continue
+            git check-ignore -q -- "$c/$base" 2>/dev/null && continue
+
             fail localsrc \
                 "$c: source() names '$f', and makepkg will look for '$base'" \
                 "makepkg resolves a local source to its BASENAME beside the" \
                 "PKGBUILD, so this fails at \"Retrieving sources\" with" \
                 "\"$base was not found in the build directory and is not a URL\"." \
+                "$c/$base is neither tracked by git nor ignored, so nothing" \
+                "ships it and nothing generates it." \
                 "Fix: flatten it — keep the file as $c/${f//\//-} and give it" \
                 "its real name in package() with install -Dm644."
         done < <(
@@ -1157,7 +1176,7 @@ check_localsrc() {
     done < <(printf '%s\n' "${KNOWN[@]}")
 
     [ "$FINDINGS" -eq "$bad" ] &&
-        ok localsrc "$n component(s) — every local source= entry is a real file beside its PKGBUILD"
+        ok localsrc "$n component(s) — every local source= entry is shipped or generated"
 }
 
 check_tarball() {
