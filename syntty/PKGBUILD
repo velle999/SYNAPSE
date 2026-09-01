@@ -153,13 +153,50 @@
 # and not harmless: LeakSanitizer reports it and MAKES THE PROCESS EXIT 1, so a
 # sanitiser build returned failure from every successful run on any machine
 # that has a config file, and success on any machine that does not.
+# ── 0.1.0-35: a corner drag was folding the shell's prompt ──────────────────
+#
+# Dragging the bottom-right corner up and to the left filled the window with
+# empty prompts, exactly as if the Return key were stuck down.
+#
+# ⚠ NOTHING WAS TYPED. Traced on the machine it happens on, with every byte
+# written to the child tagged by where it came from: one ordinary drag is 279
+# configures and 240 grid resizes, and it contained exactly ONE Return — the
+# one that ran the command before the drag started.
+#
+# ⚠ THE WINDOW HAD NO MINIMUM SIZE, so the only floor was the compositor's own
+# — `2 * border_width + 20` PIXELS on synui. The same drag took the grid to
+# TWO COLUMNS by nine rows. Once the prompt no longer fits the width bash stops
+# relying on autowrap and rewrites it as several lines separated by explicit
+# CR LF, captured verbatim from the child:
+#
+#     CR ESC[K CR [velle CR LF CR @synap CR LF CR se ~]$ CR LF CR
+#
+# The prompt sits on the bottom row, so each of those line feeds SCROLLS. Every
+# resize in the drag pushed another band of the screen into the scrollback and
+# left a piece of prompt behind, and at widths near the length of the prompt
+# the piece left behind is the whole prompt — which is what made it read as a
+# stuck Return key rather than as the screen moving.
+#
+# Nothing reflows either, so the same drag truncated every row for good:
+# `fastfetch line 1` came back from it as `fastfetc`.
+#
+# xdg_toplevel.set_min_size now advertises 20 columns by 5 rows, re-sent
+# whenever the cell size moves under it (a font change, the tab bar appearing),
+# and fit_grid clamps to the same floor for a compositor that ignores it.
+# Twenty clears a `user@host dir` prompt, which is the width that matters.
+#
+# ⚠ AND THE FLOOR IS TESTABLE, which nothing about fit_grid was. Every resize
+# fault this terminal has shipped reached a person before it reached the suite,
+# because fit_grid runs only under a compositor. The arithmetic is now
+# st_win_fit_cells and `syntty fit WxH --cell=WxH` runs it, so the six new
+# assertions exercise the shipped path — they fail against 0.1.0-34.
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=34
+pkgrel=35
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

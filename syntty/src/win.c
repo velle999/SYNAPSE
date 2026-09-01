@@ -70,6 +70,41 @@
  * beyond it the paint simply covers the rows it can, rather than overflowing. */
 #define SYN_MAX_ROWS 1024
 
+/* ⚠ THE SMALLEST GRID A DRAG MAY PRODUCE, AND IT IS NOT A COSMETIC LIMIT.
+ *
+ * xdg-shell lets the compositor pick any size it likes unless the client says
+ * otherwise, and this said nothing — so the only floor was the compositor's
+ * own, which on synui is `2 * border_width + 20` PIXELS. One ordinary drag of
+ * the bottom-right corner measured 279 configures and 240 grid resizes, and
+ * took the grid down to TWO COLUMNS by NINE ROWS on the way.
+ *
+ * A two-column terminal is not merely useless, it is destructive, and the
+ * damage outlives the drag:
+ *
+ *   - Once the prompt no longer fits the width, bash stops relying on autowrap
+ *     and redraws it as several lines with explicit CR LF — captured verbatim:
+ *     `CR ESC[K CR [velle CR LF CR @synap CR LF CR se ~]$ CR LF CR`. With the
+ *     prompt on the bottom row every one of those line feeds SCROLLS, so each
+ *     of the hundreds of resizes in a drag pushes another band of the screen
+ *     into the scrollback and leaves a piece of prompt behind. The window
+ *     fills with empty prompts exactly as if the Return key were stuck down,
+ *     and nothing has been typed: one Return appeared in the whole trace of
+ *     the drag, the one that ran the command before it started.
+ *   - Nothing reflows, so a row narrowed to eight columns is eight columns
+ *     wide for good: `fastfetch line 1` comes back from the drag as `fastfetc`.
+ *
+ * Twenty by five is chosen to clear the widest thing a shell redraws in one
+ * piece — a `user@host dir` prompt — by enough that an ordinary drag never
+ * enters the folding regime at all.
+ *
+ * The size is advertised properly with xdg_toplevel.set_min_size, which is the
+ * fix; the clamp in fit_grid is the belt to that brace, for a compositor that
+ * ignores it. A grid wider than the window is safe — render.c drops the cells
+ * that do not fit (see the bounds tests in draw_row) — and a few clipped
+ * columns are a far better failure than a scrollback that has been eaten. */
+#define SYN_MIN_COLS 20
+#define SYN_MIN_ROWS 5
+
 /* ── measuring latency, which nobody publishes ──────────────────────────────
  *
  * The design page lists input latency as the third win and marks it "not
@@ -972,6 +1007,25 @@ static void tab_cycle(win_t *w, int delta)
  * a row of somebody's screen spent on nothing. Appearing and disappearing costs
  * a resize, which the grid and the child are told about exactly as they are for
  * any other resize. */
+/* Publish the floor above, in pixels, at the CURRENT cell size.
+ *
+ * ⚠ NOT ONCE AT STARTUP. Both numbers it is derived from move while the window
+ * is open: the font can change under a theme switch (config_reload) and the
+ * tab bar appears and disappears with the second tab (bar_update). A min size
+ * left at the size the first font implied is wrong for every font after it —
+ * too small after a size increase, which is the direction that matters.
+ *
+ * Safe to call before there is a toplevel: opening the startup tabs raises the
+ * bar, and that runs before the surface exists. */
+static void publish_min_size(win_t *w)
+{
+	if (!w->toplevel || !w->font)
+		return;
+	int cw = st_font_cell_w(w->font), ch = st_font_cell_h(w->font);
+	xdg_toplevel_set_min_size(w->toplevel, SYN_MIN_COLS * cw,
+	                          SYN_MIN_ROWS * ch + w->bar_h);
+}
+
 static void bar_update(win_t *w)
 {
 	int want = w->ntabs > 1 ? st_font_cell_h(w->font) : 0;
@@ -979,6 +1033,7 @@ static void bar_update(win_t *w)
 		return;
 	w->bar_h = want;
 	st_render_origin(w->ren, want);
+	publish_min_size(w);
 	fit_grid(w);
 	tabs_invalidate(w);
 }
@@ -1287,6 +1342,21 @@ static void wm_base_ping(void *d, struct xdg_wm_base *b, uint32_t serial)
 }
 static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
 
+/* The cell arithmetic, on its own so `syntty fit` can run it — see the header.
+ * The floor is the fix described at SYN_MIN_COLS, and it is applied HERE rather
+ * than at each caller so that the number the compositor is told (set_min_size)
+ * and the number the child is told (fit_grid) can never drift apart. */
+void st_win_fit_cells(int win_w, int win_h, int bar_h, int cell_w, int cell_h,
+                      int *cols, int *rows)
+{
+	int c = cell_w > 0 ? win_w / cell_w : 0;
+	int r = cell_h > 0 ? (win_h - bar_h) / cell_h : 0;
+	if (c < SYN_MIN_COLS) c = SYN_MIN_COLS;
+	if (r < SYN_MIN_ROWS) r = SYN_MIN_ROWS;
+	*cols = c;
+	*rows = r;
+}
+
 /* Resize the grid to whatever the window now is, in whole cells.
  *
  * The GRID follows the WINDOW, not the other way round: a terminal that
@@ -1307,11 +1377,10 @@ static void fit_grid(win_t *w)
 	if (w->win_w <= 0 || w->win_h <= 0)
 		return;
 
-	int cw = st_font_cell_w(w->font), ch = st_font_cell_h(w->font);
-	int cols = w->win_w / cw;
-	int rows = (w->win_h - w->bar_h) / ch;
-	if (cols < 1) cols = 1;
-	if (rows < 1) rows = 1;
+	int cols, rows;
+	st_win_fit_cells(w->win_w, w->win_h, w->bar_h,
+	                 st_font_cell_w(w->font), st_font_cell_h(w->font),
+	                 &cols, &rows);
 
 	if (cols == w->g->cols && rows == w->g->rows)
 		return;
@@ -1409,6 +1478,10 @@ static void config_reload(win_t *w)
 			 * every tab AND every child the new size, and without it the
 			 * programs on the other end keep drawing to the old one. */
 			bar_update(w);
+			/* ⚠ AFTER bar_update, not before: it returns early when the bar
+			 * height comes out the same, which is always true with one tab,
+			 * so the min size it would have published cannot be relied on. */
+			publish_min_size(w);
 			fit_grid(w);
 		}
 	}
@@ -2964,6 +3037,10 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 	 * match the .desktop basename this ships with, when it ships one. */
 	xdg_toplevel_set_app_id(w->toplevel,
 	                        conf && conf->app_id ? conf->app_id : "syntty");
+	/* Before the first commit, so the very first configure already honours it
+	 * — a compositor that sizes the window on map would otherwise get one free
+	 * chance to make it too small. */
+	publish_min_size(w);
 
 	wl_surface_commit(w->surface);
 	wl_display_roundtrip(w->dpy);

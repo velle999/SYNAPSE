@@ -1215,4 +1215,19 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
                const char *title, bool deadline, const st_win_conf_t *conf,
                st_win_stats_t *stats);
 
+/* How many CELLS a window of that many pixels holds — the whole of what a
+ * configure means, floor included.
+ *
+ * ⚠ SPLIT OUT SO A TEST CAN REACH IT. The floor this applies is the fix for a
+ * drag that took the grid to two columns (see SYN_MIN_COLS in win.c), and it
+ * lives on the one path in this program that needs a compositor to exercise —
+ * which is exactly the path the suite has never been able to see, and exactly
+ * where three resize bugs have now been found by hand. `syntty fit WxH` is the
+ * seam; win.c calls the same function, so there is one implementation and the
+ * test is testing the shipped one.
+ *
+ * `bar_h` is the tab bar's height in pixels, 0 when there is one tab. */
+void st_win_fit_cells(int win_w, int win_h, int bar_h, int cell_w, int cell_h,
+                      int *cols, int *rows);
+
 #endif /* SYNTTY_H */

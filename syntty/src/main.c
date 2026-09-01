@@ -78,6 +78,10 @@ static const char *usage_text =
 "                            thing, where the output is the point\n"
 "  --resize=COLSxROWS        resize the grid after the stream, before dumping\n"
 "\n"
+"fit WxH [--bar=PX] [--cell=WxH]   the cells a window that many pixels across\n"
+"                            holds, floor included — the arithmetic a\n"
+"                            compositor's configure runs through\n"
+"\n"
 "mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
 "wheel:up@COL,ROW; with --mode=1000|1002|1003, --sgr, --shift, --ctrl, --alt.\n"
 "\n"
@@ -1404,6 +1408,49 @@ static int cmd_config(const opts_t *o, int argc, char **argv)
 	return c.errors ? 1 : 0;
 }
 
+/* `syntty fit WxH [--bar=PX] [--cell=WxH]` — the cells a window of that many
+ * pixels holds, which is the arithmetic a configure runs through.
+ *
+ * ⚠ THIS EXISTS BECAUSE THE WINDOW CANNOT BE TESTED AND THE WINDOW IS WHERE
+ * THE RESIZE BUGS ARE. Every resize fault this project has shipped — the
+ * alternate screen aborting, the dropped rows never reaching the scrollback,
+ * and the two-column drag that folded the shell's prompt and scrolled the
+ * screen away — reached a person before it reached a test, because fit_grid
+ * runs only under a compositor. It calls st_win_fit_cells and so does this,
+ * so a floor asserted here is the floor the window applies.
+ *
+ * The cell size is given rather than measured: a test must not depend on which
+ * font happens to be installed, and st_win_fit_cells does not open one. */
+static int cmd_fit(int argc, char **argv)
+{
+	int win_w = -1, win_h = -1, bar = 0, cw = 8, ch = 16;
+
+	for (int i = 0; i < argc; i++) {
+		const char *a = argv[i];
+		if (!strncmp(a, "--bar=", 6))  { bar = atoi(a + 6); continue; }
+		if (!strncmp(a, "--cell=", 7)) {
+			if (sscanf(a + 7, "%dx%d", &cw, &ch) != 2 || cw < 1 || ch < 1) {
+				fprintf(stderr, "syntty fit: --cell wants WxH in pixels\n");
+				return 2;
+			}
+			continue;
+		}
+		if (sscanf(a, "%dx%d", &win_w, &win_h) == 2)
+			continue;
+		fprintf(stderr, "syntty fit: unknown argument '%s'\n", a);
+		return 2;
+	}
+	if (win_w < 0 || win_h < 0) {
+		fprintf(stderr, "syntty fit: wants a window size, WxH in pixels\n");
+		return 2;
+	}
+
+	int cols, rows;
+	st_win_fit_cells(win_w, win_h, bar, cw, ch, &cols, &rows);
+	printf("%dx%d\n", cols, rows);
+	return 0;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
@@ -1460,7 +1507,7 @@ int main(int argc, char **argv)
 
 		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
 		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "key")
-		            || !strcmp(cmd, "paste")
+		            || !strcmp(cmd, "paste") || !strcmp(cmd, "fit")
 		            || !strcmp(cmd, "config"))) {
 			/* `--` and `-e` both mean "the rest is the child". Accepting
 			 * -e here as well as below is not redundancy: `syntty win -e
@@ -1612,6 +1659,9 @@ int main(int argc, char **argv)
 	else if (!strcmp(cmd, "config"))
 		rc = child_at ? cmd_config(&o, argc - child_at, argv + child_at)
 		              : cmd_config(&o, 0, NULL);
+	else if (!strcmp(cmd, "fit"))
+		rc = child_at ? cmd_fit(argc - child_at, argv + child_at)
+		              : cmd_fit(0, NULL);
 	else if (!strcmp(cmd, "about"))
 		rc = cmd_about();
 	else

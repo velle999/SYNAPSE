@@ -826,6 +826,59 @@ printf 'PRIMARY-A\r\nPRIMARY-B\r\n\033[?1049hALT\033[?1049l' \
     | "$ST" --cols=10 --rows=3 dump - --resize=20x6 >/dev/null 2>&1
 check "...and does not abort on the way out" $?
 
+# ── how small a drag may make the window ────────────────────────────────────
+#
+# ⚠ EVERY ASSERTION ABOVE HANDS st_grid_resize THE SIZE ITSELF, AND THAT IS THE
+# HALF THAT WAS NEVER WRONG. What decides the size is fit_grid, under a
+# compositor, and nothing here could see it — so a terminal that let itself be
+# dragged down to TWO COLUMNS passed this whole section.
+#
+# What two columns costs, measured on a real drag (279 configures, 240 grid
+# resizes, one gesture): once the prompt no longer fits the width, bash stops
+# relying on autowrap and redraws it as several lines separated by explicit
+# CR LF — `CR ESC[K CR [velle CR LF CR @synap CR LF CR se ~]$ CR LF CR`. The
+# prompt is on the bottom row, so every one of those line feeds SCROLLS: each
+# resize in the drag pushed another band of the screen into the scrollback and
+# left a piece of prompt behind, and the screen filled with what looked exactly
+# like somebody holding Return. Nobody was — one Return was typed in the whole
+# trace, the one that ran the command.
+#
+# `syntty fit` runs st_win_fit_cells, which is the function fit_grid calls, so
+# the floor asserted here is the floor the window applies. The cell size is
+# given rather than measured: which font is installed must not decide whether
+# this passes.
+fit_norm=$("$ST" fit 1600x900 --cell=8x16)
+expect "an ordinary window is measured in whole cells" "200x56" "$fit_norm"
+
+fit_bar=$("$ST" fit 1600x900 --cell=8x16 --bar=16)
+expect "...and the tab bar comes off the height first" "200x55" "$fit_bar"
+
+# The floor itself. 40x30 px is a window three cells wide — smaller than
+# anything a person means, and reachable with one drag because the only limit
+# on the way down was the compositor's own 24-PIXEL one.
+fit_tiny=$("$ST" fit 40x30 --cell=8x16)
+expect "a window dragged to nothing still gets a usable grid" "20x5" "$fit_tiny"
+
+# ⚠ WIDE ENOUGH THAT A SHELL PROMPT CANNOT FOLD IN IT. This is the number the
+# whole fix turns on: `[velle@synapse ~]$ ` is 19 columns, and at 19 or fewer
+# bash writes it as more than one line. A floor of ten would still be a floor
+# and would still have shipped the bug.
+fit_cols=${fit_tiny%x*}
+[ "$fit_cols" -ge 20 ] \
+    && ok "the floor clears a user@host prompt (>= 20 columns)" \
+    || bad "the floor clears a user@host prompt (>= 20 columns): got $fit_cols"
+
+# A zero-pixel window is what the compositor sends before it has decided, and
+# it must land on the floor rather than on a division by zero or a 0x0 grid
+# that every child would be told about.
+fit_zero=$("$ST" fit 0x0 --cell=8x16)
+expect "a window with no size yet lands on the floor, not on zero" "20x5" "$fit_zero"
+
+# The bar can be taller than the window during a drag — the height goes
+# negative, and truncation toward zero is not a floor.
+fit_neg=$("$ST" fit 200x10 --cell=8x16 --bar=40)
+expect "a bar taller than the window does not make the grid negative" "25x5" "$fit_neg"
+
 # ── the config file ─────────────────────────────────────────────────────────
 #
 # Flags only is not how anybody runs a terminal: `--font=` on every launch is a
