@@ -20,1263 +20,1263 @@ msgstr ""
 
 #: src/ctlpanel.c:359
 msgid "Theme"
-msgstr ""
+msgstr "Оформление"
 
 #: src/ctlpanel.c:360
 msgid "Look"
-msgstr ""
+msgstr "Внешний вид"
 
 #: src/ctlpanel.c:361
 msgid "Colour preset for window chrome and synui's own panels"
-msgstr ""
+msgstr "Набор цветов для рамок окон и собственных панелей synui"
 
 #: src/ctlpanel.c:362
 msgid "Wallpaper"
-msgstr ""
+msgstr "Обои"
 
 #: src/ctlpanel.c:368
 msgid "Wallpaper accent"
-msgstr ""
+msgstr "Акцент из обоев"
 
 #: src/ctlpanel.c:371
 msgid ""
 "Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
 "or dark), which is built on it, and nothing else"
-msgstr ""
+msgstr "Берёт акцентный цвет из обоев, а не из оформления. «Авто» — это Prism (светлый или тёмный), который на нём построен, и ничего больше"
 
 #: src/ctlpanel.c:386
 msgid "RGB lights"
-msgstr ""
+msgstr "Подсветка RGB"
 
 #: src/ctlpanel.c:388
 msgid "Put the wallpaper's accent on RGB hardware (needs openrgb)"
-msgstr ""
+msgstr "Переносит акцент обоев на RGB-оборудование (нужен openrgb)"
 
 #: src/ctlpanel.c:389
 msgid "Cursor theme"
-msgstr ""
+msgstr "Тема курсора"
 
 #: src/ctlpanel.c:391
 msgid "UI font"
-msgstr ""
+msgstr "Шрифт интерфейса"
 
 #: src/ctlpanel.c:392
 msgid "Text"
-msgstr ""
+msgstr "Текст"
 
 #: src/ctlpanel.c:393
 msgid "The family every synui panel draws in. Previews live; Esc puts it back"
-msgstr ""
+msgstr "Гарнитура, которой рисует каждая панель synui. Предпросмотр сразу; Esc возвращает"
 
 #: src/ctlpanel.c:406
 msgid "Font size"
-msgstr ""
+msgstr "Размер шрифта"
 
 #: src/ctlpanel.c:409
 msgid "Applications: GTK, Qt and the terminal. Applies when you stop"
-msgstr ""
+msgstr "Программы: GTK, Qt и терминал. Применяется, когда вы остановитесь"
 
 #: src/ctlpanel.c:410
 msgid "Text scale"
-msgstr ""
+msgstr "Масштаб текста"
 
 #: src/ctlpanel.c:413
 msgid "The bar and the SYNAPSE apps — Files, Settings, Disks, Software"
-msgstr ""
+msgstr "Панель и программы SYNAPSE — Файлы, Настройки, Диски, Программы"
 
 #: src/ctlpanel.c:415
 msgid "Transparency"
-msgstr ""
+msgstr "Прозрачность"
 
 #: src/ctlpanel.c:416 src/ctlpanel.c:428
 msgid "Glass"
-msgstr ""
+msgstr "Стекло"
 
 #: src/ctlpanel.c:417
 msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
-msgstr ""
+msgstr "Непрозрачность активного окна. Влево/вправо настраивают, Enter выключает"
 
 #: src/ctlpanel.c:437
 msgid ""
 "Auto follows the theme · Off is never glass · or set how much you see through"
-msgstr ""
+msgstr "«Авто» следует оформлению · «Выкл.» — никогда не стекло · либо задайте, сколько просвечивает"
 
 #: src/ctlpanel.c:443
 msgid "Sync all glass"
-msgstr ""
+msgstr "Выровнять всё стекло"
 
 #: src/ctlpanel.c:446
 msgid ""
 "Every surface follows Glass above. Change one and it keeps its own until you "
 "switch this back on"
-msgstr ""
+msgstr "Каждая поверхность следует «Стеклу» выше. Измените одну — она сохранит своё значение, пока вы не включите это снова"
 
 #: src/ctlpanel.c:448
 msgid "Legibility correction"
-msgstr ""
+msgstr "Поправка на читаемость"
 
 #: src/ctlpanel.c:451
 msgid ""
 "Surfaces go less see-through where their text would not read. Off draws "
 "exactly what you asked for"
-msgstr ""
+msgstr "Поверхности становятся менее прозрачными там, где текст было бы не прочесть. «Выкл.» рисует ровно то, что вы задали"
 
 #: src/ctlpanel.c:467
 msgid "Live backdrop"
-msgstr ""
+msgstr "Живой фон"
 
 #: src/ctlpanel.c:470
 msgid ""
 "Menus and panels ink themselves off the window behind them rather than the "
 "wallpaper it covers. Lands within a second"
-msgstr ""
+msgstr "Меню и панели берут цвет от окна позади, а не от закрытых им обоев. Появляется в течение секунды"
 
 #: src/ctlpanel.c:472
 msgid "Unfocused opacity"
-msgstr ""
+msgstr "Непрозрачность неактивных окон"
 
 #: src/ctlpanel.c:475
 msgid "How far windows you are not using fade back"
-msgstr ""
+msgstr "Насколько отступают окна, которыми вы не пользуетесь"
 
 #: src/ctlpanel.c:476
 msgid "Terminal glass"
-msgstr ""
+msgstr "Стекло терминала"
 
 #: src/ctlpanel.c:479
 msgid "foot draws its own background alpha, so it needs its own level"
-msgstr ""
+msgstr "foot сам рисует прозрачность своего фона, поэтому ему нужно отдельное значение"
 
 #: src/ctlpanel.c:489
 msgid "Make it all solid"
-msgstr ""
+msgstr "Сделать всё непрозрачным"
 
 #: src/ctlpanel.c:490
 msgid "Glass off and windows opaque, in one press. The rows above put it back"
-msgstr ""
+msgstr "Стекло выключено, окна плотные — одним нажатием. Строки выше возвращают обратно"
 
 #: src/ctlpanel.c:509
 msgid "Make it all clear"
-msgstr ""
+msgstr "Сделать всё прозрачным"
 
 #: src/ctlpanel.c:510
 msgid ""
 "Bar, dock and menus lose their background entirely, inked off the wallpaper. "
 "The rows above put it back"
-msgstr ""
+msgstr "Панель, док и меню полностью теряют фон и окрашиваются от обоев. Строки выше возвращают обратно"
 
 #: src/ctlpanel.c:513 src/ctlpanel.c:514
 msgid "CRT effects"
-msgstr ""
+msgstr "Эффекты ЭЛТ"
 
 #: src/ctlpanel.c:515
 msgid "The GLES post-process pass. Off on renderers that have none"
-msgstr ""
+msgstr "Проход постобработки GLES. «Выкл.» на отрисовщиках, у которых его нет"
 
 #: src/ctlpanel.c:516
 msgid "All filters"
-msgstr ""
+msgstr "Все фильтры"
 
 #: src/ctlpanel.c:517
 msgid "Scanlines"
-msgstr ""
+msgstr "Строки развёртки"
 
 #: src/ctlpanel.c:520
 msgid "Screen curve"
-msgstr ""
+msgstr "Изгиб экрана"
 
 #: src/ctlpanel.c:523
 msgid "Chromatic aberration"
-msgstr ""
+msgstr "Хроматическая аберрация"
 
 #: src/ctlpanel.c:526
 msgid "Glitch on alert"
-msgstr ""
+msgstr "Помеха при тревоге"
 
 #: src/ctlpanel.c:530
 msgid "Phosphor tint"
-msgstr ""
+msgstr "Цвет люминофора"
 
 #: src/ctlpanel.c:531
 msgid "Phosphor"
-msgstr ""
+msgstr "Люминофор"
 
 #: src/ctlpanel.c:534
 msgid "Off leaves the picture in colour; the blend below is what applies it"
-msgstr ""
+msgstr "«Выкл.» оставляет картинку цветной; наносит его только смешивание ниже"
 
 #: src/ctlpanel.c:535
 msgid "Phosphor blend"
-msgstr ""
+msgstr "Смешивание люминофора"
 
 #: src/ctlpanel.c:538
 msgid "Blend toward the phosphor tint. Bloom only bites once this is up"
-msgstr ""
+msgstr "Сдвигает к цвету люминофора. Свечение начинает работать, только когда это поднято"
 
 #: src/ctlpanel.c:539
 msgid "Phosphor glow"
-msgstr ""
+msgstr "Свечение люминофора"
 
 #: src/ctlpanel.c:542
 msgid "Phosphor lift"
-msgstr ""
+msgstr "Подложка люминофора"
 
 #: src/ctlpanel.c:545
 msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
-msgstr ""
+msgstr "Насколько светится неосвещённое поле: 0 оставляет его чёрным, выше — подсвечивает растр"
 
 #: src/ctlpanel.c:546
 msgid "Phosphor hue"
-msgstr ""
+msgstr "Оттенок люминофора"
 
 #: src/ctlpanel.c:549
 msgid ""
 "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
 "is the preset"
-msgstr ""
+msgstr "Поворачивает цвет: вниз — краснее (янтарь к оранжевому), вверх — желтее. 0,50 — заводское значение"
 
 #: src/ctlpanel.c:557
 msgid "Titlebars"
-msgstr ""
+msgstr "Заголовки окон"
 
 #: src/ctlpanel.c:558
 msgid "Frame"
-msgstr ""
+msgstr "Рамка"
 
 #: src/ctlpanel.c:559
 msgid "Server-side titlebars, on every window at once"
-msgstr ""
+msgstr "Заголовки со стороны сервера, сразу для всех окон"
 
 #: src/ctlpanel.c:560
 msgid "Titlebar height"
-msgstr ""
+msgstr "Высота заголовка"
 
 #: src/ctlpanel.c:563
 msgid "0 removes the titlebar; below 14 there is no room for a button"
-msgstr ""
+msgstr "0 убирает заголовок; ниже 14 не остаётся места для кнопки"
 
 #: src/ctlpanel.c:564
 msgid "Border width"
-msgstr ""
+msgstr "Толщина рамки"
 
 #: src/ctlpanel.c:567
 msgid "Corner radius"
-msgstr ""
+msgstr "Скругление углов"
 
 #: src/ctlpanel.c:570
 msgid "Forced square while maximized, so nothing pokes past the output"
-msgstr ""
+msgstr "При разворачивании принудительно прямые углы, чтобы ничего не выходило за экран"
 
 #: src/ctlpanel.c:572
 msgid "Tiling gap"
-msgstr ""
+msgstr "Зазор между плитками"
 
 #: src/ctlpanel.c:573 src/ctlpanel.c:747
 msgid "Layout"
-msgstr ""
+msgstr "Расположение"
 
 #: src/ctlpanel.c:576
 msgid "Master area"
-msgstr ""
+msgstr "Главная область"
 
 #: src/ctlpanel.c:579
 msgid "Share of the screen the master window takes when tiling"
-msgstr ""
+msgstr "Доля экрана, которую занимает главное окно при мозаичном расположении"
 
 #: src/ctlpanel.c:580
 msgid "Cascade pile size"
-msgstr ""
+msgstr "Размер каскадной стопки"
 
 #: src/ctlpanel.c:584
 msgid "How deep a cascade pile may get once the grid of piles is full"
-msgstr ""
+msgstr "Насколько глубокой может стать каскадная стопка, когда сетка стопок заполнена"
 
 #: src/ctlpanel.c:586
 msgid "Drop shadow"
-msgstr ""
+msgstr "Тень"
 
 #: src/ctlpanel.c:587
 msgid "Shadow"
-msgstr ""
+msgstr "Тень"
 
 #: src/ctlpanel.c:590
 msgid "Shadow softness"
-msgstr ""
+msgstr "Мягкость тени"
 
 #: src/ctlpanel.c:593
 msgid "Shadow spread"
-msgstr ""
+msgstr "Разброс тени"
 
 #: src/ctlpanel.c:596
 msgid "Solid shadow before the falloff starts — what gives it weight"
-msgstr ""
+msgstr "Плотная тень до начала спада — то, что придаёт ей вес"
 
 #: src/ctlpanel.c:597
 msgid "Shadow offset X"
-msgstr ""
+msgstr "Смещение тени по X"
 
 #: src/ctlpanel.c:600
 msgid "Shadow offset Y"
-msgstr ""
+msgstr "Смещение тени по Y"
 
 #: src/ctlpanel.c:603
 msgid "Crop client shadows"
-msgstr ""
+msgstr "Обрезать тени программ"
 
 #: src/ctlpanel.c:606
 msgid "Hides the invisible margin apps like Firefox draw their own shadow in"
-msgstr ""
+msgstr "Скрывает невидимое поле, в котором программы вроде Firefox рисуют собственную тень"
 
 #: src/ctlpanel.c:608
 msgid "Backdrop blur"
-msgstr ""
+msgstr "Размытие фона"
 
 #: src/ctlpanel.c:609
 msgid "Blur"
-msgstr ""
+msgstr "Размытие"
 
 #: src/ctlpanel.c:612
 msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
-msgstr ""
+msgstr "Делает матовым то, что за полупрозрачным окном. Непрозрачные ничего не стоят"
 
 #: src/ctlpanel.c:613
 msgid "Blur passes"
-msgstr ""
+msgstr "Проходы размытия"
 
 #: src/ctlpanel.c:616
 msgid "Blur radius"
-msgstr ""
+msgstr "Радиус размытия"
 
 #: src/ctlpanel.c:619
 msgid "Blur noise"
-msgstr ""
+msgstr "Шум размытия"
 
 #: src/ctlpanel.c:622
 msgid "Blur brightness"
-msgstr ""
+msgstr "Яркость размытия"
 
 #: src/ctlpanel.c:625
 msgid "Blur contrast"
-msgstr ""
+msgstr "Контраст размытия"
 
 #: src/ctlpanel.c:628
 msgid "Blur saturation"
-msgstr ""
+msgstr "Насыщенность размытия"
 
 #: src/ctlpanel.c:631
 msgid "Blur halo"
-msgstr ""
+msgstr "Ореол размытия"
 
 #: src/ctlpanel.c:634
 msgid "How far the blur reaches past the window. 0 keeps it inside the frame"
-msgstr ""
+msgstr "Насколько размытие выходит за окно. 0 удерживает его внутри рамки"
 
 #: src/ctlpanel.c:641
 msgid "Window open"
-msgstr ""
+msgstr "Открытие окна"
 
 #: src/ctlpanel.c:642
 msgid "Animation"
-msgstr ""
+msgstr "Анимация"
 
 #: src/ctlpanel.c:645
 msgid ""
 "How a window arrives. Closing is not animated: the client's buffer is gone "
 "the moment it unmaps"
-msgstr ""
+msgstr "Как появляется окно. Закрытие не анимируется: буфер программы исчезает в момент отключения"
 
 #: src/ctlpanel.c:647
 msgid "Window length"
-msgstr ""
+msgstr "Длительность для окна"
 
 #: src/ctlpanel.c:650
 msgid "0 jumps straight to the end state. Also times the niri strip slide"
-msgstr ""
+msgstr "0 сразу переходит к конечному состоянию. Задаёт и скольжение ленты niri"
 
 #: src/ctlpanel.c:651
 msgid "Rise distance"
-msgstr ""
+msgstr "Высота подъёма"
 
 #: src/ctlpanel.c:654
 msgid ""
 "How far a Rise window travels up into place. Ignored by the other styles"
-msgstr ""
+msgstr "Насколько высоко поднимается всплывающее окно. Другие стили это игнорируют"
 
 #: src/ctlpanel.c:655
 msgid "Desktop switch"
-msgstr ""
+msgstr "Смена рабочего стола"
 
 #: src/ctlpanel.c:658
 msgid ""
 "Fade cross-fades the two desks; Slide sends them off the way you switched; "
 "Cube turns the desk in 3D"
-msgstr ""
+msgstr "«Затухание» смешивает два стола, «Сдвиг» отправляет их в сторону переключения, «Куб» поворачивает стол в 3D"
 
 #: src/ctlpanel.c:660
 msgid "Desktop length"
-msgstr ""
+msgstr "Длительность смены"
 
 #: src/ctlpanel.c:663
 msgid ""
 "A slide wants longer than a fade — the eye has to follow it somewhere — and "
 "a cube wants longer again; try 400-600"
-msgstr ""
+msgstr "Сдвигу нужно больше времени, чем затуханию — глазу надо за ним успеть, — а кубу ещё больше; попробуйте 400-600"
 
 #: src/ctlpanel.c:665
 msgid "Easing"
-msgstr ""
+msgstr "Кривая анимации"
 
 #: src/ctlpanel.c:668
 msgid ""
 "Shared by both, and by the strip slide: two easings read as two desktops"
-msgstr ""
+msgstr "Общая для обоих и для скольжения ленты: две кривые читаются как два рабочих стола"
 
 #: src/ctlpanel.c:669
 msgid "Desktops span"
-msgstr ""
+msgstr "Охват рабочих столов"
 
 #: src/ctlpanel.c:672
 msgid ""
 "Shared: one desktop across every monitor. Per-monitor: each screen remembers "
 "its own, and the switch moves only the focused one"
-msgstr ""
+msgstr "Общий: один стол на все экраны. По экрану: каждый помнит свой, и переключение двигает только активный"
 
 #: src/ctlpanel.c:678
 msgid "Focus follows"
-msgstr ""
+msgstr "Фокус следует"
 
 #: src/ctlpanel.c:679
 msgid "Behaviour"
-msgstr ""
+msgstr "Поведение"
 
 #: src/ctlpanel.c:682
 msgid ""
 "Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
 "desktop, Strict drops focus, Sloppy keeps it"
-msgstr ""
+msgstr "«Щелчок»: фокус даёт только щелчок. «Мягкий» и «Строгий» следуют за указателем; над рабочим столом «Строгий» отпускает фокус, «Мягкий» удерживает"
 
 #: src/ctlpanel.c:684
 msgid "Focus delay"
-msgstr ""
+msgstr "Задержка фокуса"
 
 #: src/ctlpanel.c:687
 msgid ""
 "How long the pointer rests before focus follows it. 0 is instant, which also "
 "focuses windows you only crossed over"
-msgstr ""
+msgstr "Сколько указатель стоит на месте, прежде чем фокус пойдёт за ним. 0 — сразу, тогда фокус получают и окна, через которые вы лишь проехали"
 
 #: src/ctlpanel.c:689
 msgid "Edge snapping"
-msgstr ""
+msgstr "Прилипание к краям"
 
 #: src/ctlpanel.c:691
 msgid "Drag a window to an edge to fill that half or quarter"
-msgstr ""
+msgstr "Перетащите окно к краю, чтобы занять эту половину или четверть"
 
 #: src/ctlpanel.c:692
 msgid "Snap zone"
-msgstr ""
+msgstr "Зона прилипания"
 
 #: src/ctlpanel.c:695
 msgid ""
 "How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
 "if a fast pointer crosses the band"
-msgstr ""
+msgstr "Насколько близко к краю перетаскивание взводит прилипание. Поднимите на экране высокой плотности или если быстрый указатель перескакивает полосу"
 
 #: src/ctlpanel.c:697
 msgid "Remember window size"
-msgstr ""
+msgstr "Запоминать размер окон"
 
 #: src/ctlpanel.c:699
 msgid "Reopen each app where and how big it was when it closed"
-msgstr ""
+msgstr "Открывает каждую программу там и такого размера, как при закрытии"
 
 #: src/ctlpanel.c:701
 msgid "Alt+Tab is mission control"
-msgstr ""
+msgstr "Alt+Tab — это обзор"
 
 #: src/ctlpanel.c:702
 msgid "Alt+Tab"
-msgstr ""
+msgstr "Alt+Tab"
 
 #: src/ctlpanel.c:704
 msgid ""
 "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
 "three rows below describe that strip"
-msgstr ""
+msgstr "Включено — Alt+Tab открывает весь стол. Выключено — ленту миниатюр по недавнему использованию, и три строки ниже описывают эту ленту"
 
 #: src/ctlpanel.c:706
 msgid "Alt+Tab previews"
-msgstr ""
+msgstr "Миниатюры в Alt+Tab"
 
 #: src/ctlpanel.c:708
 msgid "The thumbnail grid. Off, Alt+Tab still cycles — silently"
-msgstr ""
+msgstr "Сетка миниатюр. Выключена — Alt+Tab всё равно переключает, просто молча"
 
 #: src/ctlpanel.c:709
 msgid "Alt+Tab across desktops"
-msgstr ""
+msgstr "Alt+Tab через рабочие столы"
 
 #: src/ctlpanel.c:711
 msgid "Alt+Tab reaches minimized"
-msgstr ""
+msgstr "Alt+Tab достаёт свёрнутые"
 
 #: src/ctlpanel.c:721
 msgid "Panels follow the pointer"
-msgstr ""
+msgstr "Панели следуют за указателем"
 
 #: src/ctlpanel.c:722
 msgid "Panels"
-msgstr ""
+msgstr "Панели"
 
 #: src/ctlpanel.c:725
 msgid ""
 "On, an open panel moves to whichever monitor the pointer is on. Off, it "
 "stays on the monitor you opened it on"
-msgstr ""
+msgstr "Включено — открытая панель переходит на экран с указателем. Выключено — остаётся на том экране, где вы её открыли"
 
 #: src/ctlpanel.c:731
 msgid "Calculator"
-msgstr ""
+msgstr "Калькулятор"
 
 #: src/ctlpanel.c:734
 msgid ""
 "Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
 "you click away. Esc always closes"
-msgstr ""
+msgstr "«Окно»: тащите за заголовок, щёлкайте где угодно. «Закрывать щелчком»: закрывается при щелчке рядом. Esc закрывает всегда"
 
 #: src/ctlpanel.c:736
 msgid "Control panel"
-msgstr ""
+msgstr "Панель управления"
 
 #: src/ctlpanel.c:739
 msgid "How this panel itself behaves"
-msgstr ""
+msgstr "Как ведёт себя сама эта панель"
 
 #: src/ctlpanel.c:740 src/ctlpanel.c:1276
 msgid "Task manager"
-msgstr ""
+msgstr "Диспетчер задач"
 
 #: src/ctlpanel.c:743
 msgid "How the task manager behaves"
-msgstr ""
+msgstr "Как ведёт себя диспетчер задач"
 
 #: src/ctlpanel.c:748
 msgid "Desktop"
-msgstr ""
+msgstr "Рабочий стол"
 
 #: src/ctlpanel.c:749
 msgid "Of the desktop you are on — layout is per-desktop, not global"
-msgstr ""
+msgstr "Того стола, на котором вы находитесь: расположение задаётся для каждого стола, а не для всех"
 
 #: src/ctlpanel.c:750
 msgid "Mission control"
-msgstr ""
+msgstr "Обзор"
 
 #: src/ctlpanel.c:751
 msgid "Every window on this desktop at once, and the desktops themselves"
-msgstr ""
+msgstr "Все окна этого стола сразу и сами рабочие столы"
 
 #: src/ctlpanel.c:752
 msgid "Desktop icons"
-msgstr ""
+msgstr "Значки на рабочем столе"
 
 #: src/ctlpanel.c:754
 msgid "Draw ~/Desktop on the wallpaper"
-msgstr ""
+msgstr "Рисует ~/Desktop поверх обоев"
 
 #: src/ctlpanel.c:755
 msgid "Icon order"
-msgstr ""
+msgstr "Порядок значков"
 
 #: src/ctlpanel.c:758
 msgid "Desktop widgets"
-msgstr ""
+msgstr "Виджеты рабочего стола"
 
 #: src/ctlpanel.c:769
 msgid "Widget glass"
-msgstr ""
+msgstr "Стекло виджетов"
 
 #: src/ctlpanel.c:772
 msgid "Desktop widgets take the dock's glass instead of the HUD panel"
-msgstr ""
+msgstr "Виджеты берут стекло дока, а не панели HUD"
 
 #: src/ctlpanel.c:774 src/ctlpanel.c:775
 msgid "Dock"
-msgstr ""
+msgstr "Док"
 
 #: src/ctlpanel.c:776
 msgid "Dock auto-hide"
-msgstr ""
+msgstr "Скрывать док автоматически"
 
 #: src/ctlpanel.c:780
 msgid "Dock above windows"
-msgstr ""
+msgstr "Док поверх окон"
 
 #: src/ctlpanel.c:781
 msgid ""
 "Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
 "summoned over whatever is there"
-msgstr ""
+msgstr "Выключено — окна закрывают закреплённый док. Автоскрываемый всегда выходит наверх: его вызывают поверх всего, что есть"
 
 #: src/ctlpanel.c:783
 msgid "Dock edge"
-msgstr ""
+msgstr "Край дока"
 
 #: src/ctlpanel.c:786
 msgid "Dock size"
-msgstr ""
+msgstr "Размер дока"
 
 #: src/ctlpanel.c:792
 msgid "The slab AND the icons in it — the icons are this minus 16"
-msgstr ""
+msgstr "И плашка, И значки на ней — значки равны этому минус 16"
 
 #: src/ctlpanel.c:793
 msgid "Dock reveal strip"
-msgstr ""
+msgstr "Полоса вызова дока"
 
 #: src/ctlpanel.c:796
 msgid "How close to the edge the pointer must get to bring it back"
-msgstr ""
+msgstr "Насколько близко к краю должен подойти указатель, чтобы вернуть его"
 
 #: src/ctlpanel.c:797
 msgid "Dock magnify"
-msgstr ""
+msgstr "Увеличение в доке"
 
 #: src/ctlpanel.c:798
 msgid "The icons under the pointer swell and the row slides apart to make room"
-msgstr ""
+msgstr "Значки под указателем разбухают, а ряд раздвигается, освобождая место"
 
 #: src/ctlpanel.c:806
 msgid "Dock magnify amount"
-msgstr ""
+msgstr "Сила увеличения"
 
 #: src/ctlpanel.c:813
 msgid ""
 "How big the icon under the pointer gets. The dock makes room for it, so a "
 "big swell is a taller dock"
-msgstr ""
+msgstr "Насколько велик становится значок под указателем. Док освобождает ему место, так что сильное увеличение делает док выше"
 
 #: src/ctlpanel.c:822
 msgid "Dock style"
-msgstr ""
+msgstr "Стиль дока"
 
 #: src/ctlpanel.c:823
 msgid "Dock look"
-msgstr ""
+msgstr "Вид дока"
 
 #: src/ctlpanel.c:826
 msgid "Glass frosts the wallpaper behind the bar. Auto follows the theme"
-msgstr ""
+msgstr "Стекло делает матовыми обои за панелью. «Авто» следует оформлению"
 
 #: src/ctlpanel.c:827
 msgid "Dock opacity"
-msgstr ""
+msgstr "Непрозрачность дока"
 
 #: src/ctlpanel.c:841
 msgid "0.00 leaves the icons alone on the wallpaper; 1.00 hides it completely"
-msgstr ""
+msgstr "0,00 оставляет одни значки на обоях; 1,00 закрывает их полностью"
 
 #: src/ctlpanel.c:843
 msgid "Dock corners"
-msgstr ""
+msgstr "Углы дока"
 
 #: src/ctlpanel.c:849
 msgid "Its own, not the window radius. Caps at half the dock's size"
-msgstr ""
+msgstr "Собственные, не радиус окон. Не больше половины размера дока"
 
 #: src/ctlpanel.c:851
 msgid "Show all apps button"
-msgstr ""
+msgstr "Кнопка всех программ"
 
 #: src/ctlpanel.c:852
 msgid "Dock buttons"
-msgstr ""
+msgstr "Кнопки дока"
 
 #: src/ctlpanel.c:853
 msgid ""
 "A grid of dots at the end of the dock. Always opens the application overlay"
-msgstr ""
+msgstr "Сетка точек на конце дока. Всегда открывает обзор программ"
 
 #: src/ctlpanel.c:870
 msgid "Apps button position"
-msgstr ""
+msgstr "Положение кнопки программ"
 
 #: src/ctlpanel.c:871
 msgid ""
 "Where the all-apps button sits along the run. Dragging the button on the "
 "dock sets the same thing"
-msgstr ""
+msgstr "Где кнопка стоит вдоль дока. Перетаскивание кнопки в доке задаёт то же самое"
 
 #: src/ctlpanel.c:873
 msgid "Show power button"
-msgstr ""
+msgstr "Показывать кнопку питания"
 
 #: src/ctlpanel.c:874
 msgid ""
 "A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
 "Suspend, Restart, Shut Down"
-msgstr ""
+msgstr "Значок питания за кнопкой программ. Щелчок открывает меню — «Заблокировать», «Выйти», «Сон», «Перезагрузить», «Выключить»"
 
 #: src/ctlpanel.c:876
 msgid "Power button position"
-msgstr ""
+msgstr "Положение кнопки питания"
 
 #: src/ctlpanel.c:877
 msgid ""
 "Where the power button sits along the run. Dragging the button on the dock "
 "sets the same thing"
-msgstr ""
+msgstr "Где кнопка питания стоит вдоль дока. Перетаскивание кнопки в доке задаёт то же самое"
 
 #: src/ctlpanel.c:897
 msgid "Date & time"
-msgstr ""
+msgstr "Дата и время"
 
 #: src/ctlpanel.c:898
 msgid "Clock"
-msgstr ""
+msgstr "Часы"
 
 #: src/ctlpanel.c:899
 msgid "12/24-hour and the date format, for the dock clock and the widget"
-msgstr ""
+msgstr "12/24 часа и формат даты — для часов в доке и виджета"
 
 #: src/ctlpanel.c:900
 msgid "Dock clock"
-msgstr ""
+msgstr "Часы в доке"
 
 #: src/ctlpanel.c:901
 msgid ""
 "Time and date in a cell of its own — drag the cell to move it anywhere in "
 "the row. 12/24-hour follows Clock & Time"
-msgstr ""
+msgstr "Время и дата в отдельной ячейке: перетащите ячейку в любое место ряда. Формат 12/24 следует «Дате и времени»"
 
 #: src/ctlpanel.c:903
 msgid "Analog dock clock"
-msgstr ""
+msgstr "Аналоговые часы в доке"
 
 #: src/ctlpanel.c:904
 msgid ""
 "Draw the dock clock as a dial. The one clock that fits a dock on the left or "
 "right edge — a column cannot widen for a time string"
-msgstr ""
+msgstr "Рисует часы дока циферблатом. Единственные часы, что помещаются в док слева или справа: колонка не может расшириться под строку времени"
 
 #: src/ctlpanel.c:911
 msgid "Clock position"
-msgstr ""
+msgstr "Положение часов"
 
 #: src/ctlpanel.c:912
 msgid ""
 "Where the dock clock sits along the run. Dragging the clock on the dock sets "
 "the same thing"
-msgstr ""
+msgstr "Где часы дока стоят вдоль дока. Перетаскивание часов в доке задаёт то же самое"
 
 #: src/ctlpanel.c:914
 msgid "Analog clock face"
-msgstr ""
+msgstr "Циферблат аналоговых часов"
 
 #: src/ctlpanel.c:918
 msgid ""
 "Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
 "The dock's own analog clock has one design"
-msgstr ""
+msgstr "Какой циферблат рисует ВИДЖЕТ аналоговых часов — тот, что на рабочем столе, из «Виджетов». У аналоговых часов дока рисунок один"
 
 #: src/ctlpanel.c:934 src/ctlpanel.c:935
 msgid "Start menu"
-msgstr ""
+msgstr "Меню «Пуск»"
 
 #: src/ctlpanel.c:939
 msgid ""
 "What the Super tap and Super+Escape open. The keyboard shortcut list follows "
 "this row; the dock's apps button does not"
-msgstr ""
+msgstr "Что открывают нажатие Super и Super+Esc. Список сочетаний клавиш следует этой строке, а кнопка программ в доке — нет"
 
 #: src/ctlpanel.c:941
 msgid "Start button"
-msgstr ""
+msgstr "Кнопка «Пуск»"
 
 #: src/ctlpanel.c:955 src/ctlpanel.c:956
 msgid "Bar"
-msgstr ""
+msgstr "Панель"
 
 #: src/ctlpanel.c:957
 msgid ""
 "The top bar, and only it — the widgets, notes and start menu stay. A waybar "
 "desktop needs bar_stop_cmd/bar_start_cmd"
-msgstr ""
+msgstr "Только верхняя панель — виджеты, заметки и меню «Пуск» остаются. Рабочему столу с waybar нужны bar_stop_cmd/bar_start_cmd"
 
 #: src/ctlpanel.c:964
 msgid "Bar shell"
-msgstr ""
+msgstr "Вариант панели"
 
 #: src/ctlpanel.c:967
 msgid "Antiquity is the diinki port; takes effect at the next login"
-msgstr ""
+msgstr "Antiquity — это сборка diinki; действует со следующего входа"
 
 #: src/ctlpanel.c:979
 msgid "Bar edge"
-msgstr ""
+msgstr "Край панели"
 
 #: src/ctlpanel.c:982
 msgid "Which edge the bar sits on. The bar picks this up live"
-msgstr ""
+msgstr "У какого края стоит панель. Панель подхватывает это сразу"
 
 #: src/ctlpanel.c:987
 msgid "Bar auto-hide"
-msgstr ""
+msgstr "Скрывать панель автоматически"
 
 #: src/ctlpanel.c:989
 msgid ""
 "Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
 "menu, and \"mixed\" means they disagree"
-msgstr ""
+msgstr "Панель на всех экранах сразу. Настройка для отдельного экрана живёт в контекстном меню панели, а «смешанно» значит, что они расходятся"
 
 #: src/ctlpanel.c:1005
 msgid "Bar opacity"
-msgstr ""
+msgstr "Непрозрачность панели"
 
 #: src/ctlpanel.c:1009
 msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
-msgstr ""
+msgstr "0,00 — прозрачная панель, окрашенная от обоев; 1,00 закрывает их полностью"
 
 #: src/ctlpanel.c:1017
 msgid "Bar shape"
-msgstr ""
+msgstr "Форма панели"
 
 #: src/ctlpanel.c:1020
 msgid "Shape when corners are on; needs Window effects ▸ Corner radius"
-msgstr ""
+msgstr "Форма при включённых углах; нужны «Эффекты окон ▸ Скругление углов»"
 
 #: src/ctlpanel.c:1022
 msgid "Welcome menu at login"
-msgstr ""
+msgstr "Меню приветствия при входе"
 
 #: src/ctlpanel.c:1023
 msgid "Login"
-msgstr ""
+msgstr "Вход"
 
 #: src/ctlpanel.c:1025
 msgid "Neural overlay at login"
-msgstr ""
+msgstr "Нейронный слой при входе"
 
 #: src/ctlpanel.c:1028
 msgid "Desktop cat at login"
-msgstr ""
+msgstr "Кот на рабочем столе при входе"
 
 #: src/ctlpanel.c:1029
 msgid "Desktop cat"
-msgstr ""
+msgstr "Кот на рабочем столе"
 
 #: src/ctlpanel.c:1031
 msgid "Super+Shift+C toggles it any time; this is only the login state"
-msgstr ""
+msgstr "Super+Shift+C переключает его в любой момент; здесь только состояние при входе"
 
 #: src/ctlpanel.c:1032
 msgid "Desktop cat breed"
-msgstr ""
+msgstr "Порода кота"
 
 #: src/ctlpanel.c:1035
 msgid "Coat and markings only; every breed walks the same"
-msgstr ""
+msgstr "Только окрас и отметины; ходят все породы одинаково"
 
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
-msgstr ""
+msgstr "Скорость повтора клавиш"
 
 #: src/ctlpanel.c:1044
 msgid "Keyboard"
-msgstr ""
+msgstr "Клавиатура"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
-msgstr ""
+msgstr "Задержка повтора клавиш"
 
 #: src/ctlpanel.c:1056
 msgid "Keyboard shortcuts"
-msgstr ""
+msgstr "Сочетания клавиш"
 
 #: src/ctlpanel.c:1057
 msgid "Searchable. F2 moves a shortcut to another key, F3 onto the tap"
-msgstr ""
+msgstr "С поиском. F2 переносит сочетание на другую клавишу, F3 — на нажатие"
 
 #: src/ctlpanel.c:1058
 msgid "NumLock on at login"
-msgstr ""
+msgstr "NumLock включён при входе"
 
 #: src/ctlpanel.c:1061
 msgid "A fresh xkb state has it off, which leaves the numpad on arrows"
-msgstr ""
+msgstr "В свежем состоянии xkb он выключен, и цифровой блок остаётся на стрелках"
 
 #: src/ctlpanel.c:1063
 msgid "Tap to click"
-msgstr ""
+msgstr "Касание вместо щелчка"
 
 #: src/ctlpanel.c:1064
 msgid "Pointer"
-msgstr ""
+msgstr "Указатель"
 
 #: src/ctlpanel.c:1067
 msgid "Natural scrolling"
-msgstr ""
+msgstr "Естественная прокрутка"
 
 #: src/ctlpanel.c:1070
 msgid "Left-handed buttons"
-msgstr ""
+msgstr "Кнопки для левши"
 
 #: src/ctlpanel.c:1073
 msgid "Pointer speed"
-msgstr ""
+msgstr "Скорость указателя"
 
 #: src/ctlpanel.c:1079
 msgid "Pointer acceleration"
-msgstr ""
+msgstr "Ускорение указателя"
 
 #: src/ctlpanel.c:1082
 msgid ""
 "Adaptive moves further the faster you move; Flat is 1:1. Default is "
 "libinput's own pick for the device"
-msgstr ""
+msgstr "«Адаптивное» проходит дальше, чем быстрее вы двигаете; «Плоское» — 1:1. По умолчанию — выбор самого libinput для устройства"
 
 #: src/ctlpanel.c:1084
 msgid "Pointer smoothing"
-msgstr ""
+msgstr "Сглаживание указателя"
 
 #: src/ctlpanel.c:1087
 msgid ""
 "Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
 "0 is off. Games reading raw motion are unaffected"
-msgstr ""
+msgstr "Успокаивает дрожащий или шумный указатель, усредняя его путь. Стоит небольшой задержки; 0 — выключено. Игр, читающих сырое движение, не касается"
 
 #: src/ctlpanel.c:1090
 msgid "Cursor size"
-msgstr ""
+msgstr "Размер курсора"
 
 #: src/ctlpanel.c:1095
 msgid "Display settings"
-msgstr ""
+msgstr "Настройки экрана"
 
 #: src/ctlpanel.c:1096 src/ctlpanel.c:1103
 msgid "Screens"
-msgstr ""
+msgstr "Экраны"
 
 #: src/ctlpanel.c:1104
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
-msgstr ""
+msgstr "«Расширить», «Дублировать» или встроенный выключен (крышка закрыта). Также m в Super+D"
 
 #: src/ctlpanel.c:1114
 msgid "Scale everything"
-msgstr ""
+msgstr "Масштабировать всё"
 
 #: src/ctlpanel.c:1115
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
-msgstr ""
+msgstr "Каждый экран, каждую программу, курсор. Super+Ctrl+= / -, Super+Ctrl+0 сбрасывает"
 
 #: src/ctlpanel.c:1124
 msgid "Monitor settings"
-msgstr ""
+msgstr "Настройки монитора"
 
 #: src/ctlpanel.c:1125
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
-msgstr ""
+msgstr "Разъёмы, EDID и режимы, которые предлагает оборудование (syn-settings)"
 
 #: src/ctlpanel.c:1127 src/ctlpanel.c:1128
 msgid "Night light"
-msgstr ""
+msgstr "Ночной свет"
 
 #: src/ctlpanel.c:1129
 msgid "Colour temperature"
-msgstr ""
+msgstr "Цветовая температура"
 
 #: src/ctlpanel.c:1133
 msgid "6500K is daylight — the identity ramp. Lower is warmer"
-msgstr ""
+msgstr "6500K — дневной свет, нейтральная кривая. Ниже — теплее"
 
 #: src/ctlpanel.c:1141
 msgid "Do Not Disturb"
-msgstr ""
+msgstr "Не беспокоить"
 
 #: src/ctlpanel.c:1142
 msgid "Notifications"
-msgstr ""
+msgstr "Уведомления"
 
 #: src/ctlpanel.c:1143
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
-msgstr ""
+msgstr "Super+Shift+M откуда угодно. Прячет всплывающие уведомления и глушит звук; важные предупреждения всё равно проходят"
 
 #: src/ctlpanel.c:1145
 msgid "Event sounds"
-msgstr ""
+msgstr "Звуки событий"
 
 #: src/ctlpanel.c:1152
 msgid "Screen audio"
-msgstr ""
+msgstr "Звук на экран"
 
 #: src/ctlpanel.c:1153
 msgid "Audio"
-msgstr ""
+msgstr "Звук"
 
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
-msgstr ""
+msgstr "Переводит звук на телевизор или монитор, когда вы его подключаете. «Авто» — для ноутбуков"
 
 #: src/ctlpanel.c:1157
 msgid "Equalizer"
-msgstr ""
+msgstr "Эквалайзер"
 
 #: src/ctlpanel.c:1158
 msgid "10-band system equalizer. Adds an output device while it is on"
-msgstr ""
+msgstr "Системный 10-полосный эквалайзер. Пока включён, добавляет устройство вывода"
 
 #: src/ctlpanel.c:1173
 msgid "Screen reader"
-msgstr ""
+msgstr "Экранный диктор"
 
 #: src/ctlpanel.c:1174
 msgid "Speech"
-msgstr ""
+msgstr "Речь"
 
 #: src/ctlpanel.c:1175
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
-msgstr ""
+msgstr "Читает активное окно по мере перехода фокуса. Super+Shift+U переключает"
 
 #: src/ctlpanel.c:1176
 msgid "Answer to its name"
-msgstr ""
+msgstr "Отзываться на имя"
 
 #: src/ctlpanel.c:1178
 msgid "Listen for \"Synapse\" and answer out loud. Holds the microphone open"
-msgstr ""
+msgstr "Слушает «Synapse» и отвечает вслух. Держит микрофон открытым"
 
 #: src/ctlpanel.c:1180
 msgid "Record audio"
-msgstr ""
+msgstr "Записывать звук"
 
 #: src/ctlpanel.c:1181
 msgid "Recording"
-msgstr ""
+msgstr "Запись"
 
 #: src/ctlpanel.c:1182
 msgid "Record for editing"
-msgstr ""
+msgstr "Записывать для монтажа"
 
 #: src/ctlpanel.c:1183
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
-msgstr ""
+msgstr "DNxHR .mov, который видеоредакторы читают напрямую. Примерно 1,1 ГБ в минуту"
 
 #: src/ctlpanel.c:1188
 msgid "Network / Wi-Fi"
-msgstr ""
+msgstr "Сеть / Wi-Fi"
 
 #: src/ctlpanel.c:1189
 msgid "Network"
-msgstr ""
+msgstr "Сеть"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
-msgstr ""
+msgstr "Bluetooth"
 
 #: src/ctlpanel.c:1192 src/ctlpanel.c:1193
 msgid "Printers"
-msgstr ""
+msgstr "Принтеры"
 
 #: src/ctlpanel.c:1199
 msgid "Find printers"
-msgstr ""
+msgstr "Найти принтеры"
 
 #: src/ctlpanel.c:1201
 msgid "Add every network printer that is not set up yet, driverless"
-msgstr ""
+msgstr "Добавляет каждый сетевой принтер, который ещё не настроен, без драйверов"
 
 #: src/ctlpanel.c:1204
 msgid "Power saving"
-msgstr ""
+msgstr "Энергосбережение"
 
 #: src/ctlpanel.c:1205
 msgid "Power"
-msgstr ""
+msgstr "Питание"
 
 #: src/ctlpanel.c:1206
 msgid "Idle timeouts for dim, blank, lock and suspend"
-msgstr ""
+msgstr "Время простоя до затемнения, гашения, блокировки и сна"
 
 #: src/ctlpanel.c:1207
 msgid "Screensaver"
-msgstr ""
+msgstr "Хранитель экрана"
 
 #: src/ctlpanel.c:1208
 msgid "What the screen shows when idle, and how the lock screen looks"
-msgstr ""
+msgstr "Что экран показывает в простое и как выглядит экран блокировки"
 
 #: src/ctlpanel.c:1209
 msgid "Lock screen"
-msgstr ""
+msgstr "Экран блокировки"
 
 #: src/ctlpanel.c:1213
 msgid "Unlock with fingerprint"
-msgstr ""
+msgstr "Разблокировка по отпечатку"
 
 #: src/ctlpanel.c:1222
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
-msgstr ""
+msgstr "Установите fprintd, выполните fprintd-enroll; пароль тоже работает всегда"
 
 #: src/ctlpanel.c:1230 src/ctlpanel.c:1231
 msgid "Game mode"
-msgstr ""
+msgstr "Игровой режим"
 
 #: src/ctlpanel.c:1232
 msgid "Enter cycles auto / always on / always off — same as Super+G"
-msgstr ""
+msgstr "Enter перебирает «автоматически / всегда включён / всегда выключен» — как Super+G"
 
 #: src/ctlpanel.c:1233
 msgid "Detect games"
-msgstr ""
+msgstr "Определять игры"
 
 #: src/ctlpanel.c:1235
 msgid "Treat a fullscreen game window as a game unless it is excluded"
-msgstr ""
+msgstr "Считает полноэкранное окно игры игрой, если оно не исключено"
 
 #: src/ctlpanel.c:1236
 msgid "Open games on"
-msgstr ""
+msgstr "Открывать игры на"
 
 #: src/ctlpanel.c:1239
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
-msgstr ""
+msgstr "«Основной» — экран, помеченный PRIMARY в Super+D; «Спрашивать» слушается игры"
 
 #: src/ctlpanel.c:1240
 msgid "Stop the AI while gaming"
-msgstr ""
+msgstr "Останавливать ИИ во время игры"
 
 #: src/ctlpanel.c:1242
 msgid "Hold off idle while gaming"
-msgstr ""
+msgstr "Откладывать простой во время игры"
 
 #: src/ctlpanel.c:1244
 msgid "A gamepad is not input as far as the idle timer is concerned"
-msgstr ""
+msgstr "Для счётчика простоя геймпад не считается вводом"
 
 #: src/ctlpanel.c:1248
 msgid "Drop screen effects while gaming"
-msgstr ""
+msgstr "Отключать экранные эффекты во время игры"
 
 #: src/ctlpanel.c:1250
 msgid "The biggest win: lets the game draw straight to the display"
-msgstr ""
+msgstr "Наибольший выигрыш: позволяет игре рисовать прямо на экран"
 
 #: src/ctlpanel.c:1251
 msgid "Pause the wallpaper while gaming"
-msgstr ""
+msgstr "Останавливать обои во время игры"
 
 #: src/ctlpanel.c:1253
 msgid "Animated wallpapers keep rendering behind a fullscreen game"
-msgstr ""
+msgstr "Живые обои продолжают рисоваться за полноэкранной игрой"
 
 #: src/ctlpanel.c:1254
 msgid "Stop the bar while gaming"
-msgstr ""
+msgstr "Останавливать панель во время игры"
 
 #: src/ctlpanel.c:1256
 msgid "Frees memory, but the bar takes a moment to come back"
-msgstr ""
+msgstr "Освобождает память, но панель возвращается не мгновенно"
 
 #: src/ctlpanel.c:1257
 msgid "Keep the mouse on the game's screen"
-msgstr ""
+msgstr "Удерживать мышь на экране игры"
 
 #: src/ctlpanel.c:1259
 msgid "Games rarely ask for it themselves; Alt-Tab still frees it"
-msgstr ""
+msgstr "Игры редко просят об этом сами; Alt-Tab всё равно её отпускает"
 
 #: src/ctlpanel.c:1260
 msgid "Quiet the kernel monitor while gaming"
-msgstr ""
+msgstr "Приглушать наблюдение за ядром во время игры"
 
 #: src/ctlpanel.c:1262
 msgid "Saves very little, and security monitoring pauses with it"
-msgstr ""
+msgstr "Экономит совсем немного, и вместе с ним останавливается наблюдение за безопасностью"
 
 #: src/ctlpanel.c:1265
 msgid "AI backend"
-msgstr ""
+msgstr "Движок ИИ"
 
 #: src/ctlpanel.c:1266
 msgid "AI"
-msgstr ""
+msgstr "ИИ"
 
 #: src/ctlpanel.c:1267
 msgid "Which device synapd runs inference on"
-msgstr ""
+msgstr "На каком устройстве synapd выполняет вычисления"
 
 #: src/ctlpanel.c:1268
 msgid "AI model"
-msgstr ""
+msgstr "Модель ИИ"
 
 #: src/ctlpanel.c:1269
 msgid "AI window placement"
-msgstr ""
+msgstr "Размещение окон средствами ИИ"
 
 #: src/ctlpanel.c:1271
 msgid "Let the AI layout decide where a new window goes"
-msgstr ""
+msgstr "Позволяет расположению от ИИ решать, куда попадёт новое окно"
 
 #: src/ctlpanel.c:1272
 msgid "AI context in borders"
-msgstr ""
+msgstr "Контекст ИИ в рамках"
 
 #: src/ctlpanel.c:1274
 msgid "Tint a window's border when the AI is holding context for it"
-msgstr ""
+msgstr "Подсвечивает рамку окна, пока ИИ держит для него контекст"
 
 #: src/ctlpanel.c:1277
 msgid "Tools"
-msgstr ""
+msgstr "Инструменты"
 
 #: src/ctlpanel.c:1278
 msgid "Clipboard history"
-msgstr ""
+msgstr "История буфера обмена"
 
 #: src/ctlpanel.c:1279
 msgid "News"
-msgstr ""
+msgstr "Новости"
 
 #: src/ctlpanel.c:1280
 msgid "News refresh"
-msgstr ""
+msgstr "Обновление новостей"
 
 #: src/ctlpanel.c:1283
 msgid "How often a feed may be re-fetched at most"
-msgstr ""
+msgstr "Как часто источник разрешено загружать заново, самое частое"
 
 #: src/ctlpanel.c:1295
 msgid "System settings"
-msgstr ""
+msgstr "Настройки системы"
 
 #: src/ctlpanel.c:1296
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
-msgstr ""
+msgstr "Часы, язык, ядро, программы по умолчанию — на что настроена СИСТЕМА"
 
 #: src/ctlpanel.c:1298
 msgid "About OS"
-msgstr ""
+msgstr "О системе"
 
 #: src/ctlpanel.c:1299
 msgid "About"
-msgstr ""
+msgstr "О программе"
 
 #: src/ctlpanel.c:1300
 msgid "The mark, the machine, and what this desktop is currently set to"
-msgstr ""
+msgstr "Знак, машина и то, на что настроен этот рабочий стол сейчас"
 
 #: src/ctlpanel.c:3613
 msgid "position"
-msgstr ""
+msgstr "положение"
 
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "minimum"
-msgstr ""
+msgstr "минимум"
 
 #: src/ctlpanel.c:4240 src/ctlpanel.c:4278
 msgid "maximum"
-msgstr ""
+msgstr "максимум"
