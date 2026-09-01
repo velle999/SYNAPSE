@@ -108,10 +108,13 @@ int main(int argc, char **argv)
         { "latin+accent", "naïve café",     false },
         { "cjk",          "中文字",          false },
         { "japanese",     "日本語テスト",     false },
-        /* RTL draws unjoined and in logical order — see "WHAT THIS IS STILL
-         * NOT" in text.c. These are here to prove the characters resolve to a
-         * font at all, which they did not before; they are NOT a claim that
-         * the script is laid out correctly. */
+        /* ⚠ THESE ROWS ASK ONLY WHETHER THE CHARACTERS REACH A FONT, which is
+         * all this file has ever tested and all it should. Whether they are
+         * then JOINED and ORDERED correctly is text_shape_test's question, and
+         * it needs different assertions entirely — relations between two draws
+         * rather than ink in one. The comment here used to say RTL draws
+         * unjoined and in logical order; that was true until 581 and is not a
+         * property this file pins either way. */
         { "arabic",       "مرحبا",           false },
         { "hebrew",       "שלום",            false },
         { "thai",         "สวัสดี",            false },

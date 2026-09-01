@@ -2754,7 +2754,64 @@ pkgver=0.1.0
 #   and without a display in the environment. Every voice candidate is stubbed —
 #   `vibe` first on PATH as well as espeak-ng, since the positive case has to
 #   stub them all or a real one speaks on the developer's session.
-pkgrel=580
+# 581: hi and ar are TRANSLATED AND NOW RENDER. src/text.c grows a shaper.
+#   ⛔ THE CATALOGS WERE NEVER THE PROBLEM. po/ has carried complete Hindi and
+#   Arabic since 572-580, correct and reviewed, and what the compositor drew
+#   from them was worse than the English it replaced: text.c goes through
+#   cairo's TOY font API, which resolves a family to one face and does no
+#   layout, so Arabic came out as isolated letter forms in reverse order and
+#   Devanagari with its matras unreordered. A row of correctly translated
+#   nonsense is not a translation, and it is the failure mode nobody on this
+#   side of the desk can see — the eleven Latin, Cyrillic and CJK catalogs were
+#   always fine, because none of them needs shaping or bidi.
+#   HarfBuzz shapes, FriBidi resolves the embedding levels and the visual order
+#   of the runs, and the glyphs go out through cairo_show_glyphs() at the
+#   positions HarfBuzz computed. Joining, mark positioning, Indic reordering and
+#   RTL all follow, from the same two libraries pango uses — so a synui panel and
+#   a GTK window now draw the same sentence the same way.
+#   ⚠ NEITHER LIBRARY ADDS A PACKAGE TO THE ISO. harfbuzz is already pulled in
+#   by librsvg, which synui depends on, and fribidi by pango and gtk3/gtk4.
+#   Both are named in depends= anyway: "something else happens to want it" is
+#   not a dependency declaration.
+#   ⚠ AND IT IS A SECOND PATH, NOT A REPLACEMENT. cp_needs_shaping() decides per
+#   STRING — one Arabic character anywhere shapes the whole thing, because
+#   ordering runs against each other is a decision about the string. Everything
+#   else keeps the character walk it has always had, so the eleven unaffected
+#   languages are unaffected to the pixel; routing them through HarfBuzz would
+#   have re-laid-out every panel on the desktop, across 663 call sites, to fix
+#   two languages that do not use it.
+#   ⛔ THE hb_font CACHE IS LOAD-BEARING, NOT A TIDY-UP. hb_ft_font_create()
+#   builds an hb_face_t and the first hb_shape() against one parses that font's
+#   whole OpenType layout — GSUB, GPOS, GDEF. Per run per string that measured
+#   78us for an Arabic label and 162us for a Hindi one against 5us for ASCII:
+#   6.5ms of a 16.7ms frame for a control-panel repaint, so a Hindi desktop
+#   would have dropped frames scrolling a menu and only a Hindi one. Keyed on
+#   the cairo_scaled_font_t (which pins both the face and the size the FT_Face
+#   is set to) it is 11.3us and 18.1us.
+#   ⛔ AND ONE BUG WORTH RECORDING, because it is exactly what this tree keeps
+#   relearning: the first version resolved a character's face as "a face, or
+#   NULL meaning carry on with the previous one", which collapsed "a combining
+#   mark inherits its letter's face" and "the context's own face covers this"
+#   into one value. The first LATIN letter after an Arabic run therefore
+#   inherited the ARABIC fallback face, and since a face change is a run
+#   boundary it split "HHHH" into "H" + "HHH" at two different widths. Nothing
+#   errored; the string simply measured 4.9px wider than the same string with
+#   the words the other way round. It was found only because the bidi test
+#   compares those two orderings. The answers are an enum now.
+#   tests/text_shape_test.c pins three properties, each a RELATION between two
+#   draws rather than a glyph index — an index is a property of whichever font
+#   is installed, and this has to pass on a CI container too: joined letters are
+#   narrower than isolated ones, a conjunct is narrower than its parts, and
+#   reversing a string's logical order draws the SAME line (the paragraph
+#   direction flips with it, so the reordering cancels). Plus the invariant the
+#   whole file rests on — syn_text_extents() measures what syn_show_text()
+#   paints — re-checked through the shaped path, and that a shaped draw leaves
+#   the current point where cairo_show_text() would have: cairo_show_glyphs()
+#   leaves it UNDEFINED, and thirty places in this tree draw a breadcrumb or a
+#   two-tone footer as consecutive syn_show_text() calls with no move_to.
+#   Its contact sheet draws real msgstrs out of po/ar.po and po/hi.po, not
+#   strings invented for a test.
+pkgrel=581
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2880,7 +2937,13 @@ depends=('breeze-icons' 'adwaita-icon-theme-legacy'
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.
-         'dbus' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono'
+         'dbus' 'librsvg' 'fontconfig'
+         # text.c shapes Arabic and the Indic scripts through HarfBuzz and
+         # resolves their reading order through FriBidi. Both are already here
+         # transitively — harfbuzz under librsvg one line up, fribidi under
+         # pango and gtk — so neither adds a package to the ISO. Named because
+         # synui links them, not because they were missing.
+         'harfbuzz' 'fribidi' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono'
          'noto-fonts-emoji' 'noto-fonts-cjk' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'libpulse' 'unzip'
          # Archive extraction for the Dolphin service menu. 7zip reads zip and 7z
          # (and rar), unrar is kept because 7-Zip's rar support does not cover

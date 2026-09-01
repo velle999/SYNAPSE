@@ -13,13 +13,14 @@ ru
 ja
 zh
 ko
-# ⛔ hi AND ar ARE TRANSLATED BUT DO NOT RENDER CORRECTLY YET. src/text.c
-# draws through cairo's toy API with a fallback face chooser and no shaper: no
-# HarfBuzz, no bidi. Arabic comes out as isolated letter forms in reverse
-# order; Devanagari comes out with its matras unreordered. The catalogs are
-# complete and right, and become usable the day shaping lands — nothing about
-# them needs redoing. The other eleven are unaffected: Latin and Cyrillic need
-# no shaping and CJK needs only face fallback. See the WHAT THIS IS STILL NOT
-# section at the top of src/text.c.
+# hi and ar. They were listed here from 572 and did not RENDER correctly until
+# 581: src/text.c drew through cairo's toy API with a fallback face chooser and
+# no shaper, so Arabic came out as isolated letter forms in reverse order and
+# Devanagari with its matras unreordered. The catalogs were never the problem
+# and were never redone. HarfBuzz and FriBidi land in text.c at 581, and
+# tests/text_shape_test.c pins the three properties that say it worked: letters
+# join, conjuncts form, and reversing a string's logical order draws the same
+# line. The other eleven never needed any of it — Latin and Cyrillic need no
+# shaping and CJK needs only face fallback.
 hi
 ar

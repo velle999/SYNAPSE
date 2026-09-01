@@ -27,6 +27,18 @@ cairo     = dependency('cairo')
 # to come out as question marks. Already a synui depends= (and cairo links it
 # anyway), so this adds no package to the ISO.
 fontconfig = dependency('fontconfig')
+# Shaping and bidi, also text.c. Choosing a face is not enough for Arabic or
+# Devanagari — the letter forms depend on their neighbours and the reading order
+# is not the storage order — and po/ has carried ar and hi catalogs since 575.
+# HarfBuzz joins and reorders, FriBidi resolves the embedding levels.
+#
+# ⚠ NEITHER ADDS A PACKAGE TO THE ISO. harfbuzz is already pulled in by
+# librsvg, which is a synui dependency two lines down, and fribidi by pango and
+# gtk3/gtk4, which every GTK application on this desktop needs. Both are also
+# listed in the PKGBUILD's depends= rather than left implicit, because "some
+# other package happens to want it" is not a dependency declaration.
+harfbuzz  = dependency('harfbuzz')
+fribidi   = dependency('fribidi')
 rsvg      = dependency('librsvg-2.0')  # icons.c rasterizes SVG-only app icons
 libinput  = dependency('libinput')
 # sound.c watches udev so a device being plugged in can make a noise. Already
@@ -329,6 +341,7 @@ synui_exe = executable('synui',
   # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
   # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
   dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, fontconfig, rsvg,
+                  harfbuzz, fribidi,
                   libinput, libudev, libjpeg, giflib, libcurl, libdisplay_info,
                   xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
@@ -614,7 +627,7 @@ cat_render_test = executable('cat_render_test',
   # scenefx too: synui.h includes <scenefx/types/wlr_scene.h> since the glass
   # migration, so this target stopped compiling without the header path even
   # though it draws nothing scenefx-y itself.
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])
@@ -847,7 +860,7 @@ settings_test = executable('settings_test',
   ['tests/settings_test.c', 'src/config.c', 'src/settings.c', 'src/cat_draw.c',
    'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('settings', settings_test)
@@ -865,7 +878,7 @@ state_reload_test = executable('state_reload_test',
    'src/filters.c', 'src/uifx.c', 'src/cat_draw.c', 'src/text.c',
    'src/saver_state.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('state_reload', state_reload_test)
@@ -911,7 +924,7 @@ ctlpanel_table_test = executable('ctlpanel_table_test',
    'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c',
    'src/panel.c', 'src/cat_draw.c', 'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libcurl],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('ctlpanel_table', ctlpanel_table_test)
@@ -956,11 +969,30 @@ test('terminal_chain', terminal_chain_test)
 text_fallback_test = executable('text_fallback_test',
   ['tests/text_fallback_test.c', 'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('text_fallback', text_fallback_test,
   args : [meson.current_build_dir() / 'text_fallback.png'])
+
+# Shaping and bidi. A separate binary from text_fallback because it asks the
+# question AFTER that one: not "did the character reach a font" but "is what
+# came out the right shape, in the right order".
+#
+# ⚠ ITS ASSERTIONS ARE RELATIONS BETWEEN TWO DRAWS, never glyph indices — an
+# index is a property of whichever font is installed, and this has to pass on a
+# CI container as well as on a desktop. Where a script has no font at all the
+# cases SKIP; read the report rather than the exit status if you want to know
+# what was actually exercised. libm because the checks compare distances.
+text_shape_test = executable('text_shape_test',
+  ['tests/text_shape_test.c', 'src/text.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi,
+                  wlroots, wayland, pixman, libm],
+  c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
+  build_by_default : false)
+test('text_shape', text_shape_test,
+  args : [meson.current_build_dir() / 'text_shape.png'])
 
 # The application grid's scan and filters, driven against a mkdtemp sandbox with
 # XDG_DATA_HOME and XDG_DATA_DIRS pointed at it — so the counts do not depend on
@@ -983,7 +1015,7 @@ test('appgrid', appgrid_test)
 icon_lookup_test = executable('icon_lookup_test',
   ['tests/icon_lookup_test.c', 'src/icons.c', 'src/iconhue.c', 'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman,
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman,
                   xkbcommon, rsvg],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
@@ -997,7 +1029,7 @@ emoji_test = executable('emoji_test',
   ['tests/emoji_test.c', 'src/emoji.c', 'src/emoji_data.c', 'src/text.c',
    'src/hit.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('emoji', emoji_test)
@@ -1081,7 +1113,7 @@ test('clip', clip_test)
 crop_test = executable('crop_test',
   ['tests/crop_test.c', 'src/crop.c', 'src/text.c', 'src/hit.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('crop', crop_test)
