@@ -1,0 +1,7 @@
+# The files xgettext reads, one per line.
+#
+# ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER. Its _() calls still
+# compile and still look up at runtime, so nothing warns — the strings simply
+# never reach a .pot, so no translator is ever offered them. tools/i18n-check.sh
+# fails on a source file that uses _() and is not listed.
+src/ctlpanel.c

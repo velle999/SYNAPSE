@@ -53,6 +53,7 @@
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include "i18n.h"
 #include "synui.h"
 
 /* How long to keep repainting the panel after an AI-backend switch, waiting for
@@ -355,21 +356,21 @@ struct ctl_item {
 
 static const struct ctl_item ctl_items[] = {
     /* Appearance */
-    { CTL_ROW_THEME,        CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Theme",            "theme",
-      .section = "Look",
-      .help = "Colour preset for window chrome and synui's own panels" },
-    { CTL_ROW_WALLPAPER,    CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Wallpaper",        "wallpaper" },
+    { CTL_ROW_THEME,        CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  N_("Theme"),            "theme",
+      .section = N_("Look"),
+      .help = N_("Colour preset for window chrome and synui's own panels") },
+    { CTL_ROW_WALLPAPER,    CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  N_("Wallpaper"),        "wallpaper" },
     /* ⚠ CTL_APPLY_WPACCENT AND NOT CTL_APPLY_REPAINT. Turning this on does not
      * redraw anything with a colour it already has — it CHANGES the colour, and
      * the colour lives in two places: synui's own panel fields (theme.c) and
      * palette.state, which the bar and the widgets watch. One apply reaches
      * both, because it goes through the export that publishes the decision. */
-    { CTL_ROW_WP_ACCENT,    CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Wallpaper accent", NULL,
+    { CTL_ROW_WP_ACCENT,    CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Wallpaper accent"), NULL,
       .key = "wallpaper_accent", .off = CFG(wallpaper_accent), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_wp_accent), .apply = CTL_APPLY_WPACCENT,
-      .help = "Take the accent off the wallpaper instead of the theme. "
+      .help = N_("Take the accent off the wallpaper instead of the theme. "
               "Auto is Prism (light or dark), which is built on it, and "
-              "nothing else" },
+              "nothing else") },
     /* The same accent, on the hardware that has lights in it.
      *
      * ⚠ EXTERNAL, like the font rows: the answer lives in
@@ -382,14 +383,14 @@ static const struct ctl_item ctl_items[] = {
      * disappears when its optdepend is missing is a feature nobody can find
      * out about; syn-rgb says which package to install, which is the answer
      * somebody can act on. */
-    { CTL_ROW_RGB_LIGHTS,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "RGB lights", NULL,
+    { CTL_ROW_RGB_LIGHTS,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, N_("RGB lights"), NULL,
       .vtype = CTL_VAL_BOOL, .external = true,
-      .help = "Put the wallpaper's accent on RGB hardware (needs openrgb)" },
-    { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Cursor theme",     "cursor"    },
+      .help = N_("Put the wallpaper's accent on RGB hardware (needs openrgb)") },
+    { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  N_("Cursor theme"),     "cursor"    },
 
-    { CTL_ROW_UI_FONT,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "UI font",          "font",
-      .section = "Text",
-      .help = "The family every synui panel draws in. Previews live; Esc puts it back" },
+    { CTL_ROW_UI_FONT,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  N_("UI font"),          "font",
+      .section = N_("Text"),
+      .help = N_("The family every synui panel draws in. Previews live; Esc puts it back") },
     /* No .key and no .off: these two are NOT synui config keys. They live in
      * ~/.config/synui/font.state, which synfiles, syn-settings, syn-disks and
      * the bar all read and which synfiles also writes — so the value is read
@@ -402,18 +403,18 @@ static const struct ctl_item ctl_items[] = {
      * Two rows and not one because they are two settings: a point size means
      * nothing to a window that lays itself out in pixels, which is every
      * quickshell window in the suite. */
-    { CTL_ROW_UI_FONT_SIZE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Font size",         NULL,
+    { CTL_ROW_UI_FONT_SIZE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Font size"),         NULL,
       .vtype = CTL_VAL_INT, .vmin = 6, .vmax = 24, .vstep = 1, .unit = "pt",
       .external = true,
-      .help = "Applications: GTK, Qt and the terminal. Applies when you stop" },
-    { CTL_ROW_UI_TEXT_SCALE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Text scale",       NULL,
+      .help = N_("Applications: GTK, Qt and the terminal. Applies when you stop") },
+    { CTL_ROW_UI_TEXT_SCALE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Text scale"),       NULL,
       .vtype = CTL_VAL_INT, .vmin = 75, .vmax = 175, .vstep = 5, .unit = "%",
       .external = true,
-      .help = "The bar and the SYNAPSE apps — Files, Settings, Disks, Software" },
+      .help = N_("The bar and the SYNAPSE apps — Files, Settings, Disks, Software") },
 
-    { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL,
-      .section = "Glass",
-      .help = "Focused-window opacity. Left/Right adjust; Enter switches it off" },
+    { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, N_("Transparency"),     NULL,
+      .section = N_("Glass"),
+      .help = N_("Focused-window opacity. Left/Right adjust; Enter switches it off") },
     /* ONE slider for the whole desktop's glass, above the per-surface rows it
      * drives. It is an integer 0..100 rather than an alpha because it is not
      * one: the windows, the panels and the bar get different numbers out of it
@@ -424,7 +425,7 @@ static const struct ctl_item ctl_items[] = {
      * compiled default — so the thirteen themes that are not a Prism keep the
      * opacities they were tuned with, and turning this on is an explicit act
      * whose result the per-surface rows further down this group then show. */
-    { CTL_ROW_GLASS_LEVEL,  CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glass",            NULL,
+    { CTL_ROW_GLASS_LEVEL,  CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Glass"),            NULL,
       /* ⚠ vmin STAYS 0 even though 0 is now a named mode rather than an amount.
        * The auto rung is defined as "one step below the minimum" (ctl_step), so
        * lifting vmin to 5 would put Auto where Off is and drop Off off the
@@ -433,22 +434,22 @@ static const struct ctl_item ctl_items[] = {
       .key = "glass_level", .off = CFG(glass_level), .vtype = CTL_VAL_INT,
       .vmin = 0.0f, .vmax = 100.0f, .vstep = 5.0f, .unit = "%",
       .vauto = "Auto", .vzero = "Off", .apply = CTL_APPLY_GLASS,
-      .help = "Auto follows the theme \xc2\xb7 Off is never glass \xc2\xb7 or set how much you see through" },
+      .help = N_("Auto follows the theme \xc2\xb7 Off is never glass \xc2\xb7 or set how much you see through") },
     /* What makes the row above a MASTER rather than a fourth opinion. On, the
      * five rows it drives — the two window opacities, the terminal, the bar and
      * the dock — are recomputed from it and marked "synced". Dragging one of
      * those by hand pins it and it stops following; switching this back on
      * releases every pin at once. See glass_sync in synui.h. */
-    { CTL_ROW_GLASS_SYNC,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Sync all glass", NULL,
+    { CTL_ROW_GLASS_SYNC,   CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, N_("Sync all glass"), NULL,
       .key = "glass_sync", .off = CFG(glass_sync), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_GLASS,
-      .help = "Every surface follows Glass above. Change one and it keeps its "
-              "own until you switch this back on" },
-    { CTL_ROW_GLASS_LEGIBILITY, CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Legibility correction", NULL,
+      .help = N_("Every surface follows Glass above. Change one and it keeps its "
+              "own until you switch this back on") },
+    { CTL_ROW_GLASS_LEGIBILITY, CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, N_("Legibility correction"), NULL,
       .key = "glass_legibility", .off = CFG(glass_legibility), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_GLASS,
-      .help = "Surfaces go less see-through where their text would not read. "
-              "Off draws exactly what you asked for" },
+      .help = N_("Surfaces go less see-through where their text would not read. "
+              "Off draws exactly what you asked for") },
     /* WHAT the row above measures against, which was the wallpaper and only the
      * wallpaper until barscan.c. Its own row rather than a mode of Legibility
      * because it is a different kind of setting: legibility is "may a surface
@@ -463,19 +464,19 @@ static const struct ctl_item ctl_items[] = {
      * the scan clears both grids before it fills them, so switching this off
      * publishes -1 across the board and every surface is back on the wallpaper
      * by itself, with no second path to keep in step. */
-    { CTL_ROW_SCENE_INK,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Live backdrop", NULL,
+    { CTL_ROW_SCENE_INK,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, N_("Live backdrop"), NULL,
       .key = "scene_ink", .off = CFG(scene_ink), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_NONE,
-      .help = "Menus and panels ink themselves off the window behind them "
-              "rather than the wallpaper it covers. Lands within a second" },
-    { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
+      .help = N_("Menus and panels ink themselves off the window behind them "
+              "rather than the wallpaper it covers. Lands within a second") },
+    { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Unfocused opacity"), NULL,
       .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
-      .help = "How far windows you are not using fade back" },
-    { CTL_ROW_FOOT_ALPHA,   CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Terminal glass", NULL,
+      .help = N_("How far windows you are not using fade back") },
+    { CTL_ROW_FOOT_ALPHA,   CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Terminal glass"), NULL,
       .key = "foot_alpha", .off = CFG(foot_alpha), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
-      .help = "foot draws its own background alpha, so it needs its own level" },
+      .help = N_("foot draws its own background alpha, so it needs its own level") },
     /* The one guard on the whole scheme, and the one row that says so out loud:
      * a surface measures the wallpaper under it and raises its own alpha until
      * its text clears AA. Off is "I said clear, I meant clear". */
@@ -485,8 +486,8 @@ static const struct ctl_item ctl_items[] = {
      * the third is invisible until a pinned dock stays glassy after the master
      * says Off. See synui_effects_solid(). One-way on purpose; the rows above
      * put any of it back. */
-    { CTL_ROW_SOLID,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, "Make it all solid", "solid",
-      .help = "Glass off and windows opaque, in one press. The rows above put it back" },
+    { CTL_ROW_SOLID,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, N_("Make it all solid"), "solid",
+      .help = N_("Glass off and windows opaque, in one press. The rows above put it back") },
     /*
      * …and the other end of the same argument.
      *
@@ -505,47 +506,47 @@ static const struct ctl_item ctl_items[] = {
      * hand somebody an unreadable desktop from a row labelled with a look.
      * See synui_effects_clear().
      */
-    { CTL_ROW_CLEAR,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, "Make it all clear", "clear",
-      .help = "Bar, dock and menus lose their background entirely, inked off "
-              "the wallpaper. The rows above put it back" },
+    { CTL_ROW_CLEAR,        CTL_CAT_APPEARANCE, CTL_KIND_ACTION, N_("Make it all clear"), "clear",
+      .help = N_("Bar, dock and menus lose their background entirely, inked off "
+              "the wallpaper. The rows above put it back") },
 
-    { CTL_ROW_EFFECTS,      CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "CRT effects",      NULL,
-      .section = "CRT effects",
-      .help = "The GLES post-process pass. Off on renderers that have none" },
-    { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "All filters",      "filters"   },
-    { CTL_ROW_EFFECT_SCANLINE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Scanlines", NULL,
+    { CTL_ROW_EFFECTS,      CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, N_("CRT effects"),      NULL,
+      .section = N_("CRT effects"),
+      .help = N_("The GLES post-process pass. Off on renderers that have none") },
+    { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  N_("All filters"),      "filters"   },
+    { CTL_ROW_EFFECT_SCANLINE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Scanlines"), NULL,
       .key = "effect_scanline", .off = CFG(effect_scanline), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
-    { CTL_ROW_EFFECT_CURVATURE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Screen curve", NULL,
+    { CTL_ROW_EFFECT_CURVATURE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Screen curve"), NULL,
       .key = "effect_curvature", .off = CFG(effect_curvature), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
-    { CTL_ROW_EFFECT_ABERRATION, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Chromatic aberration", NULL,
+    { CTL_ROW_EFFECT_ABERRATION, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Chromatic aberration"), NULL,
       .key = "effect_aberration", .off = CFG(effect_aberration), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
-    { CTL_ROW_EFFECT_GLITCH, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glitch on alert", NULL,
+    { CTL_ROW_EFFECT_GLITCH, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Glitch on alert"), NULL,
       .key = "effect_glitch", .off = CFG(effect_glitch), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
 
-    { CTL_ROW_EFFECT_PHOSPHOR, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor tint", NULL,
-      .section = "Phosphor",
+    { CTL_ROW_EFFECT_PHOSPHOR, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Phosphor tint"), NULL,
+      .section = N_("Phosphor"),
       .key = "effect_phosphor", .off = CFG(effect_phosphor), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_phosphor), .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
-      .help = "Off leaves the picture in colour; the blend below is what applies it" },
-    { CTL_ROW_EFFECT_MONO, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor blend", NULL,
+      .help = N_("Off leaves the picture in colour; the blend below is what applies it") },
+    { CTL_ROW_EFFECT_MONO, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Phosphor blend"), NULL,
       .key = "effect_mono", .off = CFG(effect_mono), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
-      .help = "Blend toward the phosphor tint. Bloom only bites once this is up" },
-    { CTL_ROW_EFFECT_BLOOM, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor glow", NULL,
+      .help = N_("Blend toward the phosphor tint. Bloom only bites once this is up") },
+    { CTL_ROW_EFFECT_BLOOM, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Phosphor glow"), NULL,
       .key = "effect_bloom", .off = CFG(effect_bloom), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
-    { CTL_ROW_EFFECT_LIFT, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor lift", NULL,
+    { CTL_ROW_EFFECT_LIFT, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Phosphor lift"), NULL,
       .key = "effect_lift", .off = CFG(effect_lift), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
-      .help = "How far the unlit field glows: 0 keeps it black, up lights the raster" },
-    { CTL_ROW_EFFECT_HUE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor hue", NULL,
+      .help = N_("How far the unlit field glows: 0 keeps it black, up lights the raster") },
+    { CTL_ROW_EFFECT_HUE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, N_("Phosphor hue"), NULL,
       .key = "effect_hue", .off = CFG(effect_hue), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
-      .help = "Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 is the preset" },
+      .help = N_("Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 is the preset") },
 
     /* ── Windows ─────────────────────────────────────────────
      *
@@ -553,161 +554,161 @@ static const struct ctl_item ctl_items[] = {
      * Appearance was where the theme lives and these are not about colour: a
      * border width and a shadow sigma belong with snapping and tiling, not with
      * a wallpaper picker. */
-    { CTL_ROW_TITLEBARS,      CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Titlebars", NULL,
-      .section = "Frame",
-      .help = "Server-side titlebars, on every window at once" },
-    { CTL_ROW_TITLEBAR_HEIGHT, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Titlebar height", NULL,
+    { CTL_ROW_TITLEBARS,      CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Titlebars"), NULL,
+      .section = N_("Frame"),
+      .help = N_("Server-side titlebars, on every window at once") },
+    { CTL_ROW_TITLEBAR_HEIGHT, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Titlebar height"), NULL,
       .key = "titlebar_height", .off = CFG(titlebar_height), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 64, .vstep = 2, .unit = "px", .apply = CTL_APPLY_DECO,
-      .help = "0 removes the titlebar; below 14 there is no room for a button" },
-    { CTL_ROW_BORDER_WIDTH,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Border width", NULL,
+      .help = N_("0 removes the titlebar; below 14 there is no room for a button") },
+    { CTL_ROW_BORDER_WIDTH,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Border width"), NULL,
       .key = "border_width", .off = CFG(border_width), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DECO },
-    { CTL_ROW_CORNER_RADIUS,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Corner radius", NULL,
+    { CTL_ROW_CORNER_RADIUS,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Corner radius"), NULL,
       .key = "corner_radius", .off = CFG(corner_radius), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 48, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS, .store = CTL_STORE_UIFX,
-      .help = "Forced square while maximized, so nothing pokes past the output" },
+      .help = N_("Forced square while maximized, so nothing pokes past the output") },
 
-    { CTL_ROW_GAP,            CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Tiling gap", NULL,
-      .section = "Layout",
+    { CTL_ROW_GAP,            CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Tiling gap"), NULL,
+      .section = N_("Layout"),
       .key = "gap", .off = CFG(gap), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 128, .vstep = 2, .unit = "px", .apply = CTL_APPLY_RELAYOUT },
-    { CTL_ROW_MASTER_FACTOR,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Master area", NULL,
+    { CTL_ROW_MASTER_FACTOR,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Master area"), NULL,
       .key = "master_factor", .off = CFG(master_factor), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.1f, .vmax = 0.9f, .vstep = 0.05f, .apply = CTL_APPLY_RELAYOUT,
-      .help = "Share of the screen the master window takes when tiling" },
-    { CTL_ROW_CASCADE_STACK,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Cascade pile size", NULL,
+      .help = N_("Share of the screen the master window takes when tiling") },
+    { CTL_ROW_CASCADE_STACK,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Cascade pile size"), NULL,
       .key = "cascade_stack_max", .off = CFG(cascade_stack_max), .vtype = CTL_VAL_INT,
       .vmin = CASCADE_STACK_MIN, .vmax = CASCADE_STACK_MAX, .vstep = 1,
       .apply = CTL_APPLY_RELAYOUT,
-      .help = "How deep a cascade pile may get once the grid of piles is full" },
+      .help = N_("How deep a cascade pile may get once the grid of piles is full") },
 
-    { CTL_ROW_SHADOW,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Drop shadow", NULL,
-      .section = "Shadow",
+    { CTL_ROW_SHADOW,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Drop shadow"), NULL,
+      .section = N_("Shadow"),
       .key = "shadow", .off = CFG(shadow), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
-    { CTL_ROW_SHADOW_SIGMA,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow softness", NULL,
+    { CTL_ROW_SHADOW_SIGMA,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Shadow softness"), NULL,
       .key = "shadow_blur_sigma", .off = CFG(shadow_blur_sigma), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 80.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
-    { CTL_ROW_SHADOW_SPREAD,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow spread", NULL,
+    { CTL_ROW_SHADOW_SPREAD,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Shadow spread"), NULL,
       .key = "shadow_spread", .off = CFG(shadow_spread), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 64.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX,
-      .help = "Solid shadow before the falloff starts — what gives it weight" },
-    { CTL_ROW_SHADOW_OFFSET_X, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset X", NULL,
+      .help = N_("Solid shadow before the falloff starts — what gives it weight") },
+    { CTL_ROW_SHADOW_OFFSET_X, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Shadow offset X"), NULL,
       .key = "shadow_offset_x", .off = CFG(shadow_offset_x), .vtype = CTL_VAL_INT,
       .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW },
-    { CTL_ROW_SHADOW_OFFSET_Y, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset Y", NULL,
+    { CTL_ROW_SHADOW_OFFSET_Y, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Shadow offset Y"), NULL,
       .key = "shadow_offset_y", .off = CFG(shadow_offset_y), .vtype = CTL_VAL_INT,
       .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
-    { CTL_ROW_CLIP_CSD_MARGIN, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Crop client shadows", NULL,
+    { CTL_ROW_CLIP_CSD_MARGIN, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Crop client shadows"), NULL,
       .key = "clip_csd_margin", .off = CFG(clip_csd_margin), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_DECO,
-      .help = "Hides the invisible margin apps like Firefox draw their own shadow in" },
+      .help = N_("Hides the invisible margin apps like Firefox draw their own shadow in") },
 
-    { CTL_ROW_BLUR,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Backdrop blur", NULL,
-      .section = "Blur",
+    { CTL_ROW_BLUR,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Backdrop blur"), NULL,
+      .section = N_("Blur"),
       .key = "blur", .off = CFG(blur), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX,
-      .help = "Frosts what is behind a translucent window. Opaque ones cost nothing" },
-    { CTL_ROW_BLUR_PASSES,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur passes", NULL,
+      .help = N_("Frosts what is behind a translucent window. Opaque ones cost nothing") },
+    { CTL_ROW_BLUR_PASSES,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur passes"), NULL,
       .key = "blur_passes", .off = CFG(blur_passes), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 5, .vstep = 1, .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX },
-    { CTL_ROW_BLUR_RADIUS,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur radius", NULL,
+    { CTL_ROW_BLUR_RADIUS,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur radius"), NULL,
       .key = "blur_radius", .off = CFG(blur_radius), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 20, .vstep = 1, .unit = "px", .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX },
-    { CTL_ROW_BLUR_NOISE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur noise", NULL,
+    { CTL_ROW_BLUR_NOISE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur noise"), NULL,
       .key = "blur_noise", .off = CFG(blur_noise), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.01f, .apply = CTL_APPLY_BLURDATA },
-    { CTL_ROW_BLUR_BRIGHTNESS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur brightness", NULL,
+    { CTL_ROW_BLUR_BRIGHTNESS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur brightness"), NULL,
       .key = "blur_brightness", .off = CFG(blur_brightness), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
-    { CTL_ROW_BLUR_CONTRAST,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur contrast", NULL,
+    { CTL_ROW_BLUR_CONTRAST,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur contrast"), NULL,
       .key = "blur_contrast", .off = CFG(blur_contrast), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
-    { CTL_ROW_BLUR_SATURATION, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur saturation", NULL,
+    { CTL_ROW_BLUR_SATURATION, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur saturation"), NULL,
       .key = "blur_saturation", .off = CFG(blur_saturation), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
-    { CTL_ROW_GLASS_HALO,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur halo", NULL,
+    { CTL_ROW_GLASS_HALO,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Blur halo"), NULL,
       .key = "glass_halo", .off = CFG(glass_halo), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS, .store = CTL_STORE_UIFX,
-      .help = "How far the blur reaches past the window. 0 keeps it inside the frame" },
+      .help = N_("How far the blur reaches past the window. 0 keeps it inside the frame") },
 
     /* ── Animation ────────────────────────────────────────────
      * Two events, two sets of rows, because they are two tastes: people who
      * want windows to appear instantly often still want the desk to move, and
      * the other way round. They shared one length until this section existed.
      * The curve is shared on purpose — one desktop, one way of decaying. */
-    { CTL_ROW_ANIM_WINDOW,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Window open", NULL,
-      .section = "Animation",
+    { CTL_ROW_ANIM_WINDOW,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Window open"), NULL,
+      .section = N_("Animation"),
       .key = "anim_window", .off = CFG(anim_window), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_anim_window), .apply = CTL_APPLY_NONE,
-      .help = "How a window arrives. Closing is not animated: the client's "
-              "buffer is gone the moment it unmaps" },
-    { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Window length", NULL,
+      .help = N_("How a window arrives. Closing is not animated: the client's "
+              "buffer is gone the moment it unmaps") },
+    { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Window length"), NULL,
       .key = "anim_window_ms", .off = CFG(anim_window_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
-      .help = "0 jumps straight to the end state. Also times the niri strip slide" },
-    { CTL_ROW_ANIM_RISE_PX,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Rise distance", NULL,
+      .help = N_("0 jumps straight to the end state. Also times the niri strip slide") },
+    { CTL_ROW_ANIM_RISE_PX,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Rise distance"), NULL,
       .key = "anim_rise_px", .off = CFG(anim_rise_px), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 200, .vstep = 2, .unit = "px", .apply = CTL_APPLY_NONE,
-      .help = "How far a Rise window travels up into place. Ignored by the other styles" },
-    { CTL_ROW_ANIM_WORKSPACE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop switch", NULL,
+      .help = N_("How far a Rise window travels up into place. Ignored by the other styles") },
+    { CTL_ROW_ANIM_WORKSPACE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Desktop switch"), NULL,
       .key = "anim_workspace", .off = CFG(anim_workspace), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_anim_ws), .apply = CTL_APPLY_NONE,
-      .help = "Fade cross-fades the two desks; Slide sends them off the way you "
-              "switched; Cube turns the desk in 3D" },
-    { CTL_ROW_ANIM_WORKSPACE_MS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop length", NULL,
+      .help = N_("Fade cross-fades the two desks; Slide sends them off the way you "
+              "switched; Cube turns the desk in 3D") },
+    { CTL_ROW_ANIM_WORKSPACE_MS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Desktop length"), NULL,
       .key = "anim_workspace_ms", .off = CFG(anim_workspace_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
-      .help = "A slide wants longer than a fade — the eye has to follow it "
-              "somewhere — and a cube wants longer again; try 400-600" },
-    { CTL_ROW_ANIM_CURVE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Easing", NULL,
+      .help = N_("A slide wants longer than a fade — the eye has to follow it "
+              "somewhere — and a cube wants longer again; try 400-600") },
+    { CTL_ROW_ANIM_CURVE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Easing"), NULL,
       .key = "anim_curve", .off = CFG(anim_curve), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_anim_curve), .apply = CTL_APPLY_NONE,
-      .help = "Shared by both, and by the strip slide: two easings read as two desktops" },
-    { CTL_ROW_WORKSPACE_MODE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktops span", NULL,
+      .help = N_("Shared by both, and by the strip slide: two easings read as two desktops") },
+    { CTL_ROW_WORKSPACE_MODE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Desktops span"), NULL,
       .key = "workspace_mode", .off = CFG(workspace_mode), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_ws_mode), .apply = CTL_APPLY_WSMODE,
-      .help = "Shared: one desktop across every monitor. Per-monitor: each "
-              "screen remembers its own, and the switch moves only the focused one" },
+      .help = N_("Shared: one desktop across every monitor. Per-monitor: each "
+              "screen remembers its own, and the switch moves only the focused one") },
 
     /* Window behaviour, which is what KDE calls this and what most people come
      * looking for. Focus leads: it is the one row here that changes what the
      * keyboard does rather than what the mouse can do. */
-    { CTL_ROW_FOCUS_MODE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Focus follows", NULL,
-      .section = "Behaviour",
+    { CTL_ROW_FOCUS_MODE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Focus follows"), NULL,
+      .section = N_("Behaviour"),
       .key = "focus_mode", .off = CFG(focus_mode),
       .vtype = CTL_VAL_ENUM, NAMES(ctl_names_focus_mode),
-      .help = "Click: only a click focuses. Sloppy and Strict follow the "
-              "pointer; over the desktop, Strict drops focus, Sloppy keeps it" },
-    { CTL_ROW_FOCUS_DELAY,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Focus delay", NULL,
+      .help = N_("Click: only a click focuses. Sloppy and Strict follow the "
+              "pointer; over the desktop, Strict drops focus, Sloppy keeps it") },
+    { CTL_ROW_FOCUS_DELAY,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Focus delay"), NULL,
       .key = "focus_delay_ms", .off = CFG(focus_delay_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 25, .unit = "ms",
-      .help = "How long the pointer rests before focus follows it. 0 is "
-              "instant, which also focuses windows you only crossed over" },
-    { CTL_ROW_SNAP,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Edge snapping", NULL,
+      .help = N_("How long the pointer rests before focus follows it. 0 is "
+              "instant, which also focuses windows you only crossed over") },
+    { CTL_ROW_SNAP,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Edge snapping"), NULL,
       .key = "snap", .off = CFG(snap), .vtype = CTL_VAL_BOOL,
-      .help = "Drag a window to an edge to fill that half or quarter" },
-    { CTL_ROW_SNAP_ZONE,      CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Snap zone", NULL,
+      .help = N_("Drag a window to an edge to fill that half or quarter") },
+    { CTL_ROW_SNAP_ZONE,      CTL_CAT_WINDOWS, CTL_KIND_VALUE, N_("Snap zone"), NULL,
       .key = "snap_zone", .off = CFG(snap_zone), .vtype = CTL_VAL_INT,
       .vmin = 2, .vmax = 200, .vstep = 2, .unit = "px",
-      .help = "How close to the edge a drag arms the snap. Raise it on a "
-              "high-DPI panel, or if a fast pointer crosses the band" },
-    { CTL_ROW_REMEMBER_GEOMETRY, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Remember window size", NULL,
+      .help = N_("How close to the edge a drag arms the snap. Raise it on a "
+              "high-DPI panel, or if a fast pointer crosses the band") },
+    { CTL_ROW_REMEMBER_GEOMETRY, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Remember window size"), NULL,
       .key = "remember_geometry", .off = CFG(remember_geometry), .vtype = CTL_VAL_BOOL8,
-      .help = "Reopen each app where and how big it was when it closed" },
+      .help = N_("Reopen each app where and how big it was when it closed") },
 
-    { CTL_ROW_ALT_TAB_STYLE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab is mission control", NULL,
-      .section = "Alt+Tab",
+    { CTL_ROW_ALT_TAB_STYLE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Alt+Tab is mission control"), NULL,
+      .section = N_("Alt+Tab"),
       .key = "alt_tab_style", .off = CFG(alt_tab_overview), .vtype = CTL_VAL_BOOL,
-      .help = "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip "
-              "— and the three rows below describe that strip" },
-    { CTL_ROW_ALT_TAB_PREVIEW, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab previews", NULL,
+      .help = N_("On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip "
+              "— and the three rows below describe that strip") },
+    { CTL_ROW_ALT_TAB_PREVIEW, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Alt+Tab previews"), NULL,
       .key = "alt_tab_preview", .off = CFG(alt_tab_preview), .vtype = CTL_VAL_BOOL,
-      .help = "The thumbnail grid. Off, Alt+Tab still cycles — silently" },
-    { CTL_ROW_ALT_TAB_ALL_DESKTOPS, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab across desktops", NULL,
+      .help = N_("The thumbnail grid. Off, Alt+Tab still cycles — silently") },
+    { CTL_ROW_ALT_TAB_ALL_DESKTOPS, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Alt+Tab across desktops"), NULL,
       .key = "alt_tab_all_desktops", .off = CFG(alt_tab_all_desktops), .vtype = CTL_VAL_BOOL },
-    { CTL_ROW_ALT_TAB_MINIMIZED, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab reaches minimized", NULL,
+    { CTL_ROW_ALT_TAB_MINIMIZED, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Alt+Tab reaches minimized"), NULL,
       .key = "alt_tab_minimized", .off = CFG(alt_tab_minimized), .vtype = CTL_VAL_BOOL },
 
     /* ── Panels ──────────────────────────────────────────────
@@ -717,44 +718,44 @@ static const struct ctl_item ctl_items[] = {
      * answer the other half of — the same question the focus rows ask about
      * ordinary windows ("what does the pointer moving somewhere else do?"),
      * asked about the compositor's panels instead. */
-    { CTL_ROW_PANEL_FOLLOW,   CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Panels follow the pointer", NULL,
-      .section = "Panels",
+    { CTL_ROW_PANEL_FOLLOW,   CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Panels follow the pointer"), NULL,
+      .section = N_("Panels"),
       .key = "panel_follow_pointer", .off = CFG(panel_follow_pointer),
       .vtype = CTL_VAL_BOOL,
-      .help = "On, an open panel moves to whichever monitor the pointer is on. "
-              "Off, it stays on the monitor you opened it on" },
+      .help = N_("On, an open panel moves to whichever monitor the pointer is on. "
+              "Off, it stays on the monitor you opened it on") },
     /* One row per panel, not one for all three: velle asked for "a switch for
      * each of them in settings not all or nothing", and they genuinely differ —
      * a control panel you want gone the moment you look away and a calculator
      * you park in the corner are different answers. */
-    { CTL_ROW_CALC_CLOSE,     CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Calculator", NULL,
+    { CTL_ROW_CALC_CLOSE,     CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Calculator"), NULL,
       .key = "calc_close", .off = CFG(calc_close), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
-      .help = "Window: drag it by the header, click elsewhere freely. "
-              "Clickoff: closes when you click away. Esc always closes" },
-    { CTL_ROW_CTLPANEL_CLOSE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Control panel", NULL,
+      .help = N_("Window: drag it by the header, click elsewhere freely. "
+              "Clickoff: closes when you click away. Esc always closes") },
+    { CTL_ROW_CTLPANEL_CLOSE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Control panel"), NULL,
       .key = "ctlpanel_close", .off = CFG(ctlpanel_close), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
-      .help = "How this panel itself behaves" },
-    { CTL_ROW_TASKMGR_CLOSE,  CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Task manager", NULL,
+      .help = N_("How this panel itself behaves") },
+    { CTL_ROW_TASKMGR_CLOSE,  CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, N_("Task manager"), NULL,
       .key = "taskmgr_close", .off = CFG(taskmgr_close), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
-      .help = "How the task manager behaves" },
+      .help = N_("How the task manager behaves") },
 
     /* Desktop. Layout leads: it is the one row here that changes where your
      * windows go rather than what the shell furniture looks like. */
-    { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Layout",           NULL,
-      .section = "Desktop",
-      .help = "Of the desktop you are on — layout is per-desktop, not global" },
-    { CTL_ROW_OVERVIEW,      CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Mission control",  "overview",
-      .help = "Every window on this desktop at once, and the desktops themselves" },
-    { CTL_ROW_DESKTOP_ICONS, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop icons", NULL,
+    { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Layout"),           NULL,
+      .section = N_("Desktop"),
+      .help = N_("Of the desktop you are on — layout is per-desktop, not global") },
+    { CTL_ROW_OVERVIEW,      CTL_CAT_DESKTOP, CTL_KIND_PANEL,  N_("Mission control"),  "overview",
+      .help = N_("Every window on this desktop at once, and the desktops themselves") },
+    { CTL_ROW_DESKTOP_ICONS, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Desktop icons"), NULL,
       .key = "desktop_icons", .off = CFG(desktop_icons), .vtype = CTL_VAL_BOOL8,
-      .apply = CTL_APPLY_DESKICONS, .help = "Draw ~/Desktop on the wallpaper" },
-    { CTL_ROW_DESKTOP_ICON_ARRANGE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Icon order", NULL,
+      .apply = CTL_APPLY_DESKICONS, .help = N_("Draw ~/Desktop on the wallpaper") },
+    { CTL_ROW_DESKTOP_ICON_ARRANGE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Icon order"), NULL,
       .key = "desktop_icon_arrange", .off = CFG(desktop_icon_arrange), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_arrange), .apply = CTL_APPLY_DESKICONS },
-    { CTL_ROW_WIDGETS,       CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Desktop widgets",  "widgets" },
+    { CTL_ROW_WIDGETS,       CTL_CAT_DESKTOP, CTL_KIND_PANEL,  N_("Desktop widgets"),  "widgets" },
     /* The widgets are quickshell's and read this out of settings.state
      * themselves (WidgetFrame.qml), so the compositor has nothing to apply —
      * like Bar edge, it moves while you are looking at it.
@@ -765,52 +766,52 @@ static const struct ctl_item ctl_items[] = {
      * setting OF the widgets, and the place to look for a widget setting is
      * beside Desktop widgets. The link to the dock is what the help line is
      * for, and it survives the move. */
-    { CTL_ROW_WIDGET_GLASS,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Widget glass", NULL,
+    { CTL_ROW_WIDGET_GLASS,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Widget glass"), NULL,
       .key = "widget_glass", .off = CFG(widget_glass), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_widget_glass), .apply = CTL_APPLY_NONE,
-      .help = "Desktop widgets take the dock's glass instead of the HUD panel" },
+      .help = N_("Desktop widgets take the dock's glass instead of the HUD panel") },
 
-    { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL,
-      .section = "Dock" },
-    { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
+    { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Dock"),             NULL,
+      .section = N_("Dock") },
+    { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Dock auto-hide"),   NULL      },
     /* Bespoke like the row above it (.key/.off left zeroed): each of these has
      * to persist to dock.state and wake the mirrors, which the table-driven path
      * writes to settings.state and cannot do. See ctlpanel_activate. */
-    { CTL_ROW_DOCK_ON_TOP,   CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock above windows", NULL,
-      .help = "Off, windows cover a pinned dock. Auto-hide always arrives on "
-              "top — it is summoned over whatever is there" },
-    { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
+    { CTL_ROW_DOCK_ON_TOP,   CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Dock above windows"), NULL,
+      .help = N_("Off, windows cover a pinned dock. Auto-hide always arrives on "
+              "top — it is summoned over whatever is there") },
+    { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock edge"), NULL,
       .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
-    { CTL_ROW_DOCK_HEIGHT,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock size", NULL,
+    { CTL_ROW_DOCK_HEIGHT,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock size"), NULL,
       .key = "dock_height", .off = CFG(dock_height), .vtype = CTL_VAL_INT,
       .vmin = 32, .vmax = 200, .vstep = 4, .unit = "px", .apply = CTL_APPLY_DOCK,
       /* Worth spelling out, because it did NOT until now: the number moved the
        * slab and left the icons at 48, so the row read as broken past about
        * 80px — a wall of glass with the same small pictures adrift in it. */
-      .help = "The slab AND the icons in it — the icons are this minus 16" },
-    { CTL_ROW_DOCK_HOVER_MARGIN, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock reveal strip", NULL,
+      .help = N_("The slab AND the icons in it — the icons are this minus 16") },
+    { CTL_ROW_DOCK_HOVER_MARGIN, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock reveal strip"), NULL,
       .key = "dock_hover_margin", .off = CFG(dock_hover_margin), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DOCK,
-      .help = "How close to the edge the pointer must get to bring it back" },
-    { CTL_ROW_DOCK_MAGNIFY,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock magnify",     NULL,
-      .help = "The icons under the pointer swell and the row slides apart to "
-              "make room" },
+      .help = N_("How close to the edge the pointer must get to bring it back") },
+    { CTL_ROW_DOCK_MAGNIFY,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Dock magnify"),     NULL,
+      .help = N_("The icons under the pointer swell and the row slides apart to "
+              "make room") },
     /* Table-driven where the switch above it is bespoke, and the split is not an
      * inconsistency: the SWITCH has to reach dock.state (where the dock's own
      * on/off settings live, beside the edge and the pins), and the AMOUNT is a
      * number like Dock size and Dock corners, which settings.state already
      * holds. One value, one home — a copy in the other file is a value that is
      * quietly discarded at the next load. */
-    { CTL_ROW_DOCK_MAGNIFY_SCALE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock magnify amount", NULL,
+    { CTL_ROW_DOCK_MAGNIFY_SCALE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock magnify amount"), NULL,
       .key = "dock_magnify_scale", .off = CFG(dock_magnify_scale),
       .vtype = CTL_VAL_FLOAT,
       .vmin = 1.00f, .vmax = 2.50f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
       /* Worth saying that the bar gets taller: the canvas grows its transparent
        * headroom to match (dock_headroom), so a big number is not free — it is
        * a taller strip of screen the dock can be summoned into. */
-      .help = "How big the icon under the pointer gets. The dock makes room for "
-              "it, so a big swell is a taller dock" },
+      .help = N_("How big the icon under the pointer gets. The dock makes room for "
+              "it, so a big swell is a taller dock") },
 
     /* ── Dock look ────────────────────────────────────────────
      *
@@ -818,12 +819,12 @@ static const struct ctl_item ctl_items[] = {
      * you would reach for them, and the same order the Bar group uses for the
      * same three questions: what kind of surface it is, then how much of the
      * wallpaper it lets through, then its shape. */
-    { CTL_ROW_DOCK_STYLE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock style", NULL,
-      .section = "Dock look",
+    { CTL_ROW_DOCK_STYLE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock style"), NULL,
+      .section = N_("Dock look"),
       .key = "dock_style", .off = CFG(dock_style), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_dock_style), .apply = CTL_APPLY_DOCK,
-      .help = "Glass frosts the wallpaper behind the bar. Auto follows the theme" },
-    { CTL_ROW_DOCK_OPACITY,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock opacity", NULL,
+      .help = N_("Glass frosts the wallpaper behind the bar. Auto follows the theme") },
+    { CTL_ROW_DOCK_OPACITY,  CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock opacity"), NULL,
       .key = "dock_opacity", .off = CFG(dock_opacity), .vtype = CTL_VAL_FLOAT,
       /* `Auto` is the theme's own answer — frosted on the two Prisms, the
        * 0.72 slab elsewhere — and it is the DEFAULT, so a desktop that has
@@ -837,20 +838,20 @@ static const struct ctl_item ctl_items[] = {
        * here was one of five separate floors on the same setting — see the
        * dock_opacity note in config.c. */
       .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .apply = CTL_APPLY_DOCK,
-      .help = "0.00 leaves the icons alone on the wallpaper; 1.00 hides it "
-              "completely" },
-    { CTL_ROW_DOCK_RADIUS,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock corners", NULL,
+      .help = N_("0.00 leaves the icons alone on the wallpaper; 1.00 hides it "
+              "completely") },
+    { CTL_ROW_DOCK_RADIUS,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Dock corners"), NULL,
       .key = "dock_radius", .off = CFG(dock_radius), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 64, .vstep = 2, .unit = "px", .apply = CTL_APPLY_DOCK,
       /* The clamp is worth saying out loud: past half the dock's thickness the
        * number stops doing anything, and a slider that visibly moves while the
        * screen does not reads as broken. */
-      .help = "Its own, not the window radius. Caps at half the dock's size" },
+      .help = N_("Its own, not the window radius. Caps at half the dock's size") },
 
-    { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show all apps button", NULL,
-      .section = "Dock buttons",
-      .help = "A grid of dots at the end of the dock. Always opens the "
-              "application overlay" },
+    { CTL_ROW_DOCK_APPS,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Show all apps button"), NULL,
+      .section = N_("Dock buttons"),
+      .help = N_("A grid of dots at the end of the dock. Always opens the "
+              "application overlay") },
     /*
      * A cell position, and there are three of them: this one, the power
      * button's below, and the clock's over in the Clock section. Each sits
@@ -866,15 +867,15 @@ static const struct ctl_item ctl_items[] = {
      * cell in a gap none of these three words names. The row says so ("after 3
      * icons") rather than rounding — see dock_slot_label().
      */
-    { CTL_ROW_DOCK_APPS_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Apps button position", NULL,
-      .help = "Where the all-apps button sits along the run. Dragging the "
-              "button on the dock sets the same thing" },
-    { CTL_ROW_DOCK_POWER,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Show power button", NULL,
-      .help = "A power mark past the apps button. Clicking it opens a menu — "
-              "Lock, Log Out, Suspend, Restart, Shut Down" },
-    { CTL_ROW_DOCK_POWER_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Power button position", NULL,
-      .help = "Where the power button sits along the run. Dragging the "
-              "button on the dock sets the same thing" },
+    { CTL_ROW_DOCK_APPS_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Apps button position"), NULL,
+      .help = N_("Where the all-apps button sits along the run. Dragging the "
+              "button on the dock sets the same thing") },
+    { CTL_ROW_DOCK_POWER,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Show power button"), NULL,
+      .help = N_("A power mark past the apps button. Clicking it opens a menu — "
+              "Lock, Log Out, Suspend, Restart, Shut Down") },
+    { CTL_ROW_DOCK_POWER_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Power button position"), NULL,
+      .help = N_("Where the power button sits along the run. Dragging the "
+              "button on the dock sets the same thing") },
 
     /* ── Clock ────────────────────────────────────────────────
      *
@@ -893,29 +894,29 @@ static const struct ctl_item ctl_items[] = {
      * ⚠ This row is CTL_CAT_DESKTOP now, not CTL_CAT_DISPLAY. Nothing else
      * moved category with it — the row is unchanged otherwise, it opens the
      * same `clock` panel, and Display keeps the screens and the night light. */
-    { CTL_ROW_CLOCK,      CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Date & time",      "clock",
-      .section = "Clock",
-      .help = "12/24-hour and the date format, for the dock clock and the widget" },
-    { CTL_ROW_DOCK_CLOCK,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock clock",       NULL,
-      .help = "Time and date in a cell of its own — drag the cell to move it "
-              "anywhere in the row. 12/24-hour follows Clock & Time" },
-    { CTL_ROW_DOCK_CLOCK_ANALOG, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Analog dock clock", NULL,
-      .help = "Draw the dock clock as a dial. The one clock that fits a "
+    { CTL_ROW_CLOCK,      CTL_CAT_DESKTOP, CTL_KIND_PANEL,  N_("Date & time"),      "clock",
+      .section = N_("Clock"),
+      .help = N_("12/24-hour and the date format, for the dock clock and the widget") },
+    { CTL_ROW_DOCK_CLOCK,    CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Dock clock"),       NULL,
+      .help = N_("Time and date in a cell of its own — drag the cell to move it "
+              "anywhere in the row. 12/24-hour follows Clock & Time") },
+    { CTL_ROW_DOCK_CLOCK_ANALOG, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Analog dock clock"), NULL,
+      .help = N_("Draw the dock clock as a dial. The one clock that fits a "
               "dock on the left or right edge — a column cannot widen for a "
-              "time string" },
+              "time string") },
     /* The last of the three cell positions, and the one the other two are
      * documented on — see CTL_ROW_DOCK_APPS_POS in Dock buttons. It is here
      * rather than beside them because it is a CLOCK row: somebody moving the
      * clock is in this group, not in the button group. */
-    { CTL_ROW_DOCK_CLOCK_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Clock position", NULL,
-      .help = "Where the dock clock sits along the run. Dragging the clock "
-              "on the dock sets the same thing" },
-    { CTL_ROW_CLOCK_FACE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Analog clock face", NULL,
+    { CTL_ROW_DOCK_CLOCK_POS, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Clock position"), NULL,
+      .help = N_("Where the dock clock sits along the run. Dragging the clock "
+              "on the dock sets the same thing") },
+    { CTL_ROW_CLOCK_FACE,    CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Analog clock face"), NULL,
       .key = "widget_clock_face", .off = CFG(widget_clock_face),
       .vtype = CTL_VAL_ENUM, NAMES(ctl_names_clock_face),
       .apply = CTL_APPLY_NONE,
-      .help = "Which dial the analog clock WIDGET draws — the desktop one, "
-              "from Widgets. The dock's own analog clock has one design" },
+      .help = N_("Which dial the analog clock WIDGET draws — the desktop one, "
+              "from Widgets. The dock's own analog clock has one design") },
 
     /* ── Start menu ───────────────────────────────────────────
      *
@@ -930,14 +931,14 @@ static const struct ctl_item ctl_items[] = {
      * CTL_APPLY_NONE because nothing is drawn from this — synui_start_menu_open()
      * reads it at the moment a key is pressed, which is also what makes the
      * change take effect with no reload. */
-    { CTL_ROW_START_MENU_STYLE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Start menu", NULL,
-      .section = "Start menu",
+    { CTL_ROW_START_MENU_STYLE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Start menu"), NULL,
+      .section = N_("Start menu"),
       .key = "start_menu_style", .off = CFG(start_menu_style),
       .vtype = CTL_VAL_ENUM, NAMES(ctl_names_start_menu),
       .apply = CTL_APPLY_NONE,
-      .help = "What the Super tap and Super+Escape open. The keyboard shortcut "
-              "list follows this row; the dock's apps button does not" },
-    { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL },
+      .help = N_("What the Super tap and Super+Escape open. The keyboard shortcut "
+              "list follows this row; the dock's apps button does not") },
+    { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Start button"),     NULL },
     /* There was a "Super+Space opens" row here (launcher ⇄ command bar). It was
      * a SECOND way to declare a keybinding, and the Shortcuts category's rebind
      * (F2) is the first — so the two fought: a chord moved in the palette was
@@ -951,19 +952,19 @@ static const struct ctl_item ctl_items[] = {
      * has to reach settings.state, which is the file the bar watches, and a
      * foreign bar still needs the optional command pair run.
      * See CTL_ROW_BAR in ctlpanel_activate. */
-    { CTL_ROW_BAR,           CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar",              NULL,
-      .section = "Bar",
-      .help = "The top bar, and only it — the widgets, notes and start menu "
-              "stay. A waybar desktop needs bar_stop_cmd/bar_start_cmd" },
+    { CTL_ROW_BAR,           CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Bar"),              NULL,
+      .section = N_("Bar"),
+      .help = N_("The top bar, and only it — the widgets, notes and start menu "
+              "stay. A waybar desktop needs bar_stop_cmd/bar_start_cmd") },
     /* The bar is a SEPARATE PROCESS, and this is the one row on the panel whose
      * value the compositor does not act on — synui-bar reads it at startup.
      * CTL_APPLY_NONE is therefore literally right, and the help line has to say
      * so, or the row reads as broken: you flip it, and nothing happens until the
      * bar is restarted. */
-    { CTL_ROW_BAR_SHELL,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar shell",        NULL,
+    { CTL_ROW_BAR_SHELL,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Bar shell"),        NULL,
       .key = "bar_shell", .off = CFG(bar_shell), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_shell), .apply = CTL_APPLY_NONE,
-      .help = "Antiquity is the diinki port; takes effect at the next login" },
+      .help = N_("Antiquity is the diinki port; takes effect at the next login") },
     /* The bar's answer to Dock edge, and the one row on this panel whose
      * value neither the compositor NOR a restart applies: the bar watches
      * settings.state itself, so it moves while you are looking at it. Two
@@ -975,18 +976,18 @@ static const struct ctl_item ctl_items[] = {
      * strip that is. Without this the ink stays picked from the top of the
      * screen while the bar sits at the bottom — a wrong answer that only shows
      * up on the one theme that draws a clear bar, and only on some wallpapers. */
-    { CTL_ROW_BAR_EDGE,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar edge",         NULL,
+    { CTL_ROW_BAR_EDGE,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Bar edge"),         NULL,
       .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_WALLPAPER,
-      .help = "Which edge the bar sits on. The bar picks this up live" },
+      .help = N_("Which edge the bar sits on. The bar picks this up live") },
     /* The bar's half of Dock auto-hide, and the one row on this panel that
      * neither reads nor writes a setting the compositor owns. See
      * ctl_bar_autohide_label() for why it reads bar.json and asks the bar to
      * write it rather than writing the file itself. */
-    { CTL_ROW_BAR_AUTOHIDE,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar auto-hide",    NULL,
+    { CTL_ROW_BAR_AUTOHIDE,  CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Bar auto-hide"),    NULL,
       .apply = CTL_APPLY_NONE,
-      .help = "Every monitor's bar at once. Per-monitor lives on the bar's own "
-              "right-click menu, and \"mixed\" means they disagree" },
+      .help = N_("Every monitor's bar at once. Per-monitor lives on the bar's own "
+              "right-click menu, and \"mixed\" means they disagree") },
     /* The bar's half of Dock opacity, in the same place in the same order — what
      * kind of surface, then how much of the wallpaper it lets through, then its
      * shape. Watched live by the bar like Bar edge, hence APPLY_NONE.
@@ -1001,37 +1002,37 @@ static const struct ctl_item ctl_items[] = {
      * mode the help line has to name: where the wallpaper offers no legible ink
      * the bar keeps its background, so the row can be set to 0 and the bar can
      * still, correctly, look solid. */
-    { CTL_ROW_BAR_OPACITY,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Bar opacity", NULL,
+    { CTL_ROW_BAR_OPACITY,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Bar opacity"), NULL,
       .key = "bar_opacity", .off = CFG(bar_opacity), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.00f, .vmax = 1.00f, .vstep = 0.05f, .vauto = "Follow the theme",
       .apply = CTL_APPLY_NONE,
-      .help = "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it "
-              "completely" },
+      .help = N_("0.00 is a clear bar, inked off the wallpaper; 1.00 hides it "
+              "completely") },
     /* Watched live by the bar like Bar edge above, and like it applied by
      * neither the compositor nor a restart. The help line has to say the row
      * does nothing on its own: it is the bar's share of Window effects ▸ Corner
      * radius, so on a desktop with the corners off every option here looks
      * identical, and a row that appears to be ignored is worse than one that
      * says what it is waiting for. */
-    { CTL_ROW_BAR_SHAPE,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar shape",        NULL,
+    { CTL_ROW_BAR_SHAPE,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Bar shape"),        NULL,
       .key = "bar_shape", .off = CFG(bar_shape), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_shape), .apply = CTL_APPLY_NONE,
-      .help = "Shape when corners are on; needs Window effects \xe2\x96\xb8 Corner radius" },
+      .help = N_("Shape when corners are on; needs Window effects \xe2\x96\xb8 Corner radius") },
 
-    { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
-      .section = "Login",
+    { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Welcome menu at login"), NULL,
+      .section = N_("Login"),
       .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
-    { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,
+    { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Neural overlay at login"), NULL,
       .key = "start_overlay", .off = CFG(start_overlay), .vtype = CTL_VAL_BOOL },
 
-    { CTL_ROW_CAT_START,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop cat at login", NULL,
-      .section = "Desktop cat",
+    { CTL_ROW_CAT_START,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, N_("Desktop cat at login"), NULL,
+      .section = N_("Desktop cat"),
       .key = "cat", .off = CFG(cat_start), .vtype = CTL_VAL_BOOL,
-      .help = "Super+Shift+C toggles it any time; this is only the login state" },
-    { CTL_ROW_CAT_BREED,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Desktop cat breed", NULL,
+      .help = N_("Super+Shift+C toggles it any time; this is only the login state") },
+    { CTL_ROW_CAT_BREED,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, N_("Desktop cat breed"), NULL,
       .key = "cat_breed", .off = CFG(cat_breed), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_cat_breed), .apply = CTL_APPLY_NONE,
-      .help = "Coat and markings only; every breed walks the same" },
+      .help = N_("Coat and markings only; every breed walks the same") },
 
     /* ── Input ───────────────────────────────────────────────
      *
@@ -1039,12 +1040,12 @@ static const struct ctl_item ctl_items[] = {
      * click and pointer acceleration were synuirc-only, which meant a laptop
      * with tapping off had no way to turn it on without a text editor and a
      * logout. */
-    { CTL_ROW_REPEAT_RATE,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Key repeat rate", NULL,
-      .section = "Keyboard",
+    { CTL_ROW_REPEAT_RATE,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Key repeat rate"), NULL,
+      .section = N_("Keyboard"),
       .key = "repeat_rate", .off = CFG(repeat_rate),
       .vtype = CTL_VAL_INT, .vmin = 1, .vmax = 100, .vstep = 1, .unit = "/s",
       .apply = CTL_APPLY_INPUT },
-    { CTL_ROW_REPEAT_DELAY, CTL_CAT_INPUT, CTL_KIND_VALUE, "Key repeat delay", NULL,
+    { CTL_ROW_REPEAT_DELAY, CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Key repeat delay"), NULL,
       .key = "repeat_delay", .off = CFG(repeat_delay), .vtype = CTL_VAL_INT,
       .vmin = 100, .vmax = 2000, .vstep = 25, .unit = "ms", .apply = CTL_APPLY_INPUT },
     /* The palette, which is also the rebind editor — the reason there is a row
@@ -1052,55 +1053,55 @@ static const struct ctl_item ctl_items[] = {
      * category below), but nothing on this panel led to the place where a
      * shortcut can be CHANGED, and Super+/ is only discoverable once you have
      * read the list it opens. */
-    { CTL_ROW_KEYBINDS,     CTL_CAT_INPUT, CTL_KIND_PANEL, "Keyboard shortcuts", "keys",
-      .help = "Searchable. F2 moves a shortcut to another key, F3 onto the tap" },
-    { CTL_ROW_NUMLOCK,      CTL_CAT_INPUT, CTL_KIND_TOGGLE, "NumLock on at login", NULL,
+    { CTL_ROW_KEYBINDS,     CTL_CAT_INPUT, CTL_KIND_PANEL, N_("Keyboard shortcuts"), "keys",
+      .help = N_("Searchable. F2 moves a shortcut to another key, F3 onto the tap") },
+    { CTL_ROW_NUMLOCK,      CTL_CAT_INPUT, CTL_KIND_TOGGLE, N_("NumLock on at login"), NULL,
       .key = "numlock", .off = CFG(numlock), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_INPUT,
-      .help = "A fresh xkb state has it off, which leaves the numpad on arrows" },
+      .help = N_("A fresh xkb state has it off, which leaves the numpad on arrows") },
 
-    { CTL_ROW_TAP_TO_CLICK, CTL_CAT_INPUT, CTL_KIND_VALUE, "Tap to click", NULL,
-      .section = "Pointer",
+    { CTL_ROW_TAP_TO_CLICK, CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Tap to click"), NULL,
+      .section = N_("Pointer"),
       .key = "tap", .off = CFG(tap_to_click),
       .vtype = CTL_VAL_TRI, .apply = CTL_APPLY_INPUT },
-    { CTL_ROW_NATURAL_SCROLL, CTL_CAT_INPUT, CTL_KIND_VALUE, "Natural scrolling", NULL,
+    { CTL_ROW_NATURAL_SCROLL, CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Natural scrolling"), NULL,
       .key = "natural_scroll", .off = CFG(natural_scroll), .vtype = CTL_VAL_TRI,
       .apply = CTL_APPLY_INPUT },
-    { CTL_ROW_LEFT_HANDED,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Left-handed buttons", NULL,
+    { CTL_ROW_LEFT_HANDED,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Left-handed buttons"), NULL,
       .key = "left_handed", .off = CFG(left_handed), .vtype = CTL_VAL_TRI,
       .apply = CTL_APPLY_INPUT },
-    { CTL_ROW_ACCEL_SPEED,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer speed", NULL,
+    { CTL_ROW_ACCEL_SPEED,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Pointer speed"), NULL,
       .key = "accel_speed", .off = CFG(accel_speed), .vtype = CTL_VAL_FLOAT,
       .vmin = -1.0f, .vmax = 1.0f, .vstep = 0.1f, .apply = CTL_APPLY_INPUT },
     /* The curve, which is the row somebody wanting "acceleration on" is
      * actually after — Pointer speed above scales whichever curve the device is
      * already on and can neither turn acceleration on nor off. */
-    { CTL_ROW_ACCEL_PROFILE, CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer acceleration", NULL,
+    { CTL_ROW_ACCEL_PROFILE, CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Pointer acceleration"), NULL,
       .key = "accel_profile", .off = CFG(accel_profile), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_accel_profile), .apply = CTL_APPLY_INPUT,
-      .help = "Adaptive moves further the faster you move; Flat is 1:1. "
-              "Default is libinput's own pick for the device" },
-    { CTL_ROW_POINTER_SMOOTHING, CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer smoothing", NULL,
+      .help = N_("Adaptive moves further the faster you move; Flat is 1:1. "
+              "Default is libinput's own pick for the device") },
+    { CTL_ROW_POINTER_SMOOTHING, CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Pointer smoothing"), NULL,
       .key = "pointer_smoothing", .off = CFG(pointer_smoothing), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 10, .vstep = 1, .apply = CTL_APPLY_INPUT,
-      .help = "Steadies a shaky or noisy pointer by averaging its path. "
+      .help = N_("Steadies a shaky or noisy pointer by averaging its path. "
               "Costs a little lag; 0 is off. Games reading raw motion are "
-              "unaffected" },
-    { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Cursor size", NULL,
+              "unaffected") },
+    { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Cursor size"), NULL,
       .key = "cursor_size", .off = CFG(cursor_size), .vtype = CTL_VAL_INT,
       .vmin = 8, .vmax = 256, .vstep = 4, .unit = "px", .apply = CTL_APPLY_CURSOR },
 
     /* Display */
-    { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Display settings", "displays",
-      .section = "Screens" },
+    { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  N_("Display settings"), "displays",
+      .section = N_("Screens") },
     /* Handled by id in ctlpanel_activate()/ctlpanel_adjust_choice() rather than
      * by the table, because setting it is not a field write: dispcfg has to
      * re-flow the layout, change modes and move windows off a screen it is
      * about to switch off. CHOICE so Left/Right step it and the row shows which
      * of the three is on — the same shape as the AI-model row, without the
      * settle, since none of these costs anything to enter and leave. */
-    { CTL_ROW_DISPLAY_MODE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE, "Screens", "displays",
-      .help = "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D" },
+    { CTL_ROW_DISPLAY_MODE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE, N_("Screens"), "displays",
+      .help = N_("Extend, Duplicate, or built-in off (closed lid). Also m in Super+D") },
     /* ⚠ THE ONE THAT MAKES EVERYTHING BIGGER, and it is not the Text scale row
      * under Appearance. That one sizes text inside the suite's own QML windows
      * and can reach neither a panel synui draws in cairo nor Firefox; this
@@ -1110,9 +1111,9 @@ static const struct ctl_item ctl_items[] = {
      * Handled by id like the row above it — setting it re-flows the layout and
      * touches every output, which is not a field write. */
     { CTL_ROW_DISPLAY_SCALE, CTL_CAT_DISPLAY, CTL_KIND_CHOICE,
-      "Scale everything", "displays",
-      .help = "Every screen, every app, the cursor. Super+Ctrl+= / - , "
-              "Super+Ctrl+0 resets" },
+      N_("Scale everything"), "displays",
+      .help = N_("Every screen, every app, the cursor. Super+Ctrl+= / - , "
+              "Super+Ctrl+0 resets") },
     /* Where a MONITOR is configured, as opposed to arranged. The Displays panel
      * above owns the arrangement, scale and the mode synui drives; syn-settings'
      * display pane reads the connectors' KERNEL state beside it — EDID, the
@@ -1120,16 +1121,16 @@ static const struct ctl_item ctl_items[] = {
      * compositor panel showing its own view of the world cannot tell you when
      * the two disagree, and that disagreement is the whole class of "the screen
      * is there and nothing comes out of it". */
-    { CTL_ROW_MONITORS, CTL_CAT_DISPLAY, CTL_KIND_LAUNCH, "Monitor settings", "settings display",
-      .help = "Connectors, EDID and the modes the hardware offers (syn-settings)" },
+    { CTL_ROW_MONITORS, CTL_CAT_DISPLAY, CTL_KIND_LAUNCH, N_("Monitor settings"), "settings display",
+      .help = N_("Connectors, EDID and the modes the hardware offers (syn-settings)") },
 
-    { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL,
-      .section = "Night light" },
-    { CTL_ROW_NIGHTLIGHT_TEMP, CTL_CAT_DISPLAY, CTL_KIND_VALUE, "Colour temperature", NULL,
+    { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, N_("Night light"),      NULL,
+      .section = N_("Night light") },
+    { CTL_ROW_NIGHTLIGHT_TEMP, CTL_CAT_DISPLAY, CTL_KIND_VALUE, N_("Colour temperature"), NULL,
       .key = "night_light_temp", .off = CFG(night_light_temp), .vtype = CTL_VAL_INT,
       .vmin = 1000, .vmax = 6500, .vstep = 100, .unit = "K",
       .apply = CTL_APPLY_NIGHTLIGHT,
-      .help = "6500K is daylight — the identity ramp. Lower is warmer" },
+      .help = N_("6500K is daylight — the identity ramp. Lower is warmer") },
 
     /* Sound. Recording audio lives here rather than under Display: what the
      * row decides is which SOUND goes into the file — the screen it captures is
@@ -1137,24 +1138,24 @@ static const struct ctl_item ctl_items[] = {
     /* Do Not Disturb sits under Sound, not Desktop, because this is the
      * category somebody opens when they want the machine to stop making noise.
      * It is FIRST in it for the same reason. */
-    { CTL_ROW_DND,          CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Do Not Disturb", NULL,
-      .section = "Notifications",
-      .help = "Super+Shift+M anywhere. Hides toasts and mutes the chime; "
-              "critical alerts still come through" },
-    { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  "Event sounds", "sounds" },
+    { CTL_ROW_DND,          CTL_CAT_SOUND, CTL_KIND_TOGGLE, N_("Do Not Disturb"), NULL,
+      .section = N_("Notifications"),
+      .help = N_("Super+Shift+M anywhere. Hides toasts and mutes the chime; "
+              "critical alerts still come through") },
+    { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  N_("Event sounds"), "sounds" },
 
     /* Tri-state, and `auto` is the useful position rather than a hedge: it
      * resolves to on where following a screen is what you want (a laptop) and
      * off where it is a nuisance (a desk whose monitors are always plugged in
      * and whose HDMI pins are live all day). CTL_APPLY_NONE — this is read
      * when a screen is plugged in, so the store IS the change. */
-    { CTL_ROW_HDMI_AUDIO,   CTL_CAT_SOUND, CTL_KIND_VALUE, "Screen audio", NULL,
-      .section = "Audio",
+    { CTL_ROW_HDMI_AUDIO,   CTL_CAT_SOUND, CTL_KIND_VALUE, N_("Screen audio"), NULL,
+      .section = N_("Audio"),
       .key = "hdmi_audio", .off = CFG(hdmi_audio), .vtype = CTL_VAL_TRI,
       .apply = CTL_APPLY_NONE,
-      .help = "Move sound to a TV or monitor when you plug it in. Auto = laptops" },
-    { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
-      .help = "10-band system equalizer. Adds an output device while it is on" },
+      .help = N_("Move sound to a TV or monitor when you plug it in. Auto = laptops") },
+    { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  N_("Equalizer"), "equalizer",
+      .help = N_("10-band system equalizer. Adds an output device while it is on") },
 
     /* ── Speech ────────────────────────────────────────────────────────
      *
@@ -1169,47 +1170,47 @@ static const struct ctl_item ctl_items[] = {
      * ⛔ THE SECOND ROW OPENS A MICROPHONE. It says so in its help line, the
      * bar shows a microphone for as long as it is on, and it is off until
      * somebody presses it. */
-    { CTL_ROW_SCREEN_READER, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Screen reader", NULL,
-      .vtype = CTL_VAL_BOOL, .external = true, .section = "Speech",
-      .help = "Speak the focused window as focus moves. Super+Shift+U toggles it" },
-    { CTL_ROW_WAKE_WORD,    CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Answer to its name", NULL,
+    { CTL_ROW_SCREEN_READER, CTL_CAT_SOUND, CTL_KIND_TOGGLE, N_("Screen reader"), NULL,
+      .vtype = CTL_VAL_BOOL, .external = true, .section = N_("Speech"),
+      .help = N_("Speak the focused window as focus moves. Super+Shift+U toggles it") },
+    { CTL_ROW_WAKE_WORD,    CTL_CAT_SOUND, CTL_KIND_TOGGLE, N_("Answer to its name"), NULL,
       .vtype = CTL_VAL_BOOL, .external = true,
-      .help = "Listen for \"Synapse\" and answer out loud. Holds the microphone open" },
+      .help = N_("Listen for \"Synapse\" and answer out loud. Holds the microphone open") },
 
-    { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL,
-      .section = "Recording" },
-    { CTL_ROW_RECORD_EDIT,  CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record for editing", NULL,
-      .help = "DNxHR .mov that video editors read directly. About 1.1 GB/min" },
+    { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, N_("Record audio"), NULL,
+      .section = N_("Recording") },
+    { CTL_ROW_RECORD_EDIT,  CTL_CAT_SOUND, CTL_KIND_TOGGLE, N_("Record for editing"), NULL,
+      .help = N_("DNxHR .mov that video editors read directly. About 1.1 GB/min") },
 
     /* Network. Two of the three hand off to something synui does not own —
      * nmtui in a terminal, cups in a browser — so they close the panel rather
      * than arming a return to it. */
-    { CTL_ROW_NETWORK,   CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Network / Wi-Fi", "network",
-      .section = "Network" },
-    { CTL_ROW_BLUETOOTH, CTL_CAT_NETWORK, CTL_KIND_PANEL,  "Bluetooth",       "bluetooth" },
+    { CTL_ROW_NETWORK,   CTL_CAT_NETWORK, CTL_KIND_LAUNCH, N_("Network / Wi-Fi"), "network",
+      .section = N_("Network") },
+    { CTL_ROW_BLUETOOTH, CTL_CAT_NETWORK, CTL_KIND_PANEL,  N_("Bluetooth"),       "bluetooth" },
 
-    { CTL_ROW_PRINTERS,  CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Printers",        "printers",
-      .section = "Printers" },
+    { CTL_ROW_PRINTERS,  CTL_CAT_NETWORK, CTL_KIND_LAUNCH, N_("Printers"),        "printers",
+      .section = N_("Printers") },
     /* The row that comes BEFORE opening an admin page. CUPS's web UI can do
      * everything and starts by asking which discovery protocol to use and which
      * driver to install — two questions whose answer, for any network printer
      * sold this decade, is "ask the printer". This finds them and sets them up
      * driverless, and reports by toast because the panel is gone by then. */
-    { CTL_ROW_PRINTERS_SCAN, CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Find printers",
+    { CTL_ROW_PRINTERS_SCAN, CTL_CAT_NETWORK, CTL_KIND_LAUNCH, N_("Find printers"),
       "printers_scan",
-      .help = "Add every network printer that is not set up yet, driverless" },
+      .help = N_("Add every network printer that is not set up yet, driverless") },
 
     /* Power */
-    { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power",
-      .section = "Power",
-      .help = "Idle timeouts for dim, blank, lock and suspend" },
-    { CTL_ROW_SAVER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Screensaver",  "saver",
-      .help = "What the screen shows when idle, and how the lock screen looks" },
-    { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, "Lock screen",  "lock"  },
+    { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  N_("Power saving"), "power",
+      .section = N_("Power"),
+      .help = N_("Idle timeouts for dim, blank, lock and suspend") },
+    { CTL_ROW_SAVER, CTL_CAT_POWER, CTL_KIND_PANEL,  N_("Screensaver"),  "saver",
+      .help = N_("What the screen shows when idle, and how the lock screen looks") },
+    { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, N_("Lock screen"),  "lock"  },
     /* No .apply: nothing to re-run, because the reader is started by the NEXT
      * lock. Turning it off while a lock screen is up is not a case that exists —
      * the panel is behind the lock. */
-    { CTL_ROW_LOCK_FPRINT, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Unlock with fingerprint", NULL,
+    { CTL_ROW_LOCK_FPRINT, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Unlock with fingerprint"), NULL,
       .key = "lock_fingerprint", .off = CFG(lock_fingerprint), .vtype = CTL_VAL_BOOL,
       /* Names the command rather than the requirement. "Needs an enrolled
        * finger" left the one thing you have to DO off the only screen that
@@ -1218,7 +1219,7 @@ static const struct ctl_item ctl_items[] = {
        * ~/.config/synui/synuirc never gains it on upgrade. The footer draws
        * with cairo_show_text and does not clip, so this stays inside the
        * ~70 chars the other help lines hold to. */
-      .help = "Install fprintd, run fprintd-enroll; your password always works too" },
+      .help = N_("Install fprintd, run fprintd-enroll; your password always works too") },
 
     /* Enter cycles auto → always on → always off → auto, through game_toggle()
      * so this row and Super+G are the same control. The VALUE has to name the
@@ -1226,60 +1227,60 @@ static const struct ctl_item ctl_items[] = {
      * "auto, nothing running" and "forced off" both drew as plain `off`, so
      * two of the three positions were indistinguishable and pressing Enter
      * looked like it did nothing. */
-    { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL,
-      .section = "Game mode",
-      .help = "Enter cycles auto / always on / always off — same as Super+G" },
-    { CTL_ROW_GAME_MODE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Detect games", NULL,
+    { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Game mode"),    NULL,
+      .section = N_("Game mode"),
+      .help = N_("Enter cycles auto / always on / always off — same as Super+G") },
+    { CTL_ROW_GAME_MODE, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Detect games"), NULL,
       .key = "game_mode", .off = CFG(game_mode), .vtype = CTL_VAL_BOOL,
-      .help = "Treat a fullscreen game window as a game unless it is excluded" },
-    { CTL_ROW_GAME_OUTPUT, CTL_CAT_POWER, CTL_KIND_VALUE, "Open games on", NULL,
+      .help = N_("Treat a fullscreen game window as a game unless it is excluded") },
+    { CTL_ROW_GAME_OUTPUT, CTL_CAT_POWER, CTL_KIND_VALUE, N_("Open games on"), NULL,
       .key = "game_output", .off = CFG(game_output), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_game_output), .apply = CTL_APPLY_NONE,
-      .help = "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game" },
-    { CTL_ROW_GAME_SUSPEND_AI, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Stop the AI while gaming", NULL,
+      .help = N_("Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game") },
+    { CTL_ROW_GAME_SUSPEND_AI, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Stop the AI while gaming"), NULL,
       .key = "game_suspend_ai", .off = CFG(game_suspend_ai), .vtype = CTL_VAL_BOOL },
-    { CTL_ROW_GAME_INHIBIT_IDLE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Hold off idle while gaming", NULL,
+    { CTL_ROW_GAME_INHIBIT_IDLE, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Hold off idle while gaming"), NULL,
       .key = "game_inhibit_idle", .off = CFG(game_inhibit_idle), .vtype = CTL_VAL_BOOL,
-      .help = "A gamepad is not input as far as the idle timer is concerned" },
+      .help = N_("A gamepad is not input as far as the idle timer is concerned") },
     /* The help lines say what each one BUYS, because the four are worth wildly
      * different amounts and two of them look more attractive than they are.
      * Measured rather than guessed — see game.c. */
-    { CTL_ROW_GAME_DROP_EFFECTS, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Drop screen effects while gaming", NULL,
+    { CTL_ROW_GAME_DROP_EFFECTS, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Drop screen effects while gaming"), NULL,
       .key = "game_drop_effects", .off = CFG(game_drop_effects), .vtype = CTL_VAL_BOOL,
-      .help = "The biggest win: lets the game draw straight to the display" },
-    { CTL_ROW_GAME_PAUSE_WALLPAPER, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Pause the wallpaper while gaming", NULL,
+      .help = N_("The biggest win: lets the game draw straight to the display") },
+    { CTL_ROW_GAME_PAUSE_WALLPAPER, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Pause the wallpaper while gaming"), NULL,
       .key = "game_pause_wallpaper", .off = CFG(game_pause_wallpaper), .vtype = CTL_VAL_BOOL,
-      .help = "Animated wallpapers keep rendering behind a fullscreen game" },
-    { CTL_ROW_GAME_STOP_BAR, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Stop the bar while gaming", NULL,
+      .help = N_("Animated wallpapers keep rendering behind a fullscreen game") },
+    { CTL_ROW_GAME_STOP_BAR, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Stop the bar while gaming"), NULL,
       .key = "game_stop_bar", .off = CFG(game_stop_bar), .vtype = CTL_VAL_BOOL,
-      .help = "Frees memory, but the bar takes a moment to come back" },
-    { CTL_ROW_GAME_CONFINE_POINTER, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Keep the mouse on the game's screen", NULL,
+      .help = N_("Frees memory, but the bar takes a moment to come back") },
+    { CTL_ROW_GAME_CONFINE_POINTER, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Keep the mouse on the game's screen"), NULL,
       .key = "game_confine_pointer", .off = CFG(game_confine_pointer), .vtype = CTL_VAL_BOOL,
-      .help = "Games rarely ask for it themselves; Alt-Tab still frees it" },
-    { CTL_ROW_GAME_QUIET_KMOD, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Quiet the kernel monitor while gaming", NULL,
+      .help = N_("Games rarely ask for it themselves; Alt-Tab still frees it") },
+    { CTL_ROW_GAME_QUIET_KMOD, CTL_CAT_POWER, CTL_KIND_TOGGLE, N_("Quiet the kernel monitor while gaming"), NULL,
       .key = "game_quiet_kmod", .off = CFG(game_quiet_kmod), .vtype = CTL_VAL_BOOL,
-      .help = "Saves very little, and security monitoring pauses with it" },
+      .help = N_("Saves very little, and security monitoring pauses with it") },
 
     /* System */
-    { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL,
-      .section = "AI",
-      .help = "Which device synapd runs inference on" },
-    { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_CHOICE, "AI model",          "aimodel"   },
-    { CTL_ROW_AI_LAYOUT,  CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI window placement", NULL,
+    { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, N_("AI backend"),        NULL,
+      .section = N_("AI"),
+      .help = N_("Which device synapd runs inference on") },
+    { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_CHOICE, N_("AI model"),          "aimodel"   },
+    { CTL_ROW_AI_LAYOUT,  CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, N_("AI window placement"), NULL,
       .key = "ai_layout", .off = CFG(ai_layout), .vtype = CTL_VAL_BOOL,
-      .help = "Let the AI layout decide where a new window goes" },
-    { CTL_ROW_AI_CTX_DECOR, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI context in borders", NULL,
+      .help = N_("Let the AI layout decide where a new window goes") },
+    { CTL_ROW_AI_CTX_DECOR, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, N_("AI context in borders"), NULL,
       .key = "ai_ctx_decor", .off = CFG(ai_ctx_decor), .vtype = CTL_VAL_BOOL,
-      .help = "Tint a window's border when the AI is holding context for it" },
+      .help = N_("Tint a window's border when the AI is holding context for it") },
 
-    { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr",
-      .section = "Tools" },
-    { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
-    { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
-    { CTL_ROW_NEWS_REFRESH, CTL_CAT_SYSTEM, CTL_KIND_VALUE, "News refresh", NULL,
+    { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  N_("Task manager"),      "taskmgr",
+      .section = N_("Tools") },
+    { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  N_("Clipboard history"), "clipboard" },
+    { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  N_("News"),              "news"      },
+    { CTL_ROW_NEWS_REFRESH, CTL_CAT_SYSTEM, CTL_KIND_VALUE, N_("News refresh"), NULL,
       .key = "news_refresh", .off = CFG(news_refresh_min), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 240, .vstep = 5, .unit = "min",
-      .help = "How often a feed may be re-fetched at most" },
+      .help = N_("How often a feed may be re-fetched at most") },
     /* CTL_KIND_LAUNCH, like Network and Printers: it hands off to a terminal
      * synui does not own, so the panel closes rather than arming a return to
      * itself. There is nothing to come back to — the About box is the window,
@@ -1291,12 +1292,12 @@ static const struct ctl_item ctl_items[] = {
      * and runs anywhere. Neither was findable from the other, so somebody
      * looking for the timezone in the obvious place (Super+C) found nothing
      * and had no way to learn where it actually lives. */
-    { CTL_ROW_SETTINGS, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, "System settings", "settings",
-      .help = "Clock, locale, kernel, default apps — what the SYSTEM is set to" },
+    { CTL_ROW_SETTINGS, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, N_("System settings"), "settings",
+      .help = N_("Clock, locale, kernel, default apps — what the SYSTEM is set to") },
 
-    { CTL_ROW_ABOUT, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, "About OS", "about",
-      .section = "About",
-      .help = "The mark, the machine, and what this desktop is currently set to" },
+    { CTL_ROW_ABOUT, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, N_("About OS"), "about",
+      .section = N_("About"),
+      .help = N_("The mark, the machine, and what this desktop is currently set to") },
 };
 
 #define CTL_ITEM_COUNT ((int)(sizeof(ctl_items) / sizeof(ctl_items[0])))
@@ -2041,8 +2042,17 @@ static int ctl_matches(const struct ctl_item *it, const char *needle)
 {
     if (!needle || !*needle) return 1;
 
-    const char *fields[3] = { it->label, it->section, it->key };
-    for (int f = 0; f < 3; f++) {
+    /*
+     * ⚠ THE TRANSLATED TEXT AND THE ENGLISH BOTH MATCH, and both are needed.
+     * Somebody using a German panel types German — the label they can see —
+     * so _( ) has to be searched. But every piece of documentation, every
+     * forum answer and synuirc itself are in English, so "blur" must still
+     * find "Unschärfe". The settings key is searched for exactly that reason
+     * and always was; the translated label is the same argument one step on.
+     */
+    const char *fields[5] = { _(it->label), _opt(it->section), it->key,
+                              it->label,    it->section };
+    for (int f = 0; f < 5; f++) {
         if (!fields[f]) continue;
         if (strcasestr(fields[f], needle)) return 1;
     }
@@ -2082,7 +2092,7 @@ static const char *ctl_row_action(int row)
 const char *ctlpanel_row_label(int row)
 {
     int i = ctl_item_index(row);
-    return i < 0 ? "?" : ctl_items[i].label;
+    return i < 0 ? "?" : _(ctl_items[i].label);
 }
 
 /* The shortcuts category has no rows of its own — it is one scrolling list, and
@@ -2653,7 +2663,7 @@ const char *ctlpanel_row_section(int row)
     syn_ctl_cat_t cat = ctl_items[i].cat;
     for (; i >= 0; i--) {
         if (ctl_items[i].cat != cat) break;   /* ran off the top of the category */
-        if (ctl_items[i].section) return ctl_items[i].section;
+        if (ctl_items[i].section) return _(ctl_items[i].section);
     }
     return NULL;
 }
@@ -2668,7 +2678,9 @@ int ctlpanel_row_starts_section(int row)
 const char *ctlpanel_row_help(int row)
 {
     const struct ctl_item *it = ctl_item(row);
-    return it ? it->help : NULL;
+    /* _opt: only 110 of 160 rows carry a help line, and gettext(NULL) is
+     * undefined behaviour, not an empty string. */
+    return it ? _opt(it->help) : NULL;
 }
 
 int ctlpanel_row_cat(int row)
@@ -3598,7 +3610,7 @@ static int ctlpanel_dock_pos_step(syn_server_t *s, int row, int dir)
     }
 
     const struct ctl_item *it = ctl_item(row);
-    const char *label = it ? it->label : "position";
+    const char *label = it ? _(it->label) : _("position");
 
     if (!s->config.dock_enabled || !on) {
         /* Says WHICH thing is off. "n/a" in the value column with nothing in
@@ -3682,7 +3694,7 @@ static void ctlpanel_activate(syn_server_t *s)
             char v[64];
             ctlpanel_row_value(s, row, v, sizeof(v));
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "%s: %s", it->label, v);
+                     "%s: %s", _(it->label), v);
         }
         return;
     }
@@ -3711,7 +3723,7 @@ static void ctlpanel_activate(syn_server_t *s)
                 char v[64];
                 ctlpanel_row_value(s, row, v, sizeof(v));
                 snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                         "%s: %s", it->label, v);
+                         "%s: %s", _(it->label), v);
             }
             return;
         }
@@ -4225,7 +4237,7 @@ static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
     if (v > (int)it->vmax) v = (int)it->vmax;
     if (v == cur) {
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s is at its %s", it->label, dir < 0 ? "minimum" : "maximum");
+                 "%s is at its %s", _(it->label), dir < 0 ? _("minimum") : _("maximum"));
         return 1;
     }
 
@@ -4237,7 +4249,7 @@ static int ctlpanel_adjust_font(syn_server_t *s, int row, int dir)
      * why — is the same confusion the AI-model row's message exists to avoid. */
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
              "%s: %d %s \xc2\xb7 applies when you stop",
-             it->label, v, is_size ? "pt" : "%");
+             _(it->label), v, is_size ? "pt" : "%");
     return 1;
 }
 
@@ -4263,7 +4275,7 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
         /* Already at the end of the range. Say so once rather than leaving the
          * previous message up, which reads as the key having done something. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s is at its %s", it->label, dir < 0 ? "minimum" : "maximum");
+                 "%s is at its %s", _(it->label), dir < 0 ? _("minimum") : _("maximum"));
         return 1;
     }
 
@@ -4271,10 +4283,10 @@ static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
     ctlpanel_row_value(s, row, v, sizeof(v));
     if (ctlpanel_row_is_default(s, row))
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s: %s \xc2\xb7 default", it->label, v);
+                 "%s: %s \xc2\xb7 default", _(it->label), v);
     else
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "%s: %s", it->label, v);
+                 "%s: %s", _(it->label), v);
     return 1;
 }
 
@@ -4665,10 +4677,10 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             char v[64];
             ctlpanel_row_value(s, r, v, sizeof(v));
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "%s reset to %s", it->label, v);
+                     "%s reset to %s", _(it->label), v);
         } else {
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                     "%s is already at its default", it->label);
+                     "%s is already at its default", _(it->label));
         }
         synui_render_ctlpanel(s);
         return 1;

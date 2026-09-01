@@ -1,0 +1,1281 @@
+# German translations for synui package.
+# Copyright (C) 2026 THE synui'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the synui package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: synui 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
+"POT-Creation-Date: 2026-09-01 10:47-0500\n"
+"PO-Revision-Date: 2026-09-01 10:47-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/ctlpanel.c:359
+msgid "Theme"
+msgstr "Farbschema"
+
+#: src/ctlpanel.c:360
+msgid "Look"
+msgstr "Aussehen"
+
+#: src/ctlpanel.c:361
+msgid "Colour preset for window chrome and synui's own panels"
+msgstr "Farbvorgabe für Fensterrahmen und synuis eigene Leisten"
+
+#: src/ctlpanel.c:362
+msgid "Wallpaper"
+msgstr "Hintergrundbild"
+
+#: src/ctlpanel.c:368
+msgid "Wallpaper accent"
+msgstr "Akzent vom Hintergrundbild"
+
+#: src/ctlpanel.c:371
+msgid ""
+"Take the accent off the wallpaper instead of the theme. Auto is Prism (light "
+"or dark), which is built on it, and nothing else"
+msgstr "Nimmt die Akzentfarbe vom Hintergrundbild statt vom Farbschema. Auto heißt Prism (hell oder dunkel), das darauf aufbaut, und sonst nichts"
+
+#: src/ctlpanel.c:386
+msgid "RGB lights"
+msgstr "RGB-Beleuchtung"
+
+#: src/ctlpanel.c:388
+msgid "Put the wallpaper's accent on RGB hardware (needs openrgb)"
+msgstr "Legt die Akzentfarbe des Hintergrundbilds auf RGB-Hardware (braucht openrgb)"
+
+#: src/ctlpanel.c:389
+msgid "Cursor theme"
+msgstr "Mauszeiger-Design"
+
+#: src/ctlpanel.c:391
+msgid "UI font"
+msgstr "Schrift der Oberfläche"
+
+#: src/ctlpanel.c:392
+msgid "Text"
+msgstr "Text"
+
+#: src/ctlpanel.c:393
+msgid "The family every synui panel draws in. Previews live; Esc puts it back"
+msgstr "Die Schriftfamilie aller synui-Leisten. Vorschau ist live; Esc nimmt sie zurück"
+
+#: src/ctlpanel.c:406
+msgid "Font size"
+msgstr "Schriftgröße"
+
+#: src/ctlpanel.c:409
+msgid "Applications: GTK, Qt and the terminal. Applies when you stop"
+msgstr "Anwendungen: GTK, Qt und das Terminal. Wird übernommen, sobald du aufhörst"
+
+#: src/ctlpanel.c:410
+msgid "Text scale"
+msgstr "Textskalierung"
+
+#: src/ctlpanel.c:413
+msgid "The bar and the SYNAPSE apps — Files, Settings, Disks, Software"
+msgstr "Die Leiste und die SYNAPSE-Programme — Dateien, Einstellungen, Laufwerke, Software"
+
+#: src/ctlpanel.c:415
+msgid "Transparency"
+msgstr "Transparenz"
+
+#: src/ctlpanel.c:416 src/ctlpanel.c:428
+msgid "Glass"
+msgstr "Glas"
+
+#: src/ctlpanel.c:417
+msgid "Focused-window opacity. Left/Right adjust; Enter switches it off"
+msgstr "Deckkraft des aktiven Fensters. Links/Rechts stellt ein; Enter schaltet aus"
+
+#: src/ctlpanel.c:437
+msgid ""
+"Auto follows the theme · Off is never glass · or set how much you see through"
+msgstr "Auto folgt dem Farbschema · Aus ist nie Glas · oder stell ein, wie viel durchscheint"
+
+#: src/ctlpanel.c:443
+msgid "Sync all glass"
+msgstr "Alles Glas gleichziehen"
+
+#: src/ctlpanel.c:446
+msgid ""
+"Every surface follows Glass above. Change one and it keeps its own until you "
+"switch this back on"
+msgstr "Jede Fläche folgt dem Glas oben. Änderst du eine, behält sie ihren eigenen Wert, bis du dies wieder einschaltest"
+
+#: src/ctlpanel.c:448
+msgid "Legibility correction"
+msgstr "Lesbarkeitskorrektur"
+
+#: src/ctlpanel.c:451
+msgid ""
+"Surfaces go less see-through where their text would not read. Off draws "
+"exactly what you asked for"
+msgstr "Flächen werden dort weniger durchsichtig, wo ihr Text nicht lesbar wäre. Aus zeichnet genau das, was du eingestellt hast"
+
+#: src/ctlpanel.c:467
+msgid "Live backdrop"
+msgstr "Lebendiger Hintergrund"
+
+#: src/ctlpanel.c:470
+msgid ""
+"Menus and panels ink themselves off the window behind them rather than the "
+"wallpaper it covers. Lands within a second"
+msgstr "Menüs und Leisten nehmen ihre Farbe vom Fenster dahinter statt vom verdeckten Hintergrundbild. Greift binnen einer Sekunde"
+
+#: src/ctlpanel.c:472
+msgid "Unfocused opacity"
+msgstr "Deckkraft inaktiver Fenster"
+
+#: src/ctlpanel.c:475
+msgid "How far windows you are not using fade back"
+msgstr "Wie weit Fenster zurücktreten, die du nicht benutzt"
+
+#: src/ctlpanel.c:476
+msgid "Terminal glass"
+msgstr "Terminal-Glas"
+
+#: src/ctlpanel.c:479
+msgid "foot draws its own background alpha, so it needs its own level"
+msgstr "foot zeichnet seine Hintergrund-Transparenz selbst und braucht darum einen eigenen Wert"
+
+#: src/ctlpanel.c:489
+msgid "Make it all solid"
+msgstr "Alles undurchsichtig"
+
+#: src/ctlpanel.c:490
+msgid "Glass off and windows opaque, in one press. The rows above put it back"
+msgstr "Glas aus und Fenster deckend, mit einem Druck. Die Zeilen oben nehmen es zurück"
+
+#: src/ctlpanel.c:509
+msgid "Make it all clear"
+msgstr "Alles durchsichtig"
+
+#: src/ctlpanel.c:510
+msgid ""
+"Bar, dock and menus lose their background entirely, inked off the wallpaper. "
+"The rows above put it back"
+msgstr "Leiste, Dock und Menüs verlieren ihren Hintergrund ganz und färben sich nach dem Hintergrundbild. Die Zeilen oben nehmen es zurück"
+
+#: src/ctlpanel.c:513 src/ctlpanel.c:514
+msgid "CRT effects"
+msgstr "CRT-Effekte"
+
+#: src/ctlpanel.c:515
+msgid "The GLES post-process pass. Off on renderers that have none"
+msgstr "Der GLES-Nachbearbeitungsdurchlauf. Aus bei Renderern, die keinen haben"
+
+#: src/ctlpanel.c:516
+msgid "All filters"
+msgstr "Alle Filter"
+
+#: src/ctlpanel.c:517
+msgid "Scanlines"
+msgstr "Bildzeilen"
+
+#: src/ctlpanel.c:520
+msgid "Screen curve"
+msgstr "Bildschirmwölbung"
+
+#: src/ctlpanel.c:523
+msgid "Chromatic aberration"
+msgstr "Farbsaum"
+
+#: src/ctlpanel.c:526
+msgid "Glitch on alert"
+msgstr "Bildstörung bei Warnung"
+
+#: src/ctlpanel.c:530
+msgid "Phosphor tint"
+msgstr "Phosphorfarbe"
+
+#: src/ctlpanel.c:531
+msgid "Phosphor"
+msgstr "Phosphor"
+
+#: src/ctlpanel.c:534
+msgid "Off leaves the picture in colour; the blend below is what applies it"
+msgstr "Aus lässt das Bild farbig; erst die Mischung unten wendet sie an"
+
+#: src/ctlpanel.c:535
+msgid "Phosphor blend"
+msgstr "Phosphormischung"
+
+#: src/ctlpanel.c:538
+msgid "Blend toward the phosphor tint. Bloom only bites once this is up"
+msgstr "Blendet zur Phosphorfarbe hin. Das Leuchten wirkt erst, wenn dies hoch ist"
+
+#: src/ctlpanel.c:539
+msgid "Phosphor glow"
+msgstr "Phosphorleuchten"
+
+#: src/ctlpanel.c:542
+msgid "Phosphor lift"
+msgstr "Phosphor-Grundhelligkeit"
+
+#: src/ctlpanel.c:545
+msgid "How far the unlit field glows: 0 keeps it black, up lights the raster"
+msgstr "Wie stark die unbeleuchtete Fläche glimmt: 0 bleibt schwarz, höher erhellt das Raster"
+
+#: src/ctlpanel.c:546
+msgid "Phosphor hue"
+msgstr "Phosphor-Farbton"
+
+#: src/ctlpanel.c:549
+msgid ""
+"Turns the tint's colour: down is redder (amber to orange), up yellower. 0.50 "
+"is the preset"
+msgstr "Dreht den Farbton: nach unten röter (Bernstein zu Orange), nach oben gelber. 0,50 ist die Vorgabe"
+
+#: src/ctlpanel.c:557
+msgid "Titlebars"
+msgstr "Titelleisten"
+
+#: src/ctlpanel.c:558
+msgid "Frame"
+msgstr "Rahmen"
+
+#: src/ctlpanel.c:559
+msgid "Server-side titlebars, on every window at once"
+msgstr "Serverseitige Titelleisten, für alle Fenster auf einmal"
+
+#: src/ctlpanel.c:560
+msgid "Titlebar height"
+msgstr "Höhe der Titelleiste"
+
+#: src/ctlpanel.c:563
+msgid "0 removes the titlebar; below 14 there is no room for a button"
+msgstr "0 entfernt die Titelleiste; unter 14 ist kein Platz für einen Knopf"
+
+#: src/ctlpanel.c:564
+msgid "Border width"
+msgstr "Rahmenbreite"
+
+#: src/ctlpanel.c:567
+msgid "Corner radius"
+msgstr "Eckenradius"
+
+#: src/ctlpanel.c:570
+msgid "Forced square while maximized, so nothing pokes past the output"
+msgstr "Maximiert immer eckig, damit nichts über den Bildschirm hinausragt"
+
+#: src/ctlpanel.c:572
+msgid "Tiling gap"
+msgstr "Kachelabstand"
+
+#: src/ctlpanel.c:573 src/ctlpanel.c:747
+msgid "Layout"
+msgstr "Anordnung"
+
+#: src/ctlpanel.c:576
+msgid "Master area"
+msgstr "Hauptbereich"
+
+#: src/ctlpanel.c:579
+msgid "Share of the screen the master window takes when tiling"
+msgstr "Anteil des Bildschirms, den das Hauptfenster beim Kacheln bekommt"
+
+#: src/ctlpanel.c:580
+msgid "Cascade pile size"
+msgstr "Größe des Kaskadenstapels"
+
+#: src/ctlpanel.c:584
+msgid "How deep a cascade pile may get once the grid of piles is full"
+msgstr "Wie tief ein Kaskadenstapel werden darf, wenn das Raster voll ist"
+
+#: src/ctlpanel.c:586
+msgid "Drop shadow"
+msgstr "Schlagschatten"
+
+#: src/ctlpanel.c:587
+msgid "Shadow"
+msgstr "Schatten"
+
+#: src/ctlpanel.c:590
+msgid "Shadow softness"
+msgstr "Weichheit des Schattens"
+
+#: src/ctlpanel.c:593
+msgid "Shadow spread"
+msgstr "Ausdehnung des Schattens"
+
+#: src/ctlpanel.c:596
+msgid "Solid shadow before the falloff starts — what gives it weight"
+msgstr "Voller Schatten, bevor der Verlauf beginnt — das gibt ihm Gewicht"
+
+#: src/ctlpanel.c:597
+msgid "Shadow offset X"
+msgstr "Schattenversatz X"
+
+#: src/ctlpanel.c:600
+msgid "Shadow offset Y"
+msgstr "Schattenversatz Y"
+
+#: src/ctlpanel.c:603
+msgid "Crop client shadows"
+msgstr "Fremde Schatten beschneiden"
+
+#: src/ctlpanel.c:606
+msgid "Hides the invisible margin apps like Firefox draw their own shadow in"
+msgstr "Verbirgt den unsichtbaren Rand, in den Programme wie Firefox ihren eigenen Schatten zeichnen"
+
+#: src/ctlpanel.c:608
+msgid "Backdrop blur"
+msgstr "Hintergrundunschärfe"
+
+#: src/ctlpanel.c:609
+msgid "Blur"
+msgstr "Unschärfe"
+
+#: src/ctlpanel.c:612
+msgid "Frosts what is behind a translucent window. Opaque ones cost nothing"
+msgstr "Mattiert, was hinter einem durchscheinenden Fenster liegt. Undurchsichtige kosten nichts"
+
+#: src/ctlpanel.c:613
+msgid "Blur passes"
+msgstr "Unschärfe-Durchläufe"
+
+#: src/ctlpanel.c:616
+msgid "Blur radius"
+msgstr "Unschärferadius"
+
+#: src/ctlpanel.c:619
+msgid "Blur noise"
+msgstr "Unschärferauschen"
+
+#: src/ctlpanel.c:622
+msgid "Blur brightness"
+msgstr "Unschärfehelligkeit"
+
+#: src/ctlpanel.c:625
+msgid "Blur contrast"
+msgstr "Unschärfekontrast"
+
+#: src/ctlpanel.c:628
+msgid "Blur saturation"
+msgstr "Unschärfesättigung"
+
+#: src/ctlpanel.c:631
+msgid "Blur halo"
+msgstr "Unschärfe-Hof"
+
+#: src/ctlpanel.c:634
+msgid "How far the blur reaches past the window. 0 keeps it inside the frame"
+msgstr "Wie weit die Unschärfe über das Fenster hinausreicht. 0 hält sie im Rahmen"
+
+#: src/ctlpanel.c:641
+msgid "Window open"
+msgstr "Fenster öffnet"
+
+#: src/ctlpanel.c:642
+msgid "Animation"
+msgstr "Animation"
+
+#: src/ctlpanel.c:645
+msgid ""
+"How a window arrives. Closing is not animated: the client's buffer is gone "
+"the moment it unmaps"
+msgstr "Wie ein Fenster erscheint. Das Schließen wird nicht animiert: der Puffer des Programms ist weg, sobald es sich abmeldet"
+
+#: src/ctlpanel.c:647
+msgid "Window length"
+msgstr "Dauer beim Fenster"
+
+#: src/ctlpanel.c:650
+msgid "0 jumps straight to the end state. Also times the niri strip slide"
+msgstr "0 springt direkt zum Endzustand. Bestimmt auch das Gleiten des niri-Streifens"
+
+#: src/ctlpanel.c:651
+msgid "Rise distance"
+msgstr "Aufstiegsweg"
+
+#: src/ctlpanel.c:654
+msgid ""
+"How far a Rise window travels up into place. Ignored by the other styles"
+msgstr "Wie weit ein aufsteigendes Fenster nach oben wandert. Die anderen Arten ignorieren das"
+
+#: src/ctlpanel.c:655
+msgid "Desktop switch"
+msgstr "Wechsel der Arbeitsfläche"
+
+#: src/ctlpanel.c:658
+msgid ""
+"Fade cross-fades the two desks; Slide sends them off the way you switched; "
+"Cube turns the desk in 3D"
+msgstr "Überblenden mischt beide Flächen; Schieben schickt sie in die Richtung des Wechsels; Würfel dreht die Fläche in 3D"
+
+#: src/ctlpanel.c:660
+msgid "Desktop length"
+msgstr "Dauer beim Wechsel"
+
+#: src/ctlpanel.c:663
+msgid ""
+"A slide wants longer than a fade — the eye has to follow it somewhere — and "
+"a cube wants longer again; try 400-600"
+msgstr "Ein Schieben braucht länger als ein Überblenden — das Auge muss mit — und ein Würfel noch länger; probier 400-600"
+
+#: src/ctlpanel.c:665
+msgid "Easing"
+msgstr "Verlaufskurve"
+
+#: src/ctlpanel.c:668
+msgid ""
+"Shared by both, and by the strip slide: two easings read as two desktops"
+msgstr "Gilt für beide und für den Streifen: zwei Kurven wirken wie zwei Arbeitsflächen"
+
+#: src/ctlpanel.c:669
+msgid "Desktops span"
+msgstr "Arbeitsflächen gelten"
+
+#: src/ctlpanel.c:672
+msgid ""
+"Shared: one desktop across every monitor. Per-monitor: each screen remembers "
+"its own, and the switch moves only the focused one"
+msgstr "Gemeinsam: eine Arbeitsfläche über alle Bildschirme. Pro Bildschirm: jeder merkt sich seine eigene, und der Wechsel bewegt nur den aktiven"
+
+#: src/ctlpanel.c:678
+msgid "Focus follows"
+msgstr "Fokus folgt"
+
+#: src/ctlpanel.c:679
+msgid "Behaviour"
+msgstr "Verhalten"
+
+#: src/ctlpanel.c:682
+msgid ""
+"Click: only a click focuses. Sloppy and Strict follow the pointer; over the "
+"desktop, Strict drops focus, Sloppy keeps it"
+msgstr "Klick: nur ein Klick fokussiert. Locker und Streng folgen dem Zeiger; über der Arbeitsfläche gibt Streng den Fokus ab, Locker behält ihn"
+
+#: src/ctlpanel.c:684
+msgid "Focus delay"
+msgstr "Verzögerung des Fokus"
+
+#: src/ctlpanel.c:687
+msgid ""
+"How long the pointer rests before focus follows it. 0 is instant, which also "
+"focuses windows you only crossed over"
+msgstr "Wie lange der Zeiger ruht, bevor der Fokus folgt. 0 ist sofort — dann bekommen auch Fenster den Fokus, über die du nur hinweggefahren bist"
+
+#: src/ctlpanel.c:689
+msgid "Edge snapping"
+msgstr "Einrasten am Rand"
+
+#: src/ctlpanel.c:691
+msgid "Drag a window to an edge to fill that half or quarter"
+msgstr "Zieh ein Fenster an einen Rand, um diese Hälfte oder dieses Viertel zu füllen"
+
+#: src/ctlpanel.c:692
+msgid "Snap zone"
+msgstr "Einrastzone"
+
+#: src/ctlpanel.c:695
+msgid ""
+"How close to the edge a drag arms the snap. Raise it on a high-DPI panel, or "
+"if a fast pointer crosses the band"
+msgstr "Wie nah am Rand das Ziehen das Einrasten auslöst. Erhöhe es bei hoher Auflösung oder wenn ein schneller Zeiger das Band überspringt"
+
+#: src/ctlpanel.c:697
+msgid "Remember window size"
+msgstr "Fenstergröße merken"
+
+#: src/ctlpanel.c:699
+msgid "Reopen each app where and how big it was when it closed"
+msgstr "Öffnet jedes Programm dort und so groß, wie es beim Schließen war"
+
+#: src/ctlpanel.c:701
+msgid "Alt+Tab is mission control"
+msgstr "Alt+Tab öffnet die Übersicht"
+
+#: src/ctlpanel.c:702
+msgid "Alt+Tab"
+msgstr "Alt+Tab"
+
+#: src/ctlpanel.c:704
+msgid ""
+"On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip — and the "
+"three rows below describe that strip"
+msgstr "An: Alt+Tab öffnet die ganze Fläche. Aus: den Streifen zuletzt benutzter Vorschaubilder — die drei Zeilen unten beschreiben diesen Streifen"
+
+#: src/ctlpanel.c:706
+msgid "Alt+Tab previews"
+msgstr "Alt+Tab-Vorschau"
+
+#: src/ctlpanel.c:708
+msgid "The thumbnail grid. Off, Alt+Tab still cycles — silently"
+msgstr "Das Vorschauraster. Aus wechselt Alt+Tab weiterhin — nur unsichtbar"
+
+#: src/ctlpanel.c:709
+msgid "Alt+Tab across desktops"
+msgstr "Alt+Tab über Arbeitsflächen"
+
+#: src/ctlpanel.c:711
+msgid "Alt+Tab reaches minimized"
+msgstr "Alt+Tab erreicht minimierte"
+
+#: src/ctlpanel.c:721
+msgid "Panels follow the pointer"
+msgstr "Leisten folgen dem Zeiger"
+
+#: src/ctlpanel.c:722
+msgid "Panels"
+msgstr "Leisten"
+
+#: src/ctlpanel.c:725
+msgid ""
+"On, an open panel moves to whichever monitor the pointer is on. Off, it "
+"stays on the monitor you opened it on"
+msgstr "An: eine offene Leiste wandert auf den Bildschirm mit dem Zeiger. Aus: sie bleibt auf dem Bildschirm, auf dem du sie geöffnet hast"
+
+#: src/ctlpanel.c:731
+msgid "Calculator"
+msgstr "Rechner"
+
+#: src/ctlpanel.c:734
+msgid ""
+"Window: drag it by the header, click elsewhere freely. Clickoff: closes when "
+"you click away. Esc always closes"
+msgstr "Fenster: am Kopf ziehen, sonst frei klicken. Wegklicken: schließt beim Klick daneben. Esc schließt immer"
+
+#: src/ctlpanel.c:736
+msgid "Control panel"
+msgstr "Systemsteuerung"
+
+#: src/ctlpanel.c:739
+msgid "How this panel itself behaves"
+msgstr "Wie sich diese Leiste selbst verhält"
+
+#: src/ctlpanel.c:740 src/ctlpanel.c:1276
+msgid "Task manager"
+msgstr "Aufgabenverwaltung"
+
+#: src/ctlpanel.c:743
+msgid "How the task manager behaves"
+msgstr "Wie sich die Aufgabenverwaltung verhält"
+
+#: src/ctlpanel.c:748
+msgid "Desktop"
+msgstr "Arbeitsfläche"
+
+#: src/ctlpanel.c:749
+msgid "Of the desktop you are on — layout is per-desktop, not global"
+msgstr "Für die Fläche, auf der du bist — die Anordnung gilt je Fläche, nicht überall"
+
+#: src/ctlpanel.c:750
+msgid "Mission control"
+msgstr "Übersicht"
+
+#: src/ctlpanel.c:751
+msgid "Every window on this desktop at once, and the desktops themselves"
+msgstr "Alle Fenster dieser Fläche auf einmal, und die Flächen selbst"
+
+#: src/ctlpanel.c:752
+msgid "Desktop icons"
+msgstr "Symbole auf der Arbeitsfläche"
+
+#: src/ctlpanel.c:754
+msgid "Draw ~/Desktop on the wallpaper"
+msgstr "Zeichnet ~/Desktop auf das Hintergrundbild"
+
+#: src/ctlpanel.c:755
+msgid "Icon order"
+msgstr "Reihenfolge der Symbole"
+
+#: src/ctlpanel.c:758
+msgid "Desktop widgets"
+msgstr "Miniprogramme"
+
+#: src/ctlpanel.c:769
+msgid "Widget glass"
+msgstr "Glas der Miniprogramme"
+
+#: src/ctlpanel.c:772
+msgid "Desktop widgets take the dock's glass instead of the HUD panel"
+msgstr "Miniprogramme nehmen das Glas des Docks statt das der HUD-Leiste"
+
+#: src/ctlpanel.c:774 src/ctlpanel.c:775
+msgid "Dock"
+msgstr "Dock"
+
+#: src/ctlpanel.c:776
+msgid "Dock auto-hide"
+msgstr "Dock automatisch ausblenden"
+
+#: src/ctlpanel.c:780
+msgid "Dock above windows"
+msgstr "Dock über Fenstern"
+
+#: src/ctlpanel.c:781
+msgid ""
+"Off, windows cover a pinned dock. Auto-hide always arrives on top — it is "
+"summoned over whatever is there"
+msgstr "Aus: Fenster verdecken ein angeheftetes Dock. Das automatische kommt immer obenauf — es wird über alles gerufen, was da ist"
+
+#: src/ctlpanel.c:783
+msgid "Dock edge"
+msgstr "Dock-Rand"
+
+#: src/ctlpanel.c:786
+msgid "Dock size"
+msgstr "Dock-Größe"
+
+#: src/ctlpanel.c:792
+msgid "The slab AND the icons in it — the icons are this minus 16"
+msgstr "Die Fläche UND die Symbole darin — die Symbole sind dies minus 16"
+
+#: src/ctlpanel.c:793
+msgid "Dock reveal strip"
+msgstr "Auslösestreifen des Docks"
+
+#: src/ctlpanel.c:796
+msgid "How close to the edge the pointer must get to bring it back"
+msgstr "Wie nah der Zeiger an den Rand muss, um es zurückzuholen"
+
+#: src/ctlpanel.c:797
+msgid "Dock magnify"
+msgstr "Dock vergrößern"
+
+#: src/ctlpanel.c:798
+msgid "The icons under the pointer swell and the row slides apart to make room"
+msgstr "Die Symbole unter dem Zeiger wachsen, und die Reihe rückt auseinander"
+
+#: src/ctlpanel.c:806
+msgid "Dock magnify amount"
+msgstr "Stärke der Vergrößerung"
+
+#: src/ctlpanel.c:813
+msgid ""
+"How big the icon under the pointer gets. The dock makes room for it, so a "
+"big swell is a taller dock"
+msgstr "Wie groß das Symbol unter dem Zeiger wird. Das Dock macht Platz dafür, also bedeutet viel Wachstum ein höheres Dock"
+
+#: src/ctlpanel.c:822
+msgid "Dock style"
+msgstr "Dock-Stil"
+
+#: src/ctlpanel.c:823
+msgid "Dock look"
+msgstr "Dock-Aussehen"
+
+#: src/ctlpanel.c:826
+msgid "Glass frosts the wallpaper behind the bar. Auto follows the theme"
+msgstr "Glas mattiert das Hintergrundbild hinter der Leiste. Auto folgt dem Farbschema"
+
+#: src/ctlpanel.c:827
+msgid "Dock opacity"
+msgstr "Deckkraft des Docks"
+
+#: src/ctlpanel.c:841
+msgid "0.00 leaves the icons alone on the wallpaper; 1.00 hides it completely"
+msgstr "0,00 lässt die Symbole allein auf dem Hintergrundbild; 1,00 verdeckt es ganz"
+
+#: src/ctlpanel.c:843
+msgid "Dock corners"
+msgstr "Dock-Ecken"
+
+#: src/ctlpanel.c:849
+msgid "Its own, not the window radius. Caps at half the dock's size"
+msgstr "Eigener Wert, nicht der Fensterradius. Höchstens die halbe Dock-Größe"
+
+#: src/ctlpanel.c:851
+msgid "Show all apps button"
+msgstr "Knopf für alle Programme"
+
+#: src/ctlpanel.c:852
+msgid "Dock buttons"
+msgstr "Dock-Knöpfe"
+
+#: src/ctlpanel.c:853
+msgid ""
+"A grid of dots at the end of the dock. Always opens the application overlay"
+msgstr "Ein Punktraster am Ende des Docks. Öffnet immer die Programmübersicht"
+
+#: src/ctlpanel.c:870
+msgid "Apps button position"
+msgstr "Lage des Programmknopfs"
+
+#: src/ctlpanel.c:871
+msgid ""
+"Where the all-apps button sits along the run. Dragging the button on the "
+"dock sets the same thing"
+msgstr "Wo der Programmknopf in der Reihe sitzt. Den Knopf im Dock zu ziehen stellt dasselbe ein"
+
+#: src/ctlpanel.c:873
+msgid "Show power button"
+msgstr "Ausschaltknopf zeigen"
+
+#: src/ctlpanel.c:874
+msgid ""
+"A power mark past the apps button. Clicking it opens a menu — Lock, Log Out, "
+"Suspend, Restart, Shut Down"
+msgstr "Ein Einschaltzeichen hinter dem Programmknopf. Ein Klick öffnet ein Menü — Sperren, Abmelden, Bereitschaft, Neustart, Herunterfahren"
+
+#: src/ctlpanel.c:876
+msgid "Power button position"
+msgstr "Lage des Ausschaltknopfs"
+
+#: src/ctlpanel.c:877
+msgid ""
+"Where the power button sits along the run. Dragging the button on the dock "
+"sets the same thing"
+msgstr "Wo der Ausschaltknopf in der Reihe sitzt. Den Knopf im Dock zu ziehen stellt dasselbe ein"
+
+#: src/ctlpanel.c:897
+msgid "Date & time"
+msgstr "Datum und Uhrzeit"
+
+#: src/ctlpanel.c:898
+msgid "Clock"
+msgstr "Uhr"
+
+#: src/ctlpanel.c:899
+msgid "12/24-hour and the date format, for the dock clock and the widget"
+msgstr "12/24-Stunden und das Datumsformat, für die Dock-Uhr und das Miniprogramm"
+
+#: src/ctlpanel.c:900
+msgid "Dock clock"
+msgstr "Dock-Uhr"
+
+#: src/ctlpanel.c:901
+msgid ""
+"Time and date in a cell of its own — drag the cell to move it anywhere in "
+"the row. 12/24-hour follows Clock & Time"
+msgstr "Uhrzeit und Datum in einer eigenen Zelle — zieh die Zelle an eine beliebige Stelle der Reihe. 12/24-Stunden folgt Datum und Uhrzeit"
+
+#: src/ctlpanel.c:903
+msgid "Analog dock clock"
+msgstr "Analoge Dock-Uhr"
+
+#: src/ctlpanel.c:904
+msgid ""
+"Draw the dock clock as a dial. The one clock that fits a dock on the left or "
+"right edge — a column cannot widen for a time string"
+msgstr "Zeichnet die Dock-Uhr als Zifferblatt. Die einzige Uhr, die in ein Dock am linken oder rechten Rand passt — eine Spalte kann sich für eine Uhrzeit nicht verbreitern"
+
+#: src/ctlpanel.c:911
+msgid "Clock position"
+msgstr "Lage der Uhr"
+
+#: src/ctlpanel.c:912
+msgid ""
+"Where the dock clock sits along the run. Dragging the clock on the dock sets "
+"the same thing"
+msgstr "Wo die Dock-Uhr in der Reihe sitzt. Die Uhr im Dock zu ziehen stellt dasselbe ein"
+
+#: src/ctlpanel.c:914
+msgid "Analog clock face"
+msgstr "Analoges Zifferblatt"
+
+#: src/ctlpanel.c:918
+msgid ""
+"Which dial the analog clock WIDGET draws — the desktop one, from Widgets. "
+"The dock's own analog clock has one design"
+msgstr "Welches Zifferblatt das analoge MINIPROGRAMM zeichnet — das auf der Arbeitsfläche, aus den Miniprogrammen. Die analoge Dock-Uhr hat nur ein Design"
+
+#: src/ctlpanel.c:934 src/ctlpanel.c:935
+msgid "Start menu"
+msgstr "Startmenü"
+
+#: src/ctlpanel.c:939
+msgid ""
+"What the Super tap and Super+Escape open. The keyboard shortcut list follows "
+"this row; the dock's apps button does not"
+msgstr "Was ein Tippen auf Super und Super+Escape öffnen. Die Tastenkürzel-Liste folgt dieser Zeile; der Programmknopf im Dock nicht"
+
+#: src/ctlpanel.c:941
+msgid "Start button"
+msgstr "Startknopf"
+
+#: src/ctlpanel.c:955 src/ctlpanel.c:956
+msgid "Bar"
+msgstr "Leiste"
+
+#: src/ctlpanel.c:957
+msgid ""
+"The top bar, and only it — the widgets, notes and start menu stay. A waybar "
+"desktop needs bar_stop_cmd/bar_start_cmd"
+msgstr "Nur die obere Leiste — Miniprogramme, Notizen und Startmenü bleiben. Ein Waybar-Desktop braucht bar_stop_cmd/bar_start_cmd"
+
+#: src/ctlpanel.c:964
+msgid "Bar shell"
+msgstr "Leisten-Variante"
+
+#: src/ctlpanel.c:967
+msgid "Antiquity is the diinki port; takes effect at the next login"
+msgstr "Antiquity ist die diinki-Portierung; wirkt ab der nächsten Anmeldung"
+
+#: src/ctlpanel.c:979
+msgid "Bar edge"
+msgstr "Rand der Leiste"
+
+#: src/ctlpanel.c:982
+msgid "Which edge the bar sits on. The bar picks this up live"
+msgstr "An welchem Rand die Leiste sitzt. Die Leiste übernimmt das sofort"
+
+#: src/ctlpanel.c:987
+msgid "Bar auto-hide"
+msgstr "Leiste automatisch ausblenden"
+
+#: src/ctlpanel.c:989
+msgid ""
+"Every monitor's bar at once. Per-monitor lives on the bar's own right-click "
+"menu, and \"mixed\" means they disagree"
+msgstr "Die Leiste aller Bildschirme auf einmal. Je Bildschirm geht über das Rechtsklick-Menü der Leiste, und „gemischt“ heißt, dass sie sich unterscheiden"
+
+#: src/ctlpanel.c:1005
+msgid "Bar opacity"
+msgstr "Deckkraft der Leiste"
+
+#: src/ctlpanel.c:1009
+msgid "0.00 is a clear bar, inked off the wallpaper; 1.00 hides it completely"
+msgstr "0,00 ist eine klare Leiste, gefärbt nach dem Hintergrundbild; 1,00 verdeckt es ganz"
+
+#: src/ctlpanel.c:1017
+msgid "Bar shape"
+msgstr "Form der Leiste"
+
+#: src/ctlpanel.c:1020
+msgid "Shape when corners are on; needs Window effects ▸ Corner radius"
+msgstr "Form bei eingeschalteten Ecken; braucht Fenstereffekte ▸ Eckenradius"
+
+#: src/ctlpanel.c:1022
+msgid "Welcome menu at login"
+msgstr "Willkommensmenü bei der Anmeldung"
+
+#: src/ctlpanel.c:1023
+msgid "Login"
+msgstr "Anmeldung"
+
+#: src/ctlpanel.c:1025
+msgid "Neural overlay at login"
+msgstr "Neuronale Überlagerung bei der Anmeldung"
+
+#: src/ctlpanel.c:1028
+msgid "Desktop cat at login"
+msgstr "Katze bei der Anmeldung"
+
+#: src/ctlpanel.c:1029
+msgid "Desktop cat"
+msgstr "Katze auf der Arbeitsfläche"
+
+#: src/ctlpanel.c:1031
+msgid "Super+Shift+C toggles it any time; this is only the login state"
+msgstr "Super+Umschalt+C schaltet sie jederzeit um; dies ist nur der Zustand bei der Anmeldung"
+
+#: src/ctlpanel.c:1032
+msgid "Desktop cat breed"
+msgstr "Rasse der Katze"
+
+#: src/ctlpanel.c:1035
+msgid "Coat and markings only; every breed walks the same"
+msgstr "Nur Fell und Zeichnung; jede Rasse läuft gleich"
+
+#: src/ctlpanel.c:1043
+msgid "Key repeat rate"
+msgstr "Tastenwiederholrate"
+
+#: src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "Tastatur"
+
+#: src/ctlpanel.c:1048
+msgid "Key repeat delay"
+msgstr "Verzögerung der Tastenwiederholung"
+
+#: src/ctlpanel.c:1056
+msgid "Keyboard shortcuts"
+msgstr "Tastenkürzel"
+
+#: src/ctlpanel.c:1057
+msgid "Searchable. F2 moves a shortcut to another key, F3 onto the tap"
+msgstr "Durchsuchbar. F2 legt ein Kürzel auf eine andere Taste, F3 auf das Tippen"
+
+#: src/ctlpanel.c:1058
+msgid "NumLock on at login"
+msgstr "NumLock bei der Anmeldung an"
+
+#: src/ctlpanel.c:1061
+msgid "A fresh xkb state has it off, which leaves the numpad on arrows"
+msgstr "Ein frischer xkb-Zustand hat es aus, dann liegen auf dem Ziffernblock die Pfeile"
+
+#: src/ctlpanel.c:1063
+msgid "Tap to click"
+msgstr "Tippen zum Klicken"
+
+#: src/ctlpanel.c:1064
+msgid "Pointer"
+msgstr "Zeiger"
+
+#: src/ctlpanel.c:1067
+msgid "Natural scrolling"
+msgstr "Natürliches Scrollen"
+
+#: src/ctlpanel.c:1070
+msgid "Left-handed buttons"
+msgstr "Tasten für Linkshänder"
+
+#: src/ctlpanel.c:1073
+msgid "Pointer speed"
+msgstr "Zeigergeschwindigkeit"
+
+#: src/ctlpanel.c:1079
+msgid "Pointer acceleration"
+msgstr "Zeigerbeschleunigung"
+
+#: src/ctlpanel.c:1082
+msgid ""
+"Adaptive moves further the faster you move; Flat is 1:1. Default is "
+"libinput's own pick for the device"
+msgstr "Adaptiv bewegt weiter, je schneller du bewegst; Flach ist 1:1. Vorgabe ist libinputs eigene Wahl für das Gerät"
+
+#: src/ctlpanel.c:1084
+msgid "Pointer smoothing"
+msgstr "Zeigerglättung"
+
+#: src/ctlpanel.c:1087
+msgid ""
+"Steadies a shaky or noisy pointer by averaging its path. Costs a little lag; "
+"0 is off. Games reading raw motion are unaffected"
+msgstr "Beruhigt einen zittrigen Zeiger, indem sein Weg gemittelt wird. Kostet etwas Verzögerung; 0 ist aus. Spiele, die Rohbewegung lesen, bleiben unberührt"
+
+#: src/ctlpanel.c:1090
+msgid "Cursor size"
+msgstr "Zeigergröße"
+
+#: src/ctlpanel.c:1095
+msgid "Display settings"
+msgstr "Bildschirmeinstellungen"
+
+#: src/ctlpanel.c:1096 src/ctlpanel.c:1103
+msgid "Screens"
+msgstr "Bildschirme"
+
+#: src/ctlpanel.c:1104
+msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
+msgstr "Erweitern, Duplizieren oder eingebauten aus (Deckel zu). Auch m in Super+D"
+
+#: src/ctlpanel.c:1114
+msgid "Scale everything"
+msgstr "Alles skalieren"
+
+#: src/ctlpanel.c:1115
+msgid ""
+"Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
+msgstr "Jeden Bildschirm, jedes Programm, den Zeiger. Super+Strg+= / - , Super+Strg+0 setzt zurück"
+
+#: src/ctlpanel.c:1124
+msgid "Monitor settings"
+msgstr "Monitoreinstellungen"
+
+#: src/ctlpanel.c:1125
+msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
+msgstr "Anschlüsse, EDID und die Modi, die die Hardware anbietet (syn-settings)"
+
+#: src/ctlpanel.c:1127 src/ctlpanel.c:1128
+msgid "Night light"
+msgstr "Nachtlicht"
+
+#: src/ctlpanel.c:1129
+msgid "Colour temperature"
+msgstr "Farbtemperatur"
+
+#: src/ctlpanel.c:1133
+msgid "6500K is daylight — the identity ramp. Lower is warmer"
+msgstr "6500 K ist Tageslicht — die neutrale Kurve. Niedriger ist wärmer"
+
+#: src/ctlpanel.c:1141
+msgid "Do Not Disturb"
+msgstr "Nicht stören"
+
+#: src/ctlpanel.c:1142
+msgid "Notifications"
+msgstr "Benachrichtigungen"
+
+#: src/ctlpanel.c:1143
+msgid ""
+"Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
+"still come through"
+msgstr "Super+Umschalt+M überall. Verbirgt Einblendungen und schaltet den Ton stumm; kritische Warnungen kommen trotzdem durch"
+
+#: src/ctlpanel.c:1145
+msgid "Event sounds"
+msgstr "Ereignistöne"
+
+#: src/ctlpanel.c:1152
+msgid "Screen audio"
+msgstr "Ton am Bildschirm"
+
+#: src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "Ton"
+
+#: src/ctlpanel.c:1156
+msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
+msgstr "Schickt den Ton an Fernseher oder Monitor, sobald du ihn anschließt. Auto = Notebooks"
+
+#: src/ctlpanel.c:1157
+msgid "Equalizer"
+msgstr "Klangregler"
+
+#: src/ctlpanel.c:1158
+msgid "10-band system equalizer. Adds an output device while it is on"
+msgstr "Zehnband-Klangregler fürs System. Fügt ein Ausgabegerät hinzu, solange er an ist"
+
+#: src/ctlpanel.c:1173
+msgid "Screen reader"
+msgstr "Bildschirmleser"
+
+#: src/ctlpanel.c:1174
+msgid "Speech"
+msgstr "Sprache"
+
+#: src/ctlpanel.c:1175
+msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
+msgstr "Liest das aktive Fenster vor, wenn der Fokus wandert. Super+Umschalt+U schaltet um"
+
+#: src/ctlpanel.c:1176
+msgid "Answer to its name"
+msgstr "Auf den Namen hören"
+
+#: src/ctlpanel.c:1178
+msgid "Listen for \"Synapse\" and answer out loud. Holds the microphone open"
+msgstr "Hört auf „Synapse“ und antwortet laut. Hält das Mikrofon offen"
+
+#: src/ctlpanel.c:1180
+msgid "Record audio"
+msgstr "Ton aufnehmen"
+
+#: src/ctlpanel.c:1181
+msgid "Recording"
+msgstr "Aufnahme"
+
+#: src/ctlpanel.c:1182
+msgid "Record for editing"
+msgstr "Für den Schnitt aufnehmen"
+
+#: src/ctlpanel.c:1183
+msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
+msgstr "DNxHR-.mov, das Videoschnittprogramme direkt lesen. Etwa 1,1 GB/min"
+
+#: src/ctlpanel.c:1188
+msgid "Network / Wi-Fi"
+msgstr "Netzwerk / WLAN"
+
+#: src/ctlpanel.c:1189
+msgid "Network"
+msgstr "Netzwerk"
+
+#: src/ctlpanel.c:1190
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+#: src/ctlpanel.c:1192 src/ctlpanel.c:1193
+msgid "Printers"
+msgstr "Drucker"
+
+#: src/ctlpanel.c:1199
+msgid "Find printers"
+msgstr "Drucker suchen"
+
+#: src/ctlpanel.c:1201
+msgid "Add every network printer that is not set up yet, driverless"
+msgstr "Fügt jeden Netzwerkdrucker hinzu, der noch nicht eingerichtet ist, treiberlos"
+
+#: src/ctlpanel.c:1204
+msgid "Power saving"
+msgstr "Energiesparen"
+
+#: src/ctlpanel.c:1205
+msgid "Power"
+msgstr "Energie"
+
+#: src/ctlpanel.c:1206
+msgid "Idle timeouts for dim, blank, lock and suspend"
+msgstr "Wartezeiten für Abdunkeln, Abschalten, Sperren und Bereitschaft"
+
+#: src/ctlpanel.c:1207
+msgid "Screensaver"
+msgstr "Bildschirmschoner"
+
+#: src/ctlpanel.c:1208
+msgid "What the screen shows when idle, and how the lock screen looks"
+msgstr "Was der Bildschirm im Leerlauf zeigt und wie die Sperre aussieht"
+
+#: src/ctlpanel.c:1209
+msgid "Lock screen"
+msgstr "Sperrbildschirm"
+
+#: src/ctlpanel.c:1213
+msgid "Unlock with fingerprint"
+msgstr "Mit Fingerabdruck entsperren"
+
+#: src/ctlpanel.c:1222
+msgid "Install fprintd, run fprintd-enroll; your password always works too"
+msgstr "fprintd installieren, fprintd-enroll ausführen; dein Passwort geht immer auch"
+
+#: src/ctlpanel.c:1230 src/ctlpanel.c:1231
+msgid "Game mode"
+msgstr "Spielmodus"
+
+#: src/ctlpanel.c:1232
+msgid "Enter cycles auto / always on / always off — same as Super+G"
+msgstr "Enter wechselt automatisch / immer an / immer aus — wie Super+G"
+
+#: src/ctlpanel.c:1233
+msgid "Detect games"
+msgstr "Spiele erkennen"
+
+#: src/ctlpanel.c:1235
+msgid "Treat a fullscreen game window as a game unless it is excluded"
+msgstr "Behandelt ein Vollbild-Spielfenster als Spiel, sofern es nicht ausgenommen ist"
+
+#: src/ctlpanel.c:1236
+msgid "Open games on"
+msgstr "Spiele öffnen auf"
+
+#: src/ctlpanel.c:1239
+msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
+msgstr "Primär = der in Super+D als PRIMARY markierte Bildschirm; Fragen folgt dem Spiel"
+
+#: src/ctlpanel.c:1240
+msgid "Stop the AI while gaming"
+msgstr "KI beim Spielen anhalten"
+
+#: src/ctlpanel.c:1242
+msgid "Hold off idle while gaming"
+msgstr "Leerlauf beim Spielen aussetzen"
+
+#: src/ctlpanel.c:1244
+msgid "A gamepad is not input as far as the idle timer is concerned"
+msgstr "Ein Gamepad zählt für die Leerlaufuhr nicht als Eingabe"
+
+#: src/ctlpanel.c:1248
+msgid "Drop screen effects while gaming"
+msgstr "Bildeffekte beim Spielen abschalten"
+
+#: src/ctlpanel.c:1250
+msgid "The biggest win: lets the game draw straight to the display"
+msgstr "Der größte Gewinn: das Spiel zeichnet direkt auf den Bildschirm"
+
+#: src/ctlpanel.c:1251
+msgid "Pause the wallpaper while gaming"
+msgstr "Hintergrundbild beim Spielen anhalten"
+
+#: src/ctlpanel.c:1253
+msgid "Animated wallpapers keep rendering behind a fullscreen game"
+msgstr "Animierte Hintergrundbilder rechnen hinter einem Vollbildspiel weiter"
+
+#: src/ctlpanel.c:1254
+msgid "Stop the bar while gaming"
+msgstr "Leiste beim Spielen anhalten"
+
+#: src/ctlpanel.c:1256
+msgid "Frees memory, but the bar takes a moment to come back"
+msgstr "Gibt Speicher frei, aber die Leiste braucht einen Moment zurück"
+
+#: src/ctlpanel.c:1257
+msgid "Keep the mouse on the game's screen"
+msgstr "Maus auf dem Spielbildschirm halten"
+
+#: src/ctlpanel.c:1259
+msgid "Games rarely ask for it themselves; Alt-Tab still frees it"
+msgstr "Spiele fordern das selten selbst an; Alt-Tab gibt sie trotzdem frei"
+
+#: src/ctlpanel.c:1260
+msgid "Quiet the kernel monitor while gaming"
+msgstr "Kernel-Überwachung beim Spielen ruhigstellen"
+
+#: src/ctlpanel.c:1262
+msgid "Saves very little, and security monitoring pauses with it"
+msgstr "Spart sehr wenig, und die Sicherheitsüberwachung pausiert mit"
+
+#: src/ctlpanel.c:1265
+msgid "AI backend"
+msgstr "KI-Backend"
+
+#: src/ctlpanel.c:1266
+msgid "AI"
+msgstr "KI"
+
+#: src/ctlpanel.c:1267
+msgid "Which device synapd runs inference on"
+msgstr "Auf welchem Gerät synapd rechnet"
+
+#: src/ctlpanel.c:1268
+msgid "AI model"
+msgstr "KI-Modell"
+
+#: src/ctlpanel.c:1269
+msgid "AI window placement"
+msgstr "KI-Fensterplatzierung"
+
+#: src/ctlpanel.c:1271
+msgid "Let the AI layout decide where a new window goes"
+msgstr "Lässt die KI-Anordnung entscheiden, wohin ein neues Fenster kommt"
+
+#: src/ctlpanel.c:1272
+msgid "AI context in borders"
+msgstr "KI-Kontext im Rahmen"
+
+#: src/ctlpanel.c:1274
+msgid "Tint a window's border when the AI is holding context for it"
+msgstr "Färbt den Fensterrahmen ein, wenn die KI Kontext dazu hält"
+
+#: src/ctlpanel.c:1277
+msgid "Tools"
+msgstr "Werkzeuge"
+
+#: src/ctlpanel.c:1278
+msgid "Clipboard history"
+msgstr "Zwischenablage-Verlauf"
+
+#: src/ctlpanel.c:1279
+msgid "News"
+msgstr "Nachrichten"
+
+#: src/ctlpanel.c:1280
+msgid "News refresh"
+msgstr "Nachrichten aktualisieren"
+
+#: src/ctlpanel.c:1283
+msgid "How often a feed may be re-fetched at most"
+msgstr "Wie oft eine Quelle höchstens neu geholt werden darf"
+
+#: src/ctlpanel.c:1295
+msgid "System settings"
+msgstr "Systemeinstellungen"
+
+#: src/ctlpanel.c:1296
+msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
+msgstr "Uhr, Sprache, Kernel, Standardprogramme — worauf das SYSTEM eingestellt ist"
+
+#: src/ctlpanel.c:1298
+msgid "About OS"
+msgstr "Über das System"
+
+#: src/ctlpanel.c:1299
+msgid "About"
+msgstr "Über"
+
+#: src/ctlpanel.c:1300
+msgid "The mark, the machine, and what this desktop is currently set to"
+msgstr "Das Zeichen, die Maschine und worauf diese Arbeitsfläche gerade eingestellt ist"
+
+#: src/ctlpanel.c:3613
+msgid "position"
+msgstr "Position"
+
+#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+msgid "minimum"
+msgstr "Minimum"
+
+#: src/ctlpanel.c:4240 src/ctlpanel.c:4278
+msgid "maximum"
+msgstr "Maximum"

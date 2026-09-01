@@ -26,6 +26,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
+
+#include "i18n.h"
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
@@ -3038,6 +3040,7 @@ int main(int argc, char *argv[])
      */
     setlocale(LC_ALL, "");
     setlocale(LC_NUMERIC, "C");
+    synui_i18n_init();
 
     int debug = 0;
     int no_ai = 0;

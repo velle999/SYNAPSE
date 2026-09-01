@@ -2754,7 +2754,7 @@ pkgver=0.1.0
 #   and without a display in the environment. Every voice candidate is stubbed —
 #   `vibe` first on PATH as well as espeak-ng, since the positive case has to
 #   stub them all or a real one speaks on the developer's session.
-pkgrel=567
+pkgrel=568
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -2907,7 +2907,7 @@ depends=('breeze-icons' 'adwaita-icon-theme-legacy'
          # audio is not something this compositor should grow, which is why the
          # widget shells out in the first place. 200 KiB.
          'cava')
-makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
+makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'gettext')
 optdepends=(# Network printers: cups does the discovery (its own dnssd backend) and
             # owns the queues; avahi is what makes the announcements visible at
             # all. Neither is a hard dependency — a desktop with no printer

@@ -2,6 +2,10 @@ project('synui', 'c',
   version : '0.1.0',
   default_options : ['warning_level=1', 'c_std=gnu17'])
 
+# The compositor's own words, in the user's language. libintl is part of glibc,
+# so this adds nothing to the ISO; `gettext` is a makedepends, for msgfmt.
+i18n = import('i18n')
+
 wlroots   = dependency('wlroots-0.20')
 # scenefx-0.5: the wlr_scene fork adding corner radius / backdrop blur / shadows.
 # synui includes <scenefx/types/wlr_scene.h> (a superset of wlroots' wlr_scene.h)
@@ -277,6 +281,7 @@ synui_exe = executable('synui',
     'src/settings.c',
     'src/render.c',
     'src/cairo_shapes.c',
+    'src/i18n.c',
     'src/text.c',
     'src/contrast.c',
     'src/effects.c',
@@ -328,7 +333,11 @@ synui_exe = executable('synui',
                   xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',
-            '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
+            '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"',
+            # Where bindtextdomain() looks. Composed from the same options as
+            # DATADIR above so a --prefix build finds its own catalogs rather
+            # than the system's — which is what makes a test build testable.
+            '-DSYNUI_LOCALEDIR="' + get_option('prefix') / get_option('localedir') + '"'],
   install : true)
 
 # synctl: the control-socket client (hyprctl equivalent). Talks to the socket
@@ -2496,3 +2505,10 @@ test('theme_seat_guard', theme_seat_guard,
      args    : [synui_exe.full_path()],
      depends : [synui_exe],
      timeout : 60)
+
+# A UI string that no translator can reach is silently English forever, and
+# nothing else in the build can see it — see tests/i18n.sh.
+i18n_test = find_program('tests/i18n.sh')
+test('i18n', i18n_test, timeout : 60)
+
+subdir('po')

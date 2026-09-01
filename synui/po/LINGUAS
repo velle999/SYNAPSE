@@ -1,0 +1,17 @@
+# The languages synui has catalogs for, one per line. Same set as
+# syn-install's LOCALE_ROWS and synsh's — a system installed in Polish whose
+# desktop then answered in English would be the "asked and then ignored"
+# failure that whole table exists to prevent.
+de
+fr
+es
+pt
+it
+nl
+pl
+ru
+ja
+zh
+ko
+hi
+ar
