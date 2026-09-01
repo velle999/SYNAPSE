@@ -242,6 +242,53 @@ jobs:
           done
           echo "all userspace components built"
 
+      # ⛔ AND ONCE MORE FROM THE TARBALL, WHICH IS A DIFFERENT TREE.
+      #
+      # Every step above configures the CHECKOUT. What actually ships is the
+      # source tarball, and that is assembled from a hand-maintained list of
+      # top-level directories — synui/mktarball.sh's contents=(), or the
+      # allowlist in tools/collect-source.sh. A directory missing from the list
+      # is simply absent from the tarball: the checkout still builds, this
+      # workflow still passes, and the failure lands on the first machine that
+      # starts from the tarball instead of from git.
+      #
+      # synui shipped exactly that way at 573. meson.build entered subdir('po'),
+      # contents=() did not name po/, and the build died with "Nonexistent build
+      # file 'po/meson.build'" — on a user's machine, after the commit had been
+      # pushed and the release published, with this workflow green the whole
+      # time. It is the same shape as the syn-kmod-status.c failure described
+      # further down: green here, broken at makepkg, because the two are not
+      # compiling the same set of files.
+      #
+      # preflight's check_subdir now catches that one class before the commit
+      # exists. This catches the rest of it — a data file, a protocol xml, an
+      # options file, anything the list forgot — by configuring the tarball the
+      # way a real machine does.
+      #
+      # ⚠ CONFIGURE ONLY, DELIBERATELY. The compile is already covered above and
+      # would only repeat it; what differs between the two trees is the FILE
+      # LIST, and meson setup is what reads it. It costs seconds.
+      - name: Configure each component from its source tarball
+        run: |
+          set -e
+          for c in synapd synsh synguard synnet synui; do
+            if [ -x "$c/mktarball.sh" ]; then
+              ( cd "$c" && ./mktarball.sh >/dev/null )
+              tb=$(ls "$c"/"$c"-*.tar.gz)
+            else
+              tb=$(tools/collect-source.sh "$c")
+            fi
+            rm -rf "/tmp/tb-$c" && mkdir -p "/tmp/tb-$c"
+            tar xzf "$tb" -C "/tmp/tb-$c"
+            d=$(echo "/tmp/tb-$c"/*/)
+            meson setup "$d/_tb" "$d" --buildtype=release >"/tmp/tb-$c.log" 2>&1 || {
+              echo "::error::$c does not configure from its source tarball — a file its meson.build needs is not on the tarball's list"
+              tail -40 "/tmp/tb-$c.log"
+              exit 1
+            }
+            echo "$c configures from its tarball"
+          done
+
       # synstudio: the darkroom and edit suite. Its own component, built and
       # tested separately because it needs no wayland, no GPU and no daemon —
       # just a compiler and an ffmpeg on PATH — and because its suite is the
