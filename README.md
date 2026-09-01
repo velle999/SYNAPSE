@@ -179,6 +179,40 @@ which is what a `--with-model` image wants; a stock ISO runs in 4 GB. Kernel and
 boot output are mirrored to the serial console — `View → serial0` in the QEMU
 window.
 
+### Picking a language
+
+**The first question the image asks, before anything else.** The bootloader
+carries a **Language** submenu — fifteen entries, each written in its own
+language, GRUB drawing 日本語 and العربية properly because it has a Unicode font
+loaded — and choosing one boots with `lang=` set. Take the plain entry instead
+and the live image opens on the same list as its own first screen.
+
+Whichever answers it, the answer reaches everything at once: the console
+keymap, the live desktop's keyboard layout, the locale, the console font, the
+font packs that get installed, and the language `synsh` speaks. And the
+installer does not ask again twenty minutes later — it reads the answer back
+rather than reopening the question.
+
+Both halves of the keyboard are set, which is not the same as one: `KEYMAP=`
+names a file `loadkeys` must find and `xkb_layout` names a layout `xkbcommon`
+must compile, and they disagree on four of the fifteen rows. Setting only one
+of them is how a UK install used to get the console it asked for and a US
+desktop.
+
+**And the installer speaks it too** — every step header, every question, every
+warning and every confirmation, in all fourteen languages. That is 370 strings
+per language, and they are keyed by the English sentence rather than by an id:
+a missing translation prints the English, which is usable, and no screen can
+ever show an identifier. `syn-install/tests/i18n_test.sh` fails on a catalog
+entry that matches nothing in the script, and on a translation whose `printf`
+conversions do not match the English — the one way a translation can corrupt
+output rather than merely be absent.
+
+What is *not* translated, deliberately: the answer keys. `[Y/n]`, `[y/N]` and
+typing `yes` to confirm a disk wipe stay exactly those letters in every
+language, because the script compares against them. A translated key would be
+a question whose own answer does not work.
+
 ### Installing it
 
 When you are ready to install, `syn-install` from the live session offers a
@@ -346,7 +380,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | Component | What it does |
 |---|---|
 | **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. **It also speaks llama.cpp's own HTTP API**, on a second socket at `/run/synapd/http.sock` — `/health`, `/props`, `/v1/models`, `/completion` and `/v1/chat/completions` — so anything written against llama-server or the OpenAI shape can use the model that is *already resident* instead of loading a second copy of it. A unix socket rather than a port, because a loopback port is reachable by every process on the machine, a web page included: `curl --unix-socket /run/synapd/http.sock http://localhost/v1/chat/completions -d '{"messages":[…]}'`. A whole conversation goes through the model's own chat template. `"stream": true` gets real event-stream framing, but the answer arrives in one event. **For frontends that only take a URL** — which is nearly all of them — Settings ▸ AI has a **llama.cpp API port** switch that turns on a loopback proxy at `http://127.0.0.1:8080/v1` (`syn-settings set llama-api on`, or `systemctl enable --now synapd-http-proxy.socket`). Shipped disabled: it has no authentication, so every process on the machine can reach it while it is on. |
-| **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
+| **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell — **in fourteen languages**: English, Deutsch, Français, Español, Português, Italiano, Nederlands, Polski, Русский, 日本語, 中文, 한국어, हिन्दी, العربية. It follows the language the image was booted in and needs no configuration; `syn lang de` changes it for a session, `set language de` in `~/.synshrc` for good. Requests are understood in all fourteen whatever it is set to — the phrase tables hold every language at once, so somebody working in German who types `list files` out of habit still gets it, and accents are optional in both directions (`wie spaet ist es`, `que hora es`). What the language changes is what it **says**, never what it **runs**: `ls` is `ls` everywhere and so is every exit code. It is also a competent everyday shell — concurrent pipelines, `$VAR`, `$(command)`, globs, `NAME=value`, `2>&1`, `&` and `jobs` — with `tests/shell_test.sh` asserting each of those against the way it used to fail. |
 | **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, spiral, monocle, floating and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
