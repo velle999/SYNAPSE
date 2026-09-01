@@ -680,6 +680,35 @@ check_pkgrel() {
 
         if version_moved "$c"; then
             ok pkgrel "$c — edited, version moved to $(pkgfield "$c" pkgver)-$(pkgfield "$c" pkgrel)"
+            # ⛔ AND A BUMP IS NOT A SHIP FOR AN EXTERNAL COMPONENT. Its
+            # source=() carries pkgrel in the release URL — check_external below
+            # insists on that, because a URL without it silently serves the
+            # PREVIOUS source — so the moment pkgrel moves, that URL points at a
+            # release asset which does not exist yet.
+            #
+            # ⚠ WHICH FAILS NOWHERE ON THIS MACHINE. build-all.sh collects the
+            # tarball from the working tree, and makepkg prefers a file that is
+            # already there, so every local build is green. It fails on the
+            # first machine that has to DOWNLOAD it — and `syn-update` on an
+            # installed box is exactly that machine, not an outsider's problem.
+            # Hit three times in one day on 2026-09-01: synui 581, syn-arsenal
+            # 13 and syn-confine 3 all pushed, all unbuildable, each discovered
+            # one at a time as the update queue reached it.
+            #
+            # A note and not a failure: whether the asset exists is a question
+            # only the network can answer, and this script does not touch it.
+            # ⚠ READ OUT OF publish-sources.sh's EXTERNAL through read_array,
+            # the same helper check_external uses, and never re-listed here. That
+            # array is the one place the set is written down; a second copy would
+            # drift silently, and this note would then be missing for exactly the
+            # component that was added last.
+            if read_array tools/publish-sources.sh EXTERNAL | grep -qxF "$c"; then
+                note pkgrel "$c is published externally — run tools/publish-sources.sh $c" \
+                    "Its release URL carries pkgrel, so it now points at an asset" \
+                    "that does not exist. Every local build still passes; the" \
+                    "first machine that downloads instead of collecting fails," \
+                    "and syn-update on an installed box is that machine."
+            fi
             continue
         fi
 
