@@ -53,6 +53,21 @@ executable('synstudio', sources,
 install_data('data/synstudio.qml', install_dir: get_option('datadir') / 'synstudio')
 install_data('data/synstudio-playback.qml',
              install_dir: get_option('datadir') / 'synstudio')
+
+# The translation singleton, as its own QML module directory.
+#
+# ⚠ A qmldir makes its directory an explicit module, and synstudio.qml is the
+# file quickshell is pointed AT — putting one beside it changes how that file
+# itself resolves. po/ installs the catalogs into qml/i18n/ alongside these.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'synstudio' / 'qml')
+
+# ⚠ A UI STRING NO TRANSLATOR CAN REACH IS SILENTLY ENGLISH FOREVER, and in
+# QML there is one extra way in: qsTr() looks exactly like the marking and is
+# not — quickshell has no translator to install one into. This suite also
+# holds groupLabel() to the group names the C tables actually emit.
+test('i18n', find_program('tests/i18n_test.sh'),
+     args : [meson.current_source_dir()], timeout : 60)
 # The effects. A recipe is DATA — a text manifest naming a filter chain — so
 # these install like the QML does, and a third party's own go in
 # ~/.config/synstudio/effects, which is read after these and wins on a name.
@@ -93,3 +108,5 @@ test('engine', find_program('tests/run.sh'),
      # was 344 assertions and is not at 445; a test killed by meson fails the
      # BUILD, and on the machine least able to afford it.
      timeout: 900)
+
+subdir('po')

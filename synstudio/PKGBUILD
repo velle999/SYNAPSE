@@ -1470,7 +1470,38 @@ pkgver=0.1.0
 #   Verified in a nested headless synui against a font.state carrying a face
 #   and a scale nothing resolves to by accident (DejaVu Serif at 150%), so
 #   "it followed the file" and "it kept its defaults" cannot be confused.
-pkgrel=46
+# 47: the window speaks thirteen languages.
+#   191 msgids through the same JSON bridge the bar and the other five
+#   quickshell apps carry — one byte-identical data/qml/I18n.qml with its
+#   catalogs generated beside it and read by a blocking FileView.
+#   ⛔ THE PANEL HEADINGS ARRIVE FROM THE ENGINE AND ARE MATCHED ON. `groups`,
+#   `clipGroups` and `thumbGroups` are field 5 of the keys records, spelled by
+#   C tables in develop.c, timeline.c and thumb.c — and this window compares
+#   them (`modelData === "Basic"`, `=== "Title"`, `rowsIn(group)`) as well as
+#   drawing them. groupLabel() is the one place a group becomes a word; the
+#   value compared stays the engine's. tests/i18n_test.sh reads the three C
+#   tables and fails when the mapper's set and theirs disagree EITHER WAY —
+#   which immediately found a `case "Speed"` that no group ever matches
+#   (it is a row LABEL inside Levels), a msgid no translator would ever see used.
+#   ⚠ AND THE ROW LABELS UNDER THOSE HEADINGS STAY ENGLISH. "Temperature",
+#   "Opacity" and the other ~70 come from the same C tables over the record
+#   protocol, so they need a catalog on the C side; the .po header says so
+#   rather than leaving the gap to be discovered.
+#   ⛔ AN UNRESOLVABLE QML IMPORT IS A **WARNING**, AND THAT COST THREE
+#   ASSERTIONS. tests/run.sh copies synstudio.qml to a scratch directory to
+#   drive the photo-drag gesture, and did not copy the new qml/ module beside
+#   it. quickshell logs "Ignoring unresolvable import", brings the window up
+#   anyway, and every I18n.tr() then throws "ReferenceError: I18n is not
+#   defined" AT THE POINT OF USE — aborting whatever function it was in. Here
+#   that was photoDropAt(), so the drop silently stopped adding a clip on a
+#   gesture that works perfectly. The harness copies the module now, and greps
+#   ReferenceError|TypeError — the throw is logged at WARN, so an ERROR grep
+#   walks straight past it.
+#   ⚠ The export filename keeps Qt.formatDateTime(…, "yyyyMMdd-hhmmss") on the
+#   C locale ON PURPOSE, and the suite asserts it in both directions: that call
+#   builds a PATH, and under ar_EG a locale-formatted one carries Arabic-Indic
+#   digits into it.
+pkgrel=47
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

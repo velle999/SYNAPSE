@@ -4192,6 +4192,16 @@ if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffm
     mkdir -p "$dg"
     cp "$qml" "$dg/drv.qml"
     cp "$(dirname "$qml")/synstudio-playback.qml" "$dg/" 2>/dev/null
+    # ⛔ AND THE qml/ MODULE, or every marked string throws. synstudio.qml does
+    # `import "qml"` for the I18n singleton and that import resolves against
+    # the FILE, so a driver copied to a bare directory cannot see it —
+    # quickshell then logs "Ignoring unresolvable import" as a WARNING, brings
+    # the window up anyway, and every I18n.tr() raises "ReferenceError: I18n is
+    # not defined" at the point of use. Which is not a load failure and not a
+    # visible one: it aborts whatever function it was in. Here that was
+    # photoDropAt(), so the drop stopped adding a clip and three assertions
+    # about the drag failed on a gesture that works.
+    cp -r "$(dirname "$qml")/qml" "$dg/" 2>/dev/null
     ffmpeg -v error -f lavfi -i color=c=orange:s=64x36:d=1 -frames:v 1 "$dg/shot.png" -y
     python3 - "$dg" <<'PYEOF'
 import sys
@@ -4240,6 +4250,15 @@ PYEOF
     HOME=$dg SYNSTUDIO_BIN=$BIN DISABLE_MANGOHUD=1 MANGOHUD=0 \
         QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
         timeout 60 quickshell -p "$dg/drv.qml" > "$dg/log" 2>&1
+    # ⚠ THE THROW IS LOGGED AT **WARN**, so an ERROR grep walks straight past
+    # it — the trap synui's plugin_host.sh documents. A ReferenceError here is
+    # always a bug in this file, never a startup transient.
+    if grep -qE 'ReferenceError|TypeError' "$dg/log"; then
+        bad "the window drives with no throw: $(grep -m1 -E 'ReferenceError|TypeError' \
+             "$dg/log" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-90)"
+    else
+        ok
+    fi
     if grep -q "CLIPS3" "$dg/log"; then
         grep -F "OVERTAB true"  "$dg/log" >/dev/null \
             && ok || bad "the pointer over the Video tab is recognised"

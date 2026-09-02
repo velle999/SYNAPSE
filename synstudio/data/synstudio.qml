@@ -46,6 +46,11 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
+// The translation bridge. ⛔ NOT qsTr(): quickshell has no translator to
+// install one into, so qsTr() compiles and returns its own argument. See
+// qml/I18n.qml.
+import "qml"
+
 FloatingWindow {
     id: root
 
@@ -53,10 +58,12 @@ FloatingWindow {
     // program the start screen is deliberately not choosing between.
     title: (root.atStart ? ""
             : root.mode === "video"
-            ? (root.proj ? root.proj.replace(/^.*\//, "") : "no project") + " — "
-            : (root.file ? root.file.replace(/^.*\//, "") : "no photograph")
+            ? (root.proj ? root.proj.replace(/^.*\//, "")
+                         : I18n.tr("no project")) + " — "
+            : (root.file ? root.file.replace(/^.*\//, "")
+                         : I18n.tr("no photograph"))
               + (root.dirty ? " •" : "") + " — ")
-           + "SYNAPSE Studio"
+           + I18n.tr("SYNAPSE Studio")
     implicitWidth: 1400
     implicitHeight: 880
     minimumSize: Qt.size(900, 560)
@@ -114,7 +121,8 @@ FloatingWindow {
 
     property string file: Quickshell.env("SYNSTUDIO_OPEN") || ""
     property bool   dirty: false
-    property string status: Quickshell.env("SYNSTUDIO_PROJECT") ? "" : "open a photograph"
+    property string status: Quickshell.env("SYNSTUDIO_PROJECT")
+                            ? "" : I18n.tr("open a photograph")
     property int    imgW: 0
     property int    imgH: 0
 
@@ -198,6 +206,46 @@ FloatingWindow {
     // rows: [{ key, value, lo, hi, type, group, label, hardLo, hardHi }]
     property var rows: []
     property var groups: []
+
+    // ⛔ A GROUP NAME ARRIVES FROM THE ENGINE AND IS MATCHED ON. `groups` and
+    // `clipGroups` are field 5 of the `keys` and `timeline keys` records, so
+    // they are spelled by the C tables in src/develop.c and src/timeline.c —
+    // and this file compares them (`modelData === "Basic"`, `=== "Title"`,
+    // `rowsIn(group)`) as well as drawing them. Translating what arrives would
+    // be a panel whose sections never open and whose rows land nowhere.
+    //
+    // So the engine's spelling stays the key and this is the only place it
+    // becomes a word: the same shape as syn-edit's mode chip and synfiles'
+    // propLabel(). ⚠ A NAME NOT LISTED FALLS THROUGH TO ITSELF, which is the
+    // right failure — a group added to a C table shows up in English rather
+    // than not at all. tests/i18n_test.sh fails when the two sets disagree.
+    function groupLabel(g) {
+        switch (g) {
+        case "Basic":        return I18n.tr("Basic")
+        case "Presence":     return I18n.tr("Presence")
+        case "Colour mixer": return I18n.tr("Colour mixer")
+        case "Curve":        return I18n.tr("Curve")
+        case "Detail":       return I18n.tr("Detail")
+        case "Effects":      return I18n.tr("Effects")
+        case "Geometry":     return I18n.tr("Geometry")
+        case "Grading":      return I18n.tr("Grading")
+        case "LUT":          return I18n.tr("LUT")
+        case "Levels":       return I18n.tr("Levels")
+        case "Motion":       return I18n.tr("Motion")
+        case "Sound":        return I18n.tr("Sound")
+        case "Stabiliser":   return I18n.tr("Stabiliser")
+        case "Title":        return I18n.tr("Title")
+        case "Transition":   return I18n.tr("Transition")
+        case "Background":   return I18n.tr("Background")
+        case "Canvas":       return I18n.tr("Canvas")
+        }
+        // ⚠ THE THUMBNAIL'S THREE TEXT BLOCKS ARE NUMBERED, so they are one
+        // msgid rather than three — src/thumb.c spells them "Text 1".."Text 3"
+        // through a TEXTROWS() macro, and a fourth would work here untouched.
+        const t = /^Text (\d+)$/.exec(g)
+        if (t) return I18n.tr("Text %1").arg(t[1])
+        return g
+    }
 
     function parseKeys(text) {
         const out = [], seen = [], byGroup = ({})
@@ -420,7 +468,7 @@ FloatingWindow {
     function loadFile(f) {
         root.file = f
         root.dirty = false
-        root.say("reading " + f.replace(/^.*\//, ""))
+        root.say(I18n.tr("reading %1").arg(f.replace(/^.*\//, "")))
         // ⚠ Asked on OPEN, not only after an edit. A photograph carries its
         // history beside it, so a picture with fifty steps behind it must not
         // come up with a dead Undo button — the same trap the cutting room's
@@ -703,7 +751,7 @@ FloatingWindow {
     // case and not an error worth showing.
     function fallbackHome() {
         if (root.pickerFellBack) {
-            root.say("cannot read that folder")
+            root.say(I18n.tr("cannot read that folder"))
             return
         }
         root.pickerFellBack = true
@@ -714,7 +762,8 @@ FloatingWindow {
         stderr: StdioCollector { onStreamFinished: if (this.text) root.say(this.text.split("\n")[0]) }
         onExited: function (exitCode, exitStatus) {
             root.exportingStill = false
-            root.say(exitCode === 0 ? "exported " + root.exportOut : "export failed")
+            root.say(exitCode === 0 ? I18n.tr("exported %1").arg(root.exportOut)
+                            : I18n.tr("export failed"))
         }
     }
 
@@ -806,10 +855,10 @@ FloatingWindow {
             root.saveBusy = false
             if (code === 3) {
                 root.saveReplace = true
-                root.say("a project called that is there already — Replace writes over it")
+                root.say(I18n.tr("a project called that is there already — Replace writes over it"))
                 return
             }
-            if (code !== 0 || !out) { root.say("cannot save it there"); return }
+            if (code !== 0 || !out) { root.say(I18n.tr("cannot save it there")); return }
             root.saveOpen = false
             root.saveReplace = false
             // From here on THIS is the project being edited. A Save as that
@@ -818,7 +867,7 @@ FloatingWindow {
             root.selClip = -1
             root.tlRev++
             root.reloadTimeline()
-            root.say("saved as " + out.replace(/^.*\//, ""))
+            root.say(I18n.tr("saved as %1").arg(out.replace(/^.*\//, "")))
         }
     }
 
@@ -953,7 +1002,7 @@ FloatingWindow {
             exportProc.command = [root.bin, "thumb", root.file, "render",
                                   "--out", out, "--quality", "95"]
             exportProc.running = true
-            root.say("writing the thumbnail…")
+            root.say(I18n.tr("writing the thumbnail…"))
             return
         }
         root.exportKind = ""
@@ -966,7 +1015,7 @@ FloatingWindow {
             tlExportProc.command = [root.bin, "timeline", "export", root.proj,
                                     "--out", out, "--format", fmt.name]
             tlExportProc.running = true
-            root.say("exporting the cut…")
+            root.say(I18n.tr("exporting the cut…"))
         } else {
             if (root.exportingStill) return
             root.exportingStill = true
@@ -974,7 +1023,7 @@ FloatingWindow {
             exportProc.command = [root.bin, "render", root.file,
                                   "--out", out, "--quality", "95"]
             exportProc.running = true
-            root.say("exporting…")
+            root.say(I18n.tr("exporting…"))
         }
     }
 
@@ -1025,7 +1074,7 @@ FloatingWindow {
     function photoDropAt(x, y) {
         if (!root.file) return
         if (x >= 0 && y >= 0 && x <= photoDrag.width && y <= photoDrag.height) {
-            root.say("drag it up to the Video tab to put it in the cut")
+            root.say(I18n.tr("drag it up to the Video tab to put it in the cut"))
             return
         }
         root.mode = "video"
@@ -1046,7 +1095,7 @@ FloatingWindow {
             // to the engine looks for a file with %20 in its name.
             q.push(decodeURIComponent(u.substring(7)))
         }
-        if (q.length === 0) { root.say("nothing droppable there"); return }
+        if (q.length === 0) { root.say(I18n.tr("nothing droppable there")); return }
         root.dropQueue = root.dropQueue.concat(q)
         root.pumpDrop()
     }
@@ -1089,7 +1138,7 @@ FloatingWindow {
                 root.playhead = 0
                 root.tlRev++
                 root.reloadTimeline()
-                root.say("opened " + path.replace(/^.*\//, ""))
+                root.say(I18n.tr("opened %1").arg(path.replace(/^.*\//, "")))
             } else if (kind === "image" && root.mode === "photo") {
                 root.loadFile(path)
             } else if (kind === "image" || kind === "video" || kind === "audio") {
@@ -1100,7 +1149,7 @@ FloatingWindow {
                     // coming up pump it — which is why this returns rather
                     // than falling through to the pump below.
                     if (root.autoProjTried) {
-                        root.say("cannot start a project for that")
+                        root.say(I18n.tr("cannot start a project for that"))
                     } else {
                         root.autoProjTried = true
                         root.mode = "video"
@@ -1113,11 +1162,11 @@ FloatingWindow {
                     root.mode = "video"
                     root.autoProjTried = false
                     root.addMedia(path, kind)
-                    root.say("added " + path.replace(/^.*\//, ""))
+                    root.say(I18n.tr("added %1").arg(path.replace(/^.*\//, "")))
                 }
             } else {
-                root.say("nothing this engine can open: "
-                         + path.replace(/^.*\//, ""))
+                root.say(I18n.tr("nothing this engine can open: %1")
+                             .arg(path.replace(/^.*\//, "")))
             }
             root.pumpDrop()
         }
@@ -1495,7 +1544,7 @@ FloatingWindow {
     property var titleStyles: []
 
     function applyTitleStyle(name) {
-        if (root.selTrack < 0 || root.selClip < 0) { root.say("pick a title first"); return }
+        if (root.selTrack < 0 || root.selClip < 0) { root.say(I18n.tr("pick a title first")); return }
         root.tlRun(["style", root.proj, String(root.selTrack),
                     String(root.selClip), name])
     }
@@ -1567,7 +1616,7 @@ FloatingWindow {
     function fxLabel(name) {
         for (let i = 0; i < root.fxList.length; i++)
             if (root.fxList[i].name === name) return root.fxList[i].label
-        return name + " (missing)"
+        return I18n.tr("%1 (missing)").arg(name)
     }
 
     function fxParamsOf(name) { return root.fxParams[name] || [] }
@@ -1608,15 +1657,15 @@ FloatingWindow {
     // fails, and the reverse is a name you can only reach by typing it.
     property bool sizeMenuOpen: false
     readonly property var sizePresets: [
-        { name: "4k",       label: "4K UHD",        w: 3840, h: 2160 },
-        { name: "dci4k",    label: "DCI 4K",        w: 4096, h: 2160 },
+        { name: "4k",       label: I18n.tr("4K UHD"),        w: 3840, h: 2160 },
+        { name: "dci4k",    label: I18n.tr("DCI 4K"),        w: 4096, h: 2160 },
         { name: "1440p",    label: "1440p",         w: 2560, h: 1440 },
-        { name: "1080p",    label: "1080p HD",      w: 1920, h: 1080 },
+        { name: "1080p",    label: I18n.tr("1080p HD"),      w: 1920, h: 1080 },
         { name: "720p",     label: "720p",          w: 1280, h:  720 },
         { name: "480p",     label: "480p",          w:  854, h:  480 },
-        { name: "dci2k",    label: "DCI 2K",        w: 2048, h: 1080 },
-        { name: "vertical", label: "Vertical 9:16", w: 1080, h: 1920 },
-        { name: "square",   label: "Square 1:1",    w: 1080, h: 1080 }
+        { name: "dci2k",    label: I18n.tr("DCI 2K"),        w: 2048, h: 1080 },
+        { name: "vertical", label: I18n.tr("Vertical 9:16"), w: 1080, h: 1920 },
+        { name: "square",   label: I18n.tr("Square 1:1"),    w: 1080, h: 1080 }
     ]
     function setProjectSize(ref) {
         root.sizeMenuOpen = false
@@ -1650,11 +1699,11 @@ FloatingWindow {
     // engine call shape, one line apart.
     function applyLook(name) {
         if (root.mode === "video") {
-            if (root.selTrack < 0 || root.selClip < 0) { root.say("pick a clip first"); return }
+            if (root.selTrack < 0 || root.selClip < 0) { root.say(I18n.tr("pick a clip first")); return }
             root.tlRun(["grade", root.proj, String(root.selTrack),
                         String(root.selClip), "--look", name])
         } else {
-            if (!root.file) { root.say("open a photograph first"); return }
+            if (!root.file) { root.say(I18n.tr("open a photograph first")); return }
             lookApplyProc.command = [root.bin, "look", "apply", name, "--to", root.file]
             lookApplyProc.running = true
         }
@@ -1945,7 +1994,7 @@ FloatingWindow {
         root.tlRun(["mark", root.proj, "--at",
                     String(Math.round(root.playhead * 1000) / 1000),
                     "--colour", "1"])
-        root.say("marker at " + root.timecode(root.playhead))
+        root.say(I18n.tr("marker at %1").arg(root.timecode(root.playhead)))
     }
 
     function dropMarker(i) {
@@ -1990,7 +2039,7 @@ FloatingWindow {
         root.selMore = []
         root.tlQueue = root.tlQueue.concat([["undo", root.proj]])
         root.pumpEdits()
-        root.say("undone")
+        root.say(I18n.tr("undone"))
     }
 
     function redoEdit() {
@@ -2000,7 +2049,7 @@ FloatingWindow {
         root.selMore = []
         root.tlQueue = root.tlQueue.concat([["redo", root.proj]])
         root.pumpEdits()
-        root.say("redone")
+        root.say(I18n.tr("redone"))
     }
 
     function setClip(key, v) {
@@ -2318,8 +2367,8 @@ FloatingWindow {
 
     function startVoiceover() {
         if (root.voRecording || root.voCount > 0) return
-        if (!root.proj) { root.say("start a project first"); return }
-        if (root.voDevices.length === 0) { root.say("nothing to record from"); return }
+        if (!root.proj) { root.say(I18n.tr("start a project first")); return }
+        if (root.voDevices.length === 0) { root.say(I18n.tr("nothing to record from")); return }
         root.voCount = 3
         voCountTimer.restart()
     }
@@ -2353,7 +2402,7 @@ FloatingWindow {
         recProc.command = [root.bin, "record", "--out", root.voTake,
                            "--device", d.id, "--limit", "3600", "--channels", "1"]
         recProc.running = true
-        root.say("recording…")
+        root.say(I18n.tr("recording…"))
     }
 
     function stopVoiceover() {
@@ -2388,7 +2437,7 @@ FloatingWindow {
             if (root.playing) root.pausePlayback()
 
             if (code !== 0 || root.voElapsed < 0.1) {
-                root.say(recProc.err || "the take came back empty")
+                root.say(recProc.err || I18n.tr("the take came back empty"))
                 recProc.err = ""
                 return
             }
@@ -2396,8 +2445,8 @@ FloatingWindow {
             // Punched in where it started, not where the playhead ended up:
             // playback ran for the length of the take and moved it.
             root.addMediaAt(root.voTake, "audio", root.voStartAt)
-            root.say("take of " + root.voElapsed.toFixed(1) + "s at "
-                     + root.timecode(root.voStartAt))
+            root.say(I18n.tr("take of %1s at %2").arg(root.voElapsed.toFixed(1))
+                                                 .arg(root.timecode(root.voStartAt)))
             root.playhead = root.voStartAt
             root.requestFrame()
         }
@@ -2462,7 +2511,7 @@ FloatingWindow {
     function normaliseClip() {
         if (root.normalising || root.selTrack < 0 || root.selClip < 0) return
         root.normalising = true
-        root.say("measuring…")
+        root.say(I18n.tr("measuring…"))
         normProc.command = [root.bin, "timeline", "normalise", root.proj,
                             String(root.selTrack), String(root.selClip),
                             "--target", "-14"]
@@ -2477,7 +2526,7 @@ FloatingWindow {
         property string err: ""
         onExited: function (code, status) {
             root.normalising = false
-            if (code !== 0) { root.say(normProc.err || "nothing to measure there"); return }
+            if (code !== 0) { root.say(normProc.err || I18n.tr("nothing to measure there")); return }
             let was = "", now = ""
             const lines = normProc.answer.split("\n")
             for (let i = 0; i < lines.length; i++) {
@@ -2486,7 +2535,7 @@ FloatingWindow {
                 else if (f[0] === "gain") now = f[1]
             }
             normProc.answer = ""
-            root.say("measured " + was + " LUFS · gain " + now + " dB")
+            root.say(I18n.tr("measured %1 LUFS · gain %2 dB").arg(was).arg(now))
             root.tlRev++
             root.reloadTimeline()
         }
@@ -2557,7 +2606,7 @@ FloatingWindow {
             addTrackProc.pendingPath = ""
             addTrackProc.newTrack = -1
             if (code !== 0 || !(t >= 0) || !path) {
-                root.say("cannot add a track for that")
+                root.say(I18n.tr("cannot add a track for that"))
                 return
             }
             root.selTrack = t
@@ -2609,11 +2658,11 @@ FloatingWindow {
             root.saveBusy = false
             if (code === 3) {
                 root.saveReplace = true
-                root.say("a project called that is there already — Replace writes over it")
+                root.say(I18n.tr("a project called that is there already — Replace writes over it"))
                 return
             }
             if (code !== 0 || !chosen) {
-                root.say("cannot start a project there")
+                root.say(I18n.tr("cannot start a project there"))
                 return
             }
             root.saveOpen = false
@@ -2636,7 +2685,7 @@ FloatingWindow {
         id: track2Proc
         onExited: function (code, status) {
             root.selTrack = 0
-            root.say("new project — " + root.proj.replace(/^.*\//, ""))
+            root.say(I18n.tr("new project — %1").arg(root.proj.replace(/^.*\//, "")))
             root.reloadTimeline()
             // A file dropped on the Video tab with nothing open is waiting on
             // this: it put itself back on the queue and started the project.
@@ -2673,7 +2722,7 @@ FloatingWindow {
     function togglePlay() {
         if (!root.proj || root.tlDur <= 0) return
         if (!root.playbackReady) {
-            root.say("playback needs qt6-multimedia installed")
+            root.say(I18n.tr("playback needs qt6-multimedia installed"))
             return
         }
         if (root.playing) { root.pausePlayback(); return }
@@ -2693,7 +2742,7 @@ FloatingWindow {
         root.rendering = true
         root.playAfterRender = thenPlay
         root.renderingRev = root.tlRev
-        if (thenPlay) root.say("rendering a preview to play…")
+        if (thenPlay) root.say(I18n.tr("rendering a preview to play…"))
         playRenderProc.command = [root.bin, "timeline", "export", root.proj,
                                   "--out", root.playPath(root.tlRev), "--preview"]
         playRenderProc.running = true
@@ -2726,7 +2775,7 @@ FloatingWindow {
             const want = root.playAfterRender
             root.playAfterRender = false
             if (code !== 0) {
-                if (want) root.say("could not render a preview")
+                if (want) root.say(I18n.tr("could not render a preview"))
                 return
             }
             // The previous one is dropped only once its replacement exists, so
@@ -2767,7 +2816,7 @@ FloatingWindow {
     property bool seekArmed: false
 
     function startPlayback() {
-        if (!root.playbackReady) { root.say("playback needs qt6-multimedia"); return }
+        if (!root.playbackReady) { root.say(I18n.tr("playback needs qt6-multimedia")); return }
         const pl = playbackLoader.item
         const url = "file://" + root.playFile
         // String(), because a `url` property read from QML is an OBJECT and
@@ -2835,7 +2884,7 @@ FloatingWindow {
         if (!root.playing) { root.playRate = 1; root.applyRate(); root.togglePlay(); return }
         root.playRate = root.playRate >= 8 ? 1 : root.playRate * 2
         root.applyRate()
-        root.say("play ×" + root.playRate)
+        root.say(I18n.tr("play ×%1").arg(root.playRate))
     }
 
     function shuttleBack() {
@@ -2843,7 +2892,7 @@ FloatingWindow {
         if (root.playing) root.pausePlayback()
         root.revStep = root.revStep === 0 ? 1 : Math.min(4, root.revStep * 2)
         revTimer.start()
-        root.say("shuttle back ×" + root.revStep + " (frames, not playback)")
+        root.say(I18n.tr("shuttle back ×%1 (frames, not playback)").arg(root.revStep))
     }
 
     function stopShuttle() {
@@ -2890,7 +2939,7 @@ FloatingWindow {
         root.srcDur = 0
         root.srcShown = true
         root.requestSourceFrame()
-        root.say("source: " + path.replace(/^.*\//, ""))
+        root.say(I18n.tr("source: %1").arg(path.replace(/^.*\//, "")))
     }
 
     // ⚠ The same coalescing the program monitor uses. `running = true` on a
@@ -2943,26 +2992,26 @@ FloatingWindow {
         // than refusing keeps the gesture — mark in, then out — working in
         // either order.
         if (root.srcOut >= 0 && root.srcOut <= root.srcIn) root.srcOut = -1
-        root.say("in " + root.timecode(root.srcIn))
+        root.say(I18n.tr("in %1").arg(root.timecode(root.srcIn)))
     }
     function srcMarkOut() {
         root.srcOut = root.srcPos
         if (root.srcOut <= root.srcIn) root.srcIn = 0
-        root.say("out " + root.timecode(root.srcOut))
+        root.say(I18n.tr("out %1").arg(root.timecode(root.srcOut)))
     }
 
     // The third point: where the playhead is. `insert` makes room on every
     // track, `overwrite` cuts a hole its own length on the selected one.
     function srcEdit(how) {
-        if (!root.proj) { root.say("start a project first"); return }
-        if (!root.srcFile) { root.say("open something in the source monitor"); return }
-        if (root.selTrack < 0) { root.say("pick a track first"); return }
+        if (!root.proj) { root.say(I18n.tr("start a project first")); return }
+        if (!root.srcFile) { root.say(I18n.tr("open something in the source monitor")); return }
+        if (root.selTrack < 0) { root.say(I18n.tr("pick a track first")); return }
         const args = [how, root.proj, String(root.selTrack), root.srcFile,
                       "--at", String(root.playhead), "--in", String(root.srcIn)]
         if (root.srcOut > root.srcIn) { args.push("--out-at"); args.push(String(root.srcOut)) }
         root.tlRun(args)
-        root.say(how === "insert" ? "inserted at the playhead"
-                                  : "overwrote at the playhead")
+        root.say(how === "insert" ? I18n.tr("inserted at the playhead")
+                                  : I18n.tr("overwrote at the playhead"))
     }
 
     Timer {
@@ -3016,7 +3065,7 @@ FloatingWindow {
         }
         function onFailed(text) {
             root.playing = false
-            root.say("cannot play the preview: " + text)
+            root.say(I18n.tr("cannot play the preview: %1").arg(text))
         }
     }
 
@@ -3162,7 +3211,7 @@ FloatingWindow {
         tlExportProc.command = [root.bin, "timeline", "export", root.proj, "--out",
                                 root.proj.replace(/\.[^.\/]*$/, "") + ".mp4"]
         tlExportProc.running = true
-        root.say("exporting the cut…")
+        root.say(I18n.tr("exporting the cut…"))
     }
 
     Process {
@@ -3181,7 +3230,7 @@ FloatingWindow {
                 if (!(root.tlDur > 0)) return
                 const at = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3])
                 root.exportPct = Math.max(0, Math.min(100, at / root.tlDur * 100))
-                root.say("exporting the cut… " + Math.round(root.exportPct) + "%")
+                root.say(I18n.tr("exporting the cut… %1%").arg(Math.round(root.exportPct)))
             }
         }
         onExited: function (code, status) {
@@ -3190,8 +3239,8 @@ FloatingWindow {
             // The path it actually wrote, not one reconstructed from the
             // project's name — those agreed only while the name and the
             // format were both assumed.
-            root.say(code === 0 ? "exported " + root.exportOut
-                                : (root.exportErr || "export failed"))
+            root.say(code === 0 ? I18n.tr("exported %1").arg(root.exportOut)
+                                : (root.exportErr || I18n.tr("export failed")))
         }
     }
 
@@ -3255,12 +3304,12 @@ FloatingWindow {
                     // different work with different tools on screen, and
                     // pretending one panel serves both is how an editor ends
                     // up serving neither.
-                    Tab { label: "Photo"; on: root.mode === "photo"
+                    Tab { label: I18n.tr("Photo"); on: root.mode === "photo"
                           onClicked: { root.mode = "photo"
-                                       root.say(root.file ? "" : "open a photograph") } }
+                                       root.say(root.file ? "" : I18n.tr("open a photograph")) } }
                     Tab {
                         id: videoTab
-                        label: "Video"
+                        label: I18n.tr("Video")
                         // Lit for the whole gesture, and BRIGHT when the
                         // pointer is actually on it: a target that only
                         // appears once you have already hit it is not a
@@ -3268,7 +3317,8 @@ FloatingWindow {
                         on: root.mode === "video" || videoTabDrop.containsDrag
                             || root.photoCarrying
                         onClicked: { root.mode = "video"
-                                     root.say(root.proj ? "" : "New project, then Add media") }
+                                     root.say(root.proj ? ""
+                                                        : I18n.tr("New project, then Add media")) }
 
                         DropArea {
                             id: videoTabDrop
@@ -3300,15 +3350,15 @@ FloatingWindow {
                     Item { width: 10; height: 1 }
 
                     Btn { visible: root.mode === "photo"
-                          label: "Open";  onClicked: root.openPicker() }
+                          label: I18n.tr("Open");  onClicked: root.openPicker() }
                     Btn { visible: root.mode === "photo"
-                          label: root.exportingStill ? "Export…" : "Export"
+                          label: root.exportingStill ? I18n.tr("Export…") : I18n.tr("Export")
                           active: root.file !== "" && !root.exportingStill
                           onClicked: root.openExport() }
                     // A thumbnail is a second picture made from this one,
                     // so it is a MODE of the darkroom rather than a page:
                     // every develop control is still the thing underneath it.
-                    Btn { visible: root.mode === "photo"; label: "Thumbnail"
+                    Btn { visible: root.mode === "photo"; label: I18n.tr("Thumbnail")
                           on: root.thumbOpen
                           active: root.file !== ""
                           onClicked: {
@@ -3318,37 +3368,37 @@ FloatingWindow {
                                   root.requestThumb()
                               }
                           } }
-                    Btn { visible: root.mode === "photo"; label: "Undo"
+                    Btn { visible: root.mode === "photo"; label: I18n.tr("Undo")
                           active: root.devUndo > 0
                           onClicked: root.devStep("undo") }
-                    Btn { visible: root.mode === "photo"; label: "Redo"
+                    Btn { visible: root.mode === "photo"; label: I18n.tr("Redo")
                           active: root.devRedo > 0
                           onClicked: root.devStep("redo") }
                     // ⚠ Reset is an edit like any other now, so Undo takes it
                     // back. It used to delete the sidecar, which put the work
                     // it threw away outside the history entirely.
                     Btn { visible: root.mode === "photo"
-                          label: "Reset"; active: root.file !== ""
+                          label: I18n.tr("Reset"); active: root.file !== ""
                           onClicked: root.resetPhoto() }
 
-                    Btn { visible: root.mode === "video"; label: "New project"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("New project")
                           onClicked: root.openNewProject() }
                     // Every edit is already on disk; this is what gives the
                     // file its NAME, and takes a copy at a point worth coming
                     // back to.
-                    Btn { visible: root.mode === "video"; label: "Save as"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Save as")
                           active: root.proj !== ""
                           onClicked: root.openSaveAs() }
                     // No selected track needed: the file picks its own track.
-                    Btn { visible: root.mode === "video"; label: "Add media"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Add media")
                           active: root.proj !== ""
                           onClicked: { root.pickerFor = "clip"; root.openPicker() } }
-                    Btn { visible: root.mode === "video"; label: "Title"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Title")
                           active: root.proj !== "" && root.selTrack >= 0
                           onClicked: root.tlRun(["title", root.proj, String(root.selTrack),
                                                  "Title", "--at", String(root.playhead),
                                                  "--dur", "3"]) }
-                    Btn { visible: root.mode === "video"; label: "Split"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Split")
                           active: root.proj !== "" && root.selTrack >= 0
                           onClicked: root.tlRun(["split", root.proj, String(root.selTrack),
                                                  "--at", String(root.playhead)]) }
@@ -3356,7 +3406,7 @@ FloatingWindow {
                     // Setting the kind is a property and would leave the two
                     // clips butted together with nothing to dissolve THROUGH,
                     // which reads as the transition not working.
-                    Btn { visible: root.mode === "video"; label: "Transition"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Transition")
                           active: root.proj !== "" && root.selTrack >= 0
                           onClicked: root.tlRun(["transition", root.proj,
                                                  String(root.selTrack),
@@ -3365,13 +3415,16 @@ FloatingWindow {
                                                  "--dur", String(root.defaultTransDur)]) }
                     Btn { visible: root.mode === "video"
                           label: root.selMore.length > 0
-                                 ? "Delete " + (root.selMore.length + 1) : "Delete"
+                                 ? I18n.trn("Delete %1", "Delete %1",
+                                            root.selMore.length + 1)
+                                       .arg(root.selMore.length + 1)
+                                 : I18n.tr("Delete")
                           active: root.selClip >= 0
                           onClicked: root.deleteSelection(false) }
-                    Btn { visible: root.mode === "video"; label: "Ripple delete"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Ripple delete")
                           active: root.selClip >= 0
                           onClicked: root.deleteSelection(true) }
-                    Btn { visible: root.mode === "video"; label: "Copy"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Copy")
                           active: root.selClip >= 0
                           onClicked: root.copyClip() }
                     // ⚠ Inactive with nothing on it, rather than pressed to
@@ -3379,29 +3432,29 @@ FloatingWindow {
                     // window, so "is there anything to paste" is a question
                     // only the engine can answer.
                     Btn { visible: root.mode === "video"
-                          label: root.cbKind === "" ? "Paste"
-                                 : "Paste " + root.cbKind
+                          label: root.cbKind === "" ? I18n.tr("Paste")
+                                 : I18n.tr("Paste %1").arg(root.cbKind)
                           active: root.proj !== "" && root.selTrack >= 0
                                   && root.cbKind !== ""
                           onClicked: root.pasteClip() }
-                    Btn { visible: root.mode === "video"; label: "Undo"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Undo")
                           active: root.undoDepth > 0
                           onClicked: root.undoEdit() }
-                    Btn { visible: root.mode === "video"; label: "Redo"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Redo")
                           active: root.redoDepth > 0
                           onClicked: root.redoEdit() }
-                    Btn { visible: root.mode === "video"; label: "Mark"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Mark")
                           active: root.proj !== ""
                           onClicked: root.addMarker() }
-                    Btn { visible: root.mode === "video"; label: "Snap"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Snap")
                           on: root.snapping
                           onClicked: root.snapping = !root.snapping }
-                    Btn { visible: root.mode === "video"; label: "Mixer"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Mixer")
                           on: root.mixerOpen
                           active: root.proj !== ""
                           onClicked: root.panelMode =
                               root.mixerOpen ? "clip" : "mixer" }
-                    Btn { visible: root.mode === "video"; label: "Voiceover"
+                    Btn { visible: root.mode === "video"; label: I18n.tr("Voiceover")
                           on: root.voOpen
                           active: root.proj !== ""
                           onClicked: {
@@ -3410,11 +3463,11 @@ FloatingWindow {
                                   root.loadDevices()
                           } }
                     Btn { visible: root.mode === "video"
-                          label: root.normalising ? "…" : "Normalise"
+                          label: root.normalising ? "…" : I18n.tr("Normalise")
                           active: root.selClip >= 0 && !root.normalising
                           onClicked: root.normaliseClip() }
                     Btn { visible: root.mode === "video"
-                          label: root.exportingCut ? "Export…" : "Export"
+                          label: root.exportingCut ? I18n.tr("Export…") : I18n.tr("Export")
                           active: root.proj !== "" && root.tlDur > 0
                                   && !root.exportingCut
                           onClicked: root.openExport() }
@@ -3425,7 +3478,7 @@ FloatingWindow {
                     // an editor knows both words and a glyph for either would
                     // be somebody's guess.
                     Btn { visible: root.mode === "video"
-                          label: root.srcShown ? "Program" : "Source"
+                          label: root.srcShown ? I18n.tr("Program") : I18n.tr("Source")
                           on: root.srcShown
                           onClicked: {
                               root.srcShown = !root.srcShown
@@ -3434,7 +3487,7 @@ FloatingWindow {
                                   root.openPicker()
                               }
                           } }
-                    Btn { label: "Keys"; on: root.helpOpen
+                    Btn { label: I18n.tr("Keys"); on: root.helpOpen
                           onClicked: root.helpOpen = !root.helpOpen }
                 }
 
@@ -3575,7 +3628,7 @@ FloatingWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: root.file === ""
-                        text: "Open a photograph"
+                        text: I18n.tr("Open a photograph")
                         color: "#9a9a9a"
                         font.pixelSize: root.ui(18)
                         font.family: root.uiFont
@@ -3709,7 +3762,7 @@ FloatingWindow {
                                                 anchors.left: parent.left
                                                 anchors.leftMargin: 12
                                                 text: (tgrp.open ? "▾  " : "▸  ")
-                                                      + tgrp.modelData
+                                                      + root.groupLabel(tgrp.modelData)
                                                 color: root.cText
                                                 font.pixelSize: root.ui(12)
                                                 font.family: root.uiFont
@@ -3755,11 +3808,11 @@ FloatingWindow {
                                 Row {
                                     x: 12
                                     spacing: 8
-                                    Btn { label: "Export thumbnail"
+                                    Btn { label: I18n.tr("Export thumbnail")
                                           active: root.file !== ""
                                           onClicked: { root.exportKind = "thumb"
                                                        root.openExport() } }
-                                    Btn { label: "Reset"
+                                    Btn { label: I18n.tr("Reset")
                                           active: root.file !== ""
                                           onClicked: root.resetThumb() }
                                 }
@@ -3803,7 +3856,7 @@ FloatingWindow {
                                             anchors.verticalCenter: parent.verticalCenter
                                             anchors.left: parent.left
                                             anchors.leftMargin: 12
-                                            text: (lookGrp.open ? "▾  " : "▸  ") + "Looks"
+                                            text: (lookGrp.open ? "▾  " : "▸  ") + I18n.tr("Looks")
                                             color: root.cText
                                             font.pixelSize: root.ui(12)
                                             font.family: root.uiFont
@@ -3868,7 +3921,7 @@ FloatingWindow {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 anchors.left: parent.left
                                                 anchors.leftMargin: 12
-                                                text: (grp.open ? "▾  " : "▸  ") + grp.modelData
+                                                text: (grp.open ? "▾  " : "▸  ") + root.groupLabel(grp.modelData)
                                                 color: root.cText
                                                 font.pixelSize: root.ui(12)
                                                 font.family: root.uiFont
@@ -3963,7 +4016,7 @@ FloatingWindow {
                             Text {
                                 anchors.centerIn: parent
                                 visible: root.srcFile === ""
-                                text: "Open something to edit from"
+                                text: I18n.tr("Open something to edit from")
                                 color: "#9a9a9a"
                                 font.pixelSize: root.ui(16)
                                 font.family: root.uiFont
@@ -4027,18 +4080,18 @@ FloatingWindow {
                                 anchors.bottomMargin: 6
                                 spacing: 6
 
-                                Btn { label: "Open"
+                                Btn { label: I18n.tr("Open")
                                       onClicked: { root.pickerFor = "source"
                                                    root.openPicker() } }
-                                Btn { label: "Mark in";  active: root.srcFile !== ""
+                                Btn { label: I18n.tr("Mark in");  active: root.srcFile !== ""
                                       onClicked: root.srcMarkIn() }
-                                Btn { label: "Mark out"; active: root.srcFile !== ""
+                                Btn { label: I18n.tr("Mark out"); active: root.srcFile !== ""
                                       onClicked: root.srcMarkOut() }
-                                Btn { label: "Insert"
+                                Btn { label: I18n.tr("Insert")
                                       active: root.srcFile !== "" && root.proj !== ""
                                               && root.selTrack >= 0
                                       onClicked: root.srcEdit("insert") }
-                                Btn { label: "Overwrite"
+                                Btn { label: I18n.tr("Overwrite")
                                       active: root.srcFile !== "" && root.proj !== ""
                                               && root.selTrack >= 0
                                       onClicked: root.srcEdit("overwrite") }
@@ -4049,10 +4102,12 @@ FloatingWindow {
                                 anchors.bottom: parent.bottom
                                 anchors.rightMargin: 14
                                 anchors.bottomMargin: 10
-                                text: root.timecode(root.srcPos) + "   in "
-                                      + root.timecode(root.srcIn) + "   out "
-                                      + (root.srcOut > root.srcIn
-                                         ? root.timecode(root.srcOut) : "end")
+                                text: I18n.tr("%1   in %2   out %3")
+                                          .arg(root.timecode(root.srcPos))
+                                          .arg(root.timecode(root.srcIn))
+                                          .arg(root.srcOut > root.srcIn
+                                               ? root.timecode(root.srcOut)
+                                               : I18n.tr("end"))
                                 color: root.cDim
                                 font.pixelSize: root.ui(11)
                                 font.family: "monospace"
@@ -4062,7 +4117,7 @@ FloatingWindow {
                         Text {
                             anchors.centerIn: parent
                             visible: root.proj === ""
-                            text: "New project, then Add media"
+                            text: I18n.tr("New project, then Add media")
                             color: "#9a9a9a"
                             font.pixelSize: root.ui(18)
                             font.family: root.uiFont
@@ -4078,7 +4133,7 @@ FloatingWindow {
                             color: Qt.rgba(0, 0, 0, 0.72)
                             Text {
                                 anchors.centerIn: parent
-                                text: "rendering a preview…"
+                                text: I18n.tr("rendering a preview…")
                                 color: "#e6e9ef"
                                 font.pixelSize: root.ui(12)
                                 font.family: root.uiFont
@@ -4146,7 +4201,7 @@ FloatingWindow {
                             // and a control nobody can read is worse than a
                             // wider one.
                             Btn {
-                                label: root.monMuted ? "Muted" : "Vol"
+                                label: root.monMuted ? I18n.tr("Muted") : I18n.tr("Vol")
                                 on: root.monMuted
                                 onClicked: root.monMuted = !root.monMuted
                             }
@@ -4867,7 +4922,7 @@ FloatingWindow {
                             anchors.topMargin: 12
                             anchors.left: parent.left
                             anchors.leftMargin: 14
-                            text: "Mixer"
+                            text: I18n.tr("Mixer")
                             color: root.cText
                             font.pixelSize: root.ui(13)
                             font.family: root.uiFont
@@ -4877,7 +4932,7 @@ FloatingWindow {
                             anchors.verticalCenter: mixTitle.verticalCenter
                             anchors.left: mixTitle.right
                             anchors.leftMargin: 10
-                            text: "levels at the playhead"
+                            text: I18n.tr("levels at the playhead")
                             color: root.cDim
                             font.pixelSize: root.ui(10)
                             font.family: root.uiFont
@@ -4916,7 +4971,7 @@ FloatingWindow {
 
                                 Strip {
                                     trackIndex: -1
-                                    label: "Master"
+                                    label: I18n.tr("Master")
                                     isAudio: true
                                     height: strips.height
                                 }
@@ -4935,7 +4990,7 @@ FloatingWindow {
                             spacing: 10
 
                             Text {
-                                text: "Voiceover"
+                                text: I18n.tr("Voiceover")
                                 color: root.cText
                                 font.pixelSize: root.ui(13)
                                 font.family: root.uiFont
@@ -4944,8 +4999,8 @@ FloatingWindow {
 
                             Text {
                                 width: parent.width
-                                text: "Records from the playhead onto an audio "
-                                      + "track, into a file beside the project."
+                                text: I18n.tr("Records from the playhead onto an audio "
+                                              + "track, into a file beside the project.")
                                 color: root.cDim
                                 font.pixelSize: root.ui(10)
                                 font.family: root.uiFont
@@ -4957,7 +5012,7 @@ FloatingWindow {
                             // machine is PLAYING, which is never what somebody
                             // asking for a voiceover meant.
                             Text {
-                                text: "From"
+                                text: I18n.tr("From")
                                 color: root.cDim
                                 font.pixelSize: root.ui(10)
                                 font.family: root.uiFont
@@ -5015,7 +5070,7 @@ FloatingWindow {
                                       onClicked: root.voPlayWhile = !root.voPlayWhile }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "roll the timeline"
+                                    text: I18n.tr("roll the timeline")
                                     color: root.cDim
                                     font.pixelSize: root.ui(10)
                                     font.family: root.uiFont
@@ -5034,8 +5089,8 @@ FloatingWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 150
                                     text: root.voHeadphones
-                                          ? "monitoring on — headphones"
-                                          : "monitoring muted — speakers"
+                                          ? I18n.tr("monitoring on — headphones")
+                                          : I18n.tr("monitoring muted — speakers")
                                     color: root.cDim
                                     font.pixelSize: root.ui(10)
                                     font.family: root.uiFont
@@ -5064,11 +5119,13 @@ FloatingWindow {
                             Text {
                                 width: parent.width
                                 text: root.voCount > 0
-                                      ? "in " + root.voCount + "…"
+                                      ? I18n.tr("in %1…").arg(root.voCount)
                                       : root.voRecording
-                                        ? "● " + root.timecode(root.voElapsed)
-                                          + "   " + root.voLevel.toFixed(0) + " dB"
-                                        : "from " + root.timecode(root.playhead)
+                                        ? I18n.tr("● %1   %2 dB")
+                                              .arg(root.timecode(root.voElapsed))
+                                              .arg(root.voLevel.toFixed(0))
+                                        : I18n.tr("from %1")
+                                              .arg(root.timecode(root.playhead))
                                 color: root.voRecording ? "#e0463c" : root.cDim
                                 font.pixelSize: root.ui(12)
                                 font.family: "monospace"
@@ -5078,7 +5135,7 @@ FloatingWindow {
                                 spacing: 8
                                 Btn {
                                     label: root.voRecording || root.voCount > 0
-                                           ? "Stop" : "Record"
+                                           ? I18n.tr("Stop") : I18n.tr("Record")
                                     active: root.proj !== ""
                                             && root.voDevices.length > 0
                                     onClicked: root.voRecording || root.voCount > 0
@@ -5086,7 +5143,7 @@ FloatingWindow {
                                                : root.startVoiceover()
                                 }
                                 Btn {
-                                    label: "Devices"
+                                    label: I18n.tr("Devices")
                                     active: !root.voRecording
                                     onClicked: root.loadDevices()
                                 }
@@ -5100,8 +5157,8 @@ FloatingWindow {
                         width: parent.width - 40
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
-                        text: root.proj === "" ? "No project yet"
-                              : "Pick a clip to grade it"
+                        text: root.proj === "" ? I18n.tr("No project yet")
+                              : I18n.tr("Pick a clip to grade it")
                         color: root.cDim
                         font.pixelSize: root.ui(13)
                         font.family: root.uiFont
@@ -5141,10 +5198,11 @@ FloatingWindow {
                                 Text {
                                     anchors.left: parent.left; anchors.leftMargin: 12
                                     anchors.bottom: parent.bottom; anchors.bottomMargin: 6
-                                    text: root.timecode(parseFloat(root.clipValue("tl_in")) || 0)
-                                          + "  ·  " +
-                                          root.timecode(parseFloat(root.clipValue("length")) || 0)
-                                          + " long"
+                                    text: I18n.tr("%1  ·  %2 long")
+                                              .arg(root.timecode(
+                                                  parseFloat(root.clipValue("tl_in")) || 0))
+                                              .arg(root.timecode(
+                                                  parseFloat(root.clipValue("length")) || 0))
                                     color: root.cDim
                                     font.pixelSize: root.ui(10)
                                     font.family: "monospace"
@@ -5181,7 +5239,7 @@ FloatingWindow {
                                             anchors.verticalCenter: parent.verticalCenter
                                             anchors.left: parent.left
                                             anchors.leftMargin: 12
-                                            text: (cgrp.open ? "▾  " : "▸  ") + cgrp.modelData
+                                            text: (cgrp.open ? "▾  " : "▸  ") + root.groupLabel(cgrp.modelData)
                                             color: root.cText
                                             font.pixelSize: root.ui(12)
                                             font.family: root.uiFont
@@ -5260,7 +5318,7 @@ FloatingWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
                                     anchors.leftMargin: 12
-                                    text: "Effects"
+                                    text: I18n.tr("Effects")
                                     color: root.cText
                                     font.pixelSize: root.ui(12)
                                     font.family: root.uiFont
@@ -5270,7 +5328,7 @@ FloatingWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.right: parent.right
                                     anchors.rightMargin: 10
-                                    label: root.fxPicking ? "✕" : "+ Add"
+                                    label: root.fxPicking ? "✕" : I18n.tr("+ Add")
                                     on: root.fxPicking
                                     onClicked: root.fxPicking = !root.fxPicking
                                 }
@@ -5396,7 +5454,7 @@ FloatingWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
                                     anchors.leftMargin: 12
-                                    text: "Grade"
+                                    text: I18n.tr("Grade")
                                     color: root.cText
                                     font.pixelSize: root.ui(12)
                                     font.family: root.uiFont
@@ -5409,7 +5467,7 @@ FloatingWindow {
                                     spacing: 6
 
                                     Tag {
-                                        label: "◆ key"
+                                        label: I18n.tr("◆ key")
                                         on: false
                                         onClicked: root.addKey()
                                     }
@@ -5437,10 +5495,11 @@ FloatingWindow {
                                     anchors.left: parent.left
                                     anchors.leftMargin: 20
                                     text: root.selKey < 0 ? ""
-                                          : "editing key " + (root.selKey + 1) + " of "
-                                            + root.selClipObj.keys.length + "  ·  "
-                                            + root.timecode(root.selClipObj.keys[root.selKey].t)
-                                            + " into the clip"
+                                          : I18n.tr("editing key %1 of %2  ·  %3 into the clip")
+                                                .arg(root.selKey + 1)
+                                                .arg(root.selClipObj.keys.length)
+                                                .arg(root.timecode(
+                                                    root.selClipObj.keys[root.selKey].t))
                                     color: root.cAccent
                                     font.pixelSize: root.ui(10)
                                     font.family: root.uiFont
@@ -5465,7 +5524,7 @@ FloatingWindow {
                                         anchors.verticalCenter: parent.verticalCenter
                                         anchors.left: parent.left
                                         anchors.leftMargin: 20
-                                        text: (glookGrp.open ? "▾  " : "▸  ") + "Looks"
+                                        text: (glookGrp.open ? "▾  " : "▸  ") + I18n.tr("Looks")
                                         color: root.cText
                                         font.pixelSize: root.ui(11)
                                         font.family: root.uiFont
@@ -5524,7 +5583,7 @@ FloatingWindow {
                                             anchors.verticalCenter: parent.verticalCenter
                                             anchors.left: parent.left
                                             anchors.leftMargin: 20
-                                            text: (ggrp.open ? "▾  " : "▸  ") + ggrp.modelData
+                                            text: (ggrp.open ? "▾  " : "▸  ") + root.groupLabel(ggrp.modelData)
                                             color: root.cText
                                             font.pixelSize: root.ui(11)
                                             font.family: root.uiFont
@@ -5564,7 +5623,8 @@ FloatingWindow {
                     anchors.rightMargin: 12
                     text: root.atStart ? ""
                           : root.mode === "video"
-                          ? (root.tl.w + " × " + root.tl.h + "  ·  " + root.tl.fps + " fps")
+                          ? I18n.tr("%1 × %2  ·  %3 fps")
+                                .arg(root.tl.w).arg(root.tl.h).arg(root.tl.fps)
                           : (root.imgW > 0 ? root.imgW + " × " + root.imgH : "")
                     // Lit only when it does something. In the darkroom this is
                     // the picture's own size and there is nothing to pick.
@@ -5645,9 +5705,9 @@ FloatingWindow {
                 // arriving from a file manager and reads as a refusal to the
                 // one already open.
                 text: root.mode === "video"
-                      ? (root.proj ? "drop clips onto the timeline"
-                                   : "drop clips to start a project")
-                      : "drop a photograph to open it"
+                      ? (root.proj ? I18n.tr("drop clips onto the timeline")
+                                   : I18n.tr("drop clips to start a project"))
+                      : I18n.tr("drop a photograph to open it")
                 color: "#f2f4f8"
                 font.pixelSize: root.ui(16)
                 font.family: root.uiFont
@@ -5688,26 +5748,26 @@ FloatingWindow {
     // to the handler and not to it is a binding nobody can find. `mode` is
     // which page it belongs to: "" is both.
     readonly property var keyRows: [
-        { mode: "",      k: "?",              d: "this list" },
-        { mode: "",      k: "Esc",            d: "close what is open" },
-        { mode: "",      k: "Ctrl+O",         d: "open a file" },
-        { mode: "",      k: "Ctrl+E",         d: "export" },
-        { mode: "",      k: "Ctrl+Z / Ctrl+Shift+Z", d: "undo, redo" },
-        { mode: "photo", k: "Ctrl+S",         d: "export the photograph" },
-        { mode: "photo", k: "Ctrl+R",         d: "back to the picture as it arrived" },
-        { mode: "video", k: "Ctrl+S",         d: "save the cut under a name" },
-        { mode: "video", k: "Ctrl+N",         d: "new project" },
-        { mode: "video", k: "Space",          d: "play, pause" },
-        { mode: "video", k: "L / K / J",      d: "play faster, stop, shuttle back" },
-        { mode: "video", k: "← →",            d: "a frame; with Shift, a second" },
-        { mode: "video", k: "Home / End",     d: "the start, the end" },
-        { mode: "video", k: "Ctrl+C / Ctrl+V", d: "copy a clip, paste at the playhead" },
-        { mode: "video", k: "S",              d: "split at the playhead" },
-        { mode: "video", k: "T",              d: "transition at the playhead" },
-        { mode: "video", k: "M",              d: "a marker here" },
-        { mode: "video", k: "I / O",          d: "mark in, mark out on the source" },
-        { mode: "video", k: ", / .",          d: "insert, overwrite at the playhead" },
-        { mode: "video", k: "Del / Shift+Del", d: "delete, ripple delete" }
+        { mode: "",      k: "?",              d: I18n.tr("this list") },
+        { mode: "",      k: "Esc",            d: I18n.tr("close what is open") },
+        { mode: "",      k: "Ctrl+O",         d: I18n.tr("open a file") },
+        { mode: "",      k: "Ctrl+E",         d: I18n.tr("export") },
+        { mode: "",      k: "Ctrl+Z / Ctrl+Shift+Z", d: I18n.tr("undo, redo") },
+        { mode: "photo", k: "Ctrl+S",         d: I18n.tr("export the photograph") },
+        { mode: "photo", k: "Ctrl+R",         d: I18n.tr("back to the picture as it arrived") },
+        { mode: "video", k: "Ctrl+S",         d: I18n.tr("save the cut under a name") },
+        { mode: "video", k: "Ctrl+N",         d: I18n.tr("new project") },
+        { mode: "video", k: "Space",          d: I18n.tr("play, pause") },
+        { mode: "video", k: "L / K / J",      d: I18n.tr("play faster, stop, shuttle back") },
+        { mode: "video", k: "← →",            d: I18n.tr("a frame; with Shift, a second") },
+        { mode: "video", k: "Home / End",     d: I18n.tr("the start, the end") },
+        { mode: "video", k: "Ctrl+C / Ctrl+V", d: I18n.tr("copy a clip, paste at the playhead") },
+        { mode: "video", k: "S",              d: I18n.tr("split at the playhead") },
+        { mode: "video", k: "T",              d: I18n.tr("transition at the playhead") },
+        { mode: "video", k: "M",              d: I18n.tr("a marker here") },
+        { mode: "video", k: "I / O",          d: I18n.tr("mark in, mark out on the source") },
+        { mode: "video", k: ", / .",          d: I18n.tr("insert, overwrite at the playhead") },
+        { mode: "video", k: "Del / Shift+Del", d: I18n.tr("delete, ripple delete") }
     ]
 
     function handleKey(e) {
@@ -5856,7 +5916,7 @@ FloatingWindow {
                 spacing: 6
 
                 Text {
-                    text: "Keys"
+                    text: I18n.tr("Keys")
                     color: root.cText
                     font.pixelSize: root.ui(13)
                     font.family: root.uiFont
@@ -5904,8 +5964,8 @@ FloatingWindow {
                     // direction is not: J steps the frame monitor backwards
                     // rather than playing in reverse, which nothing can do to
                     // an encoded preview.
-                    text: "J shuttles back through the frame monitor — it is a "
-                          + "fast scrub, not playback in reverse."
+                    text: I18n.tr("J shuttles back through the frame monitor — it is a "
+                                  + "fast scrub, not playback in reverse.")
                     color: root.cDim
                     font.pixelSize: root.ui(10)
                     font.family: root.uiFont
@@ -5937,7 +5997,7 @@ FloatingWindow {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "SYNAPSE Studio"
+                text: I18n.tr("SYNAPSE Studio")
                 color: root.cText
                 font.pixelSize: root.ui(26)
                 font.family: root.uiFont
@@ -5945,7 +6005,7 @@ FloatingWindow {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "one colour engine, two ways in"
+                text: I18n.tr("one colour engine, two ways in")
                 color: root.cDim
                 font.pixelSize: root.ui(12)
                 font.family: root.uiFont
@@ -5953,14 +6013,14 @@ FloatingWindow {
             }
 
             Door {
-                title: "Open a photograph"
-                sub: "RAW or a still — develop it in the darkroom"
+                title: I18n.tr("Open a photograph")
+                sub: I18n.tr("RAW or a still — develop it in the darkroom")
                 onClicked: { root.mode = "photo"; root.pickerFor = "photo"
                              root.openPicker() }
             }
             Door {
-                title: "New video project"
-                sub: "a timeline to cut, grade and export"
+                title: I18n.tr("New video project")
+                sub: I18n.tr("a timeline to cut, grade and export")
                 onClicked: {
                     root.mode = "video"
                     // The next free name, never the last project's. Save as
@@ -5970,8 +6030,8 @@ FloatingWindow {
                 }
             }
             Door {
-                title: "Open a project"
-                sub: "a .syntl timeline you started earlier"
+                title: I18n.tr("Open a project")
+                sub: I18n.tr("a .syntl timeline you started earlier")
                 onClicked: { root.mode = "video"; root.pickerFor = "project"
                              root.openPicker() }
             }
@@ -6021,8 +6081,8 @@ FloatingWindow {
                 spacing: 10
 
                 Text {
-                    text: root.mode === "video" ? "Export the cut as"
-                                                : "Export the photograph as"
+                    text: root.mode === "video" ? I18n.tr("Export the cut as")
+                                                : I18n.tr("Export the photograph as")
                     color: root.cText
                     font.pixelSize: root.ui(13)
                     font.family: root.uiFont
@@ -6113,8 +6173,8 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
-                    Btn { label: "Cancel"; onClicked: root.exportOpen = false }
-                    Btn { label: "Export"
+                    Btn { label: I18n.tr("Cancel"); onClicked: root.exportOpen = false }
+                    Btn { label: I18n.tr("Export")
                           active: root.exportName !== ""
                                   && root.exportFormats.length > 0
                           onClicked: root.doExport() }
@@ -6161,8 +6221,8 @@ FloatingWindow {
                 spacing: 10
 
                 Text {
-                    text: root.saveWhat === "new" ? "New project"
-                                                  : "Save the cut as"
+                    text: root.saveWhat === "new" ? I18n.tr("New project")
+                                                  : I18n.tr("Save the cut as")
                     color: root.cText
                     font.pixelSize: root.ui(13)
                     font.family: root.uiFont
@@ -6173,8 +6233,11 @@ FloatingWindow {
                     width: parent.width
                     wrapMode: Text.WordWrap
                     text: root.saveWhat === "new"
-                          ? "A name for it. Everything you do to it is written as you do it."
-                          : "Every edit is already on disk. This gives the cut a name of its own, and leaves a copy behind under the old one."
+                          ? I18n.tr("A name for it. Everything you do to it is "
+                                    + "written as you do it.")
+                          : I18n.tr("Every edit is already on disk. This gives the cut a "
+                                    + "name of its own, and leaves a copy behind under "
+                                    + "the old one.")
                     color: root.cDim
                     font.pixelSize: root.ui(11)
                     font.family: root.uiFont
@@ -6230,7 +6293,7 @@ FloatingWindow {
                     width: parent.width
                     visible: root.saveReplace
                     wrapMode: Text.WordWrap
-                    text: "A project of that name is there already. Replace writes over it."
+                    text: I18n.tr("A project of that name is there already. Replace writes over it.")
                     color: root.cBad
                     font.pixelSize: root.ui(11)
                     font.family: root.uiFont
@@ -6238,10 +6301,10 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
-                    Btn { label: "Cancel"; onClicked: { root.saveOpen = false
+                    Btn { label: I18n.tr("Cancel"); onClicked: { root.saveOpen = false
                                                         root.saveReplace = false } }
-                    Btn { label: root.saveReplace ? "Replace"
-                                                  : root.saveWhat === "new" ? "Create" : "Save"
+                    Btn { label: root.saveReplace ? I18n.tr("Replace")
+                                                  : root.saveWhat === "new" ? I18n.tr("Create") : I18n.tr("Save")
                           active: root.saveName !== "" && !root.saveBusy
                           onClicked: root.doSave() }
                 }
@@ -6285,7 +6348,7 @@ FloatingWindow {
 
                 Text {
                     width: parent.width
-                    text: "Project frame"
+                    text: I18n.tr("Project frame")
                     color: root.cText
                     font.pixelSize: root.ui(14)
                     font.family: root.uiFont
@@ -6293,9 +6356,9 @@ FloatingWindow {
                 }
                 Text {
                     width: parent.width
-                    text: "What this cut delivers in. Clips are fitted to it — "
-                          + "changing it re-frames the whole timeline, it does "
-                          + "not re-cut anything."
+                    text: I18n.tr("What this cut delivers in. Clips are fitted to it — "
+                                  + "changing it re-frames the whole timeline, it does "
+                                  + "not re-cut anything.")
                     wrapMode: Text.WordWrap
                     color: root.cDim
                     font.pixelSize: root.ui(11)
@@ -6343,7 +6406,7 @@ FloatingWindow {
                     }
                 }
 
-                Btn { label: "Close"; onClicked: root.sizeMenuOpen = false }
+                Btn { label: I18n.tr("Close"); onClicked: root.sizeMenuOpen = false }
             }
         }
     }
@@ -6384,7 +6447,7 @@ FloatingWindow {
                 spacing: 8
 
                 Text {
-                    text: "LUT"
+                    text: I18n.tr("LUT")
                     color: root.cText
                     font.pixelSize: root.ui(14)
                     font.family: root.uiFont
@@ -6393,9 +6456,10 @@ FloatingWindow {
                 Text {
                     width: parent.width
                     text: root.lutList.length > 0
-                          ? "Installed, or choose a .cube from anywhere."
-                          : "Nothing installed yet — put .cube files in "
-                            + "~/.config/synstudio/luts, or choose one."
+                          ? I18n.tr("Installed, or choose a .cube from anywhere.")
+                          : I18n.tr("Nothing installed yet — put .cube files in %1, "
+                                    + "or choose one.")
+                                .arg("~/.config/synstudio/luts")
                     wrapMode: Text.WordWrap
                     color: root.cDim
                     font.pixelSize: root.ui(11)
@@ -6457,14 +6521,14 @@ FloatingWindow {
                 Row {
                     spacing: 8
                     Btn {
-                        label: "Choose a file…"
+                        label: I18n.tr("Choose a file…")
                         onClicked: {
                             root.lutMenuOpen = false
                             root.pickerFor = "lut"
                             root.openPicker()
                         }
                     }
-                    Btn { label: "Close"; onClicked: root.lutMenuOpen = false }
+                    Btn { label: I18n.tr("Close"); onClicked: root.lutMenuOpen = false }
                 }
             }
         }
@@ -6522,7 +6586,7 @@ FloatingWindow {
                     }
                     Btn {
                         id: closeBtn
-                        label: "Cancel"
+                        label: I18n.tr("Cancel")
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.right: parent.right
                         anchors.rightMargin: 12
@@ -6635,7 +6699,7 @@ FloatingWindow {
                                     root.pickerOpen = false
                                     root.pickerFor = "photo"
                                     root.addMedia(m.path, m.kind)
-                                    root.say("added " + m.name)
+                                    root.say(I18n.tr("added %1").arg(m.name))
                                 } else {
                                     root.pickerOpen = false
                                     root.loadFile(m.path)
@@ -6841,7 +6905,7 @@ FloatingWindow {
                 readonly property string cur: root.vals[sl.row.key] || ""
                 // The tail of a path, or the catalogue name as it stands.
                 readonly property string shown:
-                    cur === "" ? "None" : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
+                    cur === "" ? I18n.tr("None") : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
 
                 Text {
                     id: lutLbl
@@ -7217,8 +7281,8 @@ FloatingWindow {
             Text {
                 visible: !st.isMaster
                 width: parent.width
-                text: Math.abs(st.panVal) < 0.005 ? "pan C"
-                      : "pan " + (st.panVal < 0 ? "L" : "R")
+                text: Math.abs(st.panVal) < 0.005 ? I18n.tr("pan C")
+                      : I18n.tr("pan %1").arg(st.panVal < 0 ? "L" : "R")
                            + Math.round(Math.abs(st.panVal) * 100)
                 color: Math.abs(st.panVal) < 0.005 ? root.cDim : root.cAccent
                 font.pixelSize: root.ui(9)
@@ -7875,7 +7939,7 @@ FloatingWindow {
                             if (cccurve.picked >= 0)
                                 root.curveEase(cc.row.key, cccurve.picked,
                                                eb.modelData)
-                            else root.say("pick a key on the curve first")
+                            else root.say(I18n.tr("pick a key on the curve first"))
                         }
                     }
                 }
@@ -7924,8 +7988,8 @@ FloatingWindow {
                     anchors.left: parent.left; anchors.leftMargin: 6
                     visible: ccfi.text === ""
                     text: root.fontList.length > 0
-                          ? "type to narrow the list"
-                          : "no font list here — fontconfig is not installed"
+                          ? I18n.tr("type to narrow the list")
+                          : I18n.tr("no font list here — fontconfig is not installed")
                     color: root.cDim
                     font.pixelSize: root.ui(10)
                     font.family: root.uiFont
@@ -8140,7 +8204,7 @@ FloatingWindow {
             sourceComponent: Item {
                 readonly property string cur: root.gradeRaw(grd.row.key)
                 readonly property string shown:
-                    cur === "" ? "None" : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
+                    cur === "" ? I18n.tr("None") : cur.replace(/^.*\//, "").replace(/\.cube$/i, "")
 
                 Text {
                     id: gcLutLbl
