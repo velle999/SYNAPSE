@@ -1392,16 +1392,24 @@ check_locale() {
         # forbids will always find itself unless it reads code alone.
         body=$(grep -vE '^[[:space:]]*#' "$f")
 
+        # ⚠ A HERE-STRING, NOT A PIPE INTO grep -q. `printf … | grep -q` makes
+        # grep exit on its first match while printf is still writing, printf
+        # takes SIGPIPE, and bash prints "printf: Broken pipe" to stderr on
+        # every hit — which this check did, twice, in the run that shipped it.
+        # It is the same trap tests/qs_module.sh and the synpkg suite document
+        # at their tops, reintroduced by the check written to stop a class of
+        # bug. A here-string has no second process to kill.
+
         # 1. pacman's -Qi/-Si FIELD NAMES, which gettext rewrites.
-        if printf '%s\n' "$body" | grep -qE 'pacman[^|]*-(Qi|Si)' &&
-           printf '%s\n' "$body" | grep -qE '\^(Name|Version|Description|Depends On|Installed Size|Required By)' &&
-           ! printf '%s\n' "$body" | grep -qE 'LC_ALL=C[[:space:]]+pacman'; then
+        if grep -qE 'pacman[^|]*-(Qi|Si)' <<<"$body" &&
+           grep -qE '\^(Name|Version|Description|Depends On|Installed Size|Required By)' <<<"$body" &&
+           ! grep -qE 'LC_ALL=C[[:space:]]+pacman' <<<"$body"; then
             hits="$hits $f(pacman -Qi/-Si field names)"
         fi
 
         # 2. An expectation built from `date` with a NAME in it. %d and %Y are
         #    digits everywhere; %A %B %a %b %h %p %Z %c are words.
-        if printf '%s\n' "$body" | grep -qE '(\$\(|`)date [^)`]*%[ABbahpZc]'; then
+        if grep -qE '(\$\(|`)date [^)`]*%[ABbahpZc]' <<<"$body"; then
             hits="$hits $f(date names a month or a day)"
         fi
         # ⚠ PKGBUILDs ARE IN THE LIST, because one of the four was in one:
