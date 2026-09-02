@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "compose.h"
+#include "i18n.h"
 #include "account.h"
 #include "settings.h"
 #include "event.h"
@@ -423,9 +424,9 @@ static bool default_calendar(accounts_t *a, char **acct, char **cal, char **err)
 		if (err) *err = xstrdup("no calendar is switched on — run: syn-cal discover <account>");
 		return false;
 	}
-	if (err) *err = xasprintf("there are %d calendars switched on, so say which:\n"
-	                          "  --in <account>/<calendar>   just this once\n"
-	                          "  syn-cal default <account>/<calendar>   from now on", n);
+	if (err) *err = xasprintf(_("there are %d calendars switched on, so say which:\n"
+	                            "  --in <account>/<calendar>   just this once\n"
+	                            "  syn-cal default <account>/<calendar>   from now on"), n);
 	return false;
 }
 
@@ -469,7 +470,7 @@ static bool find_event(accounts_t *a, const char *uid, found_t *out, char **err)
 			return true;
 		}
 	}
-	if (err) *err = xasprintf("no event here with the id '%s'", uid);
+	if (err) *err = xasprintf(_("no event here with the id '%s'"), uid);
 	return false;
 }
 
@@ -504,9 +505,9 @@ static bool take_opts(int argc, char **argv, opts_t *o, const char **positional)
 		/* The global flags this command is reached before main() can read. */
 		else if (!strcmp(v, "--rec"))            { g_out = OUT_REC; g_color = false; }
 		else if (!strcmp(v, "--verbose") || !strcmp(v, "-v")) { g_verbose = true; }
-		else if (v[0] == '-')                    { warn("unknown option '%s'", v); return false; }
+		else if (v[0] == '-')                    { warn(_("unknown option '%s'"), v); return false; }
 		else if (!*positional)                   { *positional = v; }
-		else { warn("too many things to call this event: '%s'", v); return false; }
+		else { warn(_("too many things to call this event: '%s'"), v); return false; }
 	}
 	return true;
 }
@@ -530,7 +531,7 @@ int cmd_default(const char *value)
 		} else if (have) {
 			printf("%s / %s\n", acct, cal);
 		} else {
-			warn("%s", err ? err : "no default calendar");
+			warn("%s", err ? err : _("no default calendar"));
 		}
 		free(acct); free(cal); free(err);
 		accounts_free(&a);
@@ -539,7 +540,7 @@ int cmd_default(const char *value)
 
 	char *acct = NULL, *cal = NULL;
 	if (!split_in(value, &acct, &cal)) {
-		warn("default wants <account>/<calendar>");
+		warn(_("default wants <account>/<calendar>"));
 		accounts_free(&a);
 		return 2;
 	}
@@ -547,7 +548,7 @@ int cmd_default(const char *value)
 	/* ⛔ REFUSED IF IT IS NOT SWITCHED ON. Remembering a calendar nothing syncs
 	 * would send every later event somewhere it never leaves this machine. */
 	if (!calendar_enabled(&a, acct, cal)) {
-		warn("'%s / %s' is not a calendar that is switched on — syn-cal calendars %s",
+		warn(_("'%s / %s' is not a calendar that is switched on — syn-cal calendars %s"),
 		     acct, cal, acct);
 		free(acct); free(cal);
 		accounts_free(&a);
@@ -556,7 +557,7 @@ int cmd_default(const char *value)
 
 	char *err = NULL;
 	bool ok = settings_set(DEFAULT_CAL_KEY, value, &err);
-	if (!ok) { warn("%s", err ? err : "could not save it"); free(err); }
+	if (!ok) { warn("%s", err ? err : _("could not save it")); free(err); }
 	else if (g_out != OUT_REC) printf("New events go to %s / %s.\n", acct, cal);
 
 	free(acct); free(cal);
@@ -573,11 +574,11 @@ int cmd_new(int argc, char **argv)
 
 	const char *title = o.title ? o.title : pos;
 	if (!title || !*title) {
-		warn("what is it called?  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\"");
+		warn(_("what is it called?  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\""));
 		return 2;
 	}
 	if (!o.at) {
-		warn("when is it?  --at \"2026-09-21 13:15\", or --at 2026-09-21 for all day");
+		warn(_("when is it?  --at \"2026-09-21 13:15\", or --at 2026-09-21 for all day"));
 		return 2;
 	}
 
@@ -585,20 +586,20 @@ int cmd_new(int argc, char **argv)
 	memset(&d, 0, sizeof d);
 	bool dated_all_day = false;
 	if (!parse_when(o.at, &d.start, &dated_all_day)) {
-		warn("--at wants a date and time like \"2026-09-21 13:15\"");
+		warn(_("--at wants a date and time like \"2026-09-21 13:15\""));
 		return 2;
 	}
 	d.all_day = o.have_all_day ? o.all_day : dated_all_day;
 
 	long span = d.all_day ? 86400 : 3600;
 	if (o.dur && !parse_duration(o.dur, &span)) {
-		warn("--for wants a length like 30m, 1h or 1h30m");
+		warn(_("--for wants a length like 30m, 1h or 1h30m"));
 		return 2;
 	}
 	d.end = d.start + span;
 
 	if (o.remind && !parse_reminder(o.remind, &d.remind_min)) {
-		warn("--remind wants a length like 15m or 1h, or 'none'");
+		warn(_("--remind wants a length like 15m or 1h, or 'none'"));
 		return 2;
 	}
 
@@ -612,7 +613,7 @@ int cmd_new(int argc, char **argv)
 	char *acct = NULL, *cal = NULL;
 	if (o.in) {
 		if (!split_in(o.in, &acct, &cal)) {
-			warn("--in wants <account>/<calendar>");
+			warn(_("--in wants <account>/<calendar>"));
 			accounts_free(&a);
 			return 2;
 		}
@@ -631,7 +632,7 @@ int cmd_new(int argc, char **argv)
 	char *uid = ics_uid(ics, len);
 
 	bool ok = local_write(acct, cal, uid, ics, len);
-	if (!ok) warn("could not write the event into %s / %s", acct, cal);
+	if (!ok) warn(_("could not write the event into %s / %s"), acct, cal);
 
 	if (ok && g_out == OUT_REC) {
 		rec_header("uid\taccount\tcalendar");
@@ -642,7 +643,7 @@ int cmd_new(int argc, char **argv)
 		/* ⚠ AND IT SAYS IT IS NOT ON THE SERVER YET. Written locally is not the
 		 * same as saved, and a calendar that implies otherwise is lying about
 		 * where somebody's appointment is. */
-		printf("Added '%s' to %s / %s.\n\n  syn-cal sync   (it is only on this machine so far)\n",
+		printf(_("Added '%s' to %s / %s.\n\n  syn-cal sync   (it is only on this machine so far)\n"),
 		       title, acct, cal);
 	}
 
@@ -657,7 +658,7 @@ int cmd_edit(int argc, char **argv)
 	memset(&o, 0, sizeof o);
 	const char *uid = NULL;
 	if (!take_opts(argc, argv, &o, &uid)) return 2;
-	if (!uid) { warn("which event?  syn-cal edit <id> --title \"...\""); return 2; }
+	if (!uid) { warn(_("which event?  syn-cal edit <id> --title \"...\"")); return 2; }
 
 	accounts_t a;
 	accounts_load(&a);
@@ -679,8 +680,8 @@ int cmd_edit(int argc, char **argv)
 	 * them. Somebody's weekly meeting is not a thing to guess at. */
 	char *rrule = ics_prop(unfolded, "RRULE");
 	if (rrule) {
-		warn("'%s' repeats, and syn-cal will not edit one occurrence of a series "
-		     "without losing the rest of it. Change it where it was made.", uid);
+		warn(_("'%s' repeats, and syn-cal will not edit one occurrence of a series "
+		     "without losing the rest of it. Change it where it was made."), uid);
 		free(rrule); free(unfolded); found_free(&f); accounts_free(&a);
 		return 1;
 	}
@@ -702,7 +703,7 @@ int cmd_edit(int argc, char **argv)
 	/* The existing times, so an edit that does not mention them keeps them. */
 	bool was_date = false;
 	if (!read_dt(unfolded, "DTSTART", &d.start, &was_date)) {
-		warn("'%s' has no start this can read, so editing it would move it", uid);
+		warn(_("'%s' has no start this can read, so editing it would move it"), uid);
 		free(old_sum); free(old_loc); free(old_notes); free(old_seq);
 		free(unfolded); found_free(&f); accounts_free(&a);
 		return 1;
@@ -718,7 +719,7 @@ int cmd_edit(int argc, char **argv)
 
 	bool changed = o.title || o.where || o.notes || o.at || o.dur || o.remind || o.have_all_day;
 	if (!changed) {
-		warn("nothing to change — pass --title, --at, --for, --remind, --where or --notes");
+		warn(_("nothing to change — pass --title, --at, --for, --remind, --where or --notes"));
 		free(old_sum); free(old_loc); free(old_notes); free(old_seq);
 		free(unfolded); found_free(&f); accounts_free(&a);
 		return 2;
@@ -728,7 +729,7 @@ int cmd_edit(int argc, char **argv)
 	if (o.at) {
 		bool dated_all_day = false;
 		if (!parse_when(o.at, &d.start, &dated_all_day)) {
-			warn("--at wants a date and time like \"2026-09-21 13:15\"");
+			warn(_("--at wants a date and time like \"2026-09-21 13:15\""));
 			free(old_sum); free(old_loc); free(old_notes); free(old_seq);
 			free(unfolded); found_free(&f); accounts_free(&a);
 			return 2;
@@ -737,7 +738,7 @@ int cmd_edit(int argc, char **argv)
 	}
 	if (o.have_all_day) d.all_day = o.all_day;
 	if (o.dur && !parse_duration(o.dur, &span)) {
-		warn("--for wants a length like 30m, 1h or 1h30m");
+		warn(_("--for wants a length like 30m, 1h or 1h30m"));
 		free(old_sum); free(old_loc); free(old_notes); free(old_seq);
 		free(unfolded); found_free(&f); accounts_free(&a);
 		return 2;
@@ -753,7 +754,7 @@ int cmd_edit(int argc, char **argv)
 		free(trig);
 	}
 	if (o.remind && !parse_reminder(o.remind, &d.remind_min)) {
-		warn("--remind wants a length like 15m or 1h, or 'none'");
+		warn(_("--remind wants a length like 15m or 1h, or 'none'"));
 		free(old_sum); free(old_loc); free(old_notes); free(old_seq);
 		free(unfolded); found_free(&f); accounts_free(&a);
 		return 2;
@@ -762,7 +763,7 @@ int cmd_edit(int argc, char **argv)
 	size_t len = 0;
 	char *ics = ics_compose(&d, &len);
 	bool ok = local_write(f.account, f.calendar, uid, ics, len);
-	if (!ok) warn("could not write the event back");
+	if (!ok) warn(_("could not write the event back"));
 	else if (g_out != OUT_REC)
 		printf("Changed '%s'.\n\n  syn-cal sync   (the server has the old one until then)\n",
 		       d.summary ? d.summary : uid);
@@ -777,7 +778,7 @@ int cmd_edit(int argc, char **argv)
 
 int cmd_delete(const char *uid)
 {
-	if (!uid || !*uid) { warn("which event?  syn-cal delete <id>"); return 2; }
+	if (!uid || !*uid) { warn(_("which event?  syn-cal delete <id>")); return 2; }
 
 	accounts_t a;
 	accounts_load(&a);
@@ -799,7 +800,7 @@ int cmd_delete(const char *uid)
 	 * index and is gone from disk is a deletion to push, which is the path a
 	 * file removed by hand takes too. */
 	bool ok = local_delete(f.account, f.calendar, uid);
-	if (!ok) warn("could not remove the event");
+	if (!ok) warn(_("could not remove the event"));
 	else if (g_out != OUT_REC)
 		printf("Removed '%s'.\n\n  syn-cal sync   (it is still on the server until then)\n",
 		       sum && *sum ? sum : uid);

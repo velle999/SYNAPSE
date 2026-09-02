@@ -10,6 +10,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE PROGRAM UNDER TEST IS TRANSLATED NOW, AND THIS FILE ASSERTS ENGLISH.
+# syn-cal's compiled-in localedir is /usr/share/locale, so on a machine where
+# syn-cal is INSTALLED a freshly built binary loads the INSTALLED catalog and
+# answers in the desktop's language — every assertion about a message then fails
+# against a program that is working perfectly, and a failing `meson test` is a
+# BUILD failure, so `syn-update` refuses to install it. synpkg 47 did exactly
+# that on a Japanese desktop.
+#
+# ⚠ Running this under LANG=ja on a box where syn-cal is not installed does NOT
+# catch it: with no catalog to find, gettext falls back to the msgid and it all
+# passes in English. Reproduce with SYN_CAL_LOCALEDIR pointed at a built catalog.
+#
+# ⚠ LANGUAGE as well as LC_ALL — gettext reads LANGUAGE FIRST.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
+
 # ⛔ THE EXPECTATION BELOW IS BUILT FROM `date`, AND `date` IS TRANSLATED.
 # syn-cal has no po/ and calls gettext nowhere, so its strftime("%B %Y") is
 # always the C locale's "September 2026". `date +'%B %Y'` is not: on a Japanese

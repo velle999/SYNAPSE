@@ -17,329 +17,600 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-cal\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: syn-cal.qml:1008
 msgid "%1 of %2 on"
 msgid_plural "%1 of %2 on"
 msgstr[0] "%2개 중 %1개 켜짐"
 
-#: syn-cal.qml:1457
-#: syn-cal.qml:1594
 msgid "(no title)"
 msgstr "(제목 없음)"
 
-#: syn-cal.qml:1614
 msgid "+%1 more"
 msgid_plural "+%1 more"
 msgstr[0] "%1개 더"
 
-#: syn-cal.qml:1745
 msgid "13:15 — or blank for all day"
 msgstr "13:15 — 종일이면 비워 두세요"
 
-#: syn-cal.qml:1762
 msgid "15m, 1h, none"
 msgstr "15m, 1h, none"
 
-#: syn-cal.qml:1756
 msgid "1h, 30m, 1h30m"
 msgstr "1h, 30m, 1h30m"
 
-#: syn-cal.qml:626
 msgid "A CalDAV account needs a server URL."
 msgstr "CalDAV 계정에는 서버 주소가 필요합니다."
 
-#: syn-cal.qml:2000
 msgid "A name for this account"
 msgstr "이 계정의 이름"
 
-#: syn-cal.qml:1212
 msgid "Add account"
 msgstr "계정 추가"
 
-#: syn-cal.qml:1956
 msgid "Add an account"
 msgstr "계정 추가하기"
 
-#: syn-cal.qml:2092
 msgid "Add and sign in"
 msgstr "추가하고 로그인"
 
-#: syn-cal.qml:628
 msgid "Adding…"
 msgstr "추가하는 중…"
 
-#: syn-cal.qml:904
 msgid "Asking the server…"
 msgstr "서버에 묻는 중…"
 
-#: syn-cal.qml:1158
 msgid "Asking…"
 msgstr "묻는 중…"
 
-#: syn-cal.qml:1358
 msgid "Back"
 msgstr "이전"
 
-#: syn-cal.qml:1775
 msgid "CALENDAR"
 msgstr "캘린더"
 
-#: syn-cal.qml:975
-#: syn-cal.qml:1057
 msgid "Calendars"
 msgstr "캘린더"
 
-#: syn-cal.qml:1882
-#: syn-cal.qml:2065
 msgid "Cancel"
 msgstr "취소"
 
-#: syn-cal.qml:584
 msgid "Checking the password…"
 msgstr "비밀번호를 확인하는 중…"
 
-#: syn-cal.qml:1735
 msgid "DAY"
 msgstr "날짜"
 
-#: syn-cal.qml:1856
 msgid "Delete"
 msgstr "삭제"
 
-#: syn-cal.qml:1726
 msgid "Dentist"
 msgstr "치과"
 
-#: syn-cal.qml:1717
 msgid "Event"
 msgstr "일정"
 
-#: syn-cal.qml:1755
 msgid "FOR"
 msgstr "기간"
 
-#: syn-cal.qml:1158
 msgid "Find calendars"
 msgstr "캘린더 찾기"
 
-#: syn-cal.qml:602
 msgid "Finish signing in in your browser…"
 msgstr "브라우저에서 로그인을 마쳐 주세요…"
 
-#: syn-cal.qml:886
 msgid "Found what the server has."
 msgstr "서버에 있는 것을 찾았습니다."
 
-#: syn-cal.qml:624
 msgid "Give the account a name first."
 msgstr "먼저 계정 이름을 입력하세요."
 
-#: syn-cal.qml:1449
 msgid "HH:mm"
 msgstr "HH:mm"
 
-#: syn-cal.qml:1057
 msgid "Hide"
 msgstr "숨기기"
 
-#: syn-cal.qml:786
 msgid "It needs a date."
 msgstr "날짜가 필요합니다."
 
-#: syn-cal.qml:785
 msgid "It needs a name."
 msgstr "이름이 필요합니다."
 
-#: syn-cal.qml:1628
 msgid "Loading %1…"
 msgstr "%1 불러오는 중…"
 
-#: syn-cal.qml:1283
-#: syn-cal.qml:1630
 msgid "MMMM yyyy"
 msgstr "yyyy년 M월"
 
-#: syn-cal.qml:1329
 msgid "Month"
 msgstr "월"
 
-#: syn-cal.qml:1827
 msgid "NOTES"
 msgstr "메모"
 
-#: syn-cal.qml:1309
-#: syn-cal.qml:1664
-#: syn-cal.qml:1717
 msgid "New event"
 msgstr "새 일정"
 
-#: syn-cal.qml:1360
 msgid "Next"
 msgstr "다음"
 
-#: syn-cal.qml:1196
 msgid "No accounts yet."
 msgstr "아직 계정이 없습니다."
 
-#: syn-cal.qml:1627
-#: syn-cal.qml:1642
 msgid "No calendars are set up yet."
 msgstr "아직 설정된 캘린더가 없습니다."
 
-#: syn-cal.qml:1643
 msgid "Nothing in the next %1 day."
 msgid_plural "Nothing in the next %1 days."
 msgstr[0] "앞으로 %1일 동안 일정이 없습니다."
 
-#: syn-cal.qml:2027
 msgid "Password"
 msgstr "비밀번호"
 
-#: syn-cal.qml:1761
 msgid "REMIND ME"
 msgstr "알림"
 
-#: syn-cal.qml:34
 msgid "SYNAPSE Calendar"
 msgstr "SYNAPSE 캘린더"
 
-#: syn-cal.qml:1903
 msgid "Save"
 msgstr "저장"
 
-#: syn-cal.qml:764
 msgid "Saved. Syncing…"
 msgstr "저장했습니다. 동기화 중…"
 
-#: syn-cal.qml:1903
 msgid "Saving…"
 msgstr "저장하는 중…"
 
-#: syn-cal.qml:2009
 msgid "Server URL"
 msgstr "서버 주소"
 
-#: syn-cal.qml:1028
 msgid "Sign in"
 msgstr "로그인"
 
-#: syn-cal.qml:2091
 msgid "Sign in with browser"
 msgstr "브라우저로 로그인"
 
-#: syn-cal.qml:573
 msgid "Signed in."
 msgstr "로그인했습니다."
 
-#: syn-cal.qml:2038
-msgid "Signing in opens your browser. Your password is typed at %1, never here."
-msgstr "로그인하면 브라우저가 열립니다. 비밀번호는 %1에 입력하며, 여기에는 절대 입력하지 않습니다."
+msgid ""
+"Signing in opens your browser. Your password is typed at %1, never here."
+msgstr ""
+"로그인하면 브라우저가 열립니다. 비밀번호는 %1에 입력하며, 여기에는 절대 입력"
+"하지 않습니다."
 
-#: syn-cal.qml:834
 msgid "Some calendars did not sync."
 msgstr "일부 캘린더가 동기화되지 않았습니다."
 
-#: syn-cal.qml:1239
 msgid "Sync now"
 msgstr "지금 동기화"
 
-#: syn-cal.qml:943
-#: syn-cal.qml:1239
 msgid "Syncing…"
 msgstr "동기화 중…"
 
-#: syn-cal.qml:1741
 msgid "TIME"
 msgstr "시간"
 
-#: syn-cal.qml:1285
 msgid "The next %1 day"
 msgid_plural "The next %1 days"
 msgstr[0] "앞으로 %1일"
 
-#: syn-cal.qml:1359
 msgid "Today"
 msgstr "오늘"
 
-#: syn-cal.qml:833
 msgid "Up to date."
 msgstr "모두 최신입니다."
 
-#: syn-cal.qml:2018
 msgid "Username"
 msgstr "사용자 이름"
 
-#: syn-cal.qml:1725
 msgid "WHAT"
 msgstr "내용"
 
-#: syn-cal.qml:1820
 msgid "WHERE"
 msgstr "장소"
 
-#: syn-cal.qml:1328
 msgid "Week"
 msgstr "주"
 
-#: syn-cal.qml:2090
 msgid "Working…"
 msgstr "처리 중…"
 
-#: syn-cal.qml:1999
 msgid "Your address at this provider"
 msgstr "이 제공업체에서의 주소"
 
-#: syn-cal.qml:1447
 msgid "all day"
 msgstr "종일"
 
-#: syn-cal.qml:554
 msgid "could not add the account"
 msgstr "계정을 추가하지 못했습니다"
 
-#: syn-cal.qml:1288
 msgid "d MMMM yyyy"
 msgstr "yyyy년 M월 d일"
 
-#: syn-cal.qml:1428
 msgid "dddd d MMMM"
 msgstr "M월 d일 dddd"
 
-#: syn-cal.qml:1007
 msgid "not signed in"
 msgstr "로그인하지 않음"
 
-#: syn-cal.qml:1821
-#: syn-cal.qml:1828
 msgid "optional"
 msgstr "선택"
 
-#: syn-cal.qml:576
 msgid "sign-in did not complete"
 msgstr "로그인이 완료되지 않았습니다"
 
-#: syn-cal.qml:919
 msgid "that calendar could not be changed"
 msgstr "그 캘린더는 변경할 수 없었습니다"
 
-#: syn-cal.qml:760
 msgid "that did not work"
 msgstr "되지 않았습니다"
 
-#: syn-cal.qml:896
 msgid "the server did not answer"
 msgstr "서버가 응답하지 않았습니다"
 
-#: syn-cal.qml:2001
 msgid "work"
 msgstr "직장"
+
+#, c-format
+msgid ""
+"no keyring is running, so this secret went to %s (readable only by you).\n"
+"         Start a keyring — gnome-keyring or kwallet — and set it again to "
+"move it."
+msgstr "실행 중인 키링이 없어서 이 비밀은 %s에 저장되었습니다(본인만 읽을 수 있습니다).\n         gnome-keyring이나 kwallet 같은 키링을 시작한 뒤 다시 설정하면 옮길 수 있습니다."
+
+#, c-format
+msgid ""
+"there are %d calendars switched on, so say which:\n"
+"  --in <account>/<calendar>   just this once\n"
+"  syn-cal default <account>/<calendar>   from now on"
+msgstr "켜져 있는 달력이 %d개이므로 어느 것인지 지정하세요:\n  --in <계정>/<달력>   이번만\n  syn-cal default <계정>/<달력>   앞으로 계속"
+
+#, c-format
+msgid "no event here with the id '%s'"
+msgstr "여기에는 id가 '%s'인 일정이 없습니다"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "too many things to call this event: '%s'"
+msgstr "이 일정의 이름이 너무 많습니다: '%s'"
+
+msgid "no default calendar"
+msgstr "기본 달력이 없습니다"
+
+msgid "default wants <account>/<calendar>"
+msgstr "default에는 <계정>/<달력>이 필요합니다"
+
+#, c-format
+msgid "'%s / %s' is not a calendar that is switched on — syn-cal calendars %s"
+msgstr "'%s / %s'은(는) 켜져 있는 달력이 아닙니다 — syn-cal calendars %s"
+
+msgid "could not save it"
+msgstr "저장할 수 없었습니다"
+
+msgid "what is it called?  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\""
+msgstr "이름이 무엇인가요?  syn-cal new \"치과\" --at \"2026-09-21 13:15\""
+
+msgid "when is it?  --at \"2026-09-21 13:15\", or --at 2026-09-21 for all day"
+msgstr "언제인가요?  --at \"2026-09-21 13:15\", 또는 하루 종일이면 --at 2026-09-21"
+
+msgid "--at wants a date and time like \"2026-09-21 13:15\""
+msgstr "--at에는 \"2026-09-21 13:15\" 같은 날짜와 시간이 필요합니다"
+
+msgid "--for wants a length like 30m, 1h or 1h30m"
+msgstr "--for에는 30m, 1h, 1h30m 같은 길이가 필요합니다"
+
+msgid "--remind wants a length like 15m or 1h, or 'none'"
+msgstr "--remind에는 15m나 1h 같은 길이, 또는 'none'이 필요합니다"
+
+msgid "--in wants <account>/<calendar>"
+msgstr "--in에는 <계정>/<달력>이 필요합니다"
+
+#, c-format
+msgid "could not write the event into %s / %s"
+msgstr "일정을 %s / %s에 기록할 수 없었습니다"
+
+#, c-format
+msgid ""
+"Added '%s' to %s / %s.\n"
+"\n"
+"  syn-cal sync   (it is only on this machine so far)\n"
+msgstr "'%s'을(를) %s / %s에 추가했습니다.\n\n  syn-cal sync   (아직 이 컴퓨터에만 있습니다)\n"
+
+msgid "which event?  syn-cal edit <id> --title \"...\""
+msgstr "어느 일정인가요?  syn-cal edit <id> --title \"...\""
+
+#, c-format
+msgid ""
+"'%s' repeats, and syn-cal will not edit one occurrence of a series without "
+"losing the rest of it. Change it where it was made."
+msgstr "'%s'은(는) 반복되는 일정이라, syn-cal은 나머지를 잃지 않고 한 번만 수정할 수 없습니다. 만든 곳에서 바꾸세요."
+
+#, c-format
+msgid "'%s' has no start this can read, so editing it would move it"
+msgstr "'%s'에는 읽을 수 있는 시작 시각이 없어서 수정하면 옮겨집니다"
+
+msgid ""
+"nothing to change — pass --title, --at, --for, --remind, --where or --notes"
+msgstr "바꿀 것이 없습니다 — --title, --at, --for, --remind, --where, --notes 중 하나를 전달하세요"
+
+msgid "could not write the event back"
+msgstr "일정을 되돌려 기록할 수 없었습니다"
+
+msgid "which event?  syn-cal delete <id>"
+msgstr "어느 일정인가요?  syn-cal delete <id>"
+
+msgid "could not remove the event"
+msgstr "일정을 삭제할 수 없었습니다"
+
+#, c-format
+msgid "could not read %s in %s / %s"
+msgstr "%s / %s의 %s을(를) 읽을 수 없었습니다"
+
+msgid "the refresh token could not be stored"
+msgstr "갱신 토큰을 저장할 수 없었습니다"
+
+msgid "the access token could not be stored"
+msgstr "액세스 토큰을 저장할 수 없었습니다"
+
+#, c-format
+msgid "'%s' has no OAuth client id — see: syn-cal account add-%s --help"
+msgstr "'%s'에는 OAuth 클라이언트 id가 없습니다 — 참고: syn-cal account add-%s --help"
+
+#, c-format
+msgid "'%s' is not signed in — run: syn-cal login %s"
+msgstr "'%s'은(는) 로그인되어 있지 않습니다 — 실행하세요: syn-cal login %s"
+
+#, c-format
+msgid "no password for '%s' — run: syn-cal login %s"
+msgstr "'%s'의 비밀번호가 없습니다 — 실행하세요: syn-cal login %s"
+
+#, c-format
+msgid ""
+"No accounts yet.\n"
+"\n"
+"  syn-cal account add work https://caldav.fastmail.com/\n"
+msgstr "아직 계정이 없습니다.\n\n  syn-cal account add work https://caldav.fastmail.com/\n"
+
+msgid "signed in:"
+msgstr "로그인됨:"
+
+#. TRANSLATORS: shown in the accounts list for an account that
+#. signs in with a password rather than OAuth. NOT the keyring
+#. attribute of the same spelling, which is never translated.
+msgid "password"
+msgstr "비밀번호"
+
+#, c-format
+msgid "               %zu of %zu calendars on, %s %s\n"
+msgstr "               달력 %zu/%zu개 켜짐, %s %s\n"
+
+#, c-format
+msgid "there is already an account called '%s'"
+msgstr "'%s'(이)라는 계정이 이미 있습니다"
+
+msgid "could not write accounts.conf"
+msgstr "accounts.conf를 기록할 수 없었습니다"
+
+#, c-format
+msgid ""
+"this build ships no OAuth client id, so it needs one of yours.\n"
+"\n"
+"  %s: register an application of type 'Desktop app'.\n"
+"  Google also issues a client secret for that type and its token endpoint\n"
+"  requires it — pass it with --client-secret. Google documents that it is\n"
+"  not confidential for an installed application; PKCE is what protects the\n"
+"  flow. Microsoft wants no secret from a public client.\n"
+"\n"
+"  syn-cal account add-%s %s --client-id <the id>"
+msgstr "이 빌드에는 OAuth 클라이언트 id가 없으므로 사용자의 것이 필요합니다.\n\n  %s: 유형이 'Desktop app'인 애플리케이션을 등록하세요.\n  Google은 그 유형에도 클라이언트 비밀을 발급하며 토큰 엔드포인트가 이를\n  요구합니다 — --client-secret으로 전달하세요. Google은 설치된 애플리케이션에서는\n  그것이 기밀이 아니라고 밝히고 있으며, 흐름을 보호하는 것은 PKCE입니다.\n  Microsoft는 공개 클라이언트에 비밀을 요구하지 않습니다.\n\n  syn-cal account add-%s %s --client-id <그 id>"
+
+#, c-format
+msgid "no account called '%s'"
+msgstr "'%s'(이)라는 계정이 없습니다"
+
+msgid ""
+"the provider returned no refresh token, so this will need signing in again "
+"when it expires"
+msgstr "제공자가 갱신 토큰을 반환하지 않아, 만료되면 다시 로그인해야 합니다"
+
+#, c-format
+msgid "'%s' has no username — run: syn-cal login %s --user you@example.org"
+msgstr "'%s'에는 사용자 이름이 없습니다 — 실행하세요: syn-cal login %s --user you@example.org"
+
+#, c-format
+msgid "Password for %s at %s: "
+msgstr "%s의 %s 비밀번호: "
+
+msgid "nothing entered; no change"
+msgstr "입력된 것이 없습니다. 변경 없음"
+
+msgid "the password could not be stored"
+msgstr "비밀번호를 저장할 수 없었습니다"
+
+#, c-format
+msgid "Saved. Where: %s\n"
+msgstr "저장했습니다. 위치: %s\n"
+
+msgid "nothing found"
+msgstr "아무것도 찾지 못했습니다"
+
+#, c-format
+msgid ""
+"Found %zu calendar on '%s':\n"
+"\n"
+msgid_plural ""
+"Found %zu calendars on '%s':\n"
+"\n"
+msgstr[0] "'%2$s'에서 달력 %1$zu개를 찾았습니다:\n\n"
+
+#, c-format
+msgid ""
+"\n"
+"All switched on. `syn-cal disable %s \"<name>\"` turns one off.\n"
+msgstr "\n모두 켜졌습니다. `syn-cal disable %s \"<이름>\"`으로 하나를 끕니다.\n"
+
+#, c-format
+msgid ""
+"\n"
+"Anything new starts switched off.\n"
+"  syn-cal enable %s \"<name>\"\n"
+msgstr "\n새로 생기는 것은 꺼진 상태로 시작합니다.\n  syn-cal enable %s \"<이름>\"\n"
+
+#, c-format
+msgid "'%s' has no calendar called '%s' — run: syn-cal calendars %s"
+msgstr "'%s'에는 '%s'(이)라는 달력이 없습니다 — 실행하세요: syn-cal calendars %s"
+
+msgid "sync failed"
+msgstr "동기화에 실패했습니다"
+
+#, c-format
+msgid "  %s / %s: %u down, %u up, %u removed here, %u removed there"
+msgstr "  %s / %s: 내려받기 %u, 올리기 %u, 여기서 삭제 %u, 저기서 삭제 %u"
+
+#, c-format
+msgid ", %u conflict kept"
+msgid_plural ", %u conflicts kept"
+msgstr[0] ", 충돌 %u개 보존"
+
+msgid "no accounts yet — run: syn-cal account add ..."
+msgstr "아직 계정이 없습니다 — 실행하세요: syn-cal account add ..."
+
+#, c-format
+msgid "Some calendars did not sync — see the messages above.\n"
+msgstr "일부 달력은 동기화되지 않았습니다 — 위의 메시지를 보세요.\n"
+
+#, c-format
+msgid "Already up to date.\n"
+msgstr "이미 최신입니다.\n"
+
+#, c-format
+msgid ""
+"%u conflict — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgid_plural ""
+"%u conflicts — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgstr[0] "충돌 %u개 — 두 사본을 모두 보존했습니다. '-syncal-local-'로 끝나는 일정을 찾아보세요.\n"
+
+msgid "(no summary)"
+msgstr "(설명 없음)"
+
+msgid "--from wants a date like 2026-09-01"
+msgstr "--from에는 2026-09-01 같은 날짜가 필요합니다"
+
+msgid "--from: that is not a date this machine can represent"
+msgstr "--from: 이 컴퓨터가 나타낼 수 있는 날짜가 아닙니다"
+
+msgid "could not read the calendars"
+msgstr "달력을 읽을 수 없었습니다"
+
+#, c-format
+msgid "Nothing in the next %d day.\n"
+msgid_plural "Nothing in the next %d days.\n"
+msgstr[0] "앞으로 %d일 동안 일정이 없습니다.\n"
+
+#, c-format
+msgid "  all day   %s"
+msgstr "  하루 종일   %s"
+
+#, c-format
+msgid "  (cancelled)"
+msgstr "  (취소됨)"
+
+msgid "no display — syn-cal gui needs a graphical session"
+msgstr "디스플레이가 없습니다 — syn-cal gui에는 그래픽 세션이 필요합니다"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell이 설치되어 있지 않습니다 — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell을 시작할 수 없었습니다"
+
+#, c-format
+msgid "unknown conflict policy '%s'"
+msgstr "알 수 없는 충돌 정책 '%s'"
+
+msgid "usage: syn-cal account add|remove|show ..."
+msgstr "사용법: syn-cal account add|remove|show ..."
+
+#, c-format
+msgid "unknown command '%s'"
+msgstr "알 수 없는 명령 '%s'"
+
+msgid "--from wants a month like 2026-09, or a date in it"
+msgstr "--from에는 2026-09 같은 달, 또는 그 안의 날짜가 필요합니다"
+
+#, c-format
+msgid "weekstart wants 'sun' or 'mon', not '%s'"
+msgstr "weekstart에는 'sun' 또는 'mon'이 필요합니다. '%s'이(가) 아닙니다"
+
+msgid "could not write the setting"
+msgstr "설정을 기록할 수 없었습니다"
+
+msgid "that is not a month this machine can represent"
+msgstr "이 컴퓨터가 나타낼 수 있는 달이 아닙니다"
+
+#, c-format
+msgid "nothing on in %s"
+msgstr "%s에는 일정이 없습니다"
+
+#, c-format
+msgid ""
+"  %s%d event — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgid_plural ""
+"  %s%d events — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgstr[0] "  %s%d개 일정 — syn-cal agenda --from %04d-%02d-01 --days %d%s\n\n"
+
+msgid "cannot read /dev/urandom, and a guessable verifier is worse than none"
+msgstr "/dev/urandom을 읽을 수 없으며, 추측 가능한 검증자는 없느니만 못합니다"
+
+#, c-format
+msgid "%s has no UID and cannot be synced"
+msgstr "%s에는 UID가 없어 동기화할 수 없습니다"
+
+#, c-format
+msgid "cannot fetch %s: %s"
+msgstr "%s을(를) 가져올 수 없습니다: %s"
+
+#, c-format
+msgid "%s has no UID; it cannot be filed and was skipped"
+msgstr "%s에는 UID가 없습니다. 보관할 수 없어 건너뛰었습니다"
+
+#, c-format
+msgid "cannot upload %s: %s"
+msgstr "%s을(를) 업로드할 수 없습니다: %s"
+
+#, c-format
+msgid "cannot delete %s on the server: %s"
+msgstr "서버에서 %s을(를) 삭제할 수 없습니다: %s"
+
+#, c-format
+msgid "could not keep your version of %s — nothing was overwritten"
+msgstr "%s의 사용자 판을 보존할 수 없었습니다 — 아무것도 덮어쓰지 않았습니다"
+
+msgid "nothing on"
+msgstr "일정 없음"
+
+msgid "←→ day · ↑↓ week · [ ] month · t today · q quit"
+msgstr "←→ 일 · ↑↓ 주 · [ ] 월 · t 오늘 · q 종료"
+
+msgid "out of memory"
+msgstr "메모리가 부족합니다"
+
+msgid "neither $HOME nor $XDG_DATA_HOME is set"
+msgstr "$HOME도 $XDG_DATA_HOME도 설정되어 있지 않습니다"

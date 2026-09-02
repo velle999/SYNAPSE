@@ -35,6 +35,7 @@
  */
 #define _GNU_SOURCE
 #include "oauth.h"
+#include "i18n.h"
 #include "http.h"
 
 #include <arpa/inet.h>
@@ -101,7 +102,7 @@ char *pkce_verifier(void)
 	FILE *f = fopen("/dev/urandom", "rb");
 	if (!f || fread(raw, 1, sizeof raw, f) != sizeof raw) {
 		if (f) fclose(f);
-		die("cannot read /dev/urandom, and a guessable verifier is worse than none");
+		die(_("cannot read /dev/urandom, and a guessable verifier is worse than none"));
 	}
 	fclose(f);
 	return b64url(raw, sizeof raw);      /* 43 unreserved characters */

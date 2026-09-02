@@ -32,6 +32,7 @@
 #include "event.h"
 #include "month.h"
 #include "syncal.h"
+#include "i18n.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -175,17 +176,19 @@ static void draw(int year, int mon, int sel, events_t *ev, bool colour)
 		if (lt.tm_year + 1900 != year || lt.tm_mon != mon || lt.tm_mday != sel) continue;
 
 		if (ev->e[i].all_day)
-			printf("    %sall day%s  %s", D, R, ev->e[i].summary ? ev->e[i].summary : "(no title)");
+			printf("    %s%s%s  %s", D, _("all day"), R,
+			       ev->e[i].summary ? ev->e[i].summary : _("(no title)"));
 		else
 			printf("    %02d:%02d    %s", lt.tm_hour, lt.tm_min,
-			       ev->e[i].summary ? ev->e[i].summary : "(no title)");
+			       ev->e[i].summary ? ev->e[i].summary : _("(no title)"));
 		if (ev->e[i].location && *ev->e[i].location) printf("  %s— %s%s", D, ev->e[i].location, R);
 		putchar('\n');
 		shown++;
 	}
-	if (!shown) printf("    %snothing on%s\n", D, R);
+	if (!shown) printf("    %s%s%s\n", D, _("nothing on"), R);
 
-	printf("\n  %s←→ day · ↑↓ week · [ ] month · t today · q quit%s\n", D, R);
+	printf("\n  %s%s%s\n", D,
+	       _("←→ day · ↑↓ week · [ ] month · t today · q quit"), R);
 }
 
 /* ── the loop ───────────────────────────────────────────────────────────── */
@@ -226,7 +229,7 @@ int cmd_tui(void)
 			 * the day filter in draw() then had to drop. The month knows where
 			 * it ends. */
 			if (!agenda_range(m.start, m.end, &ev, &err)) {
-				warn("%s", err ? err : "could not read the calendars");
+				warn("%s", err ? err : _("could not read the calendars"));
 				free(err);
 			}
 			loaded_year = year;

@@ -24,6 +24,7 @@
  */
 #define _GNU_SOURCE
 #include "syncal.h"
+#include "i18n.h"
 #include "store.h"
 
 #include <dirent.h>
@@ -245,7 +246,7 @@ bool local_scan(const char *account, const char *coll, local_list_t *out)
 				/* Loudly: an .ics with no UID cannot be addressed on a CalDAV
 				 * server, so skipping it silently would mean an event that
 				 * never syncs and never explains why. */
-				warn("%s has no UID and cannot be synced", path);
+				warn(_("%s has no UID and cannot be synced"), path);
 			}
 		}
 		free(data);

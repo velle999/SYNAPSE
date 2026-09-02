@@ -65,7 +65,7 @@ pkgver=0.1.0
 #   and had to move with it. Each was shown to fail on a deliberate break
 #   first — the rewrite of a pinned assertion is exactly where a false green
 #   comes from.
-pkgrel=27
+pkgrel=28
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

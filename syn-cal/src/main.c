@@ -16,6 +16,7 @@
 #include "event.h"
 #include "compose.h"
 #include "graph.h"
+#include "i18n.h"
 #include "month.h"
 #include "oauth.h"
 #include "sync.h"
@@ -138,10 +139,10 @@ static void store_tokens(accounts_t *a, account_t *e, oauth_tokens_t *t)
 {
 	char *err = NULL;
 	if (t->refresh_token && !secret_store(e->name, "refresh_token", t->refresh_token, &err))
-		warn("%s", err ? err : "the refresh token could not be stored");
+		warn("%s", err ? err : _("the refresh token could not be stored"));
 	free(err); err = NULL;
 	if (!secret_store(e->name, "access_token", t->access_token, &err))
-		warn("%s", err ? err : "the access token could not be stored");
+		warn("%s", err ? err : _("the access token could not be stored"));
 	free(err);
 
 	/* ⚠ SIXTY SECONDS EARLY. A token that expires while a sync is halfway
@@ -158,14 +159,14 @@ static bool renew(accounts_t *a, account_t *e, char **err)
 	const oauth_provider_t *p = provider_for(e->kind);
 	if (!p) { if (err) *err = xstrdup("that account kind does not use OAuth"); return false; }
 	if (!e->client_id) {
-		if (err) *err = xasprintf("'%s' has no OAuth client id — see: syn-cal account add-%s --help",
+		if (err) *err = xasprintf(_("'%s' has no OAuth client id — see: syn-cal account add-%s --help"),
 		                          e->name, acc_kind_name(e->kind));
 		return false;
 	}
 
 	char *refresh = secret_fetch(e->name, "refresh_token", NULL);
 	if (!refresh) {
-		if (err) *err = xasprintf("'%s' is not signed in — run: syn-cal login %s", e->name, e->name);
+		if (err) *err = xasprintf(_("'%s' is not signed in — run: syn-cal login %s"), e->name, e->name);
 		return false;
 	}
 
@@ -193,7 +194,7 @@ static bool auth_for(accounts_t *a, account_t *acc, http_auth_t *out, char **err
 		out->user = acc->user ? xstrdup(acc->user) : NULL;
 		out->pass = secret_fetch(acc->name, "password", NULL);
 		if (!out->pass) {
-			if (err) *err = xasprintf("no password for '%s' — run: syn-cal login %s",
+			if (err) *err = xasprintf(_("no password for '%s' — run: syn-cal login %s"),
 			                          acc->name, acc->name);
 			return false;
 		}
@@ -210,7 +211,7 @@ static bool auth_for(accounts_t *a, account_t *acc, http_auth_t *out, char **err
 
 	out->bearer = secret_fetch(acc->name, "access_token", NULL);
 	if (!out->bearer) {
-		if (err) *err = xasprintf("'%s' is not signed in — run: syn-cal login %s",
+		if (err) *err = xasprintf(_("'%s' is not signed in — run: syn-cal login %s"),
 		                          acc->name, acc->name);
 		return false;
 	}
@@ -247,7 +248,7 @@ static int cmd_accounts(void)
 			free(n); free(u); free(us);
 		}
 	} else if (a.n == 0) {
-		printf("No accounts yet.\n\n  syn-cal account add work https://caldav.fastmail.com/\n");
+		printf(_("No accounts yet.\n\n  syn-cal account add work https://caldav.fastmail.com/\n"));
 	} else {
 		for (size_t i = 0; i < a.n; i++) {
 			account_t *e = &a.e[i];
@@ -255,8 +256,24 @@ static int cmd_accounts(void)
 			for (size_t c = 0; c < e->ncals; c++) if (e->cals[c].enabled) on++;
 			printf("%-14s %-9s %s\n", e->name, acc_kind_name(e->kind), e->url ? e->url : "");
 			bool oauth = e->kind != ACC_CALDAV;
-			printf("               %zu of %zu calendars on, %s %s\n", on, e->ncals,
-			       oauth ? "signed in:" : "password",
+			/* ⛔ THE TWO "password"s BELOW ARE DIFFERENT THINGS WEARING ONE
+			 * WORD. `how` is printed for somebody to read; the one passed to
+			 * secret_where() is the keyring ATTRIBUTE secret_store() wrote and
+			 * secret_fetch() looks up. Translating that second one loses the
+			 * account's password — stored under one name, searched for under
+			 * another, on any desktop that is not English. They are on separate
+			 * lines so the note below lands on the msgid it is about: xgettext
+			 * attaches a comment to the FIRST marked string on the line, which
+			 * put it on "signed in:" when these shared one.  */
+			const char *how = oauth
+				? _("signed in:")
+				/* TRANSLATORS: shown in the accounts list for an account that
+				   signs in with a password rather than OAuth. NOT the keyring
+				   attribute of the same spelling, which is never translated.  */
+				: _("password");
+
+			printf(_("               %zu of %zu calendars on, %s %s\n"), on, e->ncals,
+			       how,
 			       secret_where(e->name, oauth ? "access_token" : "password"));
 		}
 	}
@@ -268,7 +285,7 @@ static int cmd_account_add(const char *name, const char *url, const char *user)
 {
 	accounts_t a;
 	accounts_load(&a);
-	if (accounts_find(&a, name)) { warn("there is already an account called '%s'", name); accounts_free(&a); return 1; }
+	if (accounts_find(&a, name)) { warn(_("there is already an account called '%s'"), name); accounts_free(&a); return 1; }
 
 	account_t *e = accounts_add(&a, name);
 	e->kind = ACC_CALDAV;
@@ -276,7 +293,7 @@ static int cmd_account_add(const char *name, const char *url, const char *user)
 	if (user) e->user = xstrdup(user);
 	bool ok = accounts_save(&a);
 	accounts_free(&a);
-	if (!ok) { warn("could not write accounts.conf"); return 1; }
+	if (!ok) { warn(_("could not write accounts.conf")); return 1; }
 
 	if (g_out != OUT_REC)
 		printf("Added '%s'.\n\n  syn-cal login %s\n  syn-cal discover %s\n", name, name, name);
@@ -361,7 +378,7 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
 		/* Only a rebuild that compiled no id in reaches this. It is still the
 		 * right answer for that build — but it is no longer what a person who
 		 * installed the distribution is asked to do. */
-		warn("this build ships no OAuth client id, so it needs one of yours.\n"
+		warn(_("this build ships no OAuth client id, so it needs one of yours.\n"
 		     "\n"
 		     "  %s: register an application of type 'Desktop app'.\n"
 		     "  Google also issues a client secret for that type and its token endpoint\n"
@@ -369,7 +386,7 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
 		     "  not confidential for an installed application; PKCE is what protects the\n"
 		     "  flow. Microsoft wants no secret from a public client.\n"
 		     "\n"
-		     "  syn-cal account add-%s %s --client-id <the id>",
+		     "  syn-cal account add-%s %s --client-id <the id>"),
 		     kind == ACC_GOOGLE
 		       /* ⛔ THE CalDAV API, NOT THE CALENDAR API. They are two products
 		        * in the console and this client speaks CalDAV; a project with
@@ -384,7 +401,7 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
 
 	accounts_t a;
 	accounts_load(&a);
-	if (accounts_find(&a, name)) { warn("there is already an account called '%s'", name); accounts_free(&a); return 1; }
+	if (accounts_find(&a, name)) { warn(_("there is already an account called '%s'"), name); accounts_free(&a); return 1; }
 
 	account_t *e = accounts_add(&a, name);
 	e->kind = kind;
@@ -393,7 +410,7 @@ static int cmd_account_add_oauth(const char *name, acc_kind_t kind,
 	if (kind == ACC_GOOGLE) e->url = xstrdup(GOOGLE_CALDAV);
 	bool ok = accounts_save(&a);
 	accounts_free(&a);
-	if (!ok) { warn("could not write accounts.conf"); return 1; }
+	if (!ok) { warn(_("could not write accounts.conf")); return 1; }
 
 	if (g_out != OUT_REC)
 		printf("Added '%s'.\n\n  syn-cal login %s\n", name, name);
@@ -404,7 +421,7 @@ static int cmd_account_remove(const char *name)
 {
 	accounts_t a;
 	accounts_load(&a);
-	if (!accounts_remove(&a, name)) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+	if (!accounts_remove(&a, name)) { warn(_("no account called '%s'"), name); accounts_free(&a); return 1; }
 	bool ok = accounts_save(&a);
 	accounts_free(&a);
 
@@ -423,7 +440,7 @@ static int cmd_login(const char *name, const char *user)
 	accounts_t a;
 	accounts_load(&a);
 	account_t *e = accounts_find(&a, name);
-	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+	if (!e) { warn(_("no account called '%s'"), name); accounts_free(&a); return 1; }
 
 	const oauth_provider_t *p = provider_for(e->kind);
 	if (p) {
@@ -436,14 +453,14 @@ static int cmd_login(const char *name, const char *user)
 		bool ok = oauth_authorise(p, e->client_id, secret_for(e),
 		                          open_browser, 0, &t, &err);
 		if (!ok) {
-			warn("%s", err ? err : "sign-in did not complete");
+			warn("%s", err ? err : _("sign-in did not complete"));
 			free(err);
 			accounts_free(&a);
 			return 1;
 		}
 		if (!t.refresh_token)
-			warn("the provider returned no refresh token, so this will need signing in "
-			     "again when it expires");
+			warn(_("the provider returned no refresh token, so this will need signing in "
+			     "again when it expires"));
 		store_tokens(&a, e, &t);
 		oauth_tokens_free(&t);
 		if (g_out != OUT_REC)
@@ -454,15 +471,15 @@ static int cmd_login(const char *name, const char *user)
 
 	if (user) { free(e->user); e->user = xstrdup(user); accounts_save(&a); }
 	if (!e->user) {
-		warn("'%s' has no username — run: syn-cal login %s --user you@example.org", name, name);
+		warn(_("'%s' has no username — run: syn-cal login %s --user you@example.org"), name, name);
 		accounts_free(&a);
 		return 1;
 	}
 
-	char *label = xasprintf("Password for %s at %s: ", e->user, e->url ? e->url : name);
+	char *label = xasprintf(_("Password for %s at %s: "), e->user, e->url ? e->url : name);
 	char *secret = prompt_secret(label);
 	free(label);
-	if (!secret || !*secret) { warn("nothing entered; no change"); free(secret); accounts_free(&a); return 1; }
+	if (!secret || !*secret) { warn(_("nothing entered; no change")); free(secret); accounts_free(&a); return 1; }
 
 	char *err = NULL;
 	bool ok = secret_store(name, "password", secret, &err);
@@ -470,9 +487,10 @@ static int cmd_login(const char *name, const char *user)
 	free(secret);
 	accounts_free(&a);
 
-	if (!ok) { warn("%s", err ? err : "the password could not be stored"); free(err); return 1; }
+	if (!ok) { warn("%s", err ? err : _("the password could not be stored")); free(err); return 1; }
 	free(err);
-	if (g_out != OUT_REC) printf("Saved. Where: %s\n", secret_where(name, "password"));
+	if (g_out != OUT_REC)
+		printf(_("Saved. Where: %s\n"), secret_where(name, "password"));
 	return 0;
 }
 
@@ -481,7 +499,7 @@ static int cmd_discover(const char *name)
 	accounts_t a;
 	accounts_load(&a);
 	account_t *e = accounts_find(&a, name);
-	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+	if (!e) { warn(_("no account called '%s'"), name); accounts_free(&a); return 1; }
 
 	http_auth_t auth;
 	char *err = NULL;
@@ -496,7 +514,7 @@ static int cmd_discover(const char *name)
 	        : caldav_discover(e->url, &auth, &colls, &err);
 	auth_free(&auth);
 	if (!ok) {
-		warn("%s", err ? err : "nothing found");
+		warn("%s", err ? err : _("nothing found"));
 		free(err);
 		accounts_free(&a);
 		return 1;
@@ -532,16 +550,17 @@ static int cmd_discover(const char *name)
 			free(u); free(n);
 		}
 	} else {
-		printf("Found %zu calendar%s on '%s':\n\n", colls.n, colls.n == 1 ? "" : "s", name);
+		printf(P_("Found %zu calendar on '%s':\n\n",
+		          "Found %zu calendars on '%s':\n\n", colls.n), colls.n, name);
 		for (size_t i = 0; i < colls.n; i++) {
 			acc_cal_t *c = acc_find_cal(e, colls.e[i].url);
 			printf("  [%s] %s\n", (c && c->enabled) ? "on " : "off",
 			       colls.e[i].name ? colls.e[i].name : colls.e[i].url);
 		}
 		if (first_discovery)
-			printf("\nAll switched on. `syn-cal disable %s \"<name>\"` turns one off.\n", name);
+			printf(_("\nAll switched on. `syn-cal disable %s \"<name>\"` turns one off.\n"), name);
 		else
-			printf("\nAnything new starts switched off.\n  syn-cal enable %s \"<name>\"\n", name);
+			printf(_("\nAnything new starts switched off.\n  syn-cal enable %s \"<name>\"\n"), name);
 	}
 
 	caldav_colls_free(&colls);
@@ -554,7 +573,7 @@ static int cmd_set_enabled(const char *name, const char *which, bool on)
 	accounts_t a;
 	accounts_load(&a);
 	account_t *e = accounts_find(&a, name);
-	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+	if (!e) { warn(_("no account called '%s'"), name); accounts_free(&a); return 1; }
 
 	/* Matched by display name or by URL, because the display name is what the
 	 * list shows and the URL is what a script has. */
@@ -564,7 +583,7 @@ static int cmd_set_enabled(const char *name, const char *which, bool on)
 		    strcmp(e->cals[i].url, which) == 0) { hit = &e->cals[i]; break; }
 
 	if (!hit) {
-		warn("'%s' has no calendar called '%s' — run: syn-cal calendars %s", name, which, name);
+		warn(_("'%s' has no calendar called '%s' — run: syn-cal calendars %s"), name, which, name);
 		accounts_free(&a);
 		return 1;
 	}
@@ -603,7 +622,7 @@ static int cmd_calendars(const char *name)
 	}
 
 	account_t *e = accounts_find(&a, name);
-	if (!e) { warn("no account called '%s'", name); accounts_free(&a); return 1; }
+	if (!e) { warn(_("no account called '%s'"), name); accounts_free(&a); return 1; }
 
 	if (g_out == OUT_REC) rec_header("url\tname\tenabled");
 	for (size_t i = 0; i < e->ncals; i++) {
@@ -645,7 +664,11 @@ static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry
 		char *serr = NULL;
 
 		if (!sync_run(r, &o, &st, &serr)) {
-			warn("%s / %s: %s", e->name, label, serr ? serr : "sync failed");
+			/* ⚠ the FORMAT is punctuation and is not marked — there is nothing in
+			 * "%s / %s: %s" for a translator to do, and a msgid that is pure
+			 * placeholders costs thirteen people a decision each. The FALLBACK
+			 * is the string a person reads, so that is the marked one.  */
+			warn("%s / %s: %s", e->name, label, serr ? serr : _("sync failed"));
 			free(serr);
 			bad = 1;
 		} else {
@@ -663,12 +686,14 @@ static int sync_account(accounts_t *a, account_t *e, conflict_t policy, bool dry
 				free(a1); free(c1);
 			} else if (g_verbose || st.pulled_new || st.pulled_changed || st.pulled_deleted ||
 			           st.pushed_new || st.pushed_changed || st.pushed_deleted || st.conflicts) {
-				printf("  %s / %s: %u down, %u up, %u removed here, %u removed there",
+				printf(_("  %s / %s: %u down, %u up, %u removed here, %u removed there"),
 				       e->name, label,
 				       st.pulled_new + st.pulled_changed,
 				       st.pushed_new + st.pushed_changed,
 				       st.pulled_deleted, st.pushed_deleted);
-				if (st.conflicts) printf(", %u conflict%s kept", st.conflicts, st.conflicts == 1 ? "" : "s");
+				if (st.conflicts)
+		printf(P_(", %u conflict kept", ", %u conflicts kept", st.conflicts),
+		       st.conflicts);
 				putchar('\n');
 			}
 		}
@@ -683,7 +708,7 @@ static int cmd_sync(const char *only, conflict_t policy, bool dry)
 {
 	accounts_t a;
 	accounts_load(&a);
-	if (a.n == 0) { warn("no accounts yet — run: syn-cal account add ..."); accounts_free(&a); return 1; }
+	if (a.n == 0) { warn(_("no accounts yet — run: syn-cal account add ...")); accounts_free(&a); return 1; }
 
 	if (g_out == OUT_REC)
 		rec_header("account\tcalendar\tdown_new\tdown_changed\tdown_deleted\t"
@@ -700,7 +725,7 @@ static int cmd_sync(const char *only, conflict_t policy, bool dry)
 		bad |= sync_account(&a, &a.e[i], policy, dry, &tot);
 	}
 
-	if (only && ran == 0) { warn("no account called '%s'", only); accounts_free(&a); return 1; }
+	if (only && ran == 0) { warn(_("no account called '%s'"), only); accounts_free(&a); return 1; }
 
 	if (g_out != OUT_REC) {
 		unsigned moved = tot.pulled_new + tot.pulled_changed + tot.pushed_new + tot.pushed_changed;
@@ -708,12 +733,14 @@ static int cmd_sync(const char *only, conflict_t policy, bool dry)
 		/* ⛔ NOT AFTER A FAILURE. "Already up to date" is the most reassuring
 		 * possible way to say nothing happened, and saying it when an account
 		 * could not be reached is how a calendar quietly stops updating. */
-		else if (bad) printf("Some calendars did not sync — see the messages above.\n");
+		else if (bad) printf(_("Some calendars did not sync — see the messages above.\n"));
 		else if (!moved && !tot.conflicts && !tot.pulled_deleted && !tot.pushed_deleted)
-			printf("Already up to date.\n");
+			printf(_("Already up to date.\n"));
 		if (tot.conflicts)
-			printf("%u conflict%s — both copies were kept. Look for events ending "
-			       "'-syncal-local-'.\n", tot.conflicts, tot.conflicts == 1 ? "" : "s");
+			printf(P_("%u conflict — both copies were kept. Look for events "
+			          "ending '-syncal-local-'.\n",
+			          "%u conflicts — both copies were kept. Look for events "
+			          "ending '-syncal-local-'.\n", tot.conflicts), tot.conflicts);
 	}
 
 	accounts_free(&a);
@@ -741,7 +768,8 @@ static int cmd_events(const char *name, const char *cal)
 			rec_row("%s\t%s\t%s\t%s", a1, kind ? kind : "", start ? start : "", a2);
 			free(a1); free(a2);
 		} else {
-			printf("  %-18s %s\n", start ? start : "-", sum ? sum : "(no summary)");
+			printf("  %-18s %s\n", start ? start : "-",
+			       sum ? sum : _("(no summary)"));
 		}
 		free(sum); free(start); free(kind); free(u); free(data);
 	}
@@ -770,7 +798,7 @@ static int cmd_agenda(int days, const char *from_date)
 		int y = 0, m = 0, d = 0;
 		if (sscanf(from_date, "%d-%d-%d", &y, &m, &d) != 3 ||
 		    m < 1 || m > 12 || d < 1 || d > 31) {
-			warn("--from wants a date like 2026-09-01");
+			warn(_("--from wants a date like 2026-09-01"));
 			return 2;
 		}
 		lt.tm_year = y - 1900;
@@ -781,13 +809,13 @@ static int cmd_agenda(int days, const char *from_date)
 
 	lt.tm_hour = lt.tm_min = lt.tm_sec = 0;
 	time_t from = mktime(&lt);
-	if (from == (time_t)-1) { warn("--from: that is not a date this machine can represent"); return 2; }
+	if (from == (time_t)-1) { warn(_("--from: that is not a date this machine can represent")); return 2; }
 	time_t to = from + (time_t)days * 86400;
 
 	events_t l;
 	char *err = NULL;
 	if (!agenda_range(from, to, &l, &err)) {
-		warn("%s", err ? err : "could not read the calendars");
+		warn("%s", err ? err : _("could not read the calendars"));
 		free(err);
 		return 1;
 	}
@@ -811,7 +839,8 @@ static int cmd_agenda(int days, const char *from_date)
 	}
 
 	if (l.n == 0) {
-		printf("Nothing in the next %d day%s.\n", days, days == 1 ? "" : "s");
+		printf(P_("Nothing in the next %d day.\n",
+		          "Nothing in the next %d days.\n", days), days);
 		events_free(&l);
 		return 0;
 	}
@@ -832,14 +861,14 @@ static int cmd_agenda(int days, const char *from_date)
 		}
 
 		if (e->all_day) {
-			printf("  all day   %s", e->summary ? e->summary : "(no summary)");
+			printf(_("  all day   %s"), e->summary ? e->summary : _("(no summary)"));
 		} else {
 			char t[8];
 			strftime(t, sizeof t, "%H:%M", &st);
-			printf("  %s     %s", t, e->summary ? e->summary : "(no summary)");
+			printf("  %s     %s", t, e->summary ? e->summary : _("(no summary)"));
 		}
 		if (e->location && *e->location) printf("  — %s", e->location);
-		if (e->cancelled) printf("  (cancelled)");
+		if (e->cancelled) printf(_("  (cancelled)"));
 		putchar('\n');
 	}
 
@@ -856,13 +885,13 @@ static int cmd_agenda(int days, const char *from_date)
 static int cmd_gui(const char *new_on)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-cal gui needs a graphical session");
+		die(_("no display — syn-cal gui needs a graphical session"));
 
 	/* ⚠ CHECKED BEFORE exec, so the message names what is missing. execvp
 	 * failing leaves "could not start quickshell", which is true and useless. */
 	if (access("/usr/bin/quickshell", X_OK) != 0 &&
 	    access("/usr/local/bin/quickshell", X_OK) != 0)
-		die("quickshell is not installed — synpkg install quickshell");
+		die(_("quickshell is not installed — synpkg install quickshell"));
 
 	/* ⛔ THE WINDOW'S WAYLAND app_id, AND OVERWRITTEN RATHER THAN MERELY SET.
 	 * Without it quickshell names every one of its windows "org.quickshell",
@@ -893,7 +922,7 @@ static int cmd_gui(const char *new_on)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die(_("could not start quickshell"));
 	return 1;
 }
 
@@ -901,6 +930,11 @@ static int cmd_gui(const char *new_on)
 
 int main(int argc, char **argv)
 {
+	/* ⚠ FIRST, BEFORE ANYTHING PRINTS. usage() and every die() below go through
+	 * gettext, and a message looked up before the catalog is bound is English
+	 * whatever the desktop's language is.  */
+	syn_cal_i18n_init();
+
 	const char *user = NULL;
 	const char *client_id = NULL;
 	const char *client_secret = NULL;
@@ -950,10 +984,10 @@ int main(int argc, char **argv)
 			if (!strcmp(c, "keep-both")) policy = CONFLICT_KEEP_BOTH;
 			else if (!strcmp(c, "remote")) policy = CONFLICT_REMOTE_WINS;
 			else if (!strcmp(c, "local")) policy = CONFLICT_LOCAL_WINS;
-			else { warn("unknown conflict policy '%s'", c); return 2; }
+			else { warn(_("unknown conflict policy '%s'"), c); return 2; }
 			continue;
 		}
-		if (v[0] == '-' && v[1] == '-') { warn("unknown option '%s'", v); usage(stderr); return 2; }
+		if (v[0] == '-' && v[1] == '-') { warn(_("unknown option '%s'"), v); usage(stderr); return 2; }
 		if (n < 8) pos[n++] = v;
 	}
 
@@ -972,7 +1006,7 @@ int main(int argc, char **argv)
 			rc = cmd_account_add_oauth(pos[2], ACC_MICROSOFT, client_id, client_secret);
 		else if (!strcmp(pos[1], "remove") && n >= 3) rc = cmd_account_remove(pos[2]);
 		else if (!strcmp(pos[1], "show") && n >= 3)   rc = cmd_calendars(pos[2]);
-		else { warn("usage: syn-cal account add|remove|show ..."); rc = 2; }
+		else { warn(_("usage: syn-cal account add|remove|show ...")); rc = 2; }
 	}
 	else if (!strcmp(c, "login") && n >= 2)           rc = cmd_login(pos[1], user);
 	else if (!strcmp(c, "logout") && n >= 2)          rc = secret_forget(pos[1], "password", NULL) ? 0 : 1;
@@ -991,7 +1025,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(c, "default"))                   rc = cmd_default(n >= 2 ? pos[1] : NULL);
 	else if (!strcmp(c, "today"))                     rc = cmd_agenda(1, NULL);
 	else if (!strcmp(c, "week"))                      rc = cmd_agenda(7, NULL);
-	else { warn("unknown command '%s'", c); usage(stderr); rc = 2; }
+	else { warn(_("unknown command '%s'"), c); usage(stderr); rc = 2; }
 
 	http_global_cleanup();
 	return rc;

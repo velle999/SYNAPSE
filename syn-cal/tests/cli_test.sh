@@ -15,6 +15,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE PROGRAM UNDER TEST IS TRANSLATED NOW, AND THIS FILE ASSERTS ENGLISH.
+# syn-cal's compiled-in localedir is /usr/share/locale, so on a machine where
+# syn-cal is INSTALLED a freshly built binary loads the INSTALLED catalog and
+# answers in the desktop's language — every assertion about a message then fails
+# against a program that is working perfectly, and a failing `meson test` is a
+# BUILD failure, so `syn-update` refuses to install it. synpkg 47 did exactly
+# that on a Japanese desktop.
+#
+# ⚠ Running this under LANG=ja on a box where syn-cal is not installed does NOT
+# catch it: with no catalog to find, gettext falls back to the msgid and it all
+# passes in English. Reproduce with SYN_CAL_LOCALEDIR pointed at a built catalog.
+#
+# ⚠ LANGUAGE as well as LC_ALL — gettext reads LANGUAGE FIRST.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
+
 S=${1:-./build/syn-cal}
 [ -x "$S" ] || { echo "not executable: $S" >&2; exit 1; }
 

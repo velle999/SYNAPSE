@@ -9,6 +9,7 @@
 #include "month.h"
 #include "settings.h"
 #include "syncal.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -179,7 +180,7 @@ static bool month_from(const char *from_date, int *year, int *mon)
 	int y = 0, m = 0, d = 0;
 	int got = sscanf(from_date, "%d-%d-%d", &y, &m, &d);
 	if (got < 2 || m < 1 || m > 12 || y < 1 || y > 9999) {
-		warn("--from wants a month like 2026-09, or a date in it");
+		warn(_("--from wants a month like 2026-09, or a date in it"));
 		return false;
 	}
 	*year = y;
@@ -201,12 +202,12 @@ int cmd_weekstart(const char *value)
 
 	week_start_t ws;
 	if (!week_start_parse(value, &ws)) {
-		warn("weekstart wants 'sun' or 'mon', not '%s'", value);
+		warn(_("weekstart wants 'sun' or 'mon', not '%s'"), value);
 		return 2;
 	}
 	char *err = NULL;
 	if (!week_start_set(ws, &err)) {
-		warn("%s", err ? err : "could not write the setting");
+		warn("%s", err ? err : _("could not write the setting"));
 		free(err);
 		return 1;
 	}
@@ -222,7 +223,7 @@ int cmd_month(const char *from_date)
 
 	month_t m;
 	if (!month_load(&m, year, mon)) {
-		warn("that is not a month this machine can represent");
+		warn(_("that is not a month this machine can represent"));
 		return 2;
 	}
 
@@ -230,7 +231,7 @@ int cmd_month(const char *from_date)
 	events_init(&ev);
 	char *err = NULL;
 	if (!agenda_range(m.start, m.end, &ev, &err)) {
-		warn("%s", err ? err : "could not read the calendars");
+		warn("%s", err ? err : _("could not read the calendars"));
 		free(err);
 		events_free(&ev);
 		return 1;
@@ -312,11 +313,20 @@ int cmd_month(const char *from_date)
 	}
 	printf("\n\n");
 
-	if (total == 0)
-		printf("  %snothing on in %s%s\n\n", D, title, R);
-	else
-		printf("  %s%d event%s — syn-cal agenda --from %04d-%02d-01 --days %d%s\n\n",
-		       D, total, total == 1 ? "" : "s", m.year, m.mon + 1, m.days, R);
+	if (total == 0) {
+		/* ⚠ THE MONTH'S NAME IS INSIDE THE SENTENCE, not concatenated onto
+		 * the end of it: a translator needs to put it where their language
+		 * puts it, and a bare "nothing on in" is not a phrase anyone can
+		 * translate. Split across three printfs so the colour escapes stay
+		 * out of the msgid.  */
+		printf("  %s", D);
+		printf(_("nothing on in %s"), title);
+		printf("%s\n\n", R);
+	} else
+		printf(P_("  %s%d event — syn-cal agenda --from %04d-%02d-01 --days %d%s\n\n",
+		          "  %s%d events — syn-cal agenda --from %04d-%02d-01 --days %d%s\n\n",
+		          total),
+		       D, total, m.year, m.mon + 1, m.days, R);
 
 	events_free(&ev);
 	return 0;

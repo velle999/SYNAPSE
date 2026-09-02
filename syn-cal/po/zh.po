@@ -17,329 +17,598 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-cal\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: syn-cal.qml:1008
 msgid "%1 of %2 on"
 msgid_plural "%1 of %2 on"
 msgstr[0] "%2 个中已开启 %1 个"
 
-#: syn-cal.qml:1457
-#: syn-cal.qml:1594
 msgid "(no title)"
 msgstr "（无标题）"
 
-#: syn-cal.qml:1614
 msgid "+%1 more"
 msgid_plural "+%1 more"
 msgstr[0] "还有 %1 项"
 
-#: syn-cal.qml:1745
 msgid "13:15 — or blank for all day"
 msgstr "13:15 — 留空表示全天"
 
-#: syn-cal.qml:1762
 msgid "15m, 1h, none"
 msgstr "15m, 1h, none"
 
-#: syn-cal.qml:1756
 msgid "1h, 30m, 1h30m"
 msgstr "1h, 30m, 1h30m"
 
-#: syn-cal.qml:626
 msgid "A CalDAV account needs a server URL."
 msgstr "CalDAV 账户需要服务器地址。"
 
-#: syn-cal.qml:2000
 msgid "A name for this account"
 msgstr "这个账户的名称"
 
-#: syn-cal.qml:1212
 msgid "Add account"
 msgstr "添加账户"
 
-#: syn-cal.qml:1956
 msgid "Add an account"
 msgstr "添加一个账户"
 
-#: syn-cal.qml:2092
 msgid "Add and sign in"
 msgstr "添加并登录"
 
-#: syn-cal.qml:628
 msgid "Adding…"
 msgstr "正在添加…"
 
-#: syn-cal.qml:904
 msgid "Asking the server…"
 msgstr "正在询问服务器…"
 
-#: syn-cal.qml:1158
 msgid "Asking…"
 msgstr "正在询问…"
 
-#: syn-cal.qml:1358
 msgid "Back"
 msgstr "上一个"
 
-#: syn-cal.qml:1775
 msgid "CALENDAR"
 msgstr "日历"
 
-#: syn-cal.qml:975
-#: syn-cal.qml:1057
 msgid "Calendars"
 msgstr "日历"
 
-#: syn-cal.qml:1882
-#: syn-cal.qml:2065
 msgid "Cancel"
 msgstr "取消"
 
-#: syn-cal.qml:584
 msgid "Checking the password…"
 msgstr "正在检查密码…"
 
-#: syn-cal.qml:1735
 msgid "DAY"
 msgstr "日期"
 
-#: syn-cal.qml:1856
 msgid "Delete"
 msgstr "删除"
 
-#: syn-cal.qml:1726
 msgid "Dentist"
 msgstr "牙医"
 
-#: syn-cal.qml:1717
 msgid "Event"
 msgstr "日程"
 
-#: syn-cal.qml:1755
 msgid "FOR"
 msgstr "时长"
 
-#: syn-cal.qml:1158
 msgid "Find calendars"
 msgstr "查找日历"
 
-#: syn-cal.qml:602
 msgid "Finish signing in in your browser…"
 msgstr "请在浏览器中完成登录…"
 
-#: syn-cal.qml:886
 msgid "Found what the server has."
 msgstr "已找到服务器上的内容。"
 
-#: syn-cal.qml:624
 msgid "Give the account a name first."
 msgstr "请先给账户起个名称。"
 
-#: syn-cal.qml:1449
 msgid "HH:mm"
 msgstr "HH:mm"
 
-#: syn-cal.qml:1057
 msgid "Hide"
 msgstr "隐藏"
 
-#: syn-cal.qml:786
 msgid "It needs a date."
 msgstr "需要填写日期。"
 
-#: syn-cal.qml:785
 msgid "It needs a name."
 msgstr "需要填写名称。"
 
-#: syn-cal.qml:1628
 msgid "Loading %1…"
 msgstr "正在加载 %1…"
 
-#: syn-cal.qml:1283
-#: syn-cal.qml:1630
 msgid "MMMM yyyy"
 msgstr "yyyy年M月"
 
-#: syn-cal.qml:1329
 msgid "Month"
 msgstr "月"
 
-#: syn-cal.qml:1827
 msgid "NOTES"
 msgstr "备注"
 
-#: syn-cal.qml:1309
-#: syn-cal.qml:1664
-#: syn-cal.qml:1717
 msgid "New event"
 msgstr "新建日程"
 
-#: syn-cal.qml:1360
 msgid "Next"
 msgstr "下一个"
 
-#: syn-cal.qml:1196
 msgid "No accounts yet."
 msgstr "还没有账户。"
 
-#: syn-cal.qml:1627
-#: syn-cal.qml:1642
 msgid "No calendars are set up yet."
 msgstr "尚未设置任何日历。"
 
-#: syn-cal.qml:1643
 msgid "Nothing in the next %1 day."
 msgid_plural "Nothing in the next %1 days."
 msgstr[0] "今后 %1 天内没有日程。"
 
-#: syn-cal.qml:2027
 msgid "Password"
 msgstr "密码"
 
-#: syn-cal.qml:1761
 msgid "REMIND ME"
 msgstr "提醒我"
 
-#: syn-cal.qml:34
 msgid "SYNAPSE Calendar"
 msgstr "SYNAPSE 日历"
 
-#: syn-cal.qml:1903
 msgid "Save"
 msgstr "保存"
 
-#: syn-cal.qml:764
 msgid "Saved. Syncing…"
 msgstr "已保存。正在同步…"
 
-#: syn-cal.qml:1903
 msgid "Saving…"
 msgstr "正在保存…"
 
-#: syn-cal.qml:2009
 msgid "Server URL"
 msgstr "服务器地址"
 
-#: syn-cal.qml:1028
 msgid "Sign in"
 msgstr "登录"
 
-#: syn-cal.qml:2091
 msgid "Sign in with browser"
 msgstr "在浏览器中登录"
 
-#: syn-cal.qml:573
 msgid "Signed in."
 msgstr "已登录。"
 
-#: syn-cal.qml:2038
-msgid "Signing in opens your browser. Your password is typed at %1, never here."
+msgid ""
+"Signing in opens your browser. Your password is typed at %1, never here."
 msgstr "登录会打开浏览器。密码在 %1 输入，绝不在这里输入。"
 
-#: syn-cal.qml:834
 msgid "Some calendars did not sync."
 msgstr "有些日历没有同步。"
 
-#: syn-cal.qml:1239
 msgid "Sync now"
 msgstr "立即同步"
 
-#: syn-cal.qml:943
-#: syn-cal.qml:1239
 msgid "Syncing…"
 msgstr "正在同步…"
 
-#: syn-cal.qml:1741
 msgid "TIME"
 msgstr "时间"
 
-#: syn-cal.qml:1285
 msgid "The next %1 day"
 msgid_plural "The next %1 days"
 msgstr[0] "今后 %1 天"
 
-#: syn-cal.qml:1359
 msgid "Today"
 msgstr "今天"
 
-#: syn-cal.qml:833
 msgid "Up to date."
 msgstr "已是最新。"
 
-#: syn-cal.qml:2018
 msgid "Username"
 msgstr "用户名"
 
-#: syn-cal.qml:1725
 msgid "WHAT"
 msgstr "内容"
 
-#: syn-cal.qml:1820
 msgid "WHERE"
 msgstr "地点"
 
-#: syn-cal.qml:1328
 msgid "Week"
 msgstr "周"
 
-#: syn-cal.qml:2090
 msgid "Working…"
 msgstr "正在处理…"
 
-#: syn-cal.qml:1999
 msgid "Your address at this provider"
 msgstr "你在该服务商的地址"
 
-#: syn-cal.qml:1447
 msgid "all day"
 msgstr "全天"
 
-#: syn-cal.qml:554
 msgid "could not add the account"
 msgstr "无法添加该账户"
 
-#: syn-cal.qml:1288
 msgid "d MMMM yyyy"
 msgstr "yyyy年M月d日"
 
-#: syn-cal.qml:1428
 msgid "dddd d MMMM"
 msgstr "M月d日dddd"
 
-#: syn-cal.qml:1007
 msgid "not signed in"
 msgstr "未登录"
 
-#: syn-cal.qml:1821
-#: syn-cal.qml:1828
 msgid "optional"
 msgstr "可不填"
 
-#: syn-cal.qml:576
 msgid "sign-in did not complete"
-msgstr "登录没有完成"
+msgstr "登录未完成"
 
-#: syn-cal.qml:919
 msgid "that calendar could not be changed"
 msgstr "该日历无法更改"
 
-#: syn-cal.qml:760
 msgid "that did not work"
 msgstr "没有成功"
 
-#: syn-cal.qml:896
 msgid "the server did not answer"
 msgstr "服务器没有响应"
 
-#: syn-cal.qml:2001
 msgid "work"
 msgstr "工作"
+
+#, c-format
+msgid ""
+"no keyring is running, so this secret went to %s (readable only by you).\n"
+"         Start a keyring — gnome-keyring or kwallet — and set it again to "
+"move it."
+msgstr "没有正在运行的密钥环，因此该密钥保存到了 %s（只有你能读取）。\n         启动一个密钥环——gnome-keyring 或 kwallet——再重新设置一次即可迁移。"
+
+#, c-format
+msgid ""
+"there are %d calendars switched on, so say which:\n"
+"  --in <account>/<calendar>   just this once\n"
+"  syn-cal default <account>/<calendar>   from now on"
+msgstr "有 %d 个日历处于开启状态，请指明是哪一个：\n  --in <账户>/<日历>   仅此一次\n  syn-cal default <账户>/<日历>   从现在起"
+
+#, c-format
+msgid "no event here with the id '%s'"
+msgstr "这里没有 id 为 “%s” 的事件"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "未知选项 “%s”"
+
+#, c-format
+msgid "too many things to call this event: '%s'"
+msgstr "这个事件的名称太多了：“%s”"
+
+msgid "no default calendar"
+msgstr "没有默认日历"
+
+msgid "default wants <account>/<calendar>"
+msgstr "default 需要 <账户>/<日历>"
+
+#, c-format
+msgid "'%s / %s' is not a calendar that is switched on — syn-cal calendars %s"
+msgstr "“%s / %s” 不是已开启的日历 — syn-cal calendars %s"
+
+msgid "could not save it"
+msgstr "无法保存"
+
+msgid "what is it called?  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\""
+msgstr "它叫什么？  syn-cal new \"牙医\" --at \"2026-09-21 13:15\""
+
+msgid "when is it?  --at \"2026-09-21 13:15\", or --at 2026-09-21 for all day"
+msgstr "什么时候？  --at \"2026-09-21 13:15\"，或用 --at 2026-09-21 表示全天"
+
+msgid "--at wants a date and time like \"2026-09-21 13:15\""
+msgstr "--at 需要像 \"2026-09-21 13:15\" 这样的日期和时间"
+
+msgid "--for wants a length like 30m, 1h or 1h30m"
+msgstr "--for 需要像 30m、1h 或 1h30m 这样的时长"
+
+msgid "--remind wants a length like 15m or 1h, or 'none'"
+msgstr "--remind 需要像 15m 或 1h 这样的时长，或者 “none”"
+
+msgid "--in wants <account>/<calendar>"
+msgstr "--in 需要 <账户>/<日历>"
+
+#, c-format
+msgid "could not write the event into %s / %s"
+msgstr "无法把事件写入 %s / %s"
+
+#, c-format
+msgid ""
+"Added '%s' to %s / %s.\n"
+"\n"
+"  syn-cal sync   (it is only on this machine so far)\n"
+msgstr "已将 “%s” 添加到 %s / %s。\n\n  syn-cal sync   (目前它只在这台机器上)\n"
+
+msgid "which event?  syn-cal edit <id> --title \"...\""
+msgstr "哪个事件？  syn-cal edit <id> --title \"...\""
+
+#, c-format
+msgid ""
+"'%s' repeats, and syn-cal will not edit one occurrence of a series without "
+"losing the rest of it. Change it where it was made."
+msgstr "“%s” 是重复事件，syn-cal 无法在不丢失其余部分的情况下只修改其中一次。请到它创建的地方修改。"
+
+#, c-format
+msgid "'%s' has no start this can read, so editing it would move it"
+msgstr "“%s” 没有可读取的开始时间，修改它会让它移位"
+
+msgid ""
+"nothing to change — pass --title, --at, --for, --remind, --where or --notes"
+msgstr "没有可修改的内容 — 请传入 --title、--at、--for、--remind、--where 或 --notes"
+
+msgid "could not write the event back"
+msgstr "无法写回该事件"
+
+msgid "which event?  syn-cal delete <id>"
+msgstr "哪个事件？  syn-cal delete <id>"
+
+msgid "could not remove the event"
+msgstr "无法删除该事件"
+
+#, c-format
+msgid "could not read %s in %s / %s"
+msgstr "无法读取 %s / %s 中的 %s"
+
+msgid "the refresh token could not be stored"
+msgstr "无法保存刷新令牌"
+
+msgid "the access token could not be stored"
+msgstr "无法保存访问令牌"
+
+#, c-format
+msgid "'%s' has no OAuth client id — see: syn-cal account add-%s --help"
+msgstr "“%s” 没有 OAuth 客户端 id — 参见：syn-cal account add-%s --help"
+
+#, c-format
+msgid "'%s' is not signed in — run: syn-cal login %s"
+msgstr "“%s” 尚未登录 — 请运行：syn-cal login %s"
+
+#, c-format
+msgid "no password for '%s' — run: syn-cal login %s"
+msgstr "“%s” 没有密码 — 请运行：syn-cal login %s"
+
+#, c-format
+msgid ""
+"No accounts yet.\n"
+"\n"
+"  syn-cal account add work https://caldav.fastmail.com/\n"
+msgstr "还没有账户。\n\n  syn-cal account add work https://caldav.fastmail.com/\n"
+
+msgid "signed in:"
+msgstr "已登录："
+
+#. TRANSLATORS: shown in the accounts list for an account that
+#. signs in with a password rather than OAuth. NOT the keyring
+#. attribute of the same spelling, which is never translated.
+msgid "password"
+msgstr "密码"
+
+#, c-format
+msgid "               %zu of %zu calendars on, %s %s\n"
+msgstr "               %zu / %zu 个日历已开启，%s %s\n"
+
+#, c-format
+msgid "there is already an account called '%s'"
+msgstr "已经有一个名为 “%s” 的账户"
+
+msgid "could not write accounts.conf"
+msgstr "无法写入 accounts.conf"
+
+#, c-format
+msgid ""
+"this build ships no OAuth client id, so it needs one of yours.\n"
+"\n"
+"  %s: register an application of type 'Desktop app'.\n"
+"  Google also issues a client secret for that type and its token endpoint\n"
+"  requires it — pass it with --client-secret. Google documents that it is\n"
+"  not confidential for an installed application; PKCE is what protects the\n"
+"  flow. Microsoft wants no secret from a public client.\n"
+"\n"
+"  syn-cal account add-%s %s --client-id <the id>"
+msgstr "此版本未附带 OAuth 客户端 id，因此需要你自己的。\n\n  %s：注册一个类型为 “Desktop app” 的应用。\n  Google 也会为该类型签发客户端密钥，并且其令牌端点需要它 — 请用\n  --client-secret 传入。Google 说明对于已安装的应用它并不保密；保护该流程的\n  是 PKCE。Microsoft 不要求公共客户端提供密钥。\n\n  syn-cal account add-%s %s --client-id <该 id>"
+
+#, c-format
+msgid "no account called '%s'"
+msgstr "没有名为 “%s” 的账户"
+
+msgid ""
+"the provider returned no refresh token, so this will need signing in again "
+"when it expires"
+msgstr "服务提供方没有返回刷新令牌，因此过期后需要重新登录"
+
+#, c-format
+msgid "'%s' has no username — run: syn-cal login %s --user you@example.org"
+msgstr "“%s” 没有用户名 — 请运行：syn-cal login %s --user you@example.org"
+
+#, c-format
+msgid "Password for %s at %s: "
+msgstr "%s 在 %s 上的密码："
+
+msgid "nothing entered; no change"
+msgstr "没有输入内容；未做更改"
+
+msgid "the password could not be stored"
+msgstr "无法保存密码"
+
+#, c-format
+msgid "Saved. Where: %s\n"
+msgstr "已保存。位置：%s\n"
+
+msgid "nothing found"
+msgstr "没有找到任何内容"
+
+#, c-format
+msgid ""
+"Found %zu calendar on '%s':\n"
+"\n"
+msgid_plural ""
+"Found %zu calendars on '%s':\n"
+"\n"
+msgstr[0] "在 “%2$s” 上找到 %1$zu 个日历：\n\n"
+
+#, c-format
+msgid ""
+"\n"
+"All switched on. `syn-cal disable %s \"<name>\"` turns one off.\n"
+msgstr "\n全部已开启。`syn-cal disable %s \"<名称>\"` 可关闭其中一个。\n"
+
+#, c-format
+msgid ""
+"\n"
+"Anything new starts switched off.\n"
+"  syn-cal enable %s \"<name>\"\n"
+msgstr "\n新增的默认处于关闭状态。\n  syn-cal enable %s \"<名称>\"\n"
+
+#, c-format
+msgid "'%s' has no calendar called '%s' — run: syn-cal calendars %s"
+msgstr "“%s” 没有名为 “%s” 的日历 — 请运行：syn-cal calendars %s"
+
+msgid "sync failed"
+msgstr "同步失败"
+
+#, c-format
+msgid "  %s / %s: %u down, %u up, %u removed here, %u removed there"
+msgstr "  %s / %s：下行 %u，上行 %u，本地删除 %u，远端删除 %u"
+
+#, c-format
+msgid ", %u conflict kept"
+msgid_plural ", %u conflicts kept"
+msgstr[0] "，保留了 %u 个冲突"
+
+msgid "no accounts yet — run: syn-cal account add ..."
+msgstr "还没有账户 — 请运行：syn-cal account add ..."
+
+#, c-format
+msgid "Some calendars did not sync — see the messages above.\n"
+msgstr "部分日历未同步 — 请看上面的消息。\n"
+
+#, c-format
+msgid "Already up to date.\n"
+msgstr "已是最新。\n"
+
+#, c-format
+msgid ""
+"%u conflict — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgid_plural ""
+"%u conflicts — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgstr[0] "%u 个冲突 — 两份副本都已保留。请查找以 “-syncal-local-” 结尾的事件。\n"
+
+msgid "(no summary)"
+msgstr "(无描述)"
+
+msgid "--from wants a date like 2026-09-01"
+msgstr "--from 需要像 2026-09-01 这样的日期"
+
+msgid "--from: that is not a date this machine can represent"
+msgstr "--from：这不是这台机器能表示的日期"
+
+msgid "could not read the calendars"
+msgstr "无法读取日历"
+
+#, c-format
+msgid "Nothing in the next %d day.\n"
+msgid_plural "Nothing in the next %d days.\n"
+msgstr[0] "接下来 %d 天没有安排。\n"
+
+#, c-format
+msgid "  all day   %s"
+msgstr "  全天   %s"
+
+#, c-format
+msgid "  (cancelled)"
+msgstr "  (已取消)"
+
+msgid "no display — syn-cal gui needs a graphical session"
+msgstr "没有显示器 — syn-cal gui 需要图形会话"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "未安装 quickshell — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "无法启动 quickshell"
+
+#, c-format
+msgid "unknown conflict policy '%s'"
+msgstr "未知的冲突策略 “%s”"
+
+msgid "usage: syn-cal account add|remove|show ..."
+msgstr "用法：syn-cal account add|remove|show ..."
+
+#, c-format
+msgid "unknown command '%s'"
+msgstr "未知命令 “%s”"
+
+msgid "--from wants a month like 2026-09, or a date in it"
+msgstr "--from 需要像 2026-09 这样的月份，或该月中的某个日期"
+
+#, c-format
+msgid "weekstart wants 'sun' or 'mon', not '%s'"
+msgstr "weekstart 需要 “sun” 或 “mon”，而不是 “%s”"
+
+msgid "could not write the setting"
+msgstr "无法写入该设置"
+
+msgid "that is not a month this machine can represent"
+msgstr "这不是这台机器能表示的月份"
+
+#, c-format
+msgid "nothing on in %s"
+msgstr "%s 没有安排"
+
+#, c-format
+msgid ""
+"  %s%d event — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgid_plural ""
+"  %s%d events — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgstr[0] "  %s%d 个事件 — syn-cal agenda --from %04d-%02d-01 --days %d%s\n\n"
+
+msgid "cannot read /dev/urandom, and a guessable verifier is worse than none"
+msgstr "无法读取 /dev/urandom，而可被猜到的验证码比没有更糟"
+
+#, c-format
+msgid "%s has no UID and cannot be synced"
+msgstr "%s 没有 UID，无法同步"
+
+#, c-format
+msgid "cannot fetch %s: %s"
+msgstr "无法获取 %s：%s"
+
+#, c-format
+msgid "%s has no UID; it cannot be filed and was skipped"
+msgstr "%s 没有 UID；无法归档，已跳过"
+
+#, c-format
+msgid "cannot upload %s: %s"
+msgstr "无法上传 %s：%s"
+
+#, c-format
+msgid "cannot delete %s on the server: %s"
+msgstr "无法在服务器上删除 %s：%s"
+
+#, c-format
+msgid "could not keep your version of %s — nothing was overwritten"
+msgstr "无法保留你的 %s 版本 — 没有任何内容被覆盖"
+
+msgid "nothing on"
+msgstr "没有安排"
+
+msgid "←→ day · ↑↓ week · [ ] month · t today · q quit"
+msgstr "←→ 日 · ↑↓ 周 · [ ] 月 · t 今天 · q 退出"
+
+msgid "out of memory"
+msgstr "内存不足"
+
+msgid "neither $HOME nor $XDG_DATA_HOME is set"
+msgstr "$HOME 和 $XDG_DATA_HOME 都未设置"

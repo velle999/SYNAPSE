@@ -5,8 +5,11 @@
  */
 #define _GNU_SOURCE
 #include "syncal.h"
+#include "i18n.h"
+#include "config.h"
 
 #include <ctype.h>
+#include <locale.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -58,14 +61,14 @@ void info(const char *fmt, ...)
 void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
-	if (!p) die("out of memory");
+	if (!p) die(_("out of memory"));
 	return p;
 }
 
 void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
-	if (!q) die("out of memory");
+	if (!q) die(_("out of memory"));
 	return q;
 }
 
@@ -82,7 +85,7 @@ char *xasprintf(const char *fmt, ...)
 	va_list ap;
 	va_start(ap, fmt);
 	char *out = NULL;
-	if (vasprintf(&out, fmt, ap) < 0) die("out of memory");
+	if (vasprintf(&out, fmt, ap) < 0) die(_("out of memory"));
 	va_end(ap);
 	return out;
 }
@@ -111,7 +114,7 @@ void buf_addf(buf_t *s, const char *fmt, ...)
 	va_list ap;
 	va_start(ap, fmt);
 	char *tmp = NULL;
-	if (vasprintf(&tmp, fmt, ap) < 0) die("out of memory");
+	if (vasprintf(&tmp, fmt, ap) < 0) die(_("out of memory"));
 	va_end(ap);
 	buf_addstr(s, tmp);
 	free(tmp);
@@ -208,7 +211,7 @@ char *store_root(void)
 	if (xdg && *xdg) return xasprintf("%s/syn-cal", xdg);
 
 	const char *home = getenv("HOME");
-	if (!home || !*home) die("neither $HOME nor $XDG_DATA_HOME is set");
+	if (!home || !*home) die(_("neither $HOME nor $XDG_DATA_HOME is set"));
 	return xasprintf("%s/.local/share/syn-cal", home);
 }
 
@@ -217,7 +220,7 @@ char *store_path(const char *fmt, ...)
 	va_list ap;
 	va_start(ap, fmt);
 	char *tail = NULL;
-	if (vasprintf(&tail, fmt, ap) < 0) die("out of memory");
+	if (vasprintf(&tail, fmt, ap) < 0) die(_("out of memory"));
 	va_end(ap);
 
 	char *root = store_root();
@@ -294,4 +297,24 @@ char *content_hash(const void *data, size_t len)
 		h *= 1099511628211ULL;
 	}
 	return xasprintf("%016llx", (unsigned long long)h);
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⛔ THE ENV OVERRIDE IS WHAT MAKES THIS TESTABLE. The compiled-in path is under
+ * the install prefix, so an UNINSTALLED binary finds no catalog at all and
+ * answers English in every locale — a test that runs it under two locales and
+ * diffs would then pass on a real bug, and PASS IS EXACTLY WHAT IT DID: synpkg
+ * verified a release that way and shipped a suite that failed on every
+ * translated desktop. Nothing changes for an installed syn-cal; the variable is
+ * not set.
+ */
+void syn_cal_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	const char *dir = getenv("SYN_CAL_LOCALEDIR");
+	bindtextdomain(SYN_CAL_GETTEXT_DOMAIN, dir && *dir ? dir : SYNCAL_LOCALEDIR);
+	bind_textdomain_codeset(SYN_CAL_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_CAL_GETTEXT_DOMAIN);
 }

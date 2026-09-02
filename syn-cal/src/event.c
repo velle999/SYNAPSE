@@ -27,6 +27,7 @@
  */
 #define _GNU_SOURCE
 #include "event.h"
+#include "i18n.h"
 #include "store.h"
 
 #include <libical/ical.h>
@@ -296,7 +297,7 @@ bool agenda_range(time_t from, time_t to, events_t *out, char **err)
 				/* ⚠ ONE UNREADABLE FILE IS NOT A FAILED AGENDA. A calendar with
 				 * one malformed event still has the rest of the week in it. */
 				if (!event_expand(data, len, from, to, acc->name, label, out))
-					warn("could not read %s in %s / %s", l.e[k].uid, acc->name, label);
+					warn(_("could not read %s in %s / %s"), l.e[k].uid, acc->name, label);
 				free(data);
 			}
 			local_free(&l);

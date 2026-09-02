@@ -19,6 +19,10 @@ conf.set_quoted('SYNCAL_DATADIR',
 conf.set_quoted('SYNCAL_GOOGLE_CLIENT_ID', get_option('google_client_id'))
 conf.set_quoted('SYNCAL_MICROSOFT_CLIENT_ID', get_option('microsoft_client_id'))
 conf.set_quoted('SYNCAL_GOOGLE_CLIENT_SECRET', get_option('google_client_secret'))
+# Where the .mo files land. ⚠ The SAME po/*.po the window's JSON comes from —
+# see include/i18n.h; one catalog, two compiled forms.
+conf.set_quoted('SYNCAL_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-DSYNCAL_VERSION="' + meson.project_version() + '"', language: 'c')
 

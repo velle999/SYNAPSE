@@ -41,6 +41,7 @@
  */
 #define _GNU_SOURCE
 #include "sync.h"
+#include "i18n.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -77,7 +78,7 @@ static bool pull(remote_t *r, const sync_opts_t *o, index_t *ix,
 	char *data = r->get(r, href, &len, &got_etag, &e);
 	if (!data) {
 		st->errors++;
-		warn("cannot fetch %s: %s", href, e ? e : "no reason given");
+		warn(_("cannot fetch %s: %s"), href, e ? e : "no reason given");
 		free(e);
 		return true;                  /* one bad item does not end the sync */
 	}
@@ -86,7 +87,7 @@ static bool pull(remote_t *r, const sync_opts_t *o, index_t *ix,
 	if (!uid) {
 		/* Addressable on the server, unusable here — and silently dropping it
 		 * would be an event that never appears and never explains itself. */
-		warn("%s has no UID; it cannot be filed and was skipped", href);
+		warn(_("%s has no UID; it cannot be filed and was skipped"), href);
 		st->skipped++;
 		free(data); free(got_etag); free(e);
 		return true;
@@ -145,7 +146,7 @@ static bool push(remote_t *r, const sync_opts_t *o, index_t *ix,
 
 	if (!r->put(r, href, data, len, etag, &new_etag, &new_href, &conflict, &e)) {
 		st->errors++;
-		warn("cannot upload %s: %s", uid, e ? e : "no reason given");
+		warn(_("cannot upload %s: %s"), uid, e ? e : "no reason given");
 		free(e); free(data); free(href); free(new_etag); free(new_href);
 		return true;
 	}
@@ -239,7 +240,7 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 						else { idx_remove(&ix, known->uid); st->pushed_deleted++; }
 					} else {
 						st->errors++;
-						warn("cannot delete %s on the server: %s", known->uid,
+						warn(_("cannot delete %s on the server: %s"), known->uid,
 						     de ? de : "no reason given");
 					}
 					free(de);
@@ -276,7 +277,7 @@ bool sync_run(remote_t *r, const sync_opts_t *o, sync_stats_t *st, char **err)
 					if (local_write(o->account, o->collection, nuid, copy, nlen))
 						info("kept your version of %s as %s", known->uid, nuid);
 					else
-						warn("could not keep your version of %s — nothing was overwritten", known->uid);
+						warn(_("could not keep your version of %s — nothing was overwritten"), known->uid);
 					free(copy); free(nuid);
 				}
 				free(mine);

@@ -25,6 +25,7 @@
  */
 #define _GNU_SOURCE
 #include "account.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <libsecret/secret.h>
@@ -321,8 +322,8 @@ bool secret_store(const char *account, const char *what, const char *value, char
 	/* ⚠ SAID OUT LOUD, ALWAYS. A silent fallback to a file on disk is the same
 	 * lie as a silent failure, one step later — the user believes the secret is
 	 * in a keyring and it is in their backups. */
-	warn("no keyring is running, so this secret went to %s (readable only by you).\n"
-	     "         Start a keyring — gnome-keyring or kwallet — and set it again to move it.",
+	warn(_("no keyring is running, so this secret went to %s (readable only by you).\n"
+	     "         Start a keyring — gnome-keyring or kwallet — and set it again to move it."),
 	     path);
 	free(path);
 	return true;

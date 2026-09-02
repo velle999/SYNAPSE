@@ -16,324 +16,598 @@ msgstr ""
 "Language-Team: \n"
 "Language: \n"
 
-#: syn-cal.qml:1008
 msgid "%1 of %2 on"
 msgid_plural "%1 of %2 on"
 msgstr[0] ""
 msgstr[1] ""
 
-#: syn-cal.qml:1457
-#: syn-cal.qml:1594
 msgid "(no title)"
 msgstr ""
 
-#: syn-cal.qml:1614
 msgid "+%1 more"
 msgid_plural "+%1 more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: syn-cal.qml:1745
 msgid "13:15 — or blank for all day"
 msgstr ""
 
-#: syn-cal.qml:1762
 msgid "15m, 1h, none"
 msgstr ""
 
-#: syn-cal.qml:1756
 msgid "1h, 30m, 1h30m"
 msgstr ""
 
-#: syn-cal.qml:626
 msgid "A CalDAV account needs a server URL."
 msgstr ""
 
-#: syn-cal.qml:2000
 msgid "A name for this account"
 msgstr ""
 
-#: syn-cal.qml:1212
 msgid "Add account"
 msgstr ""
 
-#: syn-cal.qml:1956
 msgid "Add an account"
 msgstr ""
 
-#: syn-cal.qml:2092
 msgid "Add and sign in"
 msgstr ""
 
-#: syn-cal.qml:628
 msgid "Adding…"
 msgstr ""
 
-#: syn-cal.qml:904
 msgid "Asking the server…"
 msgstr ""
 
-#: syn-cal.qml:1158
 msgid "Asking…"
 msgstr ""
 
-#: syn-cal.qml:1358
 msgid "Back"
 msgstr ""
 
-#: syn-cal.qml:1775
 msgid "CALENDAR"
 msgstr ""
 
-#: syn-cal.qml:975
-#: syn-cal.qml:1057
 msgid "Calendars"
 msgstr ""
 
-#: syn-cal.qml:1882
-#: syn-cal.qml:2065
 msgid "Cancel"
 msgstr ""
 
-#: syn-cal.qml:584
 msgid "Checking the password…"
 msgstr ""
 
-#: syn-cal.qml:1735
 msgid "DAY"
 msgstr ""
 
-#: syn-cal.qml:1856
 msgid "Delete"
 msgstr ""
 
-#: syn-cal.qml:1726
 msgid "Dentist"
 msgstr ""
 
-#: syn-cal.qml:1717
 msgid "Event"
 msgstr ""
 
-#: syn-cal.qml:1755
 msgid "FOR"
 msgstr ""
 
-#: syn-cal.qml:1158
 msgid "Find calendars"
 msgstr ""
 
-#: syn-cal.qml:602
 msgid "Finish signing in in your browser…"
 msgstr ""
 
-#: syn-cal.qml:886
 msgid "Found what the server has."
 msgstr ""
 
-#: syn-cal.qml:624
 msgid "Give the account a name first."
 msgstr ""
 
-#: syn-cal.qml:1449
 msgid "HH:mm"
 msgstr ""
 
-#: syn-cal.qml:1057
 msgid "Hide"
 msgstr ""
 
-#: syn-cal.qml:786
 msgid "It needs a date."
 msgstr ""
 
-#: syn-cal.qml:785
 msgid "It needs a name."
 msgstr ""
 
-#: syn-cal.qml:1628
 msgid "Loading %1…"
 msgstr ""
 
-#: syn-cal.qml:1283
-#: syn-cal.qml:1630
 msgid "MMMM yyyy"
 msgstr ""
 
-#: syn-cal.qml:1329
 msgid "Month"
 msgstr ""
 
-#: syn-cal.qml:1827
 msgid "NOTES"
 msgstr ""
 
-#: syn-cal.qml:1309
-#: syn-cal.qml:1664
-#: syn-cal.qml:1717
 msgid "New event"
 msgstr ""
 
-#: syn-cal.qml:1360
 msgid "Next"
 msgstr ""
 
-#: syn-cal.qml:1196
 msgid "No accounts yet."
 msgstr ""
 
-#: syn-cal.qml:1627
-#: syn-cal.qml:1642
 msgid "No calendars are set up yet."
 msgstr ""
 
-#: syn-cal.qml:1643
 msgid "Nothing in the next %1 day."
 msgid_plural "Nothing in the next %1 days."
 msgstr[0] ""
 msgstr[1] ""
 
-#: syn-cal.qml:2027
 msgid "Password"
 msgstr ""
 
-#: syn-cal.qml:1761
 msgid "REMIND ME"
 msgstr ""
 
-#: syn-cal.qml:34
 msgid "SYNAPSE Calendar"
 msgstr ""
 
-#: syn-cal.qml:1903
 msgid "Save"
 msgstr ""
 
-#: syn-cal.qml:764
 msgid "Saved. Syncing…"
 msgstr ""
 
-#: syn-cal.qml:1903
 msgid "Saving…"
 msgstr ""
 
-#: syn-cal.qml:2009
 msgid "Server URL"
 msgstr ""
 
-#: syn-cal.qml:1028
 msgid "Sign in"
 msgstr ""
 
-#: syn-cal.qml:2091
 msgid "Sign in with browser"
 msgstr ""
 
-#: syn-cal.qml:573
 msgid "Signed in."
 msgstr ""
 
-#: syn-cal.qml:2038
-msgid "Signing in opens your browser. Your password is typed at %1, never here."
+msgid ""
+"Signing in opens your browser. Your password is typed at %1, never here."
 msgstr ""
 
-#: syn-cal.qml:834
 msgid "Some calendars did not sync."
 msgstr ""
 
-#: syn-cal.qml:1239
 msgid "Sync now"
 msgstr ""
 
-#: syn-cal.qml:943
-#: syn-cal.qml:1239
 msgid "Syncing…"
 msgstr ""
 
-#: syn-cal.qml:1741
 msgid "TIME"
 msgstr ""
 
-#: syn-cal.qml:1285
 msgid "The next %1 day"
 msgid_plural "The next %1 days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: syn-cal.qml:1359
 msgid "Today"
 msgstr ""
 
-#: syn-cal.qml:833
 msgid "Up to date."
 msgstr ""
 
-#: syn-cal.qml:2018
 msgid "Username"
 msgstr ""
 
-#: syn-cal.qml:1725
 msgid "WHAT"
 msgstr ""
 
-#: syn-cal.qml:1820
 msgid "WHERE"
 msgstr ""
 
-#: syn-cal.qml:1328
 msgid "Week"
 msgstr ""
 
-#: syn-cal.qml:2090
 msgid "Working…"
 msgstr ""
 
-#: syn-cal.qml:1999
 msgid "Your address at this provider"
 msgstr ""
 
-#: syn-cal.qml:1447
 msgid "all day"
 msgstr ""
 
-#: syn-cal.qml:554
 msgid "could not add the account"
 msgstr ""
 
-#: syn-cal.qml:1288
 msgid "d MMMM yyyy"
 msgstr ""
 
-#: syn-cal.qml:1428
 msgid "dddd d MMMM"
 msgstr ""
 
-#: syn-cal.qml:1007
 msgid "not signed in"
 msgstr ""
 
-#: syn-cal.qml:1821
-#: syn-cal.qml:1828
 msgid "optional"
 msgstr ""
 
-#: syn-cal.qml:576
 msgid "sign-in did not complete"
 msgstr ""
 
-#: syn-cal.qml:919
 msgid "that calendar could not be changed"
 msgstr ""
 
-#: syn-cal.qml:760
 msgid "that did not work"
 msgstr ""
 
-#: syn-cal.qml:896
 msgid "the server did not answer"
 msgstr ""
 
-#: syn-cal.qml:2001
 msgid "work"
 msgstr ""
 
+#, c-format
+msgid ""
+"no keyring is running, so this secret went to %s (readable only by you).\n"
+"         Start a keyring — gnome-keyring or kwallet — and set it again to "
+"move it."
+msgstr ""
+
+#, c-format
+msgid ""
+"there are %d calendars switched on, so say which:\n"
+"  --in <account>/<calendar>   just this once\n"
+"  syn-cal default <account>/<calendar>   from now on"
+msgstr ""
+
+#, c-format
+msgid "no event here with the id '%s'"
+msgstr ""
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid "too many things to call this event: '%s'"
+msgstr ""
+
+msgid "no default calendar"
+msgstr ""
+
+msgid "default wants <account>/<calendar>"
+msgstr ""
+
+#, c-format
+msgid "'%s / %s' is not a calendar that is switched on — syn-cal calendars %s"
+msgstr ""
+
+msgid "could not save it"
+msgstr ""
+
+msgid "what is it called?  syn-cal new \"Dentist\" --at \"2026-09-21 13:15\""
+msgstr ""
+
+msgid "when is it?  --at \"2026-09-21 13:15\", or --at 2026-09-21 for all day"
+msgstr ""
+
+msgid "--at wants a date and time like \"2026-09-21 13:15\""
+msgstr ""
+
+msgid "--for wants a length like 30m, 1h or 1h30m"
+msgstr ""
+
+msgid "--remind wants a length like 15m or 1h, or 'none'"
+msgstr ""
+
+msgid "--in wants <account>/<calendar>"
+msgstr ""
+
+#, c-format
+msgid "could not write the event into %s / %s"
+msgstr ""
+
+#, c-format
+msgid ""
+"Added '%s' to %s / %s.\n"
+"\n"
+"  syn-cal sync   (it is only on this machine so far)\n"
+msgstr ""
+
+msgid "which event?  syn-cal edit <id> --title \"...\""
+msgstr ""
+
+#, c-format
+msgid ""
+"'%s' repeats, and syn-cal will not edit one occurrence of a series without "
+"losing the rest of it. Change it where it was made."
+msgstr ""
+
+#, c-format
+msgid "'%s' has no start this can read, so editing it would move it"
+msgstr ""
+
+msgid ""
+"nothing to change — pass --title, --at, --for, --remind, --where or --notes"
+msgstr ""
+
+msgid "could not write the event back"
+msgstr ""
+
+msgid "which event?  syn-cal delete <id>"
+msgstr ""
+
+msgid "could not remove the event"
+msgstr ""
+
+#, c-format
+msgid "could not read %s in %s / %s"
+msgstr ""
+
+msgid "the refresh token could not be stored"
+msgstr ""
+
+msgid "the access token could not be stored"
+msgstr ""
+
+#, c-format
+msgid "'%s' has no OAuth client id — see: syn-cal account add-%s --help"
+msgstr ""
+
+#, c-format
+msgid "'%s' is not signed in — run: syn-cal login %s"
+msgstr ""
+
+#, c-format
+msgid "no password for '%s' — run: syn-cal login %s"
+msgstr ""
+
+#, c-format
+msgid ""
+"No accounts yet.\n"
+"\n"
+"  syn-cal account add work https://caldav.fastmail.com/\n"
+msgstr ""
+
+msgid "signed in:"
+msgstr ""
+
+#. TRANSLATORS: shown in the accounts list for an account that
+#. signs in with a password rather than OAuth. NOT the keyring
+#. attribute of the same spelling, which is never translated.
+msgid "password"
+msgstr ""
+
+#, c-format
+msgid "               %zu of %zu calendars on, %s %s\n"
+msgstr ""
+
+#, c-format
+msgid "there is already an account called '%s'"
+msgstr ""
+
+msgid "could not write accounts.conf"
+msgstr ""
+
+#, c-format
+msgid ""
+"this build ships no OAuth client id, so it needs one of yours.\n"
+"\n"
+"  %s: register an application of type 'Desktop app'.\n"
+"  Google also issues a client secret for that type and its token endpoint\n"
+"  requires it — pass it with --client-secret. Google documents that it is\n"
+"  not confidential for an installed application; PKCE is what protects the\n"
+"  flow. Microsoft wants no secret from a public client.\n"
+"\n"
+"  syn-cal account add-%s %s --client-id <the id>"
+msgstr ""
+
+#, c-format
+msgid "no account called '%s'"
+msgstr ""
+
+msgid ""
+"the provider returned no refresh token, so this will need signing in again "
+"when it expires"
+msgstr ""
+
+#, c-format
+msgid "'%s' has no username — run: syn-cal login %s --user you@example.org"
+msgstr ""
+
+#, c-format
+msgid "Password for %s at %s: "
+msgstr ""
+
+msgid "nothing entered; no change"
+msgstr ""
+
+msgid "the password could not be stored"
+msgstr ""
+
+#, c-format
+msgid "Saved. Where: %s\n"
+msgstr ""
+
+msgid "nothing found"
+msgstr ""
+
+#, c-format
+msgid ""
+"Found %zu calendar on '%s':\n"
+"\n"
+msgid_plural ""
+"Found %zu calendars on '%s':\n"
+"\n"
+msgstr[0] ""
+msgstr[1] ""
+
+#, c-format
+msgid ""
+"\n"
+"All switched on. `syn-cal disable %s \"<name>\"` turns one off.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"\n"
+"Anything new starts switched off.\n"
+"  syn-cal enable %s \"<name>\"\n"
+msgstr ""
+
+#, c-format
+msgid "'%s' has no calendar called '%s' — run: syn-cal calendars %s"
+msgstr ""
+
+msgid "sync failed"
+msgstr ""
+
+#, c-format
+msgid "  %s / %s: %u down, %u up, %u removed here, %u removed there"
+msgstr ""
+
+#, c-format
+msgid ", %u conflict kept"
+msgid_plural ", %u conflicts kept"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "no accounts yet — run: syn-cal account add ..."
+msgstr ""
+
+#, c-format
+msgid "Some calendars did not sync — see the messages above.\n"
+msgstr ""
+
+#, c-format
+msgid "Already up to date.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"%u conflict — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgid_plural ""
+"%u conflicts — both copies were kept. Look for events ending '-syncal-"
+"local-'.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "(no summary)"
+msgstr ""
+
+msgid "--from wants a date like 2026-09-01"
+msgstr ""
+
+msgid "--from: that is not a date this machine can represent"
+msgstr ""
+
+msgid "could not read the calendars"
+msgstr ""
+
+#, c-format
+msgid "Nothing in the next %d day.\n"
+msgid_plural "Nothing in the next %d days.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+#, c-format
+msgid "  all day   %s"
+msgstr ""
+
+#, c-format
+msgid "  (cancelled)"
+msgstr ""
+
+msgid "no display — syn-cal gui needs a graphical session"
+msgstr ""
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr ""
+
+msgid "could not start quickshell"
+msgstr ""
+
+#, c-format
+msgid "unknown conflict policy '%s'"
+msgstr ""
+
+msgid "usage: syn-cal account add|remove|show ..."
+msgstr ""
+
+#, c-format
+msgid "unknown command '%s'"
+msgstr ""
+
+msgid "--from wants a month like 2026-09, or a date in it"
+msgstr ""
+
+#, c-format
+msgid "weekstart wants 'sun' or 'mon', not '%s'"
+msgstr ""
+
+msgid "could not write the setting"
+msgstr ""
+
+msgid "that is not a month this machine can represent"
+msgstr ""
+
+#, c-format
+msgid "nothing on in %s"
+msgstr ""
+
+#, c-format
+msgid ""
+"  %s%d event — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgid_plural ""
+"  %s%d events — syn-cal agenda --from %04d-%02d-01 --days %d%s\n"
+"\n"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "cannot read /dev/urandom, and a guessable verifier is worse than none"
+msgstr ""
+
+#, c-format
+msgid "%s has no UID and cannot be synced"
+msgstr ""
+
+#, c-format
+msgid "cannot fetch %s: %s"
+msgstr ""
+
+#, c-format
+msgid "%s has no UID; it cannot be filed and was skipped"
+msgstr ""
+
+#, c-format
+msgid "cannot upload %s: %s"
+msgstr ""
+
+#, c-format
+msgid "cannot delete %s on the server: %s"
+msgstr ""
+
+#, c-format
+msgid "could not keep your version of %s — nothing was overwritten"
+msgstr ""
+
+msgid "nothing on"
+msgstr ""
+
+msgid "←→ day · ↑↓ week · [ ] month · t today · q quit"
+msgstr ""
+
+msgid "out of memory"
+msgstr ""
+
+msgid "neither $HOME nor $XDG_DATA_HOME is set"
+msgstr ""
