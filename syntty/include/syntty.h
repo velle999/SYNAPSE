@@ -76,6 +76,9 @@ void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
 char *xasprintf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void  die(const char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
+/* die() without the exit. ⚠ die() and warn() are the ONLY two functions a
+ * translated string may reach — see the note above warn() in src/util.c. */
+void  warn(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 /* Monotonic nanoseconds. The benchmark's only clock — CLOCK_MONOTONIC, never
  * wall time, because a bench that a clock adjustment can improve is a bench

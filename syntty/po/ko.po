@@ -1,0 +1,204 @@
+# SynapseOS — syntty's own words.
+#
+# ⚠ The msgids are GENERATED into po/syntty.pot by po/pot.sh; merge with
+# msgmerge. syntty draws its own window, so there is no JSON half to this
+# catalog — it is compiled once to a .mo and read through libintl.
+#
+# ⛔ WHAT IS **NOT** IN HERE IS THE POINT. Every subcommand's stdout — dump,
+# about, win --stats, render, fit, mouse, key, paste, config --example — is
+# parsed by tests/syntty_test.sh and by whoever automates this terminal, so it
+# is never marked and never translated. What is here is what goes to stderr
+# when something has gone wrong, which is the only text a person reads.
+#
+# ⚠ AND THE LITERAL TOKENS STAY LITERAL. `mouse:`, `--resize`, `COLSxROWS`,
+# `shift`, `press` and `syntty -e` are things somebody TYPES; translating one
+# hands them a command that does not exist.
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: syntty\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "FreeType would not initialise"
+msgstr "FreeType를 초기화하지 못했습니다"
+
+#, c-format
+msgid "no font matched '%s'"
+msgstr "'%s'에 맞는 글꼴이 없습니다"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: 읽을 수 없습니다"
+
+msgid "--resize wants COLSxROWS"
+msgstr "--resize에는 COLSxROWS가 필요합니다"
+
+msgid "--click wants COL,ROW[,word|line]"
+msgstr "--click에는 COL,ROW[,word|line]이 필요합니다"
+
+msgid "--drag wants COL,ROW"
+msgstr "--drag에는 COL,ROW가 필요합니다"
+
+msgid "--select wants C0,R0,C1,R1"
+msgstr "--select에는 C0,R0,C1,R1이 필요합니다"
+
+msgid "run: need a command"
+msgstr "run: 명령이 필요합니다"
+
+msgid "run: cannot allocate a pty"
+msgstr "run: pty를 할당할 수 없습니다"
+
+msgid "bench: nothing to parse"
+msgstr "bench: 구문 분석할 것이 없습니다"
+
+#, c-format
+msgid "font: %s"
+msgstr "font: %s"
+
+msgid "font: every glyph rasterised blank — the face loaded but drew nothing"
+msgstr "font: 모든 글리프가 빈 채로 래스터화되었습니다 — 글꼴은 열렸지만 아무것도 그리지 않았습니다"
+
+#, c-format
+msgid "render: %s"
+msgstr "render: %s"
+
+#, c-format
+msgid "render: cannot write %s"
+msgstr "render: %s을(를) 쓸 수 없습니다"
+
+msgid "render: --probe wants col,row inside the grid"
+msgstr "render: --probe에는 격자 안의 col,row가 필요합니다"
+
+msgid "no font"
+msgstr "글꼴 없음"
+
+msgid "damage-check: nothing to parse"
+msgstr "damage-check: 구문 분석할 것이 없습니다"
+
+#, c-format
+msgid "damage-check: %s"
+msgstr "damage-check: %s"
+
+#, c-format
+msgid "mouse: unknown option '%s'"
+msgstr "mouse: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"
+msgstr "mouse: '%s'은(는) EVENT[:BUTTON]@COL,ROW가 아닙니다"
+
+#, c-format
+msgid "mouse: '%s' is not an event"
+msgstr "mouse: '%s'은(는) 이벤트가 아닙니다"
+
+#, c-format
+msgid "mouse: '%s' is not a button"
+msgstr "mouse: '%s'은(는) 버튼이 아닙니다"
+
+#, c-format
+msgid "mouse: '%s' is not press, release, move or wheel"
+msgstr "mouse: '%s'은(는) press, release, move, wheel 중 어느 것도 아닙니다"
+
+#, c-format
+msgid "key: unknown option '%s'"
+msgstr "key: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "key: '%s' is too long to be a key"
+msgstr "key: '%s'은(는) 키로 쓰기에 너무 깁니다"
+
+#, c-format
+msgid "key: '%s' is not shift, alt, ctrl or super"
+msgstr "key: '%s'은(는) shift, alt, ctrl, super 중 어느 것도 아닙니다"
+
+#, c-format
+msgid "key: '%s' names no key"
+msgstr "key: '%s'은(는) 어떤 키도 가리키지 않습니다"
+
+#, c-format
+msgid "key: '%s' is not a keysym name"
+msgstr "key: '%s'은(는) keysym 이름이 아닙니다"
+
+#, c-format
+msgid "paste: unknown option '%s'"
+msgstr "paste: 알 수 없는 옵션 '%s'"
+
+msgid "paste: one text at a time"
+msgstr "paste: 한 번에 텍스트 하나만 됩니다"
+
+#, c-format
+msgid "config: unknown option '%s'"
+msgstr "config: 알 수 없는 옵션 '%s'"
+
+msgid "--resize: too many"
+msgstr "--resize: 너무 많습니다"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "%s: one input at a time (got '%s' as well)"
+msgstr "%s: 한 번에 입력 하나만 됩니다 ('%s'도 받았습니다)"
+
+#. TRANSLATORS: the arguments are the config file's path, the number
+#. of problems in it, and where the first one is. Use %1$s, %2$d and
+#. %3$s if your language needs another order.
+#, c-format
+msgid "%s: %d problem, first at %s"
+msgid_plural "%s: %d problems, first at %s"
+msgstr[0] "%s: 문제 %d개, 첫 번째는 %s"
+
+#, c-format
+msgid "unknown command '%s' (try --help; to RUN it: syntty -e %s)"
+msgstr "알 수 없는 명령 '%s' (--help를 보세요. 실행하려면: syntty -e %s)"
+
+#, c-format
+msgid "out of memory (%zu bytes)"
+msgstr "메모리가 부족합니다 (%zu바이트)"
+
+#, c-format
+msgid "out of memory (%zu x %zu bytes)"
+msgstr "메모리가 부족합니다 (%zu x %zu바이트)"
+
+msgid "xasprintf: cannot format"
+msgstr "xasprintf: 서식을 만들 수 없습니다"
+
+#. TRANSLATORS: the first %s is a font name, the second the
+#. reason it could not be opened.
+#, c-format
+msgid "%s: %s (keeping the current font)"
+msgstr "%s: %s (현재 글꼴을 유지합니다)"
+
+msgid "the default font"
+msgstr "기본 글꼴"
+
+msgid "cannot open"
+msgstr "열 수 없습니다"
+
+#, c-format
+msgid "cannot allocate a %dx%d buffer"
+msgstr "%dx%d 버퍼를 할당할 수 없습니다"
+
+#, c-format
+msgid "no Wayland display (WAYLAND_DISPLAY is %s)"
+msgstr "Wayland 디스플레이가 없습니다 (WAYLAND_DISPLAY는 %s)"
+
+msgid "unset"
+msgstr "설정되지 않음"
+
+#, c-format
+msgid "the compositor is missing %s"
+msgstr "컴포지터에 %s이(가) 없습니다"
+
+msgid "cannot allocate a pty"
+msgstr "pty를 할당할 수 없습니다"

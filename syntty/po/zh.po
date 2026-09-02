@@ -1,0 +1,204 @@
+# SynapseOS — syntty's own words.
+#
+# ⚠ The msgids are GENERATED into po/syntty.pot by po/pot.sh; merge with
+# msgmerge. syntty draws its own window, so there is no JSON half to this
+# catalog — it is compiled once to a .mo and read through libintl.
+#
+# ⛔ WHAT IS **NOT** IN HERE IS THE POINT. Every subcommand's stdout — dump,
+# about, win --stats, render, fit, mouse, key, paste, config --example — is
+# parsed by tests/syntty_test.sh and by whoever automates this terminal, so it
+# is never marked and never translated. What is here is what goes to stderr
+# when something has gone wrong, which is the only text a person reads.
+#
+# ⚠ AND THE LITERAL TOKENS STAY LITERAL. `mouse:`, `--resize`, `COLSxROWS`,
+# `shift`, `press` and `syntty -e` are things somebody TYPES; translating one
+# hands them a command that does not exist.
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: syntty\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "FreeType would not initialise"
+msgstr "FreeType 初始化失败"
+
+#, c-format
+msgid "no font matched '%s'"
+msgstr "没有字体匹配 '%s'"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: 无法读取"
+
+msgid "--resize wants COLSxROWS"
+msgstr "--resize 需要 COLSxROWS"
+
+msgid "--click wants COL,ROW[,word|line]"
+msgstr "--click 需要 COL,ROW[,word|line]"
+
+msgid "--drag wants COL,ROW"
+msgstr "--drag 需要 COL,ROW"
+
+msgid "--select wants C0,R0,C1,R1"
+msgstr "--select 需要 C0,R0,C1,R1"
+
+msgid "run: need a command"
+msgstr "run: 需要一条命令"
+
+msgid "run: cannot allocate a pty"
+msgstr "run: 无法分配 pty"
+
+msgid "bench: nothing to parse"
+msgstr "bench: 没有可解析的内容"
+
+#, c-format
+msgid "font: %s"
+msgstr "font: %s"
+
+msgid "font: every glyph rasterised blank — the face loaded but drew nothing"
+msgstr "font: 每个字形都渲染为空白 — 字体已加载，但什么也没画出来"
+
+#, c-format
+msgid "render: %s"
+msgstr "render: %s"
+
+#, c-format
+msgid "render: cannot write %s"
+msgstr "render: 无法写入 %s"
+
+msgid "render: --probe wants col,row inside the grid"
+msgstr "render: --probe 需要网格内的 col,row"
+
+msgid "no font"
+msgstr "没有字体"
+
+msgid "damage-check: nothing to parse"
+msgstr "damage-check: 没有可解析的内容"
+
+#, c-format
+msgid "damage-check: %s"
+msgstr "damage-check: %s"
+
+#, c-format
+msgid "mouse: unknown option '%s'"
+msgstr "mouse: 未知选项 '%s'"
+
+#, c-format
+msgid "mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"
+msgstr "mouse: '%s' 不是 EVENT[:BUTTON]@COL,ROW"
+
+#, c-format
+msgid "mouse: '%s' is not an event"
+msgstr "mouse: '%s' 不是一个事件"
+
+#, c-format
+msgid "mouse: '%s' is not a button"
+msgstr "mouse: '%s' 不是一个按键"
+
+#, c-format
+msgid "mouse: '%s' is not press, release, move or wheel"
+msgstr "mouse: '%s' 不是 press、release、move 或 wheel"
+
+#, c-format
+msgid "key: unknown option '%s'"
+msgstr "key: 未知选项 '%s'"
+
+#, c-format
+msgid "key: '%s' is too long to be a key"
+msgstr "key: '%s' 作为按键太长了"
+
+#, c-format
+msgid "key: '%s' is not shift, alt, ctrl or super"
+msgstr "key: '%s' 不是 shift、alt、ctrl 或 super"
+
+#, c-format
+msgid "key: '%s' names no key"
+msgstr "key: '%s' 没有指向任何按键"
+
+#, c-format
+msgid "key: '%s' is not a keysym name"
+msgstr "key: '%s' 不是 keysym 名称"
+
+#, c-format
+msgid "paste: unknown option '%s'"
+msgstr "paste: 未知选项 '%s'"
+
+msgid "paste: one text at a time"
+msgstr "paste: 一次只能一段文本"
+
+#, c-format
+msgid "config: unknown option '%s'"
+msgstr "config: 未知选项 '%s'"
+
+msgid "--resize: too many"
+msgstr "--resize: 太多了"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "未知选项 '%s'"
+
+#, c-format
+msgid "%s: one input at a time (got '%s' as well)"
+msgstr "%s: 一次只能一个输入 (还收到了 '%s')"
+
+#. TRANSLATORS: the arguments are the config file's path, the number
+#. of problems in it, and where the first one is. Use %1$s, %2$d and
+#. %3$s if your language needs another order.
+#, c-format
+msgid "%s: %d problem, first at %s"
+msgid_plural "%s: %d problems, first at %s"
+msgstr[0] "%s: %d 个问题，第一个在 %s"
+
+#, c-format
+msgid "unknown command '%s' (try --help; to RUN it: syntty -e %s)"
+msgstr "未知命令 '%s' (请看 --help；要运行它: syntty -e %s)"
+
+#, c-format
+msgid "out of memory (%zu bytes)"
+msgstr "内存不足 (%zu 字节)"
+
+#, c-format
+msgid "out of memory (%zu x %zu bytes)"
+msgstr "内存不足 (%zu x %zu 字节)"
+
+msgid "xasprintf: cannot format"
+msgstr "xasprintf: 无法格式化"
+
+#. TRANSLATORS: the first %s is a font name, the second the
+#. reason it could not be opened.
+#, c-format
+msgid "%s: %s (keeping the current font)"
+msgstr "%s: %s (保留当前字体)"
+
+msgid "the default font"
+msgstr "默认字体"
+
+msgid "cannot open"
+msgstr "无法打开"
+
+#, c-format
+msgid "cannot allocate a %dx%d buffer"
+msgstr "无法分配 %dx%d 的缓冲区"
+
+#, c-format
+msgid "no Wayland display (WAYLAND_DISPLAY is %s)"
+msgstr "没有 Wayland 显示 (WAYLAND_DISPLAY 是 %s)"
+
+msgid "unset"
+msgstr "未设置"
+
+#, c-format
+msgid "the compositor is missing %s"
+msgstr "合成器缺少 %s"
+
+msgid "cannot allocate a pty"
+msgstr "无法分配 pty"

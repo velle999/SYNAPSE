@@ -16,6 +16,18 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ EVERY GOLDEN OUTPUT BELOW IS IN ENGLISH, AND THE BINARY ANSWERS THE
+# DESKTOP'S LANGUAGE. syntty's die() and warn() messages go through gettext as
+# of pkgrel 37, so an installed syntty on a German desktop fails the assertions
+# that name them — and passes on every English one, which is how this ships
+# broken. Pin the locale the goldens were written in.
+#
+# ⚠ LANGUAGE is UNSET, not set. gettext reads LANGUAGE **before** LC_ALL, so a
+# desktop with LANGUAGE=de still answers German to an LC_ALL=C.UTF-8 process
+# and the pin does nothing at all.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 ST=${1:-./build/syntty}
 [ -x "$ST" ] || { echo "not executable: $ST" >&2; exit 1; }
 ST=$(readlink -f "$ST")

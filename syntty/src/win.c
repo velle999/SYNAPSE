@@ -42,6 +42,7 @@
  */
 #define _GNU_SOURCE
 #include "syntty.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1458,9 +1459,11 @@ static void config_reload(win_t *w)
 			 * typo in a file somebody just edited, and the terminal keeping
 			 * the face it has while saying why is the only outcome that lets
 			 * them fix it — in this window. */
-			fprintf(stderr, "syntty: %s: %s (keeping the current font)\n",
-			        want_font ? want_font : "the default font",
-			        err ? err : "cannot open");
+			/* TRANSLATORS: the first %s is a font name, the second the
+			   reason it could not be opened.  */
+			warn(_("%s: %s (keeping the current font)"),
+			     want_font ? want_font : _("the default font"),
+			     err ? err : _("cannot open"));
 			free(err);
 		} else {
 			st_font_close(w->font);
@@ -1492,8 +1495,12 @@ static void config_reload(win_t *w)
 	tabs_invalidate(w);
 
 	if (nc.errors)
-		fprintf(stderr, "syntty: %s: %d problem%s, first at %s\n",
-		        nc.path, nc.errors, nc.errors == 1 ? "" : "s", nc.first_error);
+		/* TRANSLATORS: the arguments are the config file's path, the number
+		   of problems in it, and where the first one is. Use %1$s, %2$d and
+		   %3$s if your language needs another order.  */
+		warn(P_("%s: %d problem, first at %s",
+		        "%s: %d problems, first at %s", nc.errors),
+		     nc.path, nc.errors, nc.first_error);
 	st_config_free(&nc);
 }
 
@@ -1590,7 +1597,7 @@ static void xdg_surface_configure(void *data, struct xdg_surface *s,
 	bool resized = !w->buf[0].px
 	            || w->buf[0].w != w->win_w || w->buf[0].h != w->win_h;
 	if (resized && !pool_create(w, w->win_w, w->win_h))
-		die("cannot allocate a %dx%d buffer", w->win_w, w->win_h);
+		die(_("cannot allocate a %dx%d buffer"), w->win_w, w->win_h);
 
 	w->configured = true;
 	fit_grid(w);
@@ -2969,9 +2976,9 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 
 	w->dpy = wl_display_connect(NULL);
 	if (!w->dpy) {
-		fprintf(stderr, "syntty: no Wayland display "
-		        "(WAYLAND_DISPLAY is %s)\n",
-		        getenv("WAYLAND_DISPLAY") ? getenv("WAYLAND_DISPLAY") : "unset");
+		warn(_("no Wayland display (WAYLAND_DISPLAY is %s)"),
+		     getenv("WAYLAND_DISPLAY") ? getenv("WAYLAND_DISPLAY")
+		                               : _("unset"));
 		return 1;
 	}
 
@@ -2980,9 +2987,11 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 	wl_display_roundtrip(w->dpy);
 
 	if (!w->compositor || !w->shm || !w->wm_base) {
-		fprintf(stderr, "syntty: the compositor is missing %s\n",
-		        !w->compositor ? "wl_compositor"
-		        : !w->shm      ? "wl_shm" : "xdg_wm_base");
+		/* ⚠ The interface name is NOT marked: it is what the protocol calls
+		   itself, and a translated one names nothing.  */
+		warn(_("the compositor is missing %s"),
+		     !w->compositor ? "wl_compositor"
+		     : !w->shm      ? "wl_shm" : "xdg_wm_base");
 		wl_display_disconnect(w->dpy);
 		return 1;
 	}
@@ -2994,7 +3003,7 @@ int st_win_run(st_font_t **font, st_render_t *ren, const st_tab_spec_t *spec,
 	 * compositor turns out to be missing — the terminal would exit with its
 	 * message and leave a shell attached to a pty nothing owns. */
 	if (!tab_new(w)) {
-		fprintf(stderr, "syntty: cannot allocate a pty\n");
+		warn(_("cannot allocate a pty"));
 		wl_display_disconnect(w->dpy);
 		return 1;
 	}

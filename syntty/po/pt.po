@@ -1,0 +1,205 @@
+# SynapseOS — syntty's own words.
+#
+# ⚠ The msgids are GENERATED into po/syntty.pot by po/pot.sh; merge with
+# msgmerge. syntty draws its own window, so there is no JSON half to this
+# catalog — it is compiled once to a .mo and read through libintl.
+#
+# ⛔ WHAT IS **NOT** IN HERE IS THE POINT. Every subcommand's stdout — dump,
+# about, win --stats, render, fit, mouse, key, paste, config --example — is
+# parsed by tests/syntty_test.sh and by whoever automates this terminal, so it
+# is never marked and never translated. What is here is what goes to stderr
+# when something has gone wrong, which is the only text a person reads.
+#
+# ⚠ AND THE LITERAL TOKENS STAY LITERAL. `mouse:`, `--resize`, `COLSxROWS`,
+# `shift`, `press` and `syntty -e` are things somebody TYPES; translating one
+# hands them a command that does not exist.
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: syntty\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "FreeType would not initialise"
+msgstr "o FreeType não inicializou"
+
+#, c-format
+msgid "no font matched '%s'"
+msgstr "nenhuma fonte corresponde a '%s'"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: não é possível ler"
+
+msgid "--resize wants COLSxROWS"
+msgstr "--resize espera COLSxROWS"
+
+msgid "--click wants COL,ROW[,word|line]"
+msgstr "--click espera COL,ROW[,word|line]"
+
+msgid "--drag wants COL,ROW"
+msgstr "--drag espera COL,ROW"
+
+msgid "--select wants C0,R0,C1,R1"
+msgstr "--select espera C0,R0,C1,R1"
+
+msgid "run: need a command"
+msgstr "run: falta um comando"
+
+msgid "run: cannot allocate a pty"
+msgstr "run: não é possível alocar um pty"
+
+msgid "bench: nothing to parse"
+msgstr "bench: não há nada para analisar"
+
+#, c-format
+msgid "font: %s"
+msgstr "font: %s"
+
+msgid "font: every glyph rasterised blank — the face loaded but drew nothing"
+msgstr "font: todos os glifos foram rasterizados em branco — a fonte carregou mas não desenhou nada"
+
+#, c-format
+msgid "render: %s"
+msgstr "render: %s"
+
+#, c-format
+msgid "render: cannot write %s"
+msgstr "render: não é possível escrever %s"
+
+msgid "render: --probe wants col,row inside the grid"
+msgstr "render: --probe espera col,row dentro da grelha"
+
+msgid "no font"
+msgstr "sem fonte"
+
+msgid "damage-check: nothing to parse"
+msgstr "damage-check: não há nada para analisar"
+
+#, c-format
+msgid "damage-check: %s"
+msgstr "damage-check: %s"
+
+#, c-format
+msgid "mouse: unknown option '%s'"
+msgstr "mouse: opção desconhecida '%s'"
+
+#, c-format
+msgid "mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"
+msgstr "mouse: '%s' não é EVENT[:BUTTON]@COL,ROW"
+
+#, c-format
+msgid "mouse: '%s' is not an event"
+msgstr "mouse: '%s' não é um evento"
+
+#, c-format
+msgid "mouse: '%s' is not a button"
+msgstr "mouse: '%s' não é um botão"
+
+#, c-format
+msgid "mouse: '%s' is not press, release, move or wheel"
+msgstr "mouse: '%s' não é press, release, move nem wheel"
+
+#, c-format
+msgid "key: unknown option '%s'"
+msgstr "key: opção desconhecida '%s'"
+
+#, c-format
+msgid "key: '%s' is too long to be a key"
+msgstr "key: '%s' é demasiado longo para uma tecla"
+
+#, c-format
+msgid "key: '%s' is not shift, alt, ctrl or super"
+msgstr "key: '%s' não é shift, alt, ctrl nem super"
+
+#, c-format
+msgid "key: '%s' names no key"
+msgstr "key: '%s' não nomeia nenhuma tecla"
+
+#, c-format
+msgid "key: '%s' is not a keysym name"
+msgstr "key: '%s' não é um nome de keysym"
+
+#, c-format
+msgid "paste: unknown option '%s'"
+msgstr "paste: opção desconhecida '%s'"
+
+msgid "paste: one text at a time"
+msgstr "paste: um texto de cada vez"
+
+#, c-format
+msgid "config: unknown option '%s'"
+msgstr "config: opção desconhecida '%s'"
+
+msgid "--resize: too many"
+msgstr "--resize: demasiados"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "opção desconhecida '%s'"
+
+#, c-format
+msgid "%s: one input at a time (got '%s' as well)"
+msgstr "%s: uma entrada de cada vez (também foi recebido '%s')"
+
+#. TRANSLATORS: the arguments are the config file's path, the number
+#. of problems in it, and where the first one is. Use %1$s, %2$d and
+#. %3$s if your language needs another order.
+#, c-format
+msgid "%s: %d problem, first at %s"
+msgid_plural "%s: %d problems, first at %s"
+msgstr[0] "%s: %d problema, o primeiro em %s"
+msgstr[1] "%s: %d problemas, o primeiro em %s"
+
+#, c-format
+msgid "unknown command '%s' (try --help; to RUN it: syntty -e %s)"
+msgstr "comando desconhecido '%s' (ver --help; para o EXECUTAR: syntty -e %s)"
+
+#, c-format
+msgid "out of memory (%zu bytes)"
+msgstr "memória insuficiente (%zu bytes)"
+
+#, c-format
+msgid "out of memory (%zu x %zu bytes)"
+msgstr "memória insuficiente (%zu x %zu bytes)"
+
+msgid "xasprintf: cannot format"
+msgstr "xasprintf: não é possível formatar"
+
+#. TRANSLATORS: the first %s is a font name, the second the
+#. reason it could not be opened.
+#, c-format
+msgid "%s: %s (keeping the current font)"
+msgstr "%s: %s (a fonte atual é mantida)"
+
+msgid "the default font"
+msgstr "a fonte predefinida"
+
+msgid "cannot open"
+msgstr "não é possível abrir"
+
+#, c-format
+msgid "cannot allocate a %dx%d buffer"
+msgstr "não é possível alocar um buffer de %dx%d"
+
+#, c-format
+msgid "no Wayland display (WAYLAND_DISPLAY is %s)"
+msgstr "não há ecrã Wayland (WAYLAND_DISPLAY é %s)"
+
+msgid "unset"
+msgstr "por definir"
+
+#, c-format
+msgid "the compositor is missing %s"
+msgstr "falta %s ao compositor"
+
+msgid "cannot allocate a pty"
+msgstr "não é possível alocar um pty"

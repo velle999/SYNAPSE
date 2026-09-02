@@ -233,13 +233,58 @@
 # from a 27-column window as `日本語テキ スト`. And make_row() never
 # initialised `mark`, so rows arrived in the screen carrying whatever OSC 133
 # mark was on the stack, which is what jump-to-prompt walks.
+# ── 0.1.0-37: thirteen languages, and a line down the middle of the program ─
+#
+# syntty said everything in English, including the six sentences somebody reads
+# on the worst day they have with it — a font that will not open, a compositor
+# missing a global, a config file with a typo in it. It says them in de, fr, es,
+# pt, it, nl, pl, ru, ja, zh, ko, hi and ar now, 47 strings each.
+#
+# ⛔ AND ALMOST NOTHING ELSE IS TRANSLATED, WHICH IS THE DESIGN. `dump`,
+# `about`, `win --stats`, `render`, `fit`, `mouse`, `key`, `paste` and
+# `config --example` exist so that a terminal drawing in pixels can be asked
+# questions from a shell, and tests/syntty_test.sh parses the answers down to
+# the column labels:
+#
+#     sz=$("$ST" about | awk '/^  cell/{print $2}')
+#
+# A translated label there is a suite that fails in German and passes in
+# English, and a script somebody wrote against this terminal that stops working
+# when they change their desktop language. The usage text stays English for the
+# same reason: it names flags, and a flag cannot be translated.
+#
+# ⚠ SO THE RULE IS ABOUT TWO FUNCTIONS, NOT ABOUT INTENT. A translated string
+# may appear inside die() or warn() and nowhere else; everything printf,
+# fprintf, puts or fputs writes is a record. warn() is NEW — the six warnings
+# were fprintf(stderr, "syntty: …") calls spelling the prefix out, and the rule
+# "only the fprintf calls meant for a person" is not checkable by anything.
+# print_stats() writes to stderr as well, so stdout-versus-stderr would not have
+# drawn the line either. tests/i18n_test.sh enforces both halves: an awk pass
+# over accumulated statements, and a RUN of every diagnostic subcommand under a
+# German locale asserting byte-identical output — with a real catalog reachable
+# through SYNTTY_LOCALEDIR, because an uninstalled binary finds none and answers
+# English in every language, which is how a check like this passes while broken.
+#
+# ⚠ AND THE SUITE PINS THE LOCALE IT ASSERTS IN. Every golden output in
+# tests/syntty_test.sh is English against a binary that now answers the
+# desktop's language, so it exports LC_ALL and unsets LANGUAGE — LANGUAGE
+# because gettext reads it BEFORE LC_ALL and a desktop that sets it wins over
+# the pin. Without that this passes here and fails on a translated desktop.
+#
+# Two things fell out of the marking. `die(_("%s"), err)` at the font-open
+# failure translated nothing at all — the FALLBACK is the sentence a person
+# reads, so the two strings st_font_open produces are marked instead. And the
+# config-problem count was `%d problem%s` with a ternary for the s, which no
+# catalog can express; it is ngettext now, and Polish, Russian and Arabic get
+# the forms they need.
+
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=36
+pkgrel=37
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

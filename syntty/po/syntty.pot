@@ -1,0 +1,195 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the syntty package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: syntty\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 17:03-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+msgid "FreeType would not initialise"
+msgstr ""
+
+#, c-format
+msgid "no font matched '%s'"
+msgstr ""
+
+#, c-format
+msgid "%s: cannot read"
+msgstr ""
+
+msgid "--resize wants COLSxROWS"
+msgstr ""
+
+msgid "--click wants COL,ROW[,word|line]"
+msgstr ""
+
+msgid "--drag wants COL,ROW"
+msgstr ""
+
+msgid "--select wants C0,R0,C1,R1"
+msgstr ""
+
+msgid "run: need a command"
+msgstr ""
+
+msgid "run: cannot allocate a pty"
+msgstr ""
+
+msgid "bench: nothing to parse"
+msgstr ""
+
+#, c-format
+msgid "font: %s"
+msgstr ""
+
+msgid "font: every glyph rasterised blank — the face loaded but drew nothing"
+msgstr ""
+
+#, c-format
+msgid "render: %s"
+msgstr ""
+
+#, c-format
+msgid "render: cannot write %s"
+msgstr ""
+
+msgid "render: --probe wants col,row inside the grid"
+msgstr ""
+
+msgid "no font"
+msgstr ""
+
+msgid "damage-check: nothing to parse"
+msgstr ""
+
+#, c-format
+msgid "damage-check: %s"
+msgstr ""
+
+#, c-format
+msgid "mouse: unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid "mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"
+msgstr ""
+
+#, c-format
+msgid "mouse: '%s' is not an event"
+msgstr ""
+
+#, c-format
+msgid "mouse: '%s' is not a button"
+msgstr ""
+
+#, c-format
+msgid "mouse: '%s' is not press, release, move or wheel"
+msgstr ""
+
+#, c-format
+msgid "key: unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid "key: '%s' is too long to be a key"
+msgstr ""
+
+#, c-format
+msgid "key: '%s' is not shift, alt, ctrl or super"
+msgstr ""
+
+#, c-format
+msgid "key: '%s' names no key"
+msgstr ""
+
+#, c-format
+msgid "key: '%s' is not a keysym name"
+msgstr ""
+
+#, c-format
+msgid "paste: unknown option '%s'"
+msgstr ""
+
+msgid "paste: one text at a time"
+msgstr ""
+
+#, c-format
+msgid "config: unknown option '%s'"
+msgstr ""
+
+msgid "--resize: too many"
+msgstr ""
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid "%s: one input at a time (got '%s' as well)"
+msgstr ""
+
+#. TRANSLATORS: the arguments are the config file's path, the number
+#. of problems in it, and where the first one is. Use %1$s, %2$d and
+#. %3$s if your language needs another order.
+#, c-format
+msgid "%s: %d problem, first at %s"
+msgid_plural "%s: %d problems, first at %s"
+msgstr[0] ""
+msgstr[1] ""
+
+#, c-format
+msgid "unknown command '%s' (try --help; to RUN it: syntty -e %s)"
+msgstr ""
+
+#, c-format
+msgid "out of memory (%zu bytes)"
+msgstr ""
+
+#, c-format
+msgid "out of memory (%zu x %zu bytes)"
+msgstr ""
+
+msgid "xasprintf: cannot format"
+msgstr ""
+
+#. TRANSLATORS: the first %s is a font name, the second the
+#. reason it could not be opened.
+#, c-format
+msgid "%s: %s (keeping the current font)"
+msgstr ""
+
+msgid "the default font"
+msgstr ""
+
+msgid "cannot open"
+msgstr ""
+
+#, c-format
+msgid "cannot allocate a %dx%d buffer"
+msgstr ""
+
+#, c-format
+msgid "no Wayland display (WAYLAND_DISPLAY is %s)"
+msgstr ""
+
+msgid "unset"
+msgstr ""
+
+#, c-format
+msgid "the compositor is missing %s"
+msgstr ""
+
+msgid "cannot allocate a pty"
+msgstr ""

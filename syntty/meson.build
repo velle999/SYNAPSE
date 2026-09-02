@@ -132,13 +132,21 @@ syntty_sources = files(
   'src/win.c',
 )
 
+# Where the .mo files land, and the domain they are named after. ⚠ There is no
+# JSON half here: syntty draws its own window, so one catalog is compiled once
+# and read through libintl. See include/i18n.h.
+conf = configuration_data()
+conf.set_quoted('SYNTTY_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
+configure_file(output : 'config.h', configuration : conf)
+
 syntty = executable('syntty',
   syntty_sources,
   xdg_shell_h, xdg_shell_c,
   presentation_h, presentation_c,
   cursor_shape_h, cursor_shape_c, tablet_c,
   primary_h, primary_c,
-  include_directories : include_directories('include'),
+  include_directories : include_directories('include', '.'),
   dependencies : [util_dep, freetype_dep, fontconfig_dep,
                   wayland_client_dep, xkbcommon_dep],
   install : true)
@@ -162,3 +170,26 @@ install_data('data/syntty.svg',
 test('syntty', find_program('tests/syntty_test.sh'),
   args : [syntty.full_path()],
   timeout : 120)
+
+# ⚠ SEPARATE FROM THE SUITE ABOVE, deliberately. This one builds a locale with
+# localedef and runs the binary under it, which the parser suite must never do
+# — its whole rule is that it works on a machine with nothing installed.
+test('syntty-i18n', find_program('tests/i18n_test.sh'),
+  args : [meson.project_source_root(), syntty.full_path()],
+  timeout : 120)
+
+# ⛔ VIA meson's i18n MODULE, NOT A custom_target: libintl looks for
+# <localedir>/<lang>/LC_MESSAGES/**syntty**.mo — named after the DOMAIN — and a
+# loop over the languages can only name its output de.mo, which installs to the
+# right directory under a name nothing ever looks for, so every string falls
+# back to English with nothing to say so.
+#
+# ⛔ REGENERATE THE TEMPLATE WITH `ninja -C <build> syntty-template`, **NOT**
+# `syntty-pot`: i18n.gettext() defines that name itself and drives it from
+# po/POTFILES, which this component does not keep — po/pot.sh runs xgettext over
+# src/*.c directly.
+i18n = import('i18n')
+i18n.gettext('syntty', preset : 'glib', install : true)
+
+run_target('syntty-template',
+  command : [find_program('po/pot.sh'), meson.project_source_root()])

@@ -40,6 +40,7 @@
  */
 #define _GNU_SOURCE
 #include "syntty.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -524,14 +525,14 @@ st_font_t *st_font_open(const char *family, double size_pt, char **err)
 	f->family  = xstrdup(family);
 
 	if (FT_Init_FreeType(&f->ft) != 0) {
-		if (err) *err = xstrdup("FreeType would not initialise");
+		if (err) *err = xstrdup(_("FreeType would not initialise"));
 		free(f->family);
 		free(f);
 		return NULL;
 	}
 
 	if (!face_load(f, FACE_REGULAR, family)) {
-		if (err) *err = xasprintf("no font matched '%s'", family);
+		if (err) *err = xasprintf(_("no font matched '%s'"), family);
 		FT_Done_FreeType(f->ft);
 		free(f->family);
 		free(f);

@@ -1,0 +1,204 @@
+# SynapseOS — syntty's own words.
+#
+# ⚠ The msgids are GENERATED into po/syntty.pot by po/pot.sh; merge with
+# msgmerge. syntty draws its own window, so there is no JSON half to this
+# catalog — it is compiled once to a .mo and read through libintl.
+#
+# ⛔ WHAT IS **NOT** IN HERE IS THE POINT. Every subcommand's stdout — dump,
+# about, win --stats, render, fit, mouse, key, paste, config --example — is
+# parsed by tests/syntty_test.sh and by whoever automates this terminal, so it
+# is never marked and never translated. What is here is what goes to stderr
+# when something has gone wrong, which is the only text a person reads.
+#
+# ⚠ AND THE LITERAL TOKENS STAY LITERAL. `mouse:`, `--resize`, `COLSxROWS`,
+# `shift`, `press` and `syntty -e` are things somebody TYPES; translating one
+# hands them a command that does not exist.
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: syntty\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "FreeType would not initialise"
+msgstr "FreeType を初期化できませんでした"
+
+#, c-format
+msgid "no font matched '%s'"
+msgstr "'%s' に一致するフォントがありません"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: 読み込めません"
+
+msgid "--resize wants COLSxROWS"
+msgstr "--resize には COLSxROWS が必要です"
+
+msgid "--click wants COL,ROW[,word|line]"
+msgstr "--click には COL,ROW[,word|line] が必要です"
+
+msgid "--drag wants COL,ROW"
+msgstr "--drag には COL,ROW が必要です"
+
+msgid "--select wants C0,R0,C1,R1"
+msgstr "--select には C0,R0,C1,R1 が必要です"
+
+msgid "run: need a command"
+msgstr "run: コマンドが必要です"
+
+msgid "run: cannot allocate a pty"
+msgstr "run: pty を確保できません"
+
+msgid "bench: nothing to parse"
+msgstr "bench: 解析するものがありません"
+
+#, c-format
+msgid "font: %s"
+msgstr "font: %s"
+
+msgid "font: every glyph rasterised blank — the face loaded but drew nothing"
+msgstr "font: すべてのグリフが空でラスタライズされました — フォントは読み込まれましたが何も描画しませんでした"
+
+#, c-format
+msgid "render: %s"
+msgstr "render: %s"
+
+#, c-format
+msgid "render: cannot write %s"
+msgstr "render: %s を書き込めません"
+
+msgid "render: --probe wants col,row inside the grid"
+msgstr "render: --probe にはグリッド内の col,row が必要です"
+
+msgid "no font"
+msgstr "フォントがありません"
+
+msgid "damage-check: nothing to parse"
+msgstr "damage-check: 解析するものがありません"
+
+#, c-format
+msgid "damage-check: %s"
+msgstr "damage-check: %s"
+
+#, c-format
+msgid "mouse: unknown option '%s'"
+msgstr "mouse: 不明なオプション '%s'"
+
+#, c-format
+msgid "mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"
+msgstr "mouse: '%s' は EVENT[:BUTTON]@COL,ROW ではありません"
+
+#, c-format
+msgid "mouse: '%s' is not an event"
+msgstr "mouse: '%s' はイベントではありません"
+
+#, c-format
+msgid "mouse: '%s' is not a button"
+msgstr "mouse: '%s' はボタンではありません"
+
+#, c-format
+msgid "mouse: '%s' is not press, release, move or wheel"
+msgstr "mouse: '%s' は press、release、move、wheel のいずれでもありません"
+
+#, c-format
+msgid "key: unknown option '%s'"
+msgstr "key: 不明なオプション '%s'"
+
+#, c-format
+msgid "key: '%s' is too long to be a key"
+msgstr "key: '%s' はキーとしては長すぎます"
+
+#, c-format
+msgid "key: '%s' is not shift, alt, ctrl or super"
+msgstr "key: '%s' は shift、alt、ctrl、super のいずれでもありません"
+
+#, c-format
+msgid "key: '%s' names no key"
+msgstr "key: '%s' はどのキーも指していません"
+
+#, c-format
+msgid "key: '%s' is not a keysym name"
+msgstr "key: '%s' は keysym 名ではありません"
+
+#, c-format
+msgid "paste: unknown option '%s'"
+msgstr "paste: 不明なオプション '%s'"
+
+msgid "paste: one text at a time"
+msgstr "paste: テキストは一度に一つだけです"
+
+#, c-format
+msgid "config: unknown option '%s'"
+msgstr "config: 不明なオプション '%s'"
+
+msgid "--resize: too many"
+msgstr "--resize: 多すぎます"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "不明なオプション '%s'"
+
+#, c-format
+msgid "%s: one input at a time (got '%s' as well)"
+msgstr "%s: 入力は一度に一つだけです ('%s' も受け取りました)"
+
+#. TRANSLATORS: the arguments are the config file's path, the number
+#. of problems in it, and where the first one is. Use %1$s, %2$d and
+#. %3$s if your language needs another order.
+#, c-format
+msgid "%s: %d problem, first at %s"
+msgid_plural "%s: %d problems, first at %s"
+msgstr[0] "%s: 問題が %d 件、最初は %s です"
+
+#, c-format
+msgid "unknown command '%s' (try --help; to RUN it: syntty -e %s)"
+msgstr "不明なコマンド '%s' です (--help を参照。実行するには: syntty -e %s)"
+
+#, c-format
+msgid "out of memory (%zu bytes)"
+msgstr "メモリが足りません (%zu バイト)"
+
+#, c-format
+msgid "out of memory (%zu x %zu bytes)"
+msgstr "メモリが足りません (%zu x %zu バイト)"
+
+msgid "xasprintf: cannot format"
+msgstr "xasprintf: 書式化できません"
+
+#. TRANSLATORS: the first %s is a font name, the second the
+#. reason it could not be opened.
+#, c-format
+msgid "%s: %s (keeping the current font)"
+msgstr "%s: %s (現在のフォントを維持します)"
+
+msgid "the default font"
+msgstr "既定のフォント"
+
+msgid "cannot open"
+msgstr "開けません"
+
+#, c-format
+msgid "cannot allocate a %dx%d buffer"
+msgstr "%dx%d のバッファを確保できません"
+
+#, c-format
+msgid "no Wayland display (WAYLAND_DISPLAY is %s)"
+msgstr "Wayland ディスプレイがありません (WAYLAND_DISPLAY は %s)"
+
+msgid "unset"
+msgstr "未設定"
+
+#, c-format
+msgid "the compositor is missing %s"
+msgstr "コンポジタに %s がありません"
+
+msgid "cannot allocate a pty"
+msgstr "pty を確保できません"

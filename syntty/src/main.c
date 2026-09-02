@@ -19,6 +19,7 @@
  */
 #define _GNU_SOURCE
 #include "syntty.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -167,7 +168,7 @@ static uint8_t *slurp(const char *path, size_t *out_len)
 {
 	FILE *f = (!path || !strcmp(path, "-")) ? stdin : fopen(path, "rb");
 	if (!f)
-		die("%s: cannot read", path ? path : "-");
+		die(_("%s: cannot read"), path ? path : "-");
 
 	size_t cap = 1 << 16, len = 0;
 	uint8_t *buf = xmalloc(cap);
@@ -208,7 +209,7 @@ static void apply_resize(const opts_t *o, st_grid_t *g)
 	for (int i = 0; i < o->nresize; i++) {
 		int c = 0, r = 0;
 		if (sscanf(o->resize[i], "%dx%d", &c, &r) != 2 || c < 1 || r < 1)
-			die("--resize wants COLSxROWS");
+			die(_("--resize wants COLSxROWS"));
 		st_grid_resize(g, (uint16_t)c, (uint16_t)r);
 	}
 }
@@ -221,7 +222,7 @@ static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
 	int c = 0, r = 0;
 	char how[16] = "char";
 	if (sscanf(o->click, "%d,%d,%15s", &c, &r, how) < 2)
-		die("--click wants COL,ROW[,word|line]");
+		die(_("--click wants COL,ROW[,word|line]"));
 	int mode = !strcmp(how, "word") ? ST_SEL_WORD
 	         : !strcmp(how, "line") ? ST_SEL_LINE : ST_SEL_CHAR;
 
@@ -229,7 +230,7 @@ static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
 	if (o->drag) {
 		int dc = 0, dr = 0;
 		if (sscanf(o->drag, "%d,%d", &dc, &dr) != 2)
-			die("--drag wants COL,ROW");
+			die(_("--drag wants COL,ROW"));
 		st_sel_extend(g, dc, dr);
 	}
 
@@ -399,7 +400,7 @@ static int cmd_dump(const opts_t *o, const char *path)
 	if (o->select) {
 		int c0 = 0, r0 = 0, c1 = 0, r1 = 0;
 		if (sscanf(o->select, "%d,%d,%d,%d", &c0, &r0, &c1, &r1) != 4)
-			die("--select wants C0,R0,C1,R1");
+			die(_("--select wants C0,R0,C1,R1"));
 		char *sel = st_grid_selection_text(&g, c0, r0, c1, r1);
 		fputs(sel, stdout);
 		fputc('\n', stdout);
@@ -461,7 +462,7 @@ static int cmd_dump_split(const opts_t *o, const char *path, size_t chunk)
 static int cmd_run(const opts_t *o, int argc, char **argv)
 {
 	if (argc < 1)
-		die("run: need a command");
+		die(_("run: need a command"));
 
 	st_grid_t g;
 	st_vt_t vt;
@@ -470,7 +471,7 @@ static int cmd_run(const opts_t *o, int argc, char **argv)
 
 	st_pty_t p;
 	if (!st_pty_spawn(&p, argv, o->cols, o->rows))
-		die("run: cannot allocate a pty");
+		die(_("run: cannot allocate a pty"));
 
 	int rc = st_pty_pump(&p, &vt);
 
@@ -493,7 +494,7 @@ static int cmd_bench(const opts_t *o, const char *path)
 	size_t len = 0;
 	uint8_t *buf = slurp(path, &len);
 	if (len == 0)
-		die("bench: nothing to parse");
+		die(_("bench: nothing to parse"));
 
 	int runs = o->runs > 0 ? o->runs : 5;
 	uint64_t best = UINT64_MAX, total = 0;
@@ -550,7 +551,7 @@ static int cmd_font(const opts_t *o)
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
 	double total = (double)(now_ns() - t0) / 1e6;
 	if (!f)
-		die("font: %s", err ? err : "could not open");
+		die(_("font: %s"), err ? err : "could not open");
 
 	const st_font_stats_t *s = st_font_get_stats(f);
 
@@ -577,7 +578,7 @@ static int cmd_font(const opts_t *o)
 	}
 	printf("ink          %lu covered pixels across ASCII 33..126\n", ink);
 	if (ink == 0)
-		die("font: every glyph rasterised blank — the face loaded but drew nothing");
+		die(_("font: every glyph rasterised blank — the face loaded but drew nothing"));
 
 	st_font_close(f);
 	free(err);
@@ -619,7 +620,7 @@ static int cmd_render(const opts_t *o, const char *path)
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
 	if (!f)
-		die("render: %s", err ? err : "no font");
+		die(_("render: %s"), err ? err : "no font");
 
 	st_render_t *r = st_render_new(f);
 	apply_colors(o, r);
@@ -655,7 +656,7 @@ static int cmd_render(const opts_t *o, const char *path)
 	if (o->out) {
 		FILE *fp = fopen(o->out, "wb");
 		if (!fp)
-			die("render: cannot write %s", o->out);
+			die(_("render: cannot write %s"), o->out);
 		st_render_write_ppm(px, w, w, h, fp);
 		fclose(fp);
 	}
@@ -712,7 +713,7 @@ static int cmd_render(const opts_t *o, const char *path)
 			int x = pc * st_font_cell_w(f), y = pr * st_font_cell_h(f);
 			printf("probe %d,%d %06X\n", pc, pr, px[(size_t)y * w + x] & 0xFFFFFF);
 		} else {
-			die("render: --probe wants col,row inside the grid");
+			die(_("render: --probe wants col,row inside the grid"));
 		}
 	}
 
@@ -747,7 +748,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
 	if (!f)
-		die("%s", err ? err : "no font");
+		die("%s", err ? err : _("no font"));
 
 	st_render_t *r = st_render_new(f);
 	apply_colors(o, r);
@@ -896,14 +897,14 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	size_t len = 0;
 	uint8_t *buf = slurp(path, &len);
 	if (len == 0)
-		die("damage-check: nothing to parse");
+		die(_("damage-check: nothing to parse"));
 	if (chunk == 0)
 		chunk = 64;
 
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
 	if (!f)
-		die("damage-check: %s", err ? err : "no font");
+		die(_("damage-check: %s"), err ? err : "no font");
 	st_render_t *r = st_render_new(f);
 	st_render_cursor(r, !o->no_cursor);
 
@@ -1112,25 +1113,25 @@ static int cmd_mouse(int argc, char **argv)
 		if (!strcmp(a, "--ctrl"))         { mods |= ST_MOUSE_CTRL;  continue; }
 		if (!strcmp(a, "--alt"))          { mods |= ST_MOUSE_ALT;   continue; }
 		if (a[0] == '-')
-			die("mouse: unknown option '%s'", a);
+			die(_("mouse: unknown option '%s'"), a);
 
 		/* EVENT[:BUTTON]@COL,ROW */
 		char verb[16] = {0}, btn[16] = "left";
 		int  col = 0, row = 0;
 		const char *at = strchr(a, '@');
 		if (!at || sscanf(at + 1, "%d,%d", &col, &row) != 2)
-			die("mouse: '%s' is not EVENT[:BUTTON]@COL,ROW", a);
+			die(_("mouse: '%s' is not EVENT[:BUTTON]@COL,ROW"), a);
 
 		size_t head = (size_t)(at - a);
 		const char *colon = memchr(a, ':', head);
 		size_t vlen = colon ? (size_t)(colon - a) : head;
 		if (vlen >= sizeof verb)
-			die("mouse: '%s' is not an event", a);
+			die(_("mouse: '%s' is not an event"), a);
 		memcpy(verb, a, vlen);
 		if (colon) {
 			size_t blen = head - vlen - 1;
 			if (blen >= sizeof btn)
-				die("mouse: '%s' is not a button", a);
+				die(_("mouse: '%s' is not a button"), a);
 			memcpy(btn, colon + 1, blen);
 			btn[blen] = '\0';
 		}
@@ -1140,12 +1141,12 @@ static int cmd_mouse(int argc, char **argv)
 		else if (!strcmp(verb, "release")) event = ST_MOUSE_RELEASE;
 		else if (!strcmp(verb, "move"))    event = ST_MOUSE_MOTION;
 		else if (!strcmp(verb, "wheel"))   event = ST_MOUSE_PRESS;
-		else die("mouse: '%s' is not press, release, move or wheel", verb);
+		else die(_("mouse: '%s' is not press, release, move or wheel"), verb);
 
 		if (!strcmp(verb, "move") && !colon)
 			strcpy(btn, "none");
 		if (!mouse_button(btn, &button))
-			die("mouse: '%s' is not a button", btn);
+			die(_("mouse: '%s' is not a button"), btn);
 
 		char out[32];
 		const char *why = NULL;
@@ -1222,12 +1223,12 @@ static int cmd_key(int argc, char **argv)
 		 * Home/End to SS3, and ONLY when they carry no modifier. */
 		if (!strcmp(a, "--app-cursor")) { appcur = true; continue; }
 		if (a[0] == '-')
-			die("key: unknown option '%s'", a);
+			die(_("key: unknown option '%s'"), a);
 
 		/* [mod+]...[mod+]KEY */
 		char spec[64];
 		if (strlen(a) >= sizeof spec)
-			die("key: '%s' is too long to be a key", a);
+			die(_("key: '%s' is too long to be a key"), a);
 		snprintf(spec, sizeof spec, "%s", a);
 
 		unsigned mods = 0;
@@ -1235,15 +1236,15 @@ static int cmd_key(int argc, char **argv)
 		while ((plus = strchr(name, '+')) != NULL) {
 			*plus = '\0';
 			if (!key_modifier(name, &mods))
-				die("key: '%s' is not shift, alt, ctrl or super", name);
+				die(_("key: '%s' is not shift, alt, ctrl or super"), name);
 			name = plus + 1;
 		}
 		if (!*name)
-			die("key: '%s' names no key", a);
+			die(_("key: '%s' names no key"), a);
 
 		xkb_keysym_t sym = xkb_keysym_from_name(name, XKB_KEYSYM_CASE_INSENSITIVE);
 		if (sym == XKB_KEY_NoSymbol)
-			die("key: '%s' is not a keysym name", name);
+			die(_("key: '%s' is not a keysym name"), name);
 
 		/* ⚠ THE ONE PLACE THIS IMITATES XKB, AND IT HAS TO.
 		 *
@@ -1320,9 +1321,9 @@ static int cmd_paste(int argc, char **argv)
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--bracketed")) { bracketed = true; continue; }
 		if (argv[i][0] == '-' && argv[i][1])
-			die("paste: unknown option '%s'", argv[i]);
+			die(_("paste: unknown option '%s'"), argv[i]);
 		if (text)
-			die("paste: one text at a time");
+			die(_("paste: one text at a time"));
 		text = argv[i];
 	}
 	if (!text) {
@@ -1364,7 +1365,7 @@ static int cmd_config(const opts_t *o, int argc, char **argv)
 			st_config_example(stdout);
 			return 0;
 		}
-		die("config: unknown option '%s'", argv[i]);
+		die(_("config: unknown option '%s'"), argv[i]);
 	}
 
 	st_config_t c;
@@ -1494,6 +1495,11 @@ static int cmd_about(void)
 
 int main(int argc, char **argv)
 {
+	/* ⚠ FIRST, BEFORE ANYTHING PRINTS. Every die() below goes through gettext,
+	 * and a message looked up before the catalog is bound is English whatever
+	 * the desktop's language is.  */
+	syntty_i18n_init();
+
 	opts_t o = {
 		.cols = 0, .rows = 0, .scrollback = -1,
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
@@ -1577,7 +1583,7 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--app-id=", 9))      o.app_id = a + 9;
 		else if (!strncmp(a, "--resize=", 9)) {
 			if (o.nresize == (int)(sizeof o.resize / sizeof *o.resize))
-				die("--resize: too many");
+				die(_("--resize: too many"));
 			o.resize[o.nresize++] = a + 9;
 		}
 		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
@@ -1590,10 +1596,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--stats"))            o.stats = true;
 		else if (!strcmp(a, "--version"))          { printf("syntty %s\n", SYNTTY_VERSION); return 0; }
 		else if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(stdout); return 0; }
-		else if (a[0] == '-' && a[1])              die("unknown option '%s'", a);
+		else if (a[0] == '-' && a[1])              die(_("unknown option '%s'"), a);
 		else if (!cmd)                             cmd = a;
 		else if (!file)                            file = a;
-		else die("%s: one input at a time (got '%s' as well)", cmd, a);
+		else die(_("%s: one input at a time (got '%s' as well)"), cmd, a);
 	}
 
 	/* No subcommand at all means the window, because that is what a terminal
@@ -1619,9 +1625,9 @@ int main(int argc, char **argv)
 	if (!o.no_config && strcmp(cmd, "config") != 0) {
 		st_config_load(&cfg, o.config);
 		if (cfg.errors)
-			fprintf(stderr, "syntty: %s: %d problem%s, first at %s\n",
-			        cfg.path, cfg.errors, cfg.errors == 1 ? "" : "s",
-			        cfg.first_error);
+			warn(P_("%s: %d problem, first at %s",
+			        "%s: %d problems, first at %s", cfg.errors),
+			     cfg.path, cfg.errors, cfg.first_error);
 		if (!o.font && cfg.font)        o.font = cfg.font;
 		if (o.font_size <= 0)           o.font_size = cfg.font_size;
 		if (!o.cols && cfg.cols > 0)    o.cols = (uint16_t)cfg.cols;
@@ -1660,7 +1666,7 @@ int main(int argc, char **argv)
 		rc = cmd_bench(&o, file);
 	else if (!strcmp(cmd, "run"))
 		rc = child_at ? cmd_run(&o, argc - child_at, argv + child_at)
-		              : (die("run: need a command"), 1);
+		              : (die(_("run: need a command")), 1);
 	else if (!strcmp(cmd, "font"))
 		rc = cmd_font(&o);
 	else if (!strcmp(cmd, "render"))
@@ -1701,5 +1707,5 @@ int main(int argc, char **argv)
 	 * "say -e first". Not accepted silently instead: a bare word that is really
 	 * a mistyped subcommand would then start a shell called `dumpp` and look
 	 * like the terminal ignoring the argument. */
-	die("unknown command '%s' (try --help; to RUN it: syntty -e %s)", cmd, cmd);
+	die(_("unknown command '%s' (try --help; to RUN it: syntty -e %s)"), cmd, cmd);
 }

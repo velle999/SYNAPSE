@@ -174,7 +174,31 @@ done < <(git -C "$BASE" ls-files "$name" | sed "s#^$name/##")
 # A real checksum would make every local build fail the moment somebody edits a
 # source file, because build-all.sh regenerates this tarball from the WORKING
 # TREE and makepkg would then reject it.
-tar czf "$out" \
+# ⛔ WRITTEN TO A TEMPORARY AND RENAMED, AND tar's STATUS IS READ.
+#
+# This was `tar czf "$out" ... 2>/dev/null || true` followed by a `-s "$out"`
+# test, and that combination cannot tell "wrote a new tarball" from "could not
+# write and left the old one there". It left FOUR root-owned tarballs from an
+# Aug 29 `sudo build-all.sh` sitting in the tree: root owns the file, velle owns
+# the directory, so `tar czf` onto it is EACCES — which 2>/dev/null swallowed,
+# `|| true` cleared, and `-s` passed, because a four-day-old tarball is not
+# empty. The script then printed the path as if it had just made it, and
+# publish-sources.sh uploaded that stale source to a release tagged with the
+# new pkgrel.
+#
+# The rename fixes the ownership case for good: replacing a file in a directory
+# you own needs no permission on the file itself.
+#
+# ⚠ STATUS 1 IS NOT A FAILURE. tar exits 1 for "file changed as we read it",
+# which is ordinary against a working tree somebody is editing; 2 is fatal. The
+# stderr is kept and shown rather than discarded, because the whole cost of
+# this bug was a diagnostic nobody was allowed to see.
+tmp=$(mktemp "$(dirname "$out")/.$(basename "$out").XXXXXX")
+err=$(mktemp "$(dirname "$out")/.$(basename "$out").err.XXXXXX")
+trap 'rm -f "$tmp" "$err"' EXIT
+
+st=0
+tar czf "$tmp" \
     --transform "s|^$name/|$prefix/|" \
     --sort=name --mtime="UTC 2020-01-01" \
     --owner=0 --group=0 --numeric-owner \
@@ -188,7 +212,17 @@ tar czf "$out" \
     --exclude="$name/*.mod*" \
     --exclude="$name/modules.order" \
     --exclude="$name/Module.symvers" \
-    "${dirs[@]}" 2>/dev/null || true
+    "${dirs[@]}" 2>"$err" || st=$?
 
-[ -s "$out" ] || { echo "collect-source: $name produced no tarball" >&2; exit 1; }
+if [ "$st" -gt 1 ]; then
+    echo "collect-source: tar failed for $name (status $st)" >&2
+    sed 's/^/  /' "$err" >&2
+    exit 1
+fi
+[ -s "$tmp" ] || { echo "collect-source: $name produced no tarball" >&2; exit 1; }
+
+chmod 644 "$tmp"
+mv -f "$tmp" "$out"
+rm -f "$err"
+trap - EXIT
 echo "$out"
