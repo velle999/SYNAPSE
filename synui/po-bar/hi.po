@@ -21,833 +21,833 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr ""
+msgstr "%1 (%2 %)\n%3\nनेटवर्क चुनने के लिए क्लिक करें"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
-msgstr ""
+msgstr "%1 / %2 GiB"
 
 #: modules/Bluetooth.qml:41
 msgid "%1 connected"
 msgid_plural "%1 connected"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 जुड़ा"
+msgstr[1] "%1 जुड़े"
 
 #: modules/Updates.qml:101
 msgid "%1 held back"
 msgid_plural "%1 held back"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 रोका गया"
+msgstr[1] "%1 रोके गए"
 
-#: WeatherState.qml:65 modules/Updates.qml:183
+#: WeatherState.qml:65 modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 मिनट पहले"
+msgstr[1] "%1 मिनट पहले"
 
 #: modules/Updates.qml:99
 msgid "%1 new"
 msgid_plural "%1 new"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 नया"
+msgstr[1] "%1 नए"
 
 #: widgets/Tuxagotchi.qml:157
 msgid "%1 oz"
-msgstr ""
+msgstr "%1 औंस"
 
 #: modules/Battery.qml:47
 msgid "%1 remaining"
-msgstr ""
+msgstr "%1 शेष"
 
 #: modules/Updates.qml:97
 msgid "%1 to rebuild"
 msgid_plural "%1 to rebuild"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 फिर से बनाना है"
+msgstr[1] "%1 फिर से बनाने हैं"
 
 #: modules/Battery.qml:45
 msgid "%1 until full"
-msgstr ""
+msgstr "पूरा होने में %1"
 
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
-msgstr ""
+msgstr "%1 दि %2 घं"
 
 #: widgets/Tuxagotchi.qml:142
 msgid "%1d %2h  ·  %3oz"
-msgstr ""
+msgstr "%1 दि %2 घं  ·  %3 औंस"
 
 #: modules/Battery.qml:62
 msgid "%1h %2m"
-msgstr ""
+msgstr "%1 घं %2 मि"
 
-#: WeatherState.qml:66 modules/Updates.qml:184
+#: WeatherState.qml:66 modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 घंटे पहले"
+msgstr[1] "%1 घंटे पहले"
 
 #: modules/Battery.qml:62
 msgid "%1m"
-msgstr ""
+msgstr "%1 मि"
 
 #: modules/Network.qml:106
 msgid "(hidden)"
-msgstr ""
+msgstr "(छिपा हुआ)"
 
 #: modules/Media.qml:82 widgets/MusicPlayer.qml:248
 msgid "(unknown track)"
-msgstr ""
+msgstr "(अज्ञात ट्रैक)"
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
-msgstr ""
+msgstr "उम्र"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
-msgstr ""
+msgstr "AI शेल (synsh)"
 
 #: StartMenu.qml:747
 msgid "APPLICATIONS"
-msgstr ""
+msgstr "अनुप्रयोग"
 
 #: StartMenu.qml:708
 msgid "AVAILABLE TO INSTALL"
-msgstr ""
+msgstr "स्थापना के लिए उपलब्ध"
 
 #: StartMenu.qml:494
 msgid "Accessories"
-msgstr ""
+msgstr "सहायक उपकरण"
 
 #: components/MixerEqRow.qml:134
 msgid "Adjust"
-msgstr ""
+msgstr "समायोजित करें"
 
 #: StartMenu.qml:626
 msgid "Appearance"
-msgstr ""
+msgstr "रूप-रंग"
 
 #: components/Mixer.qml:348
 msgid "Applications"
-msgstr ""
+msgstr "अनुप्रयोग"
 
-#: modules/Updates.qml:157
+#: modules/Updates.qml:163
 msgid "Apply in a terminal"
-msgstr ""
+msgstr "टर्मिनल में लागू करें"
 
 #: BarConfig.qml:67
 msgid "Assistant"
-msgstr ""
+msgstr "सहायक"
 
 #: modules/Assistant.qml:44
 msgid "Assistant is LISTENING for its name — click to open it and stop"
-msgstr ""
+msgstr "सहायक अपना नाम सुन रहा है — खोलने और रोकने के लिए क्लिक करें"
 
 #: modules/Assistant.qml:46
 msgid "Assistant — ask, or say what you want done"
-msgstr ""
+msgstr "सहायक — पूछें, या बताएं कि क्या करना है"
 
 #: modules/Assistant.qml:45
 msgid "Assistant — click to close"
-msgstr ""
+msgstr "सहायक — बंद करने के लिए क्लिक करें"
 
 #: modules/Volume.qml:55
 msgid "Audio"
-msgstr ""
+msgstr "ऑडियो"
 
 #: modules/Recording.qml:129
 msgid "Audio: %1"
-msgstr ""
+msgstr "ऑडियो: %1"
 
 #: BarConfig.qml:60
 msgid "Auto-hide bar"
-msgstr ""
+msgstr "पट्टी अपने आप छिपाएँ"
 
 #: widgets/SysMonitor.qml:82
 msgid "BAT"
-msgstr ""
+msgstr "बैट"
 
 #: StartMenu.qml:733 welcome/Guide.qml:460
 msgid "Back"
-msgstr ""
+msgstr "वापस"
 
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
-msgstr ""
+msgstr "पट्टी · %1"
 
 #: modules/Battery.qml:42
 msgid "Battery"
-msgstr ""
+msgstr "बैटरी"
 
 #: modules/Battery.qml:43
 msgid "Battery %1%"
-msgstr ""
+msgstr "बैटरी %1 %"
 
 #: modules/Bluetooth.qml:39
 msgid "Bluetooth"
-msgstr ""
+msgstr "ब्लूटूथ"
 
 #: modules/Bluetooth.qml:35
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr ""
+msgstr "ब्लूटूथ बंद है\nचालू करने के लिए मध्य-क्लिक करें"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
-msgstr ""
+msgstr "घड़ी"
 
 #: widgets/SysMonitor.qml:80
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: modules/Cpu.qml:25
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr ""
+msgstr "CPU %1 %\nकार्य प्रबंधक के लिए क्लिक करें"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
-msgstr ""
+msgstr "CPU + मेमोरी"
 
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
-msgstr ""
+msgstr "रद्द करें"
 
-#: modules/Updates.qml:155
+#: modules/Updates.qml:161
 msgid "Check now"
-msgstr ""
+msgstr "अभी जाँचें"
 
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
-msgstr ""
+msgstr "ब्लूटूथ पैनल के लिए क्लिक करें · मध्य-क्लिक रेडियो बदलता है"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
-msgstr ""
+msgstr "चलाने/रोकने के लिए क्लिक करें · ट्रैक बदलने के लिए स्क्रॉल करें"
 
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
-msgstr ""
+msgstr "मौन करने के लिए क्लिक करें · समायोजित करने के लिए स्क्रॉल करें · मिक्सर के लिए दायाँ-क्लिक"
 
-#: modules/Updates.qml:107
-msgid "Click to open Updates Â· right-click for more"
-msgstr ""
+#: modules/Updates.qml:113
+msgid "Click to open Updates · right-click for more"
+msgstr "अद्यतन खोलने के लिए क्लिक करें · और के लिए दायाँ-क्लिक"
 
 #: modules/Weather.qml:63
 msgid "Click to refresh"
-msgstr ""
+msgstr "ताज़ा करने के लिए क्लिक करें"
 
 #: modules/Recording.qml:131
 msgid "Click to stop (or Super+Shift+R)"
-msgstr ""
+msgstr "रोकने के लिए क्लिक करें (या Super+Shift+R)"
 
 #: BarConfig.qml:63
 msgid "Clock"
-msgstr ""
+msgstr "घड़ी"
 
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
-msgstr ""
+msgstr "पुष्टि करें"
 
 #: StartMenu.qml:523 StartMenu.qml:625
 msgid "Control Panel"
-msgstr ""
+msgstr "नियंत्रण कक्ष"
 
 #: modules/Updates.qml:92
 msgid "Could not check for updates\n"
-msgstr ""
+msgstr "अद्यतन की जाँच नहीं हो सकी\n"
 
 #: widgets/Tuxagotchi.qml:149
 msgid "DISCIPLINE"
-msgstr ""
+msgstr "अनुशासन"
 
 #: StartMenu.qml:628
 msgid "Desktop"
-msgstr ""
+msgstr "डेस्कटॉप"
 
 #: BarConfig.qml:61
 msgid "Desktop switcher"
-msgstr ""
+msgstr "डेस्कटॉप बदलने वाला"
 
 #: StartMenu.qml:485
 msgid "Development"
-msgstr ""
+msgstr "विकास"
 
 #: modules/Network.qml:49
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr ""
+msgstr "असंबद्ध\nनेटवर्क चुनने के लिए क्लिक करें"
 
 #: StartMenu.qml:630
 msgid "Display"
-msgstr ""
+msgstr "प्रदर्शन"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
-msgstr ""
+msgstr "शुरू होने पर यह मार्गदर्शिका न दिखाएँ"
 
 #: components/BarMenu.qml:357 components/Mixer.qml:224 welcome/Guide.qml:487
 msgid "Done"
-msgstr ""
+msgstr "हो गया"
 
 #: StartMenu.qml:490
 msgid "Education"
-msgstr ""
+msgstr "शिक्षा"
 
 #: components/Mixer.qml:298 components/MixerEqRow.qml:81
 msgid "Equalizer"
-msgstr ""
+msgstr "इक्वलाइज़र"
 
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
-msgstr ""
+msgstr "इक्वलाइज़र: %1"
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
-msgstr ""
+msgstr "पेट भरा"
 
 #: widgets/Tuxagotchi.qml:144
 msgid "FUN"
-msgstr ""
+msgstr "मस्ती"
 
 #: BarConfig.qml:68
 msgid "Focus timer"
-msgstr ""
+msgstr "एकाग्रता टाइमर"
 
 #: modules/Pomodoro.qml:59
 msgid "Focus timer finished"
-msgstr ""
+msgstr "एकाग्रता टाइमर पूरा हुआ"
 
 #: modules/Pomodoro.qml:58
 msgid "Focus timer finished — %1"
-msgstr ""
+msgstr "एकाग्रता टाइमर पूरा हुआ — %1"
 
 #: modules/Pomodoro.qml:61
 msgid "Focus · click to stop"
-msgstr ""
+msgstr "एकाग्रता · रोकने के लिए क्लिक करें"
 
 #: modules/Pomodoro.qml:60
 msgid "Focus — %1 · click to stop"
-msgstr ""
+msgstr "एकाग्रता — %1 · रोकने के लिए क्लिक करें"
 
 #: StartMenu.qml:484
 msgid "Games"
-msgstr ""
+msgstr "खेल"
 
 #: StartMenu.qml:486
 msgid "Graphics"
-msgstr ""
+msgstr "ग्राफ़िक्स"
 
 #: widgets/Tuxagotchi.qml:151
 msgid "HEALTH"
-msgstr ""
+msgstr "सेहत"
 
 #: modules/Battery.qml:52
 msgid "Health %1%"
-msgstr ""
+msgstr "सेहत %1 %"
 
-#: modules/Updates.qml:162
+#: modules/Updates.qml:168
 msgid "Held back"
-msgstr ""
+msgstr "रोके गए"
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
-msgstr ""
+msgstr "इनपुट"
 
 #: MusicLibrary.qml:604
 msgid "Install it"
-msgstr ""
+msgstr "इसे स्थापित करें"
 
 #: StartMenu.qml:491
 msgid "Internet"
-msgstr ""
+msgstr "इंटरनेट"
 
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
-msgstr ""
+msgstr "चालू करें"
 
 #: StartMenu.qml:640 StartMenu.qml:757
 msgid "Lock Screen"
-msgstr ""
+msgstr "स्क्रीन बंद करें"
 
 #: StartMenu.qml:758
 msgid "Log Out"
-msgstr ""
+msgstr "लॉग आउट"
 
 #: widgets/SysMonitor.qml:81
 msgid "MEM"
-msgstr ""
+msgstr "मेम"
 
 #: widgets/Tuxagotchi.qml:150
 msgid "MESS"
-msgstr ""
+msgstr "गंदगी"
 
 #: widgets/Tuxagotchi.qml:152
 msgid "MISTAKES"
-msgstr ""
+msgstr "गलतियाँ"
 
 #: components/Mixer.qml:208
 msgid "MIXER"
-msgstr ""
+msgstr "मिक्सर"
 
 #: BarConfig.qml:62
 msgid "Media preview"
-msgstr ""
+msgstr "मीडिया झलक"
 
 #: modules/Memory.qml:25
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr ""
+msgstr "मेमोरी %1 / %2 GiB\nकार्य प्रबंधक के लिए क्लिक करें"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
-msgstr ""
+msgstr "मल्टीमीडिया"
 
 #: widgets/PostIt.qml:45
 msgid "NOTE"
-msgstr ""
+msgstr "नोट"
 
 #: widgets/MusicPlayer.qml:76
 msgid "NOW PLAYING"
-msgstr ""
+msgstr "अभी चल रहा है"
 
 #: StartMenu.qml:632
 msgid "Network"
-msgstr ""
+msgstr "नेटवर्क"
 
 #: BarConfig.qml:71
 msgid "Network + Bluetooth"
-msgstr ""
+msgstr "नेटवर्क + ब्लूटूथ"
 
 #: StartMenu.qml:542
 msgid "Network Setup"
-msgstr ""
+msgstr "नेटवर्क सेटअप"
 
 #: welcome/Guide.qml:487
 msgid "Next"
-msgstr ""
+msgstr "आगे"
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
-msgstr ""
+msgstr "कोई ब्लूटूथ अडैप्टर नहीं"
 
 #: modules/Recording.qml:130
 msgid "No audio"
-msgstr ""
+msgstr "कोई ऑडियो नहीं"
 
 #: Ui/SearchableDropdown.qml:33
 msgid "No matches"
-msgstr ""
+msgstr "कोई मेल नहीं"
 
 #: widgets/Weather.qml:158
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr ""
+msgstr "अभी कोई माप नहीं\nsynctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
-msgstr ""
+msgstr "कुछ नहीं चल रहा"
 
 #: StartMenu.qml:488
 msgid "Office"
-msgstr ""
+msgstr "कार्यालय"
 
-#: modules/Updates.qml:154
+#: modules/Updates.qml:160
 msgid "Open Updates"
-msgstr ""
+msgstr "अद्यतन खोलें"
 
 #: MusicLibrary.qml:605
 msgid "Open in cliamp"
-msgstr ""
+msgstr "cliamp में खोलें"
 
 #: StartMenu.qml:498
 msgid "Other"
-msgstr ""
+msgstr "अन्य"
 
 #: components/Mixer.qml:262
 msgid "Output"
-msgstr ""
+msgstr "आउटपुट"
 
 #: StartMenu.qml:756
 msgid "POWER"
-msgstr ""
+msgstr "बिजली"
 
 #: components/BarMenu.qml:247
 msgid "Plugins"
-msgstr ""
+msgstr "प्लगइन"
 
 #: StartMenu.qml:633
 msgid "Power"
-msgstr ""
+msgstr "बिजली"
 
 #: StartMenu.qml:759
 msgid "Reboot"
-msgstr ""
+msgstr "फिर से चालू करें"
 
 #: components/Mixer.qml:382 modules/Recording.qml:122
 msgid "Recording"
-msgstr ""
+msgstr "रिकॉर्ड हो रहा है"
 
 #: modules/Recording.qml:121
 msgid "Recording %1"
-msgstr ""
+msgstr "रिकॉर्ड हो रहा है %1"
 
 #: modules/Recording.qml:69
 msgid "SAVING"
-msgstr ""
+msgstr "सहेजा जा रहा है"
 
 #: widgets/Tuxagotchi.qml:146
 msgid "STAGE"
-msgstr ""
+msgstr "अवस्था"
 
 #: widgets/SysMonitor.qml:29
 msgid "SYS://MONITOR"
-msgstr ""
+msgstr "SYS://मॉनिटर"
 
 #: StartMenu.qml:522
 msgid "SYSTEM"
-msgstr ""
+msgstr "सिस्टम"
 
 #: StartMenu.qml:489
 msgid "Science"
-msgstr ""
+msgstr "विज्ञान"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
-msgstr ""
+msgstr "हर स्रोत में “%1” खोजें…"
 
 #: Ui/SearchableDropdown.qml:32
 msgid "Search..."
-msgstr ""
+msgstr "खोजें…"
 
 #: StartMenu.qml:492 StartMenu.qml:744
 msgid "Settings"
-msgstr ""
+msgstr "सेटिंग्स"
 
 #: StartMenu.qml:635
 msgid "Shortcuts"
-msgstr ""
+msgstr "शॉर्टकट"
 
 #: StartMenu.qml:761
 msgid "Shut Down"
-msgstr ""
+msgstr "बंद करें"
 
 #: MusicLibrary.qml:603
 msgid "Sign in"
-msgstr ""
+msgstr "साइन इन करें"
 
 #: StartMenu.qml:559
 msgid "Software Manager"
-msgstr ""
+msgstr "सॉफ़्टवेयर प्रबंधक"
 
 #: StartMenu.qml:631
 msgid "Sound"
-msgstr ""
+msgstr "ध्वनि"
 
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr ""
+msgstr "रुक रहा है — फ़ाइल पूरी की जा रही है…\nwf-recorder अब भी लिख रहा है"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
-msgstr ""
+msgstr "SynapseOS अद्यतन"
 
 #: modules/Updates.qml:102
 msgid "SynapseOS updates: %1"
-msgstr ""
+msgstr "SynapseOS अद्यतन: %1"
 
 #: StartMenu.qml:493 StartMenu.qml:634
 msgid "System"
-msgstr ""
+msgstr "सिस्टम"
 
 #: StartMenu.qml:540
 msgid "System Status"
-msgstr ""
+msgstr "सिस्टम स्थिति"
 
 #: StartMenu.qml:495 StartMenu.qml:742
 msgid "System Tools"
-msgstr ""
+msgstr "सिस्टम उपकरण"
 
 #: BarConfig.qml:64
 msgid "System tray"
-msgstr ""
+msgstr "सिस्टम ट्रे"
 
 #: widgets/Tuxagotchi.qml:43
 msgid "TUXAGOTCHI"
-msgstr ""
+msgstr "टक्सागोची"
 
 #: StartMenu.qml:524
 msgid "Task Manager"
-msgstr ""
+msgstr "कार्य प्रबंधक"
 
 #: StartMenu.qml:525
 msgid "Terminal"
-msgstr ""
+msgstr "टर्मिनल"
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
-msgstr ""
+msgstr "खोजने के लिए लिखें…"
 
 #: StartMenu.qml:573
 msgid "Update System"
-msgstr ""
+msgstr "सिस्टम अद्यतन करें"
 
 #: BarConfig.qml:65
 msgid "Update notifier"
-msgstr ""
+msgstr "अद्यतन सूचक"
 
-#: modules/Updates.qml:148
+#: modules/Updates.qml:154
 msgid "Updates"
-msgstr ""
+msgstr "अद्यतन"
 
 #: BarConfig.qml:70
 msgid "Volume"
-msgstr ""
+msgstr "आवाज़"
 
 #: widgets/Weather.qml:32
 msgid "WEATHER"
-msgstr ""
+msgstr "मौसम"
 
 #: widgets/Tuxagotchi.qml:148
 msgid "WEIGHT"
-msgstr ""
+msgstr "वज़न"
 
 #: BarConfig.qml:66
 msgid "Weather"
-msgstr ""
+msgstr "मौसम"
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr ""
+msgstr "वाई-फ़ाई बंद है\nफिर से चालू करने के लिए मध्य-क्लिक करें"
 
 #: StartMenu.qml:627
 msgid "Windows"
-msgstr ""
+msgstr "खिड़कियाँ"
 
 #: modules/Network.qml:47
 msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr ""
+msgstr "तार वाला\n%1\nनेटवर्क सेटिंग्स के लिए क्लिक करें"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
-msgstr ""
+msgstr "एक स्रोत"
 
 #: widgets/PostIt.qml:170
 msgid "again to delete"
-msgstr ""
+msgstr "मिटाने के लिए फिर से"
 
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
-msgstr ""
+msgstr "एक अंडा"
 
 #: widgets/PostIt.qml:157
 msgid "another note"
-msgstr ""
+msgstr "एक और नोट"
 
 #: widgets/QuickLaunch.qml:74
 msgid "app launcher"
-msgstr ""
+msgstr "ऐप लॉन्चर"
 
 #: modules/Updates.qml:106
 msgid "checked %1"
-msgstr ""
+msgstr "जाँचा %1"
 
 #: widgets/MusicPlayer.qml:600
 msgid "choose a source"
-msgstr ""
+msgstr "स्रोत चुनें"
 
 #: widgets/PostIt.qml:132
 msgid "click to edit"
-msgstr ""
+msgstr "संपादित करने के लिए क्लिक करें"
 
 #: widgets/PostIt.qml:103
 msgid "click to write something"
-msgstr ""
+msgstr "कुछ लिखने के लिए क्लिक करें"
 
 #: widgets/BigClock.qml:132
 msgid "clock unavailable"
-msgstr ""
+msgstr "घड़ी उपलब्ध नहीं"
 
 #: modules/Clock.qml:51
 msgid "clock?"
-msgstr ""
+msgstr "घड़ी?"
 
 #: widgets/PostIt.qml:170
 msgid "delete this note"
-msgstr ""
+msgstr "यह नोट मिटाएँ"
 
 #: modules/Pomodoro.qml:50
 msgid "done"
-msgstr ""
+msgstr "हो गया"
 
 #: widgets/PostItEditor.qml:283
 msgid "esc saves and closes · right-click to copy and paste"
-msgstr ""
+msgstr "Esc सहेजकर बंद करता है · कॉपी और पेस्ट के लिए दायाँ-क्लिक"
 
 #: widgets/QuickLaunch.qml:75
 msgid "file manager"
-msgstr ""
+msgstr "फ़ाइल प्रबंधक"
 
 #: widgets/QuickLaunch.qml:75
 msgid "files"
-msgstr ""
+msgstr "फ़ाइलें"
 
 #: modules/Battery.qml:38
 msgid "full"
-msgstr ""
+msgstr "पूरा"
 
 #: widgets/Tuxagotchi.qml:154
 msgid "ill"
-msgstr ""
+msgstr "बीमार"
 
-#: WeatherState.qml:64 modules/Updates.qml:182
+#: WeatherState.qml:64 modules/Updates.qml:188
 msgid "just now"
-msgstr ""
+msgstr "अभी-अभी"
 
 #: modules/Weather.qml:61 widgets/Weather.qml:138
 msgid "last reading %1"
-msgstr ""
+msgstr "पिछला माप %1"
 
 #: widgets/Tuxagotchi.qml:140
 msgid "lived %1d %2h"
-msgstr ""
+msgstr "%1 दि %2 घं जिया"
 
 #: widgets/MusicPlayer.qml:857
 msgid "loading…"
-msgstr ""
+msgstr "लोड हो रहा है…"
 
 #: modules/Volume.qml:56
 msgid "muted"
-msgstr ""
+msgstr "मौन"
 
 #: modules/Network.qml:121
 msgid "no address"
-msgstr ""
+msgstr "कोई पता नहीं"
 
 #: modules/Bluetooth.qml:45
 msgid "no devices connected"
-msgstr ""
+msgstr "कोई उपकरण जुड़ा नहीं"
 
 #: EqState.qml:79
 msgid "not running"
-msgstr ""
+msgstr "चल नहीं रहा"
 
 #: widgets/PostItEditor.qml:171
 msgid "note %1"
-msgstr ""
+msgstr "नोट %1"
 
 #: MusicLibrary.qml:312
 msgid "nothing came back from that YouTube session"
-msgstr ""
+msgstr "उस YouTube सत्र से कुछ नहीं लौटा"
 
 #: widgets/MusicPlayer.qml:394
 msgid "nothing is playing"
-msgstr ""
+msgstr "कुछ नहीं चल रहा"
 
 #: widgets/MusicPlayer.qml:393
 msgid "nothing playing yet"
-msgstr ""
+msgstr "अभी कुछ नहीं चल रहा"
 
 #: widgets/MusicPlayer.qml:859
 msgid "nothing to show for this source"
-msgstr ""
+msgstr "इस स्रोत के लिए दिखाने को कुछ नहीं"
 
 #: components/MixerEqRow.qml:101
 msgid "off"
-msgstr ""
+msgstr "बंद"
 
 #: MusicLibrary.qml:586
 msgid "opening a terminal…"
-msgstr ""
+msgstr "टर्मिनल खोला जा रहा है…"
 
 #: widgets/Pizza.qml:222
 msgid "opening…"
-msgstr ""
+msgstr "खोला जा रहा है…"
 
 #: widgets/Pizza.qml:105
 msgid "pizza near me"
-msgstr ""
+msgstr "पास का पिज़्ज़ा"
 
 #: widgets/Tuxagotchi.qml:145
 msgid "press for a new egg"
-msgstr ""
+msgstr "नए अंडे के लिए दबाएँ"
 
 #: widgets/MusicPlayer.qml:409
 msgid "press play to start %1"
-msgstr ""
+msgstr "%1 शुरू करने के लिए चलाएँ दबाएँ"
 
 #: MusicLibrary.qml:354
 msgid "press play to start this source"
-msgstr ""
+msgstr "यह स्रोत शुरू करने के लिए चलाएँ दबाएँ"
 
 #: widgets/PostItEditor.qml:388
 msgid "select all"
-msgstr ""
+msgstr "सब चुनें"
 
 #: widgets/QuickLaunch.qml:77
 msgid "select wall"
-msgstr ""
+msgstr "वॉलपेपर चुनें"
 
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
-msgstr ""
+msgstr "अब भी पिछले पर काम चल रहा है"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
-msgstr ""
+msgstr "syn-update ping   अभी आज़माने के लिए"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
-msgstr ""
+msgstr "synui-clock ने अपठनीय आउटपुट लौटाया"
 
 #: MusicLibrary.qml:579
 msgid "that is already open — look for the terminal"
-msgstr ""
+msgstr "वह पहले से खुला है — टर्मिनल देखें"
 
 #: MusicLibrary.qml:706
 msgid "that one has to be done on the television"
-msgstr ""
+msgstr "वह टेलीविज़न पर करना होगा"
 
 #: MusicLibrary.qml:355
 msgid "this source opens in cliamp"
-msgstr ""
+msgstr "यह स्रोत cliamp में खुलता है"
 
 #: modules/Weather.qml:62 widgets/Weather.qml:139
 msgid "updated %1"
-msgstr ""
+msgstr "अद्यतन %1"
 
 #: modules/Updates.qml:104
 msgid "upstream at %1"
-msgstr ""
+msgstr "अपस्ट्रीम %1 पर"
 
 #: widgets/Tuxagotchi.qml:155
 msgid "very ill"
-msgstr ""
+msgstr "बहुत बीमार"
 
 #: widgets/QuickLaunch.qml:77
 msgid "wallpaper library"
-msgstr ""
+msgstr "वॉलपेपर पुस्तकालय"
 
 #: widgets/Tuxagotchi.qml:153
 msgid "well"
-msgstr ""
+msgstr "स्वस्थ"
 
 #: MusicLibrary.qml:300
 msgid "‹ back"
-msgstr ""
+msgstr "‹ वापस"
 
 #: StartMenu.qml:1101
 msgid "◂  Back"
-msgstr ""
+msgstr "◂  वापस"

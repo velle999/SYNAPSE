@@ -2880,7 +2880,39 @@ pkgver=0.1.0
 #   bar it was, and the mechanism can be reviewed without 2,600 translations on
 #   top of it. Filling them is the next pkgrel, the way po/ was filled at
 #   572-580.
-pkgrel=582
+# 583: all thirteen bar catalogs, 201/201, and the bar speaks.
+#   582 shipped the bridge with empty catalogs so the mechanism could be
+#   reviewed on its own. This fills them: 201 msgids × 13 languages, complete in
+#   every one, msgfmt -c clean, and checked at runtime through the real
+#   quickshell/I18n.qml against the JSON the build actually generates — German,
+#   Japanese, Arabic, Hindi and Russian, including Arabic's DUAL form at n=2 and
+#   its "many" form at n=11, which no two-form language would have exercised.
+#   ⛔ AND ONE MOJIBAKE THAT PREDATES ALL OF THIS. Updates.qml wrote its
+#   separator as "\xc2\xb7" — the UTF-8 BYTES of U+00B7, which is a C idiom.
+#   In QML \xNN is a UNICODE escape, so \xc2 is U+00C2, and the tooltip has read
+#   "Click to open Updates Â· right-click for more" on every desktop since the
+#   module was written. Nobody saw it; the extractor did, because the stray Â
+#   came out in the template. Every other separator in the tree is already a
+#   literal ·, and this one is now too.
+#   ⛔ AND A LATENT BUG IN po-fill.py THAT BROKE ALL THIRTEEN AT ONCE. It builds
+#   the replacement text with po_escape(), whose whole job is to PRODUCE
+#   backslash sequences, and handed it to re.sub() as a replacement STRING —
+#   which processes escapes in its template. Every "\n" it had just written was
+#   turned back into a literal newline, ending the quoted string: msgfmt said
+#   "end-of-line within string", then "keyword \"Klicken\" unknown" on the
+#   German for the second half of the sentence. It survived this long because
+#   the compositor's catalogs were filled before any multi-line msgid reached
+#   them. A function replacement is used verbatim, and tests/i18n_bar.sh's
+#   msgfmt -c pass is what caught it — on all thirteen, in one run.
+#   ⚠ po-fill REFUSED THE RE-FILL AFTER THE RESET, correctly: the catalogs came
+#   back at 582's msgids, which still had the Â in them, and it will not place a
+#   translation against a msgid that does not exist. That is the check that
+#   stops a list slipping onto its neighbours, doing its job.
+#   What is NOT translated is unchanged and deliberate: bar.json keys, dispatch
+#   actions, page ids, panel args, connector names, SSIDs, sink descriptions, EQ
+#   preset names, git SHAs, and the commands a person is meant to type — a
+#   translated `syn-update ping` names a binary that is not on the system.
+pkgrel=583
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -22,839 +22,839 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr ""
+msgstr "%1 (%2 %)\n%3\nKliknij, aby wybrać sieć"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
-msgstr ""
+msgstr "%1 / %2 GiB"
 
 #: modules/Bluetooth.qml:41
 msgid "%1 connected"
 msgid_plural "%1 connected"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 połączone"
+msgstr[1] "%1 połączone"
+msgstr[2] "%1 połączonych"
 
 #: modules/Updates.qml:101
 msgid "%1 held back"
 msgid_plural "%1 held back"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 wstrzymana"
+msgstr[1] "%1 wstrzymane"
+msgstr[2] "%1 wstrzymanych"
 
-#: WeatherState.qml:65 modules/Updates.qml:183
+#: WeatherState.qml:65 modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 min temu"
+msgstr[1] "%1 min temu"
+msgstr[2] "%1 min temu"
 
 #: modules/Updates.qml:99
 msgid "%1 new"
 msgid_plural "%1 new"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 nowy"
+msgstr[1] "%1 nowe"
+msgstr[2] "%1 nowych"
 
 #: widgets/Tuxagotchi.qml:157
 msgid "%1 oz"
-msgstr ""
+msgstr "%1 oz"
 
 #: modules/Battery.qml:47
 msgid "%1 remaining"
-msgstr ""
+msgstr "pozostało %1"
 
 #: modules/Updates.qml:97
 msgid "%1 to rebuild"
 msgid_plural "%1 to rebuild"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 do przebudowania"
+msgstr[1] "%1 do przebudowania"
+msgstr[2] "%1 do przebudowania"
 
 #: modules/Battery.qml:45
 msgid "%1 until full"
-msgstr ""
+msgstr "%1 do pełna"
 
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
-msgstr ""
+msgstr "%1 dn. %2 godz."
 
 #: widgets/Tuxagotchi.qml:142
 msgid "%1d %2h  ·  %3oz"
-msgstr ""
+msgstr "%1 dn. %2 godz.  ·  %3 oz"
 
 #: modules/Battery.qml:62
 msgid "%1h %2m"
-msgstr ""
+msgstr "%1 godz. %2 min"
 
-#: WeatherState.qml:66 modules/Updates.qml:184
+#: WeatherState.qml:66 modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 godz. temu"
+msgstr[1] "%1 godz. temu"
+msgstr[2] "%1 godz. temu"
 
 #: modules/Battery.qml:62
 msgid "%1m"
-msgstr ""
+msgstr "%1 min"
 
 #: modules/Network.qml:106
 msgid "(hidden)"
-msgstr ""
+msgstr "(ukryta)"
 
 #: modules/Media.qml:82 widgets/MusicPlayer.qml:248
 msgid "(unknown track)"
-msgstr ""
+msgstr "(nieznany utwór)"
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
-msgstr ""
+msgstr "WIEK"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
-msgstr ""
+msgstr "Powłoka AI (synsh)"
 
 #: StartMenu.qml:747
 msgid "APPLICATIONS"
-msgstr ""
+msgstr "APLIKACJE"
 
 #: StartMenu.qml:708
 msgid "AVAILABLE TO INSTALL"
-msgstr ""
+msgstr "DOSTĘPNE DO INSTALACJI"
 
 #: StartMenu.qml:494
 msgid "Accessories"
-msgstr ""
+msgstr "Akcesoria"
 
 #: components/MixerEqRow.qml:134
 msgid "Adjust"
-msgstr ""
+msgstr "Dostosuj"
 
 #: StartMenu.qml:626
 msgid "Appearance"
-msgstr ""
+msgstr "Wygląd"
 
 #: components/Mixer.qml:348
 msgid "Applications"
-msgstr ""
+msgstr "Aplikacje"
 
-#: modules/Updates.qml:157
+#: modules/Updates.qml:163
 msgid "Apply in a terminal"
-msgstr ""
+msgstr "Zastosuj w terminalu"
 
 #: BarConfig.qml:67
 msgid "Assistant"
-msgstr ""
+msgstr "Asystent"
 
 #: modules/Assistant.qml:44
 msgid "Assistant is LISTENING for its name — click to open it and stop"
-msgstr ""
+msgstr "Asystent NASŁUCHUJE swojego imienia — kliknij, aby otworzyć i zatrzymać"
 
 #: modules/Assistant.qml:46
 msgid "Assistant — ask, or say what you want done"
-msgstr ""
+msgstr "Asystent — zapytaj albo powiedz, co ma zrobić"
 
 #: modules/Assistant.qml:45
 msgid "Assistant — click to close"
-msgstr ""
+msgstr "Asystent — kliknij, aby zamknąć"
 
 #: modules/Volume.qml:55
 msgid "Audio"
-msgstr ""
+msgstr "Dźwięk"
 
 #: modules/Recording.qml:129
 msgid "Audio: %1"
-msgstr ""
+msgstr "Dźwięk: %1"
 
 #: BarConfig.qml:60
 msgid "Auto-hide bar"
-msgstr ""
+msgstr "Automatycznie ukrywaj pasek"
 
 #: widgets/SysMonitor.qml:82
 msgid "BAT"
-msgstr ""
+msgstr "BAT"
 
 #: StartMenu.qml:733 welcome/Guide.qml:460
 msgid "Back"
-msgstr ""
+msgstr "Wstecz"
 
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
-msgstr ""
+msgstr "Pasek · %1"
 
 #: modules/Battery.qml:42
 msgid "Battery"
-msgstr ""
+msgstr "Bateria"
 
 #: modules/Battery.qml:43
 msgid "Battery %1%"
-msgstr ""
+msgstr "Bateria %1 %"
 
 #: modules/Bluetooth.qml:39
 msgid "Bluetooth"
-msgstr ""
+msgstr "Bluetooth"
 
 #: modules/Bluetooth.qml:35
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr ""
+msgstr "Bluetooth wyłączony\nKliknij środkowym, aby włączyć"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
-msgstr ""
+msgstr "ZEGAR"
 
 #: widgets/SysMonitor.qml:80
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: modules/Cpu.qml:25
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr ""
+msgstr "CPU %1 %\nKliknij, aby otworzyć menedżera zadań"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
-msgstr ""
+msgstr "CPU + pamięć"
 
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
-msgstr ""
+msgstr "Anuluj"
 
-#: modules/Updates.qml:155
+#: modules/Updates.qml:161
 msgid "Check now"
-msgstr ""
+msgstr "Sprawdź teraz"
 
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
-msgstr ""
+msgstr "Kliknij, aby otworzyć panel Bluetooth · środkowy przycisk przełącza radio"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
-msgstr ""
+msgstr "Kliknij, aby odtworzyć/wstrzymać · przewiń, aby zmienić utwór"
 
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
-msgstr ""
+msgstr "Kliknij, aby wyciszyć · przewiń, aby ustawić · prawy przycisk otwiera mikser"
 
-#: modules/Updates.qml:107
-msgid "Click to open Updates Â· right-click for more"
-msgstr ""
+#: modules/Updates.qml:113
+msgid "Click to open Updates · right-click for more"
+msgstr "Kliknij, aby otworzyć aktualizacje · prawy przycisk dla więcej"
 
 #: modules/Weather.qml:63
 msgid "Click to refresh"
-msgstr ""
+msgstr "Kliknij, aby odświeżyć"
 
 #: modules/Recording.qml:131
 msgid "Click to stop (or Super+Shift+R)"
-msgstr ""
+msgstr "Kliknij, aby zatrzymać (lub Super+Shift+R)"
 
 #: BarConfig.qml:63
 msgid "Clock"
-msgstr ""
+msgstr "Zegar"
 
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
-msgstr ""
+msgstr "Potwierdź"
 
 #: StartMenu.qml:523 StartMenu.qml:625
 msgid "Control Panel"
-msgstr ""
+msgstr "Panel sterowania"
 
 #: modules/Updates.qml:92
 msgid "Could not check for updates\n"
-msgstr ""
+msgstr "Nie udało się sprawdzić aktualizacji\n"
 
 #: widgets/Tuxagotchi.qml:149
 msgid "DISCIPLINE"
-msgstr ""
+msgstr "DYSCYPLINA"
 
 #: StartMenu.qml:628
 msgid "Desktop"
-msgstr ""
+msgstr "Pulpit"
 
 #: BarConfig.qml:61
 msgid "Desktop switcher"
-msgstr ""
+msgstr "Przełącznik pulpitów"
 
 #: StartMenu.qml:485
 msgid "Development"
-msgstr ""
+msgstr "Programowanie"
 
 #: modules/Network.qml:49
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr ""
+msgstr "Rozłączono\nKliknij, aby wybrać sieć"
 
 #: StartMenu.qml:630
 msgid "Display"
-msgstr ""
+msgstr "Ekran"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
-msgstr ""
+msgstr "Nie pokazuj tego przewodnika przy starcie"
 
 #: components/BarMenu.qml:357 components/Mixer.qml:224 welcome/Guide.qml:487
 msgid "Done"
-msgstr ""
+msgstr "Gotowe"
 
 #: StartMenu.qml:490
 msgid "Education"
-msgstr ""
+msgstr "Edukacja"
 
 #: components/Mixer.qml:298 components/MixerEqRow.qml:81
 msgid "Equalizer"
-msgstr ""
+msgstr "Korektor"
 
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
-msgstr ""
+msgstr "Korektor: %1"
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
-msgstr ""
+msgstr "NAKARMIONY"
 
 #: widgets/Tuxagotchi.qml:144
 msgid "FUN"
-msgstr ""
+msgstr "ZABAWA"
 
 #: BarConfig.qml:68
 msgid "Focus timer"
-msgstr ""
+msgstr "Minutnik skupienia"
 
 #: modules/Pomodoro.qml:59
 msgid "Focus timer finished"
-msgstr ""
+msgstr "Minutnik skupienia zakończony"
 
 #: modules/Pomodoro.qml:58
 msgid "Focus timer finished — %1"
-msgstr ""
+msgstr "Minutnik skupienia zakończony — %1"
 
 #: modules/Pomodoro.qml:61
 msgid "Focus · click to stop"
-msgstr ""
+msgstr "Skupienie · kliknij, aby zatrzymać"
 
 #: modules/Pomodoro.qml:60
 msgid "Focus — %1 · click to stop"
-msgstr ""
+msgstr "Skupienie — %1 · kliknij, aby zatrzymać"
 
 #: StartMenu.qml:484
 msgid "Games"
-msgstr ""
+msgstr "Gry"
 
 #: StartMenu.qml:486
 msgid "Graphics"
-msgstr ""
+msgstr "Grafika"
 
 #: widgets/Tuxagotchi.qml:151
 msgid "HEALTH"
-msgstr ""
+msgstr "ZDROWIE"
 
 #: modules/Battery.qml:52
 msgid "Health %1%"
-msgstr ""
+msgstr "Zdrowie %1 %"
 
-#: modules/Updates.qml:162
+#: modules/Updates.qml:168
 msgid "Held back"
-msgstr ""
+msgstr "Wstrzymane"
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
-msgstr ""
+msgstr "Wejście"
 
 #: MusicLibrary.qml:604
 msgid "Install it"
-msgstr ""
+msgstr "Zainstaluj"
 
 #: StartMenu.qml:491
 msgid "Internet"
-msgstr ""
+msgstr "Internet"
 
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
-msgstr ""
+msgstr "URUCHOM"
 
 #: StartMenu.qml:640 StartMenu.qml:757
 msgid "Lock Screen"
-msgstr ""
+msgstr "Zablokuj ekran"
 
 #: StartMenu.qml:758
 msgid "Log Out"
-msgstr ""
+msgstr "Wyloguj"
 
 #: widgets/SysMonitor.qml:81
 msgid "MEM"
-msgstr ""
+msgstr "PAM"
 
 #: widgets/Tuxagotchi.qml:150
 msgid "MESS"
-msgstr ""
+msgstr "BAŁAGAN"
 
 #: widgets/Tuxagotchi.qml:152
 msgid "MISTAKES"
-msgstr ""
+msgstr "BŁĘDY"
 
 #: components/Mixer.qml:208
 msgid "MIXER"
-msgstr ""
+msgstr "MIKSER"
 
 #: BarConfig.qml:62
 msgid "Media preview"
-msgstr ""
+msgstr "Podgląd multimediów"
 
 #: modules/Memory.qml:25
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr ""
+msgstr "Pamięć %1 / %2 GiB\nKliknij, aby otworzyć menedżera zadań"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
-msgstr ""
+msgstr "Multimedia"
 
 #: widgets/PostIt.qml:45
 msgid "NOTE"
-msgstr ""
+msgstr "NOTATKA"
 
 #: widgets/MusicPlayer.qml:76
 msgid "NOW PLAYING"
-msgstr ""
+msgstr "TERAZ ODTWARZANE"
 
 #: StartMenu.qml:632
 msgid "Network"
-msgstr ""
+msgstr "Sieć"
 
 #: BarConfig.qml:71
 msgid "Network + Bluetooth"
-msgstr ""
+msgstr "Sieć + Bluetooth"
 
 #: StartMenu.qml:542
 msgid "Network Setup"
-msgstr ""
+msgstr "Konfiguracja sieci"
 
 #: welcome/Guide.qml:487
 msgid "Next"
-msgstr ""
+msgstr "Dalej"
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
-msgstr ""
+msgstr "Brak adaptera Bluetooth"
 
 #: modules/Recording.qml:130
 msgid "No audio"
-msgstr ""
+msgstr "Brak dźwięku"
 
 #: Ui/SearchableDropdown.qml:33
 msgid "No matches"
-msgstr ""
+msgstr "Brak wyników"
 
 #: widgets/Weather.qml:158
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr ""
+msgstr "Jeszcze brak odczytu\nsynctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
-msgstr ""
+msgstr "Nic nie jest odtwarzane"
 
 #: StartMenu.qml:488
 msgid "Office"
-msgstr ""
+msgstr "Biuro"
 
-#: modules/Updates.qml:154
+#: modules/Updates.qml:160
 msgid "Open Updates"
-msgstr ""
+msgstr "Otwórz aktualizacje"
 
 #: MusicLibrary.qml:605
 msgid "Open in cliamp"
-msgstr ""
+msgstr "Otwórz w cliamp"
 
 #: StartMenu.qml:498
 msgid "Other"
-msgstr ""
+msgstr "Inne"
 
 #: components/Mixer.qml:262
 msgid "Output"
-msgstr ""
+msgstr "Wyjście"
 
 #: StartMenu.qml:756
 msgid "POWER"
-msgstr ""
+msgstr "ZASILANIE"
 
 #: components/BarMenu.qml:247
 msgid "Plugins"
-msgstr ""
+msgstr "Wtyczki"
 
 #: StartMenu.qml:633
 msgid "Power"
-msgstr ""
+msgstr "Zasilanie"
 
 #: StartMenu.qml:759
 msgid "Reboot"
-msgstr ""
+msgstr "Uruchom ponownie"
 
 #: components/Mixer.qml:382 modules/Recording.qml:122
 msgid "Recording"
-msgstr ""
+msgstr "Nagrywanie"
 
 #: modules/Recording.qml:121
 msgid "Recording %1"
-msgstr ""
+msgstr "Nagrywanie %1"
 
 #: modules/Recording.qml:69
 msgid "SAVING"
-msgstr ""
+msgstr "ZAPIS"
 
 #: widgets/Tuxagotchi.qml:146
 msgid "STAGE"
-msgstr ""
+msgstr "ETAP"
 
 #: widgets/SysMonitor.qml:29
 msgid "SYS://MONITOR"
-msgstr ""
+msgstr "SYS://MONITOR"
 
 #: StartMenu.qml:522
 msgid "SYSTEM"
-msgstr ""
+msgstr "SYSTEM"
 
 #: StartMenu.qml:489
 msgid "Science"
-msgstr ""
+msgstr "Nauka"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
-msgstr ""
+msgstr "Szukaj „%1” we wszystkich źródłach…"
 
 #: Ui/SearchableDropdown.qml:32
 msgid "Search..."
-msgstr ""
+msgstr "Szukaj…"
 
 #: StartMenu.qml:492 StartMenu.qml:744
 msgid "Settings"
-msgstr ""
+msgstr "Ustawienia"
 
 #: StartMenu.qml:635
 msgid "Shortcuts"
-msgstr ""
+msgstr "Skróty"
 
 #: StartMenu.qml:761
 msgid "Shut Down"
-msgstr ""
+msgstr "Wyłącz"
 
 #: MusicLibrary.qml:603
 msgid "Sign in"
-msgstr ""
+msgstr "Zaloguj się"
 
 #: StartMenu.qml:559
 msgid "Software Manager"
-msgstr ""
+msgstr "Menedżer oprogramowania"
 
 #: StartMenu.qml:631
 msgid "Sound"
-msgstr ""
+msgstr "Dźwięk"
 
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr ""
+msgstr "Zatrzymywanie — kończenie pliku…\nwf-recorder wciąż zapisuje"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
-msgstr ""
+msgstr "Aktualizacje SynapseOS"
 
 #: modules/Updates.qml:102
 msgid "SynapseOS updates: %1"
-msgstr ""
+msgstr "Aktualizacje SynapseOS: %1"
 
 #: StartMenu.qml:493 StartMenu.qml:634
 msgid "System"
-msgstr ""
+msgstr "System"
 
 #: StartMenu.qml:540
 msgid "System Status"
-msgstr ""
+msgstr "Stan systemu"
 
 #: StartMenu.qml:495 StartMenu.qml:742
 msgid "System Tools"
-msgstr ""
+msgstr "Narzędzia systemowe"
 
 #: BarConfig.qml:64
 msgid "System tray"
-msgstr ""
+msgstr "Zasobnik systemowy"
 
 #: widgets/Tuxagotchi.qml:43
 msgid "TUXAGOTCHI"
-msgstr ""
+msgstr "TUXAGOTCHI"
 
 #: StartMenu.qml:524
 msgid "Task Manager"
-msgstr ""
+msgstr "Menedżer zadań"
 
 #: StartMenu.qml:525
 msgid "Terminal"
-msgstr ""
+msgstr "Terminal"
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
-msgstr ""
+msgstr "Pisz, aby szukać…"
 
 #: StartMenu.qml:573
 msgid "Update System"
-msgstr ""
+msgstr "Zaktualizuj system"
 
 #: BarConfig.qml:65
 msgid "Update notifier"
-msgstr ""
+msgstr "Powiadomienia o aktualizacjach"
 
-#: modules/Updates.qml:148
+#: modules/Updates.qml:154
 msgid "Updates"
-msgstr ""
+msgstr "Aktualizacje"
 
 #: BarConfig.qml:70
 msgid "Volume"
-msgstr ""
+msgstr "Głośność"
 
 #: widgets/Weather.qml:32
 msgid "WEATHER"
-msgstr ""
+msgstr "POGODA"
 
 #: widgets/Tuxagotchi.qml:148
 msgid "WEIGHT"
-msgstr ""
+msgstr "WAGA"
 
 #: BarConfig.qml:66
 msgid "Weather"
-msgstr ""
+msgstr "Pogoda"
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr ""
+msgstr "Wi-Fi jest wyłączone\nKliknij środkowym, aby włączyć ponownie"
 
 #: StartMenu.qml:627
 msgid "Windows"
-msgstr ""
+msgstr "Okna"
 
 #: modules/Network.qml:47
 msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr ""
+msgstr "Przewodowa\n%1\nKliknij, aby otworzyć ustawienia sieci"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
-msgstr ""
+msgstr "źródło"
 
 #: widgets/PostIt.qml:170
 msgid "again to delete"
-msgstr ""
+msgstr "jeszcze raz, aby usunąć"
 
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
-msgstr ""
+msgstr "jajko"
 
 #: widgets/PostIt.qml:157
 msgid "another note"
-msgstr ""
+msgstr "kolejna notatka"
 
 #: widgets/QuickLaunch.qml:74
 msgid "app launcher"
-msgstr ""
+msgstr "program uruchamiający"
 
 #: modules/Updates.qml:106
 msgid "checked %1"
-msgstr ""
+msgstr "sprawdzono %1"
 
 #: widgets/MusicPlayer.qml:600
 msgid "choose a source"
-msgstr ""
+msgstr "wybierz źródło"
 
 #: widgets/PostIt.qml:132
 msgid "click to edit"
-msgstr ""
+msgstr "kliknij, aby edytować"
 
 #: widgets/PostIt.qml:103
 msgid "click to write something"
-msgstr ""
+msgstr "kliknij, aby coś napisać"
 
 #: widgets/BigClock.qml:132
 msgid "clock unavailable"
-msgstr ""
+msgstr "zegar niedostępny"
 
 #: modules/Clock.qml:51
 msgid "clock?"
-msgstr ""
+msgstr "zegar?"
 
 #: widgets/PostIt.qml:170
 msgid "delete this note"
-msgstr ""
+msgstr "usuń tę notatkę"
 
 #: modules/Pomodoro.qml:50
 msgid "done"
-msgstr ""
+msgstr "gotowe"
 
 #: widgets/PostItEditor.qml:283
 msgid "esc saves and closes · right-click to copy and paste"
-msgstr ""
+msgstr "Esc zapisuje i zamyka · prawy przycisk kopiuje i wkleja"
 
 #: widgets/QuickLaunch.qml:75
 msgid "file manager"
-msgstr ""
+msgstr "menedżer plików"
 
 #: widgets/QuickLaunch.qml:75
 msgid "files"
-msgstr ""
+msgstr "pliki"
 
 #: modules/Battery.qml:38
 msgid "full"
-msgstr ""
+msgstr "pełna"
 
 #: widgets/Tuxagotchi.qml:154
 msgid "ill"
-msgstr ""
+msgstr "chory"
 
-#: WeatherState.qml:64 modules/Updates.qml:182
+#: WeatherState.qml:64 modules/Updates.qml:188
 msgid "just now"
-msgstr ""
+msgstr "przed chwilą"
 
 #: modules/Weather.qml:61 widgets/Weather.qml:138
 msgid "last reading %1"
-msgstr ""
+msgstr "ostatni odczyt %1"
 
 #: widgets/Tuxagotchi.qml:140
 msgid "lived %1d %2h"
-msgstr ""
+msgstr "żył %1 dn. %2 godz."
 
 #: widgets/MusicPlayer.qml:857
 msgid "loading…"
-msgstr ""
+msgstr "wczytywanie…"
 
 #: modules/Volume.qml:56
 msgid "muted"
-msgstr ""
+msgstr "wyciszony"
 
 #: modules/Network.qml:121
 msgid "no address"
-msgstr ""
+msgstr "brak adresu"
 
 #: modules/Bluetooth.qml:45
 msgid "no devices connected"
-msgstr ""
+msgstr "brak połączonych urządzeń"
 
 #: EqState.qml:79
 msgid "not running"
-msgstr ""
+msgstr "nie działa"
 
 #: widgets/PostItEditor.qml:171
 msgid "note %1"
-msgstr ""
+msgstr "notatka %1"
 
 #: MusicLibrary.qml:312
 msgid "nothing came back from that YouTube session"
-msgstr ""
+msgstr "ta sesja YouTube nic nie zwróciła"
 
 #: widgets/MusicPlayer.qml:394
 msgid "nothing is playing"
-msgstr ""
+msgstr "nic nie jest odtwarzane"
 
 #: widgets/MusicPlayer.qml:393
 msgid "nothing playing yet"
-msgstr ""
+msgstr "nic jeszcze nie jest odtwarzane"
 
 #: widgets/MusicPlayer.qml:859
 msgid "nothing to show for this source"
-msgstr ""
+msgstr "nic do pokazania dla tego źródła"
 
 #: components/MixerEqRow.qml:101
 msgid "off"
-msgstr ""
+msgstr "wyłączony"
 
 #: MusicLibrary.qml:586
 msgid "opening a terminal…"
-msgstr ""
+msgstr "otwieranie terminala…"
 
 #: widgets/Pizza.qml:222
 msgid "opening…"
-msgstr ""
+msgstr "otwieranie…"
 
 #: widgets/Pizza.qml:105
 msgid "pizza near me"
-msgstr ""
+msgstr "pizza w pobliżu"
 
 #: widgets/Tuxagotchi.qml:145
 msgid "press for a new egg"
-msgstr ""
+msgstr "naciśnij, aby dostać nowe jajko"
 
 #: widgets/MusicPlayer.qml:409
 msgid "press play to start %1"
-msgstr ""
+msgstr "naciśnij odtwarzanie, aby zacząć %1"
 
 #: MusicLibrary.qml:354
 msgid "press play to start this source"
-msgstr ""
+msgstr "naciśnij odtwarzanie, aby zacząć to źródło"
 
 #: widgets/PostItEditor.qml:388
 msgid "select all"
-msgstr ""
+msgstr "zaznacz wszystko"
 
 #: widgets/QuickLaunch.qml:77
 msgid "select wall"
-msgstr ""
+msgstr "wybierz tapetę"
 
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
-msgstr ""
+msgstr "wciąż pracuję nad poprzednim"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
-msgstr ""
+msgstr "syn-update ping   aby spróbować teraz"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
-msgstr ""
+msgstr "synui-clock zwrócił nieczytelne dane"
 
 #: MusicLibrary.qml:579
 msgid "that is already open — look for the terminal"
-msgstr ""
+msgstr "to już jest otwarte — poszukaj terminala"
 
 #: MusicLibrary.qml:706
 msgid "that one has to be done on the television"
-msgstr ""
+msgstr "to trzeba zrobić na telewizorze"
 
 #: MusicLibrary.qml:355
 msgid "this source opens in cliamp"
-msgstr ""
+msgstr "to źródło otwiera się w cliamp"
 
 #: modules/Weather.qml:62 widgets/Weather.qml:139
 msgid "updated %1"
-msgstr ""
+msgstr "zaktualizowano %1"
 
 #: modules/Updates.qml:104
 msgid "upstream at %1"
-msgstr ""
+msgstr "upstream na %1"
 
 #: widgets/Tuxagotchi.qml:155
 msgid "very ill"
-msgstr ""
+msgstr "bardzo chory"
 
 #: widgets/QuickLaunch.qml:77
 msgid "wallpaper library"
-msgstr ""
+msgstr "biblioteka tapet"
 
 #: widgets/Tuxagotchi.qml:153
 msgid "well"
-msgstr ""
+msgstr "zdrowy"
 
 #: MusicLibrary.qml:300
 msgid "‹ back"
-msgstr ""
+msgstr "‹ wstecz"
 
 #: StartMenu.qml:1101
 msgid "◂  Back"
-msgstr ""
+msgstr "◂  Wstecz"

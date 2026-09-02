@@ -104,7 +104,13 @@ BarModule {
         if (root.rev !== "") t += "\n" + I18n.tr("upstream at %1").arg(root.rev)
         if (root.checkedAt > 0)
             t += "\n" + I18n.tr("checked %1").arg(root.ago(root.checkedAt))
-        return t + "\n" + I18n.tr("Click to open Updates \xc2\xb7 right-click for more")
+        // ⛔ A LITERAL ·, NOT "\xc2\xb7". Those two bytes are the UTF-8 encoding
+        // of U+00B7 and that is a C idiom — in QML, \xNN is a UNICODE escape, so
+        // \xc2 is U+00C2 and this tooltip has been reading "Updates Â· right-click"
+        // on every desktop since the module was written. Found by extracting the
+        // string: it came out of the template with the Â in it. Every other
+        // separator in this tree is already a literal ·.
+        return t + "\n" + I18n.tr("Click to open Updates · right-click for more")
     }
 
     // The window that actually installs them. `syn-update-gui` and not

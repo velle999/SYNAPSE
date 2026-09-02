@@ -146,7 +146,22 @@ def main():
                          b, flags=re.M).rstrip('\n') + '\n' + body
         else:
             # Replace the whole msgstr, however many continuation lines it had.
-            new = re.sub(r'^msgstr (?:"(?:[^"\\]|\\.)*"\s*)+', 'msgstr "%s"\n' % po_escape(msgstr),
+            #
+            # ⛔ A LAMBDA, NOT A REPLACEMENT STRING. re.sub() processes escapes in
+            # its replacement template — \n becomes a newline, \1 becomes a
+            # group — and po_escape() exists precisely to PRODUCE backslash
+            # sequences. Passed as a string, every "\n" this tool had just
+            # written was turned straight back into a literal newline, which
+            # ends the quoted string and makes the file unparseable: msgfmt says
+            # "end-of-line within string" and then "keyword \"Klicken\" unknown"
+            # on the German for the second half of the sentence.
+            #
+            # It went unseen because the compositor's own catalogs were filled
+            # before any multi-line msgid reached them; it broke all thirteen bar
+            # catalogs at once on 2026-09-01, and tests/i18n_bar.sh caught it.
+            # A function replacement is used verbatim.
+            new = re.sub(r'^msgstr (?:"(?:[^"\\]|\\.)*"\s*)+',
+                         lambda _m: 'msgstr "%s"\n' % po_escape(msgstr),
                          b, count=1, flags=re.M)
         # A fuzzy marker outlives the string it was guessed for.
         new = re.sub(r'^#, fuzzy\n', '', new, flags=re.M)

@@ -37,7 +37,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: WeatherState.qml:65
-#: modules/Updates.qml:183
+#: modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] ""
@@ -80,7 +80,7 @@ msgid "%1h %2m"
 msgstr ""
 
 #: WeatherState.qml:66
-#: modules/Updates.qml:184
+#: modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] ""
@@ -131,7 +131,7 @@ msgstr ""
 msgid "Applications"
 msgstr ""
 
-#: modules/Updates.qml:157
+#: modules/Updates.qml:163
 msgid "Apply in a terminal"
 msgstr ""
 
@@ -213,7 +213,7 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: modules/Updates.qml:155
+#: modules/Updates.qml:161
 msgid "Check now"
 msgstr ""
 
@@ -229,8 +229,8 @@ msgstr ""
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
 
-#: modules/Updates.qml:107
-msgid "Click to open Updates Â· right-click for more"
+#: modules/Updates.qml:113
+msgid "Click to open Updates · right-click for more"
 msgstr ""
 
 #: modules/Weather.qml:63
@@ -349,7 +349,7 @@ msgstr ""
 msgid "Health %1%"
 msgstr ""
 
-#: modules/Updates.qml:162
+#: modules/Updates.qml:168
 msgid "Held back"
 msgstr ""
 
@@ -455,7 +455,7 @@ msgstr ""
 msgid "Office"
 msgstr ""
 
-#: modules/Updates.qml:154
+#: modules/Updates.qml:160
 msgid "Open Updates"
 msgstr ""
 
@@ -603,7 +603,7 @@ msgstr ""
 msgid "Update notifier"
 msgstr ""
 
-#: modules/Updates.qml:148
+#: modules/Updates.qml:154
 msgid "Updates"
 msgstr ""
 
@@ -708,7 +708,7 @@ msgid "ill"
 msgstr ""
 
 #: WeatherState.qml:64
-#: modules/Updates.qml:182
+#: modules/Updates.qml:188
 msgid "just now"
 msgstr ""
 
