@@ -23,6 +23,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE PROGRAM UNDER TEST SPEAKS THIRTEEN LANGUAGES, AND THIS FILE ASSERTS
+# ENGLISH. syn-edit's compiled-in localedir is /usr/share/locale, so on a
+# machine where syn-edit is INSTALLED a freshly built binary loads the INSTALLED
+# catalog and answers in the desktop's language — every assertion about a
+# message then fails on a program that is working perfectly, and `meson test`
+# failing is a BUILD failure, so `syn-update` refuses to install it. That is
+# exactly what synpkg 47 did on a Japanese desktop.
+#
+# ⚠ Running this under LANG=ja on a box where syn-edit is not installed does NOT
+# catch it: with no catalog to find, gettext falls back to the msgid and
+# everything passes in English. Reproduce with SYN_EDIT_LOCALEDIR=build/po.
+#
+# ⚠ LANGUAGE as well as LC_ALL — gettext reads LANGUAGE FIRST, so an ambient
+# LANGUAGE=ja survives an exported LC_ALL=C.UTF-8 on its own.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 E=${1:-./build/syn-edit}
 [ -x "$E" ] || { echo "not executable: $E" >&2; exit 1; }
 E=$(readlink -f "$E")

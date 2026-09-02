@@ -10,21 +10,19 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "يحتوي %1 على تغييرات غير محفوظة."
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%1 من %2 مُنجزة"
@@ -34,264 +32,512 @@ msgstr[3] "%1 من %2 مُنجزة"
 msgstr[4] "%1 من %2 مُنجزة"
 msgstr[5] "%1 من %2 مُنجزة"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  من %3"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "(مهمة بلا نص)"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "عن البرنامج"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "إلغاء"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "إغلاق"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "نسخ"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "نسخ السطر"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "قص"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "قص السطر"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "المستندات"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "تجاهل"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "المستندات"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "بحث"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "بحث…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "إدراج"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "عادي"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "جديد"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "مهمة جديدة"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "لا توجد مهام في هذا الملف.\n\nالأسطر مثل  - [ ] شيء ما  هي مهام.\nالنقر الأيمن ▸ مهمة جديدة يضيف واحدة."
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"لا توجد مهام في هذا الملف.\n"
+"\n"
+"الأسطر مثل  - [ ] شيء ما  هي مهام.\n"
+"النقر الأيمن ▸ مهمة جديدة يضيف واحدة."
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "استبدال"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "فتح"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "فتح…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "الكتابة فوقه"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "لصق"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "إعادة"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "إعادة القراءة"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "استبدال"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "استبدال…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "تحديد"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "حفظ"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "حفظ ثم إغلاق"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "حفظ باسم"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "حفظ باسم…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "الحفظ هنا"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "الحفظ في:"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "تحديد الكل"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "الألسنة"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "قائمة المهام…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "المهام"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "تعليم هذه المهمة"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "تراجع"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "إزالة تعليم هذه المهمة"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[بلا اسم]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "صِوان فارغ جديد"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "إضافة مهمة عند المؤشر"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "ثنائي"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "تصفّح بحثاً عن ملف"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "الإغلاق وفقدان التغييرات"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "إبقاؤه مفتوحاً"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "تسميته ثم كتابته"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "لم يُحفظ بعد"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "فتح الملف المظلّل"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "إعادة قراءة الملف"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "إظهار القائمة أو إخفاؤها"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "إظهار شريط الألسنة أو إخفاؤه"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "اكتب مساراً (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "الإصدار والرخصة"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "الكتابة في هذا المجلد — ثم اكتب اسماً"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "كتابته في مكان آخر"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "كتابته ثم إغلاقه"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "الكتابة فوق الملف المظلّل"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "كتابة هذا الصِوان"
+
+msgid "present"
+msgstr "متوفر"
+
+msgid "absent"
+msgstr "غير متوفر"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about: خيار غير معروف '%s'"
+
+msgid "the SynapseOS text editor"
+msgstr "محرّر النصوص في SynapseOS"
+
+msgid "syn-edit langs lists them"
+msgstr "‏syn-edit langs يسردها"
+
+msgid "What this machine can do"
+msgstr "ما يستطيع هذا الجهاز فعله"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "النافذة الرسومية (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "النسخ إلى حافظة سطح المكتب (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "اللصق من حافظة سطح المكتب (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "تعذّر ضبط أذونات %s"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "تعذّرت كتابة الدليل %s إلى القرص"
+
+msgid "config get: needs a key"
+msgstr "config get: يلزم مفتاح"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "خيار غير معروف: %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set: يلزم مفتاح وقيمة"
+
+msgid "settings reset to defaults"
+msgstr "أُعيدت الإعدادات إلى القيم الافتراضية"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config: أمر فرعي غير معروف '%s' ‏(list، get، set، reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: خيار غير معروف '%s'"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s: يلزم ملف (استخدم - للدخل القياسي)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "لغة غير معروفة: %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "لا يستطيع ‎-w الكتابة إلى الدخل القياسي"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight: خيار غير معروف '%s'"
+
+msgid "highlight: needs a file"
+msgstr "highlight: يلزم ملف"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs: خيار غير معروف '%s'"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s: للقراءة فقط (‎:w!‎ يتجاوز ذلك)"
+
+msgid "write failed"
+msgstr "فشلت الكتابة"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "لم تُكتب أي ملفات (%zu)"
+msgstr[1] "كُتب ملف واحد"
+msgstr[2] "كُتب ملفان"
+msgstr[3] "كُتبت %zu ملفات"
+msgstr[4] "كُتب %zu ملفًا"
+msgstr[5] "كُتب %zu ملف"
+
+msgid "no file name (use :w <name>)"
+msgstr "لا يوجد اسم ملف (استخدم ‎:w <اسم>‎)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "«%s» كُتبت %zu سطرًا"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "في %s تغييرات غير محفوظة (‎:qa!‎ يتجاهلها)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "في %s تغييرات غير محفوظة (‎:q!‎ يتجاهلها)"
+
+msgid "no file name"
+msgstr "لا يوجد اسم ملف"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "تغييرات غير محفوظة (‎:e!‎ يتجاهلها)"
+
+msgid "read failed"
+msgstr "فشلت القراءة"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "أُعيد تحميل «%s»"
+
+msgid "could not open"
+msgstr "تعذّر الفتح"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "«%s» %zu سطرًا"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "تغييرات غير محفوظة (‎:bd!‎ يتجاهلها)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "لا يوجد صادّ %s"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "لا يوجد صادّ يطابق %s"
+
+msgid "too many open files"
+msgstr "عدد الملفات المفتوحة كبير جدًا"
+
+msgid "read: needs a file name"
+msgstr "read: يلزم اسم ملف"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "الاستخدام: ‎:[مدى]s/نمط/بديل/[g]"
+
+msgid "no previous pattern"
+msgstr "لا يوجد نمط سابق"
+
+msgid "pattern not found"
+msgstr "لم يُعثر على النمط"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "لا استبدالات (%ld)"
+msgstr[1] "استبدال واحد"
+msgstr[2] "استبدالان"
+msgstr[3] "%ld استبدالات"
+msgstr[4] "%ld استبدالًا"
+msgstr[5] "%ld استبدال"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "الاستخدام: ‎:[مدى]g/نمط/أمر"
+
+msgid "bad pattern"
+msgstr "نمط غير صالح"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "لا أسطر (%zu)"
+msgstr[1] "سطر واحد"
+msgstr[2] "سطران"
+msgstr[3] "%zu أسطر"
+msgstr[4] "%zu سطرًا"
+msgstr[5] "%zu سطر"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "نُسخت %zu سطرًا"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s: يلزم سطر وجهة"
+
+msgid "bad option"
+msgstr "خيار غير صالح"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — محرّر SynapseOS"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "ليس أمرًا للمحرّر: %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"لا يوجد عرض — يحتاج syn-edit gui إلى جلسة رسومية (‏`syn-edit` وحده هو محرّر "
+"الطرفية)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell غير مثبّت — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "تعذّر تشغيل quickshell"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit: خيار غير معروف '%s'\n"
+"\n"
+
+msgid "copied"
+msgstr "نُسخ"
+
+msgid "copied this line"
+msgstr "نُسخ هذا السطر"
+
+msgid "the clipboard is empty"
+msgstr "الحافظة فارغة"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "طلب رسومي غير معروف: %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve: خيار غير معروف '%s'"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "كُتب «%s»"
+
+msgid "could not save settings"
+msgstr "تعذّر حفظ الإعدادات"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "طلب غير معروف: %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "خيار غير معروف '%s'"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"ليست طرفية — استخدم `syn-edit gui` لنافذة، أو `syn-edit run` لتنفيذ تحرير من "
+"سكربت"
+
+msgid "could not put the terminal into raw mode"
+msgstr "تعذّر وضع الطرفية في الوضع الخام"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — ‏:help تُكتب ‎:h، و‎:q تُنهي، و i تُدرج"
+
+msgid "out of memory"
+msgstr "الذاكرة غير كافية"
+
+msgid "no comment syntax for this file type"
+msgstr "لا توجد صيغة تعليقات لهذا النوع من الملفات"
+
+msgid "nothing to put"
+msgstr "لا شيء للصقه"
+
+msgid "mark not set"
+msgstr "العلامة غير مضبوطة"
+
+msgid "gv: no previous selection"
+msgstr "gv: لا يوجد تحديد سابق"
+
+#, c-format
+msgid "recording @%c"
+msgstr "يجري تسجيل @%c"
+
+msgid "no previously played register"
+msgstr "لا يوجد سجل شُغّل من قبل"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "السجل %c فارغ"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "سُجّل @%c"
+
+msgid "already at oldest change"
+msgstr "أنت بالفعل عند أقدم تغيير"
+
+msgid "already at newest change"
+msgstr "أنت بالفعل عند أحدث تغيير"
+
+msgid "no previous search"
+msgstr "لا يوجد بحث سابق"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "«%s» %zu سطرًا --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "أُوقف الماكرو التعاودي"

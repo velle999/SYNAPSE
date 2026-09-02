@@ -30,6 +30,7 @@
  */
 #define _GNU_SOURCE
 #include "edit_internal.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -1197,7 +1198,7 @@ static void comment_toggle(ed_t *e, size_t y0, size_t y1)
 	buf_t *b = B(e);
 	const char *pfx = syn_comment_prefix(b->lang);
 	if (!pfx || !*pfx) {
-		ed_message(e, true, "no comment syntax for this file type");
+		ed_message(e, true, _("no comment syntax for this file type"));
 		return;
 	}
 	size_t plen = strlen(pfx);
@@ -1377,7 +1378,7 @@ static void do_put(ed_t *e, bool after, long count, int reg)
 {
 	const reg_t *r = reg_get(e, reg ? reg : '"');
 	if (!r || !r->text || !*r->text) {
-		ed_message(e, true, "nothing to put");
+		ed_message(e, true, _("nothing to put"));
 		return;
 	}
 	buf_t *b = B(e);
@@ -1796,7 +1797,7 @@ static void prefix_key(ed_t *e, int k)
 	case '\'': case '`': {
 		int idx = (k >= 'a' && k <= 'z') ? k - 'a' : (k == '\'' || k == '`') ? 26 : -1;
 		if (idx < 0 || b->mark[idx] == 0) {
-			ed_message(e, true, "mark not set");
+			ed_message(e, true, _("mark not set"));
 			reset_pending(e);
 			return;
 		}
@@ -1878,7 +1879,7 @@ static void prefix_key(ed_t *e, int k)
 			reset_pending(e);
 			return;
 		case 'v':
-			ed_message(e, false, "gv: no previous selection");
+			ed_message(e, false, _("gv: no previous selection"));
 			reset_pending(e);
 			return;
 		default:
@@ -1899,7 +1900,7 @@ static void prefix_key(ed_t *e, int k)
 		if (k == 'Z') {
 			char *err = NULL;
 			if (b->modified && !buf_save(b, NULL, &err)) {
-				ed_message(e, true, "%s", err ? err : "write failed");
+				ed_message(e, true, "%s", err ? err : _("write failed"));
 				free(err);
 			} else {
 				e->quit = true;
@@ -1917,7 +1918,7 @@ static void prefix_key(ed_t *e, int k)
 		if (idx >= 0 && k >= 'a' && k <= 'z') {
 			e->rec_reg = k;
 			e->nrec = 0;
-			ed_message(e, false, "recording @%c", (char)k);
+			ed_message(e, false, _("recording @%c"), (char)k);
 		}
 		reset_pending(e);
 		return;
@@ -1926,14 +1927,14 @@ static void prefix_key(ed_t *e, int k)
 	case '@': {
 		int use = (k == '@') ? e->last_macro : k;
 		if (use == 0) {
-			ed_message(e, true, "no previously played register");
+			ed_message(e, true, _("no previously played register"));
 			reset_pending(e);
 			return;
 		}
 		e->last_macro = use;
 		const reg_t *r = reg_get(e, use);
 		if (!r || !r->text) {
-			ed_message(e, true, "register %c is empty", (char)use);
+			ed_message(e, true, _("register %c is empty"), (char)use);
 			reset_pending(e);
 			return;
 		}
@@ -2041,7 +2042,7 @@ static void normal_key(ed_t *e, int k)
 			/* The q that stops recording. The key itself must not be part of
 			 * the recording, which is why ed_key catches it before the
 			 * append; here it only has to clear the state. */
-			ed_message(e, false, "recorded @%c", (char)e->rec_reg);
+			ed_message(e, false, _("recorded @%c"), (char)e->rec_reg);
 			e->rec_reg = 0;
 			reset_pending(e);
 			return;
@@ -2338,7 +2339,7 @@ static void normal_key(ed_t *e, int k)
 		for (long i = 0; i < (n > 0 ? n : 1); i++) {
 			size_t cy = e->cy, cx = e->cx;
 			if (!buf_undo(b, &cy, &cx)) {
-				ed_message(e, false, "already at oldest change");
+				ed_message(e, false, _("already at oldest change"));
 				break;
 			}
 			e->cy = cy;
@@ -2352,7 +2353,7 @@ static void normal_key(ed_t *e, int k)
 		for (long i = 0; i < (n > 0 ? n : 1); i++) {
 			size_t cy = e->cy, cx = e->cx;
 			if (!buf_redo(b, &cy, &cx)) {
-				ed_message(e, false, "already at newest change");
+				ed_message(e, false, _("already at newest change"));
 				break;
 			}
 			e->cy = cy;
@@ -2423,7 +2424,7 @@ static void normal_key(ed_t *e, int k)
 
 	case 'n': case 'N': {
 		if (!e->search || !*e->search) {
-			ed_message(e, true, "no previous search");
+			ed_message(e, true, _("no previous search"));
 			reset_pending(e);
 			return;
 		}
@@ -2431,7 +2432,7 @@ static void normal_key(ed_t *e, int k)
 		int dir = (k == 'n') ? e->search_dir : -e->search_dir;
 		for (long i = 0; i < (n > 0 ? n : 1); i++) {
 			if (!ed_search(e, e->search, dir, &err)) {
-				ed_message(e, true, "%s", err ? err : "pattern not found");
+				ed_message(e, true, "%s", err ? err : _("pattern not found"));
 				free(err);
 				err = NULL;
 				break;
@@ -2465,7 +2466,7 @@ static void normal_key(ed_t *e, int k)
 		reg_set(e, '/', e->search, false);
 		char *err = NULL;
 		if (!ed_search(e, e->search, e->search_dir, &err)) {
-			ed_message(e, true, "%s", err ? err : "pattern not found");
+			ed_message(e, true, "%s", err ? err : _("pattern not found"));
 			free(err);
 		}
 		reset_pending(e);
@@ -2521,7 +2522,7 @@ static void normal_key(ed_t *e, int k)
 	case K_PGUP: normal_key(e, 2); return;
 
 	case 7:     /* Ctrl-G — where am I */
-		ed_message(e, false, "\"%s\" %zu lines --%d%%--", buf_name(b), b->n,
+		ed_message(e, false, _("\"%s\" %zu lines --%d%%--"), buf_name(b), b->n,
 		           b->n ? (int)((e->cy + 1) * 100 / b->n) : 0);
 		reset_pending(e);
 		return;
@@ -2563,7 +2564,7 @@ static void cmdline_key(ed_t *e, int k)
 			if (e->search && *e->search) {
 				char *err = NULL;
 				if (!ed_search(e, e->search, e->search_dir, &err)) {
-					ed_message(e, true, "%s", err ? err : "pattern not found");
+					ed_message(e, true, "%s", err ? err : _("pattern not found"));
 					free(err);
 				}
 			}
@@ -2627,7 +2628,7 @@ void ed_key(ed_t *e, int key)
 		} else {
 			free(text);
 		}
-		ed_message(e, false, "recorded @%c", (char)r);
+		ed_message(e, false, _("recorded @%c"), (char)r);
 		return;
 	}
 
@@ -2785,7 +2786,7 @@ void ed_keys(ed_t *e, const char *s)
 	 * writes one deserves an error, not a hang. */
 	static int depth = 0;
 	if (depth > 64) {
-		ed_message(e, true, "recursive macro stopped");
+		ed_message(e, true, _("recursive macro stopped"));
 		return;
 	}
 	depth++;

@@ -17,6 +17,7 @@
  */
 #define _GNU_SOURCE
 #include "edit_internal.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -420,7 +421,7 @@ int cmd_tui(int argc, char **argv)
 	for (int i = 0; i < argc; i++) {
 		if (argv[i][0] == '-' && argv[i][1]) {
 			ed_free(e);
-			die("unknown option '%s'", argv[i]);
+			die(_("unknown option '%s'"), argv[i]);
 		}
 		char *err = NULL;
 		if (ed_open(e, argv[i], &err) < 0) {
@@ -434,17 +435,17 @@ int cmd_tui(int argc, char **argv)
 
 	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
 		ed_free(e);
-		die("not a terminal — use `syn-edit gui` for a window, "
-		    "or `syn-edit run` to script an edit");
+		die(_("not a terminal — use `syn-edit gui` for a window, "
+		    "or `syn-edit run` to script an edit"));
 	}
 	if (!tui_raw()) {
 		ed_free(e);
-		die("could not put the terminal into raw mode");
+		die(_("could not put the terminal into raw mode"));
 	}
 
 	if (e->nbuf == 1 && !ed_buf(e)->path)
 		ed_message(e, false,
-		           "syn-edit — :help is :h, :q quits, i inserts");
+		           _("syn-edit — :help is :h, :q quits, i inserts"));
 
 	for (;;) {
 		struct winsize ws;

@@ -10,283 +10,513 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "%1 には保存していない変更があります。"
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%2 件中 %1 件完了"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  / 全 %3 行"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "（内容のないタスク）"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "このアプリについて"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "キャンセル"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "閉じる"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "コピー"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "行をコピー"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "切り取り"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "行を切り取り"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "ドキュメント"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "破棄"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "ドキュメント"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "検索"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "検索…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "挿入"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "ノーマル"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "新規"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "新しいタスク"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "このファイルにタスクはありません。\n\n  - [ ] なにか  のような行がタスクです。\n右クリック ▸ 新しいタスク で追加できます。"
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"このファイルにタスクはありません。\n"
+"\n"
+"  - [ ] なにか  のような行がタスクです。\n"
+"右クリック ▸ 新しいタスク で追加できます。"
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "上書き"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "開く"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "開く…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "上書きする"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "貼り付け"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "やり直す"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "読み直す"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "置換"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "置換…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "選択"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "保存"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "保存して閉じる"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "名前を付けて保存"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "名前を付けて保存…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "ここに保存"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "保存先:"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "すべて選択"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "タブ"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "タスク一覧…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "タスク"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "このタスクにチェックを入れる"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "元に戻す"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "このタスクのチェックを外す"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[名前なし]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "空のバッファーを新規作成します"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "カーソル位置にタスクを追加します"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "バイナリ"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "ファイルを選びます"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "変更を捨てて閉じます"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "開いたままにします"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "名前を付けてから保存します"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "まだ保存されていません"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "選択中のファイルを開きます"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "ファイルを読み直します"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "一覧の表示を切り替えます"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "タブバーの表示を切り替えます"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "パスを入力します (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "バージョンとライセンス"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "このフォルダーに保存します — 続けて名前を入力してください"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "別の場所に保存します"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "保存してから閉じます"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "選択中のファイルに上書きします"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "このバッファーを保存します"
+
+msgid "present"
+msgstr "あり"
+
+msgid "absent"
+msgstr "なし"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about: 不明なオプション '%s'"
+
+msgid "the SynapseOS text editor"
+msgstr "SynapseOS のテキストエディタ"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs で一覧できます"
+
+msgid "What this machine can do"
+msgstr "このマシンでできること"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "グラフィカルウィンドウ (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "デスクトップのクリップボードへのコピー (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "デスクトップのクリップボードからの貼り付け (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "%s のパーミッションを設定できませんでした"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "ディレクトリ %s をディスクに書き出せませんでした"
+
+msgid "config get: needs a key"
+msgstr "config get: キーが必要です"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "不明なオプション: %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set: キーと値が必要です"
+
+msgid "settings reset to defaults"
+msgstr "設定を既定値に戻しました"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config: 不明なサブコマンド '%s' (list, get, set, reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: 不明なオプション '%s'"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s: ファイルが必要です (標準入力は -)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "不明な言語: %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w は標準入力に書き戻せません"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight: 不明なオプション '%s'"
+
+msgid "highlight: needs a file"
+msgstr "highlight: ファイルが必要です"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs: 不明なオプション '%s'"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s: 読み取り専用です (:w! で上書きできます)"
+
+msgid "write failed"
+msgstr "書き込みに失敗しました"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "%zu 個のファイルを書き込みました"
+
+msgid "no file name (use :w <name>)"
+msgstr "ファイル名がありません (:w <名前> を使ってください)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "「%s」%zu 行を書き込みました"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "%s に保存していない変更があります (:qa! で破棄します)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "%s に保存していない変更があります (:q! で破棄します)"
+
+msgid "no file name"
+msgstr "ファイル名がありません"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "保存していない変更があります (:e! で破棄します)"
+
+msgid "read failed"
+msgstr "読み込みに失敗しました"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "「%s」を再読み込みしました"
+
+msgid "could not open"
+msgstr "開けませんでした"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "「%s」%zu 行"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "保存していない変更があります (:bd! で破棄します)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "バッファ %s はありません"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "%s に一致するバッファはありません"
+
+msgid "too many open files"
+msgstr "開いているファイルが多すぎます"
+
+msgid "read: needs a file name"
+msgstr "read: ファイル名が必要です"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "使い方: :[範囲]s/パターン/置換文字列/[g]"
+
+msgid "no previous pattern"
+msgstr "前回のパターンがありません"
+
+msgid "pattern not found"
+msgstr "パターンが見つかりません"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "%ld 件置換しました"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "使い方: :[範囲]g/パターン/コマンド"
+
+msgid "bad pattern"
+msgstr "不正なパターンです"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu 行"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "%zu 行をコピーしました"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s: 移動先の行が必要です"
+
+msgid "bad option"
+msgstr "不正なオプションです"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — SynapseOS のエディタ"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "エディタのコマンドではありません: %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"ディスプレイがありません — syn-edit gui にはグラフィカルセッションが必要です "
+"(`syn-edit` だけならターミナルのエディタです)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell がインストールされていません — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell を起動できませんでした"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit: 不明なオプション '%s'\n"
+"\n"
+
+msgid "copied"
+msgstr "コピーしました"
+
+msgid "copied this line"
+msgstr "この行をコピーしました"
+
+msgid "the clipboard is empty"
+msgstr "クリップボードは空です"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "不明な GUI 要求: %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve: 不明なオプション '%s'"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "「%s」を書き込みました"
+
+msgid "could not save settings"
+msgstr "設定を保存できませんでした"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "不明な要求: %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "不明なオプション '%s'"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"ターミナルではありません — ウィンドウなら `syn-edit gui`、スクリプトから編集"
+"するなら `syn-edit run` を使ってください"
+
+msgid "could not put the terminal into raw mode"
+msgstr "ターミナルを raw モードにできませんでした"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help は :h、:q で終了、i で挿入"
+
+msgid "out of memory"
+msgstr "メモリが足りません"
+
+msgid "no comment syntax for this file type"
+msgstr "このファイル形式にはコメント構文がありません"
+
+msgid "nothing to put"
+msgstr "貼り付けるものがありません"
+
+msgid "mark not set"
+msgstr "マークが設定されていません"
+
+msgid "gv: no previous selection"
+msgstr "gv: 前回の選択範囲がありません"
+
+#, c-format
+msgid "recording @%c"
+msgstr "@%c を記録中"
+
+msgid "no previously played register"
+msgstr "以前に再生したレジスタがありません"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "レジスタ %c は空です"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "@%c を記録しました"
+
+msgid "already at oldest change"
+msgstr "すでに最も古い変更です"
+
+msgid "already at newest change"
+msgstr "すでに最も新しい変更です"
+
+msgid "no previous search"
+msgstr "前回の検索がありません"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "「%s」%zu 行 --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "再帰マクロを停止しました"

@@ -10,284 +10,517 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "%1 में सहेजे बिना किए गए बदलाव हैं।"
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%2 में से %1 पूरा"
 msgstr[1] "%2 में से %1 पूरे"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  / कुल %3"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "(बिना पाठ का कार्य)"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "परिचय"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "रद्द करें"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "बंद करें"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "कॉपी करें"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "पंक्ति कॉपी करें"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "काटें"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "पंक्ति काटें"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "दस्तावेज़"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "छोड़ दें"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "दस्तावेज़"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "खोजें"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "खोजें…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "इंसर्ट"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "सामान्य"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "नया"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "नया कार्य"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "इस फ़ाइल में कोई कार्य नहीं है।\n\n  - [ ] कुछ  जैसी पंक्तियाँ कार्य होती हैं।\nदायाँ क्लिक ▸ नया कार्य एक जोड़ता है।"
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"इस फ़ाइल में कोई कार्य नहीं है।\n"
+"\n"
+"  - [ ] कुछ  जैसी पंक्तियाँ कार्य होती हैं।\n"
+"दायाँ क्लिक ▸ नया कार्य एक जोड़ता है।"
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "ओवरराइट"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "खोलें"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "खोलें…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "ऊपर लिखें"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "चिपकाएँ"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "दोबारा करें"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "फिर से पढ़ें"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "बदलें"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "बदलें…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "चयन"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "सहेजें"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "सहेजकर बंद करें"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "इस रूप में सहेजें"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "इस रूप में सहेजें…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "यहाँ सहेजें"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "यहाँ सहेजें:"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "सब चुनें"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "टैब"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "कार्य सूची…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "कार्य"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "इस कार्य पर निशान लगाएँ"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "पूर्ववत करें"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "इस कार्य से निशान हटाएँ"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[बिना नाम]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "एक नया खाली बफ़र"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "कर्सर पर एक कार्य जोड़ें"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "बाइनरी"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "फ़ाइल ढूँढ़ें"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "बंद करें और बदलाव खो दें"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "खुला रहने दें"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "नाम दें, फिर लिखें"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "अभी तक सहेजा नहीं गया"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "चिह्नित फ़ाइल खोलें"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "फ़ाइल फिर से पढ़ें"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "सूची दिखाएँ या छिपाएँ"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "टैब पट्टी दिखाएँ या छिपाएँ"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "पथ टाइप करें (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "संस्करण और लाइसेंस"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "इस फ़ोल्डर में लिखें — फिर नाम टाइप करें"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "कहीं और लिखें"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "लिखें, फिर बंद करें"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "चिह्नित फ़ाइल पर लिखें"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "यह बफ़र लिखें"
+
+msgid "present"
+msgstr "उपलब्ध"
+
+msgid "absent"
+msgstr "अनुपलब्ध"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about: अज्ञात विकल्प '%s'"
+
+msgid "the SynapseOS text editor"
+msgstr "SynapseOS का पाठ संपादक"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs उन्हें सूचीबद्ध करता है"
+
+msgid "What this machine can do"
+msgstr "यह मशीन क्या कर सकती है"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "ग्राफ़िकल विंडो (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "डेस्कटॉप क्लिपबोर्ड में कॉपी करना (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "डेस्कटॉप क्लिपबोर्ड से चिपकाना (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "%s की अनुमतियाँ सेट नहीं की जा सकीं"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "निर्देशिका %s को डिस्क पर नहीं लिखा जा सका"
+
+msgid "config get: needs a key"
+msgstr "config get: एक कुंजी चाहिए"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "अज्ञात विकल्प: %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set: एक कुंजी और एक मान चाहिए"
+
+msgid "settings reset to defaults"
+msgstr "सेटिंग्स डिफ़ॉल्ट पर लौटा दी गईं"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config: अज्ञात उपकमांड '%s' (list, get, set, reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: अज्ञात विकल्प '%s'"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s: एक फ़ाइल चाहिए (मानक इनपुट के लिए - का उपयोग करें)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "अज्ञात भाषा: %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w मानक इनपुट में वापस नहीं लिख सकता"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight: अज्ञात विकल्प '%s'"
+
+msgid "highlight: needs a file"
+msgstr "highlight: एक फ़ाइल चाहिए"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs: अज्ञात विकल्प '%s'"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s: केवल पढ़ने योग्य (:w! इसे दरकिनार करता है)"
+
+msgid "write failed"
+msgstr "लिखना विफल रहा"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "%zu फ़ाइल लिखी गई"
+msgstr[1] "%zu फ़ाइलें लिखी गईं"
+
+msgid "no file name (use :w <name>)"
+msgstr "कोई फ़ाइल नाम नहीं (:w <नाम> का उपयोग करें)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "\"%s\" %zu पंक्तियाँ लिखी गईं"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "%s में सहेजे न गए बदलाव हैं (:qa! उन्हें छोड़ देता है)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "%s में सहेजे न गए बदलाव हैं (:q! उन्हें छोड़ देता है)"
+
+msgid "no file name"
+msgstr "कोई फ़ाइल नाम नहीं"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "सहेजे न गए बदलाव (:e! उन्हें छोड़ देता है)"
+
+msgid "read failed"
+msgstr "पढ़ना विफल रहा"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "\"%s\" फिर से लोड किया गया"
+
+msgid "could not open"
+msgstr "खोला नहीं जा सका"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "\"%s\" %zu पंक्तियाँ"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "सहेजे न गए बदलाव (:bd! उन्हें छोड़ देता है)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "बफ़र %s नहीं है"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "%s से मेल खाता कोई बफ़र नहीं"
+
+msgid "too many open files"
+msgstr "बहुत सारी फ़ाइलें खुली हैं"
+
+msgid "read: needs a file name"
+msgstr "read: एक फ़ाइल नाम चाहिए"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "उपयोग: :[परिसर]s/पैटर्न/प्रतिस्थापन/[g]"
+
+msgid "no previous pattern"
+msgstr "पिछला कोई पैटर्न नहीं"
+
+msgid "pattern not found"
+msgstr "पैटर्न नहीं मिला"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "%ld प्रतिस्थापन"
+msgstr[1] "%ld प्रतिस्थापन"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "उपयोग: :[परिसर]g/पैटर्न/कमांड"
+
+msgid "bad pattern"
+msgstr "ग़लत पैटर्न"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu पंक्ति"
+msgstr[1] "%zu पंक्तियाँ"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "%zu पंक्तियाँ कॉपी की गईं"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s: एक गंतव्य पंक्ति चाहिए"
+
+msgid "bad option"
+msgstr "ग़लत विकल्प"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — SynapseOS का संपादक"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "यह संपादक का कमांड नहीं है: %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"कोई डिस्प्ले नहीं — syn-edit gui को ग्राफ़िकल सत्र चाहिए (केवल `syn-edit` टर्मिनल "
+"संपादक है)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell संस्थापित नहीं है — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell आरंभ नहीं किया जा सका"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit: अज्ञात विकल्प '%s'\n"
+"\n"
+
+msgid "copied"
+msgstr "कॉपी किया गया"
+
+msgid "copied this line"
+msgstr "यह पंक्ति कॉपी की गई"
+
+msgid "the clipboard is empty"
+msgstr "क्लिपबोर्ड खाली है"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "अज्ञात GUI अनुरोध: %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve: अज्ञात विकल्प '%s'"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "\"%s\" लिखा गया"
+
+msgid "could not save settings"
+msgstr "सेटिंग्स सहेजी नहीं जा सकीं"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "अज्ञात अनुरोध: %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "अज्ञात विकल्प '%s'"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"यह टर्मिनल नहीं है — विंडो के लिए `syn-edit gui`, या स्क्रिप्ट से संपादन के लिए `syn-"
+"edit run` का उपयोग करें"
+
+msgid "could not put the terminal into raw mode"
+msgstr "टर्मिनल को रॉ मोड में नहीं डाला जा सका"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help को :h लिखते हैं, :q बाहर निकलता है, i सम्मिलित करता है"
+
+msgid "out of memory"
+msgstr "स्मृति समाप्त"
+
+msgid "no comment syntax for this file type"
+msgstr "इस फ़ाइल प्रकार के लिए कोई टिप्पणी वाक्यरचना नहीं"
+
+msgid "nothing to put"
+msgstr "चिपकाने के लिए कुछ नहीं"
+
+msgid "mark not set"
+msgstr "चिह्न सेट नहीं है"
+
+msgid "gv: no previous selection"
+msgstr "gv: पिछला कोई चयन नहीं"
+
+#, c-format
+msgid "recording @%c"
+msgstr "@%c रिकॉर्ड हो रहा है"
+
+msgid "no previously played register"
+msgstr "पहले चलाया गया कोई रजिस्टर नहीं"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "रजिस्टर %c खाली है"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "@%c रिकॉर्ड किया गया"
+
+msgid "already at oldest change"
+msgstr "पहले से ही सबसे पुराने बदलाव पर"
+
+msgid "already at newest change"
+msgstr "पहले से ही सबसे नए बदलाव पर"
+
+msgid "no previous search"
+msgstr "पिछली कोई खोज नहीं"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "\"%s\" %zu पंक्तियाँ --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "पुनरावर्ती मैक्रो रोका गया"

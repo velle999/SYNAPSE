@@ -18,6 +18,7 @@
  */
 #define _GNU_SOURCE
 #include "edit_internal.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -137,7 +138,7 @@ static int drive(int argc, char **argv, bool ex_mode)
 		} else if (a[0] == '-' && a[1] && strcmp(a, "-")) {
 			ed_free(e);
 			free(keys);
-			die("%s: unknown option '%s'", ex_mode ? "ex" : "run", a);
+			die(_("%s: unknown option '%s'"), ex_mode ? "ex" : "run", a);
 		} else {
 			if (nfiles < sizeof files / sizeof *files)
 				files[nfiles++] = a;
@@ -147,7 +148,7 @@ static int drive(int argc, char **argv, bool ex_mode)
 	if (nfiles == 0) {
 		ed_free(e);
 		free(keys);
-		die("%s: needs a file (use - for standard input)",
+		die(_("%s: needs a file (use - for standard input)"),
 		    ex_mode ? "ex" : "run");
 	}
 
@@ -173,7 +174,7 @@ static int drive(int argc, char **argv, bool ex_mode)
 		if (l < 0) {
 			ed_free(e);
 			free(keys);
-			die("unknown language: %s", forced_lang);
+			die(_("unknown language: %s"), forced_lang);
 		}
 		ed_buf(e)->lang = l;
 	}
@@ -190,7 +191,7 @@ static int drive(int argc, char **argv, bool ex_mode)
 
 	if (write_back) {
 		if (from_stdin) {
-			warn("-w cannot write back to standard input");
+			warn(_("-w cannot write back to standard input"));
 			rc = 1;
 		}
 		for (size_t i = 0; i < e->nbuf; i++) {
@@ -237,12 +238,12 @@ int cmd_highlight(int argc, char **argv)
 		if (!strcmp(argv[i], "--lang") && i + 1 < argc)
 			forced = argv[++i];
 		else if (argv[i][0] == '-' && argv[i][1])
-			die("highlight: unknown option '%s'", argv[i]);
+			die(_("highlight: unknown option '%s'"), argv[i]);
 		else
 			path = argv[i];
 	}
 	if (!path)
-		die("highlight: needs a file");
+		die(_("highlight: needs a file"));
 
 	buf_t *b = buf_new();
 	char *err = NULL;
@@ -256,7 +257,7 @@ int cmd_highlight(int argc, char **argv)
 		int l = syn_lang_by_name(forced);
 		if (l < 0) {
 			buf_free(b);
-			die("unknown language: %s", forced);
+			die(_("unknown language: %s"), forced);
 		}
 		b->lang = l;
 	}
@@ -296,7 +297,7 @@ int cmd_highlight(int argc, char **argv)
 int cmd_langs(int argc, char **argv)
 {
 	for (int i = 0; i < argc; i++)
-		die("langs: unknown option '%s'", argv[i]);
+		die(_("langs: unknown option '%s'"), argv[i]);
 
 	if (g_out == OUT_REC)
 		rec_row(1, "language");

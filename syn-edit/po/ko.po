@@ -10,283 +10,513 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "%1에 저장하지 않은 변경 사항이 있습니다."
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%2개 중 %1개 완료"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  / 전체 %3줄"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "(내용 없는 할 일)"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "정보"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "취소"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "닫기"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "복사"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "줄 복사"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "잘라내기"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "줄 잘라내기"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "문서"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "버리기"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "문서"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "찾기"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "찾기…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "입력"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "일반"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "새로 만들기"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "새 할 일"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "이 파일에는 할 일이 없습니다.\n\n  - [ ] 무언가  같은 줄이 할 일입니다.\n오른쪽 클릭 ▸ 새 할 일 로 추가할 수 있습니다."
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"이 파일에는 할 일이 없습니다.\n"
+"\n"
+"  - [ ] 무언가  같은 줄이 할 일입니다.\n"
+"오른쪽 클릭 ▸ 새 할 일 로 추가할 수 있습니다."
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "덮어쓰기"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "열기"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "열기…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "덮어쓰기"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "붙여넣기"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "다시 실행"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "다시 읽기"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "바꾸기"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "바꾸기…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "선택"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "저장"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "저장하고 닫기"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "다른 이름으로 저장"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "다른 이름으로 저장…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "여기에 저장"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "저장 위치:"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "모두 선택"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "탭"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "할 일 목록…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "할 일"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "이 할 일에 체크"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "실행 취소"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "이 할 일 체크 해제"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[이름 없음]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "새 빈 버퍼를 만듭니다"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "커서 위치에 할 일을 추가합니다"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "이진"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "파일을 찾아봅니다"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "닫고 변경 사항을 버립니다"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "그대로 열어 둡니다"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "이름을 정한 뒤 저장합니다"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "아직 저장되지 않음"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "선택된 파일을 엽니다"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "파일을 다시 읽습니다"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "목록을 보이거나 숨깁니다"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "탭 막대를 보이거나 숨깁니다"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "경로를 입력합니다 (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "버전과 라이선스"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "이 폴더에 저장합니다 — 이어서 이름을 입력하세요"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "다른 곳에 저장합니다"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "저장한 다음 닫습니다"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "선택된 파일에 덮어씁니다"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "이 버퍼를 저장합니다"
+
+msgid "present"
+msgstr "있음"
+
+msgid "absent"
+msgstr "없음"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about: 알 수 없는 옵션 '%s'"
+
+msgid "the SynapseOS text editor"
+msgstr "SynapseOS의 텍스트 편집기"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs로 목록을 볼 수 있습니다"
+
+msgid "What this machine can do"
+msgstr "이 컴퓨터가 할 수 있는 일"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "그래픽 창 (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "데스크톱 클립보드로 복사 (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "데스크톱 클립보드에서 붙여넣기 (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "%s의 권한을 설정할 수 없습니다"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "디렉터리 %s을(를) 디스크에 기록할 수 없습니다"
+
+msgid "config get: needs a key"
+msgstr "config get: 키가 필요합니다"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "알 수 없는 옵션: %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set: 키와 값이 필요합니다"
+
+msgid "settings reset to defaults"
+msgstr "설정을 기본값으로 되돌렸습니다"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config: 알 수 없는 하위 명령 '%s' (list, get, set, reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s: 파일이 필요합니다 (표준 입력은 -)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "알 수 없는 언어: %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w는 표준 입력에 다시 쓸 수 없습니다"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight: 알 수 없는 옵션 '%s'"
+
+msgid "highlight: needs a file"
+msgstr "highlight: 파일이 필요합니다"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s: 읽기 전용입니다 (:w!로 덮어쓸 수 있습니다)"
+
+msgid "write failed"
+msgstr "쓰기에 실패했습니다"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "파일 %zu개를 기록했습니다"
+
+msgid "no file name (use :w <name>)"
+msgstr "파일 이름이 없습니다 (:w <이름>을 사용하세요)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "\"%s\" %zu줄을 기록했습니다"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "%s에 저장하지 않은 변경 사항이 있습니다 (:qa!로 버립니다)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "%s에 저장하지 않은 변경 사항이 있습니다 (:q!로 버립니다)"
+
+msgid "no file name"
+msgstr "파일 이름이 없습니다"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "저장하지 않은 변경 사항이 있습니다 (:e!로 버립니다)"
+
+msgid "read failed"
+msgstr "읽기에 실패했습니다"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "\"%s\"을(를) 다시 불러왔습니다"
+
+msgid "could not open"
+msgstr "열 수 없습니다"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "\"%s\" %zu줄"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "저장하지 않은 변경 사항이 있습니다 (:bd!로 버립니다)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "버퍼 %s이(가) 없습니다"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "%s과(와) 일치하는 버퍼가 없습니다"
+
+msgid "too many open files"
+msgstr "열린 파일이 너무 많습니다"
+
+msgid "read: needs a file name"
+msgstr "read: 파일 이름이 필요합니다"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "사용법: :[범위]s/패턴/바꿀내용/[g]"
+
+msgid "no previous pattern"
+msgstr "이전 패턴이 없습니다"
+
+msgid "pattern not found"
+msgstr "패턴을 찾을 수 없습니다"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "%ld곳을 바꿨습니다"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "사용법: :[범위]g/패턴/명령"
+
+msgid "bad pattern"
+msgstr "잘못된 패턴입니다"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu줄"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "%zu줄을 복사했습니다"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s: 대상 줄이 필요합니다"
+
+msgid "bad option"
+msgstr "잘못된 옵션입니다"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — SynapseOS의 편집기"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "편집기 명령이 아닙니다: %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"디스플레이가 없습니다 — syn-edit gui에는 그래픽 세션이 필요합니다 (`syn-edit`"
+"만 쓰면 터미널 편집기입니다)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell이 설치되어 있지 않습니다 — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell을 시작할 수 없습니다"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit: 알 수 없는 옵션 '%s'\n"
+"\n"
+
+msgid "copied"
+msgstr "복사했습니다"
+
+msgid "copied this line"
+msgstr "이 줄을 복사했습니다"
+
+msgid "the clipboard is empty"
+msgstr "클립보드가 비어 있습니다"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "알 수 없는 GUI 요청: %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "\"%s\"을(를) 기록했습니다"
+
+msgid "could not save settings"
+msgstr "설정을 저장할 수 없습니다"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "알 수 없는 요청: %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "알 수 없는 옵션 '%s'"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"터미널이 아닙니다 — 창은 `syn-edit gui`, 스크립트로 편집하려면 `syn-edit run`"
+"을 사용하세요"
+
+msgid "could not put the terminal into raw mode"
+msgstr "터미널을 로 모드로 전환할 수 없습니다"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help는 :h, :q는 종료, i는 삽입"
+
+msgid "out of memory"
+msgstr "메모리가 부족합니다"
+
+msgid "no comment syntax for this file type"
+msgstr "이 파일 형식에는 주석 문법이 없습니다"
+
+msgid "nothing to put"
+msgstr "붙여넣을 것이 없습니다"
+
+msgid "mark not set"
+msgstr "표시가 설정되지 않았습니다"
+
+msgid "gv: no previous selection"
+msgstr "gv: 이전 선택 영역이 없습니다"
+
+#, c-format
+msgid "recording @%c"
+msgstr "@%c 기록 중"
+
+msgid "no previously played register"
+msgstr "이전에 재생한 레지스터가 없습니다"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "레지스터 %c이(가) 비어 있습니다"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "@%c을(를) 기록했습니다"
+
+msgid "already at oldest change"
+msgstr "이미 가장 오래된 변경입니다"
+
+msgid "already at newest change"
+msgstr "이미 가장 최근 변경입니다"
+
+msgid "no previous search"
+msgstr "이전 검색이 없습니다"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "\"%s\" %zu줄 --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "재귀 매크로를 중지했습니다"

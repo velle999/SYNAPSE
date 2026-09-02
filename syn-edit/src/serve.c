@@ -34,6 +34,7 @@
  */
 #define _GNU_SOURCE
 #include "edit_internal.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -335,13 +336,13 @@ static bool sel_take(ed_t *e, int reg, bool erase)
 static void gui_copy(ed_t *e)
 {
 	if (sel_take(e, '+', false)) {
-		ed_message(e, false, "copied");
+		ed_message(e, false, _("copied"));
 		return;
 	}
 	char *text = range_text(e, e->cy, 0, e->cy, 0, true);
 	reg_set(e, '+', text, true);
 	free(text);
-	ed_message(e, false, "copied this line");
+	ed_message(e, false, _("copied this line"));
 }
 
 /* Ctrl+X, and with nothing selected the line, to match Copy. */
@@ -371,7 +372,7 @@ static void gui_paste(ed_t *e)
 {
 	const reg_t *r = reg_get(e, '+');
 	if (!r || !r->text || !*r->text) {
-		ed_message(e, true, "the clipboard is empty");
+		ed_message(e, true, _("the clipboard is empty"));
 		if (e->mode != M_CMDLINE)
 			gui_insert_at(e, e->cy, e->cx);
 		return;
@@ -465,7 +466,7 @@ static void gui_verb(ed_t *e, const char *op)
 	} else if (!strcmp(op, "paste")) {
 		gui_paste(e);
 	} else {
-		ed_message(e, true, "unknown gui request: %s", op);
+		ed_message(e, true, _("unknown gui request: %s"), op);
 	}
 }
 
@@ -477,11 +478,11 @@ int cmd_serve(int argc, char **argv)
 	for (int i = 0; i < argc; i++) {
 		if (argv[i][0] == '-' && argv[i][1]) {
 			ed_free(e);
-			die("serve: unknown option '%s'", argv[i]);
+			die(_("serve: unknown option '%s'"), argv[i]);
 		}
 		char *err = NULL;
 		if (ed_open(e, argv[i], &err) < 0) {
-			ed_message(e, true, "%s", err ? err : "could not open");
+			ed_message(e, true, "%s", err ? err : _("could not open"));
 			free(err);
 		}
 	}
@@ -525,7 +526,7 @@ int cmd_serve(int argc, char **argv)
 			char *p = pct_decode(rest);
 			char *err = NULL;
 			if (ed_open(e, p, &err) < 0) {
-				ed_message(e, true, "%s", err ? err : "could not open");
+				ed_message(e, true, "%s", err ? err : _("could not open"));
 				free(err);
 			}
 			free(p);
@@ -535,9 +536,9 @@ int cmd_serve(int argc, char **argv)
 			char *p = pct_decode(rest);
 			char *err = NULL;
 			if (!buf_save(ed_buf(e), *p ? p : NULL, &err))
-				ed_message(e, true, "%s", err ? err : "write failed");
+				ed_message(e, true, "%s", err ? err : _("write failed"));
 			else
-				ed_message(e, false, "\"%s\" written", buf_name(ed_buf(e)));
+				ed_message(e, false, _("\"%s\" written"), buf_name(ed_buf(e)));
 			free(err);
 			free(p);
 		} else if (!strcmp(verb, "set")) {
@@ -571,7 +572,7 @@ int cmd_serve(int argc, char **argv)
 				 * that works until you close the window. */
 				char *err = NULL;
 				if (!opts_save(&e->o, &err))
-					ed_message(e, true, "%s", err ? err : "could not save settings");
+					ed_message(e, true, "%s", err ? err : _("could not save settings"));
 				free(err);
 			}
 		} else if (!strcmp(verb, "buf")) {
@@ -627,7 +628,7 @@ int cmd_serve(int argc, char **argv)
 		} else if (!strcmp(verb, "render")) {
 			/* nothing to do — every command ends in a frame */
 		} else if (*verb) {
-			ed_message(e, true, "unknown request: %s", verb);
+			ed_message(e, true, _("unknown request: %s"), verb);
 		}
 
 		/* The cursor must stay on screen, or the window scrolls somewhere the

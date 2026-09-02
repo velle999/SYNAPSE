@@ -45,9 +45,22 @@ foreach lang : se_linguas
     install_dir : get_option('datadir') / 'syn-edit' / 'qml' / 'i18n')
 endforeach
 
-run_target('syn-edit-pot',
-  command : [find_program('../tools/qml-xgettext.py'),
-             '--root',  meson.project_source_root() / 'data',
-             '--files', meson.current_source_dir() / 'POTFILES',
-             '-o',      meson.current_source_dir() / 'syn-edit.pot',
-             '--strict'])
+# ⛔ AND THE SAME .po AGAIN, AS A .mo. The window is QML and reads the JSON
+# above; the CLI, the TUI and `syn-edit serve` are C and read a .mo through
+# libintl. ONE catalog per language, two compiled forms.
+#
+# ⛔ VIA meson's i18n MODULE, NOT A custom_target: libintl looks for
+# <localedir>/<lang>/LC_MESSAGES/**syn-edit**.mo — named after the DOMAIN — and
+# a loop over the languages can only name its output de.mo, which installs to
+# the right directory under a name nothing ever looks for. synpkg 47 shipped
+# that mistake for an afternoon; i18n.gettext() knows the rule.
+i18n = import('i18n')
+i18n.gettext('syn-edit', preset: 'glib', install: true)
+
+# ⚠ THE TEMPLATE COMES FROM po/pot.sh, not the QML extractor alone — more than
+# half these msgids are in the C. Its header carries the xgettext flag that
+# silently mangles them.
+run_target('syn-edit-template',
+  command : [find_program('pot.sh'),
+             meson.project_source_root(),
+             meson.current_source_dir()])

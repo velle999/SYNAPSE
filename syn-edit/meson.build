@@ -7,6 +7,10 @@ conf = configuration_data()
 conf.set_quoted('SYNEDIT_VERSION', meson.project_version())
 conf.set_quoted('SYNEDIT_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'syn-edit')
+# Where the .mo files land. ⚠ The SAME po/*.po the window's JSON comes from —
+# see include/i18n.h; one catalog, two compiled forms.
+conf.set_quoted('SYNEDIT_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
 configure_file(output: 'config.h', configuration: conf)
 
 # No dependencies but libc, on purpose — the same rule the rest of the suite
@@ -35,7 +39,7 @@ sources = files(
   'src/about.c',
 )
 
-executable('syn-edit', sources,
+syn_edit_exe = executable('syn-edit', sources,
   include_directories: include_directories('include', '.'),
   install: true)
 
@@ -53,7 +57,9 @@ install_data('data/qml/I18n.qml', 'data/qml/qmldir',
 # QML there is one extra way in: qsTr() looks exactly like the marking and is
 # not — quickshell has no translator to install one into.
 i18n_test = find_program('tests/i18n_test.sh')
-test('i18n', i18n_test, args : [meson.current_source_dir()], timeout : 60)
+test('i18n', i18n_test,
+     args : [meson.current_source_dir(), meson.current_build_dir() / 'syn-edit'],
+     depends : syn_edit_exe, timeout : 120)
 
 # Scalable only: Qt renders the SVG at whatever size the dock or the menu asks
 # for, and a set of PNGs would be five more files to keep in step with one

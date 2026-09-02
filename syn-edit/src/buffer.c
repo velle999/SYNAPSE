@@ -31,6 +31,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-edit.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -518,7 +519,7 @@ bool buf_save(buf_t *b, const char *path, char **err)
 	struct stat sb;
 	mode_t want = (stat(full, &sb) == 0) ? (sb.st_mode & 07777) : b->mode;
 	if (fchmod(fd, want) != 0 && g_verbose)
-		warn("could not set mode on %s", tmp);
+		warn(_("could not set mode on %s"), tmp);
 
 	size_t len = 0;
 	char *text = buf_text(b, &len);
@@ -555,7 +556,7 @@ bool buf_save(buf_t *b, const char *path, char **err)
 	int dfd = open(dir, O_RDONLY | O_DIRECTORY);
 	if (dfd >= 0) {
 		if (fsync(dfd) != 0 && g_verbose)
-			warn("could not flush directory %s", dir);
+			warn(_("could not flush directory %s"), dir);
 		close(dfd);
 	}
 

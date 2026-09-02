@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-edit.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -75,10 +76,10 @@ static void usage(FILE *f)
 static int cmd_gui_impl(int argc, char **argv)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-edit gui needs a graphical session "
-		    "(plain `syn-edit` is the terminal editor)");
+		die(_("no display — syn-edit gui needs a graphical session "
+		    "(plain `syn-edit` is the terminal editor)"));
 	if (!have_cmd("quickshell"))
-		die("quickshell is not installed — synpkg install quickshell");
+		die(_("quickshell is not installed — synpkg install quickshell"));
 
 	/* The files to open travel in the environment; quickshell takes no
 	 * arguments of its own. Separated by newlines rather than spaces or
@@ -133,13 +134,16 @@ static int cmd_gui_impl(int argc, char **argv)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die(_("could not start quickshell"));
 }
 
 int cmd_gui(int argc, char **argv) { return cmd_gui_impl(argc, argv); }
 
 int main(int argc, char **argv)
 {
+	/* ⚠ BEFORE ANYTHING PRINTS. */
+	syn_edit_i18n_init();
+
 	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
 
 	int i = 1;
@@ -193,7 +197,7 @@ int main(int argc, char **argv)
 	 * one keystroke; refusing to start because the name is not a command
 	 * would make `syn-edit notes` fail for a file that exists. */
 	if (cmd[0] == '-') {
-		fprintf(stderr, "syn-edit: unknown option '%s'\n\n", cmd);
+		fprintf(stderr, _("syn-edit: unknown option '%s'\n\n"), cmd);
 		usage(stderr);
 		return 2;
 	}

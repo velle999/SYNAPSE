@@ -16,12 +16,16 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #define _GNU_SOURCE
+#include "config.h"
 #include "syn-edit.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -36,7 +40,7 @@ void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -44,7 +48,7 @@ void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
 	if (!q)
-		die("out of memory");
+		die(_("out of memory"));
 	return q;
 }
 
@@ -52,7 +56,7 @@ char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -71,7 +75,7 @@ char *xasprintf(const char *fmt, ...)
 	va_start(ap, fmt);
 	char *out = NULL;
 	if (vasprintf(&out, fmt, ap) < 0)
-		die("out of memory");
+		die(_("out of memory"));
 	va_end(ap);
 	return out;
 }
@@ -393,4 +397,52 @@ size_t disp_col(const char *s, size_t bytes, int ts)
 size_t disp_width(const char *s, size_t len, int ts)
 {
 	return disp_col(s, len, ts);
+}
+
+/*
+ * How many columns a terminal will spend drawing this string.
+ *
+ * ⛔ NOT disp_width(). That is the EDITOR'S cell model — one cell per
+ * codepoint, which is what buffer positions and the cursor are counted in.
+ * A terminal does not agree: "あり" is two codepoints and FOUR columns. Using
+ * the editor's number to lay out CLI output left the `about` table two columns
+ * out in Japanese and correct in German, which is the least useful kind of
+ * wrong. Anything printed for a terminal to align wants this one.
+ *
+ * Falls back to the byte count when the string will not decode in the current
+ * locale, which is the same thing printf's own width would have done.
+ */
+size_t term_cols(const char *s)
+{
+	size_t n = mbstowcs(NULL, s, 0);
+	if (n == (size_t)-1)
+		return strlen(s);
+
+	wchar_t *w = malloc((n + 1) * sizeof *w);
+	if (!w)
+		return strlen(s);
+
+	mbstowcs(w, s, n + 1);
+	int cols = wcswidth(w, n);
+	free(w);
+	return cols < 0 ? strlen(s) : (size_t)cols;
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⛔ THE ENV OVERRIDE IS WHAT MAKES THIS TESTABLE. The compiled-in path is
+ * under the install prefix, so an UNINSTALLED binary finds no catalog at all
+ * and answers English in every locale — a test that runs it under two locales
+ * and diffs would then pass on a real bug. synpkg 47 shipped that mistake and
+ * only found it by deliberately mistranslating a record. Nothing changes for
+ * an installed syn-edit: the variable is not set.
+ */
+void syn_edit_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	const char *dir = getenv("SYN_EDIT_LOCALEDIR");
+	bindtextdomain(SYN_EDIT_GETTEXT_DOMAIN, dir && *dir ? dir : SYNEDIT_LOCALEDIR);
+	bind_textdomain_codeset(SYN_EDIT_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_EDIT_GETTEXT_DOMAIN);
 }

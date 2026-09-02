@@ -197,7 +197,7 @@ pkgver=0.1.0
 #   ⚠ Two counted sentences were assembled from fragments and are one msgid
 #   each now: "%1:%2  of %3" in the status bar, and "%1 of %2 done" in the task
 #   pane — a trn(), because the number of tasks decides the form.
-pkgrel=17
+pkgrel=18
 pkgdesc="SynapseOS text editor: modal in a terminal, modeless in a window, syntax highlighting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

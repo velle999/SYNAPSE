@@ -24,6 +24,7 @@
  */
 #define _GNU_SOURCE
 #include "edit_internal.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <regex.h>
@@ -595,7 +596,7 @@ bool ed_ex(ed_t *e, const char *line)
 		          || !strcmp(cmdbuf, "xa"));
 
 		if (b->readonly && !bang && !all) {
-			ed_message(e, true, "%s: read-only (use :w! to override)",
+			ed_message(e, true, _("%s: read-only (use :w! to override)"),
 			           buf_name(b));
 			return false;
 		}
@@ -607,25 +608,25 @@ bool ed_ex(ed_t *e, const char *line)
 				if (!e->buf[i]->modified || !e->buf[i]->path)
 					continue;
 				if (!buf_save(e->buf[i], NULL, &err)) {
-					ed_message(e, true, "%s", err ? err : "write failed");
+					ed_message(e, true, "%s", err ? err : _("write failed"));
 					free(err);
 					return false;
 				}
 				n++;
 			}
-			ed_message(e, false, "%zu file%s written", n, n == 1 ? "" : "s");
+			ed_message(e, false, P_("%zu file written", "%zu files written", n), n);
 		} else {
 			const char *to = *arg ? arg : NULL;
 			if (!to && !b->path) {
-				ed_message(e, true, "no file name (use :w <name>)");
+				ed_message(e, true, _("no file name (use :w <name>)"));
 				return false;
 			}
 			if (!buf_save(b, to, &err)) {
-				ed_message(e, true, "%s", err ? err : "write failed");
+				ed_message(e, true, "%s", err ? err : _("write failed"));
 				free(err);
 				return false;
 			}
-			ed_message(e, false, "\"%s\" %zu lines written", buf_name(b), b->n);
+			ed_message(e, false, _("\"%s\" %zu lines written"), buf_name(b), b->n);
 		}
 		if (quit) {
 			if (all)
@@ -646,13 +647,13 @@ bool ed_ex(ed_t *e, const char *line)
 				for (size_t i = 0; i < e->nbuf; i++)
 					if (e->buf[i]->modified) {
 						ed_message(e, true,
-						           "%s has unsaved changes (:qa! to discard)",
+						           _("%s has unsaved changes (:qa! to discard)"),
 						           buf_name(e->buf[i]));
 						return false;
 					}
 			} else if (!all && b->modified) {
 				ed_message(e, true,
-				           "%s has unsaved changes (:q! to discard)",
+				           _("%s has unsaved changes (:q! to discard)"),
 				           buf_name(b));
 				return false;
 			}
@@ -669,11 +670,11 @@ bool ed_ex(ed_t *e, const char *line)
 	if (!strcmp(cmdbuf, "e") || !strcmp(cmdbuf, "edit")) {
 		if (!*arg) {
 			if (!b->path) {
-				ed_message(e, true, "no file name");
+				ed_message(e, true, _("no file name"));
 				return false;
 			}
 			if (b->modified && !bang) {
-				ed_message(e, true, "unsaved changes (:e! to discard)");
+				ed_message(e, true, _("unsaved changes (:e! to discard)"));
 				return false;
 			}
 			char *err = NULL;
@@ -681,23 +682,23 @@ bool ed_ex(ed_t *e, const char *line)
 			bool ok = buf_load(b, path, &err);
 			free(path);
 			if (!ok) {
-				ed_message(e, true, "%s", err ? err : "read failed");
+				ed_message(e, true, "%s", err ? err : _("read failed"));
 				free(err);
 				return false;
 			}
 			e->cy = e->cx = 0;
-			ed_message(e, false, "reloaded \"%s\"", buf_name(b));
+			ed_message(e, false, _("reloaded \"%s\""), buf_name(b));
 			return true;
 		}
 		char *err = NULL;
 		if (ed_open(e, arg, &err) < 0) {
-			ed_message(e, true, "%s", err ? err : "could not open");
+			ed_message(e, true, "%s", err ? err : _("could not open"));
 			free(err);
 			return false;
 		}
 		free(e->want_open);
 		e->want_open = xstrdup(arg);
-		ed_message(e, false, "\"%s\" %zu lines", buf_name(B(e)), B(e)->n);
+		ed_message(e, false, _("\"%s\" %zu lines"), buf_name(B(e)), B(e)->n);
 		return true;
 	}
 
@@ -715,7 +716,7 @@ bool ed_ex(ed_t *e, const char *line)
 	}
 	if (!strcmp(cmdbuf, "bd") || word_is(cmdbuf, "bdelete", 2)) {
 		if (b->modified && !bang) {
-			ed_message(e, true, "unsaved changes (:bd! to discard)");
+			ed_message(e, true, _("unsaved changes (:bd! to discard)"));
 			return false;
 		}
 		close_current(e);
@@ -725,7 +726,7 @@ bool ed_ex(ed_t *e, const char *line)
 		if (isdigit((unsigned char)*arg)) {
 			size_t i = (size_t)atol(arg);
 			if (i == 0 || i > e->nbuf) {
-				ed_message(e, true, "no buffer %s", arg);
+				ed_message(e, true, _("no buffer %s"), arg);
 				return false;
 			}
 			e->cur = i - 1;
@@ -743,7 +744,7 @@ bool ed_ex(ed_t *e, const char *line)
 				return true;
 			}
 		}
-		ed_message(e, true, "no buffer matching %s", arg);
+		ed_message(e, true, _("no buffer matching %s"), arg);
 		return false;
 	}
 	if (!strcmp(cmdbuf, "ls") || word_is(cmdbuf, "buffers", 3)) {
@@ -760,7 +761,7 @@ bool ed_ex(ed_t *e, const char *line)
 	}
 	if (!strcmp(cmdbuf, "enew")) {
 		if (e->nbuf >= MAXBUF) {
-			ed_message(e, true, "too many open files");
+			ed_message(e, true, _("too many open files"));
 			return false;
 		}
 		e->buf[e->nbuf++] = buf_new();
@@ -770,13 +771,13 @@ bool ed_ex(ed_t *e, const char *line)
 	}
 	if (!strcmp(cmdbuf, "r") || !strcmp(cmdbuf, "read")) {
 		if (!*arg) {
-			ed_message(e, true, "read: needs a file name");
+			ed_message(e, true, _("read: needs a file name"));
 			return false;
 		}
 		buf_t *tmp = buf_new();
 		char *err = NULL;
 		if (!buf_load(tmp, arg, &err)) {
-			ed_message(e, true, "%s", err ? err : "read failed");
+			ed_message(e, true, "%s", err ? err : _("read failed"));
 			free(err);
 			buf_free(tmp);
 			return false;
@@ -788,7 +789,7 @@ bool ed_ex(ed_t *e, const char *line)
 		buf_splice(b, y1 + 1, 0, lines, tmp->n, e->cy, e->cx);
 		buf_group_end(b);
 		free(lines);
-		ed_message(e, false, "\"%s\" %zu lines", arg, tmp->n);
+		ed_message(e, false, _("\"%s\" %zu lines"), arg, tmp->n);
 		buf_free(tmp);
 		return true;
 	}
@@ -798,7 +799,7 @@ bool ed_ex(ed_t *e, const char *line)
 	if (!strcmp(cmdbuf, "s") || word_is(cmdbuf, "substitute", 1)) {
 		char *pat = NULL, *rep = NULL, *flags = NULL;
 		if (!split_subst(p, &pat, &rep, &flags)) {
-			ed_message(e, true, "usage: :[range]s/pattern/replacement/[g]");
+			ed_message(e, true, _("usage: :[range]s/pattern/replacement/[g]"));
 			return false;
 		}
 		/* An empty pattern reuses the last search, which is what makes
@@ -808,7 +809,7 @@ bool ed_ex(ed_t *e, const char *line)
 			if (!e->search || !*e->search) {
 				free(rep);
 				free(flags);
-				ed_message(e, true, "no previous pattern");
+				ed_message(e, true, _("no previous pattern"));
 				return false;
 			}
 			pat = xstrdup(e->search);
@@ -823,10 +824,10 @@ bool ed_ex(ed_t *e, const char *line)
 		char *err = NULL;
 		long n = ed_substitute(e, y0, y1, pat, rep, global, icase, &err);
 		if (n <= 0) {
-			ed_message(e, true, "%s", err ? err : "pattern not found");
+			ed_message(e, true, "%s", err ? err : _("pattern not found"));
 			free(err);
 		} else {
-			ed_message(e, false, "%ld substitution%s", n, n == 1 ? "" : "s");
+			ed_message(e, false, P_("%ld substitution", "%ld substitutions", n), n);
 		}
 		free(pat);
 		free(rep);
@@ -845,7 +846,7 @@ bool ed_ex(ed_t *e, const char *line)
 		bool invert = (cmdbuf[0] == 'v');
 		char delim = *p;
 		if (!delim || isalnum((unsigned char)delim)) {
-			ed_message(e, true, "usage: :[range]g/pattern/command");
+			ed_message(e, true, _("usage: :[range]g/pattern/command"));
 			return false;
 		}
 		p++;
@@ -868,7 +869,7 @@ bool ed_ex(ed_t *e, const char *line)
 		regex_t re;
 		char *err = NULL;
 		if (compile_pat(e, pat, &re, &err) != 0) {
-			ed_message(e, true, "%s", err ? err : "bad pattern");
+			ed_message(e, true, "%s", err ? err : _("bad pattern"));
 			free(err);
 			free(pat);
 			return false;
@@ -896,7 +897,7 @@ bool ed_ex(ed_t *e, const char *line)
 		buf_group_end(b);
 		free(subcmd);
 		free(hits);
-		ed_message(e, false, "%zu line%s", nh, nh == 1 ? "" : "s");
+		ed_message(e, false, P_("%zu line", "%zu lines", nh), nh);
 		ed_clamp(e);
 		return true;
 	}
@@ -918,7 +919,7 @@ bool ed_ex(ed_t *e, const char *line)
 		char *text = range_text(e, y0, 0, y1, 0, true);
 		reg_set(e, *arg ? *arg : '"', text, true);
 		free(text);
-		ed_message(e, false, "%zu lines yanked", y1 - y0 + 1);
+		ed_message(e, false, _("%zu lines yanked"), y1 - y0 + 1);
 		return true;
 	}
 
@@ -930,7 +931,7 @@ bool ed_ex(ed_t *e, const char *line)
 		size_t dest;
 		bool got = ex_addr(e, &ap, &dest);
 		if (!got && *arg != '0') {
-			ed_message(e, true, "%s: needs a destination line", cmdbuf);
+			ed_message(e, true, _("%s: needs a destination line"), cmdbuf);
 			return false;
 		}
 		/* :m0 means "to the very top", and address 0 is the only one that is
@@ -1063,7 +1064,7 @@ bool ed_ex(ed_t *e, const char *line)
 			}
 			char cur[64];
 			if (!opts_get(&e->o, key, cur, sizeof cur)) {
-				ed_message(e, true, "unknown option: %s", arg);
+				ed_message(e, true, _("unknown option: %s"), arg);
 				return false;
 			}
 			if (toggle)
@@ -1074,7 +1075,7 @@ bool ed_ex(ed_t *e, const char *line)
 		}
 		ok = opts_set(&e->o, key, val, &err);
 		if (!ok) {
-			ed_message(e, true, "%s", err ? err : "bad option");
+			ed_message(e, true, "%s", err ? err : _("bad option"));
 			free(err);
 			return false;
 		}
@@ -1124,10 +1125,10 @@ bool ed_ex(ed_t *e, const char *line)
 		return true;
 
 	if (word_is(cmdbuf, "version", 3) || !strcmp(cmdbuf, "about")) {
-		ed_message(e, false, "syn-edit — the SynapseOS editor");
+		ed_message(e, false, _("syn-edit — the SynapseOS editor"));
 		return true;
 	}
 
-	ed_message(e, true, "not an editor command: %s", cmdbuf);
+	ed_message(e, true, _("not an editor command: %s"), cmdbuf);
 	return false;
 }

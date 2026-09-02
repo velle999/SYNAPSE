@@ -10,283 +10,510 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "%1 有未保存的更改。"
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%2 项中已完成 %1 项"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  / 共 %3 行"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "（无内容的任务）"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "关于"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "取消"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "关闭"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "复制"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "复制该行"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "剪切"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "剪切该行"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "文档"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "丢弃"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "文档"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "查找"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "查找…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "插入"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "常规"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "新建"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "新建任务"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "此文件中没有任务。\n\n形如  - [ ] 某件事  的行就是任务。\n右键 ▸ 新建任务 可以添加一条。"
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"此文件中没有任务。\n"
+"\n"
+"形如  - [ ] 某件事  的行就是任务。\n"
+"右键 ▸ 新建任务 可以添加一条。"
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "改写"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "打开"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "打开…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "覆盖"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "粘贴"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "重做"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "重新读取"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "替换"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "替换…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "选择"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "保存"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "保存并关闭"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "另存为"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "另存为…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "保存到此处"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "保存位置："
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "全选"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "标签页"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "任务列表…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "任务"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "勾选此任务"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "撤销"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "取消勾选此任务"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[未命名]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "新建一个空缓冲区"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "在光标处添加一条任务"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "二进制"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "浏览选择文件"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "关闭并丢弃更改"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "保持打开"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "先命名，再写入"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "尚未保存"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "打开高亮的文件"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "重新读取文件"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "显示或隐藏列表"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "显示或隐藏标签栏"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "输入路径 (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "版本与许可"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "写入此文件夹 — 然后输入文件名"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "写到别的位置"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "写入后关闭"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "覆盖高亮的文件"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "写入此缓冲区"
+
+msgid "present"
+msgstr "可用"
+
+msgid "absent"
+msgstr "不可用"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about：未知选项 '%s'"
+
+msgid "the SynapseOS text editor"
+msgstr "SynapseOS 的文本编辑器"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs 会列出它们"
+
+msgid "What this machine can do"
+msgstr "这台机器能做什么"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "图形窗口（syn-edit gui）"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "复制到桌面剪贴板（\"+y）"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "从桌面剪贴板粘贴（\"+p）"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "无法设置 %s 的权限"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "无法将目录 %s 写入磁盘"
+
+msgid "config get: needs a key"
+msgstr "config get：需要一个键"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "未知选项：%s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set：需要一个键和一个值"
+
+msgid "settings reset to defaults"
+msgstr "设置已恢复为默认值"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config：未知子命令 '%s'（list、get、set、reset）"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s：未知选项 '%s'"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s：需要一个文件（用 - 表示标准输入）"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "未知语言：%s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w 无法写回标准输入"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight：未知选项 '%s'"
+
+msgid "highlight: needs a file"
+msgstr "highlight：需要一个文件"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs：未知选项 '%s'"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s：只读（:w! 可强制写入）"
+
+msgid "write failed"
+msgstr "写入失败"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "已写入 %zu 个文件"
+
+msgid "no file name (use :w <name>)"
+msgstr "没有文件名（请使用 :w <名称>）"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "“%s” 已写入 %zu 行"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "%s 有未保存的更改（:qa! 将其丢弃）"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "%s 有未保存的更改（:q! 将其丢弃）"
+
+msgid "no file name"
+msgstr "没有文件名"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "有未保存的更改（:e! 将其丢弃）"
+
+msgid "read failed"
+msgstr "读取失败"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "已重新加载 “%s”"
+
+msgid "could not open"
+msgstr "无法打开"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "“%s” %zu 行"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "有未保存的更改（:bd! 将其丢弃）"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "没有缓冲区 %s"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "没有与 %s 匹配的缓冲区"
+
+msgid "too many open files"
+msgstr "打开的文件过多"
+
+msgid "read: needs a file name"
+msgstr "read：需要一个文件名"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "用法：:[范围]s/模式/替换内容/[g]"
+
+msgid "no previous pattern"
+msgstr "没有上一个模式"
+
+msgid "pattern not found"
+msgstr "未找到模式"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "已替换 %ld 处"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "用法：:[范围]g/模式/命令"
+
+msgid "bad pattern"
+msgstr "模式无效"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu 行"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "已复制 %zu 行"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s：需要一个目标行"
+
+msgid "bad option"
+msgstr "选项无效"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — SynapseOS 的编辑器"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "不是编辑器命令：%s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"没有显示器 — syn-edit gui 需要图形会话（单独的 `syn-edit` 是终端编辑器）"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "未安装 quickshell — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "无法启动 quickshell"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit：未知选项 '%s'\n"
+"\n"
+
+msgid "copied"
+msgstr "已复制"
+
+msgid "copied this line"
+msgstr "已复制此行"
+
+msgid "the clipboard is empty"
+msgstr "剪贴板是空的"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "未知的图形请求：%s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve：未知选项 '%s'"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "已写入 “%s”"
+
+msgid "could not save settings"
+msgstr "无法保存设置"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "未知请求：%s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "未知选项 '%s'"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr "不是终端 — 需要窗口请用 `syn-edit gui`，用脚本编辑请用 `syn-edit run`"
+
+msgid "could not put the terminal into raw mode"
+msgstr "无法将终端切换到原始模式"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help 写作 :h，:q 退出，i 插入"
+
+msgid "out of memory"
+msgstr "内存不足"
+
+msgid "no comment syntax for this file type"
+msgstr "此文件类型没有注释语法"
+
+msgid "nothing to put"
+msgstr "没有可粘贴的内容"
+
+msgid "mark not set"
+msgstr "未设置标记"
+
+msgid "gv: no previous selection"
+msgstr "gv：没有上一次的选区"
+
+#, c-format
+msgid "recording @%c"
+msgstr "正在录制 @%c"
+
+msgid "no previously played register"
+msgstr "之前没有播放过的寄存器"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "寄存器 %c 是空的"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "已录制 @%c"
+
+msgid "already at oldest change"
+msgstr "已经是最早的更改"
+
+msgid "already at newest change"
+msgstr "已经是最新的更改"
+
+msgid "no previous search"
+msgstr "没有上一次搜索"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "“%s” %zu 行 --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "递归宏已停止"

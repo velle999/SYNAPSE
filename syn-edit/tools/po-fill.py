@@ -164,7 +164,16 @@ def main():
                          lambda _m: 'msgstr "%s"\n' % po_escape(msgstr),
                          b, count=1, flags=re.M)
         # A fuzzy marker outlives the string it was guessed for.
-        new = re.sub(r'^#, fuzzy\n', '', new, flags=re.M)
+        #
+        # ⛔ AND IT IS NOT ALONE ON ITS LINE. gettext writes one comma-separated
+        # flag line: `#, fuzzy, c-format`. A regex for `^#, fuzzy\n` leaves that
+        # untouched, and a fuzzy entry is one msgfmt DOES NOT USE — so five
+        # freshly filled c-format strings sat in the catalog, correct, and
+        # shipped English. Drop just the flag; keep whatever else is on the line.
+        def _unfuzz(m):
+            flags = [f.strip() for f in m.group(1).split(',') if f.strip() != 'fuzzy']
+            return ('#, ' + ', '.join(flags) + '\n') if flags else ''
+        new = re.sub(r'^#,[ \t]*(.*fuzzy.*)\n', _unfuzz, new, flags=re.M)
         blocks[i] = new.rstrip('\n')
 
     po.write_text("\n\n".join(blocks).rstrip('\n') + "\n", encoding="utf-8")

@@ -10,285 +10,522 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "В «%1» есть несохранённые изменения."
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%1 из %2 сделана"
 msgstr[1] "%1 из %2 сделаны"
 msgstr[2] "%1 из %2 сделано"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  из %3"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "(задача без текста)"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "О программе"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "Отмена"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "Закрыть"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "Копировать"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "Копировать строку"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "Вырезать"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "Вырезать строку"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "ДОКУМЕНТЫ"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "Отбросить"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "Документы"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "Найти"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "Найти…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "ВСТАВКА"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "ОБЫЧНЫЙ"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "Создать"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "Новая задача"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "В этом файле нет задач.\n\nСтроки вида  - [ ] что-нибудь  — это задачи.\nПравый щелчок ▸ Новая задача добавит одну."
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"В этом файле нет задач.\n"
+"\n"
+"Строки вида  - [ ] что-нибудь  — это задачи.\n"
+"Правый щелчок ▸ Новая задача добавит одну."
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "ЗАМЕНА"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "Открыть"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "Открыть…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "Перезаписать"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "Вставить"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "Вернуть"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "Перечитать"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "Заменить"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "Заменить…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "ВЫДЕЛЕНИЕ"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "Сохранить"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "Сохранить и закрыть"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "Сохранить как"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "Сохранить как…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "Сохранить сюда"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "Сохранить в:"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "Выделить всё"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "Вкладки"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "Список задач…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "Задачи"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "Отметить задачу"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "Отменить"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "Снять отметку"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[Без имени]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "новый пустой буфер"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "добавить задачу в позиции курсора"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "двоичный"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "найти файл"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "закрыть и потерять изменения"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "оставить открытым"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "дать имя, затем записать"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "ещё не сохранён"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "открыть выделенный файл"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "перечитать файл"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "показать или скрыть список"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "показать или скрыть полосу вкладок"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "ввести путь (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "версия и лицензия"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "записать в эту папку — затем введите имя"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "записать в другое место"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "записать, затем закрыть"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "перезаписать выделенный файл"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "записать этот буфер"
+
+msgid "present"
+msgstr "есть"
+
+msgid "absent"
+msgstr "нет"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about: неизвестный параметр «%s»"
+
+msgid "the SynapseOS text editor"
+msgstr "текстовый редактор SynapseOS"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs выводит их список"
+
+msgid "What this machine can do"
+msgstr "Что умеет эта машина"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "графическое окно (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "копирование в буфер обмена рабочего стола (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "вставка из буфера обмена рабочего стола (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "не удалось задать права доступа к %s"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "не удалось сбросить каталог %s на диск"
+
+msgid "config get: needs a key"
+msgstr "config get: требуется ключ"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "неизвестный параметр: %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set: требуются ключ и значение"
+
+msgid "settings reset to defaults"
+msgstr "настройки сброшены к значениям по умолчанию"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config: неизвестная подкоманда «%s» (list, get, set, reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: неизвестный параметр «%s»"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s: требуется файл (- обозначает стандартный ввод)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "неизвестный язык: %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w не может писать обратно в стандартный ввод"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight: неизвестный параметр «%s»"
+
+msgid "highlight: needs a file"
+msgstr "highlight: требуется файл"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs: неизвестный параметр «%s»"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s: только для чтения (:w! перезаписывает)"
+
+msgid "write failed"
+msgstr "не удалось записать"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "записан %zu файл"
+msgstr[1] "записано %zu файла"
+msgstr[2] "записано %zu файлов"
+
+msgid "no file name (use :w <name>)"
+msgstr "нет имени файла (используйте :w <имя>)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "«%s» записано строк: %zu"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "в %s есть несохранённые изменения (:qa! отбрасывает их)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "в %s есть несохранённые изменения (:q! отбрасывает их)"
+
+msgid "no file name"
+msgstr "нет имени файла"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "несохранённые изменения (:e! отбрасывает их)"
+
+msgid "read failed"
+msgstr "не удалось прочитать"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "«%s» перезагружен"
+
+msgid "could not open"
+msgstr "не удалось открыть"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "«%s» строк: %zu"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "несохранённые изменения (:bd! отбрасывает их)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "нет буфера %s"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "нет буфера, подходящего под %s"
+
+msgid "too many open files"
+msgstr "слишком много открытых файлов"
+
+msgid "read: needs a file name"
+msgstr "read: требуется имя файла"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "использование: :[диапазон]s/шаблон/замена/[g]"
+
+msgid "no previous pattern"
+msgstr "нет предыдущего шаблона"
+
+msgid "pattern not found"
+msgstr "шаблон не найден"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "%ld замена"
+msgstr[1] "%ld замены"
+msgstr[2] "%ld замен"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "использование: :[диапазон]g/шаблон/команда"
+
+msgid "bad pattern"
+msgstr "неверный шаблон"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu строка"
+msgstr[1] "%zu строки"
+msgstr[2] "%zu строк"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "скопировано строк: %zu"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s: требуется строка назначения"
+
+msgid "bad option"
+msgstr "неверный параметр"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — редактор SynapseOS"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "это не команда редактора: %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"нет дисплея — syn-edit gui требует графического сеанса (просто `syn-edit` — "
+"это терминальный редактор)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell не установлен — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "не удалось запустить quickshell"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit: неизвестный параметр «%s»\n"
+"\n"
+
+msgid "copied"
+msgstr "скопировано"
+
+msgid "copied this line"
+msgstr "эта строка скопирована"
+
+msgid "the clipboard is empty"
+msgstr "буфер обмена пуст"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "неизвестный графический запрос: %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve: неизвестный параметр «%s»"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "«%s» записан"
+
+msgid "could not save settings"
+msgstr "не удалось сохранить настройки"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "неизвестный запрос: %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "неизвестный параметр «%s»"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"это не терминал — используйте `syn-edit gui` для окна или `syn-edit run`, "
+"чтобы выполнить правку из скрипта"
+
+msgid "could not put the terminal into raw mode"
+msgstr "не удалось перевести терминал в неформатированный режим"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help пишется :h, :q выходит, i вставляет"
+
+msgid "out of memory"
+msgstr "недостаточно памяти"
+
+msgid "no comment syntax for this file type"
+msgstr "для этого типа файлов нет синтаксиса комментариев"
+
+msgid "nothing to put"
+msgstr "нечего вставлять"
+
+msgid "mark not set"
+msgstr "метка не установлена"
+
+msgid "gv: no previous selection"
+msgstr "gv: нет предыдущего выделения"
+
+#, c-format
+msgid "recording @%c"
+msgstr "запись @%c"
+
+msgid "no previously played register"
+msgstr "ранее воспроизведённого регистра нет"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "регистр %c пуст"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "@%c записан"
+
+msgid "already at oldest change"
+msgstr "уже на самом раннем изменении"
+
+msgid "already at newest change"
+msgstr "уже на самом позднем изменении"
+
+msgid "no previous search"
+msgstr "нет предыдущего поиска"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "«%s» строк: %zu --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "рекурсивный макрос остановлен"

@@ -10,284 +10,517 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-edit\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-
-#: syn-edit.qml:1232
 msgid "%1 has unsaved changes."
 msgstr "%1 contient des modifications non enregistrées."
 
-#: syn-edit.qml:2324
 msgid "%1 of %2 done"
 msgid_plural "%1 of %2 done"
 msgstr[0] "%1 sur %2 terminée"
 msgstr[1] "%1 sur %2 terminées"
 
-#: syn-edit.qml:1802
 msgid "%1:%2  of %3"
 msgstr "%1:%2  sur %3"
 
-#: syn-edit.qml:2410
 msgid "(untitled task)"
 msgstr "(tâche sans texte)"
 
-#: syn-edit.qml:917
 msgid "About"
 msgstr "À propos"
 
-#: syn-edit.qml:1262
-#: syn-edit.qml:2259
 msgid "Cancel"
 msgstr "Annuler"
 
-#: syn-edit.qml:2453
-#: syn-edit.qml:2540
 msgid "Close"
 msgstr "Fermer"
 
-#: syn-edit.qml:1904
 msgid "Copy"
 msgstr "Copier"
 
-#: syn-edit.qml:1904
 msgid "Copy line"
 msgstr "Copier la ligne"
 
-#: syn-edit.qml:1902
 msgid "Cut"
 msgstr "Couper"
 
-#: syn-edit.qml:1902
 msgid "Cut line"
 msgstr "Couper la ligne"
 
-#: syn-edit.qml:1046
 msgid "DOCUMENTS"
 msgstr "DOCUMENTS"
 
-#: syn-edit.qml:1259
 msgid "Discard"
 msgstr "Abandonner"
 
-#: syn-edit.qml:906
 msgid "Documents"
 msgstr "Documents"
 
-#: syn-edit.qml:949
 msgid "Find"
 msgstr "Rechercher"
 
-#: syn-edit.qml:1927
 msgid "Find…"
 msgstr "Rechercher…"
 
-#: syn-edit.qml:1754
 msgid "INSERT"
 msgstr "INSERTION"
 
-#: syn-edit.qml:1755
 msgid "NORMAL"
 msgstr "NORMAL"
 
-#: syn-edit.qml:933
 msgid "New"
 msgstr "Nouveau"
 
-#: syn-edit.qml:1919
-#: syn-edit.qml:2445
 msgid "New task"
 msgstr "Nouvelle tâche"
 
-#: syn-edit.qml:2342
-msgid "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\nRight-click ▸ New task adds one."
-msgstr "Aucune tâche dans ce fichier.\n\nLes lignes comme  - [ ] quelque chose  sont des tâches.\nClic droit ▸ Nouvelle tâche en ajoute une."
+msgid ""
+"No tasks in this file.\n"
+"\n"
+"Lines like  - [ ] something  are tasks.\n"
+"Right-click ▸ New task adds one."
+msgstr ""
+"Aucune tâche dans ce fichier.\n"
+"\n"
+"Les lignes comme  - [ ] quelque chose  sont des tâches.\n"
+"Clic droit ▸ Nouvelle tâche en ajoute une."
 
-#: syn-edit.qml:1752
 msgid "OVERWRITE"
 msgstr "REMPLACEMENT"
 
-#: syn-edit.qml:934
-#: syn-edit.qml:2244
 msgid "Open"
 msgstr "Ouvrir"
 
-#: syn-edit.qml:1930
 msgid "Open…"
 msgstr "Ouvrir…"
 
-#: syn-edit.qml:2254
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: syn-edit.qml:1906
 msgid "Paste"
 msgstr "Coller"
 
-#: syn-edit.qml:946
-#: syn-edit.qml:1911
 msgid "Redo"
 msgstr "Rétablir"
 
-#: syn-edit.qml:2451
 msgid "Refresh"
 msgstr "Relire"
 
-#: syn-edit.qml:950
 msgid "Replace"
 msgstr "Remplacer"
 
-#: syn-edit.qml:1928
 msgid "Replace…"
 msgstr "Remplacer…"
 
-#: syn-edit.qml:1753
 msgid "SELECT"
 msgstr "SÉLECTION"
 
-#: syn-edit.qml:46
-#: syn-edit.qml:2486
 msgid "SYNAPSE Edit"
 msgstr "SYNAPSE Edit"
 
-#: syn-edit.qml:938
-#: syn-edit.qml:1931
 msgid "Save"
 msgstr "Enregistrer"
 
-#: syn-edit.qml:1253
 msgid "Save & close"
 msgstr "Enregistrer et fermer"
 
-#: syn-edit.qml:941
 msgid "Save As"
 msgstr "Enregistrer sous"
 
-#: syn-edit.qml:1932
 msgid "Save As…"
 msgstr "Enregistrer sous…"
 
-#: syn-edit.qml:2243
 msgid "Save here"
 msgstr "Enregistrer ici"
 
-#: syn-edit.qml:2164
 msgid "Save in:"
 msgstr "Enregistrer dans :"
 
-#: syn-edit.qml:1908
 msgid "Select All"
 msgstr "Tout sélectionner"
 
-#: syn-edit.qml:914
 msgid "Tabs"
 msgstr "Onglets"
 
-#: syn-edit.qml:1918
 msgid "Task list…"
 msgstr "Liste des tâches…"
 
-#: syn-edit.qml:2314
 msgid "Tasks"
 msgstr "Tâches"
 
-#: syn-edit.qml:1922
-#: syn-edit.qml:1923
 msgid "Tick this task"
 msgstr "Cocher cette tâche"
 
-#: syn-edit.qml:945
-#: syn-edit.qml:1910
 msgid "Undo"
 msgstr "Annuler la frappe"
 
-#: syn-edit.qml:1921
 msgid "Untick this task"
 msgstr "Décocher cette tâche"
 
-#: syn-edit.qml:1234
-#: syn-edit.qml:1777
 msgid "[No Name]"
 msgstr "[Sans nom]"
 
-#: syn-edit.qml:933
 msgid "a new empty buffer"
 msgstr "un nouveau tampon vide"
 
-#: syn-edit.qml:2446
 msgid "add a task at the caret"
 msgstr "ajouter une tâche au curseur"
 
-#: syn-edit.qml:1793
 msgid "binary"
 msgstr "binaire"
 
-#: syn-edit.qml:934
 msgid "browse for a file"
 msgstr "parcourir pour trouver un fichier"
 
-#: syn-edit.qml:1260
 msgid "close it and lose the changes"
 msgstr "fermer et perdre les modifications"
 
-#: syn-edit.qml:1263
 msgid "keep it open"
 msgstr "le laisser ouvert"
 
-#: syn-edit.qml:939
 msgid "name it, then write it"
 msgstr "le nommer, puis l'écrire"
 
-#: syn-edit.qml:1131
 msgid "not saved yet"
 msgstr "pas encore enregistré"
 
-#: syn-edit.qml:2247
 msgid "open the highlighted file"
 msgstr "ouvrir le fichier surligné"
 
-#: syn-edit.qml:2451
 msgid "re-read the file"
 msgstr "relire le fichier"
 
-#: syn-edit.qml:906
 msgid "show or hide the list"
 msgstr "afficher ou masquer la liste"
 
-#: syn-edit.qml:914
 msgid "show or hide the tab strip"
 msgstr "afficher ou masquer la barre d'onglets"
 
-#: syn-edit.qml:935
 msgid "type a path (:e)"
 msgstr "saisir un chemin (:e)"
 
-#: syn-edit.qml:917
 msgid "version and licence"
 msgstr "version et licence"
 
-#: syn-edit.qml:2246
 msgid "write into this folder — then type a name"
 msgstr "écrire dans ce dossier — puis saisir un nom"
 
-#: syn-edit.qml:941
 msgid "write it somewhere else"
 msgstr "l'écrire ailleurs"
 
-#: syn-edit.qml:1254
 msgid "write it, then close it"
 msgstr "l'écrire, puis le fermer"
 
-#: syn-edit.qml:2257
 msgid "write over the highlighted file"
 msgstr "écraser le fichier surligné"
 
-#: syn-edit.qml:938
 msgid "write this buffer"
 msgstr "écrire ce tampon"
+
+msgid "present"
+msgstr "présent"
+
+msgid "absent"
+msgstr "absent"
+
+#, c-format
+msgid "about: unknown option '%s'"
+msgstr "about : option « %s » inconnue"
+
+msgid "the SynapseOS text editor"
+msgstr "l'éditeur de texte de SynapseOS"
+
+msgid "syn-edit langs lists them"
+msgstr "syn-edit langs les liste"
+
+msgid "What this machine can do"
+msgstr "Ce que cette machine sait faire"
+
+msgid "the graphical window (syn-edit gui)"
+msgstr "la fenêtre graphique (syn-edit gui)"
+
+msgid "yanking to the desktop clipboard (\"+y)"
+msgstr "copier vers le presse-papiers du bureau (\"+y)"
+
+msgid "putting from the desktop clipboard (\"+p)"
+msgstr "coller depuis le presse-papiers du bureau (\"+p)"
+
+#, c-format
+msgid "could not set mode on %s"
+msgstr "impossible de définir les droits de %s"
+
+#, c-format
+msgid "could not flush directory %s"
+msgstr "impossible d'écrire le répertoire %s sur le disque"
+
+msgid "config get: needs a key"
+msgstr "config get : une clé est nécessaire"
+
+#, c-format
+msgid "unknown option: %s"
+msgstr "option inconnue : %s"
+
+msgid "config set: needs a key and a value"
+msgstr "config set : une clé et une valeur sont nécessaires"
+
+msgid "settings reset to defaults"
+msgstr "réglages remis aux valeurs par défaut"
+
+#, c-format
+msgid "config: unknown subcommand '%s' (list, get, set, reset)"
+msgstr "config : sous-commande « %s » inconnue (list, get, set, reset)"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s : option « %s » inconnue"
+
+#, c-format
+msgid "%s: needs a file (use - for standard input)"
+msgstr "%s : un fichier est nécessaire (- pour l'entrée standard)"
+
+#, c-format
+msgid "unknown language: %s"
+msgstr "langage inconnu : %s"
+
+msgid "-w cannot write back to standard input"
+msgstr "-w ne peut pas réécrire dans l'entrée standard"
+
+#, c-format
+msgid "highlight: unknown option '%s'"
+msgstr "highlight : option « %s » inconnue"
+
+msgid "highlight: needs a file"
+msgstr "highlight : un fichier est nécessaire"
+
+#, c-format
+msgid "langs: unknown option '%s'"
+msgstr "langs : option « %s » inconnue"
+
+#, c-format
+msgid "%s: read-only (use :w! to override)"
+msgstr "%s : en lecture seule (:w! passe outre)"
+
+msgid "write failed"
+msgstr "échec de l'écriture"
+
+#, c-format
+msgid "%zu file written"
+msgid_plural "%zu files written"
+msgstr[0] "%zu fichier écrit"
+msgstr[1] "%zu fichiers écrits"
+
+msgid "no file name (use :w <name>)"
+msgstr "pas de nom de fichier (utilisez :w <nom>)"
+
+#, c-format
+msgid "\"%s\" %zu lines written"
+msgstr "« %s » %zu lignes écrites"
+
+#, c-format
+msgid "%s has unsaved changes (:qa! to discard)"
+msgstr "%s a des modifications non enregistrées (:qa! pour les abandonner)"
+
+#, c-format
+msgid "%s has unsaved changes (:q! to discard)"
+msgstr "%s a des modifications non enregistrées (:q! pour les abandonner)"
+
+msgid "no file name"
+msgstr "pas de nom de fichier"
+
+msgid "unsaved changes (:e! to discard)"
+msgstr "modifications non enregistrées (:e! pour les abandonner)"
+
+msgid "read failed"
+msgstr "échec de la lecture"
+
+#, c-format
+msgid "reloaded \"%s\""
+msgstr "« %s » rechargé"
+
+msgid "could not open"
+msgstr "impossible d'ouvrir"
+
+#, c-format
+msgid "\"%s\" %zu lines"
+msgstr "« %s » %zu lignes"
+
+msgid "unsaved changes (:bd! to discard)"
+msgstr "modifications non enregistrées (:bd! pour les abandonner)"
+
+#, c-format
+msgid "no buffer %s"
+msgstr "pas de tampon %s"
+
+#, c-format
+msgid "no buffer matching %s"
+msgstr "aucun tampon ne correspond à %s"
+
+msgid "too many open files"
+msgstr "trop de fichiers ouverts"
+
+msgid "read: needs a file name"
+msgstr "read : un nom de fichier est nécessaire"
+
+msgid "usage: :[range]s/pattern/replacement/[g]"
+msgstr "usage : :[plage]s/motif/remplacement/[g]"
+
+msgid "no previous pattern"
+msgstr "pas de motif précédent"
+
+msgid "pattern not found"
+msgstr "motif introuvable"
+
+#, c-format
+msgid "%ld substitution"
+msgid_plural "%ld substitutions"
+msgstr[0] "%ld substitution"
+msgstr[1] "%ld substitutions"
+
+msgid "usage: :[range]g/pattern/command"
+msgstr "usage : :[plage]g/motif/commande"
+
+msgid "bad pattern"
+msgstr "motif incorrect"
+
+#, c-format
+msgid "%zu line"
+msgid_plural "%zu lines"
+msgstr[0] "%zu ligne"
+msgstr[1] "%zu lignes"
+
+#, c-format
+msgid "%zu lines yanked"
+msgstr "%zu lignes copiées"
+
+#, c-format
+msgid "%s: needs a destination line"
+msgstr "%s : une ligne de destination est nécessaire"
+
+msgid "bad option"
+msgstr "option incorrecte"
+
+msgid "syn-edit — the SynapseOS editor"
+msgstr "syn-edit — l'éditeur de SynapseOS"
+
+#, c-format
+msgid "not an editor command: %s"
+msgstr "pas une commande de l'éditeur : %s"
+
+msgid ""
+"no display — syn-edit gui needs a graphical session (plain `syn-edit` is the "
+"terminal editor)"
+msgstr ""
+"pas d'affichage — syn-edit gui a besoin d'une session graphique (`syn-edit` "
+"tout court est l'éditeur en terminal)"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell n'est pas installé — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "impossible de démarrer quickshell"
+
+#, c-format
+msgid ""
+"syn-edit: unknown option '%s'\n"
+"\n"
+msgstr ""
+"syn-edit : option « %s » inconnue\n"
+"\n"
+
+msgid "copied"
+msgstr "copié"
+
+msgid "copied this line"
+msgstr "cette ligne copiée"
+
+msgid "the clipboard is empty"
+msgstr "le presse-papiers est vide"
+
+#, c-format
+msgid "unknown gui request: %s"
+msgstr "requête graphique inconnue : %s"
+
+#, c-format
+msgid "serve: unknown option '%s'"
+msgstr "serve : option « %s » inconnue"
+
+#, c-format
+msgid "\"%s\" written"
+msgstr "« %s » écrit"
+
+msgid "could not save settings"
+msgstr "impossible d'enregistrer les réglages"
+
+#, c-format
+msgid "unknown request: %s"
+msgstr "requête inconnue : %s"
+
+#, c-format
+msgid "unknown option '%s'"
+msgstr "option « %s » inconnue"
+
+msgid ""
+"not a terminal — use `syn-edit gui` for a window, or `syn-edit run` to "
+"script an edit"
+msgstr ""
+"pas un terminal — `syn-edit gui` pour une fenêtre, ou `syn-edit run` pour "
+"scripter une modification"
+
+msgid "could not put the terminal into raw mode"
+msgstr "impossible de mettre le terminal en mode brut"
+
+msgid "syn-edit — :help is :h, :q quits, i inserts"
+msgstr "syn-edit — :help s'écrit :h, :q quitte, i insère"
+
+msgid "out of memory"
+msgstr "mémoire insuffisante"
+
+msgid "no comment syntax for this file type"
+msgstr "pas de syntaxe de commentaire pour ce type de fichier"
+
+msgid "nothing to put"
+msgstr "rien à coller"
+
+msgid "mark not set"
+msgstr "marque non posée"
+
+msgid "gv: no previous selection"
+msgstr "gv : pas de sélection précédente"
+
+#, c-format
+msgid "recording @%c"
+msgstr "enregistrement @%c"
+
+msgid "no previously played register"
+msgstr "aucun registre joué précédemment"
+
+#, c-format
+msgid "register %c is empty"
+msgstr "le registre %c est vide"
+
+#, c-format
+msgid "recorded @%c"
+msgstr "@%c enregistré"
+
+msgid "already at oldest change"
+msgstr "déjà à la modification la plus ancienne"
+
+msgid "already at newest change"
+msgstr "déjà à la modification la plus récente"
+
+msgid "no previous search"
+msgstr "pas de recherche précédente"
+
+#, c-format
+msgid "\"%s\" %zu lines --%d%%--"
+msgstr "« %s » %zu lignes --%d%%--"
+
+msgid "recursive macro stopped"
+msgstr "macro récursive arrêtée"

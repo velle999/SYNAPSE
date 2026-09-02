@@ -20,6 +20,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-edit.h"
+#include "i18n.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -270,17 +271,17 @@ int cmd_config(int argc, char **argv)
 
 	if (!strcmp(sub, "get")) {
 		if (argc < 2)
-			die("config get: needs a key");
+			die(_("config get: needs a key"));
 		char val[64];
 		if (!opts_get(&o, argv[1], val, sizeof val))
-			die("unknown option: %s", argv[1]);
+			die(_("unknown option: %s"), argv[1]);
 		printf("%s\n", val);
 		return 0;
 	}
 
 	if (!strcmp(sub, "set")) {
 		if (argc < 3)
-			die("config set: needs a key and a value");
+			die(_("config set: needs a key and a value"));
 		char *err = NULL;
 		if (!opts_set(&o, argv[1], argv[2], &err))
 			die("%s", err ? err : "bad value");
@@ -297,9 +298,9 @@ int cmd_config(int argc, char **argv)
 		char *err = NULL;
 		if (!opts_save(&o, &err))
 			die("%s", err ? err : "could not save");
-		printf("settings reset to defaults\n");
+		printf("%s\n", _("settings reset to defaults"));
 		return 0;
 	}
 
-	die("config: unknown subcommand '%s' (list, get, set, reset)", sub);
+	die(_("config: unknown subcommand '%s' (list, get, set, reset)"), sub);
 }

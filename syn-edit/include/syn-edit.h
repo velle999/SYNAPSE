@@ -90,6 +90,8 @@ bool mkdir_p(const char *path);
  * UTF-8 continuation adds nothing. */
 size_t utf8_len(unsigned char c);          /* bytes in the sequence, >= 1 */
 size_t disp_width(const char *s, size_t len, int ts);
+/* terminal columns, NOT editor cells — see the note in util.c */
+size_t term_cols(const char *s);
 size_t disp_col(const char *s, size_t bytes, int ts);   /* width of a prefix */
 
 /* ── buffer.c ───────────────────────────────────────────────────────────── */
