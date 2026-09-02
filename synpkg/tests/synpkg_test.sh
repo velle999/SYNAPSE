@@ -16,6 +16,28 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE PROGRAM UNDER TEST SPEAKS THIRTEEN LANGUAGES NOW, AND THIS FILE ASSERTS
+# ENGLISH. Since synpkg 47 its human messages come out of a catalog, and its
+# compiled-in localedir is /usr/share/locale — so on a machine where synpkg is
+# INSTALLED, the freshly built binary loads the INSTALLED catalog and answers in
+# the desktop's language. On a Japanese install that is four assertions failing
+# on a program that is working perfectly:
+#
+#   FAIL unexpected refusal: warning: パッケージ「…」はどのリポジトリにもありませんでした
+#
+# ⚠ It cannot be caught by running this suite under LANG=ja on a box where
+# synpkg is not installed: with no catalog to find, gettext falls back to the
+# msgid and every assertion passes in English. The fallback hides the lookup.
+# Reproduce it with SYNPKG_LOCALEDIR pointed at build/po.
+#
+# ⚠ LANGUAGE is unset as well as LC_ALL being set — gettext reads LANGUAGE
+# FIRST, so an ambient LANGUAGE=ja survives LC_ALL=C.UTF-8 on its own.
+#
+# The one place that WANTS a foreign locale is tests/i18n_test.sh, which sets it
+# per command.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 SYNPKG=${1:-./build/synpkg}
 [ -x "$SYNPKG" ] || { echo "not executable: $SYNPKG" >&2; exit 1; }
 
