@@ -45,14 +45,14 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: synfiles.qml:3781
-#: synfiles.qml:4649
+#: synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] ""
 msgstr[1] ""
 
 #: synfiles.qml:3783
-#: synfiles.qml:4651
+#: synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] ""
@@ -62,7 +62,7 @@ msgstr[1] ""
 msgid "%1 hours left"
 msgstr ""
 
-#: synfiles.qml:4647
+#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr ""
 
@@ -81,8 +81,8 @@ msgstr[1] ""
 #: synfiles.qml:1048
 #: synfiles.qml:1165
 #: synfiles.qml:1618
-#: synfiles.qml:6152
-#: synfiles.qml:6427
+#: synfiles.qml:6165
+#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] ""
@@ -122,7 +122,7 @@ msgid_plural "%1 of these already exist here"
 msgstr[0] ""
 msgstr[1] ""
 
-#: synfiles.qml:4643
+#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr ""
 
@@ -177,8 +177,8 @@ msgstr[1] ""
 msgid ", "
 msgstr ""
 
-#: synfiles.qml:5662
-msgid "A file browser for SynapseOS. Tabs, pinned places shared with "
+#: synfiles.qml:5674
+msgid "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, recent files, volumes and network shares."
 msgstr ""
 
 #: synfiles.qml:2822
@@ -189,11 +189,11 @@ msgstr ""
 msgid "About SYNAPSE Files"
 msgstr ""
 
-#: synfiles.qml:6964
+#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr ""
 
-#: synfiles.qml:6949
+#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr ""
 
@@ -201,7 +201,7 @@ msgstr ""
 msgid "Back"
 msgstr ""
 
-#: synfiles.qml:5596
+#: synfiles.qml:5604
 msgid "By name"
 msgstr ""
 
@@ -224,50 +224,50 @@ msgstr ""
 msgid "Compact"
 msgstr ""
 
-#: synfiles.qml:6933
-msgid "Compress to "
+#: synfiles.qml:6946
+msgid "Compress to %1"
 msgstr ""
 
-#: synfiles.qml:4646
-#: synfiles.qml:4692
+#: synfiles.qml:4654
+#: synfiles.qml:4700
 msgid "Contents"
 msgstr ""
 
-#: synfiles.qml:6851
+#: synfiles.qml:6864
 msgid "Copy"
 msgstr ""
 
 #: synfiles.qml:3550
-#: synfiles.qml:6950
+#: synfiles.qml:6963
 msgid "Copy Path"
 msgstr ""
 
-#: synfiles.qml:6812
+#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr ""
 
-#: synfiles.qml:6806
+#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr ""
 
-#: synfiles.qml:6809
+#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr ""
 
-#: synfiles.qml:6852
+#: synfiles.qml:6865
 msgid "Cut"
 msgstr ""
 
-#: synfiles.qml:6859
+#: synfiles.qml:6872
 msgid "Del"
 msgstr ""
 
-#: synfiles.qml:5524
+#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr ""
 
 #: synfiles.qml:4367
-#: synfiles.qml:6821
+#: synfiles.qml:6834
 msgid "Descending"
 msgstr ""
 
@@ -275,7 +275,7 @@ msgstr ""
 msgid "Destroy %1?"
 msgstr ""
 
-#: synfiles.qml:6868
+#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr ""
 
@@ -291,7 +291,7 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
-#: synfiles.qml:5604
+#: synfiles.qml:5612
 msgid "Done"
 msgstr ""
 
@@ -299,7 +299,7 @@ msgstr ""
 msgid "Eject"
 msgstr ""
 
-#: synfiles.qml:5530
+#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr ""
 
@@ -320,12 +320,12 @@ msgstr ""
 msgid "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr ""
 
-#: synfiles.qml:6857
+#: synfiles.qml:6870
 msgid "F2"
 msgstr ""
 
-#: synfiles.qml:6826
-#: synfiles.qml:6960
+#: synfiles.qml:6839
+#: synfiles.qml:6973
 msgid "F5"
 msgstr ""
 
@@ -353,7 +353,7 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
-#: synfiles.qml:6483
+#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr ""
 
@@ -377,11 +377,11 @@ msgstr ""
 msgid "Icons"
 msgstr ""
 
-#: synfiles.qml:5596
+#: synfiles.qml:5604
 msgid "In contents"
 msgstr ""
 
-#: synfiles.qml:6813
+#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr ""
 
@@ -389,28 +389,20 @@ msgstr ""
 msgid "Keep both"
 msgstr ""
 
-#: synfiles.qml:4514
-msgid "L"
-msgstr ""
-
 #: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr ""
 
-#: synfiles.qml:4657
+#: synfiles.qml:4665
 msgid "Links to"
-msgstr ""
-
-#: synfiles.qml:4513
-msgid "M"
 msgstr ""
 
 #: synfiles.qml:2905
 msgid "Menu"
 msgstr ""
 
-#: synfiles.qml:4631
-#: synfiles.qml:5829
+#: synfiles.qml:4639
+#: synfiles.qml:5842
 msgid "Modified"
 msgstr ""
 
@@ -418,11 +410,11 @@ msgstr ""
 msgid "Mount"
 msgstr ""
 
-#: synfiles.qml:6858
+#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr ""
 
-#: synfiles.qml:5821
+#: synfiles.qml:5834
 msgid "Name"
 msgstr ""
 
@@ -431,12 +423,12 @@ msgid "Network"
 msgstr ""
 
 #: synfiles.qml:3338
-#: synfiles.qml:6807
+#: synfiles.qml:6820
 msgid "New Empty File…"
 msgstr ""
 
 #: synfiles.qml:3337
-#: synfiles.qml:6806
+#: synfiles.qml:6819
 msgid "New Folder…"
 msgstr ""
 
@@ -452,31 +444,31 @@ msgstr ""
 msgid "New folder"
 msgstr ""
 
-#: synfiles.qml:6473
+#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr ""
 
-#: synfiles.qml:6471
+#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr ""
 
-#: synfiles.qml:6472
+#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr ""
 
 #: synfiles.qml:3534
-#: synfiles.qml:5741
-#: synfiles.qml:6844
+#: synfiles.qml:5754
+#: synfiles.qml:6857
 msgid "Open"
 msgstr ""
 
-#: synfiles.qml:6844
+#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr ""
 
 #: synfiles.qml:3356
-#: synfiles.qml:6827
-#: synfiles.qml:6961
+#: synfiles.qml:6840
+#: synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr ""
 
@@ -489,11 +481,11 @@ msgid "Open in Disks"
 msgstr ""
 
 #: synfiles.qml:3535
-#: synfiles.qml:6846
+#: synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr ""
 
-#: synfiles.qml:6918
+#: synfiles.qml:6931
 msgid "Open with"
 msgstr ""
 
@@ -509,12 +501,12 @@ msgstr ""
 msgid "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr ""
 
-#: synfiles.qml:6809
-#: synfiles.qml:6853
+#: synfiles.qml:6822
+#: synfiles.qml:6866
 msgid "Paste"
 msgstr ""
 
-#: synfiles.qml:5489
+#: synfiles.qml:5497
 msgid "Pin"
 msgstr ""
 
@@ -522,7 +514,7 @@ msgstr ""
 msgid "Pin to Places"
 msgstr ""
 
-#: synfiles.qml:5489
+#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr ""
 
@@ -538,13 +530,13 @@ msgstr ""
 msgid "Properties"
 msgstr ""
 
-#: synfiles.qml:6828
-#: synfiles.qml:6948
+#: synfiles.qml:6841
+#: synfiles.qml:6961
 msgid "Properties…"
 msgstr ""
 
 #: synfiles.qml:2960
-#: synfiles.qml:5422
+#: synfiles.qml:5430
 msgid "Recent"
 msgstr ""
 
@@ -553,8 +545,8 @@ msgstr ""
 msgid "Recently Modified"
 msgstr ""
 
-#: synfiles.qml:6826
-#: synfiles.qml:6959
+#: synfiles.qml:6839
+#: synfiles.qml:6972
 msgid "Refresh"
 msgstr ""
 
@@ -562,16 +554,16 @@ msgstr ""
 msgid "Removable Devices"
 msgstr ""
 
-#: synfiles.qml:6963
+#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr ""
 
-#: synfiles.qml:6856
+#: synfiles.qml:6869
 msgid "Rename…"
 msgstr ""
 
-#: synfiles.qml:6032
-#: synfiles.qml:6837
+#: synfiles.qml:6045
+#: synfiles.qml:6850
 msgid "Restore"
 msgstr ""
 
@@ -579,11 +571,7 @@ msgstr ""
 msgid "Right  ·  %1"
 msgstr ""
 
-#: synfiles.qml:4512
-msgid "S"
-msgstr ""
-
-#: synfiles.qml:5656
+#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr ""
 
@@ -604,16 +592,16 @@ msgid "Search…"
 msgstr ""
 
 #: synfiles.qml:3352
-#: synfiles.qml:6812
+#: synfiles.qml:6825
 msgid "Select All"
 msgstr ""
 
-#: synfiles.qml:6877
-#: synfiles.qml:6881
+#: synfiles.qml:6890
+#: synfiles.qml:6894
 msgid "Send to Vault"
 msgstr ""
 
-#: synfiles.qml:6887
+#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr ""
 
@@ -623,7 +611,7 @@ msgstr ""
 
 #: synfiles.qml:3351
 #: synfiles.qml:4368
-#: synfiles.qml:6823
+#: synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr ""
 
@@ -640,9 +628,9 @@ msgid "Sidebar"
 msgstr ""
 
 #: synfiles.qml:4503
-#: synfiles.qml:4641
-#: synfiles.qml:4654
-#: synfiles.qml:5825
+#: synfiles.qml:4649
+#: synfiles.qml:4662
+#: synfiles.qml:5838
 msgid "Size"
 msgstr ""
 
@@ -651,17 +639,17 @@ msgid "Skip those"
 msgstr ""
 
 #: synfiles.qml:4364
-#: synfiles.qml:6819
+#: synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr ""
 
 #: synfiles.qml:4362
-#: synfiles.qml:6815
+#: synfiles.qml:6828
 msgid "Sort by Name"
 msgstr ""
 
 #: synfiles.qml:4363
-#: synfiles.qml:6817
+#: synfiles.qml:6830
 msgid "Sort by Size"
 msgstr ""
 
@@ -682,11 +670,11 @@ msgstr ""
 msgid "Text"
 msgstr ""
 
-#: synfiles.qml:6474
+#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr ""
 
-#: synfiles.qml:6475
+#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr ""
 
@@ -699,11 +687,11 @@ msgstr ""
 msgid "Trash"
 msgstr ""
 
-#: synfiles.qml:4630
+#: synfiles.qml:4638
 msgid "Type"
 msgstr ""
 
-#: synfiles.qml:6470
+#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr ""
 
@@ -817,7 +805,7 @@ msgstr ""
 msgid "files"
 msgstr ""
 
-#: synfiles.qml:5583
+#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr ""
 
@@ -841,7 +829,7 @@ msgstr ""
 msgid "looking for network shares…"
 msgstr ""
 
-#: synfiles.qml:4642
+#: synfiles.qml:4650
 msgid "measuring…"
 msgstr ""
 
@@ -912,7 +900,7 @@ msgstr ""
 msgid "opened a terminal in %1"
 msgstr ""
 
-#: synfiles.qml:5752
+#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr ""
 
@@ -948,11 +936,11 @@ msgstr ""
 msgid "running…"
 msgstr ""
 
-#: synfiles.qml:5581
+#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr ""
 
-#: synfiles.qml:5250
+#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr ""
 

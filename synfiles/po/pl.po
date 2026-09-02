@@ -7,977 +7,967 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synfiles\n"
 "Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: pl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
 "|| n%100>=20) ? 1 : 2);\n"
-"PO-Revision-Date: \n"
-"Last-Translator: Automatically generated\n"
-"Language-Team: none\n"
-"Language: pl\n"
 
 #: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
-msgstr ""
+msgstr "%1  (%2 bajtów)"
 
 #: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
-msgstr ""
+msgstr "%1  (%2 bajtów, sam wpis folderu)"
 
 #: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
-msgstr ""
+msgstr "%1  (zawartość folderów nieliczona)"
 
 #: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
-msgstr ""
+msgstr "%1  ·  zaznaczono %2"
 
 #: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 gotowy"
+msgstr[1] "%1 gotowe"
+msgstr[2] "%1 gotowych"
 
 #: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 nieudany"
+msgstr[1] "%1 nieudane"
+msgstr[2] "%1 nieudanych"
 
-#: synfiles.qml:3781 synfiles.qml:4649
+#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 plik"
+msgstr[1] "%1 pliki"
+msgstr[2] "%1 plików"
 
-#: synfiles.qml:3783 synfiles.qml:4651
+#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 folder"
+msgstr[1] "%1 foldery"
+msgstr[2] "%1 folderów"
 
 #: synfiles.qml:832
 msgid "%1 hours left"
-msgstr ""
+msgstr "pozostało %1 godz."
 
-#: synfiles.qml:4647
+#: synfiles.qml:4655
 msgid "%1 in %2, %3"
-msgstr ""
+msgstr "%1 w %2, %3"
 
 #: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 element"
+msgstr[1] "%1 elementy"
+msgstr[2] "%1 elementów"
 
 #: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 element już tu istnieje"
+msgstr[1] "%1 elementy już tu istnieją"
+msgstr[2] "%1 elementów już tu istnieje"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6152
-#: synfiles.qml:6427
+#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
+#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 element"
+msgstr[1] "%1 elementy"
+msgstr[2] "%1 elementów"
 
 #: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "pozostała %1 min"
+msgstr[1] "pozostały %1 min"
+msgstr[2] "pozostało %1 min"
 
 #: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "znaleziono %1 miejsce sieciowe"
+msgstr[1] "znaleziono %1 miejsca sieciowe"
+msgstr[2] "znaleziono %1 miejsc sieciowych"
 
 #: synfiles.qml:840
 msgid "%1 of %2"
-msgstr ""
+msgstr "%1 z %2"
 
 #: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 z %2 elementu"
+msgstr[1] "%1 z %2 elementów"
+msgstr[2] "%1 z %2 elementów"
 
 #: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 z %2 elementów"
+msgstr[1] "%1 z %2 elementów"
+msgstr[2] "%1 z %2 elementów"
 
 #: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 z nich już tu istnieje"
+msgstr[1] "%1 z nich już tu istnieją"
+msgstr[2] "%1 z nich już tu istnieje"
 
-#: synfiles.qml:4643
+#: synfiles.qml:4651
 msgid "%1 on disk"
-msgstr ""
+msgstr "%1 na dysku"
 
 #: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
-msgstr ""
+msgstr "%1 na dysku  (%2 w %3, %4)"
 
 #: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 pominięty"
+msgstr[1] "%1 pominięte"
+msgstr[2] "%1 pominiętych"
 
 #: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
-msgstr ""
+msgstr "%1 — %2"
 
 #: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 — %2 nieudany"
+msgstr[1] "%1 — %2 nieudane"
+msgstr[2] "%1 — %2 nieudanych"
 
 #: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 — usunięto %2 element"
+msgstr[1] "%1 — usunięto %2 elementy"
+msgstr[2] "%1 — usunięto %2 elementów"
 
 #: synfiles.qml:950
 msgid "%1 — cancelled"
-msgstr ""
+msgstr "%1 — anulowano"
 
 #: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1 — anulowano po %2 gotowym"
+msgstr[1] "%1 — anulowano po %2 gotowych"
+msgstr[2] "%1 — anulowano po %2 gotowych"
 
 #: synfiles.qml:971
 msgid "%1 — done"
-msgstr ""
+msgstr "%1 — gotowe"
 
 #: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "pozostała %1 s"
+msgstr[1] "pozostały %1 s"
+msgstr[2] "pozostało %1 s"
 
 #: synfiles.qml:738
 msgid ", "
-msgstr ""
+msgstr ", "
 
-#: synfiles.qml:5662
-msgid "A file browser for SynapseOS. Tabs, pinned places shared with "
-msgstr ""
+#: synfiles.qml:5674
+msgid ""
+"A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
+"recent files, volumes and network shares."
+msgstr "Przeglądarka plików dla SynapseOS. Karty, przypięte miejsca współdzielone z Dolphinem, ostatnie pliki, woluminy i zasoby sieciowe."
 
 #: synfiles.qml:2822
 msgid "About"
-msgstr ""
+msgstr "O programie"
 
 #: synfiles.qml:3363
 msgid "About SYNAPSE Files"
-msgstr ""
+msgstr "O SYNAPSE Files"
 
-#: synfiles.qml:6964
+#: synfiles.qml:6977
 msgid "Add to Places"
-msgstr ""
+msgstr "Dodaj do miejsc"
 
-#: synfiles.qml:6949
+#: synfiles.qml:6962
 msgid "Alt+Enter"
-msgstr ""
+msgstr "Alt+Enter"
 
 #: synfiles.qml:2689
 msgid "Back"
-msgstr ""
+msgstr "Wstecz"
 
-#: synfiles.qml:5596
+#: synfiles.qml:5604
 msgid "By name"
-msgstr ""
+msgstr "Wg nazwy"
 
 #: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
-msgstr ""
+msgstr "Anuluj"
 
 #: synfiles.qml:3345
 msgid "Close Split View"
-msgstr ""
+msgstr "Zamknij widok dzielony"
 
 #: synfiles.qml:2898
 msgid "Close split view"
-msgstr ""
+msgstr "Zamknij widok dzielony"
 
 #: synfiles.qml:4357
 msgid "Compact"
-msgstr ""
+msgstr "Kompaktowy"
 
-#: synfiles.qml:6933
-msgid "Compress to "
-msgstr ""
+#: synfiles.qml:6946
+msgid "Compress to %1"
+msgstr "Skompresuj do %1"
 
-#: synfiles.qml:4646 synfiles.qml:4692
+#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
-msgstr ""
+msgstr "Zawartość"
 
-#: synfiles.qml:6851
+#: synfiles.qml:6864
 msgid "Copy"
-msgstr ""
+msgstr "Kopiuj"
 
-#: synfiles.qml:3550 synfiles.qml:6950
+#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
-msgstr ""
+msgstr "Kopiuj ścieżkę"
 
-#: synfiles.qml:6812
+#: synfiles.qml:6825
 msgid "Ctrl+A"
-msgstr ""
+msgstr "Ctrl+A"
 
-#: synfiles.qml:6806
+#: synfiles.qml:6819
 msgid "Ctrl+N"
-msgstr ""
+msgstr "Ctrl+N"
 
-#: synfiles.qml:6809
+#: synfiles.qml:6822
 msgid "Ctrl+V"
-msgstr ""
+msgstr "Ctrl+V"
 
-#: synfiles.qml:6852
+#: synfiles.qml:6865
 msgid "Cut"
-msgstr ""
+msgstr "Wytnij"
 
-#: synfiles.qml:6859
+#: synfiles.qml:6872
 msgid "Del"
-msgstr ""
+msgstr "Del"
 
-#: synfiles.qml:5524
+#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
-msgstr ""
+msgstr "Usunięte pliki. Przywrócenie odkłada plik tam, skąd pochodził."
 
-#: synfiles.qml:4367 synfiles.qml:6821
+#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
-msgstr ""
+msgstr "Malejąco"
 
 #: synfiles.qml:3892
 msgid "Destroy %1?"
-msgstr ""
+msgstr "Zniszczyć %1?"
 
-#: synfiles.qml:6868
+#: synfiles.qml:6881
 msgid "Destroy Permanently…"
-msgstr ""
+msgstr "Zniszcz trwale…"
 
 #: synfiles.qml:3945
 msgid "Destroy permanently"
-msgstr ""
+msgstr "Zniszcz trwale"
 
 #: synfiles.qml:4359
 msgid "Details"
-msgstr ""
+msgstr "Szczegóły"
 
 #: synfiles.qml:3085
 msgid "Devices"
-msgstr ""
+msgstr "Urządzenia"
 
-#: synfiles.qml:5604
+#: synfiles.qml:5612
 msgid "Done"
-msgstr ""
+msgstr "Gotowe"
 
 #: synfiles.qml:3543
 msgid "Eject"
-msgstr ""
+msgstr "Wysuń"
 
-#: synfiles.qml:5530
+#: synfiles.qml:5538
 msgid "Empty Trash…"
-msgstr ""
+msgstr "Opróżnij kosz…"
 
 #: synfiles.qml:3858
 msgid "Empty permanently"
-msgstr ""
+msgstr "Opróżnij trwale"
 
 #: synfiles.qml:3838
 msgid "Empty the trash?"
-msgstr ""
+msgstr "Opróżnić kosz?"
 
 #: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
-msgstr ""
+msgstr "Enter tworzy, Esc anuluje"
 
 #: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
-msgstr ""
+msgstr "Wszystko w koszu zostanie trwale usunięte. Tego nie da się cofnąć."
 
-#: synfiles.qml:6857
+#: synfiles.qml:6870
 msgid "F2"
-msgstr ""
+msgstr "F2"
 
-#: synfiles.qml:6826 synfiles.qml:6960
+#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
-msgstr ""
+msgstr "F5"
 
 #: synfiles.qml:3202
 msgid "Find network shares"
-msgstr ""
+msgstr "Znajdź zasoby sieciowe"
 
 #: synfiles.qml:458
 msgid "Folder"
-msgstr ""
+msgstr "Folder"
 
 #: synfiles.qml:4371
 msgid "Folder Tree"
-msgstr ""
+msgstr "Drzewo folderów"
 
 #: synfiles.qml:2988
 msgid "Folders"
-msgstr ""
+msgstr "Foldery"
 
 #: synfiles.qml:3579
 msgid "Format…"
-msgstr ""
+msgstr "Formatuj…"
 
 #: synfiles.qml:2695
 msgid "Forward"
-msgstr ""
+msgstr "Dalej"
 
-#: synfiles.qml:6483
+#: synfiles.qml:6496
 msgid "Hidden items are not shown."
-msgstr ""
+msgstr "Ukryte elementy nie są pokazywane."
 
 #: synfiles.qml:3341
 msgid "Hide Folder Tree"
-msgstr ""
+msgstr "Ukryj drzewo folderów"
 
 #: synfiles.qml:3343
 msgid "Hide Previews"
-msgstr ""
+msgstr "Ukryj podglądy"
 
 #: synfiles.qml:3347
 msgid "Hide Sidebar"
-msgstr ""
+msgstr "Ukryj panel boczny"
 
 #: synfiles.qml:1703
 msgid "Home"
-msgstr ""
+msgstr "Katalog domowy"
 
 #: synfiles.qml:4355
 msgid "Icons"
-msgstr ""
+msgstr "Ikony"
 
-#: synfiles.qml:5596
+#: synfiles.qml:5604
 msgid "In contents"
-msgstr ""
+msgstr "W zawartości"
 
-#: synfiles.qml:6813
+#: synfiles.qml:6826
 msgid "Invert Selection"
-msgstr ""
+msgstr "Odwróć zaznaczenie"
 
 #: synfiles.qml:4039
 msgid "Keep both"
-msgstr ""
-
-#: synfiles.qml:4514
-msgid "L"
-msgstr ""
+msgstr "Zachowaj oba"
 
 #: synfiles.qml:4291
 msgid "Left  ·  %1"
-msgstr ""
+msgstr "Lewy  ·  %1"
 
-#: synfiles.qml:4657
+#: synfiles.qml:4665
 msgid "Links to"
-msgstr ""
-
-#: synfiles.qml:4513
-msgid "M"
-msgstr ""
+msgstr "Wskazuje na"
 
 #: synfiles.qml:2905
 msgid "Menu"
-msgstr ""
+msgstr "Menu"
 
-#: synfiles.qml:4631 synfiles.qml:5829
+#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
-msgstr ""
+msgstr "Zmodyfikowano"
 
 #: synfiles.qml:3539
 msgid "Mount"
-msgstr ""
+msgstr "Zamontuj"
 
-#: synfiles.qml:6858
+#: synfiles.qml:6871
 msgid "Move to Trash"
-msgstr ""
+msgstr "Przenieś do kosza"
 
-#: synfiles.qml:5821
+#: synfiles.qml:5834
 msgid "Name"
-msgstr ""
+msgstr "Nazwa"
 
 #: synfiles.qml:3164
 msgid "Network"
-msgstr ""
+msgstr "Sieć"
 
-#: synfiles.qml:3338 synfiles.qml:6807
+#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
-msgstr ""
+msgstr "Nowy pusty plik…"
 
-#: synfiles.qml:3337 synfiles.qml:6806
+#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
-msgstr ""
+msgstr "Nowy folder…"
 
 #: synfiles.qml:3336
 msgid "New Tab"
-msgstr ""
+msgstr "Nowa karta"
 
 #: synfiles.qml:4223
 msgid "New empty file"
-msgstr ""
+msgstr "Nowy pusty plik"
 
 #: synfiles.qml:4176
 msgid "New folder"
-msgstr ""
+msgstr "Nowy folder"
 
-#: synfiles.qml:6473
+#: synfiles.qml:6486
 msgid "No recently used files."
-msgstr ""
+msgstr "Brak ostatnich plików."
 
-#: synfiles.qml:6471
+#: synfiles.qml:6484
 msgid "Nothing matched."
-msgstr ""
+msgstr "Nic nie znaleziono."
 
-#: synfiles.qml:6472
+#: synfiles.qml:6485
 msgid "Nothing matches that filter."
-msgstr ""
+msgstr "Nic nie pasuje do tego filtra."
 
-#: synfiles.qml:3534 synfiles.qml:5741 synfiles.qml:6844
+#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
-msgstr ""
+msgstr "Otwórz"
 
-#: synfiles.qml:6844
+#: synfiles.qml:6857
 msgid "Open Folder"
-msgstr ""
+msgstr "Otwórz folder"
 
-#: synfiles.qml:3356 synfiles.qml:6827 synfiles.qml:6961
+#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
-msgstr ""
+msgstr "Otwórz terminal tutaj"
 
 #: synfiles.qml:3359
 msgid "Open Trash"
-msgstr ""
+msgstr "Otwórz kosz"
 
 #: synfiles.qml:3559
 msgid "Open in Disks"
-msgstr ""
+msgstr "Otwórz w Dyskach"
 
-#: synfiles.qml:3535 synfiles.qml:6846
+#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
-msgstr ""
+msgstr "Otwórz w nowej karcie"
 
-#: synfiles.qml:6918
+#: synfiles.qml:6931
 msgid "Open with"
-msgstr ""
+msgstr "Otwórz za pomocą"
 
 #: synfiles.qml:4049
 msgid "Overwrite"
-msgstr ""
+msgstr "Nadpisz"
 
 #: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
-msgstr ""
+msgstr "Nadpisanie zastępuje pliki; dwa foldery o tej samej nazwie są scalane, a pliki w środku kolidują pojedynczo."
 
 #: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
-msgstr ""
+msgstr "Nadpisane i usunięte. Nie trafia do kosza i nie da się tego cofnąć."
 
-#: synfiles.qml:6809 synfiles.qml:6853
+#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
-msgstr ""
+msgstr "Wklej"
 
-#: synfiles.qml:5489
+#: synfiles.qml:5497
 msgid "Pin"
-msgstr ""
+msgstr "Przypnij"
 
 #: synfiles.qml:3549
 msgid "Pin to Places"
-msgstr ""
+msgstr "Przypnij do miejsc"
 
-#: synfiles.qml:5489
+#: synfiles.qml:5497
 msgid "Pinned ✓"
-msgstr ""
+msgstr "Przypięte ✓"
 
 #: synfiles.qml:3063
 msgid "Places"
-msgstr ""
+msgstr "Miejsca"
 
 #: synfiles.qml:4370
 msgid "Previews"
-msgstr ""
+msgstr "Podglądy"
 
 #: synfiles.qml:3653
 msgid "Properties"
-msgstr ""
+msgstr "Właściwości"
 
-#: synfiles.qml:6828 synfiles.qml:6948
+#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
-msgstr ""
+msgstr "Właściwości…"
 
-#: synfiles.qml:2960 synfiles.qml:5422
+#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
-msgstr ""
+msgstr "Ostatnie"
 
 #: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
-msgstr ""
+msgstr "Ostatnio zmodyfikowane"
 
-#: synfiles.qml:6826 synfiles.qml:6959
+#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
-msgstr ""
+msgstr "Odśwież"
 
 #: synfiles.qml:3126
 msgid "Removable Devices"
-msgstr ""
+msgstr "Urządzenia wymienne"
 
-#: synfiles.qml:6963
+#: synfiles.qml:6976
 msgid "Remove from Places"
-msgstr ""
+msgstr "Usuń z miejsc"
 
-#: synfiles.qml:6856
+#: synfiles.qml:6869
 msgid "Rename…"
-msgstr ""
+msgstr "Zmień nazwę…"
 
-#: synfiles.qml:6032 synfiles.qml:6837
+#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
-msgstr ""
+msgstr "Przywróć"
 
 #: synfiles.qml:4292
 msgid "Right  ·  %1"
-msgstr ""
+msgstr "Prawy  ·  %1"
 
-#: synfiles.qml:4512
-msgid "S"
-msgstr ""
-
-#: synfiles.qml:5656
+#: synfiles.qml:5664
 msgid "SYNAPSE Files"
-msgstr ""
+msgstr "SYNAPSE Files"
 
 #: synfiles.qml:3201
 msgid "Scan again"
-msgstr ""
+msgstr "Szukaj ponownie"
 
 #: synfiles.qml:3200
 msgid "Scanning…"
-msgstr ""
+msgstr "Szukanie…"
 
 #: synfiles.qml:2902
 msgid "Search"
-msgstr ""
+msgstr "Szukaj"
 
 #: synfiles.qml:3355
 msgid "Search…"
-msgstr ""
+msgstr "Szukaj…"
 
-#: synfiles.qml:3352 synfiles.qml:6812
+#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
-msgstr ""
+msgstr "Zaznacz wszystko"
 
-#: synfiles.qml:6877 synfiles.qml:6881
+#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
-msgstr ""
+msgstr "Wyślij do sejfu"
 
-#: synfiles.qml:6887
+#: synfiles.qml:6900
 msgid "Send to Vault…"
-msgstr ""
+msgstr "Wyślij do sejfu…"
 
 #: synfiles.qml:3341
 msgid "Show Folder Tree"
-msgstr ""
+msgstr "Pokaż drzewo folderów"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6823
+#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
-msgstr ""
+msgstr "Pokaż ukryte pliki"
 
 #: synfiles.qml:3343
 msgid "Show Previews"
-msgstr ""
+msgstr "Pokaż podglądy"
 
 #: synfiles.qml:3347
 msgid "Show Sidebar"
-msgstr ""
+msgstr "Pokaż panel boczny"
 
 #: synfiles.qml:4373
 msgid "Sidebar"
-msgstr ""
+msgstr "Panel boczny"
 
-#: synfiles.qml:4503 synfiles.qml:4641 synfiles.qml:4654 synfiles.qml:5825
+#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
-msgstr ""
+msgstr "Rozmiar"
 
 #: synfiles.qml:4034
 msgid "Skip those"
-msgstr ""
+msgstr "Pomiń te"
 
-#: synfiles.qml:4364 synfiles.qml:6819
+#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
-msgstr ""
+msgstr "Sortuj wg daty"
 
-#: synfiles.qml:4362 synfiles.qml:6815
+#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
-msgstr ""
+msgstr "Sortuj wg nazwy"
 
-#: synfiles.qml:4363 synfiles.qml:6817
+#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
-msgstr ""
+msgstr "Sortuj wg rozmiaru"
 
 #: synfiles.qml:4365
 msgid "Sort by Type"
-msgstr ""
+msgstr "Sortuj wg typu"
 
 #: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
-msgstr ""
+msgstr "Widok dzielony"
 
 #: synfiles.qml:2898
 msgid "Split view (F3)"
-msgstr ""
+msgstr "Widok dzielony (F3)"
 
 #: synfiles.qml:4437
 msgid "Text"
-msgstr ""
+msgstr "Tekst"
 
-#: synfiles.qml:6474
+#: synfiles.qml:6487
 msgid "The trash is empty."
-msgstr ""
+msgstr "Kosz jest pusty."
 
-#: synfiles.qml:6475
+#: synfiles.qml:6488
 msgid "This folder is empty."
-msgstr ""
+msgstr "Ten folder jest pusty."
 
 #: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
-msgstr ""
+msgstr "To folder, z którego pochodzi — zastąpienie usunęłoby oryginał. Zachowaj oba albo anuluj."
 
 #: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
-msgstr ""
+msgstr "Kosz"
 
-#: synfiles.qml:4630
+#: synfiles.qml:4638
 msgid "Type"
-msgstr ""
+msgstr "Typ"
 
-#: synfiles.qml:6470
+#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
-msgstr ""
+msgstr "Pisz, aby przeszukać ten folder i wszystko poniżej."
 
 #: synfiles.qml:3543
 msgid "Unmount"
-msgstr ""
+msgstr "Odmontuj"
 
 #: synfiles.qml:2701
 msgid "Up one folder"
-msgstr ""
+msgstr "Folder wyżej"
 
 #: synfiles.qml:2980
 msgid "Vault"
-msgstr ""
+msgstr "Sejf"
 
 #: synfiles.qml:2720
 msgid "View"
-msgstr ""
+msgstr "Widok"
 
 #: synfiles.qml:2721
 msgid "View options"
-msgstr ""
+msgstr "Opcje widoku"
 
 #: synfiles.qml:827
 msgid "a moment left"
-msgstr ""
+msgstr "zaraz koniec"
 
 #: synfiles.qml:1583
 msgid "accessed"
-msgstr ""
+msgstr "dostęp"
 
 #: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
-msgstr ""
+msgstr "zajęte — czekam na koniec poprzedniej operacji"
 
 #: synfiles.qml:3764
 msgid "calculating…"
-msgstr ""
+msgstr "obliczanie…"
 
 #: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
-msgstr ""
+msgstr "anulowanie…"
 
 #: synfiles.qml:1584
 msgid "changed"
-msgstr ""
+msgstr "zmieniono"
 
 #: synfiles.qml:1152
 msgid "checking the destination…"
-msgstr ""
+msgstr "sprawdzanie miejsca docelowego…"
 
 #: synfiles.qml:1712
 msgid "compressing %1…"
-msgstr ""
+msgstr "kompresowanie %1…"
 
 #: synfiles.qml:3757
 msgid "contents"
-msgstr ""
+msgstr "zawartość"
 
 #: synfiles.qml:1078
 msgid "copied %1"
-msgstr ""
+msgstr "skopiowano %1"
 
 #: synfiles.qml:2443
 msgid "copied: %1"
-msgstr ""
+msgstr "skopiowano: %1"
 
 #: synfiles.qml:1172
 msgid "copying %1"
-msgstr ""
+msgstr "kopiowanie %1"
 
 #: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "kopiowanie %1 elementu tutaj…"
+msgstr[1] "kopiowanie %1 elementów tutaj…"
+msgstr[2] "kopiowanie %1 elementów tutaj…"
 
 #: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "kopiowanie %1 elementu…"
+msgstr[1] "kopiowanie %1 elementów…"
+msgstr[2] "kopiowanie %1 elementów…"
 
 #: synfiles.qml:2482
 msgid "creating %1"
-msgstr ""
+msgstr "tworzenie %1"
 
 #: synfiles.qml:1077
 msgid "cut %1"
-msgstr ""
+msgstr "wycięto %1"
 
 #: synfiles.qml:1579
 msgid "description"
-msgstr ""
+msgstr "opis"
 
 #: synfiles.qml:1840
 msgid "destroying %1…"
-msgstr ""
+msgstr "niszczenie %1…"
 
 #: synfiles.qml:3494
 msgid "dragging %1…"
-msgstr ""
+msgstr "przeciąganie %1…"
 
 #: synfiles.qml:2472
 msgid "emptying the trash…"
-msgstr ""
+msgstr "opróżnianie kosza…"
 
 #: synfiles.qml:1591
 msgid "files"
-msgstr ""
+msgstr "pliki"
 
-#: synfiles.qml:5583
+#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
-msgstr ""
+msgstr "filtruj te elementy…   (Ctrl+F szuka)"
 
 #: synfiles.qml:1590
 msgid "folders"
-msgstr ""
+msgstr "foldery"
 
 #: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
-msgstr ""
+msgstr "formatowanie %1 — pytanie w Dyskach"
 
 #: synfiles.qml:1587
 msgid "group"
-msgstr ""
+msgstr "grupa"
 
 #: synfiles.qml:1585
 msgid "links"
-msgstr ""
+msgstr "dowiązania"
 
 #: synfiles.qml:2526
 msgid "looking for network shares…"
-msgstr ""
+msgstr "szukanie zasobów sieciowych…"
 
-#: synfiles.qml:4642
+#: synfiles.qml:4650
 msgid "measuring…"
-msgstr ""
+msgstr "mierzenie…"
 
 #: synfiles.qml:1578
 msgid "mime"
-msgstr ""
+msgstr "MIME"
 
 #: synfiles.qml:456
 msgid "missing — the file it points at is gone"
-msgstr ""
+msgstr "brak — plik, na który wskazuje, zniknął"
 
 #: synfiles.qml:1581
 msgid "mode"
-msgstr ""
+msgstr "uprawnienia"
 
 #: synfiles.qml:1582
 msgid "modified"
-msgstr ""
+msgstr "zmodyfikowano"
 
 #: synfiles.qml:3193
 msgid "mount %1"
-msgstr ""
+msgstr "zamontuj %1"
 
 #: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
-msgstr ""
+msgstr "montowanie %1…"
 
 #: synfiles.qml:1171
 msgid "moving %1"
-msgstr ""
+msgstr "przenoszenie %1"
 
 #: synfiles.qml:1767
 msgid "moving %1 into the vault"
-msgstr ""
+msgstr "przenoszenie %1 do sejfu"
 
 #: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "przenoszenie %1 elementu…"
+msgstr[1] "przenoszenie %1 elementów…"
+msgstr[2] "przenoszenie %1 elementów…"
 
 #: synfiles.qml:1058
 msgid "moving %1 to the trash"
-msgstr ""
+msgstr "przenoszenie %1 do kosza"
 
 #: synfiles.qml:1576
 msgid "name"
-msgstr ""
+msgstr "nazwa"
 
 #: synfiles.qml:3497
 msgid "nothing accepted that drop"
-msgstr ""
+msgstr "nic nie przyjęło tego upuszczenia"
 
 #: synfiles.qml:2554
 msgid "nothing announced itself on this network"
-msgstr ""
+msgstr "nic nie ogłosiło się w tej sieci"
 
 #: synfiles.qml:1993
 msgid "only local files can be dropped here"
-msgstr ""
+msgstr "tutaj można upuszczać tylko pliki lokalne"
 
 #: synfiles.qml:2408
 msgid "opened %1 in Disks"
-msgstr ""
+msgstr "otwarto %1 w Dyskach"
 
 #: synfiles.qml:2333
 msgid "opened a terminal in %1"
-msgstr ""
+msgstr "otwarto terminal w %1"
 
-#: synfiles.qml:5752
+#: synfiles.qml:5765
 msgid "opened in your browser"
-msgstr ""
+msgstr "otwarto w przeglądarce"
 
 #: synfiles.qml:2620
 msgid "opening %1"
-msgstr ""
+msgstr "otwieranie %1"
 
 #: synfiles.qml:1586
 msgid "owner"
-msgstr ""
+msgstr "właściciel"
 
 #: synfiles.qml:1190
 msgid "paste cancelled"
-msgstr ""
+msgstr "wklejanie anulowane"
 
 #: synfiles.qml:1575
 msgid "path"
-msgstr ""
+msgstr "ścieżka"
 
 #: synfiles.qml:4278
 msgid "reading…"
-msgstr ""
+msgstr "odczyt…"
 
 #: synfiles.qml:1240
 msgid "renaming to %1"
-msgstr ""
+msgstr "zmiana nazwy na %1"
 
 #: synfiles.qml:1067
 msgid "restoring %1"
-msgstr ""
+msgstr "przywracanie %1"
 
 #: synfiles.qml:2318
 msgid "running…"
-msgstr ""
+msgstr "trwa…"
 
-#: synfiles.qml:5581
+#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
-msgstr ""
+msgstr "szukaj w %1 i poniżej — naciśnij Enter"
 
-#: synfiles.qml:5250
+#: synfiles.qml:5258
 msgid "searching %1…"
-msgstr ""
+msgstr "przeszukiwanie %1…"
 
 #: synfiles.qml:1589
 msgid "selected"
-msgstr ""
+msgstr "zaznaczono"
 
 #: synfiles.qml:1580
 msgid "size"
-msgstr ""
+msgstr "rozmiar"
 
 #: synfiles.qml:1588
 msgid "target"
-msgstr ""
+msgstr "cel"
 
 #: synfiles.qml:1577
 msgid "type"
-msgstr ""
+msgstr "typ"
 
 #: synfiles.qml:2283
 msgid "undoing %1…"
-msgstr ""
+msgstr "cofanie %1…"
 
 #: synfiles.qml:2462
 msgid "unmounting %1…"
-msgstr ""
+msgstr "odmontowywanie %1…"
 
 #: synfiles.qml:755
 msgid "working…"
-msgstr ""
+msgstr "pracuję…"
 
 #: synfiles.qml:3981
 msgid "“%1” already exists here"
-msgstr ""
+msgstr "„%1” już tu istnieje"
 
 #: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "• …i jeszcze %1"
+msgstr[1] "• …i jeszcze %1"
+msgstr[2] "• …i jeszcze %1"
 
 #: synfiles.qml:3922
 msgid ""
@@ -985,11 +975,11 @@ msgid ""
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr ""
+msgstr "⚠ To jest %1 — zapisuje zmiany w nowych blokach zamiast na starych, a migawki przechowują całe kopie. Plik zniknie, ale jego zawartość może nadal dać się odzyskać z dysku. Naprawdę zapobiega temu dopiero szyfrowanie całego dysku."
 
 #: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr ""
+msgstr "⚠ To jest %1 — zapisuje zmiany w nowych blokach zamiast na starych. Plik zniknie, ale jego zawartość może nadal dać się odzyskać z dysku. Naprawdę zapobiega temu dopiero szyfrowanie całego dysku."

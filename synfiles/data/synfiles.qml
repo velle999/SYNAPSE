@@ -4509,9 +4509,17 @@ FloatingWindow {
                         anchors { left: sizeLabel.right; leftMargin: 8; verticalCenter: parent.verticalCenter }
                         spacing: 2
                         Repeater {
-                            model: [{ label: I18n.tr("S"), size: 16 },
-                                    { label: I18n.tr("M"), size: 32 },
-                                    { label: I18n.tr("L"), size: 96 }]
+                            // ⛔ NOT TRANSLATED, AND THE msgid IS THE REASON.
+                            // These are one-letter buttons in a fixed row —
+                            // small, medium, large — and "S" on its own is not
+                            // a string anyone can translate: a translator sees
+                            // one letter with no sentence around it and no way
+                            // to know it is a size. Without message contexts
+                            // the honest answer is to leave them, the same way
+                            // the bar leaves its GAME badge.
+                            model: [{ label: "S", size: 16 },
+                                    { label: "M", size: 32 },
+                                    { label: "L", size: 96 }]
                             delegate: Rectangle {
                                 id: sizeBtn
                                 required property var modelData
@@ -5659,8 +5667,13 @@ FloatingWindow {
                 }
                 Text {
                     width: aboutCol.width
-                    text: I18n.tr("A file browser for SynapseOS. Tabs, pinned places shared with ")
-                        + "Dolphin, recent files, volumes and network shares."
+                    // ⚠ ONE msgid. It is two source lines because it is long;
+                    // marking only the first half handed a translator a
+                    // sentence that stops mid-clause, with the rest glued on
+                    // in English afterwards.
+                    text: I18n.tr("A file browser for SynapseOS. Tabs, pinned places "
+                                  + "shared with Dolphin, recent files, volumes and "
+                                  + "network shares.")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(12) }
                     wrapMode: Text.WordWrap
@@ -6930,7 +6943,7 @@ FloatingWindow {
                         if (t.view === "dir") {
                             items.push({ label: "-", act: "", on: true })
                             for (const f of [".tar.gz", ".zip", ".7z"])
-                                items.push({ label: I18n.tr("Compress to ") + f,
+                                items.push({ label: I18n.tr("Compress to %1").arg(f),
                                              act: "compress", on: n > 0,
                                              fmt: f.substring(1) })
                         }
