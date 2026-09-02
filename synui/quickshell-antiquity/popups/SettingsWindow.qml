@@ -41,7 +41,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: Config.colors.accent
-                            text: "Settings"
+                            text: I18n.tr("Settings")
                             font.family: fontQuilon.name
                             font.weight: 600
                             font.pixelSize: 18
@@ -79,7 +79,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: generalHover.hovered || settingsWindow.currentTab == 0 ? Config.colors.accent : Config.colors.textLight
-                            text: "General"
+                            text: I18n.tr("General")
                             leftPadding: 10
                             font.family: fontQuilon.name
                             font.weight: 200
@@ -131,7 +131,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: widgetsHover.hovered || settingsWindow.currentTab == 1 ? Config.colors.accent : Config.colors.textLight
-                            text: "Widgets"
+                            text: I18n.tr("Widgets")
                             leftPadding: 10
                             font.family: fontQuilon.name
                             font.weight: 200
@@ -184,7 +184,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: infoHover.hovered || settingsWindow.currentTab == 2 ? Config.colors.accent : Config.colors.textLight
-                            text: "Info"
+                            text: I18n.tr("Info")
                             leftPadding: 10
                             font.family: fontQuilon.name
                             font.weight: 200
@@ -234,7 +234,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: Config.colors.accent
-                            text: "General Settings"
+                            text: I18n.tr("General Settings")
                             font.family: fontQuilon.name
                             font.weight: 600
                             font.pixelSize: 18
@@ -273,7 +273,7 @@ FloatingWindow {
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
                                         color: Config.colors.accent
-                                        text: "App Launcher Background"
+                                        text: I18n.tr("App Launcher Background")
                                         font.family: fontQuilon.name
                                         font.weight: 600
                                         font.pixelSize: 18
@@ -285,7 +285,7 @@ FloatingWindow {
                                         verticalAlignment: Text.AlignVCenter
                                         color: Config.colors.textLight
                                         opacity: 0.5
-                                        text: "Adds a fullscreen background to the application launcher."
+                                        text: I18n.tr("Adds a fullscreen background to the application launcher.")
                                         font.family: fontRecia.name
                                         font.weight: 700
                                         font.pixelSize: 13
@@ -331,7 +331,7 @@ FloatingWindow {
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.accent
-                                            text: "Enable OpenWeatherMap"
+                                            text: I18n.tr("Enable OpenWeatherMap")
                                             font.family: fontQuilon.name
                                             font.weight: 600
                                             font.pixelSize: 18
@@ -343,7 +343,7 @@ FloatingWindow {
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
                                             opacity: 0.5
-                                            text: "The weather widget uses Open Weather Map, a service that grants enough free API calls."
+                                            text: I18n.tr("The weather widget uses Open Weather Map, a service that grants enough free API calls.")
                                             font.family: fontRecia.name
                                             font.weight: 700
                                             font.pixelSize: 13
@@ -376,7 +376,7 @@ FloatingWindow {
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
-                                            text: "API Key"
+                                            text: I18n.tr("API Key")
                                             font.family: fontQuilon.name
                                             font.weight: 600
                                             font.pixelSize: 18
@@ -388,7 +388,7 @@ FloatingWindow {
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
                                             opacity: 0.5
-                                            text: "Create an account and get a key at: openweathermap.org"
+                                            text: I18n.tr("Create an account and get a key at: %1").arg("openweathermap.org")
                                             font.family: fontRecia.name
                                             font.weight: 700
                                             font.pixelSize: 13
@@ -400,7 +400,7 @@ FloatingWindow {
                                     TextField {
                                         implicitWidth: 320
                                         implicitHeight: 30
-                                        placeholderText: "API Key"
+                                        placeholderText: I18n.tr("API Key")
                                         font.pixelSize: 14
                                         font.family: fontRecia.name
                                         font.weight: 700
@@ -445,7 +445,7 @@ FloatingWindow {
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
-                                            text: "City"
+                                            text: I18n.tr("City")
                                             font.family: fontQuilon.name
                                             font.weight: 600
                                             font.pixelSize: 18
@@ -457,7 +457,7 @@ FloatingWindow {
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
                                             opacity: 0.5
-                                            text: "City that weather data will be gathered from every 10 minutes."
+                                            text: I18n.tr("City that weather data will be gathered from every 10 minutes.")
                                             font.family: fontRecia.name
                                             font.weight: 700
                                             font.pixelSize: 13
@@ -469,7 +469,7 @@ FloatingWindow {
                                     TextField {
                                         implicitWidth: 320
                                         implicitHeight: 30
-                                        placeholderText: "City Name"
+                                        placeholderText: I18n.tr("City Name")
                                         font.pixelSize: 14
                                         font.family: fontRecia.name
                                         font.weight: 700
@@ -514,7 +514,7 @@ FloatingWindow {
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
-                                            text: "Unit"
+                                            text: I18n.tr("Unit")
                                             font.family: fontQuilon.name
                                             font.weight: 600
                                             font.pixelSize: 18
@@ -526,7 +526,7 @@ FloatingWindow {
                                             verticalAlignment: Text.AlignVCenter
                                             color: Config.colors.textLight
                                             opacity: 0.5
-                                            text: "Temperature unit | available options: metric, standard, imperial"
+                                            text: I18n.tr("Temperature unit | available options: %1").arg("metric, standard, imperial")
                                             font.family: fontRecia.name
                                             font.weight: 700
                                             font.pixelSize: 13
@@ -538,7 +538,7 @@ FloatingWindow {
                                     TextField {
                                         implicitWidth: 320
                                         implicitHeight: 30
-                                        placeholderText: "Unit"
+                                        placeholderText: I18n.tr("Unit")
                                         font.pixelSize: 14
                                         font.family: fontRecia.name
                                         font.weight: 700
@@ -591,7 +591,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: Config.colors.accent
-                            text: "Widgets"
+                            text: I18n.tr("Widgets")
                             font.family: fontQuilon.name
                             font.weight: 600
                             font.pixelSize: 18
@@ -646,7 +646,7 @@ FloatingWindow {
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     color: Config.colors.accent
-                                    text: "Monitor:   " + modelData.name
+                                    text: I18n.tr("Monitor:   %1").arg(modelData.name)
                                     font.family: fontQuilon.name
                                     font.weight: 600
                                     font.pixelSize: 18
@@ -817,7 +817,7 @@ FloatingWindow {
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                         color: Config.colors.accent
-                                                        text: "X Offset"
+                                                        text: I18n.tr("X Offset")
                                                         font.family: fontRecia.name
                                                         font.weight: 800
                                                         font.pixelSize: 14
@@ -826,7 +826,7 @@ FloatingWindow {
                                                         id: xPos
                                                         Layout.alignment: Qt.AlignRight
                                                         Layout.rightMargin: 15
-                                                        placeholderText: "x offset"
+                                                        placeholderText: I18n.tr("x offset")
                                                         validator: IntValidator {
                                                             bottom: 0
                                                             top: 8000
@@ -860,7 +860,7 @@ FloatingWindow {
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                         color: Config.colors.accent
-                                                        text: "Y Offset"
+                                                        text: I18n.tr("Y Offset")
                                                         font.family: fontRecia.name
                                                         font.weight: 800
                                                         font.pixelSize: 14
@@ -869,7 +869,7 @@ FloatingWindow {
                                                         id: yPos
                                                         Layout.alignment: Qt.AlignRight
                                                         Layout.rightMargin: 15
-                                                        placeholderText: "y offset"
+                                                        placeholderText: I18n.tr("y offset")
                                                         validator: IntValidator {
                                                             bottom: 0
                                                             top: 8000
@@ -902,7 +902,7 @@ FloatingWindow {
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                         color: Config.colors.accent
-                                                        text: "Background"
+                                                        text: I18n.tr("Background")
                                                         font.family: fontRecia.name
                                                         font.weight: 800
                                                         font.pixelSize: 14
@@ -979,7 +979,7 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             color: Config.colors.accent
-                            text: "Information"
+                            text: I18n.tr("Information")
                             font.family: fontQuilon.name
                             font.weight: 600
                             font.pixelSize: 18

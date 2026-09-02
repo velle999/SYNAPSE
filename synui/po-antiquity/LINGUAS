@@ -1,0 +1,20 @@
+# The languages the Antiquity shell has catalogs for, one per line.
+#
+# ⚠ THE SAME THIRTEEN AS po/LINGUAS, AND THAT IS A REQUIREMENT, not a
+# coincidence. Antiquity is a BAR, not a whole session — synui's own panels,
+# lock screen and menus are on screen beside it and come from po/. An English
+# clock over a German control panel reads as the shell being broken.
+# tests/i18n_antiquity.sh fails when the two lists disagree.
+de
+fr
+es
+pt
+it
+nl
+pl
+ru
+ja
+zh
+ko
+hi
+ar

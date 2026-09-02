@@ -92,21 +92,21 @@ Rectangle {
         var hot = parseInt(Config.weatherData?.main?.temp) > 23 ? true : false;
 
         if (wet && cold) {
-            return ["phlegmatic", ""];
+            return [I18n.tr("phlegmatic"), ""];
         }
         if (wet && hot) {
-            return ["sanguine", ""];
+            return [I18n.tr("sanguine"), ""];
         }
         if (!wet && hot) {
-            return ["choleric", ""];
+            return [I18n.tr("choleric"), ""];
         }
         if (!wet && cold) {
-            return ["melancholic", ""];
+            return [I18n.tr("melancholic"), ""];
         }
         if (wet && !cold && !hot) {
-            return ["sanguine", ""];
+            return [I18n.tr("sanguine"), ""];
         }
-        return ["humoral eukrasia", ""];
+        return [I18n.tr("humoral eukrasia"), ""];
     }
 
     RectangularShadow {

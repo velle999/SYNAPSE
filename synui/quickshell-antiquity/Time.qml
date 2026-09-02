@@ -18,7 +18,7 @@ Singleton {
     readonly property date now: clock.date
 
     readonly property string time: {
-        Qt.formatDateTime(clock.date, " MMM d yyyy | hh:mm");
+        clock.date.toLocaleString(Qt.locale(), I18n.tr(" MMM d yyyy | hh:mm"));
     }
 
     SystemClock {

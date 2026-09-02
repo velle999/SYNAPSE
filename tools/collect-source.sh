@@ -111,9 +111,14 @@ fi
 # 'po/meson.build'", after the commit has shipped. preflight's subdir check is
 # what catches it, and it caught this one.
 #
-# ⚠ po-bar/ TOO. synui has both: po/ for the compositor's C and po-bar/ for the
-# bar's QML, different domains with different last miles. It rolls its own
-# tarball, but the rule belongs here rather than in one script.
+# ⚠ po-bar/ TOO, and now po-antiquity/. synui has three: po/ for the
+# compositor's C, po-bar/ for the SYNAPSE bar's QML and po-antiquity/ for the
+# Antiquity shell's — separate domains with separate last miles, each entered
+# by its own subdir(). ⛔ synui does NOT come through this script (it ships
+# synui/mktarball.sh and this one refuses it by name), so the list that has to
+# stay right for synui is that file's contents=(), which cross-checks itself
+# against every subdir() in meson.build. These two lines are the rule for
+# every other component.
 [ -d "$name/po" ]      && dirs+=("$name/po/")
 [ -d "$name/po-bar" ]  && dirs+=("$name/po-bar/")
 # synapse_kmod extras

@@ -103,6 +103,6 @@ Scope {
         id: settingsWindow
         visible: Config.openSettingsWindow
         reloadableId: "Antiquity Settings Window"
-        title: "Antiquity Settings"
+        title: I18n.tr("Antiquity Settings")
     }
 }

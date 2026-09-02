@@ -2946,7 +2946,45 @@ pkgver=0.1.0
 #   may depend on synui, since they install on plain Arch without it. The env
 #   override is SYN_I18N_DIR, one name for every app, because the file is the
 #   same file.
-pkgrel=584
+# 585: the SECOND bar speaks thirteen languages, and its clock stopped being
+#   English on every desktop.
+#   The Antiquity shell (`bar_shell = antiquity`) is its own QML tree and was
+#   entirely English. 39 msgids through the same JSON bridge the SYNAPSE bar
+#   uses, in a third catalog directory: po/ is the compositor's C, po-bar/ is
+#   this bar's QML, po-antiquity/ is that one's. Third domain, same last mile —
+#   ONE byte-identical I18n.qml, which tests/i18n_antiquity.sh now cmp's against
+#   the bar's copy, because four copies of a file stay one file only if
+#   something says so.
+#   ⛔ Qt.formatDateTime(d, "<format>") IGNORES THE LOCALE, and every clock in
+#   that tree used it. Measured under quickshell 0.3.1 on a de_DE and a ja_JP
+#   session: it returns "Tuesday, 1 September 2026" on both, because the string
+#   overload formats against QLocale::c() — while Qt.locale().name reads de_DE
+#   and ja_JP correctly in the SAME process, which is what makes it look fine
+#   in review. Date.toLocaleString(Qt.locale(), fmt) is the overload that uses
+#   it: names, AM/PM and digits all follow (ja draws 午後, ar draws ١٤:٠٥). The
+#   format STRING is then a msgid as well, because the locale fixes the names
+#   and only a translator can fix the ORDER — ja wants yyyy年M月d日dddd, not
+#   English word order with Japanese words in it. English leaves it
+#   untranslated and draws exactly what it drew before. The SYNAPSE bar never
+#   used that call and is unaffected.
+#   ⛔ AND THE WEATHER WIDGET SWITCHES ON WORDS OFF THE NETWORK. "Snow",
+#   "Rain", "Drizzle", "Thunderstorm" and "Atmosphere" are OpenWeatherMap's
+#   weather[0].main values, and "metric"/"standard"/"imperial" are both what
+#   getTemp() compares against and what the user types into the Unit field.
+#   Translating any of them is a switch that silently stops matching on every
+#   non-English desktop — so the sentence that lists the three units passes
+#   them through .arg(), and the suite asserts both sets are still matched
+#   literally. Same rule as ctlpanel.c's settings keys.
+#   ⚠ The gate also lints the whole tree. qmllint reports a genuine parse error
+#   as `Warning: … [syntax]` and exits 255, which is the signal used; a missing
+#   PROPERTY it reports at exit 0 and quickshell then refuses the file, so a
+#   green run means "no edit left a file that cannot be read", not "the shell
+#   starts". Every check in the suite was shown to go red on a deliberate break
+#   before being trusted.
+#   ⚠ mktarball.sh caught its own omission: contents=() cross-checks every
+#   subdir() in meson.build, so adding po-antiquity/ to the build and not to
+#   the tarball failed the tarball rather than the machine that unpacks it.
+pkgrel=585
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

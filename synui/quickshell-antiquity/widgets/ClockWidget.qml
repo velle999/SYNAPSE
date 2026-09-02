@@ -34,7 +34,8 @@ Rectangle {
         Text {
             id: timeText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(clock.date, Config.settings.militaryTimeClockFormat ? "hh:mm" : "h:mm AP")
+            text: clock.date.toLocaleString(Qt.locale(),
+                      Config.settings.militaryTimeClockFormat ? "hh:mm" : I18n.tr("h:mm AP"))
             font.pixelSize: 104
             font.family: fontBoska.name
             font.weight: 500
@@ -49,7 +50,7 @@ Rectangle {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(clock.date, "dddd, MMMM d")
+            text: clock.date.toLocaleString(Qt.locale(), I18n.tr("dddd, MMMM d"))
             font.pixelSize: 21
             font.family: fontRecia.name
             color: Config.colors.textLight

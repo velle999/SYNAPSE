@@ -171,14 +171,15 @@ ColumnLayout {
             Layout.fillWidth: true
 
             Text {
-                text: Qt.formatDateTime(Time.now, Config.settings.militaryTimeClockFormat ? "HH:mm" : "h:mm AP")
+                text: Time.now.toLocaleString(Qt.locale(),
+                      Config.settings.militaryTimeClockFormat ? "HH:mm" : I18n.tr("h:mm AP"))
                 font.family: fontQuilon.name
                 font.pixelSize: 34
                 font.weight: 600
                 color: Config.colors.accent
             }
             Text {
-                text: Qt.formatDateTime(Time.now, "dddd, d MMMM yyyy")
+                text: Time.now.toLocaleString(Qt.locale(), I18n.tr("dddd, d MMMM yyyy"))
                 font.family: fontRecia.name
                 font.pixelSize: 13
                 font.weight: 700
@@ -238,7 +239,7 @@ ColumnLayout {
         visible: root.player !== null
 
         Text {
-            text: "NOW PLAYING"
+            text: I18n.tr("NOW PLAYING")
             font.family: fontRecia.name
             font.pixelSize: 10
             font.weight: 800
@@ -257,7 +258,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.player ? (root.clean(root.player.trackTitle) || "(unknown track)") : ""
+                    text: root.player ? (root.clean(root.player.trackTitle) || I18n.tr("(unknown track)")) : ""
                     font.family: fontQuilon.name
                     font.pixelSize: 15
                     font.weight: 600
@@ -376,7 +377,7 @@ ColumnLayout {
         }
         Text {
             Layout.fillWidth: true
-            text: "Brightness"
+            text: I18n.tr("Brightness")
             font.family: fontRecia.name
             font.pixelSize: 12
             font.weight: 700

@@ -8,7 +8,7 @@ Singleton {
 
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var audio: sink?.audio ?? null
-    readonly property string audioDeviceName: sink?.description || sink?.name || "No Device Detected"
+    readonly property string audioDeviceName: sink?.description || sink?.name || I18n.tr("No Device Detected")
 
     property real volume: 0.0
     property bool muted: false

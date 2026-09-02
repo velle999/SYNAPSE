@@ -2573,3 +2573,20 @@ test('i18n_bar_runtime', i18n_bar_runtime,
      timeout : 120)
 
 subdir('po-bar')
+
+# The ANTIQUITY shell's catalogs and its own gate. A third domain because there
+# is a third consumer — `bar_shell = antiquity` starts quickshell-antiquity/
+# instead of quickshell/ — not a third mechanism; the last mile is the same
+# JSON bridge, and po-antiquity/meson.build says so.
+#
+# ⛔ AND IT CHECKS TWO THINGS THE BAR'S SUITE CANNOT. The weather widget
+# switches on words that arrive from OpenWeatherMap, and every clock in the
+# tree used Qt.formatDateTime(d, "<format>") — which formats against
+# QLocale::c() and drew an English date on a Japanese desktop. Both are in
+# tests/i18n_antiquity.sh's header.
+i18n_antiquity_test = find_program('tests/i18n_antiquity.sh')
+test('i18n_antiquity', i18n_antiquity_test,
+     args    : [meson.current_source_dir()],
+     timeout : 120)
+
+subdir('po-antiquity')

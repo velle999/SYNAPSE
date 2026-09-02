@@ -26,7 +26,7 @@ top="synui-$pkgver"
 out="$top.tar.gz"
 
 # What actually gets compiled and installed.
-contents=(config data hooks meson.build po po-bar protocols quickshell quickshell-antiquity
+contents=(config data hooks meson.build po po-antiquity po-bar protocols quickshell quickshell-antiquity
           src systemd tests tools)
 
 for c in "${contents[@]}"; do

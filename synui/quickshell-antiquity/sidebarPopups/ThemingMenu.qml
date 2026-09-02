@@ -74,7 +74,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        text: "Themes"
+                        text: I18n.tr("Themes")
                         font.family: fontQuilon.name
                         font.pixelSize: 22
                         font.weight: 600

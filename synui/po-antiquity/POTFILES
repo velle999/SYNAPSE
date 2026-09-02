@@ -1,0 +1,18 @@
+# The QML files tools/qml-xgettext.py reads, one per line, relative to
+# quickshell-antiquity/.
+#
+# ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER — its I18n.tr() calls
+# still compile and still look up at runtime, so nothing warns; the strings
+# just never reach a catalog. tests/i18n_antiquity.sh fails on a .qml under
+# quickshell-antiquity/ that calls I18n.tr() and is not listed.
+AudioSystem.qml
+I18n.qml
+Time.qml
+popups/SettingsWindow.qml
+shell.qml
+sidebarPopups/ControlPanelPane.qml
+sidebarPopups/FavoriteAppsMenu.qml
+sidebarPopups/MainMenu.qml
+sidebarPopups/ThemingMenu.qml
+widgets/ClockWidget.qml
+widgets/WeatherWidget.qml

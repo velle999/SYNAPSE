@@ -94,7 +94,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        text: "Control Panel"
+                        text: I18n.tr("Control Panel")
                         font.family: fontQuilon.name
                         font.pixelSize: 22
                         font.weight: 600
