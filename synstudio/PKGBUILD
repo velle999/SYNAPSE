@@ -1529,7 +1529,22 @@ pkgver=0.1.0
 #   in synui/, synfiles/ and synpkg/ — which already differ from each other. It
 #   is a build-time tool and ships to nobody; I18n.qml is the file kept
 #   byte-identical, and still is.
-pkgrel=48
+# 49: the template generator loses no characters.
+#   po/pot.sh passed --omit-header to xgettext, and that flag SILENTLY MANGLES
+#   THE MSGIDS: with no header there is no Content-Type to declare a charset, so
+#   xgettext writes the .pot as ASCII and DROPS every non-ASCII character from
+#   the strings it extracted, with no warning about the loss. A msgid that lost
+#   a character never matches its source string, so those entries stay English
+#   however well translated.
+#   ⚠ NOTHING WAS HARMED HERE, and that is why this is its own release rather
+#   than a fix folded into something else: every label in develop.c, timeline.c
+#   and thumb.c happens to be pure ASCII, so 48's catalogs are intact — the .pot
+#   is byte-identical after this change. The next N_() label with a · or an em
+#   dash in it would have been eaten in silence. Found in synpkg 47, where
+#   `%s.pacnew — merge it` came out as `%s.pacnew  merge it`.
+#   pot.sh now refuses the flag and asserts the round-trip, and the assertion
+#   was shown to fire by putting a · in a C label with --omit-header restored.
+pkgrel=49
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
