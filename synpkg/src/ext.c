@@ -11,6 +11,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -31,7 +32,7 @@
 static int system_check(void)
 {
 	if (!have_cmd("syn-update")) {
-		warn("syn-update is not installed — SynapseOS components cannot be checked");
+		warn(_("syn-update is not installed — SynapseOS components cannot be checked"));
 		return 1;
 	}
 
@@ -116,7 +117,7 @@ int cmd_system(int argc, char **argv)
 	 * gate. An IgnorePkg entry for one would look set and do nothing. */
 	if (!strcmp(sub, "ignored")) {
 		if (!have_cmd("syn-update"))
-			die("syn-update is not installed");
+			die(_("syn-update is not installed"));
 		/* PROBE, do not assume.
 		 *
 		 * The component hold arrived in syn-update after synpkg learned to ask
@@ -133,8 +134,8 @@ int cmd_system(int argc, char **argv)
 			if (g_out == OUT_TSV)
 				tsv_row(2, "component", "installed");
 			else
-				warn("this syn-update is too old to hold a component back — "
-				     "run `syn-update apply syn-update` first");
+				warn(_("this syn-update is too old to hold a component back — "
+				     "run `syn-update apply syn-update` first"));
 			return 100;
 		}
 		char *av[4];
@@ -154,11 +155,11 @@ int cmd_system(int argc, char **argv)
 	if (!strcmp(sub, "apply") || !strcmp(sub, "status") ||
 	    !strcmp(sub, "ignore") || !strcmp(sub, "unignore")) {
 		if (!have_cmd("syn-update"))
-			die("syn-update is not installed");
+			die(_("syn-update is not installed"));
 		if ((!strcmp(sub, "ignore") || !strcmp(sub, "unignore")) &&
 		    !syn_update_has_hold())
-			die("this syn-update cannot hold a component back yet.\n"
-			    "  Update it first: syn-update apply syn-update");
+			die(_("this syn-update cannot hold a component back yet.\n"
+			    "  Update it first: syn-update apply syn-update"));
 
 		/* `apply` is deliberately NOT run through the GUI's stdout: it drives
 		 * build-all.sh, which calls `sudo pacman -U` mid-build, and sudo with
@@ -181,8 +182,8 @@ int cmd_system(int argc, char **argv)
 		return rc;
 	}
 
-	die("system: unknown subcommand '%s' — "
-	    "try check, apply, status, ignore, unignore, ignored", sub);
+	die(_("system: unknown subcommand '%s' — "
+	    "try check, apply, status, ignore, unignore, ignored"), sub);
 }
 
 /* ── Flatpak / Flathub ──────────────────────────────────────────────────────
@@ -207,7 +208,7 @@ bool sp_flatpak_present(void)
 static void flatpak_required(void)
 {
 	if (!sp_flatpak_present())
-		die("flatpak is not installed — synpkg install flatpak");
+		die(_("flatpak is not installed — synpkg install flatpak"));
 }
 
 /* Every configured remote name, as "\nname\nname\n". */
@@ -381,8 +382,8 @@ static const struct { const char *key, *label; } fh_categories[] = {
  * as "Flathub has no games". */
 static void no_index(void)
 {
-	warn("no Flathub application index on this machine — run: "
-	     "synpkg flatpak enable-flathub");
+	warn(_("no Flathub application index on this machine — run: "
+	     "synpkg flatpak enable-flathub"));
 }
 
 static int flatpak_categories(void)
@@ -452,8 +453,8 @@ static int flatpak_category(const char *want)
 		    || !strcasecmp(want, fh_categories[c].label))
 			key = fh_categories[c].key;
 	if (!key)
-		die("flatpak: '%s' is not a Flathub category — "
-		    "try: synpkg flatpak categories", want);
+		die(_("flatpak: '%s' is not a Flathub category — "
+		    "try: synpkg flatpak categories"), want);
 
 	size_t n = 0;
 	sp_as_app *apps = sp_appstream_load(&n);
@@ -506,8 +507,8 @@ int flatpak_search(const char *term)
 				flatpak_row_header();
 				return 100;
 			}
-			warn("no Flatpak remotes are configured — run: "
-			     "synpkg flatpak enable-flathub");
+			warn(_("no Flatpak remotes are configured — run: "
+			     "synpkg flatpak enable-flathub"));
 			return 2;
 		}
 	}
@@ -768,7 +769,7 @@ static int flatpak_mask_cmd(int argc, char **argv, bool remove)
 			/* Masking something not installed is legal in flatpak — it stops
 			 * the application arriving as a dependency — so this is a warning
 			 * and the mask still goes to --user, which needs no root. */
-			warn("%s is not installed; masking it in the user installation",
+			warn(_("%s is not installed; masking it in the user installation"),
 			     argv[i]);
 			scope = "--user";
 		}
@@ -782,7 +783,7 @@ static int flatpak_mask_cmd(int argc, char **argv, bool remove)
 		av[k++] = argv[i];
 		av[k] = NULL;
 		if (run(av, false) != 0) {
-			warn("flatpak could not %s %s", remove ? "unmask" : "mask", argv[i]);
+			warn(_("flatpak could not %s %s"), remove ? "unmask" : "mask", argv[i]);
 			rc = 1;
 			continue;
 		}
@@ -850,14 +851,14 @@ static int flatpak_enable_flathub(void)
 		char *pkg[] = { (char *)"flatpak" };
 		int rc = cmd_install(1, pkg);
 		if (rc != 0) {
-			warn("could not install flatpak");
+			warn(_("could not install flatpak"));
 			return rc;
 		}
 		/* have_cmd re-reads PATH every time, so this really is asking the
 		 * disk again and not a cached answer from before the transaction. */
 		if (!sp_flatpak_present()) {
-			warn("flatpak installed but is not on PATH — open a new "
-			     "terminal and run: synpkg flatpak enable-flathub");
+			warn(_("flatpak installed but is not on PATH — open a new "
+			     "terminal and run: synpkg flatpak enable-flathub"));
 			return 1;
 		}
 	}
@@ -870,7 +871,7 @@ static int flatpak_enable_flathub(void)
 	                (char *)SYNPKG_FLATHUB_URL, NULL };
 	int rc = run(add, false);
 	if (rc != 0) {
-		warn("could not add the Flathub remote");
+		warn(_("could not add the Flathub remote"));
 		return rc;
 	}
 
@@ -895,7 +896,7 @@ static int flatpak_transact(const char *verb, int argc, char **argv)
 	/* `update` with no target is a whole-system update and is meaningful;
 	 * install and uninstall with no target are not. */
 	if (argc < 1 && strcmp(verb, "update"))
-		die("flatpak %s: need an application id", verb);
+		die(_("flatpak %s: need an application id"), verb);
 
 	char **child = xmalloc((size_t)(argc + 4) * sizeof *child);
 	int k = 0;
@@ -920,15 +921,15 @@ int cmd_flatpak(int argc, char **argv)
 		return flatpak_list();
 	if (!strcmp(sub, "search")) {
 		if (argc < 2)
-			die("flatpak search: need a term");
+			die(_("flatpak search: need a term"));
 		return flatpak_search(argv[1]);
 	}
 	if (!strcmp(sub, "categories"))
 		return flatpak_categories();
 	if (!strcmp(sub, "category")) {
 		if (argc < 2)
-			die("flatpak category: need a category — "
-			    "try: synpkg flatpak categories");
+			die(_("flatpak category: need a category — "
+			    "try: synpkg flatpak categories"));
 		return flatpak_category(argv[1]);
 	}
 	if (!strcmp(sub, "updates"))
@@ -1185,7 +1186,7 @@ static char *url_encode(const char *s)
 static char *aur_rpc(const char *url)
 {
 	if (!have_cmd("curl"))
-		die("curl is required for AUR access");
+		die(_("curl is required for AUR access"));
 	char *argv[] = { (char *)"curl", (char *)"-fsS", (char *)"--proto",
 	                 (char *)"=https", (char *)"--tlsv1.2", (char *)"--max-time",
 	                 (char *)"20", (char *)url, NULL };
@@ -1257,7 +1258,7 @@ int aur_search_term(const char *term)
 	char *json = aur_rpc(url);
 	free(url);
 	if (!json) {
-		warn("could not reach the AUR");
+		warn(_("could not reach the AUR"));
 		return 1;
 	}
 
@@ -1276,7 +1277,7 @@ int aur_search_term(const char *term)
 	free(json);
 
 	if (n < 0) {
-		warn("the AUR returned something this does not understand");
+		warn(_("the AUR returned something this does not understand"));
 		return 1;
 	}
 	if (!ctx.shown && g_out == OUT_HUMAN)
@@ -1461,7 +1462,7 @@ size_t aur_outdated_names(char ***out)
 
 	if (!json) {
 		sp_alpm_free(h);
-		warn("could not reach the AUR — AUR packages were not checked");
+		warn(_("could not reach the AUR — AUR packages were not checked"));
 		return 0;
 	}
 
@@ -1474,7 +1475,7 @@ size_t aur_outdated_names(char ***out)
 		for (size_t i = 0; i < ctx.n; i++)
 			free(ctx.names[i]);
 		free(ctx.names);
-		warn("the AUR returned something this does not understand");
+		warn(_("the AUR returned something this does not understand"));
 		return 0;
 	}
 	*out = ctx.names;
@@ -1560,7 +1561,7 @@ static int aur_updates(void)
 
 	if (!json) {
 		sp_alpm_free(h);
-		warn("could not reach the AUR");
+		warn(_("could not reach the AUR"));
 		return 1;
 	}
 
@@ -1570,7 +1571,7 @@ static int aur_updates(void)
 	sp_alpm_free(h);
 
 	if (parsed < 0) {
-		warn("the AUR returned something this does not understand");
+		warn(_("the AUR returned something this does not understand"));
 		return 1;
 	}
 	if (g_out == OUT_HUMAN && !ctx.n)
@@ -1585,18 +1586,18 @@ static int aur_updates(void)
 static int aur_install(int argc, char **argv)
 {
 	if (is_root())
-		die("AUR builds must not run as root — run `synpkg aur install` as "
+		die(_("AUR builds must not run as root — run `synpkg aur install` as "
 		    "your own user\n  (makepkg will be asked for the root password "
-		    "itself when it installs)");
+		    "itself when it installs)"));
 
 	if (!have_cmd("git"))
-		die("git is required to build from the AUR");
+		die(_("git is required to build from the AUR"));
 	if (!have_cmd("makepkg"))
-		die("makepkg is required to build from the AUR — synpkg install base-devel");
+		die(_("makepkg is required to build from the AUR — synpkg install base-devel"));
 
 	const char *home = getenv("HOME");
 	if (!home || !*home)
-		die("HOME is not set");
+		die(_("HOME is not set"));
 	char *base = xasprintf("%s/.cache/synpkg/aur", home);
 
 	/* mkdir -p, one component at a time. */
@@ -1616,7 +1617,7 @@ static int aur_install(int argc, char **argv)
 		 * own permitted character set is refused rather than escaped. */
 		for (const char *c = pkg; *c; c++) {
 			if (!isalnum((unsigned char)*c) && !strchr("@._+-", *c))
-				die("'%s' is not a valid package name", pkg);
+				die(_("'%s' is not a valid package name"), pkg);
 		}
 
 		char *dir = xasprintf("%s/%s", base, pkg);
@@ -1637,13 +1638,13 @@ static int aur_install(int argc, char **argv)
 			char *pull[] = { (char *)"git", (char *)"-C", dir,
 			                 (char *)"pull", (char *)"--ff-only", NULL };
 			if (run(pull, false) != 0)
-				warn("could not update %s — building the existing checkout", pkg);
+				warn(_("could not update %s — building the existing checkout"), pkg);
 		} else {
 			info("cloning %s", pkg);
 			char *clone[] = { (char *)"git", (char *)"clone", (char *)"--depth=1",
 			                  url, dir, NULL };
 			if (run(clone, false) != 0) {
-				warn("could not clone %s — is it in the AUR?", pkg);
+				warn(_("could not clone %s — is it in the AUR?"), pkg);
 				rc = 1;
 				free(dir);
 				free(url);
@@ -1704,7 +1705,7 @@ static int aur_install(int argc, char **argv)
 			waitpid(pid, &st, 0);
 		close(dfd);
 		if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) {
-			warn("build failed for %s", pkg);
+			warn(_("build failed for %s"), pkg);
 			rc = 1;
 		}
 
@@ -1774,17 +1775,17 @@ int cmd_aur(int argc, char **argv)
 		return aur_installed();
 	if (!strcmp(sub, "search")) {
 		if (argc < 2)
-			die("aur search: need a term");
+			die(_("aur search: need a term"));
 		return aur_search_term(argv[1]);
 	}
 	if (!strcmp(sub, "updates"))
 		return aur_updates();
 	if (!strcmp(sub, "install")) {
 		if (argc < 2)
-			die("aur install: need a package");
+			die(_("aur install: need a package"));
 		return aur_install(argc - 1, argv + 1);
 	}
 
-	die("aur: unknown subcommand '%s' — try search, install, installed, updates",
+	die(_("aur: unknown subcommand '%s' — try search, install, installed, updates"),
 	    sub);
 }

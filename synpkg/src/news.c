@@ -39,6 +39,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -561,7 +562,7 @@ static char *news_fetch(void)
 		char *stale = read_file(cache);
 		free(cache);
 		if (stale) {
-			warn("could not reach %s — showing a cached copy from %ld hour(s) ago",
+			warn(_("could not reach %s — showing a cached copy from %ld hour(s) ago"),
 			     NEWS_URL, age / 3600);
 			return stale;
 		}
@@ -704,8 +705,8 @@ bool sp_news_gate(void)
 		/* Advisory, so it gets out of the way. See the file header: refusing to
 		 * install security updates because a news feed was unreachable would be
 		 * a worse failure than the one being guarded against. */
-		warn("could not read the Arch news feed — continuing without the check "
-		     "(https://archlinux.org/news/)");
+		warn(_("could not read the Arch news feed — continuing without the check "
+		     "(https://archlinux.org/news/)"));
 		return true;
 	}
 
@@ -714,7 +715,7 @@ bool sp_news_gate(void)
 	free(xml);
 
 	if (n == 0) {
-		warn("the Arch news feed did not parse — continuing without the check");
+		warn(_("the Arch news feed did not parse — continuing without the check"));
 		return true;
 	}
 
@@ -781,12 +782,12 @@ int cmd_news(int argc, char **argv)
 		if (!strcmp(argv[i], "--all"))
 			all = true;
 		else
-			die("news: unknown argument '%s'", argv[i]);
+			die(_("news: unknown argument '%s'"), argv[i]);
 	}
 
 	char *xml = news_fetch();
 	if (!xml) {
-		warn("could not read %s", NEWS_URL);
+		warn(_("could not read %s"), NEWS_URL);
 		return 1;
 	}
 
@@ -795,7 +796,7 @@ int cmd_news(int argc, char **argv)
 	free(xml);
 
 	if (n == 0) {
-		warn("the Arch news feed did not parse");
+		warn(_("the Arch news feed did not parse"));
 		return 1;
 	}
 

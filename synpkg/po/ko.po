@@ -16,407 +16,1031 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: synpkg.qml:764
 msgid "%1   held back"
 msgstr "%1   보류됨"
 
-#: synpkg.qml:755
 msgid "%1   held back, no update waiting"
 msgstr "%1   보류됨, 대기 중인 업데이트 없음"
 
-#: synpkg.qml:736
 msgid "%1  →  %2"
 msgstr "%1  →  %2"
 
-#: synpkg.qml:752
 msgid "%1  →  %2   held back"
 msgstr "%1  →  %2   보류됨"
 
-#: synpkg.qml:1356
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "항목 %1개"
 
-#: synpkg.qml:350
 msgid "AUR"
 msgstr "AUR"
 
-#: synpkg.qml:354
 msgid "About"
 msgstr "정보"
 
-#: synpkg.qml:348
 msgid "All sources"
 msgstr "모든 원본"
 
-#: synpkg.qml:352
 msgid "Arsenal"
 msgstr "Arsenal"
 
-#: synpkg.qml:376
 msgid "BlackArch security tooling, by category"
 msgstr "BlackArch 보안 도구, 분류별"
 
-#: synpkg.qml:1640
 msgid "Browse"
 msgstr "둘러보기"
 
-#: synpkg.qml:2010
 msgid "Enable BlackArch"
 msgstr "BlackArch 사용"
 
-#: synpkg.qml:2044
 msgid "Enable Flathub"
 msgstr "Flathub 사용"
 
-#: synpkg.qml:1141
 msgid "Everything"
 msgstr "전체"
 
-#: synpkg.qml:1944
 msgid "Everything is up to date."
 msgstr "모두 최신입니다."
 
-#: synpkg.qml:2073
 msgid "Fetch the app index"
 msgstr "앱 색인 받기"
 
-#: synpkg.qml:351
 msgid "Flathub"
 msgstr "Flathub"
 
-#: synpkg.qml:1966
 msgid "Flathub has no application index yet."
 msgstr "Flathub에 아직 응용 프로그램 색인이 없습니다."
 
-#: synpkg.qml:1963
 msgid "Flathub is not enabled on this machine."
 msgstr "이 기기에서는 Flathub가 켜져 있지 않습니다."
 
-#: synpkg.qml:341
 msgid "Held back"
 msgstr "보류됨"
 
-#: synpkg.qml:2401
 msgid "Hold"
 msgstr "보류"
 
-#: synpkg.qml:1071
 msgid "Install"
 msgstr "설치"
 
-#: synpkg.qml:1642 synpkg.qml:1644
 msgid "Installed"
 msgstr "설치됨"
 
-#: synpkg.qml:1143
 msgid "Installed apps"
 msgstr "설치된 앱"
 
-#: synpkg.qml:1144
 msgid "Installed packages"
 msgstr "설치된 꾸러미"
 
-#: synpkg.qml:1142
 msgid "Installed tools"
 msgstr "설치된 도구"
 
-#: synpkg.qml:1955
 msgid "No Flatpak applications installed."
 msgstr "설치된 Flatpak 응용 프로그램이 없습니다."
 
-#: synpkg.qml:1954
 msgid "Nothing installed from outside a repository."
 msgstr "저장소 밖에서 설치한 것이 없습니다."
 
-#: synpkg.qml:1956
 msgid "Nothing installed from the repositories."
 msgstr "저장소에서 설치한 것이 없습니다."
 
-#: synpkg.qml:1945
 msgid ""
 "Nothing is being held back.\n"
 "Hold an update from the Updates page to stop it arriving."
-msgstr "보류 중인 것이 없습니다.\n업데이트 페이지에서 업데이트를 보류하면 도착하지 않습니다."
+msgstr ""
+"보류 중인 것이 없습니다.\n"
+"업데이트 페이지에서 업데이트를 보류하면 도착하지 않습니다."
 
-#: synpkg.qml:1967
 msgid "Nothing to browse."
 msgstr "둘러볼 것이 없습니다."
 
-#: synpkg.qml:1762
 msgid ""
 "One package manager over the repositories, the AUR, Flathub, BlackArch and "
 "SynapseOS's own components. The graphical browser, the terminal browser and "
 "the command line are the same binary reading the same code paths, so they "
 "cannot disagree about what is installed."
-msgstr "저장소, AUR, Flathub, BlackArch, 그리고 SynapseOS 자체 구성 요소를 한꺼번에 다루는 하나의 꾸러미 관리자. 그래픽 탐색기와 터미널 탐색기, 명령줄이 모두 같은 실행 파일로 같은 코드 경로를 지나므로 무엇이 설치되어 있는지에 대해 서로 어긋날 수 없습니다."
+msgstr ""
+"저장소, AUR, Flathub, BlackArch, 그리고 SynapseOS 자체 구성 요소를 한꺼번에 "
+"다루는 하나의 꾸러미 관리자. 그래픽 탐색기와 터미널 탐색기, 명령줄이 모두 같"
+"은 실행 파일로 같은 코드 경로를 지나므로 무엇이 설치되어 있는지에 대해 서로 "
+"어긋날 수 없습니다."
 
-#: synpkg.qml:1869
 msgid "Open"
 msgstr "열기"
 
-#: synpkg.qml:1990
 msgid ""
 "Packages here are recipes, not binaries. Installing one opens a terminal, "
 "shows you its PKGBUILD, and builds it."
-msgstr "여기서 꾸러미는 이진 파일이 아니라 조리법입니다. 설치하면 터미널이 열리고 PKGBUILD를 보여 준 뒤 빌드합니다."
+msgstr ""
+"여기서 꾸러미는 이진 파일이 아니라 조리법입니다. 설치하면 터미널이 열리고 "
+"PKGBUILD를 보여 준 뒤 빌드합니다."
 
-#: synpkg.qml:1948 synpkg.qml:1952 synpkg.qml:1964
 msgid "Pick a category."
 msgstr "분류를 고르세요."
 
-#: synpkg.qml:1069
 msgid "Release"
 msgstr "해제"
 
-#: synpkg.qml:1071
 msgid "Remove"
 msgstr "제거"
 
-#: synpkg.qml:349
 msgid "Repositories"
 msgstr "저장소"
 
-#: synpkg.qml:1869
 msgid "Run"
 msgstr "실행"
 
-#: synpkg.qml:1318 synpkg.qml:1753
 msgid "SYNAPSE Software"
 msgstr "SYNAPSE Software"
 
-#: synpkg.qml:1994
 msgid ""
 "Sandboxed applications with their own runtimes, installed alongside your "
 "system packages rather than into them."
-msgstr "자체 런타임을 갖춘 격리된 응용 프로그램으로, 시스템 꾸러미 안이 아니라 그 옆에 설치됩니다."
+msgstr ""
+"자체 런타임을 갖춘 격리된 응용 프로그램으로, 시스템 꾸러미 안이 아니라 그 옆"
+"에 설치됩니다."
 
-#: synpkg.qml:1638 synpkg.qml:1641 synpkg.qml:1643
 msgid "Search"
 msgstr "검색"
 
-#: synpkg.qml:1971
 msgid "Search Flathub."
 msgstr "Flathub에서 검색합니다."
 
-#: synpkg.qml:1969
 msgid "Search every source at once."
 msgstr "모든 원본을 한 번에 검색합니다."
 
-#: synpkg.qml:1970
 msgid "Search the AUR."
 msgstr "AUR에서 검색합니다."
 
-#: synpkg.qml:1972
 msgid "Search the repositories."
 msgstr "저장소에서 검색합니다."
 
-#: synpkg.qml:342
 msgid "Suggested"
 msgstr "추천"
 
-#: synpkg.qml:353
 msgid "SynapseOS"
 msgstr "SynapseOS"
 
-#: synpkg.qml:1946
 msgid "SynapseOS components are current."
 msgstr "SynapseOS 구성 요소는 최신입니다."
 
-#: synpkg.qml:1951
 msgid "The BlackArch repository is not enabled."
 msgstr "BlackArch 저장소가 켜져 있지 않습니다."
 
-#: synpkg.qml:1986
 msgid ""
 "This lists every installed package no repository offers — AUR builds and "
 "anything else built on this machine, including SynapseOS's own packages."
-msgstr "어떤 저장소도 제공하지 않는, 설치된 모든 꾸러미 목록입니다 — AUR 빌드와 이 기기에서 빌드한 그 밖의 모든 것, SynapseOS 자체 꾸러미를 포함합니다."
+msgstr ""
+"어떤 저장소도 제공하지 않는, 설치된 모든 꾸러미 목록입니다 — AUR 빌드와 이 기"
+"기에서 빌드한 그 밖의 모든 것, SynapseOS 자체 꾸러미를 포함합니다."
 
-#: synpkg.qml:1070
 msgid "Update"
 msgstr "업데이트"
 
-#: synpkg.qml:340
 msgid "Updates"
 msgstr "업데이트"
 
-#: synpkg.qml:1444
 msgid "Upgrade all"
 msgstr "전체 업그레이드"
 
-#: synpkg.qml:1949
 msgid "You already have everything suggested."
 msgstr "추천되는 것은 이미 모두 갖고 있습니다."
 
-#: synpkg.qml:1042
 msgid "building %1 in a terminal"
 msgstr "터미널에서 %1 빌드하는 중"
 
-#: synpkg.qml:1203
 msgid "checking Flathub…"
 msgstr "Flathub 확인하는 중…"
 
-#: synpkg.qml:1213
 msgid "checking SynapseOS components…"
 msgstr "SynapseOS 구성 요소 확인하는 중…"
 
-#: synpkg.qml:1201
 msgid "checking repositories…"
 msgstr "저장소 확인하는 중…"
 
-#: synpkg.qml:1202
 msgid "checking the AUR…"
 msgstr "AUR 확인하는 중…"
 
-#: synpkg.qml:2020
 msgid "enabling BlackArch in a terminal"
 msgstr "터미널에서 BlackArch 켜는 중"
 
-#: synpkg.qml:2054
 msgid "enabling Flathub in a terminal"
 msgstr "터미널에서 Flathub 켜는 중"
 
-#: synpkg.qml:372
 msgid ""
 "every source at once — the repositories, BlackArch, the AUR and Flathub. "
 "Each result says where it came from"
-msgstr "모든 원본을 한 번에 — 저장소, BlackArch, AUR, Flathub. 각 결과에 출처가 표시됩니다"
+msgstr ""
+"모든 원본을 한 번에 — 저장소, BlackArch, AUR, Flathub. 각 결과에 출처가 표시"
+"됩니다"
 
-#: synpkg.qml:369
 msgid ""
 "everything with a newer version — repositories, the AUR, Flathub and "
 "SynapseOS's own components"
-msgstr "더 새로운 판이 있는 모든 것 — 저장소, AUR, Flathub, SynapseOS 자체 구성 요소"
+msgstr ""
+"더 새로운 판이 있는 모든 것 — 저장소, AUR, Flathub, SynapseOS 자체 구성 요소"
 
-#: synpkg.qml:2083
 msgid "fetching Flathub's index in a terminal"
 msgstr "터미널에서 Flathub 색인 받는 중"
 
-#: synpkg.qml:1719 synpkg.qml:1724
 msgid "filter this list…"
 msgstr "이 목록 거르기…"
 
-#: synpkg.qml:756
 msgid "held back"
 msgstr "보류됨"
 
-#: synpkg.qml:1009
 msgid "holding back %1…"
 msgstr "%1 보류하는 중…"
 
-#: synpkg.qml:1496
 msgid "include SynapseOS"
 msgstr "SynapseOS 포함"
 
-#: synpkg.qml:1050
 msgid "installing %1…"
 msgstr "%1 설치하는 중…"
 
-#: synpkg.qml:1352
 msgid "loading…"
 msgstr "불러오는 중…"
 
-#: synpkg.qml:373
 msgid ""
 "official Arch repositories and SynapseOS's own — signed, binary, managed by "
 "pacman"
 msgstr "Arch 공식 저장소와 SynapseOS 자체 저장소 — 서명됨, 이진, pacman이 관리"
 
-#: synpkg.qml:979
 msgid "opened a terminal"
 msgstr "터미널을 열었습니다"
 
-#: synpkg.qml:1884
 msgid "opened in your browser"
 msgstr "브라우저에서 열었습니다"
 
-#: synpkg.qml:1223
 msgid "reading held components…"
 msgstr "보류된 구성 요소 읽는 중…"
 
-#: synpkg.qml:1222
 msgid "reading held packages…"
 msgstr "보류된 꾸러미 읽는 중…"
 
-#: synpkg.qml:1036
 msgid "rebuilding %1 in a terminal"
 msgstr "터미널에서 %1 다시 빌드하는 중"
 
-#: synpkg.qml:946
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "거부됨 (종료 코드 %1) — polkit이 거절했을 수 있습니다"
 
-#: synpkg.qml:1010
 msgid "releasing %1…"
 msgstr "%1 해제하는 중…"
 
-#: synpkg.qml:1049
 msgid "removing %1…"
 msgstr "%1 제거하는 중…"
 
-#: synpkg.qml:1463
 msgid "repos and AUR — in a terminal"
 msgstr "저장소와 AUR — 터미널에서"
 
-#: synpkg.qml:1462
 msgid "repos, AUR and components — in a terminal"
 msgstr "저장소, AUR, 구성 요소 — 터미널에서"
 
-#: synpkg.qml:1892
 msgid "running in a terminal"
 msgstr "터미널에서 실행 중"
 
-#: synpkg.qml:2088
 msgid "runs in a terminal — takes a minute"
 msgstr "터미널에서 실행됩니다 — 1분쯤 걸립니다"
 
-#: synpkg.qml:375
 msgid "sandboxed applications from Flathub, with their own runtimes"
 msgstr "자체 런타임을 갖춘 Flathub의 격리된 응용 프로그램"
 
-#: synpkg.qml:1723
 msgid "search Flathub — press Enter"
 msgstr "Flathub 검색 — Enter를 누르세요"
 
-#: synpkg.qml:1720
 msgid "search everything — repos, BlackArch, AUR and Flathub — press Enter"
 msgstr "전체 검색 — 저장소, BlackArch, AUR, Flathub — Enter를 누르세요"
 
-#: synpkg.qml:1722
 msgid "search the AUR — press Enter"
 msgstr "AUR 검색 — Enter를 누르세요"
 
-#: synpkg.qml:1721
 msgid "search the repositories — press Enter"
 msgstr "저장소 검색 — Enter를 누르세요"
 
-#: synpkg.qml:374
 msgid "the Arch User Repository — recipes built from source on this machine"
 msgstr "Arch User Repository — 이 기기에서 소스로부터 빌드되는 조리법"
 
-#: synpkg.qml:371
 msgid "the curated SynapseOS software list"
 msgstr "선별된 SynapseOS 소프트웨어 목록"
 
-#: synpkg.qml:377
 msgid "this system's own components, rebuilt from git by syn-update"
 msgstr "이 시스템 자체 구성 요소로, syn-update가 git에서 다시 빌드합니다"
 
-#: synpkg.qml:737
 msgid "update available"
 msgstr "업데이트 있음"
 
-#: synpkg.qml:370
 msgid ""
 "updates you are deliberately not taking. Release one and it comes back on "
 "the next check"
 msgstr "일부러 받지 않는 업데이트입니다. 해제하면 다음 확인 때 다시 나타납니다"
 
-#: synpkg.qml:1457
 msgid "upgrading in a terminal"
 msgstr "터미널에서 업그레이드 중"
 
-#: synpkg.qml:2355
 msgid "working…"
 msgstr "처리 중…"
+
+#, c-format
+msgid "new config saved as %s.pacnew — merge it"
+msgstr "새 설정을 %s.pacnew(으)로 저장했습니다 — 병합하세요"
+
+#, c-format
+msgid "config saved as %s.pacsave"
+msgstr "설정을 %s.pacsave(으)로 저장했습니다"
+
+msgid "failed to retrieve some databases"
+msgstr "일부 데이터베이스를 가져오지 못했습니다"
+
+msgid "failed to retrieve some packages"
+msgstr "일부 패키지를 가져오지 못했습니다"
+
+#, c-format
+msgid "%s optionally requires %s, which is being removed"
+msgstr "%s은(는) %s을(를) 선택적으로 필요로 하는데, 그것이 지금 제거됩니다"
+
+#, c-format
+msgid "%s conflicts with %s"
+msgstr "%s이(가) %s과(와) 충돌합니다"
+
+#, c-format
+msgid "%s is corrupted (%s) — deleting"
+msgstr "%s이(가) 손상되었습니다 (%s) — 삭제합니다"
+
+#, c-format
+msgid "could not register repo %s: %s"
+msgstr "저장소 %s을(를) 등록하지 못했습니다: %s"
+
+#, c-format
+msgid "repo %s has no servers configured"
+msgstr "저장소 %s에 설정된 서버가 없습니다"
+
+#, c-format
+msgid ""
+"cannot open the package database (%s)\n"
+"  is another package manager running?"
+msgstr ""
+"패키지 데이터베이스를 열 수 없습니다 (%s)\n"
+"  다른 패키지 관리자가 실행 중입니까?"
+
+msgid ""
+"blackarch-keyring is not installed — signing key rotations will never reach "
+"this machine.\n"
+"  fix: synpkg install blackarch-keyring"
+msgstr ""
+"blackarch-keyring이 설치되어 있지 않습니다 — 서명 키 교체가 이 컴퓨터에 절대 "
+"도달하지 않습니다.\n"
+"  해결: synpkg install blackarch-keyring"
+
+#, c-format
+msgid "arsenal: '%s' is not a blackarch category"
+msgstr "arsenal: '%s'은(는) BlackArch 분류가 아닙니다"
+
+#, c-format
+msgid "no such category: %s"
+msgstr "그런 분류가 없습니다: %s"
+
+msgid ""
+"the BlackArch bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+msgstr ""
+"BlackArch 부트스트랩 스크립트가 없습니다 (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+
+msgid "arsenal packages: need a category"
+msgstr "arsenal packages: 분류가 필요합니다"
+
+#, c-format
+msgid ""
+"arsenal: unknown subcommand '%s'\n"
+"  try: status, categories, packages <category>, installed, enable-repo"
+msgstr ""
+"arsenal: 알 수 없는 하위 명령 '%s'\n"
+"  사용 가능: status, categories, packages <category>, installed, enable-repo"
+
+msgid ""
+"the CachyOS bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"cachyos)"
+msgstr ""
+"CachyOS 부트스트랩 스크립트가 없습니다 (/usr/lib/synpkg/synpkg-enable-"
+"cachyos)"
+
+#, c-format
+msgid ""
+"cachyos: unknown subcommand '%s'\n"
+"  try: status, enable-repo, disable-repo"
+msgstr ""
+"cachyos: 알 수 없는 하위 명령 '%s'\n"
+"  사용 가능: status, enable-repo, disable-repo"
+
+#, c-format
+msgid "cannot read the suggestion catalogue at %s"
+msgstr "%s의 추천 목록을 읽을 수 없습니다"
+
+#, c-format
+msgid "catalogue line %zu has %zu fields, expected 5"
+msgstr "목록 %zu번째 줄에 항목이 %zu개 있습니다. 5개여야 합니다"
+
+#, c-format
+msgid "suggest: unknown option '%s'"
+msgstr "suggest: 알 수 없는 옵션 '%s'"
+
+msgid "syn-update is not installed — SynapseOS components cannot be checked"
+msgstr ""
+"syn-update가 설치되어 있지 않습니다 — SynapseOS 구성 요소를 확인할 수 없습니"
+"다"
+
+msgid "syn-update is not installed"
+msgstr "syn-update가 설치되어 있지 않습니다"
+
+msgid ""
+"this syn-update is too old to hold a component back — run `syn-update apply "
+"syn-update` first"
+msgstr ""
+"이 syn-update는 너무 오래되어 구성 요소를 보류할 수 없습니다 — 먼저 `syn-"
+"update apply syn-update`를 실행하세요"
+
+msgid ""
+"this syn-update cannot hold a component back yet.\n"
+"  Update it first: syn-update apply syn-update"
+msgstr ""
+"이 syn-update는 아직 구성 요소를 보류하지 못합니다.\n"
+"  먼저 갱신하세요: syn-update apply syn-update"
+
+#, c-format
+msgid ""
+"system: unknown subcommand '%s' — try check, apply, status, ignore, "
+"unignore, ignored"
+msgstr ""
+"system: 알 수 없는 하위 명령 '%s' — check, apply, status, ignore, unignore, "
+"ignored를 써 보세요"
+
+msgid "flatpak is not installed — synpkg install flatpak"
+msgstr "flatpak이 설치되어 있지 않습니다 — synpkg install flatpak"
+
+msgid ""
+"no Flathub application index on this machine — run: synpkg flatpak enable-"
+"flathub"
+msgstr ""
+"이 컴퓨터에 Flathub 앱 색인이 없습니다 — 실행하세요: synpkg flatpak enable-"
+"flathub"
+
+#, c-format
+msgid ""
+"flatpak: '%s' is not a Flathub category — try: synpkg flatpak categories"
+msgstr ""
+"flatpak: '%s'은(는) Flathub 분류가 아닙니다 — 시도: synpkg flatpak categories"
+
+msgid "no Flatpak remotes are configured — run: synpkg flatpak enable-flathub"
+msgstr ""
+"설정된 Flatpak 원격 저장소가 없습니다 — 실행하세요: synpkg flatpak enable-"
+"flathub"
+
+#, c-format
+msgid "%s is not installed; masking it in the user installation"
+msgstr "%s은(는) 설치되어 있지 않습니다. 사용자 설치에서 가립니다"
+
+#, c-format
+msgid "flatpak could not %s %s"
+msgstr "flatpak이 %s %s을(를) 하지 못했습니다"
+
+msgid "could not install flatpak"
+msgstr "flatpak을 설치하지 못했습니다"
+
+msgid ""
+"flatpak installed but is not on PATH — open a new terminal and run: synpkg "
+"flatpak enable-flathub"
+msgstr ""
+"flatpak은 설치되었지만 PATH에 없습니다 — 새 터미널을 열고 실행하세요: synpkg "
+"flatpak enable-flathub"
+
+msgid "could not add the Flathub remote"
+msgstr "Flathub 원격 저장소를 추가하지 못했습니다"
+
+#, c-format
+msgid "flatpak %s: need an application id"
+msgstr "flatpak %s: 앱 ID가 필요합니다"
+
+msgid "flatpak search: need a term"
+msgstr "flatpak search: 검색어가 필요합니다"
+
+msgid "flatpak category: need a category — try: synpkg flatpak categories"
+msgstr "flatpak category: 분류가 필요합니다 — 시도: synpkg flatpak categories"
+
+msgid "curl is required for AUR access"
+msgstr "AUR에 접근하려면 curl이 필요합니다"
+
+msgid "could not reach the AUR"
+msgstr "AUR에 연결하지 못했습니다"
+
+msgid "the AUR returned something this does not understand"
+msgstr "AUR이 여기서 해석할 수 없는 것을 반환했습니다"
+
+msgid "could not reach the AUR — AUR packages were not checked"
+msgstr "AUR에 연결하지 못했습니다 — AUR 패키지는 확인하지 않았습니다"
+
+msgid ""
+"AUR builds must not run as root — run `synpkg aur install` as your own user\n"
+"  (makepkg will be asked for the root password itself when it installs)"
+msgstr ""
+"AUR 빌드는 root로 실행하면 안 됩니다 — `synpkg aur install`을 본인 계정으로 "
+"실행하세요\n"
+"  (설치할 때 makepkg가 직접 root 암호를 물어봅니다)"
+
+msgid "git is required to build from the AUR"
+msgstr "AUR에서 빌드하려면 git이 필요합니다"
+
+msgid "makepkg is required to build from the AUR — synpkg install base-devel"
+msgstr "AUR에서 빌드하려면 makepkg가 필요합니다 — synpkg install base-devel"
+
+msgid "HOME is not set"
+msgstr "HOME이 설정되어 있지 않습니다"
+
+#, c-format
+msgid "'%s' is not a valid package name"
+msgstr "'%s'은(는) 올바른 패키지 이름이 아닙니다"
+
+#, c-format
+msgid "could not update %s — building the existing checkout"
+msgstr "%s을(를) 갱신하지 못했습니다 — 기존 사본을 빌드합니다"
+
+#, c-format
+msgid "could not clone %s — is it in the AUR?"
+msgstr "%s을(를) 복제하지 못했습니다 — AUR에 있습니까?"
+
+#, c-format
+msgid "build failed for %s"
+msgstr "%s 빌드에 실패했습니다"
+
+msgid "aur search: need a term"
+msgstr "aur search: 검색어가 필요합니다"
+
+msgid "aur install: need a package"
+msgstr "aur install: 패키지가 필요합니다"
+
+#, c-format
+msgid "aur: unknown subcommand '%s' — try search, install, installed, updates"
+msgstr ""
+"aur: 알 수 없는 하위 명령 '%s' — search, install, installed, updates를 써 보"
+"세요"
+
+#, c-format
+msgid ""
+"SYNPKG_PACMAN_CONF points at %s, which this user cannot write.\n"
+"  pkexec would not carry that setting to the root process, so the\n"
+"  escalated write would land on /etc/pacman.conf instead. Re-run as\n"
+"  a user who can write the file you named."
+msgstr ""
+"SYNPKG_PACMAN_CONF가 %s을(를) 가리키는데, 이 사용자는 거기에 쓸 수 없습니"
+"다.\n"
+"  pkexec는 그 설정을 root 프로세스로 전달하지 않으므로, 권한을 올린 쓰기는\n"
+"  대신 /etc/pacman.conf에 떨어집니다. 지정한 파일에 쓸 수 있는 사용자로\n"
+"  다시 실행하세요."
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "%s을(를) 읽을 수 없습니다: %s"
+
+#, c-format
+msgid ""
+"%s has no [options] section — refusing to guess where an IgnorePkg belongs"
+msgstr ""
+"%s에 [options] 절이 없습니다 — IgnorePkg를 어디에 둘지 추측하지 않습니다"
+
+#, c-format
+msgid "cannot write beside %s: %s"
+msgstr "%s 옆에 쓸 수 없습니다: %s"
+
+#, c-format
+msgid "could not set the mode on the new %s"
+msgstr "새 %s의 권한을 설정하지 못했습니다"
+
+#, c-format
+msgid "cannot flush the new %s"
+msgstr "새 %s을(를) 디스크에 기록하지 못했습니다"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "%s을(를) 바꿀 수 없습니다: %s"
+
+#, c-format
+msgid "no package called '%s' is installed or in any repository"
+msgstr "'%s'이라는 패키지는 설치되어 있지도, 어느 저장소에도 없습니다"
+
+msgid "unignore: name a package. `synpkg ignore` lists what is held back"
+msgstr ""
+"unignore: 패키지를 지정하세요. `synpkg ignore`가 보류된 것을 보여 줍니다"
+
+#, c-format
+msgid "%s is held back by a line synpkg did not write — edit %s by hand"
+msgstr ""
+"%s은(는) synpkg가 쓰지 않은 줄로 보류되어 있습니다 — %s을(를) 직접 편집하세요"
+
+#, c-format
+msgid "%s was removed"
+msgstr "%s을(를) 제거했습니다"
+
+#, c-format
+msgid ""
+"the modules for the kernel you are RUNNING (%s) were just deleted.\n"
+"    Anything that has not already loaded its driver — a USB device, a\n"
+"    filesystem, a VM module — will fail to load one until you reboot."
+msgstr ""
+"지금 실행 중인 커널(%s)의 모듈이 방금 삭제되었습니다.\n"
+"    아직 드라이버를 올리지 않은 것 — USB 장치, 파일 시스템,\n"
+"    가상 머신 모듈 — 은 다시 부팅할 때까지 올리지 못합니다."
+
+#, c-format
+msgid "you are still running %s, which is no longer installed"
+msgstr "아직 %s(으)로 실행 중인데, 그것은 더 이상 설치되어 있지 않습니다"
+
+msgid "systemctl is not available — reboot by hand"
+msgstr "systemctl을 쓸 수 없습니다 — 직접 다시 시작하세요"
+
+msgid "could not reboot — run `systemctl reboot` yourself"
+msgstr "다시 시작하지 못했습니다 — 직접 `systemctl reboot`을 실행하세요"
+
+#, c-format
+msgid "could not reach %s — showing a cached copy from %ld hour(s) ago"
+msgstr "%s에 연결하지 못했습니다 — %ld시간 전의 캐시본을 보여 줍니다"
+
+msgid ""
+"could not read the Arch news feed — continuing without the check (https://"
+"archlinux.org/news/)"
+msgstr ""
+"Arch 뉴스 피드를 읽지 못했습니다 — 이 확인 없이 계속합니다 (https://"
+"archlinux.org/news/)"
+
+msgid "the Arch news feed did not parse — continuing without the check"
+msgstr "Arch 뉴스 피드를 해석하지 못했습니다 — 이 확인 없이 계속합니다"
+
+#, c-format
+msgid "news: unknown argument '%s'"
+msgstr "news: 알 수 없는 인자 '%s'"
+
+#, c-format
+msgid "could not read %s"
+msgstr "%s을(를) 읽지 못했습니다"
+
+msgid "the Arch news feed did not parse"
+msgstr "Arch 뉴스 피드를 해석하지 못했습니다"
+
+#, c-format
+msgid "unrecognised SigLevel '%s' for repo %s"
+msgstr "저장소 %s의 SigLevel '%s'을(를) 인식할 수 없습니다"
+
+msgid "provides: --limit needs a number"
+msgstr "provides: --limit에는 숫자가 필요합니다"
+
+#, c-format
+msgid "provides: --limit takes a positive number, not '%s'"
+msgstr "provides: --limit은 양수를 받습니다. '%s'이(가) 아닙니다"
+
+#, c-format
+msgid "provides: one term at a time (got '%s' as well)"
+msgstr "provides: 한 번에 한 단어입니다 ('%s'도 함께 받았습니다)"
+
+msgid "provides: need a name to look up"
+msgstr "provides: 찾아볼 이름이 필요합니다"
+
+msgid "search: need a search term"
+msgstr "search: 검색어가 필요합니다"
+
+msgid "search: --all and --installed ask opposite questions"
+msgstr "search: --all과 --installed는 정반대의 질문입니다"
+
+msgid "curl is not installed — skipping the AUR"
+msgstr "curl이 설치되어 있지 않습니다 — AUR을 건너뜁니다"
+
+#, c-format
+msgid "the AUR search takes one term — using '%s'"
+msgstr "AUR 검색은 단어 하나만 받습니다 — '%s'을(를) 씁니다"
+
+msgid "info: need a package name"
+msgstr "info: 패키지 이름이 필요합니다"
+
+#, c-format
+msgid "package '%s' was not found"
+msgstr "패키지 '%s'을(를) 찾지 못했습니다"
+
+#, c-format
+msgid "installed: unknown argument '%s'"
+msgstr "installed: 알 수 없는 인자 '%s'"
+
+msgid "installed: --native and --foreign are opposites"
+msgstr "installed: --native와 --foreign은 정반대입니다"
+
+#, c-format
+msgid "orphans: unknown argument '%s'"
+msgstr "orphans: 알 수 없는 인자 '%s'"
+
+#, c-format
+msgid "groups: '%s' is not a browsable group — try: synpkg groups"
+msgstr ""
+"groups: '%s'은(는) 둘러볼 수 있는 그룹이 아닙니다 — 시도: synpkg groups"
+
+#, c-format
+msgid ""
+"no packages in %s — is the repository that provides it enabled and synced?"
+msgstr ""
+"%s에 패키지가 없습니다 — 그것을 제공하는 저장소가 켜져 있고 동기화되었습니까?"
+
+msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
+msgstr "`synpkg upgrade`에 SynapseOS 구성 요소를 포함 (컴파일에 몇 분)"
+
+msgid "rebuild the AUR packages synpkg installed during `synpkg upgrade`"
+msgstr "`synpkg upgrade` 때 synpkg가 설치한 AUR 패키지를 다시 빌드"
+
+msgid ""
+"show Arch news published since your last upgrade, and ask, before `synpkg "
+"upgrade` touches anything"
+msgstr ""
+"`synpkg upgrade`가 무언가를 건드리기 전에, 마지막 업그레이드 이후의 Arch 뉴스"
+"를 보여 주고 묻기"
+
+msgid "neither XDG_CONFIG_HOME nor HOME is set — nowhere to save settings"
+msgstr ""
+"XDG_CONFIG_HOME도 HOME도 설정되어 있지 않습니다 — 설정을 저장할 곳이 없습니다"
+
+msgid "cannot write the settings file"
+msgstr "설정 파일을 쓸 수 없습니다"
+
+msgid "cannot replace the settings file"
+msgstr "설정 파일을 바꿀 수 없습니다"
+
+#, c-format
+msgid "(default %s)"
+msgstr "(기본값 %s)"
+
+#, c-format
+msgid "config %s: expected yes or no, got '%s'"
+msgstr "config %s: yes 또는 no가 필요한데 '%s'을(를) 받았습니다"
+
+msgid "this needs root and pkexec is not installed — re-run with sudo"
+msgstr ""
+"이것은 root 권한이 필요한데 pkexec이 설치되어 있지 않습니다 — sudo로 다시 실"
+"행하세요"
+
+#, c-format
+msgid "cannot determine my own path: %s"
+msgstr "자신의 경로를 알아낼 수 없습니다: %s"
+
+msgid "authentication failed or was dismissed"
+msgstr "인증에 실패했거나 취소되었습니다"
+
+#, c-format
+msgid "pkexec could not run %s"
+msgstr "pkexec이 %s을(를) 실행하지 못했습니다"
+
+#, c-format
+msgid "package %s does not have a valid architecture"
+msgstr "패키지 %s에 올바른 아키텍처가 없습니다"
+
+#, c-format
+msgid "%s: requires %s"
+msgstr "%s: %s이(가) 필요합니다"
+
+#, c-format
+msgid "%s and %s are in conflict"
+msgstr "%s과(와) %s이(가) 충돌합니다"
+
+#, c-format
+msgid "%s and %s both own %s"
+msgstr "%s과(와) %s이(가) 둘 다 %s을(를) 소유합니다"
+
+#, c-format
+msgid "%s: %s exists and is owned by %s"
+msgstr "%s: %s이(가) 이미 있으며 %s의 것입니다"
+
+#, c-format
+msgid "transaction failed: %s"
+msgstr "트랜잭션에 실패했습니다: %s"
+
+msgid "no repositories are configured"
+msgstr "설정된 저장소가 없습니다"
+
+#, c-format
+msgid "failed to synchronise databases: %s"
+msgstr "데이터베이스를 동기화하지 못했습니다: %s"
+
+#, c-format
+msgid "refresh: unknown argument '%s'"
+msgstr "refresh: 알 수 없는 인자 '%s'"
+
+#, c-format
+msgid "install: unknown option '%s'"
+msgstr "install: 알 수 없는 옵션 '%s'"
+
+msgid "install: need at least one package"
+msgstr "install: 패키지가 적어도 하나는 필요합니다"
+
+#, c-format
+msgid "package '%s' was not found in any repository%s"
+msgstr "어느 저장소에서도 패키지 '%s'을(를) 찾지 못했습니다%s"
+
+msgid "continuing with the databases already on disk"
+msgstr "이미 디스크에 있는 데이터베이스로 계속합니다"
+
+#, c-format
+msgid "cannot start a transaction: %s"
+msgstr "트랜잭션을 시작할 수 없습니다: %s"
+
+#, c-format
+msgid "package '%s' was not found in any repository"
+msgstr "어느 저장소에서도 패키지 '%s'을(를) 찾지 못했습니다"
+
+#, c-format
+msgid "cannot install %s: %s"
+msgstr "%s을(를) 설치할 수 없습니다: %s"
+
+#, c-format
+msgid "remove: unknown option '%s'"
+msgstr "remove: 알 수 없는 옵션 '%s'"
+
+msgid "remove: need at least one package"
+msgstr "remove: 패키지가 적어도 하나는 필요합니다"
+
+#, c-format
+msgid "package '%s' is not installed"
+msgstr "패키지 '%s'은(는) 설치되어 있지 않습니다"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "%s을(를) 제거할 수 없습니다: %s"
+
+#, c-format
+msgid "upgrade: unknown argument '%s'"
+msgstr "upgrade: 알 수 없는 인자 '%s'"
+
+#, c-format
+msgid ""
+"%s has a newer version in the AUR, but synpkg did not install it — leaving "
+"it alone (synpkg aur install %s)"
+msgstr ""
+"%s은(는) AUR에 더 새로운 판이 있지만 synpkg가 설치한 것이 아닙니다 — 그대로 "
+"둡니다 (synpkg aur install %s)"
+
+msgid ""
+"SynapseOS components did not finish updating (syn-update apply) — the "
+"repository upgrade above was fine"
+msgstr ""
+"SynapseOS 구성 요소가 갱신을 끝내지 못했습니다 (syn-update apply) — 위의 저장"
+"소 업그레이드는 문제없었습니다"
+
+#, c-format
+msgid "cannot prepare an upgrade: %s"
+msgstr "업그레이드를 준비할 수 없습니다: %s"
+
+msgid "packages, arsenal, and the system itself"
+msgstr "패키지, 아스날, 그리고 시스템 자체"
+
+msgid "nothing here"
+msgstr "여기에는 아무것도 없습니다"
+
+#, c-format
+msgid ""
+"page %zu/%zu · [n]ext [p]rev · i <num> install · r <num> remove · s <num> "
+"info · [q]back"
+msgstr ""
+"%zu/%zu쪽 · [n]다음 [p]이전 · i <번호> 설치 · r <번호> 제거 · s <번호> 정보 "
+"· [q]뒤로"
+
+msgid "unrecognised — try i/r/s <number>, n, p or q"
+msgstr "인식할 수 없습니다 — i/r/s <번호>, n, p 또는 q를 써 보세요"
+
+#, c-format
+msgid "no row %ld"
+msgstr "%ld번째 줄이 없습니다"
+
+msgid "everything is up to date"
+msgstr "모두 최신입니다"
+
+#, c-format
+msgid "%zu package can be upgraded.\n"
+msgid_plural "%zu packages can be upgraded.\n"
+msgstr[0] "패키지 %zu개를 업그레이드할 수 있습니다.\n"
+
+msgid "  upgrade the whole system now?"
+msgstr "  지금 시스템 전체를 업그레이드할까요?"
+
+msgid ""
+"\n"
+"  search: "
+msgstr ""
+"\n"
+"  검색: "
+
+#, c-format
+msgid "Results for \"%s\""
+msgstr "\"%s\" 검색 결과"
+
+msgid "Suggested software you do not have yet"
+msgstr "아직 없는 추천 소프트웨어"
+
+msgid ""
+"\n"
+"  install which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  무엇을 설치할까요? (이름, 비우면 뒤로): "
+
+msgid "BlackArch is not enabled."
+msgstr "BlackArch가 켜져 있지 않습니다."
+
+msgid "  enable it now? (downloads and verifies upstream's bootstrap)"
+msgstr "  지금 켤까요? (원본의 부트스트랩을 내려받아 검증합니다)"
+
+#, c-format
+msgid "%d tool, some installed"
+msgid_plural "%d tools, some installed"
+msgstr[0] "도구 %d개, 일부 설치됨"
+
+#, c-format
+msgid "%d tool"
+msgid_plural "%d tools"
+msgstr[0] "도구 %d개"
+
+msgid "BlackArch categories"
+msgstr "BlackArch 분류"
+
+msgid ""
+"\n"
+"  category number ([i] installed tools, [q] back): "
+msgstr ""
+"\n"
+"  분류 번호 ([i] 설치된 도구, [q] 뒤로): "
+
+#, c-format
+msgid "no category %ld"
+msgstr "%ld번 분류가 없습니다"
+
+msgid ""
+"\n"
+"  search the AUR: "
+msgstr ""
+"\n"
+"  AUR 검색: "
+
+msgid ""
+"\n"
+"  build which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  무엇을 빌드할까요? (이름, 비우면 뒤로): "
+
+msgid "flatpak is not installed."
+msgstr "flatpak이 설치되어 있지 않습니다."
+
+msgid "  install it now?"
+msgstr "  지금 설치할까요?"
+
+msgid "No Flathub remote is configured."
+msgstr "설정된 Flathub 원격 저장소가 없습니다."
+
+msgid "Searching without one silently returns nothing."
+msgstr "그것 없이 검색하면 아무 말 없이 아무것도 나오지 않습니다."
+
+msgid "  enable Flathub now? (adds the remote and fetches its index)"
+msgstr "  지금 Flathub을 켤까요? (원격 저장소를 추가하고 색인을 받습니다)"
+
+msgid ""
+"\n"
+"  search Flathub: "
+msgstr ""
+"\n"
+"  Flathub 검색: "
+
+msgid ""
+"\n"
+"  install which? (application id, or blank to go back): "
+msgstr ""
+"\n"
+"  무엇을 설치할까요? (앱 ID, 비우면 뒤로): "
+
+msgid "Suggested apps"
+msgstr "추천 앱"
+
+msgid "SynapseOS itself"
+msgstr "SynapseOS 자체"
+
+msgid "Quit"
+msgstr "종료"
+
+msgid ""
+"\n"
+"  apply SynapseOS updates now? (opens a build)"
+msgstr ""
+"\n"
+"  지금 SynapseOS 갱신을 적용할까요? (빌드가 시작됩니다)"
+
+msgid "unrecognised choice"
+msgstr "알 수 없는 선택"
+
+msgid "out of memory"
+msgstr "메모리가 부족합니다"
+
+msgid ""
+"declined: there is no terminal to confirm on (a front-end must pass --"
+"noconfirm once the user has agreed)"
+msgstr ""
+"거부됨: 확인할 터미널이 없습니다 (사용자가 동의했다면 프런트엔드가 --"
+"noconfirm을 넘겨야 합니다)"

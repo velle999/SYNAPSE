@@ -11,6 +11,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -115,7 +116,7 @@ int pconf_siglevel(const char *repo)
 		} else if (!strcmp(w, "DatabaseTrustAll")) {
 			level |= ALPM_SIG_DATABASE_MARGINAL_OK | ALPM_SIG_DATABASE_UNKNOWN_OK;
 		} else if (g_verbose) {
-			warn("unrecognised SigLevel '%s' for repo %s", w, repo);
+			warn(_("unrecognised SigLevel '%s' for repo %s"), w, repo);
 		}
 	}
 

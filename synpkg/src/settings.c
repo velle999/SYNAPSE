@@ -28,6 +28,7 @@
  */
 
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -44,17 +45,22 @@ static const struct {
 	const char *def;
 	const char *desc;
 } SETTINGS[] = {
+	/* ⛔ N_() ON THE DESCRIPTION, AND NOTHING ELSE IN THE ROW. The key and the
+	 * default are what `synpkg config <key> yes` takes and what the settings
+	 * file stores; the description is the only part a person reads. It is also
+	 * emitted verbatim in the TSV row below — which is why the lookup happens
+	 * at the HUMAN draw site and not here. */
 	{ "upgrade_system", "yes",
-	  "include SynapseOS components in `synpkg upgrade` (minutes of compiling)" },
+	  N_("include SynapseOS components in `synpkg upgrade` (minutes of compiling)") },
 	{ "upgrade_aur", "yes",
-	  "rebuild the AUR packages synpkg installed during `synpkg upgrade`" },
+	  N_("rebuild the AUR packages synpkg installed during `synpkg upgrade`") },
 	/* On by default, and it should stay that way for anyone who has not
 	 * deliberately turned it off: the news is the ONLY announcement of a manual
 	 * step, and the cost of the check is one HTTPS request against an upgrade
 	 * that is about to download hundreds of megabytes. */
 	{ "upgrade_news", "yes",
-	  "show Arch news published since your last upgrade, and ask, before "
-	  "`synpkg upgrade` touches anything" },
+	  N_("show Arch news published since your last upgrade, and ask, before "
+	     "`synpkg upgrade` touches anything") },
 };
 static const size_t N_SETTINGS = sizeof SETTINGS / sizeof SETTINGS[0];
 
@@ -145,7 +151,7 @@ static int setting_write(const char *key, const char *val)
 {
 	char *path = conf_path();
 	if (!path)
-		die("neither XDG_CONFIG_HOME nor HOME is set — nowhere to save settings");
+		die(_("neither XDG_CONFIG_HOME nor HOME is set — nowhere to save settings"));
 
 	/* mkdir -p on the parent. */
 	char *slash = strrchr(path, '/');
@@ -192,7 +198,7 @@ static int setting_write(const char *key, const char *val)
 	FILE *o = fopen(tmp, "w");
 	if (!o) {
 		free(kept); free(tmp); free(path);
-		warn("cannot write the settings file");
+		warn(_("cannot write the settings file"));
 		return 1;
 	}
 	fputs("# synpkg settings. `synpkg config` lists them.\n", o);
@@ -206,7 +212,7 @@ static int setting_write(const char *key, const char *val)
 	if (rename(tmp, path) != 0) {
 		unlink(tmp);
 		free(tmp); free(path);
-		warn("cannot replace the settings file");
+		warn(_("cannot replace the settings file"));
 		return 1;
 	}
 	free(tmp); free(path);
@@ -226,11 +232,14 @@ int cmd_config(int argc, char **argv)
 				tsv_row(4, SETTINGS[i].key, v ? v : "",
 				        SETTINGS[i].def, SETTINGS[i].desc);
 			} else {
-				printf("  %-16s %-6s %s(default %s)%s\n",
-				       SETTINGS[i].key, v ? v : "",
-				       C_DIM(), SETTINGS[i].def, C_RESET());
+				/* ⚠ The KEY is not padded to a translated width:
+				 * it is a machine word and stays 16 columns. */
+				printf("  %-16s %-6s %s", SETTINGS[i].key,
+				       v ? v : "", C_DIM());
+				printf(_("(default %s)"), SETTINGS[i].def);
+				printf("%s\n", C_RESET());
 				printf("  %-16s %s%s%s\n", "", C_DIM(),
-				       SETTINGS[i].desc, C_RESET());
+				       _(SETTINGS[i].desc), C_RESET());
 			}
 			free(v);
 		}
@@ -258,7 +267,7 @@ int cmd_config(int argc, char **argv)
 
 	const char *val = argv[1];
 	if (strcmp(val, "yes") && strcmp(val, "no"))
-		die("config %s: expected yes or no, got '%s'", key, val);
+		die(_("config %s: expected yes or no, got '%s'"), key, val);
 
 	return setting_write(key, val);
 }

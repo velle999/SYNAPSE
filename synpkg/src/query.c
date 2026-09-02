@@ -8,6 +8,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -148,7 +149,7 @@ int cmd_search(int argc, char **argv)
 			needles = alpm_list_add(needles, argv[i]);
 	}
 	if (!needles)
-		die("search: need a search term");
+		die(_("search: need a search term"));
 
 	/*
 	 * ⚠ --all AND --installed ARE OPPOSITES AND SAYING BOTH IS A MISTAKE.
@@ -158,7 +159,7 @@ int cmd_search(int argc, char **argv)
 	 * conflict — they are the same instruction said twice.
 	 */
 	if (all && local_only)
-		die("search: --all and --installed ask opposite questions");
+		die(_("search: --all and --installed ask opposite questions"));
 	if (all) {
 		aur    = true;
 		g_super = true;
@@ -231,10 +232,10 @@ int cmd_search(int argc, char **argv)
 	if (aur) {
 		if (!have_cmd("curl")) {
 			if (g_out == OUT_HUMAN)
-				warn("curl is not installed — skipping the AUR");
+				warn(_("curl is not installed — skipping the AUR"));
 		} else {
 			if (needles->next)
-				warn("the AUR search takes one term — using '%s'",
+				warn(_("the AUR search takes one term — using '%s'"),
 				     (const char *)needles->data);
 			aur_search_term(needles->data);
 		}
@@ -315,7 +316,7 @@ static void print_time(const char *label, alpm_time_t t)
 int cmd_info(int argc, char **argv)
 {
 	if (argc < 1)
-		die("info: need a package name");
+		die(_("info: need a package name"));
 
 	alpm_handle_t *h = sp_alpm_init(false);
 	alpm_db_t *local = alpm_get_localdb(h);
@@ -331,7 +332,7 @@ int cmd_info(int argc, char **argv)
 				pkg = alpm_db_get_pkg(d->data, name);
 		}
 		if (!pkg) {
-			warn("package '%s' was not found", name);
+			warn(_("package '%s' was not found"), name);
 			missing++;
 			continue;
 		}
@@ -410,13 +411,13 @@ int cmd_installed(int argc, char **argv)
 		else if (!strcmp(argv[i], "--repo") && i + 1 < argc)
 			from_repo = argv[++i];
 		else
-			die("installed: unknown argument '%s'", argv[i]);
+			die(_("installed: unknown argument '%s'"), argv[i]);
 	}
 
 	/* Both at once is empty by definition, and an empty pane that looks like
 	 * "you have nothing installed" is worth an error instead. */
 	if (native_only && foreign_only)
-		die("installed: --native and --foreign are opposites");
+		die(_("installed: --native and --foreign are opposites"));
 
 	alpm_handle_t *h = sp_alpm_init(false);
 	emit_pkg_header();
@@ -573,7 +574,7 @@ int cmd_orphans(int argc, char **argv)
 		if (!strcmp(argv[i], "--remove"))
 			do_remove = true;
 		else
-			die("orphans: unknown argument '%s'", argv[i]);
+			die(_("orphans: unknown argument '%s'"), argv[i]);
 	}
 
 	alpm_handle_t *h = sp_alpm_init(false);
@@ -814,16 +815,16 @@ static int groups_packages(alpm_handle_t *h, const char *group)
 	 * otherwise render 300 libraries into a pane that offers an Install
 	 * button on each, and none of them is a thing to install by hand. */
 	if (!group_label(group))
-		die("groups: '%s' is not a browsable group — "
-		    "try: synpkg groups", group);
+		die(_("groups: '%s' is not a browsable group — "
+		    "try: synpkg groups"), group);
 
 	alpm_list_t *pkgs = alpm_find_group_pkgs(sp_syncdbs(h), group);
 	if (!pkgs) {
 		if (g_out == OUT_TSV)
 			emit_pkg_header();
 		else
-			warn("no packages in %s — is the repository that provides it "
-			     "enabled and synced?", group);
+			warn(_("no packages in %s — is the repository that provides it "
+			     "enabled and synced?"), group);
 		return 100;
 	}
 

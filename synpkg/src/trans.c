@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -30,7 +31,7 @@ bool is_root(void)
 int escalate(const char *verb, int argc, char **argv)
 {
 	if (!have_cmd("pkexec"))
-		die("this needs root and pkexec is not installed — re-run with sudo");
+		die(_("this needs root and pkexec is not installed — re-run with sudo"));
 
 	/* /proc/self/exe, not argv[0]: argv[0] may be a relative path, and pkexec
 	 * resets the working directory. It also pins the escalation to the binary
@@ -38,7 +39,7 @@ int escalate(const char *verb, int argc, char **argv)
 	char self[PATH_MAX];
 	ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
 	if (n <= 0)
-		die("cannot determine my own path: %s", strerror(errno));
+		die(_("cannot determine my own path: %s"), strerror(errno));
 	self[n] = '\0';
 
 	/* pkexec, self, up to three global flags, verb, argc args, NULL. */
@@ -67,9 +68,9 @@ int escalate(const char *verb, int argc, char **argv)
 	/* pkexec's own "not authorised"/"dismissed" exit code. Translate it: the
 	 * bare 126/127 reads like the command was missing. */
 	if (rc == 126)
-		die("authentication failed or was dismissed");
+		die(_("authentication failed or was dismissed"));
 	if (rc == 127)
-		die("pkexec could not run %s", self);
+		die(_("pkexec could not run %s"), self);
 	return rc;
 }
 
@@ -86,20 +87,20 @@ static void report_trans_error(alpm_handle_t *h, alpm_list_t *data)
 	switch (err) {
 	case ALPM_ERR_PKG_INVALID_ARCH:
 		for (alpm_list_t *i = data; i; i = i->next)
-			warn("package %s does not have a valid architecture", (char *)i->data);
+			warn(_("package %s does not have a valid architecture"), (char *)i->data);
 		break;
 	case ALPM_ERR_UNSATISFIED_DEPS:
 		for (alpm_list_t *i = data; i; i = i->next) {
 			alpm_depmissing_t *m = i->data;
 			char *dep = alpm_dep_compute_string(m->depend);
-			warn("%s: requires %s", m->target, dep);
+			warn(_("%s: requires %s"), m->target, dep);
 			free(dep);
 		}
 		break;
 	case ALPM_ERR_CONFLICTING_DEPS:
 		for (alpm_list_t *i = data; i; i = i->next) {
 			alpm_conflict_t *c = i->data;
-			warn("%s and %s are in conflict",
+			warn(_("%s and %s are in conflict"),
 			     alpm_pkg_get_name(c->package1), alpm_pkg_get_name(c->package2));
 		}
 		break;
@@ -107,9 +108,9 @@ static void report_trans_error(alpm_handle_t *h, alpm_list_t *data)
 		for (alpm_list_t *i = data; i; i = i->next) {
 			alpm_fileconflict_t *c = i->data;
 			if (c->type == ALPM_FILECONFLICT_TARGET)
-				warn("%s and %s both own %s", c->target, c->ctarget, c->file);
+				warn(_("%s and %s both own %s"), c->target, c->ctarget, c->file);
 			else
-				warn("%s: %s exists and is owned by %s", c->target, c->file,
+				warn(_("%s: %s exists and is owned by %s"), c->target, c->file,
 				     c->ctarget && *c->ctarget ? c->ctarget : "no package");
 		}
 		break;
@@ -117,7 +118,7 @@ static void report_trans_error(alpm_handle_t *h, alpm_list_t *data)
 		break;
 	}
 
-	warn("transaction failed: %s", alpm_strerror(err));
+	warn(_("transaction failed: %s"), alpm_strerror(err));
 }
 
 /* Summarise before committing. A package manager that starts writing without
@@ -188,14 +189,14 @@ static int do_refresh(alpm_handle_t *h, bool force)
 {
 	alpm_list_t *dbs = sp_syncdbs(h);
 	if (!dbs) {
-		warn("no repositories are configured");
+		warn(_("no repositories are configured"));
 		return 1;
 	}
 
 	info("synchronising package databases");
 	int rc = alpm_db_update(h, dbs, force);
 	if (rc < 0) {
-		warn("failed to synchronise databases: %s", sp_alpm_err(h));
+		warn(_("failed to synchronise databases: %s"), sp_alpm_err(h));
 		return 1;
 	}
 	/* rc == 1 means every db was already up to date. Not an error. */
@@ -209,7 +210,7 @@ int cmd_refresh(int argc, char **argv)
 		if (!strcmp(argv[i], "--force"))
 			force = true;
 		else
-			die("refresh: unknown argument '%s'", argv[i]);
+			die(_("refresh: unknown argument '%s'"), argv[i]);
 	}
 
 	if (!is_root())
@@ -295,12 +296,12 @@ int cmd_install(int argc, char **argv)
 		else if (!strcmp(argv[i], "--no-aur"))
 			use_aur = false;
 		else if (argv[i][0] == '-')
-			die("install: unknown option '%s'", argv[i]);
+			die(_("install: unknown option '%s'"), argv[i]);
 		else
 			targets = alpm_list_add(targets, argv[i]);
 	}
 	if (!targets)
-		die("install: need at least one package");
+		die(_("install: need at least one package"));
 
 	if (!is_root()) {
 		/* ── THE AUR FALLBACK ────────────────────────────────────────────
@@ -341,7 +342,7 @@ int cmd_install(int argc, char **argv)
 			for (size_t j = 0; j < naur && !found; j++)
 				found = !strcmp(foreign[i], aur[j]);
 			if (!found) {
-				warn("package '%s' was not found in any repository%s",
+				warn(_("package '%s' was not found in any repository%s"),
 				     foreign[i], use_aur ? " or in the AUR" : "");
 				rc = 1;
 			}
@@ -385,13 +386,13 @@ int cmd_install(int argc, char **argv)
 	int rc = 1;
 
 	if (refresh && do_refresh(h, false) != 0)
-		warn("continuing with the databases already on disk");
+		warn(_("continuing with the databases already on disk"));
 
 	/* NEEDED so re-installing something already at the target version is a
 	 * no-op. The GUI's Install button is one click away from a stray
 	 * reinstall, and a reinstall is not what anyone means by it. */
 	if (alpm_trans_init(h, ALPM_TRANS_FLAG_NEEDED) != 0) {
-		warn("cannot start a transaction: %s", sp_alpm_err(h));
+		warn(_("cannot start a transaction: %s"), sp_alpm_err(h));
 		goto out;
 	}
 
@@ -400,12 +401,12 @@ int cmd_install(int argc, char **argv)
 		const char *name = t->data;
 		alpm_pkg_t *p = find_sync_pkg(h, name);
 		if (!p) {
-			warn("package '%s' was not found in any repository", name);
+			warn(_("package '%s' was not found in any repository"), name);
 			missing++;
 			continue;
 		}
 		if (alpm_add_pkg(h, p) != 0) {
-			warn("cannot install %s: %s", name, sp_alpm_err(h));
+			warn(_("cannot install %s: %s"), name, sp_alpm_err(h));
 			missing++;
 		}
 	}
@@ -465,12 +466,12 @@ int cmd_remove(int argc, char **argv)
 		else if (!strcmp(argv[i], "--cascade"))
 			cascade = true;
 		else if (argv[i][0] == '-')
-			die("remove: unknown option '%s'", argv[i]);
+			die(_("remove: unknown option '%s'"), argv[i]);
 		else
 			targets = alpm_list_add(targets, argv[i]);
 	}
 	if (!targets)
-		die("remove: need at least one package");
+		die(_("remove: need at least one package"));
 	if (cascade)
 		flags |= ALPM_TRANS_FLAG_CASCADE;
 
@@ -484,7 +485,7 @@ int cmd_remove(int argc, char **argv)
 	int rc = 1;
 
 	if (alpm_trans_init(h, flags) != 0) {
-		warn("cannot start a transaction: %s", sp_alpm_err(h));
+		warn(_("cannot start a transaction: %s"), sp_alpm_err(h));
 		goto out;
 	}
 
@@ -493,12 +494,12 @@ int cmd_remove(int argc, char **argv)
 		const char *name = t->data;
 		alpm_pkg_t *p = alpm_db_get_pkg(local, name);
 		if (!p) {
-			warn("package '%s' is not installed", name);
+			warn(_("package '%s' is not installed"), name);
 			missing++;
 			continue;
 		}
 		if (alpm_remove_pkg(h, p) != 0) {
-			warn("cannot remove %s: %s", name, sp_alpm_err(h));
+			warn(_("cannot remove %s: %s"), name, sp_alpm_err(h));
 			missing++;
 		}
 	}
@@ -591,7 +592,7 @@ int cmd_upgrade(int argc, char **argv)
 		else if (!strcmp(argv[i], "--no-system"))
 			use_system = false;
 		else
-			die("upgrade: unknown argument '%s'", argv[i]);
+			die(_("upgrade: unknown argument '%s'"), argv[i]);
 	}
 
 	/* ── WHICH PROCESS IS TALKING TO THE USER ────────────────────────────────
@@ -687,8 +688,8 @@ int cmd_upgrade(int argc, char **argv)
 					mine[nmine++] = out[i];
 				} else {
 					nother++;
-					warn("%s has a newer version in the AUR, but synpkg did not "
-					     "install it — leaving it alone (synpkg aur install %s)",
+					warn(_("%s has a newer version in the AUR, but synpkg did not "
+					     "install it — leaving it alone (synpkg aur install %s)"),
 					     out[i], out[i]);
 				}
 			}
@@ -734,8 +735,8 @@ int cmd_upgrade(int argc, char **argv)
 			} else {
 				char *sy[] = { (char *)"syn-update", (char *)"apply", NULL };
 				if (run(sy, false) != 0)
-					warn("SynapseOS components did not finish updating "
-					     "(syn-update apply) — the repository upgrade above was fine");
+					warn(_("SynapseOS components did not finish updating "
+					     "(syn-update apply) — the repository upgrade above was fine"));
 			}
 		}
 
@@ -779,12 +780,12 @@ int cmd_upgrade(int argc, char **argv)
 		goto out;
 
 	if (alpm_trans_init(h, 0) != 0) {
-		warn("cannot start a transaction: %s", sp_alpm_err(h));
+		warn(_("cannot start a transaction: %s"), sp_alpm_err(h));
 		goto out;
 	}
 
 	if (alpm_sync_sysupgrade(h, downgrade) != 0) {
-		warn("cannot prepare an upgrade: %s", sp_alpm_err(h));
+		warn(_("cannot prepare an upgrade: %s"), sp_alpm_err(h));
 		alpm_trans_release(h);
 		goto out;
 	}

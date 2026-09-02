@@ -37,6 +37,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -304,11 +305,11 @@ int cmd_provides(int argc, char **argv)
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--limit")) {
 			if (++i >= argc)
-				die("provides: --limit needs a number");
+				die(_("provides: --limit needs a number"));
 			char *end = NULL;
 			limit = strtol(argv[i], &end, 10);
 			if (!end || *end || limit < 1)
-				die("provides: --limit takes a positive number, not '%s'",
+				die(_("provides: --limit takes a positive number, not '%s'"),
 				    argv[i]);
 		} else if (!term) {
 			term = argv[i];
@@ -316,11 +317,11 @@ int cmd_provides(int argc, char **argv)
 			/* One term, not a list. This answers "what is the thing
 			 * called <word>", and two words are two questions — the
 			 * caller that wants a phrase wants `search`. */
-			die("provides: one term at a time (got '%s' as well)", argv[i]);
+			die(_("provides: one term at a time (got '%s' as well)"), argv[i]);
 		}
 	}
 	if (!term || !*term)
-		die("provides: need a name to look up");
+		die(_("provides: need a name to look up"));
 
 	/* A single letter matches most of the repositories and ranks them by
 	 * name length, which is a list of the shortest package names on the

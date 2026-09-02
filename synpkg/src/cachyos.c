@@ -17,6 +17,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -90,8 +91,8 @@ static int cachyos_helper(const char *subcmd, const char *action)
 		return run(argv, false);
 	}
 
-	die("the CachyOS bootstrap helper is missing "
-	    "(/usr/lib/synpkg/synpkg-enable-cachyos)");
+	die(_("the CachyOS bootstrap helper is missing "
+	    "(/usr/lib/synpkg/synpkg-enable-cachyos)"));
 	return 1;   /* not reached; die() exits */
 }
 
@@ -129,7 +130,7 @@ int cmd_cachyos(int argc, char **argv)
 	if (!strcmp(sub, "disable-repo"))
 		return cachyos_helper("disable-repo", "disable");
 
-	die("cachyos: unknown subcommand '%s'\n"
-	    "  try: status, enable-repo, disable-repo", sub);
+	die(_("cachyos: unknown subcommand '%s'\n"
+	    "  try: status, enable-repo, disable-repo"), sub);
 	return 2;   /* not reached */
 }

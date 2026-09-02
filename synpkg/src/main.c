@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -165,6 +166,9 @@ static int cmd_gui(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+	/* ⚠ BEFORE ANYTHING PRINTS, including the colour decision's own errors. */
+	synpkg_i18n_init();
+
 	/* Colour is decided before flag parsing so an error inside it is still
 	 * readable, and honours NO_COLOR (https://no-color.org). */
 	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");

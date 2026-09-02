@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -62,23 +63,23 @@ static void cb_event(void *ctx, alpm_event_t *event)
 	case ALPM_EVENT_PACNEW_CREATED:
 		/* Loud on purpose: a .pacnew nobody merges is how a config silently
 		 * stops matching the package that owns it. */
-		warn("new config saved as %s.pacnew — merge it",
+		warn(_("new config saved as %s.pacnew — merge it"),
 		     event->pacnew_created.file);
 		break;
 	case ALPM_EVENT_PACSAVE_CREATED:
-		warn("config saved as %s.pacsave", event->pacsave_created.file);
+		warn(_("config saved as %s.pacsave"), event->pacsave_created.file);
 		break;
 	case ALPM_EVENT_SCRIPTLET_INFO:
 		fputs(event->scriptlet_info.line, stderr);
 		break;
 	case ALPM_EVENT_DB_RETRIEVE_FAILED:
-		warn("failed to retrieve some databases");
+		warn(_("failed to retrieve some databases"));
 		break;
 	case ALPM_EVENT_PKG_RETRIEVE_FAILED:
-		warn("failed to retrieve some packages");
+		warn(_("failed to retrieve some packages"));
 		break;
 	case ALPM_EVENT_OPTDEP_REMOVAL:
-		warn("%s optionally requires %s, which is being removed",
+		warn(_("%s optionally requires %s, which is being removed"),
 		     alpm_pkg_get_name(event->optdep_removal.pkg),
 		     event->optdep_removal.optdep->name);
 		break;
@@ -113,13 +114,13 @@ static void cb_question(void *ctx, alpm_question_t *question)
 		 * and let prepare() fail with a message naming both packages. */
 		const char *p1 = alpm_pkg_get_name(q->conflict->package1);
 		const char *p2 = alpm_pkg_get_name(q->conflict->package2);
-		warn("%s conflicts with %s", p1, p2);
+		warn(_("%s conflicts with %s"), p1, p2);
 		q->remove = g_noconfirm ? 0 : confirm("  remove %s?", p2);
 		break;
 	}
 	case ALPM_QUESTION_CORRUPTED_PKG: {
 		alpm_question_corrupted_t *q = &question->corrupted;
-		warn("%s is corrupted (%s) — deleting", q->filepath,
+		warn(_("%s is corrupted (%s) — deleting"), q->filepath,
 		     alpm_strerror(q->reason));
 		q->remove = 1;
 		break;
@@ -250,7 +251,7 @@ static void register_repos(alpm_handle_t *h)
 	for (size_t i = 0; i < nrepos; i++) {
 		alpm_db_t *db = alpm_register_syncdb(h, repos[i], pconf_siglevel(repos[i]));
 		if (!db) {
-			warn("could not register repo %s: %s", repos[i], sp_alpm_err(h));
+			warn(_("could not register repo %s: %s"), repos[i], sp_alpm_err(h));
 			continue;
 		}
 
@@ -261,7 +262,7 @@ static void register_repos(alpm_handle_t *h)
 			if (*srv[j])
 				alpm_db_add_server(db, srv[j]);
 		if (nsrv == 0)
-			warn("repo %s has no servers configured", repos[i]);
+			warn(_("repo %s has no servers configured"), repos[i]);
 		free(srv);
 		free(servers);
 
@@ -323,8 +324,8 @@ alpm_handle_t *sp_alpm_init(bool for_write)
 	if (!h) {
 		/* The common cause by far is the db lock held by a running pacman,
 		 * so say that rather than only echoing alpm's terse string. */
-		die("cannot open the package database (%s)\n"
-		    "  is another package manager running?", alpm_strerror(err));
+		die(_("cannot open the package database (%s)\n"
+		    "  is another package manager running?"), alpm_strerror(err));
 	}
 	free(root);
 	free(dbpath);

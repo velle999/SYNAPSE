@@ -16,6 +16,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -90,9 +91,9 @@ static int arsenal_status(alpm_handle_t *h, bool records)
 		printf("BlackArch is %senabled%s — %d packages available.\n",
 		       C_OK(), C_RESET(), n);
 		if (!keyring)
-			warn("blackarch-keyring is not installed — signing key rotations "
+			warn(_("blackarch-keyring is not installed — signing key rotations "
 			     "will never reach this machine.\n"
-			     "  fix: synpkg install blackarch-keyring");
+			     "  fix: synpkg install blackarch-keyring"));
 	}
 	return 0;
 }
@@ -170,7 +171,7 @@ static int arsenal_categories(alpm_handle_t *h)
 static int arsenal_packages(alpm_handle_t *h, const char *group)
 {
 	if (!is_category(group))
-		die("arsenal: '%s' is not a blackarch category", group);
+		die(_("arsenal: '%s' is not a blackarch category"), group);
 
 	alpm_db_t *db = blackarch_db(h);
 	if (!db) {
@@ -184,7 +185,7 @@ static int arsenal_packages(alpm_handle_t *h, const char *group)
 
 	alpm_group_t *grp = alpm_db_get_group(db, group);
 	if (!grp) {
-		warn("no such category: %s", group);
+		warn(_("no such category: %s"), group);
 		return 1;
 	}
 
@@ -262,8 +263,8 @@ static int arsenal_enable_repo(void)
 		return run(argv, false);
 	}
 
-	die("the BlackArch bootstrap helper is missing "
-	    "(/usr/lib/synpkg/synpkg-enable-blackarch)");
+	die(_("the BlackArch bootstrap helper is missing "
+	    "(/usr/lib/synpkg/synpkg-enable-blackarch)"));
 }
 
 /* ── dispatch ───────────────────────────────────────────────────────────── */
@@ -288,12 +289,12 @@ int cmd_arsenal(int argc, char **argv)
 		rc = arsenal_installed(h);
 	else if (!strcmp(sub, "packages")) {
 		if (argc < 2)
-			die("arsenal packages: need a category");
+			die(_("arsenal packages: need a category"));
 		rc = arsenal_packages(h, argv[1]);
 	} else {
 		sp_alpm_free(h);
-		die("arsenal: unknown subcommand '%s'\n"
-		    "  try: status, categories, packages <category>, installed, enable-repo",
+		die(_("arsenal: unknown subcommand '%s'\n"
+		    "  try: status, categories, packages <category>, installed, enable-repo"),
 		    sub);
 	}
 

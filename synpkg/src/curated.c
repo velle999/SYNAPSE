@@ -14,6 +14,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -50,7 +51,7 @@ static entry_t *load(size_t *count, char **backing)
 	char *path = catalogue_path();
 	FILE *f = fopen(path, "r");
 	if (!f)
-		die("cannot read the suggestion catalogue at %s", path);
+		die(_("cannot read the suggestion catalogue at %s"), path);
 	free(path);
 
 	size_t cap = 4096, len = 0;
@@ -82,7 +83,7 @@ static entry_t *load(size_t *count, char **backing)
 		/* A short line is a typo in the catalogue, not user input — say so
 		 * rather than rendering a row with empty columns. */
 		if (nf < 5)
-			warn("catalogue line %zu has %zu fields, expected 5", i + 1, nf);
+			warn(_("catalogue line %zu has %zu fields, expected 5"), i + 1, nf);
 		else
 			out[k++] = (entry_t){ f[0], f[1], f[2], f[3], f[4] };
 		free(f);
@@ -135,7 +136,7 @@ int cmd_suggest(int argc, char **argv)
 		else if (!strcmp(argv[i], "--missing"))
 			only_missing = true;
 		else if (argv[i][0] == '-')
-			die("suggest: unknown option '%s'", argv[i]);
+			die(_("suggest: unknown option '%s'"), argv[i]);
 		else
 			want_category = argv[i];
 	}

@@ -45,9 +45,30 @@ foreach lang : sp_linguas
     install_dir : get_option('datadir') / 'synpkg' / 'qml' / 'i18n')
 endforeach
 
-run_target('synpkg-pot',
-  command : [find_program('../tools/qml-xgettext.py'),
-             '--root',  meson.project_source_root() / 'data',
-             '--files', meson.current_source_dir() / 'POTFILES',
-             '-o',      meson.current_source_dir() / 'synpkg.pot',
-             '--strict'])
+# ⛔ AND THE SAME .po AGAIN, AS A .mo. The window is QML and reads the JSON
+# above; the CLI and the TUI are C and read a .mo through libintl. ONE catalog
+# per language, two compiled forms — so a word both front-ends use is
+# translated once and they cannot come to different conclusions about it.
+#
+# ⛔ VIA meson's i18n MODULE, NOT A custom_target, AND THAT IS NOT A STYLE
+# CHOICE. libintl looks for <localedir>/<lang>/LC_MESSAGES/**synpkg**.mo — named
+# after the DOMAIN. A custom_target's output is a filename, so a loop over the
+# languages can only produce de.mo, fr.mo … which install to the right
+# directory under the WRONG NAME and are never found: every string falls back
+# to English with a full catalog on disk and nothing to say so. Measured, not
+# assumed — the first version of this did exactly that. i18n.gettext() knows
+# the rule.
+#
+# ⚠ It also defines synpkg-pot / synpkg-update-po targets of its own, which is
+# why the template target below is called synpkg-template: two run_targets of
+# the same name is a configure error.
+i18n = import('i18n')
+i18n.gettext('synpkg', preset: 'glib', install: true)
+
+# ⚠ THE TEMPLATE COMES FROM po/pot.sh, NOT FROM THE QML EXTRACTOR ALONE — two
+# thirds of these msgids are in the C. Its header says why, including the
+# xgettext flag that silently mangles them.
+run_target('synpkg-template',
+  command : [find_program('pot.sh'),
+             meson.project_source_root(),
+             meson.current_source_dir()])

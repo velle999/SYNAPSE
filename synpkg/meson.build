@@ -19,6 +19,10 @@ endif
 conf = configuration_data()
 conf.set_quoted('SYNPKG_VERSION', meson.project_version())
 conf.set_quoted('SYNPKG_DATADIR', get_option('prefix') / get_option('datadir') / 'synpkg')
+# Where the .mo files land. ⚠ The SAME po/*.po the window's JSON comes from —
+# see include/i18n.h; one catalog, two compiled forms.
+conf.set_quoted('SYNPKG_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
 configure_file(output: 'config.h', configuration: conf)
 
 sources = files(

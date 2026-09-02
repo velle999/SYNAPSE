@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #define _GNU_SOURCE
+#include "config.h"
 #include "synpkg.h"
+#include "i18n.h"
+
+#include <locale.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -28,7 +32,7 @@ void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -36,7 +40,7 @@ void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
 	if (!q)
-		die("out of memory");
+		die(_("out of memory"));
 	return q;
 }
 
@@ -44,7 +48,7 @@ char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -54,7 +58,7 @@ char *xasprintf(const char *fmt, ...)
 	char *out = NULL;
 	va_start(ap, fmt);
 	if (vasprintf(&out, fmt, ap) < 0)
-		die("out of memory");
+		die(_("out of memory"));
 	va_end(ap);
 	return out;
 }
@@ -274,8 +278,8 @@ bool confirm(const char *fmt, ...)
 	 * 2026-08-12, its "Make bootable" button. A refusal nobody can see is
 	 * indistinguishable from a hang. */
 	if (!confirm_possible()) {
-		warn("declined: there is no terminal to confirm on "
-		     "(a front-end must pass --noconfirm once the user has agreed)");
+		warn(_("declined: there is no terminal to confirm on "
+		     "(a front-end must pass --noconfirm once the user has agreed)"));
 		return false;
 	}
 
@@ -340,4 +344,33 @@ char **split(char *text, char sep, size_t *n)
 
 	*n = count;
 	return out;
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⚠ LC_ALL, not LC_MESSAGES alone: synpkg prints sizes and counts, and a
+ * locale that gets the words right while formatting numbers the C way is a
+ * half-translated program. ⛔ But see synui's note on LC_NUMERIC if anything
+ * here ever starts PARSING a float — this binary does not.
+ */
+void synpkg_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+
+	/*
+	 * ⛔ AN ENV OVERRIDE, BECAUSE OTHERWISE NOTHING CAN TEST THIS. The
+	 * compiled-in path is under the install prefix, so an UNINSTALLED binary
+	 * finds no catalog at all — and a test that ran it under two locales got
+	 * identical English both times and reported the TSV path clean. It was
+	 * clean; the check simply could not have failed. Found by deliberately
+	 * translating a TSV column and watching the suite stay green.
+	 *
+	 * ⚠ It changes nothing for an installed synpkg: the variable is not set,
+	 * and a user who sets it has asked for their own catalogs.
+	 */
+	const char *dir = getenv("SYNPKG_LOCALEDIR");
+	bindtextdomain(SYNPKG_GETTEXT_DOMAIN, dir && *dir ? dir : SYNPKG_LOCALEDIR);
+	bind_textdomain_codeset(SYNPKG_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYNPKG_GETTEXT_DOMAIN);
 }

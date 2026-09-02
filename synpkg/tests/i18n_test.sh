@@ -1,117 +1,142 @@
 #!/usr/bin/env bash
-# i18n_test.sh — a translated string in synfiles must be reachable by a translator.
+# i18n_test.sh — synpkg's words, reachable by a translator, and its TSV untouched.
 #
-# ⛔ 1. qsTr() IS A TRAP AND IT IS THE FIRST THING CHECKED. Qt's translation
-#    path needs someone to call QTranslator::load() and installTranslator()
-#    before the QML engine starts. quickshell does neither — there is no
-#    installTranslator anywhere in the binary and no way to reach one from QML.
-#    So qsTr("Copy") compiles, returns "Copy", and translates nothing, in every
-#    language, forever. It reads in a diff exactly like a marked string.
+# synpkg has TWO front-ends over one set of code paths, and they need opposite
+# things from a catalog:
 #
-# ⚠ 2. A NON-LITERAL ARGUMENT extracts nothing. tools/qml-xgettext.py reads the
-#    source, not the running program, so I18n.tr(someVariable) is marked-looking
-#    and English.
+# ⛔ 1. THE --tsv PATH MUST NEVER BE TRANSLATED. It is what data/synpkg.qml
+#    parses and what these tests parse. A translated column or status word makes
+#    the GUI's behaviour depend on the user's locale — the bug `pacman -Qi`
+#    taught this project twice, in chibi and in syn-arsenal. This suite proves it
+#    the only way worth proving: by RUNNING the TSV commands under a real foreign
+#    locale and diffing against C.
 #
-# ⛔ 3. AND THE KEYS BESIDE THE LABELS WERE NOT SWEPT UP. A context-menu row
-#    carries the action it runs in `act:` beside its label, and a property row
-#    carries the record key the binary emitted in `key:`. Translating either
-#    does not make a German file manager — it makes one whose menu items do
-#    nothing and whose properties panel stops decoding paths. Same rule as
-#    ctlpanel.c's settings keys, asserted rather than trusted.
+# ⚠ 2. THE HUMAN PATH MUST BE. The CLI and the TUI are what somebody reads.
+#
+# ⛔ 3. AND ONE CATALOG SERVES BOTH FRONT-ENDS. po/*.po is compiled to JSON for
+#    the window and to a .mo for the binary, so a word they share is translated
+#    once. ⚠ The .mo is named after the DOMAIN — synpkg.mo — which is why the
+#    build uses meson's i18n module rather than a custom_target: a loop can only
+#    name its output de.mo, which installs to the right directory under a name
+#    libintl never looks for, and every string silently falls back to English.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -u
 
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
-QML="$root/data/synpkg.qml"
+BIN=${2:-$root/build/synpkg}
 fails=0
-
 check() {
     if [ "$2" = "$3" ]; then printf '  ok    %s\n' "$1"
     else printf '  FAIL  %s — expected [%s], got [%s]\n' "$1" "$2" "$3"; fails=$((fails+1)); fi
 }
 
-# The Plural-Forms header of a .po, joined across its continuation lines.
-#
-# ⚠ SINGLE-QUOTED PYTHON, DELIBERATELY. Written inline with double quotes the
-# shell eats the backslashes the regex needs and it matches nothing — which
-# reported all thirteen catalogs as disagreeing with the desktop when every one
-# of them agreed. Same escaping trap the bar's gate hit.
-plural_of() {
-    python3 -c 'import re,sys
-t = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r"Plural-Forms: (.*?)\\n", t, re.S)
-print(re.sub(r"\"\s*\n\s*\"", "", m.group(1)).strip() if m else "")' "$1"
-}
-
 echo "synpkg translations"
 
-# ── 1. qsTr() is never used ───────────────────────────────
-# ⚠ COMMENTS STRIPPED FIRST. A checker that describes what it forbids finds
-# itself — synui's equivalent matched its own I18n.qml header on the first run.
-qstr=$(sed -e 's://.*::' "$QML" | grep -n 'qsTr[[:space:]]*(\|qsTranslate[[:space:]]*(' | tr '\n' ' ')
-check "no qsTr() — quickshell has no translator to load it" "" "$qstr"
-
-# ── 2. every marked argument is a literal, and the template is current ──
+# ── 1. the template is current, and nothing was mangled making it ──────────
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-strict=$("$root/tools/qml-xgettext.py" --root "$root/data" --files "$root/po/POTFILES" \
-         -o "$tmp/new.pot" --strict 2>&1 >/dev/null)
-check "every I18n.tr() argument is a string literal" "" "$strict"
-
-if [ -f "$tmp/new.pot" ]; then
-    have=$(grep -c '^msgid "' "$root/po/synpkg.pot" 2>/dev/null || echo 0)
-    now=$(grep -c '^msgid "' "$tmp/new.pot" 2>/dev/null || echo 0)
+err=$("$root/po/pot.sh" "$root" "$root/po" "$tmp" 2>&1 >/dev/null | grep -v '^ ' | grep -v 'warning:')
+check "po/pot.sh runs clean" "" "$err"
+if [ -f "$tmp/synpkg.pot" ]; then
+    have=$(grep -c '^msgid "' "$root/po/synpkg.pot" 2>/dev/null)
+    now=$(grep -c '^msgid "' "$tmp/synpkg.pot" 2>/dev/null)
     check "po/synpkg.pot is current ($have msgids)" "$now" "$have"
 fi
 
-# ── 3. the language set matches the desktop's ─────────────
-# A file manager in English on a German desktop reads as the application being
-# broken, so the two lists are the same list.
-mine=$(grep -vE '^\s*#|^\s*$' "$root/po/LINGUAS" | sort | tr '\n' ' ')
-desk=$(grep -vE '^\s*#|^\s*$' /home/velle/SYNAPSE/synui/po/LINGUAS 2>/dev/null | sort | tr '\n' ' ')
-if [ -n "$desk" ]; then
-    check "po/LINGUAS matches the desktop's" "$desk" "$mine"
+# ⛔ AND THE NON-ASCII SURVIVED. xgettext with --omit-header writes the template
+# as ASCII and DROPS every non-ASCII character from the msgids it extracted, with
+# no warning about the loss — `%s.pacnew — merge it` came out `%s.pacnew  merge
+# it`, a msgid that can never match the source string. pot.sh refuses that now;
+# this asserts the result rather than the flag.
+src_nonascii=$(LC_ALL=C grep -cP 'N?_\("[^"]*[\x80-\xff]' "$root"/src/*.c | awk -F: '{s+=$2} END{print (s>0)}')
+pot_nonascii=$(LC_ALL=C grep -cP '^msgid ".*[\x80-\xff]' "$root/po/synpkg.pot" | awk '{print ($1>0)}')
+check "non-ASCII msgids survived into the template" "$src_nonascii" "$pot_nonascii"
+
+# ── 2. ⛔ THE TSV PATH IS LOCALE-INDEPENDENT ───────────────────────────────
+#
+# ⚠ RUN, not grepped. A `_()` on the wrong side of a `g_out == OUT_TSV` branch
+# is invisible to any amount of reading; it shows up the moment the program is
+# asked the same question in two languages.
+#
+# ⛔ AND THE LOCALE HAS TO EXIST. LANGUAGE is vetoed under C, so a box with no
+# generated locales silently tests nothing. localedef into a scratch LOCPATH —
+# never locale-gen, which is root and system-wide.
+if [ -x "$BIN" ] && command -v localedef >/dev/null 2>&1; then
+    loc=$tmp/loc; mkdir -p "$loc"
+    # ⛔ AND THE BINARY HAS TO BE ABLE TO FIND A CATALOG. Its compiled-in
+    # localedir is under the install prefix, so an uninstalled synpkg loads
+    # nothing and answers English in every language — which is how the first
+    # version of this check passed with a _() sitting in a TSV row.
+    mo=$tmp/mo; mkdir -p "$mo/de/LC_MESSAGES"
+    msgfmt -o "$mo/de/LC_MESSAGES/synpkg.mo" "$root/po/de.po" 2>/dev/null
+    if localedef -i de_DE -f UTF-8 -c "$loc/de_DE.UTF-8" 2>/dev/null; then
+        drift=""
+        # ⚠ EVERY --tsv SUBCOMMAND THAT RUNS OFFLINE. The runtime check is the
+        # only one that can tell a TSV branch from its else, so it has to be
+        # the broad one.
+        for cmd in "config" "--tsv config" "--tsv about" \
+                   "--tsv suggest categories" "--tsv groups"; do
+            a=$(SYNPKG_LOCALEDIR=$mo LC_ALL=C.UTF-8 $BIN $cmd 2>/dev/null | md5sum)
+            b=$(SYNPKG_LOCALEDIR=$mo LOCPATH=$loc LC_ALL=de_DE.UTF-8 \
+                $BIN $cmd 2>/dev/null | md5sum)
+            case "$cmd" in
+              --tsv*) [ "$a" = "$b" ] || drift="$drift [$cmd]" ;;
+            esac
+        done
+        check "every --tsv command answers the same in German as in C" "" "$drift"
+
+        # ...and the HUMAN path does not, or nothing is being translated at all.
+        # ⚠ Only once a catalog has something in it: before that this is a skip,
+        # not a failure, because "not translated yet" is a legitimate state.
+        # ⚠ A **C** MSGID, not just any: the QML half of this catalog was full
+        # long before the C half existed, so a bare count is always over the
+        # threshold and this check would claim the CLI was translated when not
+        # one of its strings was.
+        if msgattrib --translated --no-obsolete --no-fuzzy "$root/po/de.po" 2>/dev/null |
+           grep -qF 'msgid "upgrade_system"' ||
+           msgattrib --translated --no-obsolete --no-fuzzy "$root/po/de.po" 2>/dev/null |
+           grep -qF 'msgid "nothing here"'; then
+            h1=$(SYNPKG_LOCALEDIR=$mo LC_ALL=C.UTF-8 $BIN config 2>/dev/null | md5sum)
+            h2=$(SYNPKG_LOCALEDIR=$mo LOCPATH=$loc LC_ALL=de_DE.UTF-8 \
+                 $BIN config 2>/dev/null | md5sum)
+            check "...while the human path DOES change" "differs" \
+                  "$([ "$h1" = "$h2" ] && echo same || echo differs)"
+        else
+            printf '  skip  the German catalog is not filled yet\n'
+        fi
+    else
+        printf '  skip  localedef could not build de_DE (nothing asserted)\n'
+    fi
 else
-    printf '  skip  the desktop tree is not beside this one\n'
+    printf '  skip  no binary or no localedef (nothing asserted)\n'
 fi
 
-absent=""
-while IFS= read -r l; do
-    [ -f "$root/po/$l.po" ] || absent="$absent $l"
-done < <(grep -vE '^\s*#|^\s*$' "$root/po/LINGUAS")
-check "every language in po/LINGUAS has a .po" "" "$absent"
+# ── 3. (there is no static version of check 2, deliberately) ──────────────
+#
+# ⛔ A GREP CANNOT TELL A TSV BRANCH FROM ITS else. The first version of this
+# tracked braces after a `g_out == OUT_TSV` and reported five hits — all five
+# were the `else` arm, because the common shape here is
+#
+#     if (g_out == OUT_TSV) tsv_row(...);
+#     else warn(_("..."));
+#
+# with no braces at all, so "inside the TSV branch" is one statement wide and
+# brace counting never leaves it. A check that is wrong five times out of five
+# teaches people to ignore it, so it is gone: check 2 RUNS the program, which is
+# the only thing that can answer this question, and it runs every --tsv
+# subcommand that works offline.
 
-# ── 4. ⛔ THE KEYS BESIDE THE LABELS ARE UNTOUCHED ─────────
-badkey=$(grep -n 'act: *I18n\.\|key: *I18n\.\|icon: *I18n\.' "$QML" | tr '\n' ' ')
-check "no menu action, record key or icon name is translated" "" "$badkey"
-
-# ⛔ AND THE SECTION IDS ARE UNTOUCHED. Every row in the sidebar carries the
-# section it opens in `id:` beside its label, and sectionHint() and the state
-# file both match on it. A translated id is a sidebar whose entries open
-# nothing.
-badid=$(grep -n 'id: *I18n\.' "$QML" | tr '\n' ' ')
-check "no section id is translated" "" "$badid"
-
-# ── 5. the catalogs compile, and their plural rules are the desktop's ──
+# ── 4. the catalogs still compile, and to both shapes ─────────────────────
 bad=""
 while IFS= read -r l; do
     po="$root/po/$l.po"
-    [ -f "$po" ] || continue
+    [ -f "$po" ] || { bad="$bad $l(missing)"; continue; }
     msgfmt -c -o /dev/null "$po" 2>/dev/null || bad="$bad $l(msgfmt)"
-    "$root/tools/po2json.py" "$po" -o "$tmp/$l.json" >/dev/null 2>&1 || bad="$bad $l(po2json)"
-    # ⛔ `msginit -l ar` and `-l zh` cannot resolve those bare codes and fall
-    # back to the template's English default — Arabic gets 2 plural forms
-    # instead of 6, Chinese 2 instead of 1. Both are VALID rules that pass every
-    # property check, so the only way to catch it is to compare against the
-    # reviewed set next door.
-    ref="/home/velle/SYNAPSE/synui/po/$l.po"
-    if [ -f "$ref" ]; then
-        a=$(plural_of "$po"); b=$(plural_of "$ref")
-        [ -n "$a" ] && [ "$a" = "$b" ] || bad="$bad $l(plural)"
-    fi
+    "$root/tools/po2json.py" "$po" -o "$tmp/$l.json" >/dev/null 2>&1 \
+        || bad="$bad $l(po2json)"
 done < <(grep -vE '^\s*#|^\s*$' "$root/po/LINGUAS")
-check "every catalog compiles and uses the desktop's plural rule" "" "$bad"
+check "every catalog compiles to both a .mo and a JSON" "" "$bad"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all synpkg translation checks passed"; else echo "$fails failed"; fi

@@ -16,407 +16,1045 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: synpkg.qml:764
 msgid "%1   held back"
 msgstr "%1   保留中"
 
-#: synpkg.qml:755
 msgid "%1   held back, no update waiting"
 msgstr "%1   保留中、待機中の更新はありません"
 
-#: synpkg.qml:736
 msgid "%1  →  %2"
 msgstr "%1  →  %2"
 
-#: synpkg.qml:752
 msgid "%1  →  %2   held back"
 msgstr "%1  →  %2   保留中"
 
-#: synpkg.qml:1356
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 件"
 
-#: synpkg.qml:350
 msgid "AUR"
 msgstr "AUR"
 
-#: synpkg.qml:354
 msgid "About"
 msgstr "情報"
 
-#: synpkg.qml:348
 msgid "All sources"
 msgstr "すべてのソース"
 
-#: synpkg.qml:352
 msgid "Arsenal"
 msgstr "Arsenal"
 
-#: synpkg.qml:376
 msgid "BlackArch security tooling, by category"
 msgstr "BlackArch のセキュリティツール、カテゴリー別"
 
-#: synpkg.qml:1640
 msgid "Browse"
 msgstr "一覧"
 
-#: synpkg.qml:2010
 msgid "Enable BlackArch"
 msgstr "BlackArch を有効にする"
 
-#: synpkg.qml:2044
 msgid "Enable Flathub"
 msgstr "Flathub を有効にする"
 
-#: synpkg.qml:1141
 msgid "Everything"
 msgstr "すべて"
 
-#: synpkg.qml:1944
 msgid "Everything is up to date."
 msgstr "すべて最新です。"
 
-#: synpkg.qml:2073
 msgid "Fetch the app index"
 msgstr "アプリ索引を取得"
 
-#: synpkg.qml:351
 msgid "Flathub"
 msgstr "Flathub"
 
-#: synpkg.qml:1966
 msgid "Flathub has no application index yet."
 msgstr "Flathub のアプリケーション索引がまだありません。"
 
-#: synpkg.qml:1963
 msgid "Flathub is not enabled on this machine."
 msgstr "このマシンでは Flathub が有効になっていません。"
 
-#: synpkg.qml:341
 msgid "Held back"
 msgstr "保留中"
 
-#: synpkg.qml:2401
 msgid "Hold"
 msgstr "保留"
 
-#: synpkg.qml:1071
 msgid "Install"
 msgstr "インストール"
 
-#: synpkg.qml:1642 synpkg.qml:1644
 msgid "Installed"
 msgstr "インストール済み"
 
-#: synpkg.qml:1143
 msgid "Installed apps"
 msgstr "インストール済みのアプリ"
 
-#: synpkg.qml:1144
 msgid "Installed packages"
 msgstr "インストール済みのパッケージ"
 
-#: synpkg.qml:1142
 msgid "Installed tools"
 msgstr "インストール済みのツール"
 
-#: synpkg.qml:1955
 msgid "No Flatpak applications installed."
 msgstr "Flatpak アプリケーションはインストールされていません。"
 
-#: synpkg.qml:1954
 msgid "Nothing installed from outside a repository."
 msgstr "リポジトリ以外から入れたものはありません。"
 
-#: synpkg.qml:1956
 msgid "Nothing installed from the repositories."
 msgstr "リポジトリから入れたものはありません。"
 
-#: synpkg.qml:1945
 msgid ""
 "Nothing is being held back.\n"
 "Hold an update from the Updates page to stop it arriving."
-msgstr "保留中のものはありません。\n「更新」ページで更新を保留すると、その更新は届かなくなります。"
+msgstr ""
+"保留中のものはありません。\n"
+"「更新」ページで更新を保留すると、その更新は届かなくなります。"
 
-#: synpkg.qml:1967
 msgid "Nothing to browse."
 msgstr "一覧するものがありません。"
 
-#: synpkg.qml:1762
 msgid ""
 "One package manager over the repositories, the AUR, Flathub, BlackArch and "
 "SynapseOS's own components. The graphical browser, the terminal browser and "
 "the command line are the same binary reading the same code paths, so they "
 "cannot disagree about what is installed."
-msgstr "リポジトリ、AUR、Flathub、BlackArch、そして SynapseOS 自身のコンポーネントをまとめて扱う 1 つのパッケージ管理。グラフィカルなブラウザーも、端末のブラウザーも、コマンドラインも同じバイナリが同じコードを通るので、何が入っているかで食い違うことはありません。"
+msgstr ""
+"リポジトリ、AUR、Flathub、BlackArch、そして SynapseOS 自身のコンポーネントを"
+"まとめて扱う 1 つのパッケージ管理。グラフィカルなブラウザーも、端末のブラウ"
+"ザーも、コマンドラインも同じバイナリが同じコードを通るので、何が入っているか"
+"で食い違うことはありません。"
 
-#: synpkg.qml:1869
 msgid "Open"
 msgstr "開く"
 
-#: synpkg.qml:1990
 msgid ""
 "Packages here are recipes, not binaries. Installing one opens a terminal, "
 "shows you its PKGBUILD, and builds it."
-msgstr "ここでのパッケージはバイナリではなくレシピです。インストールすると端末が開き、PKGBUILD が表示され、その場でビルドされます。"
+msgstr ""
+"ここでのパッケージはバイナリではなくレシピです。インストールすると端末が開"
+"き、PKGBUILD が表示され、その場でビルドされます。"
 
-#: synpkg.qml:1948 synpkg.qml:1952 synpkg.qml:1964
 msgid "Pick a category."
 msgstr "カテゴリーを選んでください。"
 
-#: synpkg.qml:1069
 msgid "Release"
 msgstr "解除"
 
-#: synpkg.qml:1071
 msgid "Remove"
 msgstr "削除"
 
-#: synpkg.qml:349
 msgid "Repositories"
 msgstr "リポジトリ"
 
-#: synpkg.qml:1869
 msgid "Run"
 msgstr "実行"
 
-#: synpkg.qml:1318 synpkg.qml:1753
 msgid "SYNAPSE Software"
 msgstr "SYNAPSE Software"
 
-#: synpkg.qml:1994
 msgid ""
 "Sandboxed applications with their own runtimes, installed alongside your "
 "system packages rather than into them."
-msgstr "独自のランタイムを持つ隔離されたアプリケーション。システムのパッケージの中ではなく、その隣にインストールされます。"
+msgstr ""
+"独自のランタイムを持つ隔離されたアプリケーション。システムのパッケージの中で"
+"はなく、その隣にインストールされます。"
 
-#: synpkg.qml:1638 synpkg.qml:1641 synpkg.qml:1643
 msgid "Search"
 msgstr "検索"
 
-#: synpkg.qml:1971
 msgid "Search Flathub."
 msgstr "Flathub を検索します。"
 
-#: synpkg.qml:1969
 msgid "Search every source at once."
 msgstr "すべてのソースをまとめて検索します。"
 
-#: synpkg.qml:1970
 msgid "Search the AUR."
 msgstr "AUR を検索します。"
 
-#: synpkg.qml:1972
 msgid "Search the repositories."
 msgstr "リポジトリを検索します。"
 
-#: synpkg.qml:342
 msgid "Suggested"
 msgstr "おすすめ"
 
-#: synpkg.qml:353
 msgid "SynapseOS"
 msgstr "SynapseOS"
 
-#: synpkg.qml:1946
 msgid "SynapseOS components are current."
 msgstr "SynapseOS のコンポーネントは最新です。"
 
-#: synpkg.qml:1951
 msgid "The BlackArch repository is not enabled."
 msgstr "BlackArch リポジトリが有効になっていません。"
 
-#: synpkg.qml:1986
 msgid ""
 "This lists every installed package no repository offers — AUR builds and "
 "anything else built on this machine, including SynapseOS's own packages."
-msgstr "どのリポジトリにも無い、インストール済みのパッケージの一覧です。AUR でのビルドや、このマシンでビルドされたもの、SynapseOS 自身のパッケージも含みます。"
+msgstr ""
+"どのリポジトリにも無い、インストール済みのパッケージの一覧です。AUR でのビル"
+"ドや、このマシンでビルドされたもの、SynapseOS 自身のパッケージも含みます。"
 
-#: synpkg.qml:1070
 msgid "Update"
 msgstr "更新"
 
-#: synpkg.qml:340
 msgid "Updates"
 msgstr "更新"
 
-#: synpkg.qml:1444
 msgid "Upgrade all"
 msgstr "すべて更新"
 
-#: synpkg.qml:1949
 msgid "You already have everything suggested."
 msgstr "おすすめのものはすべて入っています。"
 
-#: synpkg.qml:1042
 msgid "building %1 in a terminal"
 msgstr "端末で %1 をビルドしています"
 
-#: synpkg.qml:1203
 msgid "checking Flathub…"
 msgstr "Flathub を確認しています…"
 
-#: synpkg.qml:1213
 msgid "checking SynapseOS components…"
 msgstr "SynapseOS のコンポーネントを確認しています…"
 
-#: synpkg.qml:1201
 msgid "checking repositories…"
 msgstr "リポジトリを確認しています…"
 
-#: synpkg.qml:1202
 msgid "checking the AUR…"
 msgstr "AUR を確認しています…"
 
-#: synpkg.qml:2020
 msgid "enabling BlackArch in a terminal"
 msgstr "端末で BlackArch を有効にしています"
 
-#: synpkg.qml:2054
 msgid "enabling Flathub in a terminal"
 msgstr "端末で Flathub を有効にしています"
 
-#: synpkg.qml:372
 msgid ""
 "every source at once — the repositories, BlackArch, the AUR and Flathub. "
 "Each result says where it came from"
-msgstr "すべてのソースをまとめて — リポジトリ、BlackArch、AUR、Flathub。各結果には出どころが表示されます"
+msgstr ""
+"すべてのソースをまとめて — リポジトリ、BlackArch、AUR、Flathub。各結果には出"
+"どころが表示されます"
 
-#: synpkg.qml:369
 msgid ""
 "everything with a newer version — repositories, the AUR, Flathub and "
 "SynapseOS's own components"
-msgstr "新しい版があるものすべて — リポジトリ、AUR、Flathub、SynapseOS 自身のコンポーネント"
+msgstr ""
+"新しい版があるものすべて — リポジトリ、AUR、Flathub、SynapseOS 自身のコンポー"
+"ネント"
 
-#: synpkg.qml:2083
 msgid "fetching Flathub's index in a terminal"
 msgstr "端末で Flathub の索引を取得しています"
 
-#: synpkg.qml:1719 synpkg.qml:1724
 msgid "filter this list…"
 msgstr "この一覧を絞り込む…"
 
-#: synpkg.qml:756
 msgid "held back"
 msgstr "保留中"
 
-#: synpkg.qml:1009
 msgid "holding back %1…"
 msgstr "%1 を保留しています…"
 
-#: synpkg.qml:1496
 msgid "include SynapseOS"
 msgstr "SynapseOS を含める"
 
-#: synpkg.qml:1050
 msgid "installing %1…"
 msgstr "%1 をインストールしています…"
 
-#: synpkg.qml:1352
 msgid "loading…"
 msgstr "読み込み中…"
 
-#: synpkg.qml:373
 msgid ""
 "official Arch repositories and SynapseOS's own — signed, binary, managed by "
 "pacman"
-msgstr "Arch の公式リポジトリと SynapseOS 自身のもの — 署名済み、バイナリ、pacman が管理"
+msgstr ""
+"Arch の公式リポジトリと SynapseOS 自身のもの — 署名済み、バイナリ、pacman が"
+"管理"
 
-#: synpkg.qml:979
 msgid "opened a terminal"
 msgstr "端末を開きました"
 
-#: synpkg.qml:1884
 msgid "opened in your browser"
 msgstr "ブラウザーで開きました"
 
-#: synpkg.qml:1223
 msgid "reading held components…"
 msgstr "保留中のコンポーネントを読み込んでいます…"
 
-#: synpkg.qml:1222
 msgid "reading held packages…"
 msgstr "保留中のパッケージを読み込んでいます…"
 
-#: synpkg.qml:1036
 msgid "rebuilding %1 in a terminal"
 msgstr "端末で %1 を再ビルドしています"
 
-#: synpkg.qml:946
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "拒否されました (終了コード %1) — polkit が拒んだ可能性があります"
 
-#: synpkg.qml:1010
 msgid "releasing %1…"
 msgstr "%1 の保留を解除しています…"
 
-#: synpkg.qml:1049
 msgid "removing %1…"
 msgstr "%1 を削除しています…"
 
-#: synpkg.qml:1463
 msgid "repos and AUR — in a terminal"
 msgstr "リポジトリと AUR — 端末で"
 
-#: synpkg.qml:1462
 msgid "repos, AUR and components — in a terminal"
 msgstr "リポジトリ、AUR、コンポーネント — 端末で"
 
-#: synpkg.qml:1892
 msgid "running in a terminal"
 msgstr "端末で実行しています"
 
-#: synpkg.qml:2088
 msgid "runs in a terminal — takes a minute"
 msgstr "端末で実行します — 1 分ほどかかります"
 
-#: synpkg.qml:375
 msgid "sandboxed applications from Flathub, with their own runtimes"
 msgstr "Flathub の隔離されたアプリケーション。独自のランタイム付き"
 
-#: synpkg.qml:1723
 msgid "search Flathub — press Enter"
 msgstr "Flathub を検索 — Enter を押してください"
 
-#: synpkg.qml:1720
 msgid "search everything — repos, BlackArch, AUR and Flathub — press Enter"
-msgstr "すべてを検索 — リポジトリ、BlackArch、AUR、Flathub — Enter を押してください"
+msgstr ""
+"すべてを検索 — リポジトリ、BlackArch、AUR、Flathub — Enter を押してください"
 
-#: synpkg.qml:1722
 msgid "search the AUR — press Enter"
 msgstr "AUR を検索 — Enter を押してください"
 
-#: synpkg.qml:1721
 msgid "search the repositories — press Enter"
 msgstr "リポジトリを検索 — Enter を押してください"
 
-#: synpkg.qml:374
 msgid "the Arch User Repository — recipes built from source on this machine"
 msgstr "Arch User Repository — このマシンでソースからビルドされるレシピ"
 
-#: synpkg.qml:371
 msgid "the curated SynapseOS software list"
 msgstr "SynapseOS が選んだソフトウェア一覧"
 
-#: synpkg.qml:377
 msgid "this system's own components, rebuilt from git by syn-update"
 msgstr "このシステム自身のコンポーネント。syn-update が git から再ビルドします"
 
-#: synpkg.qml:737
 msgid "update available"
 msgstr "更新があります"
 
-#: synpkg.qml:370
 msgid ""
 "updates you are deliberately not taking. Release one and it comes back on "
 "the next check"
 msgstr "意図的に見送っている更新です。解除すると次回の確認でまた現れます"
 
-#: synpkg.qml:1457
 msgid "upgrading in a terminal"
 msgstr "端末で更新しています"
 
-#: synpkg.qml:2355
 msgid "working…"
 msgstr "処理中…"
+
+#, c-format
+msgid "new config saved as %s.pacnew — merge it"
+msgstr "新しい設定を %s.pacnew として保存しました — 統合してください"
+
+#, c-format
+msgid "config saved as %s.pacsave"
+msgstr "設定を %s.pacsave として保存しました"
+
+msgid "failed to retrieve some databases"
+msgstr "一部のデータベースを取得できませんでした"
+
+msgid "failed to retrieve some packages"
+msgstr "一部のパッケージを取得できませんでした"
+
+#, c-format
+msgid "%s optionally requires %s, which is being removed"
+msgstr "%s は %s を任意で必要としますが、それは今削除されます"
+
+#, c-format
+msgid "%s conflicts with %s"
+msgstr "%s は %s と衝突します"
+
+#, c-format
+msgid "%s is corrupted (%s) — deleting"
+msgstr "%s は壊れています (%s) — 削除します"
+
+#, c-format
+msgid "could not register repo %s: %s"
+msgstr "リポジトリ %s を登録できませんでした: %s"
+
+#, c-format
+msgid "repo %s has no servers configured"
+msgstr "リポジトリ %s にサーバーが設定されていません"
+
+#, c-format
+msgid ""
+"cannot open the package database (%s)\n"
+"  is another package manager running?"
+msgstr ""
+"パッケージデータベースを開けません (%s)\n"
+"  別のパッケージ管理ツールが動いていませんか？"
+
+msgid ""
+"blackarch-keyring is not installed — signing key rotations will never reach "
+"this machine.\n"
+"  fix: synpkg install blackarch-keyring"
+msgstr ""
+"blackarch-keyring がインストールされていません — 署名鍵の更新がこの機械に届く"
+"ことはありません。\n"
+"  対処: synpkg install blackarch-keyring"
+
+#, c-format
+msgid "arsenal: '%s' is not a blackarch category"
+msgstr "arsenal: 「%s」は BlackArch のカテゴリーではありません"
+
+#, c-format
+msgid "no such category: %s"
+msgstr "そのようなカテゴリーはありません: %s"
+
+msgid ""
+"the BlackArch bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+msgstr ""
+"BlackArch の導入スクリプトがありません (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+
+msgid "arsenal packages: need a category"
+msgstr "arsenal packages: カテゴリーが必要です"
+
+#, c-format
+msgid ""
+"arsenal: unknown subcommand '%s'\n"
+"  try: status, categories, packages <category>, installed, enable-repo"
+msgstr ""
+"arsenal: 未知のサブコマンド「%s」\n"
+"  使えるもの: status, categories, packages <category>, installed, enable-repo"
+
+msgid ""
+"the CachyOS bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"cachyos)"
+msgstr ""
+"CachyOS の導入スクリプトがありません (/usr/lib/synpkg/synpkg-enable-cachyos)"
+
+#, c-format
+msgid ""
+"cachyos: unknown subcommand '%s'\n"
+"  try: status, enable-repo, disable-repo"
+msgstr ""
+"cachyos: 未知のサブコマンド「%s」\n"
+"  使えるもの: status, enable-repo, disable-repo"
+
+#, c-format
+msgid "cannot read the suggestion catalogue at %s"
+msgstr "%s の推奨カタログを読めません"
+
+#, c-format
+msgid "catalogue line %zu has %zu fields, expected 5"
+msgstr "カタログの %zu 行目は項目が %zu 個です。5 個必要です"
+
+#, c-format
+msgid "suggest: unknown option '%s'"
+msgstr "suggest: 未知のオプション「%s」"
+
+msgid "syn-update is not installed — SynapseOS components cannot be checked"
+msgstr ""
+"syn-update がインストールされていません — SynapseOS のコンポーネントを確認で"
+"きません"
+
+msgid "syn-update is not installed"
+msgstr "syn-update がインストールされていません"
+
+msgid ""
+"this syn-update is too old to hold a component back — run `syn-update apply "
+"syn-update` first"
+msgstr ""
+"この syn-update は古すぎてコンポーネントを保留できません — 先に `syn-update "
+"apply syn-update` を実行してください"
+
+msgid ""
+"this syn-update cannot hold a component back yet.\n"
+"  Update it first: syn-update apply syn-update"
+msgstr ""
+"この syn-update はまだコンポーネントを保留できません。\n"
+"  先に更新してください: syn-update apply syn-update"
+
+#, c-format
+msgid ""
+"system: unknown subcommand '%s' — try check, apply, status, ignore, "
+"unignore, ignored"
+msgstr ""
+"system: 未知のサブコマンド「%s」 — check, apply, status, ignore, unignore, "
+"ignored を試してください"
+
+msgid "flatpak is not installed — synpkg install flatpak"
+msgstr "flatpak がインストールされていません — synpkg install flatpak"
+
+msgid ""
+"no Flathub application index on this machine — run: synpkg flatpak enable-"
+"flathub"
+msgstr ""
+"この機械に Flathub のアプリ索引がありません — 実行してください: synpkg "
+"flatpak enable-flathub"
+
+#, c-format
+msgid ""
+"flatpak: '%s' is not a Flathub category — try: synpkg flatpak categories"
+msgstr ""
+"flatpak: 「%s」は Flathub のカテゴリーではありません — 試してください: "
+"synpkg flatpak categories"
+
+msgid "no Flatpak remotes are configured — run: synpkg flatpak enable-flathub"
+msgstr ""
+"Flatpak のリモートが設定されていません — 実行してください: synpkg flatpak "
+"enable-flathub"
+
+#, c-format
+msgid "%s is not installed; masking it in the user installation"
+msgstr "%s はインストールされていません。ユーザー領域でマスクします"
+
+#, c-format
+msgid "flatpak could not %s %s"
+msgstr "flatpak は %s %s を実行できませんでした"
+
+msgid "could not install flatpak"
+msgstr "flatpak をインストールできませんでした"
+
+msgid ""
+"flatpak installed but is not on PATH — open a new terminal and run: synpkg "
+"flatpak enable-flathub"
+msgstr ""
+"flatpak はインストールされましたが PATH にありません — 新しい端末を開いて実行"
+"してください: synpkg flatpak enable-flathub"
+
+msgid "could not add the Flathub remote"
+msgstr "Flathub のリモートを追加できませんでした"
+
+#, c-format
+msgid "flatpak %s: need an application id"
+msgstr "flatpak %s: アプリケーション ID が必要です"
+
+msgid "flatpak search: need a term"
+msgstr "flatpak search: 検索語が必要です"
+
+msgid "flatpak category: need a category — try: synpkg flatpak categories"
+msgstr ""
+"flatpak category: カテゴリーが必要です — 試してください: synpkg flatpak "
+"categories"
+
+msgid "curl is required for AUR access"
+msgstr "AUR にアクセスするには curl が必要です"
+
+msgid "could not reach the AUR"
+msgstr "AUR に接続できませんでした"
+
+msgid "the AUR returned something this does not understand"
+msgstr "AUR が解釈できないものを返しました"
+
+msgid "could not reach the AUR — AUR packages were not checked"
+msgstr "AUR に接続できませんでした — AUR のパッケージは確認していません"
+
+msgid ""
+"AUR builds must not run as root — run `synpkg aur install` as your own user\n"
+"  (makepkg will be asked for the root password itself when it installs)"
+msgstr ""
+"AUR のビルドを root で走らせてはいけません — `synpkg aur install` は自分の"
+"ユーザーで実行してください\n"
+"  （インストール時に makepkg 自身が root のパスワードを尋ねます）"
+
+msgid "git is required to build from the AUR"
+msgstr "AUR からビルドするには git が必要です"
+
+msgid "makepkg is required to build from the AUR — synpkg install base-devel"
+msgstr "AUR からビルドするには makepkg が必要です — synpkg install base-devel"
+
+msgid "HOME is not set"
+msgstr "HOME が設定されていません"
+
+#, c-format
+msgid "'%s' is not a valid package name"
+msgstr "「%s」は正しいパッケージ名ではありません"
+
+#, c-format
+msgid "could not update %s — building the existing checkout"
+msgstr "%s を更新できませんでした — 手元にあるものをビルドします"
+
+#, c-format
+msgid "could not clone %s — is it in the AUR?"
+msgstr "%s を複製できませんでした — AUR にありますか？"
+
+#, c-format
+msgid "build failed for %s"
+msgstr "%s のビルドに失敗しました"
+
+msgid "aur search: need a term"
+msgstr "aur search: 検索語が必要です"
+
+msgid "aur install: need a package"
+msgstr "aur install: パッケージが必要です"
+
+#, c-format
+msgid "aur: unknown subcommand '%s' — try search, install, installed, updates"
+msgstr ""
+"aur: 未知のサブコマンド「%s」 — search, install, installed, updates を試して"
+"ください"
+
+#, c-format
+msgid ""
+"SYNPKG_PACMAN_CONF points at %s, which this user cannot write.\n"
+"  pkexec would not carry that setting to the root process, so the\n"
+"  escalated write would land on /etc/pacman.conf instead. Re-run as\n"
+"  a user who can write the file you named."
+msgstr ""
+"SYNPKG_PACMAN_CONF は %s を指していますが、このユーザーには書き込めません。\n"
+"  pkexec はその設定を root のプロセスへ渡さないため、権限を上げた書き込みは\n"
+"  代わりに /etc/pacman.conf に着きます。指定したファイルに書けるユーザーで\n"
+"  実行し直してください。"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "%s を読めません: %s"
+
+#, c-format
+msgid ""
+"%s has no [options] section — refusing to guess where an IgnorePkg belongs"
+msgstr ""
+"%s に [options] セクションがありません — IgnorePkg の置き場所を推測はしません"
+
+#, c-format
+msgid "cannot write beside %s: %s"
+msgstr "%s の隣に書き込めません: %s"
+
+#, c-format
+msgid "could not set the mode on the new %s"
+msgstr "新しい %s の権限を設定できませんでした"
+
+#, c-format
+msgid "cannot flush the new %s"
+msgstr "新しい %s をディスクに書き出せません"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "%s を置き換えられません: %s"
+
+#, c-format
+msgid "no package called '%s' is installed or in any repository"
+msgstr ""
+"「%s」という名前のパッケージは、インストール済みにもどのリポジトリにもありま"
+"せん"
+
+msgid "unignore: name a package. `synpkg ignore` lists what is held back"
+msgstr ""
+"unignore: パッケージ名を指定してください。`synpkg ignore` で保留中のものが一"
+"覧できます"
+
+#, c-format
+msgid "%s is held back by a line synpkg did not write — edit %s by hand"
+msgstr ""
+"%s は synpkg が書いたのではない行で保留されています — %s を手で編集してくださ"
+"い"
+
+#, c-format
+msgid "%s was removed"
+msgstr "%s を削除しました"
+
+#, c-format
+msgid ""
+"the modules for the kernel you are RUNNING (%s) were just deleted.\n"
+"    Anything that has not already loaded its driver — a USB device, a\n"
+"    filesystem, a VM module — will fail to load one until you reboot."
+msgstr ""
+"いま動作中のカーネル (%s) のモジュールが削除されました。\n"
+"    まだドライバーを読み込んでいないもの — USB 機器、ファイルシステム、\n"
+"    仮想マシンのモジュールなど — は、再起動するまで読み込めません。"
+
+#, c-format
+msgid "you are still running %s, which is no longer installed"
+msgstr "まだ %s で動作していますが、それはもうインストールされていません"
+
+msgid "systemctl is not available — reboot by hand"
+msgstr "systemctl が使えません — 手で再起動してください"
+
+msgid "could not reboot — run `systemctl reboot` yourself"
+msgstr ""
+"再起動できませんでした — ご自分で `systemctl reboot` を実行してください"
+
+#, c-format
+msgid "could not reach %s — showing a cached copy from %ld hour(s) ago"
+msgstr "%s に接続できませんでした — %ld 時間前のキャッシュを表示します"
+
+msgid ""
+"could not read the Arch news feed — continuing without the check (https://"
+"archlinux.org/news/)"
+msgstr ""
+"Arch のニュースフィードを読めませんでした — この確認なしで続けます (https://"
+"archlinux.org/news/)"
+
+msgid "the Arch news feed did not parse — continuing without the check"
+msgstr "Arch のニュースフィードを解析できませんでした — この確認なしで続けます"
+
+#, c-format
+msgid "news: unknown argument '%s'"
+msgstr "news: 未知の引数「%s」"
+
+#, c-format
+msgid "could not read %s"
+msgstr "%s を読めませんでした"
+
+msgid "the Arch news feed did not parse"
+msgstr "Arch のニュースフィードを解析できませんでした"
+
+#, c-format
+msgid "unrecognised SigLevel '%s' for repo %s"
+msgstr "リポジトリ %s の SigLevel「%s」を認識できません"
+
+msgid "provides: --limit needs a number"
+msgstr "provides: --limit には数値が必要です"
+
+#, c-format
+msgid "provides: --limit takes a positive number, not '%s'"
+msgstr "provides: --limit は正の数を取ります。「%s」ではありません"
+
+#, c-format
+msgid "provides: one term at a time (got '%s' as well)"
+msgstr "provides: 一度に一語です（「%s」も受け取りました）"
+
+msgid "provides: need a name to look up"
+msgstr "provides: 調べる名前が必要です"
+
+msgid "search: need a search term"
+msgstr "search: 検索語が必要です"
+
+msgid "search: --all and --installed ask opposite questions"
+msgstr "search: --all と --installed は正反対の問いです"
+
+msgid "curl is not installed — skipping the AUR"
+msgstr "curl がインストールされていません — AUR は飛ばします"
+
+#, c-format
+msgid "the AUR search takes one term — using '%s'"
+msgstr "AUR の検索は一語だけです —「%s」を使います"
+
+msgid "info: need a package name"
+msgstr "info: パッケージ名が必要です"
+
+#, c-format
+msgid "package '%s' was not found"
+msgstr "パッケージ「%s」は見つかりませんでした"
+
+#, c-format
+msgid "installed: unknown argument '%s'"
+msgstr "installed: 未知の引数「%s」"
+
+msgid "installed: --native and --foreign are opposites"
+msgstr "installed: --native と --foreign は正反対です"
+
+#, c-format
+msgid "orphans: unknown argument '%s'"
+msgstr "orphans: 未知の引数「%s」"
+
+#, c-format
+msgid "groups: '%s' is not a browsable group — try: synpkg groups"
+msgstr ""
+"groups: 「%s」は閲覧できるグループではありません — 試してください: synpkg "
+"groups"
+
+#, c-format
+msgid ""
+"no packages in %s — is the repository that provides it enabled and synced?"
+msgstr ""
+"%s にパッケージがありません — それを提供するリポジトリは有効で同期済みです"
+"か？"
+
+msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
+msgstr ""
+"`synpkg upgrade` に SynapseOS のコンポーネントを含める（数分のコンパイル）"
+
+msgid "rebuild the AUR packages synpkg installed during `synpkg upgrade`"
+msgstr "`synpkg upgrade` のときに synpkg が入れた AUR パッケージを作り直す"
+
+msgid ""
+"show Arch news published since your last upgrade, and ask, before `synpkg "
+"upgrade` touches anything"
+msgstr ""
+"前回の更新以降に出た Arch のニュースを表示し、`synpkg upgrade` が何かに触れる"
+"前に確認する"
+
+msgid "neither XDG_CONFIG_HOME nor HOME is set — nowhere to save settings"
+msgstr ""
+"XDG_CONFIG_HOME も HOME も設定されていません — 設定の保存先がありません"
+
+msgid "cannot write the settings file"
+msgstr "設定ファイルを書き込めません"
+
+msgid "cannot replace the settings file"
+msgstr "設定ファイルを置き換えられません"
+
+#, c-format
+msgid "(default %s)"
+msgstr "(既定 %s)"
+
+#, c-format
+msgid "config %s: expected yes or no, got '%s'"
+msgstr "config %s: yes か no が必要です。「%s」を受け取りました"
+
+msgid "this needs root and pkexec is not installed — re-run with sudo"
+msgstr ""
+"これには root 権限が必要ですが pkexec がありません — sudo で実行し直してくだ"
+"さい"
+
+#, c-format
+msgid "cannot determine my own path: %s"
+msgstr "自分自身のパスを特定できません: %s"
+
+msgid "authentication failed or was dismissed"
+msgstr "認証に失敗したか、取り消されました"
+
+#, c-format
+msgid "pkexec could not run %s"
+msgstr "pkexec は %s を実行できませんでした"
+
+#, c-format
+msgid "package %s does not have a valid architecture"
+msgstr "パッケージ %s のアーキテクチャが正しくありません"
+
+#, c-format
+msgid "%s: requires %s"
+msgstr "%s: %s が必要です"
+
+#, c-format
+msgid "%s and %s are in conflict"
+msgstr "%s と %s が衝突しています"
+
+#, c-format
+msgid "%s and %s both own %s"
+msgstr "%s と %s の両方が %s を所有しています"
+
+#, c-format
+msgid "%s: %s exists and is owned by %s"
+msgstr "%s: %s は存在し、%s が所有しています"
+
+#, c-format
+msgid "transaction failed: %s"
+msgstr "処理に失敗しました: %s"
+
+msgid "no repositories are configured"
+msgstr "リポジトリが設定されていません"
+
+#, c-format
+msgid "failed to synchronise databases: %s"
+msgstr "データベースを同期できませんでした: %s"
+
+#, c-format
+msgid "refresh: unknown argument '%s'"
+msgstr "refresh: 未知の引数「%s」"
+
+#, c-format
+msgid "install: unknown option '%s'"
+msgstr "install: 未知のオプション「%s」"
+
+msgid "install: need at least one package"
+msgstr "install: 少なくとも 1 つのパッケージが必要です"
+
+#, c-format
+msgid "package '%s' was not found in any repository%s"
+msgstr "パッケージ「%s」はどのリポジトリにもありませんでした%s"
+
+msgid "continuing with the databases already on disk"
+msgstr "すでにディスクにあるデータベースで続けます"
+
+#, c-format
+msgid "cannot start a transaction: %s"
+msgstr "処理を開始できません: %s"
+
+#, c-format
+msgid "package '%s' was not found in any repository"
+msgstr "パッケージ「%s」はどのリポジトリにもありませんでした"
+
+#, c-format
+msgid "cannot install %s: %s"
+msgstr "%s をインストールできません: %s"
+
+#, c-format
+msgid "remove: unknown option '%s'"
+msgstr "remove: 未知のオプション「%s」"
+
+msgid "remove: need at least one package"
+msgstr "remove: 少なくとも 1 つのパッケージが必要です"
+
+#, c-format
+msgid "package '%s' is not installed"
+msgstr "パッケージ「%s」はインストールされていません"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "%s を削除できません: %s"
+
+#, c-format
+msgid "upgrade: unknown argument '%s'"
+msgstr "upgrade: 未知の引数「%s」"
+
+#, c-format
+msgid ""
+"%s has a newer version in the AUR, but synpkg did not install it — leaving "
+"it alone (synpkg aur install %s)"
+msgstr ""
+"%s は AUR に新しい版がありますが、synpkg が入れたものではないため触りません "
+"(synpkg aur install %s)"
+
+msgid ""
+"SynapseOS components did not finish updating (syn-update apply) — the "
+"repository upgrade above was fine"
+msgstr ""
+"SynapseOS のコンポーネントは更新を終えられませんでした (syn-update apply) — "
+"上のリポジトリ更新は問題ありません"
+
+#, c-format
+msgid "cannot prepare an upgrade: %s"
+msgstr "更新を準備できません: %s"
+
+msgid "packages, arsenal, and the system itself"
+msgstr "パッケージ、アーセナル、そしてシステム自身"
+
+msgid "nothing here"
+msgstr "ここには何もありません"
+
+#, c-format
+msgid ""
+"page %zu/%zu · [n]ext [p]rev · i <num> install · r <num> remove · s <num> "
+"info · [q]back"
+msgstr ""
+"%zu/%zu ページ · [n]次へ [p]前へ · i <番号> 導入 · r <番号> 削除 · s <番号> "
+"詳細 · [q]戻る"
+
+msgid "unrecognised — try i/r/s <number>, n, p or q"
+msgstr "認識できません — i/r/s <番号>、n、p、q を試してください"
+
+#, c-format
+msgid "no row %ld"
+msgstr "%ld 行目はありません"
+
+msgid "everything is up to date"
+msgstr "すべて最新です"
+
+#, c-format
+msgid "%zu package can be upgraded.\n"
+msgid_plural "%zu packages can be upgraded.\n"
+msgstr[0] "%zu 個のパッケージを更新できます。\n"
+
+msgid "  upgrade the whole system now?"
+msgstr "  いますぐシステム全体を更新しますか？"
+
+msgid ""
+"\n"
+"  search: "
+msgstr ""
+"\n"
+"  検索: "
+
+#, c-format
+msgid "Results for \"%s\""
+msgstr "「%s」の検索結果"
+
+msgid "Suggested software you do not have yet"
+msgstr "まだ入れていないおすすめのソフトウェア"
+
+msgid ""
+"\n"
+"  install which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  どれを入れますか？（名前、空欄で戻る）: "
+
+msgid "BlackArch is not enabled."
+msgstr "BlackArch は有効になっていません。"
+
+msgid "  enable it now? (downloads and verifies upstream's bootstrap)"
+msgstr "  いま有効にしますか？（配布元の導入スクリプトを取得して検証します）"
+
+#, c-format
+msgid "%d tool, some installed"
+msgid_plural "%d tools, some installed"
+msgstr[0] "ツール %d 個、一部は導入済み"
+
+#, c-format
+msgid "%d tool"
+msgid_plural "%d tools"
+msgstr[0] "ツール %d 個"
+
+msgid "BlackArch categories"
+msgstr "BlackArch のカテゴリー"
+
+msgid ""
+"\n"
+"  category number ([i] installed tools, [q] back): "
+msgstr ""
+"\n"
+"  カテゴリー番号（[i] 導入済みの道具、[q] 戻る）: "
+
+#, c-format
+msgid "no category %ld"
+msgstr "カテゴリー %ld はありません"
+
+msgid ""
+"\n"
+"  search the AUR: "
+msgstr ""
+"\n"
+"  AUR を検索: "
+
+msgid ""
+"\n"
+"  build which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  どれをビルドしますか？（名前、空欄で戻る）: "
+
+msgid "flatpak is not installed."
+msgstr "flatpak がインストールされていません。"
+
+msgid "  install it now?"
+msgstr "  いまインストールしますか？"
+
+msgid "No Flathub remote is configured."
+msgstr "Flathub のリモートが設定されていません。"
+
+msgid "Searching without one silently returns nothing."
+msgstr "それなしで検索しても、黙って何も返りません。"
+
+msgid "  enable Flathub now? (adds the remote and fetches its index)"
+msgstr ""
+"  いま Flathub を有効にしますか？（リモートを追加して索引を取得します）"
+
+msgid ""
+"\n"
+"  search Flathub: "
+msgstr ""
+"\n"
+"  Flathub を検索: "
+
+msgid ""
+"\n"
+"  install which? (application id, or blank to go back): "
+msgstr ""
+"\n"
+"  どれを入れますか？（アプリケーション ID、空欄で戻る）: "
+
+msgid "Suggested apps"
+msgstr "おすすめ"
+
+msgid "SynapseOS itself"
+msgstr "SynapseOS 自身"
+
+msgid "Quit"
+msgstr "終了"
+
+msgid ""
+"\n"
+"  apply SynapseOS updates now? (opens a build)"
+msgstr ""
+"\n"
+"  いま SynapseOS の更新を適用しますか？（ビルドが始まります）"
+
+msgid "unrecognised choice"
+msgstr "選択を認識できません"
+
+msgid "out of memory"
+msgstr "メモリが足りません"
+
+msgid ""
+"declined: there is no terminal to confirm on (a front-end must pass --"
+"noconfirm once the user has agreed)"
+msgstr ""
+"拒否しました: 確認する端末がありません（利用者が同意したら、フロントエンドが "
+"--noconfirm を渡す必要があります）"

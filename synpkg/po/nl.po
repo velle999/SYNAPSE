@@ -16,408 +16,1061 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: synpkg.qml:764
 msgid "%1   held back"
 msgstr "%1   tegengehouden"
 
-#: synpkg.qml:755
 msgid "%1   held back, no update waiting"
 msgstr "%1   tegengehouden, geen update in afwachting"
 
-#: synpkg.qml:736
 msgid "%1  →  %2"
 msgstr "%1  →  %2"
 
-#: synpkg.qml:752
 msgid "%1  →  %2   held back"
 msgstr "%1  →  %2   tegengehouden"
 
-#: synpkg.qml:1356
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 item"
 msgstr[1] "%1 items"
 
-#: synpkg.qml:350
 msgid "AUR"
 msgstr "AUR"
 
-#: synpkg.qml:354
 msgid "About"
 msgstr "Over"
 
-#: synpkg.qml:348
 msgid "All sources"
 msgstr "Alle bronnen"
 
-#: synpkg.qml:352
 msgid "Arsenal"
 msgstr "Arsenal"
 
-#: synpkg.qml:376
 msgid "BlackArch security tooling, by category"
 msgstr "BlackArch-beveiligingsgereedschap, per categorie"
 
-#: synpkg.qml:1640
 msgid "Browse"
 msgstr "Bladeren"
 
-#: synpkg.qml:2010
 msgid "Enable BlackArch"
 msgstr "BlackArch inschakelen"
 
-#: synpkg.qml:2044
 msgid "Enable Flathub"
 msgstr "Flathub inschakelen"
 
-#: synpkg.qml:1141
 msgid "Everything"
 msgstr "Alles"
 
-#: synpkg.qml:1944
 msgid "Everything is up to date."
 msgstr "Alles is bij."
 
-#: synpkg.qml:2073
 msgid "Fetch the app index"
 msgstr "App-index ophalen"
 
-#: synpkg.qml:351
 msgid "Flathub"
 msgstr "Flathub"
 
-#: synpkg.qml:1966
 msgid "Flathub has no application index yet."
 msgstr "Flathub heeft nog geen applicatie-index."
 
-#: synpkg.qml:1963
 msgid "Flathub is not enabled on this machine."
 msgstr "Flathub is op deze machine niet ingeschakeld."
 
-#: synpkg.qml:341
 msgid "Held back"
 msgstr "Tegengehouden"
 
-#: synpkg.qml:2401
 msgid "Hold"
 msgstr "Tegenhouden"
 
-#: synpkg.qml:1071
 msgid "Install"
 msgstr "Installeren"
 
-#: synpkg.qml:1642 synpkg.qml:1644
 msgid "Installed"
 msgstr "Geïnstalleerd"
 
-#: synpkg.qml:1143
 msgid "Installed apps"
 msgstr "Geïnstalleerde applicaties"
 
-#: synpkg.qml:1144
 msgid "Installed packages"
 msgstr "Geïnstalleerde pakketten"
 
-#: synpkg.qml:1142
 msgid "Installed tools"
 msgstr "Geïnstalleerd gereedschap"
 
-#: synpkg.qml:1955
 msgid "No Flatpak applications installed."
 msgstr "Geen Flatpak-applicaties geïnstalleerd."
 
-#: synpkg.qml:1954
 msgid "Nothing installed from outside a repository."
 msgstr "Niets geïnstalleerd van buiten een pakketbron."
 
-#: synpkg.qml:1956
 msgid "Nothing installed from the repositories."
 msgstr "Niets geïnstalleerd uit de pakketbronnen."
 
-#: synpkg.qml:1945
 msgid ""
 "Nothing is being held back.\n"
 "Hold an update from the Updates page to stop it arriving."
-msgstr "Er wordt niets tegengehouden.\nHoud een update tegen op de pagina Updates om te voorkomen dat hij binnenkomt."
+msgstr ""
+"Er wordt niets tegengehouden.\n"
+"Houd een update tegen op de pagina Updates om te voorkomen dat hij "
+"binnenkomt."
 
-#: synpkg.qml:1967
 msgid "Nothing to browse."
 msgstr "Niets om door te bladeren."
 
-#: synpkg.qml:1762
 msgid ""
 "One package manager over the repositories, the AUR, Flathub, BlackArch and "
 "SynapseOS's own components. The graphical browser, the terminal browser and "
 "the command line are the same binary reading the same code paths, so they "
 "cannot disagree about what is installed."
-msgstr "Eén pakketbeheerder over de pakketbronnen, de AUR, Flathub, BlackArch en SynapseOS' eigen componenten. De grafische verkenner, de terminalverkenner en de opdrachtregel zijn hetzelfde binaire bestand langs dezelfde codepaden, dus ze kunnen het niet oneens zijn over wat er geïnstalleerd is."
+msgstr ""
+"Eén pakketbeheerder over de pakketbronnen, de AUR, Flathub, BlackArch en "
+"SynapseOS' eigen componenten. De grafische verkenner, de terminalverkenner "
+"en de opdrachtregel zijn hetzelfde binaire bestand langs dezelfde codepaden, "
+"dus ze kunnen het niet oneens zijn over wat er geïnstalleerd is."
 
-#: synpkg.qml:1869
 msgid "Open"
 msgstr "Openen"
 
-#: synpkg.qml:1990
 msgid ""
 "Packages here are recipes, not binaries. Installing one opens a terminal, "
 "shows you its PKGBUILD, and builds it."
-msgstr "Pakketten zijn hier recepten, geen binaire bestanden. Er een installeren opent een terminal, toont het PKGBUILD en bouwt het."
+msgstr ""
+"Pakketten zijn hier recepten, geen binaire bestanden. Er een installeren "
+"opent een terminal, toont het PKGBUILD en bouwt het."
 
-#: synpkg.qml:1948 synpkg.qml:1952 synpkg.qml:1964
 msgid "Pick a category."
 msgstr "Kies een categorie."
 
-#: synpkg.qml:1069
 msgid "Release"
 msgstr "Vrijgeven"
 
-#: synpkg.qml:1071
 msgid "Remove"
 msgstr "Verwijderen"
 
-#: synpkg.qml:349
 msgid "Repositories"
 msgstr "Pakketbronnen"
 
-#: synpkg.qml:1869
 msgid "Run"
 msgstr "Uitvoeren"
 
-#: synpkg.qml:1318 synpkg.qml:1753
 msgid "SYNAPSE Software"
 msgstr "SYNAPSE Software"
 
-#: synpkg.qml:1994
 msgid ""
 "Sandboxed applications with their own runtimes, installed alongside your "
 "system packages rather than into them."
-msgstr "Afgeschermde applicaties met hun eigen runtimes, geïnstalleerd naast je systeempakketten in plaats van erin."
+msgstr ""
+"Afgeschermde applicaties met hun eigen runtimes, geïnstalleerd naast je "
+"systeempakketten in plaats van erin."
 
-#: synpkg.qml:1638 synpkg.qml:1641 synpkg.qml:1643
 msgid "Search"
 msgstr "Zoeken"
 
-#: synpkg.qml:1971
 msgid "Search Flathub."
 msgstr "Zoek in Flathub."
 
-#: synpkg.qml:1969
 msgid "Search every source at once."
 msgstr "Zoek in alle bronnen tegelijk."
 
-#: synpkg.qml:1970
 msgid "Search the AUR."
 msgstr "Zoek in de AUR."
 
-#: synpkg.qml:1972
 msgid "Search the repositories."
 msgstr "Zoek in de pakketbronnen."
 
-#: synpkg.qml:342
 msgid "Suggested"
 msgstr "Aanbevolen"
 
-#: synpkg.qml:353
 msgid "SynapseOS"
 msgstr "SynapseOS"
 
-#: synpkg.qml:1946
 msgid "SynapseOS components are current."
 msgstr "De SynapseOS-componenten zijn bij."
 
-#: synpkg.qml:1951
 msgid "The BlackArch repository is not enabled."
 msgstr "De BlackArch-pakketbron is niet ingeschakeld."
 
-#: synpkg.qml:1986
 msgid ""
 "This lists every installed package no repository offers — AUR builds and "
 "anything else built on this machine, including SynapseOS's own packages."
-msgstr "Hier staat elk geïnstalleerd pakket dat geen enkele pakketbron aanbiedt — AUR-bouwsels en al het andere dat op deze machine is gebouwd, inclusief SynapseOS' eigen pakketten."
+msgstr ""
+"Hier staat elk geïnstalleerd pakket dat geen enkele pakketbron aanbiedt — "
+"AUR-bouwsels en al het andere dat op deze machine is gebouwd, inclusief "
+"SynapseOS' eigen pakketten."
 
-#: synpkg.qml:1070
 msgid "Update"
 msgstr "Bijwerken"
 
-#: synpkg.qml:340
 msgid "Updates"
 msgstr "Updates"
 
-#: synpkg.qml:1444
 msgid "Upgrade all"
 msgstr "Alles bijwerken"
 
-#: synpkg.qml:1949
 msgid "You already have everything suggested."
 msgstr "Je hebt alles wat aanbevolen wordt al."
 
-#: synpkg.qml:1042
 msgid "building %1 in a terminal"
 msgstr "%1 wordt gebouwd in een terminal"
 
-#: synpkg.qml:1203
 msgid "checking Flathub…"
 msgstr "Flathub controleren…"
 
-#: synpkg.qml:1213
 msgid "checking SynapseOS components…"
 msgstr "SynapseOS-componenten controleren…"
 
-#: synpkg.qml:1201
 msgid "checking repositories…"
 msgstr "pakketbronnen controleren…"
 
-#: synpkg.qml:1202
 msgid "checking the AUR…"
 msgstr "de AUR controleren…"
 
-#: synpkg.qml:2020
 msgid "enabling BlackArch in a terminal"
 msgstr "BlackArch inschakelen in een terminal"
 
-#: synpkg.qml:2054
 msgid "enabling Flathub in a terminal"
 msgstr "Flathub inschakelen in een terminal"
 
-#: synpkg.qml:372
 msgid ""
 "every source at once — the repositories, BlackArch, the AUR and Flathub. "
 "Each result says where it came from"
-msgstr "alle bronnen tegelijk — de pakketbronnen, BlackArch, de AUR en Flathub. Elk resultaat vermeldt waar het vandaan komt"
+msgstr ""
+"alle bronnen tegelijk — de pakketbronnen, BlackArch, de AUR en Flathub. Elk "
+"resultaat vermeldt waar het vandaan komt"
 
-#: synpkg.qml:369
 msgid ""
 "everything with a newer version — repositories, the AUR, Flathub and "
 "SynapseOS's own components"
-msgstr "alles met een nieuwere versie — pakketbronnen, de AUR, Flathub en SynapseOS' eigen componenten"
+msgstr ""
+"alles met een nieuwere versie — pakketbronnen, de AUR, Flathub en SynapseOS' "
+"eigen componenten"
 
-#: synpkg.qml:2083
 msgid "fetching Flathub's index in a terminal"
 msgstr "Flathubs index ophalen in een terminal"
 
-#: synpkg.qml:1719 synpkg.qml:1724
 msgid "filter this list…"
 msgstr "deze lijst filteren…"
 
-#: synpkg.qml:756
 msgid "held back"
 msgstr "tegengehouden"
 
-#: synpkg.qml:1009
 msgid "holding back %1…"
 msgstr "%1 tegenhouden…"
 
-#: synpkg.qml:1496
 msgid "include SynapseOS"
 msgstr "SynapseOS meenemen"
 
-#: synpkg.qml:1050
 msgid "installing %1…"
 msgstr "%1 installeren…"
 
-#: synpkg.qml:1352
 msgid "loading…"
 msgstr "laden…"
 
-#: synpkg.qml:373
 msgid ""
 "official Arch repositories and SynapseOS's own — signed, binary, managed by "
 "pacman"
-msgstr "officiële Arch-pakketbronnen en die van SynapseOS — ondertekend, binair, beheerd door pacman"
+msgstr ""
+"officiële Arch-pakketbronnen en die van SynapseOS — ondertekend, binair, "
+"beheerd door pacman"
 
-#: synpkg.qml:979
 msgid "opened a terminal"
 msgstr "terminal geopend"
 
-#: synpkg.qml:1884
 msgid "opened in your browser"
 msgstr "geopend in je browser"
 
-#: synpkg.qml:1223
 msgid "reading held components…"
 msgstr "tegengehouden componenten lezen…"
 
-#: synpkg.qml:1222
 msgid "reading held packages…"
 msgstr "tegengehouden pakketten lezen…"
 
-#: synpkg.qml:1036
 msgid "rebuilding %1 in a terminal"
 msgstr "%1 opnieuw bouwen in een terminal"
 
-#: synpkg.qml:946
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "geweigerd (code %1) — polkit heeft mogelijk geweigerd"
 
-#: synpkg.qml:1010
 msgid "releasing %1…"
 msgstr "%1 vrijgeven…"
 
-#: synpkg.qml:1049
 msgid "removing %1…"
 msgstr "%1 verwijderen…"
 
-#: synpkg.qml:1463
 msgid "repos and AUR — in a terminal"
 msgstr "pakketbronnen en AUR — in een terminal"
 
-#: synpkg.qml:1462
 msgid "repos, AUR and components — in a terminal"
 msgstr "pakketbronnen, AUR en componenten — in een terminal"
 
-#: synpkg.qml:1892
 msgid "running in a terminal"
 msgstr "uitvoeren in een terminal"
 
-#: synpkg.qml:2088
 msgid "runs in a terminal — takes a minute"
 msgstr "draait in een terminal — duurt een minuut"
 
-#: synpkg.qml:375
 msgid "sandboxed applications from Flathub, with their own runtimes"
 msgstr "afgeschermde applicaties van Flathub, met hun eigen runtimes"
 
-#: synpkg.qml:1723
 msgid "search Flathub — press Enter"
 msgstr "zoek in Flathub — druk op Enter"
 
-#: synpkg.qml:1720
 msgid "search everything — repos, BlackArch, AUR and Flathub — press Enter"
 msgstr "zoek overal — pakketbronnen, BlackArch, AUR en Flathub — druk op Enter"
 
-#: synpkg.qml:1722
 msgid "search the AUR — press Enter"
 msgstr "zoek in de AUR — druk op Enter"
 
-#: synpkg.qml:1721
 msgid "search the repositories — press Enter"
 msgstr "zoek in de pakketbronnen — druk op Enter"
 
-#: synpkg.qml:374
 msgid "the Arch User Repository — recipes built from source on this machine"
-msgstr "de Arch User Repository — recepten die op deze machine uit de bron worden gebouwd"
+msgstr ""
+"de Arch User Repository — recepten die op deze machine uit de bron worden "
+"gebouwd"
 
-#: synpkg.qml:371
 msgid "the curated SynapseOS software list"
 msgstr "de samengestelde softwarelijst van SynapseOS"
 
-#: synpkg.qml:377
 msgid "this system's own components, rebuilt from git by syn-update"
-msgstr "de eigen componenten van dit systeem, door syn-update opnieuw gebouwd uit git"
+msgstr ""
+"de eigen componenten van dit systeem, door syn-update opnieuw gebouwd uit git"
 
-#: synpkg.qml:737
 msgid "update available"
 msgstr "update beschikbaar"
 
-#: synpkg.qml:370
 msgid ""
 "updates you are deliberately not taking. Release one and it comes back on "
 "the next check"
-msgstr "updates die je bewust niet neemt. Geef er een vrij en hij komt bij de volgende controle terug"
+msgstr ""
+"updates die je bewust niet neemt. Geef er een vrij en hij komt bij de "
+"volgende controle terug"
 
-#: synpkg.qml:1457
 msgid "upgrading in a terminal"
 msgstr "bijwerken in een terminal"
 
-#: synpkg.qml:2355
 msgid "working…"
 msgstr "bezig…"
+
+#, c-format
+msgid "new config saved as %s.pacnew — merge it"
+msgstr ""
+"nieuwe configuratie opgeslagen als %s.pacnew — moet samengevoegd worden"
+
+#, c-format
+msgid "config saved as %s.pacsave"
+msgstr "configuratie opgeslagen als %s.pacsave"
+
+msgid "failed to retrieve some databases"
+msgstr "sommige databanken konden niet worden opgehaald"
+
+msgid "failed to retrieve some packages"
+msgstr "sommige pakketten konden niet worden opgehaald"
+
+#, c-format
+msgid "%s optionally requires %s, which is being removed"
+msgstr "%s vereist optioneel %s, dat wordt verwijderd"
+
+#, c-format
+msgid "%s conflicts with %s"
+msgstr "%s botst met %s"
+
+#, c-format
+msgid "%s is corrupted (%s) — deleting"
+msgstr "%s is beschadigd (%s) — wordt verwijderd"
+
+#, c-format
+msgid "could not register repo %s: %s"
+msgstr "kon pakketbron %s niet registreren: %s"
+
+#, c-format
+msgid "repo %s has no servers configured"
+msgstr "voor pakketbron %s is geen server ingesteld"
+
+#, c-format
+msgid ""
+"cannot open the package database (%s)\n"
+"  is another package manager running?"
+msgstr ""
+"kan de pakketdatabank niet openen (%s)\n"
+"  draait er een ander pakketbeheer?"
+
+msgid ""
+"blackarch-keyring is not installed — signing key rotations will never reach "
+"this machine.\n"
+"  fix: synpkg install blackarch-keyring"
+msgstr ""
+"blackarch-keyring is niet geïnstalleerd — sleutelwisselingen bereiken deze "
+"machine nooit.\n"
+"  oplossing: synpkg install blackarch-keyring"
+
+#, c-format
+msgid "arsenal: '%s' is not a blackarch category"
+msgstr "arsenal: '%s' is geen BlackArch-categorie"
+
+#, c-format
+msgid "no such category: %s"
+msgstr "die categorie bestaat niet: %s"
+
+msgid ""
+"the BlackArch bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+msgstr ""
+"het opstartscript van BlackArch ontbreekt (/usr/lib/synpkg/synpkg-enable-"
+"blackarch)"
+
+msgid "arsenal packages: need a category"
+msgstr "arsenal packages: er is een categorie nodig"
+
+#, c-format
+msgid ""
+"arsenal: unknown subcommand '%s'\n"
+"  try: status, categories, packages <category>, installed, enable-repo"
+msgstr ""
+"arsenal: onbekend subcommando '%s'\n"
+"  probeer: status, categories, packages <category>, installed, enable-repo"
+
+msgid ""
+"the CachyOS bootstrap helper is missing (/usr/lib/synpkg/synpkg-enable-"
+"cachyos)"
+msgstr ""
+"het opstartscript van CachyOS ontbreekt (/usr/lib/synpkg/synpkg-enable-"
+"cachyos)"
+
+#, c-format
+msgid ""
+"cachyos: unknown subcommand '%s'\n"
+"  try: status, enable-repo, disable-repo"
+msgstr ""
+"cachyos: onbekend subcommando '%s'\n"
+"  probeer: status, enable-repo, disable-repo"
+
+#, c-format
+msgid "cannot read the suggestion catalogue at %s"
+msgstr "kan de suggestiecatalogus in %s niet lezen"
+
+#, c-format
+msgid "catalogue line %zu has %zu fields, expected 5"
+msgstr "regel %zu van de catalogus heeft %zu velden, 5 verwacht"
+
+#, c-format
+msgid "suggest: unknown option '%s'"
+msgstr "suggest: onbekende optie '%s'"
+
+msgid "syn-update is not installed — SynapseOS components cannot be checked"
+msgstr ""
+"syn-update is niet geïnstalleerd — SynapseOS-onderdelen kunnen niet worden "
+"gecontroleerd"
+
+msgid "syn-update is not installed"
+msgstr "syn-update is niet geïnstalleerd"
+
+msgid ""
+"this syn-update is too old to hold a component back — run `syn-update apply "
+"syn-update` first"
+msgstr ""
+"deze syn-update is te oud om een onderdeel tegen te houden — voer eerst `syn-"
+"update apply syn-update` uit"
+
+msgid ""
+"this syn-update cannot hold a component back yet.\n"
+"  Update it first: syn-update apply syn-update"
+msgstr ""
+"deze syn-update kan nog geen onderdeel tegenhouden.\n"
+"  Werk hem eerst bij: syn-update apply syn-update"
+
+#, c-format
+msgid ""
+"system: unknown subcommand '%s' — try check, apply, status, ignore, "
+"unignore, ignored"
+msgstr ""
+"system: onbekend subcommando '%s' — probeer check, apply, status, ignore, "
+"unignore, ignored"
+
+msgid "flatpak is not installed — synpkg install flatpak"
+msgstr "flatpak is niet geïnstalleerd — synpkg install flatpak"
+
+msgid ""
+"no Flathub application index on this machine — run: synpkg flatpak enable-"
+"flathub"
+msgstr ""
+"er is geen Flathub-programma-index op deze machine — voer uit: synpkg "
+"flatpak enable-flathub"
+
+#, c-format
+msgid ""
+"flatpak: '%s' is not a Flathub category — try: synpkg flatpak categories"
+msgstr ""
+"flatpak: '%s' is geen Flathub-categorie — probeer: synpkg flatpak categories"
+
+msgid "no Flatpak remotes are configured — run: synpkg flatpak enable-flathub"
+msgstr ""
+"er zijn geen Flatpak-bronnen ingesteld — voer uit: synpkg flatpak enable-"
+"flathub"
+
+#, c-format
+msgid "%s is not installed; masking it in the user installation"
+msgstr ""
+"%s is niet geïnstalleerd; het wordt gemaskeerd in de gebruikersinstallatie"
+
+#, c-format
+msgid "flatpak could not %s %s"
+msgstr "flatpak kon %s niet uitvoeren: %s"
+
+msgid "could not install flatpak"
+msgstr "kon flatpak niet installeren"
+
+msgid ""
+"flatpak installed but is not on PATH — open a new terminal and run: synpkg "
+"flatpak enable-flathub"
+msgstr ""
+"flatpak is geïnstalleerd maar staat niet in het PATH — open een nieuwe "
+"terminal en voer uit: synpkg flatpak enable-flathub"
+
+msgid "could not add the Flathub remote"
+msgstr "kon de Flathub-bron niet toevoegen"
+
+#, c-format
+msgid "flatpak %s: need an application id"
+msgstr "flatpak %s: er is een programma-id nodig"
+
+msgid "flatpak search: need a term"
+msgstr "flatpak search: er is een term nodig"
+
+msgid "flatpak category: need a category — try: synpkg flatpak categories"
+msgstr ""
+"flatpak category: er is een categorie nodig — probeer: synpkg flatpak "
+"categories"
+
+msgid "curl is required for AUR access"
+msgstr "voor toegang tot de AUR is curl nodig"
+
+msgid "could not reach the AUR"
+msgstr "kon de AUR niet bereiken"
+
+msgid "the AUR returned something this does not understand"
+msgstr "de AUR gaf iets terug dat hier niet begrepen wordt"
+
+msgid "could not reach the AUR — AUR packages were not checked"
+msgstr "kon de AUR niet bereiken — AUR-pakketten zijn niet gecontroleerd"
+
+msgid ""
+"AUR builds must not run as root — run `synpkg aur install` as your own user\n"
+"  (makepkg will be asked for the root password itself when it installs)"
+msgstr ""
+"AUR-bouwsels mogen niet als root draaien — voer `synpkg aur install` uit als "
+"je eigen gebruiker\n"
+"  (makepkg vraagt bij het installeren zelf om het rootwachtwoord)"
+
+msgid "git is required to build from the AUR"
+msgstr "om vanuit de AUR te bouwen is git nodig"
+
+msgid "makepkg is required to build from the AUR — synpkg install base-devel"
+msgstr ""
+"om vanuit de AUR te bouwen is makepkg nodig — synpkg install base-devel"
+
+msgid "HOME is not set"
+msgstr "HOME is niet ingesteld"
+
+#, c-format
+msgid "'%s' is not a valid package name"
+msgstr "'%s' is geen geldige pakketnaam"
+
+#, c-format
+msgid "could not update %s — building the existing checkout"
+msgstr "kon %s niet bijwerken — de bestaande kopie wordt gebouwd"
+
+#, c-format
+msgid "could not clone %s — is it in the AUR?"
+msgstr "kon %s niet klonen — staat het in de AUR?"
+
+#, c-format
+msgid "build failed for %s"
+msgstr "het bouwen van %s is mislukt"
+
+msgid "aur search: need a term"
+msgstr "aur search: er is een term nodig"
+
+msgid "aur install: need a package"
+msgstr "aur install: er is een pakket nodig"
+
+#, c-format
+msgid "aur: unknown subcommand '%s' — try search, install, installed, updates"
+msgstr ""
+"aur: onbekend subcommando '%s' — probeer search, install, installed, updates"
+
+#, c-format
+msgid ""
+"SYNPKG_PACMAN_CONF points at %s, which this user cannot write.\n"
+"  pkexec would not carry that setting to the root process, so the\n"
+"  escalated write would land on /etc/pacman.conf instead. Re-run as\n"
+"  a user who can write the file you named."
+msgstr ""
+"SYNPKG_PACMAN_CONF wijst naar %s, waar deze gebruiker niet kan schrijven.\n"
+"  pkexec zou die instelling niet meenemen naar het rootproces, dus de\n"
+"  verhoogde schrijfactie zou in /etc/pacman.conf belanden. Voer het opnieuw "
+"uit\n"
+"  als een gebruiker die naar het genoemde bestand kan schrijven."
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "kan %s niet lezen: %s"
+
+#, c-format
+msgid ""
+"%s has no [options] section — refusing to guess where an IgnorePkg belongs"
+msgstr ""
+"%s heeft geen [options]-sectie — er wordt niet geraden waar een IgnorePkg "
+"hoort"
+
+#, c-format
+msgid "cannot write beside %s: %s"
+msgstr "kan niet naast %s schrijven: %s"
+
+#, c-format
+msgid "could not set the mode on the new %s"
+msgstr "kon de rechten op de nieuwe %s niet zetten"
+
+#, c-format
+msgid "cannot flush the new %s"
+msgstr "kan de nieuwe %s niet naar schijf wegschrijven"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "kan %s niet vervangen: %s"
+
+#, c-format
+msgid "no package called '%s' is installed or in any repository"
+msgstr ""
+"er is geen pakket met de naam '%s' geïnstalleerd of in enige pakketbron"
+
+msgid "unignore: name a package. `synpkg ignore` lists what is held back"
+msgstr ""
+"unignore: noem een pakket. `synpkg ignore` toont wat wordt tegengehouden"
+
+#, c-format
+msgid "%s is held back by a line synpkg did not write — edit %s by hand"
+msgstr ""
+"%s wordt tegengehouden door een regel die synpkg niet geschreven heeft — "
+"bewerk %s met de hand"
+
+#, c-format
+msgid "%s was removed"
+msgstr "%s is verwijderd"
+
+#, c-format
+msgid ""
+"the modules for the kernel you are RUNNING (%s) were just deleted.\n"
+"    Anything that has not already loaded its driver — a USB device, a\n"
+"    filesystem, a VM module — will fail to load one until you reboot."
+msgstr ""
+"de modules van de kernel die je NU DRAAIT (%s) zijn zojuist verwijderd.\n"
+"    Alles wat zijn stuurprogramma nog niet geladen heeft — een USB-apparaat, "
+"een\n"
+"    bestandssysteem, een VM-module — kan er geen laden tot je herstart."
+
+#, c-format
+msgid "you are still running %s, which is no longer installed"
+msgstr "je draait nog steeds %s, dat niet meer geïnstalleerd is"
+
+msgid "systemctl is not available — reboot by hand"
+msgstr "systemctl is niet beschikbaar — herstart met de hand"
+
+msgid "could not reboot — run `systemctl reboot` yourself"
+msgstr "kon niet herstarten — voer zelf `systemctl reboot` uit"
+
+#, c-format
+msgid "could not reach %s — showing a cached copy from %ld hour(s) ago"
+msgstr ""
+"kon %s niet bereiken — er wordt een kopie uit de cache van %ld uur geleden "
+"getoond"
+
+msgid ""
+"could not read the Arch news feed — continuing without the check (https://"
+"archlinux.org/news/)"
+msgstr ""
+"kon de Arch-nieuwsfeed niet lezen — er wordt zonder die controle doorgegaan "
+"(https://archlinux.org/news/)"
+
+msgid "the Arch news feed did not parse — continuing without the check"
+msgstr ""
+"de Arch-nieuwsfeed kon niet worden ontleed — er wordt zonder die controle "
+"doorgegaan"
+
+#, c-format
+msgid "news: unknown argument '%s'"
+msgstr "news: onbekend argument '%s'"
+
+#, c-format
+msgid "could not read %s"
+msgstr "kon %s niet lezen"
+
+msgid "the Arch news feed did not parse"
+msgstr "de Arch-nieuwsfeed kon niet worden ontleed"
+
+#, c-format
+msgid "unrecognised SigLevel '%s' for repo %s"
+msgstr "onbekend SigLevel '%s' voor pakketbron %s"
+
+msgid "provides: --limit needs a number"
+msgstr "provides: --limit heeft een getal nodig"
+
+#, c-format
+msgid "provides: --limit takes a positive number, not '%s'"
+msgstr "provides: --limit neemt een positief getal, niet '%s'"
+
+#, c-format
+msgid "provides: one term at a time (got '%s' as well)"
+msgstr "provides: één term per keer ('%s' kwam er ook bij)"
+
+msgid "provides: need a name to look up"
+msgstr "provides: er is een naam nodig om op te zoeken"
+
+msgid "search: need a search term"
+msgstr "search: er is een zoekterm nodig"
+
+msgid "search: --all and --installed ask opposite questions"
+msgstr "search: --all en --installed stellen tegengestelde vragen"
+
+msgid "curl is not installed — skipping the AUR"
+msgstr "curl is niet geïnstalleerd — de AUR wordt overgeslagen"
+
+#, c-format
+msgid "the AUR search takes one term — using '%s'"
+msgstr "het zoeken in de AUR neemt één term — '%s' wordt gebruikt"
+
+msgid "info: need a package name"
+msgstr "info: er is een pakketnaam nodig"
+
+#, c-format
+msgid "package '%s' was not found"
+msgstr "pakket '%s' is niet gevonden"
+
+#, c-format
+msgid "installed: unknown argument '%s'"
+msgstr "installed: onbekend argument '%s'"
+
+msgid "installed: --native and --foreign are opposites"
+msgstr "installed: --native en --foreign zijn tegengesteld"
+
+#, c-format
+msgid "orphans: unknown argument '%s'"
+msgstr "orphans: onbekend argument '%s'"
+
+#, c-format
+msgid "groups: '%s' is not a browsable group — try: synpkg groups"
+msgstr "groups: '%s' is geen doorbladerbare groep — probeer: synpkg groups"
+
+#, c-format
+msgid ""
+"no packages in %s — is the repository that provides it enabled and synced?"
+msgstr ""
+"geen pakketten in %s — is de pakketbron die het levert ingeschakeld en "
+"gesynchroniseerd?"
+
+msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
+msgstr "SynapseOS-onderdelen meenemen in `synpkg upgrade` (minuten compileren)"
+
+msgid "rebuild the AUR packages synpkg installed during `synpkg upgrade`"
+msgstr ""
+"de AUR-pakketten die synpkg installeerde opnieuw bouwen tijdens `synpkg "
+"upgrade`"
+
+msgid ""
+"show Arch news published since your last upgrade, and ask, before `synpkg "
+"upgrade` touches anything"
+msgstr ""
+"Arch-nieuws tonen dat sinds je laatste bijwerking verscheen, en vragen, "
+"voordat `synpkg upgrade` iets aanraakt"
+
+msgid "neither XDG_CONFIG_HOME nor HOME is set — nowhere to save settings"
+msgstr ""
+"noch XDG_CONFIG_HOME noch HOME is ingesteld — er is nergens om instellingen "
+"op te slaan"
+
+msgid "cannot write the settings file"
+msgstr "kan het instellingenbestand niet schrijven"
+
+msgid "cannot replace the settings file"
+msgstr "kan het instellingenbestand niet vervangen"
+
+#, c-format
+msgid "(default %s)"
+msgstr "(standaard %s)"
+
+#, c-format
+msgid "config %s: expected yes or no, got '%s'"
+msgstr "config %s: yes of no verwacht, '%s' gekregen"
+
+msgid "this needs root and pkexec is not installed — re-run with sudo"
+msgstr ""
+"dit heeft rootrechten nodig en pkexec is niet geïnstalleerd — voer het "
+"opnieuw uit met sudo"
+
+#, c-format
+msgid "cannot determine my own path: %s"
+msgstr "kan mijn eigen pad niet bepalen: %s"
+
+msgid "authentication failed or was dismissed"
+msgstr "de authenticatie is mislukt of is afgebroken"
+
+#, c-format
+msgid "pkexec could not run %s"
+msgstr "pkexec kon %s niet uitvoeren"
+
+#, c-format
+msgid "package %s does not have a valid architecture"
+msgstr "pakket %s heeft geen geldige architectuur"
+
+#, c-format
+msgid "%s: requires %s"
+msgstr "%s: vereist %s"
+
+#, c-format
+msgid "%s and %s are in conflict"
+msgstr "%s en %s botsen"
+
+#, c-format
+msgid "%s and %s both own %s"
+msgstr "%s en %s bezitten allebei %s"
+
+#, c-format
+msgid "%s: %s exists and is owned by %s"
+msgstr "%s: %s bestaat en is van %s"
+
+#, c-format
+msgid "transaction failed: %s"
+msgstr "de transactie is mislukt: %s"
+
+msgid "no repositories are configured"
+msgstr "er zijn geen pakketbronnen ingesteld"
+
+#, c-format
+msgid "failed to synchronise databases: %s"
+msgstr "kon de databanken niet synchroniseren: %s"
+
+#, c-format
+msgid "refresh: unknown argument '%s'"
+msgstr "refresh: onbekend argument '%s'"
+
+#, c-format
+msgid "install: unknown option '%s'"
+msgstr "install: onbekende optie '%s'"
+
+msgid "install: need at least one package"
+msgstr "install: er is minstens één pakket nodig"
+
+#, c-format
+msgid "package '%s' was not found in any repository%s"
+msgstr "pakket '%s' is in geen enkele pakketbron gevonden%s"
+
+msgid "continuing with the databases already on disk"
+msgstr "er wordt doorgegaan met de databanken die al op schijf staan"
+
+#, c-format
+msgid "cannot start a transaction: %s"
+msgstr "kan geen transactie beginnen: %s"
+
+#, c-format
+msgid "package '%s' was not found in any repository"
+msgstr "pakket '%s' is in geen enkele pakketbron gevonden"
+
+#, c-format
+msgid "cannot install %s: %s"
+msgstr "kan %s niet installeren: %s"
+
+#, c-format
+msgid "remove: unknown option '%s'"
+msgstr "remove: onbekende optie '%s'"
+
+msgid "remove: need at least one package"
+msgstr "remove: er is minstens één pakket nodig"
+
+#, c-format
+msgid "package '%s' is not installed"
+msgstr "pakket '%s' is niet geïnstalleerd"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "kan %s niet verwijderen: %s"
+
+#, c-format
+msgid "upgrade: unknown argument '%s'"
+msgstr "upgrade: onbekend argument '%s'"
+
+#, c-format
+msgid ""
+"%s has a newer version in the AUR, but synpkg did not install it — leaving "
+"it alone (synpkg aur install %s)"
+msgstr ""
+"%s heeft een nieuwere versie in de AUR, maar synpkg heeft het niet "
+"geïnstalleerd — het blijft ongemoeid (synpkg aur install %s)"
+
+msgid ""
+"SynapseOS components did not finish updating (syn-update apply) — the "
+"repository upgrade above was fine"
+msgstr ""
+"de SynapseOS-onderdelen zijn niet klaargekomen met bijwerken (syn-update "
+"apply) — het bijwerken van de pakketbronnen hierboven ging goed"
+
+#, c-format
+msgid "cannot prepare an upgrade: %s"
+msgstr "kan geen bijwerking voorbereiden: %s"
+
+msgid "packages, arsenal, and the system itself"
+msgstr "pakketten, arsenaal en het systeem zelf"
+
+msgid "nothing here"
+msgstr "hier is niets"
+
+#, c-format
+msgid ""
+"page %zu/%zu · [n]ext [p]rev · i <num> install · r <num> remove · s <num> "
+"info · [q]back"
+msgstr ""
+"pagina %zu/%zu · [n]volgende [p]vorige · i <nr> installeren · r <nr> "
+"verwijderen · s <nr> info · [q]terug"
+
+msgid "unrecognised — try i/r/s <number>, n, p or q"
+msgstr "niet herkend — probeer i/r/s <nummer>, n, p of q"
+
+#, c-format
+msgid "no row %ld"
+msgstr "geen rij %ld"
+
+msgid "everything is up to date"
+msgstr "alles is bij"
+
+#, c-format
+msgid "%zu package can be upgraded.\n"
+msgid_plural "%zu packages can be upgraded.\n"
+msgstr[0] "Er kan %zu pakket worden bijgewerkt.\n"
+msgstr[1] "Er kunnen %zu pakketten worden bijgewerkt.\n"
+
+msgid "  upgrade the whole system now?"
+msgstr "  het hele systeem nu bijwerken?"
+
+msgid ""
+"\n"
+"  search: "
+msgstr ""
+"\n"
+"  zoeken: "
+
+#, c-format
+msgid "Results for \"%s\""
+msgstr "Resultaten voor \"%s\""
+
+msgid "Suggested software you do not have yet"
+msgstr "Voorgestelde software die je nog niet hebt"
+
+msgid ""
+"\n"
+"  install which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  welke installeren? (naam, of leeg om terug te gaan): "
+
+msgid "BlackArch is not enabled."
+msgstr "BlackArch is niet ingeschakeld."
+
+msgid "  enable it now? (downloads and verifies upstream's bootstrap)"
+msgstr ""
+"  nu inschakelen? (haalt het opstartscript van de bron op en controleert het)"
+
+#, c-format
+msgid "%d tool, some installed"
+msgid_plural "%d tools, some installed"
+msgstr[0] "%d gereedschap, deels geïnstalleerd"
+msgstr[1] "%d gereedschappen, deels geïnstalleerd"
+
+#, c-format
+msgid "%d tool"
+msgid_plural "%d tools"
+msgstr[0] "%d gereedschap"
+msgstr[1] "%d gereedschappen"
+
+msgid "BlackArch categories"
+msgstr "BlackArch-categorieën"
+
+msgid ""
+"\n"
+"  category number ([i] installed tools, [q] back): "
+msgstr ""
+"\n"
+"  categorienummer ([i] geïnstalleerde gereedschappen, [q] terug): "
+
+#, c-format
+msgid "no category %ld"
+msgstr "geen categorie %ld"
+
+msgid ""
+"\n"
+"  search the AUR: "
+msgstr ""
+"\n"
+"  in de AUR zoeken: "
+
+msgid ""
+"\n"
+"  build which? (name, or blank to go back): "
+msgstr ""
+"\n"
+"  welke bouwen? (naam, of leeg om terug te gaan): "
+
+msgid "flatpak is not installed."
+msgstr "flatpak is niet geïnstalleerd."
+
+msgid "  install it now?"
+msgstr "  nu installeren?"
+
+msgid "No Flathub remote is configured."
+msgstr "Er is geen Flathub-bron ingesteld."
+
+msgid "Searching without one silently returns nothing."
+msgstr "Zoeken zonder die bron levert stilzwijgend niets op."
+
+msgid "  enable Flathub now? (adds the remote and fetches its index)"
+msgstr "  Flathub nu inschakelen? (voegt de bron toe en haalt de index op)"
+
+msgid ""
+"\n"
+"  search Flathub: "
+msgstr ""
+"\n"
+"  in Flathub zoeken: "
+
+msgid ""
+"\n"
+"  install which? (application id, or blank to go back): "
+msgstr ""
+"\n"
+"  welke installeren? (programma-id, of leeg om terug te gaan): "
+
+msgid "Suggested apps"
+msgstr "Suggesties"
+
+msgid "SynapseOS itself"
+msgstr "SynapseOS zelf"
+
+msgid "Quit"
+msgstr "Afsluiten"
+
+msgid ""
+"\n"
+"  apply SynapseOS updates now? (opens a build)"
+msgstr ""
+"\n"
+"  SynapseOS-bijwerkingen nu toepassen? (start een bouwsel)"
+
+msgid "unrecognised choice"
+msgstr "keuze niet herkend"
+
+msgid "out of memory"
+msgstr "geen geheugen meer"
+
+msgid ""
+"declined: there is no terminal to confirm on (a front-end must pass --"
+"noconfirm once the user has agreed)"
+msgstr ""
+"geweigerd: er is geen terminal om op te bevestigen (een schil moet --"
+"noconfirm meegeven zodra de gebruiker akkoord is)"

@@ -44,6 +44,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <limits.h>
@@ -477,7 +478,7 @@ void sp_kernel_reboot_check(const sp_kernel *before, size_t n_before)
 	for (size_t i = 0; i < n_before; i++) {
 		if (!find_pkgbase(after, n_after, before[i].pkgbase)) {
 			changed = true;
-			warn("%s was removed", before[i].pkgbase);
+			warn(_("%s was removed"), before[i].pkgbase);
 			reported++;
 		}
 	}
@@ -494,14 +495,14 @@ void sp_kernel_reboot_check(const sp_kernel *before, size_t n_before)
 	}
 
 	if (ran_gone) {
-		warn("the modules for the kernel you are RUNNING (%s) were just deleted.\n"
+		warn(_("the modules for the kernel you are RUNNING (%s) were just deleted.\n"
 		     "    Anything that has not already loaded its driver — a USB device, a\n"
-		     "    filesystem, a VM module — will fail to load one until you reboot.",
+		     "    filesystem, a VM module — will fail to load one until you reboot."),
 		     running);
 	} else if (changed && running && !has_release(after, n_after, running)) {
 		/* Already gone before this run — an earlier upgrade nobody rebooted
 		 * for. Worth one line, since another kernel just moved on top of it. */
-		warn("you are still running %s, which is no longer installed", running);
+		warn(_("you are still running %s, which is no longer installed"), running);
 	}
 
 	if (!changed) {
@@ -517,12 +518,12 @@ void sp_kernel_reboot_check(const sp_kernel *before, size_t n_before)
 
 	if (ask_reboot()) {
 		if (!have_cmd("systemctl")) {
-			warn("systemctl is not available — reboot by hand");
+			warn(_("systemctl is not available — reboot by hand"));
 		} else {
 			info("rebooting");
 			char *argv[] = { (char *)"systemctl", (char *)"reboot", NULL };
 			if (run(argv, false) != 0)
-				warn("could not reboot — run `systemctl reboot` yourself");
+				warn(_("could not reboot — run `systemctl reboot` yourself"));
 		}
 	} else {
 		info("reboot when convenient:  systemctl reboot");

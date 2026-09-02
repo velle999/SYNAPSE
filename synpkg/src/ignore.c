@@ -39,6 +39,7 @@
  */
 #define _GNU_SOURCE
 #include "synpkg.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -95,10 +96,10 @@ static int ignore_escalate(const char *verb, int argc, char **argv)
 {
 	const char *redirect = getenv("SYNPKG_PACMAN_CONF");
 	if (redirect && *redirect)
-		die("SYNPKG_PACMAN_CONF points at %s, which this user cannot write.\n"
+		die(_("SYNPKG_PACMAN_CONF points at %s, which this user cannot write.\n"
 		    "  pkexec would not carry that setting to the root process, so the\n"
 		    "  escalated write would land on /etc/pacman.conf instead. Re-run as\n"
-		    "  a user who can write the file you named.", redirect);
+		    "  a user who can write the file you named."), redirect);
 	return escalate(verb, argc, argv);
 }
 
@@ -262,7 +263,7 @@ static int conf_rewrite(char **names, size_t n)
 	const char *path = conf_file();
 	char *conf = slurp(path);
 	if (!conf)
-		die("cannot read %s: %s", path, strerror(errno));
+		die(_("cannot read %s: %s"), path, strerror(errno));
 
 	/* Where [options] ends: the line before the next section header, or the
 	 * end of the file. */
@@ -288,8 +289,8 @@ static int conf_rewrite(char **names, size_t n)
 	}
 	if (!seen_options) {
 		free(lines); free(copy); free(conf);
-		die("%s has no [options] section — refusing to guess where an "
-		    "IgnorePkg belongs", path);
+		die(_("%s has no [options] section — refusing to guess where an "
+		    "IgnorePkg belongs"), path);
 	}
 
 	/* Build the replacement, dropping the old marker and the line under it. */
@@ -352,7 +353,7 @@ static int conf_rewrite(char **names, size_t n)
 	if (!f) {
 		int e = errno;
 		free(tmp); free(out);
-		die("cannot write beside %s: %s", path, strerror(e));
+		die(_("cannot write beside %s: %s"), path, strerror(e));
 	}
 	fputs(out, f);
 
@@ -367,12 +368,12 @@ static int conf_rewrite(char **names, size_t n)
 	 * gets the mode. The descriptor is already the file we wrote; there is no
 	 * second lookup to lose a race with. */
 	if (fchmod(fileno(f), 0644) != 0)
-		warn("could not set the mode on the new %s", path);
+		warn(_("could not set the mode on the new %s"), path);
 
 	if (fflush(f) != 0 || fsync(fileno(f)) != 0) {
 		fclose(f); unlink(tmp);
 		free(tmp); free(out);
-		die("cannot flush the new %s", path);
+		die(_("cannot flush the new %s"), path);
 	}
 	fclose(f);
 	free(out);
@@ -381,7 +382,7 @@ static int conf_rewrite(char **names, size_t n)
 		int e = errno;
 		unlink(tmp);
 		free(tmp);
-		die("cannot replace %s: %s", path, strerror(e));
+		die(_("cannot replace %s: %s"), path, strerror(e));
 	}
 	free(tmp);
 	return 0;
@@ -525,7 +526,7 @@ int cmd_ignore(int argc, char **argv)
 
 	char *conf = slurp(conf_file());
 	if (!conf)
-		die("cannot read %s: %s", conf_file(), strerror(errno));
+		die(_("cannot read %s: %s"), conf_file(), strerror(errno));
 
 	char **ours = NULL;
 	size_t n_ours = owned_names(conf, &ours);
@@ -556,7 +557,7 @@ int cmd_ignore(int argc, char **argv)
 			}
 			sp_alpm_free(h);
 			if (!known)
-				warn("no package called '%s' is installed or in any repository", argv[i]);
+				warn(_("no package called '%s' is installed or in any repository"), argv[i]);
 		}
 		want[n_want++] = xstrdup(argv[i]);
 		added++;
@@ -579,14 +580,14 @@ int cmd_ignore(int argc, char **argv)
 int cmd_unignore(int argc, char **argv)
 {
 	if (argc == 0)
-		die("unignore: name a package. `synpkg ignore` lists what is held back");
+		die(_("unignore: name a package. `synpkg ignore` lists what is held back"));
 
 	if (!can_write_conf())
 		return ignore_escalate("unignore", argc, argv);
 
 	char *conf = slurp(conf_file());
 	if (!conf)
-		die("cannot read %s: %s", conf_file(), strerror(errno));
+		die(_("cannot read %s: %s"), conf_file(), strerror(errno));
 
 	char **ours = NULL;
 	size_t n_ours = owned_names(conf, &ours);
@@ -613,7 +614,7 @@ int cmd_unignore(int argc, char **argv)
 		if (in_list(ours, n_ours, argv[a]))
 			continue;
 		if (sp_ignore_has(argv[a])) {
-			warn("%s is held back by a line synpkg did not write — edit %s by hand",
+			warn(_("%s is held back by a line synpkg did not write — edit %s by hand"),
 			     argv[a], conf_file());
 			elsewhere++;
 		} else {

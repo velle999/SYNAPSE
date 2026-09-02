@@ -148,7 +148,43 @@ pkgver=0.1.0
 #   ⚠ ONE SCAN PER WINDOW, like the .desktop map beside it, and it is allowed to
 #   find nothing — in a chroot without the data the map stays empty and every
 #   row falls back to the monogram, which is where this started.
-pkgrel=46
+# 47: the CLI and the TUI speak thirteen languages — and the TSV does not.
+#   258 msgids now, 257/257 in all thirteen: the QML window's words and the C
+#   program's, in ONE .po per language compiled twice — to JSON for the window
+#   and to a .mo for the binary. A word both front-ends use is translated once
+#   and they cannot come to different conclusions about it.
+#   ⛔ `--tsv` IS NEVER TRANSLATED, AND THAT IS THE WHOLE RULE. It is what
+#   data/synpkg.qml parses and what the tests parse; a translated column or
+#   status word makes the GUI depend on the user's locale, which is the bug
+#   `pacman -Qi` taught this project twice. Every _() sits on the human side of
+#   a `g_out == OUT_TSV` branch, and tests/i18n_test.sh proves it by RUNNING
+#   every offline --tsv subcommand under a real de_DE locale and diffing.
+#   ⛔ THAT CHECK WAS DECORATIVE UNTIL IT WAS BROKEN ON PURPOSE. The binary's
+#   compiled-in localedir is under the install prefix, so an UNINSTALLED synpkg
+#   loads no catalog and answers English in both locales — the suite passed
+#   with a _() deliberately placed in a TSV row. synpkg_i18n_init() honours
+#   $SYNPKG_LOCALEDIR now (nothing changes for an installed synpkg), the test
+#   sets it, and the sabotage fails as it should.
+#   ⛔ AND xgettext --omit-header SILENTLY MANGLES THE MSGIDS. With no header
+#   there is no charset to declare, so it writes the template as ASCII and
+#   DROPS every non-ASCII character it extracted: `%s.pacnew — merge it` came
+#   out `%s.pacnew  merge it`, a msgid that can never match the source string
+#   and would have been permanently English however well translated. There is
+#   no warning about the loss. po/pot.sh refuses the flag and asserts the
+#   round-trip.
+#   ⛔ AND A .mo IS NAMED AFTER THE DOMAIN. A custom_target loop can only name
+#   its output de.mo, which installs to the right directory under a name
+#   libintl never looks for — a full catalog on disk and every string English.
+#   meson's i18n module knows the rule; that is why po/meson.build uses it.
+#   ⚠ THE TUI'S BOX AND MENU ARE COMPUTED NOW, not typed. A hand-counted run of
+#   ─ and hand-counted padding are right in exactly one language. Both are
+#   measured in COLUMNS (mbstowcs + wcswidth), because ソフトウェア is 18 bytes
+#   and 12 columns; the Japanese banner closes and the three-column menu lines
+#   up. ⚠ tests/i18n.sh caught a `%d tools%s` plural hack and a `", some
+#   installed"` fragment on the way past.
+#   ⚠ `--help` IS DELIBERATELY NOT MARKED: fifty lines of column-aligned text
+#   whose every command name must be typed in English anyway.
+pkgrel=47
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
