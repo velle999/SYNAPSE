@@ -21,12 +21,17 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+
+// The translation bridge. ⛔ NOT qsTr(): quickshell has no translator to
+// install one into, so qsTr() compiles and returns its own argument. See
+// qml/I18n.qml.
+import "qml"
 import QtQuick.Controls
 
 FloatingWindow {
     id: root
 
-    title: "SYNAPSE Calendar"
+    title: I18n.tr("SYNAPSE Calendar")
     implicitWidth: 1020
     implicitHeight: 700
     // Seven day columns and a sidebar. Below this a week stops being readable
@@ -364,10 +369,10 @@ FloatingWindow {
     // under the wrong labels, which reads as the grid being broken. Every column
     // appears somewhere in a month, so the answer is always complete.
     readonly property var monthHeadings: {
-        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         const out = ["", "", "", "", "", "", ""]
         for (let i = 0; i < root.monthCells.length; i++)
-            out[root.monthCells[i].col] = names[root.monthCells[i].dow]
+            out[root.monthCells[i].col] =
+                Qt.locale().dayName(root.monthCells[i].dow, Locale.ShortFormat)
         return out
     }
 
@@ -546,7 +551,7 @@ FloatingWindow {
         onExited: (code) => {
             if (code !== 0) {
                 root.authBusy = false
-                root.authMsg = addErr.text.trim() || "could not add the account"
+                root.authMsg = addErr.text.trim() || I18n.tr("could not add the account")
                 return
             }
             root.beginLogin(addProc.acct)
@@ -565,10 +570,10 @@ FloatingWindow {
             if (code === 0) {
                 root.authOpen = false
                 root.authReset()
-                root.status = "Signed in."
+                root.status = I18n.tr("Signed in.")
                 root.reload()
             } else {
-                root.authMsg = loginErr.text.trim() || "sign-in did not complete"
+                root.authMsg = loginErr.text.trim() || I18n.tr("sign-in did not complete")
             }
         }
     }
@@ -576,7 +581,7 @@ FloatingWindow {
     function beginLogin(name) {
         root.authBusy = true
         if (root.authKind === "caldav") {
-            root.authMsg = "Checking the password…"
+            root.authMsg = I18n.tr("Checking the password…")
             /*
              * ⛔ A PASSWORD NEVER GOES IN argv. /proc/<pid>/cmdline is
              * world-readable; /proc/<pid>/environ is not. syn-cal already reads
@@ -594,7 +599,7 @@ FloatingWindow {
                                  "printf '%s' \"$SYNCAL_PW\" | exec \"$0\" login \"$1\"",
                                  root.bin, name]
         } else {
-            root.authMsg = "Finish signing in in your browser…"
+            root.authMsg = I18n.tr("Finish signing in in your browser…")
             // ⚠ --browser, NOT the default. syn-cal decides from isatty when it
             // is not told, and a window is not a terminal — without this the
             // sign-in prints a URL into a pipe nobody reads and then times out.
@@ -616,11 +621,11 @@ FloatingWindow {
     function submitAuth() {
         if (root.authBusy) return
         const name = root.authName.trim()
-        if (name === "") { root.authMsg = "Give the account a name first."; return }
+        if (name === "") { root.authMsg = I18n.tr("Give the account a name first."); return }
         if (root.authKind === "caldav" && root.authUrl.trim() === "") {
-            root.authMsg = "A CalDAV account needs a server URL."; return
+            root.authMsg = I18n.tr("A CalDAV account needs a server URL."); return
         }
-        root.authMsg = "Adding…"
+        root.authMsg = I18n.tr("Adding…")
         root.authBusy = true
         addProc.acct = name
         if (root.authKind === "caldav")
@@ -752,11 +757,11 @@ FloatingWindow {
         onExited: (code) => {
             root.evBusy = false
             if (code !== 0) {
-                root.evMsg = evErr.text.trim() || "that did not work"
+                root.evMsg = evErr.text.trim() || I18n.tr("that did not work")
                 return
             }
             root.evOpen = false
-            root.status = "Saved. Syncing…"
+            root.status = I18n.tr("Saved. Syncing…")
             // The chosen calendar becomes the default, so the next event opens
             // on it — which is the whole point of having picked one.
             //
@@ -777,8 +782,8 @@ FloatingWindow {
 
     function evSave() {
         if (root.evBusy) return
-        if (evTitle.text.trim() === "") { root.evMsg = "It needs a name."; return }
-        if (evDate.text.trim() === "") { root.evMsg = "It needs a date."; return }
+        if (evTitle.text.trim() === "") { root.evMsg = I18n.tr("It needs a name."); return }
+        if (evDate.text.trim() === "") { root.evMsg = I18n.tr("It needs a date."); return }
 
         const when = evTime.text.trim() === ""
                    ? evDate.text.trim()
@@ -825,8 +830,8 @@ FloatingWindow {
         stderr: StdioCollector { id: syncErr }
         onExited: (code) => {
             root.busy = false
-            root.status = code === 0 ? "Up to date."
-                                     : (syncErr.text.trim() || "Some calendars did not sync.")
+            root.status = code === 0 ? I18n.tr("Up to date.")
+                                     : (syncErr.text.trim() || I18n.tr("Some calendars did not sync."))
             root.reload()
         }
     }
@@ -878,7 +883,7 @@ FloatingWindow {
         onExited: (code) => {
             root.setupBusy = false
             if (code === 0) {
-                root.setupMsg = "Found what the server has."
+                root.setupMsg = I18n.tr("Found what the server has.")
                 root.loadCalendars(discoverProc.acct)
                 calsProc.running = false
                 calsProc.running = true
@@ -888,7 +893,7 @@ FloatingWindow {
                 // Sync — setup that looks finished and has fetched nothing.
                 root.sync()
             } else {
-                root.setupMsg = discoverErr.text.trim() || "the server did not answer"
+                root.setupMsg = discoverErr.text.trim() || I18n.tr("the server did not answer")
             }
         }
     }
@@ -896,7 +901,7 @@ FloatingWindow {
     function discover(name) {
         if (root.setupBusy) return
         root.setupBusy = true
-        root.setupMsg = "Asking the server…"
+        root.setupMsg = I18n.tr("Asking the server…")
         root.openAccount = name
         discoverProc.acct = name
         discoverProc.command = [root.bin, "discover", name]
@@ -911,7 +916,7 @@ FloatingWindow {
         onExited: (code) => {
             root.setupBusy = false
             if (code !== 0) {
-                root.setupMsg = toggleErr.text.trim() || "that calendar could not be changed"
+                root.setupMsg = toggleErr.text.trim() || I18n.tr("that calendar could not be changed")
                 root.loadCalendars(toggleProc.acct)   // back to what is really set
                 return
             }
@@ -935,7 +940,7 @@ FloatingWindow {
     function sync() {
         if (root.busy) return
         root.busy = true
-        root.status = "Syncing…"
+        root.status = I18n.tr("Syncing…")
         // ⛔ `running = true` ON AN ALREADY-RUNNING Process IS A SILENT NO-OP.
         // Two clicks in quick succession would otherwise drop the second, and
         // the button would look broken exactly when somebody pressed it twice
@@ -967,7 +972,7 @@ FloatingWindow {
                     spacing: root.ui(10)
 
                     Text {
-                        text: "Calendars"
+                        text: I18n.tr("Calendars")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11); bold: true }
                     }
@@ -999,8 +1004,10 @@ FloatingWindow {
                                 spacing: root.ui(6)
                                 Text {
                                     text: modelData.secret === "not set"
-                                          ? "not signed in"
-                                          : modelData.on + " of " + modelData.total + " on"
+                                          ? I18n.tr("not signed in")
+                                          : I18n.trn("%1 of %2 on", "%1 of %2 on",
+                                                     modelData.total)
+                                                .arg(modelData.on).arg(modelData.total)
                                     color: modelData.secret === "not set" ? root.cWarn : root.cDim
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
@@ -1018,7 +1025,7 @@ FloatingWindow {
                                     Text {
                                         id: rowSignTxt
                                         anchors.centerIn: parent
-                                        text: "Sign in"
+                                        text: I18n.tr("Sign in")
                                         color: rowSign.containsMouse ? root.cPanel : root.cAccent
                                         font { family: root.uiFont; pixelSize: root.ui(10) }
                                     }
@@ -1047,7 +1054,7 @@ FloatingWindow {
                                         id: calsTxt
                                         anchors.centerIn: parent
                                         text: root.openAccount === modelData.name
-                                              ? "Hide" : "Calendars"
+                                              ? I18n.tr("Hide") : I18n.tr("Calendars")
                                         color: rowCals.containsMouse ? root.cPanel : root.cText
                                         font { family: root.uiFont; pixelSize: root.ui(10) }
                                     }
@@ -1148,7 +1155,7 @@ FloatingWindow {
                                     border { width: 1; color: root.cDim }
                                     Text {
                                         anchors.centerIn: parent
-                                        text: root.setupBusy ? "Asking…" : "Find calendars"
+                                        text: root.setupBusy ? I18n.tr("Asking…") : I18n.tr("Find calendars")
                                         color: findMouse.containsMouse ? root.cPanel : root.cText
                                         font { family: root.uiFont; pixelSize: root.ui(10) }
                                     }
@@ -1186,7 +1193,7 @@ FloatingWindow {
                         visible: root.calendars.length === 0
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "No accounts yet."
+                        text: I18n.tr("No accounts yet.")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -1202,7 +1209,7 @@ FloatingWindow {
                         border { width: 1; color: root.cDim }
                         Text {
                             anchors.centerIn: parent
-                            text: "Add account"
+                            text: I18n.tr("Add account")
                             color: addMouse.containsMouse ? root.cPanel : root.cText
                             font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
@@ -1229,7 +1236,7 @@ FloatingWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.busy ? "Syncing…" : "Sync now"
+                        text: root.busy ? I18n.tr("Syncing…") : I18n.tr("Sync now")
                         color: syncMouse.containsMouse ? root.cPanel : root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
                     }
@@ -1272,9 +1279,13 @@ FloatingWindow {
                                       right: nav.left; rightMargin: root.ui(12) }
                             elide: Text.ElideRight
                             text: root.view === "month"
-                                  ? Qt.formatDate(root.monthAnchor, "MMMM yyyy")
-                                  : (root.offset === 0 ? "The next " + root.days + " days"
-                                                       : Qt.formatDate(root.anchorDay, "d MMMM yyyy"))
+                                  ? root.monthAnchor.toLocaleDateString(
+                                        Qt.locale(), I18n.tr("MMMM yyyy"))
+                                  : (root.offset === 0
+                                     ? I18n.trn("The next %1 day", "The next %1 days", root.days)
+                                           .arg(root.days)
+                                     : root.anchorDay.toLocaleDateString(
+                                           Qt.locale(), I18n.tr("d MMMM yyyy")))
                             color: root.cText
                             font { family: root.uiFont; pixelSize: root.ui(18); bold: true }
                         }
@@ -1295,7 +1306,7 @@ FloatingWindow {
                                 Text {
                                     id: newTxt
                                     anchors.centerIn: parent
-                                    text: "New event"
+                                    text: I18n.tr("New event")
                                     color: newMouse.containsMouse ? root.cPanel : root.cAccent
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
@@ -1314,17 +1325,18 @@ FloatingWindow {
                             // either where you are or where you would go, and
                             // both readings are wrong half the time.
                             Repeater {
-                                model: ["Week", "Month"]
+                                model: [{ id: "week",  label: I18n.tr("Week") },
+                                        { id: "month", label: I18n.tr("Month") }]
                                 Rectangle {
                                     width: root.ui(58); height: root.ui(26)
                                     radius: root.ui(5)
-                                    property bool on: root.view === modelData.toLowerCase()
+                                    property bool on: root.view === modelData.id
                                     color: on ? root.cAccent
                                               : (viewMouse.containsMouse ? root.cBg : "transparent")
                                     border { width: 1; color: on ? root.cAccent : root.cDim }
                                     Text {
                                         anchors.centerIn: parent
-                                        text: modelData
+                                        text: modelData.label
                                         color: parent.on ? root.cPanel : root.cText
                                         font { family: root.uiFont; pixelSize: root.ui(11) }
                                     }
@@ -1334,7 +1346,7 @@ FloatingWindow {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            root.view = modelData.toLowerCase()
+                                            root.view = modelData.id
                                             root.reload()
                                         }
                                     }
@@ -1343,9 +1355,9 @@ FloatingWindow {
 
                             Repeater {
                                 model: [
-                                    { label: "Back",  step: -1 },
-                                    { label: "Today", step: 0 },
-                                    { label: "Next",  step: 1 }
+                                    { label: I18n.tr("Back"),  step: -1 },
+                                    { label: I18n.tr("Today"), step: 0 },
+                                    { label: I18n.tr("Next"),  step: 1 }
                                 ]
                                 Rectangle {
                                     width: root.ui(64); height: root.ui(26)
@@ -1412,7 +1424,8 @@ FloatingWindow {
 
                             Text {
                                 visible: parent.newDay
-                                text: Qt.formatDate(new Date(modelData.start), "dddd d MMMM")
+                                text: new Date(modelData.start).toLocaleDateString(
+                                          Qt.locale(), I18n.tr("dddd d MMMM"))
                                 color: root.cAccent
                                 font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
                             }
@@ -1431,8 +1444,9 @@ FloatingWindow {
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: root.ui(58)
-                                        text: modelData.allDay ? "all day"
-                                             : Qt.formatDateTime(new Date(modelData.start), "HH:mm")
+                                        text: modelData.allDay ? I18n.tr("all day")
+                                             : new Date(modelData.start).toLocaleTimeString(
+                                                   Qt.locale(), I18n.tr("HH:mm"))
                                         color: root.cDim
                                         font { family: root.uiFont; pixelSize: root.ui(12) }
                                     }
@@ -1440,7 +1454,7 @@ FloatingWindow {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - root.ui(160)
                                         elide: Text.ElideRight
-                                        text: modelData.summary === "" ? "(no title)" : modelData.summary
+                                        text: modelData.summary === "" ? I18n.tr("(no title)") : modelData.summary
                                         color: root.cText
                                         font { family: root.uiFont; pixelSize: root.ui(13) }
                                     }
@@ -1577,7 +1591,7 @@ FloatingWindow {
                                                 width: parent.width
                                                 elide: Text.ElideRight
                                                 text: cell.shown[index].summary === ""
-                                                      ? "(no title)" : cell.shown[index].summary
+                                                      ? I18n.tr("(no title)") : cell.shown[index].summary
                                                 color: evMouse.containsMouse ? root.cAccent
                                                                              : root.cText
                                                 font { family: root.uiFont
@@ -1597,7 +1611,8 @@ FloatingWindow {
                                         visible: cell.shown.length > cell.nshow
                                         width: cell.width - root.ui(12)
                                         elide: Text.ElideRight
-                                        text: "+" + (cell.shown.length - cell.nshow) + " more"
+                                        text: I18n.trn("+%1 more", "+%1 more", cell.shown.length - cell.nshow)
+                                              .arg(cell.shown.length - cell.nshow)
                                         color: root.cDim
                                         font { family: root.uiFont; pixelSize: root.ui(10) }
                                     }
@@ -1609,8 +1624,10 @@ FloatingWindow {
                     Text {
                         visible: root.view === "month" && root.monthCells.length === 0
                         text: root.calendars.length === 0
-                              ? "No calendars are set up yet."
-                              : "Loading " + Qt.formatDate(root.monthAnchor, "MMMM yyyy") + "…"
+                              ? I18n.tr("No calendars are set up yet.")
+                              : I18n.tr("Loading %1…").arg(
+                                    root.monthAnchor.toLocaleDateString(
+                                        Qt.locale(), I18n.tr("MMMM yyyy")))
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(13) }
                     }
@@ -1622,8 +1639,10 @@ FloatingWindow {
 
                         Text {
                             text: root.calendars.length === 0
-                                  ? "No calendars are set up yet."
-                                  : "Nothing in the next " + root.days + " days."
+                                  ? I18n.tr("No calendars are set up yet.")
+                                  : I18n.trn("Nothing in the next %1 day.",
+                                             "Nothing in the next %1 days.", root.days)
+                                        .arg(root.days)
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(13) }
                         }
@@ -1642,7 +1661,7 @@ FloatingWindow {
                             Text {
                                 id: emptyNewTxt
                                 anchors.centerIn: parent
-                                text: "New event"
+                                text: I18n.tr("New event")
                                 color: emptyNew.containsMouse ? root.cPanel : root.cAccent
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -1695,7 +1714,7 @@ FloatingWindow {
                     spacing: root.ui(10)
 
                     Text {
-                        text: root.evUid === "" ? "New event" : "Event"
+                        text: root.evUid === "" ? I18n.tr("New event") : I18n.tr("Event")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(16); bold: true }
                     }
@@ -1703,8 +1722,8 @@ FloatingWindow {
                     SynField {
                         id: evTitle
                         width: parent.width
-                        label: "WHAT"
-                        placeholder: "Dentist"
+                        label: I18n.tr("WHAT")
+                        placeholder: I18n.tr("Dentist")
                     }
 
                     Row {
@@ -1713,17 +1732,17 @@ FloatingWindow {
                         SynField {
                             id: evDate
                             width: (parent.width - root.ui(10)) * 0.55
-                            label: "DAY"
+                            label: I18n.tr("DAY")
                             placeholder: "2026-09-21"
                         }
                         SynField {
                             id: evTime
                             width: (parent.width - root.ui(10)) * 0.45
-                            label: "TIME"
+                            label: I18n.tr("TIME")
                             // ⚠ SAYING WHAT EMPTY MEANS, rather than leaving it
                             // to be discovered. An all-day event is the absence
                             // of a time, and nothing else on the form says so.
-                            placeholder: "13:15 — or blank for all day"
+                            placeholder: I18n.tr("13:15 — or blank for all day")
                         }
                     }
 
@@ -1733,14 +1752,14 @@ FloatingWindow {
                         SynField {
                             id: evFor
                             width: (parent.width - root.ui(10)) / 2
-                            label: "FOR"
-                            placeholder: "1h, 30m, 1h30m"
+                            label: I18n.tr("FOR")
+                            placeholder: I18n.tr("1h, 30m, 1h30m")
                         }
                         SynField {
                             id: evRemind
                             width: (parent.width - root.ui(10)) / 2
-                            label: "REMIND ME"
-                            placeholder: "15m, 1h, none"
+                            label: I18n.tr("REMIND ME")
+                            placeholder: I18n.tr("15m, 1h, none")
                         }
                     }
 
@@ -1753,7 +1772,7 @@ FloatingWindow {
                         visible: root.allCals.length > 1
 
                         Text {
-                            text: "CALENDAR"
+                            text: I18n.tr("CALENDAR")
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                         }
@@ -1798,15 +1817,15 @@ FloatingWindow {
                     SynField {
                         id: evWhere
                         width: parent.width
-                        label: "WHERE"
-                        placeholder: "optional"
+                        label: I18n.tr("WHERE")
+                        placeholder: I18n.tr("optional")
                     }
 
                     SynField {
                         id: evNotes
                         width: parent.width
-                        label: "NOTES"
-                        placeholder: "optional"
+                        label: I18n.tr("NOTES")
+                        placeholder: I18n.tr("optional")
                     }
 
                     Text {
@@ -1834,7 +1853,7 @@ FloatingWindow {
                             border { width: 1; color: root.cBad }
                             Text {
                                 anchors.centerIn: parent
-                                text: "Delete"
+                                text: I18n.tr("Delete")
                                 color: delMouse.containsMouse ? root.cPanel : root.cBad
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -1860,7 +1879,7 @@ FloatingWindow {
                             border { width: 1; color: root.cDim }
                             Text {
                                 anchors.centerIn: parent
-                                text: "Cancel"
+                                text: I18n.tr("Cancel")
                                 color: root.cText
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -1881,7 +1900,7 @@ FloatingWindow {
                             border { width: 1; color: root.cAccent }
                             Text {
                                 anchors.centerIn: parent
-                                text: root.evBusy ? "Saving…" : "Save"
+                                text: root.evBusy ? I18n.tr("Saving…") : I18n.tr("Save")
                                 color: saveMouse.containsMouse ? root.cPanel : root.cAccent
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -1934,7 +1953,7 @@ FloatingWindow {
                     spacing: root.ui(12)
 
                     Text {
-                        text: "Add an account"
+                        text: I18n.tr("Add an account")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
                     }
@@ -1977,8 +1996,9 @@ FloatingWindow {
                     SynField {
                         id: nameField
                         width: parent.width
-                        label: root.authOauth ? "Your address at this provider" : "A name for this account"
-                        placeholder: root.authOauth ? "you@gmail.com" : "work"
+                        label: root.authOauth ? I18n.tr("Your address at this provider")
+                                              : I18n.tr("A name for this account")
+                        placeholder: root.authOauth ? "you@gmail.com" : I18n.tr("work")
                         text: root.authName
                         onTextEdited: root.authName = text
                     }
@@ -1986,7 +2006,7 @@ FloatingWindow {
                     SynField {
                         width: parent.width
                         visible: !root.authOauth
-                        label: "Server URL"
+                        label: I18n.tr("Server URL")
                         placeholder: "https://example.org/dav/"
                         text: root.authUrl
                         onTextEdited: root.authUrl = text
@@ -1995,7 +2015,7 @@ FloatingWindow {
                     SynField {
                         width: parent.width
                         visible: !root.authOauth
-                        label: "Username"
+                        label: I18n.tr("Username")
                         text: root.authUser
                         onTextEdited: root.authUser = text
                     }
@@ -2004,7 +2024,7 @@ FloatingWindow {
                         id: authPass
                         width: parent.width
                         visible: !root.authOauth
-                        label: "Password"
+                        label: I18n.tr("Password")
                         secret: true
                     }
 
@@ -2015,9 +2035,9 @@ FloatingWindow {
                         width: parent.width
                         visible: root.authOauth
                         wrapMode: Text.WordWrap
-                        text: "Signing in opens your browser. Your password is typed at "
-                              + (root.authKind === "google" ? "Google" : "Microsoft")
-                              + ", never here."
+                        text: I18n.tr("Signing in opens your browser. Your password is "
+                                      + "typed at %1, never here.")
+                                   .arg(root.authKind === "google" ? "Google" : "Microsoft")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -2042,7 +2062,7 @@ FloatingWindow {
                             border { width: 1; color: root.cDim }
                             Text {
                                 anchors.centerIn: parent
-                                text: "Cancel"
+                                text: I18n.tr("Cancel")
                                 color: root.cText
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -2067,8 +2087,9 @@ FloatingWindow {
                                 anchors.centerIn: parent
                                 // ⛔ THE BUTTON IS ITS OWN LABEL. "OK" would make
                                 // the sentence above it load-bearing.
-                                text: root.authBusy ? "Working…"
-                                    : root.authOauth ? "Sign in with browser" : "Add and sign in"
+                                text: root.authBusy ? I18n.tr("Working…")
+                                    : root.authOauth ? I18n.tr("Sign in with browser")
+                                            : I18n.tr("Add and sign in")
                                 color: signMouse.containsMouse ? root.cPanel : root.cAccent
                                 font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
                             }

@@ -34,7 +34,38 @@ pkgname=syn-cal
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=26
+# 27: the window speaks thirteen languages.
+#   76 msgids through the same JSON bridge the bar and the other four
+#   quickshell apps carry — one byte-identical data/qml/I18n.qml, catalogs
+#   generated beside it, read with a blocking FileView because tr() is a
+#   function and not a binding.
+#   ⛔ THE VIEW BUTTON'S LABEL WAS ITS KEY. `root.view = modelData.toLowerCase()`
+#   turned the drawn word straight into the value nine `root.view === "month"`
+#   branches match on, so a German "Monat" would have selected a view that does
+#   not exist and drawn an empty window. The table is {id, label} pairs now.
+#   ⛔ AND HALF THE DATES HERE MUST NOT GO THROUGH THE LOCALE. Qt.formatDate(d,
+#   "<format>") formats against QLocale::c() — measured under quickshell 0.3.1,
+#   "MMMM yyyy" returns "September 2026" on a de_DE and a ja_JP session alike.
+#   For a heading that is the bug fixed here; for the ISO dates it is the
+#   REASON to leave them alone, because "yyyy-MM-dd" is a map key, a `--from=`
+#   argument and the contents of a field the binary parses, and
+#   toLocaleDateString under ar_EG renders it ٢٠٢٦-٠٩-٠١. Both directions are
+#   asserted — a displayed date on the C locale fails, an ISO date on the
+#   locale fails. Verified live: the header reads سبتمبر ٢٠٢٦ while the key
+#   beside it is still 2026-09-01.
+#   ⚠ THE FOUR DISPLAY FORMATS ARE MSGIDS. The locale supplies the month and
+#   day NAMES; only a translator supplies the ORDER, so ja carries yyyy年M月d日
+#   and ru carries "d MMMM yyyy 'г.'".
+#   ⛔ AND THE WEEKDAY HEADINGS COME FROM Qt.locale().dayName(), not from a
+#   marked array. Qt already knows what a Tuesday is called in thirteen
+#   languages AND which abbreviation each one uses — "Di.", "火", and none at
+#   all in Arabic. Which COLUMN a given dow lands in is still read off the
+#   records, because that is the binary's setting to own.
+#   ⚠ Eight assertions in qml_test.sh pinned the English spelling of a label
+#   and had to move with it. Each was shown to fail on a deliberate break
+#   first — the rewrite of a pinned assertion is exactly where a false green
+#   comes from.
+pkgrel=27
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

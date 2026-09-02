@@ -83,7 +83,13 @@ check "the month grid comes from the binary too" $?
 ! grep -qE 'getDay\(\)|daysInMonth|% *4 *===? *0|isLeap' "$QML"
 check "…so the window works out no weekday and no leap year of its own" $?
 
-grep -q 'model: \["Week", "Month"\]' "$QML"
+# ⚠ THE LABEL IS NO LONGER THE KEY. It used to be — `root.view =
+# modelData.toLowerCase()` — which made a translated label select a view that
+# does not exist, so the table is {id, label} pairs now. Both halves are
+# asserted: the ids the nine `root.view === "…"` branches match on, and that
+# each button still carries a word rather than an icon.
+grep -qE 'id: "week", *label: I18n\.tr\("Week"\)' "$QML" &&
+grep -qE 'id: "month", *label: I18n\.tr\("Month"\)' "$QML"
 check "both views are reachable, each button naming the view it gives you" $?
 
 # ⛔ AND NOT WHICH DAY THE WEEK STARTS ON EITHER. That is a setting the binary
@@ -92,12 +98,18 @@ check "both views are reachable, each button naming the view it gives you" $?
 ! grep -q '\["Mon", "Tue", "Wed"' "$QML"
 check "…and the weekday headings are not a fixed list" $?
 
-grep -q 'names\[root.monthCells\[i\].dow\]' "$QML"
+# ⚠ THE NAME NOW COMES FROM Qt.locale() RATHER THAN A LOCAL ARRAY — Qt knows
+# the abbreviation each language actually uses — but WHICH column a given `dow`
+# lands in is still read off the records, which is what this asserts.
+grep -q 'out\[root.monthCells\[i\].col\]' "$QML" &&
+grep -q 'dayName(root.monthCells\[i\].dow' "$QML"
 check "…they are read off the records, column by column" $?
 
 # ⛔ A CELL THAT CANNOT SHOW THEM ALL SAYS SO. Silently drawing the first three
 # of five is a calendar that hides two appointments.
-grep -q '"+" + (cell.shown.length - cell.nshow) + " more"' "$QML"
+# ⚠ A trn(), not a concatenation: the number decides the form in six of the
+# thirteen languages, and " more" on its own was unreachable by a translator.
+grep -q 'I18n.trn("+%1 more", "+%1 more", cell.shown.length - cell.nshow)' "$QML"
 check "…and a full day says how many it is not showing" $?
 
 # ⛔ SETUP THAT LOOKS FINISHED MUST HAVE FETCHED SOMETHING. A first discovery
@@ -111,7 +123,7 @@ check "…and the window is what asks for them, not a terminal" $?
 
 # ⛔ AND THE WINDOW CAN MAKE AN EVENT. Everything else here reads; without this
 # the calendar is a viewer for one somebody else has to write.
-grep -q 'text: "New event"' "$QML"
+grep -q 'text: I18n.tr("New event")' "$QML"
 check "there is a button that makes an event, saying so" $?
 
 grep -q '"new", evTitle.text.trim()' "$QML"
@@ -150,7 +162,7 @@ check "…and clicking a title on that day opens that event instead" $?
 
 # An empty calendar is where somebody most wants to add something, and it had
 # nothing to press.
-grep -q '"Nothing in the next " + root.days' "$QML"
+grep -q 'Nothing in the next %1 day' "$QML"
 check "…the empty week still says it is empty" $?
 
 grep -A32 'Nothing in the next ' "$QML" | grep -q 'onClicked: root.evNew()'
@@ -166,12 +178,12 @@ check "…and the empty list takes no height, so nothing is pushed off-screen" $
 # ⛔ SAVED HERE IS NOT SAVED ANYWHERE ELSE. A window that says "Saved" and
 # leaves the appointment on one machine is telling somebody their meeting is
 # booked when nobody else can see it.
-grep -A16 'root.status = "Saved' "$QML" | grep -q 'root.sync()'
+grep -A16 'root.status = I18n.tr("Saved' "$QML" | grep -q 'root.sync()'
 check "…and saving syncs, rather than stopping at this machine" $?
 
 # ⛔ A BUTTON IS ITS OWN LABEL. Not an icon that needs a tooltip to say what it
 # does; only KEYS follow a setting.
-grep -q 'text: root.busy ? "Syncing…" : "Sync now"' "$QML"
+grep -q 'text: root.busy ? I18n.tr("Syncing…") : I18n.tr("Sync now")' "$QML"
 check "the sync button carries its own words" $?
 
 # ⛔ `running = true` ON AN ALREADY-RUNNING Process IS A SILENT NO-OP. Two
@@ -205,7 +217,7 @@ check "day grouping compares local dates, not a 24-hour arithmetic" $?
 ! grep -q 'Add one from a terminal' "$QML"
 check "the empty state does not send the user to a terminal" $?
 
-grep -q 'text: "Add account"' "$QML"
+grep -q 'text: I18n.tr("Add account")' "$QML"
 check "…it offers a button that says what it does" $?
 
 grep -q 'root.signIn(modelData.name, modelData.kind)' "$QML"

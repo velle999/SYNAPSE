@@ -113,6 +113,20 @@ test('caldav', find_program('tests/caldav_test.sh'),
      timeout: 120)
 
 install_data('data/syn-cal.qml', install_dir: get_option('datadir') / 'syn-cal')
+
+# The translation singleton, as its own QML module directory.
+#
+# ⚠ A qmldir makes its directory an explicit module, and syn-cal.qml is the
+# file quickshell is pointed AT — putting one beside it changes how that file
+# itself resolves. po/ installs the catalogs into qml/i18n/ alongside these.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-cal' / 'qml')
+
+# ⚠ A UI STRING NO TRANSLATOR CAN REACH IS SILENTLY ENGLISH FOREVER, and in
+# QML there is one extra way in: qsTr() looks exactly like the marking and is
+# not — quickshell has no translator to install one into.
+test('i18n', find_program('tests/i18n_test.sh'),
+     args : [meson.current_source_dir()], timeout : 60)
 install_data('data/syn-cal.desktop',
              install_dir: get_option('datadir') / 'applications')
 
@@ -120,3 +134,5 @@ install_data('data/syn-cal.desktop',
 # set of PNGs is a set of things to forget to regenerate.
 install_data('data/syn-cal.svg',
              install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
+
+subdir('po')

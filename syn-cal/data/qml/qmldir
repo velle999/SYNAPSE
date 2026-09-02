@@ -1,0 +1,8 @@
+# The translation singleton, as its own module directory.
+#
+# ⚠ NOT BESIDE syn-cal.qml. A qmldir makes its directory an explicit QML
+# module, and syn-cal.qml is the file quickshell is pointed AT — putting one
+# next to it changes how that file itself is resolved. A subdirectory has no
+# such effect, and it keeps the generated catalogs (qml/i18n/*.json) beside the
+# singleton that looks for them, which is how I18n.qml finds them at all.
+singleton I18n 1.0 I18n.qml
