@@ -39,10 +39,13 @@ check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 # passed; in a VM under a parallel suite grep left first and the assertion
 # failed while the string it wanted was right there.
 #
-# ⛔ the count goes into a VARIABLE, never `>/dev/null`. GNU grep looks at its
-# own stdout, and when that is /dev/null it takes an early exit — which puts
-# the SIGPIPE back exactly as `grep -q` had it, while still reading like a
-# count. `seq 1 2000000 | grep -c x >/dev/null` returns 141 for that reason.
+# ⚠ the count goes into a VARIABLE rather than `>/dev/null`. `grep -c x
+# >/dev/null` does read to EOF on the GNU grep 3.12 this runs against, so it
+# would work here — but it works by that grep's good manners, not by
+# construction, and it is not portable even on this machine: ugrep, which is
+# `grep` in an interactive shell here, DOES take an early exit when its stdout
+# is /dev/null and hands back the same 141 this helper exists to prevent.
+# Capturing the count cannot depend on which grep answered.
 has() { local n; n=$(grep -c "$@") || true; [ "${n:-0}" -gt 0 ]; }
 
 # `((n++))` evaluates to the OLD value, so a bare post-increment returns 1 the
