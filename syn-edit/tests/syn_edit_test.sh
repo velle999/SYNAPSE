@@ -95,15 +95,30 @@ GQ_MAX_BYTES=${GQ_MAX_BYTES:-1048576}
 GQ_TIMEOUT=${GQ_TIMEOUT:-10}
 
 # Bounded slurp. Mirrors `$(cat)`: command substitution eats trailing newlines
-# and the printf puts one back, so matching behaviour is unchanged for any
-# output that fits.
+# and the here-string below puts one back, so matching behaviour is unchanged
+# for any output that fits.
+#
+# ⛔ THE MATCH IS AGAINST A HERE-STRING, NOT THROUGH A PIPE, AND THAT IS THE
+# WHOLE POINT. `producer | grep -q` returns 141 WHEN IT MATCHES: grep -q exits
+# on the first hit, whatever is still writing takes SIGPIPE, and `set -o
+# pipefail` hands back its status — so a TRUE assertion is reported as a
+# failure. It is a race, so it shows up as a different passing assertion
+# failing each run, on the slow machine and not on the fast one.
+#
+# ⚠ SLURPING FIRST IS NOT ENOUGH, which is how this survived: the old helper
+# captured the output and then wrote it back out with `printf … | grep -q`,
+# leaving the PRINTF in the pipe to be killed instead of the program. Same 141,
+# same intermittency, one process further along. A here-string has no second
+# process to signal and is not a pipeline at all, so pipefail cannot reach it.
+#
+# It cost syn-edit 19 and 20: two builds on velle's install failed on two
+# different true assertions — `Paste puts it back where the caret is`, then
+# `serve reports the mode` — while 377/377 passed here every time.
 _slurp() {
-	local out
-	out=$(timeout "$GQ_TIMEOUT" head -c "$GQ_MAX_BYTES")
-	printf '%s\n' "$out"
+	timeout "$GQ_TIMEOUT" head -c "$GQ_MAX_BYTES"
 }
-gq()  { _slurp | command grep -q -- "$1"; }
-gqv() { _slurp | command grep -qv -- "$1"; }
+gq()  { local out; out=$(_slurp); command grep -q  -- "$1" <<<"$out"; }
+gqv() { local out; out=$(_slurp); command grep -qv -- "$1" <<<"$out"; }
 
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
