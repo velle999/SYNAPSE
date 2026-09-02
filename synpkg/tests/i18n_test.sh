@@ -24,6 +24,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -u
 
+# ⛔ THE AMBIENT LOCALE IS NOT THIS TEST'S TO INHERIT. Everything below parses
+# tool output — xgettext diagnostics, msgfmt, msgattrib — and the gettext tools
+# are themselves translated. On a Japanese desktop xgettext writes `警告:`, the
+# `grep -v 'warning:'` filter below matches nothing, and "po/pot.sh runs clean"
+# fails with a warning this project has decided is acceptable. It is the same
+# bug `pacman -Qi` taught us: LC_ALL=C anything you parse.
+#
+# ⚠ LANGUAGE too, and it has to be UNSET rather than set: gettext consults it
+# BEFORE LC_ALL, so an ambient LANGUAGE=ja would answer Japanese to the German
+# runs below and the one assertion that proves the human path IS translated
+# would be comparing Japanese against Japanese.
+#
+# The deliberate foreign-locale runs set LC_ALL per command, which wins over
+# this.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 BIN=${2:-$root/build/synpkg}
 fails=0

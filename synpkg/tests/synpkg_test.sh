@@ -28,16 +28,33 @@ ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
 check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 
+# ⛔ NEVER `| grep -q` in this file — use `| has`. `grep -q` exits the instant
+# it matches; the producer then takes SIGPIPE and `set -o pipefail` reports 141,
+# which is a FAILURE on a match. `grep -c` has to read to EOF to count, so it
+# cannot kill anything upstream of it.
+#
+# It bit `--help prints usage` for real on a slower machine: the usage text is
+# 4344 bytes, which is two stdio flushes, and the banner it matches on is in the
+# first one. On this box synpkg finished writing before grep left and the test
+# passed; in a VM under a parallel suite grep left first and the assertion
+# failed while the string it wanted was right there.
+#
+# ⛔ the count goes into a VARIABLE, never `>/dev/null`. GNU grep looks at its
+# own stdout, and when that is /dev/null it takes an early exit — which puts
+# the SIGPIPE back exactly as `grep -q` had it, while still reading like a
+# count. `seq 1 2000000 | grep -c x >/dev/null` returns 141 for that reason.
+has() { local n; n=$(grep -c "$@") || true; [ "${n:-0}" -gt 0 ]; }
+
 # `((n++))` evaluates to the OLD value, so a bare post-increment returns 1 the
 # first time and kills the script under `set -e`. Hence $((n + 1)) above.
 
 echo "synpkg tests — $SYNPKG"
 
 # ── the binary answers at all ───────────────────────────────────────────────
-"$SYNPKG" --version | grep -q '^synpkg '
+"$SYNPKG" --version | has '^synpkg '
 check "--version prints a version" $?
 
-"$SYNPKG" --help | grep -q 'the SynapseOS package manager'
+"$SYNPKG" --help | has 'the SynapseOS package manager'
 check "--help prints usage" $?
 
 "$SYNPKG" definitely-not-a-command >/dev/null 2>&1
@@ -90,7 +107,7 @@ warns=$("$SYNPKG" --tsv suggest 2>&1 >/dev/null | grep -c 'catalogue line')
 [ "$warns" = 0 ] && ok "curated.tsv parses with no malformed lines" \
                  || bad "$warns malformed lines in curated.tsv"
 
-"$SYNPKG" suggest categories | grep -q 'Browsers'
+"$SYNPKG" suggest categories | has 'Browsers'
 check "suggest categories lists Browsers" $?
 
 # Filtering by a category must not return the whole catalogue.
@@ -184,7 +201,7 @@ fi
 # asked for a password and then did nothing.
 CACHY_C="$(dirname "$0")/../src/cachyos.c"
 if [ -f "$CACHY_C" ]; then
-    if grep -A3 'escalate("cachyos"' "$CACHY_C" | grep -qE '"(enable|disable)"[^-]'; then
+    if grep -A3 'escalate("cachyos"' "$CACHY_C" | has -E '"(enable|disable)"[^-]'; then
         bad "cachyos escalates a helper ACTION where a synpkg SUBCOMMAND is required"
     else
         ok "cachyos escalates a real synpkg subcommand"
@@ -258,7 +275,7 @@ ragged=$("$SYNPKG" --tsv about | awk -F'\t' 'NR==1 {want=NF; next} NF!=want {n++
 
 missing=""
 for item in Repositories AUR Flathub BlackArch SynapseOS; do
-    "$SYNPKG" --tsv about | cut -f1 | grep -qx "$item" || missing="$missing $item"
+    "$SYNPKG" --tsv about | cut -f1 | has -x "$item" || missing="$missing $item"
 done
 [ -z "$missing" ] && ok "about names every source" || bad "about omits:$missing"
 
@@ -369,7 +386,11 @@ n=$(fp --tsv flatpak search firefox | tsv_cols)
 
 # The seventh column must be named, not just present: the GUI reads rows by
 # header name, so a renamed column silently blanks the app title everywhere.
-fp --tsv flatpak search firefox | head -1 | grep -q 'title$'
+# ⚠ `head -1` is an early closer too, exactly like `grep -q`. Capture the whole
+# stream first and take the first line from the variable, so nothing upstream is
+# ever killed mid-write.
+fpsearch=$(fp --tsv flatpak search firefox)
+has 'title$' <<<"${fpsearch%%$'\n'*}"
 check "flatpak search names its title column" $?
 
 ragged=$(fp --tsv flatpak search firefox | awk -F'\t' 'NR==1 {want=NF; next} NF!=want {n++} END {print n+0}')
@@ -399,7 +420,7 @@ n=$(fp --tsv flatpak updates | tsv_cols)
 [ "$n" = 6 ] && ok "flatpak updates --tsv has 6 columns" \
              || bad "flatpak updates --tsv has 6 columns (got $n)"
 
-fp --tsv flatpak updates | grep -q '^org.mozilla.firefox	142.0	'
+fp --tsv flatpak updates | has '^org.mozilla.firefox	142.0	'
 check "flatpak updates pairs the app with its installed version" $?
 
 stray=$(fp --tsv flatpak search firefox 2>/dev/null | grep -cv $'\t')
@@ -634,15 +655,15 @@ fi
 # The Games category is data, so it is deterministic and worth pinning: it is
 # what the Gaming category is NOT, and folding the two together was considered
 # and rejected.
-"$SYNPKG" --tsv suggest categories | grep -q $'^Games\t'
+"$SYNPKG" --tsv suggest categories | has $'^Games\t'
 check "the catalogue has a Games category" $?
 
-"$SYNPKG" --tsv suggest Games | grep -q $'^Games\t0ad\t'
+"$SYNPKG" --tsv suggest Games | has $'^Games\t0ad\t'
 check "suggest Games lists a game" $?
 
 # Gaming is launchers and overlays, Games are games. A game turning up under
 # Gaming means the two have been merged by accident.
-"$SYNPKG" --tsv suggest Gaming | grep -q $'\t0ad\t' && \
+"$SYNPKG" --tsv suggest Gaming | has $'\t0ad\t' && \
     bad "0ad is in Gaming — Gaming is tooling, Games are games" || \
     ok "Gaming holds no games"
 
@@ -718,7 +739,7 @@ row=$(fa --tsv flatpak categories | awk -F'\t' '$1=="AudioVideo" {print $2}')
                  || bad "AudioVideo holds $row apps (want 1 — did Audio substring-match?)"
 
 # An app with no <categories> belongs nowhere and must not inflate a count.
-fa --tsv flatpak categories | grep -q 'Uncategorised' && \
+fa --tsv flatpak categories | has 'Uncategorised' && \
     bad "an uncategorised app reached the category pane" || \
     ok "an uncategorised app is left out"
 
@@ -841,7 +862,7 @@ if pacman -Si "$probe" >/dev/null 2>&1; then
     ok "skipped: $probe is in a repository here, so it is not an AUR-only case"
 elif curl -fsS --max-time 15 \
         "https://aur.archlinux.org/rpc/v5/info?arg[]=$probe" 2>/dev/null \
-        | grep -q '"resultcount":1'; then
+        | has '"resultcount":1'; then
     out=$("$SYNPKG" install "$probe" --no-aur 2>&1 </dev/null || true)
     case "$out" in
         *"not found in any repository"*)
@@ -932,13 +953,13 @@ if [ -f "$QML" ]; then
     # there is no progress to report; a bar that creeps to 90% and waits is a
     # lie the user finds out about. The shuttle is the honest state, and it is
     # what pct < 0 selects.
-    awk '/component ProgressTrack/,/^    }/' "$QML" | grep -q 'property int pct: -1' \
+    awk '/component ProgressTrack/,/^    }/' "$QML" | has 'property int pct: -1' \
         && ok "the track defaults to indeterminate" \
         || bad "the track no longer defaults to no-percentage"
 
     # from/to are read at restart, not bound, so a resize has to restart it or
     # the shuttle sweeps a width the window no longer has.
-    awk '/component ProgressTrack/,/^    }/' "$QML" | grep -q 'onWidthChanged: if (shuttle.visible) shuttleAnim.restart()' \
+    awk '/component ProgressTrack/,/^    }/' "$QML" | has 'onWidthChanged: if (shuttle.visible) shuttleAnim.restart()' \
         && ok "the shuttle restarts when the window is resized" \
         || bad "the shuttle will sweep a stale width after a resize"
 
@@ -983,18 +1004,18 @@ if [ -f "$QML" ]; then
         && ok "a failed transaction leaves an outcome behind" \
         || bad "synpkg.qml has no outcome — reload() erases every failure message"
 
-    awk '/id: actProc/,/^    }/' "$QML" | grep -q 'onExited: (code) =>' \
+    awk '/id: actProc/,/^    }/' "$QML" | has 'onExited: (code) =>' \
         && ok "actProc reads the exit code" \
         || bad "actProc ignores the exit code — a refusal is indistinguishable from a success"
 
-    awk '/id: actProc/,/^    }/' "$QML" | grep -q 'stderr: StdioCollector' \
+    awk '/id: actProc/,/^    }/' "$QML" | has 'stderr: StdioCollector' \
         && ok "...and the reason, off stderr" \
         || bad "actProc discards stderr — the outcome cannot say WHY"
 
     # ⚠ reload() must NOT clear it. That is the whole defect: every finished
     # action reloads, so anything reload() touches has the lifetime of the
     # thing that failed.
-    awk '/function reload\(\)/,/^    }/' "$QML" | grep -q 'outcome' \
+    awk '/function reload\(\)/,/^    }/' "$QML" | has 'outcome' \
         && bad "reload() clears the outcome — the message dies with the action" \
         || ok "reload() leaves the outcome alone"
 else
@@ -1130,21 +1151,21 @@ else
     # Entities, in both spellings, and CDATA. A title rendered as "Widgets &amp;
     # sprockets" is the visible half of a decoder that is also feeding the body.
     out=$("$SYNPKG" --no-color news --all 2>/dev/null)
-    printf '%s' "$out" | grep -q 'Widgets & sprockets' \
+    printf '%s' "$out" | has 'Widgets & sprockets' \
         && ok "CDATA and named entities decode in a title" \
         || bad "CDATA and named entities decode in a title"
-    printf '%s' "$out" | grep -q 'gizmo >= 2.0' \
+    printf '%s' "$out" | has 'gizmo >= 2.0' \
         && ok "&gt; decodes in a title" || bad "&gt; decodes in a title"
-    printf '%s' "$out" | grep -q '🎉' \
+    printf '%s' "$out" | has '🎉' \
         && ok "a numeric entity decodes to UTF-8" || bad "a numeric entity decodes to UTF-8"
     # Matched on a fragment, not the whole command: the body is WRAPPED, so
     # "Run pacman -Syu --overwrite …" legitimately spans two lines. The first
     # version of this check wanted the whole string on one line and failed
     # against correct output.
-    printf '%s' "$out" | grep -q -- "--overwrite '/usr/lib/gizmo/\*'" \
+    printf '%s' "$out" | has -- "--overwrite '/usr/lib/gizmo/\*'" \
         && ok "escaped markup in a description survives tag stripping" \
         || bad "escaped markup in a description survives tag stripping"
-    printf '%s' "$out" | grep -q '<p>' \
+    printf '%s' "$out" | has '<p>' \
         && bad "HTML tags are leaking into the rendered body" \
         || ok "HTML tags are stripped from the body"
 
@@ -1164,7 +1185,7 @@ else
                  || bad "an unparseable feed fails rather than reporting no news"
 fi
 
-"$SYNPKG" --tsv config 2>/dev/null | grep -q '^upgrade_news' \
+"$SYNPKG" --tsv config 2>/dev/null | has '^upgrade_news' \
     && ok "upgrade_news is a listed setting" || bad "upgrade_news is a listed setting"
 
 # ── installed vs running kernel ─────────────────────────────────────────────
@@ -1178,7 +1199,7 @@ echo linux > "$KDIR/9.9.9-fictional/pkgbase"
 
 krows() { SYNPKG_MODULES_DIR="$KDIR" "$SYNPKG" --tsv status 2>/dev/null | grep '^kernel'; }
 
-krows | grep -q '^kernel	linux	' \
+krows | has '^kernel	linux	' \
     && ok "a kernel is found through its pkgbase file" \
     || bad "a kernel is found through its pkgbase file"
 
@@ -1191,16 +1212,16 @@ krows | grep -q '^kernel	linux	' \
 
 # The running release is absent from the synthetic tree, which is exactly the
 # state a kernel upgrade leaves behind.
-krows | grep -q 'reboot-pending' \
+krows | has 'reboot-pending' \
     && ok "a running kernel that is no longer installed is reported" \
     || bad "a running kernel that is no longer installed is reported"
 
 mkdir -p "$KDIR/$(uname -r)"
 echo linux > "$KDIR/$(uname -r)/pkgbase"
-krows | grep -q '	running$' \
+krows | has '	running$' \
     && ok "the running kernel is marked when it is still installed" \
     || bad "the running kernel is marked when it is still installed"
-krows | grep -q 'reboot-pending' \
+krows | has 'reboot-pending' \
     && bad "a reboot is still reported when the running kernel is installed" \
     || ok "no reboot is reported when the running kernel is installed"
 
@@ -1300,7 +1321,7 @@ mk_bzimage "$BDIR/vmlinuz-linux" 9.9.9-1-fake
 # because the upgrade that replaced it deleted its module tree. Every filename
 # and every hash still looks right; only the image itself gives it away.
 mk_bzimage "$BDIR/$MID/linux/vmlinuz" 7.1.6-1-fake
-brows | grep -q '	orphaned$' \
+brows | has '	orphaned$' \
 	&& ok "a staged kernel with no module tree is reported orphaned" \
 	|| bad "a staged kernel with no module tree is reported orphaned"
 
@@ -1319,10 +1340,10 @@ esac
 # Installed, so not orphaned — but not a release this pkgbase owns. Behind, not
 # fatal, and the two must not be reported as the same thing.
 mk_bzimage "$BDIR/$MID/linux/vmlinuz" 9.9.9-1-other
-brows | grep -q '	stale$' \
+brows | has '	stale$' \
 	&& ok "a staged kernel belonging to another package reads stale" \
 	|| bad "a staged kernel belonging to another package reads stale"
-brows | grep -q '	orphaned$' \
+brows | has '	orphaned$' \
 	&& bad "stale is not also reported as orphaned" \
 	|| ok "stale is not also reported as orphaned"
 
