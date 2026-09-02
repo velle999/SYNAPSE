@@ -72,8 +72,25 @@ missing=""
 while IFS= read -r f; do
     rel=${f#"$tree"/}
     grep -qxF "$rel" <<<"$listed" || missing="$missing $rel"
-done < <(grep -rlE 'I18n\.(tr|trn)\(' "$tree" --include='*.qml' 2>/dev/null | sort)
-check "every .qml using I18n.tr() is in po-bar/POTFILES" "" "$missing"
+# ⚠ .js TOO, AND THAT IS NOT A DETAIL. The welcome guide's every word lives in
+# welcome/pages.js — a `.pragma library` file, for the reason its own header
+# gives — and a check that looked only at *.qml could not see it. The guide
+# shipped entirely English through eight components' worth of this work with
+# nothing able to say so.
+# ⚠ CODE ONLY, the same as the qsTr check above and for the same reason: the
+# first run of this flagged GuideState.qml, whose only `I18n.tr(` is inside a
+# COMMENT explaining why pages.js takes the singleton. A file listed because of
+# its prose is a file nobody can remove from the list.
+done < <(for f in $(find "$tree" \( -name '*.qml' -o -name '*.js' \) | sort); do
+             sed -e 's://.*::' "$f" |
+             awk 'BEGIN{c=0}
+                  {line=$0
+                   while (match(line, /\/\*/)) { c=1; line=substr(line,1,RSTART-1) }
+                   if (c && match($0, /\*\//)) { c=0; line=substr($0,RSTART+2) }
+                   if (!c) print line}' |
+             grep -qE 'I18n\.(tr|trn)\(' && echo "$f"
+         done)
+check "every .qml or .js using I18n.tr() is in po-bar/POTFILES" "" "$missing"
 
 # ── 3. every file in POTFILES exists ──────────────────────
 gone=""
@@ -92,6 +109,15 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 strict=$("$root/tools/qml-xgettext.py" --root "$tree" --files "$root/po-bar/POTFILES" \
          -o "$tmp/new.pot" --strict 2>&1 >/dev/null)
 check "every I18n.tr() argument is a string literal" "" "$strict"
+
+# ⛔ AND THE GUIDE'S OWN WORDS ACTUALLY REACHED IT. A file can be listed, read
+# by the extractor, and contribute NOTHING while the run reports success —
+# which is exactly what happened here: pages.js took its translator as a
+# parameter named `tr`, so its call sites read `tr("…")` and the extractor,
+# which keys on `I18n.tr(`, matched none of them. The parameter is named I18n
+# now. This asserts the result rather than the spelling.
+guide=$(grep -c '^msgid "Welcome to SynapseOS"' "$root/po-bar/synui-bar.pot" 2>/dev/null)
+check "the welcome guide's pages reached the template" "1" "$guide"
 
 if [ -f "$tmp/new.pot" ]; then
     have=$(grep -c '^msgid "' "$root/po-bar/synui-bar.pot" 2>/dev/null || echo 0)
@@ -120,9 +146,19 @@ check "every language in po-bar/LINGUAS has a .po" "" "$absent"
 # in SysMonitor's, and the name alone cannot tell them apart. BarConfig is
 # asserted directly below instead, which is the file where translating a key
 # would actually lose a setting.
-badkey=$(grep -rn 'action: *I18n\.\|page: *I18n\.\|arg: *I18n\.' \
-         "$tree" --include='*.qml' 2>/dev/null | tr '\n' ' ')
-check "no dispatch action, page id or panel arg is translated" "" "$badkey"
+# ⚠ --include='*.js' HERE TOO: every row in the welcome guide carries the
+# action `synctl dispatch` is given right beside the label a person reads, and
+# a translated one dispatches something the compositor does not have.
+badkey=$(grep -rn 'action: *I18n\.\|page: *I18n\.\|arg: *I18n\.\|kind: *I18n\.\|live: *I18n\.' \
+         "$tree" --include='*.qml' --include='*.js' 2>/dev/null | tr '\n' ' ')
+check "no dispatch action, page id, panel arg or row kind is translated" "" "$badkey"
+
+# ⛔ AND THE GUIDE'S PAGE IDS AND FALLBACK CHORDS. GuideState matches on `id`;
+# `key` is a picture of keycaps and only a fallback at that — the live chord
+# comes from `synctl binds`.
+guidekey=$(grep -n 'id: *I18n\.\|key: *I18n\.' "$tree/welcome/pages.js" 2>/dev/null |
+           tr '\n' ' ')
+check "no welcome page id or fallback chord is translated" "" "$guidekey"
 
 # ⛔ THE ONE THAT WOULD LOSE A SETTING. BarConfig's rows carry the bar.json
 # spelling beside the label, and the file is written with it.

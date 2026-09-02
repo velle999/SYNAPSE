@@ -99,8 +99,25 @@ msgstr ""
 msgid "(unknown track)"
 msgstr ""
 
+#: welcome/pages.js:80
+msgid "A Wayland desktop built as one piece — the compositor, the bar, the files, the settings and the AI all ship together and all answer to the same theme."
+msgstr ""
+
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
+msgstr ""
+
+#: welcome/pages.js:152
+msgid "AI Backend"
+msgstr ""
+
+#: welcome/pages.js:86
+#: welcome/pages.js:146
+msgid "AI Command Bar"
+msgstr ""
+
+#: welcome/pages.js:150
+msgid "AI Model"
 msgstr ""
 
 #: StartMenu.qml:529
@@ -115,6 +132,10 @@ msgstr ""
 msgid "AVAILABLE TO INSTALL"
 msgstr ""
 
+#: welcome/pages.js:190
+msgid "About this system"
+msgstr ""
+
 #: StartMenu.qml:494
 msgid "Accessories"
 msgstr ""
@@ -123,16 +144,30 @@ msgstr ""
 msgid "Adjust"
 msgstr ""
 
+#: welcome/pages.js:167
+msgid "Also answers from the command bar."
+msgstr ""
+
 #: StartMenu.qml:626
+#: welcome/pages.js:125
 msgid "Appearance"
 msgstr ""
 
 #: components/Mixer.qml:348
+#: welcome/pages.js:105
 msgid "Applications"
 msgstr ""
 
 #: modules/Updates.qml:163
 msgid "Apply in a terminal"
+msgstr ""
+
+#: welcome/pages.js:91
+msgid "Arrow keys move · Enter opens · Esc closes the guide."
+msgstr ""
+
+#: welcome/pages.js:147
+msgid "Ask for a command; it answers with one you can run."
 msgstr ""
 
 #: BarConfig.qml:67
@@ -172,6 +207,10 @@ msgstr ""
 msgid "Back"
 msgstr ""
 
+#: welcome/pages.js:171
+msgid "Bar out of the way, effects off, the machine to the game."
+msgstr ""
+
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
 msgstr ""
@@ -209,8 +248,16 @@ msgstr ""
 msgid "CPU + memory"
 msgstr ""
 
+#: welcome/pages.js:166
+msgid "Calculator"
+msgstr ""
+
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
+msgstr ""
+
+#: welcome/pages.js:172
+msgid "Cat Mode"
 msgstr ""
 
 #: modules/Updates.qml:161
@@ -245,12 +292,18 @@ msgstr ""
 msgid "Clock"
 msgstr ""
 
+#: welcome/pages.js:132
+msgid "Clock, system monitor, music, notes — on the desktop."
+msgstr ""
+
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
 msgstr ""
 
 #: StartMenu.qml:523
 #: StartMenu.qml:625
+#: welcome/pages.js:88
+#: welcome/pages.js:188
 msgid "Control Panel"
 msgstr ""
 
@@ -264,6 +317,10 @@ msgstr ""
 
 #: StartMenu.qml:628
 msgid "Desktop"
+msgstr ""
+
+#: welcome/pages.js:131
+msgid "Desktop Widgets"
 msgstr ""
 
 #: BarConfig.qml:61
@@ -280,6 +337,14 @@ msgstr ""
 
 #: StartMenu.qml:630
 msgid "Display"
+msgstr ""
+
+#: welcome/pages.js:129
+msgid "Display Settings"
+msgstr ""
+
+#: welcome/pages.js:193
+msgid "Documentation and downloads: soslinux.org"
 msgstr ""
 
 #: welcome/Guide.qml:426
@@ -303,6 +368,23 @@ msgstr ""
 
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
+msgstr ""
+
+#: welcome/pages.js:89
+msgid "Every desktop setting, in one place."
+msgstr ""
+
+#: welcome/pages.js:189
+msgid "Every setting, grouped."
+msgstr ""
+
+#: welcome/pages.js:158
+#: welcome/pages.js:159
+msgid "Everything else"
+msgstr ""
+
+#: welcome/pages.js:187
+msgid "Everything this guide skipped."
 msgstr ""
 
 #: widgets/Tuxagotchi.qml:143
@@ -333,6 +415,14 @@ msgstr ""
 msgid "Focus — %1 · click to stop"
 msgstr ""
 
+#: welcome/pages.js:153
+msgid "GPU, CPU or off. Off masks the sockets, so it holds."
+msgstr ""
+
+#: welcome/pages.js:170
+msgid "Game Mode"
+msgstr ""
+
 #: StartMenu.qml:484
 msgid "Games"
 msgstr ""
@@ -345,12 +435,20 @@ msgstr ""
 msgid "HEALTH"
 msgstr ""
 
+#: welcome/pages.js:169
+msgid "Headlines, fetched on the desktop's own schedule."
+msgstr ""
+
 #: modules/Battery.qml:52
 msgid "Health %1%"
 msgstr ""
 
 #: modules/Updates.qml:168
 msgid "Held back"
+msgstr ""
+
+#: welcome/pages.js:165
+msgid "Idle, sleep, and what the lid does."
 msgstr ""
 
 #: StartMenu.qml:629
@@ -366,13 +464,23 @@ msgstr ""
 msgid "Internet"
 msgstr ""
 
+#: welcome/pages.js:101
+#: welcome/pages.js:186
+msgid "Keyboard Shortcuts"
+msgstr ""
+
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
 msgstr ""
 
 #: StartMenu.qml:640
 #: StartMenu.qml:757
+#: welcome/pages.js:174
 msgid "Lock Screen"
+msgstr ""
+
+#: welcome/pages.js:175
+msgid "Locks now; the screensaver locks on its own timer."
 msgstr ""
 
 #: StartMenu.qml:758
@@ -393,6 +501,11 @@ msgstr ""
 
 #: components/Mixer.qml:208
 msgid "MIXER"
+msgstr ""
+
+#: welcome/pages.js:120
+#: welcome/pages.js:121
+msgid "Make it yours"
 msgstr ""
 
 #: BarConfig.qml:62
@@ -423,12 +536,28 @@ msgstr ""
 msgid "Network + Bluetooth"
 msgstr ""
 
+#: welcome/pages.js:162
+msgid "Network / Wi-Fi"
+msgstr ""
+
 #: StartMenu.qml:542
 msgid "Network Setup"
 msgstr ""
 
+#: welcome/pages.js:148
+msgid "Neural Overlay"
+msgstr ""
+
+#: welcome/pages.js:168
+msgid "News"
+msgstr ""
+
 #: welcome/Guide.qml:487
 msgid "Next"
+msgstr ""
+
+#: welcome/pages.js:134
+msgid "Night light, colour blindness filters, CRT."
 msgstr ""
 
 #: modules/Bluetooth.qml:34
@@ -453,6 +582,10 @@ msgstr ""
 
 #: StartMenu.qml:488
 msgid "Office"
+msgstr ""
+
+#: welcome/pages.js:122
+msgid "One theme moves the whole desktop: the compositor's panels, the bar, the widgets, GTK and Qt applications, and the cursor."
 msgstr ""
 
 #: modules/Updates.qml:160
@@ -483,6 +616,10 @@ msgstr ""
 msgid "Power"
 msgstr ""
 
+#: welcome/pages.js:164
+msgid "Power Saving"
+msgstr ""
+
 #: StartMenu.qml:759
 msgid "Reboot"
 msgstr ""
@@ -494,6 +631,10 @@ msgstr ""
 
 #: modules/Recording.qml:121
 msgid "Recording %1"
+msgstr ""
+
+#: welcome/pages.js:130
+msgid "Resolution, refresh rate, scale and monitor layout."
 msgstr ""
 
 #: modules/Recording.qml:69
@@ -514,6 +655,14 @@ msgstr ""
 
 #: StartMenu.qml:489
 msgid "Science"
+msgstr ""
+
+#: welcome/pages.js:133
+msgid "Screen Filters"
+msgstr ""
+
+#: welcome/pages.js:135
+msgid "Screensaver"
 msgstr ""
 
 #: StartMenu.qml:724
@@ -549,8 +698,24 @@ msgstr ""
 msgid "Sound"
 msgstr ""
 
+#: welcome/pages.js:103
+msgid "Start menu"
+msgstr ""
+
+#: welcome/pages.js:128
+msgid "Stills, slideshows and animated wallpapers."
+msgstr ""
+
 #: modules/Recording.qml:118
 msgid "Stopping — finishing the file…\nwf-recorder is still writing"
+msgstr ""
+
+#: welcome/pages.js:111
+msgid "Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
+msgstr ""
+
+#: welcome/pages.js:114
+msgid "Super+E filters · Super+O move window to the next monitor · Super+Shift+Q log out"
 msgstr ""
 
 #: StartMenu.qml:590
@@ -583,12 +748,66 @@ msgstr ""
 msgid "TUXAGOTCHI"
 msgstr ""
 
+#: welcome/pages.js:104
+msgid "Tap Super on its own. Applications, settings, power."
+msgstr ""
+
 #: StartMenu.qml:524
+#: welcome/pages.js:108
 msgid "Task Manager"
 msgstr ""
 
 #: StartMenu.qml:525
+#: welcome/pages.js:84
 msgid "Terminal"
+msgstr ""
+
+#: welcome/pages.js:141
+msgid "The AI"
+msgstr ""
+
+#: welcome/pages.js:142
+msgid "The AI is local"
+msgstr ""
+
+#: welcome/pages.js:106
+msgid "The full grid of everything installed — also the dock's grid-of-dots."
+msgstr ""
+
+#: welcome/pages.js:102
+msgid "The full palette — searchable, and the place to rebind."
+msgstr ""
+
+#: welcome/pages.js:149
+msgid "The full-screen conversation view."
+msgstr ""
+
+#: welcome/pages.js:96
+msgid "The keys"
+msgstr ""
+
+#: welcome/pages.js:97
+msgid "The keys worth knowing"
+msgstr ""
+
+#: welcome/pages.js:160
+msgid "The rest of the desktop, and where it lives."
+msgstr ""
+
+#: welcome/pages.js:126
+msgid "Themes, accent colour, glass and corners."
+msgstr ""
+
+#: welcome/pages.js:173
+msgid "There is a cat. That is the whole feature."
+msgstr ""
+
+#: welcome/pages.js:182
+msgid "This guide is on Super+Escape whenever you want it back — and the shortcuts palette on Super+/ is the longer version of page two."
+msgstr ""
+
+#: welcome/pages.js:87
+msgid "Type a command, or ask for one in plain English."
 msgstr ""
 
 #: StartMenu.qml:1032
@@ -607,6 +826,10 @@ msgstr ""
 msgid "Updates"
 msgstr ""
 
+#: welcome/pages.js:191
+msgid "Version, hardware and what is installed."
+msgstr ""
+
 #: BarConfig.qml:70
 msgid "Volume"
 msgstr ""
@@ -619,8 +842,32 @@ msgstr ""
 msgid "WEIGHT"
 msgstr ""
 
+#: welcome/pages.js:127
+msgid "Wallpaper"
+msgstr ""
+
 #: BarConfig.qml:66
 msgid "Weather"
+msgstr ""
+
+#: welcome/pages.js:78
+msgid "Welcome"
+msgstr ""
+
+#: welcome/pages.js:79
+msgid "Welcome to SynapseOS"
+msgstr ""
+
+#: welcome/pages.js:109
+msgid "What is running, and what it is costing."
+msgstr ""
+
+#: welcome/pages.js:136
+msgid "What the desktop does when you walk away."
+msgstr ""
+
+#: welcome/pages.js:151
+msgid "Which model is loaded, and how to fetch another."
 msgstr ""
 
 #: modules/Network.qml:48
@@ -633,6 +880,15 @@ msgstr ""
 
 #: modules/Network.qml:47
 msgid "Wired\n%1\nClick for network settings"
+msgstr ""
+
+#: welcome/pages.js:163
+msgid "Wireless, wired and the firewall."
+msgstr ""
+
+#: welcome/pages.js:180
+#: welcome/pages.js:181
+msgid "You're set"
 msgstr ""
 
 #: widgets/MusicPlayer.qml:410
@@ -803,6 +1059,18 @@ msgstr ""
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
+msgstr ""
+
+#: welcome/pages.js:143
+msgid "synapd runs a language model on this machine. Nothing here calls out to a service, and turning it off really does stop it."
+msgstr ""
+
+#: welcome/pages.js:85
+msgid "syntty, the shipped terminal."
+msgstr ""
+
+#: welcome/pages.js:98
+msgid "synui is driven from the keyboard first. These are the handful that get you everywhere else."
 msgstr ""
 
 #: modules/Clock.qml:52

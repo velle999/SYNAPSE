@@ -21,7 +21,10 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr "%1 (%2 %)\n%3\n클릭하여 네트워크 선택"
+msgstr ""
+"%1 (%2 %)\n"
+"%3\n"
+"클릭하여 네트워크 선택"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
@@ -93,9 +96,27 @@ msgstr "(숨김)"
 msgid "(unknown track)"
 msgstr "(알 수 없는 트랙)"
 
+#: welcome/pages.js:80
+msgid ""
+"A Wayland desktop built as one piece — the compositor, the bar, the files, "
+"the settings and the AI all ship together and all answer to the same theme."
+msgstr "한 덩어리로 만든 Wayland 데스크톱입니다. 컴포지터, 막대, 파일, 설정, AI가 함께 배포되고 모두 같은 테마를 따릅니다."
+
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
 msgstr "나이"
+
+#: welcome/pages.js:152
+msgid "AI Backend"
+msgstr "AI 백엔드"
+
+#: welcome/pages.js:86 welcome/pages.js:146
+msgid "AI Command Bar"
+msgstr "AI 명령 막대"
+
+#: welcome/pages.js:150
+msgid "AI Model"
+msgstr "AI 모델"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
@@ -109,6 +130,10 @@ msgstr "응용 프로그램"
 msgid "AVAILABLE TO INSTALL"
 msgstr "설치 가능"
 
+#: welcome/pages.js:190
+msgid "About this system"
+msgstr "이 시스템 정보"
+
 #: StartMenu.qml:494
 msgid "Accessories"
 msgstr "보조 도구"
@@ -117,17 +142,29 @@ msgstr "보조 도구"
 msgid "Adjust"
 msgstr "조정"
 
-#: StartMenu.qml:626
+#: welcome/pages.js:167
+msgid "Also answers from the command bar."
+msgstr "명령 막대에서도 답합니다."
+
+#: StartMenu.qml:626 welcome/pages.js:125
 msgid "Appearance"
 msgstr "모양"
 
-#: components/Mixer.qml:348
+#: components/Mixer.qml:348 welcome/pages.js:105
 msgid "Applications"
 msgstr "응용 프로그램"
 
 #: modules/Updates.qml:163
 msgid "Apply in a terminal"
 msgstr "터미널에서 적용"
+
+#: welcome/pages.js:91
+msgid "Arrow keys move · Enter opens · Esc closes the guide."
+msgstr "화살표로 이동 · Enter로 열기 · Esc로 안내 닫기"
+
+#: welcome/pages.js:147
+msgid "Ask for a command; it answers with one you can run."
+msgstr "명령을 물어보면 바로 실행할 수 있는 것으로 답합니다."
 
 #: BarConfig.qml:67
 msgid "Assistant"
@@ -165,6 +202,10 @@ msgstr "배터리"
 msgid "Back"
 msgstr "뒤로"
 
+#: welcome/pages.js:171
+msgid "Bar out of the way, effects off, the machine to the game."
+msgstr "막대는 비켜 두고, 효과는 끄고, 기계는 게임에 넘깁니다."
+
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
 msgstr "막대 · %1"
@@ -185,7 +226,9 @@ msgstr "블루투스"
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr "블루투스 꺼짐\n가운데 클릭하면 켜집니다"
+msgstr ""
+"블루투스 꺼짐\n"
+"가운데 클릭하면 켜집니다"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
@@ -199,15 +242,25 @@ msgstr "CPU"
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr "CPU %1 %\n클릭하면 작업 관리자"
+msgstr ""
+"CPU %1 %\n"
+"클릭하면 작업 관리자"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + 메모리"
 
+#: welcome/pages.js:166
+msgid "Calculator"
+msgstr "계산기"
+
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
 msgstr "취소"
+
+#: welcome/pages.js:172
+msgid "Cat Mode"
+msgstr "고양이 모드"
 
 #: modules/Updates.qml:161
 msgid "Check now"
@@ -241,11 +294,15 @@ msgstr "클릭하여 중지 (또는 Super+Shift+R)"
 msgid "Clock"
 msgstr "시계"
 
+#: welcome/pages.js:132
+msgid "Clock, system monitor, music, notes — on the desktop."
+msgstr "시계, 시스템 모니터, 음악, 메모 — 바탕화면 위에."
+
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
 msgstr "확인"
 
-#: StartMenu.qml:523 StartMenu.qml:625
+#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "제어판"
 
@@ -261,6 +318,10 @@ msgstr "훈육"
 msgid "Desktop"
 msgstr "바탕화면"
 
+#: welcome/pages.js:131
+msgid "Desktop Widgets"
+msgstr "바탕화면 위젯"
+
 #: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "바탕화면 전환기"
@@ -273,11 +334,21 @@ msgstr "개발"
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr "연결 끊김\n클릭하여 네트워크 선택"
+msgstr ""
+"연결 끊김\n"
+"클릭하여 네트워크 선택"
 
 #: StartMenu.qml:630
 msgid "Display"
 msgstr "디스플레이"
+
+#: welcome/pages.js:129
+msgid "Display Settings"
+msgstr "디스플레이 설정"
+
+#: welcome/pages.js:193
+msgid "Documentation and downloads: soslinux.org"
+msgstr "문서와 내려받기: soslinux.org"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
@@ -298,6 +369,22 @@ msgstr "이퀄라이저"
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
 msgstr "이퀄라이저: %1"
+
+#: welcome/pages.js:89
+msgid "Every desktop setting, in one place."
+msgstr "바탕화면의 모든 설정을 한곳에."
+
+#: welcome/pages.js:189
+msgid "Every setting, grouped."
+msgstr "모든 설정을, 묶어서."
+
+#: welcome/pages.js:158 welcome/pages.js:159
+msgid "Everything else"
+msgstr "그 밖의 모든 것"
+
+#: welcome/pages.js:187
+msgid "Everything this guide skipped."
+msgstr "이 안내가 건너뛴 모든 것."
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
@@ -327,6 +414,14 @@ msgstr "집중 · 클릭하여 중지"
 msgid "Focus — %1 · click to stop"
 msgstr "집중 — %1 · 클릭하여 중지"
 
+#: welcome/pages.js:153
+msgid "GPU, CPU or off. Off masks the sockets, so it holds."
+msgstr "GPU, CPU 또는 끄기. 끄면 소켓까지 가리므로 정말로 멈춥니다."
+
+#: welcome/pages.js:170
+msgid "Game Mode"
+msgstr "게임 모드"
+
 #: StartMenu.qml:484
 msgid "Games"
 msgstr "게임"
@@ -339,6 +434,10 @@ msgstr "그래픽"
 msgid "HEALTH"
 msgstr "건강"
 
+#: welcome/pages.js:169
+msgid "Headlines, fetched on the desktop's own schedule."
+msgstr "헤드라인을 바탕화면 자체의 주기로 가져옵니다."
+
 #: modules/Battery.qml:52
 msgid "Health %1%"
 msgstr "건강 %1 %"
@@ -346,6 +445,10 @@ msgstr "건강 %1 %"
 #: modules/Updates.qml:168
 msgid "Held back"
 msgstr "보류됨"
+
+#: welcome/pages.js:165
+msgid "Idle, sleep, and what the lid does."
+msgstr "유휴, 절전, 그리고 덮개를 닫았을 때의 동작."
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
@@ -359,13 +462,21 @@ msgstr "설치하기"
 msgid "Internet"
 msgstr "인터넷"
 
+#: welcome/pages.js:101 welcome/pages.js:186
+msgid "Keyboard Shortcuts"
+msgstr "키보드 단축키"
+
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
 msgstr "실행"
 
-#: StartMenu.qml:640 StartMenu.qml:757
+#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "화면 잠금"
+
+#: welcome/pages.js:175
+msgid "Locks now; the screensaver locks on its own timer."
+msgstr "지금 잠급니다. 화면 보호기는 자체 타이머로 잠급니다."
 
 #: StartMenu.qml:758
 msgid "Log Out"
@@ -387,6 +498,10 @@ msgstr "실수"
 msgid "MIXER"
 msgstr "믹서"
 
+#: welcome/pages.js:120 welcome/pages.js:121
+msgid "Make it yours"
+msgstr "나만의 것으로"
+
 #: BarConfig.qml:62
 msgid "Media preview"
 msgstr "미디어 미리보기"
@@ -395,7 +510,9 @@ msgstr "미디어 미리보기"
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr "메모리 %1 / %2 GiB\n클릭하면 작업 관리자"
+msgstr ""
+"메모리 %1 / %2 GiB\n"
+"클릭하면 작업 관리자"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
@@ -417,13 +534,29 @@ msgstr "네트워크"
 msgid "Network + Bluetooth"
 msgstr "네트워크 + 블루투스"
 
+#: welcome/pages.js:162
+msgid "Network / Wi-Fi"
+msgstr "네트워크 / 와이파이"
+
 #: StartMenu.qml:542
 msgid "Network Setup"
 msgstr "네트워크 설정"
 
+#: welcome/pages.js:148
+msgid "Neural Overlay"
+msgstr "신경망 오버레이"
+
+#: welcome/pages.js:168
+msgid "News"
+msgstr "뉴스"
+
 #: welcome/Guide.qml:487
 msgid "Next"
 msgstr "다음"
+
+#: welcome/pages.js:134
+msgid "Night light, colour blindness filters, CRT."
+msgstr "야간 조명, 색맹 필터, CRT."
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
@@ -441,7 +574,9 @@ msgstr "일치 항목 없음"
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr "아직 측정값이 없습니다\nsynctl weather on"
+msgstr ""
+"아직 측정값이 없습니다\n"
+"synctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
@@ -450,6 +585,12 @@ msgstr "재생 중인 항목이 없습니다"
 #: StartMenu.qml:488
 msgid "Office"
 msgstr "오피스"
+
+#: welcome/pages.js:122
+msgid ""
+"One theme moves the whole desktop: the compositor's panels, the bar, the "
+"widgets, GTK and Qt applications, and the cursor."
+msgstr "테마 하나가 데스크톱 전체를 움직입니다. 컴포지터의 패널, 막대, 위젯, GTK와 Qt 앱, 그리고 커서까지."
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -479,6 +620,10 @@ msgstr "플러그인"
 msgid "Power"
 msgstr "전원"
 
+#: welcome/pages.js:164
+msgid "Power Saving"
+msgstr "절전"
+
 #: StartMenu.qml:759
 msgid "Reboot"
 msgstr "다시 시작"
@@ -490,6 +635,10 @@ msgstr "녹화 중"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "녹화 중 %1"
+
+#: welcome/pages.js:130
+msgid "Resolution, refresh rate, scale and monitor layout."
+msgstr "해상도, 주사율, 배율, 모니터 배치."
 
 #: modules/Recording.qml:69
 msgid "SAVING"
@@ -510,6 +659,14 @@ msgstr "시스템"
 #: StartMenu.qml:489
 msgid "Science"
 msgstr "과학"
+
+#: welcome/pages.js:133
+msgid "Screen Filters"
+msgstr "화면 필터"
+
+#: welcome/pages.js:135
+msgid "Screensaver"
+msgstr "화면 보호기"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
@@ -543,11 +700,32 @@ msgstr "소프트웨어 관리자"
 msgid "Sound"
 msgstr "소리"
 
+#: welcome/pages.js:103
+msgid "Start menu"
+msgstr "시작 메뉴"
+
+#: welcome/pages.js:128
+msgid "Stills, slideshows and animated wallpapers."
+msgstr "정지 화면, 슬라이드 쇼, 움직이는 배경화면."
+
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr "중지 중 — 파일을 마무리하는 중…\nwf-recorder가 아직 쓰고 있습니다"
+msgstr ""
+"중지 중 — 파일을 마무리하는 중…\n"
+"wf-recorder가 아직 쓰고 있습니다"
+
+#: welcome/pages.js:111
+msgid ""
+"Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
+msgstr "Super+1…9 데스크톱 전환 · Super+Tab 배치 순환 · Super+Q 창 닫기"
+
+#: welcome/pages.js:114
+msgid ""
+"Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
+"log out"
+msgstr "Super+E 필터 · Super+O 창을 다음 모니터로 · Super+Shift+Q 로그아웃"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
@@ -577,13 +755,67 @@ msgstr "시스템 트레이"
 msgid "TUXAGOTCHI"
 msgstr "턱스아치"
 
-#: StartMenu.qml:524
+#: welcome/pages.js:104
+msgid "Tap Super on its own. Applications, settings, power."
+msgstr "Super만 살짝 누르세요. 앱, 설정, 전원."
+
+#: StartMenu.qml:524 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "작업 관리자"
 
-#: StartMenu.qml:525
+#: StartMenu.qml:525 welcome/pages.js:84
 msgid "Terminal"
 msgstr "터미널"
+
+#: welcome/pages.js:141
+msgid "The AI"
+msgstr "AI"
+
+#: welcome/pages.js:142
+msgid "The AI is local"
+msgstr "AI는 이 컴퓨터 안에 있습니다"
+
+#: welcome/pages.js:106
+msgid "The full grid of everything installed — also the dock's grid-of-dots."
+msgstr "설치된 모든 것의 전체 격자 — 독의 점 격자와 같습니다."
+
+#: welcome/pages.js:102
+msgid "The full palette — searchable, and the place to rebind."
+msgstr "전체 목록입니다. 검색되고, 재지정도 여기서 합니다."
+
+#: welcome/pages.js:149
+msgid "The full-screen conversation view."
+msgstr "전체 화면 대화 보기."
+
+#: welcome/pages.js:96
+msgid "The keys"
+msgstr "키"
+
+#: welcome/pages.js:97
+msgid "The keys worth knowing"
+msgstr "알아 둘 만한 키"
+
+#: welcome/pages.js:160
+msgid "The rest of the desktop, and where it lives."
+msgstr "바탕화면의 나머지와, 그것들이 있는 곳."
+
+#: welcome/pages.js:126
+msgid "Themes, accent colour, glass and corners."
+msgstr "테마, 강조 색, 유리, 모서리."
+
+#: welcome/pages.js:173
+msgid "There is a cat. That is the whole feature."
+msgstr "고양이가 있습니다. 그게 기능의 전부입니다."
+
+#: welcome/pages.js:182
+msgid ""
+"This guide is on Super+Escape whenever you want it back — and the shortcuts "
+"palette on Super+/ is the longer version of page two."
+msgstr "이 안내는 언제든 Super+Escape로 다시 볼 수 있고, Super+/의 단축키 목록은 두 번째 쪽의 자세한 판입니다."
+
+#: welcome/pages.js:87
+msgid "Type a command, or ask for one in plain English."
+msgstr "명령을 입력하거나, 평범한 말로 물어보세요."
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
@@ -601,6 +833,10 @@ msgstr "업데이트 알림"
 msgid "Updates"
 msgstr "업데이트"
 
+#: welcome/pages.js:191
+msgid "Version, hardware and what is installed."
+msgstr "버전, 하드웨어, 설치된 것들."
+
 #: BarConfig.qml:70
 msgid "Volume"
 msgstr "음량"
@@ -613,15 +849,41 @@ msgstr "날씨"
 msgid "WEIGHT"
 msgstr "몸무게"
 
+#: welcome/pages.js:127
+msgid "Wallpaper"
+msgstr "배경화면"
+
 #: BarConfig.qml:66
 msgid "Weather"
 msgstr "날씨"
+
+#: welcome/pages.js:78
+msgid "Welcome"
+msgstr "환영합니다"
+
+#: welcome/pages.js:79
+msgid "Welcome to SynapseOS"
+msgstr "SynapseOS에 오신 것을 환영합니다"
+
+#: welcome/pages.js:109
+msgid "What is running, and what it is costing."
+msgstr "무엇이 돌고 있고, 얼마나 쓰고 있는지."
+
+#: welcome/pages.js:136
+msgid "What the desktop does when you walk away."
+msgstr "자리를 비웠을 때 바탕화면이 하는 일."
+
+#: welcome/pages.js:151
+msgid "Which model is loaded, and how to fetch another."
+msgstr "어떤 모델이 올라와 있는지, 다른 것을 받는 방법."
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr "Wi-Fi가 꺼져 있습니다\n가운데 클릭하면 다시 켜집니다"
+msgstr ""
+"Wi-Fi가 꺼져 있습니다\n"
+"가운데 클릭하면 다시 켜집니다"
 
 #: StartMenu.qml:627
 msgid "Windows"
@@ -632,7 +894,18 @@ msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr "유선\n%1\n클릭하면 네트워크 설정"
+msgstr ""
+"유선\n"
+"%1\n"
+"클릭하면 네트워크 설정"
+
+#: welcome/pages.js:163
+msgid "Wireless, wired and the firewall."
+msgstr "무선, 유선, 그리고 방화벽."
+
+#: welcome/pages.js:180 welcome/pages.js:181
+msgid "You're set"
+msgstr "준비 끝"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
@@ -801,6 +1074,22 @@ msgstr "아직 이전 작업 중입니다"
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   지금 시도하려면"
+
+#: welcome/pages.js:143
+msgid ""
+"synapd runs a language model on this machine. Nothing here calls out to a "
+"service, and turning it off really does stop it."
+msgstr "synapd는 이 컴퓨터에서 언어 모델을 돌립니다. 여기서 외부 서비스를 부르는 것은 없고, 끄면 정말로 멈춥니다."
+
+#: welcome/pages.js:85
+msgid "syntty, the shipped terminal."
+msgstr "syntty, 기본 제공 터미널입니다."
+
+#: welcome/pages.js:98
+msgid ""
+"synui is driven from the keyboard first. These are the handful that get you "
+"everywhere else."
+msgstr "synui는 무엇보다 키보드로 다룹니다. 아래 몇 개면 다른 어디든 갈 수 있습니다."
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"

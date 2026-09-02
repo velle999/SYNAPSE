@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "pages.js" as Pages
+import ".."
 
 /*
  * GuideState — which page the welcome guide is on, which monitor it is on, and
@@ -25,7 +26,13 @@ import "pages.js" as Pages
 QtObject {
     id: root
 
-    readonly property var pages: Pages.pages
+    // ⛔ CALLED, not read, and handed the SINGLETON. pages.js is a
+    // `.pragma library` and cannot see a QML singleton of its own, so I18n is
+    // passed in — named I18n there too, so every call site in it spells itself
+    // `I18n.tr("…")` and tools/qml-xgettext.py needs no special case. Named
+    // `tr` instead, the extractor read the file and took nothing from it while
+    // reporting success.
+    readonly property var pages: Pages.pages(I18n)
 
     property bool   open:  true
 

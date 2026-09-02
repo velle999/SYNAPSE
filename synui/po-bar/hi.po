@@ -21,7 +21,10 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr "%1 (%2 %)\n%3\nनेटवर्क चुनने के लिए क्लिक करें"
+msgstr ""
+"%1 (%2 %)\n"
+"%3\n"
+"नेटवर्क चुनने के लिए क्लिक करें"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
@@ -99,9 +102,27 @@ msgstr "(छिपा हुआ)"
 msgid "(unknown track)"
 msgstr "(अज्ञात ट्रैक)"
 
+#: welcome/pages.js:80
+msgid ""
+"A Wayland desktop built as one piece — the compositor, the bar, the files, "
+"the settings and the AI all ship together and all answer to the same theme."
+msgstr "एक ही टुकड़े में बना Wayland डेस्कटॉप — कंपोज़िटर, पट्टी, फ़ाइलें, सेटिंग्स और एआई सब साथ आते हैं और सब एक ही थीम मानते हैं।"
+
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
 msgstr "उम्र"
+
+#: welcome/pages.js:152
+msgid "AI Backend"
+msgstr "एआई बैकएंड"
+
+#: welcome/pages.js:86 welcome/pages.js:146
+msgid "AI Command Bar"
+msgstr "एआई कमांड बार"
+
+#: welcome/pages.js:150
+msgid "AI Model"
+msgstr "एआई मॉडल"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
@@ -115,6 +136,10 @@ msgstr "अनुप्रयोग"
 msgid "AVAILABLE TO INSTALL"
 msgstr "स्थापना के लिए उपलब्ध"
 
+#: welcome/pages.js:190
+msgid "About this system"
+msgstr "इस सिस्टम के बारे में"
+
 #: StartMenu.qml:494
 msgid "Accessories"
 msgstr "सहायक उपकरण"
@@ -123,17 +148,29 @@ msgstr "सहायक उपकरण"
 msgid "Adjust"
 msgstr "समायोजित करें"
 
-#: StartMenu.qml:626
+#: welcome/pages.js:167
+msgid "Also answers from the command bar."
+msgstr "कमांड बार से भी उत्तर देता है।"
+
+#: StartMenu.qml:626 welcome/pages.js:125
 msgid "Appearance"
 msgstr "रूप-रंग"
 
-#: components/Mixer.qml:348
+#: components/Mixer.qml:348 welcome/pages.js:105
 msgid "Applications"
 msgstr "अनुप्रयोग"
 
 #: modules/Updates.qml:163
 msgid "Apply in a terminal"
 msgstr "टर्मिनल में लागू करें"
+
+#: welcome/pages.js:91
+msgid "Arrow keys move · Enter opens · Esc closes the guide."
+msgstr "तीर कुंजियाँ चलाती हैं · Enter खोलता है · Esc मार्गदर्शिका बंद करता है।"
+
+#: welcome/pages.js:147
+msgid "Ask for a command; it answers with one you can run."
+msgstr "कोई कमांड माँगिए; उत्तर में वही मिलेगी जिसे आप चला सकते हैं।"
 
 #: BarConfig.qml:67
 msgid "Assistant"
@@ -171,6 +208,10 @@ msgstr "बैट"
 msgid "Back"
 msgstr "वापस"
 
+#: welcome/pages.js:171
+msgid "Bar out of the way, effects off, the machine to the game."
+msgstr "पट्टी हट जाती है, प्रभाव बंद, मशीन खेल के हवाले।"
+
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
 msgstr "पट्टी · %1"
@@ -191,7 +232,9 @@ msgstr "ब्लूटूथ"
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr "ब्लूटूथ बंद है\nचालू करने के लिए मध्य-क्लिक करें"
+msgstr ""
+"ब्लूटूथ बंद है\n"
+"चालू करने के लिए मध्य-क्लिक करें"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
@@ -205,15 +248,25 @@ msgstr "CPU"
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr "CPU %1 %\nकार्य प्रबंधक के लिए क्लिक करें"
+msgstr ""
+"CPU %1 %\n"
+"कार्य प्रबंधक के लिए क्लिक करें"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + मेमोरी"
 
+#: welcome/pages.js:166
+msgid "Calculator"
+msgstr "कैलकुलेटर"
+
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
 msgstr "रद्द करें"
+
+#: welcome/pages.js:172
+msgid "Cat Mode"
+msgstr "बिल्ली मोड"
 
 #: modules/Updates.qml:161
 msgid "Check now"
@@ -229,7 +282,8 @@ msgstr "चलाने/रोकने के लिए क्लिक कर�
 
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
-msgstr "मौन करने के लिए क्लिक करें · समायोजित करने के लिए स्क्रॉल करें · मिक्सर के लिए दायाँ-क्लिक"
+msgstr ""
+"मौन करने के लिए क्लिक करें · समायोजित करने के लिए स्क्रॉल करें · मिक्सर के लिए दायाँ-क्लिक"
 
 #: modules/Updates.qml:113
 msgid "Click to open Updates · right-click for more"
@@ -247,11 +301,15 @@ msgstr "रोकने के लिए क्लिक करें (या Su
 msgid "Clock"
 msgstr "घड़ी"
 
+#: welcome/pages.js:132
+msgid "Clock, system monitor, music, notes — on the desktop."
+msgstr "घड़ी, सिस्टम मॉनिटर, संगीत, टिप्पणियाँ — डेस्कटॉप पर।"
+
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
 msgstr "पुष्टि करें"
 
-#: StartMenu.qml:523 StartMenu.qml:625
+#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "नियंत्रण कक्ष"
 
@@ -267,6 +325,10 @@ msgstr "अनुशासन"
 msgid "Desktop"
 msgstr "डेस्कटॉप"
 
+#: welcome/pages.js:131
+msgid "Desktop Widgets"
+msgstr "डेस्कटॉप विजेट"
+
 #: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "डेस्कटॉप बदलने वाला"
@@ -279,11 +341,21 @@ msgstr "विकास"
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr "असंबद्ध\nनेटवर्क चुनने के लिए क्लिक करें"
+msgstr ""
+"असंबद्ध\n"
+"नेटवर्क चुनने के लिए क्लिक करें"
 
 #: StartMenu.qml:630
 msgid "Display"
 msgstr "प्रदर्शन"
+
+#: welcome/pages.js:129
+msgid "Display Settings"
+msgstr "प्रदर्शन सेटिंग्स"
+
+#: welcome/pages.js:193
+msgid "Documentation and downloads: soslinux.org"
+msgstr "दस्तावेज़ और डाउनलोड: soslinux.org"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
@@ -304,6 +376,22 @@ msgstr "इक्वलाइज़र"
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
 msgstr "इक्वलाइज़र: %1"
+
+#: welcome/pages.js:89
+msgid "Every desktop setting, in one place."
+msgstr "डेस्कटॉप की हर सेटिंग, एक जगह।"
+
+#: welcome/pages.js:189
+msgid "Every setting, grouped."
+msgstr "हर सेटिंग, समूह में।"
+
+#: welcome/pages.js:158 welcome/pages.js:159
+msgid "Everything else"
+msgstr "बाकी सब कुछ"
+
+#: welcome/pages.js:187
+msgid "Everything this guide skipped."
+msgstr "वह सब जो इस मार्गदर्शिका ने छोड़ दिया।"
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
@@ -333,6 +421,14 @@ msgstr "एकाग्रता · रोकने के लिए क्ल�
 msgid "Focus — %1 · click to stop"
 msgstr "एकाग्रता — %1 · रोकने के लिए क्लिक करें"
 
+#: welcome/pages.js:153
+msgid "GPU, CPU or off. Off masks the sockets, so it holds."
+msgstr "जीपीयू, सीपीयू या बंद। बंद करने पर सॉकेट भी छिप जाते हैं, इसलिए वह टिकता है।"
+
+#: welcome/pages.js:170
+msgid "Game Mode"
+msgstr "गेम मोड"
+
 #: StartMenu.qml:484
 msgid "Games"
 msgstr "खेल"
@@ -345,6 +441,10 @@ msgstr "ग्राफ़िक्स"
 msgid "HEALTH"
 msgstr "सेहत"
 
+#: welcome/pages.js:169
+msgid "Headlines, fetched on the desktop's own schedule."
+msgstr "सुर्खियाँ, डेस्कटॉप के अपने समय पर लाई जाती हैं।"
+
 #: modules/Battery.qml:52
 msgid "Health %1%"
 msgstr "सेहत %1 %"
@@ -352,6 +452,10 @@ msgstr "सेहत %1 %"
 #: modules/Updates.qml:168
 msgid "Held back"
 msgstr "रोके गए"
+
+#: welcome/pages.js:165
+msgid "Idle, sleep, and what the lid does."
+msgstr "निष्क्रियता, निद्रा, और ढक्कन बंद करने पर क्या हो।"
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
@@ -365,13 +469,21 @@ msgstr "इसे स्थापित करें"
 msgid "Internet"
 msgstr "इंटरनेट"
 
+#: welcome/pages.js:101 welcome/pages.js:186
+msgid "Keyboard Shortcuts"
+msgstr "कीबोर्ड शॉर्टकट"
+
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
 msgstr "चालू करें"
 
-#: StartMenu.qml:640 StartMenu.qml:757
+#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "स्क्रीन बंद करें"
+
+#: welcome/pages.js:175
+msgid "Locks now; the screensaver locks on its own timer."
+msgstr "अभी लॉक करता है; स्क्रीनसेवर अपने समय पर लॉक करता है।"
 
 #: StartMenu.qml:758
 msgid "Log Out"
@@ -393,6 +505,10 @@ msgstr "गलतियाँ"
 msgid "MIXER"
 msgstr "मिक्सर"
 
+#: welcome/pages.js:120 welcome/pages.js:121
+msgid "Make it yours"
+msgstr "इसे अपना बनाइए"
+
 #: BarConfig.qml:62
 msgid "Media preview"
 msgstr "मीडिया झलक"
@@ -401,7 +517,9 @@ msgstr "मीडिया झलक"
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr "मेमोरी %1 / %2 GiB\nकार्य प्रबंधक के लिए क्लिक करें"
+msgstr ""
+"मेमोरी %1 / %2 GiB\n"
+"कार्य प्रबंधक के लिए क्लिक करें"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
@@ -423,13 +541,29 @@ msgstr "नेटवर्क"
 msgid "Network + Bluetooth"
 msgstr "नेटवर्क + ब्लूटूथ"
 
+#: welcome/pages.js:162
+msgid "Network / Wi-Fi"
+msgstr "नेटवर्क / वाई-फ़ाई"
+
 #: StartMenu.qml:542
 msgid "Network Setup"
 msgstr "नेटवर्क सेटअप"
 
+#: welcome/pages.js:148
+msgid "Neural Overlay"
+msgstr "तंत्रिका ओवरले"
+
+#: welcome/pages.js:168
+msgid "News"
+msgstr "समाचार"
+
 #: welcome/Guide.qml:487
 msgid "Next"
 msgstr "आगे"
+
+#: welcome/pages.js:134
+msgid "Night light, colour blindness filters, CRT."
+msgstr "रात्रि प्रकाश, वर्णांधता फ़िल्टर, CRT।"
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
@@ -447,7 +581,9 @@ msgstr "कोई मेल नहीं"
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr "अभी कोई माप नहीं\nsynctl weather on"
+msgstr ""
+"अभी कोई माप नहीं\n"
+"synctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
@@ -456,6 +592,12 @@ msgstr "कुछ नहीं चल रहा"
 #: StartMenu.qml:488
 msgid "Office"
 msgstr "कार्यालय"
+
+#: welcome/pages.js:122
+msgid ""
+"One theme moves the whole desktop: the compositor's panels, the bar, the "
+"widgets, GTK and Qt applications, and the cursor."
+msgstr "एक थीम पूरे डेस्कटॉप को बदल देती है: कंपोज़िटर के पैनल, पट्टी, विजेट, GTK और Qt के ऐप्लिकेशन, और कर्सर भी।"
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -485,6 +627,10 @@ msgstr "प्लगइन"
 msgid "Power"
 msgstr "बिजली"
 
+#: welcome/pages.js:164
+msgid "Power Saving"
+msgstr "बिजली की बचत"
+
 #: StartMenu.qml:759
 msgid "Reboot"
 msgstr "फिर से चालू करें"
@@ -496,6 +642,10 @@ msgstr "रिकॉर्ड हो रहा है"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "रिकॉर्ड हो रहा है %1"
+
+#: welcome/pages.js:130
+msgid "Resolution, refresh rate, scale and monitor layout."
+msgstr "रिज़ॉल्यूशन, रिफ़्रेश दर, स्केल और मॉनिटर की व्यवस्था।"
 
 #: modules/Recording.qml:69
 msgid "SAVING"
@@ -516,6 +666,14 @@ msgstr "सिस्टम"
 #: StartMenu.qml:489
 msgid "Science"
 msgstr "विज्ञान"
+
+#: welcome/pages.js:133
+msgid "Screen Filters"
+msgstr "स्क्रीन फ़िल्टर"
+
+#: welcome/pages.js:135
+msgid "Screensaver"
+msgstr "स्क्रीनसेवर"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
@@ -549,11 +707,32 @@ msgstr "सॉफ़्टवेयर प्रबंधक"
 msgid "Sound"
 msgstr "ध्वनि"
 
+#: welcome/pages.js:103
+msgid "Start menu"
+msgstr "स्टार्ट मेन्यू"
+
+#: welcome/pages.js:128
+msgid "Stills, slideshows and animated wallpapers."
+msgstr "स्थिर चित्र, स्लाइड शो और चलती वॉलपेपर।"
+
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr "रुक रहा है — फ़ाइल पूरी की जा रही है…\nwf-recorder अब भी लिख रहा है"
+msgstr ""
+"रुक रहा है — फ़ाइल पूरी की जा रही है…\n"
+"wf-recorder अब भी लिख रहा है"
+
+#: welcome/pages.js:111
+msgid ""
+"Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
+msgstr "Super+1…9 डेस्कटॉप बदलें · Super+Tab लेआउट बदलते जाएँ · Super+Q खिड़की बंद करें"
+
+#: welcome/pages.js:114
+msgid ""
+"Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
+"log out"
+msgstr "Super+E फ़िल्टर · Super+O खिड़की अगले मॉनिटर पर · Super+Shift+Q लॉग आउट"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
@@ -583,13 +762,67 @@ msgstr "सिस्टम ट्रे"
 msgid "TUXAGOTCHI"
 msgstr "टक्सागोची"
 
-#: StartMenu.qml:524
+#: welcome/pages.js:104
+msgid "Tap Super on its own. Applications, settings, power."
+msgstr "अकेले Super दबाइए। ऐप्लिकेशन, सेटिंग्स, बिजली।"
+
+#: StartMenu.qml:524 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "कार्य प्रबंधक"
 
-#: StartMenu.qml:525
+#: StartMenu.qml:525 welcome/pages.js:84
 msgid "Terminal"
 msgstr "टर्मिनल"
+
+#: welcome/pages.js:141
+msgid "The AI"
+msgstr "एआई"
+
+#: welcome/pages.js:142
+msgid "The AI is local"
+msgstr "एआई इसी मशीन पर है"
+
+#: welcome/pages.js:106
+msgid "The full grid of everything installed — also the dock's grid-of-dots."
+msgstr "स्थापित हर चीज़ का पूरा ग्रिड — वही जो डॉक में बिंदुओं का ग्रिड है।"
+
+#: welcome/pages.js:102
+msgid "The full palette — searchable, and the place to rebind."
+msgstr "पूरी सूची — खोजी जा सकती है, और यहीं से दोबारा बाँधते हैं।"
+
+#: welcome/pages.js:149
+msgid "The full-screen conversation view."
+msgstr "पूरी स्क्रीन का संवाद दृश्य।"
+
+#: welcome/pages.js:96
+msgid "The keys"
+msgstr "कुंजियाँ"
+
+#: welcome/pages.js:97
+msgid "The keys worth knowing"
+msgstr "जानने लायक कुंजियाँ"
+
+#: welcome/pages.js:160
+msgid "The rest of the desktop, and where it lives."
+msgstr "डेस्कटॉप का बाकी हिस्सा, और वह कहाँ रहता है।"
+
+#: welcome/pages.js:126
+msgid "Themes, accent colour, glass and corners."
+msgstr "थीम, उभार रंग, काँच और कोने।"
+
+#: welcome/pages.js:173
+msgid "There is a cat. That is the whole feature."
+msgstr "एक बिल्ली है। पूरी सुविधा बस इतनी है।"
+
+#: welcome/pages.js:182
+msgid ""
+"This guide is on Super+Escape whenever you want it back — and the shortcuts "
+"palette on Super+/ is the longer version of page two."
+msgstr "यह मार्गदर्शिका जब चाहें Super+Escape पर मिल जाएगी — और Super+/ की शॉर्टकट सूची दूसरे पन्ने का लंबा रूप है।"
+
+#: welcome/pages.js:87
+msgid "Type a command, or ask for one in plain English."
+msgstr "कोई कमांड टाइप कीजिए, या आम भाषा में माँग लीजिए।"
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
@@ -607,6 +840,10 @@ msgstr "अद्यतन सूचक"
 msgid "Updates"
 msgstr "अद्यतन"
 
+#: welcome/pages.js:191
+msgid "Version, hardware and what is installed."
+msgstr "संस्करण, हार्डवेयर और क्या स्थापित है।"
+
 #: BarConfig.qml:70
 msgid "Volume"
 msgstr "आवाज़"
@@ -619,15 +856,41 @@ msgstr "मौसम"
 msgid "WEIGHT"
 msgstr "वज़न"
 
+#: welcome/pages.js:127
+msgid "Wallpaper"
+msgstr "वॉलपेपर"
+
 #: BarConfig.qml:66
 msgid "Weather"
 msgstr "मौसम"
+
+#: welcome/pages.js:78
+msgid "Welcome"
+msgstr "स्वागत है"
+
+#: welcome/pages.js:79
+msgid "Welcome to SynapseOS"
+msgstr "SynapseOS में आपका स्वागत है"
+
+#: welcome/pages.js:109
+msgid "What is running, and what it is costing."
+msgstr "क्या चल रहा है, और उसकी क्या कीमत है।"
+
+#: welcome/pages.js:136
+msgid "What the desktop does when you walk away."
+msgstr "जब आप हट जाते हैं तो डेस्कटॉप क्या करता है।"
+
+#: welcome/pages.js:151
+msgid "Which model is loaded, and how to fetch another."
+msgstr "कौन सा मॉडल लदा है, और दूसरा कैसे लाएँ।"
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr "वाई-फ़ाई बंद है\nफिर से चालू करने के लिए मध्य-क्लिक करें"
+msgstr ""
+"वाई-फ़ाई बंद है\n"
+"फिर से चालू करने के लिए मध्य-क्लिक करें"
 
 #: StartMenu.qml:627
 msgid "Windows"
@@ -638,7 +901,18 @@ msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr "तार वाला\n%1\nनेटवर्क सेटिंग्स के लिए क्लिक करें"
+msgstr ""
+"तार वाला\n"
+"%1\n"
+"नेटवर्क सेटिंग्स के लिए क्लिक करें"
+
+#: welcome/pages.js:163
+msgid "Wireless, wired and the firewall."
+msgstr "बेतार, तार वाला और फ़ायरवॉल।"
+
+#: welcome/pages.js:180 welcome/pages.js:181
+msgid "You're set"
+msgstr "आप तैयार हैं"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
@@ -807,6 +1081,22 @@ msgstr "अब भी पिछले पर काम चल रहा है"
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   अभी आज़माने के लिए"
+
+#: welcome/pages.js:143
+msgid ""
+"synapd runs a language model on this machine. Nothing here calls out to a "
+"service, and turning it off really does stop it."
+msgstr "synapd इसी मशीन पर एक भाषा मॉडल चलाता है। यहाँ कुछ भी किसी सेवा को नहीं बुलाता, और बंद करने पर वह सचमुच रुक जाता है।"
+
+#: welcome/pages.js:85
+msgid "syntty, the shipped terminal."
+msgstr "syntty, साथ आने वाला टर्मिनल।"
+
+#: welcome/pages.js:98
+msgid ""
+"synui is driven from the keyboard first. These are the handful that get you "
+"everywhere else."
+msgstr "synui सबसे पहले कीबोर्ड से चलता है। ये वही मुट्ठी भर कुंजियाँ हैं जो आपको बाकी हर जगह पहुँचा देती हैं।"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"

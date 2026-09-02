@@ -29,6 +29,7 @@ modules/Updates.qml
 modules/Volume.qml
 modules/Weather.qml
 welcome/Guide.qml
+welcome/pages.js
 widgets/AnalogClock.qml
 widgets/BigClock.qml
 widgets/MusicPlayer.qml

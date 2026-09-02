@@ -45,125 +45,152 @@
  * there are two definitions of "open the display settings" waiting to drift.
  */
 
-var pages = [
+/*
+ * ── WHY THIS IS A FUNCTION AND NOT A TABLE ──────────────────────────────────
+ *
+ * ⛔ A `.pragma library` JS FILE CANNOT SEE A QML SINGLETON. It is loaded once,
+ * outside any QML context, with no imports of its own to reach I18n through —
+ * which is precisely why the header above insists it stay a .js. So the
+ * translator is PASSED IN: GuideState calls `Pages.pages(I18n.tr)` and every
+ * drawn string below goes through it.
+ *
+ * ⚠ AND THE STRINGS STAY HERE, which is the point. tools/qml-xgettext.py reads
+ * this file (it is listed in po-bar/POTFILES) exactly as it reads a .qml, so a
+ * page added here reaches a translator without anything else being touched.
+ * Written the other way — English here, tr() at the draw site in Guide.qml —
+ * the argument would be a variable and the extractor would take nothing.
+ *
+ * ⛔ WHAT IS NOT TRANSLATED, AND WHY EACH ONE WOULD BREAK:
+ *   `id`      the page's own name; GuideState matches on it.
+ *   `action`  what `synctl dispatch <action>` is given. A translated one
+ *             dispatches an action the compositor does not have.
+ *   `arg`     the argument beside it, same reason.
+ *   `kind`    the row-shape sentinel — Guide.qml draws a note when it reads
+ *             "note" and a row otherwise.
+ *   `live`    the name of the value the right-hand chip shows.
+ *   `key`     a picture of keycaps, and only a FALLBACK at that: the live
+ *             chord comes from `synctl binds`. Every keyboard this ships on
+ *             has Super printed on it.
+ */
+function pages(I18n) { return [
     {
         id:    "welcome",
-        nav:   "Welcome",
-        title: "Welcome to SynapseOS",
-        blurb: "A Wayland desktop built as one piece — the compositor, the bar, "
+        nav: I18n.tr("Welcome"),
+        title: I18n.tr("Welcome to SynapseOS"),
+        blurb: I18n.tr("A Wayland desktop built as one piece — the compositor, the bar, "
              + "the files, the settings and the AI all ship together and all "
-             + "answer to the same theme.",
+             + "answer to the same theme."),
         rows: [
-            { label: "Terminal", key: "Super+Enter", action: "term",
-              desc: "syntty, the shipped terminal." },
-            { label: "AI Command Bar", key: "Super+Space", action: "cmdbar",
-              desc: "Type a command, or ask for one in plain English." },
-            { label: "Control Panel", key: "Super+C", action: "control",
-              desc: "Every desktop setting, in one place." },
+            { label: I18n.tr("Terminal"), key: "Super+Enter", action: "term",
+              desc: I18n.tr("syntty, the shipped terminal.") },
+            { label: I18n.tr("AI Command Bar"), key: "Super+Space", action: "cmdbar",
+              desc: I18n.tr("Type a command, or ask for one in plain English.") },
+            { label: I18n.tr("Control Panel"), key: "Super+C", action: "control",
+              desc: I18n.tr("Every desktop setting, in one place.") },
             { kind: "note",
-              text: "Arrow keys move · Enter opens · Esc closes the guide." }
+              text: I18n.tr("Arrow keys move · Enter opens · Esc closes the guide.") }
         ]
     },
     {
         id:    "keys",
-        nav:   "The keys",
-        title: "The keys worth knowing",
-        blurb: "synui is driven from the keyboard first. These are the handful "
-             + "that get you everywhere else.",
+        nav: I18n.tr("The keys"),
+        title: I18n.tr("The keys worth knowing"),
+        blurb: I18n.tr("synui is driven from the keyboard first. These are the handful "
+             + "that get you everywhere else."),
         rows: [
-            { label: "Keyboard Shortcuts", key: "Super+/", action: "keys",
-              desc: "The full palette — searchable, and the place to rebind." },
-            { label: "Start menu", key: "Super", action: "start_menu",
-              desc: "Tap Super on its own. Applications, settings, power." },
-            { label: "Applications", key: "", action: "apps",
-              desc: "The full grid of everything installed — also the dock's "
-                  + "grid-of-dots." },
-            { label: "Task Manager", key: "Ctrl+Alt+Del", action: "taskmgr",
-              desc: "What is running, and what it is costing." },
+            { label: I18n.tr("Keyboard Shortcuts"), key: "Super+/", action: "keys",
+              desc: I18n.tr("The full palette — searchable, and the place to rebind.") },
+            { label: I18n.tr("Start menu"), key: "Super", action: "start_menu",
+              desc: I18n.tr("Tap Super on its own. Applications, settings, power.") },
+            { label: I18n.tr("Applications"), key: "", action: "apps",
+              desc: I18n.tr("The full grid of everything installed — also the dock's "
+                  + "grid-of-dots.") },
+            { label: I18n.tr("Task Manager"), key: "Ctrl+Alt+Del", action: "taskmgr",
+              desc: I18n.tr("What is running, and what it is costing.") },
             { kind: "note",
-              text: "Super+1…9 switch desktop · Super+Tab cycle layout · "
-                  + "Super+Q close window" },
+              text: I18n.tr("Super+1…9 switch desktop · Super+Tab cycle layout · "
+                  + "Super+Q close window") },
             { kind: "note",
-              text: "Super+E filters · Super+O move window to the next monitor · "
-                  + "Super+Shift+Q log out" }
+              text: I18n.tr("Super+E filters · Super+O move window to the next monitor · "
+                  + "Super+Shift+Q log out") }
         ]
     },
     {
         id:    "look",
-        nav:   "Make it yours",
-        title: "Make it yours",
-        blurb: "One theme moves the whole desktop: the compositor's panels, the "
-             + "bar, the widgets, GTK and Qt applications, and the cursor.",
+        nav: I18n.tr("Make it yours"),
+        title: I18n.tr("Make it yours"),
+        blurb: I18n.tr("One theme moves the whole desktop: the compositor's panels, the "
+             + "bar, the widgets, GTK and Qt applications, and the cursor."),
         rows: [
-            { label: "Appearance", key: "Super+T", action: "theme",
-              desc: "Themes, accent colour, glass and corners." },
-            { label: "Wallpaper", key: "Super+W", action: "wallpaper",
-              desc: "Stills, slideshows and animated wallpapers." },
-            { label: "Display Settings", key: "Super+D", action: "displays",
-              desc: "Resolution, refresh rate, scale and monitor layout." },
-            { label: "Desktop Widgets", key: "Super+Shift+A", action: "widgets",
-              desc: "Clock, system monitor, music, notes — on the desktop." },
-            { label: "Screen Filters", key: "Super+E", action: "filters",
-              desc: "Night light, colour blindness filters, CRT." },
-            { label: "Screensaver", key: "Super+Z", action: "saver",
-              desc: "What the desktop does when you walk away." }
+            { label: I18n.tr("Appearance"), key: "Super+T", action: "theme",
+              desc: I18n.tr("Themes, accent colour, glass and corners.") },
+            { label: I18n.tr("Wallpaper"), key: "Super+W", action: "wallpaper",
+              desc: I18n.tr("Stills, slideshows and animated wallpapers.") },
+            { label: I18n.tr("Display Settings"), key: "Super+D", action: "displays",
+              desc: I18n.tr("Resolution, refresh rate, scale and monitor layout.") },
+            { label: I18n.tr("Desktop Widgets"), key: "Super+Shift+A", action: "widgets",
+              desc: I18n.tr("Clock, system monitor, music, notes — on the desktop.") },
+            { label: I18n.tr("Screen Filters"), key: "Super+E", action: "filters",
+              desc: I18n.tr("Night light, colour blindness filters, CRT.") },
+            { label: I18n.tr("Screensaver"), key: "Super+Z", action: "saver",
+              desc: I18n.tr("What the desktop does when you walk away.") }
         ]
     },
     {
         id:    "ai",
-        nav:   "The AI",
-        title: "The AI is local",
-        blurb: "synapd runs a language model on this machine. Nothing here calls "
-             + "out to a service, and turning it off really does stop it.",
+        nav: I18n.tr("The AI"),
+        title: I18n.tr("The AI is local"),
+        blurb: I18n.tr("synapd runs a language model on this machine. Nothing here calls "
+             + "out to a service, and turning it off really does stop it."),
         rows: [
-            { label: "AI Command Bar", key: "Super+Space", action: "cmdbar",
-              desc: "Ask for a command; it answers with one you can run." },
-            { label: "Neural Overlay", key: "Super+A", action: "overlay",
-              desc: "The full-screen conversation view." },
-            { label: "AI Model", key: "", action: "aimodel",
-              desc: "Which model is loaded, and how to fetch another." },
-            { label: "AI Backend", live: "ai_backend", action: "ai_backend",
-              desc: "GPU, CPU or off. Off masks the sockets, so it holds." }
+            { label: I18n.tr("AI Command Bar"), key: "Super+Space", action: "cmdbar",
+              desc: I18n.tr("Ask for a command; it answers with one you can run.") },
+            { label: I18n.tr("Neural Overlay"), key: "Super+A", action: "overlay",
+              desc: I18n.tr("The full-screen conversation view.") },
+            { label: I18n.tr("AI Model"), key: "", action: "aimodel",
+              desc: I18n.tr("Which model is loaded, and how to fetch another.") },
+            { label: I18n.tr("AI Backend"), live: "ai_backend", action: "ai_backend",
+              desc: I18n.tr("GPU, CPU or off. Off masks the sockets, so it holds.") }
         ]
     },
     {
         id:    "system",
-        nav:   "Everything else",
-        title: "Everything else",
-        blurb: "The rest of the desktop, and where it lives.",
+        nav: I18n.tr("Everything else"),
+        title: I18n.tr("Everything else"),
+        blurb: I18n.tr("The rest of the desktop, and where it lives."),
         rows: [
-            { label: "Network / Wi-Fi", key: "Super+I", action: "network",
-              desc: "Wireless, wired and the firewall." },
-            { label: "Power Saving", key: "Super+P", action: "power",
-              desc: "Idle, sleep, and what the lid does." },
-            { label: "Calculator", key: "Super+X", action: "calc",
-              desc: "Also answers from the command bar." },
-            { label: "News", key: "Super+R", action: "news",
-              desc: "Headlines, fetched on the desktop's own schedule." },
-            { label: "Game Mode", key: "Super+G", action: "game",
-              desc: "Bar out of the way, effects off, the machine to the game." },
-            { label: "Cat Mode", key: "Super+Shift+C", action: "cat",
-              desc: "There is a cat. That is the whole feature." },
-            { label: "Lock Screen", key: "Super+L", action: "lock",
-              desc: "Locks now; the screensaver locks on its own timer." }
+            { label: I18n.tr("Network / Wi-Fi"), key: "Super+I", action: "network",
+              desc: I18n.tr("Wireless, wired and the firewall.") },
+            { label: I18n.tr("Power Saving"), key: "Super+P", action: "power",
+              desc: I18n.tr("Idle, sleep, and what the lid does.") },
+            { label: I18n.tr("Calculator"), key: "Super+X", action: "calc",
+              desc: I18n.tr("Also answers from the command bar.") },
+            { label: I18n.tr("News"), key: "Super+R", action: "news",
+              desc: I18n.tr("Headlines, fetched on the desktop's own schedule.") },
+            { label: I18n.tr("Game Mode"), key: "Super+G", action: "game",
+              desc: I18n.tr("Bar out of the way, effects off, the machine to the game.") },
+            { label: I18n.tr("Cat Mode"), key: "Super+Shift+C", action: "cat",
+              desc: I18n.tr("There is a cat. That is the whole feature.") },
+            { label: I18n.tr("Lock Screen"), key: "Super+L", action: "lock",
+              desc: I18n.tr("Locks now; the screensaver locks on its own timer.") }
         ]
     },
     {
         id:    "done",
-        nav:   "You're set",
-        title: "You're set",
-        blurb: "This guide is on Super+Escape whenever you want it back — and "
+        nav: I18n.tr("You're set"),
+        title: I18n.tr("You're set"),
+        blurb: I18n.tr("This guide is on Super+Escape whenever you want it back — and "
              + "the shortcuts palette on Super+/ is the longer version of "
-             + "page two.",
+             + "page two."),
         rows: [
-            { label: "Keyboard Shortcuts", key: "Super+/", action: "keys",
-              desc: "Everything this guide skipped." },
-            { label: "Control Panel", key: "Super+C", action: "control",
-              desc: "Every setting, grouped." },
-            { label: "About this system", key: "", action: "about",
-              desc: "Version, hardware and what is installed." },
+            { label: I18n.tr("Keyboard Shortcuts"), key: "Super+/", action: "keys",
+              desc: I18n.tr("Everything this guide skipped.") },
+            { label: I18n.tr("Control Panel"), key: "Super+C", action: "control",
+              desc: I18n.tr("Every setting, grouped.") },
+            { label: I18n.tr("About this system"), key: "", action: "about",
+              desc: I18n.tr("Version, hardware and what is installed.") },
             { kind: "note",
-              text: "Documentation and downloads: soslinux.org" }
+              text: I18n.tr("Documentation and downloads: soslinux.org") }
         ]
     }
-]
+] }

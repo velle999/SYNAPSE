@@ -2984,7 +2984,37 @@ pkgver=0.1.0
 #   ⚠ mktarball.sh caught its own omission: contents=() cross-checks every
 #   subdir() in meson.build, so adding po-antiquity/ to the build and not to
 #   the tarball failed the tarball rather than the machine that unpacks it.
-pkgrel=585
+# 586: the WELCOME GUIDE was English in all thirteen languages, and nothing
+#   could say so.
+#   ⛔ ITS EVERY WORD LIVES IN A .js. quickshell/welcome/pages.js holds the six
+#   pages — nav, title, blurb, and every row's label and description — and the
+#   bar's gate asked "does every .qml that marks a string appear in POTFILES?".
+#   A file that marks NOTHING passes that trivially, and a file that is not a
+#   .qml is not even looked at. So the first screen a new user sees stayed
+#   English through eight components' worth of this work. The check reads .js
+#   now, and strips comments while doing it — its first run flagged
+#   GuideState.qml, whose only I18n.tr( is inside a comment.
+#   ⛔ A `.pragma library` CANNOT SEE A QML SINGLETON, which is exactly why
+#   pages.js is one (its header explains: importing a QML directory module
+#   instantiates every singleton in it). So the table became a FUNCTION and the
+#   singleton is passed in: `Pages.pages(I18n)`.
+#   ⚠ AND THE PARAMETER IS NAMED I18n ON PURPOSE. Named `tr`, the call sites
+#   read `tr("…")` — and tools/qml-xgettext.py keys on `I18n.tr(`, so it read
+#   the file, matched none of them, and reported success. 64 strings silently
+#   absent from a template that looked complete. Named I18n, every site spells
+#   itself the way every other file in the tree does and the extractor needs no
+#   special case. The suite now asserts the RESULT — that "Welcome to
+#   SynapseOS" is in the .pot — rather than the spelling.
+#   ⛔ AND EVERY ROW CARRIES WHAT `synctl dispatch` IS GIVEN BESIDE ITS LABEL.
+#   `action`, `arg`, `id`, `kind` and `live` are matched on; `key` is a picture
+#   of keycaps AND only a fallback, since the live chord comes from `synctl
+#   binds`. All six are asserted untranslated, in .js as well as .qml.
+#   265 msgids now, 265/265 in all thirteen. ⚠ Seven of the new ones are the
+#   page blurbs, which gettext WRAPS — `msgid ""` plus continuation lines — so
+#   a `^msgid "…"` grep skipped them and reported the catalogs full when they
+#   were seven short. Joined before asking, the same rule the msgstr side
+#   already learned.
+pkgrel=586
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

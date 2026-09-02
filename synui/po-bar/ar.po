@@ -22,7 +22,10 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr "%1 (%2 %)\n%3\nانقر لاختيار شبكة"
+msgstr ""
+"%1 (%2 %)\n"
+"%3\n"
+"انقر لاختيار شبكة"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
@@ -124,9 +127,27 @@ msgstr "(مخفية)"
 msgid "(unknown track)"
 msgstr "(مقطع غير معروف)"
 
+#: welcome/pages.js:80
+msgid ""
+"A Wayland desktop built as one piece — the compositor, the bar, the files, "
+"the settings and the AI all ship together and all answer to the same theme."
+msgstr "سطح مكتب Wayland مبنيّ قطعةً واحدة — المُركِّب والشريط والملفات والإعدادات والذكاء الاصطناعي تُشحن معاً وتستجيب كلها للسمة نفسها."
+
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
 msgstr "العمر"
+
+#: welcome/pages.js:152
+msgid "AI Backend"
+msgstr "محرك الذكاء الاصطناعي"
+
+#: welcome/pages.js:86 welcome/pages.js:146
+msgid "AI Command Bar"
+msgstr "شريط أوامر الذكاء الاصطناعي"
+
+#: welcome/pages.js:150
+msgid "AI Model"
+msgstr "نموذج الذكاء الاصطناعي"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
@@ -140,6 +161,10 @@ msgstr "التطبيقات"
 msgid "AVAILABLE TO INSTALL"
 msgstr "متاح للتثبيت"
 
+#: welcome/pages.js:190
+msgid "About this system"
+msgstr "عن هذا النظام"
+
 #: StartMenu.qml:494
 msgid "Accessories"
 msgstr "الملحقات"
@@ -148,17 +173,29 @@ msgstr "الملحقات"
 msgid "Adjust"
 msgstr "اضبط"
 
-#: StartMenu.qml:626
+#: welcome/pages.js:167
+msgid "Also answers from the command bar."
+msgstr "يجيب أيضاً من شريط الأوامر."
+
+#: StartMenu.qml:626 welcome/pages.js:125
 msgid "Appearance"
 msgstr "المظهر"
 
-#: components/Mixer.qml:348
+#: components/Mixer.qml:348 welcome/pages.js:105
 msgid "Applications"
 msgstr "التطبيقات"
 
 #: modules/Updates.qml:163
 msgid "Apply in a terminal"
 msgstr "طبّق في طرفية"
+
+#: welcome/pages.js:91
+msgid "Arrow keys move · Enter opens · Esc closes the guide."
+msgstr "أسهم التنقل تُحرّك · Enter يفتح · Esc يغلق الدليل."
+
+#: welcome/pages.js:147
+msgid "Ask for a command; it answers with one you can run."
+msgstr "اطلب أمراً؛ يجيبك بأمر يمكنك تنفيذه مباشرة."
 
 #: BarConfig.qml:67
 msgid "Assistant"
@@ -196,6 +233,10 @@ msgstr "بطارية"
 msgid "Back"
 msgstr "رجوع"
 
+#: welcome/pages.js:171
+msgid "Bar out of the way, effects off, the machine to the game."
+msgstr "الشريط جانباً، والمؤثرات مطفأة، والجهاز كله للّعبة."
+
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
 msgstr "الشريط · %1"
@@ -216,7 +257,9 @@ msgstr "بلوتوث"
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr "البلوتوث مغلق\nانقر بالزر الأوسط لتشغيله"
+msgstr ""
+"البلوتوث مغلق\n"
+"انقر بالزر الأوسط لتشغيله"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
@@ -230,15 +273,25 @@ msgstr "المعالج"
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr "المعالج %1 %\nانقر لمدير المهام"
+msgstr ""
+"المعالج %1 %\n"
+"انقر لمدير المهام"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "المعالج + الذاكرة"
 
+#: welcome/pages.js:166
+msgid "Calculator"
+msgstr "الآلة الحاسبة"
+
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
 msgstr "إلغاء"
+
+#: welcome/pages.js:172
+msgid "Cat Mode"
+msgstr "وضع القطة"
 
 #: modules/Updates.qml:161
 msgid "Check now"
@@ -272,11 +325,15 @@ msgstr "انقر للإيقاف (أو Super+Shift+R)"
 msgid "Clock"
 msgstr "الساعة"
 
+#: welcome/pages.js:132
+msgid "Clock, system monitor, music, notes — on the desktop."
+msgstr "ساعة، ومراقب النظام، وموسيقى، وملاحظات — على سطح المكتب."
+
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
 msgstr "تأكيد"
 
-#: StartMenu.qml:523 StartMenu.qml:625
+#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "لوحة التحكم"
 
@@ -292,6 +349,10 @@ msgstr "الانضباط"
 msgid "Desktop"
 msgstr "سطح المكتب"
 
+#: welcome/pages.js:131
+msgid "Desktop Widgets"
+msgstr "أدوات سطح المكتب"
+
 #: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "مبدّل أسطح المكتب"
@@ -304,11 +365,21 @@ msgstr "التطوير"
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr "غير متصل\nانقر لاختيار شبكة"
+msgstr ""
+"غير متصل\n"
+"انقر لاختيار شبكة"
 
 #: StartMenu.qml:630
 msgid "Display"
 msgstr "العرض"
+
+#: welcome/pages.js:129
+msgid "Display Settings"
+msgstr "إعدادات الشاشة"
+
+#: welcome/pages.js:193
+msgid "Documentation and downloads: soslinux.org"
+msgstr "التوثيق والتنزيلات: soslinux.org"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
@@ -329,6 +400,22 @@ msgstr "المعادل"
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
 msgstr "المعادل: %1"
+
+#: welcome/pages.js:89
+msgid "Every desktop setting, in one place."
+msgstr "كل إعدادات سطح المكتب في مكان واحد."
+
+#: welcome/pages.js:189
+msgid "Every setting, grouped."
+msgstr "كل الإعدادات، مُجمّعة."
+
+#: welcome/pages.js:158 welcome/pages.js:159
+msgid "Everything else"
+msgstr "كل ما تبقّى"
+
+#: welcome/pages.js:187
+msgid "Everything this guide skipped."
+msgstr "كل ما تجاوزه هذا الدليل."
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
@@ -358,6 +445,14 @@ msgstr "تركيز · انقر للإيقاف"
 msgid "Focus — %1 · click to stop"
 msgstr "تركيز — %1 · انقر للإيقاف"
 
+#: welcome/pages.js:153
+msgid "GPU, CPU or off. Off masks the sockets, so it holds."
+msgstr "المعالج الرسومي أو المركزي أو الإيقاف. الإيقاف يحجب المقابس أيضاً، فيثبت فعلاً."
+
+#: welcome/pages.js:170
+msgid "Game Mode"
+msgstr "وضع الألعاب"
+
 #: StartMenu.qml:484
 msgid "Games"
 msgstr "الألعاب"
@@ -370,6 +465,10 @@ msgstr "الرسوميات"
 msgid "HEALTH"
 msgstr "الصحة"
 
+#: welcome/pages.js:169
+msgid "Headlines, fetched on the desktop's own schedule."
+msgstr "العناوين، تُجلب وفق جدول سطح المكتب نفسه."
+
 #: modules/Battery.qml:52
 msgid "Health %1%"
 msgstr "الصحة %1 %"
@@ -377,6 +476,10 @@ msgstr "الصحة %1 %"
 #: modules/Updates.qml:168
 msgid "Held back"
 msgstr "محجوزة"
+
+#: welcome/pages.js:165
+msgid "Idle, sleep, and what the lid does."
+msgstr "الخمول والسكون وما يفعله إغلاق الغطاء."
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
@@ -390,13 +493,21 @@ msgstr "ثبّته"
 msgid "Internet"
 msgstr "الإنترنت"
 
+#: welcome/pages.js:101 welcome/pages.js:186
+msgid "Keyboard Shortcuts"
+msgstr "اختصارات لوحة المفاتيح"
+
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
 msgstr "تشغيل"
 
-#: StartMenu.qml:640 StartMenu.qml:757
+#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "اقفل الشاشة"
+
+#: welcome/pages.js:175
+msgid "Locks now; the screensaver locks on its own timer."
+msgstr "يقفل الآن؛ أما حافظة الشاشة فتقفل وفق مؤقّتها."
 
 #: StartMenu.qml:758
 msgid "Log Out"
@@ -418,6 +529,10 @@ msgstr "الأخطاء"
 msgid "MIXER"
 msgstr "المازج"
 
+#: welcome/pages.js:120 welcome/pages.js:121
+msgid "Make it yours"
+msgstr "اجعله لك"
+
 #: BarConfig.qml:62
 msgid "Media preview"
 msgstr "معاينة الوسائط"
@@ -426,7 +541,9 @@ msgstr "معاينة الوسائط"
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr "الذاكرة %1 / %2 غيغابايت\nانقر لمدير المهام"
+msgstr ""
+"الذاكرة %1 / %2 غيغابايت\n"
+"انقر لمدير المهام"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
@@ -448,13 +565,29 @@ msgstr "الشبكة"
 msgid "Network + Bluetooth"
 msgstr "الشبكة + البلوتوث"
 
+#: welcome/pages.js:162
+msgid "Network / Wi-Fi"
+msgstr "الشبكة / الواي-فاي"
+
 #: StartMenu.qml:542
 msgid "Network Setup"
 msgstr "إعداد الشبكة"
 
+#: welcome/pages.js:148
+msgid "Neural Overlay"
+msgstr "الطبقة العصبية"
+
+#: welcome/pages.js:168
+msgid "News"
+msgstr "الأخبار"
+
 #: welcome/Guide.qml:487
 msgid "Next"
 msgstr "التالي"
+
+#: welcome/pages.js:134
+msgid "Night light, colour blindness filters, CRT."
+msgstr "الضوء الليلي، ومرشّحات عمى الألوان، وCRT."
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
@@ -472,7 +605,9 @@ msgstr "لا نتائج"
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr "لا قراءة بعد\nsynctl weather on"
+msgstr ""
+"لا قراءة بعد\n"
+"synctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
@@ -481,6 +616,12 @@ msgstr "لا شيء قيد التشغيل"
 #: StartMenu.qml:488
 msgid "Office"
 msgstr "المكتب"
+
+#: welcome/pages.js:122
+msgid ""
+"One theme moves the whole desktop: the compositor's panels, the bar, the "
+"widgets, GTK and Qt applications, and the cursor."
+msgstr "سمة واحدة تحرّك سطح المكتب كله: لوحات المُركِّب، والشريط، والأدوات، وتطبيقات GTK وQt، والمؤشر."
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -510,6 +651,10 @@ msgstr "الإضافات"
 msgid "Power"
 msgstr "الطاقة"
 
+#: welcome/pages.js:164
+msgid "Power Saving"
+msgstr "توفير الطاقة"
+
 #: StartMenu.qml:759
 msgid "Reboot"
 msgstr "أعد التشغيل"
@@ -521,6 +666,10 @@ msgstr "يسجّل"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "يسجّل %1"
+
+#: welcome/pages.js:130
+msgid "Resolution, refresh rate, scale and monitor layout."
+msgstr "الدقة ومعدّل التحديث والتحجيم وترتيب الشاشات."
 
 #: modules/Recording.qml:69
 msgid "SAVING"
@@ -541,6 +690,14 @@ msgstr "النظام"
 #: StartMenu.qml:489
 msgid "Science"
 msgstr "العلوم"
+
+#: welcome/pages.js:133
+msgid "Screen Filters"
+msgstr "مرشّحات الشاشة"
+
+#: welcome/pages.js:135
+msgid "Screensaver"
+msgstr "حافظة الشاشة"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
@@ -574,11 +731,32 @@ msgstr "مدير البرمجيات"
 msgid "Sound"
 msgstr "الصوت"
 
+#: welcome/pages.js:103
+msgid "Start menu"
+msgstr "قائمة البدء"
+
+#: welcome/pages.js:128
+msgid "Stills, slideshows and animated wallpapers."
+msgstr "صور ثابتة وعروض شرائح وخلفيات متحركة."
+
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr "يتوقف — يُنهي الملف…\nما زال wf-recorder يكتب"
+msgstr ""
+"يتوقف — يُنهي الملف…\n"
+"ما زال wf-recorder يكتب"
+
+#: welcome/pages.js:111
+msgid ""
+"Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
+msgstr "Super+1…9 تبديل سطح المكتب · Super+Tab تدوير التخطيط · Super+Q إغلاق النافذة"
+
+#: welcome/pages.js:114
+msgid ""
+"Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
+"log out"
+msgstr "Super+E المرشّحات · Super+O نقل النافذة إلى الشاشة التالية · Super+Shift+Q إنهاء الجلسة"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
@@ -608,13 +786,67 @@ msgstr "صينية النظام"
 msgid "TUXAGOTCHI"
 msgstr "تكساغوتشي"
 
-#: StartMenu.qml:524
+#: welcome/pages.js:104
+msgid "Tap Super on its own. Applications, settings, power."
+msgstr "انقر Super وحدها. التطبيقات والإعدادات والطاقة."
+
+#: StartMenu.qml:524 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "مدير المهام"
 
-#: StartMenu.qml:525
+#: StartMenu.qml:525 welcome/pages.js:84
 msgid "Terminal"
 msgstr "الطرفية"
+
+#: welcome/pages.js:141
+msgid "The AI"
+msgstr "الذكاء الاصطناعي"
+
+#: welcome/pages.js:142
+msgid "The AI is local"
+msgstr "الذكاء الاصطناعي محلي"
+
+#: welcome/pages.js:106
+msgid "The full grid of everything installed — also the dock's grid-of-dots."
+msgstr "الشبكة الكاملة لكل ما هو مثبَّت — وهي نفسها شبكة النقاط في الرصيف."
+
+#: welcome/pages.js:102
+msgid "The full palette — searchable, and the place to rebind."
+msgstr "اللوحة الكاملة — قابلة للبحث، وهي موضع إعادة التعيين."
+
+#: welcome/pages.js:149
+msgid "The full-screen conversation view."
+msgstr "عرض المحادثة بملء الشاشة."
+
+#: welcome/pages.js:96
+msgid "The keys"
+msgstr "المفاتيح"
+
+#: welcome/pages.js:97
+msgid "The keys worth knowing"
+msgstr "المفاتيح التي تستحق المعرفة"
+
+#: welcome/pages.js:160
+msgid "The rest of the desktop, and where it lives."
+msgstr "بقية سطح المكتب، وأين تسكن."
+
+#: welcome/pages.js:126
+msgid "Themes, accent colour, glass and corners."
+msgstr "السمات ولون التمييز والزجاج والزوايا."
+
+#: welcome/pages.js:173
+msgid "There is a cat. That is the whole feature."
+msgstr "هناك قطة. هذه هي الميزة كلها."
+
+#: welcome/pages.js:182
+msgid ""
+"This guide is on Super+Escape whenever you want it back — and the shortcuts "
+"palette on Super+/ is the longer version of page two."
+msgstr "هذا الدليل على Super+Escape متى أردته من جديد — ولوحة الاختصارات على Super+/ هي النسخة المطوّلة من الصفحة الثانية."
+
+#: welcome/pages.js:87
+msgid "Type a command, or ask for one in plain English."
+msgstr "اكتب أمراً، أو اطلبه بلغة عادية."
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
@@ -632,6 +864,10 @@ msgstr "منبّه التحديثات"
 msgid "Updates"
 msgstr "التحديثات"
 
+#: welcome/pages.js:191
+msgid "Version, hardware and what is installed."
+msgstr "الإصدار والعتاد وما هو مثبَّت."
+
 #: BarConfig.qml:70
 msgid "Volume"
 msgstr "مستوى الصوت"
@@ -644,15 +880,41 @@ msgstr "الطقس"
 msgid "WEIGHT"
 msgstr "الوزن"
 
+#: welcome/pages.js:127
+msgid "Wallpaper"
+msgstr "خلفية الشاشة"
+
 #: BarConfig.qml:66
 msgid "Weather"
 msgstr "الطقس"
+
+#: welcome/pages.js:78
+msgid "Welcome"
+msgstr "أهلاً بك"
+
+#: welcome/pages.js:79
+msgid "Welcome to SynapseOS"
+msgstr "أهلاً بك في SynapseOS"
+
+#: welcome/pages.js:109
+msgid "What is running, and what it is costing."
+msgstr "ما الذي يعمل، وكم يكلّف."
+
+#: welcome/pages.js:136
+msgid "What the desktop does when you walk away."
+msgstr "ما يفعله سطح المكتب حين تبتعد."
+
+#: welcome/pages.js:151
+msgid "Which model is loaded, and how to fetch another."
+msgstr "أي نموذج مُحمَّل، وكيف تجلب غيره."
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr "الواي-فاي مغلق\nانقر بالزر الأوسط لإعادة تشغيله"
+msgstr ""
+"الواي-فاي مغلق\n"
+"انقر بالزر الأوسط لإعادة تشغيله"
 
 #: StartMenu.qml:627
 msgid "Windows"
@@ -663,7 +925,18 @@ msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr "سلكي\n%1\nانقر لإعدادات الشبكة"
+msgstr ""
+"سلكي\n"
+"%1\n"
+"انقر لإعدادات الشبكة"
+
+#: welcome/pages.js:163
+msgid "Wireless, wired and the firewall."
+msgstr "اللاسلكي والسلكي والجدار الناري."
+
+#: welcome/pages.js:180 welcome/pages.js:181
+msgid "You're set"
+msgstr "أنت جاهز"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
@@ -832,6 +1105,22 @@ msgstr "ما زال يعمل على السابق"
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   للمحاولة الآن"
+
+#: welcome/pages.js:143
+msgid ""
+"synapd runs a language model on this machine. Nothing here calls out to a "
+"service, and turning it off really does stop it."
+msgstr "يشغّل synapd نموذجاً لغوياً على هذا الجهاز. لا شيء هنا يتصل بأي خدمة، وإيقافه يوقفه فعلاً."
+
+#: welcome/pages.js:85
+msgid "syntty, the shipped terminal."
+msgstr "syntty، الطرفية المرفقة."
+
+#: welcome/pages.js:98
+msgid ""
+"synui is driven from the keyboard first. These are the handful that get you "
+"everywhere else."
+msgstr "يُقاد synui بلوحة المفاتيح أولاً. وهذه هي القلّة التي توصلك إلى كل مكان آخر."
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"

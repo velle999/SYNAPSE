@@ -21,7 +21,10 @@ msgid ""
 "%1 (%2%)\n"
 "%3\n"
 "Click to pick a network"
-msgstr "%1 (%2 %)\n%3\n点击选择网络"
+msgstr ""
+"%1 (%2 %)\n"
+"%3\n"
+"点击选择网络"
 
 #: widgets/SysMonitor.qml:168
 msgid "%1 / %2 GiB"
@@ -93,9 +96,27 @@ msgstr "(隐藏)"
 msgid "(unknown track)"
 msgstr "(未知曲目)"
 
+#: welcome/pages.js:80
+msgid ""
+"A Wayland desktop built as one piece — the compositor, the bar, the files, "
+"the settings and the AI all ship together and all answer to the same theme."
+msgstr "一体打造的 Wayland 桌面——合成器、状态栏、文件、设置和 AI 一同发布，也都听同一套主题。"
+
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
 msgstr "年龄"
+
+#: welcome/pages.js:152
+msgid "AI Backend"
+msgstr "AI 后端"
+
+#: welcome/pages.js:86 welcome/pages.js:146
+msgid "AI Command Bar"
+msgstr "AI 命令栏"
+
+#: welcome/pages.js:150
+msgid "AI Model"
+msgstr "AI 模型"
 
 #: StartMenu.qml:529
 msgid "AI Shell (synsh)"
@@ -109,6 +130,10 @@ msgstr "应用程序"
 msgid "AVAILABLE TO INSTALL"
 msgstr "可供安装"
 
+#: welcome/pages.js:190
+msgid "About this system"
+msgstr "关于本系统"
+
 #: StartMenu.qml:494
 msgid "Accessories"
 msgstr "附件"
@@ -117,17 +142,29 @@ msgstr "附件"
 msgid "Adjust"
 msgstr "调整"
 
-#: StartMenu.qml:626
+#: welcome/pages.js:167
+msgid "Also answers from the command bar."
+msgstr "也可以从命令栏得到答案。"
+
+#: StartMenu.qml:626 welcome/pages.js:125
 msgid "Appearance"
 msgstr "外观"
 
-#: components/Mixer.qml:348
+#: components/Mixer.qml:348 welcome/pages.js:105
 msgid "Applications"
 msgstr "应用程序"
 
 #: modules/Updates.qml:163
 msgid "Apply in a terminal"
 msgstr "在终端中应用"
+
+#: welcome/pages.js:91
+msgid "Arrow keys move · Enter opens · Esc closes the guide."
+msgstr "方向键移动 · 回车打开 · Esc 关闭本指南"
+
+#: welcome/pages.js:147
+msgid "Ask for a command; it answers with one you can run."
+msgstr "问它要一条命令，它会给出一条你可以直接运行的。"
 
 #: BarConfig.qml:67
 msgid "Assistant"
@@ -165,6 +202,10 @@ msgstr "电池"
 msgid "Back"
 msgstr "返回"
 
+#: welcome/pages.js:171
+msgid "Bar out of the way, effects off, the machine to the game."
+msgstr "让开状态栏，关掉特效，把机器交给游戏。"
+
 #: components/BarMenu.qml:154
 msgid "Bar · %1"
 msgstr "任务栏 · %1"
@@ -185,7 +226,9 @@ msgstr "蓝牙"
 msgid ""
 "Bluetooth off\n"
 "Middle-click to switch it on"
-msgstr "蓝牙已关闭\n中键点击可开启"
+msgstr ""
+"蓝牙已关闭\n"
+"中键点击可开启"
 
 #: widgets/AnalogClock.qml:39 widgets/BigClock.qml:26
 msgid "CLOCK"
@@ -199,15 +242,25 @@ msgstr "CPU"
 msgid ""
 "CPU %1%\n"
 "Click for the task manager"
-msgstr "CPU %1 %\n点击打开任务管理器"
+msgstr ""
+"CPU %1 %\n"
+"点击打开任务管理器"
 
 #: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + 内存"
 
+#: welcome/pages.js:166
+msgid "Calculator"
+msgstr "计算器"
+
 #: Ui/ConfirmDialog.qml:33
 msgid "Cancel"
 msgstr "取消"
+
+#: welcome/pages.js:172
+msgid "Cat Mode"
+msgstr "猫咪模式"
 
 #: modules/Updates.qml:161
 msgid "Check now"
@@ -241,11 +294,15 @@ msgstr "点击停止（或 Super+Shift+R）"
 msgid "Clock"
 msgstr "时钟"
 
+#: welcome/pages.js:132
+msgid "Clock, system monitor, music, notes — on the desktop."
+msgstr "时钟、系统监视、音乐、便笺——就放在桌面上。"
+
 #: Ui/ConfirmDialog.qml:34
 msgid "Confirm"
 msgstr "确定"
 
-#: StartMenu.qml:523 StartMenu.qml:625
+#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "控制面板"
 
@@ -261,6 +318,10 @@ msgstr "管教"
 msgid "Desktop"
 msgstr "桌面"
 
+#: welcome/pages.js:131
+msgid "Desktop Widgets"
+msgstr "桌面小部件"
+
 #: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "桌面切换器"
@@ -273,11 +334,21 @@ msgstr "开发"
 msgid ""
 "Disconnected\n"
 "Click to pick a network"
-msgstr "已断开\n点击选择网络"
+msgstr ""
+"已断开\n"
+"点击选择网络"
 
 #: StartMenu.qml:630
 msgid "Display"
 msgstr "显示"
+
+#: welcome/pages.js:129
+msgid "Display Settings"
+msgstr "显示设置"
+
+#: welcome/pages.js:193
+msgid "Documentation and downloads: soslinux.org"
+msgstr "文档与下载：soslinux.org"
 
 #: welcome/Guide.qml:426
 msgid "Don't show this guide at startup"
@@ -298,6 +369,22 @@ msgstr "均衡器"
 #: modules/Volume.qml:58
 msgid "Equalizer: %1"
 msgstr "均衡器：%1"
+
+#: welcome/pages.js:89
+msgid "Every desktop setting, in one place."
+msgstr "桌面的每一项设置，都在一处。"
+
+#: welcome/pages.js:189
+msgid "Every setting, grouped."
+msgstr "每一项设置，分门别类。"
+
+#: welcome/pages.js:158 welcome/pages.js:159
+msgid "Everything else"
+msgstr "其他一切"
+
+#: welcome/pages.js:187
+msgid "Everything this guide skipped."
+msgstr "这份指南略过的全部内容。"
 
 #: widgets/Tuxagotchi.qml:143
 msgid "FED"
@@ -327,6 +414,14 @@ msgstr "专注 · 点击停止"
 msgid "Focus — %1 · click to stop"
 msgstr "专注 — %1 · 点击停止"
 
+#: welcome/pages.js:153
+msgid "GPU, CPU or off. Off masks the sockets, so it holds."
+msgstr "GPU、CPU 或关闭。关闭会把套接字一并屏蔽，所以是真的关掉了。"
+
+#: welcome/pages.js:170
+msgid "Game Mode"
+msgstr "游戏模式"
+
 #: StartMenu.qml:484
 msgid "Games"
 msgstr "游戏"
@@ -339,6 +434,10 @@ msgstr "图形"
 msgid "HEALTH"
 msgstr "健康"
 
+#: welcome/pages.js:169
+msgid "Headlines, fetched on the desktop's own schedule."
+msgstr "新闻标题，按桌面自己的节奏抓取。"
+
 #: modules/Battery.qml:52
 msgid "Health %1%"
 msgstr "健康 %1 %"
@@ -346,6 +445,10 @@ msgstr "健康 %1 %"
 #: modules/Updates.qml:168
 msgid "Held back"
 msgstr "已保留"
+
+#: welcome/pages.js:165
+msgid "Idle, sleep, and what the lid does."
+msgstr "空闲、睡眠，以及合盖时的动作。"
 
 #: StartMenu.qml:629 components/Mixer.qml:323
 msgid "Input"
@@ -359,13 +462,21 @@ msgstr "安装它"
 msgid "Internet"
 msgstr "互联网"
 
+#: welcome/pages.js:101 welcome/pages.js:186
+msgid "Keyboard Shortcuts"
+msgstr "键盘快捷键"
+
 #: widgets/QuickLaunch.qml:26
 msgid "LAUNCH"
 msgstr "启动"
 
-#: StartMenu.qml:640 StartMenu.qml:757
+#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "锁定屏幕"
+
+#: welcome/pages.js:175
+msgid "Locks now; the screensaver locks on its own timer."
+msgstr "立刻锁定；屏保按自己的计时器锁定。"
 
 #: StartMenu.qml:758
 msgid "Log Out"
@@ -387,6 +498,10 @@ msgstr "失误"
 msgid "MIXER"
 msgstr "混音器"
 
+#: welcome/pages.js:120 welcome/pages.js:121
+msgid "Make it yours"
+msgstr "把它变成你的"
+
 #: BarConfig.qml:62
 msgid "Media preview"
 msgstr "媒体预览"
@@ -395,7 +510,9 @@ msgstr "媒体预览"
 msgid ""
 "Memory %1 / %2 GiB\n"
 "Click for the task manager"
-msgstr "内存 %1 / %2 GiB\n点击打开任务管理器"
+msgstr ""
+"内存 %1 / %2 GiB\n"
+"点击打开任务管理器"
 
 #: StartMenu.qml:487
 msgid "Multimedia"
@@ -417,13 +534,29 @@ msgstr "网络"
 msgid "Network + Bluetooth"
 msgstr "网络 + 蓝牙"
 
+#: welcome/pages.js:162
+msgid "Network / Wi-Fi"
+msgstr "网络 / Wi-Fi"
+
 #: StartMenu.qml:542
 msgid "Network Setup"
 msgstr "网络设置"
 
+#: welcome/pages.js:148
+msgid "Neural Overlay"
+msgstr "神经浮层"
+
+#: welcome/pages.js:168
+msgid "News"
+msgstr "新闻"
+
 #: welcome/Guide.qml:487
 msgid "Next"
 msgstr "下一步"
+
+#: welcome/pages.js:134
+msgid "Night light, colour blindness filters, CRT."
+msgstr "夜灯、色盲滤镜、CRT。"
 
 #: modules/Bluetooth.qml:34
 msgid "No Bluetooth adapter"
@@ -441,7 +574,9 @@ msgstr "无匹配项"
 msgid ""
 "No reading yet\n"
 "synctl weather on"
-msgstr "尚无读数\nsynctl weather on"
+msgstr ""
+"尚无读数\n"
+"synctl weather on"
 
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
@@ -450,6 +585,12 @@ msgstr "没有正在播放的内容"
 #: StartMenu.qml:488
 msgid "Office"
 msgstr "办公"
+
+#: welcome/pages.js:122
+msgid ""
+"One theme moves the whole desktop: the compositor's panels, the bar, the "
+"widgets, GTK and Qt applications, and the cursor."
+msgstr "一套主题带动整个桌面：合成器的面板、状态栏、小部件、GTK 与 Qt 应用，还有光标。"
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -479,6 +620,10 @@ msgstr "插件"
 msgid "Power"
 msgstr "电源"
 
+#: welcome/pages.js:164
+msgid "Power Saving"
+msgstr "省电"
+
 #: StartMenu.qml:759
 msgid "Reboot"
 msgstr "重启"
@@ -490,6 +635,10 @@ msgstr "正在录制"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "正在录制 %1"
+
+#: welcome/pages.js:130
+msgid "Resolution, refresh rate, scale and monitor layout."
+msgstr "分辨率、刷新率、缩放和显示器排布。"
 
 #: modules/Recording.qml:69
 msgid "SAVING"
@@ -510,6 +659,14 @@ msgstr "系统"
 #: StartMenu.qml:489
 msgid "Science"
 msgstr "科学"
+
+#: welcome/pages.js:133
+msgid "Screen Filters"
+msgstr "屏幕滤镜"
+
+#: welcome/pages.js:135
+msgid "Screensaver"
+msgstr "屏幕保护"
 
 #: StartMenu.qml:724
 msgid "Search every source for “%1”…"
@@ -543,11 +700,32 @@ msgstr "软件管理器"
 msgid "Sound"
 msgstr "声音"
 
+#: welcome/pages.js:103
+msgid "Start menu"
+msgstr "开始菜单"
+
+#: welcome/pages.js:128
+msgid "Stills, slideshows and animated wallpapers."
+msgstr "静态图、幻灯片和动态壁纸。"
+
 #: modules/Recording.qml:118
 msgid ""
 "Stopping — finishing the file…\n"
 "wf-recorder is still writing"
-msgstr "正在停止 — 正在写完文件…\nwf-recorder 仍在写入"
+msgstr ""
+"正在停止 — 正在写完文件…\n"
+"wf-recorder 仍在写入"
+
+#: welcome/pages.js:111
+msgid ""
+"Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
+msgstr "Super+1…9 切换桌面 · Super+Tab 轮换布局 · Super+Q 关闭窗口"
+
+#: welcome/pages.js:114
+msgid ""
+"Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
+"log out"
+msgstr "Super+E 滤镜 · Super+O 把窗口移到下一个显示器 · Super+Shift+Q 注销"
 
 #: StartMenu.qml:590
 msgid "SynapseOS Updates"
@@ -577,13 +755,67 @@ msgstr "系统托盘"
 msgid "TUXAGOTCHI"
 msgstr "企鹅宠物"
 
-#: StartMenu.qml:524
+#: welcome/pages.js:104
+msgid "Tap Super on its own. Applications, settings, power."
+msgstr "单独轻按 Super 键。应用、设置、电源。"
+
+#: StartMenu.qml:524 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "任务管理器"
 
-#: StartMenu.qml:525
+#: StartMenu.qml:525 welcome/pages.js:84
 msgid "Terminal"
 msgstr "终端"
+
+#: welcome/pages.js:141
+msgid "The AI"
+msgstr "关于 AI"
+
+#: welcome/pages.js:142
+msgid "The AI is local"
+msgstr "AI 就在本机"
+
+#: welcome/pages.js:106
+msgid "The full grid of everything installed — also the dock's grid-of-dots."
+msgstr "已安装内容的完整网格——也就是程序坞上的九宫格。"
+
+#: welcome/pages.js:102
+msgid "The full palette — searchable, and the place to rebind."
+msgstr "完整的列表——可搜索，也是改键的地方。"
+
+#: welcome/pages.js:149
+msgid "The full-screen conversation view."
+msgstr "全屏的对话视图。"
+
+#: welcome/pages.js:96
+msgid "The keys"
+msgstr "按键"
+
+#: welcome/pages.js:97
+msgid "The keys worth knowing"
+msgstr "值得记住的按键"
+
+#: welcome/pages.js:160
+msgid "The rest of the desktop, and where it lives."
+msgstr "桌面的其余部分，以及它们放在哪儿。"
+
+#: welcome/pages.js:126
+msgid "Themes, accent colour, glass and corners."
+msgstr "主题、强调色、玻璃和圆角。"
+
+#: welcome/pages.js:173
+msgid "There is a cat. That is the whole feature."
+msgstr "有一只猫。这就是全部功能。"
+
+#: welcome/pages.js:182
+msgid ""
+"This guide is on Super+Escape whenever you want it back — and the shortcuts "
+"palette on Super+/ is the longer version of page two."
+msgstr "想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长版。"
+
+#: welcome/pages.js:87
+msgid "Type a command, or ask for one in plain English."
+msgstr "输入一条命令，或者用大白话问一条。"
 
 #: StartMenu.qml:1032
 msgid "Type to search…"
@@ -601,6 +833,10 @@ msgstr "更新提醒"
 msgid "Updates"
 msgstr "更新"
 
+#: welcome/pages.js:191
+msgid "Version, hardware and what is installed."
+msgstr "版本、硬件，以及装了些什么。"
+
 #: BarConfig.qml:70
 msgid "Volume"
 msgstr "音量"
@@ -613,15 +849,41 @@ msgstr "天气"
 msgid "WEIGHT"
 msgstr "体重"
 
+#: welcome/pages.js:127
+msgid "Wallpaper"
+msgstr "壁纸"
+
 #: BarConfig.qml:66
 msgid "Weather"
 msgstr "天气"
+
+#: welcome/pages.js:78
+msgid "Welcome"
+msgstr "欢迎"
+
+#: welcome/pages.js:79
+msgid "Welcome to SynapseOS"
+msgstr "欢迎使用 SynapseOS"
+
+#: welcome/pages.js:109
+msgid "What is running, and what it is costing."
+msgstr "什么在运行，占用了多少。"
+
+#: welcome/pages.js:136
+msgid "What the desktop does when you walk away."
+msgstr "你离开时桌面会做什么。"
+
+#: welcome/pages.js:151
+msgid "Which model is loaded, and how to fetch another."
+msgstr "当前加载了哪个模型，以及如何获取另一个。"
 
 #: modules/Network.qml:48
 msgid ""
 "Wi-Fi is switched off\n"
 "Middle-click to turn it back on"
-msgstr "Wi-Fi 已关闭\n中键点击可重新开启"
+msgstr ""
+"Wi-Fi 已关闭\n"
+"中键点击可重新开启"
 
 #: StartMenu.qml:627
 msgid "Windows"
@@ -632,7 +894,18 @@ msgid ""
 "Wired\n"
 "%1\n"
 "Click for network settings"
-msgstr "有线\n%1\n点击打开网络设置"
+msgstr ""
+"有线\n"
+"%1\n"
+"点击打开网络设置"
+
+#: welcome/pages.js:163
+msgid "Wireless, wired and the firewall."
+msgstr "无线、有线和防火墙。"
+
+#: welcome/pages.js:180 welcome/pages.js:181
+msgid "You're set"
+msgstr "一切就绪"
 
 #: widgets/MusicPlayer.qml:410
 msgid "a source"
@@ -801,6 +1074,22 @@ msgstr "仍在处理上一个"
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   立即重试"
+
+#: welcome/pages.js:143
+msgid ""
+"synapd runs a language model on this machine. Nothing here calls out to a "
+"service, and turning it off really does stop it."
+msgstr "synapd 在本机上运行语言模型。这里没有任何东西会去调用外部服务，关掉它是真的停下来。"
+
+#: welcome/pages.js:85
+msgid "syntty, the shipped terminal."
+msgstr "syntty，随系统附带的终端。"
+
+#: welcome/pages.js:98
+msgid ""
+"synui is driven from the keyboard first. These are the handful that get you "
+"everywhere else."
+msgstr "synui 首先是用键盘操作的。下面这几个键就能带你去其他任何地方。"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
