@@ -4,6 +4,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+// The translation singleton, in qml/ beside this file. See qml/qmldir.
+import "qml"
 
 /*
  * SYNAPSE Files — the graphical front-end for synfiles.
@@ -451,9 +453,9 @@ FloatingWindow {
     // mime type when there is not, which is still an answer.
     function tipType(row) {
         if (!row) return ""
-        if (row.missing) return "missing — the file it points at is gone"
+        if (row.missing) return I18n.tr("missing — the file it points at is gone")
         if (row.desc && row.desc !== "") return root.disp(row.desc)
-        if (row.type === "dir") return "Folder"
+        if (row.type === "dir") return I18n.tr("Folder")
         return row.mime && row.mime !== "" ? row.mime : row.type
     }
 
@@ -712,14 +714,36 @@ FloatingWindow {
         return i >= 0 ? p.substring(i + 1) : p
     }
 
+    /*
+     * The tally: "12 done, 1 skipped, 2 failed".
+     *
+     * ⛔ ASSEMBLED FROM WHOLE CLAUSES, NOT FROM WORDS. This used to build the
+     * sentence by adding " done", ", " and " skipped" onto numbers, which is
+     * unreachable by any translator: the pieces arrive one at a time with no
+     * sentence to put them in, the comma is English punctuation, and a language
+     * that puts the count after the noun — or inflects the noun by the count —
+     * has nowhere to say so. Each clause is now one msgid carrying its own
+     * number, and the separator is a msgid too, because ", " is not universal.
+     *
+     * ⚠ AND EACH CLAUSE IS A PLURAL. "1 skipped" and "5 skipped" are the same
+     * word in English and three different words in Polish.
+     */
+    function opTally() {
+        const parts = []
+        parts.push(I18n.trn("%1 done", "%1 done", root.opDone).arg(root.opDone))
+        if (root.opSkipped)
+            parts.push(I18n.trn("%1 skipped", "%1 skipped", root.opSkipped).arg(root.opSkipped))
+        if (root.opFailed)
+            parts.push(I18n.trn("%1 failed", "%1 failed", root.opFailed).arg(root.opFailed))
+        return parts.join(I18n.tr(", "))
+    }
+
     function opProgress() {
-        let s = root.opNote
-        if (root.opDone || root.opSkipped || root.opFailed) {
-            s += " — " + root.opDone + " done"
-            if (root.opSkipped) s += ", " + root.opSkipped + " skipped"
-            if (root.opFailed)  s += ", " + root.opFailed + " failed"
-        }
-        return s
+        if (root.opDone || root.opSkipped || root.opFailed)
+            // ⚠ opNote is the operation's own name, already translated where it
+            // is set. The dash is part of the sentence, so it is in the msgid.
+            return I18n.tr("%1 — %2").arg(root.opNote).arg(root.opTally())
+        return root.opNote
     }
 
     // What the panel says when nothing has been reported yet. "0 done" reads
@@ -727,10 +751,8 @@ FloatingWindow {
     // finished — it would read that way for the whole operation.
     function opCountLine() {
         if (root.opDone || root.opSkipped || root.opFailed)
-            return root.opDone + " done"
-                 + (root.opSkipped ? ", " + root.opSkipped + " skipped" : "")
-                 + (root.opFailed  ? ", " + root.opFailed  + " failed"  : "")
-        return "working…"
+            return root.opTally()
+        return I18n.tr("working…")
     }
 
     // The counters the records land in. A plain object, MUTATED — assigning to
@@ -799,18 +821,26 @@ FloatingWindow {
         if (root.opRate <= 0 || root.opUnitTotal <= 0) return ""
         const left = (root.opUnitTotal - root.opUnitDone) / root.opRate
         if (!isFinite(left) || left < 0) return ""
-        if (left < 5)   return "a moment left"
-        if (left < 90)  return Math.round(left) + "s left"
-        if (left < 3600) return Math.round(left / 60) + " min left"
-        return (left / 3600).toFixed(1) + " hours left"
+        // ⚠ THE UNIT IS INSIDE THE SENTENCE. "s left" glued onto a number is
+        // English word order and English abbreviation; German wants "noch 30 s"
+        // and Japanese "残り30秒", and neither is reachable from a suffix.
+        if (left < 5)   return I18n.tr("a moment left")
+        if (left < 90)  return I18n.trn("%1s left", "%1s left", Math.round(left))
+                                  .arg(Math.round(left))
+        if (left < 3600) return I18n.trn("%1 min left", "%1 min left", Math.round(left / 60))
+                                   .arg(Math.round(left / 60))
+        return I18n.tr("%1 hours left").arg((left / 3600).toFixed(1))
     }
 
     function opRateLine() {
         if (root.opUnitTotal <= 0) return ""
+        // ⚠ "%1 of %2" IS ONE SENTENCE. Split at " of " it cannot be reordered,
+        // and the item form has to count its own noun as well.
         let s = root.opByBytes
-                ? root.fmtSize(root.opBytes, false) + " of "
-                  + root.fmtSize(root.opTotalBytes, false)
-                : root.opUnitDone + " of " + root.opTotalFiles + " items"
+                ? I18n.tr("%1 of %2").arg(root.fmtSize(root.opBytes, false))
+                                     .arg(root.fmtSize(root.opTotalBytes, false))
+                : I18n.trn("%1 of %2 items", "%1 of %2 items", root.opTotalFiles)
+                      .arg(root.opUnitDone).arg(root.opTotalFiles)
         if (root.opRate > 0)
             s += "  ·  " + (root.opByBytes
                               ? root.fmtSize(root.opRate, false) + "/s"
@@ -905,24 +935,40 @@ FloatingWindow {
             // Say how it ended. A failure used to reach the GUI as an exit
             // code and nothing else — the pane simply reloaded, and whatever
             // had not been copied was missing without a word.
+            //
+            // ⛔ WHOLE SENTENCES, ONE PER OUTCOME. Every branch here used to
+            // grow its line by adding " — cancelled" and " after " and " done"
+            // onto the operation's name. A translator receives those as five
+            // unrelated scraps with no way to know they form one line, cannot
+            // move the dash, and cannot put the count where the language wants
+            // it. Each outcome is one msgid now, with the pieces as arguments.
             if (root.opRaw.cancelled || root.opCancelling)
-                root.opOutcome = root.opNote + " — cancelled"
-                    + (root.opDone ? " after " + root.opDone + " done" : "")
+                root.opOutcome = root.opDone
+                    ? I18n.trn("%1 — cancelled after %2 done",
+                               "%1 — cancelled after %2 done", root.opDone)
+                          .arg(root.opNote).arg(root.opDone)
+                    : I18n.tr("%1 — cancelled").arg(root.opNote)
             else if (root.opError)
+                // ⛔ opError is the BINARY's message, already on stderr in its
+                // own words. Not a msgid: it is data, and inventing a catalog
+                // entry per possible errno is not translation.
                 root.opOutcome = root.opError
             else if (root.opFailed)
                 root.opOutcome = root.opFirstError
-                    ? root.opNote + " — " + root.opFirstError
-                    : root.opNote + " — " + root.opFailed + " failed"
+                    ? I18n.tr("%1 — %2").arg(root.opNote).arg(root.opFirstError)
+                    : I18n.trn("%1 — %2 failed", "%1 — %2 failed", root.opFailed)
+                          .arg(root.opNote).arg(root.opFailed)
             else if (root.opRaw.removed >= 0)
-                root.opOutcome = root.opNote + " — " + root.opRaw.removed
-                    + (root.opRaw.removed === 1 ? " item removed" : " items removed")
+                root.opOutcome =
+                    I18n.trn("%1 — %2 item removed", "%1 — %2 items removed",
+                             root.opRaw.removed)
+                        .arg(root.opNote).arg(root.opRaw.removed)
             else if (root.opDone || root.opSkipped)
                 root.opOutcome = root.opProgress()
             else
                 // Ops that report nothing per item still have to say they are
                 // over, or the panel simply vanishes and nothing replaces it.
-                root.opOutcome = root.opNote + " — done"
+                root.opOutcome = I18n.tr("%1 — done").arg(root.opNote)
 
             root.reloadAll()
             root.refreshUndo()
@@ -950,7 +996,7 @@ FloatingWindow {
             // else is still running is indistinguishable from one that is
             // broken — which is exactly how the xdg-open bug above was
             // experienced: "Open with … doesn't respond".
-            root.statusLine = "busy — waiting for the last operation to finish"
+            root.statusLine = I18n.tr("busy — waiting for the last operation to finish")
             return
         }
         root.busy = true
@@ -992,10 +1038,14 @@ FloatingWindow {
         return rows.length === 1 ? rows[0] : null
     }
 
+    // ⚠ THIS IS A NOUN PHRASE THAT GOES INSIDE OTHER SENTENCES — "moving %1 to
+    // the trash". It is translated where it is BUILT rather than where it is
+    // used, because the one-file case substitutes a filename and the many-file
+    // case a count, and only here is it known which.
     function describeSelection() {
         const n = root.selection.length
         if (n === 1) return root.rowLabel(root.selectedRows()[0])
-        return n + " items"
+        return I18n.trn("%1 items", "%1 items", n).arg(n)
     }
 
     // One process for the whole selection rather than one per file: the C side
@@ -1005,7 +1055,7 @@ FloatingWindow {
         const paths = root.selectedPaths()
         if (paths.length === 0) return
         root.runOp(["trash"].concat(paths),
-                   "moving " + root.describeSelection() + " to the trash")
+                   I18n.tr("moving %1 to the trash").arg(root.describeSelection()))
     }
 
     function restoreFromTrash(row) {
@@ -1014,14 +1064,18 @@ FloatingWindow {
         // synfiles decodes it; re-deriving it from the display name would
         // fail for anything that got a .2 suffix.
         root.runOp(["trash", "restore", row.trashName],
-                   "restoring " + root.disp(row.name))
+                   I18n.tr("restoring %1").arg(root.disp(row.name)))
     }
 
     function copySelection(cut) {
         const rows = root.selectedRows()
         if (rows.length === 0) return
         root.clip = { op: cut ? "cut" : "copy", paths: rows.map(r => r.full) }
-        root.statusLine = (cut ? "cut " : "copied ") + root.describeSelection()
+        // ⛔ NOT (cut ? "cut " : "copied ") + thing. Two verbs sharing one
+        // object is English grammar; a language that inflects the object by the
+        // verb, or puts the verb last, cannot be built that way.
+        root.statusLine = cut ? I18n.tr("cut %1").arg(root.describeSelection())
+                              : I18n.tr("copied %1").arg(root.describeSelection())
     }
 
     // ── Paste ───────────────────────────────────────────────────────────────
@@ -1069,8 +1123,9 @@ FloatingWindow {
                     root.doPaste("error")
                 } else {
                     root.pasteAsk = true
-                    root.statusLine = rows.length + (rows.length === 1
-                        ? " item already exists here" : " items already exist here")
+                    root.statusLine = I18n.trn("%1 item already exists here",
+                                               "%1 items already exist here", rows.length)
+                                          .arg(rows.length)
                 }
             }
         }
@@ -1080,7 +1135,7 @@ FloatingWindow {
         if (!root.tab || root.tab.view !== "dir") return
         if (!root.clip.paths || root.clip.paths.length === 0) return
         if (root.busy) {
-            root.statusLine = "busy — waiting for the last operation to finish"
+            root.statusLine = I18n.tr("busy — waiting for the last operation to finish")
             return
         }
 
@@ -1094,7 +1149,7 @@ FloatingWindow {
         for (const p of root.pendingPaste.paths) args.push(root.disp(p))
         args.push(root.disp(root.pendingPaste.dest))
 
-        root.statusLine = "checking the destination…"
+        root.statusLine = I18n.tr("checking the destination…")
         collideProc.command = [root.bin].concat(args)
         collideProc.running = true
     }
@@ -1106,13 +1161,15 @@ FloatingWindow {
         if (!p) return
 
         const n = p.paths.length
-        const what = n === 1 ? root.baseOf(p.paths[0]) : n + " items"
+        const what = n === 1 ? root.baseOf(p.paths[0])
+                             : I18n.trn("%1 items", "%1 items", n).arg(n)
 
         const args = [p.op === "cut" ? "move" : "copy", "--conflict=" + policy]
         for (const q of p.paths) args.push(root.disp(q))
         args.push(root.disp(p.dest))
 
-        root.runOp(args, (p.op === "cut" ? "moving " : "copying ") + what)
+        root.runOp(args, p.op === "cut" ? I18n.tr("moving %1").arg(what)
+                                        : I18n.tr("copying %1").arg(what))
         if (p.op === "cut")
             root.clip = ({ op: "", paths: [] })
     }
@@ -1123,14 +1180,14 @@ FloatingWindow {
     function cancelOp() {
         if (!root.busy || root.opCancelling) return
         root.opCancelling = true
-        root.statusLine = "cancelling…"
+        root.statusLine = I18n.tr("cancelling…")
         opProc.signal(15)
     }
 
     function cancelPaste() {
         root.pasteAsk = false
         root.pendingPaste = null
-        root.statusLine = "paste cancelled"
+        root.statusLine = I18n.tr("paste cancelled")
     }
 
     // ── Rename ──────────────────────────────────────────────────────────────
@@ -1180,7 +1237,7 @@ FloatingWindow {
         // (nor a line in the undo log) saying so.
         if (newName === was) return
         root.runOp(["rename", root.disp(row.full), newName],
-                   "renaming to " + newName)
+                   I18n.tr("renaming to %1").arg(newName))
     }
 
     // ── Thumbnails ──────────────────────────────────────────────────────────
@@ -1490,8 +1547,50 @@ FloatingWindow {
     // "1 folder", "18 folders". Written once because both the hover panel and
     // the Properties dialog count the same things, and "1 files in 1 folders"
     // is the kind of wrong that makes a careful number look careless.
-    function fmtMany(n, noun) {
-        return root.fmtCount(n) + " " + noun + (n === 1 ? "" : "s")
+    /*
+     * ⛔ fmtMany(n, "file") IS GONE, AND THIS IS WHERE IT WAS. It returned
+     * `n + " " + noun + (n === 1 ? "" : "s")` — English plural rules written
+     * into the code, over a noun handed in as a bare word. It is the "%d
+     * window%s" trap src/i18n.h documents, one language up: the catalog can
+     * replace neither the "s" nor the space, and German, Polish and Arabic all
+     * need the noun itself to change. Its two callers pass whole counted
+     * sentences to I18n.trn() now.
+     */
+
+    /*
+     * The LABEL for a property row.
+     *
+     * ⛔ THE KEY IS NOT THE LABEL, even though the panel used to draw it
+     * directly. `key` is what the binary emits in `--rec info` and what
+     * propValue() and the size branch below MATCH ON — `k === "path"`,
+     * `k === "size"`. Translating the key would leave the panel looking right
+     * in German and quietly stop decoding paths and formatting sizes.
+     *
+     * ⚠ A CLOSED SET, SPELLED OUT, and anything unknown draws as it arrives:
+     * a key this does not know is one the binary grew without telling the
+     * panel, and showing it raw is how that gets noticed.
+     */
+    function propLabel(key) {
+        switch (key) {
+        case "path":     return I18n.tr("path")
+        case "name":     return I18n.tr("name")
+        case "type":     return I18n.tr("type")
+        case "mime":     return I18n.tr("mime")
+        case "desc":     return I18n.tr("description")
+        case "size":     return I18n.tr("size")
+        case "mode":     return I18n.tr("mode")
+        case "mtime":    return I18n.tr("modified")
+        case "atime":    return I18n.tr("accessed")
+        case "ctime":    return I18n.tr("changed")
+        case "links":    return I18n.tr("links")
+        case "owner":    return I18n.tr("owner")
+        case "group":    return I18n.tr("group")
+        case "target":   return I18n.tr("target")
+        case "selected": return I18n.tr("selected")
+        case "folders":  return I18n.tr("folders")
+        case "files":    return I18n.tr("files")
+        }
+        return key
     }
 
     function openProperties() {
@@ -1514,11 +1613,16 @@ FloatingWindow {
                 if (r.type === "dir") dirs++
             }
             root.propRows = [
-                { key: "selected", value: rows.length + " items" },
+                // ⛔ `key` STAYS MACHINE-SPELLED. propLabel() translates it for
+                // drawing; propValue() and the size branch match on it.
+                { key: "selected", value: I18n.trn("%1 items", "%1 items", rows.length)
+                                              .arg(rows.length) },
                 { key: "folders",  value: "" + dirs },
                 { key: "files",    value: "" + (rows.length - dirs) },
-                { key: "size",     value: root.fmtSize(total, false)
-                                          + (dirs > 0 ? "  (folder contents not counted)" : "") }
+                { key: "size",     value: dirs > 0
+                                          ? I18n.tr("%1  (folder contents not counted)")
+                                                .arg(root.fmtSize(total, false))
+                                          : root.fmtSize(total, false) }
             ]
         }
     }
@@ -1596,7 +1700,7 @@ FloatingWindow {
                 for (const k of root.treeChildren[pathEnc])
                     walk(k.full, k.name, depth + 1)
         }
-        walk(rootPath, "Home", 0)
+        walk(rootPath, I18n.tr("Home"), 0)
         return out
     }
 
@@ -1605,7 +1709,7 @@ FloatingWindow {
         const paths = root.selectedPaths()
         if (paths.length === 0) return
         root.runOp(["compress", "--format=" + fmt].concat(paths),
-                   "compressing " + root.describeSelection() + "…")
+                   I18n.tr("compressing %1…").arg(root.describeSelection()))
     }
 
     // ── Send to Vault ───────────────────────────────────────────────────────
@@ -1660,7 +1764,7 @@ FloatingWindow {
         // policy: refuse and name the collision rather than guessing which file
         // was meant to survive.
         root.runOp(["move"].concat(paths).concat([mount]),
-                   "moving " + root.describeSelection() + " into the vault")
+                   I18n.tr("moving %1 into the vault").arg(root.describeSelection()))
     }
 
     function openVaultApp() {
@@ -1733,7 +1837,7 @@ FloatingWindow {
         const paths = root.selectedPaths()
         if (paths.length === 0 || root.busy) return
         root.busy = true
-        root.statusLine = "destroying " + root.describeSelection() + "…"
+        root.statusLine = I18n.tr("destroying %1…").arg(root.describeSelection())
         // --yes because this sheet is the asking. syn-clean refuses to read
         // silence on a pipe as consent, so without it this would block on a
         // question with nobody to answer it.
@@ -1886,7 +1990,7 @@ FloatingWindow {
     function dropUrls(destEnc, urls) {
         const paths = root.urlsToPaths(urls)
         if (paths.length === 0) {
-            root.statusLine = "only local files can be dropped here"
+            root.statusLine = I18n.tr("only local files can be dropped here")
             return
         }
         const dest = root.disp(destEnc)
@@ -1895,8 +1999,8 @@ FloatingWindow {
         const useful = paths.filter(p => p.substring(0, p.lastIndexOf("/")) !== dest)
         if (useful.length === 0) return
         root.runOp(["copy", "--conflict=rename"].concat(useful).concat([dest]),
-                   "copying " + useful.length
-                   + (useful.length === 1 ? " item" : " items") + " here…")
+                   I18n.trn("copying %1 item here…", "copying %1 items here…",
+                            useful.length).arg(useful.length))
     }
 
     // A drop onto the folder something already lives in is a no-op, and a drop
@@ -1921,8 +2025,13 @@ FloatingWindow {
         root.endDrag()
         root.runOp([copy ? "copy" : "move", "--conflict=rename"]
                    .concat(paths).concat([root.disp(destEnc)]),
-                   (copy ? "copying " : "moving ") + paths.length
-                   + (paths.length === 1 ? " item" : " items") + "…")
+                   // ⛔ THE COUNT AND ITS NOUN ARE ONE msgid. `n + (n===1 ?
+                   // " item" : " items")` is English plural rules written into
+                   // the code — the trap src/i18n.h documents for C, in QML.
+                   copy ? I18n.trn("copying %1 item…", "copying %1 items…",
+                                   paths.length).arg(paths.length)
+                        : I18n.trn("moving %1 item…", "moving %1 items…",
+                                   paths.length).arg(paths.length))
     }
 
     // ── Remembered settings ─────────────────────────────────────────────────
@@ -2171,7 +2280,7 @@ FloatingWindow {
 
     function doUndo() {
         if (root.undoLabel === "") return
-        root.runOp(["undo"], "undoing " + root.undoLabel + "…")
+        root.runOp(["undo"], I18n.tr("undoing %1…").arg(root.undoLabel))
     }
 
     // ── Borrowed menu entries ───────────────────────────────────────────────
@@ -2206,7 +2315,7 @@ FloatingWindow {
         const args = ["action", desktop]
         if (actionId) args.push(actionId)
         args.push("--")
-        root.runOp(args.concat(paths), "running…")
+        root.runOp(args.concat(paths), I18n.tr("running…"))
     }
 
     // Detached for the same reason openFile is: the terminal runs until it is
@@ -2221,7 +2330,7 @@ FloatingWindow {
             '  command -v "$t" >/dev/null 2>&1 && exec "$t"; done; ' +
             'echo "no terminal emulator found" >&2; exit 127',
             "sh", dir])
-        root.statusLine = "opened a terminal in " + dir
+        root.statusLine = I18n.tr("opened a terminal in %1").arg(dir)
     }
 
     function createEmptyFile(name) {
@@ -2296,7 +2405,7 @@ FloatingWindow {
         // field happens not to need decoding" is a fact that stops being true
         // the moment somebody changes what the field holds.
         Quickshell.execDetached(["syn-disks", "gui", root.disp(vol.device)])
-        root.statusLine = "opened " + root.disp(vol.device) + " in Disks"
+        root.statusLine = I18n.tr("opened %1 in Disks").arg(root.disp(vol.device))
     }
 
     // ── Formatting a stick ──────────────────────────────────────────────────
@@ -2316,7 +2425,7 @@ FloatingWindow {
     function formatVolume(vol) {
         if (!vol || !vol.device) return
         Quickshell.execDetached(["syn-disks", "gui", "--format", root.disp(vol.device)])
-        root.statusLine = "format " + root.disp(vol.device) + " — asking in Disks"
+        root.statusLine = I18n.tr("format %1 — asking in Disks").arg(root.disp(vol.device))
     }
 
     function openDiskMenu(vol, gx, gy) {
@@ -2331,7 +2440,7 @@ FloatingWindow {
         // says what was attempted.
         clipProc.command = ["wl-copy", "--", text]
         clipProc.running = true
-        root.statusLine = "copied: " + text
+        root.statusLine = I18n.tr("copied: %1").arg(text)
     }
     Process { id: clipProc }
 
@@ -2346,11 +2455,11 @@ FloatingWindow {
     function mountVolume(vol, thenOpen) {
         if (!vol.device) return
         root.pendingOpenDev = thenOpen ? vol.device : ""
-        root.runOp(["mount", vol.device], "mounting " + vol.title + "…")
+        root.runOp(["mount", vol.device], I18n.tr("mounting %1…").arg(vol.title))
     }
     function unmountVolume(vol) {
         if (!vol.device) return
-        root.runOp(["unmount", vol.device], "unmounting " + vol.title + "…")
+        root.runOp(["unmount", vol.device], I18n.tr("unmounting %1…").arg(vol.title))
     }
 
     // ── Emptying the trash ──────────────────────────────────────────────────
@@ -2360,7 +2469,7 @@ FloatingWindow {
 
     function emptyTrash() {
         root.confirmEmpty = false
-        root.runOp(["trash", "empty", "--yes"], "emptying the trash…")
+        root.runOp(["trash", "empty", "--yes"], I18n.tr("emptying the trash…"))
     }
 
     // ── New folder ──────────────────────────────────────────────────────────
@@ -2370,7 +2479,7 @@ FloatingWindow {
         root.creating = false
         if (!name) return
         root.runOp(["mkdir", root.disp(root.tab.path) + "/" + name],
-                   "creating " + name)
+                   I18n.tr("creating %1").arg(name))
     }
 
     Process {
@@ -2414,7 +2523,7 @@ FloatingWindow {
     function scanNetwork() {
         if (root.netScanning) return
         root.netScanning = true
-        root.statusLine = "looking for network shares…"
+        root.statusLine = I18n.tr("looking for network shares…")
         netProc.running = true
     }
 
@@ -2425,7 +2534,8 @@ FloatingWindow {
         if (!row.uri) return
         if (row.mounted === "1" && row.path) { root.navigate(row.path, "dir"); return }
         root.netPendingUri = row.uri
-        root.runOp(["netmount", root.disp(row.uri)], "mounting " + row.title + "…")
+        root.runOp(["netmount", root.disp(row.uri)],
+                   I18n.tr("mounting %1…").arg(row.title))
     }
 
     Process {
@@ -2437,8 +2547,11 @@ FloatingWindow {
                 root.netScanning = false
                 root.netScanned = true
                 root.statusLine = root.netRows.length > 0
-                    ? root.netRows.length + " network place(s) found"
-                    : "nothing announced itself on this network"
+                    // ⛔ "place(s)" IS NOT A PLURAL, it is a shrug. Every
+                    // language this ships has a real rule; give it one.
+                    ? I18n.trn("%1 network place found", "%1 network places found",
+                               root.netRows.length).arg(root.netRows.length)
+                    : I18n.tr("nothing announced itself on this network")
 
                 // A mount that was waiting on this scan to learn where it
                 // landed. Cleared unconditionally — a mount that failed must
@@ -2504,7 +2617,7 @@ FloatingWindow {
     // reason Open in Disks was written this way from the start.
     function openFile(pathEnc) {
         Quickshell.execDetached(["xdg-open", root.disp(pathEnc)])
-        root.statusLine = "opening " + root.disp(root.baseEnc(pathEnc))
+        root.statusLine = I18n.tr("opening %1").arg(root.disp(root.baseEnc(pathEnc)))
     }
 
     Process {
@@ -2573,19 +2686,19 @@ FloatingWindow {
                 // Back to a folder this tab was never in.
                 ToolButton {
                     glyph: "←"
-                    hint: "Back"
+                    hint: I18n.tr("Back")
                     dim: !root.canGoBack
                     onActivated: root.goBack()
                 }
                 ToolButton {
                     glyph: "→"
-                    hint: "Forward"
+                    hint: I18n.tr("Forward")
                     dim: !root.canGoForward
                     onActivated: root.goForward()
                 }
                 ToolButton {
                     glyph: "↑"
-                    hint: "Up one folder"
+                    hint: I18n.tr("Up one folder")
                     dim: !(root.tab && root.tab.view === "dir")
                     onActivated: {
                         if (root.tab && root.tab.view === "dir")
@@ -2604,8 +2717,8 @@ FloatingWindow {
                     // saying what the glyph means — which is why the hint is
                     // filled in here rather than left empty as it was when the
                     // label was always present.
-                    label: toolBar.width >= 520 ? "View" : ""
-                    hint: toolBar.width >= 520 ? "" : "View options"
+                    label: toolBar.width >= 520 ? I18n.tr("View") : ""
+                    hint: toolBar.width >= 520 ? "" : I18n.tr("View options")
                     active: root.viewMenuOpen
                     onActivated: root.viewMenuOpen = !root.viewMenuOpen
                 }
@@ -2658,6 +2771,7 @@ FloatingWindow {
                         model: {
                             if (!root.tab || root.tab.view !== "dir") return []
                             const parts = root.tab.path.split("/").filter(x => x !== "")
+                            // ⛔ THE ROOT DIRECTORY, which is "/" in every language.
                             const out = [{ label: "/", path: "/" }]
                             let acc = ""
                             for (const seg of parts) {
@@ -2670,6 +2784,9 @@ FloatingWindow {
                             id: crumb
                             required property var modelData
                             Text {
+                                // ⛔ A DRAWN SEPARATOR, not a word — the sweep that marked this file caught
+                                // it and it is unmarked again. There is nothing for a
+                                // translator to do with "›" but break it.
                                 text: " › "
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
@@ -2698,9 +2815,11 @@ FloatingWindow {
                 Text {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                     visible: !root.editingPath && root.tab && root.tab.view !== "dir"
-                    text: root.tab ? (root.tab.view === "recent" ? "Recently Modified"
-                                    : root.tab.view === "trash"  ? "Trash"
-                                    : "About") : ""
+                    // ⛔ `view` IS THE STATE NAME, matched here and written to
+                    // the settings file; only the answers are words.
+                    text: root.tab ? (root.tab.view === "recent" ? I18n.tr("Recently Modified")
+                                    : root.tab.view === "trash"  ? I18n.tr("Trash")
+                                    : I18n.tr("About")) : ""
                     color: root.cText
                     font { family: root.uiFont; pixelSize: root.ui(12) }
                 }
@@ -2763,6 +2882,7 @@ FloatingWindow {
                     // when the bar is tight: navigation and the address are
                     // what a file manager cannot do without, and Ctrl+Z still
                     // undoes with no chip on screen.
+                    // ⛔ THE UNDO ARROW IS A GLYPH; undoLabel is the sentence beside it.
                     label: "↶ " + root.undoLabel
                     maxWidth: Math.max(90, toolBar.width * 0.33)
                     on: false
@@ -2775,14 +2895,14 @@ FloatingWindow {
                     // has to say WHICH pane is which, and Qt cannot re-tint a
                     // theme icon in a running process (see FolderIcon).
                     splitIcon: true
-                    hint: root.split ? "Close split view" : "Split view (F3)"
+                    hint: root.split ? I18n.tr("Close split view") : I18n.tr("Split view (F3)")
                     active: root.split
                     onActivated: root.toggleSplit()
                 }
-                ToolButton { glyph: "⌕"; hint: "Search"; onActivated: root.beginSearch() }
+                ToolButton { glyph: "⌕"; hint: I18n.tr("Search"); onActivated: root.beginSearch() }
                 ToolButton {
                     glyph: "☰"
-                    hint: "Menu"
+                    hint: I18n.tr("Menu")
                     active: root.menuOpen
                     onActivated: root.menuOpen = !root.menuOpen
                 }
@@ -2837,8 +2957,8 @@ FloatingWindow {
                     // in the footer below, because it is read once and these
                     // are used constantly.
                     Repeater {
-                        model: [{ label: "Recent",  icon: "document-open-recent", view: "recent" },
-                                { label: "Trash",   icon: "user-trash",           view: "trash" }]
+                        model: [{ label: I18n.tr("Recent"),  icon: "document-open-recent", view: "recent" },
+                                { label: I18n.tr("Trash"),   icon: "user-trash",           view: "trash" }]
                         delegate: SideRow {
                             id: viewRow
                             required property var modelData
@@ -2857,7 +2977,7 @@ FloatingWindow {
                     // point — somebody looking for their private files looks in
                     // the file manager, not in an applications menu.
                     SideRow {
-                        label: "Vault"
+                        label: I18n.tr("Vault")
                         iconName: "syn-vault"
                         active: false
                         onActivated: root.openVault()
@@ -2865,7 +2985,7 @@ FloatingWindow {
 
                     Item { width: 1; height: 10 }
                     SideHeading {
-                        text: "Folders"
+                        text: I18n.tr("Folders")
                         visible: root.showTree
                     }
 
@@ -2940,7 +3060,7 @@ FloatingWindow {
                     }
 
                     Item { width: 1; height: 10 }
-                    SideHeading { text: "Places" }
+                    SideHeading { text: I18n.tr("Places") }
 
                     Repeater {
                         model: root.places
@@ -2962,7 +3082,7 @@ FloatingWindow {
                     // ejected, the other never is.
                     Item { width: 1; height: 10 }
                     SideHeading {
-                        text: "Devices"
+                        text: I18n.tr("Devices")
                         visible: root.fixedVolumes.length > 0
                     }
 
@@ -3003,7 +3123,7 @@ FloatingWindow {
 
                     Item { width: 1; height: 10 }
                     SideHeading {
-                        text: "Removable Devices"
+                        text: I18n.tr("Removable Devices")
                         visible: root.removableVolumes.length > 0
                     }
 
@@ -3041,7 +3161,7 @@ FloatingWindow {
                     // a share you have not mounted yet: the heading was hidden
                     // exactly when somebody was looking for it, and the only way
                     // to reach a NAS was to know its smb:// URI and type it.
-                    SideHeading { text: "Network" }
+                    SideHeading { text: I18n.tr("Network") }
 
                     Repeater {
                         model: root.networkVolumes
@@ -3070,16 +3190,16 @@ FloatingWindow {
                             iconName: netFound.modelData.icon || "folder-network"
                             dim: true
                             trailing: "\u25b8"
-                            trailingHint: "mount " + root.disp(netFound.modelData.uri)
+                            trailingHint: I18n.tr("mount %1").arg(root.disp(netFound.modelData.uri))
                             onActivated: root.mountNetwork(netFound.modelData)
                             onTrailingClicked: root.mountNetwork(netFound.modelData)
                         }
                     }
 
                     SideRow {
-                        label: root.netScanning ? "Scanning\u2026"
-                             : root.netScanned  ? "Scan again"
-                                                : "Find network shares"
+                        label: root.netScanning ? I18n.tr("Scanning\u2026")
+                             : root.netScanned  ? I18n.tr("Scan again")
+                                                : I18n.tr("Find network shares")
                         iconName: "network-workgroup"
                         dim: !root.netScanning
                         onActivated: root.scanNetwork()
@@ -3213,29 +3333,34 @@ FloatingWindow {
 
                         Repeater {
                             model: [
-                                { label: "New Tab",              act: "newtab",   on: true },
-                                { label: "New Folder…",          act: "newdir",   on: true },
-                                { label: "New Empty File…",      act: "newfile",  on: true },
+                                { label: I18n.tr("New Tab"),              act: "newtab",   on: true },
+                                { label: I18n.tr("New Folder…"),          act: "newdir",   on: true },
+                                { label: I18n.tr("New Empty File…"),      act: "newfile",  on: true },
+                                // ⛔ A MENU SEPARATOR RULE, drawn as a dash. Not a word.
                                 { label: "-",                    act: "",         on: true },
-                                { label: root.showTree ? "Hide Folder Tree" : "Show Folder Tree",
+                                { label: root.showTree ? I18n.tr("Hide Folder Tree") : I18n.tr("Show Folder Tree"),
                                   act: "tree",    on: true },
-                                { label: root.thumbs ? "Hide Previews" : "Show Previews",
+                                { label: root.thumbs ? I18n.tr("Hide Previews") : I18n.tr("Show Previews"),
                                   act: "thumbs",  on: true },
-                                { label: root.split ? "Close Split View" : "Split View",
+                                { label: root.split ? I18n.tr("Close Split View") : I18n.tr("Split View"),
                                   act: "split",   on: true },
-                                { label: root.showSidebar ? "Hide Sidebar" : "Show Sidebar",
+                                { label: root.showSidebar ? I18n.tr("Hide Sidebar") : I18n.tr("Show Sidebar"),
                                   act: "sidebar", on: true },
+                                // ⛔ A MENU SEPARATOR RULE, drawn as a dash. Not a word.
                                 { label: "-",                    act: "",         on: true },
-                                { label: "Show Hidden Files",    act: "hidden",   on: true },
-                                { label: "Select All",           act: "selectall",on: true },
+                                { label: I18n.tr("Show Hidden Files"),    act: "hidden",   on: true },
+                                { label: I18n.tr("Select All"),           act: "selectall",on: true },
+                                // ⛔ A MENU SEPARATOR RULE, drawn as a dash. Not a word.
                                 { label: "-",                    act: "",         on: true },
-                                { label: "Search…",              act: "search",   on: true },
-                                { label: "Open Terminal Here",   act: "term",     on: true },
+                                { label: I18n.tr("Search…"),              act: "search",   on: true },
+                                { label: I18n.tr("Open Terminal Here"),   act: "term",     on: true },
+                                // ⛔ A MENU SEPARATOR RULE, drawn as a dash. Not a word.
                                 { label: "-",                    act: "",         on: true },
-                                { label: "Open Trash",           act: "trash",    on: true },
-                                { label: "Recently Modified",    act: "recent",   on: true },
+                                { label: I18n.tr("Open Trash"),           act: "trash",    on: true },
+                                { label: I18n.tr("Recently Modified"),    act: "recent",   on: true },
+                                // ⛔ A MENU SEPARATOR RULE, drawn as a dash. Not a word.
                                 { label: "-",                    act: "",         on: true },
-                                { label: "About SYNAPSE Files",  act: "about",    on: true }
+                                { label: I18n.tr("About SYNAPSE Files"),  act: "about",    on: true }
                             ]
                             delegate: Item {
                                 id: menuItem
@@ -3366,10 +3491,10 @@ FloatingWindow {
                 // the window looked simply inert. The status line says what
                 // happened now, so the next failure is visible where the
                 // failure is.
-                Drag.onDragStarted: root.statusLine = "dragging " + root.dragLabel + "…"
+                Drag.onDragStarted: root.statusLine = I18n.tr("dragging %1…").arg(root.dragLabel)
                 Drag.onDragFinished: (dropAction) => {
                     root.statusLine = dropAction === Qt.IgnoreAction
-                                      ? "nothing accepted that drop"
+                                      ? I18n.tr("nothing accepted that drop")
                                       : ""
                 }
             }
@@ -3406,23 +3531,23 @@ FloatingWindow {
                             const mounted = v.mounted === "1"
                             const isNet = v.kind === "network"
                             const items = [
-                                { label: "Open", act: "open", on: mounted },
-                                { label: "Open in New Tab", act: "tab", on: mounted }
+                                { label: I18n.tr("Open"), act: "open", on: mounted },
+                                { label: I18n.tr("Open in New Tab"), act: "tab", on: mounted }
                             ]
                             if (!isNet) {
                                 items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Mount", act: "mount",
+                                items.push({ label: I18n.tr("Mount"), act: "mount",
                                              on: !mounted && v.device !== "" })
                                 // Ejecting an automount would fight systemd,
                                 // which remounts it on the next access.
-                                items.push({ label: v.kind === "removable" ? "Eject" : "Unmount",
+                                items.push({ label: v.kind === "removable" ? I18n.tr("Eject") : I18n.tr("Unmount"),
                                              act: "unmount",
                                              on: mounted && v.device !== ""
                                                  && v.fstype !== "autofs" })
                             }
                             items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Pin to Places", act: "pin", on: mounted })
-                            items.push({ label: "Copy Path", act: "copypath", on: mounted })
+                            items.push({ label: I18n.tr("Pin to Places"), act: "pin", on: mounted })
+                            items.push({ label: I18n.tr("Copy Path"), act: "copypath", on: mounted })
 
                             // The disk utility, when it is installed and when
                             // there is a real block device to point it at.
@@ -3431,7 +3556,7 @@ FloatingWindow {
                             // both would open a window on nothing.
                             if (root.haveDisks && !isNet && v.device !== "") {
                                 items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Open in Disks", act: "disks",
+                                items.push({ label: I18n.tr("Open in Disks"), act: "disks",
                                              on: true })
                                 // Format is offered for REMOVABLE media only.
                                 // syn-disks refuses anything sharing a disk
@@ -3451,7 +3576,7 @@ FloatingWindow {
                                 // hide the way forward behind a menu entry
                                 // that looks broken.
                                 if (v.kind === "removable" && root.haveFormat)
-                                    items.push({ label: "Format…", act: "format",
+                                    items.push({ label: I18n.tr("Format…"), act: "format",
                                                  on: true })
                             }
                             return items
@@ -3525,7 +3650,7 @@ FloatingWindow {
                 Text {
                     id: propTitle
                     anchors { top: parent.top; left: parent.left; margins: 16 }
-                    text: "Properties"
+                    text: I18n.tr("Properties")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(14); bold: true  }
                 }
@@ -3568,7 +3693,8 @@ FloatingWindow {
 
                                 Text {
                                     width: 96
-                                    text: propRow.modelData.key
+                                    // ⛔ THE LABEL, NOT THE KEY — see propLabel().
+                                    text: root.propLabel(propRow.modelData.key)
                                     color: root.cDim
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
@@ -3590,10 +3716,13 @@ FloatingWindow {
                                             // an ISO. Say which it is; the
                                             // contents row below is the other.
                                             const t = root.propValue("type")
-                                            return root.fmtSize(parseInt(v || "0"), false)
-                                                 + "  (" + v + " bytes"
-                                                 + (t === "dir" ? ", the folder entry itself" : "")
-                                                 + ")"
+                                            // ⚠ Two whole sentences rather than
+                                            // one with a clause spliced in.
+                                            return t === "dir"
+                                                ? I18n.tr("%1  (%2 bytes, the folder entry itself)")
+                                                      .arg(root.fmtSize(parseInt(v || "0"), false)).arg(v)
+                                                : I18n.tr("%1  (%2 bytes)")
+                                                      .arg(root.fmtSize(parseInt(v || "0"), false)).arg(v)
                                         }
                                         if (k === "mtime" || k === "atime" || k === "ctime")
                                             return root.fmtTime(parseInt(v || "0"))
@@ -3625,14 +3754,14 @@ FloatingWindow {
 
                             Text {
                                 width: 96
-                                text: "contents"
+                                text: I18n.tr("contents")
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
                             Text {
                                 width: propCol.width - 106
                                 text: {
-                                    if (root.duTotal === null) return "calculating…"
+                                    if (root.duTotal === null) return I18n.tr("calculating…")
                                     const t = root.duTotal
                                     // The running total is shown as it climbs,
                                     // with a trailing … so a number that is
@@ -3646,10 +3775,13 @@ FloatingWindow {
                                     // apparent size answered the wrong
                                     // question by a factor of six on a
                                     // source tree.
-                                    return root.fmtSize(t.disk, false) + " on disk"
-                                         + "  (" + root.fmtSize(t.bytes, false) + " in "
-                                         + root.fmtMany(t.files, "file") + ", "
-                                         + root.fmtMany(t.dirs, "folder") + ")"
+                                    return I18n.tr("%1 on disk  (%2 in %3, %4)")
+                                             .arg(root.fmtSize(t.disk, false))
+                                             .arg(root.fmtSize(t.bytes, false))
+                                             .arg(I18n.trn("%1 file", "%1 files", t.files)
+                                                      .arg(root.fmtCount(t.files)))
+                                             .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
+                                                      .arg(root.fmtCount(t.dirs)))
                                          + (t.done ? "" : " …")
                                 }
                                 color: root.cText
@@ -3703,14 +3835,14 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
-                        text: "Empty the trash?"
+                        text: I18n.tr("Empty the trash?")
                         color: root.cWarn
                         font { family: root.uiFont; pixelSize: root.ui(14); bold: true  }
                     }
                     Text {
                         width: parent.width - 4
-                        text: "Everything in the trash will be removed permanently. "
-                            + "This cannot be undone."
+                        text: I18n.tr("Everything in the trash will be removed "
+                                      + "permanently. This cannot be undone.")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                         wrapMode: Text.WordWrap
@@ -3718,12 +3850,12 @@ FloatingWindow {
                     Row {
                         spacing: 8
                         ToggleChip {
-                            label: "Cancel"
+                            label: I18n.tr("Cancel")
                             on: false
                             onToggled: root.confirmEmpty = false
                         }
                         ToggleChip {
-                            label: "Empty permanently"
+                            label: I18n.tr("Empty permanently")
                             on: true
                             onToggled: root.emptyTrash()
                         }
@@ -3757,14 +3889,17 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
-                        text: "Destroy " + root.describeSelection() + "?"
+                        text: I18n.tr("Destroy %1?").arg(root.describeSelection())
                         color: root.cBad
                         font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                     }
                     Text {
                         width: parent.width - 4
-                        text: "Overwritten and deleted. It does not go to the Trash "
-                            + "and there is no undo."
+                        // ⚠ ONE msgid. It was two source lines only because it is
+                        // long; a translator receiving half a sentence cannot
+                        // place the other half.
+                        text: I18n.tr("Overwritten and deleted. It does not go to the Trash "
+                                      + "and there is no undo.")
                         color: root.cText
                         wrapMode: Text.WordWrap
                         font { family: root.uiFont; pixelSize: root.ui(12) }
@@ -3772,12 +3907,29 @@ FloatingWindow {
                     Text {
                         visible: root.shredCow
                         width: parent.width - 4
-                        text: "⚠ This is " + root.shredFsType + ", which writes changes to new "
-                            + "blocks instead of over the old ones"
-                            + (root.shredSnaps ? ", and snapshots keep whole copies" : "")
-                            + ". The file will be gone, but its contents may still be "
-                            + "recoverable from the disk. Full-disk encryption is what "
-                            + "actually prevents that."
+                        /*
+                         * ⛔ TWO WHOLE PARAGRAPHS, PICKED BETWEEN — not one
+                         * sentence assembled around an optional clause. The
+                         * snapshot clause used to be spliced into the middle
+                         * with a `+`, which leaves a translator holding four
+                         * fragments, a comma that belongs to English, and no
+                         * way to move the inserted clause to where their
+                         * language puts it. Repeating the surrounding text in
+                         * two msgids costs a translator one more sentence and
+                         * buys them a sentence they can actually write.
+                         */
+                        text: root.shredSnaps
+                            ? I18n.tr("⚠ This is %1, which writes changes to new blocks "
+                                      + "instead of over the old ones, and snapshots keep "
+                                      + "whole copies. The file will be gone, but its "
+                                      + "contents may still be recoverable from the disk. "
+                                      + "Full-disk encryption is what actually prevents "
+                                      + "that.").arg(root.shredFsType)
+                            : I18n.tr("⚠ This is %1, which writes changes to new blocks "
+                                      + "instead of over the old ones. The file will be "
+                                      + "gone, but its contents may still be recoverable "
+                                      + "from the disk. Full-disk encryption is what "
+                                      + "actually prevents that.").arg(root.shredFsType)
                         color: root.cWarn
                         wrapMode: Text.WordWrap
                         font { family: root.uiFont; pixelSize: root.ui(11) }
@@ -3785,12 +3937,12 @@ FloatingWindow {
                     Row {
                         spacing: 8
                         ToggleChip {
-                            label: "Cancel"
+                            label: I18n.tr("Cancel")
                             on: false
                             onToggled: root.confirmShred = false
                         }
                         ToggleChip {
-                            label: "Destroy permanently"
+                            label: I18n.tr("Destroy permanently")
                             on: true
                             onToggled: root.shredSelection()
                         }
@@ -3821,9 +3973,17 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
+                        // ⚠ THE QUOTE MARKS ARE IN THE msgid. “ ” are English
+                        // typography; German wants „ “, French « », Japanese
+                        // 「」 — and none of that is reachable if the code
+                        // glues the name between two literals.
                         text: root.pasteConflicts.length === 1
-                                ? "“" + root.pasteConflicts[0].name + "” already exists here"
-                                : root.pasteConflicts.length + " of these already exist here"
+                                ? I18n.tr("“%1” already exists here")
+                                      .arg(root.pasteConflicts[0].name)
+                                : I18n.trn("%1 of these already exists here",
+                                           "%1 of these already exist here",
+                                           root.pasteConflicts.length)
+                                      .arg(root.pasteConflicts.length)
                         color: root.cWarn
                         width: parent.width - 4
                         elide: Text.ElideMiddle
@@ -3840,7 +4000,10 @@ FloatingWindow {
                                   .map(c => "• " + c.name + (c.kind === "dir" ? "/" : ""))
                                   .join("\n")
                             + (root.pasteConflicts.length > 6
-                                 ? "\n• …and " + (root.pasteConflicts.length - 6) + " more" : "")
+                                 ? "\n" + I18n.trn("• …and %1 more", "• …and %1 more",
+                                                   root.pasteConflicts.length - 6)
+                                               .arg(root.pasteConflicts.length - 6)
+                                 : "")
                         color: root.cText
                         wrapMode: Text.WordWrap
                         font { family: root.uiFont; pixelSize: root.ui(11) }
@@ -3849,11 +4012,12 @@ FloatingWindow {
                     Text {
                         width: parent.width - 4
                         text: root.pasteHasSame
-                                ? "This is the folder it came from, so replacing would "
-                                + "delete the original. Keep both, or cancel."
-                                : "Overwriting replaces files; two folders of the same "
-                                + "name are merged, and files inside them collide one "
-                                + "by one."
+                                ? I18n.tr("This is the folder it came from, so replacing "
+                                          + "would delete the original. Keep both, or "
+                                          + "cancel.")
+                                : I18n.tr("Overwriting replaces files; two folders of the "
+                                          + "same name are merged, and files inside them "
+                                          + "collide one by one.")
                         color: root.cText
                         wrapMode: Text.WordWrap
                         font { family: root.uiFont; pixelSize: root.ui(12) }
@@ -3862,17 +4026,17 @@ FloatingWindow {
                     Row {
                         spacing: 8
                         ToggleChip {
-                            label: "Cancel"
+                            label: I18n.tr("Cancel")
                             on: false
                             onToggled: root.cancelPaste()
                         }
                         ToggleChip {
-                            label: "Skip those"
+                            label: I18n.tr("Skip those")
                             on: false
                             onToggled: root.doPaste("skip")
                         }
                         ToggleChip {
-                            label: "Keep both"
+                            label: I18n.tr("Keep both")
                             on: true
                             onToggled: root.doPaste("rename")
                         }
@@ -3882,7 +4046,7 @@ FloatingWindow {
                         // outright — this just declines to ask for something
                         // that can only be answered with an error.
                         ToggleChip {
-                            label: "Overwrite"
+                            label: I18n.tr("Overwrite")
                             on: false
                             visible: !root.pasteHasSame
                             onToggled: root.doPaste("overwrite")
@@ -3957,8 +4121,8 @@ FloatingWindow {
                         // the two answer different questions and only one of
                         // them fits in the bar.
                         visible: root.opByBytes
-                        text: root.opCountLine() + " of " + root.opTotalFiles
-                            + (root.opTotalFiles === 1 ? " item" : " items")
+                        text: I18n.trn("%1 of %2 item", "%1 of %2 items", root.opTotalFiles)
+                                  .arg(root.opCountLine()).arg(root.opTotalFiles)
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -3978,7 +4142,7 @@ FloatingWindow {
                     Row {
                         spacing: 8
                         ToggleChip {
-                            label: root.opCancelling ? "cancelling…" : "Cancel"
+                            label: root.opCancelling ? I18n.tr("cancelling…") : I18n.tr("Cancel")
                             on: false
                             onToggled: root.cancelOp()
                         }
@@ -4009,7 +4173,7 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
-                        text: "New folder"
+                        text: I18n.tr("New folder")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(13); bold: true  }
                     }
@@ -4031,7 +4195,7 @@ FloatingWindow {
                         }
                     }
                     Text {
-                        text: "Enter to create, Escape to cancel"
+                        text: I18n.tr("Enter to create, Escape to cancel")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
@@ -4056,7 +4220,7 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
-                        text: "New empty file"
+                        text: I18n.tr("New empty file")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(13); bold: true  }
                     }
@@ -4078,7 +4242,7 @@ FloatingWindow {
                         }
                     }
                     Text {
-                        text: "Enter to create, Escape to cancel"
+                        text: I18n.tr("Enter to create, Escape to cancel")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
@@ -4111,20 +4275,26 @@ FloatingWindow {
                         // followed it, every time. It survives here until
                         // something the person does replaces it.
                         if (root.opOutcome) return root.opOutcome
-                        if (root.loading) return "reading…"
+                        if (root.loading) return I18n.tr("reading…")
                         if (root.statusLine) return root.statusLine
                         const n = root.shownRows.length
                         const s = root.selection.length
                         // One status bar under both panes, so it has to say
                         // WHICH pane it is counting — otherwise a split window
                         // has one number and two possible meanings.
-                        const side = root.split
-                                     ? (root.active === 0 ? "Left  ·  " : "Right  ·  ") : ""
-                        const base = side + n + (n === 1 ? " item" : " items")
+                        // ⛔ THE SIDE MARKER IS PART OF THE SENTENCE. Gluing
+                        // "Left  ·  " onto a count is English word order, and a
+                        // language that puts the qualifier last cannot say so.
+                        const items = I18n.trn("%1 item", "%1 items", n).arg(n)
+                        const base = !root.split ? items
+                                   : root.active === 0
+                                     ? I18n.tr("Left  ·  %1").arg(items)
+                                     : I18n.tr("Right  ·  %1").arg(items)
                         // How much is selected is the thing you check right
                         // before pressing Delete, so it goes where you are
                         // already looking rather than only in a menu label.
-                        return s > 0 ? base + "  ·  " + s + " selected" : base
+                        return s > 0 ? I18n.tr("%1  ·  %2 selected").arg(base).arg(s)
+                                     : base
                     }
                     color: (root.opOutcome && root.opFailed) ? root.cWarn
                          : root.opOutcome ? root.cAccent
@@ -4182,25 +4352,25 @@ FloatingWindow {
 
                 Repeater {
                     model: [
-                        { label: "Icons",            act: "view:icons",
+                        { label: I18n.tr("Icons"),            act: "view:icons",
                           tick: root.effectiveView === "icons" },
-                        { label: "Compact",          act: "view:compact",
+                        { label: I18n.tr("Compact"),          act: "view:compact",
                           tick: root.effectiveView === "compact" },
-                        { label: "Details",          act: "view:details",
+                        { label: I18n.tr("Details"),          act: "view:details",
                           tick: root.effectiveView === "details" },
                         { label: "-",                act: "",           tick: false },
-                        { label: "Sort by Name",     act: "sort:name",  tick: root.tab && root.tab.sort === "name" },
-                        { label: "Sort by Size",     act: "sort:size",  tick: root.tab && root.tab.sort === "size" },
-                        { label: "Sort by Modified", act: "sort:mtime", tick: root.tab && root.tab.sort === "mtime" },
-                        { label: "Sort by Type",     act: "sort:type",  tick: root.tab && root.tab.sort === "type" },
+                        { label: I18n.tr("Sort by Name"),     act: "sort:name",  tick: root.tab && root.tab.sort === "name" },
+                        { label: I18n.tr("Sort by Size"),     act: "sort:size",  tick: root.tab && root.tab.sort === "size" },
+                        { label: I18n.tr("Sort by Modified"), act: "sort:mtime", tick: root.tab && root.tab.sort === "mtime" },
+                        { label: I18n.tr("Sort by Type"),     act: "sort:type",  tick: root.tab && root.tab.sort === "type" },
                         { label: "-",                act: "",           tick: false },
-                        { label: "Descending",       act: "reverse",    tick: root.tab && root.tab.reverse },
-                        { label: "Show Hidden Files",act: "hidden",     tick: root.tab && root.tab.showHidden },
+                        { label: I18n.tr("Descending"),       act: "reverse",    tick: root.tab && root.tab.reverse },
+                        { label: I18n.tr("Show Hidden Files"),act: "hidden",     tick: root.tab && root.tab.showHidden },
                         { label: "-",                act: "",           tick: false },
-                        { label: "Previews",         act: "thumbs",     tick: root.thumbs },
-                        { label: "Folder Tree",      act: "tree",       tick: root.showTree },
-                        { label: "Split View",       act: "split",      tick: root.split },
-                        { label: "Sidebar",          act: "sidebar",    tick: root.showSidebar },
+                        { label: I18n.tr("Previews"),         act: "thumbs",     tick: root.thumbs },
+                        { label: I18n.tr("Folder Tree"),      act: "tree",       tick: root.showTree },
+                        { label: I18n.tr("Split View"),       act: "split",      tick: root.split },
+                        { label: I18n.tr("Sidebar"),          act: "sidebar",    tick: root.showSidebar },
                         { label: "-",                act: "",           tick: false }
                     ]
                     delegate: Item {
@@ -4264,7 +4434,7 @@ FloatingWindow {
                     Text {
                         id: textLabel
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        text: "Text"
+                        text: I18n.tr("Text")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -4330,7 +4500,7 @@ FloatingWindow {
                     Text {
                         id: sizeLabel
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        text: "Size"
+                        text: I18n.tr("Size")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -4339,9 +4509,9 @@ FloatingWindow {
                         anchors { left: sizeLabel.right; leftMargin: 8; verticalCenter: parent.verticalCenter }
                         spacing: 2
                         Repeater {
-                            model: [{ label: "S", size: 16 },
-                                    { label: "M", size: 32 },
-                                    { label: "L", size: 96 }]
+                            model: [{ label: I18n.tr("S"), size: 16 },
+                                    { label: I18n.tr("M"), size: 32 },
+                                    { label: I18n.tr("L"), size: 96 }]
                             delegate: Rectangle {
                                 id: sizeBtn
                                 required property var modelData
@@ -4457,8 +4627,8 @@ FloatingWindow {
                     model: {
                         const r = root.tipRow
                         if (!r) return []
-                        const out = [{ k: "Type", v: root.tipType(r) },
-                                     { k: "Modified", v: root.fmtTime(r.mtime) }]
+                        const out = [{ k: I18n.tr("Type"), v: root.tipType(r) },
+                                     { k: I18n.tr("Modified"), v: root.fmtTime(r.mtime) }]
                         // ⛔ A FOLDER'S SIZE IS A WALK, NOT A stat. st_size for
                         // a directory is the size of the directory ENTRY —
                         // "890 B" for a tree holding an ISO. What is worth
@@ -4468,19 +4638,23 @@ FloatingWindow {
                         // difference is the whole reason to ask.
                         if (r.type === "dir") {
                             const t = root.tipDu
-                            out.push({ k: "Size", v: t === null ? "measuring…"
-                                : root.fmtSize(t.disk, false) + " on disk"
+                            out.push({ k: I18n.tr("Size"),
+                                       v: t === null ? I18n.tr("measuring…")
+                                : I18n.tr("%1 on disk").arg(root.fmtSize(t.disk, false))
                                   + (t.done ? "" : " …") })
                             if (t !== null)
-                                out.push({ k: "Contents",
-                                           v: root.fmtSize(t.bytes, false) + " in "
-                                              + root.fmtMany(t.files, "file") + ", "
-                                              + root.fmtMany(t.dirs, "folder") })
+                                out.push({ k: I18n.tr("Contents"),
+                                           v: I18n.tr("%1 in %2, %3")
+                                                  .arg(root.fmtSize(t.bytes, false))
+                                                  .arg(I18n.trn("%1 file", "%1 files", t.files)
+                                                           .arg(root.fmtCount(t.files)))
+                                                  .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
+                                                           .arg(root.fmtCount(t.dirs))) })
                         } else {
-                            out.push({ k: "Size", v: root.fmtSize(r.size, false) })
+                            out.push({ k: I18n.tr("Size"), v: root.fmtSize(r.size, false) })
                         }
                         if (r.link === "1" && r.target && r.target !== "")
-                            out.push({ k: "Links to", v: root.disp(r.target) })
+                            out.push({ k: I18n.tr("Links to"), v: root.disp(r.target) })
                         return out.filter(e => e.v !== "")
                     }
                     delegate: Row {
@@ -4515,7 +4689,7 @@ FloatingWindow {
                 // The longest label there is. Measured rather than guessed,
                 // because root.ui() is a SCALE and a constant can only ever be
                 // right at one of them.
-                text: "Contents"
+                text: I18n.tr("Contents")
                 font { family: root.uiFont; pixelSize: root.ui(11) }
             }
         }
@@ -5073,7 +5247,7 @@ FloatingWindow {
         function runSearch() {
             if (!pane.searchTerm) { pane.setTab({ rows: [] }); return }
             pane.loading = true
-            root.statusLine = "searching " + root.disp(pane.searchRoot) + "…"
+            root.statusLine = I18n.tr("searching %1…").arg(root.disp(pane.searchRoot))
             const args = [root.bin, "--rec", "find", root.disp(pane.searchRoot),
                           "--limit=2000"]
             if (pane.searchContent) args.push("--content=" + pane.searchTerm)
@@ -5245,7 +5419,7 @@ FloatingWindow {
                                 verticalCenter: parent.verticalCenter
                             }
                             text: tabBtn.modelData.view === "recent"
-                                  ? "Recent"
+                                  ? I18n.tr("Recent")
                                   : (root.disp(root.baseEnc(tabBtn.modelData.path)) || "/")
                             elide: Text.ElideRight
                             color: tabBtn.active ? root.cAccent : root.cDim
@@ -5312,7 +5486,7 @@ FloatingWindow {
                 spacing: 6
 
                 ToggleChip {
-                    label: pane.tab && root.isPinned(pane.tab.path) ? "Pinned ✓" : "Pin"
+                    label: pane.tab && root.isPinned(pane.tab.path) ? I18n.tr("Pinned ✓") : I18n.tr("Pin")
                     on: pane.tab ? root.isPinned(pane.tab.path) : false
                     // Gone when the pane cannot hold it beside the tabs. The
                     // tabs are how you move around and cannot be given up; this
@@ -5347,13 +5521,13 @@ FloatingWindow {
 
             Text {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                text: "Deleted files. Restoring puts one back where it came from."
+                text: I18n.tr("Deleted files. Restoring puts one back where it came from.")
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(12) }
             }
             ToggleChip {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                label: "Empty Trash…"
+                label: I18n.tr("Empty Trash…")
                 on: false
                 onToggled: root.confirmEmpty = true
             }
@@ -5404,9 +5578,9 @@ FloatingWindow {
             Text {
                 anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                 text: pane.searching
-                      ? ("search " + root.disp(root.baseEnc(pane.searchRoot))
-                         + " and below — press Enter")
-                      : "filter these items…   (Ctrl+F to search)"
+                      ? I18n.tr("search %1 and below — press Enter")
+                            .arg(root.disp(root.baseEnc(pane.searchRoot)))
+                      : I18n.tr("filter these items…   (Ctrl+F to search)")
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(12) }
                 visible: filterInput.text === ""
@@ -5419,7 +5593,7 @@ FloatingWindow {
                 visible: pane.searching
 
                 ToggleChip {
-                    label: pane.searchContent ? "In contents" : "By name"
+                    label: pane.searchContent ? I18n.tr("In contents") : I18n.tr("By name")
                     on: pane.searchContent
                     onToggled: {
                         pane.searchContent = !pane.searchContent
@@ -5427,7 +5601,7 @@ FloatingWindow {
                     }
                 }
                 ToggleChip {
-                    label: "Done"
+                    label: I18n.tr("Done")
                     on: false
                     onToggled: { filterInput.text = ""; pane.endSearch() }
                 }
@@ -5479,13 +5653,13 @@ FloatingWindow {
                 spacing: 6
 
                 Text {
-                    text: "SYNAPSE Files"
+                    text: I18n.tr("SYNAPSE Files")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(20); bold: true  }
                 }
                 Text {
                     width: aboutCol.width
-                    text: "A file browser for SynapseOS. Tabs, pinned places shared with "
+                    text: I18n.tr("A file browser for SynapseOS. Tabs, pinned places shared with ")
                         + "Dolphin, recent files, volumes and network shares."
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(12) }
@@ -5564,7 +5738,7 @@ FloatingWindow {
                             border { width: 1; color: root.cAccent }
                             Text {
                                 anchors.centerIn: parent
-                                text: "Open"
+                                text: I18n.tr("Open")
                                 color: root.cAccent
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
@@ -5575,7 +5749,7 @@ FloatingWindow {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     Qt.openUrlExternally(aboutRow.modelData.detail)
-                                    root.statusLine = "opened in your browser"
+                                    root.statusLine = I18n.tr("opened in your browser")
                                 }
                             }
                         }
@@ -5644,15 +5818,15 @@ FloatingWindow {
 
             Text {
                 anchors { left: parent.left; leftMargin: 40 }
-                text: "Name"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+                text: I18n.tr("Name"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
             Text {
                 anchors { right: parent.right; rightMargin: 190 }
-                text: "Size"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+                text: I18n.tr("Size"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
             Text {
                 anchors { right: parent.right; rightMargin: 20 }
-                text: "Modified"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+                text: I18n.tr("Modified"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
 
@@ -5855,7 +6029,7 @@ FloatingWindow {
                     border { width: 1; color: root.cAccent }
                     Text {
                         anchors.centerIn: parent
-                        text: "Restore"
+                        text: I18n.tr("Restore")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
@@ -5975,7 +6149,9 @@ FloatingWindow {
                             return
                         root.beginDrag(pane, fileRow.modelData,
                                        pane.selection.length > 1
-                                       ? pane.selection.length + " items"
+                                       ? I18n.trn("%1 items", "%1 items",
+                                                  pane.selection.length)
+                                             .arg(pane.selection.length)
                                        : root.rowLabel(fileRow.modelData))
                     }
                     property real pressX: 0
@@ -6248,7 +6424,8 @@ FloatingWindow {
                             return
                         root.beginDrag(pane, gridCell.modelData,
                                        pane.selection.length > 1
-                                       ? pane.selection.length + " items"
+                                       ? I18n.trn("%1 items", "%1 items", pane.selection.length)
+                                             .arg(pane.selection.length)
                                        : root.rowLabel(gridCell.modelData))
                     }
                     onClicked: (mouse) => {
@@ -6290,12 +6467,12 @@ FloatingWindow {
                     if (!pane.tab) return ""
                     if (pane.searching)
                         return pane.searchTerm === ""
-                               ? "Type to search this folder and everything below it."
-                               : "Nothing matched."
-                    if (pane.tab.filter) return "Nothing matches that filter."
-                    if (pane.tab.view === "recent") return "No recently used files."
-                    if (pane.tab.view === "trash") return "The trash is empty."
-                    return "This folder is empty."
+                               ? I18n.tr("Type to search this folder and everything below it.")
+                               : I18n.tr("Nothing matched.")
+                    if (pane.tab.filter) return I18n.tr("Nothing matches that filter.")
+                    if (pane.tab.view === "recent") return I18n.tr("No recently used files.")
+                    if (pane.tab.view === "trash") return I18n.tr("The trash is empty.")
+                    return I18n.tr("This folder is empty.")
                 }
                 color: root.cText
                 font { family: root.uiFont; pixelSize: root.ui(14) }
@@ -6303,7 +6480,7 @@ FloatingWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: pane.tab && pane.tab.view === "dir" && !pane.tab.showHidden
-                      ? "Hidden items are not shown." : ""
+                      ? I18n.tr("Hidden items are not shown.") : ""
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(11) }
                 visible: text !== ""
@@ -6626,29 +6803,29 @@ FloatingWindow {
                         if (!ctxMenu.row) {
                             const dir = t.view === "dir"
                             const bg = [
-                                { label: "New Folder…",     act: "newdir",  on: dir, hint: "Ctrl+N" },
-                                { label: "New Empty File…", act: "newfile", on: dir },
+                                { label: I18n.tr("New Folder…"),     act: "newdir",  on: dir, hint: I18n.tr("Ctrl+N") },
+                                { label: I18n.tr("New Empty File…"), act: "newfile", on: dir },
                                 { label: "-", act: "", on: true },
-                                { label: "Paste", act: "paste", hint: "Ctrl+V",
+                                { label: I18n.tr("Paste"), act: "paste", hint: I18n.tr("Ctrl+V"),
                                   on: dir && root.clip.paths.length > 0 },
                                 { label: "-", act: "", on: true },
-                                { label: "Select All", act: "selectall", on: true, hint: "Ctrl+A" },
-                                { label: "Invert Selection", act: "invert", on: true },
+                                { label: I18n.tr("Select All"), act: "selectall", on: true, hint: I18n.tr("Ctrl+A") },
+                                { label: I18n.tr("Invert Selection"), act: "invert", on: true },
                                 { label: "-", act: "", on: true },
-                                { label: "Sort by Name",     act: "sort:name",
+                                { label: I18n.tr("Sort by Name"),     act: "sort:name",
                                   on: dir, hint: t.sort === "name"  ? "✓" : "" },
-                                { label: "Sort by Size",     act: "sort:size",
+                                { label: I18n.tr("Sort by Size"),     act: "sort:size",
                                   on: dir, hint: t.sort === "size"  ? "✓" : "" },
-                                { label: "Sort by Modified", act: "sort:mtime",
+                                { label: I18n.tr("Sort by Modified"), act: "sort:mtime",
                                   on: dir, hint: t.sort === "mtime" ? "✓" : "" },
-                                { label: "Descending",       act: "reverse",
+                                { label: I18n.tr("Descending"),       act: "reverse",
                                   on: dir, hint: t.reverse ? "✓" : "" },
-                                { label: "Show Hidden Files", act: "hidden",
+                                { label: I18n.tr("Show Hidden Files"), act: "hidden",
                                   on: dir, hint: t.showHidden ? "✓" : "" },
                                 { label: "-", act: "", on: true },
-                                { label: "Refresh", act: "refresh", on: true, hint: "F5" },
-                                { label: "Open Terminal Here", act: "term", on: dir },
-                                { label: "Properties…", act: "folderprops", on: dir }
+                                { label: I18n.tr("Refresh"), act: "refresh", on: true, hint: I18n.tr("F5") },
+                                { label: I18n.tr("Open Terminal Here"), act: "term", on: dir },
+                                { label: I18n.tr("Properties…"), act: "folderprops", on: dir }
                             ]
                             return bg
                         }
@@ -6657,29 +6834,29 @@ FloatingWindow {
                         const n = pane.selection.length
                         const one = n <= 1
                         if (t.view === "trash")
-                            return [{ label: "Restore", act: "restore",
+                            return [{ label: I18n.tr("Restore"), act: "restore",
                                       on: !r.missing }]
 
                         // Labels count, so it is never a surprise how much
                         // a menu entry is about to act on.
                         const many = one ? "" : " (" + n + ")"
                         const items = [
-                            { label: r.type === "dir" ? "Open Folder" : "Open",
+                            { label: r.type === "dir" ? I18n.tr("Open Folder") : I18n.tr("Open"),
                               act: "open", on: one && !r.missing },
-                            { label: "Open in New Tab", act: "tab",
+                            { label: I18n.tr("Open in New Tab"), act: "tab",
                               on: one && r.type === "dir" }
                         ]
                         if (t.view === "dir") {
                             items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Copy" + many,  act: "copy", on: n > 0 })
-                            items.push({ label: "Cut" + many,   act: "cut",  on: n > 0 })
-                            items.push({ label: "Paste",        act: "paste",
+                            items.push({ label: I18n.tr("Copy") + many,  act: "copy", on: n > 0 })
+                            items.push({ label: I18n.tr("Cut") + many,   act: "cut",  on: n > 0 })
+                            items.push({ label: I18n.tr("Paste"),        act: "paste",
                                          on: root.clip.paths.length > 0 })
                             items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Rename…", act: "rename", on: one,
-                                         hint: "F2" })
-                            items.push({ label: "Move to Trash" + many,
-                                         act: "trash", on: n > 0, hint: "Del" })
+                            items.push({ label: I18n.tr("Rename…"), act: "rename", on: one,
+                                         hint: I18n.tr("F2") })
+                            items.push({ label: I18n.tr("Move to Trash") + many,
+                                         act: "trash", on: n > 0, hint: I18n.tr("Del") })
 
                             // ⛔ BELOW TRASH AND VISIBLY APART FROM IT. Both
                             // remove a file; only one can be undone. Sitting
@@ -6688,7 +6865,7 @@ FloatingWindow {
                             // separator and the wording carry the difference —
                             // "Destroy" rather than a second kind of "Delete".
                             items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Destroy Permanently…" + many,
+                            items.push({ label: I18n.tr("Destroy Permanently…") + many,
                                          act: "shred", on: n > 0 })
 
                             // Send to Vault. A submenu when there is more than
@@ -6697,17 +6874,17 @@ FloatingWindow {
                             // — a submenu arrow that opens onto nothing is the
                             // failure the Open-with note above warns about.
                             if (root.openVaults.length === 1) {
-                                items.push({ label: "Send to Vault" + many,
+                                items.push({ label: I18n.tr("Send to Vault") + many,
                                              act: "vault", on: n > 0,
                                              mount: root.openVaults[0].mount })
                             } else if (root.openVaults.length > 1) {
-                                items.push({ label: "Send to Vault" + many,
+                                items.push({ label: I18n.tr("Send to Vault") + many,
                                              act: "submenu", on: n > 0,
                                              sub: root.openVaults.map(v => ({
                                                  label: v.name, mount: v.mount
                                              })) })
                             } else {
-                                items.push({ label: "Send to Vault…", act: "vaultopen",
+                                items.push({ label: I18n.tr("Send to Vault…"), act: "vaultopen",
                                              on: n > 0 })
                             }
                         }
@@ -6738,7 +6915,7 @@ FloatingWindow {
                             // already too many to sit in the middle of this
                             // menu. In a submenu of its own the list is the
                             // whole content, and it scrolls like the parent.
-                            items.push({ label: "Open with", act: "submenu",
+                            items.push({ label: I18n.tr("Open with"), act: "submenu",
                                          on: true, sub: opens.map(a => ({
                                              label: a.label, desktop: a.desktop
                                          })) })
@@ -6753,7 +6930,7 @@ FloatingWindow {
                         if (t.view === "dir") {
                             items.push({ label: "-", act: "", on: true })
                             for (const f of [".tar.gz", ".zip", ".7z"])
-                                items.push({ label: "Compress to " + f,
+                                items.push({ label: I18n.tr("Compress to ") + f,
                                              act: "compress", on: n > 0,
                                              fmt: f.substring(1) })
                         }
@@ -6768,9 +6945,9 @@ FloatingWindow {
                         // and bound to Alt+Enter the whole time, and still read
                         // as missing, which is the only test that counts.
                         items.push({ label: "-", act: "", on: true })
-                        items.push({ label: "Properties…", act: "props", on: n > 0,
-                                     hint: "Alt+Enter" })
-                        items.push({ label: "Copy Path", act: "copypath", on: one })
+                        items.push({ label: I18n.tr("Properties…"), act: "props", on: n > 0,
+                                     hint: I18n.tr("Alt+Enter") })
+                        items.push({ label: I18n.tr("Copy Path"), act: "copypath", on: one })
                         // ⚠ Refresh is HERE as well as in the empty-space menu,
                         // and it is not a duplicate worth removing: a pane that
                         // is full of files has no empty space to right-click,
@@ -6779,12 +6956,12 @@ FloatingWindow {
                         // mouse. It is about the pane rather than the row,
                         // which is why it sits in this trailing group with
                         // Open Terminal Here rather than up among Copy and Cut.
-                        items.push({ label: "Refresh", act: "refresh", on: true,
-                                     hint: "F5" })
-                        items.push({ label: "Open Terminal Here", act: "term",
+                        items.push({ label: I18n.tr("Refresh"), act: "refresh", on: true,
+                                     hint: I18n.tr("F5") })
+                        items.push({ label: I18n.tr("Open Terminal Here"), act: "term",
                                      on: t.view === "dir" })
-                        items.push({ label: root.isPinned(r.full) ? "Remove from Places"
-                                                                 : "Add to Places",
+                        items.push({ label: root.isPinned(r.full) ? I18n.tr("Remove from Places")
+                                                                 : I18n.tr("Add to Places"),
                                      act: "pin", on: one && r.type === "dir" })
                         // The create/select block that used to end this menu is
                         // GONE from here — it is about the folder, not about

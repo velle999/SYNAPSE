@@ -104,6 +104,18 @@ fi
 [ -d "$name/rules" ]   && dirs+=("$name/rules/")
 [ -d "$name/protocols" ] && dirs+=("$name/protocols/")
 [ -d "$name/tests" ]   && dirs+=("$name/tests/")
+# ⛔ MESSAGE CATALOGS, AND THEY ARE ENTERED BY meson. A component whose
+# meson.build says subdir('po') and whose tarball does not carry po/ builds
+# perfectly HERE — the directory is on disk either way — and fails on the first
+# machine that starts from the tarball, with "Nonexistent build file
+# 'po/meson.build'", after the commit has shipped. preflight's subdir check is
+# what catches it, and it caught this one.
+#
+# ⚠ po-bar/ TOO. synui has both: po/ for the compositor's C and po-bar/ for the
+# bar's QML, different domains with different last miles. It rolls its own
+# tarball, but the rule belongs here rather than in one script.
+[ -d "$name/po" ]      && dirs+=("$name/po/")
+[ -d "$name/po-bar" ]  && dirs+=("$name/po-bar/")
 # synapse_kmod extras
 [ -f "$name/Makefile" ]  && dirs+=("$name/Makefile")
 [ -f "$name/dkms.conf" ] && dirs+=("$name/dkms.conf")

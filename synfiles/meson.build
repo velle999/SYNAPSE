@@ -42,6 +42,23 @@ synfiles_exe = executable('synfiles', sources,
 
 install_data('data/synfiles.qml', install_dir: get_option('datadir') / 'synfiles')
 
+# The translation singleton and its module declaration. ⚠ In a SUBDIRECTORY: a
+# qmldir makes its directory an explicit QML module, and synfiles.qml is the file
+# quickshell is pointed at, so one beside it would change how that file itself
+# resolves. po/ installs the generated catalogs into qml/i18n/ alongside these.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'synfiles' / 'qml')
+
+# ⚠ A UI STRING IN QML THAT NO TRANSLATOR CAN REACH IS SILENTLY ENGLISH FOREVER,
+# with one extra way in that C does not have: qsTr() looks exactly like the
+# marking and is not — quickshell has no translator to load a .qm. The gate
+# fails on a qsTr( anywhere in the window, on a non-literal argument, on a stale
+# template, and on a menu action or record key swept up with the labels.
+i18n_test = find_program('tests/i18n_test.sh')
+test('i18n', i18n_test, args : [meson.current_source_dir()], timeout : 60)
+
+subdir('po')
+
 # The application icon. Scalable only: Qt renders the SVG at whatever size the
 # dock or the menu asks for, and a set of PNGs would be five more files to keep
 # in step with one drawing.

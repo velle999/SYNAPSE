@@ -2461,6 +2461,19 @@ if [ -f "$QML" ]; then
         && ok "closing the panel stops the walk" \
         || bad "the size walk is not stopped when properties closes"
 
+    # ⚠ THE SIBLING MODULE IS COPIED FIRST, FOR BOTH CHECKS BELOW. synfiles.qml
+    # does `import "qml"` for the translation singleton, and each check works on
+    # a COPY of it in $T — a copy in a bare directory cannot resolve that
+    # import, so both would fail on a perfectly good file, which is the exact
+    # failure mode this whole block is written to avoid.
+    #
+    # ⛔ ABOVE BOTH, not inside the qmllint one. The first cut put it there and
+    # the load check passed only because the lint check happened to run first
+    # and share $T — so on any machine WITHOUT qmllint, the load check would
+    # have failed for a missing import. That is a build broken by a tool being
+    # absent, which the comment further down says has already happened once.
+    cp -r "$(dirname "$QML")/qml" "$T/" 2>/dev/null
+
     # ── it still parses ─────────────────────────────────────────────────────
     #
     # A syntax error in this file is invisible to everything above: the C core
@@ -2856,15 +2869,39 @@ if [ -f "$QML" ]; then
 
     # ⚠ THE DISK FIGURE LEADS. A tree of small files takes far more room than
     # it contains, and that difference is the reason to ask at all.
-    grep -q 'root.fmtSize(t.disk, false) + " on disk"' "$QML" \
-        && ok "the panel leads with what the folder costs on disk" \
-        || bad "the folder size no longer says what it costs on disk"
+    #
+    # ⛔ ASSERTED ON THE msgid, NOT ON A CONCATENATION. This used to grep for
+    # `fmtSize(t.disk, false) + " on disk"`, which pinned the English sentence
+    # being BUILT — and the sentence is a catalog entry now, so the check was
+    # failing on a panel that still leads with the disk figure. The order is
+    # what matters and the order lives in the msgid: %1 is the disk size.
+    #
+    # ⚠ COUNTED, AND BOTH SITES. The properties panel and the hover tooltip each
+    # say it, and a `grep -q` for the msgid passed while one of them was
+    # rewritten — it was matching the other. Two is the number; one is a site
+    # that stopped leading with the disk figure.
+    n=$(grep -c '"%1 on disk' "$QML")
+    [ "$n" = 2 ] && ok "both places lead with what the folder costs on disk" \
+                 || bad "the folder size no longer says what it costs on disk ($n of 2)"
 
     # ⚠ "1 files in 1 folders" is the kind of wrong that makes a careful number
-    # look careless. Both counters go through fmtMany, which is where the s is.
-    n=$(grep -c 'fmtCount(t\.\(files\|dirs\))' "$QML" || true)
-    [ "$n" = 0 ] && ok "both places that count files and folders pluralise" \
-                 || bad "$n counter(s) print a bare number and a fixed plural"
+    # look careless.
+    #
+    # ⛔ AND THE OLD GUARD ASSERTED THE WRONG MECHANISM. It required that
+    # fmtCount(t.files) appear NOWHERE, because the only pluraliser then was
+    # fmtMany() — which glued an "s" onto an English noun and is exactly the
+    # trap src/i18n.h documents. fmtMany is gone; both counters go through
+    # I18n.trn(), where the LANGUAGE decides how many forms there are and which
+    # one a count selects. So the check is now that each counter has a plural
+    # msgid, which is a stronger claim than the one it replaces.
+    #
+    # ⚠ COUNTED FOR THE SAME REASON. Each noun is counted at BOTH sites, and a
+    # `grep -q` passed with one of them sabotaged because it matched the other.
+    for noun in file folder; do
+        n=$(grep -c "I18n.trn(\"%1 $noun\", \"%1 ${noun}s\"" "$QML")
+        [ "$n" = 2 ] && ok "both $noun counters pluralise through the catalog" \
+                     || bad "a $noun counter does not go through I18n.trn ($n of 2)"
+    done
 fi
 
 # ── the hover panel, with a real pointer ────────────────────────────────────
