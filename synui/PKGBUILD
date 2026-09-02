@@ -3014,7 +3014,39 @@ pkgver=0.1.0
 #   a `^msgid "…"` grep skipped them and reported the catalogs full when they
 #   were seven short. Joined before asking, the same rule the msgstr side
 #   already learned.
-pkgrel=586
+# 587: eight more C files speak thirteen languages — and two mojibake that
+#   have been on screen since they were written.
+#   bt.c, dispcfg.c, news.c, sound.c, wppick.c, clock.c, notif.c and
+#   ai_interface.c join po/POTFILES: 887 msgids now, 887/887 in all thirteen.
+#   ⛔ TWO LIVE MOJIBAKE IN dispcfg.c, both drawn in the display panel's status
+#   line. The scale row wrote C3 82 C2 B7 where it meant · and the rotation row
+#   wrote C3 A2 C2 86 C2 92 where it meant → — UTF-8 that made a Latin-1 round
+#   trip and was re-encoded, so each byte of the original became its own
+#   two-byte sequence. NOT the \xNN escape mistake Updates.qml had at 584;
+#   these are literal bytes. A byte-level sweep of the whole tree found exactly
+#   these two and nothing else — the two hits in Updates.qml and this file are
+#   the write-ups QUOTING the old bug, which is correct.
+#   ⚠ The first sweep found neither: `grep -P` would not match the byte
+#   sequence in either locale, and the pattern was too narrow besides — the
+#   general signature is C3 xx followed by C2 xx, not just the â form.
+#   ⛔ syn_display_mode_names[] IS A KEY THREE WAYS OVER — display_mode_from_name()
+#   compares it, config.c parses it, input.c takes it as a dispatch argument and
+#   settings_state_set() writes it to the state file. The status line gets
+#   syn_display_mode_label() instead, so the value stays "mirror" and the word
+#   says Spiegeln. Same shape as ctlpanel's labels beside its settings keys.
+#   ⛔ AND tests/i18n.sh CAUGHT A PLURAL HACK THE MOMENT notif.c WAS LISTED:
+#   `missed == 1 ? "" : "s"`, which is what P_() exists for. It is ngettext now.
+#   ⚠ AND po-fill.py WAS LEAVING FIVE STRINGS FUZZY. gettext writes ONE flag
+#   line — `#, fuzzy, c-format` — and the tool stripped only a line that was
+#   exactly `#, fuzzy`. A fuzzy entry is one msgfmt DOES NOT USE, so five
+#   correctly translated c-format strings would have shipped English. It now
+#   drops the flag and keeps the rest of the line. ⚠ Swept every catalog in the
+#   project afterwards: no other component was affected.
+#   Verified by compiling the catalogs to .mo and calling gettext/ngettext
+#   through a real locale — localedef into a scratch LOCPATH, because this box
+#   has none of the thirteen generated and ⛔ LANGUAGE is vetoed under C, which
+#   is the same rule I18n.qml implements on the QML side.
+pkgrel=587
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

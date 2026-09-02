@@ -39,6 +39,7 @@
 
 #include "edid.h"
 #include "synui.h"
+#include "i18n.h"
 
 static syn_output_t *selected_output(syn_server_t *s)
 {
@@ -120,6 +121,18 @@ const char *const syn_display_mode_names[SYN_DISPLAY_MODE_COUNT] = {
  * array is not, and making config.c reference the array directly broke four
  * test binaries at link time.
  */
+/* What a display mode is CALLED on screen. The array above is the key; this
+ * is the word, and the two must not be the same string. */
+const char *syn_display_mode_label(int mode)
+{
+    switch (mode) {
+    case SYN_DISPLAY_EXTEND:   return _("extend");
+    case SYN_DISPLAY_MIRROR:   return _("mirror");
+    case SYN_DISPLAY_EXTERNAL: return _("external");
+    }
+    return "";
+}
+
 int display_mode_from_name(const char *name)
 {
     if (!name) return -1;
@@ -696,10 +709,10 @@ static void dispcfg_move(syn_server_t *s, int dx, int dy)
     if (occupant) {
         occupant->grid_x = sel->grid_x;
         occupant->grid_y = sel->grid_y;
-        snprintf(d->status, sizeof(d->status), "%s \xe2\x86\x94 %s",
+        snprintf(d->status, sizeof(d->status), _("%s \xe2\x86\x94 %s"),
                  sel->wlr_output->name, occupant->wlr_output->name);
     } else {
-        snprintf(d->status, sizeof(d->status), "%s moved",
+        snprintf(d->status, sizeof(d->status), _("%s moved"),
                  sel->wlr_output->name);
     }
     sel->grid_x = nx;
@@ -863,10 +876,11 @@ void dispcfg_set_scale_all(syn_server_t *s, float want)
                 SCALE_MIN_LOGICAL_W, SCALE_MIN_LOGICAL_H);
     } else if (refused) {
         snprintf(d->status, sizeof(d->status),
-                 "scale %.2fx Â· %d screen(s); %d could not",
+                 P_("scale %.2fx · %d screen; %d could not",
+                    "scale %.2fx · %d screens; %d could not", done),
                  (double)want, done, refused);
     } else {
-        snprintf(d->status, sizeof(d->status), "everything at %.2fx",
+        snprintf(d->status, sizeof(d->status), _("everything at %.2fx"),
                  (double)want);
     }
 
@@ -917,7 +931,7 @@ static void dispcfg_scale_step(syn_server_t *s, int dir)
         return;
     }
 
-    snprintf(d->status, sizeof(d->status), "%s â %.2fx",
+    snprintf(d->status, sizeof(d->status), "%s → %.2fx",
              o->wlr_output->name, (double)want);
     dispcfg_rechain(s);
     output_persist_save(s);
@@ -953,9 +967,9 @@ static void dispcfg_rotate(syn_server_t *s, int dir)
     }
     wlr_output_state_finish(&state);
 
-    static const char *rot_names[] = { "normal", "90°", "180°", "270°" };
-    snprintf(d->status, sizeof(d->status), "%s → %s",
-             o->wlr_output->name, rot_names[rot]);
+    static const char *rot_names[] = { N_("normal"), "90°", "180°", "270°" };
+    snprintf(d->status, sizeof(d->status), _("%s → %s"),
+             o->wlr_output->name, _(rot_names[rot]));
 
     /* The effective size changed — re-chain so neighbours don't overlap. */
     dispcfg_rechain(s);
@@ -977,7 +991,7 @@ static void dispcfg_make_primary(syn_server_t *s)
     output_persist_save(s);
     xwayland_apply_primary(s);
 
-    snprintf(d->status, sizeof(d->status), "%s → primary (X11 default display)",
+    snprintf(d->status, sizeof(d->status), _("%s → primary (X11 default display)"),
              sel->wlr_output->name);
     synui_render_dispcfg(s);
 }
@@ -1005,12 +1019,12 @@ void dispcfg_set_mode_cfg(syn_server_t *s, int mode)
 
     syn_dispcfg_t *d = &s->dispcfg;
     if (mode == SYN_DISPLAY_EXTERNAL && !dispcfg_has_external(s))
-        snprintf(d->status, sizeof(d->status),
-                 "external only: no external screen connected \xe2\x80\x94 "
-                 "the built-in panel stays on");
+        snprintf(d->status, sizeof(d->status), "%s",
+                 _("external only: no external screen connected \xe2\x80\x94 "
+                   "the built-in panel stays on"));
     else
-        snprintf(d->status, sizeof(d->status), "screens: %s",
-                 syn_display_mode_names[mode]);
+        snprintf(d->status, sizeof(d->status), _("screens: %s"),
+                 syn_display_mode_label(mode));
 
     wlr_log(WLR_INFO, "synui: dispcfg: display mode = %s",
             syn_display_mode_names[mode]);

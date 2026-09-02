@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,120 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "synapd 查询失败——正在重连"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "没有聚焦的窗口——随便问"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "（未知）"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "（无标题）"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "关于：%s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "声音"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "耳麦"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "耳机"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "相机"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "摄像机"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "电脑"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "手柄"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "键盘"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "鼠标"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "平板"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "调制解调器"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "播放器"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "网络"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "手机"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "打印机"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "扫描仪"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "显示器"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "（未知设备）"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "失败"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "配对已取消"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "设备要求输入 PIN 码 · 暂不支持"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "设备要求输入配对码 · 暂不支持"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "保存失败：%s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -888,7 +1002,7 @@ msgstr "开启圆角时的形状；需要“窗口效果 ▸ 圆角半径”"
 msgid "Welcome menu at login"
 msgstr "登录时显示欢迎菜单"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "登录"
 
@@ -919,10 +1033,6 @@ msgstr "只有毛色和花纹；每个品种走路都一样"
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "按键重复速度"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "键盘"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1055,10 +1165,6 @@ msgstr "事件提示音"
 msgid "Screen audio"
 msgstr "声音送到屏幕"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "声音"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr "接上电视或显示器时把声音转过去。自动 = 笔记本电脑"
@@ -1110,10 +1216,6 @@ msgstr "视频剪辑软件可直接读取的 DNxHR .mov。每分钟约 1.1 GB"
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "网络 / Wi-Fi"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "网络"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2031,6 +2133,63 @@ msgstr "打开"
 msgid "Move to Trash"
 msgstr "移到回收站"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "扩展"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "镜像"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "仅外接"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "已移动 %s"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "缩放 %.2fx · %d 个屏幕；%d 个未成功"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "全部设为 %.2fx"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "正常"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → 主显示器（X11 默认显示）"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "仅外接：未接入外部显示器——内置屏幕保持开启"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "屏幕：%s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "上"
@@ -2094,6 +2253,71 @@ msgstr "指纹已停用 — 请使用密码"
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "指纹无法识别"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d 条，其中 %d 条是新的  （有些源没有响应）"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d 条，其中 %d 条是新的"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "没有源响应"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "这条没有讨论链接"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "无法打开该链接"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "已打开讨论"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "已打开"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "已复制 %s"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "按时间排序"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "按来源排序"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "已全部标为已读"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "正在刷新…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "开启期间收到了 %d 条通知"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "勿扰已开启"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "勿扰已关闭"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2166,10 +2390,6 @@ msgstr "(空闲 — 没有最近的事件)"
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd 不可用)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "正常"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2586,10 +2806,6 @@ msgstr "空格 全部开／关 · R 重置位置 · Esc 关闭"
 #: src/render.c:4438
 msgid "done"
 msgstr "完成"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "失败"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3490,6 +3706,66 @@ msgstr "温度单位"
 msgid "Keyboard layout"
 msgstr "键盘布局"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "注销"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "设备已接入"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "设备已拔出"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "屏幕已锁定"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "屏幕已解锁"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "通知"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "截图"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "音量变化"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "错误 / 提示音"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s 已开启"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s 已关闭"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "音量 0% · 已静音"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "音量 %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s：%s%s · 按 t 试听"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "全部小部件"
@@ -3529,6 +3805,18 @@ msgstr "指针时钟"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "音乐播放器"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "预设"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "预设（缺少底图）"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "素材（不是壁纸）"
 
 #, fuzzy
 #~ msgid "visualizer"

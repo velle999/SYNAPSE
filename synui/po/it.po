@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,120 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "richiesta a synapd non riuscita — riconnessione"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "nessuna finestra attiva — chiedi quello che vuoi"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "(sconosciuto)"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "(senza titolo)"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "informazioni su: %s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "Audio"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "Cuffie con microfono"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "Cuffie"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "Fotocamera"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "Videocamera"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "Computer"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "Controller"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "Tastiera"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "Mouse"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "Tavoletta"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "Modem"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "Lettore"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "Rete"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "Telefono"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "Stampante"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "Scanner"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "Schermo"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "(dispositivo sconosciuto)"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "non riuscito"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "associazione annullata"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "il dispositivo chiede un PIN digitato · non ancora supportato"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "il dispositivo chiede una chiave digitata · non ancora supportata"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "salvataggio non riuscito: %s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -951,7 +1065,7 @@ msgstr ""
 msgid "Welcome menu at login"
 msgstr "Menu di benvenuto all'accesso"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "Accesso"
 
@@ -983,10 +1097,6 @@ msgstr "Solo mantello e macchie; ogni razza cammina uguale"
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "Velocità di ripetizione"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "Tastiera"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1127,10 +1237,6 @@ msgstr "Suoni di evento"
 msgid "Screen audio"
 msgstr "Audio verso lo schermo"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "Audio"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr ""
@@ -1189,10 +1295,6 @@ msgstr ""
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "Rete / Wi-Fi"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "Rete"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2118,6 +2220,64 @@ msgstr "Apri"
 msgid "Move to Trash"
 msgstr "Sposta nel cestino"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "estendi"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "duplica"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "solo esterno"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "%s spostato"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "scala %.2fx · %d schermo; %d non è riuscito"
+msgstr[1] "scala %.2fx · %d schermi; %d non sono riusciti"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "tutto a %.2fx"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "normale"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → principale (schermo X11 predefinito)"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "solo esterno: nessuno schermo esterno collegato — il pannello integrato resta acceso"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "schermi: %s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "alto"
@@ -2182,6 +2342,72 @@ msgstr "Impronta disattivata — usa la password"
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "Impronta non riconosciuta"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d elementi, %d nuovi  (alcune fonti non hanno risposto)"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d elementi, %d nuovi"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "nessuna fonte ha risposto"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "nessun collegamento alla discussione per questo"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "impossibile aprire quel collegamento"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "discussione aperta"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "aperto"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "%s copiato"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "ordinato per data"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "ordinato per fonte"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "tutto segnato come letto"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "aggiornamento…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "È arrivata %d notifica mentre era attivo"
+msgstr[1] "Sono arrivate %d notifiche mentre era attivo"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "Non disturbare attivato"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "Non disturbare disattivato"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2255,10 +2481,6 @@ msgstr "(inattivo — nessun evento recente)"
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd non disponibile)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "normale"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2702,10 +2924,6 @@ msgstr ""
 #: src/render.c:4438
 msgid "done"
 msgstr "fatto"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "non riuscito"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3633,6 +3851,66 @@ msgstr "Temperatura in"
 msgid "Keyboard layout"
 msgstr "Disposizione della tastiera"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "Disconnessione"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "Dispositivo collegato"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "Dispositivo scollegato"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "Schermo bloccato"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "Schermo sbloccato"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "Notifica"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "Schermata"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "Cambio di volume"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "Errore / avviso"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s attivato"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s disattivato"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "volume 0% · muto"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "volume %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s: %s%s · t per ascoltarlo"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "Tutti i widget"
@@ -3672,6 +3950,18 @@ msgstr "Orologio analogico"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "Lettore musicale"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "preimpostazione"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "preimpostazione (manca la base)"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "risorsa (non è uno sfondo)"
 
 #, fuzzy
 #~ msgid "visualizer"

@@ -2621,6 +2621,9 @@ extern const char *const syn_display_mode_names[SYN_DISPLAY_MODE_COUNT];
  * and neither links dispcfg.c in the unit tests — a function they can stub,
  * exactly as they already stub lid_action_from_name(). */
 int display_mode_from_name(const char *name);
+/* The drawn name of a display mode. NOT syn_display_mode_names[],
+ * which is the key the state file and the dispatch argument use. */
+const char *syn_display_mode_label(int mode);
 
 /* Which window the keyboard follows. See syn_config_t.focus_mode.
  *

@@ -48,6 +48,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 /* ── synapd wire protocol ────────────────────────────────── */
 #define SYN_MAGIC       0x53594E41u
@@ -247,7 +248,7 @@ static void *ai_thread_fn(void *arg)
                     .type       = req.type,
                     .ok         = 0,
                 };
-                strncpy(err.response, "synapd query failed — reconnecting",
+                strncpy(err.response, _("synapd query failed — reconnecting"),
                         sizeof(err.response) - 1);
                 if (write_all(s->ai_pipe_resp[1], &err, sizeof(err)) < 0)
                     wlr_log(WLR_ERROR, "ai_thread: failed to write error to compositor");
@@ -403,7 +404,7 @@ void cmdbar_ask_window(syn_server_t *s)
 
     syn_view_t *v = s->focused_view;
     if (!v || !v->mapped) {
-        strncpy(s->cmdbar.response, "no focused window — ask anything",
+        strncpy(s->cmdbar.response, _("no focused window — ask anything"),
                 sizeof(s->cmdbar.response) - 1);
         synui_render_cmdbar(s);
         return;
@@ -412,12 +413,12 @@ void cmdbar_ask_window(syn_server_t *s)
     const char *app   = view_app_id(v);
     const char *title = view_title(v);
     snprintf(s->cmdbar.ctx, sizeof(s->cmdbar.ctx), "%s — %s",
-             app   && *app   ? app   : "(unknown)",
-             title && *title ? title : "(untitled)");
+             app   && *app   ? app   : _("(unknown)"),
+             title && *title ? title : _("(untitled)"));
 
     /* Echo the referent back, so the bar visibly says what it is scoped to. */
     snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
-             "about: %s", s->cmdbar.ctx);
+             _("about: %s"), s->cmdbar.ctx);
     synui_render_cmdbar(s);
     wlr_log(WLR_DEBUG, "cmdbar: ask-window ctx='%s'", s->cmdbar.ctx);
 }

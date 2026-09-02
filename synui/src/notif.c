@@ -38,6 +38,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 #define NOTIF_BUS_NAME "org.freedesktop.Notifications"
 #define NOTIF_BUS_PATH "/org/freedesktop/Notifications"
@@ -341,13 +342,15 @@ void notif_dnd_set(syn_server_t *s, bool on)
      * exactly like pressing a key that does nothing. */
     char body[96] = "";
     if (!on && s->notifs.missed > 0)
-        snprintf(body, sizeof(body), "%d notification%s arrived while it was on",
-                 s->notifs.missed, s->notifs.missed == 1 ? "" : "s");
+        snprintf(body, sizeof(body),
+                 P_("%d notification arrived while it was on",
+                    "%d notifications arrived while it was on", s->notifs.missed),
+                 s->notifs.missed);
 
     if (!on) s->notifs.missed = 0;
 
     s->notifs.dnd_notif_id =
-        notif_post_ex(s, "synui", on ? "Do Not Disturb on" : "Do Not Disturb off",
+        notif_post_ex(s, "synui", on ? _("Do Not Disturb on") : _("Do Not Disturb off"),
                       body, NOTIF_URGENCY_NORMAL, on ? 2000 : -1,
                       s->notifs.dnd_notif_id, true);
 }

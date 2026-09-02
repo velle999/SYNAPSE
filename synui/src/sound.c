@@ -41,6 +41,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 /* The key in sounds.state, and the argument to `synui-sound play`. Must match
  * the helper's $EVENTS list exactly — this is the whole binding between them. */
@@ -67,16 +68,16 @@ const char *sound_event_name(syn_sound_event_t evt)
 const char *sound_event_label(syn_sound_event_t evt)
 {
     switch (evt) {
-    case SOUND_EVT_LOGIN:          return "Login";
-    case SOUND_EVT_LOGOUT:         return "Logout";
-    case SOUND_EVT_DEVICE_ADDED:   return "Device plugged in";
-    case SOUND_EVT_DEVICE_REMOVED: return "Device unplugged";
-    case SOUND_EVT_LOCK:           return "Screen locked";
-    case SOUND_EVT_UNLOCK:         return "Screen unlocked";
-    case SOUND_EVT_NOTIFY:         return "Notification";
-    case SOUND_EVT_SCREENSHOT:     return "Screenshot";
-    case SOUND_EVT_VOLUME:         return "Volume change";
-    case SOUND_EVT_ERROR:          return "Error / alert";
+    case SOUND_EVT_LOGIN:          return _("Login");
+    case SOUND_EVT_LOGOUT:         return _("Logout");
+    case SOUND_EVT_DEVICE_ADDED:   return _("Device plugged in");
+    case SOUND_EVT_DEVICE_REMOVED: return _("Device unplugged");
+    case SOUND_EVT_LOCK:           return _("Screen locked");
+    case SOUND_EVT_UNLOCK:         return _("Screen unlocked");
+    case SOUND_EVT_NOTIFY:         return _("Notification");
+    case SOUND_EVT_SCREENSHOT:     return _("Screenshot");
+    case SOUND_EVT_VOLUME:         return _("Volume change");
+    case SOUND_EVT_ERROR:          return _("Error / alert");
     default:                       return "?";
     }
 }
@@ -392,8 +393,8 @@ static void sound_set_event(syn_server_t *s, int evt, int on)
              sound_event_name(evt), on ? "on" : "off");
     sound_apply(s, cmd);
 
-    snprintf(s->sound.status, sizeof(s->sound.status), "%s %s",
-             sound_event_label(evt), on ? "on" : "off");
+    snprintf(s->sound.status, sizeof(s->sound.status),
+             on ? _("%s on") : _("%s off"), sound_event_label(evt));
 }
 
 static void sound_set_master(syn_server_t *s, int on)
@@ -416,10 +417,10 @@ static void sound_set_volume(syn_server_t *s, int vol)
     sound_apply(s, cmd);
 
     if (vol == 0)
-        snprintf(s->sound.status, sizeof(s->sound.status),
-                 "volume 0%% \xc2\xb7 muted");
+        snprintf(s->sound.status, sizeof(s->sound.status), "%s",
+                 _("volume 0% \xc2\xb7 muted"));
     else
-        snprintf(s->sound.status, sizeof(s->sound.status), "volume %d%%", vol);
+        snprintf(s->sound.status, sizeof(s->sound.status), _("volume %d%%"), vol);
 }
 
 /* The theme row cycles whatever is installed. Reading the directory listing here
@@ -724,7 +725,7 @@ static void sound_cycle_sample(syn_server_t *s, int evt, int dir)
     char shown[SOUND_SAMPLE_MAX];
     sound_resolved_id(&s->sound, evt, shown, sizeof(shown));
     snprintf(s->sound.status, sizeof(s->sound.status),
-             "%s: %s%s \xc2\xb7 t to hear it", sound_event_label(evt), shown,
+             _("%s: %s%s \xc2\xb7 t to hear it"), sound_event_label(evt), shown,
              cur == 0 ? " (automatic)" : "");
 }
 

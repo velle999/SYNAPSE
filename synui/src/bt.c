@@ -42,6 +42,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 #define BT_SVC    "org.bluez"
 #define BT_ADAPT  "org.bluez.Adapter1"
@@ -125,23 +126,23 @@ static int bt_name_is_address(const char *name, const char *addr)
 static const char *bt_icon_label(const char *icon)
 {
     static const struct { const char *icon, *label; } MAP[] = {
-        { "audio-card",        "Audio"      },
-        { "audio-headset",     "Headset"    },
-        { "audio-headphones",  "Headphones" },
-        { "camera-photo",      "Camera"     },
-        { "camera-video",      "Camcorder"  },
-        { "computer",          "Computer"   },
-        { "input-gaming",      "Controller" },
-        { "input-keyboard",    "Keyboard"   },
-        { "input-mouse",       "Mouse"      },
-        { "input-tablet",      "Tablet"     },
-        { "modem",             "Modem"      },
-        { "multimedia-player", "Player"     },
-        { "network-wireless",  "Network"    },
-        { "phone",             "Phone"      },
-        { "printer",           "Printer"    },
-        { "scanner",           "Scanner"    },
-        { "video-display",     "Display"    },
+        { "audio-card",        N_("Audio")      },
+        { "audio-headset",     N_("Headset")    },
+        { "audio-headphones",  N_("Headphones") },
+        { "camera-photo",      N_("Camera")     },
+        { "camera-video",      N_("Camcorder")  },
+        { "computer",          N_("Computer")   },
+        { "input-gaming",      N_("Controller") },
+        { "input-keyboard",    N_("Keyboard")   },
+        { "input-mouse",       N_("Mouse")      },
+        { "input-tablet",      N_("Tablet")     },
+        { "modem",             N_("Modem")      },
+        { "multimedia-player", N_("Player")     },
+        { "network-wireless",  N_("Network")    },
+        { "phone",             N_("Phone")      },
+        { "printer",           N_("Printer")    },
+        { "scanner",           N_("Scanner")    },
+        { "video-display",     N_("Display")    },
     };
     for (unsigned i = 0; i < sizeof(MAP) / sizeof(MAP[0]); i++)
         if (strcmp(icon, MAP[i].icon) == 0) return MAP[i].label;
@@ -157,10 +158,10 @@ void bt_dev_label(const syn_bt_dev_t *d, char *out, size_t n)
     /* Nameless: say what it is, and keep the address — it is the only thing
      * telling two nameless headsets apart. */
     const char *what = d->icon[0] ? bt_icon_label(d->icon) : NULL;
-    if (what && d->addr[0]) snprintf(out, n, "%s \xc2\xb7 %s", what, d->addr);
-    else if (what)          snprintf(out, n, "%s", what);
+    if (what && d->addr[0]) snprintf(out, n, "%s \xc2\xb7 %s", _(what), d->addr);
+    else if (what)          snprintf(out, n, "%s", _(what));
     else if (d->addr[0])    snprintf(out, n, "%s", d->addr);
-    else                    snprintf(out, n, "(unknown device)");
+    else                    snprintf(out, n, "%s", _("(unknown device)"));
 }
 
 /* Is this device worth listing at all?
@@ -447,7 +448,7 @@ static int on_method_reply(sd_bus_message *m, void *data, sd_bus_error *e)
     const sd_bus_error *err = sd_bus_message_get_error(m);
     if (err) {
         const char *msg = err->message && *err->message ? err->message : err->name;
-        snprintf(s->bt.status, sizeof(s->bt.status), "%s", msg ? msg : "failed");
+        snprintf(s->bt.status, sizeof(s->bt.status), "%s", msg ? msg : _("failed"));
         wlr_log(WLR_INFO, "synui: bt: %s", msg ? msg : "(error)");
     } else {
         s->bt.status[0] = '\0';
@@ -668,7 +669,7 @@ static int agent_cancel(sd_bus_message *m, void *data, sd_bus_error *e)
     (void)e;
     syn_server_t *s = data;
     bt_ask_clear(s);
-    snprintf(s->bt.status, sizeof(s->bt.status), "pairing cancelled");
+    snprintf(s->bt.status, sizeof(s->bt.status), "%s", _("pairing cancelled"));
     bt_repaint(s);
     return sd_bus_reply_method_return(m, NULL);
 }
@@ -689,8 +690,8 @@ static int agent_request_pincode(sd_bus_message *m, void *data, sd_bus_error *e)
 {
     (void)e; (void)m;
     syn_server_t *s = data;
-    snprintf(s->bt.status, sizeof(s->bt.status),
-             "device wants a typed PIN \xc2\xb7 not supported yet");
+    snprintf(s->bt.status, sizeof(s->bt.status), "%s",
+             _("device wants a typed PIN \xc2\xb7 not supported yet"));
     bt_repaint(s);
     return sd_bus_error_set(e, "org.bluez.Error.Rejected", "PIN entry unsupported");
 }
@@ -699,8 +700,8 @@ static int agent_request_passkey(sd_bus_message *m, void *data, sd_bus_error *e)
 {
     (void)m;
     syn_server_t *s = data;
-    snprintf(s->bt.status, sizeof(s->bt.status),
-             "device wants a typed passkey \xc2\xb7 not supported yet");
+    snprintf(s->bt.status, sizeof(s->bt.status), "%s",
+             _("device wants a typed passkey \xc2\xb7 not supported yet"));
     bt_repaint(s);
     return sd_bus_error_set(e, "org.bluez.Error.Rejected", "passkey entry unsupported");
 }

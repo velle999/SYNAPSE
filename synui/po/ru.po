@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,6 +17,120 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "запрос к synapd не удался — переподключение"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "нет активного окна — спрашивайте что угодно"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "(неизвестно)"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "(без названия)"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "о: %s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "Звук"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "Гарнитура"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "Наушники"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "Камера"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "Видеокамера"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "Компьютер"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "Геймпад"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "Клавиатура"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "Мышь"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "Планшет"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "Модем"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "Плеер"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "Сеть"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "Телефон"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "Принтер"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "Сканер"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "Экран"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "(неизвестное устройство)"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "ошибка"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "сопряжение отменено"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "устройство просит ввести PIN · пока не поддерживается"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "устройство просит ввести ключ · пока не поддерживается"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "не удалось сохранить: %s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -944,7 +1058,7 @@ msgstr "Форма при включённых углах; нужны «Эффе
 msgid "Welcome menu at login"
 msgstr "Меню приветствия при входе"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "Вход"
 
@@ -977,10 +1091,6 @@ msgstr "Только окрас и отметины; ходят все поро�
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "Скорость повтора клавиш"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "Клавиатура"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1120,10 +1230,6 @@ msgstr "Звуки событий"
 msgid "Screen audio"
 msgstr "Звук на экран"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "Звук"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr ""
@@ -1180,10 +1286,6 @@ msgstr ""
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "Сеть / Wi-Fi"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "Сеть"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2108,6 +2210,65 @@ msgstr "Открыть"
 msgid "Move to Trash"
 msgstr "Переместить в корзину"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "расширить"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "дублировать"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "только внешние"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "%s перемещён"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "масштаб %.2fx · %d экран; %d не удалось"
+msgstr[1] "масштаб %.2fx · %d экрана; %d не удалось"
+msgstr[2] "масштаб %.2fx · %d экранов; %d не удалось"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "всё на %.2fx"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "обычно"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → основной (экран X11 по умолчанию)"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "только внешние: внешний экран не подключён — встроенная панель остаётся включённой"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "экраны: %s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "сверху"
@@ -2173,6 +2334,73 @@ msgstr "Отпечаток отключён — введите пароль"
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "Отпечаток не распознан"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d записей, %d новых  (часть источников не ответила)"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d записей, %d новых"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "ни один источник не ответил"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "для этого нет ссылки на обсуждение"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "не удалось открыть эту ссылку"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "обсуждение открыто"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "открыто"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "скопировано %s"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "по времени"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "по источнику"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "всё отмечено прочитанным"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "обновление…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "Пока режим был включён, пришло %d уведомление"
+msgstr[1] "Пока режим был включён, пришло %d уведомления"
+msgstr[2] "Пока режим был включён, пришло %d уведомлений"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "Не беспокоить включено"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "Не беспокоить выключено"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2247,10 +2475,6 @@ msgstr "(простой — недавних событий нет)"
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd недоступен)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "обычно"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2692,10 +2916,6 @@ msgstr "Пробел все вкл./выкл. · R сбросить положе
 #: src/render.c:4438
 msgid "done"
 msgstr "готово"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "ошибка"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3621,6 +3841,66 @@ msgstr "Температура в"
 msgid "Keyboard layout"
 msgstr "Раскладка клавиатуры"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "Выход из сеанса"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "Устройство подключено"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "Устройство отключено"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "Экран заблокирован"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "Экран разблокирован"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "Уведомление"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "Снимок экрана"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "Изменение громкости"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "Ошибка / сигнал"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s включено"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s выключено"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "громкость 0% · без звука"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "громкость %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s: %s%s · t, чтобы услышать"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "Все виджеты"
@@ -3660,6 +3940,18 @@ msgstr "Аналоговые часы"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "Музыкальный проигрыватель"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "пресет"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "пресет (нет основы)"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "ресурс (не обои)"
 
 #, fuzzy
 #~ msgid "visualizer"

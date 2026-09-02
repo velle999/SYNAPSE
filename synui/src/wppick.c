@@ -54,6 +54,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 /* Built-in wallpapers offered by the picker. Order is the on-screen order. */
 const struct wppick_option wppick_options[] = {
@@ -839,14 +840,14 @@ static bool wp_project_meta(const char *path, const char *root,
          * keys in: the early break above needs a "type", and a preset never
          * has one, so the scan always ran to EOF. */
         if (dep[0] && wp_id_present(root, dep)) {
-            snprintf(type, yn, "preset");
+            snprintf(type, yn, "%s", _("preset"));
             return true;
         }
-        snprintf(type, yn, "preset (base missing)");
+        snprintf(type, yn, "%s", _("preset (base missing)"));
         return false;
     }
     if (strcasecmp(category, "asset") == 0) {
-        snprintf(type, yn, "asset (not a wallpaper)");
+        snprintf(type, yn, "%s", _("asset (not a wallpaper)"));
         return false;
     }
     return true;

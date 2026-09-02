@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,120 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "synapd से पूछताछ विफल — फिर से जोड़ा जा रहा है"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "कोई सक्रिय खिड़की नहीं — कुछ भी पूछिए"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "(अज्ञात)"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "(बिना शीर्षक)"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "विषय: %s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "ध्वनि"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "हेडसेट"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "हेडफ़ोन"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "कैमरा"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "कैमकॉर्डर"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "कंप्यूटर"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "नियंत्रक"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "कुंजीपटल"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "माउस"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "टैबलेट"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "मॉडेम"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "प्लेयर"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "नेटवर्क"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "फ़ोन"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "प्रिंटर"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "स्कैनर"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "प्रदर्शन"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "(अज्ञात उपकरण)"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "विफल"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "युग्मन रद्द"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "उपकरण टाइप किया हुआ पिन माँगता है · अभी समर्थित नहीं"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "उपकरण टाइप की हुई कुंजी माँगता है · अभी समर्थित नहीं"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "सहेजना विफल: %s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -916,7 +1030,7 @@ msgstr "कोने चालू होने पर का आकार; इ�
 msgid "Welcome menu at login"
 msgstr "लॉगिन पर स्वागत मेन्यू"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "लॉगिन"
 
@@ -947,10 +1061,6 @@ msgstr "केवल रंग और धब्बे; चाल हर नस�
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "कुंजी दोहराव की गति"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "कुंजीपटल"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1086,10 +1196,6 @@ msgstr "घटना-ध्वनियाँ"
 msgid "Screen audio"
 msgstr "ध्वनि पर्दे पर"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "ध्वनि"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr "टीवी या मॉनिटर जोड़ते ही ध्वनि वहाँ भेज देता है। स्वचालित = लैपटॉप"
@@ -1141,10 +1247,6 @@ msgstr "DNxHR .mov, जिसे वीडियो संपादक सीध
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "नेटवर्क / Wi-Fi"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "नेटवर्क"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2063,6 +2165,64 @@ msgstr "खोलें"
 msgid "Move to Trash"
 msgstr "रद्दी में डालें"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "विस्तार"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "प्रतिबिंब"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "केवल बाहरी"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "%s हटाया गया"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "स्केल %.2fx · %d स्क्रीन; %d नहीं हो सकी"
+msgstr[1] "स्केल %.2fx · %d स्क्रीनें; %d नहीं हो सकीं"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "सब कुछ %.2fx पर"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "सामान्य"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → प्राथमिक (X11 का डिफ़ॉल्ट प्रदर्शन)"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "केवल बाहरी: कोई बाहरी स्क्रीन नहीं जुड़ी — अंतर्निर्मित पैनल चालू रहेगा"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "स्क्रीनें: %s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "ऊपर"
@@ -2127,6 +2287,72 @@ msgstr "उँगली की छाप बंद — अपना कूटश
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "उँगली की छाप पहचानी नहीं गई"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d वस्तुएँ, %d नई  (कुछ स्रोतों ने उत्तर नहीं दिया)"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d वस्तुएँ, %d नई"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "किसी स्रोत ने उत्तर नहीं दिया"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "इसके लिए कोई चर्चा लिंक नहीं"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "वह लिंक नहीं खुल सका"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "चर्चा खोली गई"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "खोला गया"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "%s कॉपी किया"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "समय के क्रम में"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "स्रोत के क्रम में"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "सब पढ़ा हुआ चिह्नित"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "ताज़ा हो रहा है…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "चालू रहते %d सूचना आई"
+msgstr[1] "चालू रहते %d सूचनाएँ आईं"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "परेशान न करें चालू"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "परेशान न करें बंद"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2200,10 +2426,6 @@ msgstr "(निष्क्रिय — कोई हालिया घटन�
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd उपलब्ध नहीं)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "सामान्य"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2623,10 +2845,6 @@ msgstr "स्पेस सब चालू/बंद · R जगहें फ�
 #: src/render.c:4438
 msgid "done"
 msgstr "हो गया"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "विफल"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3535,6 +3753,66 @@ msgstr "तापमान की इकाई"
 msgid "Keyboard layout"
 msgstr "कीबोर्ड विन्यास"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "लॉग आउट"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "उपकरण जोड़ा गया"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "उपकरण हटाया गया"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "स्क्रीन बंद"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "स्क्रीन खुली"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "सूचना"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "स्क्रीनशॉट"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "ध्वनि में बदलाव"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "त्रुटि / चेतावनी"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s चालू"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s बंद"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "ध्वनि 0% · मौन"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "ध्वनि %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s: %s%s · सुनने के लिए t"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "सभी विजेट"
@@ -3574,6 +3852,18 @@ msgstr "सुइयों वाली घड़ी"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "संगीत बजानेवाला"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "पूर्वनिर्धारित"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "पूर्वनिर्धारित (आधार अनुपलब्ध)"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "सामग्री (वॉलपेपर नहीं)"
 
 #, fuzzy
 #~ msgid "visualizer"

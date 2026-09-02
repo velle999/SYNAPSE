@@ -55,6 +55,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 /* Feeds worth having on this machine. Order is the panel's Tab order. */
 static const syn_news_source_t news_defaults[] = {
@@ -944,11 +945,13 @@ static int news_readable(int fd, uint32_t mask, void *data)
 
         int unread = 0;
         for (int i = 0; i < n->n; i++) if (!n->items[i].seen) unread++;
-        snprintf(n->status, sizeof(n->status), "%d items, %d new%s",
-                 n->n, unread,
-                 n->failed ? "  (some feeds did not answer)" : "");
+        if (n->failed)
+            snprintf(n->status, sizeof(n->status),
+                     _("%d items, %d new  (some feeds did not answer)"), n->n, unread);
+        else
+            snprintf(n->status, sizeof(n->status), _("%d items, %d new"), n->n, unread);
     } else {
-        snprintf(n->status, sizeof(n->status), "no feeds answered");
+        snprintf(n->status, sizeof(n->status), "%s", _("no feeds answered"));
     }
 
     if (n->visible) synui_render_news(s);
@@ -1083,7 +1086,7 @@ void news_show(syn_server_t *s)
     } else {
         int unread = 0;
         for (int i = 0; i < n->n; i++) if (!n->items[i].seen) unread++;
-        snprintf(n->status, sizeof(n->status), "%d items, %d new", n->n, unread);
+        snprintf(n->status, sizeof(n->status), _("%d items, %d new"), n->n, unread);
     }
 
     wl_event_source_timer_update(n->timer, 60 * 1000);
@@ -1119,13 +1122,13 @@ static void news_open(syn_server_t *s, int comments, int close_panel)
 
     const char *url = comments && it->comments[0] ? it->comments : it->url;
     if (comments && !it->comments[0]) {
-        snprintf(n->status, sizeof(n->status), "no discussion link for this one");
+        snprintf(n->status, sizeof(n->status), "%s", _("no discussion link for this one"));
         synui_render_news(s);
         return;
     }
 
     if (news_open_url(url) < 0) {
-        snprintf(n->status, sizeof(n->status), "could not open that link");
+        snprintf(n->status, sizeof(n->status), "%s", _("could not open that link"));
         synui_render_news(s);
         return;
     }
@@ -1135,7 +1138,8 @@ static void news_open(syn_server_t *s, int comments, int close_panel)
         news_hide(s);
         return;
     }
-    snprintf(n->status, sizeof(n->status), "opened%s", comments ? " discussion" : "");
+    snprintf(n->status, sizeof(n->status), "%s",
+             comments ? _("opened discussion") : _("opened"));
     news_move(n, 1);
     synui_render_news(s);
 }
@@ -1311,7 +1315,7 @@ int news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_y: {
         syn_news_item_t *it = news_sel(n);
         if (it && news_copy_url(it->url) == 0)
-            snprintf(n->status, sizeof(n->status), "copied %s", it->url);
+            snprintf(n->status, sizeof(n->status), _("copied %s"), it->url);
         break;
     }
 
@@ -1331,8 +1335,9 @@ int news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_s:
         n->sort = (n->sort == NEWS_SORT_TIME) ? NEWS_SORT_SOURCE : NEWS_SORT_TIME;
-        snprintf(n->status, sizeof(n->status), "sorted by %s",
-                 n->sort == NEWS_SORT_TIME ? "time" : "source");
+        snprintf(n->status, sizeof(n->status), "%s",
+                 n->sort == NEWS_SORT_TIME ? _("sorted by time")
+                                           : _("sorted by source"));
         news_rebuild_view(n);
         break;
 
@@ -1353,12 +1358,12 @@ int news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     }
     case XKB_KEY_A:
         for (int i = 0; i < n->n; i++) mark_seen(n, &n->items[i]);
-        snprintf(n->status, sizeof(n->status), "all marked read");
+        snprintf(n->status, sizeof(n->status), "%s", _("all marked read"));
         break;
 
     case XKB_KEY_r:
         news_request_fetch(s);
-        snprintf(n->status, sizeof(n->status), "refreshing…");
+        snprintf(n->status, sizeof(n->status), "%s", _("refreshing…"));
         break;
 
     default:

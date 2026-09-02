@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,120 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "synapd 질의 실패 — 다시 연결하는 중"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "활성 창이 없습니다 — 무엇이든 물어보세요"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "(알 수 없음)"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "(제목 없음)"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "대상: %s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "소리"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "헤드셋"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "헤드폰"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "카메라"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "캠코더"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "컴퓨터"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "컨트롤러"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "키보드"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "마우스"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "태블릿"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "모뎀"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "재생기"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "네트워크"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "전화"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "프린터"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "스캐너"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "디스플레이"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "(알 수 없는 장치)"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "실패"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "페어링을 취소했습니다"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "장치가 입력식 PIN을 요구합니다 · 아직 지원하지 않습니다"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "장치가 입력식 패스키를 요구합니다 · 아직 지원하지 않습니다"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "저장 실패: %s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -919,7 +1033,7 @@ msgstr "모서리를 켰을 때의 모양. 창 효과 ▸ 모서리 둥글기가
 msgid "Welcome menu at login"
 msgstr "로그인 시 환영 메뉴"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "로그인"
 
@@ -951,10 +1065,6 @@ msgstr "털색과 무늬만 다르고, 걷는 모습은 모두 같습니다"
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "키 반복 속도"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "키보드"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1090,10 +1200,6 @@ msgstr "이벤트 소리"
 msgid "Screen audio"
 msgstr "화면으로 소리 보내기"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "소리"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr "TV나 모니터를 연결하면 소리를 그쪽으로 옮깁니다. 자동 = 노트북"
@@ -1145,10 +1251,6 @@ msgstr "영상 편집 프로그램이 바로 읽는 DNxHR .mov. 분당 약 1.1 G
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "네트워크 / Wi-Fi"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "네트워크"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2069,6 +2171,63 @@ msgstr "열기"
 msgid "Move to Trash"
 msgstr "휴지통으로 옮기기"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "확장"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "복제"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "외부만"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "%s 이동함"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "배율 %.2fx · 화면 %d개; %d개는 실패"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "전부 %.2fx로"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "보통"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → 기본 (X11 기본 디스플레이)"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "외부만: 연결된 외부 화면이 없습니다 — 내장 패널은 켜 둡니다"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "화면: %s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "위"
@@ -2132,6 +2291,71 @@ msgstr "지문 인증이 꺼졌습니다 — 비밀번호를 쓰세요"
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "지문을 알아보지 못했습니다"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d개 중 %d개가 새 항목  (응답하지 않은 피드가 있습니다)"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d개 중 %d개가 새 항목"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "응답한 피드가 없습니다"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "이 항목에는 토론 링크가 없습니다"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "그 링크를 열지 못했습니다"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "토론을 열었습니다"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "열었습니다"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "%s 복사함"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "시간순 정렬"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "출처순 정렬"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "모두 읽음으로 표시함"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "새로 고치는 중…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "켜져 있는 동안 알림 %d개가 도착했습니다"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "방해 금지 켬"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "방해 금지 끔"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2204,10 +2428,6 @@ msgstr "(대기 중 — 최근 이벤트 없음)"
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd를 사용할 수 없음)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "보통"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2628,10 +2848,6 @@ msgstr "스페이스 전체 켬/끔 · R 위치 되돌리기 · Esc 닫기"
 #: src/render.c:4438
 msgid "done"
 msgstr "완료"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "실패"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3544,6 +3760,66 @@ msgstr "온도 단위"
 msgid "Keyboard layout"
 msgstr "키보드 배열"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "로그아웃"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "장치 연결됨"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "장치 분리됨"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "화면 잠김"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "화면 잠금 해제됨"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "알림"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "스크린샷"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "음량 변경"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "오류 / 경고음"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s 켬"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s 끔"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "음량 0% · 음소거"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "음량 %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s: %s%s · t를 누르면 들어볼 수 있습니다"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "모든 위젯"
@@ -3583,6 +3859,18 @@ msgstr "아날로그 시계"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "음악 재생기"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "프리셋"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "프리셋 (원본 없음)"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "자료 (배경화면이 아님)"
 
 #, fuzzy
 #~ msgid "visualizer"

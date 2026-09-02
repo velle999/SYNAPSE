@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/velle999/SYNAPSE/issues\n"
-"POT-Creation-Date: 2026-09-01 16:04-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 02:07-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,6 +17,120 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
 "&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
+
+#: src/ai_interface.c:251
+msgid "synapd query failed — reconnecting"
+msgstr "فشل الاستعلام من synapd — جارٍ إعادة الاتصال"
+
+#: src/ai_interface.c:407
+msgid "no focused window — ask anything"
+msgstr "لا نافذة مركّزة — اسأل ما شئت"
+
+#: src/ai_interface.c:416
+msgid "(unknown)"
+msgstr "(غير معروف)"
+
+#: src/ai_interface.c:417
+msgid "(untitled)"
+msgstr "(بلا عنوان)"
+
+#: src/ai_interface.c:421
+#, c-format
+msgid "about: %s"
+msgstr "بخصوص: %s"
+
+#: src/bt.c:129 src/ctlpanel.c:1153
+msgid "Audio"
+msgstr "الصوت"
+
+#: src/bt.c:130
+msgid "Headset"
+msgstr "سمّاعة بميكروفون"
+
+#: src/bt.c:131
+msgid "Headphones"
+msgstr "سمّاعات رأس"
+
+#: src/bt.c:132
+msgid "Camera"
+msgstr "كاميرا"
+
+#: src/bt.c:133
+msgid "Camcorder"
+msgstr "كاميرا فيديو"
+
+#: src/bt.c:134
+msgid "Computer"
+msgstr "حاسوب"
+
+#: src/bt.c:135
+msgid "Controller"
+msgstr "ذراع تحكّم"
+
+#: src/bt.c:136 src/ctlpanel.c:1044
+msgid "Keyboard"
+msgstr "لوحة المفاتيح"
+
+#: src/bt.c:137
+msgid "Mouse"
+msgstr "فأرة"
+
+#: src/bt.c:138
+msgid "Tablet"
+msgstr "لوح رقمي"
+
+#: src/bt.c:139
+msgid "Modem"
+msgstr "مودم"
+
+#: src/bt.c:140
+msgid "Player"
+msgstr "مشغّل"
+
+#: src/bt.c:141 src/ctlpanel.c:1189
+msgid "Network"
+msgstr "الشبكة"
+
+#: src/bt.c:142
+msgid "Phone"
+msgstr "هاتف"
+
+#: src/bt.c:143
+msgid "Printer"
+msgstr "طابعة"
+
+#: src/bt.c:144
+msgid "Scanner"
+msgstr "ماسحة ضوئية"
+
+#: src/bt.c:145
+msgid "Display"
+msgstr "شاشة"
+
+#: src/bt.c:164
+msgid "(unknown device)"
+msgstr "(جهاز غير معروف)"
+
+#: src/bt.c:451 src/render.c:4439
+msgid "failed"
+msgstr "فشل"
+
+#: src/bt.c:672
+msgid "pairing cancelled"
+msgstr "أُلغي الاقتران"
+
+#: src/bt.c:694
+msgid "device wants a typed PIN · not supported yet"
+msgstr "الجهاز يطلب رمز PIN مكتوباً · غير مدعوم بعد"
+
+#: src/bt.c:704
+msgid "device wants a typed passkey · not supported yet"
+msgstr "الجهاز يطلب مفتاح مرور مكتوباً · غير مدعوم بعد"
+
+#: src/clock.c:96
+#, c-format
+msgid "save failed: %s"
+msgstr "فشل الحفظ: %s"
 
 #: src/ctlpanel.c:359
 msgid "Theme"
@@ -912,7 +1026,7 @@ msgstr "الشكل حين تكون الزوايا مفعّلة؛ يحتاج «م
 msgid "Welcome menu at login"
 msgstr "قائمة الترحيب عند الدخول"
 
-#: src/ctlpanel.c:1023
+#: src/ctlpanel.c:1023 src/sound.c:71
 msgid "Login"
 msgstr "تسجيل الدخول"
 
@@ -943,10 +1057,6 @@ msgstr "الفراء والعلامات فقط؛ وكل السلالات تمش�
 #: src/ctlpanel.c:1043
 msgid "Key repeat rate"
 msgstr "سرعة تكرار المفاتيح"
-
-#: src/ctlpanel.c:1044
-msgid "Keyboard"
-msgstr "لوحة المفاتيح"
 
 #: src/ctlpanel.c:1048
 msgid "Key repeat delay"
@@ -1083,10 +1193,6 @@ msgstr "أصوات الأحداث"
 msgid "Screen audio"
 msgstr "الصوت إلى الشاشة"
 
-#: src/ctlpanel.c:1153
-msgid "Audio"
-msgstr "الصوت"
-
 #: src/ctlpanel.c:1156
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr "ينقل الصوت إلى تلفاز أو شاشة حين توصلها. «تلقائي» = الحواسيب المحمولة"
@@ -1139,10 +1245,6 @@ msgstr ""
 #: src/ctlpanel.c:1188 src/ctlpanel.c:2792
 msgid "Network / Wi-Fi"
 msgstr "الشبكة / واي-فاي"
-
-#: src/ctlpanel.c:1189
-msgid "Network"
-msgstr "الشبكة"
 
 #: src/ctlpanel.c:1190
 msgid "Bluetooth"
@@ -2060,6 +2162,68 @@ msgstr "فتح"
 msgid "Move to Trash"
 msgstr "النقل إلى المهملات"
 
+#: src/dispcfg.c:129
+msgid "extend"
+msgstr "توسيع"
+
+#: src/dispcfg.c:130
+msgid "mirror"
+msgstr "استنساخ"
+
+#: src/dispcfg.c:131
+msgid "external"
+msgstr "الخارجية فقط"
+
+#: src/dispcfg.c:712
+#, c-format
+msgid "%s ↔ %s"
+msgstr "%s ↔ %s"
+
+#: src/dispcfg.c:715
+#, c-format
+msgid "%s moved"
+msgstr "نُقل %s"
+
+#: src/dispcfg.c:879
+#, c-format
+msgid "scale %.2fx · %d screen; %d could not"
+msgid_plural "scale %.2fx · %d screens; %d could not"
+msgstr[0] "التحجيم %.2fx · %d شاشة؛ %d تعذّرت"
+msgstr[1] "التحجيم %.2fx · %d شاشة؛ %d تعذّرت"
+msgstr[2] "التحجيم %.2fx · %d شاشتان؛ %d تعذّرت"
+msgstr[3] "التحجيم %.2fx · %d شاشات؛ %d تعذّرت"
+msgstr[4] "التحجيم %.2fx · %d شاشة؛ %d تعذّرت"
+msgstr[5] "التحجيم %.2fx · %d شاشة؛ %d تعذّرت"
+
+#: src/dispcfg.c:883
+#, c-format
+msgid "everything at %.2fx"
+msgstr "كل شيء عند %.2fx"
+
+#: src/dispcfg.c:970 src/render.c:1080
+msgid "normal"
+msgstr "عادي"
+
+#: src/dispcfg.c:971
+#, c-format
+msgid "%s → %s"
+msgstr "%s → %s"
+
+#: src/dispcfg.c:994
+#, c-format
+msgid "%s → primary (X11 default display)"
+msgstr "%s → الأساسية (شاشة X11 الافتراضية)"
+
+#: src/dispcfg.c:1023
+msgid ""
+"external only: no external screen connected — the built-in panel stays on"
+msgstr "الخارجية فقط: لا توجد شاشة خارجية موصولة — تبقى اللوحة المدمجة تعمل"
+
+#: src/dispcfg.c:1026
+#, c-format
+msgid "screens: %s"
+msgstr "الشاشات: %s"
+
 #: src/dock.c:3418
 msgid "top"
 msgstr "أعلى"
@@ -2128,6 +2292,76 @@ msgstr "بصمة الإصبع معطَّلة — استعمل كلمة سرك"
 #, c-format
 msgid "Fingerprint not recognised"
 msgstr "لم يتم التعرف على البصمة"
+
+#: src/news.c:950
+#, c-format
+msgid "%d items, %d new  (some feeds did not answer)"
+msgstr "%d عنصراً، %d جديدة  (بعض المصادر لم تُجب)"
+
+#: src/news.c:952 src/news.c:1089
+#, c-format
+msgid "%d items, %d new"
+msgstr "%d عنصراً، %d جديدة"
+
+#: src/news.c:954
+msgid "no feeds answered"
+msgstr "لم يُجب أي مصدر"
+
+#: src/news.c:1125
+msgid "no discussion link for this one"
+msgstr "لا يوجد رابط نقاش لهذا"
+
+#: src/news.c:1131
+msgid "could not open that link"
+msgstr "تعذّر فتح ذلك الرابط"
+
+#: src/news.c:1142
+msgid "opened discussion"
+msgstr "فُتح النقاش"
+
+#: src/news.c:1142
+msgid "opened"
+msgstr "فُتح"
+
+#: src/news.c:1318
+#, c-format
+msgid "copied %s"
+msgstr "نُسخ %s"
+
+#: src/news.c:1339
+msgid "sorted by time"
+msgstr "مرتّب حسب الوقت"
+
+#: src/news.c:1340
+msgid "sorted by source"
+msgstr "مرتّب حسب المصدر"
+
+#: src/news.c:1361
+msgid "all marked read"
+msgstr "عُلِّم الكل كمقروء"
+
+#: src/news.c:1366
+msgid "refreshing…"
+msgstr "جارٍ التحديث…"
+
+#: src/notif.c:346
+#, c-format
+msgid "%d notification arrived while it was on"
+msgid_plural "%d notifications arrived while it was on"
+msgstr[0] "وصل %d إشعار أثناء تفعيله"
+msgstr[1] "وصل %d إشعار أثناء تفعيله"
+msgstr[2] "وصل %d إشعاران أثناء تفعيله"
+msgstr[3] "وصلت %d إشعارات أثناء تفعيله"
+msgstr[4] "وصل %d إشعاراً أثناء تفعيله"
+msgstr[5] "وصل %d إشعار أثناء تفعيله"
+
+#: src/notif.c:353
+msgid "Do Not Disturb on"
+msgstr "عدم الإزعاج مُفعّل"
+
+#: src/notif.c:353
+msgid "Do Not Disturb off"
+msgstr "عدم الإزعاج مُعطّل"
 
 #: src/power.c:112
 msgid "Dim screen"
@@ -2205,10 +2439,6 @@ msgstr "(خامل — لا أحداث حديثة)"
 #: src/render.c:1058
 msgid "(synapd unavailable)"
 msgstr "(synapd غير متاح)"
-
-#: src/render.c:1080
-msgid "normal"
-msgstr "عادي"
 
 #: src/render.c:1084
 msgid "flipped"
@@ -2642,10 +2872,6 @@ msgstr "المسافة لتشغيل الكل أو إيقافه · R لإعادة
 #: src/render.c:4438
 msgid "done"
 msgstr "تم"
-
-#: src/render.c:4439
-msgid "failed"
-msgstr "فشل"
 
 #: src/render.c:4440
 msgid "starting"
@@ -3567,6 +3793,66 @@ msgstr "وحدة الحرارة"
 msgid "Keyboard layout"
 msgstr "تخطيط لوحة المفاتيح"
 
+#: src/sound.c:72
+msgid "Logout"
+msgstr "إنهاء الجلسة"
+
+#: src/sound.c:73
+msgid "Device plugged in"
+msgstr "وُصِّل جهاز"
+
+#: src/sound.c:74
+msgid "Device unplugged"
+msgstr "فُصِل جهاز"
+
+#: src/sound.c:75
+msgid "Screen locked"
+msgstr "قُفلت الشاشة"
+
+#: src/sound.c:76
+msgid "Screen unlocked"
+msgstr "فُتح قفل الشاشة"
+
+#: src/sound.c:77
+msgid "Notification"
+msgstr "إشعار"
+
+#: src/sound.c:78
+msgid "Screenshot"
+msgstr "لقطة شاشة"
+
+#: src/sound.c:79
+msgid "Volume change"
+msgstr "تغيّر مستوى الصوت"
+
+#: src/sound.c:80
+msgid "Error / alert"
+msgstr "خطأ / تنبيه"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s on"
+msgstr "%s مُفعّل"
+
+#: src/sound.c:397
+#, c-format
+msgid "%s off"
+msgstr "%s مُعطّل"
+
+#: src/sound.c:421
+msgid "volume 0% · muted"
+msgstr "مستوى الصوت 0% · مكتوم"
+
+#: src/sound.c:423
+#, c-format
+msgid "volume %d%%"
+msgstr "مستوى الصوت %d%%"
+
+#: src/sound.c:728
+#, c-format
+msgid "%s: %s%s · t to hear it"
+msgstr "%s: %s%s · اضغط t للسماع"
+
 #: src/widgets.c:60
 msgid "All widgets"
 msgstr "كل الودجات"
@@ -3606,6 +3892,18 @@ msgstr "ساعة عقارب"
 #: src/widgets.c:69
 msgid "Music player"
 msgstr "مشغّل الموسيقى"
+
+#: src/wppick.c:843
+msgid "preset"
+msgstr "إعداد مسبق"
+
+#: src/wppick.c:846
+msgid "preset (base missing)"
+msgstr "إعداد مسبق (الأساس مفقود)"
+
+#: src/wppick.c:850
+msgid "asset (not a wallpaper)"
+msgstr "مورد (ليس خلفية)"
 
 #, fuzzy
 #~ msgid "visualizer"

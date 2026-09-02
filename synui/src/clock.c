@@ -38,6 +38,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 #define CLOCK_POLL_MS 1000
 
@@ -92,7 +93,7 @@ void clock_state_save(syn_server_t *s)
     if (!f) {
         wlr_log(WLR_ERROR, "synui: clock: cannot write '%s': %s",
                 path, strerror(errno));
-        snprintf(c->status, sizeof(c->status), "save failed: %s",
+        snprintf(c->status, sizeof(c->status), _("save failed: %s"),
                  strerror(errno));
         return;
     }
