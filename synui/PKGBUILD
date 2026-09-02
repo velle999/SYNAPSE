@@ -2912,7 +2912,41 @@ pkgver=0.1.0
 #   actions, page ids, panel args, connector names, SSIDs, sink descriptions, EQ
 #   preset names, git SHAs, and the commands a person is meant to type — a
 #   translated `syn-update ping` names a binary that is not on the system.
-pkgrel=583
+# 584: the bar's runtime test was a FALSE GREEN, and the catalogs move beside
+#   the file that reads them.
+#   ⛔ TWENTY-THREE GREEN ASSERTIONS PROVING NOTHING. tests/i18n_bar_runtime.sh
+#   ran each case as a QML file that exits 0 on a match and 1 on a mismatch —
+#   and `qml` ALSO exits 0 when it cannot load the file at all, printing "Did
+#   not load any objects, exiting." So the shell's `if qml …; then ok` reported
+#   a pass for a probe that never ran a line. Found by sabotaging it: a
+#   deliberately impossible comparison passed, and so did I18n.tr("Volume")
+#   checked against the string NONSENSE. It was cited as evidence in 582 and
+#   583; those claims about the RUNTIME half were not earned, and this is the
+#   correction. Success is exit 7 now, mismatch is 1, and every other status —
+#   including 0 — is reported as the harness failing rather than as a pass.
+#   ⛔ AND THE STUB COULD NOT READ A FILE. With the exit code fixed, seven cases
+#   failed at once: every one that needed a catalog. The stub FileView read its
+#   path with a synchronous XMLHttpRequest, which returns EMPTY for a file:// URL
+#   in this configuration — so those cases had silently got no catalog, fallen
+#   back to English, and been compared against English. The content is injected
+#   through the stub now, keyed by the path I18n.qml asks for. Reading bytes off
+#   a disk is quickshell's FileView and quickshell's to test; what is ours is
+#   what I18n.qml does with those bytes and WHICH path it asks for, and the path
+#   is asserted separately against the string.
+#   ⚠ THE SUITE IS NOW SHOWN TO FAIL, three ways, because "it passes" is exactly
+#   what it said before: a wrong expectation fails one case; breaking the lookup
+#   in I18n.qml fails the singular case and no plural one; breaking the plural
+#   SELECTION fails four plural cases and no singular one. That split is the
+#   evidence the cases are testing what they name.
+#   The catalogs also move from <datadir>/synui/i18n to
+#   <datadir>/synui/quickshell/i18n, beside I18n.qml, and the singleton finds
+#   them with Qt.resolvedUrl("i18n") against its own file rather than a
+#   hardcoded path. That is what lets ONE BYTE-IDENTICAL copy of I18n.qml serve
+#   the seven other quickshell trees that still need translating — none of which
+#   may depend on synui, since they install on plain Arch without it. The env
+#   override is SYN_I18N_DIR, one name for every app, because the file is the
+#   same file.
+pkgrel=584
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -51,16 +51,33 @@ QtObject {
     id: root
 
     /*
-     * Where the catalogs are. The install path first, an env override for the
-     * test rigs and for running the bar out of a source tree, where the catalog
-     * has been generated into the build directory and never installed.
+     * Where the catalogs are: the `i18n/` directory BESIDE THIS FILE.
      *
-     * ⚠ SAME SHAPE AS SYNUI_BAR, ON PURPOSE. Every rig that points quickshell
-     * at a source tree already sets that one; this is the sibling it needs when
-     * the tree it points at is not the installed one.
+     * ⛔ RESOLVED FROM THE FILE'S OWN URL, AND THAT IS WHAT MAKES THIS FILE
+     * COPYABLE. Eight quickshell trees in this project need translating — the
+     * bar, Antiquity, synfiles, synstudio, synpkg, syn-settings, syn-edit,
+     * syn-cal — and they are separate PACKAGES: an app that imported the bar's
+     * copy would depend on synui, and these all install on plain Arch without
+     * it. So each tree carries a copy, and the only way copies do not drift is
+     * for them to be BYTE-IDENTICAL. A hardcoded "/usr/share/synui/i18n" would
+     * have made every one of them different in exactly one line, which is the
+     * line nobody reads.
+     *
+     * Qt.resolvedUrl() inside a singleton resolves against the singleton's own
+     * file, so this answers <wherever I am>/i18n whether that is the source
+     * tree, the build directory or /usr/share/<app>/. Checked, not assumed.
+     *
+     * ⚠ THE file:// PREFIX HAS TO COME OFF. FileView takes a filesystem path,
+     * not a URL, and a path beginning "file://" is simply a file that does not
+     * exist — which fails the way a missing catalog does, silently and in
+     * English.
+     *
+     * SYN_I18N_DIR overrides it, for the test rigs and for running an app out
+     * of a tree whose catalogs were generated into a build directory. One name
+     * for every app, because the file is the same file.
      */
-    readonly property string catalogDir: Quickshell.env("SYNUI_I18N_DIR")
-                                      || "/usr/share/synui/i18n"
+    readonly property string catalogDir: Quickshell.env("SYN_I18N_DIR")
+        || String(Qt.resolvedUrl("i18n")).replace(/^file:\/\//, "")
 
     /*
      * The language, as a bare two-letter code, or "" for English.

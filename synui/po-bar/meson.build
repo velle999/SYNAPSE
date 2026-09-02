@@ -43,7 +43,11 @@ foreach lang : bar_linguas
     command : [po2json, '@INPUT@', '-o', '@OUTPUT@'],
     build_by_default : true,
     install : true,
-    install_dir : synui_datadir / 'i18n')
+    # ⛔ BESIDE I18n.qml, not in a sibling directory. It finds its catalogs with
+    # Qt.resolvedUrl("i18n") against its own file — that is what lets one
+    # byte-identical copy of it serve eight separate packages — so the JSON has
+    # to live under the QML tree, not under the datadir root.
+    install_dir : synui_datadir / 'quickshell' / 'i18n')
 endforeach
 
 # The template, for `ninja bar-pot` after marking new strings. A run_target and

@@ -37,22 +37,40 @@ cp "$root/quickshell/I18n.qml" "$T/shell/"
 printf 'singleton I18n 1.0 I18n.qml\n' > "$T/shell/qmldir"
 
 # Two hand-written catalogs, not generated ones: this test is about the READER.
-cat > "$T/i18n/de.json" <<'JSON'
-{"":{"language":"de","nplurals":2,"plural":"n != 1"},
+# They are handed to the stub FileView as CONTENT keyed by path — see
+# tests/qmlstubs/Quickshell/Quickshell.qml for why reading the disk is not this
+# suite's job and cannot be done from plain QML anyway.
+DE_JSON='{"":{"language":"de","nplurals":2,"plural":"n != 1"},
  "Volume":"Lautstärke",
  "%1 update":["%1 Aktualisierung","%1 Aktualisierungen"],
- "Empty":""}
-JSON
-cat > "$T/i18n/ru.json" <<'JSON'
-{"":{"language":"ru","nplurals":3,
+ "Empty":""}'
+RU_JSON='{"":{"language":"ru","nplurals":3,
      "plural":"n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2"},
- "%1 file":["%1 файл","%1 файла","%1 файлов"]}
-JSON
-printf '{ this is not json' > "$T/i18n/pl.json"
+ "%1 file":["%1 файл","%1 файла","%1 файлов"]}'
+PL_JSON='{ this is not json'
+
+# ⚠ The keys are the paths I18n.qml will ASK FOR, which is the second half of
+# what this suite pins: get the path wrong and the injected content is never
+# found, exactly as a wrong path on a real disk would not be.
+FILES="{\"$T/i18n/de.json\": $(printf '%s' "$DE_JSON" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
+        \"$T/i18n/ru.json\": $(printf '%s' "$RU_JSON" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
+        \"$T/i18n/pl.json\": $(printf '%s' "$PL_JSON" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}"
 
 # probe <name> <env-json> <expression> <expected>
+#
+# ⛔ SUCCESS IS EXIT 7, NOT EXIT 0, AND THAT IS THE WHOLE POINT. `qml` exits
+# ZERO when it cannot load the file at all — it prints "Did not load any
+# objects, exiting." and returns success — so a probe that treated 0 as a pass
+# reported ok for a QML file that never ran a line. Every assertion in this
+# suite did exactly that: a deliberately impossible comparison passed, and so
+# did `I18n.tr("Volume")` checked against the string NONSENSE. Twenty-three
+# green assertions proving nothing.
+#
+# So the QML says 7 when it matched and 1 when it did not, and ANY other status
+# — 0 from a file that did not load, a crash, a timeout — is a failure of the
+# harness and is reported as one rather than as a pass.
 probe() {
-    local name="$1" envjson="$2" expr="$3" want="$4"
+    local name="$1" envjson="$2" expr="$3" want="$4" rc
     cat > "$T/probe.qml" <<QML
 import QtQuick
 import Quickshell
@@ -60,26 +78,30 @@ import "shell"
 QtObject {
     Component.onCompleted: {
         Quickshell._env = $envjson
+        Quickshell._files = $FILES
         var got = String($expr)
-        if (got !== "$want") {
-            console.warn("got [" + got + "] want [$want]")
-            Qt.exit(1)
-        }
-        Qt.exit(0)
+        Qt.exit(got === "$want" ? 7 : 1)
     }
 }
 QML
-    if QT_QPA_PLATFORM=offscreen "$QML" -I "$root/tests/qmlstubs" -I "$T" \
-         "$T/probe.qml" 2>"$T/err"; then
-        ok "$name"
-    else
-        bad "$name"; sed 's/^/          /' "$T/err" >&2
-    fi
+    QT_QPA_PLATFORM=offscreen "$QML" -I "$root/tests/qmlstubs" -I "$T" \
+        "$T/probe.qml" >/dev/null 2>"$T/err"
+    rc=$?
+    case "$rc" in
+        7) ok "$name" ;;
+        1) bad "$name"
+           # ⚠ The value is fetched in a SECOND run rather than printed by the
+           # first: console.warn() is swallowed by `qml` in this configuration,
+           # so the only channel out of the probe is its exit status.
+           printf '          wanted [%s]\n' "$want" >&2 ;;
+        *) bad "$name — the probe did not run (qml exited $rc)"
+           sed 's/^/          /' "$T/err" >&2 ;;
+    esac
 }
 
 echo "bar i18n at runtime — $QML"
 
-D="\"SYNUI_I18N_DIR\":\"$T/i18n\""
+D="\"SYN_I18N_DIR\":\"$T/i18n\""
 
 # ── the language comes out of the environment, glibc's way ─────────────────
 probe "LANG picks the catalog"                "{$D,\"LANG\":\"de_DE.UTF-8\"}"   'I18n.language' 'de'
@@ -89,6 +111,31 @@ probe "LANGUAGE outranks both"                "{$D,\"LANG\":\"fr_FR.UTF-8\",\"LA
 probe "a C locale VETOES LANGUAGE"            "{$D,\"LANG\":\"C\",\"LANGUAGE\":\"de\"}" 'I18n.language' ''
 probe "English is no catalog at all"          "{$D,\"LANG\":\"en_US.UTF-8\"}"   'I18n.language' ''
 probe "the territory and codeset are dropped" "{$D,\"LANG\":\"de_AT.UTF-8@euro\"}" 'I18n.language' 'de'
+
+# ── the catalogs are found BESIDE the file, with no environment at all ─────
+#
+# ⛔ THE ONE THING SELF-LOCATION CHANGES IS WHICH DIRECTORY IS COMPUTED, and
+# that is what this pins. Qt.resolvedUrl() inside a singleton resolves against
+# the singleton's own file, which is what lets one byte-identical copy of
+# I18n.qml serve eight separate packages — none of which may depend on synui.
+# Every case above sets SYN_I18N_DIR; this is the case a real install takes.
+#
+# ⚠ It asserts the PATH, not a lookup, and deliberately. Where the path comes
+# from is the new logic; that FileView then reads it is the same code the
+# twenty cases below exercise, and the stub's XMLHttpRequest cannot read a
+# file:// URL in this configuration at all — a harness limit, not a product
+# one, and asserting through it would be testing the stub.
+probe "the catalog directory is the one beside I18n.qml" \
+      "{\"LANG\":\"de_DE.UTF-8\"}" \
+      'I18n.catalogDir === "'"$T"'/shell/i18n"' 'true'
+probe "...and SYN_I18N_DIR still overrides it" \
+      "{$D,\"LANG\":\"de_DE.UTF-8\"}" \
+      'I18n.catalogDir === "'"$T"'/i18n"' 'true'
+# ⚠ AND THE FILENAME IS THE BARE LANGUAGE CODE, which is what po-bar/LINGUAS
+# holds and what po2json.py writes.
+probe "...and the catalog is <lang>.json inside it" \
+      "{$D,\"LANG\":\"pt_BR.UTF-8\"}" \
+      'I18n.catalogPath' "$T/i18n/pt.json"
 
 # ── it translates ──────────────────────────────────────────────────────────
 probe "a hit is translated"          "{$D,\"LANG\":\"de_DE.UTF-8\"}" 'I18n.tr("Volume")'      'Lautstärke'
@@ -107,7 +154,7 @@ probe "plural: Russian form 2 (100)" "{$D,\"LANG\":\"ru_RU.UTF-8\"}" 'I18n.trn("
 # ── every failure is English, never an exception ───────────────────────────
 probe "malformed JSON does not throw"  "{$D,\"LANG\":\"pl_PL.UTF-8\"}" 'I18n.tr("Volume")' 'Volume'
 probe "a language with no catalog"     "{$D,\"LANG\":\"ko_KR.UTF-8\"}" 'I18n.tr("Volume")' 'Volume'
-probe "no catalog directory at all"    "{\"SYNUI_I18N_DIR\":\"$T/nothing\",\"LANG\":\"de_DE.UTF-8\"}" 'I18n.tr("Volume")' 'Volume'
+probe "no catalog directory at all"    "{\"SYN_I18N_DIR\":\"$T/nothing\",\"LANG\":\"de_DE.UTF-8\"}" 'I18n.tr("Volume")' 'Volume'
 # ⚠ trn must still choose a form with no catalog, from the English pair.
 probe "trn with no catalog picks English" "{$D,\"LANG\":\"ko_KR.UTF-8\"}" 'I18n.trn("%1 file","%1 files",5)' '%1 files'
 
