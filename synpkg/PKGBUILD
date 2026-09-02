@@ -184,7 +184,7 @@ pkgver=0.1.0
 #   installed"` fragment on the way past.
 #   ⚠ `--help` IS DELIBERATELY NOT MARKED: fifty lines of column-aligned text
 #   whose every command name must be typed in English anyway.
-pkgrel=50
+pkgrel=51
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

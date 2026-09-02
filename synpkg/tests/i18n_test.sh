@@ -155,6 +155,32 @@ while IFS= read -r l; do
 done < <(grep -vE '^\s*#|^\s*$' "$root/po/LINGUAS")
 check "every catalog compiles to both a .mo and a JSON" "" "$bad"
 
+# ── 5. ⛔ THE MAIN SUITE PINS THE LOCALE ──────────────────────────────────
+#
+# synpkg's compiled-in localedir is /usr/share/locale, so on a machine where
+# synpkg is INSTALLED a freshly built binary loads the INSTALLED catalog and
+# answers in the desktop's language — while tests/synpkg_test.sh asserts
+# English. That failed four assertions on a Japanese desktop and, because
+# `meson test` failing is a build failure, stopped `syn-update` from installing
+# synpkg at all.
+#
+# ⚠ IT CANNOT BE CHECKED BY RUNNING ANYTHING. Run the suite under LANG=ja on a
+# box where synpkg is not installed and every assertion passes in English,
+# because there is no catalog to find and gettext falls back to the msgid — the
+# fallback hides the lookup. Nor can it be grepped for: the four that failed
+# compare text assembled at RUNTIME (`package '%s' was not found …`), which
+# appears nowhere in the file. A msgid scan over the suite matches only a TSV
+# column list, which is the wrong line for the right reason.
+#
+# So this asserts the FIX rather than the symptom: the suite pins the locale.
+# ⚠ Both halves — gettext reads LANGUAGE before LC_ALL, so an ambient
+# LANGUAGE=ja survives an exported LC_ALL=C.UTF-8 on its own.
+suite="$root/tests/synpkg_test.sh"
+missing=""
+grep -qE '^[[:space:]]*export[[:space:]]+LC_ALL=' "$suite" || missing="$missing LC_ALL"
+grep -qE '^[[:space:]]*unset[[:space:]]+LANGUAGE' "$suite" || missing="$missing LANGUAGE"
+check "the main suite pins the locale it asserts in" "" "$missing"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all synpkg translation checks passed"; else echo "$fails failed"; fi
 exit $(( fails > 0 ))
