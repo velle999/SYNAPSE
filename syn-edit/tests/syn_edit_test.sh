@@ -1359,7 +1359,26 @@ check "…and gui delsel with nothing selected changes nothing" $?
 # needs PATH to find them. With no PATH neither is found, the documented
 # fallback makes + an ordinary private register, and the verbs are exercised
 # without a test suite overwriting the clipboard of whoever ran it.
-CLIP="env PATH= $E"
+# ⛔ AN EMPTY DIRECTORY, NOT AN EMPTY PATH. have_cmd() happens to return false
+# for an empty PATH, but "" is also the one value the C library is entitled to
+# treat as "use the default path" — and every OTHER program these tests reach is
+# free to do exactly that. A directory that exists and holds nothing cannot be
+# read either way.
+CLIPDIR=$(mktemp -d)
+CLIP="env PATH=$CLIPDIR $E"
+
+# ⛔ AND THE PREMISE IS ASSERTED, NOT ASSUMED. Everything below is only about
+# the private-register fallback IF wl-copy and wl-paste are genuinely out of
+# reach; if either is found, `gui paste` reads the DESKTOP CLIPBOARD and the
+# assertions become a test of whatever the person running this last copied.
+# That failure looks like a paste bug and is not one, which is worth one line
+# to rule out: `about` reports what the binary itself can see.
+clipseen=$($CLIP --rec about 2>/dev/null |
+           awk -F'\t' '$1 == "wl-copy" || $1 == "wl-paste" { print $1 "=" $2 }' |
+           grep -v '=absent' | tr '\n' ' ')
+[ -z "$clipseen" ]
+check "the clipboard tools are out of reach, so + is a private register" $?
+[ -n "$clipseen" ] && echo "        found: $clipseen" >&2
 
 printf 'gui insert\ngoto 1 1\ngui visual\nkeys iw\ngui copy\nquit\n' |
     $CLIP serve "$T/mless.txt" | gq '^S	mode	VISUAL$'
