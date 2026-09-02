@@ -5,6 +5,8 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+// The translation singleton, in qml/ beside this file. See qml/qmldir.
+import "qml"
 
 /*
  * SYNAPSE Software — the graphical front-end for synpkg.
@@ -335,21 +337,21 @@ FloatingWindow {
     }
 
     readonly property var sections: [
-        { id: "updates",   label: "Updates",      kind: "list" },
-        { id: "held",      label: "Held back",    kind: "list" },
-        { id: "suggested", label: "Suggested",    kind: "list" },
+        { id: "updates",   label: I18n.tr("Updates"),      kind: "list" },
+        { id: "held",      label: I18n.tr("Held back"),    kind: "list" },
+        { id: "suggested", label: I18n.tr("Suggested"),    kind: "list" },
         // Above the three single-source tabs because it is the one to reach for
         // when you do not already know WHICH source has the thing. The three
         // stay: "search only the AUR" is a real question, and answering it from
         // a list of four hundred rows from everywhere is not the same as asking
         // it.
-        { id: "all",       label: "All sources",  kind: "source" },
-        { id: "repo",      label: "Repositories", kind: "source" },
-        { id: "aur",       label: "AUR",          kind: "source" },
-        { id: "flathub",   label: "Flathub",      kind: "source" },
-        { id: "arsenal",   label: "Arsenal",      kind: "list" },
-        { id: "system",    label: "SynapseOS",    kind: "list" },
-        { id: "about",     label: "About",        kind: "about" }
+        { id: "all",       label: I18n.tr("All sources"),  kind: "source" },
+        { id: "repo",      label: I18n.tr("Repositories"), kind: "source" },
+        { id: "aur",       label: I18n.tr("AUR"),          kind: "source" },
+        { id: "flathub",   label: I18n.tr("Flathub"),      kind: "source" },
+        { id: "arsenal",   label: I18n.tr("Arsenal"),      kind: "list" },
+        { id: "system",    label: I18n.tr("SynapseOS"),    kind: "list" },
+        { id: "about",     label: I18n.tr("About"),        kind: "about" }
     ]
 
     function sectionKind(id) {
@@ -361,16 +363,18 @@ FloatingWindow {
 
     // What each tab is, in one line, under the title. Half of these are only
     // obvious if you already know the packaging landscape.
+    // ⛔ `id` IS THE SECTION KEY, matched here and written to the state file;
+    // only the sentences it returns are words.
     function sectionHint(id) {
-        if (id === "updates")   return "everything with a newer version — repositories, the AUR, Flathub and SynapseOS's own components"
-        if (id === "held")      return "updates you are deliberately not taking. Release one and it comes back on the next check"
-        if (id === "suggested") return "the curated SynapseOS software list"
-        if (id === "all")       return "every source at once — the repositories, BlackArch, the AUR and Flathub. Each result says where it came from"
-        if (id === "repo")      return "official Arch repositories and SynapseOS's own — signed, binary, managed by pacman"
-        if (id === "aur")       return "the Arch User Repository — recipes built from source on this machine"
-        if (id === "flathub")   return "sandboxed applications from Flathub, with their own runtimes"
-        if (id === "arsenal")   return "BlackArch security tooling, by category"
-        if (id === "system")    return "this system's own components, rebuilt from git by syn-update"
+        if (id === "updates")   return I18n.tr("everything with a newer version — repositories, the AUR, Flathub and SynapseOS's own components")
+        if (id === "held")      return I18n.tr("updates you are deliberately not taking. Release one and it comes back on the next check")
+        if (id === "suggested") return I18n.tr("the curated SynapseOS software list")
+        if (id === "all")       return I18n.tr("every source at once — the repositories, BlackArch, the AUR and Flathub. Each result says where it came from")
+        if (id === "repo")      return I18n.tr("official Arch repositories and SynapseOS's own — signed, binary, managed by pacman")
+        if (id === "aur")       return I18n.tr("the Arch User Repository — recipes built from source on this machine")
+        if (id === "flathub")   return I18n.tr("sandboxed applications from Flathub, with their own runtimes")
+        if (id === "arsenal")   return I18n.tr("BlackArch security tooling, by category")
+        if (id === "system")    return I18n.tr("this system's own components, rebuilt from git by syn-update")
         return ""
     }
 
@@ -727,7 +731,10 @@ FloatingWindow {
         // all three sources for exactly this.
         return table.map(r => root.makeRow(
             r.name, "", true, r.new_version, r.repo, parseInt(r.size || "0"),
-            (r.installed_version || "?") + "  →  " + (r.new_version || "update available"),
+            // ⚠ THE ARROW IS PART OF THE SENTENCE. Built by concatenation it
+            // cannot be moved, and a right-to-left language needs it mirrored.
+            I18n.tr("%1  →  %2").arg(r.installed_version || "?")
+                                .arg(r.new_version || I18n.tr("update available")),
             "update", tab, r.ignored === "1"))
     }
 
@@ -742,9 +749,11 @@ FloatingWindow {
             r.name, "", r.installed === "1", r.new_version,
             r.source === "flatpak" ? "flathub" : r.source, 0,
             r.new_version
-                ? (r.installed_version || "?") + "  →  " + r.new_version + "   held back"
-                : (r.installed_version ? r.installed_version + "   held back, no update waiting"
-                                       : "held back"),
+                ? I18n.tr("%1  →  %2   held back").arg(r.installed_version || "?")
+                                                  .arg(r.new_version)
+                : (r.installed_version
+                   ? I18n.tr("%1   held back, no update waiting").arg(r.installed_version)
+                   : I18n.tr("held back")),
             "held",
             r.source === "flatpak" ? "flathub" : "repo", true))
     }
@@ -752,7 +761,7 @@ FloatingWindow {
     function heldComponentRows(table) {
         return table.map(r => root.makeRow(
             r.name, "", true, "", "synapseos", 0,
-            (r.installed || "?") + "   held back",
+            I18n.tr("%1   held back").arg(r.installed || "?"),
             "held", "system", true))
     }
 
@@ -934,7 +943,7 @@ FloatingWindow {
             root.statusLine = ""
             if (code !== 0)
                 root.outcome = actProc.errLine !== "" ? actProc.errLine
-                    : "refused (exit " + code + ") — polkit may have declined"
+                    : I18n.tr("refused (exit %1) — polkit may have declined").arg(code)
             root.reload()
         }
     }
@@ -967,7 +976,7 @@ FloatingWindow {
     // reaches it: ALPM package names and Flatpak application ids cannot
     // contain whitespace.
     function inTerminal(argv, note) {
-        root.statusLine = note || "opened a terminal"
+        root.statusLine = note || I18n.tr("opened a terminal")
         termProc.command = ["sh", "-c",
             'command -v syntty >/dev/null 2>&1 && exec syntty --hold -e sh -c "$1"; ' +
             'for t in kitty foot; do command -v "$t" >/dev/null 2>&1 && exec "$t" --hold sh -c "$1"; done; ' +
@@ -994,7 +1003,11 @@ FloatingWindow {
         root.busy = row.name
         root.outcome = ""
         actProc.errLine = ""
-        root.statusLine = (on ? "holding back " : "releasing ") + row.name + "…"
+        // ⛔ NOT (on ? "holding back " : "releasing ") + name. Two verbs sharing
+        // one object is English grammar; a language that inflects the object by
+        // the verb, or puts the verb last, cannot be built that way.
+        root.statusLine = on ? I18n.tr("holding back %1…").arg(row.name)
+                             : I18n.tr("releasing %1…").arg(row.name)
         actProc.command = on ? root.holdCommand(row) : root.releaseCommand(row)
         actProc.running = true
     }
@@ -1020,20 +1033,21 @@ FloatingWindow {
         // the PKGBUILDs, so this window does not need to know them.
         if (row.source === "system") {
             root.inTerminal([root.bin, "system", "apply", row.name],
-                            "rebuilding " + row.name + " in a terminal")
+                            I18n.tr("rebuilding %1 in a terminal").arg(row.name))
             return
         }
 
         if (row.source === "aur" && verb !== "remove") {
             root.inTerminal([root.bin, "aur", "install", row.name],
-                            "building " + row.name + " in a terminal")
+                            I18n.tr("building %1 in a terminal").arg(row.name))
             return
         }
 
         root.busy = row.name
         root.outcome = ""
         actProc.errLine = ""
-        root.statusLine = (verb === "remove" ? "removing " : "installing ") + row.name + "…"
+        root.statusLine = verb === "remove" ? I18n.tr("removing %1…").arg(row.name)
+                                            : I18n.tr("installing %1…").arg(row.name)
 
         if (row.source === "flathub") {
             const fpVerb = verb === "remove" ? "remove"
@@ -1052,9 +1066,9 @@ FloatingWindow {
         // shipping. Taking one update without releasing the hold is a real
         // thing to want, but it is a command (`syn-update apply <name>`), not
         // the obvious button on a row that says "held back".
-        if (row.ignored) return "Release"
-        if (row.extra === "update") return "Update"
-        return row.installed ? "Remove" : "Install"
+        if (row.ignored) return I18n.tr("Release")
+        if (row.extra === "update") return I18n.tr("Update")
+        return row.installed ? I18n.tr("Remove") : I18n.tr("Install")
     }
 
     // Which command releases this row. Three sources, three mechanisms:
@@ -1124,10 +1138,10 @@ FloatingWindow {
     }
 
     function allLabel(tab) {
-        if (tab === "suggested") return "Everything"
-        if (tab === "arsenal")   return "Installed tools"
-        if (tab === "flathub")   return "Installed apps"
-        return "Installed packages"
+        if (tab === "suggested") return I18n.tr("Everything")
+        if (tab === "arsenal")   return I18n.tr("Installed tools")
+        if (tab === "flathub")   return I18n.tr("Installed apps")
+        return I18n.tr("Installed packages")
     }
 
     // "" is NOTHING selected, "*" is the header row. They are different states
@@ -1184,9 +1198,9 @@ FloatingWindow {
 
         if (section === "updates") {
             runChain([
-                { kind: "updates", tab: "repo",    args: ["updates"],           note: "checking repositories…" },
-                { kind: "updates", tab: "aur",     args: ["aur", "updates"],    note: "checking the AUR…" },
-                { kind: "updates", tab: "flathub", args: ["flatpak", "updates"], note: "checking Flathub…" },
+                { kind: "updates", tab: "repo",    args: ["updates"],           note: I18n.tr("checking repositories…") },
+                { kind: "updates", tab: "aur",     args: ["aur", "updates"],    note: I18n.tr("checking the AUR…") },
+                { kind: "updates", tab: "flathub", args: ["flatpak", "updates"], note: I18n.tr("checking Flathub…") },
                 // SynapseOS's own components belong on the page called Updates.
                 // They were only ever on their own tab, so the one page a
                 // person opens to answer "is anything out of date?" answered it
@@ -1196,7 +1210,7 @@ FloatingWindow {
                 // Last in the chain deliberately: it shells out to syn-update,
                 // which fetches from git, so it is the slowest step and the
                 // three fast ones should already be on screen.
-                { kind: "system",  tab: "system",  args: ["system", "check"],   note: "checking SynapseOS components…" }
+                { kind: "system",  tab: "system",  args: ["system", "check"],   note: I18n.tr("checking SynapseOS components…") }
             ])
         } else if (section === "held") {
             // `synpkg ignore` covers the repositories, the AUR and Flathub in
@@ -1205,8 +1219,8 @@ FloatingWindow {
             // fetches: `ignored` reads a file, and the pending versions come
             // from the local database.
             runChain([
-                { kind: "held",     args: ["ignore"],             note: "reading held packages…" },
-                { kind: "heldcomp", args: ["system", "ignored"],  note: "reading held components…" }
+                { kind: "held",     args: ["ignore"],             note: I18n.tr("reading held packages…") },
+                { kind: "heldcomp", args: ["system", "ignored"],  note: I18n.tr("reading held components…") }
             ])
         } else if (section === "about") {
             runChain([{ kind: "about", args: ["about"] }])
@@ -1301,7 +1315,7 @@ FloatingWindow {
 
                 Text {
                     width: parent.width
-                    text: "SYNAPSE Software"
+                    text: I18n.tr("SYNAPSE Software")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(17); bold: true }
                     elide: Text.ElideRight
@@ -1335,11 +1349,12 @@ FloatingWindow {
                 // that outlives the action it describes. It still yields to a
                 // live status line, because a NEW action in flight is more
                 // current news than the last one's refusal.
-                text: root.loading ? (root.statusLine !== "" ? root.statusLine : "loading…")
+                text: root.loading ? (root.statusLine !== "" ? root.statusLine : I18n.tr("loading…"))
                                    : root.statusLine !== "" ? root.statusLine
                                    : root.outcome !== "" ? root.outcome
                                    : (root.section === "about" ? ""
-                                      : root.shownRows.length + " items")
+                                      : I18n.trn("%1 item", "%1 items", root.shownRows.length)
+                              .arg(root.shownRows.length))
             }
 
             // Along the bottom edge of the header, so it reads as the whole
@@ -1426,7 +1441,7 @@ FloatingWindow {
                     border { width: 1; color: root.cAccent }
                     Text {
                         anchors.centerIn: parent
-                        text: "Upgrade all"
+                        text: I18n.tr("Upgrade all")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -1439,13 +1454,13 @@ FloatingWindow {
                         // goes; a window with a spinner and no output is where
                         // people force-quit mid-transaction. Hand it a terminal.
                         onClicked: root.inTerminal([root.bin, "upgrade"],
-                                                   "upgrading in a terminal")
+                                                   I18n.tr("upgrading in a terminal"))
                     }
                 }
                 Text {
                     width: parent.width
-                    text: root.upgradeSystem ? "repos, AUR and components — in a terminal"
-                                             : "repos and AUR — in a terminal"
+                    text: root.upgradeSystem ? I18n.tr("repos, AUR and components — in a terminal")
+                                             : I18n.tr("repos and AUR — in a terminal")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                     horizontalAlignment: Text.AlignHCenter
@@ -1478,7 +1493,7 @@ FloatingWindow {
                             border { width: 1; color: root.upgradeSystem ? root.cAccent : root.cDim }
                         }
                         Text {
-                            text: "include SynapseOS"
+                            text: I18n.tr("include SynapseOS")
                             anchors.verticalCenter: parent.verticalCenter
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(10) }
@@ -1620,13 +1635,13 @@ FloatingWindow {
                         // either here would be a button whose pane cannot say
                         // which source it is describing.
                         model: root.section === "all"
-                               ? [{ id: "search",    label: "Search" }]
+                               ? [{ id: "search",    label: I18n.tr("Search") }]
                                : root.hasCategories(root.section)
-                               ? [{ id: "browse",    label: "Browse" },
-                                  { id: "search",    label: "Search" },
-                                  { id: "installed", label: "Installed" }]
-                               : [{ id: "search",    label: "Search" },
-                                  { id: "installed", label: "Installed" }]
+                               ? [{ id: "browse",    label: I18n.tr("Browse") },
+                                  { id: "search",    label: I18n.tr("Search") },
+                                  { id: "installed", label: I18n.tr("Installed") }]
+                               : [{ id: "search",    label: I18n.tr("Search") },
+                                  { id: "installed", label: I18n.tr("Installed") }]
                         delegate: Rectangle {
                             id: modeBtn
                             required property var modelData
@@ -1701,12 +1716,12 @@ FloatingWindow {
                             // tab in Browse the box filters the rows already
                             // loaded, and telling somebody to press Enter to
                             // search would be describing the other mode.
-                            if (!searchBar.searching)       return "filter this list…"
-                            if (root.section === "all")     return "search everything — repos, BlackArch, AUR and Flathub — press Enter"
-                            if (root.section === "repo")    return "search the repositories — press Enter"
-                            if (root.section === "aur")     return "search the AUR — press Enter"
-                            if (root.section === "flathub") return "search Flathub — press Enter"
-                            return "filter this list…"
+                            if (!searchBar.searching)       return I18n.tr("filter this list…")
+                            if (root.section === "all")     return I18n.tr("search everything — repos, BlackArch, AUR and Flathub — press Enter")
+                            if (root.section === "repo")    return I18n.tr("search the repositories — press Enter")
+                            if (root.section === "aur")     return I18n.tr("search the AUR — press Enter")
+                            if (root.section === "flathub") return I18n.tr("search Flathub — press Enter")
+                            return I18n.tr("filter this list…")
                         }
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(13) }
@@ -1735,17 +1750,21 @@ FloatingWindow {
                     spacing: 14
 
                     Text {
-                        text: "SYNAPSE Software"
+                        text: I18n.tr("SYNAPSE Software")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(22); bold: true }
                     }
                     Text {
                         width: aboutCol.width
-                        text: "One package manager over the repositories, the AUR, Flathub, "
-                              + "BlackArch and SynapseOS's own components. The graphical "
-                              + "browser, the terminal browser and the command line are the "
-                              + "same binary reading the same code paths, so they cannot "
-                              + "disagree about what is installed."
+                        // ⚠ ONE msgid. It is five source lines because it is long;
+                        // marking only the first handed a translator a sentence
+                        // that stops mid-clause with the rest glued on in English.
+                        text: I18n.tr("One package manager over the repositories, the AUR, "
+                                      + "Flathub, BlackArch and SynapseOS's own components. "
+                                      + "The graphical browser, the terminal browser and the "
+                                      + "command line are the same binary reading the same "
+                                      + "code paths, so they cannot disagree about what is "
+                                      + "installed.")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                         wrapMode: Text.WordWrap
@@ -1847,7 +1866,7 @@ FloatingWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: aboutRow.openable ? "Open" : "Run"
+                                    text: aboutRow.openable ? I18n.tr("Open") : I18n.tr("Run")
                                     color: root.cAccent
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
@@ -1862,7 +1881,7 @@ FloatingWindow {
                                             // terminal: the whole point of the
                                             // openable/runnable split.
                                             Qt.openUrlExternally(aboutRow.modelData.detail)
-                                            root.statusLine = "opened in your browser"
+                                            root.statusLine = I18n.tr("opened in your browser")
                                             return
                                         }
                                         // Every one of these downloads something —
@@ -1870,7 +1889,7 @@ FloatingWindow {
                                         // prints as it goes.
                                         root.inTerminal(
                                             aboutRow.modelData.detail.split(" "),
-                                            "running in a terminal")
+                                            I18n.tr("running in a terminal"))
                                     }
                                 }
                             }
@@ -1922,35 +1941,35 @@ FloatingWindow {
                     font { family: root.uiFont; pixelSize: root.ui(15) }
                     horizontalAlignment: Text.AlignHCenter
                     text: {
-                        if (root.section === "updates")   return "Everything is up to date."
-                        if (root.section === "held")      return "Nothing is being held back.\nHold an update from the Updates page to stop it arriving."
-                        if (root.section === "system")    return "SynapseOS components are current."
+                        if (root.section === "updates")   return I18n.tr("Everything is up to date.")
+                        if (root.section === "held")      return I18n.tr("Nothing is being held back.\nHold an update from the Updates page to stop it arriving.")
+                        if (root.section === "system")    return I18n.tr("SynapseOS components are current.")
                         if (root.section === "suggested") return root.currentGroup === ""
-                                                                 ? "Pick a category."
-                                                                 : "You already have everything suggested."
+                                                                 ? I18n.tr("Pick a category.")
+                                                                 : I18n.tr("You already have everything suggested.")
                         if (root.section === "arsenal")   return root.categories.length === 0
-                                                                 ? "The BlackArch repository is not enabled."
-                                                                 : "Pick a category."
+                                                                 ? I18n.tr("The BlackArch repository is not enabled.")
+                                                                 : I18n.tr("Pick a category.")
                         if (root.mode === "installed") {
-                            if (root.section === "aur")     return "Nothing installed from outside a repository."
-                            if (root.section === "flathub") return "No Flatpak applications installed."
-                            return "Nothing installed from the repositories."
+                            if (root.section === "aur")     return I18n.tr("Nothing installed from outside a repository.")
+                            if (root.section === "flathub") return I18n.tr("No Flatpak applications installed.")
+                            return I18n.tr("Nothing installed from the repositories.")
                         }
                         // Browse with nothing picked yet is the normal opening
                         // state of these tabs, not a failure — say what to do,
                         // and only claim something is wrong when it is.
                         if (root.mode === "browse" && root.currentGroup === "") {
                             if (root.section === "flathub" && !root.flathubEnabled)
-                                return "Flathub is not enabled on this machine."
-                            if (root.categories.length > 0) return "Pick a category."
+                                return I18n.tr("Flathub is not enabled on this machine.")
+                            if (root.categories.length > 0) return I18n.tr("Pick a category.")
                             if (root.section === "flathub")
-                                return "Flathub has no application index yet."
-                            return "Nothing to browse."
+                                return I18n.tr("Flathub has no application index yet.")
+                            return I18n.tr("Nothing to browse.")
                         }
-                        if (root.section === "all")     return "Search every source at once."
-                        if (root.section === "aur")     return "Search the AUR."
-                        if (root.section === "flathub") return "Search Flathub."
-                        return "Search the repositories."
+                        if (root.section === "all")     return I18n.tr("Search every source at once.")
+                        if (root.section === "aur")     return I18n.tr("Search the AUR.")
+                        if (root.section === "flathub") return I18n.tr("Search Flathub.")
+                        return I18n.tr("Search the repositories.")
                     }
                 }
 
@@ -1964,15 +1983,17 @@ FloatingWindow {
                     visible: text !== ""
                     text: {
                         if (root.section === "aur" && root.mode === "installed")
-                            return "This lists every installed package no repository offers — "
-                                 + "AUR builds and anything else built on this machine, "
-                                 + "including SynapseOS's own packages."
+                            return I18n.tr("This lists every installed package no repository "
+                                           + "offers — AUR builds and anything else built on "
+                                           + "this machine, including SynapseOS's own packages.")
                         if (root.section === "aur")
-                            return "Packages here are recipes, not binaries. Installing one "
-                                 + "opens a terminal, shows you its PKGBUILD, and builds it."
+                            return I18n.tr("Packages here are recipes, not binaries. "
+                                           + "Installing one opens a terminal, shows you its "
+                                           + "PKGBUILD, and builds it.")
                         if (root.section === "flathub")
-                            return "Sandboxed applications with their own runtimes, installed "
-                                 + "alongside your system packages rather than into them."
+                            return I18n.tr("Sandboxed applications with their own runtimes, "
+                                           + "installed alongside your system packages rather "
+                                           + "than into them.")
                         return ""
                     }
                 }
@@ -1986,7 +2007,7 @@ FloatingWindow {
                     border { width: 1; color: root.cAccent }
                     Text {
                         anchors.centerIn: parent
-                        text: "Enable BlackArch"
+                        text: I18n.tr("Enable BlackArch")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -1996,7 +2017,7 @@ FloatingWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.inTerminal([root.bin, "arsenal", "enable-repo"],
-                                                   "enabling BlackArch in a terminal")
+                                                   I18n.tr("enabling BlackArch in a terminal"))
                     }
                 }
 
@@ -2020,7 +2041,7 @@ FloatingWindow {
                     border { width: 1; color: root.cAccent }
                     Text {
                         anchors.centerIn: parent
-                        text: "Enable Flathub"
+                        text: I18n.tr("Enable Flathub")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -2030,7 +2051,7 @@ FloatingWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.inTerminal([root.bin, "flatpak", "enable-flathub"],
-                                                   "enabling Flathub in a terminal")
+                                                   I18n.tr("enabling Flathub in a terminal"))
                     }
                 }
 
@@ -2049,7 +2070,7 @@ FloatingWindow {
                     border { width: 1; color: root.cAccent }
                     Text {
                         anchors.centerIn: parent
-                        text: "Fetch the app index"
+                        text: I18n.tr("Fetch the app index")
                         color: root.cAccent
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
@@ -2059,12 +2080,12 @@ FloatingWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.inTerminal([root.bin, "flatpak", "enable-flathub"],
-                                                   "fetching Flathub's index in a terminal")
+                                                   I18n.tr("fetching Flathub's index in a terminal"))
                     }
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "runs in a terminal — takes a minute"
+                    text: I18n.tr("runs in a terminal — takes a minute")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                     visible: root.section === "flathub"
@@ -2331,7 +2352,7 @@ FloatingWindow {
                             color: root.cAccent
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                             text: root.busy === pkgRow.modelData.name
-                                  ? "working…" : root.rowVerb(pkgRow.modelData)
+                                  ? I18n.tr("working…") : root.rowVerb(pkgRow.modelData)
                         }
                         MouseArea {
                             id: btnMa
@@ -2377,7 +2398,7 @@ FloatingWindow {
                             anchors.centerIn: parent
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
-                            text: "Hold"
+                            text: I18n.tr("Hold")
                         }
                         MouseArea {
                             id: holdMa
