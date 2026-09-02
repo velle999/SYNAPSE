@@ -12,6 +12,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+// The translation singleton, in qml/ beside this file. See qml/qmldir.
+import "qml"
 import QtQuick.Controls
 
 FloatingWindow {
@@ -251,19 +253,22 @@ FloatingWindow {
 
 
     // ── State ───────────────────────────────────────────────────────────────
+    // ⛔ `id` IS THE PANE KEY. SYNSETTINGS_PANE names it, the state file
+    // stores it, and every `root.pane === "…"` branch matches on it — so it
+    // stays machine-spelled while the label and the blurb beside it are words.
     readonly property var panes: [
-        { id: "display",   label: "Display",  blurb: "connectors as the kernel sees them, beside what the compositor drives" },
-        { id: "region",    label: "Keyboard & Language", blurb: "the console keymap and the xkb layout, which are separate settings that sometimes disagree" },
-        { id: "time",      label: "Date & Time", blurb: "the system clock — and how the desktop writes it: 12- or 24-hour, and which date order" },
-        { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
-        { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
-        { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
-        { id: "apps",      label: "Default Apps", blurb: "what opens each kind of file — and whether anybody actually chose it" },
-        { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
-        { id: "ai",        label: "AI",       blurb: "the backend switch, the units that can restart it behind your back, and which model is on disk" },
-        { id: "assistant", label: "Assistant", blurb: "which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key" },
-        { id: "fprint",    label: "Fingerprint", blurb: "the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is" },
-        { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
+        { id: "display",   label: I18n.tr("Display"),  blurb: I18n.tr("connectors as the kernel sees them, beside what the compositor drives") },
+        { id: "region",    label: I18n.tr("Keyboard & Language"), blurb: I18n.tr("the console keymap and the xkb layout, which are separate settings that sometimes disagree") },
+        { id: "time",      label: I18n.tr("Date & Time"), blurb: I18n.tr("the system clock — and how the desktop writes it: 12- or 24-hour, and which date order") },
+        { id: "network",   label: I18n.tr("Network"),  blurb: I18n.tr("interfaces, radios, and whether anything is filtering traffic") },
+        { id: "bluetooth", label: I18n.tr("Bluetooth"), blurb: I18n.tr("the adapter, both kinds of radio block, and what is paired") },
+        { id: "power",     label: I18n.tr("Power & Sleep"), blurb: I18n.tr("the units a working suspend depends on, and what the last one did") },
+        { id: "apps",      label: I18n.tr("Default Apps"), blurb: I18n.tr("what opens each kind of file — and whether anybody actually chose it") },
+        { id: "kernel",    label: I18n.tr("Kernel"),   blurb: I18n.tr("every kernel on offer, which are installed, and which one you booted") },
+        { id: "ai",        label: I18n.tr("AI"),       blurb: I18n.tr("the backend switch, the units that can restart it behind your back, and which model is on disk") },
+        { id: "assistant", label: I18n.tr("Assistant"), blurb: I18n.tr("which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key") },
+        { id: "fprint",    label: I18n.tr("Fingerprint"), blurb: I18n.tr("the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is") },
+        { id: "system",    label: I18n.tr("System"),   blurb: I18n.tr("identity, and which layer each configuration file comes from") }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
     property var cols: []
@@ -348,7 +353,7 @@ FloatingWindow {
                 }
                 root.appList = out
                 if (out.length === 0)
-                    root.status = "nothing installed offers to handle this"
+                    root.status = I18n.tr("nothing installed offers to handle this")
             }
         }
         stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
@@ -366,7 +371,7 @@ FloatingWindow {
                 }
                 root.modeList = out
                 if (out.length === 0)
-                    root.status = "no modes listed — is wlr-randr installed?"
+                    root.status = I18n.tr("no modes listed — is wlr-randr installed?")
             }
         }
         stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
@@ -596,7 +601,7 @@ FloatingWindow {
             if (code !== 0)
                 root.outcome = writeProc.errLine !== "" ? writeProc.errLine
                     : root.progressLine !== "" ? root.progressLine
-                    : "refused (exit " + code + ") — polkit may have declined"
+                    : I18n.tr("refused (exit %1) — polkit may have declined").arg(code)
             root.reload()
         }
     }
@@ -687,7 +692,7 @@ FloatingWindow {
                     root.confirmPlan = plan
                     root.confirmOpen = true
                 } else {
-                    root.status = "could not work out what to run"
+                    root.status = I18n.tr("could not work out what to run")
                 }
             }
         }
@@ -703,7 +708,7 @@ FloatingWindow {
         root.confirmVerb = verb
         root.confirmKernel = kernel
         root.confirmPlan = ({})
-        root.status = "working out what this would do…"
+        root.status = I18n.tr("working out what this would do…")
         planProc.command = [root.bin, "-n", verb, kernel]
         planProc.running = true
     }
@@ -811,7 +816,7 @@ FloatingWindow {
                 if (lines.length === 0) {
                     root.cols = []; root.rows = []
                     root.loading = false
-                    root.status = "nothing reported"
+                    root.status = I18n.tr("nothing reported")
                     return
                 }
                 // First line names the columns. Taking the header from the
@@ -890,7 +895,7 @@ FloatingWindow {
 
                 Text {
                     x: 16
-                    text: "SYNAPSE Settings"
+                    text: I18n.tr("SYNAPSE Settings")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                 }
@@ -936,9 +941,9 @@ FloatingWindow {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom
                           margins: 12 }
                 wrapMode: Text.WordWrap
-                text: "Reads the live system. Writes go through localectl, "
-                    + "timedatectl and systemctl, which do their own "
-                    + "authorisation."
+                text: I18n.tr("Reads the live system. Writes go through localectl, "
+                              + "timedatectl and systemctl, which do their own "
+                              + "authorisation.")
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(9) }
             }
@@ -975,7 +980,7 @@ FloatingWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: root.loading ? "reading…" : "Refresh"
+                    text: root.loading ? I18n.tr("reading…") : I18n.tr("Refresh")
                     color: root.cText
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
@@ -1129,9 +1134,8 @@ FloatingWindow {
                             // first thing to elide on a narrow window — which
                             // is exactly when somebody clicks it to find out.
                             if (dataRow.blocked)
-                                root.status = "synui only — "
-                                            + root.rowBlockedBy(dataRow.modelData)
-                                            + " is the session running"
+                                root.status = I18n.tr("synui only — %1 is the session running")
+                                                  .arg(root.rowBlockedBy(dataRow.modelData))
                         }
                     }
                 }
@@ -1143,8 +1147,11 @@ FloatingWindow {
         Text {
             anchors.centerIn: table
             visible: !root.loading && root.rows.length === 0
-            text: "This pane reported nothing.\nRun `" + root.bin + " --rec "
-                  + root.pane + "` to see why."
+            // ⚠ THE COMMAND IS AN ARGUMENT, NOT A SEAM. The binary name and
+            // the pane are data; the sentence around them is one msgid, and the
+            // backticks belong to it.
+            text: I18n.tr("This pane reported nothing.\nRun `%1 --rec %2` to see why.")
+                      .arg(root.bin).arg(root.pane)
             horizontalAlignment: Text.AlignHCenter
             color: root.cDim
             font { family: root.uiFont; pixelSize: root.ui(11) }
@@ -1230,20 +1237,22 @@ FloatingWindow {
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
-                        if (v === "toggle") return root.isOn(root.selValue) ? "Turn off" : "Turn on"
-                        if (v === "probe")  return "Re-probe"
-                        return "Apply"
+                        if (v === "toggle") return root.isOn(root.selValue) ? I18n.tr("Turn off")
+                                                             : I18n.tr("Turn on")
+                        if (v === "probe")  return I18n.tr("Re-probe")
+                        return I18n.tr("Apply")
                     }
                     onGo: {
                         const v = root.actionVerb(root.selAction)
                         const arg = root.actionArg(root.selAction)
                         if (v === "set")
-                            root.runWrite(["set", arg, editField.text], "setting " + arg + "…")
+                            root.runWrite(["set", arg, editField.text],
+                                          I18n.tr("setting %1…").arg(arg))
                         else if (v === "toggle")
                             root.runWrite(["set", arg, root.isOn(root.selValue) ? "off" : "on"],
-                                          "switching " + arg + "…")
+                                          I18n.tr("switching %1…").arg(arg))
                         else if (v === "probe")
-                            root.runWrite(["probe", arg], "re-probing " + arg + "…")
+                            root.runWrite(["probe", arg], I18n.tr("re-probing %1…").arg(arg))
                     }
                 }
 
@@ -1260,11 +1269,12 @@ FloatingWindow {
                  */
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "enroll")
-                    label: root.selValue === "enrolled" ? "Enrol again…" : "Enrol…"
+                    label: root.selValue === "enrolled" ? I18n.tr("Enrol again…")
+                                                        : I18n.tr("Enrol…")
                     onGo: root.runWrite(["enroll", root.actionArgFor(root.selAction, "enroll")],
-                                        "rest your finger on the reader…",
-                                        "lift and rest it again each time it asks; "
-                                        + "several passes are needed")
+                                        I18n.tr("rest your finger on the reader…"),
+                                        I18n.tr("lift and rest it again each time it asks; "
+                                                + "several passes are needed"))
                 }
 
                 // ⚠ ALL OF THEM. fprintd removes a user's prints together —
@@ -1272,9 +1282,9 @@ FloatingWindow {
                 // than looking like it acts on the selected row.
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "forget")
-                    label: "Forget all fingerprints"
+                    label: I18n.tr("Forget all fingerprints")
                     onGo: root.runWrite(["forget", "all"],
-                                        "removing every fingerprint…")
+                                        I18n.tr("removing every fingerprint…"))
                 }
 
                 /*
@@ -1290,14 +1300,15 @@ FloatingWindow {
                  */
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "secret")
-                    label: editField.text === "" ? "Remove key" : "Save key"
+                    label: editField.text === "" ? I18n.tr("Remove key")
+                                                 : I18n.tr("Save key")
                     onGo: {
                         const prov = root.actionArgFor(root.selAction, "secret")
                         root.runSecretWrite(["assistant-key", prov],
                                             editField.text,
                                             editField.text === ""
-                                                ? "removing the " + prov + " key…"
-                                                : "storing the " + prov + " key…")
+                                                ? I18n.tr("removing the %1 key…").arg(prov)
+                                                : I18n.tr("storing the %1 key…").arg(prov))
                         editField.text = ""
                     }
                 }
@@ -1309,9 +1320,22 @@ FloatingWindow {
                            ? ["connect", "disconnect"] : []
                     delegate: SettingsButton {
                         required property var modelData
-                        label: modelData === "connect" ? "Connect" : "Disconnect"
+                        // ⛔ modelData IS THE VERB THE BINARY TAKES — "connect"
+                        // or "disconnect" — and it used to be turned into the
+                        // status line by appending "ing" to it. That is English
+                        // morphology applied to a protocol word: it cannot be
+                        // translated at all, and it would produce "verbindening"
+                        // the moment the key itself changed. Two whole
+                        // sentences, chosen by the same key that runs the
+                        // command.
+                        label: modelData === "connect" ? I18n.tr("Connect")
+                                                       : I18n.tr("Disconnect")
                         onGo: root.runWrite(["device", modelData, root.actionArgFor(root.selAction, "device")],
-                                            modelData + "ing " + root.actionArgFor(root.selAction, "device") + "…")
+                                            modelData === "connect"
+                                            ? I18n.tr("connecting %1…")
+                                                  .arg(root.actionArgFor(root.selAction, "device"))
+                                            : I18n.tr("disconnecting %1…")
+                                                  .arg(root.actionArgFor(root.selAction, "device")))
                     }
                 }
 
@@ -1319,7 +1343,7 @@ FloatingWindow {
                 // through the confirmation dialogue, never straight to a write.
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "boot")
-                    label: "Make bootable…"
+                    label: I18n.tr("Make bootable…")
                     onGo: root.askBootable(root.actionArgFor(root.selAction, "boot"))
                 }
 
@@ -1328,7 +1352,7 @@ FloatingWindow {
                 // and "catch the boot menu" is not a setting.
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "default")
-                    label: "Make default…"
+                    label: I18n.tr("Make default…")
                     onGo: root.askDefault(root.actionArgFor(root.selAction, "default"))
                 }
 
@@ -1343,22 +1367,24 @@ FloatingWindow {
                 // the user actually gets.
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "install")
-                    label: "Install"
+                    label: I18n.tr("Install")
                     onGo: root.runWrite(
                         ["pkg", "install", root.actionArgFor(root.selAction, "install")],
-                        "Installing " + root.actionArgFor(root.selAction, "install"),
-                        "Authorise when asked. A kernel and its headers are a few "
-                        + "hundred megabytes to fetch and an initramfs to build, so "
-                        + "this takes minutes, not seconds.")
+                        I18n.tr("Installing %1")
+                            .arg(root.actionArgFor(root.selAction, "install")),
+                        I18n.tr("Authorise when asked. A kernel and its headers are a "
+                                + "few hundred megabytes to fetch and an initramfs to "
+                                + "build, so this takes minutes, not seconds."))
                 }
 
                 SettingsButton {
                     visible: root.actionHas(root.selAction, "remove")
-                    label: "Remove"
+                    label: I18n.tr("Remove")
                     onGo: root.runWrite(
                         ["pkg", "remove", root.actionArgFor(root.selAction, "remove")],
-                        "Removing " + root.actionArgFor(root.selAction, "remove"),
-                        "Authorise when asked.")
+                        I18n.tr("Removing %1")
+                            .arg(root.actionArgFor(root.selAction, "remove")),
+                        I18n.tr("Authorise when asked."))
                 }
 
                 Repeater {
@@ -1398,8 +1424,9 @@ FloatingWindow {
                         required property var modelData
                         label: modelData.current ? modelData.mode + " ✓" : modelData.mode
                         onGo: root.runWrite(["mode", root.actionArgFor(root.selAction, "mode"), modelData.mode],
-                                            "setting " + root.actionArgFor(root.selAction, "mode")
-                                            + " to " + modelData.mode + "…")
+                                            I18n.tr("setting %1 to %2…")
+                                                .arg(root.actionArgFor(root.selAction, "mode"))
+                                                .arg(modelData.mode))
                     }
                 }
             }
@@ -1426,7 +1453,7 @@ FloatingWindow {
                         onGo: root.runWrite(
                             ["set", "app", root.actionArgFor(root.selAction, "app"),
                              modelData.id],
-                            "setting " + root.selKey + " to " + modelData.name + "…")
+                            I18n.tr("setting %1 to %2…").arg(root.selKey).arg(modelData.name))
                     }
                 }
             }
@@ -1455,7 +1482,7 @@ FloatingWindow {
                         onGo: root.runWrite(
                             ["set", root.actionArgFor(root.selAction, "choice"),
                              modelData.id],
-                            "setting " + root.selKey + " to " + modelData.name + "…")
+                            I18n.tr("setting %1 to %2…").arg(root.selKey).arg(modelData.name))
                     }
                 }
             }
@@ -1471,7 +1498,7 @@ FloatingWindow {
                 }
                 visible: root.actionHas(root.selAction, "choice")
                          && root.choiceList.length === 0
-                text: "nothing offered this setting a list of choices"
+                text: I18n.tr("nothing offered this setting a list of choices")
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(11) }
             }
@@ -1486,7 +1513,7 @@ FloatingWindow {
                 }
                 visible: root.actionHas(root.selAction, "app")
                          && root.appList.length === 0
-                text: "nothing installed offers to handle this"
+                text: I18n.tr("nothing installed offers to handle this")
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(11) }
             }
@@ -1494,7 +1521,7 @@ FloatingWindow {
             SettingsButton {
                 id: closeBtn
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
-                label: "Close"
+                label: I18n.tr("Close")
                 onGo: { root.selRow = -1; root.selAction = "" }
             }
         }
@@ -1535,8 +1562,10 @@ FloatingWindow {
                     // reload that follows a failed write must not be allowed to
                     // paint over the reason it failed.
                     : root.outcome !== "" ? root.outcome
-                    : root.loading ? "reading…"
-                    : root.rows.length + (root.rows.length === 1 ? " row" : " rows")
+                    : root.loading ? I18n.tr("reading…")
+                    // ⛔ THE COUNT AND ITS NOUN ARE ONE msgid — the "%d window%s"
+                    // trap src/i18n.h documents, in QML.
+                    : I18n.trn("%1 row", "%1 rows", root.rows.length).arg(root.rows.length)
                 color: root.applying ? root.cText
                      : (root.status !== "" || root.outcome !== "") ? root.cWarn
                      : root.cDim
@@ -1564,7 +1593,7 @@ FloatingWindow {
                 // that keeps moving even when the tool has gone quiet.
                 text: root.applying
                         ? (root.progressPct >= 0 ? root.progressPct + "%  ·  " : "")
-                          + root.mmss(root.applyElapsed) + " elapsed"
+                          + I18n.tr("%1 elapsed").arg(root.mmss(root.applyElapsed))
                         : root.bin + " --rec " + root.pane
                 color: root.applying ? root.cAccent : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
@@ -1608,7 +1637,7 @@ FloatingWindow {
                     spacing: 10
 
                     Text {
-                        text: "Change boot configuration?"
+                        text: I18n.tr("Change boot configuration?")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                     }
@@ -1616,13 +1645,19 @@ FloatingWindow {
                     Text {
                         width: parent.width
                         wrapMode: Text.WordWrap
+                        // ⚠ TWO WHOLE PARAGRAPHS. The kernel name is an argument,
+                        // not a seam: assembled around it the sentence cannot be
+                        // reordered, and both of these say something a person is
+                        // about to make an irreversible decision on.
                         text: root.confirmVerb === "default"
-                            ? "This makes " + root.confirmKernel + " the kernel this "
-                              + "machine BOOTS. It changes nothing about the kernel you "
-                              + "are running now; it takes effect at the next restart."
-                            : "This makes " + root.confirmKernel + " bootable. It is the "
-                              + "only change in this app that can leave a machine that does "
-                              + "not start, so read what it will do first."
+                            ? I18n.tr("This makes %1 the kernel this machine BOOTS. It "
+                                      + "changes nothing about the kernel you are running "
+                                      + "now; it takes effect at the next restart.")
+                                  .arg(root.confirmKernel)
+                            : I18n.tr("This makes %1 bootable. It is the only change in "
+                                      + "this app that can leave a machine that does not "
+                                      + "start, so read what it will do first.")
+                                  .arg(root.confirmKernel)
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -1634,7 +1669,7 @@ FloatingWindow {
                         width: parent.width
 
                         Text {
-                            text: "Bootloader"
+                            text: I18n.tr("Bootloader")
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
@@ -1647,7 +1682,7 @@ FloatingWindow {
                         }
 
                         Text {
-                            text: "Config"
+                            text: I18n.tr("Config")
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
@@ -1701,7 +1736,7 @@ FloatingWindow {
                         visible: root.confirmSteps.length > 0
 
                         Text {
-                            text: "It will:"
+                            text: I18n.tr("It will:")
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
@@ -1728,26 +1763,29 @@ FloatingWindow {
                         width: parent.width
 
                         SettingsButton {
-                            label: "Cancel"
+                            label: I18n.tr("Cancel")
                             onGo: root.confirmOpen = false
                         }
 
                         SettingsButton {
-                            label: root.confirmVerb === "default" ? "Make default"
-                                                                  : "Make bootable"
+                            label: root.confirmVerb === "default" ? I18n.tr("Make default")
+                                                                  : I18n.tr("Make bootable")
                             onGo: {
                                 root.confirmOpen = false
                                 if (root.confirmVerb === "default")
                                     root.runWrite(["default", root.confirmKernel, "--confirm"],
-                                                  "Making " + root.confirmKernel + " the default",
-                                                  "You may be asked to authenticate.")
+                                                  I18n.tr("Making %1 the default")
+                                                      .arg(root.confirmKernel),
+                                                  I18n.tr("You may be asked to authenticate."))
                                 else
                                     root.runWrite(["boot", root.confirmKernel, "--confirm"],
-                                                  "Making " + root.confirmKernel + " bootable",
-                                                  "You may be asked to authenticate. On limine "
-                                                  + "this can mean building the entry generator "
-                                                  + "from source, which takes several minutes — "
-                                                  + "the lines below are it working.")
+                                                  I18n.tr("Making %1 bootable")
+                                                      .arg(root.confirmKernel),
+                                                  I18n.tr("You may be asked to authenticate. On "
+                                                          + "limine this can mean building the "
+                                                          + "entry generator from source, which "
+                                                          + "takes several minutes — the lines "
+                                                          + "below are it working."))
                             }
                         }
                     }
@@ -1874,8 +1912,9 @@ FloatingWindow {
                     Text {
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "Leave this running. Closing the window will not stop it — "
-                            + "it will only stop you seeing how it went."
+                        text: I18n.tr("Leave this running. Closing the window will not "
+                                      + "stop it — it will only stop you seeing how it "
+                                      + "went.")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
@@ -1887,7 +1926,7 @@ FloatingWindow {
                         width: parent.width
 
                         SettingsButton {
-                            label: "Hide"
+                            label: I18n.tr("Hide")
                             ignoreBusy: true
                             onGo: root.workOpen = false
                         }

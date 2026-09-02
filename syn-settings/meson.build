@@ -43,6 +43,18 @@ executable('syn-settings', sources,
 
 install_data('data/syn-settings.qml',
              install_dir: get_option('datadir') / 'syn-settings')
+
+# The translation singleton and its module declaration. ⚠ In a SUBDIRECTORY: a
+# qmldir makes its directory an explicit QML module, and syn-settings.qml is the
+# file quickshell is pointed at, so one beside it would change how that file
+# itself resolves. po/ installs the catalogs into qml/i18n/ alongside these.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-settings' / 'qml')
+
+i18n_test = find_program('tests/i18n_test.sh')
+test('i18n', i18n_test, args : [meson.current_source_dir()], timeout : 60)
+
+subdir('po')
 # The application icon. Scalable only: Qt renders the SVG at whatever size the
 # dock or the menu asks for, and a set of PNGs would be five more files to keep
 # in step with one drawing.

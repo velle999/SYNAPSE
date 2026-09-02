@@ -1,0 +1,6 @@
+# The QML files tools/qml-xgettext.py reads, one per line.
+#
+# ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER — its I18n.tr() calls
+# still compile and still look up at runtime, so nothing warns; the strings just
+# never reach a catalog.
+syn-settings.qml

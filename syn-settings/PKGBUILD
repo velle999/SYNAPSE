@@ -125,7 +125,26 @@ pkgver=0.1.0
 #   translated now, in a shared user_unit_state() the wake row uses too; the
 #   same trap ai.c documents in unit_absent(), and the reason this one is
 #   --user: everything on this pane is a session service.
-pkgrel=42
+# 43: the window speaks thirteen languages.
+#   The same bridge synui's bar carries: quickshell has no translator at all —
+#   qsTr() compiles and returns its argument — so a .po becomes JSON at build
+#   time and qml/I18n.qml reads it with a blocking FileView, because tr() is a
+#   function and not a binding. 85 msgids, thirteen catalogs, installed beside
+#   I18n.qml so the file locates its own directory and one byte-identical copy
+#   serves every package.
+#   ⛔ A PANE ID IS NOT A LABEL. panes[] carries both, and the id is matched
+#   on in three places — SYNSETTINGS_PANE, the state file, and root.pane ===
+#   — so translating it would move a German user to a pane that does not exist.
+#   The gate asserts none of them is inside an I18n.tr(); the same trap as a
+#   menu action name, and the reason the ids are spelled apart from the labels.
+#   ⛔ AND AN ENGLISH GERUND WAS BUILT FROM A PROTOCOL WORD. The Bluetooth
+#   rows took the verb the binary takes — "connect" or "disconnect" — and made
+#   their status line by appending "ing" to it. That is unreachable by a
+#   translator in any language and wrong in most; it is two whole sentences now,
+#   chosen by the same value, and the value itself still reaches the binary
+#   unchanged. Same for "%1 row"/"%1 rows", which no longer picks its form with
+#   an English == 1.
+pkgrel=43
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
