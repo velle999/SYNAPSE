@@ -31,6 +31,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <signal.h>
 #include <stdbool.h>
@@ -124,19 +125,18 @@ int pane_assistant(void)
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (!have_cmd("vibe")) {
-		rec_row("assistant\tvibe\tnot installed\tbad\t"
-		        "the assistant is not on this machine, so there is no backend "
-		        "to choose\t-");
+		rec_row("assistant\t%s\tnot installed\tbad\t%s\t-",
+		        N_("vibe"),
+		        N_("the assistant is not on this machine, so there is no backend to choose"));
 		return 0;
 	}
 
 	char now[64] = "";
 	current_backend(now, sizeof now);
 
-	rec_row("assistant\tbackend\t%s\t%s\t"
-	        "which service the assistant sends your messages to\t"
-	        "choice:assistant-backend",
-	        now[0] ? backend_label(now) : "unknown", now[0] ? "ok" : "-");
+	rec_row("assistant\t%s\t%s\t%s\t%s\tchoice:assistant-backend",
+	        N_("backend"), now[0] ? backend_label(now) : "unknown", now[0] ? "ok" : "-",
+	        N_("which service the assistant sends your messages to"));
 
 	/*
 	 * ⚠ THE KEY ROWS ARE ALWAYS DRAWN, not only for the selected backend.
@@ -170,8 +170,8 @@ int pane_assistant(void)
 		              "remove it"
 		            : (live ? "the assistant is set to this backend and has no "
 		                      "key, so every request will fail"
-		                    : "no key stored; set one before switching to this "
-		                      "backend"),
+		                    : N_("no key stored; set one before switching to this "
+		                      "backend")),
 		        BACKENDS[i].id);
 	}
 

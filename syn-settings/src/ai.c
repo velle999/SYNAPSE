@@ -20,6 +20,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -87,13 +88,13 @@ struct ai_unit {
  * needed four attempts, so the thing that does the resurrecting is on screen.
  */
 static const struct ai_unit ai_units[] = {
-	{ "synapd.service",        "the AI daemon; holds GPU memory while loaded" },
-	{ "synapd.socket",         "socket activation — this starts the daemon on the next request" },
+	{ "synapd.service",        N_("the AI daemon; holds GPU memory while loaded") },
+	{ "synapd.socket",         N_("socket activation — this starts the daemon on the next request") },
 	{ "synapd-bridge.socket",  "LAN bridge on :11435 — a client anywhere on the network reaches this" },
-	{ "synapd-bridge.service", "proxies LAN requests to synapd" },
+	{ "synapd-bridge.service", N_("proxies LAN requests to synapd") },
 	{ "synapd-http-proxy.socket",
 	  "127.0.0.1:8080 for llama.cpp-shaped frontends — off unless enabled" },
-	{ "synapd-http-proxy.service", "proxies that port to synapd's HTTP socket" },
+	{ "synapd-http-proxy.service", N_("proxies that port to synapd's HTTP socket") },
 };
 
 /* Is this unit absent from the machine?
@@ -120,17 +121,17 @@ int pane_ai(void)
 	if (have_cmd(AI_HELPER)) {
 		char now[32];
 		backend_now(now, sizeof now);
-		rec_row("backend\tAI backend\t%s\t-\t"
-		        "gpu offloads every layer \xc2\xb7 cpu runs on the CPU \xc2\xb7 "
-		        "off masks the daemon so it cannot be started again\t"
-		        "choice:ai-backend", now);
+		rec_row("backend\t%s\t%s\t-\t%s\tchoice:ai-backend",
+		        N_("AI backend"), now,
+		        N_("gpu offloads every layer \xc2\xb7 cpu runs on the CPU \xc2\xb7 off masks the daemon so it cannot be started again"));
 	} else {
 		/* Read-only rather than a button that cannot work. The helper ships
 		 * with synui; a machine that installed KDE or GNOME without the synui
 		 * component has the daemon and not the switch, and saying so is more
 		 * use than an Apply that fails. */
-		rec_row("backend\tAI backend\tunavailable\t-\t"
-		        "needs synui-ai-backend(1), shipped by the synui package\t-");
+		rec_row("backend\t%s\tunavailable\t-\t%s\t-",
+		        N_("AI backend"),
+		        N_("needs synui-ai-backend(1), shipped by the synui package"));
 	}
 
 	/* ── The llama.cpp-compatible port ────────────────────────────────── */
@@ -150,17 +151,14 @@ int pane_ai(void)
 		unit_state("synapd-http-proxy.socket", en, sizeof en, act, sizeof act);
 
 		if (unit_absent(en)) {
-			rec_row("llama-api\tllama.cpp API port\tunavailable\t-\t"
-			        "needs a synapd that ships synapd-http-proxy.socket\t-");
+			rec_row("llama-api\t%s\tunavailable\t-\t%s\t-",
+			        N_("llama.cpp API port"),
+			        N_("needs a synapd that ships synapd-http-proxy.socket"));
 		} else {
 			const char *on = !strcmp(en, "enabled") ? "on" : "off";
-			rec_row("llama-api\tllama.cpp API port\t%s\t%s\t"
-			        "127.0.0.1:8080 for frontends written against llama-server "
-			        "or the OpenAI API, over the model synapd already holds \xc2\xb7 "
-			        "no authentication, so every process on this machine can "
-			        "reach it \xc2\xb7 loopback only, never the network\t"
-			        "toggle:llama-api",
-			        on, act);
+			rec_row("llama-api\t%s\t%s\t%s\t%s\ttoggle:llama-api",
+			        N_("llama.cpp API port"), on, act,
+			        N_("127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, over the model synapd already holds \xc2\xb7 no authentication, so every process on this machine can reach it \xc2\xb7 loopback only, never the network"));
 		}
 	}
 
@@ -175,7 +173,8 @@ int pane_ai(void)
 			        !unit_absent(en) ? action : "-");
 		}
 	} else {
-		rec_row("unit\t-\tunknown\t-\tsystemctl not available\t-");
+		rec_row("unit\t-\tunknown\t-\t%s\t-",
+		        N_("systemctl not available"));
 	}
 
 	/* ── The model ────────────────────────────────────────────────────── */
@@ -192,11 +191,11 @@ int pane_ai(void)
 			double gib = (double)st.st_size / (1024.0 * 1024.0 * 1024.0);
 			rec_row("model\tmodel\t%.1f GiB\tpresent\t" AI_MODEL "\t-", gib);
 		} else if (stat(AI_MODEL, &st) == 0) {
-			rec_row("model\tmodel\t0 bytes\tEMPTY\t"
-			        "a part-downloaded model; syn-model download\t-");
+			rec_row("model\t%s\t0 bytes\tEMPTY\t%s\t-",
+			        N_("model"), N_("a part-downloaded model; syn-model download"));
 		} else {
-			rec_row("model\tmodel\tnone\tabsent\t"
-			        "no model installed \xc2\xb7 syn-model download\t-");
+			rec_row("model\t%s\tnone\tabsent\t%s\t-",
+			        N_("model"), N_("no model installed \xc2\xb7 syn-model download"));
 		}
 	}
 
@@ -217,10 +216,10 @@ int pane_ai(void)
 	 * ship beside the always-present CPU one. */
 	{
 		static const char *const accel[][2] = {
-			{ "/usr/lib/libggml-cuda.so",   "CUDA (NVIDIA)" },
+			{ "/usr/lib/libggml-cuda.so",   N_("CUDA (NVIDIA)") },
 			{ "/usr/lib/libggml-vulkan.so", "Vulkan" },
 			{ "/usr/lib/libggml-hip.so",    "ROCm/HIP (AMD)" },
-			{ "/usr/lib/libggml-cpu.so",    "CPU" },
+			{ "/usr/lib/libggml-cpu.so",    N_("CPU") },
 		};
 		int found = 0;
 		for (size_t i = 0; i < sizeof accel / sizeof accel[0]; i++) {
@@ -230,9 +229,9 @@ int pane_ai(void)
 			found = 1;
 		}
 		if (!found)
-			rec_row("accel\tacceleration\tnone\t-\t"
-			        "no ggml backend library in /usr/lib \xc2\xb7 "
-			        "is a synapse-llama package installed?\t-");
+			rec_row("accel\t%s\tnone\t-\t%s\t-",
+			        N_("acceleration"),
+			        N_("no ggml backend library in /usr/lib \xc2\xb7 is a synapse-llama package installed?"));
 	}
 
 	return 0;

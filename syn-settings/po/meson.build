@@ -11,11 +11,18 @@
 # tools/po2json.py compiles each catalog to a small JSON object and
 # data/qml/I18n.qml reads it through a blocking FileView.
 #
-# ⚠ THE .pot IS NOT GENERATED HERE. xgettext cannot read QML — there is no
-# --language=QML, and --language=JavaScript chokes on the object syntax and
-# extracts a silent subset — so tools/qml-xgettext.py writes it, and
-# tests/i18n.sh fails when the checked-in template is stale. Regenerate with
-# `ninja -C <build> syn-settings-pot`.
+# ⚠ THE .pot IS NOT GENERATED HERE, AND NOT BY xgettext ALONE. xgettext cannot
+# read QML — there is no --language=QML, and --language=JavaScript chokes on the
+# object syntax and extracts a silent subset — so po/pot.sh runs
+# tools/qml-xgettext.py over the QML, real xgettext over src/*.c, and msgcat
+# merges the two. tests/i18n_test.sh fails when the checked-in template is
+# stale. Regenerate with `ninja -C <build> syn-settings-pot`.
+#
+# ⛔ THE C HALF IS N_() AND NOTHING ELSE. This program prints only its TSV
+# record, and the record is never translated: the labels travel in it as English
+# and the WINDOW translates them at the draw site. There is deliberately no
+# i18n.gettext() here and no .mo — nothing in this binary ever calls gettext.
+# See include/i18n.h.
 
 po2json = find_program('../tools/po2json.py')
 
@@ -46,8 +53,6 @@ foreach lang : ss_linguas
 endforeach
 
 run_target('syn-settings-pot',
-  command : [find_program('../tools/qml-xgettext.py'),
-             '--root',  meson.project_source_root() / 'data',
-             '--files', meson.current_source_dir() / 'POTFILES',
-             '-o',      meson.current_source_dir() / 'syn-settings.pot',
-             '--strict'])
+  command : [find_program('pot.sh'),
+             meson.project_source_root(),
+             meson.current_source_dir()])

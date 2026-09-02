@@ -838,6 +838,17 @@ FloatingWindow {
         }
     }
 
+    // Which record columns hold words rather than data. Keyed on the column
+    // NAME from the header line, not an index: the panes have six different
+    // shapes (kind/key/value/state/detail/action, key/value/detail/action,
+    // kernel/installed/state/detail/action, role/application/state/covers/
+    // detail/action) and an index means a different thing in each. The header
+    // is read from the data for exactly this reason.
+    function wordsColumn(name) {
+        return name === "key" || name === "detail"
+            || name === "role" || name === "covers"
+    }
+
     function reload() {
         root.loading = true
         root.status = ""
@@ -1107,7 +1118,27 @@ FloatingWindow {
                             width: headRow.colWidth(index)
                             visible: index !== root.actionCol
                             elide: Text.ElideRight
-                            text: modelData
+                            // ⛔ TRANSLATED FOR DISPLAY ONLY, AND ONLY THE
+                            // COLUMNS THAT ARE WORDS. The row is the C
+                            // reader's record: `key` is the label a person
+                            // reads and `detail` the sentence under it, both
+                            // N_()-marked in src/*.c so they reach the same
+                            // catalog this window loads. Everything else —
+                            // `value`, `state`, `action` — stays exactly as it
+                            // arrived, because tone(), blocked and actionable
+                            // all MATCH on it, and a status word that changes
+                            // language stops matching.
+                            //
+                            // ⚠ modelData is passed to tone() below untouched
+                            // for that reason: what is drawn and what is
+                            // compared are deliberately two different values.
+                            // The labels and the sentences under them are
+                            // N_() in src/*.c and reach this same catalog
+                            // through po/pot.sh, so every string this lookup
+                            // can be handed IS in it — just not from this file.
+                            text: root.wordsColumn(root.cols[index] || "")
+                                      // i18n-dynamic: from src/*.c via N_()
+                                      ? I18n.tr(modelData) : modelData
                             // One colour for the whole row when it is blocked.
                             // tone() would otherwise paint the VALUE green for
                             // "12-hour" on a row that cannot be changed —

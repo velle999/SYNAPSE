@@ -27,6 +27,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -149,37 +150,35 @@ int pane_speech(void)
 
 	/* ── The two switches ─────────────────────────────────────────────── */
 	if (have_cmd("syn-speak")) {
-		rec_row("switch\tScreen reader\t%s\t-\t"
-		        "Speak the focused window as focus moves, and the highlighted "
-		        "text on Super+U. Super+Shift+U toggles it\ttoggle:screen-reader",
-		        !strcmp(on, "yes") ? "on" : "off");
+		rec_row("switch\t%s\t%s\t-\t%s\ttoggle:screen-reader",
+		        N_("Screen reader"), !strcmp(on, "yes") ? "on" : "off",
+		        N_("Speak the focused window as focus moves, and the highlighted text on Super+U. Super+Shift+U toggles it"));
 	} else {
-		rec_row("switch\tScreen reader\tunavailable\t-\t"
-		        "needs syn-speak(1), shipped by the synui package\t-");
+		rec_row("switch\t%s\tunavailable\t-\t%s\t-",
+		        N_("Screen reader"),
+		        N_("needs syn-speak(1), shipped by the synui package"));
 	}
 
 	if (have_cmd("vibe")) {
 		/* ⚠ "listening", not "on". "On" describes a setting; what is true is
 		 * that a microphone is open right now, and this is the row where the
 		 * difference matters. */
-		rec_row("switch\tAnswer to its name\t%s\t-\t"
-		        "Listen for \"Synapse\" and answer out loud. HOLDS THE "
-		        "MICROPHONE OPEN until it is turned off; the bar shows a "
-		        "microphone while it is on\ttoggle:wake-word",
-		        !strcmp(wake, "on") ? "listening" : "off");
+		rec_row("switch\t%s\t%s\t-\t%s\ttoggle:wake-word",
+		        N_("Answer to its name"), !strcmp(wake, "on") ? "listening" : "off",
+		        N_("Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until it is turned off; the bar shows a microphone while it is on"));
 	} else {
-		rec_row("switch\tAnswer to its name\tunavailable\t-\t"
-		        "needs vibe(1) \xc2\xb7 synpkg install vibe\t-");
+		rec_row("switch\t%s\tunavailable\t-\t%s\t-",
+		        N_("Answer to its name"), N_("needs vibe(1) \xc2\xb7 synpkg install vibe"));
 	}
 
 	/* ── What this box can actually do ────────────────────────────────── */
 	char speak_eng[64], listen_eng[64];
 	voice_caps(speak_eng, sizeof speak_eng, listen_eng, sizeof listen_eng);
-	rec_row("engine\tVoice\t%s\t-\t"
-	        "piper is chibi's; espeak-ng is the fallback\t-", speak_eng);
-	rec_row("engine\tDictation\t%s\t-\t"
-	        "faster-whisper, from chibi. Super+Shift+V types what it hears\t-",
-	        listen_eng);
+	rec_row("engine\t%s\t%s\t-\t%s\t-",
+	        N_("Voice"), speak_eng, N_("piper is chibi's; espeak-ng is the fallback"));
+	rec_row("engine\t%s\t%s\t-\t%s\t-",
+	        N_("Dictation"), listen_eng,
+	        N_("faster-whisper, from chibi. Super+Shift+V types what it hears"));
 
 	/* ── Tuning ───────────────────────────────────────────────────────── */
 	char rate[32] = "", vol[32] = "", words[128] = "";
@@ -187,15 +186,14 @@ int pane_speech(void)
 	state_get("synui/speak.state", "volume", vol, sizeof vol);
 	state_get("synui/wake.state", "words", words, sizeof words);
 
-	rec_row("value\tSpeech rate\t%s\t-\tWords per minute, 80 to 450\t"
-	        "set:speech-rate", rate[0] ? rate : "175");
-	rec_row("value\tSpeech volume\t%s\t-\t0 to 100\tset:speech-volume",
-	        vol[0] ? vol : "100");
-	rec_row("value\tWake words\t%s\t-\t"
-	        "Comma separated. \"computer\" is kept because whisper transcribes "
-	        "it every time \xc2\xb7 drop it if it wakes on the word in "
-	        "conversation\tset:wake-words",
-	        words[0] ? words : "synapse, computer");
+	rec_row("value\t%s\t%s\t-\t%s\tset:speech-rate",
+	        N_("Speech rate"), rate[0] ? rate : "175",
+	        N_("Words per minute, 80 to 450"));
+	rec_row("value\t%s\t%s\t-\t0 to 100\tset:speech-volume",
+	        N_("Speech volume"), vol[0] ? vol : "100");
+	rec_row("value\t%s\t%s\t-\t%s\tset:wake-words",
+	        N_("Wake words"), words[0] ? words : "synapse, computer",
+	        N_("Comma separated. \"computer\" is kept because whisper transcribes it every time \xc2\xb7 drop it if it wakes on the word in conversation"));
 
 	/* ── And the two units behind the two switches ────────────────────── */
 	/*
@@ -215,17 +213,14 @@ int pane_speech(void)
 		char en[64] = "", act[64] = "";
 
 		user_unit_state("syn-speak.service", en, sizeof en, act, sizeof act);
-		rec_row("unit\tsyn-speak.service\t%s\t%s\t"
-		        "the announcer \xc2\xb7 the Screen reader switch above is what "
-		        "turns it on. \"not installed\" with the switch on means synui "
-		        "is older than 0.1.0-564 and nothing will be announced\t-",
-		        en, act);
+		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		        "syn-speak.service", en, act,
+		        N_("the announcer \xc2\xb7 the Screen reader switch above is what turns it on. \"not installed\" with the switch on means synui is older than 0.1.0-564 and nothing will be announced"));
 
 		user_unit_state("vibe-wake.service", en, sizeof en, act, sizeof act);
-		rec_row("unit\tvibe-wake.service\t%s\t%s\t"
-		        "the listener. Shipped disabled \xc2\xb7 the switch above is "
-		        "what turns it on\t-",
-		        en, act);
+		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		        "vibe-wake.service", en, act,
+		        N_("the listener. Shipped disabled \xc2\xb7 the switch above is what turns it on"));
 	}
 
 	return 0;

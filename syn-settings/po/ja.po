@@ -7,377 +7,913 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-settings\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr "経過 %1"
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] "%1 行"
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr "AI"
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr "適用"
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr "アシスタント"
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr "求められたら承認してください。"
 
-#: syn-settings.qml:1375
 msgid ""
 "Authorise when asked. A kernel and its headers are a few hundred megabytes "
 "to fetch and an initramfs to build, so this takes minutes, not seconds."
-msgstr "求められたら承認してください。カーネルとそのヘッダーは数百メガバイトのダウンロードに加えて initramfs の生成が必要なので、秒ではなく分単位の時間がかかります。"
+msgstr ""
+"求められたら承認してください。カーネルとそのヘッダーは数百メガバイトのダウン"
+"ロードに加えて initramfs の生成が必要なので、秒ではなく分単位の時間がかかりま"
+"す。"
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr "ブートローダー"
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr "キャンセル"
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr "起動構成を変更しますか？"
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr "閉じる"
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr "設定"
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr "接続"
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr "日付と時刻"
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr "既定のアプリ"
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr "切断"
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr "ディスプレイ"
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr "もう一度登録…"
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr "登録…"
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr "指紋"
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr "すべての指紋を削除"
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr "隠す"
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr "インストール"
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr "%1 をインストール中"
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr "次の処理を行います:"
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr "カーネル"
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr "キーボードと言語"
 
-#: syn-settings.qml:1915
 msgid ""
 "Leave this running. Closing the window will not stop it — it will only stop "
 "you seeing how it went."
-msgstr "このまま実行させてください。ウィンドウを閉じても処理は止まらず、結果が見えなくなるだけです。"
+msgstr ""
+"このまま実行させてください。ウィンドウを閉じても処理は止まらず、結果が見えな"
+"くなるだけです。"
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr "起動可能にする"
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr "起動可能にする…"
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr "既定にする"
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr "既定にする…"
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr "%1 を起動可能にしています"
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr "%1 を既定にしています"
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr "ネットワーク"
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr "電源とスリープ"
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr "再検出"
 
-#: syn-settings.qml:944
 msgid ""
 "Reads the live system. Writes go through localectl, timedatectl and "
 "systemctl, which do their own authorisation."
-msgstr "稼働中のシステムを読み取ります。書き込みは localectl・timedatectl・systemctl を経由し、認証はそれぞれが行います。"
+msgstr ""
+"稼働中のシステムを読み取ります。書き込みは localectl・timedatectl・systemctl "
+"を経由し、認証はそれぞれが行います。"
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr "更新"
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr "削除"
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr "キーを削除"
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr "%1 を削除中"
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr "SYNAPSE 設定"
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr "キーを保存"
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr "システム"
 
-#: syn-settings.qml:1657
 msgid ""
 "This makes %1 bootable. It is the only change in this app that can leave a "
 "machine that does not start, so read what it will do first."
-msgstr "これは %1 を起動可能にします。このアプリの中で唯一、マシンが起動しなくなり得る変更なので、まず何が行われるかをお読みください。"
+msgstr ""
+"これは %1 を起動可能にします。このアプリの中で唯一、マシンが起動しなくなり得"
+"る変更なので、まず何が行われるかをお読みください。"
 
-#: syn-settings.qml:1653
 msgid ""
 "This makes %1 the kernel this machine BOOTS. It changes nothing about the "
 "kernel you are running now; it takes effect at the next restart."
-msgstr "これはこのマシンが「起動する」カーネルを %1 にします。現在動作中のカーネルには影響せず、次回の再起動から有効になります。"
+msgstr ""
+"これはこのマシンが「起動する」カーネルを %1 にします。現在動作中のカーネルに"
+"は影響せず、次回の再起動から有効になります。"
 
-#: syn-settings.qml:1153
 msgid ""
 "This pane reported nothing.\n"
 "Run `%1 --rec %2` to see why."
-msgstr "このペインは何も報告しませんでした。\n理由を見るには「%1 --rec %2」を実行してください。"
+msgstr ""
+"このペインは何も報告しませんでした。\n"
+"理由を見るには「%1 --rec %2」を実行してください。"
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr "オフにする"
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr "オンにする"
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr "認証を求められる場合があります。"
 
-#: syn-settings.qml:1784
 msgid ""
 "You may be asked to authenticate. On limine this can mean building the entry "
 "generator from source, which takes several minutes — the lines below are it "
 "working."
-msgstr "認証を求められる場合があります。limine ではエントリ生成ツールをソースからビルドすることがあり、数分かかります。下の行はその作業です。"
+msgstr ""
+"認証を求められる場合があります。limine ではエントリ生成ツールをソースからビル"
+"ドすることがあり、数分かかります。下の行はその作業です。"
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr "%1 に接続中…"
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr "カーネルから見たコネクターと、コンポジターが実際に駆動しているもの"
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr "何を実行すべきか判断できませんでした"
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr "%1 を切断中…"
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
-msgstr "提供されているすべてのカーネル、インストール済みのもの、そして起動に使ったもの"
+msgstr ""
+"提供されているすべてのカーネル、インストール済みのもの、そして起動に使ったも"
+"の"
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr "識別情報と、各設定ファイルがどの層から来ているか"
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr "インターフェース、無線、そして通信を遮断しているものがあるか"
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "求められるたびに指を離して置き直してください。数回の読み取りが必要です"
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "モードが一覧に出ません — wlr-randr はインストールされていますか？"
 
-#: syn-settings.qml:356 syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr "これを開くと申し出るアプリがインストールされていません"
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr "この設定に選択肢の一覧が提供されませんでした"
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr "報告なし"
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr "%1 を再検出中…"
 
-#: syn-settings.qml:983 syn-settings.qml:1565
 msgid "reading…"
 msgstr "読み取り中…"
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "拒否されました (終了コード %1) — polkit が却下した可能性があります"
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr "すべての指紋を削除中…"
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr "%1 のキーを削除中…"
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr "リーダーに指を置いてください…"
 
-#: syn-settings.qml:1427 syn-settings.qml:1456 syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr "%1 を %2 に設定中…"
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr "%1 を設定中…"
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr "%1 のキーを保存中…"
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr "%1 を切り替え中…"
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr "synui 専用 — 実行中のセッションは %1 です"
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "アダプター、2 種類の無線ブロック、そしてペアリング済みの機器"
 
-#: syn-settings.qml:268
 msgid ""
 "the backend switch, the units that can restart it behind your back, and "
 "which model is on disk"
-msgstr "バックエンドの切り替え、知らないうちに再起動しうるユニット、そしてディスク上のモデル"
+msgstr ""
+"バックエンドの切り替え、知らないうちに再起動しうるユニット、そしてディスク上"
+"のモデル"
 
-#: syn-settings.qml:261
 msgid ""
 "the console keymap and the xkb layout, which are separate settings that "
 "sometimes disagree"
-msgstr "コンソールのキーマップと xkb のレイアウト。別々の設定で、食い違うことがあります"
+msgstr ""
+"コンソールのキーマップと xkb のレイアウト。別々の設定で、食い違うことがありま"
+"す"
 
-#: syn-settings.qml:270
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
-msgstr "リーダー、登録済みの指、そして追加の登録 — ロック画面は何か登録されて初めて指紋を提示します"
+msgstr ""
+"リーダー、登録済みの指、そして追加の登録 — ロック画面は何か登録されて初めて指"
+"紋を提示します"
 
-#: syn-settings.qml:262
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
-msgstr "システム時計と、デスクトップでの表記: 12 時間制か 24 時間制か、日付の順序はどれか"
+msgstr ""
+"システム時計と、デスクトップでの表記: 12 時間制か 24 時間制か、日付の順序はど"
+"れか"
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "サスペンドの動作が依存するユニットと、直近のサスペンドの結果"
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "各ファイル種別を開くもの — そしてそれを実際に誰かが選んだのかどうか"
 
-#: syn-settings.qml:269
 msgid ""
 "which service the assistant sends your messages to — the model on this "
 "machine, or a cloud account and its API key"
-msgstr "アシスタントがメッセージを送る先 — このマシン上のモデルか、クラウドのアカウントとその API キーか"
+msgstr ""
+"アシスタントがメッセージを送る先 — このマシン上のモデルか、クラウドのアカウン"
+"トとその API キーか"
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr "何が起きるかを確認中…"
+
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr "AI デーモン。読み込まれている間は GPU メモリを保持します"
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr "ソケット起動 — 次の要求でデーモンを起動します"
+
+msgid "proxies LAN requests to synapd"
+msgstr "LAN からの要求を synapd に中継します"
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr "そのポートを synapd の HTTP ソケットに中継します"
+
+msgid "AI backend"
+msgstr "AI バックエンド"
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr "gpu は全レイヤーをオフロード · cpu は CPU で実行 · off はデーモンをマスクして再起動できなくします"
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr "synui パッケージに含まれる synui-ai-backend(1) が必要です"
+
+msgid "llama.cpp API port"
+msgstr "llama.cpp API ポート"
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr "synapd-http-proxy.socket を含む synapd が必要です"
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr "llama-server や OpenAI API 向けに書かれたフロントエンド用の 127.0.0.1:8080。同梱のソケット経由です"
+
+msgid "systemctl not available"
+msgstr "systemctl を利用できません"
+
+msgid "model"
+msgstr "モデル"
+
+msgid "a part-downloaded model; syn-model download"
+msgstr "ダウンロード途中のモデル。syn-model download"
+
+msgid "no model installed · syn-model download"
+msgstr "モデルが未インストール · syn-model download"
+
+msgid "CUDA (NVIDIA)"
+msgstr "CUDA (NVIDIA)"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "acceleration"
+msgstr "アクセラレーション"
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr "/usr/lib に ggml バックエンドライブラリがありません · synapse-llama パッケージは入っていますか?"
+
+msgid "Web Browser"
+msgstr "ウェブブラウザー"
+
+msgid "http and https links, and .html files"
+msgstr "http と https のリンク、および .html ファイル"
+
+msgid "Email"
+msgstr "メール"
+
+msgid "mailto: links"
+msgstr "mailto: のリンク"
+
+msgid "File Manager"
+msgstr "ファイルマネージャー"
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr "フォルダー — inode/directory。synfiles が既定値を用意しているものです"
+
+msgid "Text Editor"
+msgstr "テキストエディター"
+
+msgid "plain text and source code"
+msgstr "プレーンテキストとソースコード"
+
+msgid "Image Viewer"
+msgstr "画像ビューアー"
+
+msgid "photographs and drawings"
+msgstr "写真と図"
+
+msgid "Audio Player"
+msgstr "オーディオプレーヤー"
+
+msgid "music and sound files"
+msgstr "音楽と音声のファイル"
+
+msgid "Video Player"
+msgstr "動画プレーヤー"
+
+msgid "films and clips"
+msgstr "映画とクリップ"
+
+msgid "Document Viewer"
+msgstr "文書ビューアー"
+
+msgid "PDF files"
+msgstr "PDF ファイル"
+
+msgid "Archive Manager"
+msgstr "アーカイブマネージャー"
+
+msgid "zip, tar and the rest"
+msgstr "zip、tar など"
+
+msgid "Terminal"
+msgstr "ターミナル"
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr "synui がターミナルとして起動するもの — mimeapps.list ではなく synuirc"
+
+msgid "nothing installed handles this"
+msgstr "これを扱えるものはインストールされていません"
+
+msgid "vibe"
+msgstr "vibe"
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr "このマシンにアシスタントがないため、選べるバックエンドはありません"
+
+msgid "backend"
+msgstr "バックエンド"
+
+msgid "which service the assistant sends your messages to"
+msgstr "アシスタントがメッセージを送る先のサービス"
+
+msgid "no key stored; set one before switching to this backend"
+msgstr "鍵が保存されていません。このバックエンドに切り替える前に設定してください"
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr "アダプターがないか、bluetoothd が動作していません"
+
+msgid "powered"
+msgstr "オン"
+
+msgid "discoverable"
+msgstr "検出可能"
+
+msgid "visible to anything scanning"
+msgstr "スキャンしているすべての機器から見えます"
+
+msgid "pairable"
+msgstr "ペアリング可能"
+
+msgid "accepts new pairings"
+msgstr "新しいペアリングを受け付けます"
+
+msgid "nothing has been paired with this adapter"
+msgstr "このアダプターにはまだ何もペアリングされていません"
+
+msgid "paired"
+msgstr "ペアリング済み"
+
+msgid "rfkill"
+msgstr "rfkill"
+
+msgid "rfkill reported nothing"
+msgstr "rfkill は何も報告しませんでした"
+
+msgid "soft-block"
+msgstr "ソフトブロック"
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr "ソフトウェアによるもの。解除には root が必要です (rfkill)"
+
+msgid "hard-block"
+msgstr "ハードブロック"
+
+msgid "a physical switch; software cannot clear it"
+msgstr "物理スイッチです。ソフトウェアでは解除できません"
+
+msgid "BlueZ; nothing below works without it"
+msgstr "BlueZ。これがないと以下はすべて動作しません"
+
+msgid "bluez-utils is not installed"
+msgstr "bluez-utils がインストールされていません"
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr "このマシンには Bluetooth ハードウェアがないため、設定するものはありません"
+
+msgid "avrcp-volume"
+msgstr "AVRCP 音量"
+
+msgid "fprintd"
+msgstr "fprintd"
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr "指紋デーモンは任意の依存関係です。これがないとどの読み取り装置も使えません"
+
+msgid "reader"
+msgstr "読み取り装置"
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr "fprintd はインストールされていますが、このマシンに指紋読み取り装置は報告されていません"
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr "fprintd が読み取り装置を認識しています。下で指を登録すると、ロック画面で使えるようになります"
+
+msgid "fingerprints"
+msgstr "指紋"
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr "読み取り装置は動作していますが、照合する対象がありません — ロック画面は指が登録されている場合にのみ提示します"
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr "いずれかが登録されていれば、ロック画面は読み取り装置を提示します"
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr "Arch の標準カーネル。SynapseOS が同梱するものです"
+
+msgid "long-term support — the fallback worth having installed"
+msgstr "長期サポート — 入れておく価値のある予備"
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr "デスクトップ向けの調整。遅延とゲームには通常これが最適です"
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr "セキュリティ強化。より低速で、一部のドライバーが動かなくなります"
+
+msgid "real-time preemption; for audio work"
+msgstr "リアルタイムプリエンプション。音声制作向けです"
+
+msgid "real-time on the LTS base"
+msgstr "LTS をベースにしたリアルタイム版"
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr "CachyOS BORE + sched-ext。デスクトップの応答性に振り切った調整です"
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr "LTS をベースにした CachyOS のパッチ — 予備として残す価値のある Cachy カーネル"
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr "強化パッチセット入りの CachyOS。ドライバーの注意点は linux-hardened と同じです"
+
+msgid "pacman not available"
+msgstr "pacman を利用できません"
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr "実行中のカーネルに操作はありません。起動元を削除することは、二度と起動しないマシンを作る方法です。"
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr "ブートローダーの設定が見つからないため、カーネルが起動可能かどうかは判断できません。"
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr "⚠ ここには複数のブートローダーが設定されています。ファームウェアが実際にどれを使うかを決めるのは起動順であり、この一覧ではありません。"
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr "「起動可能にする」は /etc/default/grub に GRUB_DEFAULT=saved を設定し、grub.cfg を再生成してから grub-set-default を実行します — この順序なのは、GRUB_DEFAULT が起動時ではなく設定生成時に読まれるためです。確認画面には三つとも表示されます。"
+
+msgid "“Make default” runs bootctl set-default."
+msgstr "「既定にする」は bootctl set-default を実行します。"
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr "「既定にする」は limine.conf に default_entry: を書き込み、並べ替えによって意味が黙って変わらないよう、エントリーをパスで指定します。"
+
+msgid "nmcli reported nothing"
+msgstr "nmcli は何も報告しませんでした"
+
+msgid "no connection"
+msgstr "接続なし"
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr "受信は既定で破棄します。ループバック、このマシンから張った接続への応答、ICMP、ローカルネットワークからのものはすべて通します。公開アドレスからの要求していない通信は通しません。"
+
+msgid "input filtering"
+msgstr "受信フィルタリング"
+
+msgid "container links"
+msgstr "コンテナーの接続"
+
+msgid "rebuilt"
+msgstr "再構築"
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr "synnet の起動以降、ファイアウォールが消えて再構築された回数です。"
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr "これらすべてを適用するデーモンです。ルールはこのデーモンより長く残るため、synnet を止めてもマシンが無防備になることはありません。"
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr "SynapseOS が使わない Arch 自身のファイアウォールサービスです — これが有効かどうかにかかわらず、synnet は自分のテーブルを管理します。"
+
+msgid "NetworkManager is not installed"
+msgstr "NetworkManager がインストールされていません"
+
+msgid "wwan"
+msgstr "モバイル通信"
+
+msgid "runs NVIDIA's suspend hook"
+msgstr "NVIDIA のサスペンドフックを実行します"
+
+msgid "runs NVIDIA's resume hook"
+msgstr "NVIDIA のレジュームフックを実行します"
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr "NVIDIA のハイバネートフックを実行します"
+
+msgid "keeps the driver loaded with no client"
+msgstr "クライアントがなくてもドライバーを読み込んだままにします"
+
+msgid "records connector state changes"
+msgstr "コネクターの状態変化を記録します"
+
+msgid "the AI daemon; holds GPU memory"
+msgstr "AI デーモン。GPU メモリを保持します"
+
+msgid "the intrusion monitor"
+msgstr "侵入監視"
+
+msgid "network policy and the firewall set"
+msgstr "ネットワークポリシーとファイアウォールのルールセット"
+
+msgid "last-suspend"
+msgstr "前回のサスペンド"
+
+msgid "when this boot last went to sleep"
+msgstr "この起動が最後にスリープした時刻"
+
+msgid "last-resume"
+msgstr "前回のレジューム"
+
+msgid "when it came back"
+msgstr "復帰した時刻"
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr "LANG とその仲間、/etc/locale.conf"
+
+msgid "the tty and the greeter"
+msgstr "tty とログイン画面"
+
+msgid "xkb layout — what the desktop uses"
+msgstr "xkb レイアウト — デスクトップが使うもの"
+
+msgid "keymap-xkb-variant"
+msgstr "xkb バリアント"
+
+msgid "xkb variant, blank for the default"
+msgstr "xkb バリアント。既定は空欄"
+
+msgid "keymap-xkb-model"
+msgstr "xkb モデル"
+
+msgid "xkb model"
+msgstr "xkb モデル"
+
+msgid "locale"
+msgstr "言語"
+
+msgid "localectl not installed"
+msgstr "localectl がインストールされていません"
+
+msgid "keymap-console"
+msgstr "コンソールのキーマップ"
+
+msgid "keymap-xkb"
+msgstr "xkb レイアウト"
+
+msgid "wifi"
+msgstr "Wi-Fi"
+
+msgid "Screen reader"
+msgstr "スクリーンリーダー"
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr "フォーカスの移動に合わせてフォーカス中のウィンドウを読み上げ、Super+Alt+S で選択中のテキストを読み上げます"
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr "synui パッケージに含まれる syn-speak(1) が必要です"
+
+msgid "Answer to its name"
+msgstr "名前に応答する"
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr "「Synapse」を聞き取って声で応答します。オフにするまでマイクを開いたままにします。オンの間はバーにマイクが表示されます"
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr "vibe(1) が必要です · synpkg install vibe"
+
+msgid "Voice"
+msgstr "音声"
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr "piper は chibi のもの。espeak-ng は代替です"
+
+msgid "Dictation"
+msgstr "ディクテーション"
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr "chibi の faster-whisper。Super+Shift+V で聞き取った内容を入力します"
+
+msgid "Speech rate"
+msgstr "読み上げ速度"
+
+msgid "Words per minute, 80 to 450"
+msgstr "1 分あたりの語数、80 から 450"
+
+msgid "Speech volume"
+msgstr "読み上げ音量"
+
+msgid "Wake words"
+msgstr "ウェイクワード"
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr "カンマ区切り。whisper が毎回そう書き起こすため「computer」は残してあります · 会話中にその語で反応する場合は外してください"
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr "読み上げ側 · 上の「スクリーンリーダー」スイッチがこれを有効にします。「未インストール」は synui パッケージがユニットを同梱しなかったという意味です"
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr "待ち受け側。無効の状態で提供されます · 上のスイッチが有効にします"
+
+msgid "kernel hardening baseline"
+msgstr "カーネル強化のベースライン"
+
+msgid "anything here WINS over the shipped baseline"
+msgstr "ここにあるものが同梱のベースラインより優先されます"
+
+msgid "refused kernel modules"
+msgstr "拒否するカーネルモジュール"
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr "synapse_kmod のパラメーター — C の既定値は実際に読み込まれるものではありません"
+
+msgid "audit decisions we have already made"
+msgstr "すでに下した監査の判断"
+
+msgid "AI daemon"
+msgstr "AI デーモン"
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr "コンポジターの rc — アップグレードがユーザーのコピーを書き換えることはありません"
+
+msgid "the vendor default application list; this is what WINS"
+msgstr "ベンダー既定のアプリケーション一覧。優先されるのはこちらです"
+
+msgid "/etc/os-release"
+msgstr "/etc/os-release"
+
+msgid "kernel"
+msgstr "カーネル"
+
+msgid "running kernel"
+msgstr "実行中のカーネル"
+
+msgid "hostname"
+msgstr "ホスト名"
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr "このマシンがネットワーク上で応答する名前 — SynapseOS はどのインストールも同じ名前から始まります"
+
+msgid "uptime"
+msgstr "稼働時間"
+
+msgid "since boot"
+msgstr "起動から"
+
+msgid "rgb"
+msgstr "RGB"
+
+msgid "syn-rgb is not installed"
+msgstr "syn-rgb がインストールされていません"
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr "RGB ハードウェア上の壁紙アクセント — 使うには `openrgb` をインストールしてください"
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr "メモリ、マザーボード、キーボード上の壁紙アクセント"
+
+msgid "clock-local"
+msgstr "現地時刻"
+
+msgid "as the system reads it"
+msgstr "システムが読み取った値"
+
+msgid "clock-utc"
+msgstr "協定世界時"
+
+msgid "UTC"
+msgstr "UTC"
+
+msgid "rtc"
+msgstr "ハードウェアクロック"
+
+msgid "the hardware clock"
+msgstr "ハードウェアの時計"
+
+msgid "is a time client running"
+msgstr "時刻クライアントが動作しているか"
+
+msgid "ntp-synced"
+msgstr "NTP 同期済み"
+
+msgid "has it actually disciplined the clock"
+msgstr "実際に時計を調整できたか"
+
+msgid "timezone"
+msgstr "タイムゾーン"
+
+msgid "timedatectl not installed"
+msgstr "timedatectl がインストールされていません"
+
+msgid "ntp-enabled"
+msgstr "NTP 有効"
+
+msgid "time-format"
+msgstr "時刻の書式"
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr "バー、ロック画面、デスクトップ時計"
+
+msgid "time-seconds"
+msgstr "秒を表示"
+
+msgid "seconds in the bar clock"
+msgstr "バーの時計に秒を表示します"
+
+msgid "date-format"
+msgstr "日付の書式"
+
+msgid "the order the date is written in"
+msgstr "日付を書く順序"
+
+msgid "desktop-clock"
+msgstr "デスクトップ時計"
+
+msgid "what the bar is showing right now"
+msgstr "バーが今表示している内容"
+
+msgid "gpu"
+msgstr "gpu"
+
+msgid "cpu"
+msgstr "cpu"
+
+msgid "off"
+msgstr "オフ"
+
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"

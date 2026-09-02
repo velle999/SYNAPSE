@@ -31,6 +31,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -116,10 +117,9 @@ int pane_fprint(void)
 	 * "only works sometimes": there was nowhere that said which.
 	 */
 	if (!have_cmd("fprintd-enroll")) {
-		rec_row("service\tfprintd\tnot installed\tbad\t"
-		        "the fingerprint daemon is an optional dependency; without it "
-		        "no reader can be used and the lock screen will not offer one\t"
-		        "unavailable:fprintd");
+		rec_row("service\t%s\tnot installed\tbad\t%s\tunavailable:fprintd",
+		        N_("fprintd"),
+		        N_("the fingerprint daemon is an optional dependency; without it no reader can be used and the lock screen will not offer one"));
 		return 0;
 	}
 
@@ -132,15 +132,15 @@ int pane_fprint(void)
 	 */
 	bool device = listed && strstr(listing, "found 0 devices") == NULL;
 	if (!device) {
-		rec_row("device\treader\tnone found\t-\t"
-		        "fprintd is installed but reports no fingerprint reader on "
-		        "this machine\t-");
+		rec_row("device\t%s\tnone found\t-\t%s\t-",
+		        N_("reader"),
+		        N_("fprintd is installed but reports no fingerprint reader on this machine"));
 		return 0;
 	}
 
-	rec_row("device\treader\tpresent\tok\t"
-	        "fprintd can see a reader; enrol a finger below and the lock "
-	        "screen will offer it\t-");
+	rec_row("device\t%s\tpresent\tok\t%s\t-",
+	        N_("reader"),
+	        N_("fprintd can see a reader; enrol a finger below and the lock screen will offer it"));
 
 	int have = 0;
 	for (int i = 0; i < NFINGERS; i++)
@@ -153,13 +153,13 @@ int pane_fprint(void)
 	 * that all say the same thing.
 	 */
 	if (have == 0)
-		rec_row("enrolled\tfingerprints\tnone\twarn\t"
-		        "the reader works, but there is nothing for it to match — the "
-		        "lock screen stays on the password until a finger is enrolled\t-");
+		rec_row("enrolled\t%s\tnone\twarn\t%s\t-",
+		        N_("fingerprints"),
+		        N_("the reader works, but there is nothing for it to match — the lock screen stays on the password until a finger is enrolled"));
 	else
-		rec_row("enrolled\tfingerprints\t%d enrolled\tok\t"
-		        "the lock screen offers the reader whenever one of these is on "
-		        "file\tforget:all", have);
+		rec_row("enrolled\t%s\t%d enrolled\tok\t%s\tforget:all",
+		        N_("fingerprints"), have,
+		        N_("the lock screen offers the reader whenever one of these is on file"));
 
 	for (int i = 0; i < NFINGERS; i++) {
 		bool on = enrolled(listing, FINGERS[i].token);

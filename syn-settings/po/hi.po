@@ -7,378 +7,905 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-settings\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr "%1 बीत चुके"
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] "%1 पंक्ति"
 msgstr[1] "%1 पंक्तियाँ"
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr "एआई"
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr "लागू करें"
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr "सहायक"
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr "पूछे जाने पर अनुमति दें।"
 
-#: syn-settings.qml:1375
 msgid ""
 "Authorise when asked. A kernel and its headers are a few hundred megabytes "
 "to fetch and an initramfs to build, so this takes minutes, not seconds."
-msgstr "पूछे जाने पर अनुमति दें। कर्नेल और उसके हेडर कुछ सौ मेगाबाइट डाउनलोड होते हैं और साथ में initramfs भी बनाना पड़ता है, इसलिए इसमें सेकंड नहीं, मिनट लगते हैं।"
+msgstr ""
+"पूछे जाने पर अनुमति दें। कर्नेल और उसके हेडर कुछ सौ मेगाबाइट डाउनलोड होते हैं और साथ में "
+"initramfs भी बनाना पड़ता है, इसलिए इसमें सेकंड नहीं, मिनट लगते हैं।"
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr "ब्लूटूथ"
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr "बूटलोडर"
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr "रद्द करें"
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr "बूट कॉन्फ़िगरेशन बदलें?"
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr "बंद करें"
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr "कॉन्फ़िगरेशन"
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr "जोड़ें"
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr "दिनांक और समय"
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr "डिफ़ॉल्ट ऐप्स"
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr "अलग करें"
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr "डिस्प्ले"
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr "फिर से पंजीकृत करें…"
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr "पंजीकृत करें…"
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr "फ़िंगरप्रिंट"
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr "सभी फ़िंगरप्रिंट भुला दें"
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr "छिपाएँ"
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr "इंस्टॉल करें"
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr "%1 इंस्टॉल हो रहा है"
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr "यह निम्न करेगा:"
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr "कर्नेल"
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr "कीबोर्ड और भाषा"
 
-#: syn-settings.qml:1915
 msgid ""
 "Leave this running. Closing the window will not stop it — it will only stop "
 "you seeing how it went."
 msgstr "इसे चलने दें। विंडो बंद करने से यह रुकेगा नहीं — बस आप देख नहीं पाएँगे कि क्या हुआ।"
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr "बूट योग्य बनाएँ"
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr "बूट योग्य बनाएँ…"
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr "डिफ़ॉल्ट बनाएँ"
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr "डिफ़ॉल्ट बनाएँ…"
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr "%1 को बूट योग्य बनाया जा रहा है"
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr "%1 को डिफ़ॉल्ट बनाया जा रहा है"
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr "नेटवर्क"
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr "पावर और स्लीप"
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr "फिर से जाँचें"
 
-#: syn-settings.qml:944
 msgid ""
 "Reads the live system. Writes go through localectl, timedatectl and "
 "systemctl, which do their own authorisation."
-msgstr "चालू सिस्टम को पढ़ता है। बदलाव localectl, timedatectl और systemctl से होकर जाते हैं, जो अपनी अनुमति खुद माँगते हैं।"
+msgstr ""
+"चालू सिस्टम को पढ़ता है। बदलाव localectl, timedatectl और systemctl से होकर जाते हैं, "
+"जो अपनी अनुमति खुद माँगते हैं।"
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr "ताज़ा करें"
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr "हटाएँ"
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr "कुंजी हटाएँ"
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr "%1 हटाया जा रहा है"
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr "SYNAPSE सेटिंग्स"
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr "कुंजी सहेजें"
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr "सिस्टम"
 
-#: syn-settings.qml:1657
 msgid ""
 "This makes %1 bootable. It is the only change in this app that can leave a "
 "machine that does not start, so read what it will do first."
-msgstr "यह %1 को बूट योग्य बनाता है। इस ऐप में यही एकमात्र बदलाव है जिससे मशीन चालू होना बंद कर सकती है, इसलिए पहले पढ़ लें कि यह क्या करेगा।"
+msgstr ""
+"यह %1 को बूट योग्य बनाता है। इस ऐप में यही एकमात्र बदलाव है जिससे मशीन चालू होना बंद "
+"कर सकती है, इसलिए पहले पढ़ लें कि यह क्या करेगा।"
 
-#: syn-settings.qml:1653
 msgid ""
 "This makes %1 the kernel this machine BOOTS. It changes nothing about the "
 "kernel you are running now; it takes effect at the next restart."
-msgstr "यह %1 को वह कर्नेल बनाता है जिससे यह मशीन बूट होती है। अभी चल रहे कर्नेल में कोई बदलाव नहीं होता; असर अगली बार चालू होने पर पड़ेगा।"
+msgstr ""
+"यह %1 को वह कर्नेल बनाता है जिससे यह मशीन बूट होती है। अभी चल रहे कर्नेल में कोई बदलाव "
+"नहीं होता; असर अगली बार चालू होने पर पड़ेगा।"
 
-#: syn-settings.qml:1153
 msgid ""
 "This pane reported nothing.\n"
 "Run `%1 --rec %2` to see why."
-msgstr "इस पैनल ने कुछ नहीं बताया।\nकारण देखने के लिए «%1 --rec %2» चलाएँ।"
+msgstr ""
+"इस पैनल ने कुछ नहीं बताया।\n"
+"कारण देखने के लिए «%1 --rec %2» चलाएँ।"
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr "बंद करें"
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr "चालू करें"
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr "आपसे प्रमाणीकरण माँगा जा सकता है।"
 
-#: syn-settings.qml:1784
 msgid ""
 "You may be asked to authenticate. On limine this can mean building the entry "
 "generator from source, which takes several minutes — the lines below are it "
 "working."
-msgstr "आपसे प्रमाणीकरण माँगा जा सकता है। limine पर इसका मतलब एंट्री जनरेटर को स्रोत से बनाना हो सकता है, जिसमें कई मिनट लगते हैं — नीचे की पंक्तियाँ वही काम हैं।"
+msgstr ""
+"आपसे प्रमाणीकरण माँगा जा सकता है। limine पर इसका मतलब एंट्री जनरेटर को स्रोत से बनाना "
+"हो सकता है, जिसमें कई मिनट लगते हैं — नीचे की पंक्तियाँ वही काम हैं।"
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr "%1 से जुड़ा जा रहा है…"
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr "कर्नेल जिन कनेक्टर को देखता है, और साथ में कंपोज़िटर जो चला रहा है"
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr "तय नहीं हो सका कि क्या चलाना है"
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr "%1 अलग किया जा रहा है…"
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
 msgstr "उपलब्ध हर कर्नेल, कौन-से इंस्टॉल हैं, और आपने किससे बूट किया"
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr "पहचान, और हर कॉन्फ़िगरेशन फ़ाइल किस परत से आती है"
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr "इंटरफ़ेस, रेडियो, और क्या कुछ ट्रैफ़िक छान रहा है"
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "हर बार पूछे जाने पर उँगली उठाकर फिर से रखें; कई बार पढ़ना पड़ता है"
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "कोई मोड सूचीबद्ध नहीं — क्या wlr-randr इंस्टॉल है?"
 
-#: syn-settings.qml:356 syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr "इंस्टॉल किए गए किसी भी ऐप ने इसे खोलने की पेशकश नहीं की"
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr "इस सेटिंग के लिए विकल्पों की कोई सूची नहीं मिली"
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr "कुछ नहीं बताया गया"
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr "%1 की फिर से जाँच हो रही है…"
 
-#: syn-settings.qml:983 syn-settings.qml:1565
 msgid "reading…"
 msgstr "पढ़ा जा रहा है…"
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "अस्वीकृत (निकास %1) — शायद polkit ने मना कर दिया"
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr "सभी फ़िंगरप्रिंट हटाए जा रहे हैं…"
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr "%1 की कुंजी हटाई जा रही है…"
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr "रीडर पर अपनी उँगली रखें…"
 
-#: syn-settings.qml:1427 syn-settings.qml:1456 syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr "%1 को %2 पर सेट किया जा रहा है…"
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr "%1 सेट किया जा रहा है…"
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr "%1 की कुंजी सहेजी जा रही है…"
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr "%1 बदला जा रहा है…"
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr "केवल synui — चल रहा सत्र %1 है"
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "अडैप्टर, दोनों तरह के रेडियो ब्लॉक, और क्या-क्या जुड़ा हुआ है"
 
-#: syn-settings.qml:268
 msgid ""
 "the backend switch, the units that can restart it behind your back, and "
 "which model is on disk"
-msgstr "बैकएंड स्विच, वे यूनिट जो आपकी जानकारी के बिना उसे फिर चालू कर सकती हैं, और डिस्क पर कौन-सा मॉडल है"
+msgstr ""
+"बैकएंड स्विच, वे यूनिट जो आपकी जानकारी के बिना उसे फिर चालू कर सकती हैं, और डिस्क पर "
+"कौन-सा मॉडल है"
 
-#: syn-settings.qml:261
 msgid ""
 "the console keymap and the xkb layout, which are separate settings that "
 "sometimes disagree"
 msgstr "कंसोल कीमैप और xkb लेआउट — ये अलग-अलग सेटिंग्स हैं जो कभी-कभी मेल नहीं खातीं"
 
-#: syn-settings.qml:270
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
-msgstr "रीडर, कौन-सी उँगलियाँ दर्ज हैं, और एक और दर्ज करना — लॉक स्क्रीन यह तभी दिखाती है जब कुछ दर्ज हो"
+msgstr ""
+"रीडर, कौन-सी उँगलियाँ दर्ज हैं, और एक और दर्ज करना — लॉक स्क्रीन यह तभी दिखाती है जब "
+"कुछ दर्ज हो"
 
-#: syn-settings.qml:262
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr "सिस्टम घड़ी — और डेस्कटॉप उसे कैसे लिखता है: 12 या 24 घंटे, और दिनांक किस क्रम में"
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "सस्पेंड ठीक चलने के लिए जिन यूनिट पर निर्भर है, और पिछली बार क्या हुआ"
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "हर तरह की फ़ाइल क्या खोलता है — और क्या वाकई किसी ने उसे चुना था"
 
-#: syn-settings.qml:269
 msgid ""
 "which service the assistant sends your messages to — the model on this "
 "machine, or a cloud account and its API key"
-msgstr "सहायक आपके संदेश किस सेवा को भेजता है — इस मशीन के मॉडल को, या क्लाउड खाते और उसकी API कुंजी को"
+msgstr ""
+"सहायक आपके संदेश किस सेवा को भेजता है — इस मशीन के मॉडल को, या क्लाउड खाते और उसकी "
+"API कुंजी को"
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr "पता लगाया जा रहा है कि इससे क्या होगा…"
+
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr "एआई डीमन; जब तक लोड है GPU की स्मृति घेरे रहता है"
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr "सॉकेट सक्रियण — अगली माँग पर डीमन शुरू करता है"
+
+msgid "proxies LAN requests to synapd"
+msgstr "लैन की माँगें synapd तक पहुँचाता है"
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr "उस पोर्ट को synapd के HTTP सॉकेट तक पहुँचाता है"
+
+msgid "AI backend"
+msgstr "एआई बैकएंड"
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr "gpu हर परत को GPU पर भेजता है · cpu प्रोसेसर पर चलाता है · off डीमन को ढक देता है ताकि उसे दोबारा शुरू न किया जा सके"
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr "synui पैकेज में आने वाला synui-ai-backend(1) चाहिए"
+
+msgid "llama.cpp API port"
+msgstr "llama.cpp एपीआई पोर्ट"
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr "ऐसा synapd चाहिए जो synapd-http-proxy.socket देता हो"
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr "llama-server या OpenAI एपीआई के लिए लिखे फ़्रंटएंड हेतु 127.0.0.1:8080, साथ आने वाले सॉकेट के ज़रिये"
+
+msgid "systemctl not available"
+msgstr "systemctl उपलब्ध नहीं"
+
+msgid "model"
+msgstr "मॉडल"
+
+msgid "a part-downloaded model; syn-model download"
+msgstr "आधा डाउनलोड हुआ मॉडल; syn-model download"
+
+msgid "no model installed · syn-model download"
+msgstr "कोई मॉडल संस्थापित नहीं · syn-model download"
+
+msgid "CUDA (NVIDIA)"
+msgstr "CUDA (NVIDIA)"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "acceleration"
+msgstr "त्वरण"
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr "/usr/lib में कोई ggml बैकएंड लाइब्रेरी नहीं · क्या कोई synapse-llama पैकेज संस्थापित है?"
+
+msgid "Web Browser"
+msgstr "वेब ब्राउज़र"
+
+msgid "http and https links, and .html files"
+msgstr "http और https कड़ियाँ, और .html फ़ाइलें"
+
+msgid "Email"
+msgstr "ईमेल"
+
+msgid "mailto: links"
+msgstr "mailto: कड़ियाँ"
+
+msgid "File Manager"
+msgstr "फ़ाइल प्रबंधक"
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr "फ़ोल्डर — inode/directory, जिसके लिए synfiles एक डिफ़ॉल्ट देता है"
+
+msgid "Text Editor"
+msgstr "पाठ संपादक"
+
+msgid "plain text and source code"
+msgstr "सादा पाठ और स्रोत कोड"
+
+msgid "Image Viewer"
+msgstr "छवि दर्शक"
+
+msgid "photographs and drawings"
+msgstr "तस्वीरें और चित्र"
+
+msgid "Audio Player"
+msgstr "ऑडियो प्लेयर"
+
+msgid "music and sound files"
+msgstr "संगीत और ध्वनि की फ़ाइलें"
+
+msgid "Video Player"
+msgstr "वीडियो प्लेयर"
+
+msgid "films and clips"
+msgstr "फ़िल्में और क्लिप"
+
+msgid "Document Viewer"
+msgstr "दस्तावेज़ दर्शक"
+
+msgid "PDF files"
+msgstr "PDF फ़ाइलें"
+
+msgid "Archive Manager"
+msgstr "संग्रह प्रबंधक"
+
+msgid "zip, tar and the rest"
+msgstr "zip, tar और बाक़ी"
+
+msgid "Terminal"
+msgstr "टर्मिनल"
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr "synui टर्मिनल के रूप में जो चलाता है — synuirc, mimeapps.list नहीं"
+
+msgid "nothing installed handles this"
+msgstr "संस्थापित किसी भी चीज़ में यह नहीं सँभाला जाता"
+
+msgid "vibe"
+msgstr "vibe"
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr "इस मशीन पर सहायक नहीं है, इसलिए चुनने को कोई बैकएंड नहीं"
+
+msgid "backend"
+msgstr "बैकएंड"
+
+msgid "which service the assistant sends your messages to"
+msgstr "सहायक आपके संदेश किस सेवा को भेजता है"
+
+msgid "no key stored; set one before switching to this backend"
+msgstr "कोई कुंजी सहेजी नहीं गई; इस बैकएंड पर जाने से पहले एक सेट करें"
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr "कोई अडैप्टर नहीं, या bluetoothd नहीं चल रहा"
+
+msgid "powered"
+msgstr "चालू"
+
+msgid "discoverable"
+msgstr "दृश्यमान"
+
+msgid "visible to anything scanning"
+msgstr "खोज करने वाले हर उपकरण को दिखता है"
+
+msgid "pairable"
+msgstr "युग्मन योग्य"
+
+msgid "accepts new pairings"
+msgstr "नए युग्मन स्वीकार करता है"
+
+msgid "nothing has been paired with this adapter"
+msgstr "इस अडैप्टर से अभी तक कुछ भी युग्मित नहीं हुआ"
+
+msgid "paired"
+msgstr "युग्मित"
+
+msgid "rfkill"
+msgstr "rfkill"
+
+msgid "rfkill reported nothing"
+msgstr "rfkill ने कुछ नहीं बताया"
+
+msgid "soft-block"
+msgstr "सॉफ़्टवेयर रोक"
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr "सॉफ़्टवेयर की; हटाने के लिए root चाहिए (rfkill)"
+
+msgid "hard-block"
+msgstr "हार्डवेयर रोक"
+
+msgid "a physical switch; software cannot clear it"
+msgstr "एक भौतिक स्विच; सॉफ़्टवेयर इसे नहीं हटा सकता"
+
+msgid "BlueZ; nothing below works without it"
+msgstr "BlueZ; इसके बिना नीचे का कुछ भी काम नहीं करता"
+
+msgid "bluez-utils is not installed"
+msgstr "bluez-utils संस्थापित नहीं है"
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr "इस मशीन में ब्लूटूथ हार्डवेयर नहीं है, इसलिए सेट करने को कुछ नहीं"
+
+msgid "avrcp-volume"
+msgstr "AVRCP ध्वनि स्तर"
+
+msgid "fprintd"
+msgstr "fprintd"
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr "अंगुली-छाप डीमन वैकल्पिक निर्भरता है; इसके बिना कोई भी रीडर काम नहीं आता"
+
+msgid "reader"
+msgstr "रीडर"
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr "fprintd संस्थापित है पर इस मशीन पर कोई अंगुली-छाप रीडर नहीं बताता"
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr "fprintd को रीडर दिखता है; नीचे एक अंगुली दर्ज करें और लॉक स्क्रीन उसे देने लगेगी"
+
+msgid "fingerprints"
+msgstr "अंगुली-छाप"
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr "रीडर काम करता है, पर मिलान के लिए कुछ नहीं है — लॉक स्क्रीन इसे तभी देती है जब कोई अंगुली दर्ज हो"
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr "इनमें से एक भी दर्ज होते ही लॉक स्क्रीन रीडर देने लगती है"
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr "Arch का अपना कर्नेल; वही जो SynapseOS देता है"
+
+msgid "long-term support — the fallback worth having installed"
+msgstr "दीर्घकालिक समर्थन — रखने लायक विकल्प"
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr "डेस्कटॉप के लिए तैयार; विलंब और खेलों के लिए आम तौर पर सबसे अच्छा"
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr "सुरक्षा-कठोर; धीमा, और कुछ ड्राइवर तोड़ देता है"
+
+msgid "real-time preemption; for audio work"
+msgstr "रीयल-टाइम प्रीएम्प्शन; ऑडियो काम के लिए"
+
+msgid "real-time on the LTS base"
+msgstr "LTS आधार पर रीयल-टाइम"
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr "CachyOS BORE + sched-ext; डेस्कटॉप की तत्परता के लिए कसकर तैयार"
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr "LTS आधार पर CachyOS के पैच — विकल्प के रूप में रखने लायक Cachy कर्नेल"
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr "कठोर पैच सेट वाला CachyOS; ड्राइवरों को लेकर वही चेतावनियाँ जो linux-hardened में हैं"
+
+msgid "pacman not available"
+msgstr "pacman उपलब्ध नहीं"
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr "चल रहे कर्नेल के लिए कोई क्रिया नहीं है: जिससे आपने बूट किया उसी को हटाना ऐसी मशीन पाने का तरीका है जो फिर शुरू न हो।"
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr "कोई बूटलोडर विन्यास नहीं मिला, इसलिए यह नहीं कहा जा सकता कि कोई कर्नेल बूट होने योग्य है या नहीं।"
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr "⚠ यहाँ एक से अधिक बूटलोडर विन्यस्त हैं। फ़र्मवेयर वास्तव में किसे उपयोग करता है यह बूट क्रम तय करता है, यह सूची नहीं।"
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr "“बूट योग्य बनाएँ” /etc/default/grub में GRUB_DEFAULT=saved रखता है, grub.cfg फिर से बनाता है, और तब grub-set-default चलाता है — इसी क्रम में, क्योंकि GRUB_DEFAULT विन्यास बनाते समय पढ़ा जाता है, बूट पर नहीं। पुष्टि में तीनों गिनाए जाते हैं।"
+
+msgid "“Make default” runs bootctl set-default."
+msgstr "“डिफ़ॉल्ट बनाएँ” bootctl set-default चलाता है।"
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr "“डिफ़ॉल्ट बनाएँ” limine.conf में default_entry: लिखता है और प्रविष्टि को उसके पथ से नाम देता है, ताकि क्रम बदलने पर उसका अर्थ चुपचाप न बदल जाए।"
+
+msgid "nmcli reported nothing"
+msgstr "nmcli ने कुछ नहीं बताया"
+
+msgid "no connection"
+msgstr "कोई संबंध नहीं"
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr "भीतर आने वाला सब कुछ डिफ़ॉल्ट रूप से गिरा दिया जाता है। लूपबैक, इस मशीन द्वारा बनाए गए संबंधों के उत्तर, ICMP और स्थानीय नेटवर्क से आने वाला सब कुछ जाने दिया जाता है; सार्वजनिक पते से बिना माँगे आया ट्रैफ़िक नहीं।"
+
+msgid "input filtering"
+msgstr "आवक छनाई"
+
+msgid "container links"
+msgstr "कंटेनर कड़ियाँ"
+
+msgid "rebuilt"
+msgstr "पुनर्निर्मित"
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr "synnet के शुरू होने के बाद से फ़ायरवॉल कितनी बार गायब हुआ और फिर बनाया गया।"
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr "वह डीमन जो यह सब लागू करता है। नियम इससे अधिक टिकते हैं, इसलिए रुका हुआ synnet मशीन को असुरक्षित नहीं छोड़ता।"
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr "Arch की अपनी फ़ायरवॉल सेवा, जिसे SynapseOS उपयोग नहीं करता — यह सक्रिय हो या न हो, synnet अपनी तालिका स्वयं सँभालता है।"
+
+msgid "NetworkManager is not installed"
+msgstr "NetworkManager संस्थापित नहीं है"
+
+msgid "wwan"
+msgstr "मोबाइल ब्रॉडबैंड"
+
+msgid "runs NVIDIA's suspend hook"
+msgstr "NVIDIA का सस्पेंड हुक चलाता है"
+
+msgid "runs NVIDIA's resume hook"
+msgstr "NVIDIA का रिज़्यूम हुक चलाता है"
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr "NVIDIA का हाइबरनेट हुक चलाता है"
+
+msgid "keeps the driver loaded with no client"
+msgstr "बिना किसी क्लाइंट के भी ड्राइवर को लोड रखता है"
+
+msgid "records connector state changes"
+msgstr "कनेक्टर की स्थिति में बदलाव दर्ज करता है"
+
+msgid "the AI daemon; holds GPU memory"
+msgstr "एआई डीमन; GPU की स्मृति घेरता है"
+
+msgid "the intrusion monitor"
+msgstr "घुसपैठ निगरानी"
+
+msgid "network policy and the firewall set"
+msgstr "नेटवर्क नीति और फ़ायरवॉल का नियम-समूह"
+
+msgid "last-suspend"
+msgstr "पिछली सुप्तावस्था"
+
+msgid "when this boot last went to sleep"
+msgstr "इस बूट में अंतिम बार कब नींद हुई"
+
+msgid "last-resume"
+msgstr "पिछली वापसी"
+
+msgid "when it came back"
+msgstr "यह कब लौटा"
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr "LANG और उसके साथी, /etc/locale.conf"
+
+msgid "the tty and the greeter"
+msgstr "tty और लॉगिन पर्दा"
+
+msgid "xkb layout — what the desktop uses"
+msgstr "xkb विन्यास — जो डेस्कटॉप उपयोग करता है"
+
+msgid "keymap-xkb-variant"
+msgstr "xkb रूपांतर"
+
+msgid "xkb variant, blank for the default"
+msgstr "xkb रूपांतर, डिफ़ॉल्ट के लिए खाली"
+
+msgid "keymap-xkb-model"
+msgstr "xkb मॉडल"
+
+msgid "xkb model"
+msgstr "xkb मॉडल"
+
+msgid "locale"
+msgstr "भाषा"
+
+msgid "localectl not installed"
+msgstr "localectl संस्थापित नहीं है"
+
+msgid "keymap-console"
+msgstr "कंसोल कीमैप"
+
+msgid "keymap-xkb"
+msgstr "xkb विन्यास"
+
+msgid "wifi"
+msgstr "वाई-फ़ाई"
+
+msgid "Screen reader"
+msgstr "स्क्रीन रीडर"
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr "फ़ोकस बदलने पर फ़ोकस वाली खिड़की पढ़ता है, और Super+Alt+S पर चुना हुआ पाठ"
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr "synui पैकेज में आने वाला syn-speak(1) चाहिए"
+
+msgid "Answer to its name"
+msgstr "अपने नाम पर उत्तर देना"
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr "“Synapse” सुनना और बोलकर उत्तर देना। बंद किए जाने तक माइक्रोफ़ोन खुला रखता है; चालू रहने पर पट्टी में माइक्रोफ़ोन दिखता है"
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr "vibe(1) चाहिए · synpkg install vibe"
+
+msgid "Voice"
+msgstr "आवाज़"
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr "piper chibi का है; espeak-ng विकल्प है"
+
+msgid "Dictation"
+msgstr "श्रुतलेख"
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr "chibi का faster-whisper। Super+Shift+V जो सुनता है वह टाइप करता है"
+
+msgid "Speech rate"
+msgstr "बोलने की गति"
+
+msgid "Words per minute, 80 to 450"
+msgstr "शब्द प्रति मिनट, 80 से 450"
+
+msgid "Speech volume"
+msgstr "बोलने का ध्वनि स्तर"
+
+msgid "Wake words"
+msgstr "जगाने वाले शब्द"
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr "अल्पविराम से अलग। “computer” इसलिए रखा है क्योंकि whisper हर बार यही लिखता है · बातचीत में उस शब्द पर जाग जाए तो हटा दें"
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr "बोलने वाला · ऊपर का “स्क्रीन रीडर” स्विच इसे चालू करता है। “संस्थापित नहीं” का अर्थ है कि synui पैकेज ने वह यूनिट नहीं दी"
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr "सुनने वाला। बंद अवस्था में आता है · ऊपर का स्विच इसे चालू करता है"
+
+msgid "kernel hardening baseline"
+msgstr "कर्नेल कठोरता का आधार"
+
+msgid "anything here WINS over the shipped baseline"
+msgstr "यहाँ जो है वह साथ आए आधार पर भारी पड़ता है"
+
+msgid "refused kernel modules"
+msgstr "अस्वीकृत कर्नेल मॉड्यूल"
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr "synapse_kmod के प्राचल — C के डिफ़ॉल्ट वही नहीं हैं जो लोड होते हैं"
+
+msgid "audit decisions we have already made"
+msgstr "पहले ही लिए गए ऑडिट निर्णय"
+
+msgid "AI daemon"
+msgstr "एआई डीमन"
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr "कंपोज़िटर का rc — अद्यतन कभी उपयोक्ता की प्रति नहीं बदलता"
+
+msgid "the vendor default application list; this is what WINS"
+msgstr "विक्रेता की डिफ़ॉल्ट अनुप्रयोग सूची; यही भारी पड़ती है"
+
+msgid "/etc/os-release"
+msgstr "/etc/os-release"
+
+msgid "kernel"
+msgstr "कर्नेल"
+
+msgid "running kernel"
+msgstr "चल रहा कर्नेल"
+
+msgid "hostname"
+msgstr "होस्टनाम"
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr "वह नाम जिससे यह मशीन नेटवर्क पर उत्तर देती है — SynapseOS की हर संस्थापना एक ही नाम से शुरू होती है"
+
+msgid "uptime"
+msgstr "चालू रहने का समय"
+
+msgid "since boot"
+msgstr "बूट के बाद से"
+
+msgid "rgb"
+msgstr "RGB"
+
+msgid "syn-rgb is not installed"
+msgstr "syn-rgb संस्थापित नहीं है"
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr "RGB हार्डवेयर पर दीवार-चित्र का रंग — उपयोग के लिए `openrgb` संस्थापित करें"
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr "रैम, बोर्ड और कुंजीपटल पर दीवार-चित्र का रंग"
+
+msgid "clock-local"
+msgstr "स्थानीय समय"
+
+msgid "as the system reads it"
+msgstr "जैसा तंत्र उसे पढ़ता है"
+
+msgid "clock-utc"
+msgstr "वैश्विक समय"
+
+msgid "UTC"
+msgstr "UTC"
+
+msgid "rtc"
+msgstr "हार्डवेयर घड़ी"
+
+msgid "the hardware clock"
+msgstr "हार्डवेयर की घड़ी"
+
+msgid "is a time client running"
+msgstr "क्या कोई समय क्लाइंट चल रहा है"
+
+msgid "ntp-synced"
+msgstr "NTP समकालित"
+
+msgid "has it actually disciplined the clock"
+msgstr "क्या उसने वाकई घड़ी सुधारी"
+
+msgid "timezone"
+msgstr "समय क्षेत्र"
+
+msgid "timedatectl not installed"
+msgstr "timedatectl संस्थापित नहीं है"
+
+msgid "ntp-enabled"
+msgstr "NTP सक्षम"
+
+msgid "time-format"
+msgstr "समय का प्रारूप"
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr "पट्टी, लॉक पर्दा और डेस्कटॉप घड़ी"
+
+msgid "time-seconds"
+msgstr "सेकंड"
+
+msgid "seconds in the bar clock"
+msgstr "पट्टी की घड़ी में सेकंड"
+
+msgid "date-format"
+msgstr "तिथि का प्रारूप"
+
+msgid "the order the date is written in"
+msgstr "तिथि लिखने का क्रम"
+
+msgid "desktop-clock"
+msgstr "डेस्कटॉप घड़ी"
+
+msgid "what the bar is showing right now"
+msgstr "पट्टी इस समय क्या दिखा रही है"
+
+msgid "gpu"
+msgstr "gpu"
+
+msgid "cpu"
+msgstr "cpu"
+
+msgid "off"
+msgstr "बंद"
+
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "ब्लूटूथ"

@@ -157,7 +157,13 @@ def find_call_end(text, start):
 
 def scan(path, rel):
     """[(msgid, msgid_plural or None, line)] plus a list of complaints."""
-    text = strip_comments(path.read_text(encoding='utf-8'))
+    # ⚠ BOTH FORMS. strip_comments() keeps every byte offset, so an offset into
+    # `text` indexes `raw` too — which is what lets the i18n-dynamic exemption
+    # below read a COMMENT that the scanner itself must not see. (A scanner that
+    # saw comments would flag the note in I18n.qml's own header explaining the
+    # trap, which is how that check first went wrong in synui.)
+    raw = path.read_text(encoding='utf-8')
+    text = strip_comments(raw)
     hits, bad = [], []
     for m in _CALL.finditer(text):
         kind = m.group(1)
@@ -175,8 +181,30 @@ def scan(path, rel):
             continue
         single = literal_value(args[0])
         if single is None:
+            # ⛔ A NON-LITERAL EXTRACTS NOTHING AND IS ENGLISH FOREVER — with one
+            # legitimate exception. syn-settings draws a TABLE whose labels
+            # arrive over the record protocol from src/*.c, where they are
+            # marked N_(); po/pot.sh runs real xgettext over those into this
+            # same template, so every string such a call can be handed IS in the
+            # catalog — just not from this file.
+            #
+            # So the exemption is per call site and has to be written down:
+            #     // i18n-dynamic: <where the msgids come from>
+            # on the call's own line or the one above it. Anything else is still
+            # an error, and the marker is greppable when somebody asks which
+            # lookups are not literal.
+            #
+            # ⚠ THIS COPY OF THE TOOL THEREFORE DIFFERS from the ones in
+            # synfiles/, synpkg/ and synui/ — which already differ from each
+            # other; it is a build-time tool and ships to nobody.
+            prev = raw.rfind('\n', 0, m.start())
+            prev = raw.rfind('\n', 0, prev) + 1 if prev > 0 else 0
+            if 'i18n-dynamic:' in raw[prev:close]:
+                continue
             bad.append(f"{rel}:{line}: I18n.{kind}()'s first argument is not a string literal "
-                       f"— it extracts nothing and stays English: {args[0][:60]}")
+                       f"— it extracts nothing and stays English: {args[0][:60]}\n"
+                       f"    (if the msgids come from elsewhere, say so with a "
+                       f"`// i18n-dynamic: …` comment on or above the line)")
             continue
         plural = None
         if kind == 'trn':

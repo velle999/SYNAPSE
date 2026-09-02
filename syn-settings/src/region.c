@@ -13,6 +13,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <string.h>
 
@@ -45,22 +46,25 @@ int pane_region(void)
 		run_capture(argv, out, sizeof out);
 
 		row_or_unknown("locale", out, "System Locale",
-		               "LANG and friends, /etc/locale.conf", "set:locale");
+		               N_("LANG and friends, /etc/locale.conf"), "set:locale");
 		row_or_unknown("keymap-console", out, "VC Keymap",
-		               "the tty and the greeter", "set:keymap");
+		               N_("the tty and the greeter"), "set:keymap");
 		/* localectl prints "X11 Layout" even on a Wayland-only system: it is
 		 * the xkb layout, which is what synui actually loads. The name is
 		 * historical, so it is relabelled here rather than repeated. */
 		row_or_unknown("keymap-xkb", out, "X11 Layout",
-		               "xkb layout — what the desktop uses", "set:xkb");
-		row_or_unknown("keymap-xkb-variant", out, "X11 Variant",
-		               "xkb variant, blank for the default", "-");
-		row_or_unknown("keymap-xkb-model", out, "X11 Model",
-		               "xkb model", "-");
+		               N_("xkb layout — what the desktop uses"), "set:xkb");
+		row_or_unknown(N_("keymap-xkb-variant"), out, "X11 Variant",
+		               N_("xkb variant, blank for the default"), "-");
+		row_or_unknown(N_("keymap-xkb-model"), out, "X11 Model",
+		               N_("xkb model"), "-");
 	} else {
-		rec_row("locale\tunknown\tlocalectl not installed\t-");
-		rec_row("keymap-console\tunknown\tlocalectl not installed\t-");
-		rec_row("keymap-xkb\tunknown\tlocalectl not installed\t-");
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("locale"), N_("localectl not installed"));
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("keymap-console"), N_("localectl not installed"));
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("keymap-xkb"), N_("localectl not installed"));
 	}
 
 	/* The clock used to be here — timezone, NTP, and nothing at all about how

@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <dirent.h>
@@ -25,7 +26,8 @@ static void controller(void)
 	char out[8192] = "";
 	char *argv[] = { (char *)"bluetoothctl", (char *)"show", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("controller\t-\tnone\t-\tno adapter, or bluetoothd is not running\t-");
+		rec_row("controller\t-\tnone\t-\t%s\t-",
+		        N_("no adapter, or bluetoothd is not running"));
 		return;
 	}
 
@@ -46,10 +48,12 @@ static void controller(void)
 	 * rather than in `state`, with the adapter's name moved to detail. The
 	 * first cut had the name in `value` and a toggle that read the name to
 	 * decide which way to flip. */
-	rec_row("controller\tpowered\t%s\t%s\t%s (%s)\ttoggle:bluetooth",
-	        powered, addr, name, addr);
-	rec_row("controller\tdiscoverable\t%s\t-\tvisible to anything scanning\t-", discoverable);
-	rec_row("controller\tpairable\t%s\t-\taccepts new pairings\t-", pairable);
+	rec_row("controller\t%s\t%s\t%s\t%s (%s)\ttoggle:bluetooth",
+	        N_("powered"), powered, addr, name, addr);
+	rec_row("controller\t%s\t%s\t-\t%s\t-",
+	        N_("discoverable"), discoverable, N_("visible to anything scanning"));
+	rec_row("controller\t%s\t%s\t-\t%s\t-",
+	        N_("pairable"), pairable, N_("accepts new pairings"));
 }
 
 static void devices(void)
@@ -60,7 +64,8 @@ static void devices(void)
 	char *argv[] = { (char *)"bluetoothctl", (char *)"devices",
 	                 (char *)"Paired", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter\t-");
+		rec_row("device\t-\tnone paired\t-\t%s\t-",
+		        N_("nothing has been paired with this adapter"));
 		return;
 	}
 
@@ -89,12 +94,14 @@ static void devices(void)
 		snprintf(nbuf, sizeof nbuf, "%s", *name ? name : "(unnamed)");
 		tsv_clean(nbuf);
 
-		rec_row("device\t%s\t%s\t%s\tpaired\t-", addr, nbuf,
-		        !strcmp(conn, "yes") ? "connected" : "not connected");
+		rec_row("device\t%s\t%s\t%s\t%s\t-",
+		        addr, nbuf, !strcmp(conn, "yes") ? "connected" : "not connected",
+		        N_("paired"));
 		any = 1;
 	}
 	if (!any)
-		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter\t-");
+		rec_row("device\t-\tnone paired\t-\t%s\t-",
+		        N_("nothing has been paired with this adapter"));
 }
 
 /* Does this machine have a Bluetooth adapter?
@@ -132,7 +139,8 @@ static void radio(void)
 	char out[4096] = "";
 	char *argv[] = { (char *)"rfkill", (char *)"list", (char *)"bluetooth", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("radio\trfkill\tunknown\t-\trfkill reported nothing\t-");
+		rec_row("radio\t%s\tunknown\t-\t%s\t-",
+		        N_("rfkill"), N_("rfkill reported nothing"));
 		return;
 	}
 
@@ -142,8 +150,10 @@ static void radio(void)
 	if (!scrape_field(out, "Hard blocked", hard, sizeof hard))
 		snprintf(hard, sizeof hard, "unknown");
 
-	rec_row("radio\tsoft-block\t%s\t-\tsoftware; clearing it needs root (rfkill)\t-", soft);
-	rec_row("radio\thard-block\t%s\t-\ta physical switch; software cannot clear it\t-", hard);
+	rec_row("radio\t%s\t%s\t-\t%s\t-",
+	        N_("soft-block"), soft, N_("software; clearing it needs root (rfkill)"));
+	rec_row("radio\t%s\t%s\t-\t%s\t-",
+	        N_("hard-block"), hard, N_("a physical switch; software cannot clear it"));
 }
 
 int pane_bluetooth(void)
@@ -157,14 +167,16 @@ int pane_bluetooth(void)
 		run_capture(argv, out, sizeof out);
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
-		rec_row("service\tbluetooth.service\t%s\t-\tBlueZ; nothing below works without it\tunit:bluetooth.service",
-		        out[0] ? out : "not installed");
+		rec_row("service\t%s\t%s\t-\t%s\tunit:bluetooth.service",
+		        "bluetooth.service", out[0] ? out : "not installed",
+		        N_("BlueZ; nothing below works without it"));
 	}
 
 	if (have_cmd("rfkill")) radio();
 
 	if (!have_cmd("bluetoothctl")) {
-		rec_row("controller\t-\tunknown\t-\tbluez-utils is not installed\t-");
+		rec_row("controller\t-\tunknown\t-\t%s\t-",
+		        N_("bluez-utils is not installed"));
 		return 0;
 	}
 
@@ -181,8 +193,8 @@ int pane_bluetooth(void)
 	 * no Bluetooth support, and empty when it has support and no hardware.
 	 * Neither case has anything for bluetoothctl to describe. */
 	if (!bt_adapter_present()) {
-		rec_row("controller\t-\tno adapter\t-\tthis machine has no Bluetooth "
-		        "hardware, so there is nothing to configure\t-");
+		rec_row("controller\t-\tno adapter\t-\t%s\t-",
+		        N_("this machine has no Bluetooth hardware, so there is nothing to configure"));
 		return 0;
 	}
 
@@ -192,9 +204,10 @@ int pane_bluetooth(void)
 	/* The one quirk worth carrying into the UI rather than leaving in a wiki:
 	 * on this hardware an AVRCP-capable sink announces full volume the moment
 	 * it connects, which is loud and startling and is not a SynapseOS bug. */
-	rec_row("note\tavrcp-volume\tsee detail\t-\t"
-	        "a connecting headset may announce 100%% volume (AVRCP quirk); "
-	        "SPA_DATA_DIR carries the wireplumber fix\t-");
+	rec_row("note\t%s\tsee detail\t-\t"
+	        "a connecting headset may announce 100%% volume (AVRCP quirk); SPA_DATA_DIR carries the wireplumber fix\t"
+	        "-",
+	        N_("avrcp-volume"));
 
 	return 0;
 }

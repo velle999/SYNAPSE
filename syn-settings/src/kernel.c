@@ -27,6 +27,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -48,24 +49,24 @@ struct kern {
  * package, and "install linux-api-headers to change your kernel" is exactly
  * the kind of helpfulness that breaks a system. */
 static const struct kern kernels[] = {
-	{ "linux",           "the stock Arch kernel; what SynapseOS ships",            NULL },
-	{ "linux-lts",       "long-term support — the fallback worth having installed", NULL },
-	{ "linux-zen",       "desktop-tuned; usually the best for latency and gaming",  NULL },
-	{ "linux-hardened",  "security-hardened; slower, and it breaks some drivers",   NULL },
-	{ "linux-rt",        "real-time preemption; for audio work",                    NULL },
-	{ "linux-rt-lts",    "real-time on the LTS base",                               NULL },
+	{ "linux",           N_("the stock Arch kernel; what SynapseOS ships"),            NULL },
+	{ "linux-lts",       N_("long-term support — the fallback worth having installed"), NULL },
+	{ "linux-zen",       N_("desktop-tuned; usually the best for latency and gaming"),  NULL },
+	{ "linux-hardened",  N_("security-hardened; slower, and it breaks some drivers"),   NULL },
+	{ "linux-rt",        N_("real-time preemption; for audio work"),                    NULL },
+	{ "linux-rt-lts",    N_("real-time on the LTS base"),                               NULL },
 
 	/* CachyOS. Not in any Arch repository, so installing one adds [cachyos]
 	 * first — see do_pkg(). Only the PLAIN repo is ever added: upstream's own
 	 * bootstrap would also swap in their pacman fork and put -march-optimised
 	 * rebuilds of core and extra ahead of [core], which is a different
 	 * decision entirely from trying a kernel. */
-	{ "linux-cachyos",          "CachyOS BORE + sched-ext; tuned hard for desktop "
-	                            "responsiveness", "cachyos" },
-	{ "linux-cachyos-lts",      "the CachyOS patches on the LTS base — the Cachy "
-	                            "kernel worth keeping as the fallback", "cachyos" },
-	{ "linux-cachyos-hardened", "CachyOS with the hardened patch set; same driver "
-	                            "caveats as linux-hardened", "cachyos" },
+	{ "linux-cachyos",          N_("CachyOS BORE + sched-ext; tuned hard for desktop "
+	                            "responsiveness"), "cachyos" },
+	{ "linux-cachyos-lts",      N_("the CachyOS patches on the LTS base — the Cachy "
+	                            "kernel worth keeping as the fallback"), "cachyos" },
+	{ "linux-cachyos-hardened", N_("CachyOS with the hardened patch set; same driver "
+	                            "caveats as linux-hardened"), "cachyos" },
 };
 
 /* THE list. pkg.c used to keep a second copy as its install allowlist, which
@@ -143,7 +144,8 @@ int pane_kernel(void)
 	rec_header("kernel\tinstalled\tstate\tdetail\taction");
 
 	if (!have_cmd("pacman")) {
-		rec_row("-\tunknown\t-\tpacman not available\t-");
+		rec_row("-\tunknown\t-\t%s\t-",
+		        N_("pacman not available"));
 		return 1;
 	}
 
@@ -359,19 +361,16 @@ int pane_kernel(void)
 	 * leave a machine unbootable, so the running one carries no action at all
 	 * (above) and the reason is said out loud rather than left to be inferred
 	 * from a greyed-out button. */
-	rec_row("-\t-\t-\tThe running kernel has no actions: removing what you "
-	        "booted from is how a machine stops booting. Reboot into another "
-	        "one first.\t-");
+	rec_row("-\t-\t-\t%s\t-",
+	        N_("The running kernel has no actions: removing what you booted from is how a machine stops booting. Reboot into another one first."));
 
 	/* What this machine boots with, named. The gap this pane used to describe
 	 * — install a kernel, get no boot entry — is real and is what "Make
 	 * bootable" now closes, so the standing text says which mechanism will run
 	 * rather than telling the user they are on their own. */
 	if (nloaders == 0) {
-		rec_row("-\t-\t-\tNo bootloader configuration was found, so whether a "
-		        "kernel is bootable cannot be answered here. Looked for "
-		        "limine.conf and loader/entries under /boot, /boot/efi and "
-		        "/efi, and /boot/grub/grub.cfg.\t-");
+		rec_row("-\t-\t-\t%s\t-",
+		        N_("No bootloader configuration was found, so whether a kernel is bootable cannot be answered here. Looked for limine.conf and loader/entries under /boot, /boot/efi and /efi, and /boot/grub/grub.cfg."));
 	} else {
 		for (int b = 0; b < nloaders; b++) {
 			const char *how =
@@ -393,10 +392,8 @@ int pane_kernel(void)
 		}
 
 		if (nloaders > 1)
-			rec_row("-\t-\t-\t⚠ More than one bootloader is configured here. "
-			        "Which one the firmware actually starts cannot be read "
-			        "reliably, so a kernel counts as bootable if ANY of them "
-			        "can boot it.\t-");
+			rec_row("-\t-\t-\t%s\t-",
+			        N_("⚠ More than one bootloader is configured here. Which one the firmware actually starts cannot be read reliably, so a kernel counts as bootable if ANY of them can boot it."));
 
 		/* This row used to say the default was the bootloader's business and
 		 * you should pick it at the menu. It was true and it was not enough:
@@ -405,20 +402,26 @@ int pane_kernel(void)
 		 * a setting. Each loader now gets named with the mechanism that will
 		 * actually run, the same way "Make bootable" does. */
 		for (int b = 0; b < nloaders; b++) {
+			/* ⛔ THE FULL STOP IS INSIDE THE MSGID, NOT IN THE FORMAT.
+			 * The window translates the CELL, whole, by looking it up in
+			 * the catalog — so `rec_row("…%s.\t-", how)` drew a sentence
+			 * one character longer than any msgid and matched nothing,
+			 * leaving these English however well translated. Whatever a
+			 * cell ends up being has to BE a msgid, punctuation included. */
 			const char *how =
 				loaders[b].kind == SYN_BL_GRUB
-				  ? "“Make default” sets GRUB_DEFAULT=saved in "
-				    "/etc/default/grub, regenerates grub.cfg, then runs "
-				    "grub-set-default — in that order, because GRUB_DEFAULT is "
-				    "read when the config is generated, not at boot. The "
-				    "confirmation lists all three"
+				  ? N_("“Make default” sets GRUB_DEFAULT=saved in "
+				       "/etc/default/grub, regenerates grub.cfg, then runs "
+				       "grub-set-default — in that order, because GRUB_DEFAULT "
+				       "is read when the config is generated, not at boot. The "
+				       "confirmation lists all three.")
 				: loaders[b].kind == SYN_BL_SYSTEMD
-				  ? "“Make default” runs bootctl set-default"
-				  : "“Make default” writes default_entry: into limine.conf, "
-				    "naming the entry by path so a reordering cannot quietly "
-				    "change what it means";
+				  ? N_("“Make default” runs bootctl set-default.")
+				  : N_("“Make default” writes default_entry: into limine.conf, "
+				       "naming the entry by path so a reordering cannot quietly "
+				       "change what it means.");
 
-			rec_row("-\t-\t-\t%s.\t-", how);
+			rec_row("-\t-\t-\t%s\t-", how);
 		}
 	}
 

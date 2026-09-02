@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <string.h>
@@ -30,14 +31,14 @@ struct unit_row {
  * tidier and would not have caught the 07-30 regression, because the units
  * were all THERE — the question is enabled-vs-disabled, one at a time. */
 static const struct unit_row units[] = {
-	{ "nvidia-suspend.service",     "runs NVIDIA's suspend hook" },
-	{ "nvidia-resume.service",      "runs NVIDIA's resume hook" },
-	{ "nvidia-hibernate.service",   "runs NVIDIA's hibernate hook" },
-	{ "nvidia-persistenced.service","keeps the driver loaded with no client" },
-	{ "synapse-drm-watch.service",  "records connector state changes" },
-	{ "synapd.service",             "the AI daemon; holds GPU memory" },
-	{ "synguard.service",           "the intrusion monitor" },
-	{ "synnet.service",             "network policy and the firewall set" },
+	{ "nvidia-suspend.service",     N_("runs NVIDIA's suspend hook") },
+	{ "nvidia-resume.service",      N_("runs NVIDIA's resume hook") },
+	{ "nvidia-hibernate.service",   N_("runs NVIDIA's hibernate hook") },
+	{ "nvidia-persistenced.service",N_("keeps the driver loaded with no client") },
+	{ "synapse-drm-watch.service",  N_("records connector state changes") },
+	{ "synapd.service",             N_("the AI daemon; holds GPU memory") },
+	{ "synguard.service",           N_("the intrusion monitor") },
+	{ "synnet.service",             N_("network policy and the firewall set") },
 };
 
 /* Is this unit absent from the machine?
@@ -96,7 +97,8 @@ int pane_power(void)
 			        !unit_absent(en) ? unit_action : "-");
 		}
 	} else {
-		rec_row("unit\t-\tunknown\t-\tsystemctl not available\t-");
+		rec_row("unit\t-\tunknown\t-\t%s\t-",
+		        N_("systemctl not available"));
 	}
 
 	/* ── Sleep hooks on disk ──────────────────────────────────────────── */
@@ -171,10 +173,12 @@ int pane_power(void)
 			}
 			p = eol ? eol + 1 : NULL;
 		}
-		rec_row("sleep\tlast-suspend\t%s\t-\twhen this boot last went to sleep\t-",
-		        last_entry[0] ? last_entry : "none this boot");
-		rec_row("sleep\tlast-resume\t%s\t-\twhen it came back\t-",
-		        last_exit[0] ? last_exit : "none this boot");
+		rec_row("sleep\t%s\t%s\t-\t%s\t-",
+		        N_("last-suspend"), last_entry[0] ? last_entry : "none this boot",
+		        N_("when this boot last went to sleep"));
+		rec_row("sleep\t%s\t%s\t-\t%s\t-",
+		        N_("last-resume"), last_exit[0] ? last_exit : "none this boot",
+		        N_("when it came back"));
 	}
 
 	return 0;

@@ -16,6 +16,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -30,21 +31,21 @@ struct cfg_path {
 
 static const struct cfg_path paths[] = {
 	{ "/usr/lib/sysctl.d/90-synapse-hardening.conf", "shipped",
-	  "kernel hardening baseline" },
+	  N_("kernel hardening baseline") },
 	{ "/etc/sysctl.d",                                "override",
-	  "anything here WINS over the shipped baseline" },
+	  N_("anything here WINS over the shipped baseline") },
 	{ "/usr/lib/modprobe.d/90-synapse-blacklist.conf","shipped",
-	  "refused kernel modules" },
+	  N_("refused kernel modules") },
 	{ "/usr/lib/modprobe.d/synapse.conf",             "shipped",
-	  "synapse_kmod parameters — the C defaults are NOT what loads" },
+	  N_("synapse_kmod parameters — the C defaults are NOT what loads") },
 	{ "/etc/lynis/custom.prf",                        "override",
-	  "audit decisions we have already made" },
+	  N_("audit decisions we have already made") },
 	{ "/etc/synapd/synapd.conf",                      "override",
-	  "AI daemon" },
+	  N_("AI daemon") },
 	{ "/etc/xdg/synui/synuirc",                       "override",
-	  "compositor rc — an upgrade never rewrites a user's copy" },
+	  N_("compositor rc — an upgrade never rewrites a user's copy") },
 	{ "/usr/share/applications/mimeapps.list",        "shipped",
-	  "the vendor default application list; this is what WINS" },
+	  N_("the vendor default application list; this is what WINS") },
 };
 
 int pane_system(void)
@@ -79,25 +80,28 @@ int pane_system(void)
 		}
 		fclose(f);
 	}
-	rec_row("about\tos\t%s\t/etc/os-release\t-", pretty);
+	rec_row("about\tos\t%s\t%s\t-",
+	        pretty, N_("/etc/os-release"));
 
 	struct utsname u;
 	if (uname(&u) == 0) {
-		rec_row("about\tkernel\t%s %s\trunning kernel\t-", u.sysname, u.release);
+		rec_row("about\t%s\t%s %s\t%s\t-",
+		        N_("kernel"), u.sysname, u.release, N_("running kernel"));
 		/* ⚠ SETTABLE, and worth setting: every SynapseOS install is called
 		 * `synapse`, so two of them on one network means Avahi renames one
 		 * `synapse-2.local` — with no say in which one, and no promise the
 		 * suffix is the same tomorrow. The row says so, because "hostname:
 		 * synapse" on its own gives nobody a reason to change it. */
-		rec_row("about\thostname\t%s\tthe name this machine answers to on the "
-		        "network — every SynapseOS install ships as `synapse`\t"
-		        "set:hostname", u.nodename);
+		rec_row("about\t%s\t%s\t%s\tset:hostname",
+		        N_("hostname"), u.nodename,
+		        N_("the name this machine answers to on the network — every SynapseOS install ships as `synapse`"));
 	}
 
 	if (read_line_file("/proc/uptime", buf, sizeof buf)) {
 		double secs = atof(buf);
 		long h = (long)(secs / 3600), m = ((long)secs % 3600) / 60;
-		rec_row("about\tuptime\t%ldh %ldm\tsince boot\t-", h, m);
+		rec_row("about\t%s\t%ldh %ldm\t%s\t-",
+		        N_("uptime"), h, m, N_("since boot"));
 	}
 
 	/* ── The lights ───────────────────────────────────────────────────── */
@@ -137,13 +141,16 @@ int pane_system(void)
 		}
 
 		if (!have)
-			rec_row("lighting\trgb\tunavailable\tsyn-rgb is not installed\t-");
+			rec_row("lighting\t%s\tunavailable\t%s\t-",
+			        N_("rgb"), N_("syn-rgb is not installed"));
 		else if (!rgb)
-			rec_row("lighting\trgb\t%s\tthe wallpaper accent on RGB hardware — "
-			        "install `openrgb` to use it\ttoggle:rgb", on);
+			rec_row("lighting\t%s\t%s\t%s\ttoggle:rgb",
+			        N_("rgb"), on,
+			        N_("the wallpaper accent on RGB hardware — install `openrgb` to use it"));
 		else
-			rec_row("lighting\trgb\t%s\tthe wallpaper accent on the RAM, the "
-			        "board and the keyboard\ttoggle:rgb", on);
+			rec_row("lighting\t%s\t%s\t%s\ttoggle:rgb",
+			        N_("rgb"), on,
+			        N_("the wallpaper accent on the RAM, the board and the keyboard"));
 	}
 
 	/* ── Where configuration lives ────────────────────────────────────── */

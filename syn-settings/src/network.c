@@ -14,6 +14,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +45,8 @@ static void devices(void)
 	                 (char *)"-f", (char *)"DEVICE,TYPE,STATE,CONNECTION",
 	                 (char *)"device", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("device\t-\tunknown\t-\tnmcli reported nothing\t-");
+		rec_row("device\t-\tunknown\t-\t%s\t-",
+		        N_("nmcli reported nothing"));
 		return;
 	}
 
@@ -68,7 +70,7 @@ static void devices(void)
 		snprintf(d, sizeof d, "%s", dev);
 		snprintf(t, sizeof t, "%s", type && *type ? type : "-");
 		snprintf(s, sizeof s, "%s", st && *st ? st : "-");
-		snprintf(c, sizeof c, "%s", conn && *conn ? conn : "no connection");
+		snprintf(c, sizeof c, "%s", conn && *conn ? conn : N_("no connection"));
 		tsv_clean(d); tsv_clean(t); tsv_clean(s); tsv_clean(c);
 
 		/* Loopback carries no action: see do_device. Everything else — the
@@ -196,9 +198,9 @@ static void firewall_rows(void)
 	} else if (!strcmp(st, "active")) {
 		value  = "on";
 		state  = "active";
-		detail = "Default-drop inbound. Loopback, replies to connections this "
+		detail = N_("Default-drop inbound. Loopback, replies to connections this "
 		         "machine made, ICMP, and anything from the local network are "
-		         "let through; unsolicited traffic from a public address is not.";
+		         "let through; unsolicited traffic from a public address is not.");
 	} else if (!strcmp(st, "off")) {
 		/* The daemon publishes this after an explicit switch-off, so the
 		 * preference and the state agree and there is nothing to reconcile. */
@@ -212,8 +214,8 @@ static void firewall_rows(void)
 		         "filtered. `journalctl -u synnet` has what nft said.";
 	}
 
-	rec_row("firewall\tinput filtering\t%s\t%s\t%s\tchoice:firewall",
-	        value, state, detail);
+	rec_row("firewall\t%s\t%s\t%s\t%s\tchoice:firewall",
+	        N_("input filtering"), value, state, detail);
 
 	/* ── Container / VM links ────────────────────────────────────────────
 	 *
@@ -264,14 +266,10 @@ static void firewall_rows(void)
 		int stale = want && !strcmp(st, "active") && applied[0] &&
 		            (unsigned)atoi(applied) != n;
 
-		rec_row("firewall\tcontainer links\t%s\t%s\t"
-		        "Bridges this machine serves DHCP and DNS on for a container or "
-		        "VM (Waydroid, libvirt, Docker). A guest asks for its address "
-		        "from 0.0.0.0, which the default-drop policy would otherwise "
-		        "eat — the guest then has no network and nothing says firewall. "
-		        "%s\t-",
-		        n ? list : "none",
-		        stale ? "warn" : "-",
+		rec_row("firewall\t%s\t%s\t%s\t"
+		        "Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, libvirt, Docker). A guest asks for its address from 0.0.0.0, which the default-drop policy would otherwise eat — the guest then has no network and nothing says firewall. %s\t"
+		        "-",
+		        N_("container links"), n ? list : "none", stale ? "warn" : "-",
 		        stale
 		          ? "⚠ synnet last applied a different number of these; "
 		            "`sudo synnet --firewall` loads the current list."
@@ -281,11 +279,9 @@ static void firewall_rows(void)
 	/* Only when it has actually happened. A zero here would be a row about
 	 * nothing, and the pane is long enough already. */
 	if (reasserts[0] && strcmp(reasserts, "0"))
-		rec_row("firewall\trebuilt\t%s\twarn\t"
-		        "The firewall has gone missing and been rebuilt this many times "
-		        "since synnet started. Something on this machine is flushing "
-		        "nftables.\t-",
-		        reasserts);
+		rec_row("firewall\t%s\t%s\twarn\t%s\t-",
+		        N_("rebuilt"), reasserts,
+		        N_("The firewall has gone missing and been rebuilt this many times since synnet started. Something on this machine is flushing nftables."));
 
 	if (have_cmd("systemctl")) {
 		char out[128] = "";
@@ -298,12 +294,10 @@ static void firewall_rows(void)
 		 * it looks: none of the above happens if synnet is not running, and
 		 * "the firewall says active but the daemon is dead" is a real state —
 		 * the chain outlives the process that loaded it. */
-		rec_row("firewall\tsynnet.service\t%s\t%s\t"
-		        "The daemon that applies all of this. The rules outlive it, so "
-		        "a stopped synnet leaves the last ruleset in place and stops "
-		        "maintaining it.\tunit:synnet.service",
-		        out[0] ? out : "not installed",
-		        !strcmp(out, "active") ? "-" : "warn");
+		rec_row("firewall\t%s\t%s\t%s\t%s\tunit:synnet.service",
+		        "synnet.service", out[0] ? out : "not installed",
+		        !strcmp(out, "active") ? "-" : "warn",
+		        N_("The daemon that applies all of this. The rules outlive it, so a stopped synnet leaves the last ruleset in place and stops maintaining it."));
 
 		out[0] = '\0';
 		char *argv[] = { (char *)"systemctl", (char *)"is-active",
@@ -311,10 +305,9 @@ static void firewall_rows(void)
 		run_capture(argv, out, sizeof out);
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
-		rec_row("firewall\tnftables.service\t%s\t-\t"
-		        "Arch's own firewall service, which SynapseOS does not use — "
-		        "synnet manages its table whether or not this is active.\t-",
-		        out[0] ? out : "not installed");
+		rec_row("firewall\t%s\t%s\t-\t%s\t-",
+		        "nftables.service", out[0] ? out : "not installed",
+		        N_("Arch's own firewall service, which SynapseOS does not use — synnet manages its table whether or not this is active."));
 	}
 }
 
@@ -323,11 +316,12 @@ int pane_network(void)
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (!have_cmd("nmcli")) {
-		rec_row("device\t-\tunknown\t-\tNetworkManager is not installed\t-");
+		rec_row("device\t-\tunknown\t-\t%s\t-",
+		        N_("NetworkManager is not installed"));
 	} else {
 		devices();
 		radio("wifi");
-		radio("wwan");
+		radio(N_("wwan"));
 	}
 
 	firewall_rows();

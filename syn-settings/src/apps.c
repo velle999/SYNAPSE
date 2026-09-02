@@ -54,6 +54,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -89,54 +90,54 @@ struct app_role {
 };
 
 static const struct app_role g_roles[] = {
-	{ "browser", "Web Browser",
-	  "http and https links, and .html files",
+	{ "browser", N_("Web Browser"),
+	  N_("http and https links, and .html files"),
 	  { "x-scheme-handler/http", "x-scheme-handler/https", "text/html",
 	    "application/xhtml+xml", NULL } },
 
-	{ "mail", "Email",
-	  "mailto: links",
+	{ "mail", N_("Email"),
+	  N_("mailto: links"),
 	  { "x-scheme-handler/mailto", NULL } },
 
-	{ "files", "File Manager",
-	  "folders — inode/directory, the one synfiles ships a default for",
+	{ "files", N_("File Manager"),
+	  N_("folders — inode/directory, the one synfiles ships a default for"),
 	  { "inode/directory", NULL } },
 
-	{ "editor", "Text Editor",
-	  "plain text and source code",
+	{ "editor", N_("Text Editor"),
+	  N_("plain text and source code"),
 	  { "text/plain", "text/x-csrc", "text/x-chdr", "text/x-c++src",
 	    "text/x-python", "text/x-shellscript", "text/markdown",
 	    "application/json", "text/css", "application/xml", NULL } },
 
-	{ "image", "Image Viewer",
-	  "photographs and drawings",
+	{ "image", N_("Image Viewer"),
+	  N_("photographs and drawings"),
 	  { "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp",
 	    "image/tiff", "image/svg+xml", NULL } },
 
-	{ "audio", "Audio Player",
-	  "music and sound files",
+	{ "audio", N_("Audio Player"),
+	  N_("music and sound files"),
 	  { "audio/mpeg", "audio/flac", "audio/x-wav", "audio/ogg",
 	    "audio/mp4", "audio/x-vorbis+ogg", NULL } },
 
-	{ "video", "Video Player",
-	  "films and clips",
+	{ "video", N_("Video Player"),
+	  N_("films and clips"),
 	  { "video/mp4", "video/x-matroska", "video/webm", "video/quicktime",
 	    "video/x-msvideo", "video/mpeg", NULL } },
 
-	{ "pdf", "Document Viewer",
-	  "PDF files",
+	{ "pdf", N_("Document Viewer"),
+	  N_("PDF files"),
 	  { "application/pdf", NULL } },
 
-	{ "archive", "Archive Manager",
-	  "zip, tar and the rest",
+	{ "archive", N_("Archive Manager"),
+	  N_("zip, tar and the rest"),
 	  { "application/zip", "application/x-tar", "application/gzip",
 	    "application/x-7z-compressed", "application/vnd.rar",
 	    "application/x-xz", "application/zstd", "application/x-bzip2",
 	    NULL } },
 
 	/* Not a mime type. See the header. */
-	{ "terminal", "Terminal",
-	  "what synui launches for a terminal — synuirc, not mimeapps.list",
+	{ "terminal", N_("Terminal"),
+	  N_("what synui launches for a terminal — synuirc, not mimeapps.list"),
 	  { NULL } },
 };
 static const size_t g_nroles = sizeof g_roles / sizeof g_roles[0];
@@ -580,7 +581,7 @@ int pane_apps(void)
 		 * the whole reason kitty was the file manager. */
 		const char *state = how == 1 ? "chosen"
 		                  : how == 2 ? "fallback" : "none";
-		const char *detail = how ? src : "nothing installed handles this";
+		const char *detail = how ? src : N_("nothing installed handles this");
 
 		/* Every role above this one is decided by mimeapps.list, which every
 		 * desktop reads — those rows are settable wherever this app runs.

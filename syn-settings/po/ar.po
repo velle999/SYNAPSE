@@ -7,20 +7,19 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-settings\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr "مضى %1"
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] "%1 صف"
@@ -30,359 +29,888 @@ msgstr[3] "%1 صفوف"
 msgstr[4] "%1 صفًا"
 msgstr[5] "%1 صف"
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr "الذكاء الاصطناعي"
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr "تطبيق"
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr "المساعد"
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr "اسمح بذلك عند طلب الإذن."
 
-#: syn-settings.qml:1375
 msgid ""
 "Authorise when asked. A kernel and its headers are a few hundred megabytes "
 "to fetch and an initramfs to build, so this takes minutes, not seconds."
-msgstr "اسمح بذلك عند طلب الإذن. النواة وملفاتها الترويسية بضع مئات من الميغابايت للتنزيل، إضافةً إلى بناء initramfs، لذا يستغرق الأمر دقائق لا ثوانٍ."
+msgstr ""
+"اسمح بذلك عند طلب الإذن. النواة وملفاتها الترويسية بضع مئات من الميغابايت "
+"للتنزيل، إضافةً إلى بناء initramfs، لذا يستغرق الأمر دقائق لا ثوانٍ."
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr "بلوتوث"
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr "محمّل الإقلاع"
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr "إلغاء"
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr "أتريد تغيير إعدادات الإقلاع؟"
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr "إغلاق"
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr "الإعدادات"
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr "اتصال"
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr "التاريخ والوقت"
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr "التطبيقات الافتراضية"
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr "قطع الاتصال"
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr "الشاشة"
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr "تسجيل مرة أخرى…"
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr "تسجيل…"
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr "بصمة الإصبع"
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr "نسيان كل البصمات"
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr "إخفاء"
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr "تثبيت"
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr "جارٍ تثبيت %1"
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr "سيقوم بما يلي:"
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr "النواة"
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr "لوحة المفاتيح واللغة"
 
-#: syn-settings.qml:1915
 msgid ""
 "Leave this running. Closing the window will not stop it — it will only stop "
 "you seeing how it went."
 msgstr "اترك هذا يعمل. إغلاق النافذة لن يوقفه، بل سيمنعك فقط من رؤية النتيجة."
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr "اجعله قابلاً للإقلاع"
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr "اجعله قابلاً للإقلاع…"
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr "اجعله الافتراضي"
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr "اجعله الافتراضي…"
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr "جارٍ جعل %1 قابلاً للإقلاع"
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr "جارٍ جعل %1 الافتراضي"
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr "الشبكة"
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr "الطاقة والسكون"
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr "إعادة الفحص"
 
-#: syn-settings.qml:944
 msgid ""
 "Reads the live system. Writes go through localectl, timedatectl and "
 "systemctl, which do their own authorisation."
-msgstr "يقرأ النظام العامل. تمرّ التغييرات عبر localectl وtimedatectl وsystemctl، وكلٌّ منها يطلب الإذن بنفسه."
+msgstr ""
+"يقرأ النظام العامل. تمرّ التغييرات عبر localectl وtimedatectl وsystemctl، وكلٌّ "
+"منها يطلب الإذن بنفسه."
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr "تحديث"
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr "إزالة"
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr "إزالة المفتاح"
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr "جارٍ إزالة %1"
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr "إعدادات SYNAPSE"
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr "حفظ المفتاح"
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr "النظام"
 
-#: syn-settings.qml:1657
 msgid ""
 "This makes %1 bootable. It is the only change in this app that can leave a "
 "machine that does not start, so read what it will do first."
-msgstr "هذا يجعل %1 قابلاً للإقلاع. وهو التغيير الوحيد في هذا التطبيق الذي قد يترك الجهاز غير قادر على البدء، فاقرأ أولاً ما الذي سيفعله."
+msgstr ""
+"هذا يجعل %1 قابلاً للإقلاع. وهو التغيير الوحيد في هذا التطبيق الذي قد يترك "
+"الجهاز غير قادر على البدء، فاقرأ أولاً ما الذي سيفعله."
 
-#: syn-settings.qml:1653
 msgid ""
 "This makes %1 the kernel this machine BOOTS. It changes nothing about the "
 "kernel you are running now; it takes effect at the next restart."
-msgstr "هذا يجعل %1 النواة التي «يُقلع» بها هذا الجهاز. ولا يغيّر شيئاً في النواة التي تعمل الآن؛ ويسري مفعوله عند إعادة التشغيل التالية."
+msgstr ""
+"هذا يجعل %1 النواة التي «يُقلع» بها هذا الجهاز. ولا يغيّر شيئاً في النواة التي "
+"تعمل الآن؛ ويسري مفعوله عند إعادة التشغيل التالية."
 
-#: syn-settings.qml:1153
 msgid ""
 "This pane reported nothing.\n"
 "Run `%1 --rec %2` to see why."
-msgstr "لم تُبلغ هذه اللوحة بشيء.\nنفّذ «%1 --rec %2» لمعرفة السبب."
+msgstr ""
+"لم تُبلغ هذه اللوحة بشيء.\n"
+"نفّذ «%1 --rec %2» لمعرفة السبب."
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr "إيقاف"
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr "تشغيل"
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr "قد يُطلب منك الاستيثاق."
 
-#: syn-settings.qml:1784
 msgid ""
 "You may be asked to authenticate. On limine this can mean building the entry "
 "generator from source, which takes several minutes — the lines below are it "
 "working."
-msgstr "قد يُطلب منك الاستيثاق. مع limine قد يعني ذلك بناء مولّد المُدخلات من المصدر، وهو ما يستغرق عدة دقائق — والأسطر أدناه هي ذلك العمل."
+msgstr ""
+"قد يُطلب منك الاستيثاق. مع limine قد يعني ذلك بناء مولّد المُدخلات من المصدر، "
+"وهو ما يستغرق عدة دقائق — والأسطر أدناه هي ذلك العمل."
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr "جارٍ الاتصال بـ %1…"
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr "الموصّلات كما تراها النواة، إلى جانب ما يقوده المُركِّب"
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr "تعذّر تحديد ما ينبغي تشغيله"
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr "جارٍ قطع الاتصال بـ %1…"
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
 msgstr "كل نواة متاحة، وأيها مثبّت، وأيها أقلعت به"
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr "الهوية، ومن أي طبقة يأتي كل ملف إعدادات"
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr "الواجهات، وأجهزة الراديو، وما إذا كان شيء ما يرشّح حركة البيانات"
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "ارفع إصبعك ثم ضعه من جديد في كل مرة يُطلب منك ذلك؛ يلزم عدة مرات"
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "لم تُذكر أي أوضاع — هل wlr-randr مثبّت؟"
 
-#: syn-settings.qml:356 syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr "لا شيء من المثبّت يعرض فتح هذا"
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr "لم تُقدَّم قائمة خيارات لهذا الإعداد"
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr "لا شيء مُبلَّغ عنه"
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr "جارٍ إعادة فحص %1…"
 
-#: syn-settings.qml:983 syn-settings.qml:1565
 msgid "reading…"
 msgstr "جارٍ القراءة…"
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "رُفض (رمز الخروج %1) — ربما رفض polkit"
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr "جارٍ إزالة كل البصمات…"
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr "جارٍ إزالة مفتاح %1…"
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr "ضع إصبعك على القارئ…"
 
-#: syn-settings.qml:1427 syn-settings.qml:1456 syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr "جارٍ ضبط %1 على %2…"
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr "جارٍ ضبط %1…"
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr "جارٍ حفظ مفتاح %1…"
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr "جارٍ تبديل %1…"
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr "synui فقط — الجلسة العاملة هي %1"
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "المُهايئ، ونوعا حجب الراديو، وما هو مقترن"
 
-#: syn-settings.qml:268
 msgid ""
 "the backend switch, the units that can restart it behind your back, and "
 "which model is on disk"
-msgstr "مبدّل الخلفية، والوحدات التي قد تعيد تشغيلها دون علمك، وأي نموذج على القرص"
+msgstr ""
+"مبدّل الخلفية، والوحدات التي قد تعيد تشغيلها دون علمك، وأي نموذج على القرص"
 
-#: syn-settings.qml:261
 msgid ""
 "the console keymap and the xkb layout, which are separate settings that "
 "sometimes disagree"
 msgstr "خريطة مفاتيح الطرفية وتخطيط xkb، وهما إعدادان منفصلان يختلفان أحياناً"
 
-#: syn-settings.qml:270
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
-msgstr "القارئ، وأي الأصابع مسجّلة، وتسجيل إصبع آخر — لا تعرض شاشة القفل ذلك إلا بعد تسجيل شيء"
+msgstr ""
+"القارئ، وأي الأصابع مسجّلة، وتسجيل إصبع آخر — لا تعرض شاشة القفل ذلك إلا بعد "
+"تسجيل شيء"
 
-#: syn-settings.qml:262
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
-msgstr "ساعة النظام — وكيف يكتبها سطح المكتب: 12 أو 24 ساعة، وبأي ترتيب للتاريخ"
+msgstr ""
+"ساعة النظام — وكيف يكتبها سطح المكتب: 12 أو 24 ساعة، وبأي ترتيب للتاريخ"
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "الوحدات التي يعتمد عليها التعليق السليم، وما فعله آخر تعليق"
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "ما الذي يفتح كل نوع من الملفات — وهل اختاره أحد فعلاً"
 
-#: syn-settings.qml:269
 msgid ""
 "which service the assistant sends your messages to — the model on this "
 "machine, or a cloud account and its API key"
-msgstr "إلى أي خدمة يرسل المساعد رسائلك — إلى النموذج الموجود على هذا الجهاز، أم إلى حساب سحابي ومفتاح واجهته البرمجية"
+msgstr ""
+"إلى أي خدمة يرسل المساعد رسائلك — إلى النموذج الموجود على هذا الجهاز، أم إلى "
+"حساب سحابي ومفتاح واجهته البرمجية"
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr "جارٍ تبيّن ما سيفعله هذا…"
+
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr "خدمة الذكاء الاصطناعي؛ تحجز ذاكرة كرت الرسوم ما دامت محمّلة"
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr "تفعيل عبر المقبس — يبدأ الخدمة عند الطلب التالي"
+
+msgid "proxies LAN requests to synapd"
+msgstr "يمرّر طلبات الشبكة المحلية إلى synapd"
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr "يمرّر ذلك المنفذ إلى مقبس HTTP الخاص بـ synapd"
+
+msgid "AI backend"
+msgstr "محرّك الذكاء الاصطناعي"
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr "‏gpu ينقل كل طبقة إلى كرت الرسوم · cpu يحسب على المعالج · off يحجب الخدمة فلا يمكن تشغيلها مجددًا"
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr "يحتاج إلى synui-ai-backend(1) الذي تأتي به حزمة synui"
+
+msgid "llama.cpp API port"
+msgstr "منفذ واجهة llama.cpp"
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr "يحتاج إلى synapd يوفّر synapd-http-proxy.socket"
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr "‏127.0.0.1:8080 للواجهات المكتوبة لـ llama-server أو لواجهة OpenAI، عبر المقبس المرفق"
+
+msgid "systemctl not available"
+msgstr "‏systemctl غير متاح"
+
+msgid "model"
+msgstr "النموذج"
+
+msgid "a part-downloaded model; syn-model download"
+msgstr "نموذج نُزّل جزئيًا؛ syn-model download"
+
+msgid "no model installed · syn-model download"
+msgstr "لا نموذج مثبّت · syn-model download"
+
+msgid "CUDA (NVIDIA)"
+msgstr "CUDA (NVIDIA)"
+
+msgid "CPU"
+msgstr "المعالج"
+
+msgid "acceleration"
+msgstr "التسريع"
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr "لا توجد مكتبة ggml في ‎/usr/lib · هل حزمة synapse-llama مثبّتة؟"
+
+msgid "Web Browser"
+msgstr "متصفّح الوِب"
+
+msgid "http and https links, and .html files"
+msgstr "روابط http و https، وملفات ‎.html"
+
+msgid "Email"
+msgstr "البريد"
+
+msgid "mailto: links"
+msgstr "روابط ‎mailto:"
+
+msgid "File Manager"
+msgstr "مدير الملفات"
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr "المجلدات — inode/directory، وهو ما يوفّر له synfiles قيمة مبدئية"
+
+msgid "Text Editor"
+msgstr "محرّر النصوص"
+
+msgid "plain text and source code"
+msgstr "النص الصِّرف والشيفرة المصدرية"
+
+msgid "Image Viewer"
+msgstr "عارض الصور"
+
+msgid "photographs and drawings"
+msgstr "الصور والرسومات"
+
+msgid "Audio Player"
+msgstr "مشغّل الصوت"
+
+msgid "music and sound files"
+msgstr "ملفات الموسيقى والصوت"
+
+msgid "Video Player"
+msgstr "مشغّل الفيديو"
+
+msgid "films and clips"
+msgstr "الأفلام والمقاطع"
+
+msgid "Document Viewer"
+msgstr "عارض المستندات"
+
+msgid "PDF files"
+msgstr "ملفات PDF"
+
+msgid "Archive Manager"
+msgstr "مدير الأرشيفات"
+
+msgid "zip, tar and the rest"
+msgstr "‏zip و tar وسواهما"
+
+msgid "Terminal"
+msgstr "الطرفية"
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr "ما يشغّله synui كطرفية — synuirc وليس mimeapps.list"
+
+msgid "nothing installed handles this"
+msgstr "لا شيء مثبّت يتولّى هذا"
+
+msgid "vibe"
+msgstr "vibe"
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr "المساعد غير موجود على هذا الجهاز، فلا محرّك للاختيار"
+
+msgid "backend"
+msgstr "المحرّك"
+
+msgid "which service the assistant sends your messages to"
+msgstr "إلى أي خدمة يرسل المساعد رسائلك"
+
+msgid "no key stored; set one before switching to this backend"
+msgstr "لا مفتاح محفوظ؛ اضبط واحدًا قبل التحوّل إلى هذا المحرّك"
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr "لا يوجد مهايئ، أو أن bluetoothd لا يعمل"
+
+msgid "powered"
+msgstr "مشغّل"
+
+msgid "discoverable"
+msgstr "مرئي"
+
+msgid "visible to anything scanning"
+msgstr "مرئي لكل ما يبحث"
+
+msgid "pairable"
+msgstr "قابل للاقتران"
+
+msgid "accepts new pairings"
+msgstr "يقبل عمليات اقتران جديدة"
+
+msgid "nothing has been paired with this adapter"
+msgstr "لم يُقترن شيء بهذا المهايئ بعد"
+
+msgid "paired"
+msgstr "مقترن"
+
+msgid "rfkill"
+msgstr "rfkill"
+
+msgid "rfkill reported nothing"
+msgstr "لم يبلّغ rfkill عن شيء"
+
+msgid "soft-block"
+msgstr "حجب برمجي"
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr "برمجي؛ رفعه يتطلب الجذر (rfkill)"
+
+msgid "hard-block"
+msgstr "حجب مادي"
+
+msgid "a physical switch; software cannot clear it"
+msgstr "مفتاح مادي؛ لا تستطيع البرمجيات رفعه"
+
+msgid "BlueZ; nothing below works without it"
+msgstr "‏BlueZ؛ لا يعمل شيء مما يلي بدونه"
+
+msgid "bluez-utils is not installed"
+msgstr "‏bluez-utils غير مثبّتة"
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr "لا يملك هذا الجهاز عتاد بلوتوث، فلا شيء لضبطه"
+
+msgid "avrcp-volume"
+msgstr "مستوى صوت AVRCP"
+
+msgid "fprintd"
+msgstr "fprintd"
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr "خدمة البصمات اعتمادية اختيارية؛ بدونها لا ينفع أي قارئ"
+
+msgid "reader"
+msgstr "القارئ"
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr "‏fprintd مثبّتة لكنها لا تبلّغ عن أي قارئ بصمات على هذا الجهاز"
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr "يرى fprintd قارئًا؛ سجّل إصبعًا أدناه وسيعرضه قفل الشاشة"
+
+msgid "fingerprints"
+msgstr "البصمات"
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr "القارئ يعمل، لكن لا شيء لديه ليطابقه — لا يعرضه قفل الشاشة إلا إذا كان هناك إصبع مسجّل"
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr "يعرض قفل الشاشة القارئ ما إن يكون أحدها مسجّلًا"
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr "نواة أرش القياسية؛ وهي ما يأتي به SynapseOS"
+
+msgid "long-term support — the fallback worth having installed"
+msgstr "دعم طويل الأمد — البديل الذي يستحق أن يبقى مثبّتًا"
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr "مضبوطة لسطح المكتب؛ عادةً الأفضل للاستجابة وللألعاب"
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr "مُقوّاة أمنيًا؛ أبطأ، وتُعطّل بعض المشغّلات"
+
+msgid "real-time preemption; for audio work"
+msgstr "استباق زمن حقيقي؛ لعمل الصوت"
+
+msgid "real-time on the LTS base"
+msgstr "زمن حقيقي على أساس LTS"
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr "‏CachyOS BORE + sched-ext؛ مضبوطة بقوة لاستجابة سطح المكتب"
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr "رقع CachyOS على أساس LTS — نواة Cachy التي تستحق الإبقاء عليها كبديل"
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr "‏CachyOS مع مجموعة الرقع المقوّاة؛ التحفّظات نفسها على المشغّلات كما في linux-hardened"
+
+msgid "pacman not available"
+msgstr "‏pacman غير متاح"
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr "لا إجراءات على النواة العاملة: حذف ما أقلعت منه هو الطريق إلى جهاز لا يقلع بعدها."
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr "لم يُعثر على أي إعداد لمحمّل الإقلاع، فلا يمكن القول إن كانت نواة ما قابلة للإقلاع."
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr "⚠ يوجد هنا أكثر من محمّل إقلاع مُعدّ. أيّها تستخدمه البرمجية الثابتة فعليًا يحدّده ترتيب الإقلاع لا هذه القائمة."
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr "«اجعلها قابلة للإقلاع» يضع GRUB_DEFAULT=saved في ‎/etc/default/grub، ويولّد grub.cfg من جديد، ثم ينفّذ grub-set-default — بهذا الترتيب، لأن GRUB_DEFAULT يُقرأ عند توليد الإعداد لا عند الإقلاع. ويسرد التأكيد الثلاثة جميعًا."
+
+msgid "“Make default” runs bootctl set-default."
+msgstr "«اجعلها المبدئية» ينفّذ bootctl set-default."
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr "«اجعلها المبدئية» يكتب ‎default_entry:‎ في limine.conf، ويسمّي المدخلة بمسارها كي لا تغيّر إعادةُ الترتيب معناها بصمت."
+
+msgid "nmcli reported nothing"
+msgstr "لم يبلّغ nmcli عن شيء"
+
+msgid "no connection"
+msgstr "لا اتصال"
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr "يُسقَط الوارد مبدئيًا. تُمرَّر الحلقة المحلية، والردود على الاتصالات التي بدأها هذا الجهاز، و ICMP، وكل ما يأتي من الشبكة المحلية؛ أما الحركة غير المطلوبة من عنوان عام فلا."
+
+msgid "input filtering"
+msgstr "ترشيح الوارد"
+
+msgid "container links"
+msgstr "روابط الحاويات"
+
+msgid "rebuilt"
+msgstr "أُعيد بناؤه"
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr "كم مرة اختفى الجدار الناري وأُعيد بناؤه منذ أن بدأ synnet."
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr "الخدمة التي تطبّق كل هذا. القواعد تبقى بعدها، فإيقاف synnet لا يترك الجهاز بلا حماية."
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr "خدمة الجدار الناري الخاصة بأرش، والتي لا يستخدمها SynapseOS — يدير synnet جدوله سواء أكانت هذه نشطة أم لا."
+
+msgid "NetworkManager is not installed"
+msgstr "‏NetworkManager غير مثبّت"
+
+msgid "wwan"
+msgstr "النطاق العريض المحمول"
+
+msgid "runs NVIDIA's suspend hook"
+msgstr "ينفّذ خطّاف التعليق الخاص بـ NVIDIA"
+
+msgid "runs NVIDIA's resume hook"
+msgstr "ينفّذ خطّاف الاستئناف الخاص بـ NVIDIA"
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr "ينفّذ خطّاف الإسبات الخاص بـ NVIDIA"
+
+msgid "keeps the driver loaded with no client"
+msgstr "يُبقي المشغّل محمّلًا دون أي عميل"
+
+msgid "records connector state changes"
+msgstr "يسجّل تغيّرات حالة الموصّلات"
+
+msgid "the AI daemon; holds GPU memory"
+msgstr "خدمة الذكاء الاصطناعي؛ تحجز ذاكرة كرت الرسوم"
+
+msgid "the intrusion monitor"
+msgstr "مراقب التسلّل"
+
+msgid "network policy and the firewall set"
+msgstr "سياسة الشبكة ومجموعة قواعد الجدار الناري"
+
+msgid "last-suspend"
+msgstr "آخر تعليق"
+
+msgid "when this boot last went to sleep"
+msgstr "متى نام هذا الإقلاع آخر مرة"
+
+msgid "last-resume"
+msgstr "آخر استئناف"
+
+msgid "when it came back"
+msgstr "متى عاد"
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr "‏LANG وأخواتها، ‎/etc/locale.conf"
+
+msgid "the tty and the greeter"
+msgstr "الطرفية النصية وشاشة الولوج"
+
+msgid "xkb layout — what the desktop uses"
+msgstr "تخطيط xkb — ما يستخدمه سطح المكتب"
+
+msgid "keymap-xkb-variant"
+msgstr "صيغة xkb"
+
+msgid "xkb variant, blank for the default"
+msgstr "صيغة xkb، اتركها فارغة للمبدئية"
+
+msgid "keymap-xkb-model"
+msgstr "طراز xkb"
+
+msgid "xkb model"
+msgstr "طراز xkb"
+
+msgid "locale"
+msgstr "اللغة"
+
+msgid "localectl not installed"
+msgstr "‏localectl غير مثبّت"
+
+msgid "keymap-console"
+msgstr "تخطيط الطرفية النصية"
+
+msgid "keymap-xkb"
+msgstr "تخطيط xkb"
+
+msgid "wifi"
+msgstr "واي فاي"
+
+msgid "Screen reader"
+msgstr "قارئ الشاشة"
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr "ينطق النافذة ذات التركيز كلما انتقل التركيز، والنص المحدَّد عند Super+Alt+S"
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr "يحتاج إلى syn-speak(1) الذي تأتي به حزمة synui"
+
+msgid "Answer to its name"
+msgstr "الاستجابة لاسمه"
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr "الإنصات لكلمة «Synapse» والردّ بصوت مسموع. يُبقي الميكروفون مفتوحًا حتى يُطفأ؛ ويظهر في الشريط ميكروفون طوال تشغيله"
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr "يحتاج إلى vibe(1) · synpkg install vibe"
+
+msgid "Voice"
+msgstr "الصوت"
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr "‏piper من chibi؛ و espeak-ng هو البديل"
+
+msgid "Dictation"
+msgstr "الإملاء"
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr "‏faster-whisper من chibi. يكتب Super+Shift+V ما يسمعه"
+
+msgid "Speech rate"
+msgstr "سرعة النطق"
+
+msgid "Words per minute, 80 to 450"
+msgstr "كلمات في الدقيقة، من 80 إلى 450"
+
+msgid "Speech volume"
+msgstr "مستوى صوت النطق"
+
+msgid "Wake words"
+msgstr "كلمات التنبيه"
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr "مفصولة بفواصل. أُبقيت «computer» لأن whisper يكتبها في كل مرة · احذفها إن كان ينتبه لها أثناء الحديث"
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr "المُعلِن · مفتاح «قارئ الشاشة» أعلاه هو ما يشغّله. و«غير مثبّت» تعني أن حزمة synui لم تأتِ بالوحدة"
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr "المُنصِت. يُسلَّم معطّلًا · والمفتاح أعلاه هو ما يشغّله"
+
+msgid "kernel hardening baseline"
+msgstr "أساس تقوية النواة"
+
+msgid "anything here WINS over the shipped baseline"
+msgstr "ما هنا يَغلِب الأساس المرفق"
+
+msgid "refused kernel modules"
+msgstr "وحدات النواة المرفوضة"
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr "معاملات synapse_kmod — القيم المبدئية في شيفرة C ليست ما يُحمَّل فعلًا"
+
+msgid "audit decisions we have already made"
+msgstr "قرارات تدقيق اتُّخذت من قبل"
+
+msgid "AI daemon"
+msgstr "خدمة الذكاء الاصطناعي"
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr "ملف rc الخاص بالمُركِّب — لا تعيد الترقية كتابة نسخة المستخدم أبدًا"
+
+msgid "the vendor default application list; this is what WINS"
+msgstr "قائمة التطبيقات المبدئية من المزوّد؛ وهذه هي التي تَغلِب"
+
+msgid "/etc/os-release"
+msgstr "/etc/os-release"
+
+msgid "kernel"
+msgstr "النواة"
+
+msgid "running kernel"
+msgstr "النواة العاملة"
+
+msgid "hostname"
+msgstr "اسم المضيف"
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr "الاسم الذي يستجيب به هذا الجهاز على الشبكة — كل تثبيت لـ SynapseOS يبدأ بالاسم نفسه"
+
+msgid "uptime"
+msgstr "مدة التشغيل"
+
+msgid "since boot"
+msgstr "منذ الإقلاع"
+
+msgid "rgb"
+msgstr "RGB"
+
+msgid "syn-rgb is not installed"
+msgstr "‏syn-rgb غير مثبّت"
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr "لون الخلفية المميّز على عتاد RGB — ثبّت `openrgb` لاستخدامه"
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr "لون الخلفية المميّز على الذاكرة واللوحة ولوحة المفاتيح"
+
+msgid "clock-local"
+msgstr "التوقيت المحلي"
+
+msgid "as the system reads it"
+msgstr "كما يقرأه النظام"
+
+msgid "clock-utc"
+msgstr "التوقيت العالمي"
+
+msgid "UTC"
+msgstr "UTC"
+
+msgid "rtc"
+msgstr "ساعة العتاد"
+
+msgid "the hardware clock"
+msgstr "ساعة العتاد نفسها"
+
+msgid "is a time client running"
+msgstr "هل يعمل عميل توقيت"
+
+msgid "ntp-synced"
+msgstr "‏NTP متزامن"
+
+msgid "has it actually disciplined the clock"
+msgstr "هل ضبط الساعة فعلًا"
+
+msgid "timezone"
+msgstr "المنطقة الزمنية"
+
+msgid "timedatectl not installed"
+msgstr "‏timedatectl غير مثبّت"
+
+msgid "ntp-enabled"
+msgstr "‏NTP مفعّل"
+
+msgid "time-format"
+msgstr "صيغة الوقت"
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr "الشريط وقفل الشاشة وساعة سطح المكتب"
+
+msgid "time-seconds"
+msgstr "الثواني"
+
+msgid "seconds in the bar clock"
+msgstr "الثواني في ساعة الشريط"
+
+msgid "date-format"
+msgstr "صيغة التاريخ"
+
+msgid "the order the date is written in"
+msgstr "الترتيب الذي يُكتب به التاريخ"
+
+msgid "desktop-clock"
+msgstr "ساعة سطح المكتب"
+
+msgid "what the bar is showing right now"
+msgstr "ما يعرضه الشريط في هذه اللحظة"
+
+msgid "gpu"
+msgstr "gpu"
+
+msgid "cpu"
+msgstr "cpu"
+
+msgid "off"
+msgstr "إيقاف"
+
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "بلوتوث"

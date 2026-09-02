@@ -7,377 +7,906 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-settings\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr "%1 경과"
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] "%1행"
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr "AI"
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr "적용"
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr "어시스턴트"
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr "요청이 나타나면 승인하세요."
 
-#: syn-settings.qml:1375
 msgid ""
 "Authorise when asked. A kernel and its headers are a few hundred megabytes "
 "to fetch and an initramfs to build, so this takes minutes, not seconds."
-msgstr "요청이 나타나면 승인하세요. 커널과 헤더는 수백 메가바이트를 내려받고 initramfs까지 만들어야 하므로 몇 초가 아니라 몇 분이 걸립니다."
+msgstr ""
+"요청이 나타나면 승인하세요. 커널과 헤더는 수백 메가바이트를 내려받고 "
+"initramfs까지 만들어야 하므로 몇 초가 아니라 몇 분이 걸립니다."
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr "블루투스"
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr "부트로더"
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr "취소"
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr "부팅 구성을 변경할까요?"
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr "닫기"
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr "구성"
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr "연결"
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr "날짜 및 시간"
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr "기본 앱"
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr "연결 해제"
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr "디스플레이"
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr "다시 등록…"
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr "등록…"
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr "지문"
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr "모든 지문 지우기"
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr "숨기기"
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr "설치"
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr "%1 설치 중"
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr "다음을 수행합니다:"
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr "커널"
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr "키보드 및 언어"
 
-#: syn-settings.qml:1915
 msgid ""
 "Leave this running. Closing the window will not stop it — it will only stop "
 "you seeing how it went."
-msgstr "그대로 두세요. 창을 닫아도 중단되지 않으며, 결과를 볼 수 없게 될 뿐입니다."
+msgstr ""
+"그대로 두세요. 창을 닫아도 중단되지 않으며, 결과를 볼 수 없게 될 뿐입니다."
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr "부팅 가능하게 만들기"
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr "부팅 가능하게 만들기…"
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr "기본값으로 설정"
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr "기본값으로 설정…"
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr "%1을(를) 부팅 가능하게 만드는 중"
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr "%1을(를) 기본값으로 설정하는 중"
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr "네트워크"
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr "전원 및 절전"
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr "다시 검사"
 
-#: syn-settings.qml:944
 msgid ""
 "Reads the live system. Writes go through localectl, timedatectl and "
 "systemctl, which do their own authorisation."
-msgstr "실행 중인 시스템을 읽습니다. 쓰기는 localectl, timedatectl, systemctl을 거치며 각자 권한을 확인합니다."
+msgstr ""
+"실행 중인 시스템을 읽습니다. 쓰기는 localectl, timedatectl, systemctl을 거치"
+"며 각자 권한을 확인합니다."
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr "새로 고침"
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr "제거"
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr "키 제거"
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr "%1 제거 중"
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr "SYNAPSE 설정"
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr "키 저장"
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr "시스템"
 
-#: syn-settings.qml:1657
 msgid ""
 "This makes %1 bootable. It is the only change in this app that can leave a "
 "machine that does not start, so read what it will do first."
-msgstr "%1을(를) 부팅 가능하게 만듭니다. 이 앱에서 컴퓨터가 켜지지 않게 만들 수 있는 유일한 변경이므로, 무엇을 하는지 먼저 읽어 보세요."
+msgstr ""
+"%1을(를) 부팅 가능하게 만듭니다. 이 앱에서 컴퓨터가 켜지지 않게 만들 수 있는 "
+"유일한 변경이므로, 무엇을 하는지 먼저 읽어 보세요."
 
-#: syn-settings.qml:1653
 msgid ""
 "This makes %1 the kernel this machine BOOTS. It changes nothing about the "
 "kernel you are running now; it takes effect at the next restart."
-msgstr "이 컴퓨터가 '부팅하는' 커널을 %1(으)로 바꿉니다. 지금 실행 중인 커널은 그대로이며, 다음 재시작부터 적용됩니다."
+msgstr ""
+"이 컴퓨터가 '부팅하는' 커널을 %1(으)로 바꿉니다. 지금 실행 중인 커널은 그대로"
+"이며, 다음 재시작부터 적용됩니다."
 
-#: syn-settings.qml:1153
 msgid ""
 "This pane reported nothing.\n"
 "Run `%1 --rec %2` to see why."
-msgstr "이 창은 아무것도 보고하지 않았습니다.\n이유를 보려면 '%1 --rec %2'을(를) 실행하세요."
+msgstr ""
+"이 창은 아무것도 보고하지 않았습니다.\n"
+"이유를 보려면 '%1 --rec %2'을(를) 실행하세요."
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr "끄기"
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr "켜기"
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr "인증을 요구받을 수 있습니다."
 
-#: syn-settings.qml:1784
 msgid ""
 "You may be asked to authenticate. On limine this can mean building the entry "
 "generator from source, which takes several minutes — the lines below are it "
 "working."
-msgstr "인증을 요구받을 수 있습니다. limine에서는 항목 생성기를 소스에서 빌드해야 할 수 있고 몇 분이 걸립니다 — 아래 줄들이 그 작업입니다."
+msgstr ""
+"인증을 요구받을 수 있습니다. limine에서는 항목 생성기를 소스에서 빌드해야 할 "
+"수 있고 몇 분이 걸립니다 — 아래 줄들이 그 작업입니다."
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr "%1 연결 중…"
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr "커널이 보는 커넥터와 컴포지터가 실제로 구동하는 것"
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr "무엇을 실행할지 판단할 수 없었습니다"
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr "%1 연결 해제 중…"
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
 msgstr "제공되는 모든 커널, 설치된 것, 그리고 부팅에 사용한 것"
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr "식별 정보와 각 설정 파일이 어느 계층에서 왔는지"
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr "인터페이스, 무선 장치, 그리고 트래픽을 거르는 것이 있는지"
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "요청할 때마다 손가락을 떼었다 다시 올리세요. 여러 번 읽어야 합니다"
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "표시된 모드가 없습니다 — wlr-randr이 설치되어 있나요?"
 
-#: syn-settings.qml:356 syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr "설치된 것 중 이것을 열겠다는 프로그램이 없습니다"
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr "이 설정에 선택 목록이 제공되지 않았습니다"
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr "보고된 내용 없음"
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr "%1 다시 검사 중…"
 
-#: syn-settings.qml:983 syn-settings.qml:1565
 msgid "reading…"
 msgstr "읽는 중…"
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "거부됨 (종료 코드 %1) — polkit이 거절했을 수 있습니다"
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr "모든 지문 제거 중…"
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr "%1 키 제거 중…"
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr "리더에 손가락을 올려 주세요…"
 
-#: syn-settings.qml:1427 syn-settings.qml:1456 syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr "%1을(를) %2(으)로 설정하는 중…"
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr "%1 설정 중…"
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr "%1 키 저장 중…"
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr "%1 전환 중…"
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr "synui 전용 — 실행 중인 세션은 %1입니다"
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "어댑터, 두 종류의 무선 차단, 그리고 페어링된 기기"
 
-#: syn-settings.qml:268
 msgid ""
 "the backend switch, the units that can restart it behind your back, and "
 "which model is on disk"
-msgstr "백엔드 전환, 모르는 사이에 재시작할 수 있는 유닛, 그리고 디스크에 있는 모델"
+msgstr ""
+"백엔드 전환, 모르는 사이에 재시작할 수 있는 유닛, 그리고 디스크에 있는 모델"
 
-#: syn-settings.qml:261
 msgid ""
 "the console keymap and the xkb layout, which are separate settings that "
 "sometimes disagree"
 msgstr "콘솔 키맵과 xkb 배열. 서로 다른 설정이라 가끔 어긋납니다"
 
-#: syn-settings.qml:270
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
-msgstr "리더, 등록된 손가락, 그리고 추가 등록 — 잠금 화면은 등록된 것이 있어야만 지문을 제안합니다"
+msgstr ""
+"리더, 등록된 손가락, 그리고 추가 등록 — 잠금 화면은 등록된 것이 있어야만 지문"
+"을 제안합니다"
 
-#: syn-settings.qml:262
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
-msgstr "시스템 시계와 데스크톱의 표기 방식: 12시간제인지 24시간제인지, 날짜 순서는 어떤지"
+msgstr ""
+"시스템 시계와 데스크톱의 표기 방식: 12시간제인지 24시간제인지, 날짜 순서는 어"
+"떤지"
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "절전이 제대로 되려면 필요한 유닛과 마지막 절전의 결과"
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "각 파일 종류를 무엇이 여는지 — 그리고 실제로 누가 고른 것인지"
 
-#: syn-settings.qml:269
 msgid ""
 "which service the assistant sends your messages to — the model on this "
 "machine, or a cloud account and its API key"
-msgstr "어시스턴트가 메시지를 보내는 서비스 — 이 컴퓨터의 모델인지, 클라우드 계정과 그 API 키인지"
+msgstr ""
+"어시스턴트가 메시지를 보내는 서비스 — 이 컴퓨터의 모델인지, 클라우드 계정과 "
+"그 API 키인지"
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr "무엇을 하게 될지 확인하는 중…"
+
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr "AI 데몬. 적재되어 있는 동안 GPU 메모리를 차지합니다"
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr "소켓 활성화 — 다음 요청이 올 때 데몬을 시작합니다"
+
+msgid "proxies LAN requests to synapd"
+msgstr "LAN에서 온 요청을 synapd로 전달합니다"
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr "그 포트를 synapd의 HTTP 소켓으로 전달합니다"
+
+msgid "AI backend"
+msgstr "AI 백엔드"
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr "gpu는 모든 레이어를 오프로드 · cpu는 CPU에서 실행 · off는 데몬을 마스킹해 다시 시작할 수 없게 합니다"
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr "synui 패키지가 제공하는 synui-ai-backend(1)이 필요합니다"
+
+msgid "llama.cpp API port"
+msgstr "llama.cpp API 포트"
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr "synapd-http-proxy.socket을 제공하는 synapd가 필요합니다"
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr "llama-server나 OpenAI API에 맞춰 작성된 프런트엔드를 위한 127.0.0.1:8080. 함께 제공되는 소켓을 통합니다"
+
+msgid "systemctl not available"
+msgstr "systemctl을 사용할 수 없습니다"
+
+msgid "model"
+msgstr "모델"
+
+msgid "a part-downloaded model; syn-model download"
+msgstr "일부만 내려받은 모델. syn-model download"
+
+msgid "no model installed · syn-model download"
+msgstr "설치된 모델 없음 · syn-model download"
+
+msgid "CUDA (NVIDIA)"
+msgstr "CUDA (NVIDIA)"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "acceleration"
+msgstr "가속"
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr "/usr/lib에 ggml 백엔드 라이브러리가 없습니다 · synapse-llama 패키지가 설치되어 있습니까?"
+
+msgid "Web Browser"
+msgstr "웹 브라우저"
+
+msgid "http and https links, and .html files"
+msgstr "http와 https 링크, 그리고 .html 파일"
+
+msgid "Email"
+msgstr "메일"
+
+msgid "mailto: links"
+msgstr "mailto: 링크"
+
+msgid "File Manager"
+msgstr "파일 관리자"
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr "폴더 — inode/directory, synfiles가 기본값을 제공하는 항목입니다"
+
+msgid "Text Editor"
+msgstr "텍스트 편집기"
+
+msgid "plain text and source code"
+msgstr "일반 텍스트와 소스 코드"
+
+msgid "Image Viewer"
+msgstr "이미지 보기"
+
+msgid "photographs and drawings"
+msgstr "사진과 그림"
+
+msgid "Audio Player"
+msgstr "오디오 재생기"
+
+msgid "music and sound files"
+msgstr "음악과 소리 파일"
+
+msgid "Video Player"
+msgstr "동영상 재생기"
+
+msgid "films and clips"
+msgstr "영화와 클립"
+
+msgid "Document Viewer"
+msgstr "문서 보기"
+
+msgid "PDF files"
+msgstr "PDF 파일"
+
+msgid "Archive Manager"
+msgstr "압축 관리자"
+
+msgid "zip, tar and the rest"
+msgstr "zip, tar 등"
+
+msgid "Terminal"
+msgstr "터미널"
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr "synui가 터미널로 실행하는 것 — mimeapps.list가 아니라 synuirc"
+
+msgid "nothing installed handles this"
+msgstr "설치된 것 중 이것을 처리하는 프로그램이 없습니다"
+
+msgid "vibe"
+msgstr "vibe"
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr "이 컴퓨터에는 어시스턴트가 없어서 고를 백엔드가 없습니다"
+
+msgid "backend"
+msgstr "백엔드"
+
+msgid "which service the assistant sends your messages to"
+msgstr "어시스턴트가 메시지를 보내는 서비스"
+
+msgid "no key stored; set one before switching to this backend"
+msgstr "저장된 키가 없습니다. 이 백엔드로 바꾸기 전에 하나 설정하세요"
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr "어댑터가 없거나 bluetoothd가 실행 중이 아닙니다"
+
+msgid "powered"
+msgstr "켜짐"
+
+msgid "discoverable"
+msgstr "검색 가능"
+
+msgid "visible to anything scanning"
+msgstr "검색 중인 모든 기기에 보입니다"
+
+msgid "pairable"
+msgstr "페어링 가능"
+
+msgid "accepts new pairings"
+msgstr "새 페어링을 받아들입니다"
+
+msgid "nothing has been paired with this adapter"
+msgstr "이 어댑터에는 아직 아무것도 페어링되지 않았습니다"
+
+msgid "paired"
+msgstr "페어링됨"
+
+msgid "rfkill"
+msgstr "rfkill"
+
+msgid "rfkill reported nothing"
+msgstr "rfkill이 아무것도 알리지 않았습니다"
+
+msgid "soft-block"
+msgstr "소프트웨어 차단"
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr "소프트웨어에 의한 것. 해제하려면 root가 필요합니다 (rfkill)"
+
+msgid "hard-block"
+msgstr "하드웨어 차단"
+
+msgid "a physical switch; software cannot clear it"
+msgstr "물리적 스위치입니다. 소프트웨어로는 해제할 수 없습니다"
+
+msgid "BlueZ; nothing below works without it"
+msgstr "BlueZ. 이것이 없으면 아래의 어떤 것도 동작하지 않습니다"
+
+msgid "bluez-utils is not installed"
+msgstr "bluez-utils가 설치되어 있지 않습니다"
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr "이 컴퓨터에는 블루투스 하드웨어가 없어서 설정할 것이 없습니다"
+
+msgid "avrcp-volume"
+msgstr "AVRCP 음량"
+
+msgid "fprintd"
+msgstr "fprintd"
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr "지문 데몬은 선택적 의존성입니다. 이것이 없으면 어떤 판독기도 쓸 수 없습니다"
+
+msgid "reader"
+msgstr "판독기"
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr "fprintd가 설치되어 있지만 이 컴퓨터에서 지문 판독기를 찾지 못했습니다"
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr "fprintd가 판독기를 인식했습니다. 아래에서 손가락을 등록하면 잠금 화면에서 제공됩니다"
+
+msgid "fingerprints"
+msgstr "지문"
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr "판독기는 동작하지만 대조할 것이 없습니다 — 잠금 화면은 손가락이 등록된 경우에만 제공합니다"
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr "이 중 하나라도 등록되어 있으면 잠금 화면이 판독기를 제공합니다"
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr "Arch의 기본 커널. SynapseOS가 제공하는 것입니다"
+
+msgid "long-term support — the fallback worth having installed"
+msgstr "장기 지원 — 설치해 둘 만한 대비책"
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr "데스크톱에 맞춘 조정. 대체로 지연 시간과 게임에 가장 좋습니다"
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr "보안 강화. 더 느리고 일부 드라이버가 동작하지 않습니다"
+
+msgid "real-time preemption; for audio work"
+msgstr "실시간 선점. 오디오 작업용입니다"
+
+msgid "real-time on the LTS base"
+msgstr "LTS 기반의 실시간 커널"
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr "CachyOS BORE + sched-ext. 데스크톱 반응성에 맞춰 강하게 조정했습니다"
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr "LTS 기반의 CachyOS 패치 — 대비책으로 남겨 둘 만한 Cachy 커널"
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr "강화 패치 세트를 적용한 CachyOS. 드라이버에 대한 주의점은 linux-hardened와 같습니다"
+
+msgid "pacman not available"
+msgstr "pacman을 사용할 수 없습니다"
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr "실행 중인 커널에는 동작이 없습니다. 부팅한 대상을 지우는 것은 다시는 부팅되지 않는 컴퓨터를 만드는 방법입니다."
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr "부트로더 설정을 찾지 못해 커널이 부팅 가능한지 알 수 없습니다."
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr "⚠ 여기에는 부트로더가 둘 이상 설정되어 있습니다. 펌웨어가 실제로 무엇을 쓰는지는 이 목록이 아니라 부팅 순서가 정합니다."
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr "“부팅 가능하게 만들기”는 /etc/default/grub에 GRUB_DEFAULT=saved를 넣고 grub.cfg를 다시 만든 다음 grub-set-default를 실행합니다 — 이 순서인 이유는 GRUB_DEFAULT가 부팅할 때가 아니라 설정을 만들 때 읽히기 때문입니다. 확인 화면에 셋 모두 표시됩니다."
+
+msgid "“Make default” runs bootctl set-default."
+msgstr "“기본값으로 설정”은 bootctl set-default를 실행합니다."
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr "“기본값으로 설정”은 limine.conf에 default_entry:를 쓰고, 순서를 바꿔도 의미가 조용히 달라지지 않도록 항목을 경로로 지정합니다."
+
+msgid "nmcli reported nothing"
+msgstr "nmcli가 아무것도 알리지 않았습니다"
+
+msgid "no connection"
+msgstr "연결 없음"
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr "들어오는 트래픽은 기본적으로 버립니다. 루프백, 이 컴퓨터가 맺은 연결에 대한 응답, ICMP, 그리고 로컬 네트워크에서 오는 것은 모두 통과시키고, 공인 주소에서 오는 요청하지 않은 트래픽은 통과시키지 않습니다."
+
+msgid "input filtering"
+msgstr "인바운드 필터링"
+
+msgid "container links"
+msgstr "컨테이너 연결"
+
+msgid "rebuilt"
+msgstr "재구성 횟수"
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr "synnet이 시작된 뒤 방화벽이 사라졌다가 다시 만들어진 횟수입니다."
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr "이 모든 것을 적용하는 데몬입니다. 규칙이 데몬보다 오래 남으므로 synnet을 멈춰도 컴퓨터가 무방비가 되지는 않습니다."
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr "SynapseOS가 쓰지 않는 Arch 자체의 방화벽 서비스입니다 — 이것이 켜져 있든 아니든 synnet은 자기 테이블을 관리합니다."
+
+msgid "NetworkManager is not installed"
+msgstr "NetworkManager가 설치되어 있지 않습니다"
+
+msgid "wwan"
+msgstr "모바일 광대역"
+
+msgid "runs NVIDIA's suspend hook"
+msgstr "NVIDIA의 절전 훅을 실행합니다"
+
+msgid "runs NVIDIA's resume hook"
+msgstr "NVIDIA의 복귀 훅을 실행합니다"
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr "NVIDIA의 최대 절전 훅을 실행합니다"
+
+msgid "keeps the driver loaded with no client"
+msgstr "클라이언트가 없어도 드라이버를 적재된 상태로 유지합니다"
+
+msgid "records connector state changes"
+msgstr "커넥터 상태 변화를 기록합니다"
+
+msgid "the AI daemon; holds GPU memory"
+msgstr "AI 데몬. GPU 메모리를 차지합니다"
+
+msgid "the intrusion monitor"
+msgstr "침입 감시"
+
+msgid "network policy and the firewall set"
+msgstr "네트워크 정책과 방화벽 규칙 모음"
+
+msgid "last-suspend"
+msgstr "마지막 절전"
+
+msgid "when this boot last went to sleep"
+msgstr "이번 부팅이 마지막으로 잠든 시각"
+
+msgid "last-resume"
+msgstr "마지막 복귀"
+
+msgid "when it came back"
+msgstr "돌아온 시각"
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr "LANG과 관련 변수, /etc/locale.conf"
+
+msgid "the tty and the greeter"
+msgstr "tty와 로그인 화면"
+
+msgid "xkb layout — what the desktop uses"
+msgstr "xkb 배치 — 데스크톱이 쓰는 것"
+
+msgid "keymap-xkb-variant"
+msgstr "xkb 변형"
+
+msgid "xkb variant, blank for the default"
+msgstr "xkb 변형. 비우면 기본값"
+
+msgid "keymap-xkb-model"
+msgstr "xkb 모델"
+
+msgid "xkb model"
+msgstr "xkb 모델"
+
+msgid "locale"
+msgstr "언어"
+
+msgid "localectl not installed"
+msgstr "localectl이 설치되어 있지 않습니다"
+
+msgid "keymap-console"
+msgstr "콘솔 키맵"
+
+msgid "keymap-xkb"
+msgstr "xkb 배치"
+
+msgid "wifi"
+msgstr "Wi-Fi"
+
+msgid "Screen reader"
+msgstr "화면 낭독기"
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr "초점이 옮겨갈 때 초점이 있는 창을 읽어 주고, Super+Alt+S로 선택한 글을 읽어 줍니다"
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr "synui 패키지가 제공하는 syn-speak(1)이 필요합니다"
+
+msgid "Answer to its name"
+msgstr "이름에 응답하기"
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr "“Synapse”를 듣고 소리 내어 답합니다. 끌 때까지 마이크를 열어 둡니다. 켜져 있는 동안 막대에 마이크가 표시됩니다"
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr "vibe(1)이 필요합니다 · synpkg install vibe"
+
+msgid "Voice"
+msgstr "목소리"
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr "piper는 chibi의 것이고, espeak-ng는 대비책입니다"
+
+msgid "Dictation"
+msgstr "받아쓰기"
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr "chibi의 faster-whisper. Super+Shift+V가 들은 것을 입력합니다"
+
+msgid "Speech rate"
+msgstr "말하기 속도"
+
+msgid "Words per minute, 80 to 450"
+msgstr "분당 낱말 수, 80에서 450까지"
+
+msgid "Speech volume"
+msgstr "말하기 음량"
+
+msgid "Wake words"
+msgstr "호출어"
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr "쉼표로 구분합니다. whisper가 매번 그렇게 옮겨 적기 때문에 “computer”는 남겨 두었습니다 · 대화 중 그 낱말에 반응하면 지우세요"
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr "읽어 주는 쪽 · 위의 “화면 낭독기” 스위치가 이것을 켭니다. “설치되지 않음”은 synui 패키지가 유닛을 함께 넣지 않았다는 뜻입니다"
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr "듣는 쪽. 꺼진 상태로 제공됩니다 · 위의 스위치가 켭니다"
+
+msgid "kernel hardening baseline"
+msgstr "커널 강화 기준선"
+
+msgid "anything here WINS over the shipped baseline"
+msgstr "여기 있는 것이 함께 제공된 기준선보다 우선합니다"
+
+msgid "refused kernel modules"
+msgstr "거부된 커널 모듈"
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr "synapse_kmod 매개변수 — C의 기본값은 실제로 적재되는 값이 아닙니다"
+
+msgid "audit decisions we have already made"
+msgstr "이미 내린 감사 결정"
+
+msgid "AI daemon"
+msgstr "AI 데몬"
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr "컴포지터 rc — 업그레이드는 사용자의 사본을 절대 다시 쓰지 않습니다"
+
+msgid "the vendor default application list; this is what WINS"
+msgstr "공급자가 제공한 기본 응용 프로그램 목록. 우선하는 것은 이쪽입니다"
+
+msgid "/etc/os-release"
+msgstr "/etc/os-release"
+
+msgid "kernel"
+msgstr "커널"
+
+msgid "running kernel"
+msgstr "실행 중인 커널"
+
+msgid "hostname"
+msgstr "호스트 이름"
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr "이 컴퓨터가 네트워크에서 응답하는 이름 — SynapseOS는 어느 설치든 같은 이름으로 시작합니다"
+
+msgid "uptime"
+msgstr "가동 시간"
+
+msgid "since boot"
+msgstr "부팅 이후"
+
+msgid "rgb"
+msgstr "RGB"
+
+msgid "syn-rgb is not installed"
+msgstr "syn-rgb가 설치되어 있지 않습니다"
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr "RGB 하드웨어의 배경 강조색 — 쓰려면 `openrgb`를 설치하세요"
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr "메모리와 보드, 키보드의 배경 강조색"
+
+msgid "clock-local"
+msgstr "현지 시각"
+
+msgid "as the system reads it"
+msgstr "시스템이 읽은 값"
+
+msgid "clock-utc"
+msgstr "세계 표준시"
+
+msgid "UTC"
+msgstr "UTC"
+
+msgid "rtc"
+msgstr "하드웨어 시계"
+
+msgid "the hardware clock"
+msgstr "하드웨어의 시계"
+
+msgid "is a time client running"
+msgstr "시각 클라이언트가 실행 중인지"
+
+msgid "ntp-synced"
+msgstr "NTP 동기화됨"
+
+msgid "has it actually disciplined the clock"
+msgstr "실제로 시계를 맞췄는지"
+
+msgid "timezone"
+msgstr "시간대"
+
+msgid "timedatectl not installed"
+msgstr "timedatectl이 설치되어 있지 않습니다"
+
+msgid "ntp-enabled"
+msgstr "NTP 사용"
+
+msgid "time-format"
+msgstr "시간 형식"
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr "막대와 잠금 화면, 그리고 바탕화면 시계"
+
+msgid "time-seconds"
+msgstr "초 표시"
+
+msgid "seconds in the bar clock"
+msgstr "막대 시계의 초"
+
+msgid "date-format"
+msgstr "날짜 형식"
+
+msgid "the order the date is written in"
+msgstr "날짜를 적는 순서"
+
+msgid "desktop-clock"
+msgstr "바탕화면 시계"
+
+msgid "what the bar is showing right now"
+msgstr "막대가 지금 보여 주는 것"
+
+msgid "gpu"
+msgstr "gpu"
+
+msgid "cpu"
+msgstr "cpu"
+
+msgid "off"
+msgstr "끔"
+
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "블루투스"

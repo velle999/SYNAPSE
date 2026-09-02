@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -302,10 +303,10 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
-	if (!strcmp(key, "wifi")) {
+	if (!strcmp(key, N_("wifi"))) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("wifi takes on or off");
-		char *a[] = { (char *)"nmcli", (char *)"radio", (char *)"wifi",
+		char *a[] = { (char *)"nmcli", (char *)"radio", (char *)N_("wifi"),
 		              (char *)val, NULL };
 		return run_or_show(a);
 	}

@@ -16,349 +16,874 @@ msgstr ""
 "Language-Team: \n"
 "Language: \n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr ""
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] ""
 msgstr[1] ""
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr ""
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr ""
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr ""
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr ""
 
-#: syn-settings.qml:1375
-msgid "Authorise when asked. A kernel and its headers are a few hundred megabytes to fetch and an initramfs to build, so this takes minutes, not seconds."
+msgid ""
+"Authorise when asked. A kernel and its headers are a few hundred megabytes "
+"to fetch and an initramfs to build, so this takes minutes, not seconds."
 msgstr ""
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr ""
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr ""
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr ""
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr ""
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr ""
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr ""
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr ""
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr ""
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr ""
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr ""
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr ""
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr ""
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr ""
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr ""
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr ""
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr ""
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr ""
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr ""
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr ""
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr ""
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr ""
 
-#: syn-settings.qml:1915
-msgid "Leave this running. Closing the window will not stop it — it will only stop you seeing how it went."
+msgid ""
+"Leave this running. Closing the window will not stop it — it will only stop "
+"you seeing how it went."
 msgstr ""
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr ""
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr ""
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr ""
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr ""
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr ""
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr ""
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr ""
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr ""
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr ""
 
-#: syn-settings.qml:944
-msgid "Reads the live system. Writes go through localectl, timedatectl and systemctl, which do their own authorisation."
+msgid ""
+"Reads the live system. Writes go through localectl, timedatectl and "
+"systemctl, which do their own authorisation."
 msgstr ""
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr ""
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr ""
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr ""
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr ""
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr ""
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr ""
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr ""
 
-#: syn-settings.qml:1657
-msgid "This makes %1 bootable. It is the only change in this app that can leave a machine that does not start, so read what it will do first."
+msgid ""
+"This makes %1 bootable. It is the only change in this app that can leave a "
+"machine that does not start, so read what it will do first."
 msgstr ""
 
-#: syn-settings.qml:1653
-msgid "This makes %1 the kernel this machine BOOTS. It changes nothing about the kernel you are running now; it takes effect at the next restart."
+msgid ""
+"This makes %1 the kernel this machine BOOTS. It changes nothing about the "
+"kernel you are running now; it takes effect at the next restart."
 msgstr ""
 
-#: syn-settings.qml:1153
-msgid "This pane reported nothing.\nRun `%1 --rec %2` to see why."
+msgid ""
+"This pane reported nothing.\n"
+"Run `%1 --rec %2` to see why."
 msgstr ""
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr ""
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr ""
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr ""
 
-#: syn-settings.qml:1784
-msgid "You may be asked to authenticate. On limine this can mean building the entry generator from source, which takes several minutes — the lines below are it working."
+msgid ""
+"You may be asked to authenticate. On limine this can mean building the entry "
+"generator from source, which takes several minutes — the lines below are it "
+"working."
 msgstr ""
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr ""
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr ""
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr ""
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr ""
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
 msgstr ""
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr ""
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr ""
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr ""
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr ""
 
-#: syn-settings.qml:356
-#: syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr ""
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr ""
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr ""
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr ""
 
-#: syn-settings.qml:983
-#: syn-settings.qml:1565
 msgid "reading…"
 msgstr ""
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr ""
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr ""
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr ""
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr ""
 
-#: syn-settings.qml:1427
-#: syn-settings.qml:1456
-#: syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr ""
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr ""
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr ""
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr ""
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr ""
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr ""
 
-#: syn-settings.qml:268
-msgid "the backend switch, the units that can restart it behind your back, and which model is on disk"
+msgid ""
+"the backend switch, the units that can restart it behind your back, and "
+"which model is on disk"
 msgstr ""
 
-#: syn-settings.qml:261
-msgid "the console keymap and the xkb layout, which are separate settings that sometimes disagree"
+msgid ""
+"the console keymap and the xkb layout, which are separate settings that "
+"sometimes disagree"
 msgstr ""
 
-#: syn-settings.qml:270
-msgid "the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is"
+msgid ""
+"the reader, which fingers are on file, and enrolling another — the lock "
+"screen offers it only once something is"
 msgstr ""
 
-#: syn-settings.qml:262
-msgid "the system clock — and how the desktop writes it: 12- or 24-hour, and which date order"
+msgid ""
+"the system clock — and how the desktop writes it: 12- or 24-hour, and which "
+"date order"
 msgstr ""
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr ""
 
-#: syn-settings.qml:269
-msgid "which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key"
+msgid ""
+"which service the assistant sends your messages to — the model on this "
+"machine, or a cloud account and its API key"
 msgstr ""
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr ""
 
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr ""
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr ""
+
+msgid "proxies LAN requests to synapd"
+msgstr ""
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr ""
+
+msgid "AI backend"
+msgstr ""
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr ""
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr ""
+
+msgid "llama.cpp API port"
+msgstr ""
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr ""
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr ""
+
+msgid "systemctl not available"
+msgstr ""
+
+msgid "model"
+msgstr ""
+
+msgid "a part-downloaded model; syn-model download"
+msgstr ""
+
+msgid "no model installed · syn-model download"
+msgstr ""
+
+msgid "CUDA (NVIDIA)"
+msgstr ""
+
+msgid "CPU"
+msgstr ""
+
+msgid "acceleration"
+msgstr ""
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr ""
+
+msgid "Web Browser"
+msgstr ""
+
+msgid "http and https links, and .html files"
+msgstr ""
+
+msgid "Email"
+msgstr ""
+
+msgid "mailto: links"
+msgstr ""
+
+msgid "File Manager"
+msgstr ""
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr ""
+
+msgid "Text Editor"
+msgstr ""
+
+msgid "plain text and source code"
+msgstr ""
+
+msgid "Image Viewer"
+msgstr ""
+
+msgid "photographs and drawings"
+msgstr ""
+
+msgid "Audio Player"
+msgstr ""
+
+msgid "music and sound files"
+msgstr ""
+
+msgid "Video Player"
+msgstr ""
+
+msgid "films and clips"
+msgstr ""
+
+msgid "Document Viewer"
+msgstr ""
+
+msgid "PDF files"
+msgstr ""
+
+msgid "Archive Manager"
+msgstr ""
+
+msgid "zip, tar and the rest"
+msgstr ""
+
+msgid "Terminal"
+msgstr ""
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr ""
+
+msgid "nothing installed handles this"
+msgstr ""
+
+msgid "vibe"
+msgstr ""
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr ""
+
+msgid "backend"
+msgstr ""
+
+msgid "which service the assistant sends your messages to"
+msgstr ""
+
+msgid "no key stored; set one before switching to this backend"
+msgstr ""
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr ""
+
+msgid "powered"
+msgstr ""
+
+msgid "discoverable"
+msgstr ""
+
+msgid "visible to anything scanning"
+msgstr ""
+
+msgid "pairable"
+msgstr ""
+
+msgid "accepts new pairings"
+msgstr ""
+
+msgid "nothing has been paired with this adapter"
+msgstr ""
+
+msgid "paired"
+msgstr ""
+
+msgid "rfkill"
+msgstr ""
+
+msgid "rfkill reported nothing"
+msgstr ""
+
+msgid "soft-block"
+msgstr ""
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr ""
+
+msgid "hard-block"
+msgstr ""
+
+msgid "a physical switch; software cannot clear it"
+msgstr ""
+
+msgid "BlueZ; nothing below works without it"
+msgstr ""
+
+msgid "bluez-utils is not installed"
+msgstr ""
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr ""
+
+msgid "avrcp-volume"
+msgstr ""
+
+msgid "fprintd"
+msgstr ""
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr ""
+
+msgid "reader"
+msgstr ""
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr ""
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr ""
+
+msgid "fingerprints"
+msgstr ""
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr ""
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr ""
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr ""
+
+msgid "long-term support — the fallback worth having installed"
+msgstr ""
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr ""
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr ""
+
+msgid "real-time preemption; for audio work"
+msgstr ""
+
+msgid "real-time on the LTS base"
+msgstr ""
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr ""
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr ""
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr ""
+
+msgid "pacman not available"
+msgstr ""
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr ""
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr ""
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr ""
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr ""
+
+msgid "“Make default” runs bootctl set-default."
+msgstr ""
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr ""
+
+msgid "nmcli reported nothing"
+msgstr ""
+
+msgid "no connection"
+msgstr ""
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr ""
+
+msgid "input filtering"
+msgstr ""
+
+msgid "container links"
+msgstr ""
+
+msgid "rebuilt"
+msgstr ""
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr ""
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr ""
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr ""
+
+msgid "NetworkManager is not installed"
+msgstr ""
+
+msgid "wwan"
+msgstr ""
+
+msgid "runs NVIDIA's suspend hook"
+msgstr ""
+
+msgid "runs NVIDIA's resume hook"
+msgstr ""
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr ""
+
+msgid "keeps the driver loaded with no client"
+msgstr ""
+
+msgid "records connector state changes"
+msgstr ""
+
+msgid "the AI daemon; holds GPU memory"
+msgstr ""
+
+msgid "the intrusion monitor"
+msgstr ""
+
+msgid "network policy and the firewall set"
+msgstr ""
+
+msgid "last-suspend"
+msgstr ""
+
+msgid "when this boot last went to sleep"
+msgstr ""
+
+msgid "last-resume"
+msgstr ""
+
+msgid "when it came back"
+msgstr ""
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr ""
+
+msgid "the tty and the greeter"
+msgstr ""
+
+msgid "xkb layout — what the desktop uses"
+msgstr ""
+
+msgid "keymap-xkb-variant"
+msgstr ""
+
+msgid "xkb variant, blank for the default"
+msgstr ""
+
+msgid "keymap-xkb-model"
+msgstr ""
+
+msgid "xkb model"
+msgstr ""
+
+msgid "locale"
+msgstr ""
+
+msgid "localectl not installed"
+msgstr ""
+
+msgid "keymap-console"
+msgstr ""
+
+msgid "keymap-xkb"
+msgstr ""
+
+msgid "wifi"
+msgstr ""
+
+msgid "Screen reader"
+msgstr ""
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr ""
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr ""
+
+msgid "Answer to its name"
+msgstr ""
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr ""
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr ""
+
+msgid "Voice"
+msgstr ""
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr ""
+
+msgid "Dictation"
+msgstr ""
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr ""
+
+msgid "Speech rate"
+msgstr ""
+
+msgid "Words per minute, 80 to 450"
+msgstr ""
+
+msgid "Speech volume"
+msgstr ""
+
+msgid "Wake words"
+msgstr ""
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr ""
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr ""
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr ""
+
+msgid "kernel hardening baseline"
+msgstr ""
+
+msgid "anything here WINS over the shipped baseline"
+msgstr ""
+
+msgid "refused kernel modules"
+msgstr ""
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr ""
+
+msgid "audit decisions we have already made"
+msgstr ""
+
+msgid "AI daemon"
+msgstr ""
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr ""
+
+msgid "the vendor default application list; this is what WINS"
+msgstr ""
+
+msgid "/etc/os-release"
+msgstr ""
+
+msgid "kernel"
+msgstr ""
+
+msgid "running kernel"
+msgstr ""
+
+msgid "hostname"
+msgstr ""
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr ""
+
+msgid "uptime"
+msgstr ""
+
+msgid "since boot"
+msgstr ""
+
+msgid "rgb"
+msgstr ""
+
+msgid "syn-rgb is not installed"
+msgstr ""
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr ""
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr ""
+
+msgid "clock-local"
+msgstr ""
+
+msgid "as the system reads it"
+msgstr ""
+
+msgid "clock-utc"
+msgstr ""
+
+msgid "UTC"
+msgstr ""
+
+msgid "rtc"
+msgstr ""
+
+msgid "the hardware clock"
+msgstr ""
+
+msgid "is a time client running"
+msgstr ""
+
+msgid "ntp-synced"
+msgstr ""
+
+msgid "has it actually disciplined the clock"
+msgstr ""
+
+msgid "timezone"
+msgstr ""
+
+msgid "timedatectl not installed"
+msgstr ""
+
+msgid "ntp-enabled"
+msgstr ""
+
+msgid "time-format"
+msgstr ""
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr ""
+
+msgid "time-seconds"
+msgstr ""
+
+msgid "seconds in the bar clock"
+msgstr ""
+
+msgid "date-format"
+msgstr ""
+
+msgid "the order the date is written in"
+msgstr ""
+
+msgid "desktop-clock"
+msgstr ""
+
+msgid "what the bar is showing right now"
+msgstr ""
+
+msgid "gpu"
+msgstr ""
+
+msgid "cpu"
+msgstr ""
+
+msgid "off"
+msgstr ""

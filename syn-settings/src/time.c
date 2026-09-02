@@ -30,6 +30,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -290,22 +291,24 @@ int pane_time(void)
 
 		row_or_unknown("timezone", out, "Time zone", "/etc/localtime",
 		               "set:timezone");
-		row_or_unknown("clock-local", out, "Local time",
-		               "as the system reads it", "-");
-		row_or_unknown("clock-utc", out, "Universal time", "UTC", "-");
-		row_or_unknown("rtc", out, "RTC time", "the hardware clock", "-");
+		row_or_unknown(N_("clock-local"), out, "Local time",
+		               N_("as the system reads it"), "-");
+		row_or_unknown(N_("clock-utc"), out, "Universal time", N_("UTC"), "-");
+		row_or_unknown(N_("rtc"), out, "RTC time", N_("the hardware clock"), "-");
 		/* Two different questions that read almost the same: whether the NTP
 		 * CLIENT is running, and whether the clock has actually been
 		 * disciplined by it. A machine can have the first without the second
 		 * for a long time, and only the second means the clock is right.
 		 * Lynis TIME-3104 asks about the first. */
 		row_or_unknown("ntp-enabled", out, "NTP service",
-		               "is a time client running", "toggle:ntp");
-		row_or_unknown("ntp-synced", out, "System clock synchronized",
-		               "has it actually disciplined the clock", "-");
+		               N_("is a time client running"), "toggle:ntp");
+		row_or_unknown(N_("ntp-synced"), out, "System clock synchronized",
+		               N_("has it actually disciplined the clock"), "-");
 	} else {
-		rec_row("timezone\tunknown\ttimedatectl not installed\t-");
-		rec_row("ntp-enabled\tunknown\ttimedatectl not installed\t-");
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("timezone"), N_("timedatectl not installed"));
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("ntp-enabled"), N_("timedatectl not installed"));
 	}
 
 	/* ── How the desktop writes it ────────────────────────────────────── */
@@ -327,23 +330,24 @@ int pane_time(void)
 
 	char fmt[16];
 	clock_get("format", "12", fmt, sizeof fmt);
-	rec_row("time-format\t%s\t%s\t%s",
-	        !strcmp(fmt, "24") ? "24-hour" : "12-hour",
-	        elsewhere ? why : "the bar, the lock screen and the desktop clock",
+	rec_row("%s\t%s\t%s\t%s",
+	        N_("time-format"), !strcmp(fmt, "24") ? "24-hour" : "12-hour",
+	        elsewhere ? why : N_("the bar, the lock screen and the desktop clock"),
 	        clock_action(have_clock, elsewhere, "choice:time-format"));
 
 	char secs[16];
 	clock_get("seconds", "0", secs, sizeof secs);
-	rec_row("time-seconds\t%s\t%s\t%s",
-	        atoi(secs) ? "on" : "off",
-	        elsewhere ? why : "seconds in the bar clock",
+	rec_row("%s\t%s\t%s\t%s",
+	        N_("time-seconds"), atoi(secs) ? "on" : "off",
+	        elsewhere ? why : N_("seconds in the bar clock"),
 	        clock_action(have_clock, elsewhere, "toggle:time-seconds"));
 
 	char date[64], label[LAYOUT_LABEL_CAP + 48];
 	clock_get("date", "iso", date, sizeof date);
 	layout_label(date, label, sizeof label);
-	rec_row("date-format\t%s\t%s\t%s", label,
-	        elsewhere ? why : "the order the date is written in",
+	rec_row("%s\t%s\t%s\t%s",
+	        N_("date-format"), label,
+	        elsewhere ? why : N_("the order the date is written in"),
 	        clock_action(have_clock, elsewhere, "choice:date-format"));
 
 	/* Not a setting — the result of the three above, drawn by the thing that
@@ -352,11 +356,13 @@ int pane_time(void)
 	 * the screen. */
 	char prev[256];
 	if (clock_preview(prev, sizeof prev))
-		rec_row("desktop-clock\t%s\t%s\t-", prev,
+		rec_row("%s\t%s\t%s\t-",
+		        N_("desktop-clock"), prev,
 		        elsewhere ? "what synui's bar WOULD show — it is not running"
-		                  : "what the bar is showing right now");
+		                  : N_("what the bar is showing right now"));
 	else
-		rec_row("desktop-clock\tunknown\t%s\t-",
+		rec_row("%s\tunknown\t%s\t-",
+		        N_("desktop-clock"),
 		        have_clock ? "synui-clock returned nothing"
 		                   : "synui-clock not installed — not a synui session");
 
@@ -457,12 +463,12 @@ int do_choices(int argc, char **argv)
 			cur[strcspn(cur, "\n")] = '\0';
 			tsv_clean(cur);
 		}
-		rec_row("gpu\tGPU  (offload every layer)\t%s",
-		        !strcmp(cur, "gpu") ? "current" : "-");
-		rec_row("cpu\tCPU  (no GPU offload)\t%s",
-		        !strcmp(cur, "cpu") ? "current" : "-");
-		rec_row("off\tOff  (mask the daemon)\t%s",
-		        !strcmp(cur, "off") ? "current" : "-");
+		rec_row("%s\tGPU  (offload every layer)\t%s",
+		        N_("gpu"), !strcmp(cur, "gpu") ? "current" : "-");
+		rec_row("%s\tCPU  (no GPU offload)\t%s",
+		        N_("cpu"), !strcmp(cur, "cpu") ? "current" : "-");
+		rec_row("%s\tOff  (mask the daemon)\t%s",
+		        N_("off"), !strcmp(cur, "off") ? "current" : "-");
 		return 0;
 	}
 

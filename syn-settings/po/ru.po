@@ -7,380 +7,920 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-settings\n"
 "Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"PO-Revision-Date: \n"
-"Last-Translator: Automatically generated\n"
-"Language-Team: none\n"
-"Language: ru\n"
 
-#: syn-settings.qml:1596
 msgid "%1 elapsed"
 msgstr "прошло %1"
 
-#: syn-settings.qml:1568
 msgid "%1 row"
 msgid_plural "%1 rows"
 msgstr[0] "%1 строка"
 msgstr[1] "%1 строки"
 msgstr[2] "%1 строк"
 
-#: syn-settings.qml:268
 msgid "AI"
 msgstr "ИИ"
 
-#: syn-settings.qml:1243
 msgid "Apply"
 msgstr "Применить"
 
-#: syn-settings.qml:269
 msgid "Assistant"
 msgstr "Ассистент"
 
-#: syn-settings.qml:1387
 msgid "Authorise when asked."
 msgstr "Подтвердите, когда появится запрос."
 
-#: syn-settings.qml:1375
 msgid ""
 "Authorise when asked. A kernel and its headers are a few hundred megabytes "
 "to fetch and an initramfs to build, so this takes minutes, not seconds."
-msgstr "Подтвердите, когда появится запрос. Ядро и его заголовки — это несколько сотен мегабайт загрузки плюс сборка initramfs, так что это займёт минуты, а не секунды."
+msgstr ""
+"Подтвердите, когда появится запрос. Ядро и его заголовки — это несколько "
+"сотен мегабайт загрузки плюс сборка initramfs, так что это займёт минуты, а "
+"не секунды."
 
-#: syn-settings.qml:264
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
-#: syn-settings.qml:1672
 msgid "Bootloader"
 msgstr "Загрузчик"
 
-#: syn-settings.qml:1766
 msgid "Cancel"
 msgstr "Отмена"
 
-#: syn-settings.qml:1640
 msgid "Change boot configuration?"
 msgstr "Изменить конфигурацию загрузки?"
 
-#: syn-settings.qml:1524
 msgid "Close"
 msgstr "Закрыть"
 
-#: syn-settings.qml:1685
 msgid "Config"
 msgstr "Конфигурация"
 
-#: syn-settings.qml:1331
 msgid "Connect"
 msgstr "Подключить"
 
-#: syn-settings.qml:262
 msgid "Date & Time"
 msgstr "Дата и время"
 
-#: syn-settings.qml:266
 msgid "Default Apps"
 msgstr "Приложения по умолчанию"
 
-#: syn-settings.qml:1332
 msgid "Disconnect"
 msgstr "Отключить"
 
-#: syn-settings.qml:260
 msgid "Display"
 msgstr "Экран"
 
-#: syn-settings.qml:1272
 msgid "Enrol again…"
 msgstr "Зарегистрировать снова…"
 
-#: syn-settings.qml:1273
 msgid "Enrol…"
 msgstr "Зарегистрировать…"
 
-#: syn-settings.qml:270
 msgid "Fingerprint"
 msgstr "Отпечаток пальца"
 
-#: syn-settings.qml:1285
 msgid "Forget all fingerprints"
 msgstr "Забыть все отпечатки"
 
-#: syn-settings.qml:1929
 msgid "Hide"
 msgstr "Скрыть"
 
-#: syn-settings.qml:1370
 msgid "Install"
 msgstr "Установить"
 
-#: syn-settings.qml:1373
 msgid "Installing %1"
 msgstr "Установка %1"
 
-#: syn-settings.qml:1739
 msgid "It will:"
 msgstr "Будет сделано:"
 
-#: syn-settings.qml:267
 msgid "Kernel"
 msgstr "Ядро"
 
-#: syn-settings.qml:261
 msgid "Keyboard & Language"
 msgstr "Клавиатура и язык"
 
-#: syn-settings.qml:1915
 msgid ""
 "Leave this running. Closing the window will not stop it — it will only stop "
 "you seeing how it went."
-msgstr "Пусть это работает. Закрытие окна не остановит процесс — вы лишь не увидите, чем он закончился."
+msgstr ""
+"Пусть это работает. Закрытие окна не остановит процесс — вы лишь не увидите, "
+"чем он закончился."
 
-#: syn-settings.qml:1772
 msgid "Make bootable"
 msgstr "Сделать загрузочным"
 
-#: syn-settings.qml:1346
 msgid "Make bootable…"
 msgstr "Сделать загрузочным…"
 
-#: syn-settings.qml:1771
 msgid "Make default"
 msgstr "Сделать основным"
 
-#: syn-settings.qml:1355
 msgid "Make default…"
 msgstr "Сделать основным…"
 
-#: syn-settings.qml:1782
 msgid "Making %1 bootable"
 msgstr "%1 делается загрузочным"
 
-#: syn-settings.qml:1777
 msgid "Making %1 the default"
 msgstr "%1 делается основным"
 
-#: syn-settings.qml:263
 msgid "Network"
 msgstr "Сеть"
 
-#: syn-settings.qml:265
 msgid "Power & Sleep"
 msgstr "Питание и сон"
 
-#: syn-settings.qml:1242
 msgid "Re-probe"
 msgstr "Опросить снова"
 
-#: syn-settings.qml:944
 msgid ""
 "Reads the live system. Writes go through localectl, timedatectl and "
 "systemctl, which do their own authorisation."
-msgstr "Читает работающую систему. Запись идёт через localectl, timedatectl и systemctl, которые сами запрашивают права."
+msgstr ""
+"Читает работающую систему. Запись идёт через localectl, timedatectl и "
+"systemctl, которые сами запрашивают права."
 
-#: syn-settings.qml:983
 msgid "Refresh"
 msgstr "Обновить"
 
-#: syn-settings.qml:1382
 msgid "Remove"
 msgstr "Удалить"
 
-#: syn-settings.qml:1303
 msgid "Remove key"
 msgstr "Удалить ключ"
 
-#: syn-settings.qml:1385
 msgid "Removing %1"
 msgstr "Удаление %1"
 
-#: syn-settings.qml:898
 msgid "SYNAPSE Settings"
 msgstr "Параметры SYNAPSE"
 
-#: syn-settings.qml:1304
 msgid "Save key"
 msgstr "Сохранить ключ"
 
-#: syn-settings.qml:271
 msgid "System"
 msgstr "Система"
 
-#: syn-settings.qml:1657
 msgid ""
 "This makes %1 bootable. It is the only change in this app that can leave a "
 "machine that does not start, so read what it will do first."
-msgstr "Это сделает %1 загрузочным. Это единственное изменение в приложении, после которого машина может не запуститься, поэтому сначала прочитайте, что будет сделано."
+msgstr ""
+"Это сделает %1 загрузочным. Это единственное изменение в приложении, после "
+"которого машина может не запуститься, поэтому сначала прочитайте, что будет "
+"сделано."
 
-#: syn-settings.qml:1653
 msgid ""
 "This makes %1 the kernel this machine BOOTS. It changes nothing about the "
 "kernel you are running now; it takes effect at the next restart."
-msgstr "Это сделает %1 ядром, с которого машина ЗАГРУЖАЕТСЯ. Работающее сейчас ядро не изменится; действует со следующей перезагрузки."
+msgstr ""
+"Это сделает %1 ядром, с которого машина ЗАГРУЖАЕТСЯ. Работающее сейчас ядро "
+"не изменится; действует со следующей перезагрузки."
 
-#: syn-settings.qml:1153
 msgid ""
 "This pane reported nothing.\n"
 "Run `%1 --rec %2` to see why."
-msgstr "Эта панель ничего не сообщила.\nВыполните «%1 --rec %2», чтобы узнать почему."
+msgstr ""
+"Эта панель ничего не сообщила.\n"
+"Выполните «%1 --rec %2», чтобы узнать почему."
 
-#: syn-settings.qml:1240
 msgid "Turn off"
 msgstr "Выключить"
 
-#: syn-settings.qml:1241
 msgid "Turn on"
 msgstr "Включить"
 
-#: syn-settings.qml:1779
 msgid "You may be asked to authenticate."
 msgstr "Может потребоваться аутентификация."
 
-#: syn-settings.qml:1784
 msgid ""
 "You may be asked to authenticate. On limine this can mean building the entry "
 "generator from source, which takes several minutes — the lines below are it "
 "working."
-msgstr "Может потребоваться аутентификация. В случае limine это может означать сборку генератора пунктов меню из исходников, что занимает несколько минут — строки ниже и есть эта работа."
+msgstr ""
+"Может потребоваться аутентификация. В случае limine это может означать "
+"сборку генератора пунктов меню из исходников, что занимает несколько минут — "
+"строки ниже и есть эта работа."
 
-#: syn-settings.qml:1335
 msgid "connecting %1…"
 msgstr "подключение %1…"
 
-#: syn-settings.qml:260
 msgid "connectors as the kernel sees them, beside what the compositor drives"
-msgstr "разъёмы такими, какими их видит ядро, рядом с тем, чем управляет композитор"
+msgstr ""
+"разъёмы такими, какими их видит ядро, рядом с тем, чем управляет композитор"
 
-#: syn-settings.qml:695
 msgid "could not work out what to run"
 msgstr "не удалось определить, что запускать"
 
-#: syn-settings.qml:1337
 msgid "disconnecting %1…"
 msgstr "отключение %1…"
 
-#: syn-settings.qml:267
 msgid "every kernel on offer, which are installed, and which one you booted"
 msgstr "все доступные ядра, какие установлены и с какого выполнена загрузка"
 
-#: syn-settings.qml:271
 msgid "identity, and which layer each configuration file comes from"
 msgstr "идентификация и из какого слоя взят каждый файл конфигурации"
 
-#: syn-settings.qml:263
 msgid "interfaces, radios, and whether anything is filtering traffic"
 msgstr "интерфейсы, радиомодули и фильтрует ли что-нибудь трафик"
 
-#: syn-settings.qml:1276
 msgid "lift and rest it again each time it asks; several passes are needed"
-msgstr "поднимайте и снова кладите палец при каждом запросе; нужно несколько проходов"
+msgstr ""
+"поднимайте и снова кладите палец при каждом запросе; нужно несколько проходов"
 
-#: syn-settings.qml:374
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "режимы не перечислены — установлен ли wlr-randr?"
 
-#: syn-settings.qml:356 syn-settings.qml:1516
 msgid "nothing installed offers to handle this"
 msgstr "ничто из установленного не берётся это открыть"
 
-#: syn-settings.qml:1501
 msgid "nothing offered this setting a list of choices"
 msgstr "для этого параметра не предложен список вариантов"
 
-#: syn-settings.qml:819
 msgid "nothing reported"
 msgstr "ничего не сообщено"
 
-#: syn-settings.qml:1255
 msgid "re-probing %1…"
 msgstr "повторный опрос %1…"
 
-#: syn-settings.qml:983 syn-settings.qml:1565
 msgid "reading…"
 msgstr "чтение…"
 
-#: syn-settings.qml:604
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "отказано (код %1) — возможно, отказал polkit"
 
-#: syn-settings.qml:1287
 msgid "removing every fingerprint…"
 msgstr "удаление всех отпечатков…"
 
-#: syn-settings.qml:1310
 msgid "removing the %1 key…"
 msgstr "удаление ключа %1…"
 
-#: syn-settings.qml:1275
 msgid "rest your finger on the reader…"
 msgstr "положите палец на сканер…"
 
-#: syn-settings.qml:1427 syn-settings.qml:1456 syn-settings.qml:1485
 msgid "setting %1 to %2…"
 msgstr "%1 устанавливается в %2…"
 
-#: syn-settings.qml:1250
 msgid "setting %1…"
 msgstr "настройка %1…"
 
-#: syn-settings.qml:1311
 msgid "storing the %1 key…"
 msgstr "сохранение ключа %1…"
 
-#: syn-settings.qml:1253
 msgid "switching %1…"
 msgstr "переключение %1…"
 
-#: syn-settings.qml:1137
 msgid "synui only — %1 is the session running"
 msgstr "только synui — запущенный сеанс: %1"
 
-#: syn-settings.qml:264
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "адаптер, оба вида блокировки радио и что сопряжено"
 
-#: syn-settings.qml:268
 msgid ""
 "the backend switch, the units that can restart it behind your back, and "
 "which model is on disk"
-msgstr "переключатель движка, юниты, способные перезапустить его без вашего ведома, и какая модель лежит на диске"
+msgstr ""
+"переключатель движка, юниты, способные перезапустить его без вашего ведома, "
+"и какая модель лежит на диске"
 
-#: syn-settings.qml:261
 msgid ""
 "the console keymap and the xkb layout, which are separate settings that "
 "sometimes disagree"
-msgstr "раскладка консоли и раскладка xkb — это разные параметры, которые иногда расходятся"
+msgstr ""
+"раскладка консоли и раскладка xkb — это разные параметры, которые иногда "
+"расходятся"
 
-#: syn-settings.qml:270
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
-msgstr "сканер, какие пальцы записаны и регистрация ещё одного — экран блокировки предлагает это, только когда что-то уже записано"
+msgstr ""
+"сканер, какие пальцы записаны и регистрация ещё одного — экран блокировки "
+"предлагает это, только когда что-то уже записано"
 
-#: syn-settings.qml:262
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
-msgstr "системные часы — и как их записывает рабочий стол: 12 или 24 часа и в каком порядке дата"
+msgstr ""
+"системные часы — и как их записывает рабочий стол: 12 или 24 часа и в каком "
+"порядке дата"
 
-#: syn-settings.qml:265
 msgid "the units a working suspend depends on, and what the last one did"
-msgstr "юниты, от которых зависит работающий спящий режим, и что сделал последний"
+msgstr ""
+"юниты, от которых зависит работающий спящий режим, и что сделал последний"
 
-#: syn-settings.qml:266
 msgid "what opens each kind of file — and whether anybody actually chose it"
-msgstr "что открывает каждый тип файлов — и выбирал ли это кто-нибудь на самом деле"
+msgstr ""
+"что открывает каждый тип файлов — и выбирал ли это кто-нибудь на самом деле"
 
-#: syn-settings.qml:269
 msgid ""
 "which service the assistant sends your messages to — the model on this "
 "machine, or a cloud account and its API key"
-msgstr "какой службе ассистент отправляет ваши сообщения — модели на этой машине или облачной учётной записи с её ключом API"
+msgstr ""
+"какой службе ассистент отправляет ваши сообщения — модели на этой машине или "
+"облачной учётной записи с её ключом API"
 
-#: syn-settings.qml:711
 msgid "working out what this would do…"
 msgstr "выясняется, что это сделает…"
+
+msgid "the AI daemon; holds GPU memory while loaded"
+msgstr "служба ИИ; занимает память GPU, пока загружена"
+
+msgid "socket activation — this starts the daemon on the next request"
+msgstr "активация через сокет — запускает службу при следующем запросе"
+
+msgid "proxies LAN requests to synapd"
+msgstr "передаёт запросы из локальной сети в synapd"
+
+msgid "proxies that port to synapd's HTTP socket"
+msgstr "передаёт этот порт в HTTP-сокет synapd"
+
+msgid "AI backend"
+msgstr "Движок ИИ"
+
+msgid ""
+"gpu offloads every layer · cpu runs on the CPU · off masks the daemon so it "
+"cannot be started again"
+msgstr "gpu выгружает каждый слой · cpu считает на процессоре · off маскирует службу, так что запустить её снова нельзя"
+
+msgid "needs synui-ai-backend(1), shipped by the synui package"
+msgstr "требуется synui-ai-backend(1) из пакета synui"
+
+msgid "llama.cpp API port"
+msgstr "Порт API llama.cpp"
+
+msgid "needs a synapd that ships synapd-http-proxy.socket"
+msgstr "требуется synapd, поставляющий synapd-http-proxy.socket"
+
+msgid ""
+"127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
+"over the model synapd already holds · no authentication, so every process on "
+"this machine can reach it · loopback only, never the network"
+msgstr "127.0.0.1:8080 для интерфейсов, написанных под llama-server или API OpenAI, через поставляемый сокет"
+
+msgid "systemctl not available"
+msgstr "systemctl недоступен"
+
+msgid "model"
+msgstr "модель"
+
+msgid "a part-downloaded model; syn-model download"
+msgstr "частично загруженная модель; syn-model download"
+
+msgid "no model installed · syn-model download"
+msgstr "модель не установлена · syn-model download"
+
+msgid "CUDA (NVIDIA)"
+msgstr "CUDA (NVIDIA)"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "acceleration"
+msgstr "ускорение"
+
+msgid ""
+"no ggml backend library in /usr/lib · is a synapse-llama package installed?"
+msgstr "нет библиотеки ggml в /usr/lib · установлен ли пакет synapse-llama?"
+
+msgid "Web Browser"
+msgstr "Веб-браузер"
+
+msgid "http and https links, and .html files"
+msgstr "ссылки http и https и файлы .html"
+
+msgid "Email"
+msgstr "Почта"
+
+msgid "mailto: links"
+msgstr "ссылки mailto:"
+
+msgid "File Manager"
+msgstr "Файловый менеджер"
+
+msgid "folders — inode/directory, the one synfiles ships a default for"
+msgstr "папки — inode/directory, для которых synfiles поставляет значение по умолчанию"
+
+msgid "Text Editor"
+msgstr "Текстовый редактор"
+
+msgid "plain text and source code"
+msgstr "простой текст и исходный код"
+
+msgid "Image Viewer"
+msgstr "Просмотр изображений"
+
+msgid "photographs and drawings"
+msgstr "фотографии и рисунки"
+
+msgid "Audio Player"
+msgstr "Аудиопроигрыватель"
+
+msgid "music and sound files"
+msgstr "музыкальные и звуковые файлы"
+
+msgid "Video Player"
+msgstr "Видеопроигрыватель"
+
+msgid "films and clips"
+msgstr "фильмы и клипы"
+
+msgid "Document Viewer"
+msgstr "Просмотр документов"
+
+msgid "PDF files"
+msgstr "файлы PDF"
+
+msgid "Archive Manager"
+msgstr "Менеджер архивов"
+
+msgid "zip, tar and the rest"
+msgstr "zip, tar и остальные"
+
+msgid "Terminal"
+msgstr "Терминал"
+
+msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
+msgstr "что synui запускает в качестве терминала — synuirc, а не mimeapps.list"
+
+msgid "nothing installed handles this"
+msgstr "ничто из установленного этим не занимается"
+
+msgid "vibe"
+msgstr "vibe"
+
+msgid "the assistant is not on this machine, so there is no backend to choose"
+msgstr "помощника нет на этой машине, поэтому выбирать движок не из чего"
+
+msgid "backend"
+msgstr "движок"
+
+msgid "which service the assistant sends your messages to"
+msgstr "в какую службу помощник отправляет ваши сообщения"
+
+msgid "no key stored; set one before switching to this backend"
+msgstr "ключ не сохранён; задайте его, прежде чем переключаться на этот движок"
+
+msgid "no adapter, or bluetoothd is not running"
+msgstr "нет адаптера, либо bluetoothd не запущен"
+
+msgid "powered"
+msgstr "включён"
+
+msgid "discoverable"
+msgstr "виден"
+
+msgid "visible to anything scanning"
+msgstr "виден всему, что сканирует"
+
+msgid "pairable"
+msgstr "доступен для сопряжения"
+
+msgid "accepts new pairings"
+msgstr "принимает новые сопряжения"
+
+msgid "nothing has been paired with this adapter"
+msgstr "с этим адаптером пока ничего не сопряжено"
+
+msgid "paired"
+msgstr "сопряжён"
+
+msgid "rfkill"
+msgstr "rfkill"
+
+msgid "rfkill reported nothing"
+msgstr "rfkill ничего не сообщил"
+
+msgid "soft-block"
+msgstr "программная блокировка"
+
+msgid "software; clearing it needs root (rfkill)"
+msgstr "программная; чтобы снять её, нужен root (rfkill)"
+
+msgid "hard-block"
+msgstr "аппаратная блокировка"
+
+msgid "a physical switch; software cannot clear it"
+msgstr "физический переключатель; программно его не снять"
+
+msgid "BlueZ; nothing below works without it"
+msgstr "BlueZ; без него ничего из перечисленного ниже не работает"
+
+msgid "bluez-utils is not installed"
+msgstr "bluez-utils не установлен"
+
+msgid ""
+"this machine has no Bluetooth hardware, so there is nothing to configure"
+msgstr "на этой машине нет оборудования Bluetooth, поэтому настраивать нечего"
+
+msgid "avrcp-volume"
+msgstr "громкость AVRCP"
+
+msgid "fprintd"
+msgstr "fprintd"
+
+msgid ""
+"the fingerprint daemon is an optional dependency; without it no reader can "
+"be used and the lock screen will not offer one"
+msgstr "служба отпечатков — необязательная зависимость; без неё ни один считыватель не пригодится"
+
+msgid "reader"
+msgstr "считыватель"
+
+msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr "fprintd установлен, но не сообщает ни об одном считывателе отпечатков на этой машине"
+
+msgid ""
+"fprintd can see a reader; enrol a finger below and the lock screen will "
+"offer it"
+msgstr "fprintd видит считыватель; зарегистрируйте палец ниже, и экран блокировки предложит его"
+
+msgid "fingerprints"
+msgstr "отпечатки"
+
+msgid ""
+"the reader works, but there is nothing for it to match — the lock screen "
+"stays on the password until a finger is enrolled"
+msgstr "считыватель работает, но ему не с чем сравнивать — экран блокировки предлагает его, только если палец зарегистрирован"
+
+msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr "экран блокировки предлагает считыватель, как только один из них зарегистрирован"
+
+msgid "the stock Arch kernel; what SynapseOS ships"
+msgstr "обычное ядро Arch; то, что поставляет SynapseOS"
+
+msgid "long-term support — the fallback worth having installed"
+msgstr "долгосрочная поддержка — запасной вариант, который стоит держать установленным"
+
+msgid "desktop-tuned; usually the best for latency and gaming"
+msgstr "настроено под рабочий стол; обычно лучшее по задержкам и для игр"
+
+msgid "security-hardened; slower, and it breaks some drivers"
+msgstr "усилено по безопасности; медленнее, и ломает часть драйверов"
+
+msgid "real-time preemption; for audio work"
+msgstr "вытеснение реального времени; для работы со звуком"
+
+msgid "real-time on the LTS base"
+msgstr "реальное время на базе LTS"
+
+msgid "CachyOS BORE + sched-ext; tuned hard for desktop responsiveness"
+msgstr "CachyOS BORE + sched-ext; жёстко настроено на отзывчивость рабочего стола"
+
+msgid ""
+"the CachyOS patches on the LTS base — the Cachy kernel worth keeping as the "
+"fallback"
+msgstr "патчи CachyOS на базе LTS — ядро Cachy, которое стоит держать как запасное"
+
+msgid ""
+"CachyOS with the hardened patch set; same driver caveats as linux-hardened"
+msgstr "CachyOS с усиленным набором патчей; те же оговорки по драйверам, что и у linux-hardened"
+
+msgid "pacman not available"
+msgstr "pacman недоступен"
+
+msgid ""
+"The running kernel has no actions: removing what you booted from is how a "
+"machine stops booting. Reboot into another one first."
+msgstr "У работающего ядра нет действий: удалить то, с чего вы загрузились, — это способ получить машину, которая больше не загружается."
+
+msgid ""
+"No bootloader configuration was found, so whether a kernel is bootable "
+"cannot be answered here. Looked for limine.conf and loader/entries under /"
+"boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
+msgstr "Конфигурация загрузчика не найдена, поэтому сказать, загружаемо ли ядро, невозможно."
+
+msgid ""
+"⚠ More than one bootloader is configured here. Which one the firmware "
+"actually starts cannot be read reliably, so a kernel counts as bootable if "
+"ANY of them can boot it."
+msgstr "⚠ Здесь настроено более одного загрузчика. Какой из них действительно использует прошивка, решает порядок загрузки, а не этот список."
+
+msgid ""
+"“Make default” sets GRUB_DEFAULT=saved in /etc/default/grub, regenerates "
+"grub.cfg, then runs grub-set-default — in that order, because GRUB_DEFAULT "
+"is read when the config is generated, not at boot. The confirmation lists "
+"all three."
+msgstr "«Сделать загружаемым» задаёт GRUB_DEFAULT=saved в /etc/default/grub, заново создаёт grub.cfg, затем выполняет grub-set-default — именно в таком порядке, потому что GRUB_DEFAULT читается при создании конфигурации, а не при загрузке. В подтверждении перечислены все три."
+
+msgid "“Make default” runs bootctl set-default."
+msgstr "«Сделать основным» выполняет bootctl set-default."
+
+msgid ""
+"“Make default” writes default_entry: into limine.conf, naming the entry by "
+"path so a reordering cannot quietly change what it means."
+msgstr "«Сделать основным» записывает default_entry: в limine.conf, называя запись по пути, чтобы перестановка не изменила её смысл незаметно."
+
+msgid "nmcli reported nothing"
+msgstr "nmcli ничего не сообщил"
+
+msgid "no connection"
+msgstr "нет соединения"
+
+msgid ""
+"Default-drop inbound. Loopback, replies to connections this machine made, "
+"ICMP, and anything from the local network are let through; unsolicited "
+"traffic from a public address is not."
+msgstr "Входящий трафик по умолчанию отбрасывается. Петля, ответы на соединения, начатые этой машиной, ICMP и всё из локальной сети пропускаются; незапрошенный трафик с публичного адреса — нет."
+
+msgid "input filtering"
+msgstr "фильтрация входящего"
+
+msgid "container links"
+msgstr "связи контейнеров"
+
+msgid "rebuilt"
+msgstr "пересобран"
+
+msgid ""
+"The firewall has gone missing and been rebuilt this many times since synnet "
+"started. Something on this machine is flushing nftables."
+msgstr "Сколько раз брандмауэр исчезал и пересобирался с момента запуска synnet."
+
+msgid ""
+"The daemon that applies all of this. The rules outlive it, so a stopped "
+"synnet leaves the last ruleset in place and stops maintaining it."
+msgstr "Служба, которая всё это применяет. Правила переживают её, поэтому остановленный synnet не оставляет машину без защиты."
+
+msgid ""
+"Arch's own firewall service, which SynapseOS does not use — synnet manages "
+"its table whether or not this is active."
+msgstr "Собственная служба брандмауэра Arch, которой SynapseOS не пользуется — synnet ведёт свою таблицу независимо от того, активна ли она."
+
+msgid "NetworkManager is not installed"
+msgstr "NetworkManager не установлен"
+
+msgid "wwan"
+msgstr "мобильная связь"
+
+msgid "runs NVIDIA's suspend hook"
+msgstr "выполняет хук засыпания NVIDIA"
+
+msgid "runs NVIDIA's resume hook"
+msgstr "выполняет хук пробуждения NVIDIA"
+
+msgid "runs NVIDIA's hibernate hook"
+msgstr "выполняет хук гибернации NVIDIA"
+
+msgid "keeps the driver loaded with no client"
+msgstr "держит драйвер загруженным без клиента"
+
+msgid "records connector state changes"
+msgstr "записывает изменения состояния разъёмов"
+
+msgid "the AI daemon; holds GPU memory"
+msgstr "служба ИИ; занимает память GPU"
+
+msgid "the intrusion monitor"
+msgstr "монитор вторжений"
+
+msgid "network policy and the firewall set"
+msgstr "сетевые правила и набор брандмауэра"
+
+msgid "last-suspend"
+msgstr "последний сон"
+
+msgid "when this boot last went to sleep"
+msgstr "когда эта загрузка в последний раз уходила в сон"
+
+msgid "last-resume"
+msgstr "последнее пробуждение"
+
+msgid "when it came back"
+msgstr "когда она вернулась"
+
+msgid "LANG and friends, /etc/locale.conf"
+msgstr "LANG и родственные, /etc/locale.conf"
+
+msgid "the tty and the greeter"
+msgstr "tty и экран входа"
+
+msgid "xkb layout — what the desktop uses"
+msgstr "раскладка xkb — та, которую использует рабочий стол"
+
+msgid "keymap-xkb-variant"
+msgstr "вариант xkb"
+
+msgid "xkb variant, blank for the default"
+msgstr "вариант xkb, пусто — по умолчанию"
+
+msgid "keymap-xkb-model"
+msgstr "модель xkb"
+
+msgid "xkb model"
+msgstr "модель xkb"
+
+msgid "locale"
+msgstr "язык"
+
+msgid "localectl not installed"
+msgstr "localectl не установлен"
+
+msgid "keymap-console"
+msgstr "раскладка консоли"
+
+msgid "keymap-xkb"
+msgstr "раскладка xkb"
+
+msgid "wifi"
+msgstr "Wi-Fi"
+
+msgid "Screen reader"
+msgstr "Экранный диктор"
+
+msgid ""
+"Speak the focused window as focus moves, and the highlighted text on "
+"Super+U. Super+Shift+U toggles it"
+msgstr "Проговаривает окно в фокусе по мере его смены, а выделенный текст — по Super+Alt+S"
+
+msgid "needs syn-speak(1), shipped by the synui package"
+msgstr "требуется syn-speak(1) из пакета synui"
+
+msgid "Answer to its name"
+msgstr "Отзываться на своё имя"
+
+msgid ""
+"Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
+"it is turned off; the bar shows a microphone while it is on"
+msgstr "Слушать «Synapse» и отвечать вслух. ДЕРЖИТ МИКРОФОН ОТКРЫТЫМ, пока не будет выключено; всё это время панель показывает микрофон"
+
+msgid "needs vibe(1) · synpkg install vibe"
+msgstr "требуется vibe(1) · synpkg install vibe"
+
+msgid "Voice"
+msgstr "Голос"
+
+msgid "piper is chibi's; espeak-ng is the fallback"
+msgstr "piper — из chibi; espeak-ng — запасной"
+
+msgid "Dictation"
+msgstr "Диктовка"
+
+msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgstr "faster-whisper, из chibi. Super+Shift+V печатает то, что слышит"
+
+msgid "Speech rate"
+msgstr "Скорость речи"
+
+msgid "Words per minute, 80 to 450"
+msgstr "Слов в минуту, от 80 до 450"
+
+msgid "Speech volume"
+msgstr "Громкость речи"
+
+msgid "Wake words"
+msgstr "Слова пробуждения"
+
+msgid ""
+"Comma separated. \"computer\" is kept because whisper transcribes it every "
+"time · drop it if it wakes on the word in conversation"
+msgstr "Через запятую. «computer» оставлено, потому что whisper распознаёт его каждый раз · уберите его, если оно срабатывает в разговоре"
+
+msgid ""
+"the announcer · the Screen reader switch above is what turns it on. \"not "
+"installed\" with the switch on means synui is older than 0.1.0-564 and "
+"nothing will be announced"
+msgstr "диктор · включает его переключатель «Экранный диктор» выше. «не установлено» значит, что пакет synui не поставил юнит"
+
+msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr "слушатель. Поставляется выключенным · включает его переключатель выше"
+
+msgid "kernel hardening baseline"
+msgstr "основа усиления ядра"
+
+msgid "anything here WINS over the shipped baseline"
+msgstr "то, что здесь, ПЕРЕВЕШИВАЕТ поставляемую основу"
+
+msgid "refused kernel modules"
+msgstr "отклонённые модули ядра"
+
+msgid "synapse_kmod parameters — the C defaults are NOT what loads"
+msgstr "параметры synapse_kmod — значения по умолчанию в C НЕ являются тем, что загружается"
+
+msgid "audit decisions we have already made"
+msgstr "решения аудита, которые уже приняты"
+
+msgid "AI daemon"
+msgstr "Служба ИИ"
+
+msgid "compositor rc — an upgrade never rewrites a user's copy"
+msgstr "rc композитора — обновление никогда не переписывает копию пользователя"
+
+msgid "the vendor default application list; this is what WINS"
+msgstr "список приложений по умолчанию от поставщика; именно он ПЕРЕВЕШИВАЕТ"
+
+msgid "/etc/os-release"
+msgstr "/etc/os-release"
+
+msgid "kernel"
+msgstr "ядро"
+
+msgid "running kernel"
+msgstr "работающее ядро"
+
+msgid "hostname"
+msgstr "имя машины"
+
+msgid ""
+"the name this machine answers to on the network — every SynapseOS install "
+"ships as `synapse`"
+msgstr "имя, на которое эта машина отзывается в сети — каждая установка SynapseOS начинается с одного и того же"
+
+msgid "uptime"
+msgstr "время работы"
+
+msgid "since boot"
+msgstr "с момента загрузки"
+
+msgid "rgb"
+msgstr "RGB"
+
+msgid "syn-rgb is not installed"
+msgstr "syn-rgb не установлен"
+
+msgid "the wallpaper accent on RGB hardware — install `openrgb` to use it"
+msgstr "акцент обоев на оборудовании RGB — установите `openrgb`, чтобы им пользоваться"
+
+msgid "the wallpaper accent on the RAM, the board and the keyboard"
+msgstr "акцент обоев на памяти, плате и клавиатуре"
+
+msgid "clock-local"
+msgstr "местное время"
+
+msgid "as the system reads it"
+msgstr "как его читает система"
+
+msgid "clock-utc"
+msgstr "всемирное время"
+
+msgid "UTC"
+msgstr "UTC"
+
+msgid "rtc"
+msgstr "аппаратные часы"
+
+msgid "the hardware clock"
+msgstr "часы оборудования"
+
+msgid "is a time client running"
+msgstr "запущен ли клиент времени"
+
+msgid "ntp-synced"
+msgstr "NTP синхронизирован"
+
+msgid "has it actually disciplined the clock"
+msgstr "действительно ли он выровнял часы"
+
+msgid "timezone"
+msgstr "часовой пояс"
+
+msgid "timedatectl not installed"
+msgstr "timedatectl не установлен"
+
+msgid "ntp-enabled"
+msgstr "NTP включён"
+
+msgid "time-format"
+msgstr "формат времени"
+
+msgid "the bar, the lock screen and the desktop clock"
+msgstr "панель, экран блокировки и часы рабочего стола"
+
+msgid "time-seconds"
+msgstr "секунды"
+
+msgid "seconds in the bar clock"
+msgstr "секунды в часах на панели"
+
+msgid "date-format"
+msgstr "формат даты"
+
+msgid "the order the date is written in"
+msgstr "порядок, в котором записывается дата"
+
+msgid "desktop-clock"
+msgstr "часы рабочего стола"
+
+msgid "what the bar is showing right now"
+msgstr "что панель показывает прямо сейчас"
+
+msgid "gpu"
+msgstr "gpu"
+
+msgid "cpu"
+msgstr "cpu"
+
+msgid "off"
+msgstr "выкл"
+
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"
