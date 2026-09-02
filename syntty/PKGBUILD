@@ -278,13 +278,37 @@
 # catalog can express; it is ngettext now, and Polish, Russian and Arabic get
 # the forms they need.
 
+# ── 0.1.0-38: the flake fix from -25 was aimed at grep, and the trap is wider ─
+#
+# `meson test` went red on "the cell box has a positive width and height" and
+# the same suite run by hand went green. Nothing about fonts had changed. The
+# assertion was
+#
+#     fontrun | awk '/^cell/{split($2,d,"x"); exit !(d[1] > 0 && d[2] > 0)}'
+#
+# and awk's `exit` is `grep -q` wearing a different hat: awk stops reading,
+# fontrun's printf takes SIGPIPE, and pipefail reports 141 for a cell box that
+# was fine.
+#
+# ⚠ -25 FIXED THE INSTANCE AND NAMED THE WRONG CAUSE. The trap is not grep -q,
+# it is A CONSUMER THAT STOPS READING, and the suite's self-check only looked
+# for the one spelling. Two `| head -1` pipelines whose status is asserted were
+# sitting there as well, in the graphics block.
+#
+# ⚠ ONLY WHERE THE STATUS IS ASSERTED. Most `| head -1` in this suite feeds a
+# `$(...)` whose VALUE is compared, and a 141 nobody reads harms nothing —
+# rewriting those would be noise. The new gate looks at pipelines followed by
+# `check "…" $?` and flags head, grep -m, and an awk RULE that exits; an awk
+# that sets a flag and exits from END has already read to EOF, and `sed -n '1p'`
+# is the safe `head -1`.
+
 pkgname=syntty
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=37
+pkgrel=38
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

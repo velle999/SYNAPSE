@@ -1545,7 +1545,7 @@ else
 
     # An APC that is not ours is left alone, not guessed at.
     other=$(printf '\033_Xsomething else\033\\\\hello' | "$ST" --cols=20 --rows=2 dump -)
-    printf '%s' "$other" | head -1 | seen 'hello'
+    printf '%s' "$other" | sed -n '1p' | seen 'hello'
     check "an APC belonging to something else is ignored, not eaten" $?
 
     # ⚠ AN UNTERMINATED SEQUENCE MUST NOT GROW A BUFFER FOREVER. This is the
@@ -1553,7 +1553,7 @@ else
     # with no terminator in sight.
     apcout=$(python3 -c "import sys; sys.stdout.write('\033_G' + 'A'*40000 + '\033\\\\' + 'survived')" \
         | "$ST" --cols=20 --rows=2 dump -)
-    printf '%s' "$apcout" | head -1 | seen 'survived'
+    printf '%s' "$apcout" | sed -n '1p' | seen 'survived'
     check "an over-long APC is dropped and the stream stays in step" $?
 fi
 
@@ -1869,7 +1869,12 @@ else
 
     # The cell box is what the whole grid is laid out on. Zero or negative
     # would divide by zero in the renderer, far from here.
-    fontrun | awk '/^cell/{split($2,d,"x"); exit !(d[1] > 0 && d[2] > 0)}'
+    # ⚠ NO `exit` IN THE awk. It is `grep -q` wearing a different hat: awk
+    # stops reading, fontrun's `printf` takes SIGPIPE, and pipefail reports 141
+    # for a cell box that was fine. This one went red under `meson test` and
+    # green run by hand, which is the whole signature.
+    fontrun | awk '/^cell/{split($2,d,"x"); if (d[1] > 0 && d[2] > 0) good=1}
+                   END{exit !good}'
     check "the cell box has a positive width and height" $?
 
     # A font nobody has must not silently become a font somebody has WITHOUT
@@ -2529,6 +2534,30 @@ if [ -n "$selfgrep" ]; then
     printf '%s\n' "$selfgrep" | sed 's/^/        /' >&2
 else
     ok "no assertion in this file pipes into 'grep -q' (it reports 141 on a MATCH)"
+fi
+
+# ⛔ AND NOT ONLY grep -q. THE TRAP IS "A CONSUMER THAT STOPS READING", and it
+# wears other hats: `head -1`, `grep -m1`, and an awk RULE that calls `exit`.
+# The cell-box assertion was `fontrun | awk '/^cell/{... exit ...}'` and went
+# red under `meson test` and green run by hand — the signature of this bug and
+# not of anything about fonts. `sed -n '1p'` is the safe `head -1`; an awk that
+# sets a flag and exits from END has already read to EOF.
+#
+# ⚠ ONLY WHERE THE STATUS IS ASSERTED. Most `| head -1` here feed a `$(...)`
+# whose VALUE is compared, and a 141 nobody reads harms nothing.
+selfexit=$(awk '
+    /^[[:space:]]*#/ { prev = ""; next }
+    prev != "" && /check ".*" \$\?/ {
+        if (prev ~ /\|[ ]*(head|grep[ ]-q|grep[ ]-m)/ ||
+            (prev ~ /awk/ && prev ~ /[^A-Za-z_]exit[^A-Za-z_]/ && prev !~ /END/))
+            print prevn ": " prev
+    }
+    { prev = $0; prevn = NR }' "$0")
+if [ -n "$selfexit" ]; then
+    bad "this suite asserts the status of a pipeline whose consumer stops reading"
+    printf '%s\n' "$selfexit" | sed 's/^/        /' >&2
+else
+    ok "no asserted pipeline ends in a consumer that stops reading"
 fi
 
 echo
