@@ -10,6 +10,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE EXPECTATION BELOW IS BUILT FROM `date`, AND `date` IS TRANSLATED.
+# syn-cal has no po/ and calls gettext nowhere, so its strftime("%B %Y") is
+# always the C locale's "September 2026". `date +'%B %Y'` is not: on a Japanese
+# install it answers "9月 2026", and the assertion compares a localised
+# reference against an unlocalised program and fails on a TUI that drew
+# perfectly. That happened during an update on 2026-09-02.
+#
+# ⚠ EXPORTED, so it reaches `date` AND the binary. Pinning only `date` would
+# work today and break the moment syn-cal learns to translate itself — at which
+# point the two would disagree again, in the other direction.
+#
+# ⚠ AND IT IS NOT A CLAIM THAT ENGLISH IS RIGHT. A calendar that says
+# "September" on a Japanese desktop is a real gap; it is just not this file's,
+# and syn-cal has no catalogs to fix it with yet.
+export LC_ALL=C
+
+
 S=${1:-./build/syn-cal}
 [ -x "$S" ] || { echo "not executable: $S" >&2; exit 1; }
 
