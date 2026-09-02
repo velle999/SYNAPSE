@@ -1,0 +1,19 @@
+# The languages syn-edit has catalogs for, one per line.
+#
+# ⚠ THE SAME THIRTEEN THE DESKTOP SHIPS, and that is a requirement rather than
+# a coincidence: an editor window in English on a German desktop reads as the
+# application being broken. The set is synui's po/LINGUAS and syn-install's
+# LOCALE_ROWS; tests/i18n_test.sh here fails when this list drifts from it.
+de
+fr
+es
+pt
+it
+nl
+pl
+ru
+ja
+zh
+ko
+hi
+ar

@@ -41,6 +41,20 @@ executable('syn-edit', sources,
 
 install_data('data/syn-edit.qml', install_dir: get_option('datadir') / 'syn-edit')
 
+# The translation singleton, as its own QML module directory.
+#
+# ⚠ A qmldir makes its directory an explicit module, and syn-edit.qml is the
+# file quickshell is pointed AT — putting one beside it changes how that file
+# itself resolves. po/ installs the catalogs into qml/i18n/ alongside these.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-edit' / 'qml')
+
+# ⚠ A UI STRING NO TRANSLATOR CAN REACH IS SILENTLY ENGLISH FOREVER, and in
+# QML there is one extra way in: qsTr() looks exactly like the marking and is
+# not — quickshell has no translator to install one into.
+i18n_test = find_program('tests/i18n_test.sh')
+test('i18n', i18n_test, args : [meson.current_source_dir()], timeout : 60)
+
 # Scalable only: Qt renders the SVG at whatever size the dock or the menu asks
 # for, and a set of PNGs would be five more files to keep in step with one
 # drawing.
@@ -54,3 +68,5 @@ test('syn-edit', find_program('tests/syn_edit_test.sh'),
      args: [meson.current_build_dir() / 'syn-edit'],
      workdir: meson.current_source_dir(),
      timeout: 120)
+
+subdir('po')

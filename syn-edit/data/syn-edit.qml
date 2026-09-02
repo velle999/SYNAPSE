@@ -34,11 +34,16 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
+// The translation bridge. ⛔ NOT qsTr(): quickshell has no translator to
+// install one into, so qsTr() compiles and returns its own argument. See
+// qml/I18n.qml.
+import "qml"
+
 FloatingWindow {
     id: root
 
     title: (root.st.file ? root.st.file.replace(/^.*\//, "") : "syn-edit")
-           + (root.st.modified === "1" ? " •" : "") + " — SYNAPSE Edit"
+           + (root.st.modified === "1" ? " •" : "") + " — " + I18n.tr("SYNAPSE Edit")
     implicitWidth: 1080
     implicitHeight: 720
     // Below this the gutter, the sidebar and a usable number of columns stop
@@ -898,7 +903,7 @@ FloatingWindow {
                     // and not the Documents toggle.
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     spacing: 4
-                    ToolButton { label: "Documents"; tip: "show or hide the list"
+                    ToolButton { label: I18n.tr("Documents"); tip: I18n.tr("show or hide the list")
                                  active: root.st.tree === "1"
                                  onTriggered: root.send("set tree!") }
                     // The tab strip says the same thing the sidebar says, and
@@ -906,10 +911,10 @@ FloatingWindow {
                     // it is a switch rather than a decision made here. It had
                     // never had one: `:set tabbar!` was the only control, in a
                     // window that exists so nobody has to type that.
-                    ToolButton { label: "Tabs"; tip: "show or hide the tab strip"
+                    ToolButton { label: I18n.tr("Tabs"); tip: I18n.tr("show or hide the tab strip")
                                  active: root.st.tabbar === "1"
                                  onTriggered: root.send("set tabbar!") }
-                    ToolButton { label: "About"; tip: "version and licence"
+                    ToolButton { label: I18n.tr("About"); tip: I18n.tr("version and licence")
                                  onTriggered: aboutPane.visible = !aboutPane.visible }
                 }
             }
@@ -925,24 +930,24 @@ FloatingWindow {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     spacing: 4
 
-                    ToolButton { label: "New";  tip: "a new empty buffer";  onTriggered: root.send("new") }
-                    ToolButton { label: "Open"; tip: root.haveFiles ? "browse for a file"
-                                                                   : "type a path (:e)"
+                    ToolButton { label: I18n.tr("New");  tip: I18n.tr("a new empty buffer");  onTriggered: root.send("new") }
+                    ToolButton { label: I18n.tr("Open"); tip: root.haveFiles ? I18n.tr("browse for a file")
+                                                                   : I18n.tr("type a path (:e)")
                                  onTriggered: root.haveFiles ? browser.show()
                                                              : root.actKeys(":e ") }
-                    ToolButton { label: "Save"; tip: root.named ? "write this buffer"
-                                                               : "name it, then write it"
+                    ToolButton { label: I18n.tr("Save"); tip: root.named ? I18n.tr("write this buffer")
+                                                               : I18n.tr("name it, then write it")
                                  onTriggered: root.saveNow() }
-                    ToolButton { label: "Save As"; tip: "write it somewhere else"
+                    ToolButton { label: I18n.tr("Save As"); tip: I18n.tr("write it somewhere else")
                                  onTriggered: root.saveAs() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Undo"; tip: "Ctrl+Z";       onTriggered: root.undo() }
-                    ToolButton { label: "Redo"; tip: "Ctrl+Shift+Z"; onTriggered: root.redo() }
+                    ToolButton { label: I18n.tr("Undo"); tip: "Ctrl+Z";       onTriggered: root.undo() }
+                    ToolButton { label: I18n.tr("Redo"); tip: "Ctrl+Shift+Z"; onTriggered: root.redo() }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
-                    ToolButton { label: "Find"; tip: "Ctrl+F";       onTriggered: root.actKeys("/") }
-                    ToolButton { label: "Replace"; tip: "Ctrl+R";    onTriggered: root.actKeys(":%s/") }
+                    ToolButton { label: I18n.tr("Find"); tip: "Ctrl+F";       onTriggered: root.actKeys("/") }
+                    ToolButton { label: I18n.tr("Replace"); tip: "Ctrl+R";    onTriggered: root.actKeys(":%s/") }
                 }
             }
 
@@ -974,7 +979,7 @@ FloatingWindow {
                         Text {
                             id: tabLabel
                             anchors.centerIn: parent
-                            text: (modelData.name.replace(/^.*\//, "") || "[No Name]")
+                            text: (modelData.name.replace(/^.*\//, "") || I18n.tr("[No Name]"))
                                   + (modelData.modified ? " •" : "")
                             font.family: root.uiFont
                             font.pixelSize: root.ui(12)
@@ -1038,7 +1043,7 @@ FloatingWindow {
                 Text {
                     anchors { left: parent.left; leftMargin: 14
                               verticalCenter: parent.verticalCenter }
-                    text: "DOCUMENTS"
+                    text: I18n.tr("DOCUMENTS")
                     font.family: root.uiFont
                     font.pixelSize: root.ui(10)
                     font.letterSpacing: 1.2
@@ -1109,7 +1114,7 @@ FloatingWindow {
                             // the ends are what tell "config.old.json" from
                             // "config.new.json".
                             elide: Text.ElideMiddle
-                            text: (card.modelData.name.replace(/^.*\//, "") || "[No Name]")
+                            text: (card.modelData.name.replace(/^.*\//, "") || I18n.tr("[No Name]"))
                             font.family: root.uiFont
                             font.pixelSize: root.ui(12)
                             font.bold: card.modelData.current
@@ -1123,7 +1128,7 @@ FloatingWindow {
                             // other window in the suite writes it.
                             elide: Text.ElideLeft
                             text: {
-                                if (!card.modelData.named) return "not saved yet"
+                                if (!card.modelData.named) return I18n.tr("not saved yet")
                                 const home = Quickshell.env("HOME") || ""
                                 let d = card.modelData.name.replace(/\/[^/]*$/, "")
                                 if (d === "") d = "/"
@@ -1224,8 +1229,9 @@ FloatingWindow {
                         width: parent.width
                         wrapMode: Text.Wrap
                         text: root.askClose
-                              ? (root.askClose.name.replace(/^.*\//, "") || "[No Name]")
-                                + " has unsaved changes."
+                              ? I18n.tr("%1 has unsaved changes.").arg(
+                                    root.askClose.name.replace(/^.*\//, "")
+                                    || I18n.tr("[No Name]"))
                               : ""
                         font.family: root.uiFont
                         font.pixelSize: root.ui(11)
@@ -1244,17 +1250,17 @@ FloatingWindow {
                         // open the file browser mid-question, which is a second
                         // question on top of the first.
                         ToolButton {
-                            label: "Save & close"
-                            tip: "write it, then close it"
+                            label: I18n.tr("Save & close")
+                            tip: I18n.tr("write it, then close it")
                             centered: false
                             visible: root.askClose !== null && root.askClose.named
                             onTriggered: root.saveAndClose()
                         }
-                        ToolButton { label: "Discard"; centered: false
-                                     tip: "close it and lose the changes"
+                        ToolButton { label: I18n.tr("Discard"); centered: false
+                                     tip: I18n.tr("close it and lose the changes")
                                      onTriggered: root.discardAndClose() }
-                        ToolButton { label: "Cancel"; centered: false
-                                     tip: "keep it open"
+                        ToolButton { label: I18n.tr("Cancel"); centered: false
+                                     tip: I18n.tr("keep it open")
                                      onTriggered: root.askClose = null }
                     }
                 }
@@ -1743,8 +1749,10 @@ FloatingWindow {
                 Rectangle {
                     readonly property string label: {
                         const m = root.st.mode || "INSERT"
-                        if (m === "REPLACE") return "OVERWRITE"
-                        if (m.indexOf("V") === 0) return "SELECT"
+                        if (m === "REPLACE") return I18n.tr("OVERWRITE")
+                        if (m.indexOf("V") === 0) return I18n.tr("SELECT")
+                        if (m === "INSERT") return I18n.tr("INSERT")
+                        if (m === "NORMAL") return I18n.tr("NORMAL")
                         return m
                     }
                     width: modeText.implicitWidth + 20
@@ -1766,7 +1774,7 @@ FloatingWindow {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     leftPadding: 12
-                    text: (root.st.file || "[No Name]")
+                    text: (root.st.file || I18n.tr("[No Name]"))
                           + (root.st.modified === "1" ? "  [+]" : "")
                           + (root.st.readonly === "1" ? "  [RO]" : "")
                     font.family: root.uiFont
@@ -1782,7 +1790,7 @@ FloatingWindow {
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (root.st.binary === "1" ? "binary  " : "")
+                    text: (root.st.binary === "1" ? I18n.tr("binary") + "  " : "")
                           + (root.st.eol === "crlf" ? "CRLF  " : "")
                           + (root.st.lang || "text")
                     font.family: root.uiFont
@@ -1791,8 +1799,9 @@ FloatingWindow {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (root.st.line || "1") + ":" + (root.st.col || "1")
-                          + "  of " + (root.st.lines || "1")
+                    text: I18n.tr("%1:%2  of %3").arg(root.st.line || "1")
+                                                    .arg(root.st.col || "1")
+                                                    .arg(root.st.lines || "1")
                     font.family: root.uiFont
                     font.pixelSize: root.ui(11)
                     color: root.cDim
@@ -1890,37 +1899,37 @@ FloatingWindow {
                     model: {
                         const sel = root.hasSel
                         return [
-                            { label: sel ? "Cut" : "Cut line",
+                            { label: sel ? I18n.tr("Cut") : I18n.tr("Cut line"),
                               keys: "", act: "cut", hint: "Ctrl+X" },
-                            { label: sel ? "Copy" : "Copy line",
+                            { label: sel ? I18n.tr("Copy") : I18n.tr("Copy line"),
                               keys: "", act: "copy", hint: "Ctrl+C" },
-                            { label: "Paste", keys: "", act: "paste", hint: "Ctrl+V" },
+                            { label: I18n.tr("Paste"), keys: "", act: "paste", hint: "Ctrl+V" },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Select All", keys: "", act: "selectall", hint: "Ctrl+A" },
+                            { label: I18n.tr("Select All"), keys: "", act: "selectall", hint: "Ctrl+A" },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Undo", keys: "", act: "undo", hint: "Ctrl+Z" },
-                            { label: "Redo", keys: "", act: "redo", hint: "Ctrl+Shift+Z" },
+                            { label: I18n.tr("Undo"), keys: "", act: "undo", hint: "Ctrl+Z" },
+                            { label: I18n.tr("Redo"), keys: "", act: "redo", hint: "Ctrl+Shift+Z" },
                             { label: "-", keys: "", hint: "" },
                             // Task list. `o- [ ] ` deliberately LEAVES the
                             // engine in INSERT with the caret after the bracket:
                             // the next thing anybody wants after "new task" is
                             // to type the task, and a menu item that dropped
                             // them in NORMAL would eat that first word.
-                            { label: "Task list…", keys: "", act: "tasks", hint: "" },
-                            { label: "New task", keys: "o- [ ] ", hint: "" },
+                            { label: I18n.tr("Task list…"), keys: "", act: "tasks", hint: "" },
+                            { label: I18n.tr("New task"), keys: "o- [ ] ", hint: "" },
                             { label: root.taskAtCaret()
-                                     ? (root.taskAtCaret().done ? "Untick this task"
-                                                                : "Tick this task")
-                                     : "Tick this task",
+                                     ? (root.taskAtCaret().done ? I18n.tr("Untick this task")
+                                                                : I18n.tr("Tick this task"))
+                                     : I18n.tr("Tick this task"),
                               keys: "", act: "tasktoggle", hint: "",
                               off: root.taskAtCaret() === null },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Find…", keys: "/", hint: "Ctrl+F" },
-                            { label: "Replace…", keys: ":%s/", hint: "Ctrl+R" },
+                            { label: I18n.tr("Find…"), keys: "/", hint: "Ctrl+F" },
+                            { label: I18n.tr("Replace…"), keys: ":%s/", hint: "Ctrl+R" },
                             { label: "-", keys: "", hint: "" },
-                            { label: "Open…", keys: "", act: "open", hint: "" },
-                            { label: "Save", keys: "", act: "save", hint: "Ctrl+S" },
-                            { label: "Save As…", keys: "", act: "saveas", hint: "" }
+                            { label: I18n.tr("Open…"), keys: "", act: "open", hint: "" },
+                            { label: I18n.tr("Save"), keys: "", act: "save", hint: "Ctrl+S" },
+                            { label: I18n.tr("Save As…"), keys: "", act: "saveas", hint: "" }
                         ]
                     }
                     delegate: Item {
@@ -2152,7 +2161,7 @@ FloatingWindow {
 
                 Text {
                     width: parent.width
-                    text: (browser.mode === "save" ? "Save in:  " : "") + browser.dir
+                    text: (browser.mode === "save" ? I18n.tr("Save in:") + "  " : "") + browser.dir
                     elide: Text.ElideLeft
                     font.family: root.monoFont
                     font.pixelSize: root.ui(12)
@@ -2231,22 +2240,23 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
-                    ToolButton { label: browser.mode === "save" ? "Save here" : "Open"
+                    ToolButton { label: browser.mode === "save" ? I18n.tr("Save here")
+                                                                : I18n.tr("Open")
                                  tip: browser.mode === "save"
-                                      ? "write into this folder — then type a name"
-                                      : "open the highlighted file"
+                                      ? I18n.tr("write into this folder — then type a name")
+                                      : I18n.tr("open the highlighted file")
                                  onTriggered: browser.mode === "save"
                                               ? browser.seedWrite(
                                                     (browser.dir === "/" ? "" : browser.dir) + "/")
                                               : browser.enter(browser.rows[browser.sel]) }
                     // Only in save mode, and only with a FILE highlighted —
                     // there is nothing to write over otherwise.
-                    ToolButton { label: "Overwrite"
+                    ToolButton { label: I18n.tr("Overwrite")
                                  visible: browser.mode === "save"
                                           && (browser.rows[browser.sel] || {}).type === "file"
-                                 tip: "write over the highlighted file"
+                                 tip: I18n.tr("write over the highlighted file")
                                  onTriggered: browser.enter(browser.rows[browser.sel]) }
-                    ToolButton { label: "Cancel"; tip: "Esc"
+                    ToolButton { label: I18n.tr("Cancel"); tip: "Esc"
                                  onTriggered: { browser.visible = false; editor.forceActiveFocus() } }
                 }
             }
@@ -2301,7 +2311,7 @@ FloatingWindow {
                     Text {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Tasks"
+                        text: I18n.tr("Tasks")
                         font.family: root.uiFont
                         font.pixelSize: root.ui(14)
                         font.bold: true
@@ -2311,7 +2321,8 @@ FloatingWindow {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.tasks.length === 0 ? ""
-                              : tasksPanel.doneCount + " of " + root.tasks.length + " done"
+                              : I18n.trn("%1 of %2 done", "%1 of %2 done", root.tasks.length)
+                                    .arg(tasksPanel.doneCount).arg(root.tasks.length)
                         font.family: root.uiFont
                         font.pixelSize: root.ui(11)
                         color: root.cDim
@@ -2328,8 +2339,8 @@ FloatingWindow {
                 Text {
                     width: parent.width
                     visible: root.tasks.length === 0
-                    text: "No tasks in this file.\n\nLines like  - [ ] something  are tasks.\n"
-                          + "Right-click ▸ New task adds one."
+                    text: I18n.tr("No tasks in this file.\n\nLines like  - [ ] something  are tasks.\n"
+                                  + "Right-click ▸ New task adds one.")
                     wrapMode: Text.WordWrap
                     font.family: root.uiFont
                     font.pixelSize: root.ui(12)
@@ -2396,7 +2407,7 @@ FloatingWindow {
                                       verticalCenter: parent.verticalCenter }
                             elide: Text.ElideRight
                             text: taskRow.modelData.text === ""
-                                  ? "(untitled task)" : taskRow.modelData.text
+                                  ? I18n.tr("(untitled task)") : taskRow.modelData.text
                             font.family: root.uiFont
                             font.pixelSize: root.ui(12)
                             font.strikeout: taskRow.modelData.done
@@ -2431,15 +2442,15 @@ FloatingWindow {
                     id: taskFoot
                     width: parent.width
                     spacing: 8
-                    ToolButton { label: "New task"
-                                 tip: "add a task at the caret"
+                    ToolButton { label: I18n.tr("New task")
+                                 tip: I18n.tr("add a task at the caret")
                                  onTriggered: {
                                      tasksPanel.hide()
                                      root.actKeys("o- [ ] ")
                                  } }
-                    ToolButton { label: "Refresh"; tip: "re-read the file"
+                    ToolButton { label: I18n.tr("Refresh"); tip: I18n.tr("re-read the file")
                                  onTriggered: root.taskScan() }
-                    ToolButton { label: "Close"; tip: "Esc"
+                    ToolButton { label: I18n.tr("Close"); tip: "Esc"
                                  onTriggered: tasksPanel.hide() }
                 }
             }
@@ -2472,7 +2483,7 @@ FloatingWindow {
                 spacing: 6
 
                 Text {
-                    text: "SYNAPSE Edit"
+                    text: I18n.tr("SYNAPSE Edit")
                     font.family: root.uiFont
                     font.pixelSize: root.ui(16)
                     font.bold: true
@@ -2526,7 +2537,7 @@ FloatingWindow {
                     color: closeMa.containsMouse ? root.wash(0.3) : root.wash(0.16)
                     Text {
                         anchors.centerIn: parent
-                        text: "Close"
+                        text: I18n.tr("Close")
                         font.family: root.uiFont
                         font.pixelSize: root.ui(11)
                         color: root.cText

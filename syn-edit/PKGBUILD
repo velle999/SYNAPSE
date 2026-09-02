@@ -171,7 +171,33 @@ pkgver=0.1.0
 #   Twenty-four checks in syn_edit_test.sh, including the layout's anchors:
 #   a wrong one does not error, it just draws a window arranged badly, which
 #   nothing notices and nobody reports. 376 pass.
-pkgrel=16
+# 17: the window speaks thirteen languages.
+#   65 msgids through the same JSON bridge synui's bar and the other three
+#   quickshell apps carry: quickshell has no translator machinery, so qsTr()
+#   compiles and returns its own argument. One byte-identical data/qml/I18n.qml,
+#   catalogs generated beside it at build time, read with a blocking FileView
+#   because tr() is a function and not a binding.
+#   ⛔ THIS WINDOW OWNS NO TEXT, WHICH IS ALSO WHERE THE HAZARD IS. A long-lived
+#   `syn-edit serve` holds the buffer and this file sends it the editor's own
+#   language — "set tree!", ":e ", "gui insert", "ggVG", "o- [ ] " — and a
+#   context-menu row carries that string in `keys:` or `act:` right beside the
+#   label a person reads. A translated one is a menu item that does nothing.
+#   The suite asserts no `act:`/`keys:`/`hint:` is marked and that nothing
+#   reaching send()/sendEx()/sendKeys()/actKeys() comes from the catalog.
+#   ⛔ AND `label: "-"` IS A SEPARATOR SENTINEL. The delegate reads
+#   `modelData.label === "-"` to draw a 5-pixel rule instead of a row; a
+#   translated one is three empty entries in the context menu.
+#   ⛔ AND THE MODE STRING IS THE ENGINE'S, COMPARED IN NINE PLACES — the caret
+#   shape, the chip colour and the insert test all read `st.mode`. Only the CHIP
+#   is drawn, so the mapping to a translated name happens in one place and every
+#   comparison keeps the engine's spelling. Same shape as synfiles' propLabel().
+#   ⚠ "Ctrl+Z" and the other shortcut hints stay English on purpose: they are
+#   pictures of keycaps, and every keyboard this ships on has Ctrl printed on
+#   it. "[+]", "[RO]" and CRLF stay for the same reason — the editor's notation.
+#   ⚠ Two counted sentences were assembled from fragments and are one msgid
+#   each now: "%1:%2  of %3" in the status bar, and "%1 of %2 done" in the task
+#   pane — a trn(), because the number of tasks decides the form.
+pkgrel=17
 pkgdesc="SynapseOS text editor: modal in a terminal, modeless in a window, syntax highlighting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
