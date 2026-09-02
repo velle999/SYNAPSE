@@ -1350,6 +1350,78 @@ check_tarball() {
 # component is in EXTERNAL, or it is in publish-sources.sh's NOT_EXTERNAL table
 # with a sentence saying why — and a NEW component is in neither, so it fails
 # here on the commit that adds it rather than in a year.
+# ── locale: a test must not read what gettext rewrites ──────────────────────
+#
+# ⛔ FOUR COMPONENTS BROKE THIS WAY IN ONE WEEK, each found separately, each
+# from a VM running in Japanese, each after the commit had shipped:
+#
+#   chibi 20        `pacman -Qi` prints 依存パッケージ, not "Depends On", so the
+#                   dependency-closure walk returned nothing and the vendored
+#                   soname check reported 536 false errors. Build FAILED.
+#   syn-arsenal 13  `pacman -Si` prints 名前, not "Name" — every row of the
+#                   software browser came out blank, silently.
+#   syn-confine 3   ls/cat/sudo print 許可がありません, not "Permission denied",
+#                   so seven assertions failed on a sandbox that denied all
+#                   seven correctly.
+#   syn-cal 26      `date +%B` prints 9月, and the program it was compared
+#                   against does not call setlocale at all.
+#
+# Every one is invisible on a developer's machine, because a developer's machine
+# is in English. That is what makes it worth a check rather than a habit.
+#
+# ⚠ ONLY THE TWO SHAPES THAT ARE MECHANICALLY CERTAIN. A test grepping for
+# "denied" in OUR OWN program's output is fine — synpkg and syn-confine both
+# print English by design — so "any grep for an English word" is not the rule
+# and would cry wolf until it was ignored. What is flagged is reading a
+# localised field name out of pacman, and building an expectation out of a
+# localised `date`. Both are always wrong and both have already happened.
+check_locale() {
+    local bad=$FINDINGS f hits=""
+
+    local body
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        # An exported LC_ALL anywhere in the file pins the whole script, which
+        # is the fix syn-confine and syn-cal both took.
+        grep -qE '^[[:space:]]*export[[:space:]]+LC_ALL=' "$f" && continue
+
+        # ⛔ CODE ONLY. The first version of this matched THIS FILE, on the
+        # comment above that documents `date +%B` as the thing to avoid — the
+        # same way tests/i18n_bar.sh's qsTr check first matched I18n.qml's own
+        # header explaining why qsTr is a trap. A checker that describes what it
+        # forbids will always find itself unless it reads code alone.
+        body=$(grep -vE '^[[:space:]]*#' "$f")
+
+        # 1. pacman's -Qi/-Si FIELD NAMES, which gettext rewrites.
+        if printf '%s\n' "$body" | grep -qE 'pacman[^|]*-(Qi|Si)' &&
+           printf '%s\n' "$body" | grep -qE '\^(Name|Version|Description|Depends On|Installed Size|Required By)' &&
+           ! printf '%s\n' "$body" | grep -qE 'LC_ALL=C[[:space:]]+pacman'; then
+            hits="$hits $f(pacman -Qi/-Si field names)"
+        fi
+
+        # 2. An expectation built from `date` with a NAME in it. %d and %Y are
+        #    digits everywhere; %A %B %a %b %h %p %Z %c are words.
+        if printf '%s\n' "$body" | grep -qE '(\$\(|`)date [^)`]*%[ABbahpZc]'; then
+            hits="$hits $f(date names a month or a day)"
+        fi
+        # ⚠ PKGBUILDs ARE IN THE LIST, because one of the four was in one:
+        # chibi's package() walks the depends closure with `pacman -Qi`, and a
+        # sweep of test scripts alone would have missed the case that actually
+        # failed a build.
+    done < <(ls */tests/*.sh tests/*.sh tools/*.sh */PKGBUILD 2>/dev/null)
+
+    if [ -n "$hits" ]; then
+        fail locale "a test reads output that gettext rewrites:$hits" \
+            "It passes here because this machine is in English, and fails on" \
+            "every installed box that is not — which is where syn-update runs." \
+            "Fix: export LC_ALL=C at the top of the script, or put LC_ALL=C on" \
+            "the one command whose output is parsed."
+    fi
+
+    [ "$FINDINGS" -eq "$bad" ] &&
+        ok locale "$(ls */tests/*.sh tests/*.sh tools/*.sh */PKGBUILD 2>/dev/null | wc -l) file(s) — none reads a translated field name or month"
+}
+
 check_external_membership() {
     local bad=$FINDINGS ext notext name c
 
@@ -1485,6 +1557,7 @@ check_subdir
 check_tarball
 check_external_membership
 check_external
+check_locale
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \
