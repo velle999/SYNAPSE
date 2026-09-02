@@ -182,11 +182,23 @@ fi
 # from the WORKING TREE, so an uncommitted edit would ship inside an asset
 # nobody can re-derive from the tag — which is the one property this format
 # promises.
-if [ "$list" -eq 0 ] && [ "$dry" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
-    echo "publish-sources: the tree has uncommitted changes." >&2
-    echo "                 Commit and push first — an asset built from an" >&2
-    echo "                 unpublished edit cannot be re-derived from its tag." >&2
-    exit 1
+#
+# ⚠ SCOPED TO WHAT IS BEING PUBLISHED. A tarball is built from one component's
+# subtree, so that subtree is what has to be committed for the asset to be
+# re-derivable. Checking the whole repo means an unrelated component being
+# worked on in the same checkout blocks a release that is itself clean — which
+# it did, while `syn-update` on an installed machine was waiting for it. Naming
+# no component still checks everything, because then everything is published.
+if [ "$list" -eq 0 ] && [ "$dry" -eq 0 ]; then
+    if [ ${#only[@]} -eq 0 ]; then dirty=$(git status --porcelain)
+    else                           dirty=$(git status --porcelain -- "${only[@]}"); fi
+    if [ -n "$dirty" ]; then
+        echo "publish-sources: uncommitted changes in what you are publishing:" >&2
+        echo "$dirty" | sed 's/^/                 /' >&2
+        echo "                 Commit and push first — an asset built from an" >&2
+        echo "                 unpublished edit cannot be re-derived from its tag." >&2
+        exit 1
+    fi
 fi
 
 pkgfield() {  # pkgfield <component> <field>
