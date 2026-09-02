@@ -369,6 +369,9 @@ msgstr ""
 "127.0.0.1:8080 para frontends escritos para o llama-server ou a API da "
 "OpenAI, através do socket incluído"
 
+msgid "unknown"
+msgstr "desconhecido"
+
 msgid "systemctl not available"
 msgstr "systemctl indisponível"
 
@@ -378,6 +381,9 @@ msgstr "modelo"
 msgid "a part-downloaded model; syn-model download"
 msgstr "um modelo transferido pela metade; syn-model download"
 
+msgid "none"
+msgstr "nenhum"
+
 msgid "no model installed · syn-model download"
 msgstr "nenhum modelo instalado · syn-model download"
 
@@ -386,6 +392,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "disponível"
 
 msgid "acceleration"
 msgstr "aceleração"
@@ -460,8 +469,20 @@ msgstr "o que o synui lança como terminal — synuirc, não mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "nada do que está instalado trata disto"
 
+msgid "Claude (Anthropic) API key"
+msgstr "chave de API do Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "chave de API da OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "não instalado"
+
+msgid "bad"
+msgstr "com falha"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "o assistente não está nesta máquina, por isso não há motor a escolher"
@@ -471,6 +492,17 @@ msgstr "motor"
 
 msgid "which service the assistant sends your messages to"
 msgstr "a que serviço o assistente envia as suas mensagens"
+
+msgid "warn"
+msgstr "aviso"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "guardada — clique para a substituir, ou esvazie a caixa para a remover"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "o assistente está definido para este motor e não tem chave, por isso todos os pedidos vão falhar"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "nenhuma chave guardada; defina uma antes de mudar para este motor"
@@ -495,6 +527,15 @@ msgstr "aceita novos emparelhamentos"
 
 msgid "nothing has been paired with this adapter"
 msgstr "ainda não foi emparelhado nada com este adaptador"
+
+msgid "yes"
+msgstr "sim"
+
+msgid "connected"
+msgstr "ligado"
+
+msgid "not connected"
+msgstr "não ligado"
 
 msgid "paired"
 msgstr "emparelhado"
@@ -531,6 +572,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "volume AVRCP"
 
+msgid "see detail"
+msgstr "ver o detalhe"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -548,6 +592,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "o fprintd está instalado mas não comunica nenhum leitor de impressões "
 "digitais nesta máquina"
+
+msgid "present"
+msgstr "presente"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -614,7 +661,9 @@ msgstr "pacman indisponível"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ não está em nenhum repositório do Arch — instalá-lo acrescenta primeiro o repositório do CachyOS (core e extra mantêm a prioridade)"
+msgstr ""
+"  ⓘ não está em nenhum repositório do Arch — instalá-lo acrescenta primeiro "
+"o repositório do CachyOS (core e extra mantêm a prioridade)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ FALTAM os cabeçalhos — o DKMS não consegue compilar para ele"
@@ -622,12 +671,17 @@ msgstr "  ⚠ FALTAM os cabeçalhos — o DKMS não consegue compilar para ele"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ ainda não há entrada no gestor de arranque — use «Tornar inicializável» antes de reiniciar à espera de poder escolher"
+msgstr ""
+"  ⚠ ainda não há entrada no gestor de arranque — use «Tornar inicializável» "
+"antes de reiniciar à espera de poder escolher"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ a configuração do gestor de arranque é só para root, por isso este painel não pode dizer se existe uma entrada — «Tornar inicializável» regenera-a e torna-a legível"
+msgstr ""
+"  ⚠ a configuração do gestor de arranque é só para root, por isso este "
+"painel não pode dizer se existe uma entrada — «Tornar inicializável» "
+"regenera-a e torna-a legível"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -643,6 +697,28 @@ msgid ""
 msgstr ""
 "Não foi encontrada nenhuma configuração de gestor de arranque, por isso não "
 "é possível dizer se um núcleo é inicializável."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "«Tornar inicializável» executa o grub-mkconfig, que encontra sozinho cada núcleo instalado."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "«Tornar inicializável» executa o kernel-install, que escreve uma entrada Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "«Tornar inicializável» executa o limine-update, que regenera as entradas de núcleo."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "o limine não tem instalado nenhum gerador de entradas — «Tornar inicializável» instala o limine-mkinitcpio-hook, que traz um, mais um hook do pacman para que os núcleos futuros sejam tratados automaticamente."
+
+msgid "bootloader"
+msgstr "gestor de arranque"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -705,6 +781,9 @@ msgstr ""
 "Quantas vezes a firewall desapareceu e foi reconstruída desde que o synnet "
 "arrancou."
 
+msgid "active"
+msgstr "ativo"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -748,6 +827,9 @@ msgstr "o monitor de intrusões"
 
 msgid "network policy and the firewall set"
 msgstr "a política de rede e o conjunto da firewall"
+
+msgid "shipped"
+msgstr "incluído"
 
 msgid "last-suspend"
 msgstr "última suspensão"

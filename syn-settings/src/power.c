@@ -97,8 +97,8 @@ int pane_power(void)
 			        !unit_absent(en) ? unit_action : "-");
 		}
 	} else {
-		rec_row("unit\t-\tunknown\t-\t%s\t-",
-		        N_("systemctl not available"));
+		rec_row("unit\t-\t%s\t-\t%s\t-",
+		        N_("unknown"), N_("systemctl not available"));
 	}
 
 	/* ── Sleep hooks on disk ──────────────────────────────────────────── */
@@ -142,7 +142,7 @@ int pane_power(void)
 			const char *state = (st.st_mode & S_IXUSR) ? "executable"
 			                                           : "NOT executable";
 			rec_row("hook\t%s\t%s\t%s\t%s\t-", e->d_name, state,
-			        d == 0 ? "override" : "shipped", hookdirs[d]);
+			        d == 0 ? "override" : N_("shipped"), hookdirs[d]);
 		}
 		closedir(dir);
 	}

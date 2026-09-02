@@ -131,8 +131,6 @@ if [ -x "$BIN" ]; then
         # runtime never matches one however its parts are marked; and a command,
         # a unit name or a driver name is not a word anybody translates.
         case "$v" in
-            "Bootloader: "*)         continue ;;  # composed: "Bootloader: %s (%s). %s."
-            *" API key")             continue ;;  # composed: "%s API key"
             "nmcli "*)               continue ;;  # a command to type
             nvidia|nouveau|amdgpu|i915) continue ;;  # kernel driver names
             *.service|*.socket|*.timer|*.target|*.mount|*.path) continue ;;
@@ -166,6 +164,24 @@ if [ -x "$BIN" ]; then
     n=$(grep -c '' "$tmp/unreachable")
     sample=$(head -2 "$tmp/unreachable" | cut -c1-60 | tr '\n' '|')
     check "every word the window draws is in the template" "0" "$n${sample:+ — $sample}"
+
+    # ⛔ AND EVERY CLOUD BACKEND SPELLS ITS KEY LABEL OUT. That label used to be
+    # composed — `"%s API key"` — which no draw-time lookup can ever match, so
+    # it is a field in the BACKENDS table now. The field is NULL for the local
+    # backends, which never emit the row; a new CLOUD one added without it would
+    # print "(null)" into the record instead of failing loudly.
+    nokey=$(awk '
+        /^static const struct .*BACKENDS\[\] = \{/ { inside = 1; next }
+        inside && /^\};/ { exit }
+        inside && /^\t\{ "/ {
+            entry = $0
+            while (entry !~ /(true|false) \},?$/ && (getline nxt) > 0) entry = entry nxt
+            if (entry ~ /true \},?$/ && entry ~ /NULL/) {
+                match(entry, /"[^"]+"/); print substr(entry, RSTART + 1, RLENGTH - 2)
+            }
+        }
+    ' "$root/src/assistant.c" | tr '\n' ' ')
+    check "every cloud backend spells out its API-key label" "" "$nokey"
 else
     printf '  skip  no binary, so the drawn labels were not checked\n'
 fi

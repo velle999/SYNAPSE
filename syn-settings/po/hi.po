@@ -355,6 +355,9 @@ msgstr ""
 "llama-server या OpenAI एपीआई के लिए लिखे फ़्रंटएंड हेतु 127.0.0.1:8080, साथ आने वाले "
 "सॉकेट के ज़रिये"
 
+msgid "unknown"
+msgstr "अज्ञात"
+
 msgid "systemctl not available"
 msgstr "systemctl उपलब्ध नहीं"
 
@@ -364,6 +367,9 @@ msgstr "मॉडल"
 msgid "a part-downloaded model; syn-model download"
 msgstr "आधा डाउनलोड हुआ मॉडल; syn-model download"
 
+msgid "none"
+msgstr "कोई नहीं"
+
 msgid "no model installed · syn-model download"
 msgstr "कोई मॉडल संस्थापित नहीं · syn-model download"
 
@@ -372,6 +378,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "उपलब्ध"
 
 msgid "acceleration"
 msgstr "त्वरण"
@@ -444,8 +453,20 @@ msgstr "synui टर्मिनल के रूप में जो चला�
 msgid "nothing installed handles this"
 msgstr "संस्थापित किसी भी चीज़ में यह नहीं सँभाला जाता"
 
+msgid "Claude (Anthropic) API key"
+msgstr "Claude (Anthropic) की API कुंजी"
+
+msgid "OpenAI API key"
+msgstr "OpenAI की API कुंजी"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "संस्थापित नहीं"
+
+msgid "bad"
+msgstr "ख़राब"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "इस मशीन पर सहायक नहीं है, इसलिए चुनने को कोई बैकएंड नहीं"
@@ -455,6 +476,17 @@ msgstr "बैकएंड"
 
 msgid "which service the assistant sends your messages to"
 msgstr "सहायक आपके संदेश किस सेवा को भेजता है"
+
+msgid "warn"
+msgstr "चेतावनी"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "सहेजी गई — बदलने के लिए क्लिक करें, या हटाने के लिए बॉक्स खाली करें"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "सहायक इसी बैकएंड पर लगा है और उसके पास कुंजी नहीं है, इसलिए हर अनुरोध विफल होगा"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "कोई कुंजी सहेजी नहीं गई; इस बैकएंड पर जाने से पहले एक सेट करें"
@@ -479,6 +511,15 @@ msgstr "नए युग्मन स्वीकार करता है"
 
 msgid "nothing has been paired with this adapter"
 msgstr "इस अडैप्टर से अभी तक कुछ भी युग्मित नहीं हुआ"
+
+msgid "yes"
+msgstr "हाँ"
+
+msgid "connected"
+msgstr "जुड़ा"
+
+msgid "not connected"
+msgstr "नहीं जुड़ा"
 
 msgid "paired"
 msgstr "युग्मित"
@@ -514,6 +555,9 @@ msgstr "इस मशीन में ब्लूटूथ हार्डव�
 msgid "avrcp-volume"
 msgstr "AVRCP ध्वनि स्तर"
 
+msgid "see detail"
+msgstr "विवरण देखें"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -527,6 +571,9 @@ msgstr "रीडर"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "fprintd संस्थापित है पर इस मशीन पर कोई अंगुली-छाप रीडर नहीं बताता"
+
+msgid "present"
+msgstr "उपलब्ध"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -583,7 +630,9 @@ msgstr "pacman उपलब्ध नहीं"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ किसी Arch भंडार में नहीं है — संस्थापित करने पर पहले CachyOS भंडार जोड़ा जाता है (core और extra की वरीयता बनी रहती है)"
+msgstr ""
+"  ⓘ किसी Arch भंडार में नहीं है — संस्थापित करने पर पहले CachyOS भंडार जोड़ा जाता है "
+"(core और extra की वरीयता बनी रहती है)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ हेडर नहीं हैं — DKMS इसके लिए निर्माण नहीं कर सकता"
@@ -591,12 +640,16 @@ msgstr "  ⚠ हेडर नहीं हैं — DKMS इसके लि�
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ अभी कोई बूटलोडर प्रविष्टि नहीं — विकल्प की आशा में पुनः आरंभ करने से पहले “बूट योग्य बनाएँ” का उपयोग करें"
+msgstr ""
+"  ⚠ अभी कोई बूटलोडर प्रविष्टि नहीं — विकल्प की आशा में पुनः आरंभ करने से पहले “बूट योग्य "
+"बनाएँ” का उपयोग करें"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ बूटलोडर विन्यास केवल root के लिए पठनीय है, इसलिए यह पटल नहीं बता सकता कि कोई प्रविष्टि है या नहीं — “बूट योग्य बनाएँ” उसे फिर से बनाता है और पठनीय कर देता है"
+msgstr ""
+"  ⚠ बूटलोडर विन्यास केवल root के लिए पठनीय है, इसलिए यह पटल नहीं बता सकता कि कोई "
+"प्रविष्टि है या नहीं — “बूट योग्य बनाएँ” उसे फिर से बनाता है और पठनीय कर देता है"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -612,6 +665,28 @@ msgid ""
 msgstr ""
 "कोई बूटलोडर विन्यास नहीं मिला, इसलिए यह नहीं कहा जा सकता कि कोई कर्नेल बूट होने योग्य "
 "है या नहीं।"
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "“बूट योग्य बनाएँ” grub-mkconfig चलाता है, जो हर संस्थापित कर्नेल स्वयं ढूँढ़ लेता है।"
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "“बूट योग्य बनाएँ” kernel-install चलाता है, जो एक Boot Loader Spec प्रविष्टि लिखता है।"
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "“बूट योग्य बनाएँ” limine-update चलाता है, जो कर्नेल प्रविष्टियाँ फिर से बनाता है।"
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine में कोई प्रविष्टि जनक संस्थापित नहीं है — “बूट योग्य बनाएँ” limine-mkinitcpio-hook संस्थापित करता है, जो एक जनक देता है और साथ में एक pacman हुक, ताकि आगे के कर्नेल अपने आप सँभाले जाएँ।"
+
+msgid "bootloader"
+msgstr "बूटलोडर"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -670,6 +745,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr "synnet के शुरू होने के बाद से फ़ायरवॉल कितनी बार गायब हुआ और फिर बनाया गया।"
 
+msgid "active"
+msgstr "सक्रिय"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -713,6 +791,9 @@ msgstr "घुसपैठ निगरानी"
 
 msgid "network policy and the firewall set"
 msgstr "नेटवर्क नीति और फ़ायरवॉल का नियम-समूह"
+
+msgid "shipped"
+msgstr "साथ आया"
 
 msgid "last-suspend"
 msgstr "पिछली सुप्तावस्था"

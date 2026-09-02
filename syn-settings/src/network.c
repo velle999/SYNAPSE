@@ -45,8 +45,8 @@ static void devices(void)
 	                 (char *)"-f", (char *)"DEVICE,TYPE,STATE,CONNECTION",
 	                 (char *)"device", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("device\t-\tunknown\t-\t%s\t-",
-		        N_("nmcli reported nothing"));
+		rec_row("device\t-\t%s\t-\t%s\t-",
+		        N_("unknown"), N_("nmcli reported nothing"));
 		return;
 	}
 
@@ -98,7 +98,7 @@ static void radio(const char *which)
 	 * and left alone because this machine has no modem to switch on and a
 	 * button that always errors teaches people to distrust the others. */
 	rec_row("radio\t%s\t%s\t-\tnmcli radio %s\t%s",
-	        which, out[0] ? out : "unknown", which,
+	        which, out[0] ? out : N_("unknown"), which,
 	        strcmp(which, "wifi") == 0 ? "toggle:wifi" : "-");
 }
 
@@ -269,7 +269,7 @@ static void firewall_rows(void)
 		rec_row("firewall\t%s\t%s\t%s\t"
 		        "Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, libvirt, Docker). A guest asks for its address from 0.0.0.0, which the default-drop policy would otherwise eat — the guest then has no network and nothing says firewall. %s\t"
 		        "-",
-		        N_("container links"), n ? list : "none", stale ? "warn" : "-",
+		        N_("container links"), n ? list : N_("none"), stale ? N_("warn") : "-",
 		        stale
 		          ? "⚠ synnet last applied a different number of these; "
 		            "`sudo synnet --firewall` loads the current list."
@@ -279,8 +279,8 @@ static void firewall_rows(void)
 	/* Only when it has actually happened. A zero here would be a row about
 	 * nothing, and the pane is long enough already. */
 	if (reasserts[0] && strcmp(reasserts, "0"))
-		rec_row("firewall\t%s\t%s\twarn\t%s\t-",
-		        N_("rebuilt"), reasserts,
+		rec_row("firewall\t%s\t%s\t%s\t%s\t-",
+		        N_("rebuilt"), reasserts, N_("warn"),
 		        N_("The firewall has gone missing and been rebuilt this many times since synnet started. Something on this machine is flushing nftables."));
 
 	if (have_cmd("systemctl")) {
@@ -295,8 +295,8 @@ static void firewall_rows(void)
 		 * "the firewall says active but the daemon is dead" is a real state —
 		 * the chain outlives the process that loaded it. */
 		rec_row("firewall\t%s\t%s\t%s\t%s\tunit:synnet.service",
-		        "synnet.service", out[0] ? out : "not installed",
-		        !strcmp(out, "active") ? "-" : "warn",
+		        "synnet.service", out[0] ? out : N_("not installed"),
+		        !strcmp(out, N_("active")) ? "-" : N_("warn"),
 		        N_("The daemon that applies all of this. The rules outlive it, so a stopped synnet leaves the last ruleset in place and stops maintaining it."));
 
 		out[0] = '\0';
@@ -306,7 +306,7 @@ static void firewall_rows(void)
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
 		rec_row("firewall\t%s\t%s\t-\t%s\t-",
-		        "nftables.service", out[0] ? out : "not installed",
+		        "nftables.service", out[0] ? out : N_("not installed"),
 		        N_("Arch's own firewall service, which SynapseOS does not use — synnet manages its table whether or not this is active."));
 	}
 }
@@ -316,8 +316,8 @@ int pane_network(void)
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (!have_cmd("nmcli")) {
-		rec_row("device\t-\tunknown\t-\t%s\t-",
-		        N_("NetworkManager is not installed"));
+		rec_row("device\t-\t%s\t-\t%s\t-",
+		        N_("unknown"), N_("NetworkManager is not installed"));
 	} else {
 		devices();
 		radio("wifi");

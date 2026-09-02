@@ -371,6 +371,9 @@ msgstr ""
 "127.0.0.1:8080 dla nakładek pisanych pod llama-server lub API OpenAI, przez "
 "dostarczone gniazdo"
 
+msgid "unknown"
+msgstr "nieznane"
+
 msgid "systemctl not available"
 msgstr "systemctl niedostępny"
 
@@ -380,6 +383,9 @@ msgstr "model"
 msgid "a part-downloaded model; syn-model download"
 msgstr "częściowo pobrany model; syn-model download"
 
+msgid "none"
+msgstr "brak"
+
 msgid "no model installed · syn-model download"
 msgstr "nie zainstalowano modelu · syn-model download"
 
@@ -388,6 +394,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "dostępne"
 
 msgid "acceleration"
 msgstr "przyspieszenie"
@@ -462,8 +471,20 @@ msgstr "co synui uruchamia jako terminal — synuirc, nie mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "nic zainstalowanego tego nie obsługuje"
 
+msgid "Claude (Anthropic) API key"
+msgstr "klucz API Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "klucz API OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "nie zainstalowano"
+
+msgid "bad"
+msgstr "błąd"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "asystenta nie ma na tym komputerze, więc nie ma czego wybierać"
@@ -473,6 +494,17 @@ msgstr "backend"
 
 msgid "which service the assistant sends your messages to"
 msgstr "do której usługi asystent wysyła Twoje wiadomości"
+
+msgid "warn"
+msgstr "ostrzeżenie"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "zapisany — kliknij, aby go zastąpić, albo wyczyść pole, aby go usunąć"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "asystent jest ustawiony na ten backend i nie ma klucza, więc każde żądanie zawiedzie"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "nie zapisano klucza; ustaw go przed przełączeniem na ten backend"
@@ -497,6 +529,15 @@ msgstr "przyjmuje nowe parowania"
 
 msgid "nothing has been paired with this adapter"
 msgstr "z tym adapterem nic jeszcze nie zostało sparowane"
+
+msgid "yes"
+msgstr "tak"
+
+msgid "connected"
+msgstr "połączone"
+
+msgid "not connected"
+msgstr "niepołączone"
 
 msgid "paired"
 msgstr "sparowany"
@@ -532,6 +573,9 @@ msgstr "ten komputer nie ma sprzętu Bluetooth, więc nie ma czego ustawiać"
 msgid "avrcp-volume"
 msgstr "głośność AVRCP"
 
+msgid "see detail"
+msgstr "zobacz szczegóły"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -549,6 +593,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd jest zainstalowany, ale nie zgłasza żadnego czytnika odcisków na tym "
 "komputerze"
+
+msgid "present"
+msgstr "obecny"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -609,7 +656,9 @@ msgstr "pacman niedostępny"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ nie ma go w żadnym repozytorium Archa — instalacja najpierw dodaje repozytorium CachyOS (core i extra zachowują pierwszeństwo)"
+msgstr ""
+"  ⓘ nie ma go w żadnym repozytorium Archa — instalacja najpierw dodaje "
+"repozytorium CachyOS (core i extra zachowują pierwszeństwo)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ BRAK nagłówków — DKMS nie zbuduje dla niego niczego"
@@ -617,12 +666,17 @@ msgstr "  ⚠ BRAK nagłówków — DKMS nie zbuduje dla niego niczego"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ nie ma jeszcze wpisu w programie rozruchowym — użyj „Uczyń uruchamialnym”, zanim zrestartujesz licząc na wybór"
+msgstr ""
+"  ⚠ nie ma jeszcze wpisu w programie rozruchowym — użyj „Uczyń "
+"uruchamialnym”, zanim zrestartujesz licząc na wybór"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ konfiguracja programu rozruchowego jest tylko dla roota, więc ten panel nie powie, czy wpis istnieje — „Uczyń uruchamialnym” tworzy ją na nowo i czyni czytelną"
+msgstr ""
+"  ⚠ konfiguracja programu rozruchowego jest tylko dla roota, więc ten panel "
+"nie powie, czy wpis istnieje — „Uczyń uruchamialnym” tworzy ją na nowo i "
+"czyni czytelną"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -638,6 +692,28 @@ msgid ""
 msgstr ""
 "Nie znaleziono konfiguracji programu rozruchowego, więc nie da się "
 "powiedzieć, czy jądro jest uruchamialne."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "„Uczyń uruchamialnym” uruchamia grub-mkconfig, który sam znajduje każde zainstalowane jądro."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "„Uczyń uruchamialnym” uruchamia kernel-install, który zapisuje wpis Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "„Uczyń uruchamialnym” uruchamia limine-update, który na nowo tworzy wpisy jąder."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine nie ma zainstalowanego generatora wpisów — „Uczyń uruchamialnym” instaluje limine-mkinitcpio-hook, który go dostarcza, wraz z hakiem pacmana, dzięki czemu przyszłe jądra są obsługiwane automatycznie."
+
+msgid "bootloader"
+msgstr "program rozruchowy"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -697,6 +773,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr "Ile razy zapora zniknęła i została odbudowana od uruchomienia synnet."
 
+msgid "active"
+msgstr "aktywne"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -740,6 +819,9 @@ msgstr "monitor włamań"
 
 msgid "network policy and the firewall set"
 msgstr "zasady sieciowe i zestaw reguł zapory"
+
+msgid "shipped"
+msgstr "dostarczone"
 
 msgid "last-suspend"
 msgstr "ostatnie uśpienie"

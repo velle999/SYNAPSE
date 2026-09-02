@@ -349,6 +349,9 @@ msgstr ""
 "127.0.0.1:8080，供按 llama-server 或 OpenAI API 编写的前端使用，通过随附的套"
 "接字"
 
+msgid "unknown"
+msgstr "未知"
+
 msgid "systemctl not available"
 msgstr "systemctl 不可用"
 
@@ -358,6 +361,9 @@ msgstr "模型"
 msgid "a part-downloaded model; syn-model download"
 msgstr "下载了一半的模型；syn-model download"
 
+msgid "none"
+msgstr "无"
+
 msgid "no model installed · syn-model download"
 msgstr "未安装模型 · syn-model download"
 
@@ -366,6 +372,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "可用"
 
 msgid "acceleration"
 msgstr "加速"
@@ -437,8 +446,20 @@ msgstr "synui 作为终端启动的程序 —— synuirc，而不是 mimeapps.li
 msgid "nothing installed handles this"
 msgstr "已安装的程序中没有能处理这个的"
 
+msgid "Claude (Anthropic) API key"
+msgstr "Claude (Anthropic) API 密钥"
+
+msgid "OpenAI API key"
+msgstr "OpenAI API 密钥"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "未安装"
+
+msgid "bad"
+msgstr "异常"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "这台机器上没有助手，因此没有可选的后端"
@@ -448,6 +469,17 @@ msgstr "后端"
 
 msgid "which service the assistant sends your messages to"
 msgstr "助手把你的消息发往哪个服务"
+
+msgid "warn"
+msgstr "警告"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "已保存 —— 点击可替换，清空输入框则删除"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "助手已设为该后端但没有密钥，因此每次请求都会失败"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "未保存密钥；切换到该后端前请先设置一个"
@@ -472,6 +504,15 @@ msgstr "接受新的配对"
 
 msgid "nothing has been paired with this adapter"
 msgstr "尚未与该适配器配对任何设备"
+
+msgid "yes"
+msgstr "是"
+
+msgid "connected"
+msgstr "已连接"
+
+msgid "not connected"
+msgstr "未连接"
 
 msgid "paired"
 msgstr "已配对"
@@ -507,6 +548,9 @@ msgstr "这台机器没有蓝牙硬件，因此没有可配置的内容"
 msgid "avrcp-volume"
 msgstr "AVRCP 音量"
 
+msgid "see detail"
+msgstr "见详情"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -520,6 +564,9 @@ msgstr "读取器"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "已安装 fprintd，但它未在这台机器上报告任何指纹读取器"
+
+msgid "present"
+msgstr "存在"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -573,7 +620,9 @@ msgstr "pacman 不可用"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ不在任何 Arch 仓库中 —— 安装时会先添加 CachyOS 仓库（core 与 extra 仍保持优先）"
+msgstr ""
+"  ⓘ不在任何 Arch 仓库中 —— 安装时会先添加 CachyOS 仓库（core 与 extra 仍保持"
+"优先）"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ 缺少头文件 —— DKMS 无法为它构建"
@@ -586,7 +635,9 @@ msgstr "  ⚠ 还没有引导项 —— 在期待可以选择而重启之前，�
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ 引导程序配置仅 root 可读，因此本面板无法判断是否存在引导项 ——“设为可引导”会重新生成它并让它可读"
+msgstr ""
+"  ⚠ 引导程序配置仅 root 可读，因此本面板无法判断是否存在引导项 ——“设为可引导”"
+"会重新生成它并让它可读"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -600,6 +651,28 @@ msgid ""
 "cannot be answered here. Looked for limine.conf and loader/entries under /"
 "boot, /boot/efi and /efi, and /boot/grub/grub.cfg."
 msgstr "没有找到引导程序配置，因此无法判断某个内核是否可引导。"
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "“设为可引导”会运行 grub-mkconfig，它会自行找到每个已安装的内核。"
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "“设为可引导”会运行 kernel-install，它会写入一条 Boot Loader Spec 条目。"
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "“设为可引导”会运行 limine-update，它会重新生成内核条目。"
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine 未安装条目生成器 —— “设为可引导”会安装 limine-mkinitcpio-hook，它提供了一个，并附带一个 pacman 钩子，使今后的内核自动得到处理。"
+
+msgid "bootloader"
+msgstr "引导程序"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -657,6 +730,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr "自 synnet 启动以来防火墙消失并被重建的次数。"
 
+msgid "active"
+msgstr "活动"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -700,6 +776,9 @@ msgstr "入侵监控"
 
 msgid "network policy and the firewall set"
 msgstr "网络策略与防火墙规则集"
+
+msgid "shipped"
+msgstr "随附"
 
 msgid "last-suspend"
 msgstr "上次挂起"

@@ -373,6 +373,9 @@ msgstr ""
 "127.0.0.1:8080 pour les frontaux écrits pour llama-server ou l'API OpenAI, "
 "via le socket fourni"
 
+msgid "unknown"
+msgstr "inconnu"
+
 msgid "systemctl not available"
 msgstr "systemctl indisponible"
 
@@ -382,6 +385,9 @@ msgstr "modèle"
 msgid "a part-downloaded model; syn-model download"
 msgstr "un modèle partiellement téléchargé ; syn-model download"
 
+msgid "none"
+msgstr "aucun"
+
 msgid "no model installed · syn-model download"
 msgstr "aucun modèle installé · syn-model download"
 
@@ -390,6 +396,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "disponible"
 
 msgid "acceleration"
 msgstr "accélération"
@@ -465,8 +474,20 @@ msgstr "ce que synui lance comme terminal — synuirc, pas mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "rien d'installé ne gère cela"
 
+msgid "Claude (Anthropic) API key"
+msgstr "clé d'API Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "clé d'API OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "non installé"
+
+msgid "bad"
+msgstr "en échec"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr ""
@@ -477,6 +498,17 @@ msgstr "moteur"
 
 msgid "which service the assistant sends your messages to"
 msgstr "à quel service l'assistant envoie vos messages"
+
+msgid "warn"
+msgstr "avertissement"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "enregistrée — cliquez pour la remplacer, ou videz le champ pour la supprimer"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "l'assistant est réglé sur ce moteur et n'a pas de clé, chaque requête échouera donc"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "aucune clé enregistrée ; définissez-en une avant de passer à ce moteur"
@@ -501,6 +533,15 @@ msgstr "accepte de nouveaux appairages"
 
 msgid "nothing has been paired with this adapter"
 msgstr "rien n'a encore été appairé avec cet adaptateur"
+
+msgid "yes"
+msgstr "oui"
+
+msgid "connected"
+msgstr "connecté"
+
+msgid "not connected"
+msgstr "non connecté"
 
 msgid "paired"
 msgstr "appairé"
@@ -537,6 +578,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "volume AVRCP"
 
+msgid "see detail"
+msgstr "voir le détail"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -554,6 +598,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd est installé mais ne signale aucun lecteur d'empreintes sur cette "
 "machine"
+
+msgid "present"
+msgstr "présent"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -616,7 +663,9 @@ msgstr "pacman indisponible"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ dans aucun dépôt Arch — l'installation ajoute d'abord le dépôt CachyOS (core et extra gardent la priorité)"
+msgstr ""
+"  ⓘ dans aucun dépôt Arch — l'installation ajoute d'abord le dépôt CachyOS "
+"(core et extra gardent la priorité)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ en-têtes MANQUANTS — DKMS ne peut rien construire pour lui"
@@ -624,12 +673,17 @@ msgstr "  ⚠ en-têtes MANQUANTS — DKMS ne peut rien construire pour lui"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ pas encore d'entrée de chargeur d'amorçage — utilisez « Rendre amorçable » avant de redémarrer en espérant un choix"
+msgstr ""
+"  ⚠ pas encore d'entrée de chargeur d'amorçage — utilisez « Rendre "
+"amorçable » avant de redémarrer en espérant un choix"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ la configuration du chargeur d'amorçage est réservée à root, ce panneau ne peut donc pas dire si une entrée existe — « Rendre amorçable » la régénère et la rend lisible"
+msgstr ""
+"  ⚠ la configuration du chargeur d'amorçage est réservée à root, ce panneau "
+"ne peut donc pas dire si une entrée existe — « Rendre amorçable » la "
+"régénère et la rend lisible"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -645,6 +699,28 @@ msgid ""
 msgstr ""
 "Aucune configuration de chargeur d'amorçage n'a été trouvée, impossible donc "
 "de dire si un noyau est amorçable."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "« Rendre amorçable » lance grub-mkconfig, qui trouve tout seul chaque noyau installé."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "« Rendre amorçable » lance kernel-install, qui écrit une entrée Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "« Rendre amorçable » lance limine-update, qui régénère les entrées de noyau."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine n'a aucun générateur d'entrées installé — « Rendre amorçable » installe limine-mkinitcpio-hook, qui en fournit un, plus un hook pacman pour que les futurs noyaux soient traités automatiquement."
+
+msgid "bootloader"
+msgstr "chargeur d'amorçage"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -708,6 +784,9 @@ msgstr ""
 "Nombre de fois où le pare-feu a disparu et été reconstruit depuis le "
 "démarrage de synnet."
 
+msgid "active"
+msgstr "actif"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -751,6 +830,9 @@ msgstr "la surveillance des intrusions"
 
 msgid "network policy and the firewall set"
 msgstr "la politique réseau et le jeu de règles du pare-feu"
+
+msgid "shipped"
+msgstr "fourni"
 
 msgid "last-suspend"
 msgstr "dernière mise en veille"

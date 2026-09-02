@@ -367,6 +367,9 @@ msgstr ""
 "127.0.0.1:8080 per i frontend scritti per llama-server o per l'API di "
 "OpenAI, tramite il socket fornito"
 
+msgid "unknown"
+msgstr "sconosciuto"
+
 msgid "systemctl not available"
 msgstr "systemctl non disponibile"
 
@@ -376,6 +379,9 @@ msgstr "modello"
 msgid "a part-downloaded model; syn-model download"
 msgstr "un modello scaricato a metà; syn-model download"
 
+msgid "none"
+msgstr "nessuno"
+
 msgid "no model installed · syn-model download"
 msgstr "nessun modello installato · syn-model download"
 
@@ -384,6 +390,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "disponibile"
 
 msgid "acceleration"
 msgstr "accelerazione"
@@ -458,8 +467,20 @@ msgstr "quello che synui avvia come terminale — synuirc, non mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "nulla di installato gestisce questo"
 
+msgid "Claude (Anthropic) API key"
+msgstr "chiave API di Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "chiave API di OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "non installato"
+
+msgid "bad"
+msgstr "non riuscito"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr ""
@@ -471,6 +492,17 @@ msgstr "motore"
 
 msgid "which service the assistant sends your messages to"
 msgstr "a quale servizio l'assistente invia i suoi messaggi"
+
+msgid "warn"
+msgstr "avviso"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "salvata — la clicchi per sostituirla, o svuoti la casella per rimuoverla"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "l'assistente è impostato su questo motore e non ha una chiave, quindi ogni richiesta fallirà"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr ""
@@ -496,6 +528,15 @@ msgstr "accetta nuove associazioni"
 
 msgid "nothing has been paired with this adapter"
 msgstr "non è ancora stato associato nulla a questo adattatore"
+
+msgid "yes"
+msgstr "sì"
+
+msgid "connected"
+msgstr "connesso"
+
+msgid "not connected"
+msgstr "non connesso"
 
 msgid "paired"
 msgstr "associato"
@@ -533,6 +574,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "volume AVRCP"
 
+msgid "see detail"
+msgstr "vedi il dettaglio"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -550,6 +594,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd è installato ma non segnala alcun lettore di impronte su questa "
 "macchina"
+
+msgid "present"
+msgstr "presente"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -615,7 +662,9 @@ msgstr "pacman non disponibile"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ non è in alcun repository di Arch — installarlo aggiunge prima il repository di CachyOS (core ed extra mantengono la priorità)"
+msgstr ""
+"  ⓘ non è in alcun repository di Arch — installarlo aggiunge prima il "
+"repository di CachyOS (core ed extra mantengono la priorità)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ intestazioni MANCANTI — DKMS non può compilare per esso"
@@ -623,12 +672,17 @@ msgstr "  ⚠ intestazioni MANCANTI — DKMS non può compilare per esso"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ non c'è ancora una voce nel bootloader — usi «Rendi avviabile» prima di riavviare aspettandosi una scelta"
+msgstr ""
+"  ⚠ non c'è ancora una voce nel bootloader — usi «Rendi avviabile» prima di "
+"riavviare aspettandosi una scelta"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ la configurazione del bootloader è leggibile solo da root, quindi questo pannello non può dire se una voce esista — «Rendi avviabile» la rigenera e la rende leggibile"
+msgstr ""
+"  ⚠ la configurazione del bootloader è leggibile solo da root, quindi questo "
+"pannello non può dire se una voce esista — «Rendi avviabile» la rigenera e "
+"la rende leggibile"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -644,6 +698,28 @@ msgid ""
 msgstr ""
 "Non è stata trovata alcuna configurazione del bootloader, quindi non si può "
 "dire se un kernel sia avviabile."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "«Rendi avviabile» esegue grub-mkconfig, che trova da solo ogni kernel installato."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "«Rendi avviabile» esegue kernel-install, che scrive una voce Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "«Rendi avviabile» esegue limine-update, che rigenera le voci dei kernel."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine non ha alcun generatore di voci installato — «Rendi avviabile» installa limine-mkinitcpio-hook, che ne fornisce uno, più un hook di pacman perché i kernel futuri siano gestiti automaticamente."
+
+msgid "bootloader"
+msgstr "bootloader"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -707,6 +783,9 @@ msgstr ""
 "Quante volte il firewall è sparito ed è stato ricostruito da quando synnet è "
 "partito."
 
+msgid "active"
+msgstr "attivo"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -750,6 +829,9 @@ msgstr "il monitor delle intrusioni"
 
 msgid "network policy and the firewall set"
 msgstr "le regole di rete e il set del firewall"
+
+msgid "shipped"
+msgstr "fornito"
 
 msgid "last-suspend"
 msgstr "ultima sospensione"

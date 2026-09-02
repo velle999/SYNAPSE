@@ -151,7 +151,7 @@ int pane_speech(void)
 	/* ── The two switches ─────────────────────────────────────────────── */
 	if (have_cmd("syn-speak")) {
 		rec_row("switch\t%s\t%s\t-\t%s\ttoggle:screen-reader",
-		        N_("Screen reader"), !strcmp(on, "yes") ? "on" : "off",
+		        N_("Screen reader"), !strcmp(on, N_("yes")) ? "on" : "off",
 		        N_("Speak the focused window as focus moves, and the highlighted text on Super+U. Super+Shift+U toggles it"));
 	} else {
 		rec_row("switch\t%s\tunavailable\t-\t%s\t-",
@@ -191,6 +191,10 @@ int pane_speech(void)
 	        N_("Words per minute, 80 to 450"));
 	rec_row("value\t%s\t%s\t-\t0 to 100\tset:speech-volume",
 	        N_("Speech volume"), vol[0] ? vol : "100");
+	/* ⛔ THE DEFAULT WAKE WORDS ARE NOT N_(). They are words the recogniser is
+	 * asked to listen FOR, and the user can change them; a translated default
+	 * would be a phrase nothing was ever listening for. The sentence under the
+	 * row is a sentence, and that one is marked.  */
 	rec_row("value\t%s\t%s\t-\t%s\tset:wake-words",
 	        N_("Wake words"), words[0] ? words : "synapse, computer",
 	        N_("Comma separated. \"computer\" is kept because whisper transcribes it every time \xc2\xb7 drop it if it wakes on the word in conversation"));

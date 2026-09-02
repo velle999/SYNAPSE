@@ -333,6 +333,9 @@ msgid ""
 "this machine can reach it · loopback only, never the network"
 msgstr ""
 
+msgid "unknown"
+msgstr ""
+
 msgid "systemctl not available"
 msgstr ""
 
@@ -342,6 +345,9 @@ msgstr ""
 msgid "a part-downloaded model; syn-model download"
 msgstr ""
 
+msgid "none"
+msgstr ""
+
 msgid "no model installed · syn-model download"
 msgstr ""
 
@@ -349,6 +355,9 @@ msgid "CUDA (NVIDIA)"
 msgstr ""
 
 msgid "CPU"
+msgstr ""
+
+msgid "available"
 msgstr ""
 
 msgid "acceleration"
@@ -421,7 +430,19 @@ msgstr ""
 msgid "nothing installed handles this"
 msgstr ""
 
+msgid "Claude (Anthropic) API key"
+msgstr ""
+
+msgid "OpenAI API key"
+msgstr ""
+
 msgid "vibe"
+msgstr ""
+
+msgid "not installed"
+msgstr ""
+
+msgid "bad"
 msgstr ""
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
@@ -431,6 +452,17 @@ msgid "backend"
 msgstr ""
 
 msgid "which service the assistant sends your messages to"
+msgstr ""
+
+msgid "warn"
+msgstr ""
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr ""
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
 msgstr ""
 
 msgid "no key stored; set one before switching to this backend"
@@ -455,6 +487,15 @@ msgid "accepts new pairings"
 msgstr ""
 
 msgid "nothing has been paired with this adapter"
+msgstr ""
+
+msgid "yes"
+msgstr ""
+
+msgid "connected"
+msgstr ""
+
+msgid "not connected"
 msgstr ""
 
 msgid "paired"
@@ -491,6 +532,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr ""
 
+msgid "see detail"
+msgstr ""
+
 msgid "fprintd"
 msgstr ""
 
@@ -503,6 +547,9 @@ msgid "reader"
 msgstr ""
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
+msgstr ""
+
+msgid "present"
 msgstr ""
 
 msgid ""
@@ -584,6 +631,28 @@ msgid ""
 msgstr ""
 
 msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr ""
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr ""
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr ""
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr ""
+
+msgid "bootloader"
+msgstr ""
+
+msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
 "actually starts cannot be read reliably, so a kernel counts as bootable if "
 "ANY of them can boot it."
@@ -630,6 +699,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr ""
 
+msgid "active"
+msgstr ""
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -668,6 +740,9 @@ msgid "the intrusion monitor"
 msgstr ""
 
 msgid "network policy and the firewall set"
+msgstr ""
+
+msgid "shipped"
 msgstr ""
 
 msgid "last-suspend"

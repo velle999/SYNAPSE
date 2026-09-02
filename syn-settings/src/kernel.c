@@ -373,22 +373,44 @@ int pane_kernel(void)
 		        N_("No bootloader configuration was found, so whether a kernel is bootable cannot be answered here. Looked for limine.conf and loader/entries under /boot, /boot/efi and /efi, and /boot/grub/grub.cfg."));
 	} else {
 		for (int b = 0; b < nloaders; b++) {
+			/* ⚠ THE FULL STOP IS INSIDE EACH MSGID. The format used to
+			 * supply it (`… %s.`), which made the drawn cell one
+			 * character longer than any msgid and matched nothing —
+			 * whatever a cell ends up being has to BE a msgid, punctuation
+			 * and all.  */
 			const char *how =
 				loaders[b].kind == SYN_BL_GRUB
-				  ? "“Make bootable” runs grub-mkconfig, which finds every "
-				    "installed kernel by itself"
+				  ? N_("“Make bootable” runs grub-mkconfig, which finds every "
+				       "installed kernel by itself.")
 				: loaders[b].kind == SYN_BL_SYSTEMD
-				  ? "“Make bootable” runs kernel-install, which writes a Boot "
-				    "Loader Spec entry"
+				  ? N_("“Make bootable” runs kernel-install, which writes a "
+				       "Boot Loader Spec entry.")
 				: have_cmd("limine-update")
-				  ? "“Make bootable” runs limine-update, which regenerates the "
-				    "kernel entries"
-				  : "limine has no entry generator installed — “Make bootable” "
-				    "installs limine-mkinitcpio-hook, which adds one plus a "
-				    "pacman hook so future kernels are handled automatically";
+				  ? N_("“Make bootable” runs limine-update, which regenerates "
+				       "the kernel entries.")
+				  : N_("limine has no entry generator installed — “Make "
+				       "bootable” installs limine-mkinitcpio-hook, which adds "
+				       "one plus a pacman hook so future kernels are handled "
+				       "automatically.");
 
-			rec_row("-\t-\t-\tBootloader: %s (%s). %s.\t-",
-			        syn_boot_name(loaders[b].kind), loaders[b].conf, how);
+			/* ⛔ THE DATA GOES IN COLUMNS, NOT INTO THE SENTENCE. This
+			 * read `Bootloader: %s (%s). %s.` — a cell built at runtime
+			 * out of the loader's name, its config path and one of four
+			 * explanations. The window translates a drawn cell by looking
+			 * the WHOLE cell up, so a cell with a path in it can never
+			 * match a msgid and stayed English in all thirteen languages
+			 * however well `how` was marked.
+			 *
+			 * The row already had three columns spent on "-", and they
+			 * are what the sentence was carrying: the loader in `kernel`,
+			 * its config in `installed`, and `bootloader` in `state` to
+			 * say what kind of row this is. `detail` is now nothing but
+			 * the explanation, which IS a msgid. `--rec kernel | column
+			 * -t` reads better for it, and every cell is either data or
+			 * translatable.  */
+			rec_row("%s\t%s\t%s\t%s\t-",
+			        syn_boot_name(loaders[b].kind), loaders[b].conf,
+			        N_("bootloader"), how);
 		}
 
 		if (nloaders > 1)

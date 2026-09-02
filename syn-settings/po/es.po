@@ -370,6 +370,9 @@ msgstr ""
 "127.0.0.1:8080 para interfaces escritas contra llama-server o la API de "
 "OpenAI, por el socket incluido"
 
+msgid "unknown"
+msgstr "desconocido"
+
 msgid "systemctl not available"
 msgstr "systemctl no disponible"
 
@@ -379,6 +382,9 @@ msgstr "modelo"
 msgid "a part-downloaded model; syn-model download"
 msgstr "un modelo descargado a medias; syn-model download"
 
+msgid "none"
+msgstr "ninguno"
+
 msgid "no model installed · syn-model download"
 msgstr "ningún modelo instalado · syn-model download"
 
@@ -387,6 +393,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "disponible"
 
 msgid "acceleration"
 msgstr "aceleración"
@@ -461,8 +470,20 @@ msgstr "lo que synui lanza como terminal — synuirc, no mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "nada de lo instalado se encarga de esto"
 
+msgid "Claude (Anthropic) API key"
+msgstr "clave de API de Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "clave de API de OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "no instalado"
+
+msgid "bad"
+msgstr "con fallo"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "el asistente no está en esta máquina, así que no hay motor que elegir"
@@ -472,6 +493,17 @@ msgstr "motor"
 
 msgid "which service the assistant sends your messages to"
 msgstr "a qué servicio envía el asistente sus mensajes"
+
+msgid "warn"
+msgstr "aviso"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "guardada — pulse para reemplazarla, o vacíe la casilla para quitarla"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "el asistente está puesto en este motor y no tiene clave, así que toda petición fallará"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "no hay clave guardada; establezca una antes de cambiar a este motor"
@@ -496,6 +528,15 @@ msgstr "acepta nuevos emparejamientos"
 
 msgid "nothing has been paired with this adapter"
 msgstr "todavía no se ha emparejado nada con este adaptador"
+
+msgid "yes"
+msgstr "sí"
+
+msgid "connected"
+msgstr "conectado"
+
+msgid "not connected"
+msgstr "no conectado"
 
 msgid "paired"
 msgstr "emparejado"
@@ -532,6 +573,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "volumen AVRCP"
 
+msgid "see detail"
+msgstr "ver el detalle"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -549,6 +593,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd está instalado pero no informa de ningún lector de huellas en esta "
 "máquina"
+
+msgid "present"
+msgstr "presente"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -612,7 +659,9 @@ msgstr "pacman no disponible"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ no está en ningún repositorio de Arch — instalarlo añade antes el repositorio de CachyOS (core y extra mantienen la prioridad)"
+msgstr ""
+"  ⓘ no está en ningún repositorio de Arch — instalarlo añade antes el "
+"repositorio de CachyOS (core y extra mantienen la prioridad)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ FALTAN las cabeceras — DKMS no puede compilar para él"
@@ -620,12 +669,17 @@ msgstr "  ⚠ FALTAN las cabeceras — DKMS no puede compilar para él"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ todavía no hay entrada en el gestor de arranque — use «Hacer arrancable» antes de reiniciar esperando poder elegir"
+msgstr ""
+"  ⚠ todavía no hay entrada en el gestor de arranque — use «Hacer arrancable» "
+"antes de reiniciar esperando poder elegir"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ la configuración del gestor de arranque es solo para root, así que este panel no puede decir si existe una entrada — «Hacer arrancable» la regenera y la deja legible"
+msgstr ""
+"  ⚠ la configuración del gestor de arranque es solo para root, así que este "
+"panel no puede decir si existe una entrada — «Hacer arrancable» la regenera "
+"y la deja legible"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -641,6 +695,28 @@ msgid ""
 msgstr ""
 "No se encontró ninguna configuración de gestor de arranque, así que no se "
 "puede decir si un núcleo es arrancable."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "«Hacer arrancable» ejecuta grub-mkconfig, que encuentra por sí solo cada núcleo instalado."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "«Hacer arrancable» ejecuta kernel-install, que escribe una entrada Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "«Hacer arrancable» ejecuta limine-update, que regenera las entradas de núcleo."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine no tiene instalado ningún generador de entradas — «Hacer arrancable» instala limine-mkinitcpio-hook, que aporta uno, más un hook de pacman para que los núcleos futuros se traten automáticamente."
+
+msgid "bootloader"
+msgstr "gestor de arranque"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -703,6 +779,9 @@ msgstr ""
 "Cuántas veces ha desaparecido y se ha reconstruido el cortafuegos desde que "
 "arrancó synnet."
 
+msgid "active"
+msgstr "activo"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -746,6 +825,9 @@ msgstr "el monitor de intrusiones"
 
 msgid "network policy and the firewall set"
 msgstr "la política de red y el conjunto del cortafuegos"
+
+msgid "shipped"
+msgstr "incluido"
 
 msgid "last-suspend"
 msgstr "última suspensión"

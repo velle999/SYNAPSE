@@ -370,6 +370,9 @@ msgstr ""
 "127.0.0.1:8080 voor frontends geschreven tegen llama-server of de OpenAI-"
 "API, via de meegeleverde socket"
 
+msgid "unknown"
+msgstr "onbekend"
+
 msgid "systemctl not available"
 msgstr "systemctl niet beschikbaar"
 
@@ -379,6 +382,9 @@ msgstr "model"
 msgid "a part-downloaded model; syn-model download"
 msgstr "een half opgehaald model; syn-model download"
 
+msgid "none"
+msgstr "geen"
+
 msgid "no model installed · syn-model download"
 msgstr "geen model geïnstalleerd · syn-model download"
 
@@ -387,6 +393,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "beschikbaar"
 
 msgid "acceleration"
 msgstr "versnelling"
@@ -460,8 +469,20 @@ msgstr "wat synui start als terminal — synuirc, niet mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "niets dat geïnstalleerd is behandelt dit"
 
+msgid "Claude (Anthropic) API key"
+msgstr "Claude (Anthropic)-API-sleutel"
+
+msgid "OpenAI API key"
+msgstr "OpenAI-API-sleutel"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "niet geïnstalleerd"
+
+msgid "bad"
+msgstr "mislukt"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr ""
@@ -472,6 +493,17 @@ msgstr "backend"
 
 msgid "which service the assistant sends your messages to"
 msgstr "naar welke dienst de assistent uw berichten stuurt"
+
+msgid "warn"
+msgstr "waarschuwing"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "opgeslagen — klik om hem te vervangen, of maak het vak leeg om hem te verwijderen"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "de assistent staat op deze backend en heeft geen sleutel, dus elk verzoek zal mislukken"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr ""
@@ -498,6 +530,15 @@ msgstr "accepteert nieuwe koppelingen"
 
 msgid "nothing has been paired with this adapter"
 msgstr "er is nog niets met deze adapter gekoppeld"
+
+msgid "yes"
+msgstr "ja"
+
+msgid "connected"
+msgstr "verbonden"
+
+msgid "not connected"
+msgstr "niet verbonden"
 
 msgid "paired"
 msgstr "gekoppeld"
@@ -534,6 +575,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "AVRCP-volume"
 
+msgid "see detail"
+msgstr "zie het detail"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -550,6 +594,9 @@ msgstr "lezer"
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd is geïnstalleerd maar meldt geen vingerafdruklezer op deze machine"
+
+msgid "present"
+msgstr "aanwezig"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -615,7 +662,9 @@ msgstr "pacman niet beschikbaar"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ staat in geen enkele Arch-pakketbron — installeren voegt eerst de CachyOS-pakketbron toe (core en extra houden voorrang)"
+msgstr ""
+"  ⓘ staat in geen enkele Arch-pakketbron — installeren voegt eerst de "
+"CachyOS-pakketbron toe (core en extra houden voorrang)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ headers ONTBREKEN — DKMS kan er niets voor bouwen"
@@ -623,12 +672,17 @@ msgstr "  ⚠ headers ONTBREKEN — DKMS kan er niets voor bouwen"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ nog geen bootloaderitem — gebruik „Opstartbaar maken” voordat u herstart en een keuze verwacht"
+msgstr ""
+"  ⚠ nog geen bootloaderitem — gebruik „Opstartbaar maken” voordat u herstart "
+"en een keuze verwacht"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ de bootloaderconfiguratie is alleen voor root leesbaar, dus dit paneel kan niet zeggen of er een item bestaat — „Opstartbaar maken” genereert hem opnieuw en maakt hem leesbaar"
+msgstr ""
+"  ⚠ de bootloaderconfiguratie is alleen voor root leesbaar, dus dit paneel "
+"kan niet zeggen of er een item bestaat — „Opstartbaar maken” genereert hem "
+"opnieuw en maakt hem leesbaar"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -644,6 +698,28 @@ msgid ""
 msgstr ""
 "Er is geen bootloaderconfiguratie gevonden, dus of een kernel opstartbaar is "
 "valt niet te zeggen."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "„Opstartbaar maken” voert grub-mkconfig uit, dat elke geïnstalleerde kernel zelf vindt."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "„Opstartbaar maken” voert kernel-install uit, dat een Boot Loader Spec-item schrijft."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "„Opstartbaar maken” voert limine-update uit, dat de kernelitems opnieuw genereert."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine heeft geen itemgenerator geïnstalleerd — „Opstartbaar maken” installeert limine-mkinitcpio-hook, die er een levert, plus een pacman-hook zodat toekomstige kernels vanzelf worden afgehandeld."
+
+msgid "bootloader"
+msgstr "bootloader"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -704,6 +780,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr "Hoe vaak de firewall is verdwenen en herbouwd sinds synnet is gestart."
 
+msgid "active"
+msgstr "actief"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -747,6 +826,9 @@ msgstr "de inbraakmonitor"
 
 msgid "network policy and the firewall set"
 msgstr "het netwerkbeleid en de firewallset"
+
+msgid "shipped"
+msgstr "meegeleverd"
 
 msgid "last-suspend"
 msgstr "laatste slaapstand"

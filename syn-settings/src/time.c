@@ -305,10 +305,10 @@ int pane_time(void)
 		row_or_unknown(N_("ntp-synced"), out, "System clock synchronized",
 		               N_("has it actually disciplined the clock"), "-");
 	} else {
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("timezone"), N_("timedatectl not installed"));
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("ntp-enabled"), N_("timedatectl not installed"));
+		rec_row("%s\t%s\t%s\t-",
+		        N_("timezone"), N_("unknown"), N_("timedatectl not installed"));
+		rec_row("%s\t%s\t%s\t-",
+		        N_("ntp-enabled"), N_("unknown"), N_("timedatectl not installed"));
 	}
 
 	/* ── How the desktop writes it ────────────────────────────────────── */
@@ -361,8 +361,8 @@ int pane_time(void)
 		        elsewhere ? "what synui's bar WOULD show — it is not running"
 		                  : N_("what the bar is showing right now"));
 	else
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("desktop-clock"),
+		rec_row("%s\t%s\t%s\t-",
+		        N_("desktop-clock"), N_("unknown"),
 		        have_clock ? "synui-clock returned nothing"
 		                   : "synui-clock not installed — not a synui session");
 

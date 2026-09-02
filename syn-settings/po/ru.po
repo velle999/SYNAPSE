@@ -370,6 +370,9 @@ msgstr ""
 "127.0.0.1:8080 для интерфейсов, написанных под llama-server или API OpenAI, "
 "через поставляемый сокет"
 
+msgid "unknown"
+msgstr "неизвестно"
+
 msgid "systemctl not available"
 msgstr "systemctl недоступен"
 
@@ -379,6 +382,9 @@ msgstr "модель"
 msgid "a part-downloaded model; syn-model download"
 msgstr "частично загруженная модель; syn-model download"
 
+msgid "none"
+msgstr "нет"
+
 msgid "no model installed · syn-model download"
 msgstr "модель не установлена · syn-model download"
 
@@ -387,6 +393,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "доступно"
 
 msgid "acceleration"
 msgstr "ускорение"
@@ -460,8 +469,20 @@ msgstr "что synui запускает в качестве терминала �
 msgid "nothing installed handles this"
 msgstr "ничто из установленного этим не занимается"
 
+msgid "Claude (Anthropic) API key"
+msgstr "ключ API Claude (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "ключ API OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "не установлено"
+
+msgid "bad"
+msgstr "ошибка"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "помощника нет на этой машине, поэтому выбирать движок не из чего"
@@ -471,6 +492,17 @@ msgstr "движок"
 
 msgid "which service the assistant sends your messages to"
 msgstr "в какую службу помощник отправляет ваши сообщения"
+
+msgid "warn"
+msgstr "предупреждение"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "сохранён — нажмите, чтобы заменить, или очистите поле, чтобы удалить"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "помощник настроен на этот движок и не имеет ключа, поэтому любой запрос завершится ошибкой"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "ключ не сохранён; задайте его, прежде чем переключаться на этот движок"
@@ -495,6 +527,15 @@ msgstr "принимает новые сопряжения"
 
 msgid "nothing has been paired with this adapter"
 msgstr "с этим адаптером пока ничего не сопряжено"
+
+msgid "yes"
+msgstr "да"
+
+msgid "connected"
+msgstr "подключено"
+
+msgid "not connected"
+msgstr "не подключено"
 
 msgid "paired"
 msgstr "сопряжён"
@@ -530,6 +571,9 @@ msgstr "на этой машине нет оборудования Bluetooth, п
 msgid "avrcp-volume"
 msgstr "громкость AVRCP"
 
+msgid "see detail"
+msgstr "см. подробности"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -547,6 +591,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd установлен, но не сообщает ни об одном считывателе отпечатков на "
 "этой машине"
+
+msgid "present"
+msgstr "есть"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -612,7 +659,9 @@ msgstr "pacman недоступен"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ нет ни в одном репозитории Arch — при установке сначала добавляется репозиторий CachyOS (core и extra сохраняют приоритет)"
+msgstr ""
+"  ⓘ нет ни в одном репозитории Arch — при установке сначала добавляется "
+"репозиторий CachyOS (core и extra сохраняют приоритет)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ заголовки ОТСУТСТВУЮТ — DKMS не сможет для него собрать"
@@ -620,12 +669,17 @@ msgstr "  ⚠ заголовки ОТСУТСТВУЮТ — DKMS не сможе
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ записи загрузчика ещё нет — воспользуйтесь «Сделать загружаемым», прежде чем перезагружаться в расчёте на выбор"
+msgstr ""
+"  ⚠ записи загрузчика ещё нет — воспользуйтесь «Сделать загружаемым», прежде "
+"чем перезагружаться в расчёте на выбор"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ конфигурация загрузчика доступна только root, поэтому эта панель не может сказать, есть ли запись — «Сделать загружаемым» создаёт её заново и делает читаемой"
+msgstr ""
+"  ⚠ конфигурация загрузчика доступна только root, поэтому эта панель не "
+"может сказать, есть ли запись — «Сделать загружаемым» создаёт её заново и "
+"делает читаемой"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -641,6 +695,28 @@ msgid ""
 msgstr ""
 "Конфигурация загрузчика не найдена, поэтому сказать, загружаемо ли ядро, "
 "невозможно."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "«Сделать загружаемым» выполняет grub-mkconfig, который сам находит каждое установленное ядро."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "«Сделать загружаемым» выполняет kernel-install, который записывает запись Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "«Сделать загружаемым» выполняет limine-update, который заново создаёт записи ядер."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "у limine не установлен генератор записей — «Сделать загружаемым» ставит limine-mkinitcpio-hook, который его даёт, плюс хук pacman, чтобы будущие ядра обрабатывались сами."
+
+msgid "bootloader"
+msgstr "загрузчик"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -701,6 +777,9 @@ msgid ""
 msgstr ""
 "Сколько раз брандмауэр исчезал и пересобирался с момента запуска synnet."
 
+msgid "active"
+msgstr "активно"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -744,6 +823,9 @@ msgstr "монитор вторжений"
 
 msgid "network policy and the firewall set"
 msgstr "сетевые правила и набор брандмауэра"
+
+msgid "shipped"
+msgstr "поставляется"
 
 msgid "last-suspend"
 msgstr "последний сон"

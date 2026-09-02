@@ -360,6 +360,9 @@ msgstr ""
 "‏127.0.0.1:8080 للواجهات المكتوبة لـ llama-server أو لواجهة OpenAI، عبر "
 "المقبس المرفق"
 
+msgid "unknown"
+msgstr "غير معروف"
+
 msgid "systemctl not available"
 msgstr "‏systemctl غير متاح"
 
@@ -369,6 +372,9 @@ msgstr "النموذج"
 msgid "a part-downloaded model; syn-model download"
 msgstr "نموذج نُزّل جزئيًا؛ syn-model download"
 
+msgid "none"
+msgstr "لا شيء"
+
 msgid "no model installed · syn-model download"
 msgstr "لا نموذج مثبّت · syn-model download"
 
@@ -377,6 +383,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "المعالج"
+
+msgid "available"
+msgstr "متاح"
 
 msgid "acceleration"
 msgstr "التسريع"
@@ -448,8 +457,20 @@ msgstr "ما يشغّله synui كطرفية — synuirc وليس mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "لا شيء مثبّت يتولّى هذا"
 
+msgid "Claude (Anthropic) API key"
+msgstr "مفتاح واجهة Claude‏ (Anthropic)"
+
+msgid "OpenAI API key"
+msgstr "مفتاح واجهة OpenAI"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "غير مثبّت"
+
+msgid "bad"
+msgstr "معطوب"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr "المساعد غير موجود على هذا الجهاز، فلا محرّك للاختيار"
@@ -459,6 +480,17 @@ msgstr "المحرّك"
 
 msgid "which service the assistant sends your messages to"
 msgstr "إلى أي خدمة يرسل المساعد رسائلك"
+
+msgid "warn"
+msgstr "تحذير"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "محفوظ — انقر لاستبداله، أو أفرغ الحقل لحذفه"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "المساعد مضبوط على هذا المحرّك وليس لديه مفتاح، لذا سيفشل كل طلب"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "لا مفتاح محفوظ؛ اضبط واحدًا قبل التحوّل إلى هذا المحرّك"
@@ -483,6 +515,15 @@ msgstr "يقبل عمليات اقتران جديدة"
 
 msgid "nothing has been paired with this adapter"
 msgstr "لم يُقترن شيء بهذا المهايئ بعد"
+
+msgid "yes"
+msgstr "نعم"
+
+msgid "connected"
+msgstr "متصل"
+
+msgid "not connected"
+msgstr "غير متصل"
 
 msgid "paired"
 msgstr "مقترن"
@@ -518,6 +559,9 @@ msgstr "لا يملك هذا الجهاز عتاد بلوتوث، فلا شيء 
 msgid "avrcp-volume"
 msgstr "مستوى صوت AVRCP"
 
+msgid "see detail"
+msgstr "انظر التفاصيل"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -531,6 +575,9 @@ msgstr "القارئ"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "‏fprintd مثبّتة لكنها لا تبلّغ عن أي قارئ بصمات على هذا الجهاز"
+
+msgid "present"
+msgstr "موجود"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -588,7 +635,9 @@ msgstr "‏pacman غير متاح"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ ليس في أي مستودع لأرش — تثبيته يضيف أولًا مستودع CachyOS (يحتفظ core و extra بالأولوية)"
+msgstr ""
+"  ⓘ ليس في أي مستودع لأرش — تثبيته يضيف أولًا مستودع CachyOS (يحتفظ core و "
+"extra بالأولوية)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ الترويسات مفقودة — لا يستطيع DKMS البناء لها"
@@ -596,12 +645,16 @@ msgstr "  ⚠ الترويسات مفقودة — لا يستطيع DKMS الب�
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ لا توجد بعد مدخلة في محمّل الإقلاع — استخدم «اجعلها قابلة للإقلاع» قبل أن تعيد التشغيل متوقعًا خيارًا"
+msgstr ""
+"  ⚠ لا توجد بعد مدخلة في محمّل الإقلاع — استخدم «اجعلها قابلة للإقلاع» قبل أن "
+"تعيد التشغيل متوقعًا خيارًا"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ إعداد محمّل الإقلاع مقروء للجذر فقط، فلا يستطيع هذا اللوح القول إن كانت هناك مدخلة — «اجعلها قابلة للإقلاع» يعيد توليده ويجعله مقروءًا"
+msgstr ""
+"  ⚠ إعداد محمّل الإقلاع مقروء للجذر فقط، فلا يستطيع هذا اللوح القول إن كانت "
+"هناك مدخلة — «اجعلها قابلة للإقلاع» يعيد توليده ويجعله مقروءًا"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -617,6 +670,28 @@ msgid ""
 msgstr ""
 "لم يُعثر على أي إعداد لمحمّل الإقلاع، فلا يمكن القول إن كانت نواة ما قابلة "
 "للإقلاع."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "«اجعلها قابلة للإقلاع» ينفّذ grub-mkconfig، وهو يجد بنفسه كل نواة مثبّتة."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "«اجعلها قابلة للإقلاع» ينفّذ kernel-install، وهو يكتب مدخلة Boot Loader Spec."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "«اجعلها قابلة للإقلاع» ينفّذ limine-update، وهو يعيد توليد مدخلات النوى."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "لا مولّد مدخلات مثبّت مع limine — «اجعلها قابلة للإقلاع» يثبّت limine-mkinitcpio-hook، فيوفّر واحدًا، مع خطّاف pacman كي تُعالَج النوى المقبلة تلقائيًا."
+
+msgid "bootloader"
+msgstr "محمّل الإقلاع"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -675,6 +750,9 @@ msgid ""
 "started. Something on this machine is flushing nftables."
 msgstr "كم مرة اختفى الجدار الناري وأُعيد بناؤه منذ أن بدأ synnet."
 
+msgid "active"
+msgstr "نشط"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -718,6 +796,9 @@ msgstr "مراقب التسلّل"
 
 msgid "network policy and the firewall set"
 msgstr "سياسة الشبكة ومجموعة قواعد الجدار الناري"
+
+msgid "shipped"
+msgstr "مُرفق"
 
 msgid "last-suspend"
 msgstr "آخر تعليق"

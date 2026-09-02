@@ -173,8 +173,8 @@ int pane_ai(void)
 			        !unit_absent(en) ? action : "-");
 		}
 	} else {
-		rec_row("unit\t-\tunknown\t-\t%s\t-",
-		        N_("systemctl not available"));
+		rec_row("unit\t-\t%s\t-\t%s\t-",
+		        N_("unknown"), N_("systemctl not available"));
 	}
 
 	/* ── The model ────────────────────────────────────────────────────── */
@@ -194,8 +194,9 @@ int pane_ai(void)
 			rec_row("model\t%s\t0 bytes\tEMPTY\t%s\t-",
 			        N_("model"), N_("a part-downloaded model; syn-model download"));
 		} else {
-			rec_row("model\t%s\tnone\tabsent\t%s\t-",
-			        N_("model"), N_("no model installed \xc2\xb7 syn-model download"));
+			rec_row("model\t%s\t%s\tabsent\t%s\t-",
+			        N_("model"), N_("none"),
+			        N_("no model installed \xc2\xb7 syn-model download"));
 		}
 	}
 
@@ -225,12 +226,13 @@ int pane_ai(void)
 		for (size_t i = 0; i < sizeof accel / sizeof accel[0]; i++) {
 			struct stat st;
 			if (stat(accel[i][0], &st) != 0) continue;
-			rec_row("accel\t%s\tavailable\t-\t%s\t-", accel[i][1], accel[i][0]);
+			rec_row("accel\t%s\t%s\t-\t%s\t-",
+			        accel[i][1], N_("available"), accel[i][0]);
 			found = 1;
 		}
 		if (!found)
-			rec_row("accel\t%s\tnone\t-\t%s\t-",
-			        N_("acceleration"),
+			rec_row("accel\t%s\t%s\t-\t%s\t-",
+			        N_("acceleration"), N_("none"),
 			        N_("no ggml backend library in /usr/lib \xc2\xb7 is a synapse-llama package installed?"));
 	}
 

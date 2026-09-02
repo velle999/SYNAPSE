@@ -47,17 +47,24 @@
  * A name here that vibe does not know would draw a button that fails on click,
  * which is the settings-app version of a dead link.
  */
-static const struct { const char *id, *label, *blurb; bool cloud; } BACKENDS[] = {
-	{ "synapd",    "SynapseOS (local)",
+/* ⛔ key_label IS SPELLED OUT, NOT COMPOSED. The window translates a drawn cell
+ * by looking the WHOLE cell up in the catalog, so a label built at runtime —
+ * `"%s API key"` with the backend's name substituted — can never match a msgid
+ * however well its parts are marked, and stayed English in all thirteen
+ * languages. There are two of them and they are fixed, so they are written out
+ * and N_()-marked like everything else. The record is unchanged: the same bytes
+ * come out, they are simply no longer assembled.  */
+static const struct { const char *id, *label, *key_label, *blurb; bool cloud; } BACKENDS[] = {
+	{ "synapd",    "SynapseOS (local)", NULL,
 	  "the model on this machine, through synapd — private, and no account", false },
-	{ "ollama",    "Ollama (local)",
+	{ "ollama",    "Ollama (local)", NULL,
 	  "a local ollama server, if you run one", false },
-	{ "llama_cpp", "llama.cpp (local)",
+	{ "llama_cpp", "llama.cpp (local)", NULL,
 	  "a GGUF loaded in-process; needs python-llama-cpp", false },
-	{ "anthropic", "Claude (Anthropic)",
+	{ "anthropic", "Claude (Anthropic)", N_("Claude (Anthropic) API key"),
 	  "Claude over the official SDK — needs an API key, and every request "
 	  "leaves this machine", true },
-	{ "openai",    "OpenAI",
+	{ "openai",    "OpenAI", N_("OpenAI API key"),
 	  "GPT over the chat-completions API — needs an API key, and every "
 	  "request leaves this machine", true },
 };
@@ -125,8 +132,8 @@ int pane_assistant(void)
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (!have_cmd("vibe")) {
-		rec_row("assistant\t%s\tnot installed\tbad\t%s\t-",
-		        N_("vibe"),
+		rec_row("assistant\t%s\t%s\t%s\t%s\t-",
+		        N_("vibe"), N_("not installed"), N_("bad"),
 		        N_("the assistant is not on this machine, so there is no backend to choose"));
 		return 0;
 	}
@@ -135,7 +142,7 @@ int pane_assistant(void)
 	current_backend(now, sizeof now);
 
 	rec_row("assistant\t%s\t%s\t%s\t%s\tchoice:assistant-backend",
-	        N_("backend"), now[0] ? backend_label(now) : "unknown", now[0] ? "ok" : "-",
+	        N_("backend"), now[0] ? backend_label(now) : N_("unknown"), now[0] ? "ok" : "-",
 	        N_("which service the assistant sends your messages to"));
 
 	/*
@@ -163,15 +170,15 @@ int pane_assistant(void)
 		bool set = strcmp(w, "not set") != 0 && strcmp(w, "unknown") != 0;
 		bool live = !strcmp(now, BACKENDS[i].id);
 
-		rec_row("key\t%s API key\t%s\t%s\t%s\tsecret:%s",
-		        BACKENDS[i].label, w,
-		        set ? "ok" : (live ? "bad" : "warn"),
-		        set ? "stored — click to replace it, or clear the box to "
-		              "remove it"
-		            : (live ? "the assistant is set to this backend and has no "
-		                      "key, so every request will fail"
+		rec_row("key\t%s\t%s\t%s\t%s\tsecret:%s",
+		        BACKENDS[i].key_label, w,
+		        set ? "ok" : (live ? N_("bad") : N_("warn")),
+		        set ? N_("stored — click to replace it, or clear the box to "
+		                 "remove it")
+		            : (live ? N_("the assistant is set to this backend and has "
+		                         "no key, so every request will fail")
 		                    : N_("no key stored; set one before switching to this "
-		                      "backend")),
+		                         "backend")),
 		        BACKENDS[i].id);
 	}
 

@@ -26,8 +26,8 @@ static void controller(void)
 	char out[8192] = "";
 	char *argv[] = { (char *)"bluetoothctl", (char *)"show", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("controller\t-\tnone\t-\t%s\t-",
-		        N_("no adapter, or bluetoothd is not running"));
+		rec_row("controller\t-\t%s\t-\t%s\t-",
+		        N_("none"), N_("no adapter, or bluetoothd is not running"));
 		return;
 	}
 
@@ -95,7 +95,7 @@ static void devices(void)
 		tsv_clean(nbuf);
 
 		rec_row("device\t%s\t%s\t%s\t%s\t-",
-		        addr, nbuf, !strcmp(conn, "yes") ? "connected" : "not connected",
+		        addr, nbuf, !strcmp(conn, N_("yes")) ? N_("connected") : N_("not connected"),
 		        N_("paired"));
 		any = 1;
 	}
@@ -139,8 +139,8 @@ static void radio(void)
 	char out[4096] = "";
 	char *argv[] = { (char *)"rfkill", (char *)"list", (char *)"bluetooth", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("radio\t%s\tunknown\t-\t%s\t-",
-		        N_("rfkill"), N_("rfkill reported nothing"));
+		rec_row("radio\t%s\t%s\t-\t%s\t-",
+		        N_("rfkill"), N_("unknown"), N_("rfkill reported nothing"));
 		return;
 	}
 
@@ -168,15 +168,15 @@ int pane_bluetooth(void)
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
 		rec_row("service\t%s\t%s\t-\t%s\tunit:bluetooth.service",
-		        "bluetooth.service", out[0] ? out : "not installed",
+		        "bluetooth.service", out[0] ? out : N_("not installed"),
 		        N_("BlueZ; nothing below works without it"));
 	}
 
 	if (have_cmd("rfkill")) radio();
 
 	if (!have_cmd("bluetoothctl")) {
-		rec_row("controller\t-\tunknown\t-\t%s\t-",
-		        N_("bluez-utils is not installed"));
+		rec_row("controller\t-\t%s\t-\t%s\t-",
+		        N_("unknown"), N_("bluez-utils is not installed"));
 		return 0;
 	}
 
@@ -204,10 +204,10 @@ int pane_bluetooth(void)
 	/* The one quirk worth carrying into the UI rather than leaving in a wiki:
 	 * on this hardware an AVRCP-capable sink announces full volume the moment
 	 * it connects, which is loud and startling and is not a SynapseOS bug. */
-	rec_row("note\t%s\tsee detail\t-\t"
+	rec_row("note\t%s\t%s\t-\t"
 	        "a connecting headset may announce 100%% volume (AVRCP quirk); SPA_DATA_DIR carries the wireplumber fix\t"
 	        "-",
-	        N_("avrcp-volume"));
+	        N_("avrcp-volume"), N_("see detail"));
 
 	return 0;
 }

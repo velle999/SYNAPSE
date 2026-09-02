@@ -117,8 +117,8 @@ int pane_fprint(void)
 	 * "only works sometimes": there was nowhere that said which.
 	 */
 	if (!have_cmd("fprintd-enroll")) {
-		rec_row("service\t%s\tnot installed\tbad\t%s\tunavailable:fprintd",
-		        N_("fprintd"),
+		rec_row("service\t%s\t%s\t%s\t%s\tunavailable:fprintd",
+		        N_("fprintd"), N_("not installed"), N_("bad"),
 		        N_("the fingerprint daemon is an optional dependency; without it no reader can be used and the lock screen will not offer one"));
 		return 0;
 	}
@@ -138,8 +138,8 @@ int pane_fprint(void)
 		return 0;
 	}
 
-	rec_row("device\t%s\tpresent\tok\t%s\t-",
-	        N_("reader"),
+	rec_row("device\t%s\t%s\tok\t%s\t-",
+	        N_("reader"), N_("present"),
 	        N_("fprintd can see a reader; enrol a finger below and the lock screen will offer it"));
 
 	int have = 0;
@@ -153,8 +153,8 @@ int pane_fprint(void)
 	 * that all say the same thing.
 	 */
 	if (have == 0)
-		rec_row("enrolled\t%s\tnone\twarn\t%s\t-",
-		        N_("fingerprints"),
+		rec_row("enrolled\t%s\t%s\t%s\t%s\t-",
+		        N_("fingerprints"), N_("none"), N_("warn"),
 		        N_("the reader works, but there is nothing for it to match — the lock screen stays on the password until a finger is enrolled"));
 	else
 		rec_row("enrolled\t%s\t%d enrolled\tok\t%s\tforget:all",

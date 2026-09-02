@@ -371,6 +371,9 @@ msgstr ""
 "127.0.0.1:8080 für Frontends, die gegen llama-server oder die OpenAI-API "
 "geschrieben sind, über den mitgelieferten Socket"
 
+msgid "unknown"
+msgstr "unbekannt"
+
 msgid "systemctl not available"
 msgstr "systemctl nicht verfügbar"
 
@@ -380,6 +383,9 @@ msgstr "Modell"
 msgid "a part-downloaded model; syn-model download"
 msgstr "ein teilweise heruntergeladenes Modell; syn-model download"
 
+msgid "none"
+msgstr "keins"
+
 msgid "no model installed · syn-model download"
 msgstr "kein Modell installiert · syn-model download"
 
@@ -388,6 +394,9 @@ msgstr "CUDA (NVIDIA)"
 
 msgid "CPU"
 msgstr "CPU"
+
+msgid "available"
+msgstr "verfügbar"
 
 msgid "acceleration"
 msgstr "Beschleunigung"
@@ -461,8 +470,20 @@ msgstr "was synui als Terminal startet — synuirc, nicht mimeapps.list"
 msgid "nothing installed handles this"
 msgstr "nichts Installiertes behandelt dies"
 
+msgid "Claude (Anthropic) API key"
+msgstr "Claude (Anthropic) API-Schlüssel"
+
+msgid "OpenAI API key"
+msgstr "OpenAI API-Schlüssel"
+
 msgid "vibe"
 msgstr "vibe"
+
+msgid "not installed"
+msgstr "nicht installiert"
+
+msgid "bad"
+msgstr "fehlerhaft"
 
 msgid "the assistant is not on this machine, so there is no backend to choose"
 msgstr ""
@@ -474,6 +495,17 @@ msgstr "Backend"
 
 msgid "which service the assistant sends your messages to"
 msgstr "an welchen Dienst der Assistent Ihre Nachrichten schickt"
+
+msgid "warn"
+msgstr "Warnung"
+
+msgid "stored — click to replace it, or clear the box to remove it"
+msgstr "gespeichert — zum Ersetzen anklicken, oder das Feld leeren, um ihn zu entfernen"
+
+msgid ""
+"the assistant is set to this backend and has no key, so every request will "
+"fail"
+msgstr "der Assistent ist auf dieses Backend eingestellt und hat keinen Schlüssel, jede Anfrage wird also fehlschlagen"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr ""
@@ -500,6 +532,15 @@ msgstr "nimmt neue Kopplungen an"
 
 msgid "nothing has been paired with this adapter"
 msgstr "mit diesem Adapter wurde noch nichts gekoppelt"
+
+msgid "yes"
+msgstr "ja"
+
+msgid "connected"
+msgstr "verbunden"
+
+msgid "not connected"
+msgstr "nicht verbunden"
 
 msgid "paired"
 msgstr "gekoppelt"
@@ -536,6 +577,9 @@ msgstr ""
 msgid "avrcp-volume"
 msgstr "AVRCP-Lautstärke"
 
+msgid "see detail"
+msgstr "siehe Details"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -553,6 +597,9 @@ msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
 "fprintd ist installiert, meldet aber kein Fingerabdruck-Lesegerät auf dieser "
 "Maschine"
+
+msgid "present"
+msgstr "vorhanden"
 
 msgid ""
 "fprintd can see a reader; enrol a finger below and the lock screen will "
@@ -616,7 +663,9 @@ msgstr "pacman nicht verfügbar"
 msgid ""
 "  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
 "(core and extra keep priority)"
-msgstr "  ⓘ in keinem Arch-Repositorium — beim Installieren wird zuerst das CachyOS-Repositorium hinzugefügt (core und extra behalten Vorrang)"
+msgstr ""
+"  ⓘ in keinem Arch-Repositorium — beim Installieren wird zuerst das CachyOS-"
+"Repositorium hinzugefügt (core und extra behalten Vorrang)"
 
 msgid "  ⚠ headers MISSING — DKMS cannot build for it"
 msgstr "  ⚠ Header FEHLEN — DKMS kann dafür nicht bauen"
@@ -624,12 +673,17 @@ msgstr "  ⚠ Header FEHLEN — DKMS kann dafür nicht bauen"
 msgid ""
 "  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
 "expecting a choice"
-msgstr "  ⚠ noch kein Bootloader-Eintrag — nutzen Sie „Startfähig machen“, bevor Sie mit einer Auswahl rechnen"
+msgstr ""
+"  ⚠ noch kein Bootloader-Eintrag — nutzen Sie „Startfähig machen“, bevor Sie "
+"mit einer Auswahl rechnen"
 
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
-msgstr "  ⚠ die Bootloader-Konfiguration ist nur für root lesbar, daher kann diese Seite nicht sagen, ob ein Eintrag existiert — „Startfähig machen“ erzeugt sie neu und macht sie lesbar"
+msgstr ""
+"  ⚠ die Bootloader-Konfiguration ist nur für root lesbar, daher kann diese "
+"Seite nicht sagen, ob ein Eintrag existiert — „Startfähig machen“ erzeugt "
+"sie neu und macht sie lesbar"
 
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
@@ -645,6 +699,28 @@ msgid ""
 msgstr ""
 "Es wurde keine Bootloader-Konfiguration gefunden, daher lässt sich nicht "
 "sagen, ob ein Kernel startfähig ist."
+
+msgid ""
+"“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
+"itself."
+msgstr "„Startfähig machen“ führt grub-mkconfig aus, das jeden installierten Kernel selbst findet."
+
+msgid ""
+"“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
+msgstr "„Startfähig machen“ führt kernel-install aus, das einen Boot-Loader-Spec-Eintrag schreibt."
+
+msgid ""
+"“Make bootable” runs limine-update, which regenerates the kernel entries."
+msgstr "„Startfähig machen“ führt limine-update aus, das die Kernel-Einträge neu erzeugt."
+
+msgid ""
+"limine has no entry generator installed — “Make bootable” installs limine-"
+"mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
+"handled automatically."
+msgstr "limine hat keinen Eintragsgenerator installiert — „Startfähig machen“ installiert limine-mkinitcpio-hook, der einen mitbringt, dazu einen pacman-Hook, damit künftige Kernel automatisch behandelt werden."
+
+msgid "bootloader"
+msgstr "Bootloader"
 
 msgid ""
 "⚠ More than one bootloader is configured here. Which one the firmware "
@@ -707,6 +783,9 @@ msgstr ""
 "So oft ist die Firewall seit dem Start von synnet verschwunden und neu "
 "aufgebaut worden."
 
+msgid "active"
+msgstr "aktiv"
+
 msgid ""
 "The daemon that applies all of this. The rules outlive it, so a stopped "
 "synnet leaves the last ruleset in place and stops maintaining it."
@@ -750,6 +829,9 @@ msgstr "die Einbruchsüberwachung"
 
 msgid "network policy and the firewall set"
 msgstr "Netzwerkregeln und der Firewall-Satz"
+
+msgid "shipped"
+msgstr "mitgeliefert"
 
 msgid "last-suspend"
 msgstr "letzter Suspend"

@@ -59,12 +59,12 @@ int pane_region(void)
 		row_or_unknown(N_("keymap-xkb-model"), out, "X11 Model",
 		               N_("xkb model"), "-");
 	} else {
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("locale"), N_("localectl not installed"));
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("keymap-console"), N_("localectl not installed"));
-		rec_row("%s\tunknown\t%s\t-",
-		        N_("keymap-xkb"), N_("localectl not installed"));
+		rec_row("%s\t%s\t%s\t-",
+		        N_("locale"), N_("unknown"), N_("localectl not installed"));
+		rec_row("%s\t%s\t%s\t-",
+		        N_("keymap-console"), N_("unknown"), N_("localectl not installed"));
+		rec_row("%s\t%s\t%s\t-",
+		        N_("keymap-xkb"), N_("unknown"), N_("localectl not installed"));
 	}
 
 	/* The clock used to be here — timezone, NTP, and nothing at all about how

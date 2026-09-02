@@ -847,7 +847,22 @@ FloatingWindow {
     function wordsColumn(name) {
         return name === "key" || name === "detail"
             || name === "role" || name === "covers"
+            || name === "value" || name === "state"
     }
+
+    // ⚠ `value` AND `state` ARE TRANSLATED OPPORTUNISTICALLY, AND THAT IS THE
+    // DIFFERENCE. The label columns above are words by definition and every one
+    // of them is required to be a msgid — tests/i18n_test.sh fails on a drawn
+    // label that is not. These two carry whatever the reader found: "present"
+    // and "not installed" are words, but so are a MAC address, a kernel
+    // version, a locale and the wake words somebody typed. I18n.tr() returns
+    // anything it does not recognise unchanged, so marking the words is enough
+    // and nothing has to classify the rest.
+    //
+    // ⛔ NOTHING MATCHES ON THE TRANSLATION. tone(), blocked and actionable all
+    // read modelData, which is the raw cell — a status word that changed
+    // language would otherwise stop colouring, and a row would stop being
+    // clickable on a German desktop.
 
     function reload() {
         root.loading = true
