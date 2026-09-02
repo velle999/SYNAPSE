@@ -20,808 +20,1004 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synstudio\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-
-#: synstudio.qml:4105
 msgid "%1   in %2   out %3"
 msgstr "%1   entrada %2   salida %3"
 
-#: synstudio.qml:5201
 msgid "%1  ·  %2 long"
 msgstr "%1  ·  %2 de duración"
 
-#: synstudio.qml:1619
 msgid "%1 (missing)"
 msgstr "%1 (no está)"
 
-#: synstudio.qml:5626
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
 
-#: synstudio.qml:5331
 msgid "+ Add"
 msgstr "+ Añadir"
 
-#: synstudio.qml:1663
 msgid "1080p HD"
 msgstr "1080p HD"
 
-#: synstudio.qml:1660
 msgid "4K UHD"
 msgstr "4K UHD"
 
-#: synstudio.qml:6236
 msgid "A name for it. Everything you do to it is written as you do it."
 msgstr "Un nombre para él. Todo lo que le hagas se escribe según lo haces."
 
-#: synstudio.qml:6296
 msgid "A project of that name is there already. Replace writes over it."
 msgstr "Ya hay un proyecto con ese nombre. Reemplazar escribe encima."
 
-#: synstudio.qml:3393
 msgid "Add media"
 msgstr "Añadir material"
 
-#: synstudio.qml:239
-msgid "Background"
-msgstr "Fondo"
-
-#: synstudio.qml:224
-msgid "Basic"
-msgstr "Básico"
-
-#: synstudio.qml:6176
-#: synstudio.qml:6304
-#: synstudio.qml:6589
 msgid "Cancel"
 msgstr "Cancelar"
 
-#: synstudio.qml:240
-msgid "Canvas"
-msgstr "Lienzo"
-
-#: synstudio.qml:6524
 msgid "Choose a file…"
 msgstr "Elegir un archivo…"
 
-#: synstudio.qml:6409
-#: synstudio.qml:6531
 msgid "Close"
 msgstr "Cerrar"
 
-#: synstudio.qml:226
-msgid "Colour mixer"
-msgstr "Mezclador de color"
-
-#: synstudio.qml:3427
 msgid "Copy"
 msgstr "Copiar"
 
-#: synstudio.qml:6307
 msgid "Create"
 msgstr "Crear"
 
-#: synstudio.qml:227
-msgid "Curve"
-msgstr "Curva"
-
-#: synstudio.qml:1666
 msgid "DCI 2K"
 msgstr "DCI 2K"
 
-#: synstudio.qml:1661
 msgid "DCI 4K"
 msgstr "DCI 4K"
 
-#: synstudio.qml:3421
 msgid "Delete"
 msgstr "Eliminar"
 
-#: synstudio.qml:3418
 msgid "Delete %1"
 msgid_plural "Delete %1"
 msgstr[0] "Eliminar %1"
 msgstr[1] "Eliminar %1"
 
-#: synstudio.qml:228
-msgid "Detail"
-msgstr "Detalle"
-
-#: synstudio.qml:5146
 msgid "Devices"
 msgstr "Dispositivos"
 
-#: synstudio.qml:229
-#: synstudio.qml:5321
 msgid "Effects"
 msgstr "Efectos"
 
-#: synstudio.qml:6238
-msgid "Every edit is already on disk. This gives the cut a name of its own, and leaves a copy behind under the old one."
-msgstr "Cada edición ya está en el disco. Esto le da al montaje un nombre propio y deja una copia con el anterior."
+msgid ""
+"Every edit is already on disk. This gives the cut a name of its own, and "
+"leaves a copy behind under the old one."
+msgstr ""
+"Cada edición ya está en el disco. Esto le da al montaje un nombre propio y "
+"deja una copia con el anterior."
 
-#: synstudio.qml:3355
-#: synstudio.qml:3470
-#: synstudio.qml:6177
 msgid "Export"
 msgstr "Exportar"
 
-#: synstudio.qml:6084
 msgid "Export the cut as"
 msgstr "Exportar el montaje como"
 
-#: synstudio.qml:6085
 msgid "Export the photograph as"
 msgstr "Exportar la fotografía como"
 
-#: synstudio.qml:3811
 msgid "Export thumbnail"
 msgstr "Exportar miniatura"
 
-#: synstudio.qml:3355
-#: synstudio.qml:3470
 msgid "Export…"
 msgstr "Exportar…"
 
-#: synstudio.qml:5015
 msgid "From"
 msgstr "Desde"
 
-#: synstudio.qml:230
-msgid "Geometry"
-msgstr "Geometría"
-
-#: synstudio.qml:5457
 msgid "Grade"
 msgstr "Etalonaje"
 
-#: synstudio.qml:231
-msgid "Grading"
-msgstr "Etalonaje"
-
-#: synstudio.qml:4090
 msgid "Insert"
 msgstr "Insertar"
 
-#: synstudio.qml:6459
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "Instalados, o elige un .cube de donde sea."
 
-#: synstudio.qml:5967
-msgid "J shuttles back through the frame monitor — it is a fast scrub, not playback in reverse."
-msgstr "J retrocede por el monitor de fotograma: es un barrido rápido, no reproducción hacia atrás."
+msgid ""
+"J shuttles back through the frame monitor — it is a fast scrub, not playback "
+"in reverse."
+msgstr ""
+"J retrocede por el monitor de fotograma: es un barrido rápido, no "
+"reproducción hacia atrás."
 
-#: synstudio.qml:3490
-#: synstudio.qml:5919
 msgid "Keys"
 msgstr "Teclas"
 
-#: synstudio.qml:232
-#: synstudio.qml:6450
 msgid "LUT"
 msgstr "LUT"
 
-#: synstudio.qml:233
-msgid "Levels"
-msgstr "Niveles"
-
-#: synstudio.qml:3859
-#: synstudio.qml:5527
 msgid "Looks"
 msgstr "Estilos"
 
-#: synstudio.qml:3446
 msgid "Mark"
 msgstr "Marca"
 
-#: synstudio.qml:4086
 msgid "Mark in"
 msgstr "Marcar entrada"
 
-#: synstudio.qml:4088
 msgid "Mark out"
 msgstr "Marcar salida"
 
-#: synstudio.qml:4974
 msgid "Master"
 msgstr "Máster"
 
-#: synstudio.qml:3452
-#: synstudio.qml:4925
 msgid "Mixer"
 msgstr "Mezclador"
 
-#: synstudio.qml:234
-msgid "Motion"
-msgstr "Movimiento"
-
-#: synstudio.qml:4204
 msgid "Muted"
 msgstr "Silenciado"
 
-#: synstudio.qml:3384
-#: synstudio.qml:6224
 msgid "New project"
 msgstr "Proyecto nuevo"
 
-#: synstudio.qml:3321
-#: synstudio.qml:4120
 msgid "New project, then Add media"
 msgstr "Proyecto nuevo, luego Añadir material"
 
-#: synstudio.qml:6022
 msgid "New video project"
 msgstr "Nuevo proyecto de vídeo"
 
-#: synstudio.qml:5160
 msgid "No project yet"
 msgstr "Todavía no hay proyecto"
 
-#: synstudio.qml:6908
-#: synstudio.qml:8207
 msgid "None"
 msgstr "Ninguno"
 
-#: synstudio.qml:3466
 msgid "Normalise"
 msgstr "Normalizar"
 
-#: synstudio.qml:6460
 msgid "Nothing installed yet — put .cube files in %1, or choose one."
 msgstr "Todavía no hay nada instalado: pon archivos .cube en %1, o elige uno."
 
-#: synstudio.qml:3353
-#: synstudio.qml:4083
 msgid "Open"
 msgstr "Abrir"
 
-#: synstudio.qml:3631
-#: synstudio.qml:6016
 msgid "Open a photograph"
 msgstr "Abrir una fotografía"
 
-#: synstudio.qml:6033
 msgid "Open a project"
 msgstr "Abrir un proyecto"
 
-#: synstudio.qml:4019
 msgid "Open something to edit from"
 msgstr "Abre algo desde donde montar"
 
-#: synstudio.qml:4094
 msgid "Overwrite"
 msgstr "Sobrescribir"
 
-#: synstudio.qml:3435
 msgid "Paste"
 msgstr "Pegar"
 
-#: synstudio.qml:3436
 msgid "Paste %1"
 msgstr "Pegar %1"
 
-#: synstudio.qml:3307
 msgid "Photo"
 msgstr "Foto"
 
-#: synstudio.qml:5161
 msgid "Pick a clip to grade it"
 msgstr "Elige un clip para etalonarlo"
 
-#: synstudio.qml:225
-msgid "Presence"
-msgstr "Presencia"
-
-#: synstudio.qml:3481
 msgid "Program"
 msgstr "Programa"
 
-#: synstudio.qml:6351
 msgid "Project frame"
 msgstr "Formato del proyecto"
 
-#: synstudio.qml:6017
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "Un RAW o una imagen fija: revélala en el cuarto oscuro"
 
-#: synstudio.qml:5138
 msgid "Record"
 msgstr "Grabar"
 
-#: synstudio.qml:5002
-msgid "Records from the playhead onto an audio track, into a file beside the project."
-msgstr "Graba desde el cabezal en una pista de audio, en un archivo junto al proyecto."
+msgid ""
+"Records from the playhead onto an audio track, into a file beside the "
+"project."
+msgstr ""
+"Graba desde el cabezal en una pista de audio, en un archivo junto al "
+"proyecto."
 
-#: synstudio.qml:3374
-#: synstudio.qml:3443
 msgid "Redo"
 msgstr "Rehacer"
 
-#: synstudio.qml:6306
 msgid "Replace"
 msgstr "Reemplazar"
 
-#: synstudio.qml:3381
-#: synstudio.qml:3815
 msgid "Reset"
 msgstr "Restablecer"
 
-#: synstudio.qml:3424
 msgid "Ripple delete"
 msgstr "Eliminar y cerrar hueco"
 
-#: synstudio.qml:66
-#: synstudio.qml:6000
 msgid "SYNAPSE Studio"
 msgstr "SYNAPSE Studio"
 
-#: synstudio.qml:6307
 msgid "Save"
 msgstr "Guardar"
 
-#: synstudio.qml:3389
 msgid "Save as"
 msgstr "Guardar como"
 
-#: synstudio.qml:6225
 msgid "Save the cut as"
 msgstr "Guardar el montaje como"
 
-#: synstudio.qml:3449
 msgid "Snap"
 msgstr "Ajustar"
 
-#: synstudio.qml:235
-msgid "Sound"
-msgstr "Sonido"
-
-#: synstudio.qml:3481
 msgid "Source"
 msgstr "Origen"
 
-#: synstudio.qml:3401
 msgid "Split"
 msgstr "Cortar"
 
-#: synstudio.qml:1668
 msgid "Square 1:1"
 msgstr "Cuadrado 1:1"
 
-#: synstudio.qml:236
-msgid "Stabiliser"
-msgstr "Estabilizador"
-
-#: synstudio.qml:5138
 msgid "Stop"
 msgstr "Parar"
 
-#: synstudio.qml:246
-msgid "Text %1"
-msgstr "Texto %1"
-
-#: synstudio.qml:3361
 msgid "Thumbnail"
 msgstr "Miniatura"
 
-#: synstudio.qml:237
-#: synstudio.qml:3396
 msgid "Title"
 msgstr "Título"
 
-#: synstudio.qml:238
-#: synstudio.qml:3409
 msgid "Transition"
 msgstr "Transición"
 
-#: synstudio.qml:3371
-#: synstudio.qml:3440
 msgid "Undo"
 msgstr "Deshacer"
 
-#: synstudio.qml:1667
 msgid "Vertical 9:16"
 msgstr "Vertical 9:16"
 
-#: synstudio.qml:3312
 msgid "Video"
 msgstr "Vídeo"
 
-#: synstudio.qml:3457
-#: synstudio.qml:4993
 msgid "Voiceover"
 msgstr "Voz en off"
 
-#: synstudio.qml:4204
 msgid "Vol"
 msgstr "Vol"
 
-#: synstudio.qml:6359
-msgid "What this cut delivers in. Clips are fitted to it — changing it re-frames the whole timeline, it does not re-cut anything."
-msgstr "El formato en que se entrega este montaje. Los clips se ajustan a él: cambiarlo reencuadra toda la línea de tiempo, no vuelve a montar nada."
+msgid ""
+"What this cut delivers in. Clips are fitted to it — changing it re-frames "
+"the whole timeline, it does not re-cut anything."
+msgstr ""
+"El formato en que se entrega este montaje. Los clips se ajustan a él: "
+"cambiarlo reencuadra toda la línea de tiempo, no vuelve a montar nada."
 
-#: synstudio.qml:6034
 msgid "a .syntl timeline you started earlier"
 msgstr "una línea de tiempo .syntl que empezaste antes"
 
-#: synstudio.qml:5762
 msgid "a frame; with Shift, a second"
 msgstr "un fotograma; con Mayús, un segundo"
 
-#: synstudio.qml:5767
 msgid "a marker here"
 msgstr "una marca aquí"
 
-#: synstudio.qml:858
-#: synstudio.qml:2661
 msgid "a project called that is there already — Replace writes over it"
 msgstr "ya hay un proyecto con ese nombre: Reemplazar escribe encima"
 
-#: synstudio.qml:6023
 msgid "a timeline to cut, grade and export"
 msgstr "una línea de tiempo para montar, etalonar y exportar"
 
-#: synstudio.qml:1165
-#: synstudio.qml:6702
 msgid "added %1"
 msgstr "%1 añadido"
 
-#: synstudio.qml:5757
 msgid "back to the picture as it arrived"
 msgstr "volver a la imagen tal como llegó"
 
-#: synstudio.qml:2609
 msgid "cannot add a track for that"
 msgstr "no se puede añadir una pista para eso"
 
-#: synstudio.qml:3068
 msgid "cannot play the preview: %1"
 msgstr "no se puede reproducir la vista previa: %1"
 
-#: synstudio.qml:754
 msgid "cannot read that folder"
 msgstr "no se puede leer esa carpeta"
 
-#: synstudio.qml:861
 msgid "cannot save it there"
 msgstr "ahí no se puede guardar"
 
-#: synstudio.qml:1152
 msgid "cannot start a project for that"
 msgstr "no se puede empezar un proyecto con eso"
 
-#: synstudio.qml:2665
 msgid "cannot start a project there"
 msgstr "ahí no se puede empezar un proyecto"
 
-#: synstudio.qml:5752
 msgid "close what is open"
 msgstr "cierra lo que esté abierto"
 
-#: synstudio.qml:5764
 msgid "copy a clip, paste at the playhead"
 msgstr "copiar un clip, pegar en el cabezal"
 
-#: synstudio.qml:2778
 msgid "could not render a preview"
 msgstr "no se pudo generar una vista previa"
 
-#: synstudio.qml:5770
 msgid "delete, ripple delete"
 msgstr "eliminar, eliminar y cerrar hueco"
 
-#: synstudio.qml:1077
 msgid "drag it up to the Video tab to put it in the cut"
 msgstr "Arrástrala a la pestaña Vídeo para ponerla en el montaje"
 
-#: synstudio.qml:5710
 msgid "drop a photograph to open it"
 msgstr "suelta una fotografía para abrirla"
 
-#: synstudio.qml:5708
 msgid "drop clips onto the timeline"
 msgstr "suelta clips en la línea de tiempo"
 
-#: synstudio.qml:5709
 msgid "drop clips to start a project"
 msgstr "suelta clips para empezar un proyecto"
 
-#: synstudio.qml:5498
 msgid "editing key %1 of %2  ·  %3 into the clip"
 msgstr "editando el fotograma clave %1 de %2  ·  %3 dentro del clip"
 
-#: synstudio.qml:4110
 msgid "end"
 msgstr "fin"
 
-#: synstudio.qml:5754
 msgid "export"
 msgstr "exportar"
 
-#: synstudio.qml:766
-#: synstudio.qml:3243
 msgid "export failed"
 msgstr "falló la exportación"
 
-#: synstudio.qml:5756
 msgid "export the photograph"
 msgstr "exportar la fotografía"
 
-#: synstudio.qml:765
-#: synstudio.qml:3242
 msgid "exported %1"
 msgstr "%1 exportado"
 
-#: synstudio.qml:1018
-#: synstudio.qml:3214
 msgid "exporting the cut…"
 msgstr "exportando el montaje…"
 
-#: synstudio.qml:3233
 msgid "exporting the cut… %1%"
 msgstr "exportando el montaje… %1 %"
 
-#: synstudio.qml:1026
 msgid "exporting…"
 msgstr "exportando…"
 
-#: synstudio.qml:5127
 msgid "from %1"
 msgstr "desde %1"
 
-#: synstudio.qml:2995
 msgid "in %1"
 msgstr "entrada %1"
 
-#: synstudio.qml:5122
 msgid "in %1…"
 msgstr "dentro de %1…"
 
-#: synstudio.qml:5769
 msgid "insert, overwrite at the playhead"
 msgstr "insertar, sobrescribir en el cabezal"
 
-#: synstudio.qml:3013
 msgid "inserted at the playhead"
 msgstr "insertado en el cabezal"
 
-#: synstudio.qml:4935
 msgid "levels at the playhead"
 msgstr "niveles en el cabezal"
 
-#: synstudio.qml:5768
 msgid "mark in, mark out on the source"
 msgstr "marcar entrada y salida en el origen"
 
-#: synstudio.qml:1997
 msgid "marker at %1"
 msgstr "marca en %1"
 
-#: synstudio.qml:2538
 msgid "measured %1 LUFS · gain %2 dB"
 msgstr "medido %1 LUFS · ganancia %2 dB"
 
-#: synstudio.qml:2514
 msgid "measuring…"
 msgstr "midiendo…"
 
-#: synstudio.qml:5093
 msgid "monitoring muted — speakers"
 msgstr "escucha silenciada: altavoces"
 
-#: synstudio.qml:5092
 msgid "monitoring on — headphones"
 msgstr "escucha activa: auriculares"
 
-#: synstudio.qml:5759
 msgid "new project"
 msgstr "proyecto nuevo"
 
-#: synstudio.qml:2688
 msgid "new project — %1"
 msgstr "proyecto nuevo — %1"
 
-#: synstudio.qml:7992
 msgid "no font list here — fontconfig is not installed"
 msgstr "aquí no hay lista de fuentes: fontconfig no está instalado"
 
-#: synstudio.qml:64
 msgid "no photograph"
 msgstr "sin fotografía"
 
-#: synstudio.qml:62
 msgid "no project"
 msgstr "sin proyecto"
 
-#: synstudio.qml:1098
 msgid "nothing droppable there"
 msgstr "ahí no hay nada que soltar"
 
-#: synstudio.qml:1168
 msgid "nothing this engine can open: %1"
 msgstr "nada que este motor pueda abrir: %1"
 
-#: synstudio.qml:2529
 msgid "nothing to measure there"
 msgstr "ahí no hay nada que medir"
 
-#: synstudio.qml:2371
 msgid "nothing to record from"
 msgstr "no hay de dónde grabar"
 
-#: synstudio.qml:6008
 msgid "one colour engine, two ways in"
 msgstr "un solo motor de color, dos formas de entrar"
 
-#: synstudio.qml:5753
 msgid "open a file"
 msgstr "abrir un archivo"
 
-#: synstudio.qml:125
-#: synstudio.qml:3309
 msgid "open a photograph"
 msgstr "abrir una fotografía"
 
-#: synstudio.qml:1706
 msgid "open a photograph first"
 msgstr "abre primero una fotografía"
 
-#: synstudio.qml:3007
 msgid "open something in the source monitor"
 msgstr "abre algo en el monitor de origen"
 
-#: synstudio.qml:1141
 msgid "opened %1"
 msgstr "%1 abierto"
 
-#: synstudio.qml:3000
 msgid "out %1"
 msgstr "salida %1"
 
-#: synstudio.qml:3014
 msgid "overwrote at the playhead"
 msgstr "sobrescrito en el cabezal"
 
-#: synstudio.qml:7285
 msgid "pan %1"
 msgstr "panorama %1"
 
-#: synstudio.qml:7284
 msgid "pan C"
 msgstr "panorama C"
 
-#: synstudio.qml:1702
 msgid "pick a clip first"
 msgstr "elige primero un clip"
 
-#: synstudio.qml:7942
 msgid "pick a key on the curve first"
 msgstr "elige primero un punto de la curva"
 
-#: synstudio.qml:1547
 msgid "pick a title first"
 msgstr "elige primero un título"
 
-#: synstudio.qml:3008
 msgid "pick a track first"
 msgstr "elige primero una pista"
 
-#: synstudio.qml:5761
 msgid "play faster, stop, shuttle back"
 msgstr "reproducir más rápido, parar, retroceder"
 
-#: synstudio.qml:2887
 msgid "play ×%1"
 msgstr "reproducción ×%1"
 
-#: synstudio.qml:5760
 msgid "play, pause"
 msgstr "reproducir, pausar"
 
-#: synstudio.qml:2819
 msgid "playback needs qt6-multimedia"
 msgstr "la reproducción necesita qt6-multimedia"
 
-#: synstudio.qml:2725
 msgid "playback needs qt6-multimedia installed"
 msgstr "la reproducción necesita qt6-multimedia instalado"
 
-#: synstudio.qml:471
 msgid "reading %1"
 msgstr "leyendo %1"
 
-#: synstudio.qml:2405
 msgid "recording…"
 msgstr "grabando…"
 
-#: synstudio.qml:2052
 msgid "redone"
 msgstr "rehecho"
 
-#: synstudio.qml:2745
 msgid "rendering a preview to play…"
 msgstr "generando una vista previa para reproducir…"
 
-#: synstudio.qml:4136
 msgid "rendering a preview…"
 msgstr "generando una vista previa…"
 
-#: synstudio.qml:5073
 msgid "roll the timeline"
 msgstr "desplazar la línea de tiempo"
 
-#: synstudio.qml:5758
 msgid "save the cut under a name"
 msgstr "guardar el montaje con un nombre"
 
-#: synstudio.qml:870
 msgid "saved as %1"
 msgstr "guardado como %1"
 
-#: synstudio.qml:2895
 msgid "shuttle back ×%1 (frames, not playback)"
 msgstr "retroceso ×%1 (fotogramas, no reproducción)"
 
-#: synstudio.qml:2942
 msgid "source: %1"
 msgstr "origen: %1"
 
-#: synstudio.qml:5765
 msgid "split at the playhead"
 msgstr "cortar en el cabezal"
 
-#: synstudio.qml:2370
-#: synstudio.qml:3006
 msgid "start a project first"
 msgstr "empieza primero un proyecto"
 
-#: synstudio.qml:2448
 msgid "take of %1s at %2"
 msgstr "toma de %1 s en %2"
 
-#: synstudio.qml:5763
 msgid "the start, the end"
 msgstr "al principio, al final"
 
-#: synstudio.qml:2440
 msgid "the take came back empty"
 msgstr "la toma volvió vacía"
 
-#: synstudio.qml:5751
 msgid "this list"
 msgstr "esta lista"
 
-#: synstudio.qml:5766
 msgid "transition at the playhead"
 msgstr "transición en el cabezal"
 
-#: synstudio.qml:7991
 msgid "type to narrow the list"
 msgstr "escribe para acotar la lista"
 
-#: synstudio.qml:5755
 msgid "undo, redo"
 msgstr "deshacer, rehacer"
 
-#: synstudio.qml:2042
 msgid "undone"
 msgstr "deshecho"
 
-#: synstudio.qml:1005
 msgid "writing the thumbnail…"
 msgstr "escribiendo la miniatura…"
 
-#: synstudio.qml:5470
 msgid "◆ key"
 msgstr "◆ clave"
 
-#: synstudio.qml:5124
 msgid "● %1   %2 dB"
 msgstr "● %1   %2 dB"
+
+msgid "Basic"
+msgstr "Básico"
+
+msgid "Log input"
+msgstr "Entrada logarítmica"
+
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgid "Tint"
+msgstr "Matiz"
+
+msgid "Exposure"
+msgstr "Exposición"
+
+msgid "Contrast"
+msgstr "Contraste"
+
+msgid "Highlights"
+msgstr "Luces"
+
+msgid "Shadows"
+msgstr "Sombras"
+
+msgid "Whites"
+msgstr "Blancos"
+
+msgid "Blacks"
+msgstr "Negros"
+
+msgid "Presence"
+msgstr "Presencia"
+
+msgid "Texture"
+msgstr "Textura"
+
+msgid "Clarity"
+msgstr "Claridad"
+
+msgid "Dehaze"
+msgstr "Quitar neblina"
+
+msgid "Vibrance"
+msgstr "Intensidad"
+
+msgid "Saturation"
+msgstr "Saturación"
+
+msgid "Colour mixer"
+msgstr "Mezclador de color"
+
+msgid "Red hue"
+msgstr "Tono rojo"
+
+msgid "Orange hue"
+msgstr "Tono naranja"
+
+msgid "Yellow hue"
+msgstr "Tono amarillo"
+
+msgid "Green hue"
+msgstr "Tono verde"
+
+msgid "Aqua hue"
+msgstr "Tono aguamarina"
+
+msgid "Blue hue"
+msgstr "Tono azul"
+
+msgid "Purple hue"
+msgstr "Tono púrpura"
+
+msgid "Magenta hue"
+msgstr "Tono magenta"
+
+msgid "Red saturation"
+msgstr "Saturación roja"
+
+msgid "Orange saturation"
+msgstr "Saturación naranja"
+
+msgid "Yellow saturation"
+msgstr "Saturación amarilla"
+
+msgid "Green saturation"
+msgstr "Saturación verde"
+
+msgid "Aqua saturation"
+msgstr "Saturación aguamarina"
+
+msgid "Blue saturation"
+msgstr "Saturación azul"
+
+msgid "Purple saturation"
+msgstr "Saturación púrpura"
+
+msgid "Magenta saturation"
+msgstr "Saturación magenta"
+
+msgid "Red luminance"
+msgstr "Luminancia roja"
+
+msgid "Orange luminance"
+msgstr "Luminancia naranja"
+
+msgid "Yellow luminance"
+msgstr "Luminancia amarilla"
+
+msgid "Green luminance"
+msgstr "Luminancia verde"
+
+msgid "Aqua luminance"
+msgstr "Luminancia aguamarina"
+
+msgid "Blue luminance"
+msgstr "Luminancia azul"
+
+msgid "Purple luminance"
+msgstr "Luminancia púrpura"
+
+msgid "Magenta luminance"
+msgstr "Luminancia magenta"
+
+msgid "Grading"
+msgstr "Etalonaje"
+
+msgid "Shadow hue"
+msgstr "Tono de las sombras"
+
+msgid "Shadow strength"
+msgstr "Intensidad de las sombras"
+
+msgid "Highlight hue"
+msgstr "Tono de las luces"
+
+msgid "Highlight strength"
+msgstr "Intensidad de las luces"
+
+msgid "Balance"
+msgstr "Balance"
+
+msgid "Detail"
+msgstr "Detalle"
+
+msgid "Sharpening"
+msgstr "Enfoque"
+
+msgid "Radius"
+msgstr "Radio"
+
+msgid "Luminance noise"
+msgstr "Ruido de luminancia"
+
+msgid "Colour noise"
+msgstr "Ruido de color"
+
+msgid "Vignette"
+msgstr "Viñeta"
+
+msgid "Vignette midpoint"
+msgstr "Punto medio de la viñeta"
+
+msgid "Vignette feather"
+msgstr "Suavizado de la viñeta"
+
+msgid "Grain"
+msgstr "Grano"
+
+msgid "Grain size"
+msgstr "Tamaño del grano"
+
+msgid "LUT strength"
+msgstr "Intensidad de la LUT"
+
+msgid "Geometry"
+msgstr "Geometría"
+
+msgid "Crop"
+msgstr "Recorte"
+
+msgid "Crop left"
+msgstr "Recorte a la izquierda"
+
+msgid "Crop top"
+msgstr "Recorte arriba"
+
+msgid "Crop width"
+msgstr "Ancho del recorte"
+
+msgid "Crop height"
+msgstr "Alto del recorte"
+
+msgid "Straighten"
+msgstr "Enderezar"
+
+msgid "Flip horizontally"
+msgstr "Voltear en horizontal"
+
+msgid "Flip vertically"
+msgstr "Voltear en vertical"
+
+msgid "Quarter turns"
+msgstr "Cuartos de vuelta"
+
+msgid "Curve"
+msgstr "Curva"
+
+msgid "RGB curve"
+msgstr "Curva RGB"
+
+msgid "Red curve"
+msgstr "Curva de rojos"
+
+msgid "Green curve"
+msgstr "Curva de verdes"
+
+msgid "Blue curve"
+msgstr "Curva de azules"
+
+msgid "Levels"
+msgstr "Niveles"
+
+msgid "Opacity"
+msgstr "Opacidad"
+
+msgid "Gain (dB)"
+msgstr "Ganancia (dB)"
+
+msgid "Speed"
+msgstr "Velocidad"
+
+msgid "Backwards"
+msgstr "Hacia atrás"
+
+msgid "Freeze at (s)"
+msgstr "Congelar en (s)"
+
+msgid "Retime"
+msgstr "Cambiar el tiempo"
+
+msgid "Stabiliser"
+msgstr "Estabilizador"
+
+msgid "On"
+msgstr "Activado"
+
+msgid "Smoothing"
+msgstr "Suavizado"
+
+msgid "Zoom %"
+msgstr "Zoom %"
+
+msgid "Fade in (s)"
+msgstr "Entrada gradual (s)"
+
+msgid "Fade out (s)"
+msgstr "Salida gradual (s)"
+
+msgid "Fade shape"
+msgstr "Forma del fundido"
+
+msgid "Sound"
+msgstr "Sonido"
+
+msgid "Noise reduction"
+msgstr "Reducción de ruido"
+
+msgid "Noise model"
+msgstr "Modelo de ruido"
+
+msgid "Gate"
+msgstr "Puerta de ruido"
+
+msgid "60 Hz"
+msgstr "60 Hz"
+
+msgid "200 Hz"
+msgstr "200 Hz"
+
+msgid "600 Hz"
+msgstr "600 Hz"
+
+msgid "2 kHz"
+msgstr "2 kHz"
+
+msgid "6 kHz"
+msgstr "6 kHz"
+
+msgid "12 kHz"
+msgstr "12 kHz"
+
+msgid "Compression"
+msgstr "Compresión"
+
+msgid "Threshold (dB)"
+msgstr "Umbral (dB)"
+
+msgid "De-ess"
+msgstr "Reductor de sibilancias"
+
+msgid "Kind"
+msgstr "Tipo"
+
+msgid "Length (s)"
+msgstr "Duración (s)"
+
+msgid "Dip red"
+msgstr "Fundido rojo"
+
+msgid "Dip green"
+msgstr "Fundido verde"
+
+msgid "Dip blue"
+msgstr "Fundido azul"
+
+msgid "Motion"
+msgstr "Movimiento"
+
+msgid "Scale"
+msgstr "Escala"
+
+msgid "Position X"
+msgstr "Posición X"
+
+msgid "Position Y"
+msgstr "Posición Y"
+
+msgid "Rotation"
+msgstr "Rotación"
+
+msgid "Animate to"
+msgstr "Animar hasta"
+
+msgid "End scale"
+msgstr "Escala final"
+
+msgid "End X"
+msgstr "X final"
+
+msgid "End Y"
+msgstr "Y final"
+
+msgid "End rotation"
+msgstr "Rotación final"
+
+msgid "Caption"
+msgstr "Rótulo"
+
+msgid "Size"
+msgstr "Tamaño"
+
+msgid "Red"
+msgstr "Rojo"
+
+msgid "Green"
+msgstr "Verde"
+
+msgid "Blue"
+msgstr "Azul"
+
+msgid "Placement"
+msgstr "Colocación"
+
+msgid "Font"
+msgstr "Fuente"
+
+msgid "Weight"
+msgstr "Grosor"
+
+msgid "Outline"
+msgstr "Contorno"
+
+msgid "Shadow"
+msgstr "Sombra"
+
+msgid "Plate"
+msgstr "Placa"
+
+msgid "Line spacing"
+msgstr "Interlineado"
+
+msgid "Credit roll"
+msgstr "Créditos"
+
+msgid "Background"
+msgstr "Fondo"
+
+msgid "Canvas"
+msgstr "Lienzo"
+
+msgid "Thumbnail on"
+msgstr "Miniatura activada"
+
+msgid "Framing"
+msgstr "Encuadre"
+
+msgid "Background red"
+msgstr "Fondo rojo"
+
+msgid "Background green"
+msgstr "Fondo verde"
+
+msgid "Background blue"
+msgstr "Fondo azul"
+
+msgid "Words"
+msgstr "Texto"
+
+msgid "Nudge across"
+msgstr "Desplazar en horizontal"
+
+msgid "Nudge down"
+msgstr "Desplazar en vertical"
+
+msgid "Outline red"
+msgstr "Contorno rojo"
+
+msgid "Outline green"
+msgstr "Contorno verde"
+
+msgid "Outline blue"
+msgstr "Contorno azul"
+
+msgid "Plate red"
+msgstr "Placa roja"
+
+msgid "Plate green"
+msgstr "Placa verde"
+
+msgid "Plate blue"
+msgstr "Placa azul"
+
+msgid "Plate padding"
+msgstr "Margen de la placa"
+
+msgid "Text 1"
+msgstr "Texto 1"
+
+msgid "Text 2"
+msgstr "Texto 2"
+
+msgid "Text 3"
+msgstr "Texto 3"

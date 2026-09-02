@@ -72,8 +72,11 @@ check "no qsTr() — quickshell has no translator to load it" "" "$qstr"
 
 # ── 2. every marked argument is a literal, and the template is current ──
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-strict=$("$root/tools/qml-xgettext.py" --root "$root/data" --files "$root/po/POTFILES" \
-         -o "$tmp/new.pot" --strict 2>&1 >/dev/null)
+# ⚠ REGENERATED WITH po/pot.sh, NOT THE QML EXTRACTOR ALONE. Half this
+# template comes from the C tables; comparing against the QML half only reports
+# a current template as 148 msgids short.
+strict=$("$root/po/pot.sh" "$root" "$root/po" "$tmp" 2>&1 >/dev/null)
+[ -f "$tmp/synstudio.pot" ] && mv "$tmp/synstudio.pot" "$tmp/new.pot"
 check "every I18n.tr() argument is a string literal" "" "$strict"
 
 if [ -f "$tmp/new.pot" ]; then
@@ -99,40 +102,39 @@ while IFS= read -r l; do
 done < <(grep -vE '^\s*#|^\s*$' "$root/po/LINGUAS")
 check "every language in po/LINGUAS has a .po" "" "$absent"
 
-# ── 4. ⛔ THE ENGINE'S GROUP NAMES ARE UNTOUCHED ───────────
+# ── 4. ⛔ THE ENGINE'S OWN LABELS REACHED THE TEMPLATE ─────
 #
-# The mapper's set against the C tables' set, both ways. A group added to a C
-# table and not here draws in English with nothing to say so; one left here
-# after the C table dropped it is a msgid no translator can ever see used.
+# The develop, clip and thumbnail panels are built from TABLES IN C, and their
+# group names and row labels are drawn exactly as the record delivers them. The
+# window therefore looks them up dynamically — `I18n.tr(row.label)` — which is
+# safe only because those rows are marked N_() and po/pot.sh runs real xgettext
+# over them into the same .pot. Drop that half and the panels go quietly
+# English with a catalog that reads as complete.
+#
+# ⇒ Assert the union, not a hand-written list: every label the three C tables
+# can emit must be a msgid. This replaced a groupLabel() switch and its
+# set-equality check — the mapper could drift from the C, this cannot.
 src="$root/src"
-have=$(sed -n '/function groupLabel/,/^    }/p' "$QML" |
-       grep -oE 'case "[^"]*"' | sed 's/case "//; s/"//' | sort -u)
-# ⚠ Read out of the C tables the same way each one spells a row: develop.c and
-# thumb.c through their D()/T() macros, timeline.c through its brace list. The
-# numbered "Text 1".."Text 3" collapse to the regex arm in groupLabel(), so
-# they are excluded here and asserted separately below.
-want=$( { grep -ohE '^\s+D\([^)]*\)' "$src/develop.c" |
-            sed -E 's/.*, *"([^"]*)", *"[^"]*"\)$/\1/'
-          grep -ohE '^\s+T\([^)]*\)' "$src/thumb.c" |
-            sed -E 's/.*, *"([^"]*)", *"[^"]*", *[^,]*\)$/\1/'
-          # ⚠ cfields[], and named rather than pattern-matched: the file also
-          # holds transes[], tstyles[] and tl_presets[], whose second string is
-          # a LABEL and not a group. A loose grep swept those in and reported
-          # eight groups the engine never emits.
-          sed -n '/^static const cfield cfields\[\] = {/,/^};/p' "$src/timeline.c" |
-            grep -oE ', *"[A-Z][^"]*", *"[^"]*"' | sed -E 's/", *"[^"]*"$//; s/^, *"//'
-        } | grep -E '^[A-Z]' | grep -vE '^Text [0-9]+$' | sort -u )
-check "groupLabel() covers every group the engine emits" "" \
-      "$(comm -13 <(printf '%s\n' "$have") <(printf '%s\n' "$want") | tr '\n' ' ')"
-check "...and names none the engine does not" "" \
-      "$(comm -23 <(printf '%s\n' "$have") <(printf '%s\n' "$want") | tr '\n' ' ')"
-# ...and the numbered blocks go through the one msgid rather than three.
-check "the numbered text blocks are one msgid" "yes" \
-      "$(grep -q 'I18n.tr("Text %1")' "$QML" && echo yes || echo no)"
-# ⛔ AND THE HEADINGS ACTUALLY CALL IT. A mapper nothing routes through is a
-# panel still drawing the engine's English.
+missing=""
+while IFS= read -r lbl; do
+    [ -n "$lbl" ] || continue
+    grep -qxF "msgid \"$lbl\"" "$root/po/synstudio.pot" || missing="$missing [$lbl]"
+done < <(grep -ohE 'N_\("(\\.|[^"\\])*"\)' "$src/develop.c" "$src/timeline.c" "$src/thumb.c" |
+         sed -E 's/^N_\("//; s/"\)$//' | sort -u)
+check "every N_() label in the C tables is in the template" "" "$missing"
+
+# ...and the window actually routes a group through the lookup.
+check "group headings go through groupLabel()" "yes" \
+      "$(grep -q 'function groupLabel(g) { return g ? I18n.tr(g) : g }' "$QML" && echo yes || echo no)"
 raw=$(grep -nE '\+ (grp|cgrp|ggrp|tgrp)\.modelData$' "$QML" | tr '\n' ' ')
-check "every group heading is drawn through groupLabel()" "" "$raw"
+check "...and no heading is drawn raw" "" "$raw"
+
+# ⛔ EVERY DYNAMIC LOOKUP SAYS WHERE ITS MSGIDS COME FROM. tools/qml-xgettext.py
+# refuses a non-literal argument unless the line carries `i18n-dynamic:`; this
+# counts them, so one appearing without anyone noticing is a failing test rather
+# than a panel that silently stops being translatable.
+dyn=$(grep -c 'i18n-dynamic:' "$QML")
+check "exactly four dynamic lookups, each explained" "4" "$dyn"
 
 # ── 4b. ⛔ NOTHING SENT TO THE ENGINE GOES THROUGH THE CATALOG ──
 badsend=$(grep -nE '(tlRun|devRun|thumbRun|run)\(\[ *I18n\.|, *I18n\.tr\("(split|title|transition|track|clip|set|get)' \

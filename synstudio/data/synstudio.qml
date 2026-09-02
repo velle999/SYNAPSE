@@ -207,45 +207,22 @@ FloatingWindow {
     property var rows: []
     property var groups: []
 
-    // ⛔ A GROUP NAME ARRIVES FROM THE ENGINE AND IS MATCHED ON. `groups` and
-    // `clipGroups` are field 5 of the `keys` and `timeline keys` records, so
-    // they are spelled by the C tables in src/develop.c and src/timeline.c —
-    // and this file compares them (`modelData === "Basic"`, `=== "Title"`,
-    // `rowsIn(group)`) as well as drawing them. Translating what arrives would
+    // ⛔ A GROUP NAME ARRIVES FROM THE ENGINE AND IS MATCHED ON. `groups`,
+    // `clipGroups` and `thumbGroups` are field 5 of the keys records, spelled
+    // by the C tables in src/develop.c, src/timeline.c and src/thumb.c — and
+    // this file compares them (`modelData === "Basic"`, `=== "Title"`,
+    // `rowsIn(group)`) as well as drawing them. Translating what ARRIVES would
     // be a panel whose sections never open and whose rows land nowhere.
     //
-    // So the engine's spelling stays the key and this is the only place it
-    // becomes a word: the same shape as syn-edit's mode chip and synfiles'
-    // propLabel(). ⚠ A NAME NOT LISTED FALLS THROUGH TO ITSELF, which is the
-    // right failure — a group added to a C table shows up in English rather
-    // than not at all. tests/i18n_test.sh fails when the two sets disagree.
-    function groupLabel(g) {
-        switch (g) {
-        case "Basic":        return I18n.tr("Basic")
-        case "Presence":     return I18n.tr("Presence")
-        case "Colour mixer": return I18n.tr("Colour mixer")
-        case "Curve":        return I18n.tr("Curve")
-        case "Detail":       return I18n.tr("Detail")
-        case "Effects":      return I18n.tr("Effects")
-        case "Geometry":     return I18n.tr("Geometry")
-        case "Grading":      return I18n.tr("Grading")
-        case "LUT":          return I18n.tr("LUT")
-        case "Levels":       return I18n.tr("Levels")
-        case "Motion":       return I18n.tr("Motion")
-        case "Sound":        return I18n.tr("Sound")
-        case "Stabiliser":   return I18n.tr("Stabiliser")
-        case "Title":        return I18n.tr("Title")
-        case "Transition":   return I18n.tr("Transition")
-        case "Background":   return I18n.tr("Background")
-        case "Canvas":       return I18n.tr("Canvas")
-        }
-        // ⚠ THE THUMBNAIL'S THREE TEXT BLOCKS ARE NUMBERED, so they are one
-        // msgid rather than three — src/thumb.c spells them "Text 1".."Text 3"
-        // through a TEXTROWS() macro, and a fourth would work here untouched.
-        const t = /^Text (\d+)$/.exec(g)
-        if (t) return I18n.tr("Text %1").arg(t[1])
-        return g
-    }
+    // ⚠ SO THE LOOKUP IS DYNAMIC, AND THAT IS SAFE HERE BECAUSE THE MSGIDS
+    // COME FROM THE SAME TABLES. Those rows are marked N_() and po/meson.build
+    // runs xgettext over them into this component's own .pot, so every group
+    // the engine can emit is in the catalog by construction — there is no
+    // hand-written list to drift from the C. A group added to a C table shows
+    // up here as English until somebody translates it, which is the right
+    // failure. tests/i18n_test.sh asserts the two sets agree.
+    // i18n-dynamic: the group names are N_() in src/develop.c, timeline.c and thumb.c
+    function groupLabel(g) { return g ? I18n.tr(g) : g }
 
     function parseKeys(text) {
         const out = [], seen = [], byGroup = ({})
@@ -6748,7 +6725,8 @@ FloatingWindow {
             id: tclbl
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.top: parent.top; anchors.topMargin: 6
-            text: tc.row.label
+            // i18n-dynamic: row labels are N_() in the engine's C tables
+            text: I18n.tr(tc.row.label)
             color: root.cText
             font.pixelSize: root.ui(11)
             font.family: root.uiFont
@@ -6911,7 +6889,8 @@ FloatingWindow {
                     id: lutLbl
                     anchors.left: parent.left; anchors.leftMargin: 12
                     anchors.top: parent.top; anchors.topMargin: 6
-                    text: sl.row.label
+                    // i18n-dynamic: row labels are N_() in the engine's C tables
+            text: I18n.tr(sl.row.label)
                     color: root.cText
                     font.pixelSize: root.ui(11)
                     font.family: root.uiFont
@@ -6979,7 +6958,8 @@ FloatingWindow {
             visible: sl.row.type !== "str"
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.top: parent.top; anchors.topMargin: 6
-            text: sl.row.label
+            // i18n-dynamic: row labels are N_() in the engine's C tables
+            text: I18n.tr(sl.row.label)
             color: root.cText
             font.pixelSize: root.ui(11)
             font.family: root.uiFont

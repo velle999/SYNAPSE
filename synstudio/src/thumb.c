@@ -19,6 +19,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "synstudio.h"
+#include "i18n.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,41 +116,41 @@ typedef struct {
  * its panel from it — so a control added here appears in all three and can
  * never appear in only two. Adding a setting is adding a ROW. */
 static const tfield tfields[] = {
-    T("on",        TF_INT,   on,       0.0f, 1.0f,   "Canvas", "Thumbnail on", NULL),
-    T("canvas",    TF_ENUM,  canvas,   0.0f, 5.0f,   "Canvas", "Size", NULL),
+    T("on",        TF_INT,   on,       0.0f, 1.0f,   N_("Canvas"), N_("Thumbnail on"), NULL),
+    T("canvas",    TF_ENUM,  canvas,   0.0f, 5.0f,   N_("Canvas"), N_("Size"), NULL),
     T("width",     TF_INT,   w,       16.0f, 8192.0f,"Canvas", "Custom width", NULL),
     T("height",    TF_INT,   h,       16.0f, 8192.0f,"Canvas", "Custom height", NULL),
-    T("fit",       TF_ENUM,  fit,      0.0f, 1.0f,   "Canvas", "Framing", FIT_CHOICES),
-    T("bg.r",      TF_FLOAT, bg_r,     0.0f, 1.0f,   "Canvas", "Background red", NULL),
-    T("bg.g",      TF_FLOAT, bg_g,     0.0f, 1.0f,   "Canvas", "Background green", NULL),
-    T("bg.b",      TF_FLOAT, bg_b,     0.0f, 1.0f,   "Canvas", "Background blue", NULL),
+    T("fit",       TF_ENUM,  fit,      0.0f, 1.0f,   N_("Canvas"), N_("Framing"), FIT_CHOICES),
+    T("bg.r",      TF_FLOAT, bg_r,     0.0f, 1.0f,   N_("Canvas"), N_("Background red"), NULL),
+    T("bg.g",      TF_FLOAT, bg_g,     0.0f, 1.0f,   N_("Canvas"), N_("Background green"), NULL),
+    T("bg.b",      TF_FLOAT, bg_b,     0.0f, 1.0f,   N_("Canvas"), N_("Background blue"), NULL),
 
 #define TEXTROWS(n, N, grp) \
-    T(#n ".words",  TF_TEXT,  text[N].words,  0.0f, 0.0f,  grp, "Words", NULL), \
-    T(#n ".size",   TF_FLOAT, text[N].size,   0.02f, 0.6f, grp, "Size", NULL), \
-    T(#n ".r",      TF_FLOAT, text[N].r,      0.0f, 1.0f,  grp, "Red", NULL), \
-    T(#n ".g",      TF_FLOAT, text[N].g,      0.0f, 1.0f,  grp, "Green", NULL), \
-    T(#n ".b",      TF_FLOAT, text[N].b,      0.0f, 1.0f,  grp, "Blue", NULL), \
-    T(#n ".pos",    TF_ENUM,  text[N].pos,    0.0f, 8.0f,  grp, "Placement", POS_CHOICES), \
-    T(#n ".x",      TF_FLOAT, text[N].dx,    -0.5f, 0.5f,  grp, "Nudge across", NULL), \
-    T(#n ".y",      TF_FLOAT, text[N].dy,    -0.5f, 0.5f,  grp, "Nudge down", NULL), \
-    T(#n ".border", TF_FLOAT, text[N].border, 0.0f, 0.4f,  grp, "Outline", NULL), \
-    T(#n ".border.r", TF_FLOAT, text[N].br,   0.0f, 1.0f,  grp, "Outline red", NULL), \
-    T(#n ".border.g", TF_FLOAT, text[N].bg_,  0.0f, 1.0f,  grp, "Outline green", NULL), \
-    T(#n ".border.b", TF_FLOAT, text[N].bb,   0.0f, 1.0f,  grp, "Outline blue", NULL), \
-    T(#n ".shadow", TF_FLOAT, text[N].shadow, 0.0f, 0.3f,  grp, "Shadow", NULL), \
-    T(#n ".plate",  TF_FLOAT, text[N].plate,  0.0f, 1.0f,  grp, "Plate", NULL), \
-    T(#n ".plate.r",TF_FLOAT, text[N].pr,     0.0f, 1.0f,  grp, "Plate red", NULL), \
-    T(#n ".plate.g",TF_FLOAT, text[N].pg,     0.0f, 1.0f,  grp, "Plate green", NULL), \
-    T(#n ".plate.b",TF_FLOAT, text[N].pb,     0.0f, 1.0f,  grp, "Plate blue", NULL), \
-    T(#n ".pad",    TF_FLOAT, text[N].pad,    0.0f, 1.0f,  grp, "Plate padding", NULL), \
-    T(#n ".font",   TF_TEXT,  text[N].font,   0.0f, 0.0f,  grp, "Font", NULL), \
-    T(#n ".weight", TF_ENUM,  text[N].weight, 0.0f, 4.0f,  grp, "Weight", \
+    T(#n ".words",  TF_TEXT,  text[N].words,  0.0f, 0.0f,  grp, N_("Words"), NULL), \
+    T(#n ".size",   TF_FLOAT, text[N].size,   0.02f, 0.6f, grp, N_("Size"), NULL), \
+    T(#n ".r",      TF_FLOAT, text[N].r,      0.0f, 1.0f,  grp, N_("Red"), NULL), \
+    T(#n ".g",      TF_FLOAT, text[N].g,      0.0f, 1.0f,  grp, N_("Green"), NULL), \
+    T(#n ".b",      TF_FLOAT, text[N].b,      0.0f, 1.0f,  grp, N_("Blue"), NULL), \
+    T(#n ".pos",    TF_ENUM,  text[N].pos,    0.0f, 8.0f,  grp, N_("Placement"), POS_CHOICES), \
+    T(#n ".x",      TF_FLOAT, text[N].dx,    -0.5f, 0.5f,  grp, N_("Nudge across"), NULL), \
+    T(#n ".y",      TF_FLOAT, text[N].dy,    -0.5f, 0.5f,  grp, N_("Nudge down"), NULL), \
+    T(#n ".border", TF_FLOAT, text[N].border, 0.0f, 0.4f,  grp, N_("Outline"), NULL), \
+    T(#n ".border.r", TF_FLOAT, text[N].br,   0.0f, 1.0f,  grp, N_("Outline red"), NULL), \
+    T(#n ".border.g", TF_FLOAT, text[N].bg_,  0.0f, 1.0f,  grp, N_("Outline green"), NULL), \
+    T(#n ".border.b", TF_FLOAT, text[N].bb,   0.0f, 1.0f,  grp, N_("Outline blue"), NULL), \
+    T(#n ".shadow", TF_FLOAT, text[N].shadow, 0.0f, 0.3f,  grp, N_("Shadow"), NULL), \
+    T(#n ".plate",  TF_FLOAT, text[N].plate,  0.0f, 1.0f,  grp, N_("Plate"), NULL), \
+    T(#n ".plate.r",TF_FLOAT, text[N].pr,     0.0f, 1.0f,  grp, N_("Plate red"), NULL), \
+    T(#n ".plate.g",TF_FLOAT, text[N].pg,     0.0f, 1.0f,  grp, N_("Plate green"), NULL), \
+    T(#n ".plate.b",TF_FLOAT, text[N].pb,     0.0f, 1.0f,  grp, N_("Plate blue"), NULL), \
+    T(#n ".pad",    TF_FLOAT, text[N].pad,    0.0f, 1.0f,  grp, N_("Plate padding"), NULL), \
+    T(#n ".font",   TF_TEXT,  text[N].font,   0.0f, 0.0f,  grp, N_("Font"), NULL), \
+    T(#n ".weight", TF_ENUM,  text[N].weight, 0.0f, 4.0f,  grp, N_("Weight"), \
       "regular|bold|light|italic|bolditalic")
 
-    TEXTROWS(text1, 0, "Text 1"),
-    TEXTROWS(text2, 1, "Text 2"),
-    TEXTROWS(text3, 2, "Text 3")
+    TEXTROWS(text1, 0, N_("Text 1")),
+    TEXTROWS(text2, 1, N_("Text 2")),
+    TEXTROWS(text3, 2, N_("Text 3"))
 };
 
 static const int ntfields = (int)(sizeof tfields / sizeof tfields[0]);

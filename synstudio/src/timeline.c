@@ -33,6 +33,7 @@
  * share `xform_at`, which is the only place a transform becomes numbers.
  */
 #include "synstudio.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -555,76 +556,71 @@ typedef struct {
 #define AFADE_CHOICES  "linear|qsin|hsin|esin|log|exp"
 
 static const cfield cfields[] = {
-    C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, "Levels", "Opacity", NULL, 1),
-    C("gain",         CO_FLOAT, gain_db,    -60.0f,   24.0f, "Levels", "Gain (dB)", NULL, 1),
+    C("opacity",      CO_FLOAT, opacity,      0.0f,    1.0f, N_("Levels"), N_("Opacity"), NULL, 1),
+    C("gain",         CO_FLOAT, gain_db,    -60.0f,   24.0f, N_("Levels"), N_("Gain (dB)"), NULL, 1),
     /* Keyed speed is a RAMP, and its keys are in SOURCE seconds — the one
      * property whose axis is not output time, because a ramp says "at this
      * point in the shot" and because the output length is then an integral
      * rather than an equation. ss_clip_retime is where that is decided. */
-    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, "Levels", "Speed", NULL, 1),
-    C("reverse",      CO_INT,   reverse,      0.0f,    1.0f, "Levels", "Backwards", NULL, 0),
-    C("freeze",       CO_DOUBLE,freeze,      -1.0f, 86400.0f, "Levels", "Freeze at (s)", NULL, 0),
-    C("retime",       CO_ENUM,  retime,       0.0f,    2.0f, "Levels", "Retime", RETIME_CHOICES, 0),
-    C("stab",         CO_INT,   stab,         0.0f,    1.0f, "Stabiliser", "On", NULL, 0),
-    C("stab.smooth",  CO_FLOAT, stab_smooth,  1.0f,  100.0f, "Stabiliser", "Smoothing", NULL, 0),
-    C("stab.zoom",    CO_FLOAT, stab_zoom,    0.0f,   20.0f, "Stabiliser", "Zoom %", NULL, 0),
-    C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, "Levels", "Fade in (s)", NULL, 0),
-    C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, "Levels", "Fade out (s)", NULL, 0),
-    C("fade.shape",   CO_ENUM,  fade_shape,   0.0f,    5.0f, "Levels", "Fade shape", AFADE_CHOICES, 0),
-
+    C("speed",        CO_DOUBLE,speed,        0.1f,   10.0f, N_("Levels"), N_("Speed"), NULL, 1),
+    C("reverse",      CO_INT,   reverse,      0.0f,    1.0f, N_("Levels"), N_("Backwards"), NULL, 0),
+    C("freeze",       CO_DOUBLE,freeze,      -1.0f, 86400.0f, N_("Levels"), N_("Freeze at (s)"), NULL, 0),
+    C("retime",       CO_ENUM,  retime,       0.0f,    2.0f, N_("Levels"), N_("Retime"), RETIME_CHOICES, 0),
+    C("stab",         CO_INT,   stab,         0.0f,    1.0f, N_("Stabiliser"), N_("On"), NULL, 0),
+    C("stab.smooth",  CO_FLOAT, stab_smooth,  1.0f,  100.0f, N_("Stabiliser"), N_("Smoothing"), NULL, 0),
+    C("stab.zoom",    CO_FLOAT, stab_zoom,    0.0f,   20.0f, N_("Stabiliser"), N_("Zoom %"), NULL, 0),
+    C("fade.in",      CO_DOUBLE,fade_in,      0.0f,   30.0f, N_("Levels"), N_("Fade in (s)"), NULL, 0),
+    C("fade.out",     CO_DOUBLE,fade_out,     0.0f,   30.0f, N_("Levels"), N_("Fade out (s)"), NULL, 0),
+    C("fade.shape",   CO_ENUM,  fade_shape,   0.0f,    5.0f, N_("Levels"), N_("Fade shape"), AFADE_CHOICES, 0),
     /* The dialogue chain, in the order it is built: clean it, shape it,
      * control it. Each is one filter with one knob, and zero means the filter
      * is not in the graph AT ALL rather than in it doing nothing. */
-    C("nr",           CO_FLOAT, nr_audio,     0.0f,  100.0f, "Sound", "Noise reduction", NULL, 0),
+    C("nr",           CO_FLOAT, nr_audio,     0.0f,  100.0f, N_("Sound"), N_("Noise reduction"), NULL, 0),
     /* Which denoiser that amount drives: empty is afftdn, a name or a path is
      * an arnndn model. A model this machine has not got is KEPT and does not
      * denoise, the way a missing LUT renders as nothing. */
-    C("nr.model",     CO_TEXT,  nr_model,     0.0f,    0.0f, "Sound", "Noise model", NULL, 0),
-    C("gate",         CO_FLOAT, gate,         0.0f,  100.0f, "Sound", "Gate", NULL, 0),
-    C("eq.60",        CO_FLOAT, eq_db[0],   -18.0f,   18.0f, "Sound", "60 Hz", NULL, 0),
-    C("eq.200",       CO_FLOAT, eq_db[1],   -18.0f,   18.0f, "Sound", "200 Hz", NULL, 0),
-    C("eq.600",       CO_FLOAT, eq_db[2],   -18.0f,   18.0f, "Sound", "600 Hz", NULL, 0),
-    C("eq.2k",        CO_FLOAT, eq_db[3],   -18.0f,   18.0f, "Sound", "2 kHz", NULL, 0),
-    C("eq.6k",        CO_FLOAT, eq_db[4],   -18.0f,   18.0f, "Sound", "6 kHz", NULL, 0),
-    C("eq.12k",       CO_FLOAT, eq_db[5],   -18.0f,   18.0f, "Sound", "12 kHz", NULL, 0),
-    C("comp",         CO_FLOAT, comp,         0.0f,  100.0f, "Sound", "Compression", NULL, 0),
-    C("comp.thresh",  CO_FLOAT, comp_thresh,-60.0f,    0.0f, "Sound", "Threshold (dB)", NULL, 0),
-    C("deess",        CO_FLOAT, deess,        0.0f,  100.0f, "Sound", "De-ess", NULL, 0),
-
-    C("trans",        CO_ENUM,  trans,        0.0f, TRANS_COUNT - 1.0f, "Transition", "Kind", TRANS_CHOICES, 0),
-    C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, "Transition", "Length (s)", NULL, 0),
-    C("trans.r",      CO_FLOAT, trans_r,      0.0f,    1.0f, "Transition", "Dip red", NULL, 0),
-    C("trans.g",      CO_FLOAT, trans_g,      0.0f,    1.0f, "Transition", "Dip green", NULL, 0),
-    C("trans.b",      CO_FLOAT, trans_b,      0.0f,    1.0f, "Transition", "Dip blue", NULL, 0),
-
-    C("xform.scale",  CO_FLOAT, xf.scale,     0.05f,  10.0f, "Motion", "Scale", NULL, 1),
-    C("xform.x",      CO_FLOAT, xf.pos_x,    -1.0f,    1.0f, "Motion", "Position X", NULL, 1),
-    C("xform.y",      CO_FLOAT, xf.pos_y,    -1.0f,    1.0f, "Motion", "Position Y", NULL, 1),
-    C("xform.rotate", CO_FLOAT, xf.rotate, -180.0f,  180.0f, "Motion", "Rotation", NULL, 1),
-    C("xform.animate",CO_INT,   xf.animate,   0.0f,    1.0f, "Motion", "Animate to", NULL, 0),
-    C("xform.scale2", CO_FLOAT, xf.scale2,    0.05f,  10.0f, "Motion", "End scale", NULL, 0),
-    C("xform.x2",     CO_FLOAT, xf.pos_x2,   -1.0f,    1.0f, "Motion", "End X", NULL, 0),
-    C("xform.y2",     CO_FLOAT, xf.pos_y2,   -1.0f,    1.0f, "Motion", "End Y", NULL, 0),
-    C("xform.rotate2",CO_FLOAT, xf.rotate2,-180.0f,  180.0f, "Motion", "End rotation", NULL, 0),
-
-    C("text",         CO_TEXT,  text,         0.0f,    0.0f, "Title", "Caption", NULL, 0),
-    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, "Title", "Size", NULL, 0),
-    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, "Title", "Red", NULL, 0),
-    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, "Title", "Green", NULL, 0),
-    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, "Title", "Blue", NULL, 0),
-    C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, "Title", "Placement", POS_CHOICES, 0),
-    C("text.font",    CO_TEXT,  text_font,    0.0f,    0.0f, "Title", "Font", NULL, 0),
-    C("text.weight",  CO_ENUM,  text_weight,  0.0f,    4.0f, "Title", "Weight", WEIGHT_CHOICES, 0),
-    C("text.border",  CO_FLOAT, text_border,  0.0f,    0.4f, "Title", "Outline", NULL, 0),
-    C("text.shadow",  CO_FLOAT, text_shadow,  0.0f,    0.4f, "Title", "Shadow", NULL, 0),
-    C("text.box",     CO_FLOAT, text_box,     0.0f,    1.0f, "Title", "Plate", NULL, 0),
-    C("text.line",    CO_FLOAT, text_line,    0.0f,    3.0f, "Title", "Line spacing", NULL, 0),
-    C("text.roll",    CO_FLOAT, text_roll,    0.0f,    2.0f, "Title", "Credit roll", NULL, 0),
-
-    C("colour.r",     CO_FLOAT, col_r,        0.0f,    1.0f, "Background", "Red", NULL, 0),
-    C("colour.g",     CO_FLOAT, col_g,        0.0f,    1.0f, "Background", "Green", NULL, 0),
-    C("colour.b",     CO_FLOAT, col_b,        0.0f,    1.0f, "Background", "Blue", NULL, 0),
-    C("colour.a",     CO_FLOAT, col_a,        0.0f,    1.0f, "Background", "Opacity", NULL, 0),
+    C("nr.model",     CO_TEXT,  nr_model,     0.0f,    0.0f, N_("Sound"), N_("Noise model"), NULL, 0),
+    C("gate",         CO_FLOAT, gate,         0.0f,  100.0f, N_("Sound"), N_("Gate"), NULL, 0),
+    C("eq.60",        CO_FLOAT, eq_db[0],   -18.0f,   18.0f, N_("Sound"), N_("60 Hz"), NULL, 0),
+    C("eq.200",       CO_FLOAT, eq_db[1],   -18.0f,   18.0f, N_("Sound"), N_("200 Hz"), NULL, 0),
+    C("eq.600",       CO_FLOAT, eq_db[2],   -18.0f,   18.0f, N_("Sound"), N_("600 Hz"), NULL, 0),
+    C("eq.2k",        CO_FLOAT, eq_db[3],   -18.0f,   18.0f, N_("Sound"), N_("2 kHz"), NULL, 0),
+    C("eq.6k",        CO_FLOAT, eq_db[4],   -18.0f,   18.0f, N_("Sound"), N_("6 kHz"), NULL, 0),
+    C("eq.12k",       CO_FLOAT, eq_db[5],   -18.0f,   18.0f, N_("Sound"), N_("12 kHz"), NULL, 0),
+    C("comp",         CO_FLOAT, comp,         0.0f,  100.0f, N_("Sound"), N_("Compression"), NULL, 0),
+    C("comp.thresh",  CO_FLOAT, comp_thresh,-60.0f,    0.0f, N_("Sound"), N_("Threshold (dB)"), NULL, 0),
+    C("deess",        CO_FLOAT, deess,        0.0f,  100.0f, N_("Sound"), N_("De-ess"), NULL, 0),
+    C("trans",        CO_ENUM,  trans,        0.0f, TRANS_COUNT - 1.0f, N_("Transition"), N_("Kind"), TRANS_CHOICES, 0),
+    C("trans.dur",    CO_DOUBLE,trans_dur,    0.0f,   10.0f, N_("Transition"), N_("Length (s)"), NULL, 0),
+    C("trans.r",      CO_FLOAT, trans_r,      0.0f,    1.0f, N_("Transition"), N_("Dip red"), NULL, 0),
+    C("trans.g",      CO_FLOAT, trans_g,      0.0f,    1.0f, N_("Transition"), N_("Dip green"), NULL, 0),
+    C("trans.b",      CO_FLOAT, trans_b,      0.0f,    1.0f, N_("Transition"), N_("Dip blue"), NULL, 0),
+    C("xform.scale",  CO_FLOAT, xf.scale,     0.05f,  10.0f, N_("Motion"), N_("Scale"), NULL, 1),
+    C("xform.x",      CO_FLOAT, xf.pos_x,    -1.0f,    1.0f, N_("Motion"), N_("Position X"), NULL, 1),
+    C("xform.y",      CO_FLOAT, xf.pos_y,    -1.0f,    1.0f, N_("Motion"), N_("Position Y"), NULL, 1),
+    C("xform.rotate", CO_FLOAT, xf.rotate, -180.0f,  180.0f, N_("Motion"), N_("Rotation"), NULL, 1),
+    C("xform.animate",CO_INT,   xf.animate,   0.0f,    1.0f, N_("Motion"), N_("Animate to"), NULL, 0),
+    C("xform.scale2", CO_FLOAT, xf.scale2,    0.05f,  10.0f, N_("Motion"), N_("End scale"), NULL, 0),
+    C("xform.x2",     CO_FLOAT, xf.pos_x2,   -1.0f,    1.0f, N_("Motion"), N_("End X"), NULL, 0),
+    C("xform.y2",     CO_FLOAT, xf.pos_y2,   -1.0f,    1.0f, N_("Motion"), N_("End Y"), NULL, 0),
+    C("xform.rotate2",CO_FLOAT, xf.rotate2,-180.0f,  180.0f, N_("Motion"), N_("End rotation"), NULL, 0),
+    C("text",         CO_TEXT,  text,         0.0f,    0.0f, N_("Title"), N_("Caption"), NULL, 0),
+    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, N_("Title"), N_("Size"), NULL, 0),
+    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, N_("Title"), N_("Red"), NULL, 0),
+    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, N_("Title"), N_("Green"), NULL, 0),
+    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, N_("Title"), N_("Blue"), NULL, 0),
+    C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, N_("Title"), N_("Placement"), POS_CHOICES, 0),
+    C("text.font",    CO_TEXT,  text_font,    0.0f,    0.0f, N_("Title"), N_("Font"), NULL, 0),
+    C("text.weight",  CO_ENUM,  text_weight,  0.0f,    4.0f, N_("Title"), N_("Weight"), WEIGHT_CHOICES, 0),
+    C("text.border",  CO_FLOAT, text_border,  0.0f,    0.4f, N_("Title"), N_("Outline"), NULL, 0),
+    C("text.shadow",  CO_FLOAT, text_shadow,  0.0f,    0.4f, N_("Title"), N_("Shadow"), NULL, 0),
+    C("text.box",     CO_FLOAT, text_box,     0.0f,    1.0f, N_("Title"), N_("Plate"), NULL, 0),
+    C("text.line",    CO_FLOAT, text_line,    0.0f,    3.0f, N_("Title"), N_("Line spacing"), NULL, 0),
+    C("text.roll",    CO_FLOAT, text_roll,    0.0f,    2.0f, N_("Title"), N_("Credit roll"), NULL, 0),
+    C("colour.r",     CO_FLOAT, col_r,        0.0f,    1.0f, N_("Background"), N_("Red"), NULL, 0),
+    C("colour.g",     CO_FLOAT, col_g,        0.0f,    1.0f, N_("Background"), N_("Green"), NULL, 0),
+    C("colour.b",     CO_FLOAT, col_b,        0.0f,    1.0f, N_("Background"), N_("Blue"), NULL, 0),
+    C("colour.a",     CO_FLOAT, col_a,        0.0f,    1.0f, N_("Background"), N_("Opacity"), NULL, 0),
 };
 #undef C
 

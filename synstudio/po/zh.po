@@ -20,807 +20,999 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synstudio\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
-
-#: synstudio.qml:4105
 msgid "%1   in %2   out %3"
 msgstr "%1   入点 %2   出点 %3"
 
-#: synstudio.qml:5201
 msgid "%1  ·  %2 long"
 msgstr "%1  ·  长 %2"
 
-#: synstudio.qml:1619
 msgid "%1 (missing)"
 msgstr "%1（缺失）"
 
-#: synstudio.qml:5626
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
 
-#: synstudio.qml:5331
 msgid "+ Add"
 msgstr "+ 添加"
 
-#: synstudio.qml:1663
 msgid "1080p HD"
 msgstr "1080p HD"
 
-#: synstudio.qml:1660
 msgid "4K UHD"
 msgstr "4K UHD"
 
-#: synstudio.qml:6236
 msgid "A name for it. Everything you do to it is written as you do it."
 msgstr "给它起个名字。你所做的每一处改动都会随手写入。"
 
-#: synstudio.qml:6296
 msgid "A project of that name is there already. Replace writes over it."
 msgstr "已经有同名项目了。「替换」会覆盖它。"
 
-#: synstudio.qml:3393
 msgid "Add media"
 msgstr "添加素材"
 
-#: synstudio.qml:239
-msgid "Background"
-msgstr "背景"
-
-#: synstudio.qml:224
-msgid "Basic"
-msgstr "基本"
-
-#: synstudio.qml:6176
-#: synstudio.qml:6304
-#: synstudio.qml:6589
 msgid "Cancel"
 msgstr "取消"
 
-#: synstudio.qml:240
-msgid "Canvas"
-msgstr "画布"
-
-#: synstudio.qml:6524
 msgid "Choose a file…"
 msgstr "选择文件…"
 
-#: synstudio.qml:6409
-#: synstudio.qml:6531
 msgid "Close"
 msgstr "关闭"
 
-#: synstudio.qml:226
-msgid "Colour mixer"
-msgstr "色彩混合器"
-
-#: synstudio.qml:3427
 msgid "Copy"
 msgstr "复制"
 
-#: synstudio.qml:6307
 msgid "Create"
 msgstr "创建"
 
-#: synstudio.qml:227
-msgid "Curve"
-msgstr "曲线"
-
-#: synstudio.qml:1666
 msgid "DCI 2K"
 msgstr "DCI 2K"
 
-#: synstudio.qml:1661
 msgid "DCI 4K"
 msgstr "DCI 4K"
 
-#: synstudio.qml:3421
 msgid "Delete"
 msgstr "删除"
 
-#: synstudio.qml:3418
 msgid "Delete %1"
 msgid_plural "Delete %1"
 msgstr[0] "删除 %1 项"
 
-#: synstudio.qml:228
-msgid "Detail"
-msgstr "细节"
-
-#: synstudio.qml:5146
 msgid "Devices"
 msgstr "设备"
 
-#: synstudio.qml:229
-#: synstudio.qml:5321
 msgid "Effects"
 msgstr "效果"
 
-#: synstudio.qml:6238
-msgid "Every edit is already on disk. This gives the cut a name of its own, and leaves a copy behind under the old one."
-msgstr "每一处编辑都已经在磁盘上了。这会给该剪辑一个自己的名字，并以旧名留下一份副本。"
+msgid ""
+"Every edit is already on disk. This gives the cut a name of its own, and "
+"leaves a copy behind under the old one."
+msgstr ""
+"每一处编辑都已经在磁盘上了。这会给该剪辑一个自己的名字，并以旧名留下一份副"
+"本。"
 
-#: synstudio.qml:3355
-#: synstudio.qml:3470
-#: synstudio.qml:6177
 msgid "Export"
 msgstr "导出"
 
-#: synstudio.qml:6084
 msgid "Export the cut as"
 msgstr "将剪辑导出为"
 
-#: synstudio.qml:6085
 msgid "Export the photograph as"
 msgstr "将照片导出为"
 
-#: synstudio.qml:3811
 msgid "Export thumbnail"
 msgstr "导出缩略图"
 
-#: synstudio.qml:3355
-#: synstudio.qml:3470
 msgid "Export…"
 msgstr "导出中…"
 
-#: synstudio.qml:5015
 msgid "From"
 msgstr "起点"
 
-#: synstudio.qml:230
-msgid "Geometry"
-msgstr "几何"
-
-#: synstudio.qml:5457
 msgid "Grade"
 msgstr "调色"
 
-#: synstudio.qml:231
-msgid "Grading"
-msgstr "调色"
-
-#: synstudio.qml:4090
 msgid "Insert"
 msgstr "插入"
 
-#: synstudio.qml:6459
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "已安装的，或者从任意位置选择一个 .cube 文件。"
 
-#: synstudio.qml:5967
-msgid "J shuttles back through the frame monitor — it is a fast scrub, not playback in reverse."
+msgid ""
+"J shuttles back through the frame monitor — it is a fast scrub, not playback "
+"in reverse."
 msgstr "J 在帧监视器中向后拖动——这是快速搜索，不是倒放。"
 
-#: synstudio.qml:3490
-#: synstudio.qml:5919
 msgid "Keys"
 msgstr "快捷键"
 
-#: synstudio.qml:232
-#: synstudio.qml:6450
 msgid "LUT"
 msgstr "LUT"
 
-#: synstudio.qml:233
-msgid "Levels"
-msgstr "电平"
-
-#: synstudio.qml:3859
-#: synstudio.qml:5527
 msgid "Looks"
 msgstr "风格"
 
-#: synstudio.qml:3446
 msgid "Mark"
 msgstr "标记"
 
-#: synstudio.qml:4086
 msgid "Mark in"
 msgstr "标记入点"
 
-#: synstudio.qml:4088
 msgid "Mark out"
 msgstr "标记出点"
 
-#: synstudio.qml:4974
 msgid "Master"
 msgstr "总输出"
 
-#: synstudio.qml:3452
-#: synstudio.qml:4925
 msgid "Mixer"
 msgstr "调音台"
 
-#: synstudio.qml:234
-msgid "Motion"
-msgstr "运动"
-
-#: synstudio.qml:4204
 msgid "Muted"
 msgstr "已静音"
 
-#: synstudio.qml:3384
-#: synstudio.qml:6224
 msgid "New project"
 msgstr "新建项目"
 
-#: synstudio.qml:3321
-#: synstudio.qml:4120
 msgid "New project, then Add media"
 msgstr "先新建项目，再添加素材"
 
-#: synstudio.qml:6022
 msgid "New video project"
 msgstr "新建视频项目"
 
-#: synstudio.qml:5160
 msgid "No project yet"
 msgstr "还没有项目"
 
-#: synstudio.qml:6908
-#: synstudio.qml:8207
 msgid "None"
 msgstr "无"
 
-#: synstudio.qml:3466
 msgid "Normalise"
 msgstr "标准化"
 
-#: synstudio.qml:6460
 msgid "Nothing installed yet — put .cube files in %1, or choose one."
 msgstr "还没有安装任何内容——把 .cube 文件放进 %1，或者选择一个。"
 
-#: synstudio.qml:3353
-#: synstudio.qml:4083
 msgid "Open"
 msgstr "打开"
 
-#: synstudio.qml:3631
-#: synstudio.qml:6016
 msgid "Open a photograph"
 msgstr "打开一张照片"
 
-#: synstudio.qml:6033
 msgid "Open a project"
 msgstr "打开一个项目"
 
-#: synstudio.qml:4019
 msgid "Open something to edit from"
 msgstr "打开可供剪辑的素材"
 
-#: synstudio.qml:4094
 msgid "Overwrite"
 msgstr "覆盖"
 
-#: synstudio.qml:3435
 msgid "Paste"
 msgstr "粘贴"
 
-#: synstudio.qml:3436
 msgid "Paste %1"
 msgstr "粘贴 %1"
 
-#: synstudio.qml:3307
 msgid "Photo"
 msgstr "照片"
 
-#: synstudio.qml:5161
 msgid "Pick a clip to grade it"
 msgstr "选择一个片段来调色"
 
-#: synstudio.qml:225
-msgid "Presence"
-msgstr "临场感"
-
-#: synstudio.qml:3481
 msgid "Program"
 msgstr "节目"
 
-#: synstudio.qml:6351
 msgid "Project frame"
 msgstr "项目画幅"
 
-#: synstudio.qml:6017
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW 或静帧——在暗房里冲洗它"
 
-#: synstudio.qml:5138
 msgid "Record"
 msgstr "录制"
 
-#: synstudio.qml:5002
-msgid "Records from the playhead onto an audio track, into a file beside the project."
+msgid ""
+"Records from the playhead onto an audio track, into a file beside the "
+"project."
 msgstr "从播放头开始录制到一条音频轨，写入项目旁边的文件。"
 
-#: synstudio.qml:3374
-#: synstudio.qml:3443
 msgid "Redo"
 msgstr "重做"
 
-#: synstudio.qml:6306
 msgid "Replace"
 msgstr "替换"
 
-#: synstudio.qml:3381
-#: synstudio.qml:3815
 msgid "Reset"
 msgstr "重置"
 
-#: synstudio.qml:3424
 msgid "Ripple delete"
 msgstr "删除并合拢"
 
-#: synstudio.qml:66
-#: synstudio.qml:6000
 msgid "SYNAPSE Studio"
 msgstr "SYNAPSE Studio"
 
-#: synstudio.qml:6307
 msgid "Save"
 msgstr "保存"
 
-#: synstudio.qml:3389
 msgid "Save as"
 msgstr "另存为"
 
-#: synstudio.qml:6225
 msgid "Save the cut as"
 msgstr "将剪辑另存为"
 
-#: synstudio.qml:3449
 msgid "Snap"
 msgstr "吸附"
 
-#: synstudio.qml:235
-msgid "Sound"
-msgstr "声音"
-
-#: synstudio.qml:3481
 msgid "Source"
 msgstr "源"
 
-#: synstudio.qml:3401
 msgid "Split"
 msgstr "分割"
 
-#: synstudio.qml:1668
 msgid "Square 1:1"
 msgstr "正方形 1:1"
 
-#: synstudio.qml:236
-msgid "Stabiliser"
-msgstr "防抖"
-
-#: synstudio.qml:5138
 msgid "Stop"
 msgstr "停止"
 
-#: synstudio.qml:246
-msgid "Text %1"
-msgstr "文本 %1"
-
-#: synstudio.qml:3361
 msgid "Thumbnail"
 msgstr "缩略图"
 
-#: synstudio.qml:237
-#: synstudio.qml:3396
 msgid "Title"
 msgstr "标题"
 
-#: synstudio.qml:238
-#: synstudio.qml:3409
 msgid "Transition"
 msgstr "转场"
 
-#: synstudio.qml:3371
-#: synstudio.qml:3440
 msgid "Undo"
 msgstr "撤销"
 
-#: synstudio.qml:1667
 msgid "Vertical 9:16"
 msgstr "竖屏 9:16"
 
-#: synstudio.qml:3312
 msgid "Video"
 msgstr "视频"
 
-#: synstudio.qml:3457
-#: synstudio.qml:4993
 msgid "Voiceover"
 msgstr "配音"
 
-#: synstudio.qml:4204
 msgid "Vol"
 msgstr "音量"
 
-#: synstudio.qml:6359
-msgid "What this cut delivers in. Clips are fitted to it — changing it re-frames the whole timeline, it does not re-cut anything."
-msgstr "这个剪辑最终交付的画幅。片段会被适配到其中——更改它会重新取景整条时间线，但不会重新剪辑任何内容。"
+msgid ""
+"What this cut delivers in. Clips are fitted to it — changing it re-frames "
+"the whole timeline, it does not re-cut anything."
+msgstr ""
+"这个剪辑最终交付的画幅。片段会被适配到其中——更改它会重新取景整条时间线，但不"
+"会重新剪辑任何内容。"
 
-#: synstudio.qml:6034
 msgid "a .syntl timeline you started earlier"
 msgstr "你之前开始的 .syntl 时间线"
 
-#: synstudio.qml:5762
 msgid "a frame; with Shift, a second"
 msgstr "一帧；按住 Shift 为一秒"
 
-#: synstudio.qml:5767
 msgid "a marker here"
 msgstr "在此处加标记"
 
-#: synstudio.qml:858
-#: synstudio.qml:2661
 msgid "a project called that is there already — Replace writes over it"
 msgstr "已经有同名项目了——「替换」会覆盖它"
 
-#: synstudio.qml:6023
 msgid "a timeline to cut, grade and export"
 msgstr "用于剪辑、调色和导出的时间线"
 
-#: synstudio.qml:1165
-#: synstudio.qml:6702
 msgid "added %1"
 msgstr "已添加 %1"
 
-#: synstudio.qml:5757
 msgid "back to the picture as it arrived"
 msgstr "回到照片刚导入时的样子"
 
-#: synstudio.qml:2609
 msgid "cannot add a track for that"
 msgstr "无法为它添加轨道"
 
-#: synstudio.qml:3068
 msgid "cannot play the preview: %1"
 msgstr "无法播放预览：%1"
 
-#: synstudio.qml:754
 msgid "cannot read that folder"
 msgstr "无法读取该文件夹"
 
-#: synstudio.qml:861
 msgid "cannot save it there"
 msgstr "无法保存到那里"
 
-#: synstudio.qml:1152
 msgid "cannot start a project for that"
 msgstr "无法用它新建项目"
 
-#: synstudio.qml:2665
 msgid "cannot start a project there"
 msgstr "无法在那里新建项目"
 
-#: synstudio.qml:5752
 msgid "close what is open"
 msgstr "关闭已打开的内容"
 
-#: synstudio.qml:5764
 msgid "copy a clip, paste at the playhead"
 msgstr "复制片段，在播放头处粘贴"
 
-#: synstudio.qml:2778
 msgid "could not render a preview"
 msgstr "无法生成预览"
 
-#: synstudio.qml:5770
 msgid "delete, ripple delete"
 msgstr "删除，删除并合拢"
 
-#: synstudio.qml:1077
 msgid "drag it up to the Video tab to put it in the cut"
 msgstr "把它拖到「视频」标签页即可放入剪辑"
 
-#: synstudio.qml:5710
 msgid "drop a photograph to open it"
 msgstr "拖入一张照片即可打开"
 
-#: synstudio.qml:5708
 msgid "drop clips onto the timeline"
 msgstr "把片段拖到时间线上"
 
-#: synstudio.qml:5709
 msgid "drop clips to start a project"
 msgstr "拖入片段即可新建项目"
 
-#: synstudio.qml:5498
 msgid "editing key %1 of %2  ·  %3 into the clip"
 msgstr "正在编辑第 %1 个关键帧（共 %2 个）  ·  位于片段内 %3"
 
-#: synstudio.qml:4110
 msgid "end"
 msgstr "末尾"
 
-#: synstudio.qml:5754
 msgid "export"
 msgstr "导出"
 
-#: synstudio.qml:766
-#: synstudio.qml:3243
 msgid "export failed"
 msgstr "导出失败"
 
-#: synstudio.qml:5756
 msgid "export the photograph"
 msgstr "导出照片"
 
-#: synstudio.qml:765
-#: synstudio.qml:3242
 msgid "exported %1"
 msgstr "已导出 %1"
 
-#: synstudio.qml:1018
-#: synstudio.qml:3214
 msgid "exporting the cut…"
 msgstr "正在导出剪辑…"
 
-#: synstudio.qml:3233
 msgid "exporting the cut… %1%"
 msgstr "正在导出剪辑… %1%"
 
-#: synstudio.qml:1026
 msgid "exporting…"
 msgstr "正在导出…"
 
-#: synstudio.qml:5127
 msgid "from %1"
 msgstr "从 %1 起"
 
-#: synstudio.qml:2995
 msgid "in %1"
 msgstr "入点 %1"
 
-#: synstudio.qml:5122
 msgid "in %1…"
 msgstr "%1 后…"
 
-#: synstudio.qml:5769
 msgid "insert, overwrite at the playhead"
 msgstr "在播放头处插入、覆盖"
 
-#: synstudio.qml:3013
 msgid "inserted at the playhead"
 msgstr "已在播放头处插入"
 
-#: synstudio.qml:4935
 msgid "levels at the playhead"
 msgstr "播放头处的电平"
 
-#: synstudio.qml:5768
 msgid "mark in, mark out on the source"
 msgstr "在源上标记入点、出点"
 
-#: synstudio.qml:1997
 msgid "marker at %1"
 msgstr "在 %1 处加标记"
 
-#: synstudio.qml:2538
 msgid "measured %1 LUFS · gain %2 dB"
 msgstr "测得 %1 LUFS · 增益 %2 dB"
 
-#: synstudio.qml:2514
 msgid "measuring…"
 msgstr "正在测量…"
 
-#: synstudio.qml:5093
 msgid "monitoring muted — speakers"
 msgstr "监听已静音——扬声器"
 
-#: synstudio.qml:5092
 msgid "monitoring on — headphones"
 msgstr "监听已开启——耳机"
 
-#: synstudio.qml:5759
 msgid "new project"
 msgstr "新建项目"
 
-#: synstudio.qml:2688
 msgid "new project — %1"
 msgstr "新建项目 — %1"
 
-#: synstudio.qml:7992
 msgid "no font list here — fontconfig is not installed"
 msgstr "这里没有字体列表——未安装 fontconfig"
 
-#: synstudio.qml:64
 msgid "no photograph"
 msgstr "无照片"
 
-#: synstudio.qml:62
 msgid "no project"
 msgstr "无项目"
 
-#: synstudio.qml:1098
 msgid "nothing droppable there"
 msgstr "那里没有可拖放的内容"
 
-#: synstudio.qml:1168
 msgid "nothing this engine can open: %1"
 msgstr "此引擎无法打开的内容：%1"
 
-#: synstudio.qml:2529
 msgid "nothing to measure there"
 msgstr "那里没有可测量的内容"
 
-#: synstudio.qml:2371
 msgid "nothing to record from"
 msgstr "没有可录制的来源"
 
-#: synstudio.qml:6008
 msgid "one colour engine, two ways in"
 msgstr "一个色彩引擎，两条入口"
 
-#: synstudio.qml:5753
 msgid "open a file"
 msgstr "打开文件"
 
-#: synstudio.qml:125
-#: synstudio.qml:3309
 msgid "open a photograph"
 msgstr "打开一张照片"
 
-#: synstudio.qml:1706
 msgid "open a photograph first"
 msgstr "请先打开一张照片"
 
-#: synstudio.qml:3007
 msgid "open something in the source monitor"
 msgstr "请在源监视器中打开一些素材"
 
-#: synstudio.qml:1141
 msgid "opened %1"
 msgstr "已打开 %1"
 
-#: synstudio.qml:3000
 msgid "out %1"
 msgstr "出点 %1"
 
-#: synstudio.qml:3014
 msgid "overwrote at the playhead"
 msgstr "已在播放头处覆盖"
 
-#: synstudio.qml:7285
 msgid "pan %1"
 msgstr "声像 %1"
 
-#: synstudio.qml:7284
 msgid "pan C"
 msgstr "声像 C"
 
-#: synstudio.qml:1702
 msgid "pick a clip first"
 msgstr "请先选择一个片段"
 
-#: synstudio.qml:7942
 msgid "pick a key on the curve first"
 msgstr "请先在曲线上选择一个点"
 
-#: synstudio.qml:1547
 msgid "pick a title first"
 msgstr "请先选择一个标题"
 
-#: synstudio.qml:3008
 msgid "pick a track first"
 msgstr "请先选择一条轨道"
 
-#: synstudio.qml:5761
 msgid "play faster, stop, shuttle back"
 msgstr "加速播放、停止、后退"
 
-#: synstudio.qml:2887
 msgid "play ×%1"
 msgstr "播放 ×%1"
 
-#: synstudio.qml:5760
 msgid "play, pause"
 msgstr "播放、暂停"
 
-#: synstudio.qml:2819
 msgid "playback needs qt6-multimedia"
 msgstr "播放需要 qt6-multimedia"
 
-#: synstudio.qml:2725
 msgid "playback needs qt6-multimedia installed"
 msgstr "播放需要安装 qt6-multimedia"
 
-#: synstudio.qml:471
 msgid "reading %1"
 msgstr "正在读取 %1"
 
-#: synstudio.qml:2405
 msgid "recording…"
 msgstr "正在录制…"
 
-#: synstudio.qml:2052
 msgid "redone"
 msgstr "已重做"
 
-#: synstudio.qml:2745
 msgid "rendering a preview to play…"
 msgstr "正在生成可播放的预览…"
 
-#: synstudio.qml:4136
 msgid "rendering a preview…"
 msgstr "正在生成预览…"
 
-#: synstudio.qml:5073
 msgid "roll the timeline"
 msgstr "让时间线跟着滚动"
 
-#: synstudio.qml:5758
 msgid "save the cut under a name"
 msgstr "为剪辑命名并保存"
 
-#: synstudio.qml:870
 msgid "saved as %1"
 msgstr "已保存为 %1"
 
-#: synstudio.qml:2895
 msgid "shuttle back ×%1 (frames, not playback)"
 msgstr "后退 ×%1（按帧，不是播放）"
 
-#: synstudio.qml:2942
 msgid "source: %1"
 msgstr "源：%1"
 
-#: synstudio.qml:5765
 msgid "split at the playhead"
 msgstr "在播放头处分割"
 
-#: synstudio.qml:2370
-#: synstudio.qml:3006
 msgid "start a project first"
 msgstr "请先新建一个项目"
 
-#: synstudio.qml:2448
 msgid "take of %1s at %2"
 msgstr "在 %2 处录了 %1 秒"
 
-#: synstudio.qml:5763
 msgid "the start, the end"
 msgstr "到开头，到结尾"
 
-#: synstudio.qml:2440
 msgid "the take came back empty"
 msgstr "这一条录下来是空的"
 
-#: synstudio.qml:5751
 msgid "this list"
 msgstr "这个列表"
 
-#: synstudio.qml:5766
 msgid "transition at the playhead"
 msgstr "在播放头处加转场"
 
-#: synstudio.qml:7991
 msgid "type to narrow the list"
 msgstr "输入以筛选列表"
 
-#: synstudio.qml:5755
 msgid "undo, redo"
 msgstr "撤销、重做"
 
-#: synstudio.qml:2042
 msgid "undone"
 msgstr "已撤销"
 
-#: synstudio.qml:1005
 msgid "writing the thumbnail…"
 msgstr "正在写入缩略图…"
 
-#: synstudio.qml:5470
 msgid "◆ key"
 msgstr "◆ 关键帧"
 
-#: synstudio.qml:5124
 msgid "● %1   %2 dB"
 msgstr "● %1   %2 dB"
+
+msgid "Basic"
+msgstr "基本"
+
+msgid "Log input"
+msgstr "Log 输入"
+
+msgid "Temperature"
+msgstr "色温"
+
+msgid "Tint"
+msgstr "色调"
+
+msgid "Exposure"
+msgstr "曝光"
+
+msgid "Contrast"
+msgstr "对比度"
+
+msgid "Highlights"
+msgstr "高光"
+
+msgid "Shadows"
+msgstr "阴影"
+
+msgid "Whites"
+msgstr "白色"
+
+msgid "Blacks"
+msgstr "黑色"
+
+msgid "Presence"
+msgstr "临场感"
+
+msgid "Texture"
+msgstr "纹理"
+
+msgid "Clarity"
+msgstr "清晰度"
+
+msgid "Dehaze"
+msgstr "去雾"
+
+msgid "Vibrance"
+msgstr "自然饱和度"
+
+msgid "Saturation"
+msgstr "饱和度"
+
+msgid "Colour mixer"
+msgstr "色彩混合器"
+
+msgid "Red hue"
+msgstr "红色色相"
+
+msgid "Orange hue"
+msgstr "橙色色相"
+
+msgid "Yellow hue"
+msgstr "黄色色相"
+
+msgid "Green hue"
+msgstr "绿色色相"
+
+msgid "Aqua hue"
+msgstr "青色色相"
+
+msgid "Blue hue"
+msgstr "蓝色色相"
+
+msgid "Purple hue"
+msgstr "紫色色相"
+
+msgid "Magenta hue"
+msgstr "洋红色相"
+
+msgid "Red saturation"
+msgstr "红色饱和度"
+
+msgid "Orange saturation"
+msgstr "橙色饱和度"
+
+msgid "Yellow saturation"
+msgstr "黄色饱和度"
+
+msgid "Green saturation"
+msgstr "绿色饱和度"
+
+msgid "Aqua saturation"
+msgstr "青色饱和度"
+
+msgid "Blue saturation"
+msgstr "蓝色饱和度"
+
+msgid "Purple saturation"
+msgstr "紫色饱和度"
+
+msgid "Magenta saturation"
+msgstr "洋红饱和度"
+
+msgid "Red luminance"
+msgstr "红色明度"
+
+msgid "Orange luminance"
+msgstr "橙色明度"
+
+msgid "Yellow luminance"
+msgstr "黄色明度"
+
+msgid "Green luminance"
+msgstr "绿色明度"
+
+msgid "Aqua luminance"
+msgstr "青色明度"
+
+msgid "Blue luminance"
+msgstr "蓝色明度"
+
+msgid "Purple luminance"
+msgstr "紫色明度"
+
+msgid "Magenta luminance"
+msgstr "洋红明度"
+
+msgid "Grading"
+msgstr "调色"
+
+msgid "Shadow hue"
+msgstr "阴影色相"
+
+msgid "Shadow strength"
+msgstr "阴影强度"
+
+msgid "Highlight hue"
+msgstr "高光色相"
+
+msgid "Highlight strength"
+msgstr "高光强度"
+
+msgid "Balance"
+msgstr "平衡"
+
+msgid "Detail"
+msgstr "细节"
+
+msgid "Sharpening"
+msgstr "锐化"
+
+msgid "Radius"
+msgstr "半径"
+
+msgid "Luminance noise"
+msgstr "亮度噪点"
+
+msgid "Colour noise"
+msgstr "彩色噪点"
+
+msgid "Vignette"
+msgstr "暗角"
+
+msgid "Vignette midpoint"
+msgstr "暗角中点"
+
+msgid "Vignette feather"
+msgstr "暗角羽化"
+
+msgid "Grain"
+msgstr "颗粒"
+
+msgid "Grain size"
+msgstr "颗粒大小"
+
+msgid "LUT strength"
+msgstr "LUT 强度"
+
+msgid "Geometry"
+msgstr "几何"
+
+msgid "Crop"
+msgstr "裁切"
+
+msgid "Crop left"
+msgstr "左侧裁切"
+
+msgid "Crop top"
+msgstr "顶部裁切"
+
+msgid "Crop width"
+msgstr "裁切宽度"
+
+msgid "Crop height"
+msgstr "裁切高度"
+
+msgid "Straighten"
+msgstr "拉直"
+
+msgid "Flip horizontally"
+msgstr "水平翻转"
+
+msgid "Flip vertically"
+msgstr "垂直翻转"
+
+msgid "Quarter turns"
+msgstr "旋转 90° 次数"
+
+msgid "Curve"
+msgstr "曲线"
+
+msgid "RGB curve"
+msgstr "RGB 曲线"
+
+msgid "Red curve"
+msgstr "红色曲线"
+
+msgid "Green curve"
+msgstr "绿色曲线"
+
+msgid "Blue curve"
+msgstr "蓝色曲线"
+
+msgid "Levels"
+msgstr "电平"
+
+msgid "Opacity"
+msgstr "不透明度"
+
+msgid "Gain (dB)"
+msgstr "增益（dB）"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "Backwards"
+msgstr "倒放"
+
+msgid "Freeze at (s)"
+msgstr "定格于（秒）"
+
+msgid "Retime"
+msgstr "变速"
+
+msgid "Stabiliser"
+msgstr "防抖"
+
+msgid "On"
+msgstr "开启"
+
+msgid "Smoothing"
+msgstr "平滑"
+
+msgid "Zoom %"
+msgstr "缩放 %"
+
+msgid "Fade in (s)"
+msgstr "淡入（秒）"
+
+msgid "Fade out (s)"
+msgstr "淡出（秒）"
+
+msgid "Fade shape"
+msgstr "淡化曲线"
+
+msgid "Sound"
+msgstr "声音"
+
+msgid "Noise reduction"
+msgstr "降噪"
+
+msgid "Noise model"
+msgstr "噪声模型"
+
+msgid "Gate"
+msgstr "噪声门"
+
+msgid "60 Hz"
+msgstr "60 Hz"
+
+msgid "200 Hz"
+msgstr "200 Hz"
+
+msgid "600 Hz"
+msgstr "600 Hz"
+
+msgid "2 kHz"
+msgstr "2 kHz"
+
+msgid "6 kHz"
+msgstr "6 kHz"
+
+msgid "12 kHz"
+msgstr "12 kHz"
+
+msgid "Compression"
+msgstr "压缩"
+
+msgid "Threshold (dB)"
+msgstr "阈值（dB）"
+
+msgid "De-ess"
+msgstr "齿音消除"
+
+msgid "Kind"
+msgstr "类型"
+
+msgid "Length (s)"
+msgstr "时长（秒）"
+
+msgid "Dip red"
+msgstr "经由红色"
+
+msgid "Dip green"
+msgstr "经由绿色"
+
+msgid "Dip blue"
+msgstr "经由蓝色"
+
+msgid "Motion"
+msgstr "运动"
+
+msgid "Scale"
+msgstr "缩放"
+
+msgid "Position X"
+msgstr "位置 X"
+
+msgid "Position Y"
+msgstr "位置 Y"
+
+msgid "Rotation"
+msgstr "旋转"
+
+msgid "Animate to"
+msgstr "动画到"
+
+msgid "End scale"
+msgstr "结束缩放"
+
+msgid "End X"
+msgstr "结束 X"
+
+msgid "End Y"
+msgstr "结束 Y"
+
+msgid "End rotation"
+msgstr "结束旋转"
+
+msgid "Caption"
+msgstr "字幕"
+
+msgid "Size"
+msgstr "大小"
+
+msgid "Red"
+msgstr "红"
+
+msgid "Green"
+msgstr "绿"
+
+msgid "Blue"
+msgstr "蓝"
+
+msgid "Placement"
+msgstr "位置"
+
+msgid "Font"
+msgstr "字体"
+
+msgid "Weight"
+msgstr "字重"
+
+msgid "Outline"
+msgstr "描边"
+
+msgid "Shadow"
+msgstr "阴影"
+
+msgid "Plate"
+msgstr "衬底"
+
+msgid "Line spacing"
+msgstr "行距"
+
+msgid "Credit roll"
+msgstr "片尾字幕"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Canvas"
+msgstr "画布"
+
+msgid "Thumbnail on"
+msgstr "开启缩略图"
+
+msgid "Framing"
+msgstr "取景"
+
+msgid "Background red"
+msgstr "背景红"
+
+msgid "Background green"
+msgstr "背景绿"
+
+msgid "Background blue"
+msgstr "背景蓝"
+
+msgid "Words"
+msgstr "文字"
+
+msgid "Nudge across"
+msgstr "水平微移"
+
+msgid "Nudge down"
+msgstr "垂直微移"
+
+msgid "Outline red"
+msgstr "描边红"
+
+msgid "Outline green"
+msgstr "描边绿"
+
+msgid "Outline blue"
+msgstr "描边蓝"
+
+msgid "Plate red"
+msgstr "衬底红"
+
+msgid "Plate green"
+msgstr "衬底绿"
+
+msgid "Plate blue"
+msgstr "衬底蓝"
+
+msgid "Plate padding"
+msgstr "衬底内边距"
+
+msgid "Text 1"
+msgstr "文本 1"
+
+msgid "Text 2"
+msgstr "文本 2"
+
+msgid "Text 3"
+msgstr "文本 3"

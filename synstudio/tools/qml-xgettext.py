@@ -157,7 +157,8 @@ def find_call_end(text, start):
 
 def scan(path, rel):
     """[(msgid, msgid_plural or None, line)] plus a list of complaints."""
-    text = strip_comments(path.read_text(encoding='utf-8'))
+    raw = path.read_text(encoding='utf-8')
+    text = strip_comments(raw)
     hits, bad = [], []
     for m in _CALL.finditer(text):
         kind = m.group(1)
@@ -175,8 +176,36 @@ def scan(path, rel):
             continue
         single = literal_value(args[0])
         if single is None:
+            # ⛔ A DYNAMIC LOOKUP IS AN ERROR UNLESS THE LINE SAYS WHY.
+            #
+            # The rule stands: I18n.tr(someVariable) extracts nothing and stays
+            # English, and that is the QML shape of the N_() trap. But synstudio
+            # has one case the rule cannot express — the develop, clip and
+            # thumbnail panels are built from TABLES IN C, and their group names
+            # and row labels arrive over the record protocol and are drawn as
+            # they come. Those rows are marked N_() and po/pot.sh runs real
+            # xgettext over them into the same template, so every string such a
+            # call can be handed IS in the catalog — just not from this file.
+            #
+            # So the exemption is per call site and has to be written down:
+            #     // i18n-dynamic: <where the msgids come from>
+            # on the call's own line or the one above it. Anything else is
+            # still an error, and the marker is greppable when someone asks
+            # which lookups are not literal.
+            #
+            # ⚠ THIS COPY OF THE TOOL THEREFORE DIFFERS from the ones in
+            # synfiles/, synpkg/ and synui/ — which already differ from each
+            # other; this file has never been kept byte-identical the way
+            # I18n.qml is. It is a build-time tool and ships to nobody.
+            prev = raw.rfind('\n', 0, m.start())
+            prev = raw.rfind('\n', 0, prev) + 1 if prev > 0 else 0
+            near = raw[prev:close]
+            if 'i18n-dynamic:' in near:
+                continue
             bad.append(f"{rel}:{line}: I18n.{kind}()'s first argument is not a string literal "
-                       f"— it extracts nothing and stays English: {args[0][:60]}")
+                       f"— it extracts nothing and stays English: {args[0][:60]}\n"
+                       f"    (if the msgids come from elsewhere, say so with a "
+                       f"`// i18n-dynamic: …` comment on or above the line)")
             continue
         plural = None
         if kind == 'trn':

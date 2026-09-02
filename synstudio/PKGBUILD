@@ -1501,7 +1501,35 @@ pkgver=0.1.0
 #   C locale ON PURPOSE, and the suite asserts it in both directions: that call
 #   builds a PATH, and under ar_EG a locale-formatted one carries Arabic-Indic
 #   digits into it.
-pkgrel=47
+# 48: the panels stop being English under translated headings.
+#   47 translated the WINDOW; the develop, clip and thumbnail panels are built
+#   from TABLES IN C, so "Temperature", "Opacity" and about 150 others still
+#   drew in English underneath. They are marked N_() now — src/develop.c,
+#   src/timeline.c, src/thumb.c — and po/pot.sh runs REAL xgettext over them and
+#   msgcat's the result into the same template the QML extractor writes. One
+#   .po per language, one JSON, two source languages. 326 msgids, 325/325 in
+#   all thirteen.
+#   ⛔ AND THE RECORD STAYS ENGLISH, which is the whole point. The group and the
+#   label are KEYS as well as words — the window matches on the group, the CLI
+#   and every test parse the same records, and a translated record makes output
+#   depend on the locale, which is the bug `pacman -Qi` taught this project
+#   twice. src/i18n.h therefore has N_() and NO _(): the C marks, the window
+#   looks up. Verified: `synstudio keys` is byte-identical under de_DE.
+#   ⛔ WHICH MAKES THE WINDOW'S LOOKUP DYNAMIC — `I18n.tr(row.label)` — and
+#   tools/qml-xgettext.py refuses a non-literal argument for good reason. The
+#   refusal stands; the exemption is per call site and has to be written down as
+#   `// i18n-dynamic: <where the msgids come from>`. There are exactly four, the
+#   suite counts them, and it also asserts every N_() label in the three C
+#   tables is a msgid — so the dynamic lookup can never be handed a string the
+#   catalog has not got.
+#   ⚠ THIS DELETED THE groupLabel() SWITCH and its set-equality check. The
+#   mapper was a hand-written list that could drift from the C; the group names
+#   are now extracted from the C by construction, so groupLabel() is one line.
+#   ⚠ tools/qml-xgettext.py in THIS component therefore differs from the copies
+#   in synui/, synfiles/ and synpkg/ — which already differ from each other. It
+#   is a build-time tool and ships to nobody; I18n.qml is the file kept
+#   byte-identical, and still is.
+pkgrel=48
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

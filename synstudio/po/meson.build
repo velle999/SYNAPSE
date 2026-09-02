@@ -45,9 +45,20 @@ foreach lang : st_linguas
     install_dir : get_option('datadir') / 'synstudio' / 'qml' / 'i18n')
 endforeach
 
+# ⛔ TWO SOURCE LANGUAGES, ONE TEMPLATE. The window's own strings come from
+# tools/qml-xgettext.py; the develop, clip and thumbnail panels are built from
+# TABLES IN C (src/develop.c, src/timeline.c, src/thumb.c) whose group names and
+# row labels travel over the record protocol and are drawn as they arrive. Those
+# rows are marked N_() — see src/i18n.h for why there is no _() beside it — and
+# real xgettext reads them.
+#
+# ⚠ THE C HALF IS WHAT MAKES THE WINDOW'S DYNAMIC LOOKUP SAFE. `I18n.tr(row.label)`
+# is not a literal and tools/qml-xgettext.py cannot see it; it does not have to,
+# because every string it can ever be handed is extracted from the tables here.
+# Drop this half and the panels go quietly English with a full catalog.
+#
+# msgcat, not two catalogs: one .po per language and one JSON for the window.
 run_target('synstudio-pot',
-  command : [find_program('../tools/qml-xgettext.py'),
-             '--root',  meson.project_source_root() / 'data',
-             '--files', meson.current_source_dir() / 'POTFILES',
-             '-o',      meson.current_source_dir() / 'synstudio.pot',
-             '--strict'])
+  command : [find_program('pot.sh'),
+             meson.project_source_root(),
+             meson.current_source_dir()])
