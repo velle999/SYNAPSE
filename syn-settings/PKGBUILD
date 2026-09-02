@@ -144,7 +144,7 @@ pkgver=0.1.0
 #   chosen by the same value, and the value itself still reaches the binary
 #   unchanged. Same for "%1 row"/"%1 rows", which no longer picks its form with
 #   an English == 1.
-pkgrel=44
+pkgrel=45
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

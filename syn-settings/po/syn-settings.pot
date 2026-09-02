@@ -555,6 +555,24 @@ msgid "pacman not available"
 msgstr ""
 
 msgid ""
+"  ⓘ not in any Arch repository — installing adds the CachyOS repo first "
+"(core and extra keep priority)"
+msgstr ""
+
+msgid "  ⚠ headers MISSING — DKMS cannot build for it"
+msgstr ""
+
+msgid ""
+"  ⚠ no bootloader entry yet — use “Make bootable” before you reboot "
+"expecting a choice"
+msgstr ""
+
+msgid ""
+"  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
+"entry exists — “Make bootable” regenerates it and makes it readable"
+msgstr ""
+
+msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
 msgstr ""

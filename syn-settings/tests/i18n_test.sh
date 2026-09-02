@@ -139,8 +139,29 @@ if [ -x "$BIN" ]; then
             *-sleep-hook|*-gpu-sleep)   continue ;;  # systemd unit names
             *.conf|*.desktop)        continue ;;  # file names
         esac
+        # ⛔ A PREFIX COUNTS, BECAUSE THIS CODE COMPOSES CELLS BY APPENDING.
+        # kernel.c builds its detail as `what` plus up to three clauses —
+        # "  ⚠ headers MISSING …" and friends — so the drawn cell is a marked
+        # sentence with more marked sentences stuck on the end, and demanding
+        # the WHOLE cell be one msgid fails on a machine that happens to append
+        # one. It did: this passed here and failed on a CachyOS box, because
+        # those kernel rows only exist where those kernels are installed.
+        #
+        # ⚠ THE MORAL: a check that reads the RECORD reads THIS MACHINE. Rows
+        # appear and disappear with the hardware, the installed packages and
+        # the bootloader, so anything asserted about them has to hold for rows
+        # this box will never emit.
         esc=$(printf '%s' "$v" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        grep -qF "msgid \"$esc\"" "$tmp/flat.pot" || printf '%s\n' "$v"
+        if grep -qF "msgid \"$esc\"" "$tmp/flat.pot"; then continue; fi
+        # …otherwise: is any msgid a prefix of it?
+        awk -v cell="$v" '
+            /^msgid "/ {
+                m = substr($0, 8, length($0) - 8)
+                gsub(/\\"/, "\"", m)
+                if (length(m) > 8 && substr(cell, 1, length(m)) == m) { found = 1; exit }
+            }
+            END { exit !found }
+        ' "$tmp/flat.pot" || printf '%s\n' "$v"
     done > "$tmp/unreachable"
     n=$(grep -c '' "$tmp/unreachable")
     sample=$(head -2 "$tmp/unreachable" | cut -c1-60 | tr '\n' '|')

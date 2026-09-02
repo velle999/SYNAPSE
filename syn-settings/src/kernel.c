@@ -265,19 +265,19 @@ int pane_kernel(void)
 		 * kernel because it is per kernel. */
 		snprintf(detail, sizeof detail, "%s%s%s%s", kernels[i].what,
 		         needs_repo
-		           ? "  ⓘ not in any Arch repository — installing adds the "
-		             "CachyOS repo first (core and extra keep priority)"
+		           ? N_("  ⓘ not in any Arch repository — installing adds the "
+		                "CachyOS repo first (core and extra keep priority)")
 		           : "",
 		         have && !have_hdr
-		           ? "  ⚠ headers MISSING — DKMS cannot build for it"
+		           ? N_("  ⚠ headers MISSING — DKMS cannot build for it")
 		           : "",
 		         have && !is_running && bootable == 0
-		           ? "  ⚠ no bootloader entry yet — use “Make bootable” before "
-		             "you reboot expecting a choice"
+		           ? N_("  ⚠ no bootloader entry yet — use “Make bootable” before "
+		                "you reboot expecting a choice")
 		           : have && bootable < 0
-		           ? "  ⚠ the bootloader config is root-only, so this pane "
-		             "cannot say whether an entry exists — “Make bootable” "
-		             "regenerates it and makes it readable"
+		           ? N_("  ⚠ the bootloader config is root-only, so this pane "
+		                "cannot say whether an entry exists — “Make bootable” "
+		                "regenerates it and makes it readable")
 		           : "");
 
 		/* WHAT YOU CAN DO TO THIS KERNEL — a list, and it is the whole list.
