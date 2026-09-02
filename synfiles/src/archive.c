@@ -25,6 +25,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -134,29 +135,29 @@ int cmd_compress(int argc, char **argv)
 		else if (!strncmp(argv[i], "--name=", 7))
 			want_name = argv[i] + 7;
 		else if (argv[i][0] == '-' && argv[i][1])
-			die("compress: unknown option '%s'", argv[i]);
+			die(_("compress: unknown option '%s'"), argv[i]);
 		else
 			paths[n++] = argv[i];
 	}
 
 	if (n == 0) {
 		free(paths);
-		die("compress: need at least one path");
+		die(_("compress: need at least one path"));
 	}
 
 	const format_t *fmt = find_format(fmt_id);
 	if (!fmt) {
 		free(paths);
-		die("compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z",
+		die(_("compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"),
 		    fmt_id);
 	}
 
 	char *dir = common_parent(paths, n);
 	if (!dir) {
 		free(paths);
-		die("compress: everything must be in the same folder\n"
+		die(_("compress: everything must be in the same folder\n"
 		    "  otherwise the archive records absolute paths and unpacking it "
-		    "scatters files");
+		    "scatters files"));
 	}
 
 	/* A name is only accepted as a NAME. A path here would put the archive
@@ -164,7 +165,7 @@ int cmd_compress(int argc, char **argv)
 	if (want_name && strchr(want_name, '/')) {
 		free(dir);
 		free(paths);
-		die("compress: --name takes a name, not a path");
+		die(_("compress: --name takes a name, not a path"));
 	}
 
 	char *base;
@@ -187,7 +188,7 @@ int cmd_compress(int argc, char **argv)
 
 	char *out = xasprintf("%s/%s", dir, base);
 	if (faccessat(AT_FDCWD, out, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
-		warn("%s already exists", out);
+		warn(_("%s already exists"), out);
 		free(out); free(base); free(dir); free(paths);
 		return 1;
 	}
@@ -214,12 +215,12 @@ int cmd_compress(int argc, char **argv)
 			child[k++] = base;
 		} else {
 			free(child); free(out); free(base); free(dir); free(paths);
-			die("compress: neither zip nor 7z is installed");
+			die(_("compress: neither zip nor 7z is installed"));
 		}
 	} else if (!strcmp(fmt->id, "7z")) {
 		if (!have_cmd("7z")) {
 			free(child); free(out); free(base); free(dir); free(paths);
-			die("compress: 7z is not installed — install p7zip");
+			die(_("compress: 7z is not installed — install p7zip"));
 		}
 		child[k++] = (char *)"7z";
 		child[k++] = (char *)"a";
@@ -227,7 +228,7 @@ int cmd_compress(int argc, char **argv)
 	} else {
 		if (!have_cmd("tar")) {
 			free(child); free(out); free(base); free(dir); free(paths);
-			die("compress: tar is not installed");
+			die(_("compress: tar is not installed"));
 		}
 		child[k++] = (char *)"tar";
 		if (!strcmp(fmt->id, "tar.gz"))       child[k++] = (char *)"-czf";
@@ -259,7 +260,7 @@ int cmd_compress(int argc, char **argv)
 			rec_row(3, e, "failed", "the archive tool reported an error");
 			free(e);
 		} else {
-			warn("could not create %s", base);
+			warn(_("could not create %s"), base);
 		}
 	} else {
 		sf_journal("compress", out, "");

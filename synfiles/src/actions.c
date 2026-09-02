@@ -25,6 +25,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -479,14 +480,14 @@ static void emit_service_menus(const char *mime)
 int cmd_actions(int argc, char **argv)
 {
 	if (argc < 1)
-		die("actions: need a path");
+		die(_("actions: need a path"));
 
 	/* Every selected file must share a type for an action to apply to the
 	 * whole selection — offering "Extract" for a set that is half archives
 	 * and half photographs would run it on the photographs too. */
 	struct stat st;
 	if (lstat(argv[0], &st) != 0)
-		die("cannot stat %s: %s", argv[0], strerror(errno));
+		die(_("cannot stat %s: %s"), argv[0], strerror(errno));
 	bool is_dir = S_ISDIR(st.st_mode);
 	const char *first = mime_for(sf_basename(argv[0]), is_dir);
 	char *mime = xstrdup(first);
@@ -601,8 +602,8 @@ static char *find_servicemenu(const char *name)
 int cmd_action(int argc, char **argv)
 {
 	if (argc < 2)
-		die("action: need a .desktop file and a path\n"
-		    "  usage: synfiles action <file.desktop> [action-id] -- <path>...");
+		die(_("action: need a .desktop file and a path\n"
+		    "  usage: synfiles action <file.desktop> [action-id] -- <path>..."));
 
 	const char *desktop = argv[0];
 
@@ -610,7 +611,7 @@ int cmd_action(int argc, char **argv)
 	 * caller point this at any file on the system and run whatever Exec= it
 	 * found there. */
 	if (strchr(desktop, '/'))
-		die("action: '%s' must be a .desktop NAME, not a path", desktop);
+		die(_("action: '%s' must be a .desktop NAME, not a path"), desktop);
 
 	int i = 1;
 	const char *action_id = "";
@@ -622,7 +623,7 @@ int cmd_action(int argc, char **argv)
 		i++;
 
 	if (i >= argc)
-		die("action: need at least one path");
+		die(_("action: need at least one path"));
 
 	char **paths = argv + i;
 	int npaths = argc - i;
@@ -634,11 +635,11 @@ int cmd_action(int argc, char **argv)
 	if (!path)
 		path = find_desktop(desktop);
 	if (!path)
-		die("action: no such desktop entry: %s", desktop);
+		die(_("action: no such desktop entry: %s"), desktop);
 
 	char *text = slurp(path);
 	if (!text)
-		die("action: cannot read %s", path);
+		die(_("action: cannot read %s"), path);
 
 	char *group = *action_id ? xasprintf("Desktop Action %s", action_id)
 	                         : xstrdup("Desktop Entry");
@@ -647,13 +648,13 @@ int cmd_action(int argc, char **argv)
 	free(group);
 
 	if (!exec)
-		die("action: %s has no Exec for '%s'", desktop,
+		die(_("action: %s has no Exec for '%s'"), desktop,
 		    *action_id ? action_id : "Desktop Entry");
 
 	size_t n = 0;
 	char **child = build_argv(exec, paths, npaths, &n);
 	if (n == 0)
-		die("action: %s has an empty Exec", desktop);
+		die(_("action: %s has an empty Exec"), desktop);
 
 	if (g_verbose) {
 		fprintf(stderr, "synfiles: exec");
@@ -666,7 +667,7 @@ int cmd_action(int argc, char **argv)
 	 * Rather than guess at one, say so — a helper that silently did nothing
 	 * because it printed into a void is worse than one that explains. */
 	if (term && !strcmp(term, "true") && !getenv("SYNFILES_IN_TERMINAL"))
-		warn("%s wants a terminal; running it without one", desktop);
+		warn(_("%s wants a terminal; running it without one"), desktop);
 
 	free(term);
 	free(exec);
@@ -692,7 +693,7 @@ int cmd_action(int argc, char **argv)
 
 	pid_t pid = fork();
 	if (pid < 0)
-		die("fork: %s", strerror(errno));
+		die(_("fork: %s"), strerror(errno));
 	if (pid == 0) {
 		setsid();
 

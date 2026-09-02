@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <signal.h>
@@ -37,7 +38,7 @@ char *sf_resolve(const char *path)
 {
 	char *real = realpath(path, NULL);
 	if (!real)
-		die("cannot resolve %s: %s", path, strerror(errno));
+		die(_("cannot resolve %s: %s"), path, strerror(errno));
 	return real;
 }
 
@@ -223,7 +224,7 @@ static conflict_t parse_conflict(const char *s)
 	if (!strcmp(s, "skip"))      return CONFLICT_SKIP;
 	if (!strcmp(s, "rename"))    return CONFLICT_RENAME;
 	if (!strcmp(s, "overwrite")) return CONFLICT_OVERWRITE;
-	die("unknown conflict policy '%s' — try error, skip, rename, overwrite", s);
+	die(_("unknown conflict policy '%s' — try error, skip, rename, overwrite"), s);
 }
 
 /* "report.txt" -> "report (copy).txt" -> "report (copy 2).txt". The suffix goes
@@ -653,13 +654,13 @@ static args_t parse_args(int argc, char **argv, const char *verb)
 		if (!strncmp(argv[i], "--conflict=", 11))
 			a.pol = parse_conflict(argv[i] + 11);
 		else if (argv[i][0] == '-' && argv[i][1])
-			die("%s: unknown option '%s'", verb, argv[i]);
+			die(_("%s: unknown option '%s'"), verb, argv[i]);
 		else
 			a.srcs[a.nsrc++] = argv[i];
 	}
 
 	if (a.nsrc < 2)
-		die("%s: need one or more sources and a destination directory", verb);
+		die(_("%s: need one or more sources and a destination directory"), verb);
 
 	a.dest = a.srcs[--a.nsrc];   /* last positional is the destination */
 	return a;
@@ -668,8 +669,10 @@ static args_t parse_args(int argc, char **argv, const char *verb)
 static int finish(tally_t *t)
 {
 	if (g_out == OUT_HUMAN && (t->done || t->skipped || t->failed))
-		printf("%s%d done, %d skipped, %d failed%s\n", C_DIM(),
-		       t->done, t->skipped, t->failed, C_RESET());
+		printf("%s", C_DIM());
+		printf(_("%d done, %d skipped, %d failed"),
+		       t->done, t->skipped, t->failed);
+		printf("%s\n", C_RESET());
 	return t->failed ? 1 : 0;
 }
 
@@ -697,8 +700,8 @@ int cmd_collisions(int argc, char **argv)
 	int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (dfd < 0) {
 		if (errno == ENOTDIR)
-			die("collisions: %s is not a directory", a.dest);
-		die("collisions: cannot open %s: %s", dest, strerror(errno));
+			die(_("collisions: %s is not a directory"), a.dest);
+		die(_("collisions: cannot open %s: %s"), dest, strerror(errno));
 	}
 
 	if (g_out == OUT_REC)
@@ -751,8 +754,8 @@ int cmd_copy(int argc, char **argv)
 	int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (dfd < 0) {
 		if (errno == ENOTDIR)
-			die("copy: %s is not a directory", a.dest);
-		die("copy: cannot open %s: %s", dest, strerror(errno));
+			die(_("copy: %s is not a directory"), a.dest);
+		die(_("copy: cannot open %s: %s"), dest, strerror(errno));
 	}
 
 	sf_install_cancel();
@@ -889,8 +892,8 @@ int cmd_move(int argc, char **argv)
 	int destfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (destfd < 0) {
 		if (errno == ENOTDIR)
-			die("move: %s is not a directory", a.dest);
-		die("move: cannot open %s: %s", dest, strerror(errno));
+			die(_("move: %s is not a directory"), a.dest);
+		die(_("move: cannot open %s: %s"), dest, strerror(errno));
 	}
 
 	sf_install_cancel();
@@ -1082,7 +1085,7 @@ int cmd_move(int argc, char **argv)
 int cmd_rename(int argc, char **argv)
 {
 	if (argc < 2)
-		die("rename: need a path and a new name");
+		die(_("rename: need a path and a new name"));
 
 	const char *path = argv[0];
 	const char *newname = argv[1];
@@ -1090,9 +1093,9 @@ int cmd_rename(int argc, char **argv)
 	/* A new name is a NAME. Allowing a "/" would make rename a silent move,
 	 * and "../.." a silent move somewhere surprising. Moving is `move`. */
 	if (strchr(newname, '/'))
-		die("rename: '%s' is a path, not a name — use `synfiles move`", newname);
+		die(_("rename: '%s' is a path, not a name — use `synfiles move`"), newname);
 	if (!*newname || !strcmp(newname, ".") || !strcmp(newname, ".."))
-		die("rename: '%s' is not a usable name", newname);
+		die(_("rename: '%s' is not a usable name"), newname);
 
 	char *src = sf_resolve(path);
 	char *parent = xstrdup(src);
@@ -1107,10 +1110,10 @@ int cmd_rename(int argc, char **argv)
 
 	int rc = 0;
 	if (faccessat(AT_FDCWD, target, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
-		warn("%s already exists", target);
+		warn(_("%s already exists"), target);
 		rc = 1;
 	} else if (rename(src, target) != 0) {
-		warn("cannot rename %s: %s", src, strerror(errno));
+		warn(_("cannot rename %s: %s"), src, strerror(errno));
 		rc = 1;
 	} else if ((sf_journal("rename", target, src)), g_out == OUT_REC) {
 		char *e = pct_encode(target, true);
@@ -1130,12 +1133,12 @@ int cmd_rename(int argc, char **argv)
 int cmd_mkdir(int argc, char **argv)
 {
 	if (argc < 1)
-		die("mkdir: need a path");
+		die(_("mkdir: need a path"));
 
 	int rc = 0;
 	for (int i = 0; i < argc; i++) {
 		if (mkdir(argv[i], 0755) != 0) {
-			warn("cannot create %s: %s", argv[i], strerror(errno));
+			warn(_("cannot create %s: %s"), argv[i], strerror(errno));
 			rc = 1;
 		} else {
 			char *real = sf_resolve_parent(argv[i]);
@@ -1158,22 +1161,22 @@ int cmd_delete(int argc, char **argv)
 		if (!strcmp(argv[i], "--yes"))
 			confirmed = true;
 		else if (argv[i][0] == '-' && argv[i][1])
-			die("delete: unknown option '%s'", argv[i]);
+			die(_("delete: unknown option '%s'"), argv[i]);
 		else
 			paths[n++] = argv[i];
 	}
 
 	if (n == 0)
-		die("delete: need a path");
+		die(_("delete: need a path"));
 
 	/* Permanent deletion is gated behind an explicit flag, and the GUI never
 	 * passes it without asking. `synfiles trash` is what a Delete key should
 	 * reach — this is the one that cannot be undone. */
 	if (!confirmed) {
 		free(paths);
-		die("delete removes files PERMANENTLY and cannot be undone.\n"
+		die(_("delete removes files PERMANENTLY and cannot be undone.\n"
 		    "  to move them to the trash instead:  synfiles trash <path>\n"
-		    "  to delete them anyway:              synfiles delete --yes <path>");
+		    "  to delete them anyway:              synfiles delete --yes <path>"));
 	}
 
 	if (g_out == OUT_REC) {

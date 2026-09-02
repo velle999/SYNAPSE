@@ -16,948 +16,1287 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
 msgstr "%1  (%2 bytes)"
 
-#: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
 msgstr "%1  (%2 bytes, de mapvermelding zelf)"
 
-#: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
 msgstr "%1  (mapinhoud niet meegeteld)"
 
-#: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 geselecteerd"
 
-#: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 klaar"
 msgstr[1] "%1 klaar"
 
-#: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
 msgstr[0] "%1 mislukt"
 msgstr[1] "%1 mislukt"
 
-#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] "%1 bestand"
 msgstr[1] "%1 bestanden"
 
-#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] "%1 map"
 msgstr[1] "%1 mappen"
 
-#: synfiles.qml:832
 msgid "%1 hours left"
 msgstr "nog %1 uur"
 
-#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr "%1 in %2, %3"
 
-#: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 item"
 msgstr[1] "%1 items"
 
-#: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
 msgstr[0] "%1 item bestaat hier al"
 msgstr[1] "%1 items bestaan hier al"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
-#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] "%1 items"
 msgstr[1] "%1 items"
 
-#: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "nog %1 min"
 msgstr[1] "nog %1 min"
 
-#: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
 msgstr[0] "%1 netwerklocatie gevonden"
 msgstr[1] "%1 netwerklocaties gevonden"
 
-#: synfiles.qml:840
 msgid "%1 of %2"
 msgstr "%1 van %2"
 
-#: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 van %2 item"
 msgstr[1] "%1 van %2 items"
 
-#: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 van %2 items"
 msgstr[1] "%1 van %2 items"
 
-#: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
 msgstr[0] "%1 hiervan bestaat hier al"
 msgstr[1] "%1 hiervan bestaan hier al"
 
-#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr "%1 op schijf"
 
-#: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
 msgstr "%1 op schijf  (%2 in %3, %4)"
 
-#: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
 msgstr[0] "%1 overgeslagen"
 msgstr[1] "%1 overgeslagen"
 
-#: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
-#: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
 msgstr[0] "%1 — %2 mislukt"
 msgstr[1] "%1 — %2 mislukt"
 
-#: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
 msgstr[0] "%1 — %2 item verwijderd"
 msgstr[1] "%1 — %2 items verwijderd"
 
-#: synfiles.qml:950
 msgid "%1 — cancelled"
 msgstr "%1 — geannuleerd"
 
-#: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
 msgstr[0] "%1 — geannuleerd na %2 klaar"
 msgstr[1] "%1 — geannuleerd na %2 klaar"
 
-#: synfiles.qml:971
 msgid "%1 — done"
 msgstr "%1 — klaar"
 
-#: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
 msgstr[0] "nog %1 s"
 msgstr[1] "nog %1 s"
 
-#: synfiles.qml:738
 msgid ", "
 msgstr ", "
 
-#: synfiles.qml:5674
 msgid ""
 "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
 "recent files, volumes and network shares."
-msgstr "Een bestandsbeheerder voor SynapseOS. Tabbladen, vastgezette locaties gedeeld met Dolphin, recente bestanden, volumes en netwerkshares."
+msgstr ""
+"Een bestandsbeheerder voor SynapseOS. Tabbladen, vastgezette locaties "
+"gedeeld met Dolphin, recente bestanden, volumes en netwerkshares."
 
-#: synfiles.qml:2822
 msgid "About"
 msgstr "Over"
 
-#: synfiles.qml:3363
 msgid "About SYNAPSE Files"
 msgstr "Over SYNAPSE Files"
 
-#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr "Aan locaties toevoegen"
 
-#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr "Alt+Enter"
 
-#: synfiles.qml:2689
 msgid "Back"
 msgstr "Terug"
 
-#: synfiles.qml:5604
 msgid "By name"
 msgstr "Op naam"
 
-#: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
 msgstr "Annuleren"
 
-#: synfiles.qml:3345
 msgid "Close Split View"
 msgstr "Gesplitste weergave sluiten"
 
-#: synfiles.qml:2898
 msgid "Close split view"
 msgstr "Gesplitste weergave sluiten"
 
-#: synfiles.qml:4357
 msgid "Compact"
 msgstr "Compact"
 
-#: synfiles.qml:6946
 msgid "Compress to %1"
 msgstr "Comprimeren naar %1"
 
-#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
 msgstr "Inhoud"
 
-#: synfiles.qml:6864
 msgid "Copy"
 msgstr "Kopiëren"
 
-#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
 msgstr "Pad kopiëren"
 
-#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
 
-#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr "Ctrl+N"
 
-#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr "Ctrl+V"
 
-#: synfiles.qml:6865
 msgid "Cut"
 msgstr "Knippen"
 
-#: synfiles.qml:6872
 msgid "Del"
 msgstr "Del"
 
-#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
-msgstr "Verwijderde bestanden. Terugzetten plaatst er één terug waar hij vandaan kwam."
+msgstr ""
+"Verwijderde bestanden. Terugzetten plaatst er één terug waar hij vandaan "
+"kwam."
 
-#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
 msgstr "Aflopend"
 
-#: synfiles.qml:3892
 msgid "Destroy %1?"
 msgstr "%1 vernietigen?"
 
-#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr "Definitief vernietigen…"
 
-#: synfiles.qml:3945
 msgid "Destroy permanently"
 msgstr "Definitief vernietigen"
 
-#: synfiles.qml:4359
 msgid "Details"
 msgstr "Details"
 
-#: synfiles.qml:3085
 msgid "Devices"
 msgstr "Apparaten"
 
-#: synfiles.qml:5612
 msgid "Done"
 msgstr "Klaar"
 
-#: synfiles.qml:3543
 msgid "Eject"
 msgstr "Uitwerpen"
 
-#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr "Prullenbak legen…"
 
-#: synfiles.qml:3858
 msgid "Empty permanently"
 msgstr "Definitief legen"
 
-#: synfiles.qml:3838
 msgid "Empty the trash?"
 msgstr "Prullenbak legen?"
 
-#: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
 msgstr "Enter om aan te maken, Esc om te annuleren"
 
-#: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
-msgstr "Alles in de prullenbak wordt definitief verwijderd. Dit kan niet ongedaan worden gemaakt."
+msgstr ""
+"Alles in de prullenbak wordt definitief verwijderd. Dit kan niet ongedaan "
+"worden gemaakt."
 
-#: synfiles.qml:6870
 msgid "F2"
 msgstr "F2"
 
-#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
 msgstr "F5"
 
-#: synfiles.qml:3202
 msgid "Find network shares"
 msgstr "Netwerkshares zoeken"
 
-#: synfiles.qml:458
 msgid "Folder"
 msgstr "Map"
 
-#: synfiles.qml:4371
 msgid "Folder Tree"
 msgstr "Mappenboom"
 
-#: synfiles.qml:2988
 msgid "Folders"
 msgstr "Mappen"
 
-#: synfiles.qml:3579
 msgid "Format…"
 msgstr "Formatteren…"
 
-#: synfiles.qml:2695
 msgid "Forward"
 msgstr "Vooruit"
 
-#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr "Verborgen items worden niet getoond."
 
-#: synfiles.qml:3341
 msgid "Hide Folder Tree"
 msgstr "Mappenboom verbergen"
 
-#: synfiles.qml:3343
 msgid "Hide Previews"
 msgstr "Voorbeelden verbergen"
 
-#: synfiles.qml:3347
 msgid "Hide Sidebar"
 msgstr "Zijbalk verbergen"
 
-#: synfiles.qml:1703
 msgid "Home"
 msgstr "Persoonlijke map"
 
-#: synfiles.qml:4355
 msgid "Icons"
 msgstr "Pictogrammen"
 
-#: synfiles.qml:5604
 msgid "In contents"
 msgstr "In de inhoud"
 
-#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr "Selectie omkeren"
 
-#: synfiles.qml:4039
 msgid "Keep both"
 msgstr "Beide behouden"
 
-#: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr "Links  ·  %1"
 
-#: synfiles.qml:4665
 msgid "Links to"
 msgstr "Verwijst naar"
 
-#: synfiles.qml:2905
 msgid "Menu"
 msgstr "Menu"
 
-#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
 msgstr "Gewijzigd"
 
-#: synfiles.qml:3539
 msgid "Mount"
 msgstr "Aankoppelen"
 
-#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr "Naar de prullenbak"
 
-#: synfiles.qml:5834
 msgid "Name"
 msgstr "Naam"
 
-#: synfiles.qml:3164
 msgid "Network"
 msgstr "Netwerk"
 
-#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
 msgstr "Nieuw leeg bestand…"
 
-#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
 msgstr "Nieuwe map…"
 
-#: synfiles.qml:3336
 msgid "New Tab"
 msgstr "Nieuw tabblad"
 
-#: synfiles.qml:4223
 msgid "New empty file"
 msgstr "Nieuw leeg bestand"
 
-#: synfiles.qml:4176
 msgid "New folder"
 msgstr "Nieuwe map"
 
-#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr "Geen recente bestanden."
 
-#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr "Niets gevonden."
 
-#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr "Niets komt overeen met dat filter."
 
-#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
 msgstr "Openen"
 
-#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr "Map openen"
 
-#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr "Terminal hier openen"
 
-#: synfiles.qml:3359
 msgid "Open Trash"
 msgstr "Prullenbak openen"
 
-#: synfiles.qml:3559
 msgid "Open in Disks"
 msgstr "Openen in Schijven"
 
-#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr "In nieuw tabblad openen"
 
-#: synfiles.qml:6931
 msgid "Open with"
 msgstr "Openen met"
 
-#: synfiles.qml:4049
 msgid "Overwrite"
 msgstr "Overschrijven"
 
-#: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
-msgstr "Overschrijven vervangt bestanden; twee mappen met dezelfde naam worden samengevoegd, en de bestanden erin botsen één voor één."
+msgstr ""
+"Overschrijven vervangt bestanden; twee mappen met dezelfde naam worden "
+"samengevoegd, en de bestanden erin botsen één voor één."
 
-#: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
-msgstr "Overschreven en verwijderd. Het gaat niet naar de prullenbak en er is geen weg terug."
+msgstr ""
+"Overschreven en verwijderd. Het gaat niet naar de prullenbak en er is geen "
+"weg terug."
 
-#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
 msgstr "Plakken"
 
-#: synfiles.qml:5497
 msgid "Pin"
 msgstr "Vastzetten"
 
-#: synfiles.qml:3549
 msgid "Pin to Places"
 msgstr "Aan locaties vastzetten"
 
-#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr "Vastgezet ✓"
 
-#: synfiles.qml:3063
 msgid "Places"
 msgstr "Locaties"
 
-#: synfiles.qml:4370
 msgid "Previews"
 msgstr "Voorbeelden"
 
-#: synfiles.qml:3653
 msgid "Properties"
 msgstr "Eigenschappen"
 
-#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
 msgstr "Eigenschappen…"
 
-#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
 msgstr "Recent"
 
-#: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
 msgstr "Onlangs gewijzigd"
 
-#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
 msgstr "Vernieuwen"
 
-#: synfiles.qml:3126
 msgid "Removable Devices"
 msgstr "Verwisselbare apparaten"
 
-#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr "Uit locaties verwijderen"
 
-#: synfiles.qml:6869
 msgid "Rename…"
 msgstr "Hernoemen…"
 
-#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
 msgstr "Terugzetten"
 
-#: synfiles.qml:4292
 msgid "Right  ·  %1"
 msgstr "Rechts  ·  %1"
 
-#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr "SYNAPSE Files"
 
-#: synfiles.qml:3201
 msgid "Scan again"
 msgstr "Opnieuw zoeken"
 
-#: synfiles.qml:3200
 msgid "Scanning…"
 msgstr "Bezig met zoeken…"
 
-#: synfiles.qml:2902
 msgid "Search"
 msgstr "Zoeken"
 
-#: synfiles.qml:3355
 msgid "Search…"
 msgstr "Zoeken…"
 
-#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
 msgstr "Alles selecteren"
 
-#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
 msgstr "Naar de kluis sturen"
 
-#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr "Naar de kluis sturen…"
 
-#: synfiles.qml:3341
 msgid "Show Folder Tree"
 msgstr "Mappenboom tonen"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr "Verborgen bestanden tonen"
 
-#: synfiles.qml:3343
 msgid "Show Previews"
 msgstr "Voorbeelden tonen"
 
-#: synfiles.qml:3347
 msgid "Show Sidebar"
 msgstr "Zijbalk tonen"
 
-#: synfiles.qml:4373
 msgid "Sidebar"
 msgstr "Zijbalk"
 
-#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
 msgstr "Grootte"
 
-#: synfiles.qml:4034
 msgid "Skip those"
 msgstr "Die overslaan"
 
-#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr "Sorteren op datum"
 
-#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
 msgstr "Sorteren op naam"
 
-#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
 msgstr "Sorteren op grootte"
 
-#: synfiles.qml:4365
 msgid "Sort by Type"
 msgstr "Sorteren op type"
 
-#: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
 msgstr "Gesplitste weergave"
 
-#: synfiles.qml:2898
 msgid "Split view (F3)"
 msgstr "Gesplitste weergave (F3)"
 
-#: synfiles.qml:4437
 msgid "Text"
 msgstr "Tekst"
 
-#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr "De prullenbak is leeg."
 
-#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr "Deze map is leeg."
 
-#: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
-msgstr "Dit is de map waar het vandaan komt — vervangen zou het origineel wissen. Behoud beide, of annuleer."
+msgstr ""
+"Dit is de map waar het vandaan komt — vervangen zou het origineel wissen. "
+"Behoud beide, of annuleer."
 
-#: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
 msgstr "Prullenbak"
 
-#: synfiles.qml:4638
 msgid "Type"
 msgstr "Type"
 
-#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr "Typ om in deze map en alles eronder te zoeken."
 
-#: synfiles.qml:3543
 msgid "Unmount"
 msgstr "Afkoppelen"
 
-#: synfiles.qml:2701
 msgid "Up one folder"
 msgstr "Eén map omhoog"
 
-#: synfiles.qml:2980
 msgid "Vault"
 msgstr "Kluis"
 
-#: synfiles.qml:2720
 msgid "View"
 msgstr "Weergave"
 
-#: synfiles.qml:2721
 msgid "View options"
 msgstr "Weergaveopties"
 
-#: synfiles.qml:827
 msgid "a moment left"
 msgstr "nog even"
 
-#: synfiles.qml:1583
 msgid "accessed"
 msgstr "geopend"
 
-#: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
 msgstr "bezig — wachten tot de vorige bewerking klaar is"
 
-#: synfiles.qml:3764
 msgid "calculating…"
 msgstr "berekenen…"
 
-#: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
 msgstr "annuleren…"
 
-#: synfiles.qml:1584
 msgid "changed"
 msgstr "gewijzigd"
 
-#: synfiles.qml:1152
 msgid "checking the destination…"
 msgstr "bestemming controleren…"
 
-#: synfiles.qml:1712
 msgid "compressing %1…"
 msgstr "%1 comprimeren…"
 
-#: synfiles.qml:3757
 msgid "contents"
 msgstr "inhoud"
 
-#: synfiles.qml:1078
 msgid "copied %1"
 msgstr "%1 gekopieerd"
 
-#: synfiles.qml:2443
 msgid "copied: %1"
 msgstr "gekopieerd: %1"
 
-#: synfiles.qml:1172
 msgid "copying %1"
 msgstr "%1 kopiëren"
 
-#: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
 msgstr[0] "%1 item hierheen kopiëren…"
 msgstr[1] "%1 items hierheen kopiëren…"
 
-#: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "%1 item kopiëren…"
 msgstr[1] "%1 items kopiëren…"
 
-#: synfiles.qml:2482
 msgid "creating %1"
 msgstr "%1 aanmaken"
 
-#: synfiles.qml:1077
 msgid "cut %1"
 msgstr "%1 geknipt"
 
-#: synfiles.qml:1579
 msgid "description"
 msgstr "beschrijving"
 
-#: synfiles.qml:1840
 msgid "destroying %1…"
 msgstr "%1 vernietigen…"
 
-#: synfiles.qml:3494
 msgid "dragging %1…"
 msgstr "%1 slepen…"
 
-#: synfiles.qml:2472
 msgid "emptying the trash…"
 msgstr "prullenbak legen…"
 
-#: synfiles.qml:1591
 msgid "files"
 msgstr "bestanden"
 
-#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "deze items filteren…   (Ctrl+F om te zoeken)"
 
-#: synfiles.qml:1590
 msgid "folders"
 msgstr "mappen"
 
-#: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
 msgstr "%1 formatteren — vraag in Schijven"
 
-#: synfiles.qml:1587
 msgid "group"
 msgstr "groep"
 
-#: synfiles.qml:1585
 msgid "links"
 msgstr "koppelingen"
 
-#: synfiles.qml:2526
 msgid "looking for network shares…"
 msgstr "netwerkshares zoeken…"
 
-#: synfiles.qml:4650
 msgid "measuring…"
 msgstr "meten…"
 
-#: synfiles.qml:1578
 msgid "mime"
 msgstr "MIME"
 
-#: synfiles.qml:456
 msgid "missing — the file it points at is gone"
 msgstr "ontbreekt — het bestand waarnaar het verwijst is weg"
 
-#: synfiles.qml:1581
 msgid "mode"
 msgstr "rechten"
 
-#: synfiles.qml:1582
 msgid "modified"
 msgstr "gewijzigd"
 
-#: synfiles.qml:3193
 msgid "mount %1"
 msgstr "%1 aankoppelen"
 
-#: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
 msgstr "%1 aankoppelen…"
 
-#: synfiles.qml:1171
 msgid "moving %1"
 msgstr "%1 verplaatsen"
 
-#: synfiles.qml:1767
 msgid "moving %1 into the vault"
 msgstr "%1 naar de kluis verplaatsen"
 
-#: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
 msgstr[0] "%1 item verplaatsen…"
 msgstr[1] "%1 items verplaatsen…"
 
-#: synfiles.qml:1058
 msgid "moving %1 to the trash"
 msgstr "%1 naar de prullenbak verplaatsen"
 
-#: synfiles.qml:1576
 msgid "name"
 msgstr "naam"
 
-#: synfiles.qml:3497
 msgid "nothing accepted that drop"
 msgstr "niets accepteerde dat neerzetten"
 
-#: synfiles.qml:2554
 msgid "nothing announced itself on this network"
 msgstr "niets heeft zich op dit netwerk aangekondigd"
 
-#: synfiles.qml:1993
 msgid "only local files can be dropped here"
 msgstr "hier kunnen alleen lokale bestanden worden neergezet"
 
-#: synfiles.qml:2408
 msgid "opened %1 in Disks"
 msgstr "%1 geopend in Schijven"
 
-#: synfiles.qml:2333
 msgid "opened a terminal in %1"
 msgstr "terminal geopend in %1"
 
-#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr "geopend in je browser"
 
-#: synfiles.qml:2620
 msgid "opening %1"
 msgstr "%1 openen"
 
-#: synfiles.qml:1586
 msgid "owner"
 msgstr "eigenaar"
 
-#: synfiles.qml:1190
 msgid "paste cancelled"
 msgstr "plakken geannuleerd"
 
-#: synfiles.qml:1575
 msgid "path"
 msgstr "pad"
 
-#: synfiles.qml:4278
 msgid "reading…"
 msgstr "lezen…"
 
-#: synfiles.qml:1240
 msgid "renaming to %1"
 msgstr "hernoemen naar %1"
 
-#: synfiles.qml:1067
 msgid "restoring %1"
 msgstr "%1 terugzetten"
 
-#: synfiles.qml:2318
 msgid "running…"
 msgstr "bezig…"
 
-#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr "zoek in %1 en daaronder — druk op Enter"
 
-#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr "zoeken in %1…"
 
-#: synfiles.qml:1589
 msgid "selected"
 msgstr "geselecteerd"
 
-#: synfiles.qml:1580
 msgid "size"
 msgstr "grootte"
 
-#: synfiles.qml:1588
 msgid "target"
 msgstr "doel"
 
-#: synfiles.qml:1577
 msgid "type"
 msgstr "type"
 
-#: synfiles.qml:2283
 msgid "undoing %1…"
 msgstr "%1 ongedaan maken…"
 
-#: synfiles.qml:2462
 msgid "unmounting %1…"
 msgstr "%1 afkoppelen…"
 
-#: synfiles.qml:755
 msgid "working…"
 msgstr "bezig…"
 
-#: synfiles.qml:3981
 msgid "“%1” already exists here"
 msgstr "‘%1’ bestaat hier al"
 
-#: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
 msgstr[0] "• …en nog %1"
 msgstr[1] "• …en nog %1"
 
-#: synfiles.qml:3922
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr "⚠ Dit is %1, dat wijzigingen naar nieuwe blokken schrijft in plaats van over de oude, en snapshots bewaren hele kopieën. Het bestand is dan weg, maar de inhoud is mogelijk nog van de schijf te herstellen. Alleen volledige schijfversleuteling voorkomt dat echt."
+msgstr ""
+"⚠ Dit is %1, dat wijzigingen naar nieuwe blokken schrijft in plaats van over "
+"de oude, en snapshots bewaren hele kopieën. Het bestand is dan weg, maar de "
+"inhoud is mogelijk nog van de schijf te herstellen. Alleen volledige "
+"schijfversleuteling voorkomt dat echt."
 
-#: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr "⚠ Dit is %1, dat wijzigingen naar nieuwe blokken schrijft in plaats van over de oude. Het bestand is dan weg, maar de inhoud is mogelijk nog van de schijf te herstellen. Alleen volledige schijfversleuteling voorkomt dat echt."
+msgstr ""
+"⚠ Dit is %1, dat wijzigingen naar nieuwe blokken schrijft in plaats van over "
+"de oude. Het bestand is dan weg, maar de inhoud is mogelijk nog van de "
+"schijf te herstellen. Alleen volledige schijfversleuteling voorkomt dat echt."
+
+msgid "actions: need a path"
+msgstr "actions: een pad is nodig"
+
+#, c-format
+msgid "cannot stat %s: %s"
+msgstr "kan %s niet opvragen: %s"
+
+msgid ""
+"action: need a .desktop file and a path\n"
+"  usage: synfiles action <file.desktop> [action-id] -- <path>..."
+msgstr "action: een .desktop-bestand en een pad zijn nodig\n  gebruik: synfiles action <bestand.desktop> <pad>…"
+
+#, c-format
+msgid "action: '%s' must be a .desktop NAME, not a path"
+msgstr "action: '%s' moet een .desktop-NAAM zijn, geen pad"
+
+msgid "action: need at least one path"
+msgstr "action: ten minste één pad is nodig"
+
+#, c-format
+msgid "action: no such desktop entry: %s"
+msgstr "action: die bureaubladvermelding bestaat niet: %s"
+
+#, c-format
+msgid "action: cannot read %s"
+msgstr "action: kan %s niet lezen"
+
+#, c-format
+msgid "action: %s has no Exec for '%s'"
+msgstr "action: %s heeft geen Exec voor '%s'"
+
+#, c-format
+msgid "action: %s has an empty Exec"
+msgstr "action: %s heeft een lege Exec"
+
+#, c-format
+msgid "%s wants a terminal; running it without one"
+msgstr "%s wil een terminal; het wordt zonder gestart"
+
+#, c-format
+msgid "fork: %s"
+msgstr "fork: %s"
+
+#, c-format
+msgid "compress: unknown option '%s'"
+msgstr "compress: onbekende optie '%s'"
+
+msgid "compress: need at least one path"
+msgstr "compress: ten minste één pad is nodig"
+
+#, c-format
+msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr "compress: onbekende indeling '%s' — probeer zip, tar.gz, tar.xz, tar.zst, 7z"
+
+msgid ""
+"compress: everything must be in the same folder\n"
+"  otherwise the archive records absolute paths and unpacking it scatters "
+"files"
+msgstr "compress: alles moet in dezelfde map staan\n  anders zou het archief paden bevatten die elders nergens op slaan"
+
+msgid "compress: --name takes a name, not a path"
+msgstr "compress: --name verwacht een naam, geen pad"
+
+#, c-format
+msgid "%s already exists"
+msgstr "%s bestaat al"
+
+msgid "compress: neither zip nor 7z is installed"
+msgstr "compress: noch zip noch 7z is geïnstalleerd"
+
+msgid "compress: 7z is not installed — install p7zip"
+msgstr "compress: 7z is niet geïnstalleerd — installeer p7zip"
+
+msgid "compress: tar is not installed"
+msgstr "compress: tar is niet geïnstalleerd"
+
+#, c-format
+msgid "could not create %s"
+msgstr "kon %s niet aanmaken"
+
+#, c-format
+msgid "cannot write settings: %s"
+msgstr "kan de instellingen niet schrijven: %s"
+
+#, c-format
+msgid "cannot save settings: %s"
+msgstr "kan de instellingen niet opslaan: %s"
+
+msgid "config get: need a key"
+msgstr "config get: een sleutel is nodig"
+
+#, c-format
+msgid "config: unknown setting '%s'"
+msgstr "config: onbekende instelling '%s'"
+
+msgid "config set: need a key and a value"
+msgstr "config set: een sleutel en een waarde zijn nodig"
+
+#, c-format
+msgid "config: '%s' is not a valid %s for %s"
+msgstr "config: '%s' is geen geldige %s voor %s"
+
+#, c-format
+msgid "settings reset to defaults\n"
+msgstr "instellingen teruggezet op de standaardwaarden\n"
+
+#, c-format
+msgid ""
+"config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
+"reset"
+msgstr "config: onbekend subcommando '%s' — probeer list, get <sleutel>, set <sleutel> <waarde>, reset"
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr "kan %s niet herleiden: %s"
+
+#, c-format
+msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
+msgstr "onbekende conflictregel '%s' — probeer error, skip, rename, overwrite"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: onbekende optie '%s'"
+
+#, c-format
+msgid "%s: need one or more sources and a destination directory"
+msgstr "%s: een of meer bronnen en een doelmap zijn nodig"
+
+#, c-format
+msgid "%d done, %d skipped, %d failed"
+msgstr "%d gedaan, %d overgeslagen, %d mislukt"
+
+#, c-format
+msgid "collisions: %s is not a directory"
+msgstr "collisions: %s is geen map"
+
+#, c-format
+msgid "collisions: cannot open %s: %s"
+msgstr "collisions: kan %s niet openen: %s"
+
+#, c-format
+msgid "copy: %s is not a directory"
+msgstr "copy: %s is geen map"
+
+#, c-format
+msgid "copy: cannot open %s: %s"
+msgstr "copy: kan %s niet openen: %s"
+
+#, c-format
+msgid "move: %s is not a directory"
+msgstr "move: %s is geen map"
+
+#, c-format
+msgid "move: cannot open %s: %s"
+msgstr "move: kan %s niet openen: %s"
+
+msgid "rename: need a path and a new name"
+msgstr "rename: een pad en een nieuwe naam zijn nodig"
+
+#, c-format
+msgid "rename: '%s' is a path, not a name — use `synfiles move`"
+msgstr "rename: '%s' is een pad, geen naam — gebruik `synfiles move`"
+
+#, c-format
+msgid "rename: '%s' is not a usable name"
+msgstr "rename: '%s' is geen bruikbare naam"
+
+#, c-format
+msgid "cannot rename %s: %s"
+msgstr "kan %s niet hernoemen: %s"
+
+msgid "mkdir: need a path"
+msgstr "mkdir: een pad is nodig"
+
+#, c-format
+msgid "cannot create %s: %s"
+msgstr "kan %s niet aanmaken: %s"
+
+#, c-format
+msgid "delete: unknown option '%s'"
+msgstr "delete: onbekende optie '%s'"
+
+msgid "delete: need a path"
+msgstr "delete: een pad is nodig"
+
+msgid ""
+"delete removes files PERMANENTLY and cannot be undone.\n"
+"  to move them to the trash instead:  synfiles trash <path>\n"
+"  to delete them anyway:              synfiles delete --yes <path>"
+msgstr "delete verwijdert bestanden DEFINITIEF en kan niet ongedaan worden gemaakt.\n  om ze naar de prullenbak te verplaatsen: synfiles trash <pad>…\n  als u dit echt bedoelt: --force"
+
+#, c-format
+msgid "find: unknown option '%s'"
+msgstr "find: onbekende optie '%s'"
+
+msgid "find: need --name=GLOB or --content=TEXT (or both)"
+msgstr "find: --name=PATROON of --content=TEKST is nodig (of allebei)"
+
+#, c-format
+msgid "cannot open %s: %s"
+msgstr "kan %s niet openen: %s"
+
+msgid "no matches"
+msgstr "geen overeenkomsten"
+
+#, c-format
+msgid "%ld matches (stopped at the limit)"
+msgstr "%ld overeenkomsten (bij de limiet gestopt)"
+
+msgid "[broken]"
+msgstr "[kapot]"
+
+#, c-format
+msgid "list: unknown sort '%s' — try name, size, mtime, type"
+msgstr "list: onbekende sortering '%s' — probeer name, size, mtime, type"
+
+#, c-format
+msgid "list: unknown option '%s'"
+msgstr "list: onbekende optie '%s'"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "kan %s niet lezen: %s"
+
+msgid "empty"
+msgstr "leeg"
+
+msgid "info: need a path"
+msgstr "info: een pad is nodig"
+
+msgid "du: need a path"
+msgstr "du: een pad is nodig"
+
+msgid "no display — synfiles gui needs a graphical session"
+msgstr "geen scherm — synfiles gui heeft een grafische sessie nodig"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell is niet geïnstalleerd — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "kon quickshell niet starten"
+
+#, c-format
+msgid ""
+"netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
+msgstr "netscan: avahi-browse is mislukt voor %s (afsluitcode %d) — mDNS-ontdekking werkt niet op deze machine"
+
+#, c-format
+msgid "netscan: unknown option '%s'"
+msgstr "netscan: onbekende optie '%s'"
+
+msgid ""
+"netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
+"network places"
+msgstr "netscan: installeer avahi (mDNS) of smbclient (Windows-shares) om apparaten te ontdekken"
+
+msgid "netmount: need a URI (see: synfiles netscan)"
+msgstr "netmount: een URI is nodig (zie: synfiles netscan)"
+
+#, c-format
+msgid "netmount: '%s' is not a URI"
+msgstr "netmount: '%s' is geen URI"
+
+msgid "netmount: gio is not installed — install gvfs to mount network shares"
+msgstr "netmount: gio is niet geïnstalleerd — installeer gvfs om netwerkshares aan te koppelen"
+
+#, c-format
+msgid "netmount: could not mount %s"
+msgstr "netmount: kon %s niet aankoppelen"
+
+#, c-format
+msgid "peek: unknown option '%s'"
+msgstr "peek: onbekende optie '%s'"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: kan niet lezen"
+
+#, c-format
+msgid "cannot create a temporary file beside %s: %s"
+msgstr "kan geen tijdelijk bestand naast %s aanmaken: %s"
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr "kan %s niet schrijven: %s"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "kan %s niet vervangen: %s"
+
+#, c-format
+msgid "could not write %s"
+msgstr "kon %s niet schrijven"
+
+#, c-format
+msgid "%s is already pinned"
+msgstr "%s is al vastgezet"
+
+#, c-format
+msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
+msgstr "%s heeft geen </xbel> — er wordt niet geraden waar een bladwijzer hoort"
+
+#, c-format
+msgid "pinned %s\n"
+msgstr "%s vastgezet\n"
+
+msgid "no places file to remove from"
+msgstr "er is geen locatiesbestand om iets uit te verwijderen"
+
+#, c-format
+msgid "could not find the bookmark element around %s"
+msgstr "kon het bladwijzerelement rond %s niet vinden"
+
+#, c-format
+msgid "unpinned %s\n"
+msgstr "%s losgemaakt\n"
+
+#, c-format
+msgid "%s is not pinned"
+msgstr "%s is niet vastgezet"
+
+msgid "places pin: need a path"
+msgstr "places pin: een pad is nodig"
+
+msgid "places unpin: need a path"
+msgstr "places unpin: een pad is nodig"
+
+#, c-format
+msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
+msgstr "places: onbekend subcommando '%s' — probeer list, pin <pad>, unpin <pad>"
+
+#, c-format
+msgid "recent: unknown option '%s'"
+msgstr "recent: onbekende optie '%s'"
+
+msgid "refusing to trash the root directory"
+msgstr "de hoofdmap gaat niet naar de prullenbak"
+
+#, c-format
+msgid "cannot work out where to trash %s"
+msgstr "kan niet bepalen waar %s in de prullenbak hoort"
+
+#, c-format
+msgid "cannot create the trash directory at %s: %s"
+msgstr "kan de prullenbakmap in %s niet aanmaken: %s"
+
+#, c-format
+msgid "cannot write trash info: %s"
+msgstr "kan de prullenbakinformatie niet schrijven: %s"
+
+#, c-format
+msgid "cannot find a free name in the trash for %s"
+msgstr "kan geen vrije naam in de prullenbak vinden voor %s"
+
+#, c-format
+msgid "cannot write trash info for %s"
+msgstr "kan de prullenbakinformatie voor %s niet schrijven"
+
+#, c-format
+msgid "cannot move %s to the trash: %s"
+msgstr "kan %s niet naar de prullenbak verplaatsen: %s"
+
+msgid "the trash is empty"
+msgstr "de prullenbak is leeg"
+
+#, c-format
+msgid "%s has no Path in its trash info"
+msgstr "%s heeft geen Path in zijn prullenbakinformatie"
+
+#, c-format
+msgid "%s already exists — not restoring over it"
+msgstr "%s bestaat al — er wordt niet overheen teruggezet"
+
+#, c-format
+msgid "cannot restore %s: %s"
+msgstr "kan %s niet terugzetten: %s"
+
+#, c-format
+msgid "nothing called '%s' is in the trash"
+msgstr "er zit niets met de naam '%s' in de prullenbak"
+
+msgid ""
+"emptying the trash is PERMANENT and cannot be undone.\n"
+"  to see what would go:  synfiles trash list\n"
+"  to empty it anyway:    synfiles trash empty --yes"
+msgstr "de prullenbak legen is DEFINITIEF en kan niet ongedaan worden gemaakt.\n  om te zien wat zou verdwijnen: synfiles trash list\n  als u dit echt bedoelt: --force"
+
+msgid "trash restore: need the trashed name (see: synfiles trash list)"
+msgstr "trash restore: de naam in de prullenbak is nodig (zie: synfiles trash list)"
+
+#, c-format
+msgid "trash: unknown option '%s'"
+msgstr "trash: onbekende optie '%s'"
+
+#, c-format
+msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
+msgstr "<num> openen · u omhoog · h persoonlijke map · c <pad> ga · / <tekst> filter"
+
+#, c-format
+msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
+msgstr "i <num> info · z <num> grootte · t <num> prullenbak · e <num> acties"
+
+#, c-format
+msgid "m <num> <path> move · y <num> <path> copy"
+msgstr "m <num> <pad> verplaatsen · y <num> <pad> kopiëren"
+
+#, c-format
+msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
+msgstr "n/p pagina · a verborgen · s sortering · r omkeren · g gui · q stoppen"
+
+#, c-format
+msgid "xdg-open is not installed — cannot open %s"
+msgstr "xdg-open is niet geïnstalleerd — kan %s niet openen"
+
+#, c-format
+msgid "cannot fork: %s"
+msgstr "kan niet forken: %s"
+
+msgid "opened"
+msgstr "geopend"
+
+msgid "synfiles is not on PATH"
+msgstr "synfiles staat niet in het PATH"
+
+msgid "opened the window on"
+msgstr "het venster geopend op"
+
+#, c-format
+msgid "cannot go to %s: %s"
+msgstr "kan niet naar %s: %s"
+
+#, c-format
+msgid "%s needs somewhere to %s to"
+msgstr "%s heeft ergens nodig om naar te %s"
+
+#, c-format
+msgid "cannot %s to %s: %s"
+msgstr "kan niet %s naar %s: %s"
+
+#, c-format
+msgid "%s is not a folder — %s puts things INTO a folder"
+msgstr "%s is geen map — %s zet dingen IN een map"
+
+#, c-format
+msgid ""
+"%s is already here — copy it somewhere else, or use `synfiles copy --"
+"conflict=rename` for a duplicate"
+msgstr "%s is hier al — kopieer het ergens anders heen, of gebruik `synfiles copy --conflict=rename`"
+
+#, c-format
+msgid "%s is already in this folder"
+msgstr "%s zit al in deze map"
+
+#, c-format
+msgid "press any key"
+msgstr "druk op een toets"
+
+#, c-format
+msgid "filter: %s  (/ alone clears it)"
+msgstr "filter: %s  (/ alleen wist het)"
+
+#, c-format
+msgid "no row %ld"
+msgstr "geen rij %ld"
+
+#, c-format
+msgid "c needs a path"
+msgstr "c heeft een pad nodig"
+
+#, c-format
+msgid "%c needs a row number and a destination"
+msgstr "%c heeft een rijnummer en een bestemming nodig"
+
+#, c-format
+msgid "%c needs a row number"
+msgstr "%c heeft een rijnummer nodig"
+
+#, c-format
+msgid "unrecognised — see the keys above"
+msgstr "niet herkend — zie de toetsen hierboven"
+
+#, c-format
+msgid "%s is no longer there — not undoing"
+msgstr "%s is er niet meer — er wordt niets ongedaan gemaakt"
+
+#, c-format
+msgid "%s already exists — not undoing over it"
+msgstr "%s bestaat al — er wordt niets overheen ongedaan gemaakt"
+
+#, c-format
+msgid "cannot put %s back: %s"
+msgstr "kan %s niet terugzetten: %s"
+
+#, c-format
+msgid "%s is not empty any more — leaving it"
+msgstr "%s is niet meer leeg — het blijft staan"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "kan %s niet verwijderen: %s"
+
+#, c-format
+msgid "removed %s\n"
+msgstr "%s verwijderd\n"
+
+#, c-format
+msgid "nothing knows how to undo '%s'"
+msgstr "niets weet hoe '%s' ongedaan te maken"
+
+#, c-format
+msgid "undo history cleared\n"
+msgstr "geschiedenis van ongedaan maken gewist\n"
+
+#, c-format
+msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
+msgstr "undo: onbekend subcommando '%s' — probeer list, clear, of helemaal geen argument"
+
+msgid "out of memory"
+msgstr "onvoldoende geheugen"
+
+msgid "HOME is not set"
+msgstr "HOME is niet ingesteld"
+
+msgid "udisksctl is not installed — install udisks2 to mount from here"
+msgstr "udisksctl is niet geïnstalleerd — installeer udisks2 om vanaf hier aan te koppelen"
+
+#, c-format
+msgid "%s: expected a device path like /dev/sdc1"
+msgstr "%s: een apparaatpad zoals /dev/sdc1 wordt verwacht"
+
+msgid "mount: need a device path (see: synfiles volumes)"
+msgstr "mount: een apparaatpad is nodig (zie: synfiles volumes)"
+
+msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr "unmount: een apparaatpad is nodig (zie: synfiles volumes)"
+
+#, c-format
+msgid "volumes: unknown option '%s'"
+msgstr "volumes: onbekende optie '%s'"
+
+msgid "no volumes"
+msgstr "geen volumes"

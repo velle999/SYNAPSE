@@ -18,6 +18,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -213,7 +214,7 @@ static int write_all(const char *path, const char *text, const char *key,
 	char *tmp = xasprintf("%s.XXXXXX", path);
 	int fd = mkstemp(tmp);
 	if (fd < 0) {
-		warn("cannot write settings: %s", strerror(errno));
+		warn(_("cannot write settings: %s"), strerror(errno));
 		free(tmp);
 		free(out);
 		return 1;
@@ -230,7 +231,7 @@ static int write_all(const char *path, const char *text, const char *key,
 
 	int rc = 0;
 	if (!wrote || rename(tmp, path) != 0) {
-		warn("cannot save settings: %s", strerror(errno));
+		warn(_("cannot save settings: %s"), strerror(errno));
 		unlink(tmp);
 		rc = 1;
 	}
@@ -266,10 +267,10 @@ int cmd_config(int argc, char **argv)
 
 	if (!strcmp(sub, "get")) {
 		if (argc < 2)
-			die("config get: need a key");
+			die(_("config get: need a key"));
 		const setting_t *s = find_setting(argv[1]);
 		if (!s)
-			die("config: unknown setting '%s'", argv[1]);
+			die(_("config: unknown setting '%s'"), argv[1]);
 		char *v = effective(text, s);
 		printf("%s\n", v);
 		free(v);
@@ -280,14 +281,14 @@ int cmd_config(int argc, char **argv)
 
 	if (!strcmp(sub, "set")) {
 		if (argc < 3)
-			die("config set: need a key and a value");
+			die(_("config set: need a key and a value"));
 		const setting_t *s = find_setting(argv[1]);
 		if (!s)
-			die("config: unknown setting '%s'", argv[1]);
+			die(_("config: unknown setting '%s'"), argv[1]);
 
 		char *v = validate(s, argv[2]);
 		if (!v)
-			die("config: '%s' is not a valid %s for %s", argv[2],
+			die(_("config: '%s' is not a valid %s for %s"), argv[2],
 			    s->kind == T_BOOL ? "boolean"
 			    : s->kind == T_INT ? "number" : "choice", s->key);
 
@@ -305,12 +306,12 @@ int cmd_config(int argc, char **argv)
 		free(text);
 		free(path);
 		if (g_out == OUT_HUMAN)
-			printf("settings reset to defaults\n");
+			printf(_("settings reset to defaults\n"));
 		return 0;
 	}
 
 	free(text);
 	free(path);
-	die("config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, reset",
+	die(_("config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, reset"),
 	    sub);
 }

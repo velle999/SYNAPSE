@@ -16,948 +16,1286 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
 msgstr "%1  (%2 Bytes)"
 
-#: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
 msgstr "%1  (%2 Bytes, der Ordnereintrag selbst)"
 
-#: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
 msgstr "%1  (Ordnerinhalt nicht mitgezählt)"
 
-#: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 ausgewählt"
 
-#: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 fertig"
 msgstr[1] "%1 fertig"
 
-#: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
 msgstr[0] "%1 fehlgeschlagen"
 msgstr[1] "%1 fehlgeschlagen"
 
-#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] "%1 Datei"
 msgstr[1] "%1 Dateien"
 
-#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] "%1 Ordner"
 msgstr[1] "%1 Ordner"
 
-#: synfiles.qml:832
 msgid "%1 hours left"
 msgstr "noch %1 Stunden"
 
-#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr "%1 in %2, %3"
 
-#: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 Element"
 msgstr[1] "%1 Elemente"
 
-#: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
 msgstr[0] "%1 Element ist hier schon vorhanden"
 msgstr[1] "%1 Elemente sind hier schon vorhanden"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
-#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] "%1 Elemente"
 msgstr[1] "%1 Elemente"
 
-#: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "noch %1 Min."
 msgstr[1] "noch %1 Min."
 
-#: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
 msgstr[0] "%1 Netzwerkort gefunden"
 msgstr[1] "%1 Netzwerkorte gefunden"
 
-#: synfiles.qml:840
 msgid "%1 of %2"
 msgstr "%1 von %2"
 
-#: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 von %2 Element"
 msgstr[1] "%1 von %2 Elementen"
 
-#: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 von %2 Elementen"
 msgstr[1] "%1 von %2 Elementen"
 
-#: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
 msgstr[0] "%1 davon ist hier schon vorhanden"
 msgstr[1] "%1 davon sind hier schon vorhanden"
 
-#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr "%1 auf der Platte"
 
-#: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
 msgstr "%1 auf der Platte  (%2 in %3, %4)"
 
-#: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
 msgstr[0] "%1 übersprungen"
 msgstr[1] "%1 übersprungen"
 
-#: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
-#: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
 msgstr[0] "%1 — %2 fehlgeschlagen"
 msgstr[1] "%1 — %2 fehlgeschlagen"
 
-#: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
 msgstr[0] "%1 — %2 Element entfernt"
 msgstr[1] "%1 — %2 Elemente entfernt"
 
-#: synfiles.qml:950
 msgid "%1 — cancelled"
 msgstr "%1 — abgebrochen"
 
-#: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
 msgstr[0] "%1 — abgebrochen nach %2 fertig"
 msgstr[1] "%1 — abgebrochen nach %2 fertig"
 
-#: synfiles.qml:971
 msgid "%1 — done"
 msgstr "%1 — fertig"
 
-#: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
 msgstr[0] "noch %1 s"
 msgstr[1] "noch %1 s"
 
-#: synfiles.qml:738
 msgid ", "
 msgstr ", "
 
-#: synfiles.qml:5674
 msgid ""
 "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
 "recent files, volumes and network shares."
-msgstr "Ein Dateibrowser für SynapseOS. Tabs, mit Dolphin geteilte Orte, zuletzt benutzte Dateien, Datenträger und Netzwerkfreigaben."
+msgstr ""
+"Ein Dateibrowser für SynapseOS. Tabs, mit Dolphin geteilte Orte, zuletzt "
+"benutzte Dateien, Datenträger und Netzwerkfreigaben."
 
-#: synfiles.qml:2822
 msgid "About"
 msgstr "Über"
 
-#: synfiles.qml:3363
 msgid "About SYNAPSE Files"
 msgstr "Über SYNAPSE Files"
 
-#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr "Zu Orten hinzufügen"
 
-#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr "Alt+Eingabe"
 
-#: synfiles.qml:2689
 msgid "Back"
 msgstr "Zurück"
 
-#: synfiles.qml:5604
 msgid "By name"
 msgstr "Nach Name"
 
-#: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
 msgstr "Abbrechen"
 
-#: synfiles.qml:3345
 msgid "Close Split View"
 msgstr "Geteilte Ansicht schließen"
 
-#: synfiles.qml:2898
 msgid "Close split view"
 msgstr "Geteilte Ansicht schließen"
 
-#: synfiles.qml:4357
 msgid "Compact"
 msgstr "Kompakt"
 
-#: synfiles.qml:6946
 msgid "Compress to %1"
 msgstr "Komprimieren zu %1"
 
-#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
 msgstr "Inhalt"
 
-#: synfiles.qml:6864
 msgid "Copy"
 msgstr "Kopieren"
 
-#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
 msgstr "Pfad kopieren"
 
-#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr "Strg+A"
 
-#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr "Strg+N"
 
-#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr "Strg+V"
 
-#: synfiles.qml:6865
 msgid "Cut"
 msgstr "Ausschneiden"
 
-#: synfiles.qml:6872
 msgid "Del"
 msgstr "Entf"
 
-#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Gelöschte Dateien. Wiederherstellen legt eine zurück, wo sie herkam."
 
-#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
 msgstr "Absteigend"
 
-#: synfiles.qml:3892
 msgid "Destroy %1?"
 msgstr "%1 vernichten?"
 
-#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr "Endgültig vernichten…"
 
-#: synfiles.qml:3945
 msgid "Destroy permanently"
 msgstr "Endgültig vernichten"
 
-#: synfiles.qml:4359
 msgid "Details"
 msgstr "Details"
 
-#: synfiles.qml:3085
 msgid "Devices"
 msgstr "Geräte"
 
-#: synfiles.qml:5612
 msgid "Done"
 msgstr "Fertig"
 
-#: synfiles.qml:3543
 msgid "Eject"
 msgstr "Auswerfen"
 
-#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr "Papierkorb leeren…"
 
-#: synfiles.qml:3858
 msgid "Empty permanently"
 msgstr "Endgültig leeren"
 
-#: synfiles.qml:3838
 msgid "Empty the trash?"
 msgstr "Papierkorb leeren?"
 
-#: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
 msgstr "Eingabe zum Anlegen, Esc zum Abbrechen"
 
-#: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
-msgstr "Alles im Papierkorb wird endgültig entfernt. Das lässt sich nicht rückgängig machen."
+msgstr ""
+"Alles im Papierkorb wird endgültig entfernt. Das lässt sich nicht rückgängig "
+"machen."
 
-#: synfiles.qml:6870
 msgid "F2"
 msgstr "F2"
 
-#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
 msgstr "F5"
 
-#: synfiles.qml:3202
 msgid "Find network shares"
 msgstr "Netzwerkfreigaben suchen"
 
-#: synfiles.qml:458
 msgid "Folder"
 msgstr "Ordner"
 
-#: synfiles.qml:4371
 msgid "Folder Tree"
 msgstr "Ordnerbaum"
 
-#: synfiles.qml:2988
 msgid "Folders"
 msgstr "Ordner"
 
-#: synfiles.qml:3579
 msgid "Format…"
 msgstr "Formatieren…"
 
-#: synfiles.qml:2695
 msgid "Forward"
 msgstr "Vorwärts"
 
-#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr "Versteckte Objekte werden nicht angezeigt."
 
-#: synfiles.qml:3341
 msgid "Hide Folder Tree"
 msgstr "Ordnerbaum ausblenden"
 
-#: synfiles.qml:3343
 msgid "Hide Previews"
 msgstr "Vorschauen ausblenden"
 
-#: synfiles.qml:3347
 msgid "Hide Sidebar"
 msgstr "Seitenleiste ausblenden"
 
-#: synfiles.qml:1703
 msgid "Home"
 msgstr "Persönlicher Ordner"
 
-#: synfiles.qml:4355
 msgid "Icons"
 msgstr "Symbole"
 
-#: synfiles.qml:5604
 msgid "In contents"
 msgstr "Im Inhalt"
 
-#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr "Auswahl umkehren"
 
-#: synfiles.qml:4039
 msgid "Keep both"
 msgstr "Beide behalten"
 
-#: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr "Links  ·  %1"
 
-#: synfiles.qml:4665
 msgid "Links to"
 msgstr "Verweist auf"
 
-#: synfiles.qml:2905
 msgid "Menu"
 msgstr "Menü"
 
-#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
 msgstr "Geändert"
 
-#: synfiles.qml:3539
 msgid "Mount"
 msgstr "Einhängen"
 
-#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr "In den Papierkorb"
 
-#: synfiles.qml:5834
 msgid "Name"
 msgstr "Name"
 
-#: synfiles.qml:3164
 msgid "Network"
 msgstr "Netzwerk"
 
-#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
 msgstr "Neue leere Datei…"
 
-#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
 msgstr "Neuer Ordner…"
 
-#: synfiles.qml:3336
 msgid "New Tab"
 msgstr "Neuer Tab"
 
-#: synfiles.qml:4223
 msgid "New empty file"
 msgstr "Neue leere Datei"
 
-#: synfiles.qml:4176
 msgid "New folder"
 msgstr "Neuer Ordner"
 
-#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr "Keine zuletzt benutzten Dateien."
 
-#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr "Nichts gefunden."
 
-#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr "Nichts passt zu diesem Filter."
 
-#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
 msgstr "Öffnen"
 
-#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr "Ordner öffnen"
 
-#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr "Terminal hier öffnen"
 
-#: synfiles.qml:3359
 msgid "Open Trash"
 msgstr "Papierkorb öffnen"
 
-#: synfiles.qml:3559
 msgid "Open in Disks"
 msgstr "In Datenträger öffnen"
 
-#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr "In neuem Tab öffnen"
 
-#: synfiles.qml:6931
 msgid "Open with"
 msgstr "Öffnen mit"
 
-#: synfiles.qml:4049
 msgid "Overwrite"
 msgstr "Überschreiben"
 
-#: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
-msgstr "Überschreiben ersetzt Dateien; zwei Ordner gleichen Namens werden zusammengeführt, und die Dateien darin kollidieren einzeln."
+msgstr ""
+"Überschreiben ersetzt Dateien; zwei Ordner gleichen Namens werden "
+"zusammengeführt, und die Dateien darin kollidieren einzeln."
 
-#: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
-msgstr "Überschrieben und gelöscht. Es landet nicht im Papierkorb, und es gibt kein Zurück."
+msgstr ""
+"Überschrieben und gelöscht. Es landet nicht im Papierkorb, und es gibt kein "
+"Zurück."
 
-#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
 msgstr "Einfügen"
 
-#: synfiles.qml:5497
 msgid "Pin"
 msgstr "Anheften"
 
-#: synfiles.qml:3549
 msgid "Pin to Places"
 msgstr "An Orte anheften"
 
-#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr "Angeheftet ✓"
 
-#: synfiles.qml:3063
 msgid "Places"
 msgstr "Orte"
 
-#: synfiles.qml:4370
 msgid "Previews"
 msgstr "Vorschauen"
 
-#: synfiles.qml:3653
 msgid "Properties"
 msgstr "Eigenschaften"
 
-#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
 msgstr "Eigenschaften…"
 
-#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
 msgstr "Zuletzt"
 
-#: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
 msgstr "Zuletzt geändert"
 
-#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
 msgstr "Neu laden"
 
-#: synfiles.qml:3126
 msgid "Removable Devices"
 msgstr "Wechseldatenträger"
 
-#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr "Von Orten entfernen"
 
-#: synfiles.qml:6869
 msgid "Rename…"
 msgstr "Umbenennen…"
 
-#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
 msgstr "Wiederherstellen"
 
-#: synfiles.qml:4292
 msgid "Right  ·  %1"
 msgstr "Rechts  ·  %1"
 
-#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr "SYNAPSE Files"
 
-#: synfiles.qml:3201
 msgid "Scan again"
 msgstr "Erneut suchen"
 
-#: synfiles.qml:3200
 msgid "Scanning…"
 msgstr "Suche läuft…"
 
-#: synfiles.qml:2902
 msgid "Search"
 msgstr "Suchen"
 
-#: synfiles.qml:3355
 msgid "Search…"
 msgstr "Suchen…"
 
-#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
 msgstr "Alles auswählen"
 
-#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
 msgstr "In den Tresor senden"
 
-#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr "In den Tresor senden…"
 
-#: synfiles.qml:3341
 msgid "Show Folder Tree"
 msgstr "Ordnerbaum anzeigen"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr "Versteckte Dateien anzeigen"
 
-#: synfiles.qml:3343
 msgid "Show Previews"
 msgstr "Vorschauen anzeigen"
 
-#: synfiles.qml:3347
 msgid "Show Sidebar"
 msgstr "Seitenleiste anzeigen"
 
-#: synfiles.qml:4373
 msgid "Sidebar"
 msgstr "Seitenleiste"
 
-#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
 msgstr "Größe"
 
-#: synfiles.qml:4034
 msgid "Skip those"
 msgstr "Diese überspringen"
 
-#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr "Nach Änderung sortieren"
 
-#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
 msgstr "Nach Name sortieren"
 
-#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
 msgstr "Nach Größe sortieren"
 
-#: synfiles.qml:4365
 msgid "Sort by Type"
 msgstr "Nach Typ sortieren"
 
-#: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
 msgstr "Geteilte Ansicht"
 
-#: synfiles.qml:2898
 msgid "Split view (F3)"
 msgstr "Geteilte Ansicht (F3)"
 
-#: synfiles.qml:4437
 msgid "Text"
 msgstr "Text"
 
-#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr "Der Papierkorb ist leer."
 
-#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr "Dieser Ordner ist leer."
 
-#: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
-msgstr "Das ist der Ordner, aus dem es stammt — Ersetzen würde das Original löschen. Beide behalten oder abbrechen."
+msgstr ""
+"Das ist der Ordner, aus dem es stammt — Ersetzen würde das Original löschen. "
+"Beide behalten oder abbrechen."
 
-#: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
 msgstr "Papierkorb"
 
-#: synfiles.qml:4638
 msgid "Type"
 msgstr "Typ"
 
-#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr "Tippen, um diesen Ordner und alles darunter zu durchsuchen."
 
-#: synfiles.qml:3543
 msgid "Unmount"
 msgstr "Aushängen"
 
-#: synfiles.qml:2701
 msgid "Up one folder"
 msgstr "Einen Ordner nach oben"
 
-#: synfiles.qml:2980
 msgid "Vault"
 msgstr "Tresor"
 
-#: synfiles.qml:2720
 msgid "View"
 msgstr "Ansicht"
 
-#: synfiles.qml:2721
 msgid "View options"
 msgstr "Ansichtsoptionen"
 
-#: synfiles.qml:827
 msgid "a moment left"
 msgstr "gleich fertig"
 
-#: synfiles.qml:1583
 msgid "accessed"
 msgstr "zugegriffen"
 
-#: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
 msgstr "beschäftigt — warte auf das Ende des letzten Vorgangs"
 
-#: synfiles.qml:3764
 msgid "calculating…"
 msgstr "wird berechnet…"
 
-#: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
 msgstr "wird abgebrochen…"
 
-#: synfiles.qml:1584
 msgid "changed"
 msgstr "geändert"
 
-#: synfiles.qml:1152
 msgid "checking the destination…"
 msgstr "Ziel wird geprüft…"
 
-#: synfiles.qml:1712
 msgid "compressing %1…"
 msgstr "%1 wird komprimiert…"
 
-#: synfiles.qml:3757
 msgid "contents"
 msgstr "Inhalt"
 
-#: synfiles.qml:1078
 msgid "copied %1"
 msgstr "%1 kopiert"
 
-#: synfiles.qml:2443
 msgid "copied: %1"
 msgstr "kopiert: %1"
 
-#: synfiles.qml:1172
 msgid "copying %1"
 msgstr "%1 wird kopiert"
 
-#: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
 msgstr[0] "%1 Element wird hierher kopiert…"
 msgstr[1] "%1 Elemente werden hierher kopiert…"
 
-#: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "%1 Element wird kopiert…"
 msgstr[1] "%1 Elemente werden kopiert…"
 
-#: synfiles.qml:2482
 msgid "creating %1"
 msgstr "%1 wird angelegt"
 
-#: synfiles.qml:1077
 msgid "cut %1"
 msgstr "%1 ausgeschnitten"
 
-#: synfiles.qml:1579
 msgid "description"
 msgstr "Beschreibung"
 
-#: synfiles.qml:1840
 msgid "destroying %1…"
 msgstr "%1 wird vernichtet…"
 
-#: synfiles.qml:3494
 msgid "dragging %1…"
 msgstr "%1 wird gezogen…"
 
-#: synfiles.qml:2472
 msgid "emptying the trash…"
 msgstr "Papierkorb wird geleert…"
 
-#: synfiles.qml:1591
 msgid "files"
 msgstr "Dateien"
 
-#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "diese Objekte filtern…   (Strg+F zum Suchen)"
 
-#: synfiles.qml:1590
 msgid "folders"
 msgstr "Ordner"
 
-#: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
 msgstr "%1 formatieren — Anfrage in Datenträger"
 
-#: synfiles.qml:1587
 msgid "group"
 msgstr "Gruppe"
 
-#: synfiles.qml:1585
 msgid "links"
 msgstr "Verweise"
 
-#: synfiles.qml:2526
 msgid "looking for network shares…"
 msgstr "Netzwerkfreigaben werden gesucht…"
 
-#: synfiles.qml:4650
 msgid "measuring…"
 msgstr "wird gemessen…"
 
-#: synfiles.qml:1578
 msgid "mime"
 msgstr "MIME"
 
-#: synfiles.qml:456
 msgid "missing — the file it points at is gone"
 msgstr "fehlt — die Zieldatei ist verschwunden"
 
-#: synfiles.qml:1581
 msgid "mode"
 msgstr "Rechte"
 
-#: synfiles.qml:1582
 msgid "modified"
 msgstr "geändert"
 
-#: synfiles.qml:3193
 msgid "mount %1"
 msgstr "%1 einhängen"
 
-#: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
 msgstr "%1 wird eingehängt…"
 
-#: synfiles.qml:1171
 msgid "moving %1"
 msgstr "%1 wird verschoben"
 
-#: synfiles.qml:1767
 msgid "moving %1 into the vault"
 msgstr "%1 wird in den Tresor verschoben"
 
-#: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
 msgstr[0] "%1 Element wird verschoben…"
 msgstr[1] "%1 Elemente werden verschoben…"
 
-#: synfiles.qml:1058
 msgid "moving %1 to the trash"
 msgstr "%1 wird in den Papierkorb verschoben"
 
-#: synfiles.qml:1576
 msgid "name"
 msgstr "Name"
 
-#: synfiles.qml:3497
 msgid "nothing accepted that drop"
 msgstr "nichts hat dieses Ablegen angenommen"
 
-#: synfiles.qml:2554
 msgid "nothing announced itself on this network"
 msgstr "in diesem Netzwerk hat sich nichts gemeldet"
 
-#: synfiles.qml:1993
 msgid "only local files can be dropped here"
 msgstr "hier lassen sich nur lokale Dateien ablegen"
 
-#: synfiles.qml:2408
 msgid "opened %1 in Disks"
 msgstr "%1 in Datenträger geöffnet"
 
-#: synfiles.qml:2333
 msgid "opened a terminal in %1"
 msgstr "Terminal in %1 geöffnet"
 
-#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr "im Browser geöffnet"
 
-#: synfiles.qml:2620
 msgid "opening %1"
 msgstr "%1 wird geöffnet"
 
-#: synfiles.qml:1586
 msgid "owner"
 msgstr "Eigentümer"
 
-#: synfiles.qml:1190
 msgid "paste cancelled"
 msgstr "Einfügen abgebrochen"
 
-#: synfiles.qml:1575
 msgid "path"
 msgstr "Pfad"
 
-#: synfiles.qml:4278
 msgid "reading…"
 msgstr "wird gelesen…"
 
-#: synfiles.qml:1240
 msgid "renaming to %1"
 msgstr "wird umbenannt in %1"
 
-#: synfiles.qml:1067
 msgid "restoring %1"
 msgstr "%1 wird wiederhergestellt"
 
-#: synfiles.qml:2318
 msgid "running…"
 msgstr "läuft…"
 
-#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr "%1 und darunter durchsuchen — Eingabe drücken"
 
-#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr "%1 wird durchsucht…"
 
-#: synfiles.qml:1589
 msgid "selected"
 msgstr "ausgewählt"
 
-#: synfiles.qml:1580
 msgid "size"
 msgstr "Größe"
 
-#: synfiles.qml:1588
 msgid "target"
 msgstr "Ziel"
 
-#: synfiles.qml:1577
 msgid "type"
 msgstr "Typ"
 
-#: synfiles.qml:2283
 msgid "undoing %1…"
 msgstr "%1 wird rückgängig gemacht…"
 
-#: synfiles.qml:2462
 msgid "unmounting %1…"
 msgstr "%1 wird ausgehängt…"
 
-#: synfiles.qml:755
 msgid "working…"
 msgstr "arbeitet…"
 
-#: synfiles.qml:3981
 msgid "“%1” already exists here"
 msgstr "„%1“ ist hier schon vorhanden"
 
-#: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
 msgstr[0] "• …und %1 weiteres"
 msgstr[1] "• …und %1 weitere"
 
-#: synfiles.qml:3922
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr "⚠ Das hier ist %1 — es schreibt Änderungen in neue Blöcke statt über die alten, und Snapshots bewahren ganze Kopien. Die Datei ist dann weg, ihr Inhalt lässt sich aber womöglich noch von der Platte wiederherstellen. Davor schützt erst eine Festplattenverschlüsselung."
+msgstr ""
+"⚠ Das hier ist %1 — es schreibt Änderungen in neue Blöcke statt über die "
+"alten, und Snapshots bewahren ganze Kopien. Die Datei ist dann weg, ihr "
+"Inhalt lässt sich aber womöglich noch von der Platte wiederherstellen. Davor "
+"schützt erst eine Festplattenverschlüsselung."
 
-#: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr "⚠ Das hier ist %1 — es schreibt Änderungen in neue Blöcke statt über die alten. Die Datei ist dann weg, ihr Inhalt lässt sich aber womöglich noch von der Platte wiederherstellen. Davor schützt erst eine Festplattenverschlüsselung."
+msgstr ""
+"⚠ Das hier ist %1 — es schreibt Änderungen in neue Blöcke statt über die "
+"alten. Die Datei ist dann weg, ihr Inhalt lässt sich aber womöglich noch von "
+"der Platte wiederherstellen. Davor schützt erst eine "
+"Festplattenverschlüsselung."
+
+msgid "actions: need a path"
+msgstr "actions: ein Pfad ist nötig"
+
+#, c-format
+msgid "cannot stat %s: %s"
+msgstr "kann %s nicht abfragen: %s"
+
+msgid ""
+"action: need a .desktop file and a path\n"
+"  usage: synfiles action <file.desktop> [action-id] -- <path>..."
+msgstr "action: eine .desktop-Datei und ein Pfad sind nötig\n  Aufruf: synfiles action <datei.desktop> <pfad>…"
+
+#, c-format
+msgid "action: '%s' must be a .desktop NAME, not a path"
+msgstr "action: „%s“ muss ein .desktop-NAME sein, kein Pfad"
+
+msgid "action: need at least one path"
+msgstr "action: mindestens ein Pfad ist nötig"
+
+#, c-format
+msgid "action: no such desktop entry: %s"
+msgstr "action: kein solcher Desktop-Eintrag: %s"
+
+#, c-format
+msgid "action: cannot read %s"
+msgstr "action: %s kann nicht gelesen werden"
+
+#, c-format
+msgid "action: %s has no Exec for '%s'"
+msgstr "action: %s hat kein Exec für „%s“"
+
+#, c-format
+msgid "action: %s has an empty Exec"
+msgstr "action: %s hat ein leeres Exec"
+
+#, c-format
+msgid "%s wants a terminal; running it without one"
+msgstr "%s möchte ein Terminal; es wird ohne eines gestartet"
+
+#, c-format
+msgid "fork: %s"
+msgstr "fork: %s"
+
+#, c-format
+msgid "compress: unknown option '%s'"
+msgstr "compress: unbekannte Option „%s“"
+
+msgid "compress: need at least one path"
+msgstr "compress: mindestens ein Pfad ist nötig"
+
+#, c-format
+msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr "compress: unbekanntes Format „%s“ — versuchen Sie zip, tar.gz, tar.xz, tar.zst, 7z"
+
+msgid ""
+"compress: everything must be in the same folder\n"
+"  otherwise the archive records absolute paths and unpacking it scatters "
+"files"
+msgstr "compress: alles muss im selben Ordner liegen\n  sonst enthielte das Archiv Pfade, die anderswo nicht ergeben"
+
+msgid "compress: --name takes a name, not a path"
+msgstr "compress: --name erwartet einen Namen, keinen Pfad"
+
+#, c-format
+msgid "%s already exists"
+msgstr "%s existiert bereits"
+
+msgid "compress: neither zip nor 7z is installed"
+msgstr "compress: weder zip noch 7z ist installiert"
+
+msgid "compress: 7z is not installed — install p7zip"
+msgstr "compress: 7z ist nicht installiert — installieren Sie p7zip"
+
+msgid "compress: tar is not installed"
+msgstr "compress: tar ist nicht installiert"
+
+#, c-format
+msgid "could not create %s"
+msgstr "%s konnte nicht angelegt werden"
+
+#, c-format
+msgid "cannot write settings: %s"
+msgstr "Einstellungen können nicht geschrieben werden: %s"
+
+#, c-format
+msgid "cannot save settings: %s"
+msgstr "Einstellungen können nicht gespeichert werden: %s"
+
+msgid "config get: need a key"
+msgstr "config get: ein Schlüssel ist nötig"
+
+#, c-format
+msgid "config: unknown setting '%s'"
+msgstr "config: unbekannte Einstellung „%s“"
+
+msgid "config set: need a key and a value"
+msgstr "config set: ein Schlüssel und ein Wert sind nötig"
+
+#, c-format
+msgid "config: '%s' is not a valid %s for %s"
+msgstr "config: „%s“ ist kein gültiger %s für %s"
+
+#, c-format
+msgid "settings reset to defaults\n"
+msgstr "Einstellungen auf die Vorgaben zurückgesetzt\n"
+
+#, c-format
+msgid ""
+"config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
+"reset"
+msgstr "config: unbekannter Unterbefehl „%s“ — versuchen Sie list, get <schlüssel>, set <schlüssel> <wert>, reset"
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr "%s kann nicht aufgelöst werden: %s"
+
+#, c-format
+msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
+msgstr "unbekannte Konfliktregel „%s“ — versuchen Sie error, skip, rename, overwrite"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: unbekannte Option „%s“"
+
+#, c-format
+msgid "%s: need one or more sources and a destination directory"
+msgstr "%s: eine oder mehrere Quellen und ein Zielverzeichnis sind nötig"
+
+#, c-format
+msgid "%d done, %d skipped, %d failed"
+msgstr "%d erledigt, %d übersprungen, %d fehlgeschlagen"
+
+#, c-format
+msgid "collisions: %s is not a directory"
+msgstr "collisions: %s ist kein Verzeichnis"
+
+#, c-format
+msgid "collisions: cannot open %s: %s"
+msgstr "collisions: %s kann nicht geöffnet werden: %s"
+
+#, c-format
+msgid "copy: %s is not a directory"
+msgstr "copy: %s ist kein Verzeichnis"
+
+#, c-format
+msgid "copy: cannot open %s: %s"
+msgstr "copy: %s kann nicht geöffnet werden: %s"
+
+#, c-format
+msgid "move: %s is not a directory"
+msgstr "move: %s ist kein Verzeichnis"
+
+#, c-format
+msgid "move: cannot open %s: %s"
+msgstr "move: %s kann nicht geöffnet werden: %s"
+
+msgid "rename: need a path and a new name"
+msgstr "rename: ein Pfad und ein neuer Name sind nötig"
+
+#, c-format
+msgid "rename: '%s' is a path, not a name — use `synfiles move`"
+msgstr "rename: „%s“ ist ein Pfad, kein Name — nutzen Sie `synfiles move`"
+
+#, c-format
+msgid "rename: '%s' is not a usable name"
+msgstr "rename: „%s“ ist kein brauchbarer Name"
+
+#, c-format
+msgid "cannot rename %s: %s"
+msgstr "%s kann nicht umbenannt werden: %s"
+
+msgid "mkdir: need a path"
+msgstr "mkdir: ein Pfad ist nötig"
+
+#, c-format
+msgid "cannot create %s: %s"
+msgstr "%s kann nicht angelegt werden: %s"
+
+#, c-format
+msgid "delete: unknown option '%s'"
+msgstr "delete: unbekannte Option „%s“"
+
+msgid "delete: need a path"
+msgstr "delete: ein Pfad ist nötig"
+
+msgid ""
+"delete removes files PERMANENTLY and cannot be undone.\n"
+"  to move them to the trash instead:  synfiles trash <path>\n"
+"  to delete them anyway:              synfiles delete --yes <path>"
+msgstr "delete entfernt Dateien ENDGÜLTIG und kann nicht rückgängig gemacht werden.\n  um sie stattdessen in den Papierkorb zu legen: synfiles trash <pfad>…\n  wenn Sie das wirklich meinen: --force"
+
+#, c-format
+msgid "find: unknown option '%s'"
+msgstr "find: unbekannte Option „%s“"
+
+msgid "find: need --name=GLOB or --content=TEXT (or both)"
+msgstr "find: --name=MUSTER oder --content=TEXT ist nötig (oder beides)"
+
+#, c-format
+msgid "cannot open %s: %s"
+msgstr "%s kann nicht geöffnet werden: %s"
+
+msgid "no matches"
+msgstr "keine Treffer"
+
+#, c-format
+msgid "%ld matches (stopped at the limit)"
+msgstr "%ld Treffer (an der Grenze abgebrochen)"
+
+msgid "[broken]"
+msgstr "[defekt]"
+
+#, c-format
+msgid "list: unknown sort '%s' — try name, size, mtime, type"
+msgstr "list: unbekannte Sortierung „%s“ — versuchen Sie name, size, mtime, type"
+
+#, c-format
+msgid "list: unknown option '%s'"
+msgstr "list: unbekannte Option „%s“"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "%s kann nicht gelesen werden: %s"
+
+msgid "empty"
+msgstr "leer"
+
+msgid "info: need a path"
+msgstr "info: ein Pfad ist nötig"
+
+msgid "du: need a path"
+msgstr "du: ein Pfad ist nötig"
+
+msgid "no display — synfiles gui needs a graphical session"
+msgstr "keine Anzeige — synfiles gui braucht eine grafische Sitzung"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell ist nicht installiert — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell konnte nicht gestartet werden"
+
+#, c-format
+msgid ""
+"netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
+msgstr "netscan: avahi-browse ist für %s fehlgeschlagen (Ende %d) — die mDNS-Erkennung funktioniert auf dieser Maschine nicht"
+
+#, c-format
+msgid "netscan: unknown option '%s'"
+msgstr "netscan: unbekannte Option „%s“"
+
+msgid ""
+"netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
+"network places"
+msgstr "netscan: installieren Sie avahi (mDNS) oder smbclient (Windows-Freigaben), um Geräte zu finden"
+
+msgid "netmount: need a URI (see: synfiles netscan)"
+msgstr "netmount: eine URI ist nötig (siehe: synfiles netscan)"
+
+#, c-format
+msgid "netmount: '%s' is not a URI"
+msgstr "netmount: „%s“ ist keine URI"
+
+msgid "netmount: gio is not installed — install gvfs to mount network shares"
+msgstr "netmount: gio ist nicht installiert — installieren Sie gvfs, um Netzwerkfreigaben einzuhängen"
+
+#, c-format
+msgid "netmount: could not mount %s"
+msgstr "netmount: %s konnte nicht eingehängt werden"
+
+#, c-format
+msgid "peek: unknown option '%s'"
+msgstr "peek: unbekannte Option „%s“"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: nicht lesbar"
+
+#, c-format
+msgid "cannot create a temporary file beside %s: %s"
+msgstr "neben %s kann keine temporäre Datei angelegt werden: %s"
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr "%s kann nicht geschrieben werden: %s"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "%s kann nicht ersetzt werden: %s"
+
+#, c-format
+msgid "could not write %s"
+msgstr "%s konnte nicht geschrieben werden"
+
+#, c-format
+msgid "%s is already pinned"
+msgstr "%s ist bereits angeheftet"
+
+#, c-format
+msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
+msgstr "%s hat kein </xbel> — es wird nicht geraten, wohin ein Lesezeichen gehört"
+
+#, c-format
+msgid "pinned %s\n"
+msgstr "%s angeheftet\n"
+
+msgid "no places file to remove from"
+msgstr "keine Orte-Datei, aus der entfernt werden könnte"
+
+#, c-format
+msgid "could not find the bookmark element around %s"
+msgstr "das Lesezeichen-Element um %s konnte nicht gefunden werden"
+
+#, c-format
+msgid "unpinned %s\n"
+msgstr "%s losgelöst\n"
+
+#, c-format
+msgid "%s is not pinned"
+msgstr "%s ist nicht angeheftet"
+
+msgid "places pin: need a path"
+msgstr "places pin: ein Pfad ist nötig"
+
+msgid "places unpin: need a path"
+msgstr "places unpin: ein Pfad ist nötig"
+
+#, c-format
+msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
+msgstr "places: unbekannter Unterbefehl „%s“ — versuchen Sie list, pin <pfad>, unpin <pfad>"
+
+#, c-format
+msgid "recent: unknown option '%s'"
+msgstr "recent: unbekannte Option „%s“"
+
+msgid "refusing to trash the root directory"
+msgstr "das Wurzelverzeichnis wird nicht in den Papierkorb gelegt"
+
+#, c-format
+msgid "cannot work out where to trash %s"
+msgstr "es lässt sich nicht ermitteln, wohin %s in den Papierkorb soll"
+
+#, c-format
+msgid "cannot create the trash directory at %s: %s"
+msgstr "das Papierkorbverzeichnis unter %s kann nicht angelegt werden: %s"
+
+#, c-format
+msgid "cannot write trash info: %s"
+msgstr "die Papierkorb-Info kann nicht geschrieben werden: %s"
+
+#, c-format
+msgid "cannot find a free name in the trash for %s"
+msgstr "im Papierkorb ist kein freier Name für %s zu finden"
+
+#, c-format
+msgid "cannot write trash info for %s"
+msgstr "die Papierkorb-Info für %s kann nicht geschrieben werden"
+
+#, c-format
+msgid "cannot move %s to the trash: %s"
+msgstr "%s kann nicht in den Papierkorb verschoben werden: %s"
+
+msgid "the trash is empty"
+msgstr "der Papierkorb ist leer"
+
+#, c-format
+msgid "%s has no Path in its trash info"
+msgstr "%s hat kein Path in seiner Papierkorb-Info"
+
+#, c-format
+msgid "%s already exists — not restoring over it"
+msgstr "%s existiert bereits — es wird nicht darüber wiederhergestellt"
+
+#, c-format
+msgid "cannot restore %s: %s"
+msgstr "%s kann nicht wiederhergestellt werden: %s"
+
+#, c-format
+msgid "nothing called '%s' is in the trash"
+msgstr "nichts mit dem Namen „%s“ liegt im Papierkorb"
+
+msgid ""
+"emptying the trash is PERMANENT and cannot be undone.\n"
+"  to see what would go:  synfiles trash list\n"
+"  to empty it anyway:    synfiles trash empty --yes"
+msgstr "den Papierkorb zu leeren ist ENDGÜLTIG und kann nicht rückgängig gemacht werden.\n  um zu sehen, was verschwinden würde: synfiles trash list\n  wenn Sie das wirklich meinen: --force"
+
+msgid "trash restore: need the trashed name (see: synfiles trash list)"
+msgstr "trash restore: der Papierkorb-Name ist nötig (siehe: synfiles trash list)"
+
+#, c-format
+msgid "trash: unknown option '%s'"
+msgstr "trash: unbekannte Option „%s“"
+
+#, c-format
+msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
+msgstr "<zahl> öffnen · u hoch · h Persönlich · c <pfad> wechseln · / <text> filtern"
+
+#, c-format
+msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
+msgstr "i <zahl> Info · z <zahl> Größe · t <zahl> Papierkorb · e <zahl> Aktionen"
+
+#, c-format
+msgid "m <num> <path> move · y <num> <path> copy"
+msgstr "m <zahl> <pfad> verschieben · y <zahl> <pfad> kopieren"
+
+#, c-format
+msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
+msgstr "n/p Seite · a Versteckte · s Sortierung · r umkehren · g GUI · q beenden"
+
+#, c-format
+msgid "xdg-open is not installed — cannot open %s"
+msgstr "xdg-open ist nicht installiert — %s kann nicht geöffnet werden"
+
+#, c-format
+msgid "cannot fork: %s"
+msgstr "fork nicht möglich: %s"
+
+msgid "opened"
+msgstr "geöffnet"
+
+msgid "synfiles is not on PATH"
+msgstr "synfiles ist nicht im PATH"
+
+msgid "opened the window on"
+msgstr "das Fenster geöffnet auf"
+
+#, c-format
+msgid "cannot go to %s: %s"
+msgstr "zu %s kann nicht gewechselt werden: %s"
+
+#, c-format
+msgid "%s needs somewhere to %s to"
+msgstr "%s braucht ein Ziel zum %s"
+
+#, c-format
+msgid "cannot %s to %s: %s"
+msgstr "%s kann nicht nach %s: %s"
+
+#, c-format
+msgid "%s is not a folder — %s puts things INTO a folder"
+msgstr "%s ist kein Ordner — %s legt Dinge IN einen Ordner"
+
+#, c-format
+msgid ""
+"%s is already here — copy it somewhere else, or use `synfiles copy --"
+"conflict=rename` for a duplicate"
+msgstr "%s ist bereits hier — kopieren Sie es woandershin, oder nutzen Sie `synfiles copy --conflict=rename`"
+
+#, c-format
+msgid "%s is already in this folder"
+msgstr "%s ist bereits in diesem Ordner"
+
+#, c-format
+msgid "press any key"
+msgstr "beliebige Taste drücken"
+
+#, c-format
+msgid "filter: %s  (/ alone clears it)"
+msgstr "Filter: %s  (/ allein löscht ihn)"
+
+#, c-format
+msgid "no row %ld"
+msgstr "keine Zeile %ld"
+
+#, c-format
+msgid "c needs a path"
+msgstr "c braucht einen Pfad"
+
+#, c-format
+msgid "%c needs a row number and a destination"
+msgstr "%c braucht eine Zeilennummer und ein Ziel"
+
+#, c-format
+msgid "%c needs a row number"
+msgstr "%c braucht eine Zeilennummer"
+
+#, c-format
+msgid "unrecognised — see the keys above"
+msgstr "unbekannt — siehe die Tasten oben"
+
+#, c-format
+msgid "%s is no longer there — not undoing"
+msgstr "%s ist nicht mehr da — es wird nichts rückgängig gemacht"
+
+#, c-format
+msgid "%s already exists — not undoing over it"
+msgstr "%s existiert bereits — es wird nichts darüber rückgängig gemacht"
+
+#, c-format
+msgid "cannot put %s back: %s"
+msgstr "%s kann nicht zurückgelegt werden: %s"
+
+#, c-format
+msgid "%s is not empty any more — leaving it"
+msgstr "%s ist nicht mehr leer — es bleibt stehen"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "%s kann nicht entfernt werden: %s"
+
+#, c-format
+msgid "removed %s\n"
+msgstr "%s entfernt\n"
+
+#, c-format
+msgid "nothing knows how to undo '%s'"
+msgstr "nichts weiß, wie „%s“ rückgängig zu machen wäre"
+
+#, c-format
+msgid "undo history cleared\n"
+msgstr "Rückgängig-Verlauf gelöscht\n"
+
+#, c-format
+msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
+msgstr "undo: unbekannter Unterbefehl „%s“ — versuchen Sie list, clear oder gar kein Argument"
+
+msgid "out of memory"
+msgstr "nicht genügend Speicher"
+
+msgid "HOME is not set"
+msgstr "HOME ist nicht gesetzt"
+
+msgid "udisksctl is not installed — install udisks2 to mount from here"
+msgstr "udisksctl ist nicht installiert — installieren Sie udisks2, um von hier aus einzuhängen"
+
+#, c-format
+msgid "%s: expected a device path like /dev/sdc1"
+msgstr "%s: ein Gerätepfad wie /dev/sdc1 wird erwartet"
+
+msgid "mount: need a device path (see: synfiles volumes)"
+msgstr "mount: ein Gerätepfad ist nötig (siehe: synfiles volumes)"
+
+msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr "unmount: ein Gerätepfad ist nötig (siehe: synfiles volumes)"
+
+#, c-format
+msgid "volumes: unknown option '%s'"
+msgstr "volumes: unbekannte Option „%s“"
+
+msgid "no volumes"
+msgstr "keine Datenträger"

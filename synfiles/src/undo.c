@@ -29,6 +29,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -265,15 +266,15 @@ static int undo_one(entry_t *e)
 	 * and nothing has taken the place it came from. */
 	if (!strcmp(e->op, "move") || !strcmp(e->op, "rename")) {
 		if (faccessat(AT_FDCWD, e->a, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
-			warn("%s is no longer there — not undoing", e->a);
+			warn(_("%s is no longer there — not undoing"), e->a);
 			return 1;
 		}
 		if (faccessat(AT_FDCWD, e->b, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
-			warn("%s already exists — not undoing over it", e->b);
+			warn(_("%s already exists — not undoing over it"), e->b);
 			return 1;
 		}
 		if (rename(e->a, e->b) != 0) {
-			warn("cannot put %s back: %s", e->b, strerror(errno));
+			warn(_("cannot put %s back: %s"), e->b, strerror(errno));
 			return 1;
 		}
 		if (g_out == OUT_REC) {
@@ -316,17 +317,17 @@ static int undo_one(entry_t *e)
 			return 0;
 		if (rmdir(e->a) != 0) {
 			if (errno == ENOTEMPTY)
-				warn("%s is not empty any more — leaving it", e->a);
+				warn(_("%s is not empty any more — leaving it"), e->a);
 			else
-				warn("cannot remove %s: %s", e->a, strerror(errno));
+				warn(_("cannot remove %s: %s"), e->a, strerror(errno));
 			return 1;
 		}
 		if (g_out == OUT_HUMAN)
-			printf("removed %s\n", e->a);
+			printf(_("removed %s\n"), e->a);
 		return 0;
 	}
 
-	warn("nothing knows how to undo '%s'", e->op);
+	warn(_("nothing knows how to undo '%s'"), e->op);
 	return 1;
 }
 
@@ -344,7 +345,7 @@ int cmd_undo(int argc, char **argv)
 		free(path);
 		free_journal(e, n, backing);
 		if (g_out == OUT_HUMAN)
-			printf("undo history cleared\n");
+			printf(_("undo history cleared\n"));
 		return 0;
 	}
 
@@ -381,7 +382,7 @@ int cmd_undo(int argc, char **argv)
 	}
 
 	if (*sub)
-		die("undo: unknown subcommand '%s' — try list, clear, or no argument", sub);
+		die(_("undo: unknown subcommand '%s' — try list, clear, or no argument"), sub);
 
 	if (n == 0) {
 		if (g_out == OUT_REC)

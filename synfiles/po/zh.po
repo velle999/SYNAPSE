@@ -16,927 +16,1253 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
 msgstr "%1  (%2 字节)"
 
-#: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
 msgstr "%1  (%2 字节，文件夹条目本身)"
 
-#: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
 msgstr "%1  (未统计文件夹内容)"
 
-#: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  已选 %2"
 
-#: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "完成 %1 项"
 
-#: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
 msgstr[0] "失败 %1 项"
 
-#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] "%1 个文件"
 
-#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] "%1 个文件夹"
 
-#: synfiles.qml:832
 msgid "%1 hours left"
 msgstr "还剩 %1 小时"
 
-#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr "%2、%3 中共 %1"
 
-#: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 个项目"
 
-#: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
 msgstr[0] "这里已存在 %1 个项目"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
-#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] "%1 个项目"
 
-#: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "还剩 %1 分钟"
 
-#: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
 msgstr[0] "找到 %1 个网络位置"
 
-#: synfiles.qml:840
 msgid "%1 of %2"
 msgstr "%2 中的 %1"
 
-#: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%2 个中的 %1 个"
 
-#: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%2 个中的 %1 个"
 
-#: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
 msgstr[0] "其中 %1 个这里已存在"
 
-#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr "磁盘占用 %1"
 
-#: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
 msgstr "磁盘占用 %1  (%3、%4 中共 %2)"
 
-#: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
 msgstr[0] "跳过 %1 项"
 
-#: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
-#: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
 msgstr[0] "%1 — 失败 %2 项"
 
-#: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
 msgstr[0] "%1 — 已移除 %2 个项目"
 
-#: synfiles.qml:950
 msgid "%1 — cancelled"
 msgstr "%1 — 已取消"
 
-#: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
 msgstr[0] "%1 — 完成 %2 项后取消"
 
-#: synfiles.qml:971
 msgid "%1 — done"
 msgstr "%1 — 完成"
 
-#: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
 msgstr[0] "还剩 %1 秒"
 
-#: synfiles.qml:738
 msgid ", "
 msgstr "、"
 
-#: synfiles.qml:5674
 msgid ""
 "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
 "recent files, volumes and network shares."
-msgstr "SynapseOS 的文件浏览器。标签页、与 Dolphin 共享的固定位置、最近文件、卷和网络共享。"
+msgstr ""
+"SynapseOS 的文件浏览器。标签页、与 Dolphin 共享的固定位置、最近文件、卷和网络"
+"共享。"
 
-#: synfiles.qml:2822
 msgid "About"
 msgstr "关于"
 
-#: synfiles.qml:3363
 msgid "About SYNAPSE Files"
 msgstr "关于 SYNAPSE Files"
 
-#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr "添加到位置"
 
-#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr "Alt+Enter"
 
-#: synfiles.qml:2689
 msgid "Back"
 msgstr "后退"
 
-#: synfiles.qml:5604
 msgid "By name"
 msgstr "按名称"
 
-#: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
 msgstr "取消"
 
-#: synfiles.qml:3345
 msgid "Close Split View"
 msgstr "关闭分屏"
 
-#: synfiles.qml:2898
 msgid "Close split view"
 msgstr "关闭分屏"
 
-#: synfiles.qml:4357
 msgid "Compact"
 msgstr "紧凑"
 
-#: synfiles.qml:6946
 msgid "Compress to %1"
 msgstr "压缩为 %1"
 
-#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
 msgstr "内容"
 
-#: synfiles.qml:6864
 msgid "Copy"
 msgstr "复制"
 
-#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
 msgstr "复制路径"
 
-#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
 
-#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr "Ctrl+N"
 
-#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr "Ctrl+V"
 
-#: synfiles.qml:6865
 msgid "Cut"
 msgstr "剪切"
 
-#: synfiles.qml:6872
 msgid "Del"
 msgstr "Del"
 
-#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "已删除的文件。还原会把文件放回原处。"
 
-#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
 msgstr "降序"
 
-#: synfiles.qml:3892
 msgid "Destroy %1?"
 msgstr "要销毁 %1 吗？"
 
-#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr "永久销毁…"
 
-#: synfiles.qml:3945
 msgid "Destroy permanently"
 msgstr "永久销毁"
 
-#: synfiles.qml:4359
 msgid "Details"
 msgstr "详细"
 
-#: synfiles.qml:3085
 msgid "Devices"
 msgstr "设备"
 
-#: synfiles.qml:5612
 msgid "Done"
 msgstr "完成"
 
-#: synfiles.qml:3543
 msgid "Eject"
 msgstr "弹出"
 
-#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr "清空回收站…"
 
-#: synfiles.qml:3858
 msgid "Empty permanently"
 msgstr "永久清空"
 
-#: synfiles.qml:3838
 msgid "Empty the trash?"
 msgstr "清空回收站吗？"
 
-#: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
 msgstr "回车创建，Esc 取消"
 
-#: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "回收站中的所有内容都将被永久删除，且无法撤销。"
 
-#: synfiles.qml:6870
 msgid "F2"
 msgstr "F2"
 
-#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
 msgstr "F5"
 
-#: synfiles.qml:3202
 msgid "Find network shares"
 msgstr "查找网络共享"
 
-#: synfiles.qml:458
 msgid "Folder"
 msgstr "文件夹"
 
-#: synfiles.qml:4371
 msgid "Folder Tree"
 msgstr "文件夹树"
 
-#: synfiles.qml:2988
 msgid "Folders"
 msgstr "文件夹"
 
-#: synfiles.qml:3579
 msgid "Format…"
 msgstr "格式化…"
 
-#: synfiles.qml:2695
 msgid "Forward"
 msgstr "前进"
 
-#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr "未显示隐藏项目。"
 
-#: synfiles.qml:3341
 msgid "Hide Folder Tree"
 msgstr "隐藏文件夹树"
 
-#: synfiles.qml:3343
 msgid "Hide Previews"
 msgstr "隐藏预览"
 
-#: synfiles.qml:3347
 msgid "Hide Sidebar"
 msgstr "隐藏侧边栏"
 
-#: synfiles.qml:1703
 msgid "Home"
 msgstr "主目录"
 
-#: synfiles.qml:4355
 msgid "Icons"
 msgstr "图标"
 
-#: synfiles.qml:5604
 msgid "In contents"
 msgstr "在内容中"
 
-#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr "反选"
 
-#: synfiles.qml:4039
 msgid "Keep both"
 msgstr "两者都保留"
 
-#: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr "左  ·  %1"
 
-#: synfiles.qml:4665
 msgid "Links to"
 msgstr "指向"
 
-#: synfiles.qml:2905
 msgid "Menu"
 msgstr "菜单"
 
-#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
 msgstr "修改时间"
 
-#: synfiles.qml:3539
 msgid "Mount"
 msgstr "挂载"
 
-#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr "移到回收站"
 
-#: synfiles.qml:5834
 msgid "Name"
 msgstr "名称"
 
-#: synfiles.qml:3164
 msgid "Network"
 msgstr "网络"
 
-#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
 msgstr "新建空文件…"
 
-#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
 msgstr "新建文件夹…"
 
-#: synfiles.qml:3336
 msgid "New Tab"
 msgstr "新建标签页"
 
-#: synfiles.qml:4223
 msgid "New empty file"
 msgstr "新建空文件"
 
-#: synfiles.qml:4176
 msgid "New folder"
 msgstr "新建文件夹"
 
-#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr "没有最近使用的文件。"
 
-#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr "没有匹配项。"
 
-#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr "没有符合该筛选的项目。"
 
-#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
 msgstr "打开"
 
-#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr "打开文件夹"
 
-#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr "在此打开终端"
 
-#: synfiles.qml:3359
 msgid "Open Trash"
 msgstr "打开回收站"
 
-#: synfiles.qml:3559
 msgid "Open in Disks"
 msgstr "在磁盘中打开"
 
-#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr "在新标签页中打开"
 
-#: synfiles.qml:6931
 msgid "Open with"
 msgstr "打开方式"
 
-#: synfiles.qml:4049
 msgid "Overwrite"
 msgstr "覆盖"
 
-#: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
 msgstr "覆盖会替换文件；同名的两个文件夹会合并，其中的文件逐个发生冲突。"
 
-#: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "先覆盖再删除。不进回收站，也无法撤销。"
 
-#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
 msgstr "粘贴"
 
-#: synfiles.qml:5497
 msgid "Pin"
 msgstr "固定"
 
-#: synfiles.qml:3549
 msgid "Pin to Places"
 msgstr "固定到位置"
 
-#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr "已固定 ✓"
 
-#: synfiles.qml:3063
 msgid "Places"
 msgstr "位置"
 
-#: synfiles.qml:4370
 msgid "Previews"
 msgstr "预览"
 
-#: synfiles.qml:3653
 msgid "Properties"
 msgstr "属性"
 
-#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
 msgstr "属性…"
 
-#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
 msgstr "最近"
 
-#: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
 msgstr "最近修改"
 
-#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
 msgstr "刷新"
 
-#: synfiles.qml:3126
 msgid "Removable Devices"
 msgstr "可移动设备"
 
-#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr "从位置中移除"
 
-#: synfiles.qml:6869
 msgid "Rename…"
 msgstr "重命名…"
 
-#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
 msgstr "还原"
 
-#: synfiles.qml:4292
 msgid "Right  ·  %1"
 msgstr "右  ·  %1"
 
-#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr "SYNAPSE Files"
 
-#: synfiles.qml:3201
 msgid "Scan again"
 msgstr "重新扫描"
 
-#: synfiles.qml:3200
 msgid "Scanning…"
 msgstr "正在扫描…"
 
-#: synfiles.qml:2902
 msgid "Search"
 msgstr "搜索"
 
-#: synfiles.qml:3355
 msgid "Search…"
 msgstr "搜索…"
 
-#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
 msgstr "全选"
 
-#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
 msgstr "送入保险库"
 
-#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr "送入保险库…"
 
-#: synfiles.qml:3341
 msgid "Show Folder Tree"
 msgstr "显示文件夹树"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr "显示隐藏文件"
 
-#: synfiles.qml:3343
 msgid "Show Previews"
 msgstr "显示预览"
 
-#: synfiles.qml:3347
 msgid "Show Sidebar"
 msgstr "显示侧边栏"
 
-#: synfiles.qml:4373
 msgid "Sidebar"
 msgstr "侧边栏"
 
-#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
 msgstr "大小"
 
-#: synfiles.qml:4034
 msgid "Skip those"
 msgstr "跳过这些"
 
-#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr "按修改时间排序"
 
-#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
 msgstr "按名称排序"
 
-#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
 msgstr "按大小排序"
 
-#: synfiles.qml:4365
 msgid "Sort by Type"
 msgstr "按类型排序"
 
-#: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
 msgstr "分屏"
 
-#: synfiles.qml:2898
 msgid "Split view (F3)"
 msgstr "分屏 (F3)"
 
-#: synfiles.qml:4437
 msgid "Text"
 msgstr "文本"
 
-#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr "回收站是空的。"
 
-#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr "此文件夹是空的。"
 
-#: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
 msgstr "这就是它来的文件夹——替换会删掉原件。请两者都保留，或取消。"
 
-#: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
 msgstr "回收站"
 
-#: synfiles.qml:4638
 msgid "Type"
 msgstr "类型"
 
-#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr "输入以搜索此文件夹及其下的全部内容。"
 
-#: synfiles.qml:3543
 msgid "Unmount"
 msgstr "卸载"
 
-#: synfiles.qml:2701
 msgid "Up one folder"
 msgstr "上一级文件夹"
 
-#: synfiles.qml:2980
 msgid "Vault"
 msgstr "保险库"
 
-#: synfiles.qml:2720
 msgid "View"
 msgstr "视图"
 
-#: synfiles.qml:2721
 msgid "View options"
 msgstr "视图选项"
 
-#: synfiles.qml:827
 msgid "a moment left"
 msgstr "即将完成"
 
-#: synfiles.qml:1583
 msgid "accessed"
 msgstr "访问时间"
 
-#: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
 msgstr "忙碌——正在等待上一个操作结束"
 
-#: synfiles.qml:3764
 msgid "calculating…"
 msgstr "正在计算…"
 
-#: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
 msgstr "正在取消…"
 
-#: synfiles.qml:1584
 msgid "changed"
 msgstr "变更时间"
 
-#: synfiles.qml:1152
 msgid "checking the destination…"
 msgstr "正在检查目标位置…"
 
-#: synfiles.qml:1712
 msgid "compressing %1…"
 msgstr "正在压缩 %1…"
 
-#: synfiles.qml:3757
 msgid "contents"
 msgstr "内容"
 
-#: synfiles.qml:1078
 msgid "copied %1"
 msgstr "已复制 %1"
 
-#: synfiles.qml:2443
 msgid "copied: %1"
 msgstr "已复制：%1"
 
-#: synfiles.qml:1172
 msgid "copying %1"
 msgstr "正在复制 %1"
 
-#: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
 msgstr[0] "正在把 %1 个项目复制到这里…"
 
-#: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "正在复制 %1 个项目…"
 
-#: synfiles.qml:2482
 msgid "creating %1"
 msgstr "正在创建 %1"
 
-#: synfiles.qml:1077
 msgid "cut %1"
 msgstr "已剪切 %1"
 
-#: synfiles.qml:1579
 msgid "description"
 msgstr "描述"
 
-#: synfiles.qml:1840
 msgid "destroying %1…"
 msgstr "正在销毁 %1…"
 
-#: synfiles.qml:3494
 msgid "dragging %1…"
 msgstr "正在拖动 %1…"
 
-#: synfiles.qml:2472
 msgid "emptying the trash…"
 msgstr "正在清空回收站…"
 
-#: synfiles.qml:1591
 msgid "files"
 msgstr "文件"
 
-#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "筛选这些项目…   (Ctrl+F 搜索)"
 
-#: synfiles.qml:1590
 msgid "folders"
 msgstr "文件夹"
 
-#: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
 msgstr "格式化 %1 — 正在磁盘中询问"
 
-#: synfiles.qml:1587
 msgid "group"
 msgstr "组"
 
-#: synfiles.qml:1585
 msgid "links"
 msgstr "链接数"
 
-#: synfiles.qml:2526
 msgid "looking for network shares…"
 msgstr "正在查找网络共享…"
 
-#: synfiles.qml:4650
 msgid "measuring…"
 msgstr "正在测量…"
 
-#: synfiles.qml:1578
 msgid "mime"
 msgstr "MIME"
 
-#: synfiles.qml:456
 msgid "missing — the file it points at is gone"
 msgstr "缺失——它指向的文件已不存在"
 
-#: synfiles.qml:1581
 msgid "mode"
 msgstr "权限"
 
-#: synfiles.qml:1582
 msgid "modified"
 msgstr "修改时间"
 
-#: synfiles.qml:3193
 msgid "mount %1"
 msgstr "挂载 %1"
 
-#: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
 msgstr "正在挂载 %1…"
 
-#: synfiles.qml:1171
 msgid "moving %1"
 msgstr "正在移动 %1"
 
-#: synfiles.qml:1767
 msgid "moving %1 into the vault"
 msgstr "正在把 %1 移入保险库"
 
-#: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
 msgstr[0] "正在移动 %1 个项目…"
 
-#: synfiles.qml:1058
 msgid "moving %1 to the trash"
 msgstr "正在把 %1 移到回收站"
 
-#: synfiles.qml:1576
 msgid "name"
 msgstr "名称"
 
-#: synfiles.qml:3497
 msgid "nothing accepted that drop"
 msgstr "没有东西接受此次拖放"
 
-#: synfiles.qml:2554
 msgid "nothing announced itself on this network"
 msgstr "此网络上没有任何设备发出通告"
 
-#: synfiles.qml:1993
 msgid "only local files can be dropped here"
 msgstr "这里只能放入本地文件"
 
-#: synfiles.qml:2408
 msgid "opened %1 in Disks"
 msgstr "已在磁盘中打开 %1"
 
-#: synfiles.qml:2333
 msgid "opened a terminal in %1"
 msgstr "已在 %1 中打开终端"
 
-#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr "已在浏览器中打开"
 
-#: synfiles.qml:2620
 msgid "opening %1"
 msgstr "正在打开 %1"
 
-#: synfiles.qml:1586
 msgid "owner"
 msgstr "所有者"
 
-#: synfiles.qml:1190
 msgid "paste cancelled"
 msgstr "已取消粘贴"
 
-#: synfiles.qml:1575
 msgid "path"
 msgstr "路径"
 
-#: synfiles.qml:4278
 msgid "reading…"
 msgstr "正在读取…"
 
-#: synfiles.qml:1240
 msgid "renaming to %1"
 msgstr "正在重命名为 %1"
 
-#: synfiles.qml:1067
 msgid "restoring %1"
 msgstr "正在还原 %1"
 
-#: synfiles.qml:2318
 msgid "running…"
 msgstr "正在运行…"
 
-#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr "搜索 %1 及其下内容——按回车"
 
-#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr "正在搜索 %1…"
 
-#: synfiles.qml:1589
 msgid "selected"
 msgstr "已选"
 
-#: synfiles.qml:1580
 msgid "size"
 msgstr "大小"
 
-#: synfiles.qml:1588
 msgid "target"
 msgstr "目标"
 
-#: synfiles.qml:1577
 msgid "type"
 msgstr "类型"
 
-#: synfiles.qml:2283
 msgid "undoing %1…"
 msgstr "正在撤销 %1…"
 
-#: synfiles.qml:2462
 msgid "unmounting %1…"
 msgstr "正在卸载 %1…"
 
-#: synfiles.qml:755
 msgid "working…"
 msgstr "处理中…"
 
-#: synfiles.qml:3981
 msgid "“%1” already exists here"
 msgstr "这里已存在“%1”"
 
-#: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
 msgstr[0] "• …还有 %1 个"
 
-#: synfiles.qml:3922
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr "⚠ 这是 %1，它把改动写入新块而不是覆盖旧块，而且快照会保留完整副本。文件会消失，但其内容仍可能从磁盘中恢复。真正能防止这一点的是全盘加密。"
+msgstr ""
+"⚠ 这是 %1，它把改动写入新块而不是覆盖旧块，而且快照会保留完整副本。文件会消"
+"失，但其内容仍可能从磁盘中恢复。真正能防止这一点的是全盘加密。"
 
-#: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr "⚠ 这是 %1，它把改动写入新块而不是覆盖旧块。文件会消失，但其内容仍可能从磁盘中恢复。真正能防止这一点的是全盘加密。"
+msgstr ""
+"⚠ 这是 %1，它把改动写入新块而不是覆盖旧块。文件会消失，但其内容仍可能从磁盘中"
+"恢复。真正能防止这一点的是全盘加密。"
+
+msgid "actions: need a path"
+msgstr "actions：需要一个路径"
+
+#, c-format
+msgid "cannot stat %s: %s"
+msgstr "无法获取 %s 的信息：%s"
+
+msgid ""
+"action: need a .desktop file and a path\n"
+"  usage: synfiles action <file.desktop> [action-id] -- <path>..."
+msgstr "action：需要一个 .desktop 文件和一个路径\n  用法：synfiles action <文件.desktop> <路径>…"
+
+#, c-format
+msgid "action: '%s' must be a .desktop NAME, not a path"
+msgstr "action：“%s”必须是 .desktop 的名称，而不是路径"
+
+msgid "action: need at least one path"
+msgstr "action：至少需要一个路径"
+
+#, c-format
+msgid "action: no such desktop entry: %s"
+msgstr "action：没有这个桌面条目：%s"
+
+#, c-format
+msgid "action: cannot read %s"
+msgstr "action：无法读取 %s"
+
+#, c-format
+msgid "action: %s has no Exec for '%s'"
+msgstr "action：%s 没有对应“%s”的 Exec"
+
+#, c-format
+msgid "action: %s has an empty Exec"
+msgstr "action：%s 的 Exec 为空"
+
+#, c-format
+msgid "%s wants a terminal; running it without one"
+msgstr "%s 需要终端；现在不带终端运行"
+
+#, c-format
+msgid "fork: %s"
+msgstr "fork：%s"
+
+#, c-format
+msgid "compress: unknown option '%s'"
+msgstr "compress：未知选项“%s”"
+
+msgid "compress: need at least one path"
+msgstr "compress：至少需要一个路径"
+
+#, c-format
+msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr "compress：未知格式“%s”—— 可试 zip、tar.gz、tar.xz、tar.zst、7z"
+
+msgid ""
+"compress: everything must be in the same folder\n"
+"  otherwise the archive records absolute paths and unpacking it scatters "
+"files"
+msgstr "compress：所有内容必须在同一个文件夹中\n  否则压缩包会包含在别处毫无意义的路径"
+
+msgid "compress: --name takes a name, not a path"
+msgstr "compress：--name 需要一个名称，而不是路径"
+
+#, c-format
+msgid "%s already exists"
+msgstr "%s 已存在"
+
+msgid "compress: neither zip nor 7z is installed"
+msgstr "compress：zip 和 7z 都没有安装"
+
+msgid "compress: 7z is not installed — install p7zip"
+msgstr "compress：未安装 7z —— 请安装 p7zip"
+
+msgid "compress: tar is not installed"
+msgstr "compress：未安装 tar"
+
+#, c-format
+msgid "could not create %s"
+msgstr "无法创建 %s"
+
+#, c-format
+msgid "cannot write settings: %s"
+msgstr "无法写入设置：%s"
+
+#, c-format
+msgid "cannot save settings: %s"
+msgstr "无法保存设置：%s"
+
+msgid "config get: need a key"
+msgstr "config get：需要一个键"
+
+#, c-format
+msgid "config: unknown setting '%s'"
+msgstr "config：未知设置“%s”"
+
+msgid "config set: need a key and a value"
+msgstr "config set：需要一个键和一个值"
+
+#, c-format
+msgid "config: '%s' is not a valid %s for %s"
+msgstr "config：“%s”不是 %s 可用的 %s"
+
+#, c-format
+msgid "settings reset to defaults\n"
+msgstr "设置已恢复为默认值\n"
+
+#, c-format
+msgid ""
+"config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
+"reset"
+msgstr "config：未知子命令“%s”—— 可试 list、get <键>、set <键> <值>、reset"
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr "无法解析 %s：%s"
+
+#, c-format
+msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
+msgstr "未知的冲突策略“%s”—— 可试 error、skip、rename、overwrite"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s：未知选项“%s”"
+
+#, c-format
+msgid "%s: need one or more sources and a destination directory"
+msgstr "%s：需要一个或多个来源以及一个目标目录"
+
+#, c-format
+msgid "%d done, %d skipped, %d failed"
+msgstr "完成 %d 个，跳过 %d 个，失败 %d 个"
+
+#, c-format
+msgid "collisions: %s is not a directory"
+msgstr "collisions：%s 不是目录"
+
+#, c-format
+msgid "collisions: cannot open %s: %s"
+msgstr "collisions：无法打开 %s：%s"
+
+#, c-format
+msgid "copy: %s is not a directory"
+msgstr "copy：%s 不是目录"
+
+#, c-format
+msgid "copy: cannot open %s: %s"
+msgstr "copy：无法打开 %s：%s"
+
+#, c-format
+msgid "move: %s is not a directory"
+msgstr "move：%s 不是目录"
+
+#, c-format
+msgid "move: cannot open %s: %s"
+msgstr "move：无法打开 %s：%s"
+
+msgid "rename: need a path and a new name"
+msgstr "rename：需要一个路径和一个新名称"
+
+#, c-format
+msgid "rename: '%s' is a path, not a name — use `synfiles move`"
+msgstr "rename：“%s”是路径而不是名称 —— 请用 `synfiles move`"
+
+#, c-format
+msgid "rename: '%s' is not a usable name"
+msgstr "rename：“%s”不是可用的名称"
+
+#, c-format
+msgid "cannot rename %s: %s"
+msgstr "无法重命名 %s：%s"
+
+msgid "mkdir: need a path"
+msgstr "mkdir：需要一个路径"
+
+#, c-format
+msgid "cannot create %s: %s"
+msgstr "无法创建 %s：%s"
+
+#, c-format
+msgid "delete: unknown option '%s'"
+msgstr "delete：未知选项“%s”"
+
+msgid "delete: need a path"
+msgstr "delete：需要一个路径"
+
+msgid ""
+"delete removes files PERMANENTLY and cannot be undone.\n"
+"  to move them to the trash instead:  synfiles trash <path>\n"
+"  to delete them anyway:              synfiles delete --yes <path>"
+msgstr "delete 会永久删除文件，且无法撤销。\n  若要移入回收站：synfiles trash <路径>…\n  如果你确实要这么做：--force"
+
+#, c-format
+msgid "find: unknown option '%s'"
+msgstr "find：未知选项“%s”"
+
+msgid "find: need --name=GLOB or --content=TEXT (or both)"
+msgstr "find：需要 --name=通配符 或 --content=文本（或两者）"
+
+#, c-format
+msgid "cannot open %s: %s"
+msgstr "无法打开 %s：%s"
+
+msgid "no matches"
+msgstr "没有匹配项"
+
+#, c-format
+msgid "%ld matches (stopped at the limit)"
+msgstr "%ld 项匹配（已在上限处停止）"
+
+msgid "[broken]"
+msgstr "[已损坏]"
+
+#, c-format
+msgid "list: unknown sort '%s' — try name, size, mtime, type"
+msgstr "list：未知排序“%s”—— 可试 name、size、mtime、type"
+
+#, c-format
+msgid "list: unknown option '%s'"
+msgstr "list：未知选项“%s”"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "无法读取 %s：%s"
+
+msgid "empty"
+msgstr "空"
+
+msgid "info: need a path"
+msgstr "info：需要一个路径"
+
+msgid "du: need a path"
+msgstr "du：需要一个路径"
+
+msgid "no display — synfiles gui needs a graphical session"
+msgstr "没有显示器 —— synfiles gui 需要图形会话"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "未安装 quickshell —— synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "无法启动 quickshell"
+
+#, c-format
+msgid ""
+"netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
+msgstr "netscan：对 %s 执行 avahi-browse 失败（退出码 %d）—— 这台机器上的 mDNS 发现无法工作"
+
+#, c-format
+msgid "netscan: unknown option '%s'"
+msgstr "netscan：未知选项“%s”"
+
+msgid ""
+"netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
+"network places"
+msgstr "netscan：请安装 avahi（mDNS）或 smbclient（Windows 共享）以发现设备"
+
+msgid "netmount: need a URI (see: synfiles netscan)"
+msgstr "netmount：需要一个 URI（参见：synfiles netscan）"
+
+#, c-format
+msgid "netmount: '%s' is not a URI"
+msgstr "netmount：“%s”不是 URI"
+
+msgid "netmount: gio is not installed — install gvfs to mount network shares"
+msgstr "netmount：未安装 gio —— 请安装 gvfs 以挂载网络共享"
+
+#, c-format
+msgid "netmount: could not mount %s"
+msgstr "netmount：无法挂载 %s"
+
+#, c-format
+msgid "peek: unknown option '%s'"
+msgstr "peek：未知选项“%s”"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s：无法读取"
+
+#, c-format
+msgid "cannot create a temporary file beside %s: %s"
+msgstr "无法在 %s 旁创建临时文件：%s"
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr "无法写入 %s：%s"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "无法替换 %s：%s"
+
+#, c-format
+msgid "could not write %s"
+msgstr "无法写入 %s"
+
+#, c-format
+msgid "%s is already pinned"
+msgstr "%s 已经固定"
+
+#, c-format
+msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
+msgstr "%s 没有 </xbel> —— 不去猜测书签该放在哪里"
+
+#, c-format
+msgid "pinned %s\n"
+msgstr "已固定 %s\n"
+
+msgid "no places file to remove from"
+msgstr "没有可供移除的位置文件"
+
+#, c-format
+msgid "could not find the bookmark element around %s"
+msgstr "找不到 %s 周围的书签元素"
+
+#, c-format
+msgid "unpinned %s\n"
+msgstr "已取消固定 %s\n"
+
+#, c-format
+msgid "%s is not pinned"
+msgstr "%s 未被固定"
+
+msgid "places pin: need a path"
+msgstr "places pin：需要一个路径"
+
+msgid "places unpin: need a path"
+msgstr "places unpin：需要一个路径"
+
+#, c-format
+msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
+msgstr "places：未知子命令“%s”—— 可试 list、pin <路径>、unpin <路径>"
+
+#, c-format
+msgid "recent: unknown option '%s'"
+msgstr "recent：未知选项“%s”"
+
+msgid "refusing to trash the root directory"
+msgstr "不会把根目录放进回收站"
+
+#, c-format
+msgid "cannot work out where to trash %s"
+msgstr "无法确定该把 %s 放进哪个回收站"
+
+#, c-format
+msgid "cannot create the trash directory at %s: %s"
+msgstr "无法在 %s 创建回收站目录：%s"
+
+#, c-format
+msgid "cannot write trash info: %s"
+msgstr "无法写入回收站信息：%s"
+
+#, c-format
+msgid "cannot find a free name in the trash for %s"
+msgstr "无法在回收站中为 %s 找到可用的名称"
+
+#, c-format
+msgid "cannot write trash info for %s"
+msgstr "无法写入 %s 的回收站信息"
+
+#, c-format
+msgid "cannot move %s to the trash: %s"
+msgstr "无法把 %s 移入回收站：%s"
+
+msgid "the trash is empty"
+msgstr "回收站是空的"
+
+#, c-format
+msgid "%s has no Path in its trash info"
+msgstr "%s 的回收站信息中没有 Path"
+
+#, c-format
+msgid "%s already exists — not restoring over it"
+msgstr "%s 已存在 —— 不覆盖还原"
+
+#, c-format
+msgid "cannot restore %s: %s"
+msgstr "无法还原 %s：%s"
+
+#, c-format
+msgid "nothing called '%s' is in the trash"
+msgstr "回收站中没有名为“%s”的东西"
+
+msgid ""
+"emptying the trash is PERMANENT and cannot be undone.\n"
+"  to see what would go:  synfiles trash list\n"
+"  to empty it anyway:    synfiles trash empty --yes"
+msgstr "清空回收站是永久性的，且无法撤销。\n  若要查看会消失哪些内容：synfiles trash list\n  如果你确实要这么做：--force"
+
+msgid "trash restore: need the trashed name (see: synfiles trash list)"
+msgstr "trash restore：需要回收站中的名称（参见：synfiles trash list）"
+
+#, c-format
+msgid "trash: unknown option '%s'"
+msgstr "trash：未知选项“%s”"
+
+#, c-format
+msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
+msgstr "<编号> 打开 · u 上级 · h 主目录 · c <路径> 进入 · / <文本> 过滤"
+
+#, c-format
+msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
+msgstr "i <编号> 信息 · z <编号> 大小 · t <编号> 回收站 · e <编号> 操作"
+
+#, c-format
+msgid "m <num> <path> move · y <num> <path> copy"
+msgstr "m <编号> <路径> 移动 · y <编号> <路径> 复制"
+
+#, c-format
+msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
+msgstr "n/p 翻页 · a 隐藏文件 · s 排序 · r 反序 · g 图形界面 · q 退出"
+
+#, c-format
+msgid "xdg-open is not installed — cannot open %s"
+msgstr "未安装 xdg-open —— 无法打开 %s"
+
+#, c-format
+msgid "cannot fork: %s"
+msgstr "无法 fork：%s"
+
+msgid "opened"
+msgstr "已打开"
+
+msgid "synfiles is not on PATH"
+msgstr "synfiles 不在 PATH 中"
+
+msgid "opened the window on"
+msgstr "已打开窗口于"
+
+#, c-format
+msgid "cannot go to %s: %s"
+msgstr "无法进入 %s：%s"
+
+#, c-format
+msgid "%s needs somewhere to %s to"
+msgstr "%s 需要一个可供 %s 的目标"
+
+#, c-format
+msgid "cannot %s to %s: %s"
+msgstr "无法把 %s 到 %s：%s"
+
+#, c-format
+msgid "%s is not a folder — %s puts things INTO a folder"
+msgstr "%s 不是文件夹 —— %s 是把东西放进文件夹里"
+
+#, c-format
+msgid ""
+"%s is already here — copy it somewhere else, or use `synfiles copy --"
+"conflict=rename` for a duplicate"
+msgstr "%s 已经在这里 —— 请复制到别处，或使用 `synfiles copy --conflict=rename`"
+
+#, c-format
+msgid "%s is already in this folder"
+msgstr "%s 已经在这个文件夹里"
+
+#, c-format
+msgid "press any key"
+msgstr "按任意键"
+
+#, c-format
+msgid "filter: %s  (/ alone clears it)"
+msgstr "过滤：%s （单独按 / 可清除）"
+
+#, c-format
+msgid "no row %ld"
+msgstr "没有第 %ld 行"
+
+#, c-format
+msgid "c needs a path"
+msgstr "c 需要一个路径"
+
+#, c-format
+msgid "%c needs a row number and a destination"
+msgstr "%c 需要一个行号和一个目标"
+
+#, c-format
+msgid "%c needs a row number"
+msgstr "%c 需要一个行号"
+
+#, c-format
+msgid "unrecognised — see the keys above"
+msgstr "无法识别 —— 请看上面的按键"
+
+#, c-format
+msgid "%s is no longer there — not undoing"
+msgstr "%s 已经不在了 —— 不进行撤销"
+
+#, c-format
+msgid "%s already exists — not undoing over it"
+msgstr "%s 已存在 —— 不覆盖撤销"
+
+#, c-format
+msgid "cannot put %s back: %s"
+msgstr "无法把 %s 放回去：%s"
+
+#, c-format
+msgid "%s is not empty any more — leaving it"
+msgstr "%s 不再是空的 —— 保持原样"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "无法删除 %s：%s"
+
+#, c-format
+msgid "removed %s\n"
+msgstr "已删除 %s\n"
+
+#, c-format
+msgid "nothing knows how to undo '%s'"
+msgstr "没有任何东西知道如何撤销“%s”"
+
+#, c-format
+msgid "undo history cleared\n"
+msgstr "撤销历史已清空\n"
+
+#, c-format
+msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
+msgstr "undo：未知子命令“%s”—— 可试 list、clear，或者不带参数"
+
+msgid "out of memory"
+msgstr "内存不足"
+
+msgid "HOME is not set"
+msgstr "未设置 HOME"
+
+msgid "udisksctl is not installed — install udisks2 to mount from here"
+msgstr "未安装 udisksctl —— 请安装 udisks2 以便从这里挂载"
+
+#, c-format
+msgid "%s: expected a device path like /dev/sdc1"
+msgstr "%s：需要像 /dev/sdc1 这样的设备路径"
+
+msgid "mount: need a device path (see: synfiles volumes)"
+msgstr "mount：需要一个设备路径（参见：synfiles volumes）"
+
+msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr "unmount：需要一个设备路径（参见：synfiles volumes）"
+
+#, c-format
+msgid "volumes: unknown option '%s'"
+msgstr "volumes：未知选项“%s”"
+
+msgid "no volumes"
+msgstr "没有卷"

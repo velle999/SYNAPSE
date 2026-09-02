@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -227,13 +228,13 @@ int cmd_find(int argc, char **argv)
 		else if (!strcmp(a, "--all") || !strcmp(a, "-a"))
 			s.all = true;
 		else if (a[0] == '-' && a[1])
-			die("find: unknown option '%s'", a);
+			die(_("find: unknown option '%s'"), a);
 		else
 			root = a;
 	}
 
 	if (!name && !content)
-		die("find: need --name=GLOB or --content=TEXT (or both)");
+		die(_("find: need --name=GLOB or --content=TEXT (or both)"));
 	if (s.limit <= 0)
 		s.limit = 1000;
 	if (s.max_depth <= 0)
@@ -255,7 +256,7 @@ int cmd_find(int argc, char **argv)
 	int fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0) {
 		free(pattern);
-		die("cannot open %s: %s", root, strerror(errno));
+		die(_("cannot open %s: %s"), root, strerror(errno));
 	}
 
 	if (g_out == OUT_REC)
@@ -267,10 +268,11 @@ int cmd_find(int argc, char **argv)
 
 	if (g_out == OUT_HUMAN) {
 		if (s.found == 0)
-			printf("%sno matches%s\n", C_DIM(), C_RESET());
+			printf("%s%s%s\n", C_DIM(), _("no matches"), C_RESET());
 		else if (s.truncated)
-			printf("%s%ld matches (stopped at the limit)%s\n", C_DIM(),
-			       s.found, C_RESET());
+			printf("%s", C_DIM());
+			printf(_("%ld matches (stopped at the limit)"), s.found);
+			printf("%s\n", C_RESET());
 	}
 
 	return s.found ? 0 : 100;

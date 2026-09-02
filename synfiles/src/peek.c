@@ -31,6 +31,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -128,7 +129,7 @@ int cmd_peek(int argc, char **argv)
 		if (!strncmp(a, "--limit=", 8))
 			limit = strtol(a + 8, NULL, 10);
 		else if (a[0] == '-' && a[1])
-			die("peek: unknown option '%s'", a);
+			die(_("peek: unknown option '%s'"), a);
 		else
 			root = a;
 	}
@@ -139,12 +140,12 @@ int cmd_peek(int argc, char **argv)
 
 	int fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0)
-		die("%s: cannot read", root);
+		die(_("%s: cannot read"), root);
 
 	DIR *d = fdopendir(fd);
 	if (!d) {
 		close(fd);
-		die("%s: cannot read", root);
+		die(_("%s: cannot read"), root);
 	}
 
 	if (g_out == OUT_REC)

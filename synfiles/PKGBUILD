@@ -203,7 +203,7 @@ pkgver=0.1.0
 #   ⚠ "1 files in 1 folders" — both counters go through one fmtMany() now.
 #   Nine checks in synfiles_test.sh, three of them on `du`'s own two numbers.
 #   377 pass.
-pkgrel=73
+pkgrel=74
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

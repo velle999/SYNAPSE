@@ -28,6 +28,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -182,7 +183,7 @@ static int trash_put_one(const char *path)
 	char *real = sf_resolve(path);
 
 	if (!strcmp(real, "/")) {
-		warn("refusing to trash the root directory");
+		warn(_("refusing to trash the root directory"));
 		free(real);
 		return 1;
 	}
@@ -190,7 +191,7 @@ static int trash_put_one(const char *path)
 	char *topdir = NULL;
 	char *trash = trash_for(real, &topdir);
 	if (!trash) {
-		warn("cannot work out where to trash %s", real);
+		warn(_("cannot work out where to trash %s"), real);
 		free(real);
 		return 1;
 	}
@@ -198,7 +199,7 @@ static int trash_put_one(const char *path)
 	char *filesdir = xasprintf("%s/files", trash);
 	char *infodir = xasprintf("%s/info", trash);
 	if (mkdir_p(filesdir, 0700) != 0 || mkdir_p(infodir, 0700) != 0) {
-		warn("cannot create the trash directory at %s: %s", trash, strerror(errno));
+		warn(_("cannot create the trash directory at %s: %s"), trash, strerror(errno));
 		free(filesdir); free(infodir); free(trash); free(topdir); free(real);
 		return 1;
 	}
@@ -228,13 +229,13 @@ static int trash_put_one(const char *path)
 		infofd = open(ipath, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
 		free(ipath);
 		if (infofd < 0 && errno != EEXIST) {
-			warn("cannot write trash info: %s", strerror(errno));
+			warn(_("cannot write trash info: %s"), strerror(errno));
 			break;
 		}
 	}
 
 	if (infofd < 0) {
-		warn("cannot find a free name in the trash for %s", base);
+		warn(_("cannot find a free name in the trash for %s"), base);
 		free(chosen); free(filesdir); free(infodir); free(trash);
 		free(topdir); free(real);
 		return 1;
@@ -256,9 +257,9 @@ static int trash_put_one(const char *path)
 		 * shows up in every trash viewer as a phantom entry that cannot be
 		 * restored or removed. */
 		if (!wrote)
-			warn("cannot write trash info for %s", real);
+			warn(_("cannot write trash info for %s"), real);
 		else
-			warn("cannot move %s to the trash: %s", real, strerror(errno));
+			warn(_("cannot move %s to the trash: %s"), real, strerror(errno));
 		char *ipath = xasprintf("%s/%s.trashinfo", infodir, chosen);
 		unlink(ipath);
 		free(ipath);
@@ -430,7 +431,8 @@ static int trash_list(void)
 	each_trash(list_cb, &n);
 
 	if (g_out == OUT_HUMAN && n == 0)
-		printf("%sthe trash is empty%s\n", C_DIM(), C_RESET());
+		printf("%s%s%s\n", C_DIM(),
+		       _("the trash is empty"), C_RESET());
 	return n ? 0 : 100;
 }
 
@@ -467,16 +469,16 @@ static void restore_cb(const char *trash, const char *topdir, void *vctx)
 	char *from = xasprintf("%s/files/%s", trash, ctx->want);
 
 	if (!target || !*target) {
-		warn("%s has no Path in its trash info", ctx->want);
+		warn(_("%s has no Path in its trash info"), ctx->want);
 		ctx->rc = 1;
 	} else if (faccessat(AT_FDCWD, target, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
 		/* Never overwrite on restore. Something already occupies the place
 		 * this came from, and clobbering it would destroy the newer file to
 		 * recover the older one. */
-		warn("%s already exists — not restoring over it", target);
+		warn(_("%s already exists — not restoring over it"), target);
 		ctx->rc = 1;
 	} else if (rename(from, target) != 0) {
-		warn("cannot restore %s: %s", target, strerror(errno));
+		warn(_("cannot restore %s: %s"), target, strerror(errno));
 		ctx->rc = 1;
 	} else {
 		unlink(ipath);
@@ -512,7 +514,7 @@ static int trash_restore(const char *name)
 	each_trash(restore_cb, &ctx);
 
 	if (!ctx.found) {
-		warn("nothing called '%s' is in the trash", name);
+		warn(_("nothing called '%s' is in the trash"), name);
 		free(raw);
 		return 1;
 	}
@@ -583,9 +585,9 @@ static void count_cb(const char *trash, const char *topdir, void *vctx)
 static int trash_empty(bool confirmed)
 {
 	if (!confirmed)
-		die("emptying the trash is PERMANENT and cannot be undone.\n"
+		die(_("emptying the trash is PERMANENT and cannot be undone.\n"
 		    "  to see what would go:  synfiles trash list\n"
-		    "  to empty it anyway:    synfiles trash empty --yes");
+		    "  to empty it anyway:    synfiles trash empty --yes"));
 
 	if (g_out == OUT_REC) {
 		rec_row(4, "path", "status", "detail", "bytes");
@@ -632,7 +634,7 @@ int cmd_trash(int argc, char **argv)
 
 	if (!strcmp(sub, "restore")) {
 		if (argc < 2)
-			die("trash restore: need the trashed name (see: synfiles trash list)");
+			die(_("trash restore: need the trashed name (see: synfiles trash list)"));
 		return trash_restore(argv[1]);
 	}
 
@@ -652,7 +654,7 @@ int cmd_trash(int argc, char **argv)
 	int rc = 0;
 	for (int i = 0; i < argc; i++) {
 		if (argv[i][0] == '-' && argv[i][1])
-			die("trash: unknown option '%s'", argv[i]);
+			die(_("trash: unknown option '%s'"), argv[i]);
 		if (trash_put_one(argv[i]) != 0)
 			rc = 1;
 	}

@@ -1,21 +1,28 @@
-# synfiles' message catalogs, compiled to JSON rather than to .mo.
+# synfiles' message catalogs, compiled TWICE — to JSON and to a .mo.
 #
-# ⛔ NOT i18n.gettext(), AND NOT BECAUSE gettext IS WRONG. These are ordinary
-# .po files and take msgmerge, msgfmt -c and tools/po-fill.py. What cannot
-# happen is the LAST step: a .mo is read by libintl, which is reached from C,
-# and this window is QML running inside quickshell — which has no translator
+# ⛔ THE WINDOW CANNOT USE THE .mo. A .mo is read by libintl, which is reached
+# from C; the window is QML running inside quickshell, which has no translator
 # machinery at all. There is no installTranslator anywhere in the quickshell
 # binary, so qsTr() compiles, returns the source text, and translates nothing
-# while looking exactly like a marked string in review.
+# while looking exactly like a marked string in review. tools/po2json.py
+# compiles each catalog to a small JSON object and data/qml/I18n.qml reads it
+# through a blocking FileView.
 #
-# tools/po2json.py compiles each catalog to a small JSON object and
-# data/qml/I18n.qml reads it through a blocking FileView.
+# ⛔ AND THE CLI AND THE TUI CANNOT USE THE JSON. They are C and read a .mo
+# through libintl. So the SAME po/<lang>.po is compiled both ways: one catalog
+# per language, two compiled forms, and a word both front-ends use is translated
+# once and cannot come out differently in each.
 #
-# ⚠ THE .pot IS NOT GENERATED HERE. xgettext cannot read QML — there is no
-# --language=QML, and --language=JavaScript chokes on the object syntax and
-# extracts a silent subset — so tools/qml-xgettext.py writes it, and
-# tests/i18n.sh fails when the checked-in template is stale. Regenerate with
-# `ninja -C <build> synfiles-pot`.
+# ⚠ THE .pot IS NOT GENERATED HERE, AND NOT BY xgettext ALONE. xgettext cannot
+# read QML — there is no --language=QML, and --language=JavaScript chokes on the
+# object syntax and extracts a silent subset — so po/pot.sh runs
+# tools/qml-xgettext.py over the QML, real xgettext over src/*.c, and msgcat
+# merges the two. tests/i18n_test.sh fails when the checked-in template is stale.
+#
+# ⛔ REGENERATE WITH `ninja -C <build> synfiles-template`, **NOT** `synfiles-pot`.
+# i18n.gettext() below defines <domain>-pot itself, and that one runs plain
+# xgettext over po/POTFILES — a file that lists .qml, which xgettext cannot read.
+# Running it overwrites the template with a half-empty one.
 
 po2json = find_program('../tools/po2json.py')
 
@@ -45,9 +52,15 @@ foreach lang : sf_linguas
     install_dir : get_option('datadir') / 'synfiles' / 'qml' / 'i18n')
 endforeach
 
-run_target('synfiles-pot',
-  command : [find_program('../tools/qml-xgettext.py'),
-             '--root',  meson.project_source_root() / 'data',
-             '--files', meson.current_source_dir() / 'POTFILES',
-             '-o',      meson.current_source_dir() / 'synfiles.pot',
-             '--strict'])
+# ⛔ VIA meson's i18n MODULE, NOT A custom_target: libintl looks for
+# <localedir>/<lang>/LC_MESSAGES/**synfiles**.mo — named after the DOMAIN — and a
+# loop over the languages can only name its output de.mo, which installs to the
+# right directory under a name nothing ever looks for, so every string falls back
+# to English with nothing to say so.
+i18n = import('i18n')
+i18n.gettext('synfiles', preset: 'glib', install: true)
+
+run_target('synfiles-template',
+  command : [find_program('pot.sh'),
+             meson.project_source_root(),
+             meson.current_source_dir()])

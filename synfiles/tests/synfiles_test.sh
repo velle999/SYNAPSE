@@ -17,6 +17,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE PROGRAM UNDER TEST IS TRANSLATED NOW, AND THIS FILE ASSERTS ENGLISH.
+# synfiles' compiled-in localedir is /usr/share/locale, so on a machine where
+# synfiles is INSTALLED a freshly built binary loads the INSTALLED catalog and
+# answers in the desktop's language — every assertion about a message then fails
+# against a program that is working perfectly, and a failing `meson test` is a
+# BUILD failure, so `syn-update` refuses to install it. synpkg 47 did exactly
+# that on a Japanese desktop.
+#
+# ⚠ Running this under LANG=ja on a box where synfiles is not installed does NOT
+# catch it: with no catalog to find, gettext falls back to the msgid and it all
+# passes in English. Reproduce with SYNFILES_LOCALEDIR pointed at build/po.
+#
+# ⚠ LANGUAGE as well as LC_ALL — gettext reads LANGUAGE FIRST.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 SYNFILES=${1:-./build/synfiles}
 [ -x "$SYNFILES" ] || { echo "not executable: $SYNFILES" >&2; exit 1; }
 SYNFILES=$(readlink -f "$SYNFILES")
@@ -49,6 +65,20 @@ ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
 check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 
+# ⛔ NEVER `| grep -q` IN THIS FILE — use `| has`. `grep -q` exits on its first
+# match, whatever is still writing takes SIGPIPE, and `set -o pipefail` hands
+# that status back: the pipeline returns 141 BECAUSE it matched, and a true
+# assertion is reported as a failure. It is a race on how much the producer had
+# left to write, so it surfaces as a DIFFERENT passing assertion failing each
+# run — and only past the pipe buffer, which is why a fast box never sees it.
+# syn-edit lost two releases to exactly this before the helper was fixed there;
+# a file listing is easily large enough to lose the race here.
+#
+# ⚠ THE COUNT GOES INTO A VARIABLE, never `>/dev/null`: grep looks at its own
+# stdout, and ugrep — which is `grep` in an interactive shell on this machine —
+# takes an early exit when that is /dev/null, putting the SIGPIPE straight back.
+has() { local n; n=$(grep -c "$@") || true; [ "${n:-0}" -gt 0 ]; }
+
 # `((n++))` returns the OLD value, so a bare post-increment exits 1 the first
 # time and kills the script under set -e. Hence $((n + 1)) above.
 
@@ -58,10 +88,10 @@ trap 'rm -rf "$T"' EXIT
 echo "synfiles tests — $SYNFILES"
 
 # ── the binary answers ──────────────────────────────────────────────────────
-"$SYNFILES" --version | grep -q '^synfiles '
+"$SYNFILES" --version | has '^synfiles '
 check "--version prints a version" $?
 
-"$SYNFILES" --help | grep -q 'the SynapseOS file browser'
+"$SYNFILES" --help | has 'the SynapseOS file browser'
 check "--help prints usage" $?
 
 "$SYNFILES" not-a-command >/dev/null 2>&1
@@ -100,22 +130,22 @@ stray=$("$SYNFILES" --rec list "$D" | grep -cv $'\t')
                  || bad "$stray non-record lines on stdout"
 
 # The specific escapes, by name.
-"$SYNFILES" --rec list "$D" | grep -q '^tab%09inside\.txt	'
+"$SYNFILES" --rec list "$D" | has '^tab%09inside\.txt	'
 check "a tab in a filename is escaped" $?
 
-"$SYNFILES" --rec list "$D" | grep -q '^newline%0Ahere\.txt	'
+"$SYNFILES" --rec list "$D" | has '^newline%0Ahere\.txt	'
 check "a newline in a filename is escaped" $?
 
-"$SYNFILES" --rec list "$D" | grep -q '^invalid%FF%FEutf8\.txt	'
+"$SYNFILES" --rec list "$D" | has '^invalid%FF%FEutf8\.txt	'
 check "invalid UTF-8 bytes survive as escapes" $?
 
-"$SYNFILES" --rec list "$D" | grep -q '^with%20space\.txt	'
+"$SYNFILES" --rec list "$D" | has '^with%20space\.txt	'
 check "a space in a filename is escaped" $?
 
 # THE round trip. A literal "%20" in a filename must encode to "%2520", or
 # decoding gives back a SPACE and every action targets a different file — the
 # failure that a naive encoder passes every other test while committing.
-"$SYNFILES" --rec list "$D" | grep -q '^percent%2520literal\.txt	'
+"$SYNFILES" --rec list "$D" | has '^percent%2520literal\.txt	'
 check "a literal %20 in a filename double-encodes" $?
 
 # And the decoded form must name a file that actually exists. This is the test
@@ -221,10 +251,10 @@ d=$("$SYNFILES" --rec list "$T" | awk -F'\t' '$1=="mime" {print $8}')
 n=$("$SYNFILES" --rec info "$M/a.txt" | awk -F'\t' 'NR==1 {print NF}')
 [ "$n" = 2 ] && ok "info --rec is two columns" || bad "info --rec has $n columns"
 
-"$SYNFILES" --rec info "$M/a.txt" | grep -q '^mime	text/plain$'
+"$SYNFILES" --rec info "$M/a.txt" | has '^mime	text/plain$'
 check "info reports the mime type" $?
 
-"$SYNFILES" --rec info "$D/tab	inside.txt" 2>/dev/null | grep -q '^name	tab%09inside.txt$'
+"$SYNFILES" --rec info "$D/tab	inside.txt" 2>/dev/null | has '^name	tab%09inside.txt$'
 check "info percent-encodes the name" $?
 
 "$SYNFILES" info "$T/does-not-exist" >/dev/null 2>&1
@@ -477,33 +507,33 @@ n=$("$SYNFILES" --rec places | tail -n +2 | wc -l)
 
 # An href is ALREADY a URI. Re-encoding it turns %20 into %2520 and the
 # sidebar entry stops pointing at the folder it names.
-"$SYNFILES" --rec places | grep -q '^/home/someone/My%20Files	path	'
+"$SYNFILES" --rec places | has '^/home/someone/My%20Files	path	'
 check "an href is not double-encoded" $?
 
-"$SYNFILES" --rec places | grep -q '^remote:/	remote	'
+"$SYNFILES" --rec places | has '^remote:/	remote	'
 check "a non-file scheme keeps its scheme and is labelled" $?
 
-"$SYNFILES" --rec places | grep -q 'folder-documents'
+"$SYNFILES" --rec places | has 'folder-documents'
 check "places carries the bookmark icon" $?
 
 # isHidden entries still travel — the front-end decides. Dropping them here
 # would make them unrecoverable from the GUI.
-"$SYNFILES" --rec places | grep -q 'Hidden One'
+"$SYNFILES" --rec places | has 'Hidden One'
 check "a hidden place is still emitted, flagged" $?
 
 # pin/unpin round trip, on the fixture.
 mkdir -p "$T/pinme"
 "$SYNFILES" places pin "$T/pinme" "Pin Me" >/dev/null 2>&1
-"$SYNFILES" --rec places | grep -q 'Pin Me'
+"$SYNFILES" --rec places | has 'Pin Me'
 check "pin adds a bookmark" $?
 
 # The other bookmarks must survive a write. A regenerating writer would drop
 # the icon metadata it does not understand.
-"$SYNFILES" --rec places | grep -q 'folder-documents'
+"$SYNFILES" --rec places | has 'folder-documents'
 check "pin preserves the bookmarks it did not touch" $?
 
 "$SYNFILES" places unpin "$T/pinme" >/dev/null 2>&1
-"$SYNFILES" --rec places | grep -q 'Pin Me' && bad "unpin left the bookmark behind" \
+"$SYNFILES" --rec places | has 'Pin Me' && bad "unpin left the bookmark behind" \
                                             || ok "unpin removes the bookmark"
 
 n=$("$SYNFILES" --rec places | tail -n +2 | wc -l)
@@ -561,12 +591,12 @@ XBEL
 first=$("$SYNFILES" --rec recent | awk -F'\t' 'NR==2 {print $1}')
 [ "$first" = "/tmp/newer.txt" ] && ok "recent is newest first" || bad "recent starts with $first"
 
-"$SYNFILES" --rec recent | grep -q '	text/plain	'
+"$SYNFILES" --rec recent | has '	text/plain	'
 check "recent carries the mime type" $?
 
 # Entries whose file is gone are shown and FLAGGED, not dropped: "I know I
 # opened it yesterday" is exactly what this view is for.
-"$SYNFILES" --rec recent | grep -q '/tmp/older.txt	text/plain	[0-9]*	0'
+"$SYNFILES" --rec recent | has '/tmp/older.txt	text/plain	[0-9]*	0'
 check "a missing recent file is flagged rather than dropped" $?
 
 n=$("$SYNFILES" --rec recent --limit=1 | tail -n +2 | wc -l)
@@ -604,14 +634,14 @@ LB
 chmod +x "$B/lsblk"
 
 vols=$(PATH="$B:$PATH" "$SYNFILES" --rec volumes)
-printf '%s' "$vols" | grep -q '/run/media/tester/STICKFIX' \
+printf '%s' "$vols" | has '/run/media/tester/STICKFIX' \
   && ok "a udisks mount under /run/media is listed" \
   || bad "a volume mounted at /run/media/... was filtered out"
-printf '%s' "$vols" | grep -q '/media/OLDSTYLE' \
+printf '%s' "$vols" | has '/media/OLDSTYLE' \
   && ok "a mount under /media is listed" || bad "/media was filtered out"
-printf '%s' "$vols" | grep -q 'ESPFIX' \
+printf '%s' "$vols" | has 'ESPFIX' \
   && bad "/boot is listed as a browsable volume" || ok "/boot is still filtered out"
-printf '%s' "$vols" | grep -q 'RUNFIX' \
+printf '%s' "$vols" | has 'RUNFIX' \
   && bad "an unrelated /run mount is listed" || ok "/run at large is still filtered out"
 
 # The removable stick keeps its kind, or it lands under the wrong heading and
@@ -640,26 +670,26 @@ pk=$("$SYNFILES" --rec peek "$PK")
 n=$(printf '%s' "$pk" | awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d' | wc -l)
 [ "$n" = 2 ] && ok "peek reports the images in a folder" || bad "pics gave $n rows, want 2"
 
-printf '%s' "$pk" | awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d {print $2}' | grep -q 'notes.txt' \
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d {print $2}' | has 'notes.txt' \
   && bad "peek offered a text file as a preview" || ok "peek skips what cannot be previewed"
 
-printf '%s' "$pk" | grep -q 'buried.png' \
+printf '%s' "$pk" | has 'buried.png' \
   && bad "peek descended a second level" || ok "peek never descends past one level"
 
-printf '%s' "$pk" | awk -F'\t' -v d="$PK/clips" 'NR>1 && $1==d {print $2}' | grep -q 'holiday.mp4' \
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/clips" 'NR>1 && $1==d {print $2}' | has 'holiday.mp4' \
   && ok "a video counts as previewable" || bad "peek skipped a video"
 
-printf '%s' "$pk" | grep -q 'manual.pdf' \
+printf '%s' "$pk" | has 'manual.pdf' \
   && bad "peek offered a PDF" || ok "peek leaves PDFs alone"
 
-printf '%s' "$pk" | awk -F'\t' -v d="$PK/empty" 'NR>1 && $1==d' | grep -q . \
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/empty" 'NR>1 && $1==d' | has . \
   && bad "an empty folder produced a row" || ok "an empty folder produces no rows"
 
-printf '%s' "$pk" | grep -q 'loose.png' \
+printf '%s' "$pk" | has 'loose.png' \
   && bad "peek reported a file sitting in the root" || ok "peek only looks inside subfolders"
 
 # A symlinked directory is not followed — same rule as everywhere else here.
-printf '%s' "$pk" | awk -F'\t' -v d="$PK/link-to-pics" 'NR>1 && $1==d' | grep -q . \
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/link-to-pics" 'NR>1 && $1==d' | has . \
   && bad "peek followed a symlinked directory" || ok "peek does not follow a symlinked folder"
 
 one=$("$SYNFILES" --rec peek "$PK" --limit=1 |
@@ -675,18 +705,18 @@ bad_sz=$("$SYNFILES" --rec peek "$PK" |
 # Filenames are bytes here too: the row is the identity, so it stays encoded.
 mkdir -p "$PK/odd"
 : > "$PK/odd/hol iday%20.png"
-"$SYNFILES" --rec peek "$PK" | grep -q 'hol%20iday%2520.png' \
+"$SYNFILES" --rec peek "$PK" | has 'hol%20iday%2520.png' \
   && ok "peek percent-encodes an awkward filename" \
   || bad "peek did not encode a name with a space and a percent"
 
 # Trailing slash must not produce a doubled separator: the GUI matches these
 # strings against paths it already holds.
-"$SYNFILES" --rec peek "$PK/" | grep -q '//' \
+"$SYNFILES" --rec peek "$PK/" | has '//' \
   && bad "a trailing slash produced a doubled separator" \
   || ok "a trailing slash is trimmed"
 
 # "/" is the one directory whose name already ends in the separator.
-"$SYNFILES" --rec peek / | grep -q '^//' \
+"$SYNFILES" --rec peek / | has '^//' \
   && bad "peek / produced doubled separators" || ok "peek / joins without doubling"
 
 # ── .desktop launchers name their own icon ──────────────────────────────────
@@ -1295,7 +1325,7 @@ mkdir -p "$C/tickq/src" "$C/tickq/dst/x"
 echo new > "$C/tickq/src/x"
 echo old > "$C/tickq/dst/x/inner"
 "$SYNFILES" --rec copy --conflict=overwrite "$C/tickq/src/x" "$C/tickq/dst" \
-    | grep -q 'removed$' \
+    | has 'removed$' \
     && bad "an overwrite emitted removal records" \
     || ok "the removal inside an overwrite stays quiet"
 
@@ -1405,11 +1435,11 @@ grep -q 'lone'          <<<"$out" && bad "a name that does not collide was repor
 # came from. The GUI needs to know, because overwriting there would delete the
 # original, so that button must not be offered.
 out=$("$SYNFILES" --rec collisions "$K/dst/dup.txt" "$K/dst")
-awk -F'\t' '$1!="path" && $4=="yes"' <<<"$out" | grep -q . \
+awk -F'\t' '$1!="path" && $4=="yes"' <<<"$out" | has . \
     && ok "collisions flags a source that IS the destination entry" \
     || bad "the duplicate-in-place case was not flagged"
 out=$("$SYNFILES" --rec collisions "$K/src/dup.txt" "$K/dst")
-awk -F'\t' '$1!="path" && $4=="no"' <<<"$out" | grep -q . \
+awk -F'\t' '$1!="path" && $4=="no"' <<<"$out" | has . \
     && ok "...and does not flag an ordinary collision as that" \
     || bad "an ordinary collision was called same"
 
@@ -1508,17 +1538,17 @@ touch "$U/plain.png" "$U/with space.png" "$U/mixed-CASE_1.9~x.png"
 
 enc() { "$SYNFILES" --rec list "$U" | awk -F'\t' -v n="$1" '$1==n {print $1}'; }
 
-"$SYNFILES" --rec list "$U" | grep -q '^with%20space\.png	'
+"$SYNFILES" --rec list "$U" | has '^with%20space\.png	'
 check "a space becomes %20, as the URI form requires" $?
 
 # Unreserved characters must NOT be escaped, or the hash differs from the one
 # GTK and KDE computed for the same file.
-"$SYNFILES" --rec list "$U" | grep -q '^mixed-CASE_1\.9~x\.png	'
+"$SYNFILES" --rec list "$U" | has '^mixed-CASE_1\.9~x\.png	'
 check "unreserved characters are left alone" $?
 
 # And the full path form keeps its slashes, which is what makes
 # "file://" + path a valid URI rather than one long escaped blob.
-"$SYNFILES" --rec info "$U/plain.png" | grep -q "^path	$U/plain.png\$"
+"$SYNFILES" --rec info "$U/plain.png" | has "^path	$U/plain.png\$"
 check "info emits a path with its slashes intact" $?
 
 # ── about ───────────────────────────────────────────────────────────────────
@@ -1530,7 +1560,7 @@ ragged=$("$SYNFILES" --rec about | awk -F'\t' 'NR==1 {w=NF; next} NF!=w {n++} EN
 
 # The donate link. The GUI decides between "open in a browser" and "run in a
 # terminal" purely on this prefix, so the row has to keep it.
-"$SYNFILES" --rec about | grep -q '^Support	info	Buy me a coffee	https://'
+"$SYNFILES" --rec about | has '^Support	info	Buy me a coffee	https://'
 check "about carries a Support row with an https link" $?
 
 # Every state the front-ends colour must be one they know about.
@@ -1598,12 +1628,12 @@ mkdir -p "$HOME"
 n=$("$SYNFILES" --rec actions "$AM/a.txt" | awk -F'\t' 'NR==1 {print NF}')
 [ "$n" = 5 ] && ok "actions --rec has 5 columns" || bad "actions --rec has $n columns"
 
-"$SYNFILES" --rec actions "$AM/a.txt" | grep -q '^open-with	fixture-editor.desktop		Fixture Editor	'
+"$SYNFILES" --rec actions "$AM/a.txt" | has '^open-with	fixture-editor.desktop		Fixture Editor	'
 check "actions lists an Open With candidate" $?
 
 # NoDisplay is how a helper .desktop hides itself from menus; offering it puts
 # something in front of the user that nobody meant to be there.
-"$SYNFILES" --rec actions "$AM/a.txt" | grep -q 'Hidden Helper' \
+"$SYNFILES" --rec actions "$AM/a.txt" | has 'Hidden Helper' \
     && bad "a NoDisplay application reached the menu" \
     || ok "a NoDisplay application is left out"
 
@@ -1613,12 +1643,12 @@ n=$("$SYNFILES" --rec actions "$AM/archive.zip" | grep -c '^service	')
 [ "$n" = 2 ] && ok "a service menu expands to one row per action" \
              || bad "expected 2 service rows, got $n"
 
-"$SYNFILES" --rec actions "$AM/archive.zip" | grep -q '^service	test-extract.desktop	here	Extract Here	archive-extract$'
+"$SYNFILES" --rec actions "$AM/archive.zip" | has '^service	test-extract.desktop	here	Extract Here	archive-extract$'
 check "a service action carries its id, label and icon" $?
 
 # A .txt is not an archive. Whole-entry mime matching is what keeps Extract off
 # every file in the folder.
-"$SYNFILES" --rec actions "$AM/a.txt" | grep -q '^service	' \
+"$SYNFILES" --rec actions "$AM/a.txt" | has '^service	' \
     && bad "a service menu matched the wrong mime type" \
     || ok "a service menu does not match an unrelated mime type"
 
@@ -1738,14 +1768,14 @@ SM
 export SYNFILES_MIME_DIR="$MM"
 touch "$AM/disc.iso" "$AM/prog.c"
 
-"$SYNFILES" --rec actions "$AM/disc.iso" | grep -q 'Mount Image'
+"$SYNFILES" --rec actions "$AM/disc.iso" | has 'Mount Image'
 check "a service menu declared for a mime ALIAS still matches" $?
 
-"$SYNFILES" --rec actions "$AM/prog.c" | grep -q 'Count Lines'
+"$SYNFILES" --rec actions "$AM/prog.c" | has 'Count Lines'
 check "a service menu declared for a PARENT type matches a subclass" $?
 
 # The equivalence must not become "everything matches everything".
-"$SYNFILES" --rec actions "$AM/disc.iso" | grep -q 'Count Lines' \
+"$SYNFILES" --rec actions "$AM/disc.iso" | has 'Count Lines' \
     && bad "alias resolution matched an unrelated mime type" \
     || ok "alias resolution does not over-match"
 
@@ -1845,7 +1875,7 @@ echo x > "$UW/kept/something.txt"
 [ -f "$UW/dst/f1.txt" ] && ok "copy lands where expected" || bad "copy did not produce dst/f1.txt"
 "$SYNFILES" undo >/dev/null 2>&1
 [ ! -e "$UW/dst/f1.txt" ] && ok "undo removes the copy" || bad "the copy is still there"
-"$SYNFILES" --rec trash list | grep -q 'f1.txt'
+"$SYNFILES" --rec trash list | has 'f1.txt'
 check "the undone copy went to the TRASH, not to unlink" $?
 grep -q '^one$' "$UW/src/f1.txt"
 check "undoing a copy leaves the original alone" $?
@@ -1900,7 +1930,7 @@ n=$("$SYNFILES" --rec find "$F" --name=deep | awk -F'\t' 'NR==1 {print NF}')
 
 # A bare word means "contains". Making somebody type *deep* would be a quiz
 # about fnmatch, not a search box.
-"$SYNFILES" --rec find "$F" --name=deep | grep -q '^deep\.txt	'
+"$SYNFILES" --rec find "$F" --name=deep | has '^deep\.txt	'
 check "a pattern with no wildcards means contains" $?
 
 # And where it was found, or a result list is unusable — the same filename
@@ -1908,12 +1938,12 @@ check "a pattern with no wildcards means contains" $?
 d=$("$SYNFILES" --rec find "$F" --name=deep | awk -F'\t' 'NR==2 {print $9}')
 [ "$d" = "one/two" ] && ok "a hit reports the directory it is in" || bad "dir is '$d', want one/two"
 
-"$SYNFILES" --rec find "$F" --name='*.bin' | grep -q '^blob\.bin	'
+"$SYNFILES" --rec find "$F" --name='*.bin' | has '^blob\.bin	'
 check "an explicit glob is used as given" $?
 
 # Case-insensitive, because a search box that cares is a search box that finds
 # nothing half the time.
-"$SYNFILES" --rec find "$F" --name=HAYSTACK | grep -q '^haystack\.txt	'
+"$SYNFILES" --rec find "$F" --name=HAYSTACK | has '^haystack\.txt	'
 check "name matching is case-insensitive" $?
 
 n=$("$SYNFILES" --rec find "$F" --content=needle | tail -n +2 | wc -l)
@@ -1921,7 +1951,7 @@ n=$("$SYNFILES" --rec find "$F" --content=needle | tail -n +2 | wc -l)
 
 # The NUL heuristic: blob.bin contains "needle" but is binary, and matching it
 # would put an unopenable file in the results of a text search.
-"$SYNFILES" --rec find "$F" --content=needle | grep -q 'blob\.bin' \
+"$SYNFILES" --rec find "$F" --content=needle | has 'blob\.bin' \
     && bad "content search matched a binary file" \
     || ok "content search skips binaries"
 
@@ -1930,10 +1960,10 @@ n=$("$SYNFILES" --rec find "$F" --content=needle | tail -n +2 | wc -l)
 n=$("$SYNFILES" --rec find "$F" --name='second*' --content=needle | tail -n +2 | wc -l)
 [ "$n" = 1 ] && ok "--name and --content are ANDed" || bad "combined search returned $n, want 1"
 
-"$SYNFILES" --rec find "$F" --name=needle | grep -q 'hidden' \
+"$SYNFILES" --rec find "$F" --name=needle | has 'hidden' \
     && bad "a dotfile leaked into search results" \
     || ok "find hides dotfiles by default"
-"$SYNFILES" --rec find "$F" --all --name=needle | grep -q 'hidden'
+"$SYNFILES" --rec find "$F" --all --name=needle | has 'hidden'
 check "--all searches dotfiles" $?
 
 n=$("$SYNFILES" --rec find "$F" --name='*' --limit=2 | tail -n +2 | wc -l)
@@ -1975,10 +2005,10 @@ echo gamma > "$CZ/elsewhere/c.txt"
 # THE thing that makes an archive safe to unpack anywhere: relative paths. An
 # archive full of absolute paths or "../" scatters files across the filesystem
 # on extraction, which is the tarbomb problem from the other end.
-tar tzf "$CZ/proj.tar.gz" 2>/dev/null | grep -qE '^(/|\.\./)' \
+tar tzf "$CZ/proj.tar.gz" 2>/dev/null | has -E '^(/|\.\./)' \
     && bad "the archive contains absolute or parent-relative paths" \
     || ok "archive paths are relative to the containing folder"
-tar tzf "$CZ/proj.tar.gz" 2>/dev/null | grep -q '^proj/sub/b.txt$'
+tar tzf "$CZ/proj.tar.gz" 2>/dev/null | has '^proj/sub/b.txt$'
 check "compress recurses into subdirectories" $?
 
 # Not overwriting matters here specifically: "compress" is not a command
@@ -2023,7 +2053,7 @@ fi
 # trashes it rather than leaving clutter.
 "$SYNFILES" undo >/dev/null 2>&1
 [ ! -e "$CZ/z.zip" ] && ok "undo removes a created archive" || bad "the archive survived undo"
-"$SYNFILES" --rec trash list | grep -q 'z.zip'
+"$SYNFILES" --rec trash list | has 'z.zip'
 check "the undone archive went to the trash" $?
 
 unset SYNFILES_JOURNAL SYNFILES_TRASH
@@ -2291,7 +2321,7 @@ if [ -f "$QML" ]; then
         && ok "…by moving into it, inventing no encryption of its own" \
         || bad "Send to Vault does something other than a move"
 
-    ! sed 's,//.*,,' "$QML" | grep -qiE 'gocryptfs|fusermount'
+    ! sed 's,//.*,,' "$QML" | has -iE 'gocryptfs|fusermount'
     if [ $? = 0 ]; then ok "…and knows nothing about the backend"
     else bad "synfiles.qml mentions the vault backend"; fi
 
@@ -2399,7 +2429,7 @@ if [ -f "$QML" ]; then
     #
     # The rule this pins: an external application is launched with
     # execDetached, never through a Process object.
-    grep -n '"xdg-open"' "$QML" | grep -qv execDetached \
+    grep -n '"xdg-open"' "$QML" | has -v execDetached \
         && bad "xdg-open is launched through a Process — it will block until the app exits" \
         || ok "opening a file is detached from the file manager"
 
@@ -2451,7 +2481,7 @@ if [ -f "$QML" ]; then
     # SplitParser, not StdioCollector: `du` prints a RUNNING total and a
     # collector fires once at the end, which would leave the row saying
     # "calculating…" for the whole walk and then jump to the answer.
-    awk '/id: duProc/,/^        }/' "$QML" | grep -q 'SplitParser' \
+    awk '/id: duProc/,/^        }/' "$QML" | has 'SplitParser' \
         && ok "the running total is read line by line" \
         || bad "duProc no longer streams — the total cannot update while it runs"
 
@@ -2528,7 +2558,7 @@ if [ -f "$QML" ]; then
         mkdir -p "$qsrun"
         qsout=$(XDG_RUNTIME_DIR="$qsrun" QT_QPA_PLATFORM=offscreen \
                 timeout 30 quickshell -p "$qsq" 2>&1 | head -40)
-        if printf '%s' "$qsout" | grep -q "Failed to load configuration"; then
+        if printf '%s' "$qsout" | has "Failed to load configuration"; then
             bad "synfiles.qml does not LOAD — the window will not open"
             printf '%s\n' "$qsout" | grep -A2 "Failed to load" | sed 's/^/        /' >&2
         else
@@ -2702,7 +2732,7 @@ if [ -f "$QML" ] && command -v quickshell >/dev/null 2>&1; then
         # ⚠ Assert on the ABSENCE of FAIL *and* the presence of PASS. A run that
         # printed the marker and nothing else would satisfy a bare `grep -qv
         # FAIL` while proving nothing.
-        if printf '%s' "$rqout" | grep -q 'FAIL '; then
+        if printf '%s' "$rqout" | has 'FAIL '; then
             bad "a rename would still lose or mangle the extension"
             printf '%s\n' "$rqout" | tr '|' '\n' | grep 'FAIL ' | sed 's/^/        /' >&2
         else
@@ -2746,7 +2776,7 @@ desc_of() {  # desc_of <name>
     && ok "…for a folder too" \
     || bad "a folder's description is '$(desc_of sub)'"
 
-"$SYNFILES" --rec info "$DESCD/b.png" | grep -q '^desc	PNG%20image$'
+"$SYNFILES" --rec info "$DESCD/b.png" | has '^desc	PNG%20image$'
 check "info carries it as well, encoded like every other field with a space" $?
 
 # ⚠ AND IT IS PERCENT-ENCODED LIKE EVERY OTHER FIELD. Descriptions hold spaces
@@ -2812,8 +2842,8 @@ if [ -f "$QML" ]; then
     # gets forgotten.
     for ma in rowMa cellMa; do
         blk=$(sed -n "/id: $ma\$/,/^                }/p" "$QML")
-        if printf '%s' "$blk" | grep -q 'root.askInfo' &&
-           printf '%s' "$blk" | grep -q 'root.dropInfo'; then
+        if printf '%s' "$blk" | has 'root.askInfo' &&
+           printf '%s' "$blk" | has 'root.dropInfo'; then
             ok "$ma raises and drops the hover panel"
         else
             bad "$ma no longer drives the hover panel"
@@ -2829,7 +2859,7 @@ if [ -f "$QML" ]; then
                  || bad "$n of 2 views hide the panel on a scroll"
 
     # A delay, or crossing the grid strobes.
-    sed -n '/id: tipDelay/,/^    }/p' "$QML" | grep -qE 'interval: [1-9][0-9][0-9]' \
+    sed -n '/id: tipDelay/,/^    }/p' "$QML" | has -E 'interval: [1-9][0-9][0-9]' \
         && ok "the panel waits before it appears" \
         || bad "the hover panel has no delay — crossing the grid would strobe"
 
@@ -2855,7 +2885,7 @@ if [ -f "$QML" ]; then
     # seconds after the panel is gone otherwise, and its records land in
     # whatever the pointer reached next.
     for f in hideInfo dropInfo; do
-        sed -n "/function $f/,/^    }/p" "$QML" | grep -q 'stopTipSize' \
+        sed -n "/function $f/,/^    }/p" "$QML" | has 'stopTipSize' \
             && ok "$f() stops the folder walk" \
             || bad "$f() leaves a du running with no panel to report to"
     done
@@ -2918,7 +2948,7 @@ if [ -n "${QMLTEST2:-}" ] && [ -f "$HOVER2_QML" ]; then
     h2out=$(XDG_RUNTIME_DIR="$h2run" QT_QPA_PLATFORM=offscreen \
             timeout 90 "$QMLTEST2" -input "$HOVER2_QML" 2>&1)
     h2pass=$(printf '%s' "$h2out" | grep -c '^PASS ' || true)
-    if printf '%s' "$h2out" | grep -q '^FAIL'; then
+    if printf '%s' "$h2out" | has '^FAIL'; then
         bad "the hover panel misbehaves under a real pointer"
         printf '%s\n' "$h2out" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
     elif [ "$h2pass" -lt 8 ]; then
@@ -2944,7 +2974,7 @@ if [ -n "$QMLTEST" ] && [ -f "$HOVER_QML" ]; then
     hout=$(XDG_RUNTIME_DIR="$hrun" QT_QPA_PLATFORM=offscreen \
            timeout 60 "$QMLTEST" -input "$HOVER_QML" 2>&1)
     hpass=$(printf '%s' "$hout" | grep -c '^PASS ' || true)
-    if printf '%s' "$hout" | grep -q '^FAIL'; then
+    if printf '%s' "$hout" | has '^FAIL'; then
         bad "the Open With flyout closes under a resting pointer"
         printf '%s\n' "$hout" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
     elif [ "$hpass" -lt 5 ]; then
@@ -2983,7 +3013,7 @@ if command -v ffmpeg >/dev/null 2>&1 && command -v md5sum >/dev/null 2>&1; then
     [ "$out" = "$XDG_CACHE_HOME/thumbnails/large/$want.png" ]
     check "…in \$XDG_CACHE_HOME/thumbnails/large" $?
 
-    [ -s "$out" ] && head -c 8 "$out" | od -An -tx1 | grep -q "89 50 4e 47"
+    [ -s "$out" ] && head -c 8 "$out" | od -An -tx1 | has "89 50 4e 47"
     check "…and it is a PNG with something in it" $?
 
     # ⛔ 0600: a thumbnail can show the contents of a file whose own permissions

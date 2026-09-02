@@ -47,6 +47,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -429,14 +430,18 @@ static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n,
 
 static void draw_help(void)
 {
-	printf("\n  %s<num> open · u up · h home · c <path> cd · / <text> filter%s\n",
-	       C_DIM(), C_RESET());
-	printf("  %si <num> info · z <num> size · t <num> trash · e <num> actions%s\n",
-	       C_DIM(), C_RESET());
-	printf("  %sm <num> <path> move · y <num> <path> copy%s\n",
-	       C_DIM(), C_RESET());
-	printf("  %sn/p page · a hidden · s sort · r reverse · g gui · q quit%s\n",
-	       C_DIM(), C_RESET());
+	printf("\n  %s", C_DIM());
+	printf(_("<num> open · u up · h home · c <path> cd · / <text> filter"));
+	printf("%s\n", C_RESET());
+	printf("  %s", C_DIM());
+	printf(_("i <num> info · z <num> size · t <num> trash · e <num> actions"));
+	printf("%s\n", C_RESET());
+	printf("  %s", C_DIM());
+	printf(_("m <num> <path> move · y <num> <path> copy"));
+	printf("%s\n", C_RESET());
+	printf("  %s", C_DIM());
+	printf(_("n/p page · a hidden · s sort · r reverse · g gui · q quit"));
+	printf("%s\n", C_RESET());
 }
 
 /* ── opening things ─────────────────────────────────────────────────────── */
@@ -455,13 +460,13 @@ static void draw_help(void)
 static void open_detached(const char *path)
 {
 	if (!have_cmd("xdg-open")) {
-		warn("xdg-open is not installed — cannot open %s", path);
+		warn(_("xdg-open is not installed — cannot open %s"), path);
 		return;
 	}
 
 	pid_t pid = fork();
 	if (pid < 0) {
-		warn("cannot fork: %s", strerror(errno));
+		warn(_("cannot fork: %s"), strerror(errno));
 		return;
 	}
 	if (pid == 0) {
@@ -482,7 +487,7 @@ static void open_detached(const char *path)
 		_exit(127);
 	}
 	waitpid(pid, NULL, 0);             /* reaps the intermediate, not the app */
-	printf("  %sopened%s %s\n", C_DIM(), C_RESET(), path);
+	printf("  %s%s%s %s\n", C_DIM(), _("opened"), C_RESET(), path);
 }
 
 /* The graphical browser, on this folder. Detached for the same reason opening a
@@ -491,12 +496,12 @@ static void open_detached(const char *path)
 static void open_gui(const char *dir)
 {
 	if (!have_cmd("synfiles")) {
-		warn("synfiles is not on PATH");
+		warn(_("synfiles is not on PATH"));
 		return;
 	}
 	pid_t pid = fork();
 	if (pid < 0) {
-		warn("cannot fork: %s", strerror(errno));
+		warn(_("cannot fork: %s"), strerror(errno));
 		return;
 	}
 	if (pid == 0) {
@@ -507,7 +512,7 @@ static void open_gui(const char *dir)
 		_exit(127);
 	}
 	waitpid(pid, NULL, 0);
-	printf("  %sopened the window on%s %s\n", C_DIM(), C_RESET(), dir);
+	printf("  %s%s%s %s\n", C_DIM(), _("opened the window on"), C_RESET(), dir);
 }
 
 /* ── the loop ───────────────────────────────────────────────────────────── */
@@ -516,8 +521,10 @@ static void go(tui_t *t, const char *path)
 {
 	char resolved[PATH_MAX];
 	if (!realpath(path, resolved)) {
-		printf("  %scannot go to %s: %s%s\n", C_WARN(), path,
-		       strerror(errno), C_RESET());
+		printf("  %s", C_WARN());
+		printf(_("cannot go to %s: %s"), path,
+		       strerror(errno));
+		printf("%s\n", C_RESET());
 		return;
 	}
 
@@ -527,8 +534,10 @@ static void go(tui_t *t, const char *path)
 	size_t probe_n = 0;
 	sf_entry_t *probe = sf_scan(resolved, t->all, &probe_n);
 	if (!probe) {
-		printf("  %scannot read %s: %s%s\n", C_WARN(), resolved,
-		       strerror(errno), C_RESET());
+		printf("  %s", C_WARN());
+		printf(_("cannot read %s: %s"), resolved,
+		       strerror(errno));
+		printf("%s\n", C_RESET());
 		return;
 	}
 	sf_entries_free(probe, probe_n);
@@ -581,7 +590,7 @@ static void transfer_entry(tui_t *t, sf_entry_t *e, const char *typed,
 	const char *verb = copying ? "copy" : "move";
 
 	if (!typed || !*typed) {
-		warn("%s needs somewhere to %s to", verb, verb);
+		warn(_("%s needs somewhere to %s to"), verb, verb);
 		return;
 	}
 
@@ -590,12 +599,12 @@ static void transfer_entry(tui_t *t, sf_entry_t *e, const char *typed,
 
 	struct stat st;
 	if (stat(dest, &st) != 0) {
-		warn("cannot %s to %s: %s", verb, dest, strerror(errno));
+		warn(_("cannot %s to %s: %s"), verb, dest, strerror(errno));
 		goto out;
 	}
 	if (!S_ISDIR(st.st_mode)) {
 		/* Both commands would die() with exactly this, which is the point. */
-		warn("%s is not a folder — %s puts things INTO a folder", dest, verb);
+		warn(_("%s is not a folder — %s puts things INTO a folder"), dest, verb);
 		goto out;
 	}
 
@@ -609,10 +618,10 @@ static void transfer_entry(tui_t *t, sf_entry_t *e, const char *typed,
 	char *dreal = realpath(dest, NULL);
 	if (dreal && !strcmp(dreal, t->cwd)) {
 		if (copying)
-			warn("%s is already here — copy it somewhere else, or use "
-			     "`synfiles copy --conflict=rename` for a duplicate", e->name);
+			warn(_("%s is already here — copy it somewhere else, or use "
+			     "`synfiles copy --conflict=rename` for a duplicate"), e->name);
 		else
-			warn("%s is already in this folder", e->name);
+			warn(_("%s is already in this folder"), e->name);
 		free(dreal);
 		goto out;
 	}
@@ -659,7 +668,9 @@ static void row_action(tui_t *t, sf_entry_t *e, char what)
 	free(full);
 
 	if (g_cbreak) {
-		printf("\n  %spress any key%s", C_DIM(), C_RESET());
+		printf("\n  %s", C_DIM());
+		printf(_("press any key"));
+		printf("%s", C_RESET());
 		fflush(stdout);
 		tty_uncooked();
 		read_key();
@@ -698,8 +709,10 @@ static int run_keys(tui_t *t)
 		size_t n = 0;
 		sf_entry_t *ents = sf_scan(t->cwd, t->all, &n);
 		if (!ents) {
-			printf("  %scannot read %s: %s%s\n", C_WARN(), t->cwd,
-			       strerror(errno), C_RESET());
+			printf("  %s", C_WARN());
+			printf(_("cannot read %s: %s"), t->cwd,
+			       strerror(errno));
+			printf("%s\n", C_RESET());
 			return 1;
 		}
 		if (*filter) {
@@ -853,7 +866,9 @@ static int run_keys(tui_t *t)
 			if (p && *p) {
 				tty_cooked();
 				transfer_entry(t, &ents[sel], p, copying);
-				printf("\n  %spress any key%s", C_DIM(), C_RESET());
+				printf("\n  %s", C_DIM());
+				printf(_("press any key"));
+				printf("%s", C_RESET());
 				fflush(stdout);
 				tty_uncooked();
 				read_key();
@@ -886,7 +901,7 @@ int cmd_tui(int argc, char **argv)
 	const char *start = argc > 0 && *argv[0] ? argv[0] : ".";
 	char resolved[PATH_MAX];
 	if (!realpath(start, resolved))
-		die("cannot resolve %s: %s", start, strerror(errno));
+		die(_("cannot resolve %s: %s"), start, strerror(errno));
 	snprintf(t.cwd, sizeof t.cwd, "%s", resolved);
 
 	/* WHICH LOOP. A terminal gets arrow keys; anything else keeps the line
@@ -911,8 +926,10 @@ int cmd_tui(int argc, char **argv)
 		size_t n = 0;
 		sf_entry_t *ents = sf_scan(t.cwd, t.all, &n);
 		if (!ents) {
-			printf("  %scannot read %s: %s%s\n", C_WARN(), t.cwd,
-			       strerror(errno), C_RESET());
+			printf("  %s", C_WARN());
+			printf(_("cannot read %s: %s"), t.cwd,
+			       strerror(errno));
+			printf("%s\n", C_RESET());
 			return 1;
 		}
 
@@ -939,8 +956,9 @@ int cmd_tui(int argc, char **argv)
 
 		draw_header(&t, n, pages);
 		if (*filter)
-			printf("  %sfilter: %s%s  (/ alone clears it)\n",
-			       C_WARN(), filter, C_RESET());
+			printf("  %s", C_WARN());
+			printf(_("filter: %s  (/ alone clears it)"), filter);
+			printf("%s\n", C_RESET());
 		draw_rows(&t, ents, n, PAGE, -1);
 		draw_help();
 
@@ -963,7 +981,9 @@ int cmd_tui(int argc, char **argv)
 		if (in[0] >= '0' && in[0] <= '9') {
 			long num = strtol(in, NULL, 10);
 			if (num < 1 || (size_t)num > n) {
-				printf("  %sno row %ld%s\n", C_WARN(), num, C_RESET());
+				printf("  %s", C_WARN());
+				printf(_("no row %ld"), num);
+				printf("%s\n", C_RESET());
 				sf_entries_free(ents, n);
 				continue;
 			}
@@ -995,7 +1015,9 @@ int cmd_tui(int argc, char **argv)
 			go(&t, home_dir());
 			break;
 		case 'c': {
-			if (!*rest) { printf("  %sc needs a path%s\n", C_WARN(), C_RESET()); break; }
+			if (!*rest) { printf("  %s", C_WARN());
+ printf(_("c needs a path"));
+ printf("%s\n", C_RESET()); break; }
 			char *abs = resolve_here(&t, rest);
 			*filter = '\0';
 			go(&t, abs);
@@ -1032,8 +1054,9 @@ int cmd_tui(int argc, char **argv)
 			char *end = NULL;
 			long num = strtol(rest, &end, 10);
 			if (num < 1 || (size_t)num > n) {
-				printf("  %s%c needs a row number and a destination%s\n",
-				       C_WARN(), verb, C_RESET());
+				printf("  %s", C_WARN());
+				printf(_("%c needs a row number and a destination"), verb);
+				printf("%s\n", C_RESET());
 				break;
 			}
 			while (end && *end == ' ')
@@ -1044,7 +1067,9 @@ int cmd_tui(int argc, char **argv)
 		case 'i': case 'z': case 't': case 'e': {
 			long num = strtol(rest, NULL, 10);
 			if (num < 1 || (size_t)num > n) {
-				printf("  %s%c needs a row number%s\n", C_WARN(), verb, C_RESET());
+				printf("  %s", C_WARN());
+				printf(_("%c needs a row number"), verb);
+				printf("%s\n", C_RESET());
 				break;
 			}
 			/* THE SAME row_action the arrow loop calls. Two copies of this is
@@ -1054,7 +1079,9 @@ int cmd_tui(int argc, char **argv)
 			break;
 		}
 		default:
-			printf("  %sunrecognised — see the keys above%s\n", C_WARN(), C_RESET());
+			printf("  %s", C_WARN());
+			printf(_("unrecognised — see the keys above"));
+			printf("%s\n", C_RESET());
 			break;
 		}
 

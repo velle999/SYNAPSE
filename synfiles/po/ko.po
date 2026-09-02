@@ -16,927 +16,1258 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
 msgstr "%1  (%2바이트)"
 
-#: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
 msgstr "%1  (%2바이트, 폴더 항목 자체)"
 
-#: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
 msgstr "%1  (폴더 내용은 계산하지 않음)"
 
-#: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2개 선택됨"
 
-#: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1개 완료"
 
-#: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
 msgstr[0] "%1개 실패"
 
-#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] "파일 %1개"
 
-#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] "폴더 %1개"
 
-#: synfiles.qml:832
 msgid "%1 hours left"
 msgstr "%1시간 남음"
 
-#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr "%2, %3 안에 %1"
 
-#: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "항목 %1개"
 
-#: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
 msgstr[0] "여기에 이미 항목 %1개가 있습니다"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
-#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] "항목 %1개"
 
-#: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "%1분 남음"
 
-#: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
 msgstr[0] "네트워크 위치 %1곳을 찾았습니다"
 
-#: synfiles.qml:840
 msgid "%1 of %2"
 msgstr "%2 중 %1"
 
-#: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%2개 중 %1개"
 
-#: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%2개 중 %1개"
 
-#: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
 msgstr[0] "이 가운데 %1개가 이미 여기 있습니다"
 
-#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr "디스크 사용량 %1"
 
-#: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
 msgstr "디스크 사용량 %1  (%3, %4 안에 %2)"
 
-#: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
 msgstr[0] "%1개 건너뜀"
 
-#: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
-#: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
 msgstr[0] "%1 — %2개 실패"
 
-#: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
 msgstr[0] "%1 — 항목 %2개 제거됨"
 
-#: synfiles.qml:950
 msgid "%1 — cancelled"
 msgstr "%1 — 취소됨"
 
-#: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
 msgstr[0] "%1 — %2개 완료 후 취소됨"
 
-#: synfiles.qml:971
 msgid "%1 — done"
 msgstr "%1 — 완료"
 
-#: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
 msgstr[0] "%1초 남음"
 
-#: synfiles.qml:738
 msgid ", "
 msgstr ", "
 
-#: synfiles.qml:5674
 msgid ""
 "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
 "recent files, volumes and network shares."
-msgstr "SynapseOS를 위한 파일 브라우저. 탭, Dolphin과 공유하는 고정 위치, 최근 파일, 볼륨, 네트워크 공유."
+msgstr ""
+"SynapseOS를 위한 파일 브라우저. 탭, Dolphin과 공유하는 고정 위치, 최근 파일, "
+"볼륨, 네트워크 공유."
 
-#: synfiles.qml:2822
 msgid "About"
 msgstr "정보"
 
-#: synfiles.qml:3363
 msgid "About SYNAPSE Files"
 msgstr "SYNAPSE Files 정보"
 
-#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr "위치에 추가"
 
-#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr "Alt+Enter"
 
-#: synfiles.qml:2689
 msgid "Back"
 msgstr "뒤로"
 
-#: synfiles.qml:5604
 msgid "By name"
 msgstr "이름으로"
 
-#: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
 msgstr "취소"
 
-#: synfiles.qml:3345
 msgid "Close Split View"
 msgstr "분할 보기 닫기"
 
-#: synfiles.qml:2898
 msgid "Close split view"
 msgstr "분할 보기 닫기"
 
-#: synfiles.qml:4357
 msgid "Compact"
 msgstr "간단히"
 
-#: synfiles.qml:6946
 msgid "Compress to %1"
 msgstr "%1(으)로 압축"
 
-#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
 msgstr "내용"
 
-#: synfiles.qml:6864
 msgid "Copy"
 msgstr "복사"
 
-#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
 msgstr "경로 복사"
 
-#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
 
-#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr "Ctrl+N"
 
-#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr "Ctrl+V"
 
-#: synfiles.qml:6865
 msgid "Cut"
 msgstr "잘라내기"
 
-#: synfiles.qml:6872
 msgid "Del"
 msgstr "Del"
 
-#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "삭제된 파일. 복원하면 원래 있던 곳으로 되돌립니다."
 
-#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
 msgstr "내림차순"
 
-#: synfiles.qml:3892
 msgid "Destroy %1?"
 msgstr "%1을(를) 파기할까요?"
 
-#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr "영구히 파기…"
 
-#: synfiles.qml:3945
 msgid "Destroy permanently"
 msgstr "영구히 파기"
 
-#: synfiles.qml:4359
 msgid "Details"
 msgstr "자세히"
 
-#: synfiles.qml:3085
 msgid "Devices"
 msgstr "장치"
 
-#: synfiles.qml:5612
 msgid "Done"
 msgstr "완료"
 
-#: synfiles.qml:3543
 msgid "Eject"
 msgstr "꺼내기"
 
-#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr "휴지통 비우기…"
 
-#: synfiles.qml:3858
 msgid "Empty permanently"
 msgstr "영구히 비우기"
 
-#: synfiles.qml:3838
 msgid "Empty the trash?"
 msgstr "휴지통을 비울까요?"
 
-#: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
 msgstr "Enter로 만들고, Esc로 취소"
 
-#: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "휴지통의 모든 항목이 영구히 삭제됩니다. 되돌릴 수 없습니다."
 
-#: synfiles.qml:6870
 msgid "F2"
 msgstr "F2"
 
-#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
 msgstr "F5"
 
-#: synfiles.qml:3202
 msgid "Find network shares"
 msgstr "네트워크 공유 찾기"
 
-#: synfiles.qml:458
 msgid "Folder"
 msgstr "폴더"
 
-#: synfiles.qml:4371
 msgid "Folder Tree"
 msgstr "폴더 트리"
 
-#: synfiles.qml:2988
 msgid "Folders"
 msgstr "폴더"
 
-#: synfiles.qml:3579
 msgid "Format…"
 msgstr "포맷…"
 
-#: synfiles.qml:2695
 msgid "Forward"
 msgstr "앞으로"
 
-#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr "숨김 항목은 표시되지 않습니다."
 
-#: synfiles.qml:3341
 msgid "Hide Folder Tree"
 msgstr "폴더 트리 숨기기"
 
-#: synfiles.qml:3343
 msgid "Hide Previews"
 msgstr "미리보기 숨기기"
 
-#: synfiles.qml:3347
 msgid "Hide Sidebar"
 msgstr "사이드바 숨기기"
 
-#: synfiles.qml:1703
 msgid "Home"
 msgstr "홈"
 
-#: synfiles.qml:4355
 msgid "Icons"
 msgstr "아이콘"
 
-#: synfiles.qml:5604
 msgid "In contents"
 msgstr "내용에서"
 
-#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr "선택 반전"
 
-#: synfiles.qml:4039
 msgid "Keep both"
 msgstr "둘 다 유지"
 
-#: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr "왼쪽  ·  %1"
 
-#: synfiles.qml:4665
 msgid "Links to"
 msgstr "연결 대상"
 
-#: synfiles.qml:2905
 msgid "Menu"
 msgstr "메뉴"
 
-#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
 msgstr "수정한 날짜"
 
-#: synfiles.qml:3539
 msgid "Mount"
 msgstr "마운트"
 
-#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr "휴지통으로 이동"
 
-#: synfiles.qml:5834
 msgid "Name"
 msgstr "이름"
 
-#: synfiles.qml:3164
 msgid "Network"
 msgstr "네트워크"
 
-#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
 msgstr "새 빈 파일…"
 
-#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
 msgstr "새 폴더…"
 
-#: synfiles.qml:3336
 msgid "New Tab"
 msgstr "새 탭"
 
-#: synfiles.qml:4223
 msgid "New empty file"
 msgstr "새 빈 파일"
 
-#: synfiles.qml:4176
 msgid "New folder"
 msgstr "새 폴더"
 
-#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr "최근 사용한 파일이 없습니다."
 
-#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr "일치하는 항목이 없습니다."
 
-#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr "그 필터와 일치하는 항목이 없습니다."
 
-#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
 msgstr "열기"
 
-#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr "폴더 열기"
 
-#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr "여기서 터미널 열기"
 
-#: synfiles.qml:3359
 msgid "Open Trash"
 msgstr "휴지통 열기"
 
-#: synfiles.qml:3559
 msgid "Open in Disks"
 msgstr "디스크에서 열기"
 
-#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr "새 탭에서 열기"
 
-#: synfiles.qml:6931
 msgid "Open with"
 msgstr "다음으로 열기"
 
-#: synfiles.qml:4049
 msgid "Overwrite"
 msgstr "덮어쓰기"
 
-#: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
-msgstr "덮어쓰면 파일이 바뀝니다. 이름이 같은 두 폴더는 합쳐지고, 그 안의 파일이 하나씩 충돌합니다."
+msgstr ""
+"덮어쓰면 파일이 바뀝니다. 이름이 같은 두 폴더는 합쳐지고, 그 안의 파일이 하나"
+"씩 충돌합니다."
 
-#: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "덮어쓴 뒤 삭제합니다. 휴지통으로 가지 않으며 되돌릴 수 없습니다."
 
-#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
 msgstr "붙여넣기"
 
-#: synfiles.qml:5497
 msgid "Pin"
 msgstr "고정"
 
-#: synfiles.qml:3549
 msgid "Pin to Places"
 msgstr "위치에 고정"
 
-#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr "고정됨 ✓"
 
-#: synfiles.qml:3063
 msgid "Places"
 msgstr "위치"
 
-#: synfiles.qml:4370
 msgid "Previews"
 msgstr "미리보기"
 
-#: synfiles.qml:3653
 msgid "Properties"
 msgstr "속성"
 
-#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
 msgstr "속성…"
 
-#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
 msgstr "최근"
 
-#: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
 msgstr "최근에 수정함"
 
-#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
 msgstr "새로 고침"
 
-#: synfiles.qml:3126
 msgid "Removable Devices"
 msgstr "이동식 장치"
 
-#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr "위치에서 제거"
 
-#: synfiles.qml:6869
 msgid "Rename…"
 msgstr "이름 바꾸기…"
 
-#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
 msgstr "복원"
 
-#: synfiles.qml:4292
 msgid "Right  ·  %1"
 msgstr "오른쪽  ·  %1"
 
-#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr "SYNAPSE Files"
 
-#: synfiles.qml:3201
 msgid "Scan again"
 msgstr "다시 검색"
 
-#: synfiles.qml:3200
 msgid "Scanning…"
 msgstr "검색 중…"
 
-#: synfiles.qml:2902
 msgid "Search"
 msgstr "검색"
 
-#: synfiles.qml:3355
 msgid "Search…"
 msgstr "검색…"
 
-#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
 msgstr "모두 선택"
 
-#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
 msgstr "보관함으로 보내기"
 
-#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr "보관함으로 보내기…"
 
-#: synfiles.qml:3341
 msgid "Show Folder Tree"
 msgstr "폴더 트리 표시"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr "숨김 파일 표시"
 
-#: synfiles.qml:3343
 msgid "Show Previews"
 msgstr "미리보기 표시"
 
-#: synfiles.qml:3347
 msgid "Show Sidebar"
 msgstr "사이드바 표시"
 
-#: synfiles.qml:4373
 msgid "Sidebar"
 msgstr "사이드바"
 
-#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
 msgstr "크기"
 
-#: synfiles.qml:4034
 msgid "Skip those"
 msgstr "그것들 건너뛰기"
 
-#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr "수정한 날짜순"
 
-#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
 msgstr "이름순"
 
-#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
 msgstr "크기순"
 
-#: synfiles.qml:4365
 msgid "Sort by Type"
 msgstr "종류순"
 
-#: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
 msgstr "분할 보기"
 
-#: synfiles.qml:2898
 msgid "Split view (F3)"
 msgstr "분할 보기 (F3)"
 
-#: synfiles.qml:4437
 msgid "Text"
 msgstr "텍스트"
 
-#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr "휴지통이 비어 있습니다."
 
-#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr "이 폴더는 비어 있습니다."
 
-#: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
-msgstr "원래 있던 폴더입니다. 바꾸면 원본이 지워집니다. 둘 다 유지하거나 취소하세요."
+msgstr ""
+"원래 있던 폴더입니다. 바꾸면 원본이 지워집니다. 둘 다 유지하거나 취소하세요."
 
-#: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
 msgstr "휴지통"
 
-#: synfiles.qml:4638
 msgid "Type"
 msgstr "종류"
 
-#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr "입력하면 이 폴더와 그 아래 전체를 검색합니다."
 
-#: synfiles.qml:3543
 msgid "Unmount"
 msgstr "마운트 해제"
 
-#: synfiles.qml:2701
 msgid "Up one folder"
 msgstr "상위 폴더로"
 
-#: synfiles.qml:2980
 msgid "Vault"
 msgstr "보관함"
 
-#: synfiles.qml:2720
 msgid "View"
 msgstr "보기"
 
-#: synfiles.qml:2721
 msgid "View options"
 msgstr "보기 옵션"
 
-#: synfiles.qml:827
 msgid "a moment left"
 msgstr "곧 끝남"
 
-#: synfiles.qml:1583
 msgid "accessed"
 msgstr "접근한 날짜"
 
-#: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
 msgstr "작업 중 — 이전 작업이 끝나기를 기다리는 중"
 
-#: synfiles.qml:3764
 msgid "calculating…"
 msgstr "계산 중…"
 
-#: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
 msgstr "취소하는 중…"
 
-#: synfiles.qml:1584
 msgid "changed"
 msgstr "변경된 날짜"
 
-#: synfiles.qml:1152
 msgid "checking the destination…"
 msgstr "대상 위치를 확인하는 중…"
 
-#: synfiles.qml:1712
 msgid "compressing %1…"
 msgstr "%1 압축하는 중…"
 
-#: synfiles.qml:3757
 msgid "contents"
 msgstr "내용"
 
-#: synfiles.qml:1078
 msgid "copied %1"
 msgstr "%1 복사함"
 
-#: synfiles.qml:2443
 msgid "copied: %1"
 msgstr "복사함: %1"
 
-#: synfiles.qml:1172
 msgid "copying %1"
 msgstr "%1 복사하는 중"
 
-#: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
 msgstr[0] "항목 %1개를 여기로 복사하는 중…"
 
-#: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "항목 %1개를 복사하는 중…"
 
-#: synfiles.qml:2482
 msgid "creating %1"
 msgstr "%1 만드는 중"
 
-#: synfiles.qml:1077
 msgid "cut %1"
 msgstr "%1 잘라냄"
 
-#: synfiles.qml:1579
 msgid "description"
 msgstr "설명"
 
-#: synfiles.qml:1840
 msgid "destroying %1…"
 msgstr "%1 파기하는 중…"
 
-#: synfiles.qml:3494
 msgid "dragging %1…"
 msgstr "%1 끄는 중…"
 
-#: synfiles.qml:2472
 msgid "emptying the trash…"
 msgstr "휴지통을 비우는 중…"
 
-#: synfiles.qml:1591
 msgid "files"
 msgstr "파일"
 
-#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "이 항목을 거르기…   (Ctrl+F로 검색)"
 
-#: synfiles.qml:1590
 msgid "folders"
 msgstr "폴더"
 
-#: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
 msgstr "%1 포맷 — 디스크에서 확인 중"
 
-#: synfiles.qml:1587
 msgid "group"
 msgstr "그룹"
 
-#: synfiles.qml:1585
 msgid "links"
 msgstr "링크 수"
 
-#: synfiles.qml:2526
 msgid "looking for network shares…"
 msgstr "네트워크 공유를 찾는 중…"
 
-#: synfiles.qml:4650
 msgid "measuring…"
 msgstr "측정 중…"
 
-#: synfiles.qml:1578
 msgid "mime"
 msgstr "MIME"
 
-#: synfiles.qml:456
 msgid "missing — the file it points at is gone"
 msgstr "없음 — 가리키는 파일이 사라졌습니다"
 
-#: synfiles.qml:1581
 msgid "mode"
 msgstr "권한"
 
-#: synfiles.qml:1582
 msgid "modified"
 msgstr "수정한 날짜"
 
-#: synfiles.qml:3193
 msgid "mount %1"
 msgstr "%1 마운트"
 
-#: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
 msgstr "%1 마운트하는 중…"
 
-#: synfiles.qml:1171
 msgid "moving %1"
 msgstr "%1 옮기는 중"
 
-#: synfiles.qml:1767
 msgid "moving %1 into the vault"
 msgstr "%1을(를) 보관함으로 옮기는 중"
 
-#: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
 msgstr[0] "항목 %1개를 옮기는 중…"
 
-#: synfiles.qml:1058
 msgid "moving %1 to the trash"
 msgstr "%1을(를) 휴지통으로 옮기는 중"
 
-#: synfiles.qml:1576
 msgid "name"
 msgstr "이름"
 
-#: synfiles.qml:3497
 msgid "nothing accepted that drop"
 msgstr "그 놓기를 받아들인 것이 없습니다"
 
-#: synfiles.qml:2554
 msgid "nothing announced itself on this network"
 msgstr "이 네트워크에서 아무것도 알려오지 않았습니다"
 
-#: synfiles.qml:1993
 msgid "only local files can be dropped here"
 msgstr "여기에는 로컬 파일만 놓을 수 있습니다"
 
-#: synfiles.qml:2408
 msgid "opened %1 in Disks"
 msgstr "디스크에서 %1을(를) 열었습니다"
 
-#: synfiles.qml:2333
 msgid "opened a terminal in %1"
 msgstr "%1에서 터미널을 열었습니다"
 
-#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr "브라우저에서 열었습니다"
 
-#: synfiles.qml:2620
 msgid "opening %1"
 msgstr "%1 여는 중"
 
-#: synfiles.qml:1586
 msgid "owner"
 msgstr "소유자"
 
-#: synfiles.qml:1190
 msgid "paste cancelled"
 msgstr "붙여넣기를 취소했습니다"
 
-#: synfiles.qml:1575
 msgid "path"
 msgstr "경로"
 
-#: synfiles.qml:4278
 msgid "reading…"
 msgstr "읽는 중…"
 
-#: synfiles.qml:1240
 msgid "renaming to %1"
 msgstr "%1(으)로 이름 바꾸는 중"
 
-#: synfiles.qml:1067
 msgid "restoring %1"
 msgstr "%1 복원하는 중"
 
-#: synfiles.qml:2318
 msgid "running…"
 msgstr "실행 중…"
 
-#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr "%1과 그 아래를 검색 — Enter를 누르세요"
 
-#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr "%1 검색하는 중…"
 
-#: synfiles.qml:1589
 msgid "selected"
 msgstr "선택됨"
 
-#: synfiles.qml:1580
 msgid "size"
 msgstr "크기"
 
-#: synfiles.qml:1588
 msgid "target"
 msgstr "대상"
 
-#: synfiles.qml:1577
 msgid "type"
 msgstr "종류"
 
-#: synfiles.qml:2283
 msgid "undoing %1…"
 msgstr "%1 되돌리는 중…"
 
-#: synfiles.qml:2462
 msgid "unmounting %1…"
 msgstr "%1 마운트 해제하는 중…"
 
-#: synfiles.qml:755
 msgid "working…"
 msgstr "처리 중…"
 
-#: synfiles.qml:3981
 msgid "“%1” already exists here"
 msgstr "여기에 “%1”이(가) 이미 있습니다"
 
-#: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
 msgstr[0] "• …외 %1개"
 
-#: synfiles.qml:3922
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr "⚠ 이것은 %1입니다. 변경 내용을 예전 블록에 덮어쓰지 않고 새 블록에 기록하며, 스냅숏이 통째로 사본을 남깁니다. 파일은 사라지지만 내용은 디스크에서 복구될 수 있습니다. 그것을 실제로 막아 주는 것은 전체 디스크 암호화입니다."
+msgstr ""
+"⚠ 이것은 %1입니다. 변경 내용을 예전 블록에 덮어쓰지 않고 새 블록에 기록하며, "
+"스냅숏이 통째로 사본을 남깁니다. 파일은 사라지지만 내용은 디스크에서 복구될 "
+"수 있습니다. 그것을 실제로 막아 주는 것은 전체 디스크 암호화입니다."
 
-#: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr "⚠ 이것은 %1입니다. 변경 내용을 예전 블록에 덮어쓰지 않고 새 블록에 기록합니다. 파일은 사라지지만 내용은 디스크에서 복구될 수 있습니다. 그것을 실제로 막아 주는 것은 전체 디스크 암호화입니다."
+msgstr ""
+"⚠ 이것은 %1입니다. 변경 내용을 예전 블록에 덮어쓰지 않고 새 블록에 기록합니"
+"다. 파일은 사라지지만 내용은 디스크에서 복구될 수 있습니다. 그것을 실제로 막"
+"아 주는 것은 전체 디스크 암호화입니다."
+
+msgid "actions: need a path"
+msgstr "actions: 경로가 필요합니다"
+
+#, c-format
+msgid "cannot stat %s: %s"
+msgstr "%s의 정보를 가져올 수 없습니다: %s"
+
+msgid ""
+"action: need a .desktop file and a path\n"
+"  usage: synfiles action <file.desktop> [action-id] -- <path>..."
+msgstr "action: .desktop 파일과 경로가 필요합니다\n  사용법: synfiles action <파일.desktop> <경로>…"
+
+#, c-format
+msgid "action: '%s' must be a .desktop NAME, not a path"
+msgstr "action: '%s'은(는) 경로가 아니라 .desktop 이름이어야 합니다"
+
+msgid "action: need at least one path"
+msgstr "action: 경로가 최소한 하나 필요합니다"
+
+#, c-format
+msgid "action: no such desktop entry: %s"
+msgstr "action: 그런 데스크톱 항목이 없습니다: %s"
+
+#, c-format
+msgid "action: cannot read %s"
+msgstr "action: %s을(를) 읽을 수 없습니다"
+
+#, c-format
+msgid "action: %s has no Exec for '%s'"
+msgstr "action: %s에는 '%s'에 해당하는 Exec가 없습니다"
+
+#, c-format
+msgid "action: %s has an empty Exec"
+msgstr "action: %s의 Exec가 비어 있습니다"
+
+#, c-format
+msgid "%s wants a terminal; running it without one"
+msgstr "%s은(는) 터미널을 원합니다. 터미널 없이 실행합니다"
+
+#, c-format
+msgid "fork: %s"
+msgstr "fork: %s"
+
+#, c-format
+msgid "compress: unknown option '%s'"
+msgstr "compress: 알 수 없는 옵션 '%s'"
+
+msgid "compress: need at least one path"
+msgstr "compress: 경로가 최소한 하나 필요합니다"
+
+#, c-format
+msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr "compress: 알 수 없는 형식 '%s' — zip, tar.gz, tar.xz, tar.zst, 7z를 시도해 보세요"
+
+msgid ""
+"compress: everything must be in the same folder\n"
+"  otherwise the archive records absolute paths and unpacking it scatters "
+"files"
+msgstr "compress: 모두 같은 폴더에 있어야 합니다\n  그렇지 않으면 다른 곳에서는 의미가 없는 경로가 압축 파일에 들어갑니다"
+
+msgid "compress: --name takes a name, not a path"
+msgstr "compress: --name은 경로가 아니라 이름을 받습니다"
+
+#, c-format
+msgid "%s already exists"
+msgstr "%s이(가) 이미 있습니다"
+
+msgid "compress: neither zip nor 7z is installed"
+msgstr "compress: zip도 7z도 설치되어 있지 않습니다"
+
+msgid "compress: 7z is not installed — install p7zip"
+msgstr "compress: 7z가 설치되어 있지 않습니다 — p7zip을 설치하세요"
+
+msgid "compress: tar is not installed"
+msgstr "compress: tar가 설치되어 있지 않습니다"
+
+#, c-format
+msgid "could not create %s"
+msgstr "%s을(를) 만들 수 없었습니다"
+
+#, c-format
+msgid "cannot write settings: %s"
+msgstr "설정을 기록할 수 없습니다: %s"
+
+#, c-format
+msgid "cannot save settings: %s"
+msgstr "설정을 저장할 수 없습니다: %s"
+
+msgid "config get: need a key"
+msgstr "config get: 키가 필요합니다"
+
+#, c-format
+msgid "config: unknown setting '%s'"
+msgstr "config: 알 수 없는 설정 '%s'"
+
+msgid "config set: need a key and a value"
+msgstr "config set: 키와 값이 필요합니다"
+
+#, c-format
+msgid "config: '%s' is not a valid %s for %s"
+msgstr "config: '%s'은(는) %s에 쓸 수 있는 %s이(가) 아닙니다"
+
+#, c-format
+msgid "settings reset to defaults\n"
+msgstr "설정을 기본값으로 되돌렸습니다\n"
+
+#, c-format
+msgid ""
+"config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
+"reset"
+msgstr "config: 알 수 없는 하위 명령 '%s' — list, get <키>, set <키> <값>, reset을 시도해 보세요"
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr "%s을(를) 해석할 수 없습니다: %s"
+
+#, c-format
+msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
+msgstr "알 수 없는 충돌 정책 '%s' — error, skip, rename, overwrite를 시도해 보세요"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "%s: need one or more sources and a destination directory"
+msgstr "%s: 원본 하나 이상과 대상 디렉터리가 필요합니다"
+
+#, c-format
+msgid "%d done, %d skipped, %d failed"
+msgstr "%d개 완료, %d개 건너뜀, %d개 실패"
+
+#, c-format
+msgid "collisions: %s is not a directory"
+msgstr "collisions: %s은(는) 디렉터리가 아닙니다"
+
+#, c-format
+msgid "collisions: cannot open %s: %s"
+msgstr "collisions: %s을(를) 열 수 없습니다: %s"
+
+#, c-format
+msgid "copy: %s is not a directory"
+msgstr "copy: %s은(는) 디렉터리가 아닙니다"
+
+#, c-format
+msgid "copy: cannot open %s: %s"
+msgstr "copy: %s을(를) 열 수 없습니다: %s"
+
+#, c-format
+msgid "move: %s is not a directory"
+msgstr "move: %s은(는) 디렉터리가 아닙니다"
+
+#, c-format
+msgid "move: cannot open %s: %s"
+msgstr "move: %s을(를) 열 수 없습니다: %s"
+
+msgid "rename: need a path and a new name"
+msgstr "rename: 경로와 새 이름이 필요합니다"
+
+#, c-format
+msgid "rename: '%s' is a path, not a name — use `synfiles move`"
+msgstr "rename: '%s'은(는) 이름이 아니라 경로입니다 — `synfiles move`를 쓰세요"
+
+#, c-format
+msgid "rename: '%s' is not a usable name"
+msgstr "rename: '%s'은(는) 쓸 수 있는 이름이 아닙니다"
+
+#, c-format
+msgid "cannot rename %s: %s"
+msgstr "%s의 이름을 바꿀 수 없습니다: %s"
+
+msgid "mkdir: need a path"
+msgstr "mkdir: 경로가 필요합니다"
+
+#, c-format
+msgid "cannot create %s: %s"
+msgstr "%s을(를) 만들 수 없습니다: %s"
+
+#, c-format
+msgid "delete: unknown option '%s'"
+msgstr "delete: 알 수 없는 옵션 '%s'"
+
+msgid "delete: need a path"
+msgstr "delete: 경로가 필요합니다"
+
+msgid ""
+"delete removes files PERMANENTLY and cannot be undone.\n"
+"  to move them to the trash instead:  synfiles trash <path>\n"
+"  to delete them anyway:              synfiles delete --yes <path>"
+msgstr "delete는 파일을 영구히 지우며 되돌릴 수 없습니다.\n  휴지통으로 옮기려면: synfiles trash <경로>…\n  정말 그러려면: --force"
+
+#, c-format
+msgid "find: unknown option '%s'"
+msgstr "find: 알 수 없는 옵션 '%s'"
+
+msgid "find: need --name=GLOB or --content=TEXT (or both)"
+msgstr "find: --name=글로브 또는 --content=텍스트가 필요합니다 (둘 다도 가능)"
+
+#, c-format
+msgid "cannot open %s: %s"
+msgstr "%s을(를) 열 수 없습니다: %s"
+
+msgid "no matches"
+msgstr "일치하는 것이 없습니다"
+
+#, c-format
+msgid "%ld matches (stopped at the limit)"
+msgstr "%ld개 일치 (한도에서 멈췄습니다)"
+
+msgid "[broken]"
+msgstr "[깨짐]"
+
+#, c-format
+msgid "list: unknown sort '%s' — try name, size, mtime, type"
+msgstr "list: 알 수 없는 정렬 '%s' — name, size, mtime, type을 시도해 보세요"
+
+#, c-format
+msgid "list: unknown option '%s'"
+msgstr "list: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "%s을(를) 읽을 수 없습니다: %s"
+
+msgid "empty"
+msgstr "비어 있음"
+
+msgid "info: need a path"
+msgstr "info: 경로가 필요합니다"
+
+msgid "du: need a path"
+msgstr "du: 경로가 필요합니다"
+
+msgid "no display — synfiles gui needs a graphical session"
+msgstr "디스플레이가 없습니다 — synfiles gui에는 그래픽 세션이 필요합니다"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell이 설치되어 있지 않습니다 — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "quickshell을 시작할 수 없었습니다"
+
+#, c-format
+msgid ""
+"netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
+msgstr "netscan: %s에 대해 avahi-browse가 실패했습니다 (종료 코드 %d) — 이 컴퓨터에서는 mDNS 검색이 동작하지 않습니다"
+
+#, c-format
+msgid "netscan: unknown option '%s'"
+msgstr "netscan: 알 수 없는 옵션 '%s'"
+
+msgid ""
+"netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
+"network places"
+msgstr "netscan: 장치를 찾으려면 avahi(mDNS)나 smbclient(윈도우 공유)를 설치하세요"
+
+msgid "netmount: need a URI (see: synfiles netscan)"
+msgstr "netmount: URI가 필요합니다 (참고: synfiles netscan)"
+
+#, c-format
+msgid "netmount: '%s' is not a URI"
+msgstr "netmount: '%s'은(는) URI가 아닙니다"
+
+msgid "netmount: gio is not installed — install gvfs to mount network shares"
+msgstr "netmount: gio가 설치되어 있지 않습니다 — 네트워크 공유를 마운트하려면 gvfs를 설치하세요"
+
+#, c-format
+msgid "netmount: could not mount %s"
+msgstr "netmount: %s을(를) 마운트할 수 없었습니다"
+
+#, c-format
+msgid "peek: unknown option '%s'"
+msgstr "peek: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: 읽을 수 없습니다"
+
+#, c-format
+msgid "cannot create a temporary file beside %s: %s"
+msgstr "%s 옆에 임시 파일을 만들 수 없습니다: %s"
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr "%s을(를) 기록할 수 없습니다: %s"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "%s을(를) 바꿀 수 없습니다: %s"
+
+#, c-format
+msgid "could not write %s"
+msgstr "%s을(를) 기록할 수 없었습니다"
+
+#, c-format
+msgid "%s is already pinned"
+msgstr "%s은(는) 이미 고정되어 있습니다"
+
+#, c-format
+msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
+msgstr "%s에 </xbel>이 없습니다 — 책갈피가 어디로 갈지 추측하지 않습니다"
+
+#, c-format
+msgid "pinned %s\n"
+msgstr "%s을(를) 고정했습니다\n"
+
+msgid "no places file to remove from"
+msgstr "제거할 대상이 되는 위치 파일이 없습니다"
+
+#, c-format
+msgid "could not find the bookmark element around %s"
+msgstr "%s 주변의 책갈피 요소를 찾을 수 없었습니다"
+
+#, c-format
+msgid "unpinned %s\n"
+msgstr "%s의 고정을 해제했습니다\n"
+
+#, c-format
+msgid "%s is not pinned"
+msgstr "%s은(는) 고정되어 있지 않습니다"
+
+msgid "places pin: need a path"
+msgstr "places pin: 경로가 필요합니다"
+
+msgid "places unpin: need a path"
+msgstr "places unpin: 경로가 필요합니다"
+
+#, c-format
+msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
+msgstr "places: 알 수 없는 하위 명령 '%s' — list, pin <경로>, unpin <경로>를 시도해 보세요"
+
+#, c-format
+msgid "recent: unknown option '%s'"
+msgstr "recent: 알 수 없는 옵션 '%s'"
+
+msgid "refusing to trash the root directory"
+msgstr "루트 디렉터리는 휴지통에 넣지 않습니다"
+
+#, c-format
+msgid "cannot work out where to trash %s"
+msgstr "%s을(를) 어느 휴지통에 넣어야 할지 알 수 없습니다"
+
+#, c-format
+msgid "cannot create the trash directory at %s: %s"
+msgstr "%s에 휴지통 디렉터리를 만들 수 없습니다: %s"
+
+#, c-format
+msgid "cannot write trash info: %s"
+msgstr "휴지통 정보를 기록할 수 없습니다: %s"
+
+#, c-format
+msgid "cannot find a free name in the trash for %s"
+msgstr "휴지통에서 %s에 쓸 빈 이름을 찾을 수 없습니다"
+
+#, c-format
+msgid "cannot write trash info for %s"
+msgstr "%s의 휴지통 정보를 기록할 수 없습니다"
+
+#, c-format
+msgid "cannot move %s to the trash: %s"
+msgstr "%s을(를) 휴지통으로 옮길 수 없습니다: %s"
+
+msgid "the trash is empty"
+msgstr "휴지통이 비어 있습니다"
+
+#, c-format
+msgid "%s has no Path in its trash info"
+msgstr "%s의 휴지통 정보에 Path가 없습니다"
+
+#, c-format
+msgid "%s already exists — not restoring over it"
+msgstr "%s이(가) 이미 있습니다 — 덮어써서 복원하지 않습니다"
+
+#, c-format
+msgid "cannot restore %s: %s"
+msgstr "%s을(를) 복원할 수 없습니다: %s"
+
+#, c-format
+msgid "nothing called '%s' is in the trash"
+msgstr "휴지통에 '%s'(이)라는 것이 없습니다"
+
+msgid ""
+"emptying the trash is PERMANENT and cannot be undone.\n"
+"  to see what would go:  synfiles trash list\n"
+"  to empty it anyway:    synfiles trash empty --yes"
+msgstr "휴지통 비우기는 영구적이며 되돌릴 수 없습니다.\n  무엇이 사라질지 보려면: synfiles trash list\n  정말 그러려면: --force"
+
+msgid "trash restore: need the trashed name (see: synfiles trash list)"
+msgstr "trash restore: 휴지통 안의 이름이 필요합니다 (참고: synfiles trash list)"
+
+#, c-format
+msgid "trash: unknown option '%s'"
+msgstr "trash: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
+msgstr "<번호> 열기 · u 위로 · h 홈 · c <경로> 이동 · / <글자> 거르기"
+
+#, c-format
+msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
+msgstr "i <번호> 정보 · z <번호> 크기 · t <번호> 휴지통 · e <번호> 작업"
+
+#, c-format
+msgid "m <num> <path> move · y <num> <path> copy"
+msgstr "m <번호> <경로> 옮기기 · y <번호> <경로> 복사"
+
+#, c-format
+msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
+msgstr "n/p 쪽 · a 숨김 · s 정렬 · r 뒤집기 · g GUI · q 끝내기"
+
+#, c-format
+msgid "xdg-open is not installed — cannot open %s"
+msgstr "xdg-open이 설치되어 있지 않습니다 — %s을(를) 열 수 없습니다"
+
+#, c-format
+msgid "cannot fork: %s"
+msgstr "fork할 수 없습니다: %s"
+
+msgid "opened"
+msgstr "열었습니다"
+
+msgid "synfiles is not on PATH"
+msgstr "synfiles가 PATH에 없습니다"
+
+msgid "opened the window on"
+msgstr "창을 연 위치:"
+
+#, c-format
+msgid "cannot go to %s: %s"
+msgstr "%s(으)로 갈 수 없습니다: %s"
+
+#, c-format
+msgid "%s needs somewhere to %s to"
+msgstr "%s에는 %s 대상이 필요합니다"
+
+#, c-format
+msgid "cannot %s to %s: %s"
+msgstr "%s을(를) %s(으)로 할 수 없습니다: %s"
+
+#, c-format
+msgid "%s is not a folder — %s puts things INTO a folder"
+msgstr "%s은(는) 폴더가 아닙니다 — %s은(는) 폴더 안에 넣는 동작입니다"
+
+#, c-format
+msgid ""
+"%s is already here — copy it somewhere else, or use `synfiles copy --"
+"conflict=rename` for a duplicate"
+msgstr "%s은(는) 이미 여기 있습니다 — 다른 곳에 복사하거나 `synfiles copy --conflict=rename`을 쓰세요"
+
+#, c-format
+msgid "%s is already in this folder"
+msgstr "%s은(는) 이미 이 폴더에 있습니다"
+
+#, c-format
+msgid "press any key"
+msgstr "아무 키나 누르세요"
+
+#, c-format
+msgid "filter: %s  (/ alone clears it)"
+msgstr "거르기: %s  (/ 만 누르면 지웁니다)"
+
+#, c-format
+msgid "no row %ld"
+msgstr "%ld번 줄이 없습니다"
+
+#, c-format
+msgid "c needs a path"
+msgstr "c에는 경로가 필요합니다"
+
+#, c-format
+msgid "%c needs a row number and a destination"
+msgstr "%c에는 줄 번호와 대상이 필요합니다"
+
+#, c-format
+msgid "%c needs a row number"
+msgstr "%c에는 줄 번호가 필요합니다"
+
+#, c-format
+msgid "unrecognised — see the keys above"
+msgstr "알 수 없습니다 — 위의 키 목록을 보세요"
+
+#, c-format
+msgid "%s is no longer there — not undoing"
+msgstr "%s이(가) 더 이상 없습니다 — 되돌리지 않습니다"
+
+#, c-format
+msgid "%s already exists — not undoing over it"
+msgstr "%s이(가) 이미 있습니다 — 덮어써서 되돌리지 않습니다"
+
+#, c-format
+msgid "cannot put %s back: %s"
+msgstr "%s을(를) 되돌려 놓을 수 없습니다: %s"
+
+#, c-format
+msgid "%s is not empty any more — leaving it"
+msgstr "%s이(가) 더 이상 비어 있지 않습니다 — 그대로 둡니다"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "%s을(를) 지울 수 없습니다: %s"
+
+#, c-format
+msgid "removed %s\n"
+msgstr "%s을(를) 지웠습니다\n"
+
+#, c-format
+msgid "nothing knows how to undo '%s'"
+msgstr "'%s'을(를) 되돌리는 방법을 아는 것이 없습니다"
+
+#, c-format
+msgid "undo history cleared\n"
+msgstr "되돌리기 기록을 지웠습니다\n"
+
+#, c-format
+msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
+msgstr "undo: 알 수 없는 하위 명령 '%s' — list, clear, 또는 인자 없이 시도해 보세요"
+
+msgid "out of memory"
+msgstr "메모리가 부족합니다"
+
+msgid "HOME is not set"
+msgstr "HOME이 설정되어 있지 않습니다"
+
+msgid "udisksctl is not installed — install udisks2 to mount from here"
+msgstr "udisksctl이 설치되어 있지 않습니다 — 여기서 마운트하려면 udisks2를 설치하세요"
+
+#, c-format
+msgid "%s: expected a device path like /dev/sdc1"
+msgstr "%s: /dev/sdc1 같은 장치 경로가 필요합니다"
+
+msgid "mount: need a device path (see: synfiles volumes)"
+msgstr "mount: 장치 경로가 필요합니다 (참고: synfiles volumes)"
+
+msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr "unmount: 장치 경로가 필요합니다 (참고: synfiles volumes)"
+
+#, c-format
+msgid "volumes: unknown option '%s'"
+msgstr "volumes: 알 수 없는 옵션 '%s'"
+
+msgid "no volumes"
+msgstr "볼륨이 없습니다"

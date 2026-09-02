@@ -17,6 +17,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -133,7 +134,7 @@ static void emit_entry(const sf_entry_t *e)
 		if (e->is_link)
 			printf("  %s-> %s%s", C_DIM(), e->target ? e->target : "?", C_RESET());
 		if (e->broken)
-			printf("  %s[broken]%s", C_WARN(), C_RESET());
+			printf("  %s%s%s", C_WARN(), _("[broken]"), C_RESET());
 		putchar('\n');
 		free(hs);
 	}
@@ -363,9 +364,9 @@ int cmd_list(int argc, char **argv)
 			else if (!strcmp(s, "size"))  g_sort = SORT_SIZE;
 			else if (!strcmp(s, "mtime")) g_sort = SORT_MTIME;
 			else if (!strcmp(s, "type"))  g_sort = SORT_TYPE;
-			else die("list: unknown sort '%s' — try name, size, mtime, type", s);
+			else die(_("list: unknown sort '%s' — try name, size, mtime, type"), s);
 		} else if (a[0] == '-' && a[1]) {
-			die("list: unknown option '%s'", a);
+			die(_("list: unknown option '%s'"), a);
 		} else {
 			dir = a;
 		}
@@ -377,7 +378,7 @@ int cmd_list(int argc, char **argv)
 	size_t n = 0;
 	sf_entry_t *ents = sf_scan(dir, all, &n);
 	if (!ents)
-		die("cannot read %s: %s", dir, strerror(errno));
+		die(_("cannot read %s: %s"), dir, strerror(errno));
 
 	if (g_out == OUT_REC)
 		emit_header();
@@ -385,7 +386,7 @@ int cmd_list(int argc, char **argv)
 		emit_entry(&ents[i]);
 
 	if (g_out == OUT_HUMAN && n == 0)
-		printf("%sempty%s\n", C_DIM(), C_RESET());
+		printf("%s%s%s\n", C_DIM(), _("empty"), C_RESET());
 
 	sf_entries_free(ents, n);
 	return n ? 0 : 100;
@@ -404,12 +405,12 @@ static void kv(const char *key, const char *value)
 int cmd_info(int argc, char **argv)
 {
 	if (argc < 1)
-		die("info: need a path");
+		die(_("info: need a path"));
 	const char *path = argv[0];
 
 	struct stat st;
 	if (lstat(path, &st) != 0)
-		die("cannot stat %s: %s", path, strerror(errno));
+		die(_("cannot stat %s: %s"), path, strerror(errno));
 
 	bool is_link = S_ISLNK(st.st_mode);
 	struct stat tst = st;
@@ -641,7 +642,7 @@ static void du_walk(int dirfd, struct du_acc *a)
 int cmd_du(int argc, char **argv)
 {
 	if (argc < 1)
-		die("du: need a path");
+		die(_("du: need a path"));
 	const char *path = argv[0];
 
 	/* THE OPEN IS THE FIRST AND ONLY LOOK AT THIS NAME. There is deliberately
@@ -661,7 +662,7 @@ int cmd_du(int argc, char **argv)
 	 * This is the entry point catching up with its own walk. */
 	int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 	if (fd < 0 && errno != ENOTDIR && errno != ELOOP)
-		die("cannot read %s: %s", path, strerror(errno));
+		die(_("cannot read %s: %s"), path, strerror(errno));
 
 	if (g_out == OUT_REC)
 		rec_row(5, "bytes", "disk", "files", "dirs", "done");
@@ -688,7 +689,7 @@ int cmd_du(int argc, char **argv)
 		 * second resolution for a swap to slip between. */
 		struct stat st;
 		if (lstat(path, &st) != 0)             /* toctou-ok: printed, not used to open */
-			die("cannot stat %s: %s", path, strerror(errno));
+			die(_("cannot stat %s: %s"), path, strerror(errno));
 		a.files = 1;
 		a.bytes = st.st_size;
 		a.disk  = (long long)st.st_blocks * 512;

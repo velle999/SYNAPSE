@@ -6,8 +6,11 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
+#include "config.h"
 
 #include <errno.h>
+#include <locale.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -25,7 +28,7 @@ void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -33,7 +36,7 @@ void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
 	if (!q)
-		die("out of memory");
+		die(_("out of memory"));
 	return q;
 }
 
@@ -41,7 +44,7 @@ char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -59,7 +62,7 @@ char *xasprintf(const char *fmt, ...)
 	va_start(ap, fmt);
 	char *out = NULL;
 	if (vasprintf(&out, fmt, ap) < 0)
-		die("out of memory");
+		die(_("out of memory"));
 	va_end(ap);
 	return out;
 }
@@ -345,7 +348,7 @@ const char *home_dir(void)
 {
 	const char *h = getenv("HOME");
 	if (!h || !*h)
-		die("HOME is not set");
+		die(_("HOME is not set"));
 	return h;
 }
 
@@ -355,4 +358,23 @@ char *xdg_data_home(void)
 	if (x && *x)
 		return xstrdup(x);
 	return xasprintf("%s/.local/share", home_dir());
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⛔ THE ENV OVERRIDE IS WHAT MAKES THIS TESTABLE. The compiled-in path is under
+ * the install prefix, so an UNINSTALLED binary finds no catalog at all and
+ * answers English in every locale — a test that runs it under two locales and
+ * diffs would then pass on a real bug. synpkg shipped a release verified
+ * exactly that way. Nothing changes for an installed synfiles; the variable is
+ * not set.
+ */
+void synfiles_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	const char *dir = getenv("SYNFILES_LOCALEDIR");
+	bindtextdomain(SYNFILES_GETTEXT_DOMAIN, dir && *dir ? dir : SYNFILES_LOCALEDIR);
+	bind_textdomain_codeset(SYNFILES_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYNFILES_GETTEXT_DOMAIN);
 }

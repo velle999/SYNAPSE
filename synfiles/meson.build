@@ -7,6 +7,10 @@ conf = configuration_data()
 conf.set_quoted('SYNFILES_VERSION', meson.project_version())
 conf.set_quoted('SYNFILES_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'synfiles')
+# Where the .mo files land. ⚠ The SAME po/*.po the window's JSON comes from —
+# see include/i18n.h; one catalog, two compiled forms.
+conf.set_quoted('SYNFILES_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
 configure_file(output: 'config.h', configuration: conf)
 
 # No external dependencies on purpose. The file type database is read as data

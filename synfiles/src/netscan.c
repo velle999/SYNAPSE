@@ -47,6 +47,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <stdlib.h>
@@ -204,8 +205,8 @@ static void scan_mdns(hostlist_t *l, const char *type, const char *service)
 		/* Not fatal — the other source may still find something — but never
 		 * silent. warn() goes to stderr, so a --rec caller's records stay
 		 * clean while a person running this in a terminal is told. */
-		warn("netscan: avahi-browse failed for %s (exit %d) — mDNS discovery "
-		     "is not working", type, st);
+		warn(_("netscan: avahi-browse failed for %s (exit %d) — mDNS discovery "
+		     "is not working"), type, st);
 		free(out);
 		return;
 	}
@@ -459,7 +460,7 @@ int cmd_netscan(int argc, char **argv)
 		if (!strcmp(argv[i], "--hosts"))
 			hosts_only = true;
 		else
-			die("netscan: unknown option '%s'", argv[i]);
+			die(_("netscan: unknown option '%s'"), argv[i]);
 	}
 
 	/* Neither tool is a hard dependency: a machine with no avahi still finds
@@ -471,8 +472,8 @@ int cmd_netscan(int argc, char **argv)
 	bool have_smb   = have_cmd("smbclient");
 
 	if (!have_avahi && !have_smb)
-		die("netscan: install avahi (mDNS) or smbclient (Windows shares) to "
-		    "discover network places");
+		die(_("netscan: install avahi (mDNS) or smbclient (Windows shares) to "
+		    "discover network places"));
 
 	hostlist_t hosts = { 0 };
 
@@ -516,8 +517,8 @@ int cmd_netscan(int argc, char **argv)
 	hosts_free(&hosts);
 
 	if (g_out == OUT_HUMAN && n == 0)
-		printf("%snothing announced itself on this network%s\n",
-		       C_DIM(), C_RESET());
+		printf("%s%s%s\n", C_DIM(),
+		       _("nothing announced itself on this network"), C_RESET());
 
 	/* 100, not 1: the same "nothing to show" status the other listers use, so
 	 * a caller can tell an empty network from a failed scan. */
@@ -538,17 +539,17 @@ int cmd_netscan(int argc, char **argv)
 int cmd_netmount(int argc, char **argv)
 {
 	if (argc < 1)
-		die("netmount: need a URI (see: synfiles netscan)");
+		die(_("netmount: need a URI (see: synfiles netscan)"));
 
 	const char *uri = argv[0];
 	/* The URI reaches gio as an argv element and never a shell, but it also
 	 * becomes a path we hand back to a GUI, so refuse the shapes that are not
 	 * URIs at all rather than letting one through to be interpreted later. */
 	if (!strstr(uri, "://"))
-		die("netmount: '%s' is not a URI", uri);
+		die(_("netmount: '%s' is not a URI"), uri);
 
 	if (!have_cmd("gio"))
-		die("netmount: gio is not installed — install gvfs to mount network shares");
+		die(_("netmount: gio is not installed — install gvfs to mount network shares"));
 
 	char *already = netscan_mounted_path(uri);
 	if (already) {
@@ -572,7 +573,7 @@ int cmd_netmount(int argc, char **argv)
 	free(out);
 
 	if (st != 0)
-		die("netmount: could not mount %s", uri);
+		die(_("netmount: could not mount %s"), uri);
 
 	char *path = netscan_mounted_path(uri);
 	if (g_out == OUT_REC) {

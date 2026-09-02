@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +92,7 @@ int cmd_recent(int argc, char **argv)
 		else if (!strcmp(argv[i], "--existing"))
 			only_existing = true;
 		else
-			die("recent: unknown option '%s'", argv[i]);
+			die(_("recent: unknown option '%s'"), argv[i]);
 	}
 	if (limit <= 0)
 		limit = 200;

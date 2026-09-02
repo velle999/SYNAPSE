@@ -18,6 +18,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <stdlib.h>
@@ -633,13 +634,13 @@ static int list_network(void)
 static int volume_mount(const char *device, bool unmount)
 {
 	if (!have_cmd("udisksctl"))
-		die("udisksctl is not installed — install udisks2 to mount from here");
+		die(_("udisksctl is not installed — install udisks2 to mount from here"));
 
 	/* A device path, not a name: "sdc1" would be ambiguous, and passing a
 	 * caller-supplied string straight through to a mount helper is exactly
 	 * where a surprising argument does damage. */
 	if (strncmp(device, "/dev/", 5))
-		die("%s: expected a device path like /dev/sdc1", device);
+		die(_("%s: expected a device path like /dev/sdc1"), device);
 
 	char *argv[] = { (char *)"udisksctl", (char *)(unmount ? "unmount" : "mount"),
 	                 (char *)"-b", (char *)device, NULL };
@@ -680,7 +681,7 @@ static int volume_mount(const char *device, bool unmount)
 int cmd_mount(int argc, char **argv)
 {
 	if (argc < 1)
-		die("mount: need a device path (see: synfiles volumes)");
+		die(_("mount: need a device path (see: synfiles volumes)"));
 	if (g_out == OUT_REC)
 		rec_row(3, "device", "status", "path");
 	return volume_mount(argv[0], false);
@@ -689,7 +690,7 @@ int cmd_mount(int argc, char **argv)
 int cmd_unmount(int argc, char **argv)
 {
 	if (argc < 1)
-		die("unmount: need a device path (see: synfiles volumes)");
+		die(_("unmount: need a device path (see: synfiles volumes)"));
 	if (g_out == OUT_REC)
 		rec_row(3, "device", "status", "path");
 	return volume_mount(argv[0], true);
@@ -701,7 +702,7 @@ int cmd_volumes(int argc, char **argv)
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--network"))     net_only = true;
 		else if (!strcmp(argv[i], "--block"))  blk_only = true;
-		else die("volumes: unknown option '%s'", argv[i]);
+		else die(_("volumes: unknown option '%s'"), argv[i]);
 	}
 
 	if (g_out == OUT_REC)
@@ -717,7 +718,8 @@ int cmd_volumes(int argc, char **argv)
 		n += list_network();
 
 	if (g_out == OUT_HUMAN && n == 0)
-		printf("%sno volumes%s\n", C_DIM(), C_RESET());
+		printf("%s%s%s\n", C_DIM(),
+		       _("no volumes"), C_RESET());
 
 	return n ? 0 : 100;
 }

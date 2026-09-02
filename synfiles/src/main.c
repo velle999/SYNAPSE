@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -99,9 +100,9 @@ static void usage(FILE *f)
 static int cmd_gui(int argc, char **argv)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — synfiles gui needs a graphical session");
+		die(_("no display — synfiles gui needs a graphical session"));
 	if (!have_cmd("quickshell"))
-		die("quickshell is not installed — synpkg install quickshell");
+		die(_("quickshell is not installed — synpkg install quickshell"));
 
 	/* The directory to open travels in the environment: quickshell takes no
 	 * arguments of its own. */
@@ -136,11 +137,16 @@ static int cmd_gui(int argc, char **argv)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die(_("could not start quickshell"));
 }
 
 int main(int argc, char **argv)
 {
+	/* ⚠ FIRST, BEFORE ANYTHING PRINTS. usage() and every die() below go
+	 * through gettext, and a message looked up before the catalog is bound is
+	 * English whatever the desktop's language is.  */
+	synfiles_i18n_init();
+
 	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
 
 	int i = 1;

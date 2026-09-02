@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include "synfiles.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -37,7 +38,7 @@ static char *resolve(const char *path)
 {
 	char *real = realpath(path, NULL);
 	if (!real)
-		die("cannot resolve %s: %s", path, strerror(errno));
+		die(_("cannot resolve %s: %s"), path, strerror(errno));
 	return real;
 }
 
@@ -249,7 +250,7 @@ static int write_atomic(const char *path, const char *text)
 	char *tmp = xasprintf("%s.synfiles-XXXXXX", path);
 	int fd = mkstemp(tmp);
 	if (fd < 0) {
-		warn("cannot create a temporary file beside %s: %s", path, strerror(errno));
+		warn(_("cannot create a temporary file beside %s: %s"), path, strerror(errno));
 		free(tmp);
 		return 1;
 	}
@@ -257,7 +258,7 @@ static int write_atomic(const char *path, const char *text)
 	size_t len = strlen(text);
 	ssize_t w = write(fd, text, len);
 	if (w < 0 || (size_t)w != len || fsync(fd) != 0) {
-		warn("cannot write %s: %s", tmp, strerror(errno));
+		warn(_("cannot write %s: %s"), tmp, strerror(errno));
 		close(fd);
 		unlink(tmp);
 		free(tmp);
@@ -270,7 +271,7 @@ static int write_atomic(const char *path, const char *text)
 	chmod(tmp, 0644);
 
 	if (rename(tmp, path) != 0) {
-		warn("cannot replace %s: %s", path, strerror(errno));
+		warn(_("cannot replace %s: %s"), path, strerror(errno));
 		unlink(tmp);
 		free(tmp);
 		return 1;
@@ -298,7 +299,7 @@ static void backup_once(const char *path)
 		if (text) {
 			size_t len = strlen(text);
 			if (write(fd, text, len) != (ssize_t)len)
-				warn("could not write %s", bak);
+				warn(_("could not write %s"), bak);
 			free(text);
 		}
 		close(fd);
@@ -352,7 +353,7 @@ static int places_pin(const char *path, const char *title)
 
 	char *href = href_for(real);
 	if (href_find(text, href)) {
-		warn("%s is already pinned", real);
+		warn(_("%s is already pinned"), real);
 		free(href); free(text); free(file); free(real);
 		return 0;
 	}
@@ -373,7 +374,7 @@ static int places_pin(const char *path, const char *title)
 
 	char *close = strstr(text, "</xbel>");
 	if (!close) {
-		warn("%s has no </xbel> — refusing to guess where a bookmark goes", file);
+		warn(_("%s has no </xbel> — refusing to guess where a bookmark goes"), file);
 		free(block); free(etitle); free(href); free(text); free(file); free(real);
 		return 1;
 	}
@@ -386,7 +387,7 @@ static int places_pin(const char *path, const char *title)
 
 	int rc = write_atomic(file, out);
 	if (rc == 0 && g_out == OUT_HUMAN)
-		printf("pinned %s\n", real);
+		printf(_("pinned %s\n"), real);
 
 	free(out); free(block); free(etitle); free(href); free(text); free(file); free(real);
 	return rc;
@@ -398,7 +399,7 @@ static int places_unpin(const char *path)
 	char *file = places_path();
 	char *text = slurp(file);
 	if (!text) {
-		warn("no places file to remove from");
+		warn(_("no places file to remove from"));
 		free(real);
 		free(file);
 		return 1;
@@ -419,7 +420,7 @@ static int places_unpin(const char *path)
 			start--;
 		char *stop = strstr(hit, "</bookmark>");
 		if (strncmp(start, "<bookmark ", 10) || !stop) {
-			warn("could not find the bookmark element around %s", real);
+			warn(_("could not find the bookmark element around %s"), real);
 			break;
 		}
 		stop += strlen("</bookmark>");
@@ -438,13 +439,13 @@ static int places_unpin(const char *path)
 
 		rc = write_atomic(file, out);
 		if (rc == 0 && g_out == OUT_HUMAN)
-			printf("unpinned %s\n", real);
+			printf(_("unpinned %s\n"), real);
 		free(out);
 		break;
 	}
 
 	if (rc != 0 && !hit)
-		warn("%s is not pinned", real);
+		warn(_("%s is not pinned"), real);
 
 	free(href); free(text); free(file); free(real);
 	return rc;
@@ -458,14 +459,14 @@ int cmd_places(int argc, char **argv)
 		return places_list();
 	if (!strcmp(sub, "pin")) {
 		if (argc < 2)
-			die("places pin: need a path");
+			die(_("places pin: need a path"));
 		return places_pin(argv[1], argc >= 3 ? argv[2] : NULL);
 	}
 	if (!strcmp(sub, "unpin")) {
 		if (argc < 2)
-			die("places unpin: need a path");
+			die(_("places unpin: need a path"));
 		return places_unpin(argv[1]);
 	}
 
-	die("places: unknown subcommand '%s' — try list, pin <path>, unpin <path>", sub);
+	die(_("places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"), sub);
 }

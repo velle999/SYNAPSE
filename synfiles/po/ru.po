@@ -17,969 +17,1302 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#: synfiles.qml:3724
 msgid "%1  (%2 bytes)"
 msgstr "%1  (%2 байт)"
 
-#: synfiles.qml:3722
 msgid "%1  (%2 bytes, the folder entry itself)"
 msgstr "%1  (%2 байт, сама запись папки)"
 
-#: synfiles.qml:1623
 msgid "%1  (folder contents not counted)"
 msgstr "%1  (содержимое папок не учтено)"
 
-#: synfiles.qml:4296
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  выбрано %2"
 
-#: synfiles.qml:733
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 готов"
 msgstr[1] "%1 готовы"
 msgstr[2] "%1 готово"
 
-#: synfiles.qml:737
 msgid "%1 failed"
 msgid_plural "%1 failed"
 msgstr[0] "%1 не удался"
 msgstr[1] "%1 не удались"
 msgstr[2] "%1 не удалось"
 
-#: synfiles.qml:3781 synfiles.qml:4657
 msgid "%1 file"
 msgid_plural "%1 files"
 msgstr[0] "%1 файл"
 msgstr[1] "%1 файла"
 msgstr[2] "%1 файлов"
 
-#: synfiles.qml:3783 synfiles.qml:4659
 msgid "%1 folder"
 msgid_plural "%1 folders"
 msgstr[0] "%1 папка"
 msgstr[1] "%1 папки"
 msgstr[2] "%1 папок"
 
-#: synfiles.qml:832
 msgid "%1 hours left"
 msgstr "осталось %1 ч"
 
-#: synfiles.qml:4655
 msgid "%1 in %2, %3"
 msgstr "%1 в %2, %3"
 
-#: synfiles.qml:4288
 msgid "%1 item"
 msgid_plural "%1 items"
 msgstr[0] "%1 элемент"
 msgstr[1] "%1 элемента"
 msgstr[2] "%1 элементов"
 
-#: synfiles.qml:1126
 msgid "%1 item already exists here"
 msgid_plural "%1 items already exist here"
 msgstr[0] "%1 элемент уже есть здесь"
 msgstr[1] "%1 элемента уже есть здесь"
 msgstr[2] "%1 элементов уже есть здесь"
 
-#: synfiles.qml:1048 synfiles.qml:1165 synfiles.qml:1618 synfiles.qml:6165
-#: synfiles.qml:6440
 msgid "%1 items"
 msgid_plural "%1 items"
 msgstr[0] "%1 элемент"
 msgstr[1] "%1 элемента"
 msgstr[2] "%1 элементов"
 
-#: synfiles.qml:830
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "осталась %1 мин"
 msgstr[1] "осталось %1 мин"
 msgstr[2] "осталось %1 мин"
 
-#: synfiles.qml:2552
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
 msgstr[0] "найдено %1 сетевое место"
 msgstr[1] "найдено %1 сетевых места"
 msgstr[2] "найдено %1 сетевых мест"
 
-#: synfiles.qml:840
 msgid "%1 of %2"
 msgstr "%1 из %2"
 
-#: synfiles.qml:4124
 msgid "%1 of %2 item"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 из %2 элемента"
 msgstr[1] "%1 из %2 элементов"
 msgstr[2] "%1 из %2 элементов"
 
-#: synfiles.qml:842
 msgid "%1 of %2 items"
 msgid_plural "%1 of %2 items"
 msgstr[0] "%1 из %2 элементов"
 msgstr[1] "%1 из %2 элементов"
 msgstr[2] "%1 из %2 элементов"
 
-#: synfiles.qml:3983
 msgid "%1 of these already exists here"
 msgid_plural "%1 of these already exist here"
 msgstr[0] "%1 из них уже есть здесь"
 msgstr[1] "%1 из них уже есть здесь"
 msgstr[2] "%1 из них уже есть здесь"
 
-#: synfiles.qml:4651
 msgid "%1 on disk"
 msgstr "%1 на диске"
 
-#: synfiles.qml:3778
 msgid "%1 on disk  (%2 in %3, %4)"
 msgstr "%1 на диске  (%2 в %3, %4)"
 
-#: synfiles.qml:735
 msgid "%1 skipped"
 msgid_plural "%1 skipped"
 msgstr[0] "%1 пропущен"
 msgstr[1] "%1 пропущены"
 msgstr[2] "%1 пропущено"
 
-#: synfiles.qml:745 synfiles.qml:958
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
-#: synfiles.qml:959
 msgid "%1 — %2 failed"
 msgid_plural "%1 — %2 failed"
 msgstr[0] "%1 — %2 не удался"
 msgstr[1] "%1 — %2 не удались"
 msgstr[2] "%1 — %2 не удалось"
 
-#: synfiles.qml:963
 msgid "%1 — %2 item removed"
 msgid_plural "%1 — %2 items removed"
 msgstr[0] "%1 — удалён %2 элемент"
 msgstr[1] "%1 — удалено %2 элемента"
 msgstr[2] "%1 — удалено %2 элементов"
 
-#: synfiles.qml:950
 msgid "%1 — cancelled"
 msgstr "%1 — отменено"
 
-#: synfiles.qml:947
 msgid "%1 — cancelled after %2 done"
 msgid_plural "%1 — cancelled after %2 done"
 msgstr[0] "%1 — отменено после %2 готового"
 msgstr[1] "%1 — отменено после %2 готовых"
 msgstr[2] "%1 — отменено после %2 готовых"
 
-#: synfiles.qml:971
 msgid "%1 — done"
 msgstr "%1 — готово"
 
-#: synfiles.qml:828
 msgid "%1s left"
 msgid_plural "%1s left"
 msgstr[0] "осталась %1 с"
 msgstr[1] "осталось %1 с"
 msgstr[2] "осталось %1 с"
 
-#: synfiles.qml:738
 msgid ", "
 msgstr ", "
 
-#: synfiles.qml:5674
 msgid ""
 "A file browser for SynapseOS. Tabs, pinned places shared with Dolphin, "
 "recent files, volumes and network shares."
-msgstr "Файловый менеджер для SynapseOS. Вкладки, закреплённые места, общие с Dolphin, недавние файлы, тома и сетевые ресурсы."
+msgstr ""
+"Файловый менеджер для SynapseOS. Вкладки, закреплённые места, общие с "
+"Dolphin, недавние файлы, тома и сетевые ресурсы."
 
-#: synfiles.qml:2822
 msgid "About"
 msgstr "О программе"
 
-#: synfiles.qml:3363
 msgid "About SYNAPSE Files"
 msgstr "О SYNAPSE Files"
 
-#: synfiles.qml:6977
 msgid "Add to Places"
 msgstr "Добавить в места"
 
-#: synfiles.qml:6962
 msgid "Alt+Enter"
 msgstr "Alt+Enter"
 
-#: synfiles.qml:2689
 msgid "Back"
 msgstr "Назад"
 
-#: synfiles.qml:5604
 msgid "By name"
 msgstr "По имени"
 
-#: synfiles.qml:3853 synfiles.qml:3940 synfiles.qml:4029 synfiles.qml:4145
 msgid "Cancel"
 msgstr "Отмена"
 
-#: synfiles.qml:3345
 msgid "Close Split View"
 msgstr "Закрыть разделённый вид"
 
-#: synfiles.qml:2898
 msgid "Close split view"
 msgstr "Закрыть разделённый вид"
 
-#: synfiles.qml:4357
 msgid "Compact"
 msgstr "Компактно"
 
-#: synfiles.qml:6946
 msgid "Compress to %1"
 msgstr "Сжать в %1"
 
-#: synfiles.qml:4654 synfiles.qml:4700
 msgid "Contents"
 msgstr "Содержимое"
 
-#: synfiles.qml:6864
 msgid "Copy"
 msgstr "Копировать"
 
-#: synfiles.qml:3550 synfiles.qml:6963
 msgid "Copy Path"
 msgstr "Копировать путь"
 
-#: synfiles.qml:6825
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
 
-#: synfiles.qml:6819
 msgid "Ctrl+N"
 msgstr "Ctrl+N"
 
-#: synfiles.qml:6822
 msgid "Ctrl+V"
 msgstr "Ctrl+V"
 
-#: synfiles.qml:6865
 msgid "Cut"
 msgstr "Вырезать"
 
-#: synfiles.qml:6872
 msgid "Del"
 msgstr "Del"
 
-#: synfiles.qml:5532
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Удалённые файлы. Восстановление возвращает файл туда, откуда он был."
 
-#: synfiles.qml:4367 synfiles.qml:6834
 msgid "Descending"
 msgstr "По убыванию"
 
-#: synfiles.qml:3892
 msgid "Destroy %1?"
 msgstr "Уничтожить %1?"
 
-#: synfiles.qml:6881
 msgid "Destroy Permanently…"
 msgstr "Уничтожить навсегда…"
 
-#: synfiles.qml:3945
 msgid "Destroy permanently"
 msgstr "Уничтожить навсегда"
 
-#: synfiles.qml:4359
 msgid "Details"
 msgstr "Подробности"
 
-#: synfiles.qml:3085
 msgid "Devices"
 msgstr "Устройства"
 
-#: synfiles.qml:5612
 msgid "Done"
 msgstr "Готово"
 
-#: synfiles.qml:3543
 msgid "Eject"
 msgstr "Извлечь"
 
-#: synfiles.qml:5538
 msgid "Empty Trash…"
 msgstr "Очистить корзину…"
 
-#: synfiles.qml:3858
 msgid "Empty permanently"
 msgstr "Очистить навсегда"
 
-#: synfiles.qml:3838
 msgid "Empty the trash?"
 msgstr "Очистить корзину?"
 
-#: synfiles.qml:4198 synfiles.qml:4245
 msgid "Enter to create, Escape to cancel"
 msgstr "Enter — создать, Esc — отменить"
 
-#: synfiles.qml:3844
 msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "Всё в корзине будет удалено навсегда. Это нельзя отменить."
 
-#: synfiles.qml:6870
 msgid "F2"
 msgstr "F2"
 
-#: synfiles.qml:6839 synfiles.qml:6973
 msgid "F5"
 msgstr "F5"
 
-#: synfiles.qml:3202
 msgid "Find network shares"
 msgstr "Найти сетевые ресурсы"
 
-#: synfiles.qml:458
 msgid "Folder"
 msgstr "Папка"
 
-#: synfiles.qml:4371
 msgid "Folder Tree"
 msgstr "Дерево папок"
 
-#: synfiles.qml:2988
 msgid "Folders"
 msgstr "Папки"
 
-#: synfiles.qml:3579
 msgid "Format…"
 msgstr "Форматировать…"
 
-#: synfiles.qml:2695
 msgid "Forward"
 msgstr "Вперёд"
 
-#: synfiles.qml:6496
 msgid "Hidden items are not shown."
 msgstr "Скрытые объекты не показаны."
 
-#: synfiles.qml:3341
 msgid "Hide Folder Tree"
 msgstr "Скрыть дерево папок"
 
-#: synfiles.qml:3343
 msgid "Hide Previews"
 msgstr "Скрыть миниатюры"
 
-#: synfiles.qml:3347
 msgid "Hide Sidebar"
 msgstr "Скрыть боковую панель"
 
-#: synfiles.qml:1703
 msgid "Home"
 msgstr "Домашняя папка"
 
-#: synfiles.qml:4355
 msgid "Icons"
 msgstr "Значки"
 
-#: synfiles.qml:5604
 msgid "In contents"
 msgstr "В содержимом"
 
-#: synfiles.qml:6826
 msgid "Invert Selection"
 msgstr "Обратить выделение"
 
-#: synfiles.qml:4039
 msgid "Keep both"
 msgstr "Оставить оба"
 
-#: synfiles.qml:4291
 msgid "Left  ·  %1"
 msgstr "Слева  ·  %1"
 
-#: synfiles.qml:4665
 msgid "Links to"
 msgstr "Ссылается на"
 
-#: synfiles.qml:2905
 msgid "Menu"
 msgstr "Меню"
 
-#: synfiles.qml:4639 synfiles.qml:5842
 msgid "Modified"
 msgstr "Изменён"
 
-#: synfiles.qml:3539
 msgid "Mount"
 msgstr "Подключить"
 
-#: synfiles.qml:6871
 msgid "Move to Trash"
 msgstr "В корзину"
 
-#: synfiles.qml:5834
 msgid "Name"
 msgstr "Имя"
 
-#: synfiles.qml:3164
 msgid "Network"
 msgstr "Сеть"
 
-#: synfiles.qml:3338 synfiles.qml:6820
 msgid "New Empty File…"
 msgstr "Новый пустой файл…"
 
-#: synfiles.qml:3337 synfiles.qml:6819
 msgid "New Folder…"
 msgstr "Новая папка…"
 
-#: synfiles.qml:3336
 msgid "New Tab"
 msgstr "Новая вкладка"
 
-#: synfiles.qml:4223
 msgid "New empty file"
 msgstr "Новый пустой файл"
 
-#: synfiles.qml:4176
 msgid "New folder"
 msgstr "Новая папка"
 
-#: synfiles.qml:6486
 msgid "No recently used files."
 msgstr "Нет недавних файлов."
 
-#: synfiles.qml:6484
 msgid "Nothing matched."
 msgstr "Ничего не найдено."
 
-#: synfiles.qml:6485
 msgid "Nothing matches that filter."
 msgstr "Ничего не подходит под этот фильтр."
 
-#: synfiles.qml:3534 synfiles.qml:5754 synfiles.qml:6857
 msgid "Open"
 msgstr "Открыть"
 
-#: synfiles.qml:6857
 msgid "Open Folder"
 msgstr "Открыть папку"
 
-#: synfiles.qml:3356 synfiles.qml:6840 synfiles.qml:6974
 msgid "Open Terminal Here"
 msgstr "Открыть терминал здесь"
 
-#: synfiles.qml:3359
 msgid "Open Trash"
 msgstr "Открыть корзину"
 
-#: synfiles.qml:3559
 msgid "Open in Disks"
 msgstr "Открыть в Дисках"
 
-#: synfiles.qml:3535 synfiles.qml:6859
 msgid "Open in New Tab"
 msgstr "Открыть в новой вкладке"
 
-#: synfiles.qml:6931
 msgid "Open with"
 msgstr "Открыть с помощью"
 
-#: synfiles.qml:4049
 msgid "Overwrite"
 msgstr "Перезаписать"
 
-#: synfiles.qml:4018
 msgid ""
 "Overwriting replaces files; two folders of the same name are merged, and "
 "files inside them collide one by one."
-msgstr "Перезапись заменяет файлы; две папки с одинаковым именем объединяются, а файлы внутри сталкиваются по одному."
+msgstr ""
+"Перезапись заменяет файлы; две папки с одинаковым именем объединяются, а "
+"файлы внутри сталкиваются по одному."
 
-#: synfiles.qml:3901
 msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "Перезаписано и удалено. В корзину не попадает, и отменить нельзя."
 
-#: synfiles.qml:6822 synfiles.qml:6866
 msgid "Paste"
 msgstr "Вставить"
 
-#: synfiles.qml:5497
 msgid "Pin"
 msgstr "Закрепить"
 
-#: synfiles.qml:3549
 msgid "Pin to Places"
 msgstr "Закрепить в местах"
 
-#: synfiles.qml:5497
 msgid "Pinned ✓"
 msgstr "Закреплено ✓"
 
-#: synfiles.qml:3063
 msgid "Places"
 msgstr "Места"
 
-#: synfiles.qml:4370
 msgid "Previews"
 msgstr "Миниатюры"
 
-#: synfiles.qml:3653
 msgid "Properties"
 msgstr "Свойства"
 
-#: synfiles.qml:6841 synfiles.qml:6961
 msgid "Properties…"
 msgstr "Свойства…"
 
-#: synfiles.qml:2960 synfiles.qml:5430
 msgid "Recent"
 msgstr "Недавние"
 
-#: synfiles.qml:2820 synfiles.qml:3360
 msgid "Recently Modified"
 msgstr "Недавно изменённые"
 
-#: synfiles.qml:6839 synfiles.qml:6972
 msgid "Refresh"
 msgstr "Обновить"
 
-#: synfiles.qml:3126
 msgid "Removable Devices"
 msgstr "Съёмные устройства"
 
-#: synfiles.qml:6976
 msgid "Remove from Places"
 msgstr "Убрать из мест"
 
-#: synfiles.qml:6869
 msgid "Rename…"
 msgstr "Переименовать…"
 
-#: synfiles.qml:6045 synfiles.qml:6850
 msgid "Restore"
 msgstr "Восстановить"
 
-#: synfiles.qml:4292
 msgid "Right  ·  %1"
 msgstr "Справа  ·  %1"
 
-#: synfiles.qml:5664
 msgid "SYNAPSE Files"
 msgstr "SYNAPSE Files"
 
-#: synfiles.qml:3201
 msgid "Scan again"
 msgstr "Искать снова"
 
-#: synfiles.qml:3200
 msgid "Scanning…"
 msgstr "Поиск…"
 
-#: synfiles.qml:2902
 msgid "Search"
 msgstr "Поиск"
 
-#: synfiles.qml:3355
 msgid "Search…"
 msgstr "Поиск…"
 
-#: synfiles.qml:3352 synfiles.qml:6825
 msgid "Select All"
 msgstr "Выделить всё"
 
-#: synfiles.qml:6890 synfiles.qml:6894
 msgid "Send to Vault"
 msgstr "Отправить в хранилище"
 
-#: synfiles.qml:6900
 msgid "Send to Vault…"
 msgstr "Отправить в хранилище…"
 
-#: synfiles.qml:3341
 msgid "Show Folder Tree"
 msgstr "Показать дерево папок"
 
-#: synfiles.qml:3351 synfiles.qml:4368 synfiles.qml:6836
 msgid "Show Hidden Files"
 msgstr "Показать скрытые файлы"
 
-#: synfiles.qml:3343
 msgid "Show Previews"
 msgstr "Показать миниатюры"
 
-#: synfiles.qml:3347
 msgid "Show Sidebar"
 msgstr "Показать боковую панель"
 
-#: synfiles.qml:4373
 msgid "Sidebar"
 msgstr "Боковая панель"
 
-#: synfiles.qml:4503 synfiles.qml:4649 synfiles.qml:4662 synfiles.qml:5838
 msgid "Size"
 msgstr "Размер"
 
-#: synfiles.qml:4034
 msgid "Skip those"
 msgstr "Пропустить их"
 
-#: synfiles.qml:4364 synfiles.qml:6832
 msgid "Sort by Modified"
 msgstr "Сортировать по дате"
 
-#: synfiles.qml:4362 synfiles.qml:6828
 msgid "Sort by Name"
 msgstr "Сортировать по имени"
 
-#: synfiles.qml:4363 synfiles.qml:6830
 msgid "Sort by Size"
 msgstr "Сортировать по размеру"
 
-#: synfiles.qml:4365
 msgid "Sort by Type"
 msgstr "Сортировать по типу"
 
-#: synfiles.qml:3345 synfiles.qml:4372
 msgid "Split View"
 msgstr "Разделённый вид"
 
-#: synfiles.qml:2898
 msgid "Split view (F3)"
 msgstr "Разделённый вид (F3)"
 
-#: synfiles.qml:4437
 msgid "Text"
 msgstr "Текст"
 
-#: synfiles.qml:6487
 msgid "The trash is empty."
 msgstr "Корзина пуста."
 
-#: synfiles.qml:6488
 msgid "This folder is empty."
 msgstr "Эта папка пуста."
 
-#: synfiles.qml:4015
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
 "Keep both, or cancel."
-msgstr "Это та папка, откуда он взят — замена удалит оригинал. Оставьте оба или отмените."
+msgstr ""
+"Это та папка, откуда он взят — замена удалит оригинал. Оставьте оба или "
+"отмените."
 
-#: synfiles.qml:2821 synfiles.qml:2961
 msgid "Trash"
 msgstr "Корзина"
 
-#: synfiles.qml:4638
 msgid "Type"
 msgstr "Тип"
 
-#: synfiles.qml:6483
 msgid "Type to search this folder and everything below it."
 msgstr "Введите, чтобы искать в этой папке и во всём, что внутри."
 
-#: synfiles.qml:3543
 msgid "Unmount"
 msgstr "Отключить"
 
-#: synfiles.qml:2701
 msgid "Up one folder"
 msgstr "На папку вверх"
 
-#: synfiles.qml:2980
 msgid "Vault"
 msgstr "Хранилище"
 
-#: synfiles.qml:2720
 msgid "View"
 msgstr "Вид"
 
-#: synfiles.qml:2721
 msgid "View options"
 msgstr "Параметры вида"
 
-#: synfiles.qml:827
 msgid "a moment left"
 msgstr "вот-вот"
 
-#: synfiles.qml:1583
 msgid "accessed"
 msgstr "открыт"
 
-#: synfiles.qml:999 synfiles.qml:1138
 msgid "busy — waiting for the last operation to finish"
 msgstr "занято — жду окончания предыдущей операции"
 
-#: synfiles.qml:3764
 msgid "calculating…"
 msgstr "вычисление…"
 
-#: synfiles.qml:1183 synfiles.qml:4145
 msgid "cancelling…"
 msgstr "отмена…"
 
-#: synfiles.qml:1584
 msgid "changed"
 msgstr "изменён"
 
-#: synfiles.qml:1152
 msgid "checking the destination…"
 msgstr "проверка назначения…"
 
-#: synfiles.qml:1712
 msgid "compressing %1…"
 msgstr "сжатие %1…"
 
-#: synfiles.qml:3757
 msgid "contents"
 msgstr "содержимое"
 
-#: synfiles.qml:1078
 msgid "copied %1"
 msgstr "скопировано %1"
 
-#: synfiles.qml:2443
 msgid "copied: %1"
 msgstr "скопировано: %1"
 
-#: synfiles.qml:1172
 msgid "copying %1"
 msgstr "копирование %1"
 
-#: synfiles.qml:2002
 msgid "copying %1 item here…"
 msgid_plural "copying %1 items here…"
 msgstr[0] "копирование %1 элемента сюда…"
 msgstr[1] "копирование %1 элементов сюда…"
 msgstr[2] "копирование %1 элементов сюда…"
 
-#: synfiles.qml:2031
 msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "копирование %1 элемента…"
 msgstr[1] "копирование %1 элементов…"
 msgstr[2] "копирование %1 элементов…"
 
-#: synfiles.qml:2482
 msgid "creating %1"
 msgstr "создание %1"
 
-#: synfiles.qml:1077
 msgid "cut %1"
 msgstr "вырезано %1"
 
-#: synfiles.qml:1579
 msgid "description"
 msgstr "описание"
 
-#: synfiles.qml:1840
 msgid "destroying %1…"
 msgstr "уничтожение %1…"
 
-#: synfiles.qml:3494
 msgid "dragging %1…"
 msgstr "перетаскивание %1…"
 
-#: synfiles.qml:2472
 msgid "emptying the trash…"
 msgstr "очистка корзины…"
 
-#: synfiles.qml:1591
 msgid "files"
 msgstr "файлы"
 
-#: synfiles.qml:5591
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "фильтровать эти объекты…   (Ctrl+F — поиск)"
 
-#: synfiles.qml:1590
 msgid "folders"
 msgstr "папки"
 
-#: synfiles.qml:2428
 msgid "format %1 — asking in Disks"
 msgstr "форматирование %1 — запрос в Дисках"
 
-#: synfiles.qml:1587
 msgid "group"
 msgstr "группа"
 
-#: synfiles.qml:1585
 msgid "links"
 msgstr "ссылки"
 
-#: synfiles.qml:2526
 msgid "looking for network shares…"
 msgstr "поиск сетевых ресурсов…"
 
-#: synfiles.qml:4650
 msgid "measuring…"
 msgstr "измерение…"
 
-#: synfiles.qml:1578
 msgid "mime"
 msgstr "MIME"
 
-#: synfiles.qml:456
 msgid "missing — the file it points at is gone"
 msgstr "отсутствует — файл, на который он указывает, исчез"
 
-#: synfiles.qml:1581
 msgid "mode"
 msgstr "права"
 
-#: synfiles.qml:1582
 msgid "modified"
 msgstr "изменён"
 
-#: synfiles.qml:3193
 msgid "mount %1"
 msgstr "подключить %1"
 
-#: synfiles.qml:2458 synfiles.qml:2538
 msgid "mounting %1…"
 msgstr "подключение %1…"
 
-#: synfiles.qml:1171
 msgid "moving %1"
 msgstr "перемещение %1"
 
-#: synfiles.qml:1767
 msgid "moving %1 into the vault"
 msgstr "перемещение %1 в хранилище"
 
-#: synfiles.qml:2033
 msgid "moving %1 item…"
 msgid_plural "moving %1 items…"
 msgstr[0] "перемещение %1 элемента…"
 msgstr[1] "перемещение %1 элементов…"
 msgstr[2] "перемещение %1 элементов…"
 
-#: synfiles.qml:1058
 msgid "moving %1 to the trash"
 msgstr "перемещение %1 в корзину"
 
-#: synfiles.qml:1576
 msgid "name"
 msgstr "имя"
 
-#: synfiles.qml:3497
 msgid "nothing accepted that drop"
 msgstr "ничто не приняло это перетаскивание"
 
-#: synfiles.qml:2554
 msgid "nothing announced itself on this network"
 msgstr "в этой сети ничего не объявилось"
 
-#: synfiles.qml:1993
 msgid "only local files can be dropped here"
 msgstr "сюда можно перетаскивать только локальные файлы"
 
-#: synfiles.qml:2408
 msgid "opened %1 in Disks"
 msgstr "%1 открыт в Дисках"
 
-#: synfiles.qml:2333
 msgid "opened a terminal in %1"
 msgstr "терминал открыт в %1"
 
-#: synfiles.qml:5765
 msgid "opened in your browser"
 msgstr "открыто в браузере"
 
-#: synfiles.qml:2620
 msgid "opening %1"
 msgstr "открытие %1"
 
-#: synfiles.qml:1586
 msgid "owner"
 msgstr "владелец"
 
-#: synfiles.qml:1190
 msgid "paste cancelled"
 msgstr "вставка отменена"
 
-#: synfiles.qml:1575
 msgid "path"
 msgstr "путь"
 
-#: synfiles.qml:4278
 msgid "reading…"
 msgstr "чтение…"
 
-#: synfiles.qml:1240
 msgid "renaming to %1"
 msgstr "переименование в %1"
 
-#: synfiles.qml:1067
 msgid "restoring %1"
 msgstr "восстановление %1"
 
-#: synfiles.qml:2318
 msgid "running…"
 msgstr "выполняется…"
 
-#: synfiles.qml:5589
 msgid "search %1 and below — press Enter"
 msgstr "искать в %1 и ниже — нажмите Enter"
 
-#: synfiles.qml:5258
 msgid "searching %1…"
 msgstr "поиск в %1…"
 
-#: synfiles.qml:1589
 msgid "selected"
 msgstr "выбрано"
 
-#: synfiles.qml:1580
 msgid "size"
 msgstr "размер"
 
-#: synfiles.qml:1588
 msgid "target"
 msgstr "цель"
 
-#: synfiles.qml:1577
 msgid "type"
 msgstr "тип"
 
-#: synfiles.qml:2283
 msgid "undoing %1…"
 msgstr "отмена %1…"
 
-#: synfiles.qml:2462
 msgid "unmounting %1…"
 msgstr "отключение %1…"
 
-#: synfiles.qml:755
 msgid "working…"
 msgstr "работаю…"
 
-#: synfiles.qml:3981
 msgid "“%1” already exists here"
 msgstr "«%1» уже есть здесь"
 
-#: synfiles.qml:4003
 msgid "• …and %1 more"
 msgid_plural "• …and %1 more"
 msgstr[0] "• …и ещё %1"
 msgstr[1] "• …и ещё %1"
 msgstr[2] "• …и ещё %1"
 
-#: synfiles.qml:3922
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones, and snapshots keep whole copies. The file will be gone, but its "
 "contents may still be recoverable from the disk. Full-disk encryption is "
 "what actually prevents that."
-msgstr "⚠ Это %1 — она пишет изменения в новые блоки, а не поверх старых, и снимки хранят целые копии. Файл исчезнет, но его содержимое, возможно, ещё удастся восстановить с диска. По-настоящему этому мешает только полное шифрование диска."
+msgstr ""
+"⚠ Это %1 — она пишет изменения в новые блоки, а не поверх старых, и снимки "
+"хранят целые копии. Файл исчезнет, но его содержимое, возможно, ещё удастся "
+"восстановить с диска. По-настоящему этому мешает только полное шифрование "
+"диска."
 
-#: synfiles.qml:3928
 msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
-msgstr "⚠ Это %1 — она пишет изменения в новые блоки, а не поверх старых. Файл исчезнет, но его содержимое, возможно, ещё удастся восстановить с диска. По-настоящему этому мешает только полное шифрование диска."
+msgstr ""
+"⚠ Это %1 — она пишет изменения в новые блоки, а не поверх старых. Файл "
+"исчезнет, но его содержимое, возможно, ещё удастся восстановить с диска. По-"
+"настоящему этому мешает только полное шифрование диска."
+
+msgid "actions: need a path"
+msgstr "actions: нужен путь"
+
+#, c-format
+msgid "cannot stat %s: %s"
+msgstr "не удалось получить сведения о %s: %s"
+
+msgid ""
+"action: need a .desktop file and a path\n"
+"  usage: synfiles action <file.desktop> [action-id] -- <path>..."
+msgstr "action: нужны файл .desktop и путь\n  использование: synfiles action <файл.desktop> <путь>…"
+
+#, c-format
+msgid "action: '%s' must be a .desktop NAME, not a path"
+msgstr "action: «%s» должно быть ИМЕНЕМ файла .desktop, а не путём"
+
+msgid "action: need at least one path"
+msgstr "action: нужен хотя бы один путь"
+
+#, c-format
+msgid "action: no such desktop entry: %s"
+msgstr "action: нет такой записи рабочего стола: %s"
+
+#, c-format
+msgid "action: cannot read %s"
+msgstr "action: не удалось прочитать %s"
+
+#, c-format
+msgid "action: %s has no Exec for '%s'"
+msgstr "action: у %s нет Exec для «%s»"
+
+#, c-format
+msgid "action: %s has an empty Exec"
+msgstr "action: у %s пустой Exec"
+
+#, c-format
+msgid "%s wants a terminal; running it without one"
+msgstr "%s требует терминала; запускается без него"
+
+#, c-format
+msgid "fork: %s"
+msgstr "fork: %s"
+
+#, c-format
+msgid "compress: unknown option '%s'"
+msgstr "compress: неизвестный параметр «%s»"
+
+msgid "compress: need at least one path"
+msgstr "compress: нужен хотя бы один путь"
+
+#, c-format
+msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr "compress: неизвестный формат «%s» — попробуйте zip, tar.gz, tar.xz, tar.zst, 7z"
+
+msgid ""
+"compress: everything must be in the same folder\n"
+"  otherwise the archive records absolute paths and unpacking it scatters "
+"files"
+msgstr "compress: всё должно лежать в одной папке\n  иначе архив содержал бы пути, которые в другом месте ничего не значат"
+
+msgid "compress: --name takes a name, not a path"
+msgstr "compress: --name требует имя, а не путь"
+
+#, c-format
+msgid "%s already exists"
+msgstr "%s уже существует"
+
+msgid "compress: neither zip nor 7z is installed"
+msgstr "compress: не установлен ни zip, ни 7z"
+
+msgid "compress: 7z is not installed — install p7zip"
+msgstr "compress: 7z не установлен — установите p7zip"
+
+msgid "compress: tar is not installed"
+msgstr "compress: tar не установлен"
+
+#, c-format
+msgid "could not create %s"
+msgstr "не удалось создать %s"
+
+#, c-format
+msgid "cannot write settings: %s"
+msgstr "не удаётся записать настройки: %s"
+
+#, c-format
+msgid "cannot save settings: %s"
+msgstr "не удаётся сохранить настройки: %s"
+
+msgid "config get: need a key"
+msgstr "config get: нужен ключ"
+
+#, c-format
+msgid "config: unknown setting '%s'"
+msgstr "config: неизвестная настройка «%s»"
+
+msgid "config set: need a key and a value"
+msgstr "config set: нужны ключ и значение"
+
+#, c-format
+msgid "config: '%s' is not a valid %s for %s"
+msgstr "config: «%s» не является допустимым %s для %s"
+
+#, c-format
+msgid "settings reset to defaults\n"
+msgstr "настройки сброшены к значениям по умолчанию\n"
+
+#, c-format
+msgid ""
+"config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
+"reset"
+msgstr "config: неизвестная подкоманда «%s» — попробуйте list, get <ключ>, set <ключ> <значение>, reset"
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr "не удаётся разрешить %s: %s"
+
+#, c-format
+msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
+msgstr "неизвестное правило разрешения конфликтов «%s» — попробуйте error, skip, rename, overwrite"
+
+#, c-format
+msgid "%s: unknown option '%s'"
+msgstr "%s: неизвестный параметр «%s»"
+
+#, c-format
+msgid "%s: need one or more sources and a destination directory"
+msgstr "%s: нужны один или несколько источников и папка назначения"
+
+#, c-format
+msgid "%d done, %d skipped, %d failed"
+msgstr "готово: %d, пропущено: %d, не удалось: %d"
+
+#, c-format
+msgid "collisions: %s is not a directory"
+msgstr "collisions: %s не является каталогом"
+
+#, c-format
+msgid "collisions: cannot open %s: %s"
+msgstr "collisions: не удаётся открыть %s: %s"
+
+#, c-format
+msgid "copy: %s is not a directory"
+msgstr "copy: %s не является каталогом"
+
+#, c-format
+msgid "copy: cannot open %s: %s"
+msgstr "copy: не удаётся открыть %s: %s"
+
+#, c-format
+msgid "move: %s is not a directory"
+msgstr "move: %s не является каталогом"
+
+#, c-format
+msgid "move: cannot open %s: %s"
+msgstr "move: не удаётся открыть %s: %s"
+
+msgid "rename: need a path and a new name"
+msgstr "rename: нужны путь и новое имя"
+
+#, c-format
+msgid "rename: '%s' is a path, not a name — use `synfiles move`"
+msgstr "rename: «%s» — это путь, а не имя — воспользуйтесь `synfiles move`"
+
+#, c-format
+msgid "rename: '%s' is not a usable name"
+msgstr "rename: «%s» не является пригодным именем"
+
+#, c-format
+msgid "cannot rename %s: %s"
+msgstr "не удаётся переименовать %s: %s"
+
+msgid "mkdir: need a path"
+msgstr "mkdir: нужен путь"
+
+#, c-format
+msgid "cannot create %s: %s"
+msgstr "не удаётся создать %s: %s"
+
+#, c-format
+msgid "delete: unknown option '%s'"
+msgstr "delete: неизвестный параметр «%s»"
+
+msgid "delete: need a path"
+msgstr "delete: нужен путь"
+
+msgid ""
+"delete removes files PERMANENTLY and cannot be undone.\n"
+"  to move them to the trash instead:  synfiles trash <path>\n"
+"  to delete them anyway:              synfiles delete --yes <path>"
+msgstr "delete удаляет файлы БЕЗВОЗВРАТНО, и это нельзя отменить.\n  чтобы отправить их в корзину: synfiles trash <путь>…\n  если вы действительно этого хотите: --force"
+
+#, c-format
+msgid "find: unknown option '%s'"
+msgstr "find: неизвестный параметр «%s»"
+
+msgid "find: need --name=GLOB or --content=TEXT (or both)"
+msgstr "find: нужно --name=ШАБЛОН или --content=ТЕКСТ (или и то, и другое)"
+
+#, c-format
+msgid "cannot open %s: %s"
+msgstr "не удаётся открыть %s: %s"
+
+msgid "no matches"
+msgstr "совпадений нет"
+
+#, c-format
+msgid "%ld matches (stopped at the limit)"
+msgstr "совпадений: %ld (остановлено на пределе)"
+
+msgid "[broken]"
+msgstr "[повреждено]"
+
+#, c-format
+msgid "list: unknown sort '%s' — try name, size, mtime, type"
+msgstr "list: неизвестная сортировка «%s» — попробуйте name, size, mtime, type"
+
+#, c-format
+msgid "list: unknown option '%s'"
+msgstr "list: неизвестный параметр «%s»"
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr "не удаётся прочитать %s: %s"
+
+msgid "empty"
+msgstr "пусто"
+
+msgid "info: need a path"
+msgstr "info: нужен путь"
+
+msgid "du: need a path"
+msgstr "du: нужен путь"
+
+msgid "no display — synfiles gui needs a graphical session"
+msgstr "нет дисплея — synfiles gui требует графического сеанса"
+
+msgid "quickshell is not installed — synpkg install quickshell"
+msgstr "quickshell не установлен — synpkg install quickshell"
+
+msgid "could not start quickshell"
+msgstr "не удалось запустить quickshell"
+
+#, c-format
+msgid ""
+"netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
+msgstr "netscan: avahi-browse завершился ошибкой для %s (код %d) — обнаружение mDNS на этой машине не работает"
+
+#, c-format
+msgid "netscan: unknown option '%s'"
+msgstr "netscan: неизвестный параметр «%s»"
+
+msgid ""
+"netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
+"network places"
+msgstr "netscan: установите avahi (mDNS) или smbclient (общие ресурсы Windows), чтобы находить устройства"
+
+msgid "netmount: need a URI (see: synfiles netscan)"
+msgstr "netmount: нужен URI (см.: synfiles netscan)"
+
+#, c-format
+msgid "netmount: '%s' is not a URI"
+msgstr "netmount: «%s» не является URI"
+
+msgid "netmount: gio is not installed — install gvfs to mount network shares"
+msgstr "netmount: gio не установлен — установите gvfs, чтобы монтировать сетевые ресурсы"
+
+#, c-format
+msgid "netmount: could not mount %s"
+msgstr "netmount: не удалось смонтировать %s"
+
+#, c-format
+msgid "peek: unknown option '%s'"
+msgstr "peek: неизвестный параметр «%s»"
+
+#, c-format
+msgid "%s: cannot read"
+msgstr "%s: не удаётся прочитать"
+
+#, c-format
+msgid "cannot create a temporary file beside %s: %s"
+msgstr "не удаётся создать временный файл рядом с %s: %s"
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr "не удаётся записать %s: %s"
+
+#, c-format
+msgid "cannot replace %s: %s"
+msgstr "не удаётся заменить %s: %s"
+
+#, c-format
+msgid "could not write %s"
+msgstr "не удалось записать %s"
+
+#, c-format
+msgid "%s is already pinned"
+msgstr "%s уже закреплён"
+
+#, c-format
+msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
+msgstr "в %s нет </xbel> — не станем гадать, куда поместить закладку"
+
+#, c-format
+msgid "pinned %s\n"
+msgstr "%s закреплён\n"
+
+msgid "no places file to remove from"
+msgstr "нет файла мест, из которого можно удалять"
+
+#, c-format
+msgid "could not find the bookmark element around %s"
+msgstr "не удалось найти элемент закладки вокруг %s"
+
+#, c-format
+msgid "unpinned %s\n"
+msgstr "%s откреплён\n"
+
+#, c-format
+msgid "%s is not pinned"
+msgstr "%s не закреплён"
+
+msgid "places pin: need a path"
+msgstr "places pin: нужен путь"
+
+msgid "places unpin: need a path"
+msgstr "places unpin: нужен путь"
+
+#, c-format
+msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
+msgstr "places: неизвестная подкоманда «%s» — попробуйте list, pin <путь>, unpin <путь>"
+
+#, c-format
+msgid "recent: unknown option '%s'"
+msgstr "recent: неизвестный параметр «%s»"
+
+msgid "refusing to trash the root directory"
+msgstr "корневой каталог в корзину не отправляется"
+
+#, c-format
+msgid "cannot work out where to trash %s"
+msgstr "не удаётся определить, куда отправить %s в корзину"
+
+#, c-format
+msgid "cannot create the trash directory at %s: %s"
+msgstr "не удаётся создать каталог корзины в %s: %s"
+
+#, c-format
+msgid "cannot write trash info: %s"
+msgstr "не удаётся записать сведения корзины: %s"
+
+#, c-format
+msgid "cannot find a free name in the trash for %s"
+msgstr "не удаётся найти в корзине свободное имя для %s"
+
+#, c-format
+msgid "cannot write trash info for %s"
+msgstr "не удаётся записать сведения корзины для %s"
+
+#, c-format
+msgid "cannot move %s to the trash: %s"
+msgstr "не удаётся переместить %s в корзину: %s"
+
+msgid "the trash is empty"
+msgstr "корзина пуста"
+
+#, c-format
+msgid "%s has no Path in its trash info"
+msgstr "у %s нет Path в сведениях корзины"
+
+#, c-format
+msgid "%s already exists — not restoring over it"
+msgstr "%s уже существует — восстановление поверх не выполняется"
+
+#, c-format
+msgid "cannot restore %s: %s"
+msgstr "не удаётся восстановить %s: %s"
+
+#, c-format
+msgid "nothing called '%s' is in the trash"
+msgstr "в корзине нет ничего с именем «%s»"
+
+msgid ""
+"emptying the trash is PERMANENT and cannot be undone.\n"
+"  to see what would go:  synfiles trash list\n"
+"  to empty it anyway:    synfiles trash empty --yes"
+msgstr "очистка корзины БЕЗВОЗВРАТНА, и её нельзя отменить.\n  чтобы посмотреть, что исчезнет: synfiles trash list\n  если вы действительно этого хотите: --force"
+
+msgid "trash restore: need the trashed name (see: synfiles trash list)"
+msgstr "trash restore: нужно имя в корзине (см.: synfiles trash list)"
+
+#, c-format
+msgid "trash: unknown option '%s'"
+msgstr "trash: неизвестный параметр «%s»"
+
+#, c-format
+msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
+msgstr "<номер> открыть · u вверх · h домой · c <путь> перейти · / <текст> фильтр"
+
+#, c-format
+msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
+msgstr "i <номер> сведения · z <номер> размер · t <номер> корзина · e <номер> действия"
+
+#, c-format
+msgid "m <num> <path> move · y <num> <path> copy"
+msgstr "m <номер> <путь> переместить · y <номер> <путь> копировать"
+
+#, c-format
+msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
+msgstr "n/p страница · a скрытые · s сортировка · r обратный порядок · g gui · q выход"
+
+#, c-format
+msgid "xdg-open is not installed — cannot open %s"
+msgstr "xdg-open не установлен — не удаётся открыть %s"
+
+#, c-format
+msgid "cannot fork: %s"
+msgstr "не удаётся выполнить fork: %s"
+
+msgid "opened"
+msgstr "открыто"
+
+msgid "synfiles is not on PATH"
+msgstr "synfiles отсутствует в PATH"
+
+msgid "opened the window on"
+msgstr "окно открыто на"
+
+#, c-format
+msgid "cannot go to %s: %s"
+msgstr "не удаётся перейти к %s: %s"
+
+#, c-format
+msgid "%s needs somewhere to %s to"
+msgstr "%s нужно место, куда %s"
+
+#, c-format
+msgid "cannot %s to %s: %s"
+msgstr "не удаётся %s в %s: %s"
+
+#, c-format
+msgid "%s is not a folder — %s puts things INTO a folder"
+msgstr "%s не является папкой — %s помещает вещи В папку"
+
+#, c-format
+msgid ""
+"%s is already here — copy it somewhere else, or use `synfiles copy --"
+"conflict=rename` for a duplicate"
+msgstr "%s уже здесь — скопируйте его в другое место или воспользуйтесь `synfiles copy --conflict=rename`"
+
+#, c-format
+msgid "%s is already in this folder"
+msgstr "%s уже в этой папке"
+
+#, c-format
+msgid "press any key"
+msgstr "нажмите любую клавишу"
+
+#, c-format
+msgid "filter: %s  (/ alone clears it)"
+msgstr "фильтр: %s  (одиночная / очищает его)"
+
+#, c-format
+msgid "no row %ld"
+msgstr "нет строки %ld"
+
+#, c-format
+msgid "c needs a path"
+msgstr "c требует путь"
+
+#, c-format
+msgid "%c needs a row number and a destination"
+msgstr "%c требует номер строки и назначение"
+
+#, c-format
+msgid "%c needs a row number"
+msgstr "%c требует номер строки"
+
+#, c-format
+msgid "unrecognised — see the keys above"
+msgstr "не распознано — см. клавиши выше"
+
+#, c-format
+msgid "%s is no longer there — not undoing"
+msgstr "%s больше нет — отмена не выполняется"
+
+#, c-format
+msgid "%s already exists — not undoing over it"
+msgstr "%s уже существует — отмена поверх не выполняется"
+
+#, c-format
+msgid "cannot put %s back: %s"
+msgstr "не удаётся вернуть %s: %s"
+
+#, c-format
+msgid "%s is not empty any more — leaving it"
+msgstr "%s больше не пуст — оставлено как есть"
+
+#, c-format
+msgid "cannot remove %s: %s"
+msgstr "не удаётся удалить %s: %s"
+
+#, c-format
+msgid "removed %s\n"
+msgstr "удалено: %s\n"
+
+#, c-format
+msgid "nothing knows how to undo '%s'"
+msgstr "ничто не умеет отменять «%s»"
+
+#, c-format
+msgid "undo history cleared\n"
+msgstr "история отмен очищена\n"
+
+#, c-format
+msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
+msgstr "undo: неизвестная подкоманда «%s» — попробуйте list, clear или без аргументов"
+
+msgid "out of memory"
+msgstr "недостаточно памяти"
+
+msgid "HOME is not set"
+msgstr "HOME не задан"
+
+msgid "udisksctl is not installed — install udisks2 to mount from here"
+msgstr "udisksctl не установлен — установите udisks2, чтобы монтировать отсюда"
+
+#, c-format
+msgid "%s: expected a device path like /dev/sdc1"
+msgstr "%s: ожидается путь к устройству вида /dev/sdc1"
+
+msgid "mount: need a device path (see: synfiles volumes)"
+msgstr "mount: нужен путь к устройству (см.: synfiles volumes)"
+
+msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr "unmount: нужен путь к устройству (см.: synfiles volumes)"
+
+#, c-format
+msgid "volumes: unknown option '%s'"
+msgstr "volumes: неизвестный параметр «%s»"
+
+msgid "no volumes"
+msgstr "нет томов"
