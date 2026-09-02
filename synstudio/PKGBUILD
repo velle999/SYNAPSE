@@ -1544,7 +1544,7 @@ pkgver=0.1.0
 #   `%s.pacnew — merge it` came out as `%s.pacnew  merge it`.
 #   pot.sh now refuses the flag and asserts the round-trip, and the assertion
 #   was shown to fire by putting a · in a C label with --omit-header restored.
-pkgrel=49
+pkgrel=50
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
