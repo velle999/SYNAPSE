@@ -113,7 +113,9 @@ msgstr "(неизвестный трек)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "Рабочий стол Wayland, собранный как единое целое: композитор, панель, файлы, параметры и ИИ поставляются вместе и все следуют одной теме."
+msgstr ""
+"Рабочий стол Wayland, собранный как единое целое: композитор, панель, файлы, "
+"параметры и ИИ поставляются вместе и все следуют одной теме."
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -131,15 +133,15 @@ msgstr "Командная строка ИИ"
 msgid "AI Model"
 msgstr "Модель ИИ"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "ИИ-оболочка (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "ПРИЛОЖЕНИЯ"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "ДОСТУПНО ДЛЯ УСТАНОВКИ"
 
@@ -147,7 +149,7 @@ msgstr "ДОСТУПНО ДЛЯ УСТАНОВКИ"
 msgid "About this system"
 msgstr "Об этой системе"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "Стандартные"
 
@@ -159,7 +161,7 @@ msgstr "Настроить"
 msgid "Also answers from the command bar."
 msgstr "Отвечает и из командной строки."
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "Оформление"
 
@@ -211,7 +213,7 @@ msgstr "Автоматически скрывать панель"
 msgid "BAT"
 msgstr "БАТ"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "Назад"
 
@@ -279,6 +281,10 @@ msgstr "Кошачий режим"
 msgid "Check now"
 msgstr "Проверить сейчас"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "Проверка…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "Нажмите для панели Bluetooth · средний щелчок переключает радио"
@@ -317,7 +323,7 @@ msgstr "Часы, системный монитор, музыка, заметк�
 msgid "Confirm"
 msgstr "Подтвердить"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "Панель управления"
 
@@ -329,7 +335,7 @@ msgstr "Не удалось проверить обновления\n"
 msgid "DISCIPLINE"
 msgstr "ДИСЦИПЛИНА"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "Рабочий стол"
 
@@ -341,7 +347,7 @@ msgstr "Виджеты рабочего стола"
 msgid "Desktop switcher"
 msgstr "Переключатель рабочих столов"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "Разработка"
 
@@ -353,7 +359,7 @@ msgstr ""
 "Нет подключения\n"
 "Нажмите, чтобы выбрать сеть"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "Экран"
 
@@ -373,7 +379,7 @@ msgstr "Не показывать это руководство при запу�
 msgid "Done"
 msgstr "Готово"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "Образование"
 
@@ -431,17 +437,18 @@ msgstr "Фокус — %1 · нажмите, чтобы остановить"
 
 #: welcome/pages.js:153
 msgid "GPU, CPU or off. Off masks the sockets, so it holds."
-msgstr "GPU, CPU или выключено. Выключение скрывает сокеты, так что оно и держится."
+msgstr ""
+"GPU, CPU или выключено. Выключение скрывает сокеты, так что оно и держится."
 
 #: welcome/pages.js:170
 msgid "Game Mode"
 msgstr "Игровой режим"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "Игры"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "Графика"
 
@@ -465,7 +472,7 @@ msgstr "Удержано"
 msgid "Idle, sleep, and what the lid does."
 msgstr "Простой, сон и что делает крышка."
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "Ввод"
 
@@ -473,7 +480,7 @@ msgstr "Ввод"
 msgid "Install it"
 msgstr "Установить"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "Интернет"
 
@@ -485,7 +492,7 @@ msgstr "Сочетания клавиш"
 msgid "LAUNCH"
 msgstr "ЗАПУСК"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "Заблокировать экран"
 
@@ -493,7 +500,7 @@ msgstr "Заблокировать экран"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "Блокирует сразу; хранитель экрана блокирует по своему таймеру."
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "Выйти"
 
@@ -529,7 +536,7 @@ msgstr ""
 "Память %1 / %2 ГиБ\n"
 "Нажмите, чтобы открыть диспетчер задач"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "Мультимедиа"
 
@@ -541,7 +548,7 @@ msgstr "ЗАМЕТКА"
 msgid "NOW PLAYING"
 msgstr "СЕЙЧАС ИГРАЕТ"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "Сеть"
 
@@ -553,7 +560,7 @@ msgstr "Сеть + Bluetooth"
 msgid "Network / Wi-Fi"
 msgstr "Сеть / Wi-Fi"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "Настройка сети"
 
@@ -593,11 +600,15 @@ msgstr ""
 "Показаний ещё нет\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "Не из пакета"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "Ничего не воспроизводится"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "Офис"
 
@@ -605,7 +616,9 @@ msgstr "Офис"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "Одна тема двигает весь рабочий стол: панели композитора, панель, виджеты, приложения GTK и Qt и указатель."
+msgstr ""
+"Одна тема двигает весь рабочий стол: панели композитора, панель, виджеты, "
+"приложения GTK и Qt и указатель."
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -615,7 +628,7 @@ msgstr "Открыть обновления"
 msgid "Open in cliamp"
 msgstr "Открыть в cliamp"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "Прочее"
 
@@ -623,7 +636,7 @@ msgstr "Прочее"
 msgid "Output"
 msgstr "Выход"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "ПИТАНИЕ"
 
@@ -631,7 +644,7 @@ msgstr "ПИТАНИЕ"
 msgid "Plugins"
 msgstr "Плагины"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "Питание"
 
@@ -639,7 +652,7 @@ msgstr "Питание"
 msgid "Power Saving"
 msgstr "Энергосбережение"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Перезагрузить"
 
@@ -667,11 +680,11 @@ msgstr "СТАДИЯ"
 msgid "SYS://MONITOR"
 msgstr "SYS://МОНИТОР"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "СИСТЕМА"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "Наука"
 
@@ -683,7 +696,7 @@ msgstr "Экранные фильтры"
 msgid "Screensaver"
 msgstr "Хранитель экрана"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "Искать «%1» во всех источниках…"
 
@@ -691,15 +704,15 @@ msgstr "Искать «%1» во всех источниках…"
 msgid "Search..."
 msgstr "Поиск…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "Параметры"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "Сочетания клавиш"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "Выключить"
 
@@ -707,11 +720,11 @@ msgstr "Выключить"
 msgid "Sign in"
 msgstr "Войти"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Менеджер программ"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "Звук"
 
@@ -734,15 +747,19 @@ msgstr ""
 #: welcome/pages.js:111
 msgid ""
 "Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
-msgstr "Super+1…9 сменить рабочий стол · Super+Tab перебрать раскладку · Super+Q закрыть окно"
+msgstr ""
+"Super+1…9 сменить рабочий стол · Super+Tab перебрать раскладку · Super+Q "
+"закрыть окно"
 
 #: welcome/pages.js:114
 msgid ""
 "Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
 "log out"
-msgstr "Super+E фильтры · Super+O перенести окно на следующий монитор · Super+Shift+Q выйти из сеанса"
+msgstr ""
+"Super+E фильтры · Super+O перенести окно на следующий монитор · "
+"Super+Shift+Q выйти из сеанса"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "Обновления SynapseOS"
 
@@ -750,15 +767,15 @@ msgstr "Обновления SynapseOS"
 msgid "SynapseOS updates: %1"
 msgstr "Обновления SynapseOS: %1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "Система"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "Состояние системы"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "Служебные программы"
 
@@ -774,11 +791,11 @@ msgstr "ТУКСАГОТЧИ"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "Нажмите Super отдельно. Приложения, параметры, выключение."
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "Диспетчер задач"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "Терминал"
 
@@ -826,17 +843,23 @@ msgstr "Есть кот. В этом вся функция."
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "Это руководство живёт на Super+Escape, когда бы оно ни понадобилось, — а палитра сочетаний на Super+/ есть длинная версия второй страницы."
+msgstr ""
+"Это руководство живёт на Super+Escape, когда бы оно ни понадобилось, — а "
+"палитра сочетаний на Super+/ есть длинная версия второй страницы."
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "Наберите команду или попросите её обычными словами."
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "Введите для поиска…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "Удалить %1"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "Обновить систему"
 
@@ -900,7 +923,7 @@ msgstr ""
 "Wi-Fi выключен\n"
 "Средний щелчок включает его обратно"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "Окна"
 
@@ -1094,7 +1117,9 @@ msgstr "syn-update ping   чтобы попробовать сейчас"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd запускает языковую модель на этой машине. Ничто здесь не обращается к сервису, и выключение действительно её останавливает."
+msgstr ""
+"synapd запускает языковую модель на этой машине. Ничто здесь не обращается к "
+"сервису, и выключение действительно её останавливает."
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1104,7 +1129,9 @@ msgstr "syntty, поставляемый терминал."
 msgid ""
 "synui is driven from the keyboard first. These are the handful that get you "
 "everywhere else."
-msgstr "synui управляется прежде всего с клавиатуры. Вот та горстка клавиш, которая приведёт вас куда угодно."
+msgstr ""
+"synui управляется прежде всего с клавиатуры. Вот та горстка клавиш, которая "
+"приведёт вас куда угодно."
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
@@ -1146,6 +1173,6 @@ msgstr "здоров"
 msgid "‹ back"
 msgstr "‹ назад"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  Назад"

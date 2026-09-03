@@ -455,7 +455,7 @@ int cmd_remove(int argc, char **argv)
 	 * config files with it. That is what "uninstall" means to a user and
 	 * leaving orphans behind is how an Arch install rots. */
 	int flags = ALPM_TRANS_FLAG_RECURSE | ALPM_TRANS_FLAG_NOSAVE;
-	bool cascade = false;
+	bool cascade = false, by_owner = false;
 	alpm_list_t *targets = NULL;
 
 	for (int i = 0; i < argc; i++) {
@@ -465,10 +465,77 @@ int cmd_remove(int argc, char **argv)
 			flags &= ~ALPM_TRANS_FLAG_NOSAVE;
 		else if (!strcmp(argv[i], "--cascade"))
 			cascade = true;
+		else if (!strcmp(argv[i], "--owner"))
+			by_owner = true;
 		else if (argv[i][0] == '-')
 			die(_("remove: unknown option '%s'"), argv[i]);
 		else
 			targets = alpm_list_add(targets, argv[i]);
+	}
+
+	/*
+	 * --owner: the arguments are APPLICATIONS, not packages.
+	 *
+	 * This is what the Uninstall row in the start menu and the application
+	 * grid runs. Neither of them knows a package name — one holds a
+	 * freedesktop entry id and the other a .desktop path — and neither can
+	 * afford to find out: the menu would need a subprocess to decide whether
+	 * to draw a row, and the grid lives inside the compositor, where a
+	 * blocking query on a right-click stalls every window on the screen.
+	 *
+	 * ⚠ RESOLVED BEFORE THE CONFIRMATION, never after. The name that comes
+	 * back is what the transaction below prints and asks about, so what
+	 * somebody is shown is the package that will actually be removed — not
+	 * the file they right-clicked, which is one indirection away from it.
+	 *
+	 * ⚠ A FLATPAK IS NOT A pacman TARGET. It is handed to the Flatpak path
+	 * instead of being passed to alpm, which would report it as "not
+	 * installed" — a true sentence about a package name that never existed,
+	 * for an application that is plainly right there on the screen.
+	 */
+	if (by_owner) {
+		alpm_list_t *resolved = NULL;
+		for (alpm_list_t *t = targets; t; t = t->next) {
+			char kind[16], name[256], path[1024];
+
+			/* ⛔ COPIED BEFORE THE LIST IS FREED. The first draft
+			 * passed `t->data` to die() AFTER alpm_list_free(targets)
+			 * on the line above it: a use-after-free that printed an
+			 * empty name for one argument and segfaulted on the next.
+			 * Both were found by running the two refusals, and
+			 * neither is visible in the code by reading it. */
+			char want[512];
+			snprintf(want, sizeof(want), "%s", (const char *)t->data);
+
+			if (!owner_resolve(want, kind, sizeof(kind),
+					   name, sizeof(name), path, sizeof(path))) {
+				alpm_list_free(targets);
+				FREELIST(resolved);
+				die(_("nothing owns '%s' — it did not come from "
+				      "a package, so there is nothing to "
+				      "uninstall"), want);
+			}
+			if (!strcmp(kind, "flatpak")) {
+				char *fargv[] = { (char *)"remove", name, NULL };
+				alpm_list_free(targets);
+				FREELIST(resolved);
+				return cmd_flatpak(2, fargv);
+			}
+			/* Only where they differ. "firefox is firefox" is the
+			 * common case and says nothing; the line exists for
+			 * "Steam Big Picture is steam", where the package about
+			 * to be removed is not the name that was clicked. */
+			/* ⚠ "%s is %s" WAS THE FIRST DRAFT AND IT IS NOT A
+			 * SENTENCE. A format string with no words in it hands
+			 * a translator punctuation and nothing to translate;
+			 * the same mistake syn-arcade's webapps verb made in
+			 * the same week. */
+			if (strcmp(want, name) != 0)
+				info(_("%s comes from the package %s"), want, name);
+			resolved = alpm_list_add(resolved, strdup(name));
+		}
+		alpm_list_free(targets);
+		targets = resolved;
 	}
 	if (!targets)
 		die(_("remove: need at least one package"));

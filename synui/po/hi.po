@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-02 02:07-0500\n"
+"POT-Creation-Date: 2026-09-03 05:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -110,7 +110,7 @@ msgstr "प्रदर्शन"
 msgid "(unknown device)"
 msgstr "(अज्ञात उपकरण)"
 
-#: src/bt.c:451 src/render.c:4439
+#: src/bt.c:451 src/render.c:4502
 msgid "failed"
 msgstr "विफल"
 
@@ -895,7 +895,7 @@ msgstr "बिजली का बटन डॉक के साथ कहाँ
 msgid "Date & time"
 msgstr "दिनांक और समय"
 
-#: src/ctlpanel.c:898 src/render.c:8161
+#: src/ctlpanel.c:898 src/render.c:8224
 msgid "Clock"
 msgstr "घड़ी"
 
@@ -1188,7 +1188,7 @@ msgstr ""
 "कहीं से भी Super+Shift+M। झलक-सूचनाएँ छिपाता है और ध्वनि बंद करता है; गंभीर चेतावनियाँ "
 "फिर भी आती हैं"
 
-#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5416
 msgid "Event sounds"
 msgstr "घटना-ध्वनियाँ"
 
@@ -1268,7 +1268,7 @@ msgstr "हर उस नेटवर्क प्रिंटर को बि�
 msgid "Power saving"
 msgstr "बिजली की बचत"
 
-#: src/ctlpanel.c:1205 src/render.c:8163
+#: src/ctlpanel.c:1205 src/render.c:8226
 msgid "Power"
 msgstr "बिजली"
 
@@ -1949,8 +1949,8 @@ msgstr "डॉक %s %s"
 msgid "on"
 msgstr "चालू"
 
-#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
-#: src/render.c:5370 src/render.c:6171
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4313 src/render.c:5417
+#: src/render.c:5433 src/render.c:6234
 #, c-format
 msgid "off"
 msgstr "बंद"
@@ -2157,7 +2157,7 @@ msgstr "तारीख़ से जमाएँ"
 msgid "Task Manager"
 msgstr "कार्य प्रबंधक"
 
-#: src/deskmenu.c:92 src/render.c:8194
+#: src/deskmenu.c:92 src/render.c:8257
 msgid "Open"
 msgstr "खोलें"
 
@@ -2393,7 +2393,7 @@ msgstr[1] "+%d और पंक्तियाँ"
 msgid "NEURAL OVERLAY"
 msgstr "न्यूरल ओवरले"
 
-#: src/render.c:979 src/render.c:5164
+#: src/render.c:979 src/render.c:5227
 msgid "loaded"
 msgstr "लोड हो गया"
 
@@ -2648,106 +2648,110 @@ msgid_plural "%d applications · type to search · Enter opens · Esc closes"
 msgstr[0] "%d ऐप · खोजने के लिए टाइप करें · Enter खोलता है · Esc बंद करता है"
 msgstr[1] "%d ऐप · खोजने के लिए टाइप करें · Enter खोलता है · Esc बंद करता है"
 
-#: src/render.c:2721
+#: src/render.c:2697
+msgid "Uninstall…"
+msgstr "अनइंस्टॉल…"
+
+#: src/render.c:2784
 msgid "EMOJI"
 msgstr "इमोजी"
 
-#: src/render.c:2743
+#: src/render.c:2806
 msgid "type to search"
 msgstr "खोजने के लिए टाइप करें"
 
-#: src/render.c:2802
+#: src/render.c:2865
 msgid "No emoji match that search."
 msgstr "उस खोज से कोई इमोजी मेल नहीं खाता।"
 
-#: src/render.c:2803
+#: src/render.c:2866
 msgid "Nothing here yet."
 msgstr "यहाँ अभी कुछ नहीं है।"
 
-#: src/render.c:2865
+#: src/render.c:2928
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
 msgstr "खोजने के लिए टाइप करें · क्लिक या Tab श्रेणी · Enter डालें · Esc साफ़/बंद करें"
 
-#: src/render.c:3010
+#: src/render.c:3073
 msgid "CALCULATOR"
 msgstr "कैलकुलेटर"
 
-#: src/render.c:3050
+#: src/render.c:3113
 msgid "Anything you work out is kept here."
 msgstr "आप जो भी हिसाब लगाते हैं वह यहीं रहता है।"
 
-#: src/render.c:3092
+#: src/render.c:3155
 msgid "type an expression"
 msgstr "कोई व्यंजक लिखें"
 
-#: src/render.c:3197
+#: src/render.c:3260
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
 msgstr "Enter हिसाब लगाता है · Ctrl+C नक़ल करता है · Ctrl+V चिपकाता है"
 
-#: src/render.c:3199
+#: src/render.c:3262
 msgid "Up/Down recall the tape · Esc clears, then closes"
 msgstr "ऊपर/नीचे इतिहास लौटाते हैं · Esc साफ़ करता है, फिर बंद"
 
-#: src/render.c:3268
+#: src/render.c:3331
 msgid "EQUALIZER"
 msgstr "इक्वलाइज़र"
 
-#: src/render.c:3277
+#: src/render.c:3340
 msgid "output routed through the equalizer sink"
 msgstr "आउटपुट इक्वलाइज़र से होकर जा रहा है"
 
-#: src/render.c:3278
+#: src/render.c:3341
 msgid "off — audio goes straight to your device"
 msgstr "बंद — आवाज़ सीधे आपके उपकरण पर जाती है"
 
-#: src/render.c:3354
+#: src/render.c:3417
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
 msgstr "ऊपर/नीचे पंक्ति · बाएँ/दाएँ बदलें · r समतल · Esc बंद करें"
 
-#: src/render.c:3424
+#: src/render.c:3487
 msgid "CROP — RECENT IMAGES"
 msgstr "काटें — हाल की छवियाँ"
 
-#: src/render.c:3425
+#: src/render.c:3488
 msgid "IMAGES — RECENT"
 msgstr "छवियाँ — हाल की"
 
-#: src/render.c:3430
+#: src/render.c:3493
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
 msgstr[0] "%d छवि"
 msgstr[1] "%d छवियाँ"
 
-#: src/render.c:3449
+#: src/render.c:3512
 msgid "No images in Pictures, Wallpapers or Downloads."
 msgstr "चित्र, वॉलपेपर या डाउनलोड में कोई छवि नहीं।"
 
-#: src/render.c:3453
+#: src/render.c:3516
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
 msgstr "फिर से खोजने को r दबाएँ, या फ़ाइल सीधे खोलें: synctl dispatch view <पथ>"
 
-#: src/render.c:3510
+#: src/render.c:3573
 msgid "Enter crop · v view · r rescan · Esc close"
 msgstr "Enter काटें · v देखें · r फिर से खोजें · Esc बंद करें"
 
-#: src/render.c:3511
+#: src/render.c:3574
 msgid "Enter view · c crop · r rescan · Esc close"
 msgstr "Enter देखें · c काटें · r फिर से खोजें · Esc बंद करें"
 
-#: src/render.c:3621
+#: src/render.c:3684
 msgid "VIEW"
 msgstr "देखें"
 
-#: src/render.c:3758
+#: src/render.c:3821
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
 msgstr "खींचकर हटाएँ · तीर सरकाते हैं · Shift × 4 · n / p अगली और पिछली"
 
-#: src/render.c:3760
+#: src/render.c:3823
 msgid "← → next and previous · drag or scroll to zoom in"
 msgstr "← → अगली और पिछली · बड़ा करने के लिए खींचें या स्क्रॉल करें"
 
-#: src/render.c:3765
+#: src/render.c:3828
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
@@ -2755,25 +2759,25 @@ msgid ""
 msgstr ""
 "स्क्रॉल से ज़ूम · + − ज़ूम · 0 फ़िट · 1 असली आकार · c काटें · r फिर से खोजें · Esc या × %s"
 
-#: src/render.c:3768 src/render.c:3961
+#: src/render.c:3831 src/render.c:4024
 msgid "back to the list"
 msgstr "सूची पर लौटें"
 
-#: src/render.c:3768
+#: src/render.c:3831
 msgid "close"
 msgstr "बंद करें"
 
-#: src/render.c:3918
+#: src/render.c:3981
 msgid "CROP"
 msgstr "काटें"
 
-#: src/render.c:3951
+#: src/render.c:4014
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
 msgstr "खींचकर चुनें · कोना खींचकर ठीक करें · Tab वह कोना चुनता है जिसे तीर हटाते हैं"
 
-#: src/render.c:3959
+#: src/render.c:4022
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
@@ -2782,490 +2786,490 @@ msgstr ""
 "तीर आकार बदलते हैं · Ctrl+तीर हटाते हैं · Shift × 25 · a सब · Enter नक़ल सहेजता है · "
 "Esc %s"
 
-#: src/render.c:3961
+#: src/render.c:4024
 msgid "cancel"
 msgstr "रद्द करें"
 
-#: src/render.c:4060
+#: src/render.c:4123
 msgid "WINDOW EFFECTS"
 msgstr "विंडो प्रभाव"
 
-#: src/render.c:4060
+#: src/render.c:4123
 msgid "CRT FILTERS"
 msgstr "CRT फ़िल्टर"
 
-#: src/render.c:4067
+#: src/render.c:4130
 msgid "Tab → CRT filters"
 msgstr "Tab → CRT फ़िल्टर"
 
-#: src/render.c:4068
+#: src/render.c:4131
 msgid "Tab → window effects"
 msgstr "Tab → विंडो प्रभाव"
 
-#: src/render.c:4084
+#: src/render.c:4147
 msgid "no GLES renderer · filters unavailable on this display"
 msgstr "कोई GLES रेंडरर नहीं · इस स्क्रीन पर फ़िल्टर उपलब्ध नहीं"
 
-#: src/render.c:4088
+#: src/render.c:4151
 msgid "filters off · Space to turn them on"
 msgstr "फ़िल्टर बंद हैं · स्पेस से चालू करें"
 
-#: src/render.c:4151
+#: src/render.c:4214
 msgid "Up/Down select · Left/Right adjust · Space on/off"
 msgstr "ऊपर/नीचे चुनें · बाएँ/दाएँ बदलें · स्पेस चालू/बंद"
 
-#: src/render.c:4153
+#: src/render.c:4216
 msgid "s save (unsaved changes) · Tab page · Esc close"
 msgstr "s सहेजें (बिना सहेजे बदलाव) · Tab पृष्ठ · Esc बंद करें"
 
-#: src/render.c:4154
+#: src/render.c:4217
 msgid "s save · Tab page · Esc close"
 msgstr "s सहेजें · Tab पृष्ठ · Esc बंद करें"
 
-#: src/render.c:4212
+#: src/render.c:4275
 msgid "DESKTOP WIDGETS"
 msgstr "डेस्कटॉप विजेट"
 
-#: src/render.c:4217
+#: src/render.c:4280
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
 msgstr "हर एक अपने आप · पकड़ से खींचें · स्पेस या तो सब या कुछ नहीं"
 
-#: src/render.c:4263
+#: src/render.c:4326
 msgid "needs cava"
 msgstr "cava चाहिए"
 
-#: src/render.c:4277
+#: src/render.c:4340
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
 msgstr "ऊपर/नीचे चुनें · Enter बदलें · बाएँ/दाएँ बंद/चालू"
 
-#: src/render.c:4279
+#: src/render.c:4342
 msgid "Space all on/off · R reset positions · Esc close"
 msgstr "स्पेस सब चालू/बंद · R जगहें फिर से तय करें · Esc बंद करें"
 
-#: src/render.c:4438
+#: src/render.c:4501
 msgid "done"
 msgstr "हो गया"
 
-#: src/render.c:4440
+#: src/render.c:4503
 msgid "starting"
 msgstr "शुरू हो रहा है"
 
-#: src/render.c:4541
+#: src/render.c:4604
 msgid "Cannot read the model directory."
 msgstr "मॉडल की डायरेक्टरी पढ़ी नहीं जा सकी।"
 
-#: src/render.c:4542
+#: src/render.c:4605
 msgid "No models installed."
 msgstr "कोई मॉडल स्थापित नहीं है।"
 
-#: src/render.c:4550
+#: src/render.c:4613
 msgid "A model may still be loaded · see the message below."
 msgstr "कोई मॉडल अब भी लोड हो सकता है · नीचे का संदेश देखें।"
 
-#: src/render.c:4551
+#: src/render.c:4614
 msgid "Pick one from AVAILABLE below and press Enter."
 msgstr "नीचे «उपलब्ध» में से एक चुनें और Enter दबाएँ।"
 
-#: src/render.c:4619
+#: src/render.c:4682
 msgid "Size"
 msgstr "आकार"
 
-#: src/render.c:4620 src/render.c:4776
+#: src/render.c:4683 src/render.c:4839
 msgid "Params"
 msgstr "पैरामीटर"
 
-#: src/render.c:4621
+#: src/render.c:4684
 msgid "Quant"
 msgstr "क्वांट"
 
-#: src/render.c:4622
+#: src/render.c:4685
 msgid "Context"
 msgstr "संदर्भ"
 
-#: src/render.c:4623
+#: src/render.c:4686
 msgid "Arch"
 msgstr "संरचना"
 
-#: src/render.c:4646
+#: src/render.c:4709
 msgid "no chat template · synapd will guess the turn format"
 msgstr "कोई चैट टेम्पलेट नहीं · synapd बातचीत का रूप अनुमान से तय करेगा"
 
-#: src/render.c:4651
+#: src/render.c:4714
 msgid "unreadable header"
 msgstr "हेडर पढ़ा नहीं जा सका"
 
-#: src/render.c:4674 src/render.c:4810
+#: src/render.c:4737 src/render.c:4873
 msgid "ABOUT"
 msgstr "परिचय"
 
-#: src/render.c:4686 src/render.c:4817
+#: src/render.c:4749 src/render.c:4880
 msgid "Good at"
 msgstr "इसमें अच्छा"
 
-#: src/render.c:4687
+#: src/render.c:4750
 msgid "Speaks"
 msgstr "बोलता है"
 
-#: src/render.c:4688 src/render.c:4779
+#: src/render.c:4751 src/render.c:4842
 msgid "License"
 msgstr "लाइसेंस"
 
-#: src/render.c:4689 src/render.c:4818
+#: src/render.c:4752 src/render.c:4881
 msgid "Based on"
 msgstr "इस पर आधारित"
 
-#: src/render.c:4737
+#: src/render.c:4800
 msgid "this is the model synapd is running"
 msgstr "यही मॉडल synapd चला रहा है"
 
-#: src/render.c:4741
+#: src/render.c:4804
 msgid "[ Enter: load this model ]"
 msgstr "[ Enter: यह मॉडल लोड करें ]"
 
-#: src/render.c:4777
+#: src/render.c:4840
 msgid "Download"
 msgstr "डाउनलोड"
 
-#: src/render.c:4778
+#: src/render.c:4841
 msgid "Quality"
 msgstr "गुणवत्ता"
 
-#: src/render.c:4780
+#: src/render.c:4843
 msgid "Pulls"
 msgstr "डाउनलोड"
 
-#: src/render.c:4861
+#: src/render.c:4924
 msgid "QUANTISATION"
 msgstr "क्वांटाइज़ेशन"
 
-#: src/render.c:4867
+#: src/render.c:4930
 msgid "reading the repository …"
 msgstr "रिपॉज़िटरी पढ़ी जा रही है …"
 
-#: src/render.c:4872
+#: src/render.c:4935
 msgid "could not read the repository"
 msgstr "रिपॉज़िटरी पढ़ी नहीं जा सकी"
 
-#: src/render.c:4877
+#: src/render.c:4940
 msgid "no single-file GGUF here"
 msgstr "यहाँ एक-फ़ाइल वाला GGUF नहीं है"
 
-#: src/render.c:4926 src/render.c:5780
+#: src/render.c:4989 src/render.c:5843
 #, c-format
 msgid "+%d more"
 msgstr "+%d और"
 
-#: src/render.c:4934
+#: src/render.c:4997
 msgid "[ Enter: download ]"
 msgstr "[ Enter: डाउनलोड करें ]"
 
-#: src/render.c:5011
+#: src/render.c:5074
 msgid "AI MODEL"
 msgstr "AI मॉडल"
 
-#: src/render.c:5022
+#: src/render.c:5085
 msgid "Loaded"
 msgstr "लोड हुआ"
 
-#: src/render.c:5023
+#: src/render.c:5086
 msgid "synapd not responding"
 msgstr "synapd जवाब नहीं दे रहा"
 
-#: src/render.c:5026
+#: src/render.c:5089
 msgid "Format"
 msgstr "रूप"
 
-#: src/render.c:5028
+#: src/render.c:5091
 msgid "Profile"
 msgstr "प्रोफ़ाइल"
 
-#: src/render.c:5047
+#: src/render.c:5110
 msgid "legacy"
 msgstr "पुराना"
 
-#: src/render.c:5051
+#: src/render.c:5114
 msgid "GGUF declares no chat template"
 msgstr "GGUF कोई चैट टेम्पलेट नहीं बताता"
 
-#: src/render.c:5056
+#: src/render.c:5119
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
 msgstr "ताप %.2f  ·  top_p %.2f  ·  top_k %d"
 
-#: src/render.c:5064
+#: src/render.c:5127
 msgid "Sampling"
 msgstr "सैंपलिंग"
 
-#: src/render.c:5094
+#: src/render.c:5157
 msgid "search huggingface"
 msgstr "Hugging Face में खोजें"
 
-#: src/render.c:5109
+#: src/render.c:5172
 msgid "INSTALLED"
 msgstr "स्थापित"
 
-#: src/render.c:5109
+#: src/render.c:5172
 msgid "INSTALLED · none"
 msgstr "स्थापित · कोई नहीं"
 
-#: src/render.c:5154
+#: src/render.c:5217
 msgid "delete?"
 msgstr "मिटाएँ?"
 
-#: src/render.c:5160
+#: src/render.c:5223
 msgid "loading …"
 msgstr "लोड हो रहा है …"
 
-#: src/render.c:5220
+#: src/render.c:5283
 msgid "type to search · Enter search · Esc cancel"
 msgstr "खोजने के लिए टाइप करें · Enter खोजता है · Esc रद्द करें"
 
-#: src/render.c:5222
+#: src/render.c:5285
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
 msgstr "ऊपर/नीचे चुनें · बाएँ/दाएँ क्वांटाइज़ेशन · Enter डाउनलोड · / खोज · Esc बंद करें"
 
-#: src/render.c:5228
+#: src/render.c:5291
 msgid "Delete again to confirm · Esc cancels · any move cancels"
 msgstr "पक्का करने के लिए फिर मिटाएँ · Esc रद्द करता है · कोई भी हलचल रद्द कर देती है"
 
-#: src/render.c:5231
+#: src/render.c:5294
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
 msgstr ""
 "ऊपर/नीचे चुनें · Enter लोड करें · Del मिटाएँ · / खोज · R फिर से खोजें · Esc बंद करें"
 
-#: src/render.c:5235
+#: src/render.c:5298
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
 msgstr "डाउनलोड सिस्टम सेवा के रूप में चलते हैं — यह पैनल बंद करने से कोई रद्द नहीं होता"
 
-#: src/render.c:5238
+#: src/render.c:5301
 msgid "switching reloads the model — the AI pauses while it loads"
 msgstr "बदलने पर मॉडल फिर से लोड होता है — तब तक AI रुका रहता है"
 
-#: src/render.c:5299
+#: src/render.c:5362
 msgid "EVENT SOUNDS"
 msgstr "घटना की ध्वनियाँ"
 
-#: src/render.c:5308
+#: src/render.c:5371
 msgid "silent · Space turns event sounds on"
 msgstr "चुप · स्पेस घटना की ध्वनियाँ चालू करता है"
 
-#: src/render.c:5312
+#: src/render.c:5375
 msgid "t plays the selected sound without enabling it"
 msgstr "t चुनी हुई ध्वनि बिना चालू किए बजाता है"
 
-#: src/render.c:5357
+#: src/render.c:5420
 msgid "Volume"
 msgstr "आवाज़"
 
-#: src/render.c:5360
+#: src/render.c:5423
 msgid "Sound theme"
 msgstr "ध्वनि थीम"
 
-#: src/render.c:5364
+#: src/render.c:5427
 #, c-format
 msgid "%s — not a sound theme"
 msgstr "%s — ध्वनि थीम नहीं है"
 
-#: src/render.c:5421
+#: src/render.c:5484
 msgid "not in this theme"
 msgstr "इस थीम में नहीं"
 
-#: src/render.c:5435
+#: src/render.c:5498
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
 msgstr "ऊपर/नीचे चुनें · Enter बदलें · बाएँ/दाएँ बंद/चालू · [ ] ध्वनि चुनें"
 
-#: src/render.c:5437
+#: src/render.c:5500
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
 msgstr "t बजाएँ · स्पेस सभी ध्वनियाँ चालू/बंद · Esc बंद करें · और: synui-sound --help"
 
-#: src/render.c:5492
+#: src/render.c:5555
 msgid "DATE & TIME"
 msgstr "दिनांक और समय"
 
-#: src/render.c:5505
+#: src/render.c:5568
 #, c-format
 msgid "system zone · %s"
 msgstr "सिस्टम का क्षेत्र · %s"
 
-#: src/render.c:5538
+#: src/render.c:5601
 msgid "WORLD CLOCK"
 msgstr "विश्व घड़ी"
 
-#: src/render.c:5563
+#: src/render.c:5626
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
 msgstr "ऊपर/नीचे चुनें · स्पेस बदलें · c कैलेंडर · Esc बंद करें"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "January"
 msgstr "जनवरी"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "February"
 msgstr "फ़रवरी"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "March"
 msgstr "मार्च"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "April"
 msgstr "अप्रैल"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "May"
 msgstr "मई"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "June"
 msgstr "जून"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "July"
 msgstr "जुलाई"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "August"
 msgstr "अगस्त"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "September"
 msgstr "सितंबर"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "October"
 msgstr "अक्तूबर"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "November"
 msgstr "नवंबर"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "December"
 msgstr "दिसंबर"
 
-#: src/render.c:5755
+#: src/render.c:5818
 msgid "loading…"
 msgstr "लोड हो रहा है…"
 
-#: src/render.c:5765
+#: src/render.c:5828
 msgid "nothing on"
 msgstr "कुछ भी चालू नहीं"
 
-#: src/render.c:5770
+#: src/render.c:5833
 #, c-format
 msgid "all day  %s"
 msgstr "पूरे दिन  %s"
 
-#: src/render.c:5792
+#: src/render.c:5855
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
 msgstr "←→ दिन · PgUp/PgDn महीना · t आज · Esc"
 
-#: src/render.c:5881
+#: src/render.c:5944
 msgid "CONTROL PANEL"
 msgstr "नियंत्रण कक्ष"
 
-#: src/render.c:5900
+#: src/render.c:5963
 msgid "Search"
 msgstr "खोजें"
 
-#: src/render.c:5927
+#: src/render.c:5990
 msgid "CATEGORIES"
 msgstr "श्रेणियाँ"
 
-#: src/render.c:5932 src/render.c:6418
+#: src/render.c:5995 src/render.c:6481
 msgid "FIND  "
 msgstr "ढूँढें  "
 
-#: src/render.c:5939 src/render.c:6365
+#: src/render.c:6002 src/render.c:6428
 msgid "KEYBOARD SHORTCUTS"
 msgstr "कीबोर्ड शॉर्टकट"
 
-#: src/render.c:5940
+#: src/render.c:6003
 msgid "SETTINGS"
 msgstr "सेटिंग्स"
 
-#: src/render.c:6015
+#: src/render.c:6078
 msgid "Press a key…"
 msgstr "कोई कुंजी दबाएँ…"
 
-#: src/render.c:6035 src/render.c:6211 src/render.c:6506
+#: src/render.c:6098 src/render.c:6274 src/render.c:6569
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
 msgstr "%d में से %d–%d · PgUp/PgDn"
 
-#: src/render.c:6172
+#: src/render.c:6235
 msgid "none"
 msgstr "कोई नहीं"
 
-#: src/render.c:6221
+#: src/render.c:6284
 msgid "No setting matches that."
 msgstr "उससे कोई सेटिंग मेल नहीं खाती।"
 
-#: src/render.c:6256
+#: src/render.c:6319
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
 msgstr "छाँटने के लिए टाइप करें · ऊपर/नीचे चुनें · Del फिर से तय करें · Esc वापस"
 
-#: src/render.c:6258
+#: src/render.c:6321
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
 msgstr "ऊपर/नीचे श्रेणी · Enter या दायाँ खोलता है · / ढूँढें · Esc बंद करें"
 
-#: src/render.c:6264
+#: src/render.c:6327
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
 msgstr "Super, Ctrl, Alt या Shift दबाएँ · Del से कोई नहीं · Esc रद्द करता है"
 
-#: src/render.c:6265
+#: src/render.c:6328
 msgid "Press the new key for this shortcut · Esc cancels"
 msgstr "इस शॉर्टकट के लिए नई कुंजी दबाएँ · Esc रद्द करता है"
 
-#: src/render.c:6267
+#: src/render.c:6330
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
 msgstr ""
 "F2 फिर से जोड़ें · F3 इसे एक बार दबाने पर ले जाता है · Ctrl+Shift+R सब फिर से तय करें · "
 "Esc वापस"
 
-#: src/render.c:6274
+#: src/render.c:6337
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
 msgstr "बाएँ/दाएँ बदलें · Del चूक · / ढूँढें · Tab स्तंभ · Esc वापस"
 
-#: src/render.c:6281
+#: src/render.c:6344
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
 msgstr "बाएँ/दाएँ बदलें · Enter विवरण · Tab स्तंभ · Esc वापस"
 
-#: src/render.c:6283
+#: src/render.c:6346
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
 msgstr "ऊपर/नीचे चुनें · Enter चलाएँ · / ढूँढें · बायाँ या Esc वापस"
 
-#: src/render.c:6405
+#: src/render.c:6468
 msgid "PRESS THE NEW KEY  "
 msgstr "नई कुंजी दबाएँ  "
 
-#: src/render.c:6412
+#: src/render.c:6475
 #, c-format
 msgid "for %s  ·  Esc cancels"
 msgstr "%s के लिए  ·  Esc रद्द करता है"
 
-#: src/render.c:6431
+#: src/render.c:6494
 msgid "_  a key, what it does, an app, or a command"
 msgstr "_  कोई कुंजी, उसका काम, कोई ऐप या कोई कमांड"
 
-#: src/render.c:6487
+#: src/render.c:6550
 msgid "No shortcut matches that."
 msgstr "उससे कोई शॉर्टकट मेल नहीं खाता।"
 
-#: src/render.c:6524
+#: src/render.c:6587
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
 msgstr "Super, Ctrl, Alt या Shift दबाएँ · Del से कोई नहीं · Esc रद्द करता है"
 
-#: src/render.c:6526
+#: src/render.c:6589
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
 msgstr "Super, Ctrl या Alt वाला कोई भी संयोजन दबाएँ · Esc रद्द करता है"
 
-#: src/render.c:6542
+#: src/render.c:6605
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
@@ -3273,233 +3277,233 @@ msgstr ""
 "छाँटें · Enter चलाता है · F2 कुंजी तय करता है · Del उसे छोड़ता है · F3 एक बार दबाना · "
 "Ctrl+Shift+R फिर से तय करता है"
 
-#: src/render.c:6562
+#: src/render.c:6625
 msgid "The neon night-drive default · apps dark"
 msgstr "नियॉन रात की ड्राइव, चूक की थीम · ऐप गहरे"
 
-#: src/render.c:6563
+#: src/render.c:6626
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
 msgstr "सपाट, आधुनिक, गहरा · ऐप + Dolphin + Firefox गहरे"
 
-#: src/render.c:6564
+#: src/render.c:6627
 msgid "Luna blue, gradient captions · apps beige"
 msgstr "Luna नीला, ढालदार शीर्षक · ऐप बेज"
 
-#: src/render.c:6565
+#: src/render.c:6628
 msgid "Silver 3D bevels, navy titles · apps grey"
 msgstr "चाँदी जैसे उभरे किनारे, गहरे नीले शीर्षक · ऐप स्लेटी"
 
-#: src/render.c:6566
+#: src/render.c:6629
 msgid "Mocha · mauve on soft black · glassy"
 msgstr "मोका · मुलायम काले पर बैंगनी आभा · काँच जैसा"
 
-#: src/render.c:6567
+#: src/render.c:6630
 msgid "Retro warm · orange on brown · glassy"
 msgstr "गर्म रेट्रो · भूरे पर नारंगी · काँच जैसा"
 
-#: src/render.c:6568
+#: src/render.c:6631
 msgid "Storm · blue + purple on navy · glassy"
 msgstr "तूफ़ान · गहरे नीले पर नीला और बैंगनी · काँच जैसा"
 
-#: src/render.c:6569
+#: src/render.c:6632
 msgid "Arctic · frost blue on slate · glassy"
 msgstr "आर्कटिक · स्लेट पर बर्फ़ीला नीला · काँच जैसा"
 
-#: src/render.c:6570
+#: src/render.c:6633
 msgid "Purple + pink on charcoal · glassy"
 msgstr "कोयले जैसे रंग पर बैंगनी और गुलाबी · काँच जैसा"
 
-#: src/render.c:6571
+#: src/render.c:6634
 msgid "Pastel pink, hot-pink titles · apps light"
 msgstr "हल्का गुलाबी, चटख गुलाबी शीर्षक · ऐप हल्के"
 
-#: src/render.c:6572
+#: src/render.c:6635
 msgid "Liquid glass · rounded, translucent · apps light"
 msgstr "तरल काँच · गोल, पारभासी · ऐप हल्के"
 
-#: src/render.c:6573
+#: src/render.c:6636
 msgid "Pinstripes + traffic lights · apps light grey"
 msgstr "महीन धारियाँ और ट्रैफ़िक बत्तियाँ · ऐप हल्के स्लेटी"
 
-#: src/render.c:6574
+#: src/render.c:6637
 msgid "Racing stripes, square boxes · apps grey"
 msgstr "रेसिंग धारियाँ, चौकोर डिब्बे · ऐप स्लेटी"
 
-#: src/render.c:6580
+#: src/render.c:6643
 msgid "House glass · accent off the wallpaper · apps dark"
 msgstr "घर का काँच · वॉलपेपर से लिया रंग · ऐप गहरे"
 
-#: src/render.c:6581
+#: src/render.c:6644
 msgid "The same glass in daylight · apps + Files light"
 msgstr "वही काँच दिन के उजाले में · ऐप और «फ़ाइलें» हल्के"
 
-#: src/render.c:6652
+#: src/render.c:6715
 msgid "THEME MANAGER"
 msgstr "थीम प्रबंधक"
 
-#: src/render.c:6757
+#: src/render.c:6820
 #, c-format
 msgid "Transparency  %d%%"
 msgstr "पारदर्शिता  %d%%"
 
-#: src/render.c:6759
+#: src/render.c:6822
 #, c-format
 msgid "Transparency  off"
 msgstr "पारदर्शिता  बंद"
 
-#: src/render.c:6789
+#: src/render.c:6852
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
 msgstr "ऊपर/नीचे थीम · ←/→ अपारदर्शिता · T पारदर्शिता · Enter लागू करें · Esc"
 
-#: src/render.c:6856
+#: src/render.c:6919
 msgid "CLIPBOARD"
 msgstr "क्लिपबोर्ड"
 
-#: src/render.c:6873
+#: src/render.c:6936
 msgid "Nothing copied yet"
 msgstr "अभी कुछ नक़ल नहीं किया गया"
 
-#: src/render.c:6919
+#: src/render.c:6982
 msgid "Enter copy · Del clear all · Esc close"
 msgstr "Enter नक़ल करें · Del सब मिटाएँ · Esc बंद करें"
 
-#: src/render.c:7260
+#: src/render.c:7323
 msgid "connected"
 msgstr "जुड़ा हुआ"
 
-#: src/render.c:7261
+#: src/render.c:7324
 msgid "paired"
 msgstr "युग्मित"
 
-#: src/render.c:7321
+#: src/render.c:7384
 msgid "BLUETOOTH"
 msgstr "ब्लूटूथ"
 
-#: src/render.c:7334
+#: src/render.c:7397
 msgid "No Bluetooth adapter found"
 msgstr "कोई ब्लूटूथ अडैप्टर नहीं मिला"
 
-#: src/render.c:7339
+#: src/render.c:7402
 msgid "Radio on"
 msgstr "रेडियो चालू"
 
-#: src/render.c:7339
+#: src/render.c:7402
 msgid "Radio off"
 msgstr "रेडियो बंद"
 
-#: src/render.c:7344
+#: src/render.c:7407
 msgid "· scanning…"
 msgstr "· खोज रहे हैं…"
 
-#: src/render.c:7354
+#: src/render.c:7417
 msgid "A device"
 msgstr "कोई उपकरण"
 
-#: src/render.c:7362
+#: src/render.c:7425
 #, c-format
 msgid "Passkey %06u · does it match the device?"
 msgstr "पासकी %06u · क्या यह उपकरण से मेल खाती है?"
 
-#: src/render.c:7365
+#: src/render.c:7428
 #, c-format
 msgid "wants to connect%s"
 msgstr "जुड़ना चाहता है%s"
 
-#: src/render.c:7368
+#: src/render.c:7431
 #, c-format
 msgid "Type %06u on the device, then Enter"
 msgstr "उपकरण पर %06u लिखें, फिर Enter"
 
-#: src/render.c:7371
+#: src/render.c:7434
 #, c-format
 msgid "Enter PIN %s on the device"
 msgstr "उपकरण पर PIN %s डालें"
 
-#: src/render.c:7379
+#: src/render.c:7442
 msgid "Any key to dismiss"
 msgstr "कोई भी कुंजी बंद कर देगी"
 
-#: src/render.c:7380
+#: src/render.c:7443
 msgid "y accept · n reject"
 msgstr "y स्वीकारें · n अस्वीकारें"
 
-#: src/render.c:7393
+#: src/render.c:7456
 msgid "Radio is off · press o"
 msgstr "रेडियो बंद है · o दबाएँ"
 
-#: src/render.c:7398
+#: src/render.c:7461
 #, c-format
 msgid "%d hidden · press a to show"
 msgstr "%d छिपे हुए · दिखाने को a दबाएँ"
 
-#: src/render.c:7401
+#: src/render.c:7464
 msgid "No devices · press s to scan"
 msgstr "कोई उपकरण नहीं · खोजने को s दबाएँ"
 
-#: src/render.c:7438
+#: src/render.c:7501
 msgid "trusted"
 msgstr "विश्वसनीय"
 
-#: src/render.c:7471
+#: src/render.c:7534
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
 msgstr ""
 "Enter जोड़ें · p युग्मित करें · t विश्वास करें · r भुलाएँ · s खोजें · o रेडियो · a कम · Esc"
 
-#: src/render.c:7473
+#: src/render.c:7536
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
 msgstr ""
 "Enter जोड़ें · p युग्मित करें · t विश्वास करें · r भुलाएँ · s खोजें · o रेडियो · a सब · Esc"
 
-#: src/render.c:7633
+#: src/render.c:7696
 msgid "TASK MANAGER"
 msgstr "कार्य प्रबंधक"
 
-#: src/render.c:7639
+#: src/render.c:7702
 #, c-format
 msgid "%d procs · sort: %s%s"
 msgstr "%d प्रक्रियाएँ · क्रम: %s%s"
 
-#: src/render.c:7650
+#: src/render.c:7713
 #, c-format
 msgid "%.0f%%  (%ld cores)"
 msgstr "%.0f%%  (%ld कोर)"
 
-#: src/render.c:7652
+#: src/render.c:7715
 msgid "CPU"
 msgstr "CPU"
 
-#: src/render.c:7663
+#: src/render.c:7726
 msgid "RAM"
 msgstr "रैम"
 
-#: src/render.c:7666 src/render.c:7674
+#: src/render.c:7729 src/render.c:7737
 msgid "GPU"
 msgstr "GPU"
 
-#: src/render.c:7666
+#: src/render.c:7729
 msgid "no GPU telemetry available"
 msgstr "GPU का कोई माप उपलब्ध नहीं"
 
-#: src/render.c:7691 src/render.c:7710
+#: src/render.c:7754 src/render.c:7773
 msgid "VRAM"
 msgstr "VRAM"
 
-#: src/render.c:7705
+#: src/render.c:7768
 msgid "PID"
 msgstr "PID"
 
-#: src/render.c:7707
+#: src/render.c:7770
 msgid "NAME"
 msgstr "नाम"
 
-#: src/render.c:7709
+#: src/render.c:7772
 msgid "MEM"
 msgstr "मेमोरी"
 
-#: src/render.c:7818
+#: src/render.c:7881
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
@@ -3507,52 +3511,52 @@ msgstr ""
 "j/k चलें · किसी पंक्ति पर दायाँ क्लिक · c/m/g/p क्रम · u मेरे · x समाप्त · X ज़बरदस्ती "
 "बंद · Esc बंद करें"
 
-#: src/render.c:7984
+#: src/render.c:8047
 msgid "NEWS"
 msgstr "समाचार"
 
-#: src/render.c:7992
+#: src/render.c:8055
 msgid "all sources"
 msgstr "सभी स्रोत"
 
-#: src/render.c:7993
+#: src/render.c:8056
 msgid "by time"
 msgstr "समय से"
 
-#: src/render.c:7993
+#: src/render.c:8056
 msgid "by source"
 msgstr "स्रोत से"
 
-#: src/render.c:7996
+#: src/render.c:8059
 msgid "never fetched"
 msgstr "कभी नहीं लाए गए"
 
-#: src/render.c:8023
+#: src/render.c:8086
 #, c-format
 msgid "filter: /%s"
 msgstr "छाँट: /%s"
 
-#: src/render.c:8036
+#: src/render.c:8099
 msgid "fetching feeds…"
 msgstr "फ़ीड लाई जा रही हैं…"
 
-#: src/render.c:8037
+#: src/render.c:8100
 msgid "nothing matches this filter"
 msgstr "इस छाँट से कुछ मेल नहीं खाता"
 
-#: src/render.c:8038
+#: src/render.c:8101
 msgid "no feeds answered — check the network, then press r"
 msgstr "किसी फ़ीड ने जवाब नहीं दिया — नेटवर्क देखें, फिर r दबाएँ"
 
-#: src/render.c:8039
+#: src/render.c:8102
 msgid "no items yet — press r to fetch"
 msgstr "अभी कोई प्रविष्टि नहीं — लाने को r दबाएँ"
 
-#: src/render.c:8125
+#: src/render.c:8188
 msgid "type to filter · Enter keep · Esc clear"
 msgstr "छाँटने के लिए टाइप करें · Enter रखें · Esc साफ़ करें"
 
-#: src/render.c:8126
+#: src/render.c:8189
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
@@ -3560,140 +3564,140 @@ msgstr ""
 "j/k चलें · Enter खोलें · o पीछे खोलें · c टिप्पणियाँ · y नक़ल · Tab स्रोत · / खोज · s "
 "क्रम · m पढ़ा हुआ · r ताज़ा करें · Esc बंद करें"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Bottom"
 msgstr "नीचे"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Top"
 msgstr "ऊपर"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Left"
 msgstr "बाएँ"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Right"
 msgstr "दाएँ"
 
-#: src/render.c:8162
+#: src/render.c:8225
 msgid "Apps"
 msgstr "ऐप"
 
-#: src/render.c:8165
+#: src/render.c:8228
 #, c-format
 msgid "Dock Edge: %s"
 msgstr "डॉक का किनारा: %s"
 
-#: src/render.c:8179
+#: src/render.c:8242
 #, c-format
 msgid "%s At: %s"
 msgstr "%s यहाँ: %s"
 
-#: src/render.c:8191
+#: src/render.c:8254
 msgid "Pin to Dock"
 msgstr "डॉक में लगाएँ"
 
-#: src/render.c:8193
+#: src/render.c:8256
 msgid "Unpin from Dock"
 msgstr "डॉक से हटाएँ"
 
-#: src/render.c:8195
+#: src/render.c:8258
 msgid "New Window"
 msgstr "नई विंडो"
 
-#: src/render.c:8196
+#: src/render.c:8259
 msgid "Close Window"
 msgstr "विंडो बंद करें"
 
-#: src/render.c:8197
+#: src/render.c:8260
 msgid "Quit All Windows"
 msgstr "सभी विंडो बंद करें"
 
-#: src/render.c:8201
+#: src/render.c:8264
 msgid "Auto-hide Dock"
 msgstr "डॉक अपने आप छिपाएँ"
 
-#: src/render.c:8202
+#: src/render.c:8265
 msgid "Dock Above Windows"
 msgstr "डॉक विंडो के ऊपर"
 
-#: src/render.c:8203
+#: src/render.c:8266
 msgid "Magnify Icons"
 msgstr "आइकन बड़े करें"
 
-#: src/render.c:8204
+#: src/render.c:8267
 msgid "Show Clock"
 msgstr "घड़ी दिखाएँ"
 
-#: src/render.c:8205
+#: src/render.c:8268
 msgid "Analog Clock Face"
 msgstr "सुइयों वाला डायल"
 
-#: src/render.c:8206
+#: src/render.c:8269
 msgid "Show All Apps Button"
 msgstr "«सभी ऐप» बटन दिखाएँ"
 
-#: src/render.c:8207
+#: src/render.c:8270
 msgid "Show Power Button"
 msgstr "पावर बटन दिखाएँ"
 
-#: src/render.c:8208
+#: src/render.c:8271
 msgid "Dock Settings…"
 msgstr "डॉक सेटिंग्स…"
 
-#: src/render.c:8212
+#: src/render.c:8275
 msgid "Lock Screen"
 msgstr "स्क्रीन बंद करें"
 
-#: src/render.c:8213
+#: src/render.c:8276
 msgid "Log Out"
 msgstr "लॉग आउट"
 
-#: src/render.c:8214
+#: src/render.c:8277
 msgid "Suspend"
 msgstr "निलंबित करें"
 
-#: src/render.c:8215
+#: src/render.c:8278
 msgid "Restart"
 msgstr "फिर से चालू करें"
 
-#: src/render.c:8216
+#: src/render.c:8279
 msgid "Shut Down"
 msgstr "बंद करें"
 
-#: src/render.c:8839
+#: src/render.c:8902
 msgid "minimized"
 msgstr "छोटा किया हुआ"
 
-#: src/render.c:8839 src/render.c:9333 src/render.c:9336
+#: src/render.c:8902 src/render.c:9396 src/render.c:9399
 msgid "MIN"
 msgstr "छोटा"
 
-#: src/render.c:8944
+#: src/render.c:9007
 msgid "WINDOWS"
 msgstr "विंडो"
 
-#: src/render.c:9101
+#: src/render.c:9164
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab अगली · Alt+Shift+Tab पिछली"
 
-#: src/render.c:9218
+#: src/render.c:9281
 msgid "MISSION CONTROL"
 msgstr "विहंगम दृश्य"
 
-#: src/render.c:9223
+#: src/render.c:9286
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "डेस्कटॉप %d · %d विंडो"
 msgstr[1] "डेस्कटॉप %d · %d विंडो"
 
-#: src/render.c:9360
+#: src/render.c:9423
 msgid "Nothing open on this desktop."
 msgstr "इस डेस्कटॉप पर कुछ खुला नहीं है।"
 
-#: src/render.c:9415
+#: src/render.c:9478
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

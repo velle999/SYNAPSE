@@ -716,6 +716,25 @@ msgid ""
 "no packages in %s — is the repository that provides it enabled and synced?"
 msgstr "%s 中没有软件包 — 提供它的软件源是否已启用并同步？"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner：未知选项 '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "没有软件包拥有 '%s' — 它不是来自软件包"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s 是一个 Flatpak"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s 拥有 %s"
+
+msgid "owner: need a file or an application id"
+msgstr "owner：需要一个文件或应用程序 ID"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "在 `synpkg upgrade` 中包含 SynapseOS 组件（需要数分钟编译）"
 
@@ -822,6 +841,16 @@ msgstr "无法安装 %s：%s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove：未知选项「%s」"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "没有软件包拥有 '%s' — 它不是来自软件包，因此没有可卸载的内容"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s 来自软件包 %s"
 
 msgid "remove: need at least one package"
 msgstr "remove：至少需要一个软件包"
@@ -1008,3 +1037,7 @@ msgid ""
 "declined: there is no terminal to confirm on (a front-end must pass --"
 "noconfirm once the user has agreed)"
 msgstr "已拒绝：没有可供确认的终端（用户同意后，前端必须传入 --noconfirm）"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s：需要 %s"

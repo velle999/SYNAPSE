@@ -106,7 +106,9 @@ msgstr "(अज्ञात ट्रैक)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "एक ही टुकड़े में बना Wayland डेस्कटॉप — कंपोज़िटर, पट्टी, फ़ाइलें, सेटिंग्स और एआई सब साथ आते हैं और सब एक ही थीम मानते हैं।"
+msgstr ""
+"एक ही टुकड़े में बना Wayland डेस्कटॉप — कंपोज़िटर, पट्टी, फ़ाइलें, सेटिंग्स और एआई सब साथ आते "
+"हैं और सब एक ही थीम मानते हैं।"
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -124,15 +126,15 @@ msgstr "एआई कमांड बार"
 msgid "AI Model"
 msgstr "एआई मॉडल"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "AI शेल (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "अनुप्रयोग"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "स्थापना के लिए उपलब्ध"
 
@@ -140,7 +142,7 @@ msgstr "स्थापना के लिए उपलब्ध"
 msgid "About this system"
 msgstr "इस सिस्टम के बारे में"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "सहायक उपकरण"
 
@@ -152,7 +154,7 @@ msgstr "समायोजित करें"
 msgid "Also answers from the command bar."
 msgstr "कमांड बार से भी उत्तर देता है।"
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "रूप-रंग"
 
@@ -204,7 +206,7 @@ msgstr "पट्टी अपने आप छिपाएँ"
 msgid "BAT"
 msgstr "बैट"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "वापस"
 
@@ -272,6 +274,10 @@ msgstr "बिल्ली मोड"
 msgid "Check now"
 msgstr "अभी जाँचें"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "जाँच हो रही है…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "ब्लूटूथ पैनल के लिए क्लिक करें · मध्य-क्लिक रेडियो बदलता है"
@@ -309,7 +315,7 @@ msgstr "घड़ी, सिस्टम मॉनिटर, संगीत, �
 msgid "Confirm"
 msgstr "पुष्टि करें"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "नियंत्रण कक्ष"
 
@@ -321,7 +327,7 @@ msgstr "अद्यतन की जाँच नहीं हो सकी\n"
 msgid "DISCIPLINE"
 msgstr "अनुशासन"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "डेस्कटॉप"
 
@@ -333,7 +339,7 @@ msgstr "डेस्कटॉप विजेट"
 msgid "Desktop switcher"
 msgstr "डेस्कटॉप बदलने वाला"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "विकास"
 
@@ -345,7 +351,7 @@ msgstr ""
 "असंबद्ध\n"
 "नेटवर्क चुनने के लिए क्लिक करें"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "प्रदर्शन"
 
@@ -365,7 +371,7 @@ msgstr "शुरू होने पर यह मार्गदर्शि�
 msgid "Done"
 msgstr "हो गया"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "शिक्षा"
 
@@ -429,11 +435,11 @@ msgstr "जीपीयू, सीपीयू या बंद। बंद क
 msgid "Game Mode"
 msgstr "गेम मोड"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "खेल"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "ग्राफ़िक्स"
 
@@ -457,7 +463,7 @@ msgstr "रोके गए"
 msgid "Idle, sleep, and what the lid does."
 msgstr "निष्क्रियता, निद्रा, और ढक्कन बंद करने पर क्या हो।"
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "इनपुट"
 
@@ -465,7 +471,7 @@ msgstr "इनपुट"
 msgid "Install it"
 msgstr "इसे स्थापित करें"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "इंटरनेट"
 
@@ -477,7 +483,7 @@ msgstr "कीबोर्ड शॉर्टकट"
 msgid "LAUNCH"
 msgstr "चालू करें"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "स्क्रीन बंद करें"
 
@@ -485,7 +491,7 @@ msgstr "स्क्रीन बंद करें"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "अभी लॉक करता है; स्क्रीनसेवर अपने समय पर लॉक करता है।"
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "लॉग आउट"
 
@@ -521,7 +527,7 @@ msgstr ""
 "मेमोरी %1 / %2 GiB\n"
 "कार्य प्रबंधक के लिए क्लिक करें"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "मल्टीमीडिया"
 
@@ -533,7 +539,7 @@ msgstr "नोट"
 msgid "NOW PLAYING"
 msgstr "अभी चल रहा है"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "नेटवर्क"
 
@@ -545,7 +551,7 @@ msgstr "नेटवर्क + ब्लूटूथ"
 msgid "Network / Wi-Fi"
 msgstr "नेटवर्क / वाई-फ़ाई"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "नेटवर्क सेटअप"
 
@@ -585,11 +591,15 @@ msgstr ""
 "अभी कोई माप नहीं\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "किसी पैकेज से नहीं है"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "कुछ नहीं चल रहा"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "कार्यालय"
 
@@ -597,7 +607,9 @@ msgstr "कार्यालय"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "एक थीम पूरे डेस्कटॉप को बदल देती है: कंपोज़िटर के पैनल, पट्टी, विजेट, GTK और Qt के ऐप्लिकेशन, और कर्सर भी।"
+msgstr ""
+"एक थीम पूरे डेस्कटॉप को बदल देती है: कंपोज़िटर के पैनल, पट्टी, विजेट, GTK और Qt के "
+"ऐप्लिकेशन, और कर्सर भी।"
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -607,7 +619,7 @@ msgstr "अद्यतन खोलें"
 msgid "Open in cliamp"
 msgstr "cliamp में खोलें"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "अन्य"
 
@@ -615,7 +627,7 @@ msgstr "अन्य"
 msgid "Output"
 msgstr "आउटपुट"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "बिजली"
 
@@ -623,7 +635,7 @@ msgstr "बिजली"
 msgid "Plugins"
 msgstr "प्लगइन"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "बिजली"
 
@@ -631,7 +643,7 @@ msgstr "बिजली"
 msgid "Power Saving"
 msgstr "बिजली की बचत"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "फिर से चालू करें"
 
@@ -659,11 +671,11 @@ msgstr "अवस्था"
 msgid "SYS://MONITOR"
 msgstr "SYS://मॉनिटर"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "सिस्टम"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "विज्ञान"
 
@@ -675,7 +687,7 @@ msgstr "स्क्रीन फ़िल्टर"
 msgid "Screensaver"
 msgstr "स्क्रीनसेवर"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "हर स्रोत में “%1” खोजें…"
 
@@ -683,15 +695,15 @@ msgstr "हर स्रोत में “%1” खोजें…"
 msgid "Search..."
 msgstr "खोजें…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "सेटिंग्स"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "शॉर्टकट"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "बंद करें"
 
@@ -699,11 +711,11 @@ msgstr "बंद करें"
 msgid "Sign in"
 msgstr "साइन इन करें"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "सॉफ़्टवेयर प्रबंधक"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "ध्वनि"
 
@@ -734,7 +746,7 @@ msgid ""
 "log out"
 msgstr "Super+E फ़िल्टर · Super+O खिड़की अगले मॉनिटर पर · Super+Shift+Q लॉग आउट"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "SynapseOS अद्यतन"
 
@@ -742,15 +754,15 @@ msgstr "SynapseOS अद्यतन"
 msgid "SynapseOS updates: %1"
 msgstr "SynapseOS अद्यतन: %1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "सिस्टम"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "सिस्टम स्थिति"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "सिस्टम उपकरण"
 
@@ -766,11 +778,11 @@ msgstr "टक्सागोची"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "अकेले Super दबाइए। ऐप्लिकेशन, सेटिंग्स, बिजली।"
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "कार्य प्रबंधक"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "टर्मिनल"
 
@@ -818,17 +830,23 @@ msgstr "एक बिल्ली है। पूरी सुविधा ब�
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "यह मार्गदर्शिका जब चाहें Super+Escape पर मिल जाएगी — और Super+/ की शॉर्टकट सूची दूसरे पन्ने का लंबा रूप है।"
+msgstr ""
+"यह मार्गदर्शिका जब चाहें Super+Escape पर मिल जाएगी — और Super+/ की शॉर्टकट सूची "
+"दूसरे पन्ने का लंबा रूप है।"
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "कोई कमांड टाइप कीजिए, या आम भाषा में माँग लीजिए।"
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "खोजने के लिए लिखें…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "%1 अनइंस्टॉल करें"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "सिस्टम अद्यतन करें"
 
@@ -892,7 +910,7 @@ msgstr ""
 "वाई-फ़ाई बंद है\n"
 "फिर से चालू करने के लिए मध्य-क्लिक करें"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "खिड़कियाँ"
 
@@ -1086,7 +1104,9 @@ msgstr "syn-update ping   अभी आज़माने के लिए"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd इसी मशीन पर एक भाषा मॉडल चलाता है। यहाँ कुछ भी किसी सेवा को नहीं बुलाता, और बंद करने पर वह सचमुच रुक जाता है।"
+msgstr ""
+"synapd इसी मशीन पर एक भाषा मॉडल चलाता है। यहाँ कुछ भी किसी सेवा को नहीं बुलाता, और "
+"बंद करने पर वह सचमुच रुक जाता है।"
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1096,7 +1116,9 @@ msgstr "syntty, साथ आने वाला टर्मिनल।"
 msgid ""
 "synui is driven from the keyboard first. These are the handful that get you "
 "everywhere else."
-msgstr "synui सबसे पहले कीबोर्ड से चलता है। ये वही मुट्ठी भर कुंजियाँ हैं जो आपको बाकी हर जगह पहुँचा देती हैं।"
+msgstr ""
+"synui सबसे पहले कीबोर्ड से चलता है। ये वही मुट्ठी भर कुंजियाँ हैं जो आपको बाकी हर जगह "
+"पहुँचा देती हैं।"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
@@ -1138,6 +1160,6 @@ msgstr "स्वस्थ"
 msgid "‹ back"
 msgstr "‹ वापस"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  वापस"

@@ -682,6 +682,25 @@ msgid ""
 "no packages in %s — is the repository that provides it enabled and synced?"
 msgstr ""
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr ""
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr ""
+
+#, c-format
+msgid "%s owns %s"
+msgstr ""
+
+msgid "owner: need a file or an application id"
+msgstr ""
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr ""
 
@@ -787,6 +806,16 @@ msgstr ""
 
 #, c-format
 msgid "remove: unknown option '%s'"
+msgstr ""
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr ""
+
+#, c-format
+msgid "%s comes from the package %s"
 msgstr ""
 
 msgid "remove: need at least one package"

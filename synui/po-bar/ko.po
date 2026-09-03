@@ -100,7 +100,9 @@ msgstr "(알 수 없는 트랙)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "한 덩어리로 만든 Wayland 데스크톱입니다. 컴포지터, 막대, 파일, 설정, AI가 함께 배포되고 모두 같은 테마를 따릅니다."
+msgstr ""
+"한 덩어리로 만든 Wayland 데스크톱입니다. 컴포지터, 막대, 파일, 설정, AI가 함"
+"께 배포되고 모두 같은 테마를 따릅니다."
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -118,15 +120,15 @@ msgstr "AI 명령 막대"
 msgid "AI Model"
 msgstr "AI 모델"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "AI 셸 (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "응용 프로그램"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "설치 가능"
 
@@ -134,7 +136,7 @@ msgstr "설치 가능"
 msgid "About this system"
 msgstr "이 시스템 정보"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "보조 도구"
 
@@ -146,7 +148,7 @@ msgstr "조정"
 msgid "Also answers from the command bar."
 msgstr "명령 막대에서도 답합니다."
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "모양"
 
@@ -198,7 +200,7 @@ msgstr "막대 자동 숨기기"
 msgid "BAT"
 msgstr "배터리"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "뒤로"
 
@@ -266,6 +268,10 @@ msgstr "고양이 모드"
 msgid "Check now"
 msgstr "지금 확인"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "확인 중…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "클릭하면 블루투스 패널 · 가운데 클릭은 무선을 전환합니다"
@@ -302,7 +308,7 @@ msgstr "시계, 시스템 모니터, 음악, 메모 — 바탕화면 위에."
 msgid "Confirm"
 msgstr "확인"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "제어판"
 
@@ -314,7 +320,7 @@ msgstr "업데이트를 확인할 수 없습니다\n"
 msgid "DISCIPLINE"
 msgstr "훈육"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "바탕화면"
 
@@ -326,7 +332,7 @@ msgstr "바탕화면 위젯"
 msgid "Desktop switcher"
 msgstr "바탕화면 전환기"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "개발"
 
@@ -338,7 +344,7 @@ msgstr ""
 "연결 끊김\n"
 "클릭하여 네트워크 선택"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "디스플레이"
 
@@ -358,7 +364,7 @@ msgstr "시작할 때 이 안내를 표시하지 않기"
 msgid "Done"
 msgstr "완료"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "교육"
 
@@ -422,11 +428,11 @@ msgstr "GPU, CPU 또는 끄기. 끄면 소켓까지 가리므로 정말로 멈�
 msgid "Game Mode"
 msgstr "게임 모드"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "게임"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "그래픽"
 
@@ -450,7 +456,7 @@ msgstr "보류됨"
 msgid "Idle, sleep, and what the lid does."
 msgstr "유휴, 절전, 그리고 덮개를 닫았을 때의 동작."
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "입력"
 
@@ -458,7 +464,7 @@ msgstr "입력"
 msgid "Install it"
 msgstr "설치하기"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "인터넷"
 
@@ -470,7 +476,7 @@ msgstr "키보드 단축키"
 msgid "LAUNCH"
 msgstr "실행"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "화면 잠금"
 
@@ -478,7 +484,7 @@ msgstr "화면 잠금"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "지금 잠급니다. 화면 보호기는 자체 타이머로 잠급니다."
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "로그아웃"
 
@@ -514,7 +520,7 @@ msgstr ""
 "메모리 %1 / %2 GiB\n"
 "클릭하면 작업 관리자"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "멀티미디어"
 
@@ -526,7 +532,7 @@ msgstr "메모"
 msgid "NOW PLAYING"
 msgstr "재생 중"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "네트워크"
 
@@ -538,7 +544,7 @@ msgstr "네트워크 + 블루투스"
 msgid "Network / Wi-Fi"
 msgstr "네트워크 / 와이파이"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "네트워크 설정"
 
@@ -578,11 +584,15 @@ msgstr ""
 "아직 측정값이 없습니다\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "패키지에서 온 것이 아닙니다"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "재생 중인 항목이 없습니다"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "오피스"
 
@@ -590,7 +600,9 @@ msgstr "오피스"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "테마 하나가 데스크톱 전체를 움직입니다. 컴포지터의 패널, 막대, 위젯, GTK와 Qt 앱, 그리고 커서까지."
+msgstr ""
+"테마 하나가 데스크톱 전체를 움직입니다. 컴포지터의 패널, 막대, 위젯, GTK와 "
+"Qt 앱, 그리고 커서까지."
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -600,7 +612,7 @@ msgstr "업데이트 열기"
 msgid "Open in cliamp"
 msgstr "cliamp에서 열기"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "기타"
 
@@ -608,7 +620,7 @@ msgstr "기타"
 msgid "Output"
 msgstr "출력"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "전원"
 
@@ -616,7 +628,7 @@ msgstr "전원"
 msgid "Plugins"
 msgstr "플러그인"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "전원"
 
@@ -624,7 +636,7 @@ msgstr "전원"
 msgid "Power Saving"
 msgstr "절전"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "다시 시작"
 
@@ -652,11 +664,11 @@ msgstr "단계"
 msgid "SYS://MONITOR"
 msgstr "SYS://모니터"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "시스템"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "과학"
 
@@ -668,7 +680,7 @@ msgstr "화면 필터"
 msgid "Screensaver"
 msgstr "화면 보호기"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "모든 소스에서 “%1” 검색…"
 
@@ -676,15 +688,15 @@ msgstr "모든 소스에서 “%1” 검색…"
 msgid "Search..."
 msgstr "검색…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "설정"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "단축키"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "시스템 종료"
 
@@ -692,11 +704,11 @@ msgstr "시스템 종료"
 msgid "Sign in"
 msgstr "로그인"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "소프트웨어 관리자"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "소리"
 
@@ -727,7 +739,7 @@ msgid ""
 "log out"
 msgstr "Super+E 필터 · Super+O 창을 다음 모니터로 · Super+Shift+Q 로그아웃"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "SynapseOS 업데이트"
 
@@ -735,15 +747,15 @@ msgstr "SynapseOS 업데이트"
 msgid "SynapseOS updates: %1"
 msgstr "SynapseOS 업데이트: %1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "시스템"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "시스템 상태"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "시스템 도구"
 
@@ -759,11 +771,11 @@ msgstr "턱스아치"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "Super만 살짝 누르세요. 앱, 설정, 전원."
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "작업 관리자"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "터미널"
 
@@ -811,17 +823,23 @@ msgstr "고양이가 있습니다. 그게 기능의 전부입니다."
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "이 안내는 언제든 Super+Escape로 다시 볼 수 있고, Super+/의 단축키 목록은 두 번째 쪽의 자세한 판입니다."
+msgstr ""
+"이 안내는 언제든 Super+Escape로 다시 볼 수 있고, Super+/의 단축키 목록은 두 "
+"번째 쪽의 자세한 판입니다."
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "명령을 입력하거나, 평범한 말로 물어보세요."
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "입력하여 검색…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "%1 제거"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "시스템 업데이트"
 
@@ -885,7 +903,7 @@ msgstr ""
 "Wi-Fi가 꺼져 있습니다\n"
 "가운데 클릭하면 다시 켜집니다"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "창"
 
@@ -1079,7 +1097,9 @@ msgstr "syn-update ping   지금 시도하려면"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd는 이 컴퓨터에서 언어 모델을 돌립니다. 여기서 외부 서비스를 부르는 것은 없고, 끄면 정말로 멈춥니다."
+msgstr ""
+"synapd는 이 컴퓨터에서 언어 모델을 돌립니다. 여기서 외부 서비스를 부르는 것"
+"은 없고, 끄면 정말로 멈춥니다."
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1089,7 +1109,8 @@ msgstr "syntty, 기본 제공 터미널입니다."
 msgid ""
 "synui is driven from the keyboard first. These are the handful that get you "
 "everywhere else."
-msgstr "synui는 무엇보다 키보드로 다룹니다. 아래 몇 개면 다른 어디든 갈 수 있습니다."
+msgstr ""
+"synui는 무엇보다 키보드로 다룹니다. 아래 몇 개면 다른 어디든 갈 수 있습니다."
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
@@ -1131,6 +1152,6 @@ msgstr "건강함"
 msgid "‹ back"
 msgstr "‹ 뒤로"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  뒤로"

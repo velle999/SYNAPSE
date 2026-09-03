@@ -572,6 +572,133 @@ static void test_paging(void)
 
 /* ── main ────────────────────────────────────────────────── */
 
+/* ── The right-click Uninstall menu ──────────────────────── */
+
+/*
+ * The menu is one row and that row removes software, so what is worth pinning
+ * is not that it draws — it is everything that must NOT happen around it.
+ *
+ * ⚠ THE HIT RECTS BELONG TO THE RENDERER, which is stubbed out in this file —
+ * so both tables are seeded here to stand in for it. That is honest about what
+ * is being tested and what is not: the geometry below is INVENTED, so nothing
+ * here can catch a menu drawn somewhere other than where it is clickable. That
+ * is bar_module_menu.sh's kind of question and it needs a compositor. What this
+ * file can prove is the behaviour around the rows — that right does not launch,
+ * that the menu is modal to the keyboard and the pointer, what it closes on,
+ * and, through the spawn stub, exactly what the row would run.
+ */
+static void test_uninstall_menu(void)
+{
+    syn_server_t *s = server();
+    appgrid_show(s);
+    CHECK(s->appgrid.filt_count > 0, "the sandbox grid is empty");
+
+    /* Standing in for synui_render_appgrid(): one 100x100 tile at the origin,
+     * and one menu row beside it at x=200 so a click can be aimed at either
+     * without ambiguity. */
+    hit_set_panel(&s->appgrid.hit, 0, 0, 1920, 1080);
+    hit_set_grid(&s->appgrid.hit, 0, 0, 100, 100, 4, 4);
+    hit_set_first(&s->appgrid.hit, 0);
+
+    /* The entry the menu will be about, and the path it must carry. The id
+     * folds '/' to '-' and cannot be inverted, so an entry without a path has
+     * nothing exact to hand `synpkg remove --owner`. */
+    syn_app_entry_t *e = &s->appgrid.apps[s->appgrid.filt[0]];
+    CHECK(e->path[0] == '/', "the entry kept no .desktop path (%s)", e->path);
+
+    /* ── it opens on RIGHT, and does not launch ── */
+    spawn_count = 0;
+    appgrid_click(s, 10, 10, BTN_RIGHT, 0);
+    CHECK(s->appgrid.menu_open, "right-click did not open the menu");
+    hit_add_spot(&s->appgrid.menu_hit, 200, 200, 260, APPGRID_MENU_ROW_H);
+    CHECK(spawn_count == 0,
+           "right-click LAUNCHED the application as well as opening its menu");
+    CHECK(s->appgrid.menu_app == s->appgrid.filt[0],
+           "the menu is about the wrong application");
+
+    /* ⛔ MODAL FOR THE KEYBOARD. Left to fall through, typing would go on
+     * editing the search box behind an open menu — refiltering the grid, and
+     * with it moving the application the menu is about out from under it. */
+    int before = s->appgrid.filt_count;
+    type(s, "zzzz");
+    CHECK(s->appgrid.search_len == 0,
+           "typing reached the search box through an open menu");
+    CHECK(s->appgrid.filt_count == before,
+           "the grid refiltered under its own context menu");
+
+    /* Escape closes the MENU and nothing else: the search and the page it was
+     * opened on are still there. */
+    appgrid_key(s, XKB_KEY_Escape, 0);
+    CHECK(!s->appgrid.menu_open, "Escape did not close the menu");
+    CHECK(s->appgrid.visible, "Escape closed the whole grid, not just the menu");
+
+    /* ⛔ A CLICK THAT MISSES THE MENU MUST NOT REACH THE TILE UNDER IT. With
+     * the menu up, falling through would launch an application from a menu
+     * whose only row uninstalls one — the worst possible pair of outcomes to
+     * get one pixel apart. */
+    appgrid_click(s, 10, 10, BTN_RIGHT, 0);
+    CHECK(s->appgrid.menu_open, "the menu did not reopen");
+    hit_add_spot(&s->appgrid.menu_hit, 200, 200, 260, APPGRID_MENU_ROW_H);
+    spawn_count = 0;
+    /* (10,10) is ON A TILE and OFF the menu — exactly the click that must not
+     * fall through. */
+    appgrid_click(s, 10, 10, BTN_LEFT, 0);
+    CHECK(spawn_count == 0, "a click past the menu launched the tile behind it");
+    CHECK(!s->appgrid.menu_open, "a click past the menu did not close it");
+
+    /* And the row itself, clicked where the renderer said it is. */
+    appgrid_click(s, 10, 10, BTN_RIGHT, 0);
+    hit_add_spot(&s->appgrid.menu_hit, 200, 200, 260, APPGRID_MENU_ROW_H);
+    spawn_count = 0; last_spawn[0] = '\0';
+    appgrid_click(s, 210, 210, BTN_LEFT, 0);
+    CHECK(spawn_count == 1, "clicking the Uninstall row ran nothing");
+    CHECK(strstr(last_spawn, "synpkg remove --owner") != NULL,
+           "the clicked row does not run `synpkg remove --owner`: %s", last_spawn);
+
+    /* ── what the row actually runs ── */
+    appgrid_show(s);
+    hit_set_panel(&s->appgrid.hit, 0, 0, 1920, 1080);
+    hit_set_grid(&s->appgrid.hit, 0, 0, 100, 100, 4, 4);
+    hit_set_first(&s->appgrid.hit, 0);
+    appgrid_click(s, 10, 10, BTN_RIGHT, 0);
+    hit_add_spot(&s->appgrid.menu_hit, 200, 200, 260, APPGRID_MENU_ROW_H);
+    s->appgrid.menu_hover = 0;
+    spawn_count = 0;
+    last_spawn[0] = '\0';
+    appgrid_key(s, XKB_KEY_Return, 0);
+    CHECK(spawn_count == 1, "the Uninstall row ran nothing");
+    CHECK(strstr(last_spawn, "synpkg remove --owner") != NULL,
+           "the row does not run `synpkg remove --owner`: %s", last_spawn);
+    /* ⛔ NEVER --noconfirm. synpkg's remove is -Rns: it takes the unneeded
+     * dependencies and the config files with it. It has to print that list and
+     * ask, and a front-end that silenced the question would uninstall an
+     * application and everything it dragged out on one right-click and one
+     * left click. */
+    CHECK(strstr(last_spawn, "--noconfirm") == NULL,
+           "the Uninstall row passes --noconfirm: %s", last_spawn);
+    /* A terminal, and one that HOLDS: a refusal ("nothing owns this") has to be
+     * read, not flashed. */
+    CHECK(strstr(last_spawn, "syntty --hold") != NULL,
+           "the row does not open a terminal that stays up: %s", last_spawn);
+    CHECK(!s->appgrid.menu_open && !s->appgrid.visible,
+           "the grid stayed up over the terminal it just opened");
+
+    /* ⛔ THE PATH IS SHELL-QUOTED. synui_spawn runs /bin/sh -c, and a .desktop
+     * file is trivially attacker-named — it survives a download or a USB stick.
+     * The quoting is what stops `game'; curl … | sh; '.desktop` from executing
+     * the moment somebody right-clicks it. */
+    {
+        char *q = strstr(last_spawn, "--owner ");
+        CHECK(q != NULL && q[8] == '\'',
+               "the .desktop path is not single-quoted: %s", last_spawn);
+    }
+
+    /* Reopening the grid must not bring a stale menu back with it. */
+    appgrid_show(s);
+    CHECK(!s->appgrid.menu_open,
+           "the grid reopened with the previous menu still up");
+}
+
 int main(void)
 {
     snprintf(scratch, sizeof(scratch), "%s", "/tmp/appgridtestXXXXXX");
@@ -604,6 +731,7 @@ int main(void)
     test_order();
     test_search_and_keys();
     test_paging();
+    test_uninstall_menu();
 
     rm_rf(scratch);
 

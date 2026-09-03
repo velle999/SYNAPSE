@@ -100,7 +100,9 @@ msgstr "(未知曲目)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "一体打造的 Wayland 桌面——合成器、状态栏、文件、设置和 AI 一同发布，也都听同一套主题。"
+msgstr ""
+"一体打造的 Wayland 桌面——合成器、状态栏、文件、设置和 AI 一同发布，也都听同一"
+"套主题。"
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -118,15 +120,15 @@ msgstr "AI 命令栏"
 msgid "AI Model"
 msgstr "AI 模型"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "AI 外壳 (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "应用程序"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "可供安装"
 
@@ -134,7 +136,7 @@ msgstr "可供安装"
 msgid "About this system"
 msgstr "关于本系统"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "附件"
 
@@ -146,7 +148,7 @@ msgstr "调整"
 msgid "Also answers from the command bar."
 msgstr "也可以从命令栏得到答案。"
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "外观"
 
@@ -198,7 +200,7 @@ msgstr "自动隐藏任务栏"
 msgid "BAT"
 msgstr "电池"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "返回"
 
@@ -266,6 +268,10 @@ msgstr "猫咪模式"
 msgid "Check now"
 msgstr "立即检查"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "正在检查…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "点击打开蓝牙面板 · 中键点击切换无线开关"
@@ -302,7 +308,7 @@ msgstr "时钟、系统监视、音乐、便笺——就放在桌面上。"
 msgid "Confirm"
 msgstr "确定"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "控制面板"
 
@@ -314,7 +320,7 @@ msgstr "无法检查更新\n"
 msgid "DISCIPLINE"
 msgstr "管教"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "桌面"
 
@@ -326,7 +332,7 @@ msgstr "桌面小部件"
 msgid "Desktop switcher"
 msgstr "桌面切换器"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "开发"
 
@@ -338,7 +344,7 @@ msgstr ""
 "已断开\n"
 "点击选择网络"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "显示"
 
@@ -358,7 +364,7 @@ msgstr "启动时不再显示本指南"
 msgid "Done"
 msgstr "完成"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "教育"
 
@@ -422,11 +428,11 @@ msgstr "GPU、CPU 或关闭。关闭会把套接字一并屏蔽，所以是真�
 msgid "Game Mode"
 msgstr "游戏模式"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "游戏"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "图形"
 
@@ -450,7 +456,7 @@ msgstr "已保留"
 msgid "Idle, sleep, and what the lid does."
 msgstr "空闲、睡眠，以及合盖时的动作。"
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "输入"
 
@@ -458,7 +464,7 @@ msgstr "输入"
 msgid "Install it"
 msgstr "安装它"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "互联网"
 
@@ -470,7 +476,7 @@ msgstr "键盘快捷键"
 msgid "LAUNCH"
 msgstr "启动"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "锁定屏幕"
 
@@ -478,7 +484,7 @@ msgstr "锁定屏幕"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "立刻锁定；屏保按自己的计时器锁定。"
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "注销"
 
@@ -514,7 +520,7 @@ msgstr ""
 "内存 %1 / %2 GiB\n"
 "点击打开任务管理器"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "多媒体"
 
@@ -526,7 +532,7 @@ msgstr "便签"
 msgid "NOW PLAYING"
 msgstr "正在播放"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "网络"
 
@@ -538,7 +544,7 @@ msgstr "网络 + 蓝牙"
 msgid "Network / Wi-Fi"
 msgstr "网络 / Wi-Fi"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "网络设置"
 
@@ -578,11 +584,15 @@ msgstr ""
 "尚无读数\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "不是来自软件包"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "没有正在播放的内容"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "办公"
 
@@ -590,7 +600,9 @@ msgstr "办公"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "一套主题带动整个桌面：合成器的面板、状态栏、小部件、GTK 与 Qt 应用，还有光标。"
+msgstr ""
+"一套主题带动整个桌面：合成器的面板、状态栏、小部件、GTK 与 Qt 应用，还有光"
+"标。"
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -600,7 +612,7 @@ msgstr "打开更新"
 msgid "Open in cliamp"
 msgstr "在 cliamp 中打开"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "其他"
 
@@ -608,7 +620,7 @@ msgstr "其他"
 msgid "Output"
 msgstr "输出"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "电源"
 
@@ -616,7 +628,7 @@ msgstr "电源"
 msgid "Plugins"
 msgstr "插件"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "电源"
 
@@ -624,7 +636,7 @@ msgstr "电源"
 msgid "Power Saving"
 msgstr "省电"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "重启"
 
@@ -652,11 +664,11 @@ msgstr "阶段"
 msgid "SYS://MONITOR"
 msgstr "SYS://监视器"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "系统"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "科学"
 
@@ -668,7 +680,7 @@ msgstr "屏幕滤镜"
 msgid "Screensaver"
 msgstr "屏幕保护"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "在所有来源中搜索“%1”…"
 
@@ -676,15 +688,15 @@ msgstr "在所有来源中搜索“%1”…"
 msgid "Search..."
 msgstr "搜索…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "设置"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "快捷键"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "关机"
 
@@ -692,11 +704,11 @@ msgstr "关机"
 msgid "Sign in"
 msgstr "登录"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "软件管理器"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "声音"
 
@@ -727,7 +739,7 @@ msgid ""
 "log out"
 msgstr "Super+E 滤镜 · Super+O 把窗口移到下一个显示器 · Super+Shift+Q 注销"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "SynapseOS 更新"
 
@@ -735,15 +747,15 @@ msgstr "SynapseOS 更新"
 msgid "SynapseOS updates: %1"
 msgstr "SynapseOS 更新：%1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "系统"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "系统状态"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "系统工具"
 
@@ -759,11 +771,11 @@ msgstr "企鹅宠物"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "单独轻按 Super 键。应用、设置、电源。"
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "任务管理器"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "终端"
 
@@ -811,17 +823,23 @@ msgstr "有一只猫。这就是全部功能。"
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长版。"
+msgstr ""
+"想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长"
+"版。"
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "输入一条命令，或者用大白话问一条。"
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "输入以搜索…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "卸载 %1"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "更新系统"
 
@@ -885,7 +903,7 @@ msgstr ""
 "Wi-Fi 已关闭\n"
 "中键点击可重新开启"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "窗口"
 
@@ -1079,7 +1097,9 @@ msgstr "syn-update ping   立即重试"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd 在本机上运行语言模型。这里没有任何东西会去调用外部服务，关掉它是真的停下来。"
+msgstr ""
+"synapd 在本机上运行语言模型。这里没有任何东西会去调用外部服务，关掉它是真的停"
+"下来。"
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1131,6 +1151,6 @@ msgstr "健康"
 msgid "‹ back"
 msgstr "‹ 返回"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  返回"

@@ -933,6 +933,12 @@ extern const int              syn_emoji_cat_count;
 #define APPGRID_COLS       6
 #define APPGRID_ROWS       4
 #define APPGRID_PER_PAGE  (APPGRID_COLS * APPGRID_ROWS)
+
+/* The right-click menu's geometry, shared because appgrid.c hit-tests it and
+ * render.c draws and clamps it — two files that have to agree to the pixel. */
+#define APPGRID_MENU_ROWS_N  1    /* just Uninstall; see appgrid_menu_open() */
+#define APPGRID_MENU_H      26    /* the application-name strip above the rows */
+#define APPGRID_MENU_ROW_H  30
 #define APPGRID_SEARCH_MAX 64
 
 /* One application, as read off its .desktop file. */
@@ -945,6 +951,11 @@ typedef struct {
     char name[128];        /* Name=, or the id when the file has none */
     char exec[256];        /* Exec= with the field codes stripped */
     char icon_hint[128];   /* Icon=; resolved lazily, see `icon` */
+    /* Where the entry was read from. The id folds '/' to '-' and cannot be
+     * inverted, so the Uninstall row would have nothing exact to hand `synpkg
+     * remove --owner` without this — and "which package is this application"
+     * has to be asked about a FILE. */
+    char path[512];
     int  terminal;         /* Terminal=true — launched through the terminal */
     /* Decoded on the first frame this entry is actually DRAWN on, not at scan
      * time: a box with 300 applications would otherwise decode 300 PNGs and
@@ -976,6 +987,33 @@ typedef struct {
 
     int selected;   /* index into filt[], NOT into apps[] */
     int page;       /* which page of APPGRID_PER_PAGE is on screen */
+
+    /* ── the right-click menu on a tile ──
+     *
+     * Drawn into the grid's OWN cairo buffer rather than as a second scene
+     * tree: the grid is already one full-screen surface that swallows every
+     * click, so a menu anywhere else would have to be raised above it and
+     * hit-tested ahead of it. One buffer, one hit test, one z-order.
+     *
+     * `menu_app` is an index into apps[], NOT into filt[] — the search can be
+     * retyped while the menu is up, and an index into the filtered list would
+     * then point at a different application than the one right-clicked. */
+    int  menu_open;
+    int  menu_app;
+    int  menu_x, menu_y;   /* WHERE THE POINTER WAS — unclamped, see below */
+    int  menu_hover;       /* row under the pointer, or -1 */
+    /* ⚠ ITS OWN HIT TABLE, not the grid's. `hit` holds one spot per TILE and
+     * hit_index_at() on it answers "which application"; the menu's rows are a
+     * different question that happens to be asked at the same coordinates.
+     * Sharing one table would mean a click on the menu resolving to whatever
+     * tile is behind it — which, on a menu whose only row is Uninstall, is the
+     * worst possible pair of answers to get one pixel apart.
+     *
+     * The rects are added by the RENDERER, beside the drawing, because a panel
+     * keeping private geometry for a thing it also draws is how a drawn item
+     * and a clickable item drift apart. render.c also does the clamping, since
+     * it is the half that knows the output size. */
+    syn_hit_t menu_hit;
 
     syn_hit_t hit;
 } syn_appgrid_t;

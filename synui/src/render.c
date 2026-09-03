@@ -2639,6 +2639,69 @@ void synui_render_appgrid(syn_server_t *s)
         syn_show_text(cr, foot);
     }
 
+    /* ---- the right-click menu ----
+     *
+     * LAST, so it draws over the tiles it was opened on top of, and its
+     * clickable rects are hit spots added HERE, beside the drawing — the rule
+     * the task manager's menu states: a panel keeping private geometry for a
+     * thing it also draws is how a drawn item and a clickable item drift apart.
+     *
+     * The clamp is here for the same reason. appgrid.c records where the
+     * pointer was and nothing else; this is the half that knows both how big
+     * the menu is and how big the output is.
+     */
+    if (g->menu_open && g->menu_app >= 0 && g->menu_app < g->count) {
+        const syn_app_entry_t *me = &g->apps[g->menu_app];
+        int mw = 260;
+        int mh = APPGRID_MENU_H + 8 + APPGRID_MENU_ROWS_N * APPGRID_MENU_ROW_H;
+        int mx, my;
+
+        hit_place_popup(g->menu_x, g->menu_y, mw, mh, ob.width, ob.height,
+                        &mx, &my);
+        hit_clear(&g->menu_hit);
+
+        /* A plate of its own rather than the grid's wash: the menu lands on
+         * tiles and has to be readable against whichever ones it covers. */
+        cairo_set_source_rgba(cr, 0.09, 0.09, 0.13, 0.98);
+        cairo_rectangle(cr, mx, my, mw, mh);
+        cairo_fill(cr);
+        set_accent(cr, 0.55);
+        cairo_set_line_width(cr, 1.0);
+        cairo_rectangle(cr, mx + 0.5, my + 0.5, mw - 1, mh - 1);
+        cairo_stroke(cr);
+
+        /* Which application this is about, because the menu covers the tile it
+         * was opened on — without the name, a menu offering to uninstall
+         * something is a menu that has hidden WHAT. */
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_LABEL, 0.85);
+        cairo_move_to(cr, mx + 14, my + 20);
+        syn_show_text(cr, me->name);
+
+        for (int i = 0; i < APPGRID_MENU_ROWS_N; i++) {
+            int iy = my + APPGRID_MENU_H + 4 + i * APPGRID_MENU_ROW_H;
+            if (i == g->menu_hover) {
+                set_accent(cr, 0.22);
+                cairo_rectangle(cr, mx + 3, iy, mw - 6, APPGRID_MENU_ROW_H);
+                cairo_fill(cr);
+            }
+            cairo_set_font_size(cr, 13);
+            /* ⚠ THE DESTRUCTIVE ROW SAYS SO IN COLOUR, and THROUGH set_hue
+             * rather than as a literal rgba — the rule the task manager's Force
+             * Quit row learned: a bare pale red is drawn at the same absolute
+             * colour whatever is underneath, and measured 1.29:1 against 95's
+             * silver. set_hue runs it through the same corrector the accent
+             * goes through, so it stays red and stays legible. */
+            set_hue(cr, 0.95, 0.55, 0.55, 1.0);
+            cairo_move_to(cr, mx + 14, iy + 18);
+            syn_show_text(cr, _("Uninstall…"));
+
+            hit_add_spot(&g->menu_hit, mx + 3, iy, mw - 6, APPGRID_MENU_ROW_H);
+        }
+    } else {
+        hit_clear(&g->menu_hit);
+    }
+
     overlay_surface_pop(&saved_ink);
     cairo_destroy(cr);
     set_scene_buffer(&s->appgrid_ui.text_buf, s->appgrid_ui.tree, buf);

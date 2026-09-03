@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* ── shared row renderer ────────────────────────────────────────────────── */
 
@@ -851,4 +854,256 @@ int cmd_groups(int argc, char **argv)
 	int rc = argc > 0 ? groups_packages(h, argv[0]) : groups_list(h);
 	sp_alpm_free(h);
 	return rc;
+}
+
+/* ── owner: which package is an application ─────────────────────────────── */
+
+/*
+ * WHY THIS VERB EXISTS. Both of SynapseOS's application lists — the start menu
+ * and the full-screen grid — grew an Uninstall row, and neither of them can
+ * answer the question that row depends on. The menu is quickshell, whose
+ * DesktopEntry exposes an `id` and no path at all; the grid is inside the
+ * compositor, where a blocking `pacman -Qo` on a right-click stalls every
+ * window on the machine. So the question is asked ONCE, here, by the tool that
+ * already holds an alpm handle.
+ *
+ * ⛔ AND NOT BY PARSING `pacman -Qo`. Two reasons, both of which have cost this
+ * project a round already: pacman's output is translated, so a German box
+ * hands back "Kein Paket besitzt" and any grep for "No package owns" reads it
+ * as a package name; and -Qo prints the SAME message for a file that does not
+ * exist as for one that exists and is unowned, so it cannot tell "you have not
+ * installed that" from "that is not a package".
+ */
+
+/* Every directory an application entry can live in, in XDG precedence order —
+ * the user's own first, so a local override resolves to the local file exactly
+ * as the launcher that drew the row resolved it. */
+static int desktop_dirs(char dirs[][512], int max)
+{
+	int n = 0;
+	const char *home = getenv("HOME");
+	const char *xdh  = getenv("XDG_DATA_HOME");
+	const char *xdd  = getenv("XDG_DATA_DIRS");
+
+	if (xdh && *xdh)
+		snprintf(dirs[n++], 512, "%s/applications", xdh);
+	else if (home && *home)
+		snprintf(dirs[n++], 512, "%s/.local/share/applications", home);
+
+	if (!xdd || !*xdd)
+		xdd = "/usr/local/share:/usr/share";
+	char buf[1024];
+	snprintf(buf, sizeof(buf), "%s", xdd);
+	for (char *p = strtok(buf, ":"); p && n < max; p = strtok(NULL, ":"))
+		if (*p)
+			snprintf(dirs[n++], 512, "%s/applications", p);
+	return n;
+}
+
+/*
+ * A freedesktop entry id back to the file it came from.
+ *
+ * ⚠ THE ID FOLDS '/' TO '-' AND THE FOLD IS LOSSY. `wine-Programs-Foo` could be
+ * wine/Programs/Foo.desktop or a flat file literally called that, and an
+ * application called "re-volt" folds to a name with a hyphen in it that no
+ * directory produced. So this does not try to invert the fold: it walks the
+ * tree and re-derives each candidate's id the same way the scanner did, and
+ * compares. Slower, and it cannot be wrong.
+ */
+static bool desktop_find(const char *dir, const char *rel, const char *id,
+			 char *out, size_t n, int depth)
+{
+	if (depth > 4)
+		return false;
+	DIR *d = opendir(dir);
+	if (!d)
+		return false;
+
+	struct dirent *de;
+	bool found = false;
+	while (!found && (de = readdir(d))) {
+		if (de->d_name[0] == '.')
+			continue;
+
+		char child[512], full[1024];
+		if (rel[0]) snprintf(child, sizeof(child), "%s/%s", rel, de->d_name);
+		else        snprintf(child, sizeof(child), "%s", de->d_name);
+		snprintf(full, sizeof(full), "%s/%s", dir, de->d_name);
+
+		struct stat st;
+		if (stat(full, &st) != 0)
+			continue;
+		if (S_ISDIR(st.st_mode)) {
+			found = desktop_find(full, child, id, out, n, depth + 1);
+			continue;
+		}
+		size_t len = strlen(child);
+		if (len < 9 || strcmp(child + len - 8, ".desktop") != 0)
+			continue;
+
+		char cand[512];
+		snprintf(cand, sizeof(cand), "%.*s", (int)(len - 8), child);
+		for (char *c = cand; *c; c++)
+			if (*c == '/')
+				*c = '-';
+		if (strcmp(cand, id) == 0) {
+			snprintf(out, n, "%s", full);
+			found = true;
+		}
+	}
+	closedir(d);
+	return found;
+}
+
+/* Resolve an argument that is either a path or a desktop entry id. */
+static bool owner_target(const char *arg, char *out, size_t n)
+{
+	if (strchr(arg, '/')) {           /* already a path */
+		snprintf(out, n, "%s", arg);
+		return access(out, F_OK) == 0;
+	}
+
+	/* A bare name ending in .desktop is an id with the suffix left on — what
+	 * somebody types after tab-completing in a directory. Take it either
+	 * way rather than refusing over a suffix. */
+	char id[256];
+	snprintf(id, sizeof(id), "%s", arg);
+	size_t l = strlen(id);
+	if (l > 8 && strcmp(id + l - 8, ".desktop") == 0)
+		id[l - 8] = '\0';
+
+	char dirs[16][512];
+	int nd = desktop_dirs(dirs, 16);
+	for (int i = 0; i < nd; i++)
+		if (desktop_find(dirs[i], "", id, out, n, 0))
+			return true;
+	return false;
+}
+
+/*
+ * A Flatpak exports its .desktop into a well-known tree, and no pacman package
+ * owns it. Recognised so the answer is "this is a Flatpak, and here is its
+ * application id" rather than the flat "nothing owns it" — which would be true
+ * and useless, and would leave the Uninstall row unable to act on the one class
+ * of application it most obviously should.
+ */
+static bool flatpak_appid(const char *path, char *out, size_t n)
+{
+	const char *m = strstr(path, "/flatpak/exports/share/applications/");
+	if (!m)
+		return false;
+	const char *base = strrchr(path, '/');
+	if (!base)
+		return false;
+	base++;
+	size_t l = strlen(base);
+	if (l <= 8 || strcmp(base + l - 8, ".desktop") != 0)
+		return false;
+	snprintf(out, n, "%.*s", (int)(l - 8), base);
+	return true;
+}
+
+/*
+ * The installed package owning `path`, or NULL.
+ *
+ * alpm's filelists are stored RELATIVE to the install root with no leading
+ * slash, so the needle has the root prefix taken off it first. Comparing the
+ * absolute path against them matches nothing at all — silently, since "nothing
+ * owns it" is a legitimate answer and looks identical to this bug.
+ */
+static alpm_pkg_t *owner_of(alpm_handle_t *h, const char *path)
+{
+	const char *root = alpm_option_get_root(h);
+	size_t rl = root ? strlen(root) : 0;
+	const char *rel = path;
+
+	if (rl && strncmp(path, root, rl) == 0)
+		rel = path + rl;
+	while (*rel == '/')
+		rel++;
+
+	for (alpm_list_t *i = alpm_db_get_pkgcache(alpm_get_localdb(h)); i; i = i->next) {
+		alpm_pkg_t *p = i->data;
+		alpm_filelist_t *fl = alpm_pkg_get_files(p);
+		if (!fl)
+			continue;
+		for (size_t k = 0; k < fl->count; k++)
+			if (strcmp(fl->files[k].name, rel) == 0)
+				return p;
+	}
+	return NULL;
+}
+
+/*
+ * Resolve one argument all the way to something removable.
+ *
+ * `kind` comes back as "pacman" or "flatpak" and `name` as what the matching
+ * remove command takes. Shared with `remove --owner`, which is the whole reason
+ * it is a function rather than the body of cmd_owner: an Uninstall button that
+ * resolved the target differently from the query that decided to show it would
+ * offer to remove one thing and remove another.
+ */
+bool owner_resolve(const char *arg, char *kind, size_t kn, char *name, size_t nn,
+		   char *path, size_t pn)
+{
+	if (!owner_target(arg, path, pn))
+		return false;
+
+	if (flatpak_appid(path, name, nn)) {
+		snprintf(kind, kn, "flatpak");
+		return true;
+	}
+
+	alpm_handle_t *h = sp_alpm_init(false);
+	alpm_pkg_t *p = owner_of(h, path);
+	bool ok = false;
+	if (p) {
+		snprintf(kind, kn, "pacman");
+		snprintf(name, nn, "%s", alpm_pkg_get_name(p));
+		ok = true;
+	}
+	sp_alpm_free(h);
+	return ok;
+}
+
+int cmd_owner(int argc, char **argv)
+{
+	bool quiet = false;
+	int targets = 0, missed = 0;
+
+	for (int i = 0; i < argc; i++)
+		if (!strcmp(argv[i], "--quiet") || !strcmp(argv[i], "-q"))
+			quiet = true;
+		else if (argv[i][0] == '-')
+			die(_("owner: unknown option '%s'"), argv[i]);
+
+	for (int i = 0; i < argc; i++) {
+		if (argv[i][0] == '-')
+			continue;
+		targets++;
+
+		char kind[16], name[256], path[1024];
+		if (!owner_resolve(argv[i], kind, sizeof(kind), name, sizeof(name),
+				   path, sizeof(path))) {
+			missed++;
+			if (!quiet)
+				warn(_("nothing owns '%s' — it is not from a "
+				       "package"), argv[i]);
+			continue;
+		}
+		/* ⚠ THE NAME ALONE ON stdout, so a caller can use it as an
+		 * argument without cutting a field out of a sentence. Anything
+		 * explanatory goes to stderr through info(). */
+		printf("%s\n", name);
+		if (!quiet) {
+			if (strcmp(kind, "flatpak") == 0)
+				info(_("%s is a Flatpak"), name);
+			else
+				info(_("%s owns %s"), name, path);
+		}
+	}
+
+	if (!targets)
+		die(_("owner: need a file or an application id"));
+	return missed ? 1 : 0;
 }

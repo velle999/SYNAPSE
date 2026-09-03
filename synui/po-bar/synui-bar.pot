@@ -120,15 +120,15 @@ msgstr ""
 msgid "AI Model"
 msgstr ""
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr ""
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr ""
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr ""
 
@@ -136,7 +136,7 @@ msgstr ""
 msgid "About this system"
 msgstr ""
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr ""
 
@@ -148,7 +148,7 @@ msgstr ""
 msgid "Also answers from the command bar."
 msgstr ""
 
-#: StartMenu.qml:626
+#: StartMenu.qml:627
 #: welcome/pages.js:125
 msgid "Appearance"
 msgstr ""
@@ -202,7 +202,7 @@ msgstr ""
 msgid "BAT"
 msgstr ""
 
-#: StartMenu.qml:733
+#: StartMenu.qml:734
 #: welcome/Guide.qml:460
 msgid "Back"
 msgstr ""
@@ -264,6 +264,10 @@ msgstr ""
 msgid "Check now"
 msgstr ""
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr ""
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr ""
@@ -300,8 +304,8 @@ msgstr ""
 msgid "Confirm"
 msgstr ""
 
-#: StartMenu.qml:523
-#: StartMenu.qml:625
+#: StartMenu.qml:524
+#: StartMenu.qml:626
 #: welcome/pages.js:88
 #: welcome/pages.js:188
 msgid "Control Panel"
@@ -315,7 +319,7 @@ msgstr ""
 msgid "DISCIPLINE"
 msgstr ""
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr ""
 
@@ -327,7 +331,7 @@ msgstr ""
 msgid "Desktop switcher"
 msgstr ""
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr ""
 
@@ -335,7 +339,7 @@ msgstr ""
 msgid "Disconnected\nClick to pick a network"
 msgstr ""
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr ""
 
@@ -357,7 +361,7 @@ msgstr ""
 msgid "Done"
 msgstr ""
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr ""
 
@@ -423,11 +427,11 @@ msgstr ""
 msgid "Game Mode"
 msgstr ""
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr ""
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr ""
 
@@ -451,7 +455,7 @@ msgstr ""
 msgid "Idle, sleep, and what the lid does."
 msgstr ""
 
-#: StartMenu.qml:629
+#: StartMenu.qml:630
 #: components/Mixer.qml:323
 msgid "Input"
 msgstr ""
@@ -460,7 +464,7 @@ msgstr ""
 msgid "Install it"
 msgstr ""
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr ""
 
@@ -473,8 +477,8 @@ msgstr ""
 msgid "LAUNCH"
 msgstr ""
 
-#: StartMenu.qml:640
-#: StartMenu.qml:757
+#: StartMenu.qml:641
+#: StartMenu.qml:758
 #: welcome/pages.js:174
 msgid "Lock Screen"
 msgstr ""
@@ -483,7 +487,7 @@ msgstr ""
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr ""
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr ""
 
@@ -516,7 +520,7 @@ msgstr ""
 msgid "Memory %1 / %2 GiB\nClick for the task manager"
 msgstr ""
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr ""
 
@@ -528,7 +532,7 @@ msgstr ""
 msgid "NOW PLAYING"
 msgstr ""
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr ""
 
@@ -540,7 +544,7 @@ msgstr ""
 msgid "Network / Wi-Fi"
 msgstr ""
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr ""
 
@@ -576,11 +580,15 @@ msgstr ""
 msgid "No reading yet\nsynctl weather on"
 msgstr ""
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr ""
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr ""
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr ""
 
@@ -596,7 +604,7 @@ msgstr ""
 msgid "Open in cliamp"
 msgstr ""
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr ""
 
@@ -604,7 +612,7 @@ msgstr ""
 msgid "Output"
 msgstr ""
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr ""
 
@@ -612,7 +620,7 @@ msgstr ""
 msgid "Plugins"
 msgstr ""
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr ""
 
@@ -620,7 +628,7 @@ msgstr ""
 msgid "Power Saving"
 msgstr ""
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr ""
 
@@ -649,11 +657,11 @@ msgstr ""
 msgid "SYS://MONITOR"
 msgstr ""
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr ""
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr ""
 
@@ -665,7 +673,7 @@ msgstr ""
 msgid "Screensaver"
 msgstr ""
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr ""
 
@@ -673,16 +681,16 @@ msgstr ""
 msgid "Search..."
 msgstr ""
 
-#: StartMenu.qml:492
-#: StartMenu.qml:744
+#: StartMenu.qml:493
+#: StartMenu.qml:745
 msgid "Settings"
 msgstr ""
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr ""
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr ""
 
@@ -690,11 +698,11 @@ msgstr ""
 msgid "Sign in"
 msgstr ""
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr ""
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr ""
 
@@ -718,7 +726,7 @@ msgstr ""
 msgid "Super+E filters · Super+O move window to the next monitor · Super+Shift+Q log out"
 msgstr ""
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr ""
 
@@ -726,17 +734,17 @@ msgstr ""
 msgid "SynapseOS updates: %1"
 msgstr ""
 
-#: StartMenu.qml:493
-#: StartMenu.qml:634
+#: StartMenu.qml:494
+#: StartMenu.qml:635
 msgid "System"
 msgstr ""
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr ""
 
-#: StartMenu.qml:495
-#: StartMenu.qml:742
+#: StartMenu.qml:496
+#: StartMenu.qml:743
 msgid "System Tools"
 msgstr ""
 
@@ -752,12 +760,12 @@ msgstr ""
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr ""
 
-#: StartMenu.qml:524
+#: StartMenu.qml:525
 #: welcome/pages.js:108
 msgid "Task Manager"
 msgstr ""
 
-#: StartMenu.qml:525
+#: StartMenu.qml:526
 #: welcome/pages.js:84
 msgid "Terminal"
 msgstr ""
@@ -810,11 +818,15 @@ msgstr ""
 msgid "Type a command, or ask for one in plain English."
 msgstr ""
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr ""
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr ""
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr ""
 
@@ -874,7 +886,7 @@ msgstr ""
 msgid "Wi-Fi is switched off\nMiddle-click to turn it back on"
 msgstr ""
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr ""
 
@@ -1114,7 +1126,7 @@ msgstr ""
 msgid "‹ back"
 msgstr ""
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr ""
 

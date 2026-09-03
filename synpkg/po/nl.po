@@ -767,6 +767,25 @@ msgstr ""
 "geen pakketten in %s — is de pakketbron die het levert ingeschakeld en "
 "gesynchroniseerd?"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: onbekende optie '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "niets bezit '%s' — het komt niet uit een pakket"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s is een Flatpak"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s bezit %s"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: een bestand of een toepassings-id is nodig"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "SynapseOS-onderdelen meenemen in `synpkg upgrade` (minuten compileren)"
 
@@ -881,6 +900,16 @@ msgstr "kan %s niet installeren: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: onbekende optie '%s'"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "niets bezit '%s' — het komt niet uit een pakket, dus er valt niets te verwijderen"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s komt uit het pakket %s"
 
 msgid "remove: need at least one package"
 msgstr "remove: er is minstens één pakket nodig"
@@ -1074,3 +1103,7 @@ msgid ""
 msgstr ""
 "geweigerd: er is geen terminal om op te bevestigen (een schil moet --"
 "noconfirm meegeven zodra de gebruiker akkoord is)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: vereist %s"

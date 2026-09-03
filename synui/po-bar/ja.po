@@ -100,7 +100,9 @@ msgstr "(不明なトラック)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "ひとつづきに作られた Wayland デスクトップです。コンポジター、バー、ファイル、設定、AI がまとめて配布され、すべてが同じテーマに従います。"
+msgstr ""
+"ひとつづきに作られた Wayland デスクトップです。コンポジター、バー、ファイル、"
+"設定、AI がまとめて配布され、すべてが同じテーマに従います。"
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -118,15 +120,15 @@ msgstr "AI コマンドバー"
 msgid "AI Model"
 msgstr "AI モデル"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "AI シェル (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "アプリケーション"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "インストール可能"
 
@@ -134,7 +136,7 @@ msgstr "インストール可能"
 msgid "About this system"
 msgstr "このシステムについて"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "アクセサリ"
 
@@ -146,7 +148,7 @@ msgstr "調整"
 msgid "Also answers from the command bar."
 msgstr "コマンドバーからも答えます。"
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "外観"
 
@@ -198,7 +200,7 @@ msgstr "バーを自動的に隠す"
 msgid "BAT"
 msgstr "電池"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "戻る"
 
@@ -266,6 +268,10 @@ msgstr "ねこモード"
 msgid "Check now"
 msgstr "今すぐ確認"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "確認中…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "クリックで Bluetooth パネル · 中クリックで無線を切り替え"
@@ -302,7 +308,7 @@ msgstr "時計、システムモニター、音楽、メモ — デスクトッ�
 msgid "Confirm"
 msgstr "確定"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "コントロールパネル"
 
@@ -314,7 +320,7 @@ msgstr "更新を確認できませんでした\n"
 msgid "DISCIPLINE"
 msgstr "しつけ"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "デスクトップ"
 
@@ -326,7 +332,7 @@ msgstr "デスクトップウィジェット"
 msgid "Desktop switcher"
 msgstr "デスクトップ切り替え"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "開発"
 
@@ -338,7 +344,7 @@ msgstr ""
 "未接続\n"
 "クリックでネットワークを選択"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "ディスプレイ"
 
@@ -358,7 +364,7 @@ msgstr "起動時にこのガイドを表示しない"
 msgid "Done"
 msgstr "完了"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "教育"
 
@@ -422,11 +428,11 @@ msgstr "GPU、CPU、またはオフ。オフはソケットごと隠すので、
 msgid "Game Mode"
 msgstr "ゲームモード"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "ゲーム"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "グラフィックス"
 
@@ -450,7 +456,7 @@ msgstr "保留中"
 msgid "Idle, sleep, and what the lid does."
 msgstr "待機、スリープ、そして蓋を閉じたときの動作。"
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "入力"
 
@@ -458,7 +464,7 @@ msgstr "入力"
 msgid "Install it"
 msgstr "インストール"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "インターネット"
 
@@ -470,7 +476,7 @@ msgstr "キーボードショートカット"
 msgid "LAUNCH"
 msgstr "起動"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "画面をロック"
 
@@ -478,7 +484,7 @@ msgstr "画面をロック"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "すぐにロックします。スクリーンセーバーは自分のタイマーでロックします。"
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "ログアウト"
 
@@ -514,7 +520,7 @@ msgstr ""
 "メモリ %1 / %2 GiB\n"
 "クリックでタスクマネージャー"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "マルチメディア"
 
@@ -526,7 +532,7 @@ msgstr "メモ"
 msgid "NOW PLAYING"
 msgstr "再生中"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "ネットワーク"
 
@@ -538,7 +544,7 @@ msgstr "ネットワーク + Bluetooth"
 msgid "Network / Wi-Fi"
 msgstr "ネットワーク / Wi-Fi"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "ネットワーク設定"
 
@@ -578,11 +584,15 @@ msgstr ""
 "まだ計測値がありません\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "パッケージ由来ではありません"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "何も再生していません"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "オフィス"
 
@@ -590,7 +600,9 @@ msgstr "オフィス"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "ひとつのテーマがデスクトップ全体を動かします。コンポジターのパネル、バー、ウィジェット、GTK と Qt のアプリ、そしてカーソルまで。"
+msgstr ""
+"ひとつのテーマがデスクトップ全体を動かします。コンポジターのパネル、バー、"
+"ウィジェット、GTK と Qt のアプリ、そしてカーソルまで。"
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -600,7 +612,7 @@ msgstr "更新を開く"
 msgid "Open in cliamp"
 msgstr "cliamp で開く"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "その他"
 
@@ -608,7 +620,7 @@ msgstr "その他"
 msgid "Output"
 msgstr "出力"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "電源"
 
@@ -616,7 +628,7 @@ msgstr "電源"
 msgid "Plugins"
 msgstr "プラグイン"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "電源"
 
@@ -624,7 +636,7 @@ msgstr "電源"
 msgid "Power Saving"
 msgstr "省電力"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "再起動"
 
@@ -652,11 +664,11 @@ msgstr "段階"
 msgid "SYS://MONITOR"
 msgstr "SYS://モニター"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "システム"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "科学"
 
@@ -668,7 +680,7 @@ msgstr "画面フィルター"
 msgid "Screensaver"
 msgstr "スクリーンセーバー"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "すべてのソースで「%1」を検索…"
 
@@ -676,15 +688,15 @@ msgstr "すべてのソースで「%1」を検索…"
 msgid "Search..."
 msgstr "検索…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "設定"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "ショートカット"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "シャットダウン"
 
@@ -692,11 +704,11 @@ msgstr "シャットダウン"
 msgid "Sign in"
 msgstr "サインイン"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "ソフトウェア管理"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "サウンド"
 
@@ -719,15 +731,19 @@ msgstr ""
 #: welcome/pages.js:111
 msgid ""
 "Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
-msgstr "Super+1…9 デスクトップ切り替え · Super+Tab レイアウト循環 · Super+Q ウィンドウを閉じる"
+msgstr ""
+"Super+1…9 デスクトップ切り替え · Super+Tab レイアウト循環 · Super+Q ウィンド"
+"ウを閉じる"
 
 #: welcome/pages.js:114
 msgid ""
 "Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
 "log out"
-msgstr "Super+E フィルター · Super+O ウィンドウを次のモニターへ · Super+Shift+Q ログアウト"
+msgstr ""
+"Super+E フィルター · Super+O ウィンドウを次のモニターへ · Super+Shift+Q ログ"
+"アウト"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "SynapseOS の更新"
 
@@ -735,15 +751,15 @@ msgstr "SynapseOS の更新"
 msgid "SynapseOS updates: %1"
 msgstr "SynapseOS の更新: %1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "システム"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "システム状態"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "システムツール"
 
@@ -759,11 +775,11 @@ msgstr "タクスっち"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "Super を単独で押します。アプリ、設定、電源。"
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "タスクマネージャー"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "端末"
 
@@ -811,17 +827,23 @@ msgstr "ねこがいます。それが機能のすべてです。"
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "このガイドはいつでも Super+Escape で戻ってきます。Super+/ のショートカット一覧は 2 ページ目の詳しい版です。"
+msgstr ""
+"このガイドはいつでも Super+Escape で戻ってきます。Super+/ のショートカット一"
+"覧は 2 ページ目の詳しい版です。"
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "コマンドを入力するか、ふつうの言葉で尋ねてください。"
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "入力して検索…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "%1 をアンインストール"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "システムを更新"
 
@@ -885,7 +907,7 @@ msgstr ""
 "Wi-Fi はオフです\n"
 "中クリックで再びオンにします"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "ウィンドウ"
 
@@ -1079,7 +1101,9 @@ msgstr "syn-update ping   今すぐ試すには"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd はこの機械の上で言語モデルを動かします。外部のサービスを呼ぶものは何もなく、オフにすれば本当に止まります。"
+msgstr ""
+"synapd はこの機械の上で言語モデルを動かします。外部のサービスを呼ぶものは何も"
+"なく、オフにすれば本当に止まります。"
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1089,7 +1113,9 @@ msgstr "syntty、同梱の端末です。"
 msgid ""
 "synui is driven from the keyboard first. These are the handful that get you "
 "everywhere else."
-msgstr "synui はまずキーボードで操作します。ここに挙げたわずかなキーで、ほかのどこへでも行けます。"
+msgstr ""
+"synui はまずキーボードで操作します。ここに挙げたわずかなキーで、ほかのどこへ"
+"でも行けます。"
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
@@ -1131,6 +1157,6 @@ msgstr "元気"
 msgid "‹ back"
 msgstr "‹ 戻る"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  戻る"

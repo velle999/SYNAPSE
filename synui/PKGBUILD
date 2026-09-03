@@ -3046,7 +3046,34 @@ pkgver=0.1.0
 #   through a real locale — localedef into a scratch LOCPATH, because this box
 #   has none of the thirteen generated and ⛔ LANGUAGE is vetoed under C, which
 #   is the same rule I18n.qml implements on the QML side.
-pkgrel=588
+# 589: RIGHT-CLICK UNINSTALL, in both application lists — the start menu and
+#   the full-screen "show all apps" grid. Each opens a context menu on the
+#   application under the pointer with one row, and that row opens a terminal
+#   running `synpkg remove --owner` (synpkg 52).
+#   ⛔ NEVER --noconfirm. synpkg's remove is -Rns: it takes the unneeded
+#   dependencies and the config files with it. It has to print that list, ask,
+#   and authenticate through polkit — all three need somewhere to happen, and a
+#   front-end that silenced the question would uninstall an application and
+#   everything it dragged out on one right-click and one left click.
+#   ⛔ ONE ROW, AND NOTHING BESIDE IT. A menu whose rows are Open / Pin /
+#   Uninstall puts the destructive one a slot from the two anybody clicks
+#   without reading. If it ever grows, Uninstall goes last and behind a
+#   separator — the rule that put Quit All Windows at the bottom of the dock's
+#   menu and Shut Down furthest from the hand in the power one.
+#   ⚠ THE TWO MENUS DIFFER IN ONE WAY, deliberately: the start menu asks
+#   `synpkg owner` while it draws and says "Not from a package" where nothing
+#   owns the entry; the grid cannot, because it is the compositor and the answer
+#   would have to arrive by blocking the input handler. There the row is offered
+#   and synpkg refuses in the terminal, by name, before it escalates.
+#   ⚠ The grid's menu is modal to the keyboard as well as the pointer. Left to
+#   fall through, typing would go on editing the search box behind it — and the
+#   refilter would move the application the menu is about out from under it.
+#   ⚠ tests/menu_uninstall.sh is new, and three earlier versions of it PASSED
+#   on an absent feature; each one is written up in the file. The last was
+#   `vpointer_click X Y left`, which clicked ZERO times because there is no
+#   `left` keyword — the third argument is a count and atoi("left") is 0. The
+#   tool refuses that form now rather than doing nothing quietly.
+pkgrel=589
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

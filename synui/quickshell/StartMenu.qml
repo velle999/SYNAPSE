@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick.Controls
 
@@ -1112,10 +1113,215 @@ PanelWindow {
                     anchors.fill: parent
                     enabled: !rowItem.header
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onEntered: list.selected = rowItem.index
-                    onClicked: panel.activate(rowItem.modelData)
+                    onClicked: (m) => {
+                        // ⚠ RIGHT DOES NOT ACTIVATE. A context menu that also
+                        // launched the thing it is a menu about would make the
+                        // Uninstall row unreachable — the application would be
+                        // in front of it before the menu drew.
+                        if (m.button === Qt.RightButton) {
+                            list.selected = rowItem.index
+                            ctx.openFor(rowItem.modelData,
+                                        rowItem.mapToItem(panel, m.x, m.y))
+                            return
+                        }
+                        panel.activate(rowItem.modelData)
+                    }
                 }
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // The right-click menu on an application row.
+        //
+        // ⚠ ONE ROW, AND IT IS THE DANGEROUS ONE. This menu exists to carry
+        // Uninstall and nothing else has been put beside it — a context menu
+        // whose rows are Open / Pin / Uninstall is a menu where the destructive
+        // row is one slot away from the two anybody uses without looking. If
+        // more rows are ever wanted here, Uninstall goes LAST and behind a
+        // separator, the way dock.c orders Quit All Windows.
+        //
+        // ⚠ IT ASKS WHO OWNS THE APPLICATION RATHER THAN ASSUMING. Plenty of
+        // what is on this menu came from nowhere a package manager knows —
+        // a .desktop somebody wrote in ~/.local/share/applications, a Wine
+        // shortcut, a script. Offering to uninstall those would be an offer
+        // that cannot be kept. The row therefore says what it found: the
+        // package name while it can act, and why not when it cannot.
+        Item {
+            id: ctx
+            visible: ctx.entry !== null
+            z: 10
+
+            property var entry: null      /* the DesktopEntry, or null */
+            property string appName: ""
+            property string owner: ""     /* package name once known */
+            property string phase: ""     /* "asking" | "owned" | "unowned" */
+            // ⛔ NOT `state`. That is QQuickItem's own property — the one
+            // its state machine reads — and shadowing it with a string is a
+            // clash Qt resolves in ways nobody here intends. qmllint named
+            // it; nothing on screen would have.
+
+            function openFor(row, pt) {
+                if (!row || row.kind !== "app" || !row.entry) return
+                ctx.entry = row.entry
+                ctx.appName = row.label || row.entry.name || ""
+                ctx.owner = ""
+                ctx.phase = "asking"
+
+                // Clamped so a right-click near an edge does not put the menu
+                // half off the panel, where its own rows cannot be reached.
+                const w = 230, h = 62
+                ctx.x = Math.max(4, Math.min(pt.x, panel.width  - w - 4))
+                ctx.y = Math.max(4, Math.min(pt.y, panel.height - h - 4))
+                ctx.width = w
+                ctx.height = h
+
+                // ⚠ ASKED HERE, NOT WHEN THE ROW WAS DRAWN. There are several
+                // hundred entries on this menu and this is a subprocess per
+                // question; asking on hover, or eagerly for the whole list,
+                // would put a fork storm on the arrow keys.
+                ownerProc.command = ["synpkg", "owner", "-q", ctx.entry.id]
+                ownerProc.running = true
+            }
+
+            function close() {
+                ctx.entry = null
+                ctx.phase = ""
+            }
+
+            // ⛔ AND IT GOES WHEN THE MENU DOES. Without this the context menu
+            // survives the start menu closing — so the next time the menu is
+            // summoned it comes up with a menu about an application nobody
+            // right-clicked, sitting wherever the pointer happened to be last
+            // time, and its dismiss catcher swallowing the first click at the
+            // list behind it. Found by a rig that reopened the menu and could
+            // no longer launch anything from it, and only visible in the
+            // screenshot: the stale menu looks exactly like a fresh one.
+            //
+            // ⚠ A BOUND PROPERTY, not a Connections on MenuState. The singleton
+            // is reached from inside a nested component here, which is the
+            // scope qmllint keeps warning about — mirroring it onto this Item
+            // makes the change signal this object's own and leaves nothing to
+            // resolve at runtime.
+            readonly property bool menuOpen: MenuState.open
+            onMenuOpenChanged: ctx.close()
+
+            Process {
+                id: ownerProc
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        // ⚠ TRIMMED, and the exit status is what decides. An
+                        // empty answer with a zero status cannot happen, but a
+                        // non-empty one with a failure could — synpkg prints
+                        // the name on stdout and its reasons on stderr, so
+                        // reading stdout alone would take a warning for a
+                        // package name.
+                        ctx.owner = this.text.trim()
+                    }
+                }
+                onExited: (code) => {
+                    ctx.phase = (code === 0 && ctx.owner !== "") ? "owned" : "unowned"
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.popupBg
+                border.width: 1
+                border.color: Theme.magenta
+                radius: Theme.radius
+            }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 6
+                spacing: 2
+
+                Text {
+                    width: parent.width
+                    text: ctx.appName
+                    elide: Text.ElideRight
+                    color: Theme.magenta
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                Rectangle {
+                    width: parent.width; height: 26
+                    radius: Theme.radius
+                    color: uninstallHover.hovered && ctx.phase === "owned"
+                           ? Theme.activeBg : "transparent"
+
+                    Text {
+                        anchors {
+                            left: parent.left; right: parent.right
+                            leftMargin: 6; rightMargin: 6
+                            verticalCenter: parent.verticalCenter
+                        }
+                        elide: Text.ElideRight
+                        text: ctx.phase === "asking"
+                              ? I18n.tr("Checking…")
+                              : ctx.phase === "owned"
+                                ? I18n.tr("Uninstall %1").arg(ctx.owner)
+                                : I18n.tr("Not from a package")
+                        color: Theme.popupFgOn(panel.backdrop)
+                        opacity: ctx.phase === "owned" ? 1.0 : 0.55
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                    }
+
+                    HoverHandler { id: uninstallHover }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        // ⚠ Only once the answer is in. A row that acted while
+                        // it still said "Checking…" would run `remove --owner`
+                        // on an application nothing owns, and the refusal would
+                        // arrive in a terminal the user did not ask for.
+                        enabled: ctx.phase === "owned"
+                        onClicked: {
+                            /*
+                             * A TERMINAL, and deliberately not a silent one —
+                             * the same rule the "install" row states at length,
+                             * and it matters more here.
+                             *
+                             * `synpkg remove` prints what it is about to take
+                             * (an uninstall is -Rns, so it takes the unneeded
+                             * dependencies with it), asks, and authenticates
+                             * through polkit. All three need somewhere to
+                             * happen. A GUI front-end passing --noconfirm would
+                             * remove an application and everything it dragged
+                             * out with it on ONE right-click and ONE left
+                             * click, with no list and no second thought.
+                             *
+                             * ⚠ --owner, so the id goes through argv and synpkg
+                             * resolves it. The menu never builds a package name
+                             * and there is no shell for a .desktop id to be
+                             * anything but one argument in.
+                             */
+                            Quickshell.execDetached(
+                                ["syntty", "--hold", "-e",
+                                 "synpkg", "remove", "--owner", ctx.entry.id])
+                            ctx.close()
+                            MenuState.close()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Anywhere else on the panel closes the context menu rather than the
+        // whole menu — a right-click that opened something by mistake should
+        // cost one click to undo, not the place you had got to.
+        MouseArea {
+            anchors.fill: parent
+            z: 9
+            visible: ctx.entry !== null
+            enabled: ctx.entry !== null
+            acceptedButtons: Qt.AllButtons
+            onPressed: ctx.close()
         }
     }
 }

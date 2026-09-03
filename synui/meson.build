@@ -1744,6 +1744,23 @@ test('bar_module_menu', bar_module_menu_t,
      depends : [synui_exe, vpointer_click],
      timeout : 120)
 
+# `menu_uninstall`: right-clicking an application in the START MENU opens a
+# context menu, that menu is at the POINTER, and left-click still launches.
+# ⚠ THREE EARLIER VERSIONS OF THIS RIG PASSED ON AN ABSENT FEATURE, and each
+# one is written down in the file: counting changed pixels passed when
+# right-click merely DISMISSED the whole menu (155,000 of them); the row it
+# picked was a category rather than an application, which is supposed to open
+# nothing; and `vpointer_click X Y left` clicked ZERO times, because there is no
+# `left` keyword — the third argument is a count and atoi("left") is 0. That one
+# is now refused by the tool itself.
+menu_uninstall_t = find_program('tests/menu_uninstall.sh')
+test('menu_uninstall', menu_uninstall_t,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell',
+                vpointer_click.full_path()],
+     depends : [synui_exe, vpointer_click],
+     timeout : 180)
+
 # `bar_palette_keys`: every `pal.<key>` a bar module reads is one the palette
 # actually defines. Updates.qml asked for `pal.yellow` — a THEME property, never
 # a key of the per-strip object the modules read — on its error branch alone, so

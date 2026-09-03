@@ -731,6 +731,25 @@ msgid ""
 "no packages in %s — is the repository that provides it enabled and synced?"
 msgstr "%s में कोई पैकेज नहीं — जो रिपॉज़िटरी इसे देती है, क्या वह चालू और तुल्यकालित है?"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: अज्ञात विकल्प '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "'%s' का कोई स्वामी नहीं — यह किसी पैकेज से नहीं है"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s एक Flatpak है"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s के पास %s है"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: एक फ़ाइल या अनुप्रयोग आईडी चाहिए"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "`synpkg upgrade` में SynapseOS के घटक शामिल करें (कई मिनट संकलन)"
 
@@ -838,6 +857,16 @@ msgstr "%s स्थापित नहीं हो सकता: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: अज्ञात विकल्प „%s“"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "'%s' का कोई स्वामी नहीं — यह किसी पैकेज से नहीं है, इसलिए अनइंस्टॉल करने को कुछ नहीं है"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s पैकेज %s से आता है"
 
 msgid "remove: need at least one package"
 msgstr "remove: कम से कम एक पैकेज चाहिए"
@@ -1030,3 +1059,7 @@ msgid ""
 msgstr ""
 "अस्वीकृत: पुष्टि के लिए कोई टर्मिनल नहीं है (उपयोक्ता की सहमति के बाद अग्रभाग को --"
 "noconfirm देना होगा)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: को %s चाहिए"

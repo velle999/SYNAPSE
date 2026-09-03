@@ -36,6 +36,10 @@ static void usage(FILE *out)
 "                          AUR for a name no repository carries (--no-aur\n"
 "                          to refuse rather than build from source)\n"
 "  remove <package>...     uninstall, with its unneeded dependencies\n"
+"    --owner               the arguments are APPLICATIONS, not packages: a\n"
+"                          .desktop path or a freedesktop entry id, resolved\n"
+"                          to whatever owns it. What the Uninstall row in the\n"
+"                          start menu and the application grid runs\n"
 "  upgrade                 force-refresh the databases (-Syy, under the one\n"
 "                          authentication the upgrade already needs) and\n"
 "                          upgrade the whole system, then rebuild\n"
@@ -56,6 +60,11 @@ static void usage(FILE *out)
 "  unignore <package>...   let one go again\n"
 "  installed [--explicit]  what is on this machine\n"
 "  orphans [--remove]      dependencies nothing needs any more\n"
+"  owner <file|app-id>...  which package an application came from. Takes a\n"
+"                          .desktop path or a freedesktop entry id, prints\n"
+"                          the package name alone on stdout, and exits 1 for\n"
+"                          anything no package owns. A Flatpak answers with\n"
+"                          its application id\n"
 "  status                  database and repository health\n"
 "\n"
 "Discovery\n"
@@ -221,6 +230,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "updates"))   return cmd_updates(rest_argc, rest);
 	if (!strcmp(cmd, "installed")) return cmd_installed(rest_argc, rest);
 	if (!strcmp(cmd, "orphans"))   return cmd_orphans(rest_argc, rest);
+	if (!strcmp(cmd, "owner"))     return cmd_owner(rest_argc, rest);
 	if (!strcmp(cmd, "status"))    return cmd_status(rest_argc, rest);
 	if (!strcmp(cmd, "suggest"))   return cmd_suggest(rest_argc, rest);
 	if (!strcmp(cmd, "groups"))    return cmd_groups(rest_argc, rest);

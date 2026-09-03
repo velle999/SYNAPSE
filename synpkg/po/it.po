@@ -761,6 +761,25 @@ msgstr ""
 "nessun pacchetto in %s: il repository che lo fornisce è attivo e "
 "sincronizzato?"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: opzione sconosciuta «%s»"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "nulla possiede «%s» — non proviene da un pacchetto"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s è un Flatpak"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s possiede %s"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: serve un file o un identificatore di applicazione"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr ""
 "includi i componenti di SynapseOS in `synpkg upgrade` (minuti di "
@@ -876,6 +895,16 @@ msgstr "impossibile installare %s: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: opzione «%s» sconosciuta"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "nulla possiede «%s» — non proviene da un pacchetto, quindi non c'è nulla da disinstallare"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s proviene dal pacchetto %s"
 
 msgid "remove: need at least one package"
 msgstr "remove: serve almeno un pacchetto"
@@ -1069,3 +1098,7 @@ msgid ""
 msgstr ""
 "rifiutato: non c'è un terminale su cui confermare (un front-end deve passare "
 "--noconfirm una volta che l'utente ha acconsentito)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: richiede %s"

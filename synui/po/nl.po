@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-02 02:07-0500\n"
+"POT-Creation-Date: 2026-09-03 05:26-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -110,7 +110,7 @@ msgstr "Beeldscherm"
 msgid "(unknown device)"
 msgstr "(onbekend apparaat)"
 
-#: src/bt.c:451 src/render.c:4439
+#: src/bt.c:451 src/render.c:4502
 msgid "failed"
 msgstr "mislukt"
 
@@ -932,7 +932,7 @@ msgstr ""
 msgid "Date & time"
 msgstr "Datum en tijd"
 
-#: src/ctlpanel.c:898 src/render.c:8161
+#: src/ctlpanel.c:898 src/render.c:8224
 msgid "Clock"
 msgstr "Klok"
 
@@ -1237,7 +1237,7 @@ msgstr ""
 "Super+Shift+M overal. Verbergt meldingen en dempt de toon; kritieke "
 "waarschuwingen komen er nog steeds door"
 
-#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5353
+#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5416
 msgid "Event sounds"
 msgstr "Gebeurtenisgeluiden"
 
@@ -1325,7 +1325,7 @@ msgstr ""
 msgid "Power saving"
 msgstr "Energiebesparing"
 
-#: src/ctlpanel.c:1205 src/render.c:8163
+#: src/ctlpanel.c:1205 src/render.c:8226
 msgid "Power"
 msgstr "Energie"
 
@@ -2012,8 +2012,8 @@ msgstr "dock %s %s"
 msgid "on"
 msgstr "aan"
 
-#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4250 src/render.c:5354
-#: src/render.c:5370 src/render.c:6171
+#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4313 src/render.c:5417
+#: src/render.c:5433 src/render.c:6234
 #, c-format
 msgid "off"
 msgstr "uit"
@@ -2220,7 +2220,7 @@ msgstr "Op datum schikken"
 msgid "Task Manager"
 msgstr "Taakbeheer"
 
-#: src/deskmenu.c:92 src/render.c:8194
+#: src/deskmenu.c:92 src/render.c:8257
 msgid "Open"
 msgstr "Openen"
 
@@ -2279,7 +2279,9 @@ msgstr "%s → primair (X11-standaardscherm)"
 #: src/dispcfg.c:1023
 msgid ""
 "external only: no external screen connected — the built-in panel stays on"
-msgstr "alleen extern: geen extern scherm aangesloten — het ingebouwde paneel blijft aan"
+msgstr ""
+"alleen extern: geen extern scherm aangesloten — het ingebouwde paneel blijft "
+"aan"
 
 #: src/dispcfg.c:1026
 #, c-format
@@ -2456,7 +2458,7 @@ msgstr[1] "+%d regels meer"
 msgid "NEURAL OVERLAY"
 msgstr "NEURALE OVERLAY"
 
-#: src/render.c:979 src/render.c:5164
+#: src/render.c:979 src/render.c:5227
 msgid "loaded"
 msgstr "geladen"
 
@@ -2719,112 +2721,116 @@ msgid_plural "%d applications · type to search · Enter opens · Esc closes"
 msgstr[0] "%d toepassing · typ om te zoeken · Enter opent · Esc sluit"
 msgstr[1] "%d toepassingen · typ om te zoeken · Enter opent · Esc sluit"
 
-#: src/render.c:2721
+#: src/render.c:2697
+msgid "Uninstall…"
+msgstr "Verwijderen…"
+
+#: src/render.c:2784
 msgid "EMOJI"
 msgstr "EMOJI"
 
-#: src/render.c:2743
+#: src/render.c:2806
 msgid "type to search"
 msgstr "typ om te zoeken"
 
-#: src/render.c:2802
+#: src/render.c:2865
 msgid "No emoji match that search."
 msgstr "Geen emoji komen overeen met die zoekopdracht."
 
-#: src/render.c:2803
+#: src/render.c:2866
 msgid "Nothing here yet."
 msgstr "Hier is nog niets."
 
-#: src/render.c:2865
+#: src/render.c:2928
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
 msgstr ""
 "Typ om te zoeken · Klik of Tab categorie · Enter invoegen · Esc wissen/"
 "sluiten"
 
-#: src/render.c:3010
+#: src/render.c:3073
 msgid "CALCULATOR"
 msgstr "REKENMACHINE"
 
-#: src/render.c:3050
+#: src/render.c:3113
 msgid "Anything you work out is kept here."
 msgstr "Alles wat u uitrekent blijft hier staan."
 
-#: src/render.c:3092
+#: src/render.c:3155
 msgid "type an expression"
 msgstr "typ een uitdrukking"
 
-#: src/render.c:3197
+#: src/render.c:3260
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
 msgstr "Enter rekent het uit · Ctrl+C kopieert · Ctrl+V plakt"
 
-#: src/render.c:3199
+#: src/render.c:3262
 msgid "Up/Down recall the tape · Esc clears, then closes"
 msgstr "Omhoog/Omlaag halen de geschiedenis terug · Esc wist en sluit daarna"
 
-#: src/render.c:3268
+#: src/render.c:3331
 msgid "EQUALIZER"
 msgstr "EQUALIZER"
 
-#: src/render.c:3277
+#: src/render.c:3340
 msgid "output routed through the equalizer sink"
 msgstr "uitvoer loopt via de equalizer"
 
-#: src/render.c:3278
+#: src/render.c:3341
 msgid "off — audio goes straight to your device"
 msgstr "uit — het geluid gaat rechtstreeks naar uw apparaat"
 
-#: src/render.c:3354
+#: src/render.c:3417
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
 msgstr "Omhoog/Omlaag rij · Links/Rechts aanpassen · r vlak · Esc sluiten"
 
-#: src/render.c:3424
+#: src/render.c:3487
 msgid "CROP — RECENT IMAGES"
 msgstr "BIJSNIJDEN — RECENTE AFBEELDINGEN"
 
-#: src/render.c:3425
+#: src/render.c:3488
 msgid "IMAGES — RECENT"
 msgstr "AFBEELDINGEN — RECENT"
 
-#: src/render.c:3430
+#: src/render.c:3493
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
 msgstr[0] "%d afbeelding"
 msgstr[1] "%d afbeeldingen"
 
-#: src/render.c:3449
+#: src/render.c:3512
 msgid "No images in Pictures, Wallpapers or Downloads."
 msgstr "Geen afbeeldingen in Afbeeldingen, Achtergronden of Downloads."
 
-#: src/render.c:3453
+#: src/render.c:3516
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
 msgstr ""
 "Druk op r om opnieuw te zoeken, of open een bestand rechtstreeks: synctl "
 "dispatch view <pad>"
 
-#: src/render.c:3510
+#: src/render.c:3573
 msgid "Enter crop · v view · r rescan · Esc close"
 msgstr "Enter bijsnijden · v bekijken · r opnieuw zoeken · Esc sluiten"
 
-#: src/render.c:3511
+#: src/render.c:3574
 msgid "Enter view · c crop · r rescan · Esc close"
 msgstr "Enter bekijken · c bijsnijden · r opnieuw zoeken · Esc sluiten"
 
-#: src/render.c:3621
+#: src/render.c:3684
 msgid "VIEW"
 msgstr "WEERGAVE"
 
-#: src/render.c:3758
+#: src/render.c:3821
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
 msgstr ""
 "Sleep om te verplaatsen · pijlen schuiven · Shift × 4 · n / p volgende en "
 "vorige"
 
-#: src/render.c:3760
+#: src/render.c:3823
 msgid "← → next and previous · drag or scroll to zoom in"
 msgstr "← → volgende en vorige · sleep of scroll om in te zoomen"
 
-#: src/render.c:3765
+#: src/render.c:3828
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
@@ -2833,19 +2839,19 @@ msgstr ""
 "Scrollen zoomt · + − zoom · 0 passend · 1 werkelijke grootte · c bijsnijden "
 "· r opnieuw zoeken · Esc of × %s"
 
-#: src/render.c:3768 src/render.c:3961
+#: src/render.c:3831 src/render.c:4024
 msgid "back to the list"
 msgstr "terug naar de lijst"
 
-#: src/render.c:3768
+#: src/render.c:3831
 msgid "close"
 msgstr "sluiten"
 
-#: src/render.c:3918
+#: src/render.c:3981
 msgid "CROP"
 msgstr "BIJSNIJDEN"
 
-#: src/render.c:3951
+#: src/render.c:4014
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
@@ -2853,7 +2859,7 @@ msgstr ""
 "Sleep om te selecteren · sleep een hoek om die aan te passen · Tab kiest de "
 "hoek die de pijlen verplaatsen"
 
-#: src/render.c:3959
+#: src/render.c:4022
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
@@ -2862,245 +2868,245 @@ msgstr ""
 "Pijlen wijzigen de grootte · Ctrl+pijlen verplaatsen · Shift × 25 · a alles "
 "· Enter slaat een kopie op · Esc %s"
 
-#: src/render.c:3961
+#: src/render.c:4024
 msgid "cancel"
 msgstr "annuleren"
 
-#: src/render.c:4060
+#: src/render.c:4123
 msgid "WINDOW EFFECTS"
 msgstr "VENSTEREFFECTEN"
 
-#: src/render.c:4060
+#: src/render.c:4123
 msgid "CRT FILTERS"
 msgstr "CRT-FILTERS"
 
-#: src/render.c:4067
+#: src/render.c:4130
 msgid "Tab → CRT filters"
 msgstr "Tab → CRT-filters"
 
-#: src/render.c:4068
+#: src/render.c:4131
 msgid "Tab → window effects"
 msgstr "Tab → venstereffecten"
 
-#: src/render.c:4084
+#: src/render.c:4147
 msgid "no GLES renderer · filters unavailable on this display"
 msgstr "geen GLES-renderer · filters niet beschikbaar op dit scherm"
 
-#: src/render.c:4088
+#: src/render.c:4151
 msgid "filters off · Space to turn them on"
 msgstr "filters uit · Spatie zet ze aan"
 
-#: src/render.c:4151
+#: src/render.c:4214
 msgid "Up/Down select · Left/Right adjust · Space on/off"
 msgstr "Omhoog/Omlaag kiezen · Links/Rechts aanpassen · Spatie aan/uit"
 
-#: src/render.c:4153
+#: src/render.c:4216
 msgid "s save (unsaved changes) · Tab page · Esc close"
 msgstr "s opslaan (niet-opgeslagen wijzigingen) · Tab pagina · Esc sluiten"
 
-#: src/render.c:4154
+#: src/render.c:4217
 msgid "s save · Tab page · Esc close"
 msgstr "s opslaan · Tab pagina · Esc sluiten"
 
-#: src/render.c:4212
+#: src/render.c:4275
 msgid "DESKTOP WIDGETS"
 msgstr "BUREAUBLADWIDGETS"
 
-#: src/render.c:4217
+#: src/render.c:4280
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
 msgstr "elk apart · sleep aan de greep · Spatie is alles of niets"
 
-#: src/render.c:4263
+#: src/render.c:4326
 msgid "needs cava"
 msgstr "vereist cava"
 
-#: src/render.c:4277
+#: src/render.c:4340
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
 msgstr "Omhoog/Omlaag kiezen · Enter omschakelen · Links/Rechts uit/aan"
 
-#: src/render.c:4279
+#: src/render.c:4342
 msgid "Space all on/off · R reset positions · Esc close"
 msgstr "Spatie alles aan/uit · R posities herstellen · Esc sluiten"
 
-#: src/render.c:4438
+#: src/render.c:4501
 msgid "done"
 msgstr "klaar"
 
-#: src/render.c:4440
+#: src/render.c:4503
 msgid "starting"
 msgstr "starten"
 
-#: src/render.c:4541
+#: src/render.c:4604
 msgid "Cannot read the model directory."
 msgstr "Kan de modelmap niet lezen."
 
-#: src/render.c:4542
+#: src/render.c:4605
 msgid "No models installed."
 msgstr "Geen modellen geïnstalleerd."
 
-#: src/render.c:4550
+#: src/render.c:4613
 msgid "A model may still be loaded · see the message below."
 msgstr "Er kan nog een model geladen zijn · zie het bericht hieronder."
 
-#: src/render.c:4551
+#: src/render.c:4614
 msgid "Pick one from AVAILABLE below and press Enter."
 msgstr "Kies er hieronder een uit BESCHIKBAAR en druk op Enter."
 
-#: src/render.c:4619
+#: src/render.c:4682
 msgid "Size"
 msgstr "Grootte"
 
-#: src/render.c:4620 src/render.c:4776
+#: src/render.c:4683 src/render.c:4839
 msgid "Params"
 msgstr "Parameters"
 
-#: src/render.c:4621
+#: src/render.c:4684
 msgid "Quant"
 msgstr "Kwant."
 
-#: src/render.c:4622
+#: src/render.c:4685
 msgid "Context"
 msgstr "Context"
 
-#: src/render.c:4623
+#: src/render.c:4686
 msgid "Arch"
 msgstr "Arch."
 
-#: src/render.c:4646
+#: src/render.c:4709
 msgid "no chat template · synapd will guess the turn format"
 msgstr "geen chatsjabloon · synapd raadt de beurtindeling"
 
-#: src/render.c:4651
+#: src/render.c:4714
 msgid "unreadable header"
 msgstr "onleesbare kop"
 
-#: src/render.c:4674 src/render.c:4810
+#: src/render.c:4737 src/render.c:4873
 msgid "ABOUT"
 msgstr "OVER"
 
-#: src/render.c:4686 src/render.c:4817
+#: src/render.c:4749 src/render.c:4880
 msgid "Good at"
 msgstr "Goed in"
 
-#: src/render.c:4687
+#: src/render.c:4750
 msgid "Speaks"
 msgstr "Spreekt"
 
-#: src/render.c:4688 src/render.c:4779
+#: src/render.c:4751 src/render.c:4842
 msgid "License"
 msgstr "Licentie"
 
-#: src/render.c:4689 src/render.c:4818
+#: src/render.c:4752 src/render.c:4881
 msgid "Based on"
 msgstr "Gebaseerd op"
 
-#: src/render.c:4737
+#: src/render.c:4800
 msgid "this is the model synapd is running"
 msgstr "dit is het model dat synapd draait"
 
-#: src/render.c:4741
+#: src/render.c:4804
 msgid "[ Enter: load this model ]"
 msgstr "[ Enter: dit model laden ]"
 
-#: src/render.c:4777
+#: src/render.c:4840
 msgid "Download"
 msgstr "Download"
 
-#: src/render.c:4778
+#: src/render.c:4841
 msgid "Quality"
 msgstr "Kwaliteit"
 
-#: src/render.c:4780
+#: src/render.c:4843
 msgid "Pulls"
 msgstr "Downloads"
 
-#: src/render.c:4861
+#: src/render.c:4924
 msgid "QUANTISATION"
 msgstr "KWANTISATIE"
 
-#: src/render.c:4867
+#: src/render.c:4930
 msgid "reading the repository …"
 msgstr "de repository wordt gelezen …"
 
-#: src/render.c:4872
+#: src/render.c:4935
 msgid "could not read the repository"
 msgstr "kon de repository niet lezen"
 
-#: src/render.c:4877
+#: src/render.c:4940
 msgid "no single-file GGUF here"
 msgstr "hier is geen GGUF in één bestand"
 
-#: src/render.c:4926 src/render.c:5780
+#: src/render.c:4989 src/render.c:5843
 #, c-format
 msgid "+%d more"
 msgstr "+%d meer"
 
-#: src/render.c:4934
+#: src/render.c:4997
 msgid "[ Enter: download ]"
 msgstr "[ Enter: downloaden ]"
 
-#: src/render.c:5011
+#: src/render.c:5074
 msgid "AI MODEL"
 msgstr "AI-MODEL"
 
-#: src/render.c:5022
+#: src/render.c:5085
 msgid "Loaded"
 msgstr "Geladen"
 
-#: src/render.c:5023
+#: src/render.c:5086
 msgid "synapd not responding"
 msgstr "synapd reageert niet"
 
-#: src/render.c:5026
+#: src/render.c:5089
 msgid "Format"
 msgstr "Formaat"
 
-#: src/render.c:5028
+#: src/render.c:5091
 msgid "Profile"
 msgstr "Profiel"
 
-#: src/render.c:5047
+#: src/render.c:5110
 msgid "legacy"
 msgstr "verouderd"
 
-#: src/render.c:5051
+#: src/render.c:5114
 msgid "GGUF declares no chat template"
 msgstr "de GGUF geeft geen chatsjabloon op"
 
-#: src/render.c:5056
+#: src/render.c:5119
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
 msgstr "temp. %.2f  ·  top_p %.2f  ·  top_k %d"
 
-#: src/render.c:5064
+#: src/render.c:5127
 msgid "Sampling"
 msgstr "Sampling"
 
-#: src/render.c:5094
+#: src/render.c:5157
 msgid "search huggingface"
 msgstr "op Hugging Face zoeken"
 
-#: src/render.c:5109
+#: src/render.c:5172
 msgid "INSTALLED"
 msgstr "GEÏNSTALLEERD"
 
-#: src/render.c:5109
+#: src/render.c:5172
 msgid "INSTALLED · none"
 msgstr "GEÏNSTALLEERD · geen"
 
-#: src/render.c:5154
+#: src/render.c:5217
 msgid "delete?"
 msgstr "verwijderen?"
 
-#: src/render.c:5160
+#: src/render.c:5223
 msgid "loading …"
 msgstr "laden …"
 
-#: src/render.c:5220
+#: src/render.c:5283
 msgid "type to search · Enter search · Esc cancel"
 msgstr "typ om te zoeken · Enter zoekt · Esc annuleren"
 
-#: src/render.c:5222
+#: src/render.c:5285
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
@@ -3108,255 +3114,255 @@ msgstr ""
 "Omhoog/Omlaag kiezen · Links/Rechts kwantisatie · Enter downloaden · / "
 "zoeken · Esc sluiten"
 
-#: src/render.c:5228
+#: src/render.c:5291
 msgid "Delete again to confirm · Esc cancels · any move cancels"
 msgstr ""
 "Verwijder nogmaals om te bevestigen · Esc annuleert · elke beweging annuleert"
 
-#: src/render.c:5231
+#: src/render.c:5294
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
 msgstr ""
 "Omhoog/Omlaag kiezen · Enter laden · Del verwijderen · / zoeken · R opnieuw "
 "zoeken · Esc sluiten"
 
-#: src/render.c:5235
+#: src/render.c:5298
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
 msgstr ""
 "downloads draaien als systeemdienst — dit paneel sluiten annuleert er geen"
 
-#: src/render.c:5238
+#: src/render.c:5301
 msgid "switching reloads the model — the AI pauses while it loads"
 msgstr "wisselen laadt het model opnieuw — de AI pauzeert tijdens het laden"
 
-#: src/render.c:5299
+#: src/render.c:5362
 msgid "EVENT SOUNDS"
 msgstr "GEBEURTENISGELUIDEN"
 
-#: src/render.c:5308
+#: src/render.c:5371
 msgid "silent · Space turns event sounds on"
 msgstr "stil · Spatie zet gebeurtenisgeluiden aan"
 
-#: src/render.c:5312
+#: src/render.c:5375
 msgid "t plays the selected sound without enabling it"
 msgstr "t speelt het gekozen geluid af zonder het aan te zetten"
 
-#: src/render.c:5357
+#: src/render.c:5420
 msgid "Volume"
 msgstr "Volume"
 
-#: src/render.c:5360
+#: src/render.c:5423
 msgid "Sound theme"
 msgstr "Geluidsthema"
 
-#: src/render.c:5364
+#: src/render.c:5427
 #, c-format
 msgid "%s — not a sound theme"
 msgstr "%s — geen geluidsthema"
 
-#: src/render.c:5421
+#: src/render.c:5484
 msgid "not in this theme"
 msgstr "niet in dit thema"
 
-#: src/render.c:5435
+#: src/render.c:5498
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
 msgstr ""
 "Omhoog/Omlaag kiezen · Enter omschakelen · Links/Rechts uit/aan · [ ] geluid "
 "kiezen"
 
-#: src/render.c:5437
+#: src/render.c:5500
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
 msgstr ""
 "t afspelen · Spatie alle geluiden aan/uit · Esc sluiten · meer: synui-sound "
 "--help"
 
-#: src/render.c:5492
+#: src/render.c:5555
 msgid "DATE & TIME"
 msgstr "DATUM EN TIJD"
 
-#: src/render.c:5505
+#: src/render.c:5568
 #, c-format
 msgid "system zone · %s"
 msgstr "systeemzone · %s"
 
-#: src/render.c:5538
+#: src/render.c:5601
 msgid "WORLD CLOCK"
 msgstr "WERELDKLOK"
 
-#: src/render.c:5563
+#: src/render.c:5626
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
 msgstr "Omhoog/Omlaag kiezen · Spatie omschakelen · c agenda · Esc sluiten"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "January"
 msgstr "januari"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "February"
 msgstr "februari"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "March"
 msgstr "maart"
 
-#: src/render.c:5631
+#: src/render.c:5694
 msgid "April"
 msgstr "april"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "May"
 msgstr "mei"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "June"
 msgstr "juni"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "July"
 msgstr "juli"
 
-#: src/render.c:5632
+#: src/render.c:5695
 msgid "August"
 msgstr "augustus"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "September"
 msgstr "september"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "October"
 msgstr "oktober"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "November"
 msgstr "november"
 
-#: src/render.c:5633
+#: src/render.c:5696
 msgid "December"
 msgstr "december"
 
-#: src/render.c:5755
+#: src/render.c:5818
 msgid "loading…"
 msgstr "laden…"
 
-#: src/render.c:5765
+#: src/render.c:5828
 msgid "nothing on"
 msgstr "niets aan"
 
-#: src/render.c:5770
+#: src/render.c:5833
 #, c-format
 msgid "all day  %s"
 msgstr "hele dag  %s"
 
-#: src/render.c:5792
+#: src/render.c:5855
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
 msgstr "←→ dag · PgUp/PgDn maand · t vandaag · Esc"
 
-#: src/render.c:5881
+#: src/render.c:5944
 msgid "CONTROL PANEL"
 msgstr "CONFIGURATIESCHERM"
 
-#: src/render.c:5900
+#: src/render.c:5963
 msgid "Search"
 msgstr "Zoeken"
 
-#: src/render.c:5927
+#: src/render.c:5990
 msgid "CATEGORIES"
 msgstr "CATEGORIEËN"
 
-#: src/render.c:5932 src/render.c:6418
+#: src/render.c:5995 src/render.c:6481
 msgid "FIND  "
 msgstr "ZOEKEN  "
 
-#: src/render.c:5939 src/render.c:6365
+#: src/render.c:6002 src/render.c:6428
 msgid "KEYBOARD SHORTCUTS"
 msgstr "SNELTOETSEN"
 
-#: src/render.c:5940
+#: src/render.c:6003
 msgid "SETTINGS"
 msgstr "INSTELLINGEN"
 
-#: src/render.c:6015
+#: src/render.c:6078
 msgid "Press a key…"
 msgstr "Druk op een toets…"
 
-#: src/render.c:6035 src/render.c:6211 src/render.c:6506
+#: src/render.c:6098 src/render.c:6274 src/render.c:6569
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
 msgstr "%d–%d van %d · PgUp/PgDn"
 
-#: src/render.c:6172
+#: src/render.c:6235
 msgid "none"
 msgstr "geen"
 
-#: src/render.c:6221
+#: src/render.c:6284
 msgid "No setting matches that."
 msgstr "Geen instelling komt daarmee overeen."
 
-#: src/render.c:6256
+#: src/render.c:6319
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
 msgstr "Typ om te filteren · Omhoog/Omlaag kiezen · Del herstellen · Esc terug"
 
-#: src/render.c:6258
+#: src/render.c:6321
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
 msgstr ""
 "Omhoog/Omlaag categorie · Enter of Rechts opent · / zoeken · Esc sluiten"
 
-#: src/render.c:6264
+#: src/render.c:6327
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
 msgstr "Tik op Super, Ctrl, Alt of Shift · Del voor geen · Esc annuleert"
 
-#: src/render.c:6265
+#: src/render.c:6328
 msgid "Press the new key for this shortcut · Esc cancels"
 msgstr "Druk op de nieuwe toets voor deze sneltoets · Esc annuleert"
 
-#: src/render.c:6267
+#: src/render.c:6330
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
 msgstr ""
 "F2 opnieuw toewijzen · F3 zet hem op de tik · Ctrl+Shift+R alles herstellen "
 "· Esc terug"
 
-#: src/render.c:6274
+#: src/render.c:6337
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
 msgstr ""
 "Links/Rechts aanpassen · Del standaard · / zoeken · Tab kolom · Esc terug"
 
-#: src/render.c:6281
+#: src/render.c:6344
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
 msgstr "Links/Rechts wisselen · Enter details · Tab kolom · Esc terug"
 
-#: src/render.c:6283
+#: src/render.c:6346
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
 msgstr "Omhoog/Omlaag kiezen · Enter activeren · / zoeken · Links of Esc terug"
 
-#: src/render.c:6405
+#: src/render.c:6468
 msgid "PRESS THE NEW KEY  "
 msgstr "DRUK OP DE NIEUWE TOETS  "
 
-#: src/render.c:6412
+#: src/render.c:6475
 #, c-format
 msgid "for %s  ·  Esc cancels"
 msgstr "voor %s  ·  Esc annuleert"
 
-#: src/render.c:6431
+#: src/render.c:6494
 msgid "_  a key, what it does, an app, or a command"
 msgstr "_  een toets, wat die doet, een toepassing of een opdracht"
 
-#: src/render.c:6487
+#: src/render.c:6550
 msgid "No shortcut matches that."
 msgstr "Geen sneltoets komt daarmee overeen."
 
-#: src/render.c:6524
+#: src/render.c:6587
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
 msgstr "Tik op Super, Ctrl, Alt of Shift · Del voor geen · Esc annuleert"
 
-#: src/render.c:6526
+#: src/render.c:6589
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
 msgstr "Druk op een combinatie met Super, Ctrl of Alt · Esc annuleert"
 
-#: src/render.c:6542
+#: src/render.c:6605
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
@@ -3364,175 +3370,175 @@ msgstr ""
 "Filteren · Enter voert uit · F2 wijst een toets toe · Del maakt hem vrij · "
 "F3 tik · Ctrl+Shift+R herstelt"
 
-#: src/render.c:6562
+#: src/render.c:6625
 msgid "The neon night-drive default · apps dark"
 msgstr "De neon-nachtritstandaard · toepassingen donker"
 
-#: src/render.c:6563
+#: src/render.c:6626
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
 msgstr "Vlak, modern en donker · toepassingen + Dolphin + Firefox donker"
 
-#: src/render.c:6564
+#: src/render.c:6627
 msgid "Luna blue, gradient captions · apps beige"
 msgstr "Luna-blauw, titels met kleurverloop · toepassingen beige"
 
-#: src/render.c:6565
+#: src/render.c:6628
 msgid "Silver 3D bevels, navy titles · apps grey"
 msgstr "Zilveren 3D-randen, marineblauwe titels · toepassingen grijs"
 
-#: src/render.c:6566
+#: src/render.c:6629
 msgid "Mocha · mauve on soft black · glassy"
 msgstr "Mokka · mauve op zacht zwart · glasachtig"
 
-#: src/render.c:6567
+#: src/render.c:6630
 msgid "Retro warm · orange on brown · glassy"
 msgstr "Retro warm · oranje op bruin · glasachtig"
 
-#: src/render.c:6568
+#: src/render.c:6631
 msgid "Storm · blue + purple on navy · glassy"
 msgstr "Storm · blauw + paars op marineblauw · glasachtig"
 
-#: src/render.c:6569
+#: src/render.c:6632
 msgid "Arctic · frost blue on slate · glassy"
 msgstr "Arctisch · vorstblauw op leisteen · glasachtig"
 
-#: src/render.c:6570
+#: src/render.c:6633
 msgid "Purple + pink on charcoal · glassy"
 msgstr "Paars + roze op antraciet · glasachtig"
 
-#: src/render.c:6571
+#: src/render.c:6634
 msgid "Pastel pink, hot-pink titles · apps light"
 msgstr "Pastelroze, felroze titels · toepassingen licht"
 
-#: src/render.c:6572
+#: src/render.c:6635
 msgid "Liquid glass · rounded, translucent · apps light"
 msgstr "Vloeibaar glas · afgerond, doorschijnend · toepassingen licht"
 
-#: src/render.c:6573
+#: src/render.c:6636
 msgid "Pinstripes + traffic lights · apps light grey"
 msgstr "Krijtstrepen + stoplichten · toepassingen lichtgrijs"
 
-#: src/render.c:6574
+#: src/render.c:6637
 msgid "Racing stripes, square boxes · apps grey"
 msgstr "Racestrepen, vierkante vakken · toepassingen grijs"
 
-#: src/render.c:6580
+#: src/render.c:6643
 msgid "House glass · accent off the wallpaper · apps dark"
 msgstr "Huisglas · accent uit de achtergrond · toepassingen donker"
 
-#: src/render.c:6581
+#: src/render.c:6644
 msgid "The same glass in daylight · apps + Files light"
 msgstr "Hetzelfde glas bij daglicht · toepassingen + Bestanden licht"
 
-#: src/render.c:6652
+#: src/render.c:6715
 msgid "THEME MANAGER"
 msgstr "THEMABEHEER"
 
-#: src/render.c:6757
+#: src/render.c:6820
 #, c-format
 msgid "Transparency  %d%%"
 msgstr "Transparantie  %d%%"
 
-#: src/render.c:6759
+#: src/render.c:6822
 #, c-format
 msgid "Transparency  off"
 msgstr "Transparantie  uit"
 
-#: src/render.c:6789
+#: src/render.c:6852
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
 msgstr ""
 "Omhoog/Omlaag thema · ←/→ dekking · T transparantie · Enter toepassen · Esc"
 
-#: src/render.c:6856
+#: src/render.c:6919
 msgid "CLIPBOARD"
 msgstr "KLEMBORD"
 
-#: src/render.c:6873
+#: src/render.c:6936
 msgid "Nothing copied yet"
 msgstr "Nog niets gekopieerd"
 
-#: src/render.c:6919
+#: src/render.c:6982
 msgid "Enter copy · Del clear all · Esc close"
 msgstr "Enter kopiëren · Del alles wissen · Esc sluiten"
 
-#: src/render.c:7260
+#: src/render.c:7323
 msgid "connected"
 msgstr "verbonden"
 
-#: src/render.c:7261
+#: src/render.c:7324
 msgid "paired"
 msgstr "gekoppeld"
 
-#: src/render.c:7321
+#: src/render.c:7384
 msgid "BLUETOOTH"
 msgstr "BLUETOOTH"
 
-#: src/render.c:7334
+#: src/render.c:7397
 msgid "No Bluetooth adapter found"
 msgstr "Geen Bluetooth-adapter gevonden"
 
-#: src/render.c:7339
+#: src/render.c:7402
 msgid "Radio on"
 msgstr "Radio aan"
 
-#: src/render.c:7339
+#: src/render.c:7402
 msgid "Radio off"
 msgstr "Radio uit"
 
-#: src/render.c:7344
+#: src/render.c:7407
 msgid "· scanning…"
 msgstr "· zoeken…"
 
-#: src/render.c:7354
+#: src/render.c:7417
 msgid "A device"
 msgstr "Een apparaat"
 
-#: src/render.c:7362
+#: src/render.c:7425
 #, c-format
 msgid "Passkey %06u · does it match the device?"
 msgstr "Toegangscode %06u · komt die overeen met het apparaat?"
 
-#: src/render.c:7365
+#: src/render.c:7428
 #, c-format
 msgid "wants to connect%s"
 msgstr "wil verbinding maken%s"
 
-#: src/render.c:7368
+#: src/render.c:7431
 #, c-format
 msgid "Type %06u on the device, then Enter"
 msgstr "Typ %06u op het apparaat en druk op Enter"
 
-#: src/render.c:7371
+#: src/render.c:7434
 #, c-format
 msgid "Enter PIN %s on the device"
 msgstr "Voer pincode %s in op het apparaat"
 
-#: src/render.c:7379
+#: src/render.c:7442
 msgid "Any key to dismiss"
 msgstr "Een willekeurige toets om te sluiten"
 
-#: src/render.c:7380
+#: src/render.c:7443
 msgid "y accept · n reject"
 msgstr "y accepteren · n weigeren"
 
-#: src/render.c:7393
+#: src/render.c:7456
 msgid "Radio is off · press o"
 msgstr "De radio staat uit · druk op o"
 
-#: src/render.c:7398
+#: src/render.c:7461
 #, c-format
 msgid "%d hidden · press a to show"
 msgstr "%d verborgen · druk op a om ze te tonen"
 
-#: src/render.c:7401
+#: src/render.c:7464
 msgid "No devices · press s to scan"
 msgstr "Geen apparaten · druk op s om te zoeken"
 
-#: src/render.c:7438
+#: src/render.c:7501
 msgid "trusted"
 msgstr "vertrouwd"
 
-#: src/render.c:7471
+#: src/render.c:7534
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
@@ -3540,60 +3546,60 @@ msgstr ""
 "Enter verbinden · p koppelen · t vertrouwen · r vergeten · s zoeken · o "
 "radio · a minder · Esc"
 
-#: src/render.c:7473
+#: src/render.c:7536
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
 msgstr ""
 "Enter verbinden · p koppelen · t vertrouwen · r vergeten · s zoeken · o "
 "radio · a alle · Esc"
 
-#: src/render.c:7633
+#: src/render.c:7696
 msgid "TASK MANAGER"
 msgstr "TAAKBEHEER"
 
-#: src/render.c:7639
+#: src/render.c:7702
 #, c-format
 msgid "%d procs · sort: %s%s"
 msgstr "%d proc. · sortering: %s%s"
 
-#: src/render.c:7650
+#: src/render.c:7713
 #, c-format
 msgid "%.0f%%  (%ld cores)"
 msgstr "%.0f%%  (%ld kernen)"
 
-#: src/render.c:7652
+#: src/render.c:7715
 msgid "CPU"
 msgstr "CPU"
 
-#: src/render.c:7663
+#: src/render.c:7726
 msgid "RAM"
 msgstr "RAM"
 
-#: src/render.c:7666 src/render.c:7674
+#: src/render.c:7729 src/render.c:7737
 msgid "GPU"
 msgstr "GPU"
 
-#: src/render.c:7666
+#: src/render.c:7729
 msgid "no GPU telemetry available"
 msgstr "geen GPU-telemetrie beschikbaar"
 
-#: src/render.c:7691 src/render.c:7710
+#: src/render.c:7754 src/render.c:7773
 msgid "VRAM"
 msgstr "VRAM"
 
-#: src/render.c:7705
+#: src/render.c:7768
 msgid "PID"
 msgstr "PID"
 
-#: src/render.c:7707
+#: src/render.c:7770
 msgid "NAME"
 msgstr "NAAM"
 
-#: src/render.c:7709
+#: src/render.c:7772
 msgid "MEM"
 msgstr "GEH."
 
-#: src/render.c:7818
+#: src/render.c:7881
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
@@ -3601,52 +3607,52 @@ msgstr ""
 "j/k bewegen · rechtsklik op een rij · c/m/g/p sorteren · u de mijne · x "
 "beëindigen · X afbreken · Esc sluiten"
 
-#: src/render.c:7984
+#: src/render.c:8047
 msgid "NEWS"
 msgstr "NIEUWS"
 
-#: src/render.c:7992
+#: src/render.c:8055
 msgid "all sources"
 msgstr "alle bronnen"
 
-#: src/render.c:7993
+#: src/render.c:8056
 msgid "by time"
 msgstr "op tijd"
 
-#: src/render.c:7993
+#: src/render.c:8056
 msgid "by source"
 msgstr "op bron"
 
-#: src/render.c:7996
+#: src/render.c:8059
 msgid "never fetched"
 msgstr "nooit opgehaald"
 
-#: src/render.c:8023
+#: src/render.c:8086
 #, c-format
 msgid "filter: /%s"
 msgstr "filter: /%s"
 
-#: src/render.c:8036
+#: src/render.c:8099
 msgid "fetching feeds…"
 msgstr "feeds ophalen…"
 
-#: src/render.c:8037
+#: src/render.c:8100
 msgid "nothing matches this filter"
 msgstr "niets komt overeen met dit filter"
 
-#: src/render.c:8038
+#: src/render.c:8101
 msgid "no feeds answered — check the network, then press r"
 msgstr "geen enkele feed antwoordde — controleer het netwerk en druk op r"
 
-#: src/render.c:8039
+#: src/render.c:8102
 msgid "no items yet — press r to fetch"
 msgstr "nog geen items — druk op r om op te halen"
 
-#: src/render.c:8125
+#: src/render.c:8188
 msgid "type to filter · Enter keep · Esc clear"
 msgstr "typ om te filteren · Enter behouden · Esc wissen"
 
-#: src/render.c:8126
+#: src/render.c:8189
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
@@ -3654,140 +3660,140 @@ msgstr ""
 "j/k bewegen · Enter openen · o op de achtergrond · c reacties · y kopiëren · "
 "Tab bron · / zoeken · s sorteren · m gelezen · r verversen · Esc sluiten"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Bottom"
 msgstr "Onder"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Top"
 msgstr "Boven"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Left"
 msgstr "Links"
 
-#: src/render.c:8152
+#: src/render.c:8215
 msgid "Right"
 msgstr "Rechts"
 
-#: src/render.c:8162
+#: src/render.c:8225
 msgid "Apps"
 msgstr "Toepassingen"
 
-#: src/render.c:8165
+#: src/render.c:8228
 #, c-format
 msgid "Dock Edge: %s"
 msgstr "Dockrand: %s"
 
-#: src/render.c:8179
+#: src/render.c:8242
 #, c-format
 msgid "%s At: %s"
 msgstr "%s op: %s"
 
-#: src/render.c:8191
+#: src/render.c:8254
 msgid "Pin to Dock"
 msgstr "Aan dock vastmaken"
 
-#: src/render.c:8193
+#: src/render.c:8256
 msgid "Unpin from Dock"
 msgstr "Van dock losmaken"
 
-#: src/render.c:8195
+#: src/render.c:8258
 msgid "New Window"
 msgstr "Nieuw venster"
 
-#: src/render.c:8196
+#: src/render.c:8259
 msgid "Close Window"
 msgstr "Venster sluiten"
 
-#: src/render.c:8197
+#: src/render.c:8260
 msgid "Quit All Windows"
 msgstr "Alle vensters sluiten"
 
-#: src/render.c:8201
+#: src/render.c:8264
 msgid "Auto-hide Dock"
 msgstr "Dock automatisch verbergen"
 
-#: src/render.c:8202
+#: src/render.c:8265
 msgid "Dock Above Windows"
 msgstr "Dock boven vensters"
 
-#: src/render.c:8203
+#: src/render.c:8266
 msgid "Magnify Icons"
 msgstr "Pictogrammen vergroten"
 
-#: src/render.c:8204
+#: src/render.c:8267
 msgid "Show Clock"
 msgstr "Klok tonen"
 
-#: src/render.c:8205
+#: src/render.c:8268
 msgid "Analog Clock Face"
 msgstr "Analoge wijzerplaat"
 
-#: src/render.c:8206
+#: src/render.c:8269
 msgid "Show All Apps Button"
 msgstr "Knop Alle toepassingen tonen"
 
-#: src/render.c:8207
+#: src/render.c:8270
 msgid "Show Power Button"
 msgstr "Aan-uitknop tonen"
 
-#: src/render.c:8208
+#: src/render.c:8271
 msgid "Dock Settings…"
 msgstr "Dockinstellingen…"
 
-#: src/render.c:8212
+#: src/render.c:8275
 msgid "Lock Screen"
 msgstr "Scherm vergrendelen"
 
-#: src/render.c:8213
+#: src/render.c:8276
 msgid "Log Out"
 msgstr "Afmelden"
 
-#: src/render.c:8214
+#: src/render.c:8277
 msgid "Suspend"
 msgstr "Slaapstand"
 
-#: src/render.c:8215
+#: src/render.c:8278
 msgid "Restart"
 msgstr "Opnieuw opstarten"
 
-#: src/render.c:8216
+#: src/render.c:8279
 msgid "Shut Down"
 msgstr "Afsluiten"
 
-#: src/render.c:8839
+#: src/render.c:8902
 msgid "minimized"
 msgstr "geminimaliseerd"
 
-#: src/render.c:8839 src/render.c:9333 src/render.c:9336
+#: src/render.c:8902 src/render.c:9396 src/render.c:9399
 msgid "MIN"
 msgstr "MIN"
 
-#: src/render.c:8944
+#: src/render.c:9007
 msgid "WINDOWS"
 msgstr "VENSTERS"
 
-#: src/render.c:9101
+#: src/render.c:9164
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab volgende · Alt+Shift+Tab terug"
 
-#: src/render.c:9218
+#: src/render.c:9281
 msgid "MISSION CONTROL"
 msgstr "OVERZICHT"
 
-#: src/render.c:9223
+#: src/render.c:9286
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "Bureaublad %d · %d venster"
 msgstr[1] "Bureaublad %d · %d vensters"
 
-#: src/render.c:9360
+#: src/render.c:9423
 msgid "Nothing open on this desktop."
 msgstr "Niets open op dit bureaublad."
 
-#: src/render.c:9415
+#: src/render.c:9478
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

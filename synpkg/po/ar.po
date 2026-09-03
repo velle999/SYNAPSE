@@ -731,6 +731,25 @@ msgid ""
 "no packages in %s — is the repository that provides it enabled and synced?"
 msgstr "لا حزم في %s — هل المستودع الذي يوفّرها مُفعّل ومُزامَن؟"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: خيار غير معروف '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "لا شيء يملك '%s' — إنه ليس من حزمة"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s هو Flatpak"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s يملك %s"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: يلزم ملف أو معرّف تطبيق"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "تضمين مكوّنات SynapseOS في `synpkg upgrade` (دقائق من الترجمة)"
 
@@ -839,6 +858,16 @@ msgstr "تعذّر تثبيت %s: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: خيار غير معروف «%s»"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "لا شيء يملك '%s' — إنه ليس من حزمة، لذا لا يوجد ما يُلغى تثبيته"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s يأتي من الحزمة %s"
 
 msgid "remove: need at least one package"
 msgstr "remove: تلزم حزمة واحدة على الأقل"
@@ -1043,3 +1072,7 @@ msgid ""
 msgstr ""
 "رُفض: لا توجد طرفية للتأكيد عليها (على الواجهة أن تمرّر ‎--noconfirm بعد موافقة "
 "المستخدم)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: تتطلّب %s"

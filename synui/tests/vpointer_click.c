@@ -176,6 +176,25 @@ int main(int argc, char **argv)
     else if (right)        clicks = argc > 4 ? atoi(argv[4]) : 1;
     else if (drag)         clicks = 0;
     else if (argc > 3)     clicks = atoi(argv[3]);
+
+    /* ⛔ AN UNRECOGNISED WORD IS ZERO CLICKS, SILENTLY, AND THAT COST A ROUND.
+     * There is no `left` keyword — the left button is the default and the third
+     * argument is a COUNT — so `vpointer_click 120 73 left` reads as
+     * atoi("left") == 0 and moves the pointer without ever pressing it. The
+     * tool exits 0, the rig sees nothing happen, and the failure it reports is
+     * about the feature under test rather than about its own invocation.
+     * Refuse it here instead: this is a test tool, and a test tool that does
+     * nothing quietly is worse than one that will not run. */
+    if (argc > 3 && !drag && !right && !moveonly && !scroll && !rel &&
+        clicks == 0 && strcmp(argv[3], "0") != 0) {
+        fprintf(stderr, "vpointer_click: '%s' is not a count or a known word.\n"
+                        "There is no `left` — the left button is the default:\n"
+                        "  vpointer_click X Y [N]        left, N times\n"
+                        "  vpointer_click X Y right [N]  right\n"
+                        "  vpointer_click X Y move       no button at all\n",
+                argv[3]);
+        return 2;
+    }
     if (drag) { NEG_CHECK(tox, "drag target X"); NEG_CHECK(toy, "drag target Y"); }
 
     const char *sock = getenv("WAYLAND_DISPLAY");

@@ -142,6 +142,13 @@ int cmd_info(int argc, char **argv);
 int cmd_installed(int argc, char **argv);
 int cmd_updates(int argc, char **argv);
 int cmd_orphans(int argc, char **argv);
+/* Which package an application came from. `arg` is a .desktop path or a
+ * freedesktop entry id; `kind` comes back "pacman" or "flatpak". Shared by
+ * `synpkg owner` and `remove --owner` so the row that OFFERS an uninstall and
+ * the command that performs it resolve the same target. */
+bool owner_resolve(const char *arg, char *kind, size_t kn, char *name, size_t nn,
+                   char *path, size_t pn);
+int cmd_owner(int argc, char **argv);
 int cmd_status(int argc, char **argv);
 int cmd_groups(int argc, char **argv);
 

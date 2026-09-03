@@ -757,6 +757,25 @@ msgstr ""
 "в %s нет пакетов — включён ли и синхронизирован ли репозиторий, который их "
 "поставляет?"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: неизвестный параметр «%s»"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "«%s» никому не принадлежит — это не из пакета"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s — это Flatpak"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s владеет %s"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: нужен файл или идентификатор приложения"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "включать компоненты SynapseOS в `synpkg upgrade` (минуты компиляции)"
 
@@ -867,6 +886,16 @@ msgstr "не удаётся установить %s: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: неизвестный параметр «%s»"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "«%s» никому не принадлежит — это не из пакета, удалять нечего"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s из пакета %s"
 
 msgid "remove: need at least one package"
 msgstr "remove: нужен хотя бы один пакет"
@@ -1064,3 +1093,7 @@ msgid ""
 msgstr ""
 "отказано: нет терминала для подтверждения (интерфейс должен передать --"
 "noconfirm, когда пользователь уже согласился)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: требует %s"

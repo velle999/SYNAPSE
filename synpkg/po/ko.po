@@ -744,6 +744,25 @@ msgid ""
 msgstr ""
 "%s에 패키지가 없습니다 — 그것을 제공하는 저장소가 켜져 있고 동기화되었습니까?"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "'%s'을(를) 소유한 것이 없습니다 — 패키지에서 온 것이 아닙니다"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s은(는) Flatpak입니다"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s이(가) %s을(를) 소유합니다"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: 파일이나 응용 프로그램 ID가 필요합니다"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr "`synpkg upgrade`에 SynapseOS 구성 요소를 포함 (컴파일에 몇 분)"
 
@@ -855,6 +874,16 @@ msgstr "%s을(를) 설치할 수 없습니다: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: 알 수 없는 옵션 '%s'"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "'%s'을(를) 소유한 것이 없습니다 — 패키지에서 온 것이 아니므로 제거할 것이 없습니다"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s은(는) 패키지 %s에서 왔습니다"
 
 msgid "remove: need at least one package"
 msgstr "remove: 패키지가 적어도 하나는 필요합니다"
@@ -1044,3 +1073,7 @@ msgid ""
 msgstr ""
 "거부됨: 확인할 터미널이 없습니다 (사용자가 동의했다면 프런트엔드가 --"
 "noconfirm을 넘겨야 합니다)"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: %s이(가) 필요합니다"

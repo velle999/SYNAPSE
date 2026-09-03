@@ -184,7 +184,22 @@ pkgver=0.1.0
 #   installed"` fragment on the way past.
 #   ⚠ `--help` IS DELIBERATELY NOT MARKED: fifty lines of column-aligned text
 #   whose every command name must be typed in English anyway.
-pkgrel=51
+# 52: `owner` — which package an application came from, and `remove --owner`,
+#   which removes it. The two application lists (the start menu and the
+#   full-screen grid) grew a right-click Uninstall row, and neither of them can
+#   answer that question for itself: the menu is quickshell, whose DesktopEntry
+#   exposes an id and no path, and the grid is inside the COMPOSITOR, where a
+#   blocking query on a right-click stalls every window on the machine.
+#   ⛔ AND NOT BY PARSING `pacman -Qo`, for two reasons that have each cost this
+#   project a round: its output is translated, so a German box answers "Kein
+#   Paket besitzt" and a grep for "No package owns" reads it as a package name;
+#   and it prints the SAME message for a file that does not exist as for one
+#   that exists and is unowned. This asks alpm directly.
+#   ⚠ A Flatpak answers with its application id and `remove --owner` routes it
+#   to the Flatpak path — handed to alpm it would report "not installed", a true
+#   sentence about a package name that never existed, for an application that is
+#   plainly on the screen.
+pkgrel=52
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

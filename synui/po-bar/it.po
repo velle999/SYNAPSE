@@ -106,7 +106,10 @@ msgstr "(traccia sconosciuta)"
 msgid ""
 "A Wayland desktop built as one piece — the compositor, the bar, the files, "
 "the settings and the AI all ship together and all answer to the same theme."
-msgstr "Una scrivania Wayland costruita in un pezzo solo — il compositor, la barra, i file, le impostazioni e l'IA arrivano insieme e rispondono tutti allo stesso tema."
+msgstr ""
+"Una scrivania Wayland costruita in un pezzo solo — il compositor, la barra, "
+"i file, le impostazioni e l'IA arrivano insieme e rispondono tutti allo "
+"stesso tema."
 
 #: widgets/Tuxagotchi.qml:147
 msgid "AGE"
@@ -124,15 +127,15 @@ msgstr "Barra dei comandi IA"
 msgid "AI Model"
 msgstr "Modello IA"
 
-#: StartMenu.qml:529
+#: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "Shell IA (synsh)"
 
-#: StartMenu.qml:747
+#: StartMenu.qml:748
 msgid "APPLICATIONS"
 msgstr "APPLICAZIONI"
 
-#: StartMenu.qml:708
+#: StartMenu.qml:709
 msgid "AVAILABLE TO INSTALL"
 msgstr "DISPONIBILE DA INSTALLARE"
 
@@ -140,7 +143,7 @@ msgstr "DISPONIBILE DA INSTALLARE"
 msgid "About this system"
 msgstr "Informazioni su questo sistema"
 
-#: StartMenu.qml:494
+#: StartMenu.qml:495
 msgid "Accessories"
 msgstr "Accessori"
 
@@ -152,7 +155,7 @@ msgstr "Regola"
 msgid "Also answers from the command bar."
 msgstr "Risponde anche dalla barra dei comandi."
 
-#: StartMenu.qml:626 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:125
 msgid "Appearance"
 msgstr "Aspetto"
 
@@ -204,7 +207,7 @@ msgstr "Nascondi la barra automaticamente"
 msgid "BAT"
 msgstr "BAT"
 
-#: StartMenu.qml:733 welcome/Guide.qml:460
+#: StartMenu.qml:734 welcome/Guide.qml:460
 msgid "Back"
 msgstr "Indietro"
 
@@ -272,6 +275,10 @@ msgstr "Modalità gatto"
 msgid "Check now"
 msgstr "Controlla ora"
 
+#: StartMenu.qml:1265
+msgid "Checking…"
+msgstr "Controllo…"
+
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "Clicca per il pannello Bluetooth · il clic centrale commuta la radio"
@@ -308,7 +315,7 @@ msgstr "Orologio, monitor di sistema, musica, note — sulla scrivania."
 msgid "Confirm"
 msgstr "Conferma"
 
-#: StartMenu.qml:523 StartMenu.qml:625 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
 msgid "Control Panel"
 msgstr "Pannello di controllo"
 
@@ -320,7 +327,7 @@ msgstr "Impossibile controllare gli aggiornamenti\n"
 msgid "DISCIPLINE"
 msgstr "DISCIPLINA"
 
-#: StartMenu.qml:628
+#: StartMenu.qml:629
 msgid "Desktop"
 msgstr "Scrivania"
 
@@ -332,7 +339,7 @@ msgstr "Widget della scrivania"
 msgid "Desktop switcher"
 msgstr "Selettore di scrivania"
 
-#: StartMenu.qml:485
+#: StartMenu.qml:486
 msgid "Development"
 msgstr "Sviluppo"
 
@@ -344,7 +351,7 @@ msgstr ""
 "Disconnesso\n"
 "Clicca per scegliere una rete"
 
-#: StartMenu.qml:630
+#: StartMenu.qml:631
 msgid "Display"
 msgstr "Schermo"
 
@@ -364,7 +371,7 @@ msgstr "Non mostrare più questa guida all'avvio"
 msgid "Done"
 msgstr "Fatto"
 
-#: StartMenu.qml:490
+#: StartMenu.qml:491
 msgid "Education"
 msgstr "Istruzione"
 
@@ -428,11 +435,11 @@ msgstr "GPU, CPU o spento. Spento nasconde i socket, quindi regge davvero."
 msgid "Game Mode"
 msgstr "Modalità gioco"
 
-#: StartMenu.qml:484
+#: StartMenu.qml:485
 msgid "Games"
 msgstr "Giochi"
 
-#: StartMenu.qml:486
+#: StartMenu.qml:487
 msgid "Graphics"
 msgstr "Grafica"
 
@@ -456,7 +463,7 @@ msgstr "Trattenuti"
 msgid "Idle, sleep, and what the lid does."
 msgstr "Inattività, sospensione e cosa fa il coperchio."
 
-#: StartMenu.qml:629 components/Mixer.qml:323
+#: StartMenu.qml:630 components/Mixer.qml:323
 msgid "Input"
 msgstr "Ingresso"
 
@@ -464,7 +471,7 @@ msgstr "Ingresso"
 msgid "Install it"
 msgstr "Installalo"
 
-#: StartMenu.qml:491
+#: StartMenu.qml:492
 msgid "Internet"
 msgstr "Internet"
 
@@ -476,7 +483,7 @@ msgstr "Scorciatoie da tastiera"
 msgid "LAUNCH"
 msgstr "AVVIA"
 
-#: StartMenu.qml:640 StartMenu.qml:757 welcome/pages.js:174
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
 msgid "Lock Screen"
 msgstr "Blocca lo schermo"
 
@@ -484,7 +491,7 @@ msgstr "Blocca lo schermo"
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "Blocca subito; il salvaschermo blocca con il proprio timer."
 
-#: StartMenu.qml:758
+#: StartMenu.qml:759
 msgid "Log Out"
 msgstr "Esci"
 
@@ -520,7 +527,7 @@ msgstr ""
 "Memoria %1 / %2 GiB\n"
 "Clicca per il gestore attività"
 
-#: StartMenu.qml:487
+#: StartMenu.qml:488
 msgid "Multimedia"
 msgstr "Multimedia"
 
@@ -532,7 +539,7 @@ msgstr "NOTA"
 msgid "NOW PLAYING"
 msgstr "IN RIPRODUZIONE"
 
-#: StartMenu.qml:632
+#: StartMenu.qml:633
 msgid "Network"
 msgstr "Rete"
 
@@ -544,7 +551,7 @@ msgstr "Rete + Bluetooth"
 msgid "Network / Wi-Fi"
 msgstr "Rete / Wi-Fi"
 
-#: StartMenu.qml:542
+#: StartMenu.qml:543
 msgid "Network Setup"
 msgstr "Configurazione di rete"
 
@@ -584,11 +591,15 @@ msgstr ""
 "Ancora nessuna lettura\n"
 "synctl weather on"
 
+#: StartMenu.qml:1268
+msgid "Not from a package"
+msgstr "Non proviene da un pacchetto"
+
 #: components/Mixer.qml:354
 msgid "Nothing is playing"
 msgstr "Non è in riproduzione nulla"
 
-#: StartMenu.qml:488
+#: StartMenu.qml:489
 msgid "Office"
 msgstr "Ufficio"
 
@@ -596,7 +607,9 @@ msgstr "Ufficio"
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
-msgstr "Un tema muove l'intera scrivania: i pannelli del compositor, la barra, i widget, le applicazioni GTK e Qt, e il puntatore."
+msgstr ""
+"Un tema muove l'intera scrivania: i pannelli del compositor, la barra, i "
+"widget, le applicazioni GTK e Qt, e il puntatore."
 
 #: modules/Updates.qml:160
 msgid "Open Updates"
@@ -606,7 +619,7 @@ msgstr "Apri gli aggiornamenti"
 msgid "Open in cliamp"
 msgstr "Apri in cliamp"
 
-#: StartMenu.qml:498
+#: StartMenu.qml:499
 msgid "Other"
 msgstr "Altro"
 
@@ -614,7 +627,7 @@ msgstr "Altro"
 msgid "Output"
 msgstr "Uscita"
 
-#: StartMenu.qml:756
+#: StartMenu.qml:757
 msgid "POWER"
 msgstr "ENERGIA"
 
@@ -622,7 +635,7 @@ msgstr "ENERGIA"
 msgid "Plugins"
 msgstr "Plugin"
 
-#: StartMenu.qml:633
+#: StartMenu.qml:634
 msgid "Power"
 msgstr "Energia"
 
@@ -630,7 +643,7 @@ msgstr "Energia"
 msgid "Power Saving"
 msgstr "Risparmio energetico"
 
-#: StartMenu.qml:759
+#: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Riavvia"
 
@@ -658,11 +671,11 @@ msgstr "STADIO"
 msgid "SYS://MONITOR"
 msgstr "SYS://MONITOR"
 
-#: StartMenu.qml:522
+#: StartMenu.qml:523
 msgid "SYSTEM"
 msgstr "SISTEMA"
 
-#: StartMenu.qml:489
+#: StartMenu.qml:490
 msgid "Science"
 msgstr "Scienza"
 
@@ -674,7 +687,7 @@ msgstr "Filtri dello schermo"
 msgid "Screensaver"
 msgstr "Salvaschermo"
 
-#: StartMenu.qml:724
+#: StartMenu.qml:725
 msgid "Search every source for “%1”…"
 msgstr "Cerca «%1» in tutte le fonti…"
 
@@ -682,15 +695,15 @@ msgstr "Cerca «%1» in tutte le fonti…"
 msgid "Search..."
 msgstr "Cerca…"
 
-#: StartMenu.qml:492 StartMenu.qml:744
+#: StartMenu.qml:493 StartMenu.qml:745
 msgid "Settings"
 msgstr "Impostazioni"
 
-#: StartMenu.qml:635
+#: StartMenu.qml:636
 msgid "Shortcuts"
 msgstr "Scorciatoie"
 
-#: StartMenu.qml:761
+#: StartMenu.qml:762
 msgid "Shut Down"
 msgstr "Spegni"
 
@@ -698,11 +711,11 @@ msgstr "Spegni"
 msgid "Sign in"
 msgstr "Accedi"
 
-#: StartMenu.qml:559
+#: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Gestore dei programmi"
 
-#: StartMenu.qml:631
+#: StartMenu.qml:632
 msgid "Sound"
 msgstr "Suono"
 
@@ -725,15 +738,19 @@ msgstr ""
 #: welcome/pages.js:111
 msgid ""
 "Super+1…9 switch desktop · Super+Tab cycle layout · Super+Q close window"
-msgstr "Super+1…9 cambia scrivania · Super+Tab scorri la disposizione · Super+Q chiudi la finestra"
+msgstr ""
+"Super+1…9 cambia scrivania · Super+Tab scorri la disposizione · Super+Q "
+"chiudi la finestra"
 
 #: welcome/pages.js:114
 msgid ""
 "Super+E filters · Super+O move window to the next monitor · Super+Shift+Q "
 "log out"
-msgstr "Super+E filtri · Super+O sposta la finestra sullo schermo successivo · Super+Maiusc+Q disconnetti"
+msgstr ""
+"Super+E filtri · Super+O sposta la finestra sullo schermo successivo · "
+"Super+Maiusc+Q disconnetti"
 
-#: StartMenu.qml:590
+#: StartMenu.qml:591
 msgid "SynapseOS Updates"
 msgstr "Aggiornamenti di SynapseOS"
 
@@ -741,15 +758,15 @@ msgstr "Aggiornamenti di SynapseOS"
 msgid "SynapseOS updates: %1"
 msgstr "Aggiornamenti di SynapseOS: %1"
 
-#: StartMenu.qml:493 StartMenu.qml:634
+#: StartMenu.qml:494 StartMenu.qml:635
 msgid "System"
 msgstr "Sistema"
 
-#: StartMenu.qml:540
+#: StartMenu.qml:541
 msgid "System Status"
 msgstr "Stato del sistema"
 
-#: StartMenu.qml:495 StartMenu.qml:742
+#: StartMenu.qml:496 StartMenu.qml:743
 msgid "System Tools"
 msgstr "Strumenti di sistema"
 
@@ -765,11 +782,11 @@ msgstr "TUXAGOTCHI"
 msgid "Tap Super on its own. Applications, settings, power."
 msgstr "Premi Super da sola. Applicazioni, impostazioni, spegnimento."
 
-#: StartMenu.qml:524 welcome/pages.js:108
+#: StartMenu.qml:525 welcome/pages.js:108
 msgid "Task Manager"
 msgstr "Gestore attività"
 
-#: StartMenu.qml:525 welcome/pages.js:84
+#: StartMenu.qml:526 welcome/pages.js:84
 msgid "Terminal"
 msgstr "Terminale"
 
@@ -783,7 +800,9 @@ msgstr "L'IA è locale"
 
 #: welcome/pages.js:106
 msgid "The full grid of everything installed — also the dock's grid-of-dots."
-msgstr "La griglia completa di tutto ciò che è installato — anche la griglia di punti della dock."
+msgstr ""
+"La griglia completa di tutto ciò che è installato — anche la griglia di "
+"punti della dock."
 
 #: welcome/pages.js:102
 msgid "The full palette — searchable, and the place to rebind."
@@ -817,17 +836,23 @@ msgstr "C'è un gatto. È tutta qui la funzione."
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
-msgstr "Questa guida è su Super+Esc ogni volta che la rivuoi — e la tavolozza delle scorciatoie su Super+/ è la versione lunga della pagina due."
+msgstr ""
+"Questa guida è su Super+Esc ogni volta che la rivuoi — e la tavolozza delle "
+"scorciatoie su Super+/ è la versione lunga della pagina due."
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
 msgstr "Digita un comando, oppure chiedine uno in linguaggio corrente."
 
-#: StartMenu.qml:1032
+#: StartMenu.qml:1033
 msgid "Type to search…"
 msgstr "Scrivi per cercare…"
 
-#: StartMenu.qml:573
+#: StartMenu.qml:1267
+msgid "Uninstall %1"
+msgstr "Disinstalla %1"
+
+#: StartMenu.qml:574
 msgid "Update System"
 msgstr "Aggiorna il sistema"
 
@@ -891,7 +916,7 @@ msgstr ""
 "Il Wi-Fi è spento\n"
 "Clic centrale per riaccenderlo"
 
-#: StartMenu.qml:627
+#: StartMenu.qml:628
 msgid "Windows"
 msgstr "Finestre"
 
@@ -1085,7 +1110,9 @@ msgstr "syn-update ping   per provare ora"
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
-msgstr "synapd esegue un modello linguistico su questa macchina. Niente qui contatta un servizio, e spegnerlo lo ferma davvero."
+msgstr ""
+"synapd esegue un modello linguistico su questa macchina. Niente qui contatta "
+"un servizio, e spegnerlo lo ferma davvero."
 
 #: welcome/pages.js:85
 msgid "syntty, the shipped terminal."
@@ -1095,7 +1122,9 @@ msgstr "syntty, il terminale incluso."
 msgid ""
 "synui is driven from the keyboard first. These are the handful that get you "
 "everywhere else."
-msgstr "synui si guida prima di tutto da tastiera. Questi sono i pochi tasti che ti portano ovunque altro."
+msgstr ""
+"synui si guida prima di tutto da tastiera. Questi sono i pochi tasti che ti "
+"portano ovunque altro."
 
 #: modules/Clock.qml:52
 msgid "synui-clock returned unparseable output"
@@ -1137,6 +1166,6 @@ msgstr "in salute"
 msgid "‹ back"
 msgstr "‹ indietro"
 
-#: StartMenu.qml:1101
+#: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  Indietro"

@@ -756,6 +756,25 @@ msgstr ""
 "%s にパッケージがありません — それを提供するリポジトリは有効で同期済みです"
 "か？"
 
+#, c-format
+msgid "owner: unknown option '%s'"
+msgstr "owner: 不明なオプション '%s'"
+
+#, c-format
+msgid "nothing owns '%s' — it is not from a package"
+msgstr "'%s' の所有者はありません — パッケージ由来ではありません"
+
+#, c-format
+msgid "%s is a Flatpak"
+msgstr "%s は Flatpak です"
+
+#, c-format
+msgid "%s owns %s"
+msgstr "%s が %s を所有しています"
+
+msgid "owner: need a file or an application id"
+msgstr "owner: ファイルかアプリケーション ID が必要です"
+
 msgid "include SynapseOS components in `synpkg upgrade` (minutes of compiling)"
 msgstr ""
 "`synpkg upgrade` に SynapseOS のコンポーネントを含める（数分のコンパイル）"
@@ -868,6 +887,16 @@ msgstr "%s をインストールできません: %s"
 #, c-format
 msgid "remove: unknown option '%s'"
 msgstr "remove: 未知のオプション「%s」"
+
+#, c-format
+msgid ""
+"nothing owns '%s' — it did not come from a package, so there is nothing to "
+"uninstall"
+msgstr "'%s' の所有者はありません — パッケージ由来ではないため、アンインストールするものがありません"
+
+#, c-format
+msgid "%s comes from the package %s"
+msgstr "%s はパッケージ %s に由来します"
 
 msgid "remove: need at least one package"
 msgstr "remove: 少なくとも 1 つのパッケージが必要です"
@@ -1058,3 +1087,7 @@ msgid ""
 msgstr ""
 "拒否しました: 確認する端末がありません（利用者が同意したら、フロントエンドが "
 "--noconfirm を渡す必要があります）"
+
+#, fuzzy, c-format
+#~ msgid "%s is %s"
+#~ msgstr "%s: %s が必要です"
