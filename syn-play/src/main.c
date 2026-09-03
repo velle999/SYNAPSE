@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include "synplay.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <ctype.h>
@@ -129,7 +130,7 @@ static int load_targets(int fd, char **paths, int n, bool append_all)
 	for (int i = 0; i < n; i++) {
 		char abs[PATH_MAX];
 		if (!resolve_target(paths[i], abs, sizeof abs)) {
-			warn("no such file: %s", paths[i]);
+			warn(_("no such file: %s"), paths[i]);
 			continue;
 		}
 
@@ -137,7 +138,7 @@ static int load_targets(int fd, char **paths, int n, bool append_all)
 		/* ⚠ A FOLDER IS A LEGITIMATE TARGET, and sp_load() is what makes
 		 * it become its files instead of a single queue row. */
 		if (!sp_load(fd, abs, first ? "replace" : "append-play")) {
-			warn("mpv would not take %s", abs);
+			warn(_("mpv would not take %s"), abs);
 			continue;
 		}
 
@@ -157,8 +158,18 @@ static int load_targets(int fd, char **paths, int n, bool append_all)
 		char abs[PATH_MAX];
 		if (resolve_target(paths[0], abs, sizeof abs)) {
 			sp_pretty_title(abs, title, sizeof title);
-			printf("%s %s%s\n", append_all ? "Queued" : "Playing", title,
-			       loaded > 1 ? " (+ more)" : "");
+			/* ⛔ FOUR WHOLE SENTENCES, NOT TWO WORDS IN SLOTS. "Queued"
+			 * and " (+ more)" dropped into %s reach every reader in
+			 * English however well the line around them is translated,
+			 * and neither fragment can agree with the title beside it. */
+			if (append_all && loaded > 1)
+				printf(_("Queued %s (+ more)\n"), title);
+			else if (append_all)
+				printf(_("Queued %s\n"), title);
+			else if (loaded > 1)
+				printf(_("Playing %s (+ more)\n"), title);
+			else
+				printf(_("Playing %s\n"), title);
 		}
 	}
 	return 0;
@@ -172,7 +183,7 @@ static int need_fd(void)
 	int fd = sp_connect();
 	if (fd < 0) {
 		if (g_out == OUT_REC) printf("state\tstopped\n");
-		else fprintf(stderr, "syn-play: nothing is playing\n");
+		else warn(_("nothing is playing"));
 		exit(3);
 	}
 	return fd;
@@ -185,7 +196,7 @@ static int cmd_status(void)
 	int fd = sp_connect();
 	if (fd < 0) {
 		if (g_out == OUT_REC) printf("state\tstopped\n");
-		else printf("Nothing is playing.\n");
+		else printf(_("Nothing is playing.\n"));
 		return 3;
 	}
 
@@ -215,13 +226,16 @@ static int cmd_status(void)
 		printf("index\t%d\n", (int)idx);
 		printf("count\t%d\n", (int)count);
 	} else if (!path[0]) {
-		printf("Idle — a player is running with nothing queued.\n");
+		printf(_("Idle — a player is running with nothing queued.\n"));
 	} else {
 		char a[16], b[16];
 		fmt_time(pos, a, sizeof a);
 		fmt_time(dur, b, sizeof b);
-		printf("%s %s\n", paused ? "Paused" : "Playing", title);
-		printf("  %s / %s   volume %.0f   %d of %d\n",
+		/* Two sentences: "Paused" in a %s slot is a word no language can
+		 * put where it belongs relative to the title. */
+		if (paused) printf(_("Paused %s\n"), title);
+		else        printf(_("Playing %s\n"), title);
+		printf(_("  %s / %s   volume %.0f   %d of %d\n"),
 		       a, b, vol, (int)idx + 1, (int)count);
 	}
 	close(fd);
@@ -248,7 +262,7 @@ static int cmd_queue(void)
 	double total = 0;
 	if (n == QUEUE_MAX) sp_get_num(fd, "playlist-count", &total);
 	close(fd);
-	if (n < 0) die("mpv would not say what is queued");
+	if (n < 0) die(_("mpv would not say what is queued"));
 
 	for (int i = 0; i < n; i++) {
 		if (g_out == OUT_REC) {
@@ -260,11 +274,12 @@ static int cmd_queue(void)
 			printf("%s%3d  %s\n", q[i].current ? "> " : "  ", i + 1, q[i].title);
 		}
 	}
-	if (n == 0 && g_out == OUT_HUMAN) printf("The queue is empty.\n");
+	if (n == 0 && g_out == OUT_HUMAN) printf(_("The queue is empty.\n"));
 	if ((int)total > n) {
 		if (g_out == OUT_REC) printf("more\t%d\n", (int)total - n);
-		else printf("     … and %d more that this list does not show\n",
-		            (int)total - n);
+		else printf(P_("     … and %d more that this list does not show\n",
+		               "     … and %d more that this list does not show\n",
+		               (int)total - n), (int)total - n);
 	}
 	return 0;
 }
@@ -273,7 +288,7 @@ static int cmd_history(int argc, char **argv)
 {
 	if (argc && !strcmp(argv[0], "clear")) {
 		sp_history_clear();
-		if (g_out == OUT_HUMAN) printf("History cleared.\n");
+		if (g_out == OUT_HUMAN) printf(_("History cleared.\n"));
 		return 0;
 	}
 
@@ -298,13 +313,13 @@ static int cmd_history(int argc, char **argv)
 			 * something. "0:00 in" beside every row is noise that
 			 * hides the two rows where it is the point. */
 			if (h[i].pos > 30 && (h[i].dur <= 0 || h[i].pos < h[i].dur - 30))
-				printf("  %-52s  %s in\n", h[i].title, at);
+				printf(_("  %-52s  %s in\n"), h[i].title, at);
 			else
 				printf("  %s\n", h[i].title);
 		}
 	}
 	if (n == 0 && g_out == OUT_HUMAN)
-		printf("  nothing played yet\n");
+		printf(_("  nothing played yet\n"));
 	return 0;
 }
 
@@ -314,7 +329,7 @@ static int cmd_find(const char *query, bool play)
 	int n = sp_find(query, hits, play ? 1 : 40);
 	if (n == 0) {
 		if (g_out == OUT_REC) printf("none\t%s\n", query);
-		else fprintf(stderr, "syn-play: nothing matches '%s'\n", query);
+		else warn(_("nothing matches '%s'"), query);
 		return 4;
 	}
 
@@ -333,7 +348,7 @@ static int cmd_find(const char *query, bool play)
 	}
 
 	int fd = sp_connect_or_start();
-	if (fd < 0) die("could not start mpv");
+	if (fd < 0) die(_("could not start mpv"));
 	char *one = hits[0].path;
 	int rc = load_targets(fd, &one, 1, false);
 	close(fd);
@@ -344,11 +359,11 @@ static int cmd_resume(void)
 {
 	static sp_hist_t h[1];
 	if (sp_history_read(h, 1) < 1) {
-		fprintf(stderr, "syn-play: nothing has been played yet\n");
+		warn(_("nothing has been played yet"));
 		return 4;
 	}
 	int fd = sp_connect_or_start();
-	if (fd < 0) die("could not start mpv");
+	if (fd < 0) die(_("could not start mpv"));
 	char *one = h[0].path;
 	/*
 	 * ⛔ THE SEEK IS MPV'S. --save-position-on-quit wrote a watch-later file
@@ -365,10 +380,10 @@ static int cmd_resume(void)
 static int cmd_gui(void)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-play gui needs a graphical session");
+		die(_("no display — syn-play gui needs a graphical session"));
 	if (access("/usr/bin/quickshell", X_OK) != 0 &&
 	    access("/usr/local/bin/quickshell", X_OK) != 0)
-		die("quickshell is not installed — synpkg install quickshell");
+		die(_("quickshell is not installed — synpkg install quickshell"));
 
 	/* The window's own Wayland identity, so the dock resolves its .desktop
 	 * and it does not inherit the app_id of whatever launched it. */
@@ -380,7 +395,7 @@ static int cmd_gui(void)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die(_("could not start quickshell"));
 	return 1;
 }
 
@@ -390,6 +405,8 @@ int main(int argc, char **argv)
 {
 	char *pos[256];
 	int n = 0;
+
+	syn_play_i18n_init();
 
 	for (int i = 1; i < argc && n < 256; i++) {
 		char *v = argv[i];
@@ -406,7 +423,7 @@ int main(int argc, char **argv)
 			break;
 		}
 		if (v[0] == '-' && v[1] == '-') {
-			warn("unknown option '%s'", v);
+			warn(_("unknown option '%s'"), v);
 			usage(stderr);
 			return 2;
 		}
@@ -429,7 +446,7 @@ int main(int argc, char **argv)
 	if (!strcmp(c, "resume"))  return cmd_resume();
 
 	if (!strcmp(c, "find")) {
-		if (!rest) die("find what? — syn-play find <words>");
+		if (!rest) die(_("find what? — syn-play find <words>"));
 		char q[512] = "";
 		for (int i = 0; i < rest; i++)
 			snprintf(q + strlen(q), sizeof q - strlen(q), "%s%s",
@@ -437,7 +454,7 @@ int main(int argc, char **argv)
 		return cmd_find(q, false);
 	}
 	if (!strcmp(c, "open")) {
-		if (!rest) die("open what? — syn-play open <words>");
+		if (!rest) die(_("open what? — syn-play open <words>"));
 		char q[512] = "";
 		for (int i = 0; i < rest; i++)
 			snprintf(q + strlen(q), sizeof q - strlen(q), "%s%s",
@@ -447,7 +464,7 @@ int main(int argc, char **argv)
 
 	if (!strcmp(c, "playlist")) {
 		if (!rest || !strcmp(args[0], "list")) return sp_playlist_list();
-		if (rest < 2) die("syn-play playlist %s <name>", args[0]);
+		if (rest < 2) die(_("syn-play playlist %s <name>"), args[0]);
 		if (!strcmp(args[0], "rm") || !strcmp(args[0], "remove"))
 			return sp_playlist_rm(args[1]);
 		if (!strcmp(args[0], "save")) {
@@ -458,19 +475,19 @@ int main(int argc, char **argv)
 		}
 		if (!strcmp(args[0], "load") || !strcmp(args[0], "append")) {
 			int fd = sp_connect_or_start();
-			if (fd < 0) die("could not start mpv");
+			if (fd < 0) die(_("could not start mpv"));
 			int rc = sp_playlist_load(fd, args[1], !strcmp(args[0], "append"));
 			close(fd);
 			return rc;
 		}
-		die("syn-play playlist list|save|load|append|rm");
+		die(_("syn-play playlist list|save|load|append|rm"));
 	}
 
 	/* ── the ones that start a player ──────────────────────────────────── */
 	if (!strcmp(c, "play") || !strcmp(c, "add")) {
-		if (!rest) die("syn-play %s <file|url> ...", c);
+		if (!rest) die(_("syn-play %s <file|url> ..."), c);
 		int fd = sp_connect_or_start();
-		if (fd < 0) die("could not start mpv");
+		if (fd < 0) die(_("could not start mpv"));
 		int rc = load_targets(fd, args, rest, !strcmp(c, "add"));
 		close(fd);
 		return rc;
@@ -484,7 +501,11 @@ int main(int argc, char **argv)
 		bool ok = sp_cmd(fd, c[0] == 'n' ? "\"playlist-next\",\"force\""
 		                                 : "\"playlist-prev\",\"force\"", NULL, 0);
 		close(fd);
-		if (!ok) { fprintf(stderr, "syn-play: no %s track\n", c); return 3; }
+		/* Two sentences: `c` is the command the user typed, not a noun this
+		 * one can decline. */
+		if (!ok) { if (c[0] == 'n') warn(_("no next track"));
+		           else             warn(_("no previous track"));
+		           return 3; }
 		return g_out == OUT_HUMAN ? cmd_status() : 0;
 	}
 
@@ -494,22 +515,22 @@ int main(int argc, char **argv)
 		if (!strcmp(c, "toggle")) ok = sp_cmd(fd, "\"cycle\",\"pause\"", NULL, 0);
 		else ok = sp_set_bool(fd, "pause", !strcmp(c, "pause"));
 		close(fd);
-		if (!ok) die("mpv would not take that");
+		if (!ok) die(_("mpv would not take that"));
 		return g_out == OUT_HUMAN ? cmd_status() : 0;
 	}
 
 	if (!strcmp(c, "seek")) {
-		if (!rest) die("seek where? — +30, -10, or 1:23");
+		if (!rest) die(_("seek where? — +30, -10, or 1:23"));
 		double v;
 		bool absolute;
-		if (!parse_time(args[0], &v, &absolute)) die("'%s' is not a time", args[0]);
+		if (!parse_time(args[0], &v, &absolute)) die(_("'%s' is not a time"), args[0]);
 		int fd = need_fd();
 		char a[128];
 		snprintf(a, sizeof a, "\"seek\",%.3f,\"%s\"", v,
 		         absolute ? "absolute" : "relative");
 		bool ok = sp_cmd(fd, a, NULL, 0);
 		close(fd);
-		if (!ok) die("mpv would not seek there");
+		if (!ok) die(_("mpv would not seek there"));
 		return g_out == OUT_HUMAN ? cmd_status() : 0;
 	}
 
@@ -526,7 +547,7 @@ int main(int argc, char **argv)
 			snprintf(a, sizeof a, "\"set_property\",\"volume\",%.0f", atof(args[0]));
 		bool ok = sp_cmd(fd, a, NULL, 0);
 		close(fd);
-		if (!ok) die("mpv would not take that volume");
+		if (!ok) die(_("mpv would not take that volume"));
 		return 0;
 	}
 
@@ -546,8 +567,12 @@ int main(int argc, char **argv)
 		bool ok = sp_cmd(fd, c[0] == 's' ? "\"playlist-shuffle\""
 		                                 : "\"playlist-unshuffle\"", NULL, 0);
 		close(fd);
-		if (!ok) die("mpv would not %s", c);
-		if (g_out == OUT_HUMAN) printf("%s.\n", c[0] == 's' ? "Shuffled" : "Unshuffled");
+		if (!ok) { if (c[0] == 's') die(_("mpv would not shuffle"));
+		           else             die(_("mpv would not unshuffle")); }
+		if (g_out == OUT_HUMAN) {
+			if (c[0] == 's') printf(_("Shuffled.\n"));
+			else             printf(_("Unshuffled.\n"));
+		}
 		return 0;
 	}
 
@@ -563,37 +588,44 @@ int main(int argc, char **argv)
 			ok = sp_cmd(fd, "\"set_property\",\"loop-file\",\"inf\"", NULL, 0);
 		else if (!strcmp(how, "playlist"))
 			ok = sp_cmd(fd, "\"set_property\",\"loop-playlist\",\"inf\"", NULL, 0);
-		else { close(fd); die("syn-play loop off|file|playlist"); }
+		else { close(fd); die(_("syn-play loop off|file|playlist")); }
 		(void)a;
 		close(fd);
-		if (!ok) die("mpv would not set the loop");
-		if (g_out == OUT_HUMAN) printf("Loop: %s\n", how);
+		if (!ok) die(_("mpv would not set the loop"));
+		/* ⚠ Three whole lines, not `Loop: %s` with the mode dropped in.
+		 * `how` is one of three words the code already branched on, and a
+		 * language that translates "Loop" may want the mode before it. */
+		if (g_out == OUT_HUMAN) {
+			if (!strcmp(how, "off"))       printf(_("Loop: off\n"));
+			else if (!strcmp(how, "file")) printf(_("Loop: file\n"));
+			else                           printf(_("Loop: playlist\n"));
+		}
 		return 0;
 	}
 
 	if (!strcmp(c, "jump")) {
-		if (!rest) die("jump to which line? — syn-play queue");
+		if (!rest) die(_("jump to which line? — syn-play queue"));
 		int idx = atoi(args[0]) - 1;         /* the queue prints from 1 */
-		if (idx < 0) die("the queue starts at 1");
+		if (idx < 0) die(_("the queue starts at 1"));
 		int fd = need_fd();
 		char a[64];
 		snprintf(a, sizeof a, "\"playlist-play-index\",%d", idx);
 		bool ok = sp_cmd(fd, a, NULL, 0);
 		close(fd);
-		if (!ok) die("there is no line %s in the queue", args[0]);
+		if (!ok) die(_("there is no line %s in the queue"), args[0]);
 		return g_out == OUT_HUMAN ? cmd_status() : 0;
 	}
 
 	if (!strcmp(c, "remove")) {
-		if (!rest) die("remove which line? — syn-play queue");
+		if (!rest) die(_("remove which line? — syn-play queue"));
 		int idx = atoi(args[0]) - 1;
-		if (idx < 0) die("the queue starts at 1");
+		if (idx < 0) die(_("the queue starts at 1"));
 		int fd = need_fd();
 		char a[64];
 		snprintf(a, sizeof a, "\"playlist-remove\",%d", idx);
 		bool ok = sp_cmd(fd, a, NULL, 0);
 		close(fd);
-		if (!ok) die("there is no line %s in the queue", args[0]);
+		if (!ok) die(_("there is no line %s in the queue"), args[0]);
 		return 0;
 	}
 
@@ -604,17 +636,17 @@ int main(int argc, char **argv)
 		 * queued up is not the same as stopping the music. */
 		bool ok = sp_cmd(fd, "\"playlist-clear\"", NULL, 0);
 		close(fd);
-		if (!ok) die("mpv would not clear the queue");
-		if (g_out == OUT_HUMAN) printf("Queue cleared — what is playing continues.\n");
+		if (!ok) die(_("mpv would not clear the queue"));
+		if (g_out == OUT_HUMAN) printf(_("Queue cleared — what is playing continues.\n"));
 		return 0;
 	}
 
 	if (!strcmp(c, "stop") || !strcmp(c, "quit")) {
 		int fd = sp_connect();
-		if (fd < 0) { if (g_out == OUT_HUMAN) printf("Nothing is playing.\n"); return 0; }
+		if (fd < 0) { if (g_out == OUT_HUMAN) printf(_("Nothing is playing.\n")); return 0; }
 		sp_cmd(fd, "\"quit\"", NULL, 0);
 		close(fd);
-		if (g_out == OUT_HUMAN) printf("Stopped.\n");
+		if (g_out == OUT_HUMAN) printf(_("Stopped.\n"));
 		return 0;
 	}
 
@@ -628,12 +660,12 @@ int main(int argc, char **argv)
 	{
 		char abs[PATH_MAX];
 		if (!resolve_target(c, abs, sizeof abs)) {
-			warn("unknown command '%s'", c);
+			warn(_("unknown command '%s'"), c);
 			usage(stderr);
 			return 2;
 		}
 		int fd = sp_connect_or_start();
-		if (fd < 0) die("could not start mpv");
+		if (fd < 0) die(_("could not start mpv"));
 		int rc = load_targets(fd, pos, n, false);
 		close(fd);
 		return rc;

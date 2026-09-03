@@ -20,6 +20,15 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -u
 
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every contains() below looks
+# for an English phrase, and once syn-play is installed the binary answers the
+# desktop's language — so on a German box these assertions fail for a program
+# that is working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 BIN="${1:-}"
 [ -x "$BIN" ] || BIN=$(command -v syn-play)
 [ -x "$BIN" ] || { echo "cli_test: no syn-play binary"; exit 1; }

@@ -33,10 +33,18 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS NOT qsTr(). quickshell 0.3.1 installs
+// no QTranslator, so qsTr() compiles, looks up nothing and returns its own
+// argument while looking exactly like a marked string in review — so
+// qml/I18n.qml reads a JSON catalog compiled from the same po/ the CLI's .mo
+// comes from, and a word this window and `syn-play status` share is translated
+// once and cannot disagree.
+import "qml"
+
 FloatingWindow {
     id: root
 
-    title: "Player"
+    title: I18n.tr("Player")
     implicitWidth: 560
     implicitHeight: 680
     minimumSize: Qt.size(380, 420)
@@ -337,7 +345,11 @@ FloatingWindow {
             n++
         }
         if (n === 0) return
-        root.say((append ? "Queued " : "Playing ") + n + (n === 1 ? " item" : " items"))
+        // ⛔ FOUR WHOLE SENTENCES, NOT THREE PIECES GLUED. "Queued " + n +
+        // " items" can never match a msgid — whole-cell lookup is the rule —
+        // and the count needs a plural form the concatenation cannot carry.
+        root.say(append ? I18n.trn("Queued %1 item", "Queued %1 items", n).arg(n)
+                        : I18n.trn("Playing %1 item", "Playing %1 items", n).arg(n))
     }
 
     function dec(s) {
@@ -446,8 +458,10 @@ FloatingWindow {
         // contain one. A newline cannot appear in a path on Linux… except it
         // can; it is merely the least bad of the separators zenity offers, and
         // the rows are trimmed and empty ones dropped below.
+        // ⚠ THE TITLE IS ZENITY'S WINDOW TITLE — a person reads it, so it is
+        // built rather than written whole: the `--title=` half is the flag.
         command: ["zenity", "--file-selection", "--multiple", "--separator=\n",
-                  "--title=Open files"]
+                  "--title=" + I18n.tr("Open files")]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -461,7 +475,7 @@ FloatingWindow {
     Process {
         id: pickFolder
         command: ["zenity", "--file-selection", "--directory",
-                  "--title=Open a folder"]
+                  "--title=" + I18n.tr("Open a folder")]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -479,7 +493,7 @@ FloatingWindow {
     // "only warnings" gate lets through.
     function openPicker(folder) {
         if (!root.hasPicker) {
-            root.say("zenity is not installed — synpkg install zenity")
+            root.say(I18n.tr("zenity is not installed — synpkg install zenity"))
             return
         }
         // ⚠ `running = true` on a process that is ALREADY running is a silent
@@ -487,7 +501,7 @@ FloatingWindow {
         // would do nothing and read as a dead button. It is already open; say
         // so instead.
         const proc = folder ? pickFolder : pickFiles
-        if (proc.running) { root.say("the chooser is already open"); return }
+        if (proc.running) { root.say(I18n.tr("the chooser is already open")); return }
         proc.running = true
     }
 
@@ -536,11 +550,11 @@ FloatingWindow {
                 readonly property bool roomy: root.width >= root.ui(560)
 
                 Chip {
-                    label: openBtns.roomy ? "Open files…" : "Files…"
+                    label: openBtns.roomy ? I18n.tr("Open files…") : I18n.tr("Files…")
                     onClicked: root.openPicker(false)
                 }
                 Chip {
-                    label: openBtns.roomy ? "Open folder…" : "Folder…"
+                    label: openBtns.roomy ? I18n.tr("Open folder…") : I18n.tr("Folder…")
                     onClicked: root.openPicker(true)
                 }
             }
@@ -582,7 +596,7 @@ FloatingWindow {
                     Text {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         visible: openField.text === ""
-                        text: "Open something — a few letters of the name"
+                        text: I18n.tr("Open something — a few letters of the name")
                         color: root.cDim
                         font.family: root.uiFont || "sans-serif"
                         font.pixelSize: root.ui(13)
@@ -619,7 +633,7 @@ FloatingWindow {
                 Text {
                     width: parent.width
                     text: root.live && root.nowTitle !== "" ? root.nowTitle
-                                                            : "Nothing playing"
+                                                            : I18n.tr("Nothing playing")
                     elide: Text.ElideRight
                     color: root.live ? root.cText : root.cDim
                     font.family: root.uiFont || "sans-serif"
@@ -718,8 +732,8 @@ FloatingWindow {
                     // ⛔ MPV'S SHUFFLE, AND MPV'S UNDO. `unshuffle` restores the
                     // order the files were ADDED in — mpv keeps that, and
                     // nothing here could reconstruct it after the fact.
-                    Chip { label: "Shuffle";   onClicked: root.send("shuffle") }
-                    Chip { label: "Unshuffle"; onClicked: root.send("unshuffle") }
+                    Chip { label: I18n.tr("Shuffle");   onClicked: root.send("shuffle") }
+                    Chip { label: I18n.tr("Unshuffle"); onClicked: root.send("unshuffle") }
 
                     Item { width: root.ui(6); height: 1 }
 
@@ -754,7 +768,12 @@ FloatingWindow {
                 spacing: root.ui(4)
 
                 Repeater {
-                    model: [["Queue", 0], ["History", 1], ["Playlists", 2]]
+                    // ⚠ THE NUMBER IS THE TAB'S IDENTITY and the word is what
+                    // is drawn. `root.tab` is compared against the number, so
+                    // there is no id-and-label pair here that could be marked
+                    // by mistake.
+                    model: [[I18n.tr("Queue"), 0], [I18n.tr("History"), 1],
+                            [I18n.tr("Playlists"), 2]]
                     Item {
                         id: tabItem
                         required property var modelData
@@ -809,14 +828,14 @@ FloatingWindow {
                 anchors { right: parent.right; rightMargin: root.ui(12)
                           verticalCenter: parent.verticalCenter }
                 visible: root.note === "" && root.tab === 0 && queue.count > 0
-                label: "Save as playlist"
+                label: I18n.tr("Save as playlist")
                 onClicked: saveBox.open()
             }
             Chip {
                 anchors { right: parent.right; rightMargin: root.ui(12)
                           verticalCenter: parent.verticalCenter }
                 visible: root.note === "" && root.tab === 1 && history.count > 0
-                label: "Clear history"
+                label: I18n.tr("Clear history")
                 onClicked: root.send("history-clear")
             }
         }
@@ -895,7 +914,7 @@ FloatingWindow {
                         anchors { right: parent.right; rightMargin: root.ui(10)
                                   verticalCenter: parent.verticalCenter }
                         visible: fArea.containsMouse
-                        text: "queue"
+                        text: I18n.tr("queue")
                         color: root.cAccent
                         font.family: root.uiFont || "sans-serif"
                         font.pixelSize: root.ui(11)
@@ -912,7 +931,7 @@ FloatingWindow {
             Text {
                 anchors.centerIn: parent
                 visible: found.count === 0 && !root.searching
-                text: "Nothing matches that."
+                text: I18n.tr("Nothing matches that.")
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(12)
@@ -994,7 +1013,7 @@ FloatingWindow {
             Text {
                 anchors.centerIn: parent
                 visible: queue.count === 0
-                text: "The queue is empty — open something above."
+                text: I18n.tr("The queue is empty — open something above.")
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(12)
@@ -1006,7 +1025,9 @@ FloatingWindow {
             Text {
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
                 visible: root.queueMore > 0
-                text: "… and " + root.queueMore + " more not shown here"
+                text: I18n.trn("… and %1 more not shown here",
+                               "… and %1 more not shown here",
+                               root.queueMore).arg(root.queueMore)
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(11)
@@ -1070,7 +1091,10 @@ FloatingWindow {
                     id: hAt
                     anchors { right: hQueue.left; rightMargin: root.ui(10)
                               verticalCenter: parent.verticalCenter }
-                    text: hRow.part ? root.fmt(hRow.pos) + " in" : ""
+                    // Whole cell: "0:61 in" concatenated could never match a
+                    // msgid, and the word may not follow the time in every
+                    // language.
+                    text: hRow.part ? I18n.tr("%1 in").arg(root.fmt(hRow.pos)) : ""
                     color: root.cAccent
                     font.family: "monospace"
                     font.pixelSize: root.ui(10)
@@ -1080,7 +1104,7 @@ FloatingWindow {
                     anchors { right: parent.right; rightMargin: root.ui(10)
                               verticalCenter: parent.verticalCenter }
                     visible: hArea.containsMouse
-                    text: "queue"
+                    text: I18n.tr("queue")
                     color: root.cAccent
                     font.family: root.uiFont || "sans-serif"
                     font.pixelSize: root.ui(11)
@@ -1096,7 +1120,7 @@ FloatingWindow {
             Text {
                 anchors.centerIn: parent
                 visible: history.count === 0
-                text: "Nothing played yet."
+                text: I18n.tr("Nothing played yet.")
                 color: root.cDim
                 font.family: root.uiFont || "sans-serif"
                 font.pixelSize: root.ui(12)
@@ -1148,7 +1172,7 @@ FloatingWindow {
                     id: pCount
                     anchors { right: pAppend.left; rightMargin: root.ui(12)
                               verticalCenter: parent.verticalCenter }
-                    text: pRow.count + (pRow.count === 1 ? " item" : " items")
+                    text: I18n.trn("%1 item", "%1 items", pRow.count).arg(pRow.count)
                     color: root.cDim
                     font.family: root.uiFont || "sans-serif"
                     font.pixelSize: root.ui(10)
@@ -1158,7 +1182,7 @@ FloatingWindow {
                     anchors { right: pDel.left; rightMargin: root.ui(12)
                               verticalCenter: parent.verticalCenter }
                     visible: pArea.containsMouse
-                    text: "queue"
+                    text: I18n.tr("queue")
                     color: root.cAccent
                     font.family: root.uiFont || "sans-serif"
                     font.pixelSize: root.ui(11)
@@ -1190,7 +1214,7 @@ FloatingWindow {
             Text {
                 anchors.centerIn: parent
                 visible: playlists.count === 0
-                text: "No playlists yet — queue some things and Save as playlist."
+                text: I18n.tr("No playlists yet — queue some things and Save as playlist.")
                 wrapMode: Text.Wrap
                 width: plView.width - root.ui(40)
                 horizontalAlignment: Text.AlignHCenter
@@ -1253,7 +1277,10 @@ FloatingWindow {
                 color: Qt.rgba(root.cBg.r, root.cBg.g, root.cBg.b, 0.86)
 
                 Repeater {
-                    model: [[true, "Play now"], [false, "Add to the queue"]]
+                    // ⚠ The boolean is the zone's identity; only the word is
+                    // drawn.
+                    model: [[true, I18n.tr("Play now")],
+                            [false, I18n.tr("Add to the queue")]]
                     Rectangle {
                         id: zone
                         required property var modelData
@@ -1340,7 +1367,7 @@ FloatingWindow {
                     Text {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         visible: nameField.text === ""
-                        text: "Name this playlist"
+                        text: I18n.tr("Name this playlist")
                         color: root.cDim
                         font.family: root.uiFont || "sans-serif"
                         font.pixelSize: root.ui(13)
@@ -1352,7 +1379,7 @@ FloatingWindow {
                 id: saveGo
                 anchors { right: saveCancel.left; rightMargin: root.ui(8)
                           verticalCenter: parent.verticalCenter }
-                label: "Save"
+                label: I18n.tr("Save")
                 on: nameField.nameOk
                 onClicked: {
                     if (!nameField.nameOk) return
@@ -1364,7 +1391,7 @@ FloatingWindow {
                 id: saveCancel
                 anchors { right: parent.right; rightMargin: root.ui(12)
                           verticalCenter: parent.verticalCenter }
-                label: "Cancel"
+                label: I18n.tr("Cancel")
                 onClicked: saveBox.close()
             }
         }

@@ -49,7 +49,64 @@
 # one, or want last night's film back.
 pkgname=syn-play
 pkgver=0.1.0
-pkgrel=8
+# ── 0.1.0-9: thirteen languages, across all three faces ──────────────────────
+#
+# The CLI, the terminal UI and the window said everything in English. 122
+# strings now in de, fr, es, pt, it, nl, pl, ru, ja, zh, ko, hi and ar, from ONE
+# po/ compiled twice: a .mo for the binary and JSON for the quickshell window,
+# so a word they share is translated once and cannot disagree.
+#
+# ⛔ AND THE RECORDS STAY ENGLISH, WHICH HAS THREE READERS HERE AND NOT ONE.
+# data/syn-play.qml parses the `serve` stream, tests/cli_test.sh parses `--rec`
+# — and syn-play parses its own: tui.c sets `g_out = OUT_REC`, runs
+# sp_playlist_list() into a pipe and reads the rows back, because a second
+# directory walk would be a second idea of what a playlist file is. A translated
+# record does not merely confuse a window; the TUI stops recognising its own
+# output. The tags (`s`, `q`, `h`, `f`, `playlist`, `q-more`), the field names
+# (`state`, `path`, `title`, `pos`, `duration`, `volume`) and the VALUES of
+# `state` — `playing`, `paused`, `idle`, `stopped` — are all matched with `===`
+# in the QML, and none of them is marked. tests/i18n_test.sh proves it by
+# running every offline --rec command under a catalog that translates
+# EVERYTHING and diffing the bytes.
+#
+# ⛔ LC_NUMERIC IS PINNED TO C, AND HERE THAT IS THE WIRE AND NOT COSMETICS.
+# This program builds mpv's JSON with snprintf: `"seek",%.3f,"relative"` under a
+# German locale is `"seek",12,500,"relative"` — four arguments where mpv expects
+# three. The same separator reaches `s\tpos\t%.3f` in the serve stream, where
+# the window does parseFloat() on it, and the history file, where a position
+# saved in one locale is read back wrong in another. ⚠ And atof() is the half
+# that is easy to miss: a locale-aware strtod stops at the '.' in "12.5".
+#
+# ── the sentences that were assembled from pieces ────────────────────────────
+#
+# ⛔ A WORD IN A %s SLOT SHIPS ENGLISH INSIDE EVERY LANGUAGE. `printf("%s %s%s",
+# append ? "Queued" : "Playing", title, more ? " (+ more)" : "")` is a sentence
+# nothing can translate: the fragments are marked nowhere and could not agree
+# with the title beside them if they were. Four whole lines now, one per branch,
+# and the same for Paused/Playing, Shuffled/Unshuffled, Appended/Playing,
+# queued/playing, the loop modes and `no next|previous track`.
+#
+# ⚠ THE WINDOW LOOKS UP THE WHOLE CELL, so `"… and " + n + " more not shown
+# here"` could never match a msgid however its parts were marked. It is
+# I18n.trn() with an .arg() now, as is the item count and the history position.
+#
+# ⚠ usage() IS DELIBERATELY NOT TRANSLATED, as in syn-disks, syn-arcade, syntty,
+# synpkg and syn-edit. It is a manual page in one fputs, every line a command
+# spelling with a column of text aligned to it. Whether that whole set moves is
+# one decision, taken once, for all of them.
+#
+# ⛔ AND THE THREE OLDER SUITES NOW PIN THE LOCALE THEY ASSERT IN. Every
+# contains() in them looks for an English phrase, and an installed syn-play
+# answers the desktop's language — so on a German box they would fail for a
+# program working exactly as intended. One exported LC_ALL and one unset
+# LANGUAGE, and the i18n suite fails if either is dropped.
+#
+# ⚠ THE TWO QML RIGS COPY data/syn-play.qml AND NOW ITS qml/ DIRECTORY WITH IT.
+# The window imports the translation singleton by relative path; a copy of the
+# .qml alone leaves that import unresolvable, which quickshell reports as a
+# WARNING and then refuses the file — so every assertion would have been made
+# about a window that never drew.
+pkgrel=9
 pkgdesc="Playlists, shuffle, quick open and history for mpv — window, terminal UI and command line"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

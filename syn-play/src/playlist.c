@@ -16,6 +16,7 @@
  */
 #define _GNU_SOURCE
 #include "synplay.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -171,15 +172,18 @@ int sp_playlist_store(int fd, const char *name, const char **why)
 {
 	char path[PATH_MAX];
 	if (!sp_playlist_path(name, path, sizeof path)) {
-		if (why) *why = "not a name a playlist can have — letters, digits, "
-		                "space, - _ .";
+		/* ⚠ N_() HERE AND _() AT THE die(), because this function is also
+		 * called by serve.c with why == NULL. The reason is a sentence a
+		 * person reads; it is never a record field. */
+		if (why) *why = N_("not a name a playlist can have — letters, digits, "
+		                   "space, - _ .");
 		return -1;
 	}
 
 	static sp_entry_t q[4096];
 	int n = sp_queue(fd, q, 4096);
-	if (n < 0) { if (why) *why = "nothing is playing"; return -1; }
-	if (n == 0) { if (why) *why = "the queue is empty"; return -1; }
+	if (n < 0) { if (why) *why = N_("nothing is playing"); return -1; }
+	if (n == 0) { if (why) *why = N_("the queue is empty"); return -1; }
 
 	/* Written to a temporary and renamed. A save interrupted half way
 	 * through would otherwise leave a playlist that is neither the old one
@@ -187,7 +191,7 @@ int sp_playlist_store(int fd, const char *name, const char **why)
 	char tmp[PATH_MAX + 8];
 	snprintf(tmp, sizeof tmp, "%s.new", path);
 	FILE *f = fopen(tmp, "w");
-	if (!f) { if (why) *why = "cannot write there"; return -1; }
+	if (!f) { if (why) *why = N_("cannot write there"); return -1; }
 
 	fputs("#EXTM3U\n", f);
 	for (int i = 0; i < n; i++) {
@@ -200,8 +204,8 @@ int sp_playlist_store(int fd, const char *name, const char **why)
 	/* Written to a temporary and renamed. A save interrupted half way
 	 * through would otherwise leave a playlist that is neither the old one
 	 * nor the new one, and the person finds out when they open it. */
-	if (fclose(f) != 0) { unlink(tmp); if (why) *why = "could not finish writing"; return -1; }
-	if (rename(tmp, path) != 0) { unlink(tmp); if (why) *why = "could not save"; return -1; }
+	if (fclose(f) != 0) { unlink(tmp); if (why) *why = N_("could not finish writing"); return -1; }
+	if (rename(tmp, path) != 0) { unlink(tmp); if (why) *why = N_("could not save"); return -1; }
 	return n;
 }
 
@@ -232,12 +236,12 @@ bool sp_playlist_open(int fd, const char *name, bool append)
 
 int sp_playlist_save(int fd, const char *name)
 {
-	const char *why = "could not save";
+	const char *why = N_("could not save");
 	int n = sp_playlist_store(fd, name, &why);
-	if (n < 0) die("%s", why);
+	if (n < 0) die("%s", _(why));
 
 	if (g_out == OUT_REC) printf("saved\t%s\t%d\n", name, n);
-	else printf("Saved %s — %d item%s\n", name, n, n == 1 ? "" : "s");
+	else printf(P_("Saved %s — %d item\n", "Saved %s — %d items\n", n), name, n);
 	return 0;
 }
 
@@ -245,14 +249,16 @@ int sp_playlist_load(int fd, const char *name, bool append)
 {
 	char path[PATH_MAX];
 	if (!sp_playlist_path(name, path, sizeof path))
-		die("'%s' is not a playlist name", name);
+		die(_("'%s' is not a playlist name"), name);
 	if (access(path, R_OK) != 0)
-		die("no playlist called '%s' — syn-play playlist list", name);
+		die(_("no playlist called '%s' — syn-play playlist list"), name);
 	if (!sp_playlist_open(fd, name, append))
-		die("mpv would not load %s", path);
+		die(_("mpv would not load %s"), path);
 
 	if (g_out == OUT_REC) printf("loaded\t%s\n", name);
-	else printf("%s %s\n", append ? "Appended" : "Playing", name);
+	/* Two sentences; "Appended" alone is a word with nowhere to agree. */
+	else if (append) printf(_("Appended %s\n"), name);
+	else             printf(_("Playing %s\n"), name);
 	return 0;
 }
 
@@ -293,12 +299,12 @@ int sp_playlist_list(void)
 			}
 		}
 		if (g_out == OUT_REC) printf("playlist\t%s\t%d\n", names[i], items);
-		else printf("  %-24s %d item%s\n", names[i], items,
-		            items == 1 ? "" : "s");
+		else printf(P_("  %-24s %d item\n", "  %-24s %d items\n", items),
+		            names[i], items);
 		free(names[i]);
 	}
 	if (n == 0 && g_out == OUT_HUMAN)
-		printf("  no playlists yet — syn-play playlist save <name>\n");
+		printf(_("  no playlists yet — syn-play playlist save <name>\n"));
 	return 0;
 }
 
@@ -306,10 +312,10 @@ int sp_playlist_rm(const char *name)
 {
 	char path[PATH_MAX];
 	if (!sp_playlist_path(name, path, sizeof path))
-		die("'%s' is not a playlist name", name);
+		die(_("'%s' is not a playlist name"), name);
 	if (!sp_playlist_unlink(name))
-		die("no playlist called '%s'", name);
+		die(_("no playlist called '%s'"), name);
 	if (g_out == OUT_REC) printf("removed\t%s\n", name);
-	else printf("Removed %s\n", name);
+	else printf(_("Removed %s\n"), name);
 	return 0;
 }

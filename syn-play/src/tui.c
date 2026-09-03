@@ -29,6 +29,7 @@
  */
 #define _GNU_SOURCE
 #include "synplay.h"
+#include "i18n.h"
 
 #include <poll.h>
 #include <signal.h>
@@ -114,7 +115,11 @@ static void fmt_time(double secs, char *out, size_t cap)
 /* ── the view ───────────────────────────────────────────────────────────── */
 
 typedef enum { TAB_QUEUE, TAB_HISTORY, TAB_PLAYLISTS, TAB_N } tab_t;
-static const char *const TAB_NAME[TAB_N] = { "Queue", "History", "Playlists" };
+/* ⚠ MARKED HERE, TRANSLATED AT THE DRAW SITE. The tab's IDENTITY is the
+ * tab_t enum, not this string — nothing compares against it — so one table is
+ * enough and there is no id-and-label pair to keep apart. */
+static const char *const TAB_NAME[TAB_N] = { N_("Queue"), N_("History"),
+                                             N_("Playlists") };
 
 static tab_t g_tab = TAB_QUEUE;
 static int   g_sel[TAB_N];
@@ -195,12 +200,15 @@ static void draw(int fd, bool interactive)
 	if (interactive) fputs("\033[H\033[2J", stdout);
 
 	if (!path[0]) {
-		printf("syn-play — nothing playing\n");
+		printf(_("syn-play — nothing playing\n"));
 	} else {
 		char a[16], b[16];
 		fmt_time(pos, a, sizeof a);
 		fmt_time(dur, b, sizeof b);
-		printf("syn-play — %s%s\n", paused ? "[paused] " : "", title);
+		/* Two lines rather than "[paused] " in a %s slot: a fragment in
+		 * brackets is a word no language can place for itself. */
+		if (paused) printf(_("syn-play — [paused] %s\n"), title);
+		else        printf(_("syn-play — %s\n"), title);
 
 		int width = 40;
 		int filled = (dur > 0.5) ? (int)(pos / dur * width) : 0;
@@ -208,13 +216,13 @@ static void draw(int fd, bool interactive)
 		if (filled > width) filled = width;
 		fputs("  [", stdout);
 		for (int i = 0; i < width; i++) fputc(i < filled ? '#' : '-', stdout);
-		printf("]  %s / %s   vol %.0f\n", a, b, vol);
+		printf(_("]  %s / %s   vol %.0f\n"), a, b, vol);
 	}
 	fputc('\n', stdout);
 
 	for (int i = 0; i < TAB_N; i++) {
 		bool on = ((tab_t)i == g_tab);
-		printf("%s%s%s  ", on ? "[" : " ", TAB_NAME[i], on ? "]" : " ");
+		printf("%s%s%s  ", on ? "[" : " ", _(TAB_NAME[i]), on ? "]" : " ");
 	}
 	fputc('\n', stdout);
 
@@ -242,22 +250,23 @@ static void draw(int fd, bool interactive)
 			printf("%s  %s\n", cur ? ">" : " ", g_pl[i]);
 		}
 	}
-	if (max == 0)
-		printf("   %s\n", g_tab == TAB_QUEUE ? "the queue is empty"
-		                : g_tab == TAB_HISTORY ? "nothing played yet"
-		                                       : "no playlists saved");
+	if (max == 0) {
+		if (g_tab == TAB_QUEUE)        printf(_("   the queue is empty\n"));
+		else if (g_tab == TAB_HISTORY) printf(_("   nothing played yet\n"));
+		else                           printf(_("   no playlists saved\n"));
+	}
 
 	if (!interactive) return;
 
 	fputc('\n', stdout);
 	if (g_note[0]) { printf("  %s\n", g_note); g_note[0] = '\0'; }
 	else if (g_tab == TAB_QUEUE)
-		printf("  space pause  n/p track  ↑↓ move  enter play  x remove  "
-		       "s shuffle  S save  tab view  q quit\n");
+		printf(_("  space pause  n/p track  ↑↓ move  enter play  x remove  "
+		         "s shuffle  S save  tab view  q quit\n"));
 	else if (g_tab == TAB_HISTORY)
-		printf("  enter play  a queue  ↑↓ move  tab view  q quit\n");
+		printf(_("  enter play  a queue  ↑↓ move  tab view  q quit\n"));
 	else
-		printf("  enter load  a append  D delete  ↑↓ move  tab view  q quit\n");
+		printf(_("  enter load  a append  D delete  ↑↓ move  tab view  q quit\n"));
 	fflush(stdout);
 }
 
@@ -279,15 +288,17 @@ static void play_selected(int *fd, bool append)
 	if (!target) return;
 
 	if (*fd < 0) *fd = sp_connect_or_start();
-	if (*fd < 0) { snprintf(g_note, sizeof g_note, "could not start mpv"); return; }
+	if (*fd < 0) { snprintf(g_note, sizeof g_note, "%s", _("could not start mpv")); return; }
 
 	if (sp_load(*fd, target, append ? "append-play" : "replace")) {
 		char title[512];
 		sp_pretty_title(target, title, sizeof title);
 		sp_history_note(target, title, 0, 0);
-		snprintf(g_note, sizeof g_note, "%s %.200s", append ? "queued" : "playing", title);
+		/* Two whole notes; "queued" in a slot cannot agree with the title. */
+		if (append) snprintf(g_note, sizeof g_note, _("queued %.200s"), title);
+		else        snprintf(g_note, sizeof g_note, _("playing %.200s"), title);
 	} else {
-		snprintf(g_note, sizeof g_note, "mpv would not take that");
+		snprintf(g_note, sizeof g_note, "%s", _("mpv would not take that"));
 	}
 }
 
@@ -378,12 +389,13 @@ int sp_tui(void)
 		case 's':
 			if (fd >= 0) sp_expand_queue_dirs(fd);
 			if (fd >= 0 && sp_cmd(fd, "\"playlist-shuffle\"", NULL, 0))
-				snprintf(g_note, sizeof g_note, "shuffled");
+				snprintf(g_note, sizeof g_note, "%s", _("shuffled"));
 			refresh(fd);
 			break;
 		case 'u':
 			if (fd >= 0 && sp_cmd(fd, "\"playlist-unshuffle\"", NULL, 0))
-				snprintf(g_note, sizeof g_note, "unshuffled — back to the order added");
+				snprintf(g_note, sizeof g_note, "%s",
+				         _("unshuffled — back to the order added"));
 			refresh(fd);
 			break;
 
@@ -403,7 +415,7 @@ int sp_tui(void)
 						sp_json_quote(path, quoted, sizeof quoted);
 						snprintf(args, sizeof args, "\"loadlist\",%s,\"replace\"", quoted);
 						sp_cmd(fd, args, NULL, 0);
-						snprintf(g_note, sizeof g_note, "playing %s",
+						snprintf(g_note, sizeof g_note, _("playing %s"),
 						         g_pl[g_sel[TAB_PLAYLISTS]]);
 					}
 				}
@@ -434,7 +446,7 @@ int sp_tui(void)
 				char path[PATH_MAX];
 				if (sp_playlist_path(g_pl[g_sel[TAB_PLAYLISTS]], path, sizeof path)) {
 					unlink(path);
-					snprintf(g_note, sizeof g_note, "deleted %s",
+					snprintf(g_note, sizeof g_note, _("deleted %s"),
 					         g_pl[g_sel[TAB_PLAYLISTS]]);
 				}
 				refresh(fd);
@@ -446,13 +458,13 @@ int sp_tui(void)
 			/* ⚠ Guarded here because sp_playlist_save() dies on an empty
 			 * queue — correct for a command line, and in a TUI it would be
 			 * the whole program exiting under somebody's hands. */
-			if (g_qn == 0) { snprintf(g_note, sizeof g_note,
-			                          "nothing in the queue to save"); break; }
-			if (fd >= 0 && prompt("save the queue as: ", name, sizeof name)) {
+			if (g_qn == 0) { snprintf(g_note, sizeof g_note, "%s",
+			                          _("nothing in the queue to save")); break; }
+			if (fd >= 0 && prompt(_("save the queue as: "), name, sizeof name)) {
 				char path[PATH_MAX];
 				if (!sp_playlist_path(name, path, sizeof path))
 					snprintf(g_note, sizeof g_note,
-					         "'%s' is not a name a playlist can have", name);
+					         _("'%s' is not a name a playlist can have"), name);
 				else {
 					/* sp_playlist_save prints and may die(); the TUI wants
 					 * neither, so the queue is written here through the
@@ -466,7 +478,7 @@ int sp_tui(void)
 					if (sink) { fflush(stdout); dup2(devnull, STDOUT_FILENO); }
 					close(devnull);
 					g_out = save;
-					snprintf(g_note, sizeof g_note, "saved %s", name);
+					snprintf(g_note, sizeof g_note, _("saved %s"), name);
 				}
 			}
 			refresh(fd);
@@ -475,17 +487,17 @@ int sp_tui(void)
 
 		case '/': {
 			char q[256];
-			if (prompt("open: ", q, sizeof q)) {
+			if (prompt(_("open: "), q, sizeof q)) {
 				static sp_entry_t hit[1];
 				if (sp_find(q, hit, 1) == 1) {
 					if (fd < 0) fd = sp_connect_or_start();
 					if (fd >= 0) {
 						sp_load(fd, hit[0].path, "replace");
 						sp_history_note(hit[0].path, hit[0].title, 0, 0);
-						snprintf(g_note, sizeof g_note, "playing %.200s", hit[0].title);
+						snprintf(g_note, sizeof g_note, _("playing %.200s"), hit[0].title);
 					}
 				} else {
-					snprintf(g_note, sizeof g_note, "nothing matches '%.200s'", q);
+					snprintf(g_note, sizeof g_note, _("nothing matches '%.200s'"), q);
 				}
 			}
 			refresh(fd);

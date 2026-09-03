@@ -7,6 +7,7 @@ cc = meson.get_compiler('c')
 conf = configuration_data()
 conf.set_quoted('SYNPLAY_VERSION', meson.project_version())
 conf.set_quoted('SYNPLAY_DATADIR', get_option('prefix') / get_option('datadir') / 'syn-play')
+conf.set_quoted('SYNPLAY_LOCALEDIR', get_option('prefix') / get_option('localedir'))
 configure_file(output: 'config.h', configuration: conf)
 
 inc = include_directories('include', '.')
@@ -28,6 +29,16 @@ install_data('data/syn-play.desktop',
              install_dir: get_option('datadir') / 'applications')
 install_data('data/syn-play.svg',
              install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
+
+# ⛔ THE SINGLETON AND ITS qmldir, AS A MODULE DIRECTORY. quickshell is pointed
+# at syn-play.qml; a qmldir beside that file would change how the file itself is
+# resolved, so the translation singleton lives one level down and the generated
+# catalogs land beside it (qml/i18n/*.json), which is the only place
+# Qt.resolvedUrl("i18n") from inside I18n.qml will look.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-play' / 'qml')
+
+subdir('po')
 
 # ⛔ THE SUITE RUNS INSIDE A SCRATCH SYNPLAY_HOME AND ON ITS OWN SOCKET.
 #
@@ -73,3 +84,14 @@ test('click', find_program('tests/click_test.sh'),
      args: [syn_play.full_path()],
      depends: [syn_play],
      timeout: 180)
+
+# ⛔ THE ONE THAT PROVES THE RECORDS DID NOT MOVE. It builds a catalog from the
+# TEMPLATE with every msgstr marked and runs the offline --rec commands under
+# it: a record that changes has a string reaching gettext, whether or not any
+# real catalog carries that entry today. A marked field name is invisible to a
+# real-catalog diff until somebody translates it, and by then it is a window —
+# and a TUI — that has stopped recognising its own rows.
+test('i18n', find_program('tests/i18n_test.sh'),
+     args: [meson.current_source_dir(), syn_play.full_path()],
+     depends: [syn_play],
+     timeout: 120)

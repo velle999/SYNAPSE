@@ -29,6 +29,15 @@
 set -u
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every contains() below looks
+# for an English phrase, and once syn-play is installed the binary answers the
+# desktop's language — so on a German box these assertions fail for a program
+# that is working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 BIN="${1:-$HERE/build/syn-play}"
 QML="$HERE/data/syn-play.qml"
 fails=0
@@ -109,6 +118,15 @@ probe() {  # probe <js once the window is up> [js a beat later]
         printf "    Timer { id: done; interval: 2200; repeat: false; onTriggered: Qt.quit() }\n"
         printf "%s", substr($0,n)
     }' "$QML" > "$T/probe.qml"
+
+    # ⛔ THE PROBE IS A COPY, SO ITS `import "qml"` RESOLVES AGAINST $T. The
+    # window imports the translation singleton by RELATIVE PATH, and a copy of
+    # the .qml alone leaves that import unresolvable — which quickshell reports
+    # as a WARNING and then refuses the file, so the checks below assert on a
+    # window that never drew. The catalogs are deliberately NOT staged: with no
+    # qml/i18n/*.json the singleton answers English, which is what every
+    # assertion here is written against.
+    cp -r "$(dirname "$QML")/qml" "$T/qml"
 
     SYNPLAY_BIN="$BIN" QT_QPA_PLATFORM=offscreen GSETTINGS_BACKEND=memory \
     QT_ASSUME_STDERR_HAS_CONSOLE=1 timeout 40 quickshell -p "$T/probe.qml" 2>&1

@@ -5,8 +5,11 @@
  */
 #define _GNU_SOURCE
 #include "synplay.h"
+#include "i18n.h"
+#include "config.h"
 
 #include <errno.h>
+#include <locale.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -16,6 +19,35 @@
 #include <unistd.h>
 
 sp_out_t g_out = OUT_HUMAN;
+
+/*
+ * ⛔ LC_NUMERIC STAYS AT C, AND HERE IT IS NOT COSMETIC — IT IS THE WIRE.
+ *
+ * setlocale(LC_ALL, "") changes what printf's %f writes AND what atof() reads.
+ * This program builds mpv's JSON with snprintf:
+ *
+ *     snprintf(args, sizeof args, "\"seek\",%.3f,\"relative\"", atof(s));
+ *
+ * A German locale turns that into `"seek",12,500,"relative"` — four arguments
+ * where mpv expects three, and a seek that either fails or goes somewhere
+ * nobody asked for. The same separator reaches `s\tpos\t%.3f` in the serve
+ * stream, where the window does parseFloat() on it and gets 12, and the history
+ * file, where a position saved in one locale is read back wrong in another.
+ *
+ * ⚠ AND atof() IS THE HALF THAT IS EASY TO MISS. Even with every printf fixed,
+ * a locale-aware strtod stops at the '.' in "12.5" and answers 12.
+ */
+void syn_play_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_PLAY_LOCALEDIR");
+	bindtextdomain(SYN_PLAY_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNPLAY_LOCALEDIR);
+	bind_textdomain_codeset(SYN_PLAY_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_PLAY_GETTEXT_DOMAIN);
+}
 
 void die(const char *fmt, ...)
 {

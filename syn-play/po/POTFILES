@@ -1,0 +1,8 @@
+# The QML files tools/qml-xgettext.py reads, one per line, relative to data/.
+#
+# ⚠ A FILE MISSING FROM HERE IS SILENTLY ENGLISH FOREVER — its I18n.tr() calls
+# still compile and still look up at runtime, so nothing warns; the strings
+# just never reach a template. tests/i18n_test.sh fails on a .qml under data/
+# that calls I18n.tr() and is not listed.
+syn-play.qml
+qml/I18n.qml
