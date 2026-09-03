@@ -60,6 +60,8 @@
 #include <limits.h>
 #include <sched.h>
 #include <stdarg.h>
+#include <locale.h>
+#include "../include/i18n.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -94,6 +96,29 @@ static long ll_restrict(int fd, unsigned int flags)
 }
 
 static const char *g_prog = "syn-confine";
+
+/*
+ * ⛔ LC_NUMERIC STAYS AT C. Nothing here prints a float today, but the ports
+ * and the ABI number in `--print` are %u and %d and the next number somebody
+ * adds may not be. A separator that moved with the desktop is a policy summary
+ * that reads differently from the policy.
+ *
+ * ⚠ AND setlocale() HERE AFFECTS THE CONFINED CHILD NOT AT ALL. It inherits
+ * the environment, not this process's locale state, and phrases its own errors
+ * from its own libc — which is the thing tests/syn_confine_test.sh pins LC_ALL
+ * for, two execs away.
+ */
+static void i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_CONFINE_LOCALEDIR");
+	bindtextdomain(SYN_CONFINE_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNCONFINE_LOCALEDIR);
+	bind_textdomain_codeset(SYN_CONFINE_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_CONFINE_GETTEXT_DOMAIN);
+}
 
 static void die(const char *fmt, ...)
 {
@@ -173,7 +198,7 @@ static size_t g_nrules;
 static void add_rule(const char *path, uint64_t rights, bool required)
 {
 	if (g_nrules >= MAX_RULES)
-		die("too many paths (limit %d)", MAX_RULES);
+		die(_("too many paths (limit %d)"), MAX_RULES);
 	g_rules[g_nrules++] = (rule_t){ path, rights, required };
 }
 
@@ -225,9 +250,9 @@ static void write_file(const char *path, const char *data)
 {
 	int fd = open(path, O_WRONLY | O_CLOEXEC);
 	if (fd < 0)
-		die("--isolate-net: open %s: %s", path, strerror(errno));
+		die(_("--isolate-net: open %s: %s"), path, strerror(errno));
 	if (write(fd, data, strlen(data)) < 0)
-		die("--isolate-net: write %s: %s", path, strerror(errno));
+		die(_("--isolate-net: write %s: %s"), path, strerror(errno));
 	close(fd);
 }
 
@@ -247,9 +272,9 @@ static void isolate_net(void)
 	gid_t gid = getgid();
 
 	if (unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0)
-		die("--isolate-net: unshare: %s\n"
-		    "  This needs unprivileged user namespaces "
-		    "(/proc/sys/user/max_user_namespaces must be > 0).",
+		die(_("--isolate-net: unshare: %s\n"
+		      "  This needs unprivileged user namespaces "
+		      "(/proc/sys/user/max_user_namespaces must be > 0)."),
 		    strerror(errno));
 
 	/* Must deny setgroups before gid_map may be written unprivileged. */
@@ -300,6 +325,8 @@ static void usage(FILE *f)
 
 int main(int argc, char **argv)
 {
+	i18n_init();
+
 	bool want_base = true, print_only = false;
 	bool net_unrestricted = false, isolate = false;
 	int i = 1;
@@ -314,23 +341,23 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--isolate-net")) isolate = true;
 		else if (!strcmp(a, "--rw") || !strcmp(a, "--ro") || !strcmp(a, "--rx")) {
 			if (i + 1 >= argc)
-				die("%s needs a path", a);
+				die(_("%s needs a path"), a);
 			uint64_t r = A_READ;
 			if (a[3] == 'w') r |= A_WRITE | A_EXEC;
 			if (a[3] == 'x') r |= A_EXEC;
 			add_rule(argv[++i], r, true);
 		} else if (!strcmp(a, "--tcp")) {
 			if (i + 1 >= argc)
-				die("--tcp needs a port");
+				die("%s", _("--tcp needs a port"));
 			char *end = NULL;
 			long p = strtol(argv[++i], &end, 10);
 			if (!end || *end || p < 1 || p > 65535)
-				die("--tcp: '%s' is not a port", argv[i]);
+				die(_("--tcp: '%s' is not a port"), argv[i]);
 			if (g_nports >= MAX_PORTS)
-				die("too many --tcp ports (limit %d)", MAX_PORTS);
+				die(_("too many --tcp ports (limit %d)"), MAX_PORTS);
 			g_ports[g_nports++] = (uint16_t)p;
 		} else {
-			die("unknown option '%s' (use -- before the command)", a);
+			die(_("unknown option '%s' (use -- before the command)"), a);
 		}
 	}
 
@@ -340,17 +367,17 @@ int main(int argc, char **argv)
 	}
 
 	if (net_unrestricted && g_nports)
-		die("--net and --tcp contradict each other");
+		die("%s", _("--net and --tcp contradict each other"));
 	if (net_unrestricted && isolate)
-		die("--net and --isolate-net contradict each other");
+		die("%s", _("--net and --isolate-net contradict each other"));
 
 	if (want_base)
 		add_base_profile();
 
 	int abi = (int)ll_create(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
 	if (abi < 1)
-		die("this kernel has no Landlock support (%s) — refusing to run "
-		    "the command unconfined", strerror(errno));
+		die(_("this kernel has no Landlock support (%s) — refusing to run "
+		      "the command unconfined"), strerror(errno));
 
 	uint64_t handled_fs = abi_mask(abi, A_ALL);
 
@@ -364,9 +391,9 @@ int main(int argc, char **argv)
 		attr.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP
 		                        | LANDLOCK_ACCESS_NET_CONNECT_TCP;
 	if (!net_unrestricted && abi < 4 && !isolate)
-		die("this kernel's Landlock (ABI %d) cannot restrict the network, "
-		    "and --isolate-net was not given — refusing rather than "
-		    "pretending the network is closed", abi);
+		die(_("this kernel's Landlock (ABI %d) cannot restrict the network, "
+		      "and --isolate-net was not given — refusing rather than "
+		      "pretending the network is closed"), abi);
 
 	/* Signals and abstract unix sockets scoped to the sandbox: the confined
 	 * process cannot signal the compositor, and cannot reach an abstract
@@ -377,20 +404,43 @@ int main(int argc, char **argv)
 		            | LANDLOCK_SCOPE_SIGNAL;
 
 	if (print_only) {
-		printf("landlock abi   %d\n", abi);
-		printf("network        %s\n",
-		       isolate ? "isolated (namespace: no TCP, UDP, DNS or loopback)"
-		       : net_unrestricted ? "unrestricted TCP"
-		       : g_nports ? "TCP to listed ports only (UDP NOT covered)"
-		                  : "no TCP (UDP NOT covered)");
+		/*
+		 * ⚠ THE LABEL AND ITS PADDING ARE INSIDE THE MSGID, deliberately.
+		 * This is a two-column report spaced by hand, and the alternative —
+		 * translating the word and padding it here — needs a DISPLAY WIDTH,
+		 * because "ネットワーク" is 18 bytes, 6 code points and 12 columns.
+		 * Handing the translator the whole line instead lets them line their
+		 * own column up, which is what a .po is for; all thirteen were
+		 * checked against the English width.
+		 */
+		printf(_("landlock abi   %d\n"), abi);
+		/*
+		 * ⛔ FOUR WHOLE SENTENCES, NOT A WORD IN A SLOT. This is the line
+		 * somebody reads to decide whether a sandbox is tight enough —
+		 * "(UDP NOT covered)" is the whole point of it — and a clause
+		 * dropped into a %s reaches every reader in English however well
+		 * the rest is translated.
+		 */
+		printf("%s", isolate
+		       ? _("network        isolated (namespace: no TCP, UDP, DNS or loopback)\n")
+		       : net_unrestricted
+		       ? _("network        unrestricted TCP\n")
+		       : g_nports
+		       ? _("network        TCP to listed ports only (UDP NOT covered)\n")
+		       : _("network        no TCP (UDP NOT covered)\n"));
 		for (size_t k = 0; k < g_nports; k++)
-			printf("  tcp port     %u\n", g_ports[k]);
+			printf(_("  tcp port     %u\n"), g_ports[k]);
 		for (size_t k = 0; k < g_nrules; k++) {
+			/* ⚠ `rw`/`rx`/`ro` ARE THE FLAG SPELLINGS — what you typed —
+			 * so they stay as they are while the note beside them moves. */
 			const char *kind = (g_rules[k].rights & A_WRITE) ? "rw"
 			                 : (g_rules[k].rights & A_EXEC)   ? "rx" : "ro";
 			bool exists = access(g_rules[k].path, F_OK) == 0;
-			printf("  %-2s %-28s %s\n", kind, g_rules[k].path,
-			       exists ? "" : "(absent, skipped)");
+			if (exists)
+				printf("  %-2s %s\n", kind, g_rules[k].path);
+			else
+				printf(_("  %-2s %-28s (absent, skipped)\n"),
+				       kind, g_rules[k].path);
 		}
 		return 0;
 	}
@@ -403,7 +453,7 @@ int main(int argc, char **argv)
 
 	int rfd = (int)ll_create(&attr, sizeof attr, 0);
 	if (rfd < 0)
-		die("landlock_create_ruleset: %s", strerror(errno));
+		die(_("landlock_create_ruleset: %s"), strerror(errno));
 
 	for (size_t k = 0; k < g_nrules; k++) {
 		int pfd = open(g_rules[k].path, O_PATH | O_CLOEXEC);
@@ -427,7 +477,7 @@ int main(int argc, char **argv)
 			.parent_fd = pfd,
 		};
 		if (ll_add(rfd, LANDLOCK_RULE_PATH_BENEATH, &pb, 0))
-			die("landlock_add_rule %s: %s", g_rules[k].path, strerror(errno));
+			die(_("landlock_add_rule %s: %s"), g_rules[k].path, strerror(errno));
 		close(pfd);
 	}
 
@@ -437,7 +487,7 @@ int main(int argc, char **argv)
 			.port = g_ports[k],
 		};
 		if (ll_add(rfd, LANDLOCK_RULE_NET_PORT, &np, 0))
-			die("landlock_add_rule tcp/%u: %s", g_ports[k], strerror(errno));
+			die(_("landlock_add_rule tcp/%u: %s"), g_ports[k], strerror(errno));
 	}
 
 	/* Landlock requires no_new_privs, which also means no setuid binary can
@@ -445,9 +495,9 @@ int main(int argc, char **argv)
 	 * sandbox. That is not a side effect to work around; it is half the
 	 * point. */
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
-		die("prctl(NO_NEW_PRIVS): %s", strerror(errno));
+		die(_("prctl(NO_NEW_PRIVS): %s"), strerror(errno));
 	if (ll_restrict(rfd, 0))
-		die("landlock_restrict_self: %s", strerror(errno));
+		die(_("landlock_restrict_self: %s"), strerror(errno));
 	close(rfd);
 
 	execvp(argv[i], &argv[i]);

@@ -1,0 +1,113 @@
+# Korean translations for syn-confine package.
+# Copyright (C) 2026 THE syn-confine'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the syn-confine package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: syn-confine\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-03 03:16-0500\n"
+"PO-Revision-Date: 2026-09-03 03:16-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#, c-format
+msgid "too many paths (limit %d)"
+msgstr "경로가 너무 많습니다 (한도 %d)"
+
+#, c-format
+msgid "--isolate-net: open %s: %s"
+msgstr "--isolate-net: %s 열기: %s"
+
+#, c-format
+msgid "--isolate-net: write %s: %s"
+msgstr "--isolate-net: %s 쓰기: %s"
+
+#, c-format
+msgid ""
+"--isolate-net: unshare: %s\n"
+"  This needs unprivileged user namespaces (/proc/sys/user/max_user_namespaces must be > 0)."
+msgstr "--isolate-net: unshare: %s\n  비특권 사용자 네임스페이스가 필요합니다 (/proc/sys/user/max_user_namespaces가 0보다 커야 합니다)."
+
+#, c-format
+msgid "%s needs a path"
+msgstr "%s에는 경로가 필요합니다"
+
+msgid "--tcp needs a port"
+msgstr "--tcp에는 포트가 필요합니다"
+
+#, c-format
+msgid "--tcp: '%s' is not a port"
+msgstr "--tcp: '%s'은(는) 포트가 아닙니다"
+
+#, c-format
+msgid "too many --tcp ports (limit %d)"
+msgstr "--tcp 포트가 너무 많습니다 (한도 %d)"
+
+#, c-format
+msgid "unknown option '%s' (use -- before the command)"
+msgstr "알 수 없는 옵션 '%s' (명령 앞에 --를 두십시오)"
+
+msgid "--net and --tcp contradict each other"
+msgstr "--net과 --tcp는 서로 모순됩니다"
+
+msgid "--net and --isolate-net contradict each other"
+msgstr "--net과 --isolate-net은 서로 모순됩니다"
+
+#, c-format
+msgid "this kernel has no Landlock support (%s) — refusing to run the command unconfined"
+msgstr "이 커널은 Landlock을 지원하지 않습니다 (%s) — 제한 없이 명령을 실행하기를 거부합니다"
+
+#, c-format
+msgid "this kernel's Landlock (ABI %d) cannot restrict the network, and --isolate-net was not given — refusing rather than pretending the network is closed"
+msgstr "이 커널의 Landlock(ABI %d)은 네트워크를 제한할 수 없고 --isolate-net도 주어지지 않았습니다 — 네트워크가 닫힌 척하기보다 거부합니다"
+
+#, c-format
+msgid "landlock abi   %d\n"
+msgstr "Landlock ABI   %d\n"
+
+msgid "network        isolated (namespace: no TCP, UDP, DNS or loopback)\n"
+msgstr "네트워크       격리됨 (네임스페이스: TCP·UDP·DNS·루프백 모두 없음)\n"
+
+msgid "network        unrestricted TCP\n"
+msgstr "네트워크       TCP 무제한\n"
+
+msgid "network        TCP to listed ports only (UDP NOT covered)\n"
+msgstr "네트워크       TCP는 나열된 포트만 (UDP는 포함되지 않음)\n"
+
+msgid "network        no TCP (UDP NOT covered)\n"
+msgstr "네트워크       TCP 없음 (UDP는 포함되지 않음)\n"
+
+#, c-format
+msgid "  tcp port     %u\n"
+msgstr "  TCP 포트     %u\n"
+
+#, c-format
+msgid "  %-2s %-28s (absent, skipped)\n"
+msgstr "  %-2s %-28s (없음, 건너뜀)\n"
+
+#, c-format
+msgid "landlock_create_ruleset: %s"
+msgstr "landlock_create_ruleset: %s"
+
+#, c-format
+msgid "landlock_add_rule %s: %s"
+msgstr "landlock_add_rule %s: %s"
+
+#, c-format
+msgid "landlock_add_rule tcp/%u: %s"
+msgstr "landlock_add_rule tcp/%u: %s"
+
+#, c-format
+msgid "prctl(NO_NEW_PRIVS): %s"
+msgstr "prctl(NO_NEW_PRIVS): %s"
+
+#, c-format
+msgid "landlock_restrict_self: %s"
+msgstr "landlock_restrict_self: %s"

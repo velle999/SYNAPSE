@@ -1,0 +1,112 @@
+# Hindi translations for syn-confine package.
+# Copyright (C) 2026 THE syn-confine'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the syn-confine package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: syn-confine\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-03 03:16-0500\n"
+"PO-Revision-Date: 2026-09-03 03:16-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#, c-format
+msgid "too many paths (limit %d)"
+msgstr "बहुत अधिक पथ (सीमा %d)"
+
+#, c-format
+msgid "--isolate-net: open %s: %s"
+msgstr "--isolate-net: %s खोलना: %s"
+
+#, c-format
+msgid "--isolate-net: write %s: %s"
+msgstr "--isolate-net: %s लिखना: %s"
+
+#, c-format
+msgid ""
+"--isolate-net: unshare: %s\n"
+"  This needs unprivileged user namespaces (/proc/sys/user/max_user_namespaces must be > 0)."
+msgstr "--isolate-net: unshare: %s\n  इसके लिए बिना-विशेषाधिकार यूज़र नेमस्पेस चाहिए (/proc/sys/user/max_user_namespaces > 0 होना चाहिए)।"
+
+#, c-format
+msgid "%s needs a path"
+msgstr "%s को एक पथ चाहिए"
+
+msgid "--tcp needs a port"
+msgstr "--tcp को एक पोर्ट चाहिए"
+
+#, c-format
+msgid "--tcp: '%s' is not a port"
+msgstr "--tcp: '%s' कोई पोर्ट नहीं है"
+
+#, c-format
+msgid "too many --tcp ports (limit %d)"
+msgstr "बहुत अधिक --tcp पोर्ट (सीमा %d)"
+
+#, c-format
+msgid "unknown option '%s' (use -- before the command)"
+msgstr "अज्ञात विकल्प '%s' (कमांड से पहले -- लगाएँ)"
+
+msgid "--net and --tcp contradict each other"
+msgstr "--net और --tcp एक-दूसरे का विरोध करते हैं"
+
+msgid "--net and --isolate-net contradict each other"
+msgstr "--net और --isolate-net एक-दूसरे का विरोध करते हैं"
+
+#, c-format
+msgid "this kernel has no Landlock support (%s) — refusing to run the command unconfined"
+msgstr "इस कर्नेल में Landlock समर्थन नहीं है (%s) — कमांड को बिना सीमा चलाने से इनकार"
+
+#, c-format
+msgid "this kernel's Landlock (ABI %d) cannot restrict the network, and --isolate-net was not given — refusing rather than pretending the network is closed"
+msgstr "इस कर्नेल का Landlock (ABI %d) नेटवर्क सीमित नहीं कर सकता, और --isolate-net भी नहीं दिया गया — नेटवर्क बंद होने का दिखावा करने के बजाय इनकार"
+
+#, c-format
+msgid "landlock abi   %d\n"
+msgstr "Landlock ABI   %d\n"
+
+msgid "network        isolated (namespace: no TCP, UDP, DNS or loopback)\n"
+msgstr "नेटवर्क          पृथक (नेमस्पेस: न TCP, न UDP, न DNS, न लूपबैक)\n"
+
+msgid "network        unrestricted TCP\n"
+msgstr "नेटवर्क          TCP अप्रतिबंधित\n"
+
+msgid "network        TCP to listed ports only (UDP NOT covered)\n"
+msgstr "नेटवर्क          TCP केवल सूचीबद्ध पोर्ट तक (UDP शामिल नहीं)\n"
+
+msgid "network        no TCP (UDP NOT covered)\n"
+msgstr "नेटवर्क          कोई TCP नहीं (UDP शामिल नहीं)\n"
+
+#, c-format
+msgid "  tcp port     %u\n"
+msgstr "  TCP पोर्ट     %u\n"
+
+#, c-format
+msgid "  %-2s %-28s (absent, skipped)\n"
+msgstr "  %-2s %-28s (अनुपस्थित, छोड़ा गया)\n"
+
+#, c-format
+msgid "landlock_create_ruleset: %s"
+msgstr "landlock_create_ruleset: %s"
+
+#, c-format
+msgid "landlock_add_rule %s: %s"
+msgstr "landlock_add_rule %s: %s"
+
+#, c-format
+msgid "landlock_add_rule tcp/%u: %s"
+msgstr "landlock_add_rule tcp/%u: %s"
+
+#, c-format
+msgid "prctl(NO_NEW_PRIVS): %s"
+msgstr "prctl(NO_NEW_PRIVS): %s"
+
+#, c-format
+msgid "landlock_restrict_self: %s"
+msgstr "landlock_restrict_self: %s"

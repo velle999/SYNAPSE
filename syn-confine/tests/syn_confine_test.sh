@@ -39,6 +39,12 @@ set -uo pipefail
 # the literal "EPERM" rather than letting the interpreter phrase the error.
 # That is the same problem, solved locally. This is the general fix.
 export LC_ALL=C
+# ⚠ AND LANGUAGE UNSET WITH IT. LC_ALL=C does veto LANGUAGE for gettext — a
+# LC_MESSAGES of "C" makes it ignored — but that is one rule deep in gettext's
+# precedence, not a thing anybody reads off this line. syn-confine's own words
+# go through gettext now, so the pin is stated in full rather than relying on
+# it. Same two lines every suite in this project carries.
+unset LANGUAGE
 
 SC=${1:-./build/syn-confine}
 [ -x "$SC" ] || { echo "not executable: $SC" >&2; exit 1; }
