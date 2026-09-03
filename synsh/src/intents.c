@@ -258,8 +258,7 @@ static int run_foreground(synsh_state_t *s, const char *cmd, bool keep_open)
 
     const char *term = find_terminal();
     if (!term) {
-        fprintf(stderr, "  synsh: no terminal installed to run: %s\n"
-                        "         sudo pacman -S syntty\n", cmd);
+        fprintf(stderr, T(M_NO_TERMINAL), cmd);
         return 1;
     }
 
@@ -272,7 +271,7 @@ static int run_foreground(synsh_state_t *s, const char *cmd, bool keep_open)
 
     /* Say where it went. Without this the bar reports nothing and a terminal
      * appears on some other workspace, unexplained. */
-    printf("  opening %s\n", term);
+    printf(T(M_OPENING_TERM), term);
     fflush(stdout);
 
     pid_t p = fork();
@@ -319,11 +318,10 @@ static int intent_url(synsh_state_t *s, const char *url)
 {
     const char *opener = have("xdg-open") ? "xdg-open" : first_present(browsers);
     if (!opener) {
-        fprintf(stderr, "  synsh: no browser and no xdg-open installed\n"
-                        "         sudo pacman -S firefox\n");
+        fputs(T(M_NO_BROWSER), stderr);
         return 1;
     }
-    printf("  %sopening%s %s\n", COLOR_DIM, COLOR_RESET, url);
+    printf(T(M_OPENING_URL), COLOR_DIM, COLOR_RESET, url);
     return launch_detached(opener, url);
 }
 
@@ -336,7 +334,7 @@ static int intent_files(synsh_state_t *s)
     /* SynapseOS's own, and the distribution default for inode/directory since
      * 2026-08-10, so it answers first. */
     if (have("synfiles")) {
-        printf("  %sopening%s %s in synfiles\n", COLOR_DIM, COLOR_RESET, where);
+        printf(T(M_OPENING_SYNFILES), COLOR_DIM, COLOR_RESET, where);
         return launch_detached2("synfiles", "gui", where);
     }
 
@@ -346,12 +344,11 @@ static int intent_files(synsh_state_t *s)
          * something not in our candidate list. */
         if (have("xdg-open")) fm = "xdg-open";
         else {
-            fprintf(stderr, "  synsh: no file manager installed\n"
-                            "         sudo pacman -S synfiles\n");
+            fputs(T(M_NO_FILEMANAGER), stderr);
             return 1;
         }
     }
-    printf("  %sopening%s %s in %s\n", COLOR_DIM, COLOR_RESET, where, fm);
+    printf(T(M_OPENING_IN), COLOR_DIM, COLOR_RESET, where, fm);
     return launch_detached(fm, where);
 }
 
@@ -410,10 +407,10 @@ static int intent_music(synsh_state_t *s)
         if (cliamp_running(s)) {
             /* Resume is a one-shot IPC call, not the TUI — it needs no terminal
              * either way, and opening one for it would leave an empty window. */
-            printf("  %sresuming%s cliamp\n", COLOR_DIM, COLOR_RESET);
+            printf(T(M_RESUMING_CLIAMP), COLOR_DIM, COLOR_RESET);
             return execute_pipeline(s, "cliamp play");
         }
-        printf("  %sstarting%s cliamp\n", COLOR_DIM, COLOR_RESET);
+        printf(T(M_STARTING_CLIAMP), COLOR_DIM, COLOR_RESET);
         return run_foreground(s, "cliamp --auto-play --shuffle", false);
     }
 
@@ -428,11 +425,11 @@ static int intent_music(synsh_state_t *s)
 
     struct stat st;
     if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        fprintf(stderr, "  synsh: no music directory (%s)\n", dir);
+        fprintf(stderr, T(M_NO_MUSIC_DIR), dir);
         return 1;
     }
 
-    printf("  %splaying%s %s with %s\n", COLOR_DIM, COLOR_RESET, dir, player);
+    printf(T(M_PLAYING_WITH), COLOR_DIM, COLOR_RESET, dir, player);
     /* mpv understands a directory; the others mostly do too. Shuffle is what
      * "play music" means when you did not name anything. */
     if (strcmp(player, "mpv") == 0) {
@@ -485,7 +482,7 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
 {
     int h, m;
     if (!parse_clock(lower, &h, &m)) {
-        fprintf(stderr, "  synsh: what time? e.g. \"set alarm for 7:30am\"\n");
+        fputs(T(M_ALARM_WHAT_TIME), stderr);
         return 1;
     }
 
@@ -552,7 +549,7 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
     snprintf(tmp, sizeof(tmp), "%s.synsh.tmp", path);
     FILE *out = fopen(tmp, "w");
     if (!out) {
-        fprintf(stderr, "  synsh: cannot write %s: %s\n", path, strerror(errno));
+        fprintf(stderr, T(M_CANNOT_WRITE), path, strerror(errno));
         return 1;
     }
 
@@ -576,15 +573,14 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
     }
     fclose(out);
     if (rename(tmp, path) != 0) {
-        fprintf(stderr, "  synsh: cannot replace %s: %s\n", path, strerror(errno));
+        fprintf(stderr, T(M_CANNOT_REPLACE), path, strerror(errno));
         unlink(tmp);
         return 1;
     }
 
-    printf("  %salarm set for %s%s\n", COLOR_BRAND, pretty, COLOR_RESET);
+    printf(T(M_ALARM_SET), COLOR_BRAND, pretty, COLOR_RESET);
     if (system("pgrep -u \"$(id -u)\" -f 'python3 main.py' >/dev/null 2>&1") != 0)
-        printf("  %s(chibi is not running — she rings it, so start her before then)%s\n",
-               COLOR_DIM, COLOR_RESET);
+        printf(T(M_CHIBI_NOT_RUNNING), COLOR_DIM, COLOR_RESET);
     return 0;
 }
 
@@ -780,9 +776,29 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
          * package names. Every invocation errored out and fell through to the
          * `||`, so this intent had answered "no orphaned packages" on every
          * machine, always, whatever was installed. */
-        CLAIM(run_pkg(s,
-            "pacman -Qtdq >/dev/null 2>&1 && sudo pacman -Rns $(pacman -Qtdq) "
-            "|| echo '  no orphaned packages'"));
+    {
+        /*
+         * ⛔ THE ONE MESSAGE THAT TRAVELS INSIDE A SHELL COMMAND, so it is the
+         * one that has to be quoted rather than just translated. It reaches
+         * the person through `echo` in a pipeline, not through printf here —
+         * and a translation containing an apostrophe ("aucun paquet
+         * orphelin"… or any language that uses one) would close the single
+         * quote and turn the rest of the sentence into arguments. The
+         * '"'"' idiom is the standard way out and the only safe one.
+         */
+        char q[512], cmd[1024];
+        const char *m = T(M_NO_ORPHANS);
+        size_t qi = 0;
+        for (const char *c = m; *c && qi + 8 < sizeof q; c++) {
+            if (*c == '\'') { memcpy(q + qi, "'\\''", 4); qi += 4; }
+            else               q[qi++] = *c;
+        }
+        q[qi] = '\0';
+        snprintf(cmd, sizeof cmd,
+                 "pacman -Qtdq >/dev/null 2>&1 && sudo pacman -Rns $(pacman -Qtdq) "
+                 "|| echo '%s'", q);
+        CLAIM(run_pkg(s, cmd));
+    }
 
     return 0;   /* not ours — let synapd have it */
 }
@@ -796,6 +812,8 @@ void synsh_intent_help(synsh_state_t *s)
 
     printf("\n  %s%s%s — %s:\n", COLOR_BOLD, T(M_HELP_ASK), COLOR_RESET,
            T(M_HELP_ANSWERED));
+    /* i18n-english: LINES YOU CAN TYPE, not descriptions — see the note below.
+     * The marker holds until the next blank line. */
     printf("    %-22s %s\n", "what time is it",       T(M_HELP_THE_TIME));
     printf("    %-22s %s\n", "what day is it",        T(M_HELP_THE_DATE));
     printf("    %-22s %s\n", "open youtube",
@@ -806,6 +824,7 @@ void synsh_intent_help(synsh_state_t *s)
 
     printf("\n  %s%s%s (%s):\n", COLOR_BOLD, T(M_HELP_PACKAGES), COLOR_RESET,
            T(M_HELP_ARCH_SYNTAX));
+    /* i18n-english: lines you can type, and the pacman commands they become */
     printf("    %-22s %s\n", "install mpv",           "pacman -S --needed");
     printf("    %-22s %s\n", "uninstall mpv",         "pacman -Rns");
     printf("    %-22s %s\n", "search mpv",            "pacman -Ss");
@@ -813,6 +832,7 @@ void synsh_intent_help(synsh_state_t *s)
     printf("    %-22s %s\n", "is firefox installed",  "pacman -Q");
 
     printf("\n  %s%s%s:\n", COLOR_BOLD, T(M_HELP_EVERYDAY), COLOR_RESET);
+    /* i18n-english: lines you can type */
     printf("    where am i · list files · disk space · how much memory\n");
     printf("    what's running · my ip · uptime · what kernel\n");
     printf("    show the logs · failed services · gpu · temperature\n");

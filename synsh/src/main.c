@@ -404,6 +404,7 @@ int main(int argc, char *argv[]) {
         case 'i': force_interactive = 1; break;
         case 'v': g_state.verbose = 1; break;
         case 'V':
+            /* i18n-english: --version is a record, and things scrape it */
             printf("synsh %s (SynapseOS natural language shell)\n", SYNSH_VERSION);
             return 0;
         case 'h': usage(argv[0]); return 0;
@@ -416,7 +417,7 @@ int main(int argc, char *argv[]) {
 
     /* Initialize shell state */
     if (synsh_init(&g_state, argc, argv) < 0) {
-        fprintf(stderr, "synsh: initialization failed\n");
+        fprintf(stderr, "%s\n", T(M_INIT_FAILED));
         return 1;
     }
 
@@ -453,6 +454,7 @@ int main(int argc, char *argv[]) {
      * in the wrong language with no explanation is the failure this whole
      * layer exists to remove. */
     if (lang_arg && synsh_i18n_init(lang_arg) != synsh_lang_from_string(lang_arg))
+        /* i18n-english: language TAGS again — the reason is translated, the list is not */
         fprintf(stderr, "synsh: %s en de fr es pt it nl pl ru ja zh ko hi ar\n",
                 T(M_LANG_UNKNOWN));
 
@@ -468,7 +470,7 @@ int main(int argc, char *argv[]) {
     if (!no_ai) {
         if (synapd_connect(&g_state) == 0) {
             if (g_state.verbose)
-                printf("%ssynsh: connected to synapd\n%s", COLOR_OK, COLOR_RESET);
+                printf("%s%s\n%s", COLOR_OK, T(M_CONNECTED_SHORT), COLOR_RESET);
         } else {
             fprintf(stderr, "%s%s\n%s",
                     COLOR_WARN, T(M_AI_UNAVAILABLE), COLOR_RESET);
@@ -489,16 +491,35 @@ int main(int argc, char *argv[]) {
         char *p = rule;
         for (int i = 0; i < BANNER_W; i++) p = stpcpy(p, "─");
 
+        /*
+         * ⛔ THE PAD IS MEASURED, NOT COUNTED. It was the literal 25 — the
+         * length of the English tagline — which is why that one line stayed
+         * English while the rest of the shell was translated: any other
+         * wording put the right-hand │ in the wrong column. strlen() would be
+         * no better, because the box pads to COLUMNS and "カーネルが考える場所"
+         * is 30 bytes and 10 columns.
+         */
+        int tag_w = synsh_disp_width(T(M_TAGLINE));
+        int ver_w = synsh_disp_width(SYNSH_VERSION);
+        /* The interior starts right after │, so the two leading spaces of each
+         * row count toward BANNER_W — as they did in the constants this
+         * replaces (25 = 2 + the English tagline, 22 = 2 + "SynapseOS  ·
+         * synsh "). */
+        int tag_pad = BANNER_W - 2 - tag_w;
+        int ver_pad = BANNER_W - 22 - ver_w;
+        if (tag_pad < 1) tag_pad = 1;
+        if (ver_pad < 1) ver_pad = 1;
+
         printf("%s"
             "  ╭%s╮\n"
             "  │  SynapseOS  ·  synsh %s%*s│\n"
-            "  │  Where the kernel thinks%*s│\n"
+            "  │  %s%*s│\n"
             "  ╰%s╯\n"
             "%s\n",
             COLOR_BRAND,
             rule,
-            SYNSH_VERSION, (int)(BANNER_W - 22 - strlen(SYNSH_VERSION)), "",
-            (int)(BANNER_W - 25), "",
+            SYNSH_VERSION, ver_pad, "",
+            T(M_TAGLINE), tag_pad, "",
             rule,
             COLOR_RESET
         );

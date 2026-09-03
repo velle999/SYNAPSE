@@ -26,6 +26,11 @@ set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
 SYNSH=${1:-$here/../build/synsh}
+# ⛔ MADE ABSOLUTE, BECAUSE THE CASES BELOW cd. A relative `./build/synsh` is
+# resolved against whatever directory the test has just changed into, and every
+# one of them then fails with "No such file or directory" — 53 of them at once,
+# which reads as a broken shell rather than a mistyped argument.
+case "$SYNSH" in /*) ;; *) SYNSH="$PWD/$SYNSH" ;; esac
 [ -x "$SYNSH" ] || { echo "no synsh at $SYNSH — build it first"; exit 2; }
 
 fails=0
@@ -154,6 +159,117 @@ check "the language does not change what runs" "hello" \
       "$(timeout 5 "$SYNSH" --lang ja --no-ai -c 'echo hello')"
 check "exit codes are not localised" "1" \
       "$(timeout 5 "$SYNSH" --lang ru --no-ai -c 'false'; echo $?)"
+
+
+# ── ⛔ EVERY WORD synsh PRINTS GOES THROUGH T() ────────────────────────────
+#
+# The catalog was COMPLETE and this suite PASSED while thirty-eight messages
+# were English in all fourteen languages — because a string that never reaches
+# T() is not a missing translation, it is not a message. `syn status` translated
+# its values through M_STATUS_* and printed the labels beside them in English;
+# `syn ai on` printed the same two words as bare literals three lines from the
+# T() that already had them.
+#
+# So this reads the SOURCE. Any printf/fputs literal that looks like a sentence
+# and is not a T() is a message somebody forgot to declare.
+#
+# ⚠ i18n.c AND phrases.c ARE EXEMPT BY NAME. One holds every catalog and the
+# other the intent tables — both are nothing BUT foreign-language literals.
+bare=$(python3 - "$here/.." <<'PYEOF'
+import re, sys, glob, os
+root = sys.argv[1]
+
+# ⛔ EACH OF THESE IS SOMETHING A PROGRAM READS OR RE-READS, NOT PROSE.
+#   export NAME=…, alias n='v'   — output you can paste back in as input
+#   the shell's own diagnostics whose words all arrive as %s (strerror, argv)
+SKIP_SUBSTR = ("export %s", "alias %s='%s'", "pacman -", "%s: %s", "%s  Synapse:")
+#
+# ⚠ AND ONE PER-SITE EXEMPTION, WHICH HAS TO CARRY A REASON.
+# `/* i18n-english: why */` on the line or above it holds until the next BLANK
+# LINE, so a run of them — the help screen's typeable examples — takes one
+# marker and not thirteen. Anything claiming the exemption says in place why the
+# English is the right answer; that is the whole point of it being a comment.
+bad = []
+for f in sorted(glob.glob(os.path.join(root, "src", "*.c"))):
+    base = os.path.basename(f)
+    if base in ("i18n.c", "phrases.c"):
+        continue
+    exempt = False
+    for n, line in enumerate(open(f, encoding="utf-8"), 1):
+        if not line.strip():
+            exempt = False
+        if "i18n-english:" in line:
+            exempt = True
+        if exempt:
+            continue
+        if not re.search(r"\b(printf|fprintf|fputs|puts|dprintf)\s*\(", line):
+            continue
+        stripped = re.sub(r"T\(M_[A-Z_0-9]+\)", "X", line)
+        for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', stripped):
+            if any(k in lit for k in SKIP_SUBSTR):
+                continue
+            # Two words of lower-case prose is a sentence; "%s\n" is not.
+            if re.search(r"[A-Za-z]{2,}\s+[a-z]{2,}", lit):
+                bad.append("%s:%d: %s" % (base, n, lit[:48]))
+print("\n".join(bad))
+PYEOF
+)
+check "every word synsh prints goes through T()" "" "$(printf '%s' "$bare" | tr '\n' ' ')"
+
+# ── ⛔ AND EVERY CATALOG HAS EVERY SLOT ────────────────────────────────────
+#
+# A missing designated initialiser is a NULL in the array, and synsh_msg()
+# answers the English text for it — which is exactly right at runtime and
+# invisible to every other check here, because the shell still works and still
+# says something. The only way to see a slot nobody filled is to count them.
+gaps=$(python3 - "$here/.." <<'PYEOF'
+import re, sys, os
+root = sys.argv[1]
+ids = re.findall(r"X\((M_[A-Z_0-9]+),", open(os.path.join(root, "include", "i18n.h")).read())
+want = set(ids)
+src = open(os.path.join(root, "src", "i18n.c")).read()
+out = []
+for lang in ("DE FR ES PT IT NL PL RU JA ZH KO HI AR").split():
+    m = re.search(r"static const char \*const MSG_%s\[M_COUNT\] = \{(.*?)\n\};" % lang,
+                  src, re.S)
+    if not m:
+        out.append("%s(no catalog)" % lang); continue
+    have = set(re.findall(r"\[(M_[A-Z_0-9]+)\s*\]\s*=", m.group(1)))
+    missing = want - have
+    if missing:
+        out.append("%s(%d missing: %s)" % (lang, len(missing), ",".join(sorted(missing)[:3])))
+print(" ".join(out))
+PYEOF
+)
+check "every catalog fills every message slot" "" "$gaps"
+
+# ── ⛔ AND THE BANNER BOX IS THE SAME WIDTH IN ALL FOURTEEN ────────────────
+#
+# The tagline row padded to a hard-coded 25 — the length of the English words —
+# so the right-hand │ landed wherever the translation happened to end. It is
+# measured now, in COLUMNS: "カーネルが考える場所" is 30 bytes, 10 code points
+# and 20 columns, and only the last of those three draws a box that closes.
+#
+# ⚠ THE ASSERTION IS THAT EVERY ROW MATCHES, not that any row is 41 wide. A
+# width constant here would be a second place to change.
+box=$(for l in en de fr es pt it nl pl ru ja zh ko hi ar; do
+    printf '' | timeout 5 "$SYNSH" --lang "$l" -i 2>/dev/null |
+    python3 -c '
+import sys, unicodedata
+def cols(s):
+    w = 0
+    for ch in s:
+        if unicodedata.category(ch) in ("Mn", "Me"): continue
+        w += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+    return w
+rows = [r for r in sys.stdin.read().split("\n")
+        if r.startswith("  \u2502") or r.startswith("  \u256d") or r.startswith("  \u2570")]
+widths = {cols(r) for r in rows}
+if len(rows) < 4 or len(widths) != 1:
+    print("'"$l"'(" + ",".join(str(w) for w in sorted(widths)) + ")", end="")
+'
+done)
+check "the banner box closes in every language" "" "$box"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all language checks passed"; else echo "$fails failed"; fi

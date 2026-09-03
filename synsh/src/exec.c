@@ -189,7 +189,7 @@ static int take_redirs(synsh_state_t *s, synsh_words_t *w,
         if (strcmp(w->v[i], "&") == 0) { *background = 1; continue; }
 
         if (nred >= MAX_REDIRS) {
-            fprintf(stderr, "synsh: too many redirections\n");
+            fprintf(stderr, "%s\n", T(M_TOO_MANY_REDIR));
             free_redirs(rs, nred);
             return -1;
         }

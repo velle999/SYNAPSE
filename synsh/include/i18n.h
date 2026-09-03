@@ -100,7 +100,62 @@ typedef enum {
     X(M_STAT_ASSISTS,     "AI assists")                                       \
     X(M_LANG_IS,          "Language:")                                        \
     X(M_LANG_UNKNOWN,     "unknown language — try one of:")                   \
-    X(M_SYNAPD_OFFLINE,   "syn: synapd offline")
+    X(M_SYNAPD_OFFLINE,   "syn: synapd offline")                             \
+    /*                                                                        \
+     * ── everything below was English in every language until 0.1.0-29 ─────  \
+     *                                                                        \
+     * ⛔ AND NOT ONE OF THEM LOOKED WRONG. The catalog was complete, all      \
+     * thirteen columns filled, and tests/lang_test.sh passed — because a      \
+     * message that never reaches T() is not a MISSING translation, it is not  \
+     * a message. `syn status` translated its VALUES through M_STATUS_* and    \
+     * printed the labels beside them in English; `syn ai on` printed the      \
+     * same two words as bare literals three lines from the T() that has them. \
+     * The gate in lang_test.sh now reads the SOURCE and fails on a printed    \
+     * English string that is not T().                                        \
+     */                                                                       \
+    X(M_CD_NO_OLDPWD,     "cd: OLDPWD not set")                               \
+    X(M_NO_JOBS,          "No background jobs.")                              \
+    X(M_JOB_RUNNING,      "Running")                                          \
+    X(M_JOB_STOPPED,      "Stopped")                                          \
+    X(M_JOB_DONE,         "Done")                                             \
+    X(M_LABEL_SOCKET,     "socket")                                           \
+    X(M_LABEL_AI,         "ai")                                               \
+    X(M_LABEL_EXPLAIN,    "explain")                                          \
+    X(M_LABEL_SAFE,       "safe mode")                                        \
+    X(M_SET_AI,           "AI assistance:")                                   \
+    X(M_SET_EXPLAIN,      "Explain mode:")                                    \
+    X(M_SET_SAFE,         "Safe mode:")                                       \
+    X(M_UNKNOWN_SUBCMD,   "syn: unknown subcommand '%s'. Try 'syn' for help.\n") \
+    X(M_ALIAS_NOT_FOUND,  "alias: %s: not found\n")                           \
+    X(M_ALIAS_BAD_NAME,   "alias: invalid alias name\n")                      \
+    X(M_ALIAS_FULL,       "alias: table full (max 128)\n")                    \
+    X(M_UNALIAS_USAGE,    "unalias: usage: unalias name [name ...]\n")        \
+    X(M_UNALIAS_NOT_FOUND, "unalias: %s: not found\n")                        \
+    X(M_TOO_MANY_REDIR,   "synsh: too many redirections")                     \
+    X(M_UNTERMINATED,     "synsh: unterminated %s\n")                         \
+    X(M_NO_TERMINAL,      "  synsh: no terminal installed to run: %s\n"       \
+                          "         sudo pacman -S syntty\n")                 \
+    X(M_OPENING_TERM,     "  opening %s\n")                                   \
+    X(M_NO_BROWSER,       "  synsh: no browser and no xdg-open installed\n"   \
+                          "         sudo pacman -S firefox\n")                \
+    X(M_OPENING_URL,      "  %sopening%s %s\n")                               \
+    X(M_OPENING_SYNFILES, "  %sopening%s %s in synfiles\n")                   \
+    X(M_NO_FILEMANAGER,   "  synsh: no file manager installed\n"              \
+                          "         sudo pacman -S synfiles\n")               \
+    X(M_OPENING_IN,       "  %sopening%s %s in %s\n")                         \
+    X(M_RESUMING_CLIAMP,  "  %sresuming%s cliamp\n")                          \
+    X(M_STARTING_CLIAMP,  "  %sstarting%s cliamp\n")                          \
+    X(M_NO_MUSIC_DIR,     "  synsh: no music directory (%s)\n")               \
+    X(M_PLAYING_WITH,     "  %splaying%s %s with %s\n")                       \
+    X(M_ALARM_WHAT_TIME,  "  synsh: what time? e.g. \"set alarm for 7:30am\"\n") \
+    X(M_CANNOT_WRITE,     "  synsh: cannot write %s: %s\n")                   \
+    X(M_CANNOT_REPLACE,   "  synsh: cannot replace %s: %s\n")                 \
+    X(M_ALARM_SET,        "  %salarm set for %s%s\n")                         \
+    X(M_CHIBI_NOT_RUNNING, "  %s(chibi is not running — she rings it, so start her before then)%s\n") \
+    X(M_INIT_FAILED,      "synsh: initialization failed")                     \
+    X(M_CONNECTED_SHORT,  "synsh: connected to synapd")                      \
+    X(M_TAGLINE,          "Where the kernel thinks")                        \
+    X(M_NO_ORPHANS,       "  no orphaned packages")
 
 #define SYNSH_MSG_ENUM(id, en) id,
 typedef enum { SYNSH_MESSAGES(SYNSH_MSG_ENUM) M_COUNT } synsh_msg_t;
@@ -140,6 +195,11 @@ const char *synsh_msg(synsh_msg_t id);
  * through unchanged, which is exactly right: those scripts need no folding and
  * the tables are written in them directly.
  */
+/* How many COLUMNS this string takes on a terminal — not bytes, not code
+ * points. The banner box pads to a column count, and a byte count pads a CJK
+ * tagline to less than half its width. See the note in i18n.c. */
+int synsh_disp_width(const char *s);
+
 void synsh_fold(char *dst, size_t n, const char *src);
 
 /* The same, with the German ae/oe/ue transliteration applied instead of the

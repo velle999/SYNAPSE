@@ -465,7 +465,7 @@ int synsh_words_split(synsh_state_t *s, const char *line, synsh_words_t *out)
             w.started = true;
             if (*p) p++;
             else {
-                fprintf(stderr, "synsh: unterminated '\n");
+                fprintf(stderr, T(M_UNTERMINATED), "'");
                 rc = -1; goto done;
             }
             continue;
@@ -487,7 +487,7 @@ int synsh_words_split(synsh_state_t *s, const char *line, synsh_words_t *out)
                 } else if (*p == '`') {
                     p++;
                     char *body = sub_body(&p, 0, '`');
-                    if (!body) { fprintf(stderr, "synsh: unterminated `\n"); rc = -1; goto done; }
+                    if (!body) { fprintf(stderr, T(M_UNTERMINATED), "`"); rc = -1; goto done; }
                     char *val = capture(s, body);
                     free(body);
                     if (val) { wb_put(&w, val, strlen(val), false); free(val); }
@@ -497,7 +497,7 @@ int synsh_words_split(synsh_state_t *s, const char *line, synsh_words_t *out)
             }
             if (*p) p++;
             else {
-                fprintf(stderr, "synsh: unterminated \"\n");
+                fprintf(stderr, T(M_UNTERMINATED), "\"");
                 rc = -1; goto done;
             }
             continue;
@@ -515,7 +515,7 @@ int synsh_words_split(synsh_state_t *s, const char *line, synsh_words_t *out)
         if (*p == '`') {
             p++;
             char *body = sub_body(&p, 0, '`');
-            if (!body) { fprintf(stderr, "synsh: unterminated `\n"); rc = -1; goto done; }
+            if (!body) { fprintf(stderr, T(M_UNTERMINATED), "`"); rc = -1; goto done; }
             char *val = capture(s, body);
             free(body);
             if (val) { wb_put(&w, val, strlen(val), true); free(val); }

@@ -29,6 +29,11 @@ set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
 SYNSH=${1:-$here/../build/synsh}
+# ⛔ MADE ABSOLUTE, BECAUSE THE CASES BELOW cd. A relative `./build/synsh` is
+# resolved against whatever directory the test has just changed into, and every
+# one of them then fails with "No such file or directory" — 53 of them at once,
+# which reads as a broken shell rather than a mistyped argument.
+case "$SYNSH" in /*) ;; *) SYNSH="$PWD/$SYNSH" ;; esac
 [ -x "$SYNSH" ] || { echo "no synsh at $SYNSH — build it first"; exit 2; }
 
 TMP=$(mktemp -d /tmp/synsh-shell.XXXXXX)

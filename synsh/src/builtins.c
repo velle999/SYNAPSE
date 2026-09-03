@@ -24,7 +24,7 @@ static int builtin_cd(synsh_state_t *s, int argc, char **argv) {
         if (!dir) dir = "/";
     } else if (strcmp(argv[1], "-") == 0) {
         dir = getenv("OLDPWD");
-        if (!dir) { fprintf(stderr, "cd: OLDPWD not set\n"); return 1; }
+        if (!dir) { fprintf(stderr, "%s\n", T(M_CD_NO_OLDPWD)); return 1; }
         printf("%s\n", dir);
     } else {
         dir = argv[1];
@@ -71,10 +71,13 @@ static int builtin_export(synsh_state_t *s, int argc, char **argv) {
 static int builtin_jobs(synsh_state_t *s, int argc, char **argv) {
     (void)argc; (void)argv;
     syn_job_t *j = s->jobs;
-    if (!j) { printf("No background jobs.\n"); return 0; }
+    if (!j) { printf("%s\n", T(M_NO_JOBS)); return 0; }
     while (j) {
-        const char *state = j->state == JOB_RUNNING ? "Running"
-                          : j->state == JOB_STOPPED ? "Stopped" : "Done";
+        /* ⚠ Translated HERE, at the draw site. The state itself is the enum
+         * beside it; this is only the word printed for it. */
+        const char *state = j->state == JOB_RUNNING ? T(M_JOB_RUNNING)
+                          : j->state == JOB_STOPPED ? T(M_JOB_STOPPED)
+                                                    : T(M_JOB_DONE);
         printf("[%d]  %s\t%s\n", j->id, state, j->command_str);
         j = j->next;
     }
@@ -112,10 +115,13 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
             s->synapd_online ? COL_BGREEN : COL_YELLOW,
             s->synapd_online ? T(M_STATUS_ONLINE) : T(M_STATUS_OFFLINE),
             COL_RESET);
-        printf("socket: %s\n", SYN_SOCKET_PATH);
-        printf("ai: %s\n", s->ai_enabled ? T(M_STATUS_ENABLED) : T(M_STATUS_DISABLED));
-        printf("explain: %s\n", s->explain_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
-        printf("safe mode: %s\n", s->safe_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
+        printf("%s: %s\n", T(M_LABEL_SOCKET), SYN_SOCKET_PATH);
+        printf("%s: %s\n", T(M_LABEL_AI),
+               s->ai_enabled ? T(M_STATUS_ENABLED) : T(M_STATUS_DISABLED));
+        printf("%s: %s\n", T(M_LABEL_EXPLAIN),
+               s->explain_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
+        printf("%s: %s\n", T(M_LABEL_SAFE),
+               s->safe_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
         printf("%s %s (%s)\n", T(M_LANG_IS),
                synsh_lang_name(synsh_lang()), synsh_lang_code(synsh_lang()));
         return 0;
@@ -131,6 +137,7 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
         if (argc < 3) {
             printf("%s %s (%s)\n", T(M_LANG_IS),
                    synsh_lang_name(synsh_lang()), synsh_lang_code(synsh_lang()));
+            /* i18n-english: language TAGS, not words — these are what you type */
             printf("  en de fr es pt it nl pl ru ja zh ko hi ar\n");
             return 0;
         }
@@ -147,19 +154,25 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
 
     if (strcmp(argv[1], "ai") == 0 && argc >= 3) {
         s->ai_enabled = strcmp(argv[2], "on") == 0;
-        printf("AI assistance: %s\n", s->ai_enabled ? "enabled" : "disabled");
+        /* ⚠ THE SAME TWO WORDS `syn status` ALREADY TRANSLATES, three lines
+         * up, and they were bare literals here. A word in a %s slot is a word
+         * no catalog can reach. */
+        printf("%s %s\n", T(M_SET_AI),
+               s->ai_enabled ? T(M_STATUS_ENABLED) : T(M_STATUS_DISABLED));
         return 0;
     }
 
     if (strcmp(argv[1], "explain") == 0 && argc >= 3) {
         s->explain_mode = strcmp(argv[2], "on") == 0;
-        printf("Explain mode: %s\n", s->explain_mode ? "on" : "off");
+        printf("%s %s\n", T(M_SET_EXPLAIN),
+               s->explain_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
         return 0;
     }
 
     if (strcmp(argv[1], "safe") == 0 && argc >= 3) {
         s->safe_mode = strcmp(argv[2], "on") == 0;
-        printf("Safe mode: %s\n", s->safe_mode ? "on" : "off");
+        printf("%s %s\n", T(M_SET_SAFE),
+               s->safe_mode ? T(M_STATUS_ON) : T(M_STATUS_OFF));
         return 0;
     }
 
@@ -198,7 +211,7 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
         return 0;
     }
 
-    fprintf(stderr, "syn: unknown subcommand '%s'. Try 'syn' for help.\n", argv[1]);
+    fprintf(stderr, T(M_UNKNOWN_SUBCMD), argv[1]);
     return 1;
 }
 
@@ -261,7 +274,7 @@ static int builtin_alias(synsh_state_t *s, int argc, char **argv) {
             if (i >= 0) {
                 alias_print(s, i);
             } else {
-                fprintf(stderr, "alias: %s: not found\n", argv[a]);
+                fprintf(stderr, T(M_ALIAS_NOT_FOUND), argv[a]);
                 rc = 1;
             }
             continue;
@@ -271,7 +284,7 @@ static int builtin_alias(synsh_state_t *s, int argc, char **argv) {
         const char *name  = argv[a];
         const char *value = eq + 1;
         if (!*name) {
-            fprintf(stderr, "alias: invalid alias name\n");
+            fputs(T(M_ALIAS_BAD_NAME), stderr);
             rc = 1;
             continue;
         }
@@ -282,7 +295,7 @@ static int builtin_alias(synsh_state_t *s, int argc, char **argv) {
             free(s->alias_values[i]);
             s->alias_values[i] = strdup(value);
         } else if (s->alias_count >= 128) {
-            fprintf(stderr, "alias: table full (max 128)\n");
+            fputs(T(M_ALIAS_FULL), stderr);
             rc = 1;
         } else {
             s->alias_names[s->alias_count]  = strdup(name);
@@ -295,7 +308,7 @@ static int builtin_alias(synsh_state_t *s, int argc, char **argv) {
 
 static int builtin_unalias(synsh_state_t *s, int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "unalias: usage: unalias name [name ...]\n");
+        fputs(T(M_UNALIAS_USAGE), stderr);
         return 1;
     }
 
@@ -303,7 +316,7 @@ static int builtin_unalias(synsh_state_t *s, int argc, char **argv) {
     for (int a = 1; a < argc; a++) {
         int i = alias_find(s, argv[a]);
         if (i < 0) {
-            fprintf(stderr, "unalias: %s: not found\n", argv[a]);
+            fprintf(stderr, T(M_UNALIAS_NOT_FOUND), argv[a]);
             rc = 1;
             continue;
         }

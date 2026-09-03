@@ -1,7 +1,64 @@
 # Maintainer: SynapseOS Project <dev@synapseos.dev>
 pkgname=synsh
 pkgver=0.1.0
-pkgrel=28
+# ── 0.1.0-29: the thirty-nine messages that were never messages ──────────────
+#
+# ⛔ THE CATALOG WAS COMPLETE, ALL FOURTEEN COLUMNS FILLED, AND tests/
+# lang_test.sh PASSED — while `syn status` printed its labels in English beside
+# values it had just translated, `syn ai on` printed the same two words as bare
+# literals three lines from the T() that already had them, and every message in
+# builtins.c, expand.c and half of intents.c had never been declared at all. A
+# string that never reaches T() is not a MISSING translation; it is not a
+# message, and nothing that counts translations can see it.
+#
+# 39 of them now, so 91 in each of the fourteen catalogs: cd, jobs and their
+# three states, the alias and unalias diagnostics, the unterminated-quote
+# errors, `syn status`'s labels, and everything the intents say while opening a
+# browser, a file manager, a music player or setting an alarm.
+#
+# ⛔ THE GATE READS THE SOURCE, because that is the only place the absence is
+# visible. Any printf/fputs literal that looks like a sentence and is not a T()
+# fails the build. ⚠ With ONE per-site exemption that must carry a reason —
+# `/* i18n-english: why */`, holding until the next blank line, which is how
+# the help screen's examples stay in the one spelling every language's tables
+# accept, and how `--version` stays a record. It was proved by removing a T()
+# and watching it fail.
+#
+# ⛔ AND A SECOND GATE COUNTS THE SLOTS. A missing designated initialiser is a
+# NULL that synsh_msg() answers in English — correct at runtime, invisible to
+# everything else, and permanent.
+#
+# ── the banner said "Where the kernel thinks" in every language ──────────────
+#
+# Not because anybody chose that: the box padded to a hard-coded 25, the length
+# of those English words, so any other wording put the right-hand │ in the wrong
+# column. It is measured now — in COLUMNS, which is the third of the three
+# possible answers: "カーネルが考える場所" is 30 bytes, 10 code points and 20
+# columns, and only the last of them closes the box.
+#
+# ⚠ NO wcswidth(3). It needs setlocale(LC_CTYPE, "") and synsh deliberately
+# never calls setlocale — its catalog is compiled in so that it works before
+# /usr is complete. synsh_disp_width() decodes UTF-8 itself, and every range in
+# it was checked against glibc's wcswidth() for all fourteen taglines.
+# ⛔ Mn AND Me TAKE NO ROOM, Mc TAKES ONE, and that distinction is the whole of
+# Devanagari: zeroing all of 093A–094F made the Hindi tagline 13 columns where a
+# terminal draws 16. The suite asserts the box CLOSES in every language rather
+# than that it is any particular width.
+#
+# ⚠ ONE MESSAGE TRAVELS INSIDE A SHELL COMMAND — the orphan-package line, which
+# reaches the person through `echo` in a pipeline. It is quoted with the
+# '"'"' idiom, because a translation containing an apostrophe would otherwise
+# close the quote and turn the rest of the sentence into arguments.
+#
+# ── and 118 assertions that nothing ran ─────────────────────────────────────
+#
+# ⛔ `meson test` answered "No tests defined". tests/shell_test.sh and
+# tests/lang_test.sh existed, passed, and were run when somebody remembered to
+# type them, which is a habit and not a gate. Both are wired into meson.build
+# now. ⚠ And both make their argument absolute first: the cases cd, so a
+# relative ./build/synsh failed 53 of them at once with "No such file or
+# directory" — which reads as a broken shell rather than a mistyped path.
+pkgrel=29
 pkgdesc="SynapseOS natural language shell — AI-native command interface, in 14 languages"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
