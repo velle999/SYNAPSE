@@ -58,6 +58,10 @@ typedef enum { OUT_HUMAN, OUT_REC } out_mode_t;
 extern out_mode_t g_out;
 
 void warn(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+/* How many COLUMNS a string takes on a terminal — see util.c. `list` pads its
+ * state column to it, and a byte count pads a CJK word to twice its width. */
+int   disp_width(const char *s);
+
 void die(const char *fmt, ...)  __attribute__((format(printf, 1, 2), noreturn));
 void rec_header(const char *fields);
 void rec_row(const char *fmt, ...) __attribute__((format(printf, 1, 2)));

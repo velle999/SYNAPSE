@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "synvault.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -38,7 +39,7 @@ static char *home(void)
 	const char *h = getenv("SYNVAULT_HOME");
 	if (h && *h) return xstrdup(h);
 	h = getenv("HOME");
-	if (!h || !*h) die("no HOME, so there is nowhere to keep a vault");
+	if (!h || !*h) die("%s", _("no HOME, so there is nowhere to keep a vault"));
 	return xstrdup(h);
 }
 
@@ -185,11 +186,14 @@ static void hush_backend(void)
 static const char *gocryptfs_reason(int rc)
 {
 	switch (rc) {
-	case 12:  return "That password is not right.";
-	case 11:  return "This vault's settings file is missing or unreadable.";
-	case 10:  return "There are already files where this vault opens, so it was left shut.";
-	case 6:   return "This vault's encrypted files are missing.";
-	case 127: return "gocryptfs is not installed.";
+	/* ⚠ TRANSLATED HERE, not at the warn() that prints them. `warn("%s", why)`
+	 * with a bare literal reaches gettext with nothing to look up — the format
+	 * is "%s" and the sentence never passes through _() at all. */
+	case 12:  return _("That password is not right.");
+	case 11:  return _("This vault's settings file is missing or unreadable.");
+	case 10:  return _("There are already files where this vault opens, so it was left shut.");
+	case 6:   return _("This vault's encrypted files are missing.");
+	case 127: return _("gocryptfs is not installed.");
 	default:  return NULL;
 	}
 }
@@ -269,8 +273,8 @@ static bool have(const char *cmd)
 static bool backend_ready(void)
 {
 	if (!have(SYNVAULT_GOCRYPTFS)) {
-		warn("gocryptfs is not installed, and it is what does the encrypting.\n"
-		     "  synpkg install gocryptfs");
+		warn("%s", _("gocryptfs is not installed, and it is what does the encrypting.\n"
+		             "  synpkg install gocryptfs"));
 		return false;
 	}
 	return true;
@@ -280,11 +284,11 @@ static bool backend_ready(void)
 
 int cmd_create(const char *name)
 {
-	if (!vault_name_ok(name)) { warn("that is not a usable vault name"); return 2; }
+	if (!vault_name_ok(name)) { warn("%s", _("that is not a usable vault name")); return 2; }
 	if (!backend_ready()) return 1;
 
 	if (vault_exists(name)) {
-		warn("'%s' already exists — syn-vault open %s", name, name);
+		warn(_("'%s' already exists — syn-vault open %s"), name, name);
 		return 1;
 	}
 
@@ -297,14 +301,14 @@ int cmd_create(const char *name)
 	 * to every other account on the machine for exactly as long as it is
 	 * useful. */
 	if (!mkpath(cipher, 0700) || !mkpath(mount, 0700)) {
-		warn("could not make the vault's directories: %s", strerror(errno));
+		warn(_("could not make the vault's directories: %s"), strerror(errno));
 		free(cipher); free(mount);
 		return 1;
 	}
 
-	char *pw = password_read("A password for this vault: ");
+	char *pw = password_read(_("A password for this vault: "));
 	if (!pw || !*pw) {
-		warn("no password, so nothing was created");
+		warn("%s", _("no password, so nothing was created"));
 		wipe(pw); free(cipher); free(mount);
 		return 1;
 	}
@@ -314,11 +318,11 @@ int cmd_create(const char *name)
 	 * no other copy of the key. Piped input is the window, which does its own
 	 * confirming. */
 	if (isatty(STDIN_FILENO)) {
-		char *again = password_read("And again: ");
+		char *again = password_read(_("And again: "));
 		bool same = again && !strcmp(pw, again);
 		wipe(again);
 		if (!same) {
-			warn("those did not match, so nothing was created");
+			warn("%s", _("those did not match, so nothing was created"));
 			wipe(pw); free(cipher); free(mount);
 			return 1;
 		}
@@ -334,7 +338,7 @@ int cmd_create(const char *name)
 		if (g_out == OUT_REC && why)
 			warn("%s", why);
 		else
-			warn("gocryptfs could not create the vault (exit %d)", rc);
+			warn(_("gocryptfs could not create the vault (exit %d)"), rc);
 		free(cipher); free(mount);
 		return 1;
 	}
@@ -345,10 +349,10 @@ int cmd_create(const char *name)
 		rec_row("%s\t%s\t%s", n, c, m);
 		free(n); free(c); free(m);
 	} else {
-		printf("Made the vault '%s'.\n\n"
-		       "  syn-vault open %s   unlocks it at %s\n"
-		       "  syn-vault close %s  locks it again\n\n"
-		       "⚠ There is no way back in without the password. Nothing else has a copy.\n",
+		printf(_("Made the vault '%s'.\n\n"
+		         "  syn-vault open %s   unlocks it at %s\n"
+		         "  syn-vault close %s  locks it again\n\n"
+		         "⚠ There is no way back in without the password. Nothing else has a copy.\n"),
 		       name, name, mount, name);
 	}
 
@@ -358,15 +362,15 @@ int cmd_create(const char *name)
 
 int cmd_open(const char *name)
 {
-	if (!vault_name_ok(name)) { warn("that is not a usable vault name"); return 2; }
+	if (!vault_name_ok(name)) { warn("%s", _("that is not a usable vault name")); return 2; }
 	if (!backend_ready()) return 1;
 
 	if (!vault_exists(name)) {
-		warn("there is no vault called '%s' — syn-vault create %s", name, name);
+		warn(_("there is no vault called '%s' — syn-vault create %s"), name, name);
 		return 1;
 	}
 	if (vault_is_open(name)) {
-		if (g_out != OUT_REC) printf("'%s' is already open.\n", name);
+		if (g_out != OUT_REC) printf(_("'%s' is already open.\n"), name);
 		return 0;
 	}
 
@@ -374,7 +378,7 @@ int cmd_open(const char *name)
 	char *mount = vault_mount_dir(name);
 
 	if (!mkpath(mount, 0700)) {
-		warn("could not make %s: %s", mount, strerror(errno));
+		warn(_("could not make %s: %s"), mount, strerror(errno));
 		free(cipher); free(mount);
 		return 1;
 	}
@@ -385,16 +389,16 @@ int cmd_open(const char *name)
 	 * person believes it is inside the vault. Better to refuse and say where
 	 * the files are. */
 	if (!dir_empty(mount)) {
-		warn("%s already has files in it, and they are NOT in the vault — they were\n"
-		     "  saved while it was closed, so they are on the ordinary disk. Move them\n"
-		     "  aside, open the vault, then move them in.", mount);
+		warn(_("%s already has files in it, and they are NOT in the vault — they were\n"
+		       "  saved while it was closed, so they are on the ordinary disk. Move them\n"
+		       "  aside, open the vault, then move them in."), mount);
 		free(cipher); free(mount);
 		return 1;
 	}
 
-	char *pw = password_read("Password: ");
+	char *pw = password_read(_("Password: "));
 	if (!pw || !*pw) {
-		warn("no password given");
+		warn("%s", _("no password given"));
 		wipe(pw); free(cipher); free(mount);
 		return 1;
 	}
@@ -412,22 +416,22 @@ int cmd_open(const char *name)
 		if (g_out == OUT_REC && why)
 			warn("%s", why);
 		else
-			warn("could not open '%s' (exit %d)", name, rc);
+			warn(_("could not open '%s' (exit %d)"), name, rc);
 		free(cipher); free(mount);
 		return 1;
 	}
 
-	if (g_out != OUT_REC) printf("'%s' is open at %s\n", name, mount);
+	if (g_out != OUT_REC) printf(_("'%s' is open at %s\n"), name, mount);
 	free(cipher); free(mount);
 	return 0;
 }
 
 int cmd_close(const char *name)
 {
-	if (!vault_name_ok(name)) { warn("that is not a usable vault name"); return 2; }
+	if (!vault_name_ok(name)) { warn("%s", _("that is not a usable vault name")); return 2; }
 
 	if (!vault_is_open(name)) {
-		if (g_out != OUT_REC) printf("'%s' is not open.\n", name);
+		if (g_out != OUT_REC) printf(_("'%s' is not open.\n"), name);
 		return 0;
 	}
 
@@ -439,20 +443,20 @@ int cmd_close(const char *name)
 		/* ⚠ THE USUAL CAUSE IS A PROGRAM STILL IN THERE, and saying so is more
 		 * use than the exit status: a file manager sitting in the folder, or a
 		 * terminal whose working directory is inside it, holds the mount. */
-		warn("could not close '%s' — something is still using it.\n"
-		     "  Close anything open in %s and try again.", name, mount);
+		warn(_("could not close '%s' — something is still using it.\n"
+		       "  Close anything open in %s and try again."), name, mount);
 		free(mount);
 		return 1;
 	}
 
-	if (g_out != OUT_REC) printf("'%s' is locked.\n", name);
+	if (g_out != OUT_REC) printf(_("'%s' is locked.\n"), name);
 	free(mount);
 	return 0;
 }
 
 int cmd_status(const char *name)
 {
-	if (!vault_name_ok(name)) { warn("that is not a usable vault name"); return 2; }
+	if (!vault_name_ok(name)) { warn("%s", _("that is not a usable vault name")); return 2; }
 
 	bool exists = vault_exists(name);
 	bool open_now = exists && vault_is_open(name);
@@ -466,12 +470,17 @@ int cmd_status(const char *name)
 		        !exists ? "none" : (open_now ? "open" : "locked"), m, stray ? 1 : 0);
 		free(n); free(m);
 	} else if (!exists) {
-		printf("There is no vault called '%s'.\n", name);
+		printf(_("There is no vault called '%s'.\n"), name);
 	} else {
-		printf("'%s' is %s.\n", name, open_now ? "open" : "locked");
+		/* ⛔ TWO WHOLE SENTENCES. `open` and `locked` are the RECORD's words —
+		 * data/syn-vault.qml compares `state === "open"` in seven places — and
+		 * dropping either into a %s here would put the record's identifier in
+		 * front of a person in English, in every language, for ever. */
+		if (open_now) printf(_("'%s' is open.\n"), name);
+		else          printf(_("'%s' is locked.\n"), name);
 		if (stray)
-			printf("\n⚠ %s has files in it while the vault is closed.\n"
-			       "  They are NOT encrypted — they are on the ordinary disk.\n", mount);
+			printf(_("\n⚠ %s has files in it while the vault is closed.\n"
+			         "  They are NOT encrypted — they are on the ordinary disk.\n"), mount);
 	}
 
 	free(mount);
@@ -486,6 +495,12 @@ int cmd_list(void)
 
 	DIR *d = opendir(root);
 	if (g_out == OUT_REC) rec_header("name\tstate\tmount\tstray");
+
+	/* The bracket column, measured once from the two words this language
+	 * actually uses rather than assumed from the two English ones. */
+	int state_col = disp_width(_("open"));
+	int locked_col = disp_width(_("locked"));
+	if (locked_col > state_col) state_col = locked_col;
 
 	int n = 0;
 	if (d) {
@@ -509,8 +524,22 @@ int cmd_list(void)
 				        stray ? 1 : 0);
 				free(pn); free(pm);
 			} else {
-				printf("  [%s] %-24s %s%s\n", open_now ? "open  " : "locked",
-				       name, mount, stray ? "   ⚠ unencrypted files here" : "");
+				/* ⛔ THE BRACKET IS PADDED TO A MEASURED WIDTH, not to the
+				 * six characters of "open  ". The two words are any width
+				 * once translated, and "已解锁" is 9 bytes, 3 code points
+				 * and 6 columns — only the last of those lines a table up.
+				 *
+				 * ⚠ And the stray warning is its own whole line rather than
+				 * a fragment appended in a %s: a clause that short carries
+				 * no grammar and cannot move to where a language wants it. */
+				const char *st = open_now ? _("open") : _("locked");
+				int pad = state_col - disp_width(st);
+				if (pad < 0) pad = 0;
+				if (stray)
+					printf(_("  [%s%*s] %-24s %s   ⚠ unencrypted files here\n"),
+					       st, pad, "", name, mount);
+				else
+					printf(_("  [%s%*s] %-24s %s\n"), st, pad, "", name, mount);
 			}
 			free(mount);
 			free(name);
@@ -520,7 +549,7 @@ int cmd_list(void)
 	}
 
 	if (g_out != OUT_REC && n == 0)
-		printf("No vaults yet.\n\n  syn-vault create <name>\n");
+		printf("%s", _("No vaults yet.\n\n  syn-vault create <name>\n"));
 
 	free(root);
 	return 0;

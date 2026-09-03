@@ -17,6 +17,15 @@
 #
 # SynapseOS Project — GPL-2.0-or-later
 set -uo pipefail
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every assertion below looks
+# for an English phrase, and once syn-vault is installed the binary answers the
+# desktop's language — so on a German box they fail for a program that is
+# working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 
 S=${1:?usage: vault_test.sh /path/to/syn-vault [srcdir]}
 pass=0; fail=0

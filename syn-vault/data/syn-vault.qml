@@ -19,6 +19,14 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS NOT qsTr(). quickshell 0.3.1 installs
+// no QTranslator, so qsTr() compiles, looks up nothing and returns its own
+// argument while looking exactly like a marked string in review — so
+// qml/I18n.qml reads a JSON catalog compiled from the same po/ the CLI's .mo
+// comes from, and a word this window and `syn-vault list` share is translated
+// once and cannot disagree.
+import "qml"
 import Quickshell.Wayland
 
 ShellRoot {
@@ -170,7 +178,7 @@ ShellRoot {
                 // lines. Reflowing is the window's business — the wording is
                 // still entirely the binary's.
                 const said = actErr.text.trim().replace(/\s*\n\s*/g, " ")
-                root.askMsg = said || "that did not work"
+                root.askMsg = said || I18n.tr("that did not work")
             }
             root.reload()
         }
@@ -178,14 +186,14 @@ ShellRoot {
 
     function submit() {
         if (root.busy) return
-        if (pwField.text.length === 0) { root.askMsg = "It needs a password."; return }
+        if (pwField.text.length === 0) { root.askMsg = I18n.tr("It needs a password."); return }
         if (root.askIsNew && pwField.text !== pwAgain.text) {
             // ⛔ CHECKED HERE BECAUSE THE BINARY CANNOT. It confirms a password
             // only when it has a terminal to ask twice; piped input is this
             // window, so this window owns the confirmation. A vault created
             // with a mistyped password cannot be opened and cannot be
             // recovered — nothing anywhere keeps a second copy.
-            root.askMsg = "Those two do not match."
+            root.askMsg = I18n.tr("Those two do not match.")
             return
         }
 
@@ -215,7 +223,7 @@ ShellRoot {
             // "something is still using it" for a terminal, this draws it in a
             // window that wraps by itself.
             const said = closeErr.text.trim().replace(/\s*\n\s*/g, " ")
-            root.status = code === 0 ? "" : (said || "could not close it")
+            root.status = code === 0 ? "" : (said || I18n.tr("could not close it"))
             root.reload()
         }
     }
@@ -241,7 +249,7 @@ ShellRoot {
     // ── the window ──────────────────────────────────────────────────────────
 
     FloatingWindow {
-        title: "File Vault"
+        title: I18n.tr("File Vault")
         implicitWidth: root.ui(560)
         implicitHeight: root.ui(460)
         color: root.cBg
@@ -261,7 +269,7 @@ ShellRoot {
                     Text {
                         id: head
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        text: "Vaults"
+                        text: I18n.tr("Vaults")
                         color: root.cText
                         font { family: root.uiFont; pixelSize: root.ui(18); bold: true }
                     }
@@ -277,7 +285,7 @@ ShellRoot {
                         Text {
                             id: newTxt
                             anchors.centerIn: parent
-                            text: "New vault"
+                            text: I18n.tr("New vault")
                             color: newMouse.containsMouse ? root.cPanel : root.cAccent
                             font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
@@ -329,11 +337,17 @@ ShellRoot {
                                 font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                             }
                             Text {
+                                // ⛔ WHOLE CELLS, NOT PIECES. "open · " glued
+                                // to a path can never be a msgid, and `open`
+                                // and `locked` are the RECORD's words — the
+                                // comparison two lines up is what decides
+                                // which row this is, and it must stay English.
+                                // These are the sentences a person reads.
                                 text: modelData.state === "open"
-                                      ? "open · " + modelData.mount
+                                      ? I18n.tr("open · %1").arg(modelData.mount)
                                       : (modelData.stray
-                                         ? "locked · files in " + modelData.mount + " are NOT encrypted"
-                                         : "locked")
+                                         ? I18n.tr("locked · files in %1 are NOT encrypted").arg(modelData.mount)
+                                         : I18n.tr("locked"))
                                 color: modelData.stray ? root.cWarn : root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
@@ -351,7 +365,7 @@ ShellRoot {
                                 border { width: 1; color: root.cDim }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Open"
+                                    text: I18n.tr("Open")
                                     color: browseMouse.containsMouse ? root.cPanel : root.cText
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
@@ -377,7 +391,7 @@ ShellRoot {
                                     // ⛔ THE BUTTON IS ITS OWN LABEL. Not a
                                     // padlock glyph that needs a tooltip to say
                                     // which way it is about to go.
-                                    text: modelData.state === "open" ? "Lock" : "Unlock"
+                                    text: modelData.state === "open" ? I18n.tr("Lock") : I18n.tr("Unlock")
                                     color: actMouse.containsMouse ? root.cPanel
                                          : (modelData.state === "open" ? root.cWarn : root.cAccent)
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
@@ -402,9 +416,9 @@ ShellRoot {
                     visible: root.vaults.length === 0
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: "No vaults yet. A vault is a folder whose contents are encrypted "
-                          + "with a password — it lives in ~/Vaults while it is open, and is "
-                          + "unreadable when it is not."
+                    text: I18n.tr("No vaults yet. A vault is a folder whose contents are "
+                                  + "encrypted with a password — it lives in ~/Vaults while "
+                                  + "it is open, and is unreadable when it is not.")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(12) }
                 }
@@ -448,7 +462,8 @@ ShellRoot {
                         spacing: 10
 
                         Text {
-                            text: root.askIsNew ? "New vault" : "Unlock " + root.askFor
+                            text: root.askIsNew ? I18n.tr("New vault")
+                                                : I18n.tr("Unlock %1").arg(root.askFor)
                             color: root.cText
                             font { family: root.uiFont; pixelSize: root.ui(16); bold: true }
                         }
@@ -472,7 +487,7 @@ ShellRoot {
                                 anchors { left: parent.left; leftMargin: 8
                                           verticalCenter: parent.verticalCenter }
                                 visible: nameField.text === ""
-                                text: "What to call it"
+                                text: I18n.tr("What to call it")
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(13) }
                             }
@@ -504,7 +519,7 @@ ShellRoot {
                                 anchors { left: parent.left; leftMargin: 8
                                           verticalCenter: parent.verticalCenter }
                                 visible: pwField.text === "" && !pwField.activeFocus
-                                text: "Password"
+                                text: I18n.tr("Password")
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(13) }
                             }
@@ -533,7 +548,7 @@ ShellRoot {
                                 anchors { left: parent.left; leftMargin: 8
                                           verticalCenter: parent.verticalCenter }
                                 visible: pwAgain.text === "" && !pwAgain.activeFocus
-                                text: "And again"
+                                text: I18n.tr("And again")
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(13) }
                             }
@@ -546,8 +561,8 @@ ShellRoot {
                             // ⚠ SAID BEFORE, NOT AFTER. There is no recovery and
                             // no second copy of the key; somebody choosing a
                             // password is owed that while they are choosing it.
-                            text: "Nothing keeps a second copy of this password. "
-                                  + "A vault whose password is lost is lost with it."
+                            text: I18n.tr("Nothing keeps a second copy of this password. "
+                                          + "A vault whose password is lost is lost with it.")
                             color: root.cWarn
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
@@ -572,8 +587,9 @@ ShellRoot {
                                 border { width: 1; color: root.cAccent }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: root.busy ? "Working…"
-                                                    : (root.askIsNew ? "Create" : "Unlock")
+                                    text: root.busy ? I18n.tr("Working…")
+                                                    : (root.askIsNew ? I18n.tr("Create")
+                                                                     : I18n.tr("Unlock"))
                                     color: goMouse.containsMouse ? root.cPanel : root.cAccent
                                     font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }
@@ -593,7 +609,7 @@ ShellRoot {
                                 border { width: 1; color: root.cDim }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Cancel"
+                                    text: I18n.tr("Cancel")
                                     color: root.cText
                                     font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }

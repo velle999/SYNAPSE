@@ -5,7 +5,10 @@
  */
 #define _GNU_SOURCE
 #include "synvault.h"
+#include "i18n.h"
+#include "config.h"
 
+#include <locale.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +16,78 @@
 #include <unistd.h>
 
 out_mode_t g_out = OUT_HUMAN;
+
+/*
+ * How many COLUMNS a string occupies — not bytes, and not code points.
+ *
+ * ⛔ `syn-vault list` BRACKETS ITS STATE WORD AND PADS THE COLUMN, and the pad
+ * was the literal "open  " — six characters, the width of the English words. A
+ * translation makes those two words any width at all, and "已解锁" is 9 bytes,
+ * 3 code points and 6 columns; only the last of the three lines a table up.
+ *
+ * ⚠ NO wcswidth(3): it needs setlocale(LC_CTYPE, "") to have taken effect for
+ * the string's charset, and this returns the same answer whether it has or
+ * not. The rule is the usual one — Mn and Me marks take no room, the East
+ * Asian Wide and Fullwidth blocks take two, everything else one.
+ */
+int disp_width(const char *s)
+{
+	int w = 0;
+	const unsigned char *p = (const unsigned char *)s;
+	while (*p) {
+		unsigned c;
+		int n;
+		if (*p < 0x80)             { c = *p;              n = 1; }
+		else if ((*p & 0xE0) == 0xC0) { c = *p & 0x1Fu;   n = 2; }
+		else if ((*p & 0xF0) == 0xE0) { c = *p & 0x0Fu;   n = 3; }
+		else if ((*p & 0xF8) == 0xF0) { c = *p & 0x07u;   n = 4; }
+		else { p++; w++; continue; }          /* stray continuation byte */
+		for (int i = 1; i < n; i++) {
+			if ((p[i] & 0xC0) != 0x80) { n = i; break; }
+			c = (c << 6) | (p[i] & 0x3Fu);
+		}
+		p += n;
+		/* Mn/Me: combining diacritics, Arabic and Devanagari nonspacing marks,
+		 * the joiners. Mc (a spacing matra) is NOT here — it takes a cell. */
+		if ((c >= 0x0300 && c <= 0x036F) || (c >= 0x0483 && c <= 0x0489) ||
+		    (c >= 0x0591 && c <= 0x05BD) || (c >= 0x0610 && c <= 0x061A) ||
+		    (c >= 0x064B && c <= 0x065F) || c == 0x0670 ||
+		    (c >= 0x06D6 && c <= 0x06DC) || (c >= 0x06DF && c <= 0x06E4) ||
+		    (c >= 0x0900 && c <= 0x0902) || c == 0x093A || c == 0x093C ||
+		    (c >= 0x0941 && c <= 0x0948) || c == 0x094D ||
+		    (c >= 0x0951 && c <= 0x0957) || (c >= 0x0962 && c <= 0x0963) ||
+		    (c >= 0x200B && c <= 0x200F) || (c >= 0xFE00 && c <= 0xFE0F))
+			continue;
+		if ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) ||
+		    (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xF900 && c <= 0xFAFF) ||
+		    (c >= 0xFE30 && c <= 0xFE6F) || (c >= 0xFF00 && c <= 0xFF60) ||
+		    (c >= 0xFFE0 && c <= 0xFFE6) || (c >= 0x1F300 && c <= 0x1F64F) ||
+		    (c >= 0x20000 && c <= 0x3FFFD))
+			w += 2;
+		else
+			w += 1;
+	}
+	return w;
+}
+
+/*
+ * ⛔ LC_NUMERIC STAYS AT C. Nothing here prints a float today, but `--rec`'s
+ * `stray` column is a %d and the next column somebody adds will not be — and a
+ * record whose decimal separator moved with the desktop's language is a window
+ * reading a different number than the one this program meant. The pin costs
+ * nothing and removes the whole class.
+ */
+void syn_vault_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_VAULT_LOCALEDIR");
+	bindtextdomain(SYN_VAULT_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNVAULT_LOCALEDIR);
+	bind_textdomain_codeset(SYN_VAULT_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_VAULT_GETTEXT_DOMAIN);
+}
 
 /*
  * ⚠ THE "syn-vault: " PREFIX IS FOR A TERMINAL, so --rec drops it. That prefix
@@ -64,7 +139,7 @@ void rec_row(const char *fmt, ...)
 char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
-	if (!p) die("out of memory");
+	if (!p) die("%s", _("out of memory"));
 	return p;
 }
 
@@ -75,7 +150,7 @@ char *xasprintf(const char *fmt, ...)
 	va_start(ap, fmt);
 	int n = vasprintf(&out, fmt, ap);
 	va_end(ap);
-	if (n < 0 || !out) die("out of memory");
+	if (n < 0 || !out) die("%s", _("out of memory"));
 	return out;
 }
 
@@ -86,7 +161,7 @@ char *pct_encode(const char *s)
 	static const char *hex = "0123456789ABCDEF";
 	size_t n = strlen(s ? s : "");
 	char *out = malloc(n * 3 + 1);
-	if (!out) die("out of memory");
+	if (!out) die("%s", _("out of memory"));
 	char *w = out;
 	for (const unsigned char *p = (const unsigned char *)(s ? s : ""); *p; p++) {
 		if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||

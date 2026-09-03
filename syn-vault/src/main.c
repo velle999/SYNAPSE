@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include "config.h"
 #include "synvault.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -43,11 +44,11 @@ static void usage(FILE *f)
 int cmd_gui(const char *name)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-vault gui needs a graphical session");
+		die("%s", _("no display — syn-vault gui needs a graphical session"));
 
 	if (access("/usr/bin/quickshell", X_OK) != 0 &&
 	    access("/usr/local/bin/quickshell", X_OK) != 0)
-		die("quickshell is not installed — synpkg install quickshell");
+		die("%s", _("quickshell is not installed — synpkg install quickshell"));
 
 	/* The window's own Wayland identity, so the dock can find its .desktop and
 	 * it does not inherit the app_id of whatever opened it. */
@@ -62,12 +63,14 @@ int cmd_gui(const char *name)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die("%s", _("could not start quickshell"));
 	return 1;
 }
 
 int main(int argc, char **argv)
 {
+	syn_vault_i18n_init();
+
 	const char *pos[4];
 	int n = 0;
 
@@ -77,7 +80,7 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--help") || !strcmp(v, "-h")) { usage(stdout); return 0; }
 		if (!strcmp(v, "--version")) { printf("syn-vault %s\n", SYNVAULT_VERSION); return 0; }
 		if (v[0] == '-' && v[1] == '-') {
-			warn("unknown option '%s'", v);
+			warn(_("unknown option '%s'"), v);
 			usage(stderr);
 			return 2;
 		}
@@ -101,11 +104,11 @@ int main(int argc, char **argv)
 	 * and saying so is the difference between a typo and a missing argument. */
 	if (!strcmp(c, "create") || !strcmp(c, "open") || !strcmp(c, "close") ||
 	    !strcmp(c, "lock") || !strcmp(c, "unlock") || !strcmp(c, "status")) {
-		warn("%s needs the name of a vault", c);
+		warn(_("%s needs the name of a vault"), c);
 		return 2;
 	}
 
-	warn("unknown command '%s'", c);
+	warn(_("unknown command '%s'"), c);
 	usage(stderr);
 	return 2;
 }

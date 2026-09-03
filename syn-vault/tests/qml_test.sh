@@ -9,6 +9,15 @@
 #
 # SynapseOS Project — GPL-2.0-or-later
 set -uo pipefail
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every assertion below looks
+# for an English phrase, and once syn-vault is installed the binary answers the
+# desktop's language — so on a German box they fail for a program that is
+# working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 
 QML=${1:-data/syn-vault.qml}
 [ -f "$QML" ] || { echo "no such file: $QML" >&2; exit 1; }
@@ -95,7 +104,13 @@ chk "unencrypted files in a closed vault are called out" $?
 
 # ⛔ A BUTTON IS ITS OWN LABEL, not a padlock glyph needing a tooltip to say
 # which way it is about to go.
-grep -q '"Lock" : "Unlock"' "$QML"
+#
+# ⚠ ASSERTED ON THE FACT, NOT THE SPELLING. This grepped for the literal
+# `"Lock" : "Unlock"` and broke the moment those two words were wrapped in
+# I18n.tr() — the button was still a button, still said which way it went, and
+# the suite reported it gone. What has to be true is that the label is CHOSEN by
+# the state and that both words are there to be chosen from.
+grep -q 'text: modelData.state === "open" ?.*Lock.*:.*Unlock' "$QML"
 chk "the lock button says which way it goes" $?
 
 echo "$pass/$((pass + fail)) passed"

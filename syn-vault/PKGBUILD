@@ -22,7 +22,48 @@
 # window passes one in. There is deliberately no --password option.
 pkgname=syn-vault
 pkgver=0.1.0
-pkgrel=5
+# ── 0.1.0-6: thirteen languages, with the record left exactly as it was ──────
+#
+# The CLI and the window said everything in English. 63 strings now in de, fr,
+# es, pt, it, nl, pl, ru, ja, zh, ko, hi and ar, from ONE po/ compiled twice: a
+# .mo for the binary and JSON for the quickshell window, so a word they share is
+# translated once and cannot disagree.
+#
+# ⛔ AND `open`/`locked` ARE THE HARD CASE, because they are BOTH. `--rec` puts
+# `open` in a column data/syn-vault.qml compares in seven places — it decides
+# whether a row offers Lock or Unlock, whether the mount path is shown and what
+# colour the row is — AND `syn-vault status foo` prints "'foo' is open." to a
+# person. Two destinations, so two separate strings in the source: the record's
+# is a literal that never moves, and the sentence is a whole marked sentence per
+# branch. tests/i18n_test.sh asserts the column still reads `locked` under a
+# catalog that translates everything, which is the only thing that separates
+# the two copies.
+#
+# ⚠ AND THIS PROGRAM GUARDS SOMEBODY'S ENCRYPTED FILES. A record that changed
+# shape in one language is a window that believes a locked vault is mounted, on
+# the screen where the alternative is writing plaintext to the ordinary disk.
+#
+# ── the list column was a measurement of two English words ───────────────────
+#
+# ⛔ `syn-vault list` BRACKETS ITS STATE AND PADS THE COLUMN, and the pad was
+# the literal "open  " — six characters, the width of the English. Measured in
+# COLUMNS now, which is the third of three possible answers: "已解锁" is 9
+# bytes, 3 code points and 6 columns, and only the last of them lines a table
+# up. disp_width() decodes UTF-8 itself rather than calling wcswidth(3), whose
+# answer depends on a setlocale() having taken effect; Mn and Me marks take no
+# room and Mc takes one, which is the whole of Devanagari and of the Arabic
+# vowel signs. The suite asserts the ] lands in ONE column in every language.
+#
+# ⚠ AND THE STRAY WARNING IS ITS OWN WHOLE LINE, not a clause appended in a %s.
+# A fragment that short carries no grammar and cannot move to where a language
+# wants it — the same reason the "'%s' is open." sentence is two branches and
+# not one format with the state dropped in.
+#
+# ⚠ ONE SUITE ASSERTION WAS ON A SPELLING. tests/qml_test.sh grepped for the
+# literal `"Lock" : "Unlock"` and broke the moment those two words were wrapped
+# in I18n.tr() — the button was still a button and still said which way it went.
+# It asserts the FACT now: that the label is chosen by the state.
+pkgrel=6
 pkgdesc="A password-locked folder for your own files: an encrypted vault in userspace"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
