@@ -36,6 +36,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 #include "iconhue.h"
 
 #define ICON_CACHE_MAX 64
@@ -233,14 +234,22 @@ static void strip_exec_field_codes(char *exec)
         exec[--len] = '\0';
 }
 
-/* Parse Name=/Icon=/Exec= from the unlocalized main [Desktop Entry] section
- * (first match wins; [Desktop Action ...] sub-sections are skipped). */
+/* Parse Name=/Icon=/Exec= from the main [Desktop Entry] section (first match
+ * wins; [Desktop Action ...] sub-sections are skipped).
+ *
+ * ⚠ THE NAME IS LOCALISED, the other two are not, and that split is the whole
+ * of the rule i18n.h states: `Name` is read by a person and `Icon`/`Exec` are
+ * read by the icon loader and the shell. A desktop icon labelled in German is
+ * localisation; one whose Exec came from `Exec[de]` would be a launcher that
+ * runs a different program in Germany. */
 static void parse_desktop_file(const char *path, syn_icon_entry_t *e)
 {
     FILE *f = fopen(path, "r");
     if (!f) return;
 
     int in_main_section = 0;
+    const char *loc = synui_desktop_locale();
+    int name_rank = -1;
     char line[512];
     while (fgets(line, sizeof(line), f)) {
         char *s = line;
@@ -261,8 +270,13 @@ static void parse_desktop_file(const char *path, syn_icon_entry_t *e)
         const char *key = s;
         const char *val = eq + 1;
 
-        if (strcmp(key, "Name") == 0 && !e->display_name[0])
-            snprintf(e->display_name, sizeof(e->display_name), "%s", val);
+        int rank = synui_desktop_locale_rank(key, "Name", loc);
+        if (rank >= 0) {
+            if (!e->display_name[0] || rank > name_rank) {
+                snprintf(e->display_name, sizeof(e->display_name), "%s", val);
+                name_rank = rank;
+            }
+        }
         else if (strcmp(key, "Icon") == 0 && !e->icon_hint[0])
             snprintf(e->icon_hint, sizeof(e->icon_hint), "%s", val);
         else if (strcmp(key, "Exec") == 0 && !e->exec[0])

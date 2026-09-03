@@ -998,8 +998,18 @@ test('text_shape', text_shape_test,
 # XDG_DATA_HOME and XDG_DATA_DIRS pointed at it — so the counts do not depend on
 # what the machine running the test happens to have installed. hit.c comes along
 # for the grid geometry the pointer entry points read.
+# Matching a .desktop file's OWN translations — `Name[de]`, `Name[pt_BR]`,
+# `Name[sr@latin]` — against the locale gettext is already answering in. A pure
+# function taking the locale as an argument, so every case is asserted on a
+# machine where none of those locales is installed.
+desktop_locale_test = executable('desktop_locale_test',
+  ['tests/desktop_locale_test.c', 'src/i18n.c'],
+  include_directories : include_directories('src'),
+  build_by_default : false)
+test('desktop_locale', desktop_locale_test)
+
 appgrid_test = executable('appgrid_test',
-  ['tests/appgrid_test.c', 'src/appgrid.c', 'src/hit.c'],
+  ['tests/appgrid_test.c', 'src/appgrid.c', 'src/hit.c', 'src/i18n.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
@@ -1013,7 +1023,8 @@ test('appgrid', appgrid_test)
 # not an error), which is why it is worth a test of its own. iconhue.c and
 # text.c come along because icons.c tints its own icons and draws the monogram.
 icon_lookup_test = executable('icon_lookup_test',
-  ['tests/icon_lookup_test.c', 'src/icons.c', 'src/iconhue.c', 'src/text.c'],
+  ['tests/icon_lookup_test.c', 'src/icons.c', 'src/iconhue.c', 'src/text.c',
+   'src/i18n.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, harfbuzz, fribidi, wlroots, wayland, pixman,
                   xkbcommon, rsvg],

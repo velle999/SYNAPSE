@@ -65,6 +65,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "i18n.h"
 
 /* ── Small string helpers ────────────────────────────────── */
 
@@ -296,6 +297,10 @@ static bool desktop_read(const char *path, const char *id, syn_app_entry_t *e)
     char try_exec[256] = {0};
     bool no_display = false, hidden = false;
     int in_main = 0;
+    /* Resolved once per process; -1 is "nothing has been read into e->name
+     * yet", which the plain key's own rank of 0 has to beat. */
+    const char *loc = synui_desktop_locale();
+    int name_rank = -1;
 
     memset(e, 0, sizeof(*e));
     snprintf(e->id, sizeof(e->id), "%s", id);
@@ -319,14 +324,24 @@ static bool desktop_read(const char *path, const char *id, syn_app_entry_t *e)
         *eq = '\0';
         const char *key = p, *val = eq + 1;
 
-        /* ⚠ THE PLAIN KEY ONLY, never `Name[de]`. The localised variants sort
-         * around the plain one arbitrarily, and taking the last-seen would give
-         * a German name on an English desktop for any entry that ships one. A
-         * real locale match belongs with the rest of i18n; this at least is
-         * never wrong on purpose. */
+        /*
+         * ⚠ `Name` AND `Name[de]` ARE THE SAME FIELD, and the best match wins
+         * rather than the first. The localised variants sit in arbitrary order
+         * around the plain one, so "first seen" is whichever the file happens
+         * to list first and "last seen" is whichever it ends with — this took
+         * the plain key on purpose until 595, which is why a German desktop
+         * listed its applications in English while every panel around them was
+         * German. synui_desktop_locale_rank() scores each candidate against the
+         * locale gettext is already answering in; see i18n.h.
+         */
+        int rank;
         if      (!strcmp(key, "Type"))       snprintf(type, sizeof(type), "%s", val);
-        else if (!strcmp(key, "Name") && !e->name[0])
-                                             snprintf(e->name, sizeof(e->name), "%s", val);
+        else if ((rank = synui_desktop_locale_rank(key, "Name", loc)) >= 0) {
+            if (!e->name[0] || rank > name_rank) {
+                snprintf(e->name, sizeof(e->name), "%s", val);
+                name_rank = rank;
+            }
+        }
         else if (!strcmp(key, "Exec") && !e->exec[0])
                                              snprintf(e->exec, sizeof(e->exec), "%s", val);
         else if (!strcmp(key, "Icon") && !e->icon_hint[0])

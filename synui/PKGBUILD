@@ -3263,7 +3263,53 @@ pkgver=0.1.0
 #   the same probe and gains the same fix, plus the theme.state it turns out it
 #   always needed — without one it had been testing a solid 0.97 menu and
 #   agreeing with itself.
-pkgrel=594
+# 595: THE APPLICATION LIST WAS THE ONE THING STILL IN ENGLISH.
+#
+#   Every application ships its own translations in the file that describes it —
+#   `Name[de]`, `Name[pt_BR]`, `Name[sr@latin]`; Firefox ships thirty of them —
+#   and both readers here took the plain key. appgrid.c said so in a comment:
+#   "a real locale match belongs with the rest of i18n". So a German desktop had
+#   a German compositor, a German bar, German panels, and an application grid
+#   and a set of desktop icons in English. velle, 2026-09-03: the app titles are
+#   largely translatable and all still in English.
+#
+#   synui_desktop_locale_rank() (i18n.c) scores one key against one locale on
+#   the spec's own candidate list — lang_COUNTRY@MODIFIER, lang_COUNTRY,
+#   lang@MODIFIER, lang, then the plain key — and the two scans keep the best
+#   ranked value rather than the first or the last one they see. The localised
+#   keys sit in arbitrary order around the plain one, so "first" and "last" are
+#   both wrong, which is exactly why this was left undone rather than done
+#   badly.
+#
+#   ⛔ THE ENCODING IS DROPPED ON BOTH SIDES. A desktop's locale is
+#   `de_DE.UTF-8` and the key is `Name[de]`; compare them whole and nothing
+#   matches, in any language, on any machine — a fix that looks right and
+#   changes nothing.
+#
+#   ⛔ AND `Name[pt_BR]` IS NOT A CANDIDATE ON pt_PT. The spec's list is exact;
+#   falling back to it because the language matched hands Portugal Brazilian
+#   Portuguese, which is worse than English.
+#
+#   ⚠ THE LOCALE COMES FROM setlocale(), NOT THE ENVIRONMENT, so the list
+#   follows the same answer gettext is giving the rest of the desktop: on a box
+#   where the locale is not installed, everything stays English together rather
+#   than German names appearing down an English menu. And it is read per call
+#   rather than cached — a cache is what makes a matcher untestable in-process.
+#
+#   ⚠ Name ONLY, not Exec or Icon. A launcher whose Exec came from `Exec[de]`
+#   would run a different program in Germany.
+#
+#   tests/desktop_locale_test.c pins the ranking (a pure function, so every case
+#   is asserted where none of those locales exists); appgrid_test.c pins the
+#   wiring at both ends — the C locale takes the plain key, and a de_DE desktop
+#   built with localedef into a scratch LOCPATH takes `Name[de_DE]` over
+#   `Name[de]` over `Name`.
+#
+#   ⚠ WHAT THIS DOES NOT DO: synui's own thirty .desktop entries still carry
+#   English Names only, so the desktop's own launchers are the remaining English
+#   ones. That is a catalog job (`xgettext --language=Desktop` + `msgfmt
+#   --desktop`), not a reader job, and it is the next piece.
+pkgrel=595
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

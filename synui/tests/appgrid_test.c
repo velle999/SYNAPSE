@@ -40,6 +40,7 @@
 
 #define _GNU_SOURCE
 #include <dirent.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -173,6 +174,19 @@ static void build_tree(void)
     app_file("normal.desktop",
         "[Desktop Entry]\nType=Application\nName=Normal App\nExec=normal\n");
 
+    /* An application that ships its own translations, which most do. The
+     * localised keys are deliberately written AROUND the plain one and in a
+     * language this test never selects as well: "first seen" and "last seen"
+     * both give the wrong answer here, and only a ranked match gives the
+     * right one. See tests/desktop_locale_test.c for the ranking itself. */
+    app_file("translated.desktop",
+        "[Desktop Entry]\nType=Application\n"
+        "Name[fr]=Éditeur\n"
+        "Name=Text Editor\n"
+        "Name[de]=Texteditor\n"
+        "Name[de_DE]=Texteditor DE\n"
+        "Exec=edit\n");
+
     /* Not applications, each in its own way. */
     app_file("nodisplay.desktop",
         "[Desktop Entry]\nType=Application\nName=Hidden By NoDisplay\n"
@@ -268,6 +282,21 @@ static void test_scan(void)
     appgrid_rescan(s);
 
     CHECK(scanned(s, "normal"), "a plain application should be listed");
+
+    /*
+     * ⚠ THE C LOCALE TAKES THE PLAIN KEY, and this runs under it: main() never
+     * calls setlocale, so the suite is in "C" whatever the machine's LANG says.
+     * A reader that took the LAST `Name*` key it saw would answer "Texteditor
+     * DE" here and an English desktop would list German applications — which is
+     * exactly why the old code took the plain key and stopped there.
+     */
+    {
+        syn_app_entry_t *tr = entry(s, "translated");
+        CHECK(tr != NULL, "the translated entry should be listed");
+        if (tr)
+            CHECK(!strcmp(tr->name, "Text Editor"),
+                  "the C locale must take the plain Name (got '%s')", tr->name);
+    }
 
     CHECK(!scanned(s, "nodisplay"), "NoDisplay=true must not be listed");
     CHECK(!scanned(s, "hiddenkey"), "Hidden=true must not be listed");
@@ -699,6 +728,69 @@ static void test_uninstall_menu(void)
            "the grid reopened with the previous menu still up");
 }
 
+/*
+ * ── …and the same scan in German ────────────────────────────────────────────
+ *
+ * The half the C-locale case above cannot prove: that a localised key is
+ * actually PREFERRED when the desktop is in that language.
+ *
+ * ⚠ RUN LAST, AND IT PUTS THE LOCALE BACK. synui_desktop_locale() reads
+ * setlocale() every time precisely so this is possible in one process; leaving
+ * the suite in German afterwards would hand any case added below it a
+ * different desktop than the one it was written against.
+ *
+ * ⚠ AND IT SKIPS WHERE de_DE IS NOT INSTALLED, which is most build containers.
+ * setlocale() fails there and the desktop stays in C — so the assertion would
+ * be "German gives the English name", which passes on a broken matcher. A skip
+ * says nothing was proved; a pass that proves nothing is worse.
+ */
+static void test_locale_de(void)
+{
+    /*
+     * ⛔ localedef INTO A SCRATCH LOCPATH — never locale-gen, which is root and
+     * system-wide, and never "hope de_DE is installed", which is a skip on
+     * every build container this ships through. LOCPATH is read by setlocale()
+     * when it LOADS a locale, so it has to be in the environment before the
+     * call below and not merely before the process.
+     */
+    char loc[512], cmd[1024];
+    snprintf(loc, sizeof(loc), "%s/locales", scratch);
+    mkdirs(loc);
+    snprintf(cmd, sizeof(cmd),
+             "localedef -i de_DE -f UTF-8 -c '%s/de_DE.UTF-8' >/dev/null 2>&1",
+             loc);
+    int built = system(cmd) == 0;
+    if (built) setenv("LOCPATH", loc, 1);
+
+    if (!setlocale(LC_MESSAGES, "de_DE.UTF-8")) {
+        printf("  skip  de_DE.UTF-8 could not be built with localedef "
+               "(the localised scan is not asserted)\n");
+        unsetenv("LOCPATH");
+        return;
+    }
+
+    syn_server_t *s = server();
+    appgrid_rescan(s);
+
+    syn_app_entry_t *tr = entry(s, "translated");
+    CHECK(tr != NULL, "the translated entry should be listed in German too");
+    if (tr)
+        /* Name[de_DE] over Name[de] over Name: the ranked answer, not the
+         * first or the last key in the file. */
+        CHECK(!strcmp(tr->name, "Texteditor DE"),
+              "a de_DE desktop must take Name[de_DE] (got '%s')", tr->name);
+
+    /* The English-only entry has nothing to localise and must not change. */
+    syn_app_entry_t *n = entry(s, "normal");
+    if (n)
+        CHECK(!strcmp(n->name, "Normal App"),
+              "an entry with no localised Name keeps the plain one (got '%s')",
+              n->name);
+
+    setlocale(LC_MESSAGES, "C");
+    unsetenv("LOCPATH");
+}
+
 int main(void)
 {
     snprintf(scratch, sizeof(scratch), "%s", "/tmp/appgridtestXXXXXX");
@@ -732,6 +824,7 @@ int main(void)
     test_search_and_keys();
     test_paging();
     test_uninstall_menu();
+    test_locale_de();
 
     rm_rf(scratch);
 
