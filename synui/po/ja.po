@@ -2538,9 +2538,9 @@ msgid "No preview"
 msgstr "プレビューなし"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
 msgstr ""
-"上下 プレビュー · Tab 画面 · m 拡大率 · r 再読み込み · Enter/Esc 閉じる"
+"上下 プレビュー · Tab 画面 · m 拡大率 · r 再読み込み · w wallhaven · Enter/Esc 閉じる"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

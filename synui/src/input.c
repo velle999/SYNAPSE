@@ -1550,10 +1550,18 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * network with a worker thread and a stop flag wired into libcurl's
          * progress callback; a picker does not need to.
          *
-         * ⚠ THE LAUNCHER AND NOT quickshell DIRECTLY. synui-wallhaven owns the
-         * network switch (off by default), which tree the QML comes from, and
-         * the toggle across a process boundary. The Super+W picker's own
-         * Wallhaven row spawns the identical command. */
+         * ⚠ THE LAUNCHER AND NOT quickshell DIRECTLY. synui-wallhaven owns
+         * which tree the QML comes from and the toggle across a process
+         * boundary; the window itself owns the network switch, and says so on
+         * its own face while it is off. The Super+W picker's Wallhaven row and
+         * its [w] button spawn the identical command.
+         *
+         * ⛔ AND THE PICKER GOES AWAY FIRST. The browser is a focusable
+         * full-screen layer surface, so with the picker still up two
+         * full-screen surfaces are both asking for the keyboard and neither is
+         * drivable — which is exactly what this key did while the picker was
+         * open. wppick_hide() on a picker that is not visible is a no-op. */
+        if (s->wppick.visible) wppick_hide(s);
         synui_spawn("synui-wallhaven toggle");
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);

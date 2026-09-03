@@ -9722,6 +9722,9 @@ void wppick_row(syn_server_t *s, int row, const char **label, const char **desc)
 /* Path of the image that previews one row, or NULL when there is nothing real
  * to show (a solid colour, or the live Matrix shader). */
 const char *wppick_row_preview(syn_server_t *s, int row);
+/* The Wallhaven row, which is where the header's [w] button takes its label
+ * from — the button and the row are one spelling. -1 if the row is gone. */
+int  wppick_wallhaven_row(void);
 
 /* ── wpthumb.c (decoded preview images for the picker) ───── */
 

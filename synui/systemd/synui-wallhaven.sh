@@ -13,6 +13,16 @@
 # surprise the weather switch exists to prevent. `synui-wallhaven on` is the
 # whole opt-in, and nothing here resolves a name until it is given.
 #
+# ⛔ BUT THE WINDOW ASKS, AND THAT IS WHY `toggle` DOES NOT CHECK. It used to:
+# the window path refused while the switch was off, on the reasoning that a key
+# which opens a panel saying "turn me on" is worse than a key that says it
+# itself. The key cannot say it. Super+Ctrl+W spawns this with no terminal
+# attached, so the refusal went to a stderr nobody was reading and the key did
+# nothing at all — reported as the keybind not responding. The window opens on
+# its own switch instead, which is one place to say yes and no terminal needed;
+# `search`, `get` and `set` still refuse, because those are the commands that
+# actually reach the network and they run where somebody can read the answer.
+#
 # ── Why a script and not compositor code ────────────────────────────────────
 #
 # The picker is drawn by the compositor, and this is not, deliberately. A grid
@@ -49,7 +59,17 @@ DEST="${SYNUI_WALLHAVEN_DIR:-$HOME/Pictures/Wallpapers}"
 QML_USER="$HOME/.config/quickshell/synapse/wallhaven.qml"
 QML_PKG=/usr/share/synui/quickshell/wallhaven.qml
 
-die()  { printf 'synui-wallhaven: %s\n' "$*" >&2; exit 1; }
+# ⚠ AND A REFUSAL SAYS SO SOMEWHERE VISIBLE. Every caller that is not a
+# terminal — a keybind, the picker's button, a .desktop entry — throws stderr
+# away, so a bare `>&2` there is a command that failed in silence. Not a
+# fallback for the message: the same message, in the only place that caller has.
+die()  {
+    printf 'synui-wallhaven: %s\n' "$*" >&2
+    if [ ! -t 2 ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -a synui "Wallhaven" "$*" || true
+    fi
+    exit 1
+}
 
 # ── the network switch ──────────────────────────────────────────────────────
 #
@@ -227,10 +247,10 @@ qml_path() { [ -f "$QML_USER" ] && printf '%s\n' "$QML_USER" || printf '%s\n' "$
 cmd_window() {
     local verb=$1 qml; qml=$(qml_path)
     [ -f "$qml" ] || die "$qml is missing — is synui installed?"
-    # ⚠ Checked HERE and not only in the window. A key press that opens a panel
-    # which immediately says "turn me on" is a worse answer than the key saying
-    # it, and the window has no way to be turned on from inside itself.
-    need_on
+    # ⛔ NO need_on HERE. The window asks — see the switch note at the top of
+    # this file. A key press has no stderr, so a refusal here was a key that did
+    # nothing; the window opening on "this is off, turn it on?" is the same
+    # question in the one place the person who pressed the key can read it.
     if quickshell -p "$qml" ipc call wallhaven "$verb" >/dev/null 2>&1; then
         return 0
     fi
@@ -242,7 +262,8 @@ usage() {
     cat <<'USAGE'
 synui-wallhaven — browse wallhaven.cc and set one as the wallpaper
 
-  synui-wallhaven                    open the browser (Super+Ctrl+W)
+  synui-wallhaven                    open the browser (Super+Ctrl+W, or w in
+                                     the Super+W wallpaper picker)
   synui-wallhaven toggle|show|hide   the window, across a process boundary
   synui-wallhaven search [--rec]     what is on wallhaven right now
        --categories=BITS             general/anime/people as three bits (111)
@@ -260,8 +281,13 @@ Super+W picker scans — so one taken from wallhaven is a local wallpaper from
 then on.
 
 ⛔ OFF BY DEFAULT. This is the only part of the wallpaper picker that leaves
-this machine. Nothing here resolves a name until `synui-wallhaven on`.
+this machine. Nothing here resolves a name until it is switched on — either
+with `synui-wallhaven on`, or from the window itself, which opens on that
+question while the switch is off and browses nothing until it is answered.
 Results are filtered to wallhaven's `sfw` purity, which is not a setting.
+
+Inside the window, `w` opens the Super+W wallpaper picker, and `w` there comes
+back here — one key flips between what is on the disk and what is not.
 USAGE
 }
 

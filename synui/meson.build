@@ -1259,6 +1259,19 @@ keys_test = executable('keys_test',
   build_by_default : false)
 test('keys', keys_test)
 
+# The [w] button in the wallpaper picker — where more wallpapers come from, and
+# the compositor half of a key that flips between the picker and the browser.
+# wppick.c linked alone, the way panel_pointer_test links power.c: the spawn is
+# COUNTED, because the failure this shape has is a keypress that both acts and
+# falls through, which toggles the browser open and shut again.
+wppick_wallhaven_test = executable('wppick_wallhaven_test',
+  ['tests/wppick_wallhaven_test.c', 'src/wppick.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('wppick_wallhaven', wppick_wallhaven_test)
+
 panel_pointer_test = executable('panel_pointer_test',
   ['tests/panel_pointer_test.c', 'src/power.c', 'src/hit.c'],
   include_directories : include_directories('src'),
@@ -1585,6 +1598,27 @@ qs_module_sh = find_program('tests/qs_module.sh')
 test('qs_module', qs_module_sh,
      args    : [meson.current_source_dir() / 'quickshell'],
      timeout : 60)
+
+# `wallhaven_key`: the keys that open the wallhaven browser, PRESSED. The bug
+# this closes had every layer reporting success — the bind existed, the dispatch
+# was accepted, the spawn happened — and the launcher refusing onto a stderr
+# nobody was reading, so the ledger here is the launcher actually being run.
+wallhaven_key = find_program('tests/wallhaven_key.sh')
+test('wallhaven_key', wallhaven_key,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
+# `wallhaven_window`: the browser's OWN keyboard, which shipped dead in 590 —
+# Keys.onPressed on a PanelWindow is delivered to nothing. Four presses against
+# a real headless compositor, and the switch's promise (nothing leaves the
+# machine before consent) asserted from the ledger rather than from reading.
+wallhaven_window = find_program('tests/wallhaven_window.sh')
+test('wallhaven_window', wallhaven_window,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell' / 'wallhaven.qml'],
+     depends : [synui_exe],
+     timeout : 300)
 
 deskmenu_widgets = find_program('tests/deskmenu_widgets.sh')
 test('deskmenu_widgets', deskmenu_widgets,

@@ -2533,8 +2533,9 @@ msgid "No preview"
 msgstr "कोई पूर्वावलोकन नहीं"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr "ऊपर/नीचे पूर्वावलोकन · Tab स्क्रीन · m आकार · r फिर से खोजें · Enter/Esc बंद करें"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
+msgstr ""
+"ऊपर/नीचे पूर्वावलोकन · Tab स्क्रीन · m आकार · r फिर से खोजें · w wallhaven · Enter/Esc बंद करें"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

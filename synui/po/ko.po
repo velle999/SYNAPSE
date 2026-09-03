@@ -2533,8 +2533,9 @@ msgid "No preview"
 msgstr "미리 보기 없음"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr "위/아래 미리 보기 · Tab 화면 · m 배율 · r 다시 검색 · Enter/Esc 닫기"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
+msgstr ""
+"위/아래 미리 보기 · Tab 화면 · m 배율 · r 다시 검색 · w wallhaven · Enter/Esc 닫기"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

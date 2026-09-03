@@ -2495,8 +2495,9 @@ msgid "No preview"
 msgstr "没有预览"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
-msgstr "上下 预览 · Tab 显示器 · m 缩放 · r 重新扫描 · Enter/Esc 关闭"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
+msgstr ""
+"上下 预览 · Tab 显示器 · m 缩放 · r 重新扫描 · w wallhaven · Enter/Esc 关闭"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

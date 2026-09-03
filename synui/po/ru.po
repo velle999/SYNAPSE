@@ -2585,10 +2585,9 @@ msgid "No preview"
 msgstr "Нет предпросмотра"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
 msgstr ""
-"Вверх/Вниз предпросмотр · Tab экран · m масштаб · r обновить · Enter/Esc "
-"закрыть"
+"Вверх/Вниз предпросмотр · Tab экран · m масштаб · r обновить · w wallhaven · Enter/Esc закрыть"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

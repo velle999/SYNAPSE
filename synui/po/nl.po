@@ -2598,10 +2598,9 @@ msgid "No preview"
 msgstr "Geen voorbeeld"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
 msgstr ""
-"Omhoog/Omlaag voorbeeld · Tab scherm · m schaling · r opnieuw zoeken · Enter/"
-"Esc sluiten"
+"Omhoog/Omlaag voorbeeld · Tab scherm · m schaling · r opnieuw zoeken · w wallhaven · Enter/Esc sluiten"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

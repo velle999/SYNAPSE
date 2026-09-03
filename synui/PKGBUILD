@@ -3120,7 +3120,45 @@ pkgver=0.1.0
 #   background, which on a dark wallpaper is dark on dark: the three chips that
 #   were ON were the three nobody could read. Caught in the rig's first
 #   screenshot.
-pkgrel=590
+# 591: THE KEY THAT DID NOTHING, AND `w` BETWEEN THE TWO WINDOWS.
+#
+#   Reported as Super+Ctrl+W not responding.
+#
+#   ⛔ THE KEY WAS FINE. It was bound, dispatched, and spawned the launcher —
+#   which refused, because the switch is off by default, onto the stderr of a
+#   process nobody was reading. Every layer reported success and the desktop
+#   did not move. 590's own comment argued for checking there ("a key that says
+#   how to turn it on rather than a panel that says turn me on"), and the key
+#   cannot say anything: it has no terminal. So the WINDOW asks now — it opens
+#   on its switch, says what saying yes costs, and reaches wallhaven.cc for
+#   nothing until the button is pressed. `search`/`get`/`set` still refuse,
+#   because those run where somebody can read the refusal, and die() posts a
+#   notification whenever stderr is not a terminal.
+#
+#   ⛔ AND THE BROWSER'S WHOLE KEYBOARD WAS DEAD. Keys.onPressed sat on the
+#   PanelWindow, and Qt delivers keys to an ITEM with active focus inside the
+#   surface — layer-shell granting the surface focus is not enough, which
+#   Ui/KeyboardPanel.qml already says in as many words. Escape, Enter, the
+#   arrows, 1 2 3 and S were all advertised in the footer and all answered
+#   nothing, silently, since 590. Found by pressing them; there is no build,
+#   lint or runtime error for a key handler nobody is listening to.
+#   ⚠ Keys.BeforeItem with it, or the grid's Flickable eats the arrows.
+#
+#   `w` flips between the two halves of picking a wallpaper: a [w] Wallhaven
+#   BUTTON in the picker's header (its label taken from the row's, so the two
+#   cannot drift), and a Wallpapers button in the browser's. Whichever window
+#   you leave closes — both are full-screen and both want the keyboard, which
+#   is the same reason the Wallhaven row closes the picker. Super+Ctrl+W now
+#   puts the picker down too, which it never did.
+#
+#   Two rigs, because the thing that failed was reachability rather than logic:
+#   wallhaven_key.sh presses Super+Ctrl+W and `w` against a real compositor and
+#   counts what the launcher was ACTUALLY run with (twice for one `w` would
+#   mean the picker stayed up and the second press closed the browser again),
+#   and wallhaven_window.sh presses Enter/w/Esc at the window and asserts the
+#   switch's promise from the ledger — nothing leaves the machine before
+#   consent. wppick_wallhaven_test.c is the unit half.
+pkgrel=591
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

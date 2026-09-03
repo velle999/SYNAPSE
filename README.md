@@ -564,8 +564,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Ctrl`+`=` / `Super`+`Ctrl`+`-` | **Scale the whole desktop** — the compositor's panels, every application and the cursor together, and sharp rather than magnified |
 | `Super`+`Ctrl`+`0` | Back to 100% |
 | `Super`+`D` | Display settings — resolution, refresh, arrangement, `m` to cycle `display_mode` (extend / mirror / external), `d` for 10-bit colour and `Shift`+`D` for **HDR10 output** |
-| `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
-| `Super`+`Ctrl`+`W` | Browse wallhaven.cc for a wallpaper (off until `synui-wallhaven on`) |
+| `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor, `w` opens the wallhaven browser) / reload the wallpaper |
+| `Super`+`Ctrl`+`W` | Browse wallhaven.cc for a wallpaper (`w` goes back to the picker) |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager — fifteen: **Prism** and **Prism Light** (the house theme, and what a fresh install boots into), SYNAPSE / Dark / XP / 95, **macOS 26 / Aqua / Platinum**, plus six riced palettes |
 | `Super`+`Shift`+`T` | Tile this desktop — switches to the tiling layout from wherever you are and drags every dragged, snapped, floated or maximized window back into it |
@@ -1386,23 +1386,29 @@ those keys — delete that file to hand control back to `synuirc`.
 **Where more come from: `Super`+`Ctrl`+`W`.** The picker lists what is already on
 the disk; this is a grid of what is on **wallhaven.cc** — category chips
 (general, anime, people), sorted by what is popular, latest, most viewed or
-random, paged. The same window is the **Wallhaven** row at the bottom of the
-`Super`+`W` picker's built-ins. Picking one downloads it into
-`~/Pictures/Wallpapers` — the first directory the picker scans — and sets it, so
-a wallpaper taken from wallhaven is an ordinary local wallpaper from then on.
+random, paged. Picking one downloads it into `~/Pictures/Wallpapers` — the first
+directory the picker scans — and sets it, so a wallpaper taken from wallhaven is
+an ordinary local wallpaper from then on.
+
+**`w` flips between the two.** The picker's header carries a **[w] Wallhaven**
+button (and the **Wallhaven** row at the bottom of its built-ins is the same
+door); the browser's header carries **Wallpapers**, which comes back. One key,
+either direction, and whichever window you left goes away rather than fighting
+the new one for the keyboard.
 
 > ⛔ **Off by default.** This is the only part of the wallpaper picker that
 > leaves your machine, and the second thing in the whole desktop that talks to
-> the internet at all. Nothing here resolves a name until `synui-wallhaven on`.
-> Results are pinned to wallhaven's `sfw` purity, which is not a setting: the
-> other levels need an API key, and a wallpaper picker that asks you to paste a
-> credential into it is a promise this would rather not make.
+> the internet at all. The window opens on that question the first time and
+> browses nothing until you answer it — `synui-wallhaven on` is the same switch
+> from a prompt. Results are pinned to wallhaven's `sfw` purity, which is not a
+> setting: the other levels need an API key, and a wallpaper picker that asks
+> you to paste a credential into it is a promise this would rather not make.
 
 `synui-wallhaven` is the command-line half — `search`, `get`, `set`, and the
 switch:
 
 ```bash
-synui-wallhaven on                       # the opt-in
+synui-wallhaven on                       # the opt-in (or the window's own button)
 synui-wallhaven search --sort=toplist    # what is popular right now
 synui-wallhaven set lydkg2               # download it and make it the wallpaper
 ```

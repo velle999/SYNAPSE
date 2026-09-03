@@ -2545,10 +2545,9 @@ msgid "No preview"
 msgstr "لا توجد معاينة"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
 msgstr ""
-"أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · Enter/Esc "
-"للإغلاق"
+"أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · w wallhaven · Enter/Esc للإغلاق"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

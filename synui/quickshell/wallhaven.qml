@@ -17,8 +17,10 @@ import "."
  * is in Super+W's list afterwards, and nothing has to remember where it came
  * from.
  *
- * Reached three ways, all the same window: Super+Ctrl+W, the "Browse
- * wallhaven.cc…" row in the Super+W picker, and `synui-wallhaven` at a prompt.
+ * Reached four ways, all the same window: Super+Ctrl+W, `w` or the [w] button
+ * in the Super+W picker, the "Wallhaven" row at the bottom of that picker's
+ * built-ins, and `synui-wallhaven` at a prompt. `w` HERE goes back to the
+ * picker, so one key flips between what is on the disk and what is not.
  *
  * ⚠ A SECOND QUICKSHELL ENTRY POINT, like the welcome guide, and for the same
  * reason: two bars ship, and a browser living inside the SYNAPSE bar would not
@@ -26,10 +28,14 @@ import "."
  * dismissing it quits the process — and does not come back when game mode
  * restarts the bar.
  *
- * ⛔ THE NETWORK SWITCH IS THE SCRIPT'S, NOT THIS FILE'S. synui-wallhaven
- * refuses every command while it is off and the launcher checks before it ever
- * starts this, so a window that is on screen is one somebody has already opted
- * in to. Re-asking here would be a second copy of that rule to keep in step.
+ * ⛔ THE NETWORK SWITCH IS STILL THE SCRIPT'S — THIS IS ONLY WHERE IT IS ASKED.
+ * `synui-wallhaven status` and `on` are the whole of it here; the state file,
+ * what counts as off and which commands refuse are all the script's, so there
+ * is one copy of the rule and this is its face. The launcher used to refuse
+ * before it ever started this window, which meant Super+Ctrl+W spawned a
+ * process that printed to a stderr nobody was reading and the key looked dead.
+ * So: the window opens on the question while the switch is off, and asks for
+ * nothing from wallhaven.cc until it has been answered.
  *
  * ⚠ NOTHING HERE PARSES JSON. The script emits the same tab-separated records
  * every other --rec table in this project does, and the columns are matched by
@@ -52,6 +58,12 @@ ShellRoot {
     property int total: 0
     property bool busy: false
     property string error: ""
+
+    // ⛔ THE NETWORK SWITCH. -1 while `status` is still running: an "unknown"
+    // that is neither on nor off matters, because treating it as off for the
+    // instant before the answer lands would flash the consent pane in the face
+    // of somebody who turned this on months ago.
+    property int netOn: -1
 
     // ⚠ THREE BITS, general/anime/people, which is wallhaven's own spelling and
     // is passed through rather than translated into something friendlier. The
@@ -81,6 +93,10 @@ ShellRoot {
     // exactly the sort of thing somebody clicks three times in a second.
     function reload() {
         if (searchProc.running) return
+        // ⛔ Nothing leaves this machine while the switch is off — the script
+        // would refuse anyway, but a refusal rendered as a red error string is
+        // not what "you have not turned this on" should look like.
+        if (root.netOn !== 1) return
         root.busy = true
         root.error = ""
         searchProc.command = ["synui-wallhaven", "search", "--rec",
@@ -181,9 +197,58 @@ ShellRoot {
         onExited: root.applying = ""
     }
 
+    // ── the switch ──────────────────────────────────────────────────────────
+    Process {
+        id: statusProc
+        command: ["synui-wallhaven", "status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.netOn = String(this.text).trim() === "on" ? 1 : 0
+            }
+        }
+    }
+
+    Process {
+        id: onProc
+        command: ["synui-wallhaven", "on"]
+        // ⚠ The script is the one that writes the state file; this only asks
+        // for it and believes the exit status.
+        onExited: (code) => { if (code === 0) root.netOn = 1 }
+    }
+
+    function turnOn() {
+        if (onProc.running || root.netOn === 1) return
+        onProc.running = true
+    }
+
+    // The first search waits for the answer rather than racing it.
+    onNetOnChanged: if (root.netOn === 1) root.reload()
+
+    // ── back to the picker ──────────────────────────────────────────────────
+    //
+    // `w` here opens the Super+W wallpaper picker, and `w` there opens this —
+    // one key flips between what is already on the disk and where more comes
+    // from.
+    //
+    // ⛔ AND THIS WINDOW GOES AWAY. It is a focusable full-screen layer surface
+    // and the picker is a compositor-drawn modal: leave both up and two
+    // full-screen surfaces are asking for the keyboard, which is a picker
+    // nobody can drive. The quit waits for synctl to exit — a detached child
+    // holding this process's pipes is a child that gets SIGPIPE'd.
+    Process {
+        id: pickProc
+        command: ["synctl", "dispatch", "wallpaper"]
+        onExited: root.close()
+    }
+
+    function openPicker() {
+        if (pickProc.running) return
+        pickProc.running = true
+    }
+
     function close() { Qt.quit() }
 
-    Component.onCompleted: root.reload()
+    Component.onCompleted: statusProc.running = true
 
     /*
      * ⚠ The launcher toggles ACROSS A PROCESS BOUNDARY: closing quits, so
@@ -221,6 +286,14 @@ ShellRoot {
             focusable: true
             color: "transparent"
 
+            // ⚠ Qt.callLater, not a direct call: the item has to exist and the
+            // surface has to be mapped before it can take focus. `visible` is
+            // already true when this window is built, so the completion handler
+            // is the one that fires on the first open and the change handler is
+            // for every toggle after it.
+            Component.onCompleted: Qt.callLater(keys.forceActiveFocus)
+            onVisibleChanged: if (visible) Qt.callLater(keys.forceActiveFocus)
+
             readonly property real u: Math.max(10, Math.round(height / 54))
 
             MouseArea {
@@ -250,10 +323,11 @@ ShellRoot {
                     // ── the header ──────────────────────────────────────────
                     Item {
                         width: parent.width
-                        height: title.height
+                        height: Math.max(title.height, wpBtn.height)
 
                         Text {
                             id: title
+                            anchors.verticalCenter: parent.verticalCenter
                             text: "WALLHAVEN"
                             color: Theme.fgDim
                             font.pixelSize: win.u * 0.95
@@ -261,10 +335,26 @@ ShellRoot {
                             font.letterSpacing: win.u * 0.14
                             font.bold: true
                         }
-                        Text {
+
+                        // The way back. A BUTTON and its own label: it opens
+                        // the wallpaper picker, and it says so whatever the
+                        // state of anything else on this window.
+                        Chip {
+                            id: wpBtn
                             anchors.right: parent.right
-                            anchors.verticalCenter: title.verticalCenter
-                            text: root.busy ? "loading…"
+                            anchors.verticalCenter: parent.verticalCenter
+                            u: win.u
+                            label: "Wallpapers"
+                            onPicked: root.openPicker()
+                        }
+
+                        Text {
+                            anchors.right: wpBtn.left
+                            anchors.rightMargin: win.u * 0.6
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.netOn === -1 ? "checking…"
+                                : root.netOn === 0 ? "off"
+                                : root.busy ? "loading…"
                                 : root.error !== "" ? root.error
                                 : root.total > 0
                                   ? "page " + root.page + " of " + root.lastPage
@@ -273,7 +363,7 @@ ShellRoot {
                             font.pixelSize: win.u * 0.85
                             font.family: Theme.fontFamily
                             elide: Text.ElideRight
-                            width: Math.min(implicitWidth, card.width * 0.6)
+                            width: Math.min(implicitWidth, card.width * 0.45)
                         }
                     }
 
@@ -281,6 +371,7 @@ ShellRoot {
                     Flow {
                         width: parent.width
                         spacing: win.u * 0.4
+                        visible: root.netOn === 1
 
                         Repeater {
                             model: [
@@ -317,6 +408,7 @@ ShellRoot {
                         id: grid
                         width: parent.width
                         height: parent.height - y - foot.height - win.u * 1.6
+                        visible: root.netOn === 1
                         clip: true
                         // A view that scrolls says so.
                         ScrollBar.vertical: ScrollBar {
@@ -421,12 +513,82 @@ ShellRoot {
                         }
                     }
 
+                    // ── the switch, while it is off ─────────────────────────
+                    //
+                    // ⛔ THE WHOLE POINT OF THIS PANE. Everything else in this
+                    // window talks to wallhaven.cc; this is the one screen that
+                    // does not, and it is what a first Super+Ctrl+W lands on.
+                    // The button is deliberately the only way past it, and it
+                    // says exactly what saying yes costs.
+                    Item {
+                        width: parent.width
+                        height: parent.height - y - foot.height - win.u * 1.6
+                        visible: root.netOn === 0
+
+                        Column {
+                            anchors.centerIn: parent
+                            width: Math.min(parent.width * 0.8, win.u * 40)
+                            spacing: win.u * 0.9
+
+                            Text {
+                                width: parent.width
+                                text: "Wallhaven is off"
+                                color: Theme.fg
+                                font.pixelSize: win.u * 1.3
+                                font.family: Theme.fontFamily
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Text {
+                                width: parent.width
+                                text: "Browsing here asks wallhaven.cc for "
+                                      + "thumbnails, and the one you pick is "
+                                      + "downloaded into ~/Pictures/Wallpapers. "
+                                      + "It is the only part of the wallpaper "
+                                      + "picker that leaves this machine, so it "
+                                      + "is off until you say otherwise — "
+                                      + "nothing has been asked for yet."
+                                color: Theme.fgDim
+                                font.pixelSize: win.u * 0.85
+                                font.family: Theme.fontFamily
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Item {
+                                width: parent.width
+                                height: turnOnBtn.height
+                                Chip {
+                                    id: turnOnBtn
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    u: win.u * 1.3
+                                    label: onProc.running ? "turning on…"
+                                                          : "Turn on"
+                                    on: true
+                                    onPicked: root.turnOn()
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: "The wallpapers already on this machine "
+                                      + "are in the Super+W picker — press w."
+                                color: Theme.fgDim
+                                font.pixelSize: win.u * 0.75
+                                font.family: Theme.fontFamily
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+                    }
+
                     // ── the footer ──────────────────────────────────────────
                     Text {
                         id: foot
                         width: parent.width
-                        text: "Enter set as wallpaper   ·   ← → page   ·   "
-                              + "1 2 3 categories   ·   S sort   ·   Esc close"
+                        text: root.netOn === 1
+                              ? "Enter set as wallpaper   ·   ← → page   ·   "
+                                + "1 2 3 categories   ·   S sort   ·   "
+                                + "w wallpapers   ·   Esc close"
+                              : "Enter turn on   ·   w wallpapers   ·   Esc close"
                         color: Theme.fgDim
                         font.pixelSize: win.u * 0.75
                         font.family: Theme.fontFamily
@@ -435,37 +597,65 @@ ShellRoot {
                 }
             }
 
-            Keys.onPressed: (e) => {
-                switch (e.key) {
-                case Qt.Key_Escape: root.close(); break
-                case Qt.Key_Left:
-                    if (root.selected % 4 === 0) root.goPage(-1)
-                    else root.selected = Math.max(0, root.selected - 1)
-                    break
-                case Qt.Key_Right:
-                    if (root.selected % 4 === 3 || root.selected === root.items.length - 1)
-                        root.goPage(1)
-                    else root.selected = Math.min(root.items.length - 1, root.selected + 1)
-                    break
-                case Qt.Key_Up:
-                    root.selected = Math.max(0, root.selected - 4); break
-                case Qt.Key_Down:
-                    root.selected = Math.min(root.items.length - 1, root.selected + 4); break
-                case Qt.Key_PageDown: root.goPage(1); break
-                case Qt.Key_PageUp:   root.goPage(-1); break
-                case Qt.Key_Return:
-                case Qt.Key_Enter:
-                case Qt.Key_Space:
-                    root.apply(root.items[root.selected]); break
-                case Qt.Key_1: root.toggleCat(0); break
-                case Qt.Key_2: root.toggleCat(1); break
-                case Qt.Key_3: root.toggleCat(2); break
-                case Qt.Key_S:
-                    root.setSort((root.sortIndex + 1) % root.sorts.length); break
-                case Qt.Key_R: root.reload(); break
-                default: return
+            /*
+             * ⛔ THE KEYS HAVE TO HANG OFF AN ITEM WITH ACTIVE FOCUS, NOT OFF
+             * THE WINDOW. Layer-shell handing this surface keyboard focus is
+             * not enough for `Keys.onPressed` to fire — Qt needs a focused item
+             * INSIDE it, which Ui/KeyboardPanel.qml documents and StartMenu.qml
+             * does the same way. On the window, as this shipped in 590, every
+             * key the footer advertises answered nothing: Escape did not close
+             * it, Enter set no wallpaper, the arrows did not move. Nothing said
+             * so — a dead key handler is not a warning, a crash, or a lint.
+             *
+             * ⛔ AND `Keys.BeforeItem`, because the grid is a Flickable and its
+             * built-in arrow scrolling would otherwise eat exactly the arrows
+             * that move the selection.
+             */
+            Item {
+                id: keys
+                anchors.fill: parent
+                focus: true
+                Keys.priority: Keys.BeforeItem
+
+                Keys.onPressed: (e) => {
+                    switch (e.key) {
+                    case Qt.Key_Escape: root.close(); break
+                    case Qt.Key_Left:
+                        if (root.selected % 4 === 0) root.goPage(-1)
+                        else root.selected = Math.max(0, root.selected - 1)
+                        break
+                    case Qt.Key_Right:
+                        if (root.selected % 4 === 3 || root.selected === root.items.length - 1)
+                            root.goPage(1)
+                        else root.selected = Math.min(root.items.length - 1, root.selected + 1)
+                        break
+                    case Qt.Key_Up:
+                        root.selected = Math.max(0, root.selected - 4); break
+                    case Qt.Key_Down:
+                        root.selected = Math.min(root.items.length - 1, root.selected + 4); break
+                    case Qt.Key_PageDown: root.goPage(1); break
+                    case Qt.Key_PageUp:   root.goPage(-1); break
+                    case Qt.Key_Return:
+                    case Qt.Key_Enter:
+                    case Qt.Key_Space:
+                        // While the switch is off there is nothing to set, and the
+                        // one thing on screen is the button this answers.
+                        if (root.netOn !== 1) root.turnOn()
+                        else root.apply(root.items[root.selected])
+                        break
+                    case Qt.Key_W:
+                        // The picker's `w` opens this window; this one goes back.
+                        root.openPicker(); break
+                    case Qt.Key_1: root.toggleCat(0); break
+                    case Qt.Key_2: root.toggleCat(1); break
+                    case Qt.Key_3: root.toggleCat(2); break
+                    case Qt.Key_S:
+                        root.setSort((root.sortIndex + 1) % root.sorts.length); break
+                    case Qt.Key_R: root.reload(); break
+                    default: return
+                    }
+                    e.accepted = true
                 }
-                e.accepted = true
             }
         }
     }

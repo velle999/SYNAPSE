@@ -1669,7 +1669,10 @@ void synui_render_wppick(syn_server_t *s)
         cairo_stroke(cr);
     }
 
-    /* Scroll position, when there is more than one screenful. */
+    /* Scroll position, when there is more than one screenful. Walks right_edge
+     * like the two above it — it used to draw at `right_edge - te.width` and
+     * leave the cursor where it found it, so the next thing packed in here
+     * would have overdrawn it. */
     if (total > shown) {
         char pos[32];
         snprintf(pos, sizeof(pos), "%d/%d", s->wppick.selected + 1, total);
@@ -1677,8 +1680,43 @@ void synui_render_wppick(syn_server_t *s)
         cairo_text_extents_t te;
         syn_text_extents(cr, pos, &te);
         set_ink(cr, INK_DIM, 0.9);
-        cairo_move_to(cr, right_edge - te.width, 30);
+        right_edge -= te.width;
+        cairo_move_to(cr, right_edge, 30);
         syn_show_text(cr, pos);
+        right_edge -= 12;
+    }
+
+    /* ── [w] Wallhaven ───────────────────────────────────────
+     *
+     * A BUTTON, not a legend entry: the only clickable thing in this header.
+     * The Wallhaven row at the bottom of the built-ins is the same door, but it
+     * is a row in a list that can be 131 entries long, and where more
+     * wallpapers come from should not be something you scroll to.
+     *
+     * Its label comes from the row's own, so the two cannot come to be spelled
+     * differently, and the browser has the mirror of it — `w` there comes back
+     * here, so one key flips between the two halves of picking a wallpaper.
+     *
+     * ⚠ THE RECT IS RECORDED WHERE IT IS DRAWN. hit_set_panel() above cleared
+     * the spot list, so this is spot 0, which is what wppick_click() tests. */
+    {
+        int wh = wppick_wallhaven_row();
+        if (wh >= 0) {
+            char label[64];
+            snprintf(label, sizeof(label), "[w] %s", wppick_options[wh].label);
+            cairo_set_font_size(cr, 12);
+            cairo_text_extents_t te;
+            syn_text_extents(cr, label, &te);
+            set_accent(cr, 1.0);
+            right_edge -= te.width;
+            cairo_move_to(cr, right_edge, 30);
+            syn_show_text(cr, label);
+            /* Padded to a click target: the text is 12px tall and nobody can
+             * hit that with a pointer. */
+            hit_add_spot(&s->wppick.hit, (int)right_edge - 6, 14,
+                         (int)te.width + 12, 24);
+            right_edge -= 12;
+        }
     }
 
     /* Controls legend */
@@ -1686,7 +1724,8 @@ void synui_render_wppick(syn_server_t *s)
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     syn_show_text(cr, _("Up/Down preview \xc2\xb7 Tab monitor \xc2\xb7 m scaling "
-                        "\xc2\xb7 r rescan \xc2\xb7 Enter/Esc close"));
+                        "\xc2\xb7 r rescan \xc2\xb7 w wallhaven "
+                        "\xc2\xb7 Enter/Esc close"));
 
     cairo_destroy(cr);
     set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);

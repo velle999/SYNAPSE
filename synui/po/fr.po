@@ -2604,10 +2604,9 @@ msgid "No preview"
 msgstr "Aucun aperçu"
 
 #: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · Enter/Esc close"
+msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
 msgstr ""
-"Haut/Bas aperçu · Tab écran · m mise à l'échelle · r réanalyser · Entrée/"
-"Échap fermer"
+"Haut/Bas aperçu · Tab écran · m mise à l'échelle · r réanalyser · w wallhaven · Entrée/Échap fermer"
 
 #: src/render.c:1748
 msgid "POWER SAVING"

@@ -78,6 +78,33 @@ const int wppick_option_count =
 static int wppick_we_index(syn_server_t *s, int row);
 
 /*
+ * Open the wallhaven browser.
+ *
+ * ⚠ THE LAUNCHER AND NOT quickshell DIRECTLY. synui-wallhaven owns which tree
+ * the QML comes from and the toggle across a process boundary; the window owns
+ * the network switch, and says so on its own face when it is off. Super+Ctrl+W
+ * (input.c) spawns the identical command.
+ *
+ * ⛔ THE CALLER CLOSES THE PANEL. The browser wants the keyboard, and two
+ * full-screen surfaces both asking for it is a panel nobody can drive — but the
+ * row path commits from inside wppick_apply(), whose callers close immediately
+ * afterwards, so a wppick_hide() here would be one close too many.
+ */
+static void wppick_wallhaven_open(void)
+{
+    synui_spawn("synui-wallhaven toggle");
+}
+
+/* The Wallhaven row's index, which is also where the header button takes its
+ * label from — one spelling, so the button and the row cannot drift apart. */
+int wppick_wallhaven_row(void)
+{
+    for (int i = 0; i < wppick_option_count; i++)
+        if (strcmp(wppick_options[i].token, "wallhaven") == 0) return i;
+    return -1;
+}
+
+/*
  * Is this row an ACTION rather than a wallpaper?
  *
  * ⛔ THE PANEL APPLIES ON HIGHLIGHT. Moving onto a row sets that wallpaper so
@@ -90,7 +117,7 @@ static bool wppick_is_action(syn_server_t *s, int idx)
 {
     if (idx < 0 || idx >= wppick_option_count) return false;
     (void)s;
-    return strcmp(wppick_options[idx].token, "wallhaven") == 0;
+    return idx == wppick_wallhaven_row();
 }
 
 /* ── Scope ───────────────────────────────────────────────── */
@@ -410,15 +437,12 @@ static void wppick_apply(syn_server_t *s, int idx, bool commit)
      * browser wants the keyboard and two full-screen surfaces both asking for
      * it is a panel nobody can drive.
      *
-     * ⚠ synui-wallhaven, not quickshell directly. The launcher is what knows
-     * the network switch is off, which tree the QML comes from, and how to
-     * toggle an instance that is already up. */
+     * The header's [w] button is the same door, one keypress away instead of
+     * one scroll and an Enter — both end up in wppick_wallhaven_open(). */
     if (wppick_is_action(s, idx)) {
         if (!commit) return;
-        /* ⚠ NOT hidden here. Every path that commits a deferred row closes the
-         * panel immediately afterwards, and a second wppick_hide() from inside
-         * the thing it is committing is one close too many to reason about. */
-        synui_spawn("synui-wallhaven toggle");
+        /* ⚠ NOT hidden here — see wppick_wallhaven_open(). */
+        wppick_wallhaven_open();
         return;
     }
 
@@ -1185,6 +1209,17 @@ int wppick_click(syn_server_t *s, double lx, double ly, uint32_t button,
 
     if (button != BTN_LEFT) return 1;
 
+    /* The header's [w] Wallhaven button. A BUTTON, so one click acts — the
+     * double-click rule below is about picking a wallpaper, and this picks
+     * none. render.c records the rect where it draws the label; spot 0 is the
+     * only one this panel has. */
+    if (hit_spot_at(&s->wppick.hit, lx, ly) == 0) {
+        s->wppick.pending_we = -1;
+        wppick_wallhaven_open();
+        wppick_hide(s);
+        return 1;
+    }
+
     int i = hit_index_at(&s->wppick.hit, lx, ly);
     if (i < 0 || i >= wppick_total(s)) return 1;   /* chrome / preview pane */
 
@@ -1337,6 +1372,18 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         synui_render_wppick(s);
         return 1;
     }
+    case XKB_KEY_w:
+        /* Where more wallpapers come from. The header button's key, and the
+         * counterpart of the browser's own `w`, which comes back here — so w
+         * flips between the two halves of picking a wallpaper.
+         *
+         * ⛔ CLOSES THE PICKER. Unlike the Wallhaven row this commits nothing,
+         * so a deferred row is abandoned rather than applied, exactly as Esc
+         * abandons it: pressing w is going somewhere else, not choosing. */
+        s->wppick.pending_we = -1;
+        wppick_wallhaven_open();
+        wppick_hide(s);
+        return 1;
     case XKB_KEY_r:
         /* Rescan without closing — for when you have just saved an image into
          * ~/Pictures and want it in the list. */
