@@ -45,6 +45,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -385,8 +386,8 @@ int pads_mouse_stream(const char *want_output)
 	prctl(PR_SET_PDEATHSIG, SIGTERM);
 
 	if (!getenv("WAYLAND_DISPLAY")) {
-		fputs("syn-arcade: no Wayland session — `big mouse` moves the "
-		      "compositor's pointer and needs one\n", stderr);
+		fputs(_("syn-arcade: no Wayland session — `big mouse` moves the "
+		        "compositor's pointer and needs one\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -395,7 +396,7 @@ int pads_mouse_stream(const char *want_output)
 
 	w.display = wl_display_connect(NULL);
 	if (!w.display) {
-		fputs("syn-arcade: cannot connect to the Wayland display\n", stderr);
+		fputs(_("syn-arcade: cannot connect to the Wayland display\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -408,10 +409,13 @@ int pads_mouse_stream(const char *want_output)
 	wl_display_roundtrip(w.display);
 
 	if (!w.mgr) {
-		fputs("syn-arcade: this compositor does not offer "
-		      "zwlr_virtual_pointer_manager_v1, so a controller cannot "
-		      "move the pointer.\nOn SynapseOS that means synui is older "
-		      "than the feature — update it.\n", stderr);
+		/* ⚠ The interface name is what the protocol calls itself and is
+		 * not marked out of the sentence — a translated one names nothing
+		 * and cannot be looked up. */
+		fputs(_("syn-arcade: this compositor does not offer "
+		        "zwlr_virtual_pointer_manager_v1, so a controller cannot "
+		        "move the pointer.\nOn SynapseOS that means synui is older "
+		        "than the feature — update it.\n"), stderr);
 		wl_display_disconnect(w.display);
 		return EX_FAIL;
 	}
@@ -434,7 +438,7 @@ int pads_mouse_stream(const char *want_output)
 				w.mgr, w.seat);
 
 	if (!w.ptr) {
-		fputs("syn-arcade: could not create a virtual pointer\n", stderr);
+		fputs(_("syn-arcade: could not create a virtual pointer\n"), stderr);
 		wl_display_disconnect(w.display);
 		return EX_FAIL;
 	}

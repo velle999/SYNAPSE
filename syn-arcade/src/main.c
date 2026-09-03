@@ -6,6 +6,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -226,14 +227,18 @@ static void usage(FILE *f)
 static int cmd_gui(void)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY")) {
-		fputs("syn-arcade: no display — the gui needs a graphical "
-		      "session\n", stderr);
+		fputs(_("syn-arcade: no display — the gui needs a graphical "
+		        "session\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (system("command -v quickshell >/dev/null 2>&1") != 0) {
-		fputs("syn-arcade: quickshell is not installed — "
-		      "synpkg install quickshell\n", stderr);
+		/* ⚠ The command at the end is one somebody TYPES. It is inside
+		 * the marked string because a sentence split around it reads badly
+		 * in every language; a translator keeps `synpkg install quickshell`
+		 * as it stands. */
+		fputs(_("syn-arcade: quickshell is not installed — "
+		        "synpkg install quickshell\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -253,7 +258,7 @@ static int cmd_gui(void)
 
 	execlp("quickshell", "quickshell", "-p", qml, (char *)NULL);
 
-	fputs("syn-arcade: could not start quickshell\n", stderr);
+	fputs(_("syn-arcade: could not start quickshell\n"), stderr);
 	return EX_FAIL;
 }
 
@@ -277,40 +282,55 @@ static int cmd_about(bool rec)
 
 	if (rec) {
 		rec_row(3, "field", "value", "action");
-		rec_row(3, "version", SYNARCADE_VERSION, "detail");
-		rec_row(3, "licence", "GPL-2.0-or-later", "detail");
-		rec_row(3, "MangoHud", mangohud ? "installed" : "NOT INSTALLED",
+		/* ⚠ MangoHud and quickshell are PRODUCT NAMES and stay as they
+		 * are; the words around them are labels a window draws. A version
+		 * string, a licence identifier, a path and an environment value
+		 * are data and are never marked. */
+		rec_row(3, N_("version"), SYNARCADE_VERSION, "detail");
+		rec_row(3, N_("licence"), "GPL-2.0-or-later", "detail");
+		rec_row(3, "MangoHud",
+			mangohud ? N_("installed") : N_("NOT INSTALLED"),
 			"detail");
-		rec_row(3, "overlay config", hudpath, hud_ok ? "detail"
-							     : "detail readonly");
-		rec_row(3, "quickshell", quickshell ? "installed" : "NOT INSTALLED",
+		rec_row(3, N_("overlay config"), hudpath, hud_ok ? "detail"
+								 : "detail readonly");
+		rec_row(3, "quickshell",
+			quickshell ? N_("installed") : N_("NOT INSTALLED"),
 			"detail");
-		rec_row(3, "on-screen keyboard", wtype ? "wtype installed"
-						       : "wtype NOT INSTALLED",
+		rec_row(3, N_("on-screen keyboard"),
+			wtype ? N_("wtype installed") : N_("wtype NOT INSTALLED"),
 			"detail");
-		rec_row(3, "SDL mappings", (sdl && *sdl) ? sdl : "(not set)",
-			"detail");
+		rec_row(3, N_("SDL mappings"),
+			(sdl && *sdl) ? sdl : N_("(not set)"), "detail");
 		return EX_OK;
 	}
 
-	printf("syn-arcade %s — the SynapseOS game assistant\n", SYNARCADE_VERSION);
+	/* ⚠ THE LABEL COLUMN IS PADDED TO A FIXED WIDTH IN THE FORMAT, so a
+	 * translation longer than the column runs into the value. The labels are
+	 * short on purpose and a translator can see the alignment in the msgid —
+	 * this is a terminal listing, not a table something parses. */
+	printf(_("syn-arcade %s — the SynapseOS game assistant\n"), SYNARCADE_VERSION);
 	puts("GPL-2.0-or-later\n");
-	printf("  MangoHud        %s\n", mangohud ? "installed"
-	     : "NOT INSTALLED — the overlay does nothing without it");
-	printf("  overlay config  %s%s\n", hudpath,
-	       file_writable(hudpath) ? "" : "   (NOT WRITABLE — see `hud path`)");
-	printf("  quickshell      %s\n", quickshell ? "installed"
-	     : "NOT INSTALLED — `syn-arcade gui` needs it");
-	printf("  wtype           %s\n", wtype ? "installed"
-	     : "NOT INSTALLED — big screen mode's on-screen keyboard "
-	       "cannot type without it");
-	printf("  SDL mappings    %s\n", (sdl && *sdl) ? sdl
-	     : "(SDL_GAMECONTROLLERCONFIG_FILE not set — see `map path`)");
+	printf(_("  MangoHud        %s\n"), mangohud ? _("installed")
+	     : _("NOT INSTALLED — the overlay does nothing without it"));
+	printf(_("  overlay config  %s%s\n"), hudpath,
+	       file_writable(hudpath) ? "" : _("   (NOT WRITABLE — see `hud path`)"));
+	printf(_("  quickshell      %s\n"), quickshell ? _("installed")
+	     : _("NOT INSTALLED — `syn-arcade gui` needs it"));
+	printf(_("  wtype           %s\n"), wtype ? _("installed")
+	     : _("NOT INSTALLED — big screen mode's on-screen keyboard "
+	         "cannot type without it"));
+	printf(_("  SDL mappings    %s\n"), (sdl && *sdl) ? sdl
+	     : _("(SDL_GAMECONTROLLERCONFIG_FILE not set — see `map path`)"));
 	return EX_OK;
 }
 
 int main(int argc, char **argv)
 {
+	/* ⚠ FIRST, BEFORE ANYTHING PRINTS — including the usage below. A message
+	 * looked up before the catalog is bound is English whatever the desktop's
+	 * language is, and the failure is silent. */
+	syn_arcade_i18n_init();
+
 	if (argc < 2) {
 		usage(stdout);
 		return EX_OK;
@@ -367,7 +387,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "about"))
 		return cmd_about(rest_c > 0 && !strcmp(rest[0], "--rec"));
 
-	fprintf(stderr, "syn-arcade: unknown command '%s'\n", cmd);
+	fprintf(stderr, _("syn-arcade: unknown command '%s'\n"), cmd);
 	usage(stderr);
 	return EX_USAGE;
 }

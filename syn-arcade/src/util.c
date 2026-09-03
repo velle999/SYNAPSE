@@ -6,8 +6,11 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
+#include "config.h"
 
 #include <ctype.h>
+#include <locale.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -22,7 +25,7 @@ void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
 	if (!p) {
-		fputs("syn-arcade: out of memory\n", stderr);
+		fputs(_("syn-arcade: out of memory\n"), stderr);
 		exit(EX_FAIL);
 	}
 	return p;
@@ -32,7 +35,7 @@ void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
 	if (!q) {
-		fputs("syn-arcade: out of memory\n", stderr);
+		fputs(_("syn-arcade: out of memory\n"), stderr);
 		exit(EX_FAIL);
 	}
 	return q;
@@ -346,4 +349,24 @@ bool data_path(char *buf, size_t n, const char *rel)
 	const char *home = getenv("HOME");
 	if (!home || !*home) return false;
 	return snprintf(buf, n, "%s/.local/share/%s", home, rel) < (int)n;
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⛔ THE ENV OVERRIDE IS WHAT MAKES THIS TESTABLE. The compiled-in path is
+ * under the install prefix, so an UNINSTALLED binary finds no catalog at all
+ * and answers English in every locale — a test that runs it under two locales
+ * and diffs would then pass on a real bug. synpkg 47 shipped that mistake and
+ * only found it by deliberately mistranslating a record. Nothing changes for
+ * an installed syn-arcade: the variable is not set.
+ */
+void syn_arcade_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	const char *dir = getenv("SYN_ARCADE_LOCALEDIR");
+	bindtextdomain(SYN_ARCADE_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNARCADE_LOCALEDIR);
+	bind_textdomain_codeset(SYN_ARCADE_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_ARCADE_GETTEXT_DOMAIN);
 }

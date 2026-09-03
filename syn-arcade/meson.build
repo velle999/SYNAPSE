@@ -9,6 +9,11 @@ conf = configuration_data()
 conf.set_quoted('SYNARCADE_VERSION', meson.project_version())
 conf.set_quoted('SYNARCADE_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'syn-arcade')
+# Where the .mo files land, and the domain they are named after. ⚠ The QML
+# windows do NOT read these — quickshell has no translator, so they read JSON
+# compiled from the same .po by po/meson.build. See include/i18n.h.
+conf.set_quoted('SYNARCADE_LOCALEDIR',
+                get_option('prefix') / get_option('datadir') / 'locale')
 configure_file(output: 'config.h', configuration: conf)
 
 # ONE dependency beyond libc — libwayland-client — and it is worth saying why
@@ -89,6 +94,14 @@ executable('syn-arcade',
 
 install_data('data/syn-arcade.qml', install_dir: get_option('datadir') / 'syn-arcade')
 
+# ⛔ THE TRANSLATION SINGLETON, IN ITS OWN MODULE DIRECTORY. Not beside the two
+# .qml files above: a qmldir makes its directory an explicit QML module, and
+# those are the files quickshell is pointed AT. The generated catalogs land
+# beside it (po/meson.build installs qml/i18n/<lang>.json), because I18n.qml
+# resolves them against its OWN file.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-arcade' / 'qml')
+
 # Big screen mode's shell — a separate QML file, not a tab of the one above,
 # because it is a different SURFACE: a full-screen layer-shell window with
 # exclusive keyboard focus, where the other is an ordinary desktop window. They
@@ -153,6 +166,15 @@ install_data('data/syn-arcade-big.desktop',
 # MangoHud's inotify watch fails permanently if the config file does not exist
 # when the game starts.
 install_data('data/syn-arcade.sh', install_dir: get_option('sysconfdir') / 'profile.d')
+
+subdir('po')
+
+# ⚠ SEPARATE FROM THE SUITE BELOW, deliberately. This one builds a locale with
+# localedef and runs the binary under it; the main suite asserts English golden
+# output and must not.
+test('syn-arcade-i18n', find_program('tests/i18n_test.sh'),
+     args: [meson.current_source_dir(), meson.current_build_dir() / 'syn-arcade'],
+     timeout: 120)
 
 test('syn-arcade', find_program('tests/syn_arcade_test.sh'),
      args: [meson.current_build_dir() / 'syn-arcade'],

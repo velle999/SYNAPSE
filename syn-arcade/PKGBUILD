@@ -206,6 +206,82 @@
 # seat user an ACL. So "permission denied" here means the device was not
 # recognised as a joystick, or this is not the active seat — never "use sudo",
 # and the binary says so rather than teaching the wrong fix.
+# ── 0.1.0-51: thirteen languages, and a line down the middle of every record ─
+#
+# syn-arcade said everything in English — the CLI you use over SSH, the desktop
+# window, and the ten-foot interface on a television. 597 strings now in de, fr,
+# es, pt, it, nl, pl, ru, ja, zh, ko, hi and ar, one catalog compiled twice: a
+# .mo for the binary and JSON for the two quickshell windows, so a word they
+# share is translated once and cannot disagree.
+#
+# ⛔ AND EVERY --rec RECORD STAYS ENGLISH, WHICH IS MOST OF THE WORK. The first
+# row of every record NAMES THE COLUMNS and both windows key off those names;
+# they match on values too — `installed === "yes"` in four places, a hud
+# position is `top-left`, a fit scaler is `integer`, an `action` cell is
+# `toggle:hud`. So the marking is by DESTINATION, not by file: `hud show` writes
+# a sentence somebody reads and `hud --rec` writes a record, out of the same
+# function, a few lines apart.
+#
+#   _()   the human path.
+#   N_()  a LABEL that travels in a record for a WINDOW to translate at the draw
+#         site: in the catalog, unchanged in the row.
+#
+# ⚠ TWO PLACES NEEDED A SECOND TABLE, because an id and a label are two facts
+# that happened to be spelled the same. `hud choices` prints an id column and a
+# label column, and both were hud_positions[] — marking that one array would
+# have put `top-left` in the catalog, and a German window would have offered a
+# position no command accepts. Same for a big-screen SHELF: its `title` is this
+# shell's identity for a row (the selection survives a rebuild by matching it,
+# and the scroll position is remembered under it), so it stays English and a new
+# `label` field carries the word on screen.
+#
+# ⚠ AND button_name() BECAME button_label(). The convention across this project
+# is that a *_name() function is read by a PROGRAM — bus_name() returns USB and
+# Bluetooth — but this one returns "left bumper" and "d-pad up", which are
+# sentences. The two sibling functions could not keep the same suffix.
+#
+# ⛔ THE TEST THAT MATTERS IS A HOSTILE CATALOG. tests/i18n_test.sh builds one
+# from the TEMPLATE with every msgstr marked and runs twenty --rec commands
+# under it: a record that changes has a string reaching gettext, whether or not
+# de.po happens to carry that entry today. A marked column name is invisible to
+# a real-catalog diff until somebody translates it, and then it is a window that
+# has stopped recognising its own records. It cannot be a static check either —
+# `rec_row(3, N_("licence"), "GPL-2.0-or-later", "detail")` is a DATA row whose
+# fields are all literals, and `pads info` prints a LABEL spelled `name` while
+# `pads --rec` has a COLUMN spelled `name`. A grep for header spellings reported
+# three false positives on its first run and was deleted.
+#
+# ── and four things the languages found ────────────────────────────────────
+#
+# ⚠ A FIXED 120 px LABEL COLUMN IS A MEASUREMENT OF ONE LANGUAGE'S WORDS.
+# "Config file" fits it; "Konfigurationsdatei" printed straight over the path
+# beside it. Verified in a nested headless synui under a German catalog — the
+# only way to see it — and the column now grows for a label that needs it while
+# staying aligned for the short ones.
+#
+# ⚠ THE SUITE'S SANDBOX ASSERTION WAS AN ABSOLUTE. "No wrapper reached the real
+# applications menu" was `find ~/.local/share/applications -name 'syn-fit-*'` is
+# EMPTY — which fails on any machine where somebody has actually used `fit new`.
+# The machine this is written on has one for SimCity 3000, so the suite failed
+# here for the same reason it would fail on any box the feature works on. It is
+# snapshotted at the top and compared at the end now: the claim is that this run
+# ADDED nothing.
+#
+# ⚠ SEVENTY-FOUR PIPELINES STILL RAN THE BINARY INTO `grep -q`. says() was added
+# for this in an earlier round and 139 assertions use it, but `"$SA" big games
+# --rec | cut -f2 | grep -qx "…"` has no says() in front: grep -q exits on the
+# match, syn-arcade takes SIGPIPE mid-record, and pipefail reports 141 for an
+# assertion that was TRUE. They go through `has` now — `grep -c` into a
+# variable, which must read to EOF — and the suite greps ITSELF for the shape,
+# because this file has now been fixed for it twice.
+#
+# ⚠ AND THE fit RIG DREW A WINDOW WITH NO WORDS IN IT AND CALLED IT A PASS. It
+# copies the .qml to a temporary and runs quickshell on the copy, so the
+# `import "qml"` for the translation singleton resolved to nothing: one WARN
+# about an unresolvable import, a ReferenceError per lookup, and a screenshot of
+# blank labels. It copies qml/ beside the file now, and a match on ERROR in that
+# log is a FAILURE rather than a line printed and carried past.
+
 pkgname=syn-arcade
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
@@ -1050,7 +1126,7 @@ pkgver=0.1.0
 #   relationship its layout depends on. A face is a face at any distance; a
 #   ten-foot UI's sizes are not the desktop's.
 #   tools/preflight.sh gates this repo-wide now, and names the exemption.
-pkgrel=50
+pkgrel=51
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

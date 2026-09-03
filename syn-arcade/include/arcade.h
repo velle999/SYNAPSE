@@ -24,6 +24,10 @@
 
 /* ── util.c ──────────────────────────────────────────────────────────────── */
 
+/* Bind the message catalog. Called once from main(), before anything prints.
+ * Lives in util.c; see include/i18n.h for what is and is not translated. */
+void syn_arcade_i18n_init(void);
+
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
@@ -77,6 +81,9 @@ int mkdir_parents(const char *path);
  * walks them: clockwise from the top-left corner. */
 #define HUD_POS_COUNT 8
 extern const char *const hud_positions[HUD_POS_COUNT];
+/* The same eight as WORDS, for the `label` column. ⛔ Never interchangeable
+ * with the ids above — see the note over the definition in src/hud.c. */
+extern const char *const hud_position_labels[HUD_POS_COUNT];
 
 /* Which file MangoHud will actually read.
  *

@@ -63,6 +63,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <dlfcn.h>
 #include <poll.h>
@@ -107,7 +108,7 @@ static struct {
 	do {                                                                   \
 		*(void **)(&sdl.name) = dlsym(sdl.lib, "SDL_" #name);          \
 		if (!sdl.name) {                                               \
-			fprintf(stderr, "syn-arcade: %s has no SDL_%s\n",      \
+			fprintf(stderr, _("syn-arcade: %s has no SDL_%s\n"),   \
 				SDL_SONAME, #name);                            \
 			dlclose(sdl.lib);                                      \
 			sdl.lib = NULL;                                        \
@@ -131,10 +132,10 @@ static bool sdl_load(void)
 	sdl.lib = dlopen(SDL_SONAME, RTLD_LAZY | RTLD_LOCAL);
 	if (!sdl.lib) {
 		fprintf(stderr,
-		 "syn-arcade: SDL is not installed, and the mapping this writes\n"
-		 "            is SDL's own format — its numbering has to come\n"
-		 "            from the library that will read it back.\n"
-		 "            synpkg install sdl3\n");
+		 _("syn-arcade: SDL is not installed, and the mapping this writes\n"
+		   "            is SDL's own format — its numbering has to come\n"
+		   "            from the library that will read it back.\n"
+		   "            synpkg install sdl3\n"));
 		return false;
 	}
 
@@ -177,27 +178,33 @@ static const struct {
 	const char *prompt;
 	ctl_kind_t  kind;
 } wiz_controls[] = {
-	{ "a",             "the BOTTOM face button (A, or cross)",       CTL_BUTTON },
-	{ "b",             "the RIGHT face button (B, or circle)",       CTL_BUTTON },
-	{ "x",             "the LEFT face button (X, or square)",        CTL_BUTTON },
-	{ "y",             "the TOP face button (Y, or triangle)",       CTL_BUTTON },
-	{ "leftshoulder",  "the left shoulder button (LB, or L1)",       CTL_BUTTON },
-	{ "rightshoulder", "the right shoulder button (RB, or R1)",      CTL_BUTTON },
-	{ "lefttrigger",   "the left trigger, all the way in (LT, L2)",  CTL_TRIGGER },
-	{ "righttrigger",  "the right trigger, all the way in (RT, R2)", CTL_TRIGGER },
-	{ "back",          "Back, Select or View",                       CTL_BUTTON },
-	{ "start",         "Start or Menu",                              CTL_BUTTON },
-	{ "guide",         "the Guide or Home button, if it has one",    CTL_BUTTON },
-	{ "leftstick",     "the left stick pressed IN (L3)",             CTL_BUTTON },
-	{ "rightstick",    "the right stick pressed IN (R3)",            CTL_BUTTON },
-	{ "leftx",         "the left stick pushed RIGHT",                CTL_AXIS },
-	{ "lefty",         "the left stick pushed DOWN",                 CTL_AXIS },
-	{ "rightx",        "the right stick pushed RIGHT",               CTL_AXIS },
-	{ "righty",        "the right stick pushed DOWN",                CTL_AXIS },
-	{ "dpup",          "the d-pad UP",                               CTL_BUTTON },
-	{ "dpdown",        "the d-pad DOWN",                             CTL_BUTTON },
-	{ "dpleft",        "the d-pad LEFT",                             CTL_BUTTON },
-	{ "dpright",       "the d-pad RIGHT",                            CTL_BUTTON },
+	/* ⛔ THE FIRST COLUMN IS SDL'S OWN NAME AND IS NEVER MARKED — it is
+	 * written into the mapping string SDL reads back, and a translated one
+	 * is a mapping no game understands. The second is a sentence somebody
+	 * reads, and it travels to the WINDOW as the record's `detail` field,
+	 * so it is marked here: in the catalog, unchanged in the record, looked
+	 * up at the draw site. */
+	{ "a",             N_("the BOTTOM face button (A, or cross)"),       CTL_BUTTON },
+	{ "b",             N_("the RIGHT face button (B, or circle)"),       CTL_BUTTON },
+	{ "x",             N_("the LEFT face button (X, or square)"),        CTL_BUTTON },
+	{ "y",             N_("the TOP face button (Y, or triangle)"),       CTL_BUTTON },
+	{ "leftshoulder",  N_("the left shoulder button (LB, or L1)"),       CTL_BUTTON },
+	{ "rightshoulder", N_("the right shoulder button (RB, or R1)"),      CTL_BUTTON },
+	{ "lefttrigger",   N_("the left trigger, all the way in (LT, L2)"),  CTL_TRIGGER },
+	{ "righttrigger",  N_("the right trigger, all the way in (RT, R2)"), CTL_TRIGGER },
+	{ "back",          N_("Back, Select or View"),                       CTL_BUTTON },
+	{ "start",         N_("Start or Menu"),                              CTL_BUTTON },
+	{ "guide",         N_("the Guide or Home button, if it has one"),    CTL_BUTTON },
+	{ "leftstick",     N_("the left stick pressed IN (L3)"),             CTL_BUTTON },
+	{ "rightstick",    N_("the right stick pressed IN (R3)"),            CTL_BUTTON },
+	{ "leftx",         N_("the left stick pushed RIGHT"),                CTL_AXIS },
+	{ "lefty",         N_("the left stick pushed DOWN"),                 CTL_AXIS },
+	{ "rightx",        N_("the right stick pushed RIGHT"),               CTL_AXIS },
+	{ "righty",        N_("the right stick pushed DOWN"),                CTL_AXIS },
+	{ "dpup",          N_("the d-pad UP"),                               CTL_BUTTON },
+	{ "dpdown",        N_("the d-pad DOWN"),                             CTL_BUTTON },
+	{ "dpleft",        N_("the d-pad LEFT"),                             CTL_BUTTON },
+	{ "dpright",       N_("the d-pad RIGHT"),                            CTL_BUTTON },
 };
 
 #define WIZ_COUNT ((int)(sizeof(wiz_controls) / sizeof(wiz_controls[0])))
@@ -232,15 +239,20 @@ static void wiz_row(const char *event, int index, const char *control,
 	if (wiz_rec)
 		rec_row(6, event, idx, tot, control ? control : "",
 			detail ? detail : "", binding ? binding : "");
+	/* ⚠ `detail` IS TRANSLATED ONLY IN THE "ask" BRANCH. It carries a marked
+	 * prompt there and a CONTROLLER NAME off a USB descriptor in the "pad"
+	 * one, and gettext on a device name would silently return a translation
+	 * for any string that happened to match a msgid. `control` is SDL's own
+	 * identifier throughout and is never translated at all. */
 	else if (!strcmp(event, "ask"))
-		printf("[%d/%d] %-14s press %s\n", index + 1, WIZ_COUNT,
-		       control, detail);
+		printf(_("[%d/%d] %-14s press %s\n"), index + 1, WIZ_COUNT,
+		       control, detail ? _(detail) : "");
 	else if (!strcmp(event, "bound"))
-		printf("        %-14s = %s\n", control, binding);
+		printf(_("        %-14s = %s\n"), control, binding);
 	else if (!strcmp(event, "skipped"))
-		printf("        %-14s — skipped\n", control);
+		printf(_("        %-14s — skipped\n"), control);
 	else if (!strcmp(event, "taken"))
-		printf("        that is already %s. Try another control.\n",
+		printf(_("        that is already %s. Try another control.\n"),
 		       binding);
 	else if (detail && *detail)
 		printf("%s\n", detail);
@@ -316,9 +328,9 @@ static SDL_Joystick *wiz_open(const char *want, char *name, size_t namen,
 	SDL_JoystickID *ids = sdl.GetJoysticks(&n);
 	if (!ids || n == 0) {
 		if (ids) sdl.free(ids);
-		fputs("syn-arcade: no controller. Plug one in — this reads the "
-		      "pad you are\n            holding, so there is nothing to "
-		      "learn without one.\n", stderr);
+		fputs(_("syn-arcade: no controller. Plug one in — this reads the "
+		        "pad you are\n            holding, so there is nothing to "
+		        "learn without one.\n"), stderr);
 		return NULL;
 	}
 
@@ -342,7 +354,7 @@ static SDL_Joystick *wiz_open(const char *want, char *name, size_t namen,
 	sdl.free(ids);
 
 	if (!chosen)
-		fprintf(stderr, "syn-arcade: no controller matching '%s'\n",
+		fprintf(stderr, _("syn-arcade: no controller matching '%s'\n"),
 			want ? want : "");
 	return chosen;
 }
@@ -567,7 +579,7 @@ int map_learn(int argc, char **argv)
 	 * a program with no window never has focus. */
 	sdl.SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 	if (!sdl.Init(SDL_INIT_JOYSTICK)) {
-		fprintf(stderr, "syn-arcade: SDL would not start: %s\n",
+		fprintf(stderr, _("syn-arcade: SDL would not start: %s\n"),
 			sdl.GetError());
 		return EX_FAIL;
 	}
@@ -584,9 +596,12 @@ int map_learn(int argc, char **argv)
 			"binding");
 	wiz_row("pad", 0, guid, name, "");
 	if (!wiz_rec)
-		puts("\nPress each control as it is named. Enter skips one this "
-		     "pad does not\nhave, `back` re-does the last, `cancel` "
-		     "stops.\n");
+		/* ⚠ `back` and `cancel` are what somebody TYPES; they stay inside
+		 * the marked sentence so it reads naturally, and a translator
+		 * leaves the two words as they stand. */
+		puts(_("\nPress each control as it is named. Enter skips one this "
+		       "pad does not\nhave, `back` re-does the last, `cancel` "
+		       "stops.\n"));
 
 	char bind[WIZ_COUNT][32];
 	for (int i = 0; i < WIZ_COUNT; i++)

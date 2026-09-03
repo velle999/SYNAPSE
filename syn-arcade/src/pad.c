@@ -40,6 +40,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -276,7 +277,7 @@ static bool pad_find(const char *want, pad_t *out)
 	pad_t *v = pads_scan(&n);
 	if (!v || n == 0) {
 		free(v);
-		fputs("syn-arcade: no game controllers found\n", stderr);
+		fputs(_("syn-arcade: no game controllers found\n"), stderr);
 		return false;
 	}
 
@@ -309,9 +310,10 @@ done:
 	}
 
 	if (hits == 0)
-		fprintf(stderr, "syn-arcade: no controller matches '%s'\n", want);
+		fprintf(stderr, _("syn-arcade: no controller matches '%s'\n"), want);
 	else {
-		fprintf(stderr, "syn-arcade: '%s' matches %d controllers:\n",
+		fprintf(stderr, P_("syn-arcade: '%s' matches %d controller:\n",
+		                   "syn-arcade: '%s' matches %d controllers:\n", n),
 			want, hits);
 		for (int i = 0; i < n; i++)
 			if (strcasestr(v[i].name, want))
@@ -340,18 +342,18 @@ static int pad_open_rw(const pad_t *p)
 
 	if (errno == EACCES) {
 		fprintf(stderr,
-		 "syn-arcade: no write access to %s\n"
-		 "\n"
-		 "Game controllers are normally writable by whoever is logged in at\n"
-		 "the machine: udev tags joysticks for uaccess and systemd grants an\n"
-		 "ACL. Two things stop that, and neither is fixed by sudo —\n"
-		 "\n"
-		 "  · udev did not recognise this as a joystick, so no ACL was added\n"
-		 "    (check: udevadm info %s | grep ID_INPUT)\n"
-		 "  · this session is not the active seat — an SSH login, or another\n"
-		 "    user switched to\n", p->node, p->node);
+		 _("syn-arcade: no write access to %s\n"
+		   "\n"
+		   "Game controllers are normally writable by whoever is logged in at\n"
+		   "the machine: udev tags joysticks for uaccess and systemd grants an\n"
+		   "ACL. Two things stop that, and neither is fixed by sudo —\n"
+		   "\n"
+		   "  · udev did not recognise this as a joystick, so no ACL was added\n"
+		   "    (check: udevadm info %s | grep ID_INPUT)\n"
+		   "  · this session is not the active seat — an SSH login, or another\n"
+		   "    user switched to\n"), p->node, p->node);
 	} else {
-		fprintf(stderr, "syn-arcade: cannot open %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot open %s: %s\n"),
 			p->node, strerror(errno));
 	}
 	return -1;
@@ -361,7 +363,7 @@ static int pad_open_ro(const pad_t *p)
 {
 	int fd = open(p->node, O_RDONLY | O_CLOEXEC);
 	if (fd < 0)
-		fprintf(stderr, "syn-arcade: cannot open %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot open %s: %s\n"),
 			p->node, strerror(errno));
 	return fd;
 }
@@ -426,7 +428,7 @@ static int pads_list(bool rec)
 		if (rec)
 			rec_row(6, "id", "name", "kind", "bus", "rumble", "node");
 		else
-			puts("no game controllers attached");
+			puts(_("no game controllers attached"));
 		/* An answer, not a failure. */
 		return EX_EMPTY;
 	}
@@ -435,18 +437,24 @@ static int pads_list(bool rec)
 		rec_row(6, "id", "name", "kind", "bus", "rumble", "node");
 		for (int i = 0; i < n; i++) {
 			const char *kind = friendly_kind(v[i].vendor, v[i].product);
-			rec_row(6, v[i].id, v[i].name, kind ? kind : "controller",
+			/* ⚠ friendly_kind() is a DEVICE DATABASE — "DualSense",
+			 * "Xbox controller" — and bus_name() is what the bus
+			 * calls itself. Neither is translated; the fallback
+			 * word is. */
+			rec_row(6, v[i].id, v[i].name,
+				kind ? kind : N_("controller"),
 				bus_name(v[i].bus),
-				v[i].has_rumble ? "yes" : "no", v[i].node);
+				v[i].has_rumble ? N_("yes") : N_("no"),
+				v[i].node);
 		}
 	} else {
 		for (int i = 0; i < n; i++) {
 			const char *kind = friendly_kind(v[i].vendor, v[i].product);
 			printf("%d. %-10s %s\n", i + 1, v[i].id, v[i].name);
-			printf("      %s · %s · %d buttons · %d axes · %s\n",
-			       kind ? kind : "controller", bus_name(v[i].bus),
+			printf(_("      %s · %s · %d buttons · %d axes · %s\n"),
+			       kind ? kind : _("controller"), bus_name(v[i].bus),
 			       v[i].buttons, v[i].axes,
-			       v[i].has_rumble ? "rumble" : "no rumble");
+			       v[i].has_rumble ? _("rumble") : _("no rumble"));
 		}
 	}
 
@@ -454,16 +462,19 @@ static int pads_list(bool rec)
 	return EX_OK;
 }
 
-/* The axes worth naming, in the order a person thinks about them. */
+/* The axes worth naming, in the order a person thinks about them.
+ *
+ * ⚠ N_(), like button_label() above: these are drawn, not matched. The X and Y
+ * stay as they are — they are the axis, not a word. */
 static const struct { int code; const char *name; } axis_names[] = {
-	{ ABS_X,	"left stick X" },
-	{ ABS_Y,	"left stick Y" },
-	{ ABS_RX,	"right stick X" },
-	{ ABS_RY,	"right stick Y" },
-	{ ABS_Z,	"left trigger" },
-	{ ABS_RZ,	"right trigger" },
-	{ ABS_HAT0X,	"d-pad X" },
-	{ ABS_HAT0Y,	"d-pad Y" },
+	{ ABS_X,	N_("left stick X") },
+	{ ABS_Y,	N_("left stick Y") },
+	{ ABS_RX,	N_("right stick X") },
+	{ ABS_RY,	N_("right stick Y") },
+	{ ABS_Z,	N_("left trigger") },
+	{ ABS_RZ,	N_("right trigger") },
+	{ ABS_HAT0X,	N_("d-pad X") },
+	{ ABS_HAT0Y,	N_("d-pad Y") },
 };
 #define AXIS_COUNT ((int)(sizeof(axis_names) / sizeof(axis_names[0])))
 
@@ -477,38 +488,38 @@ static int pads_info(const char *want, bool rec)
 
 	if (rec) {
 		rec_row(3, "field", "value", "action");
-		rec_row(3, "name", p.name, "detail");
-		rec_row(3, "id", p.id, "detail");
-		rec_row(3, "node", p.node, "detail");
-		rec_row(3, "bus", bus_name(p.bus), "detail");
+		rec_row(3, N_("name"), p.name, "detail");
+		rec_row(3, N_("id"), p.id, "detail");
+		rec_row(3, N_("node"), p.node, "detail");
+		rec_row(3, N_("bus"), bus_name(p.bus), "detail");
 		char ids[64];
 		snprintf(ids, sizeof(ids), "%s:%s", p.vendor, p.product);
-		rec_row(3, "usb id", ids, "detail");
+		rec_row(3, N_("usb id"), ids, "detail");
 		char num[32];
 		snprintf(num, sizeof(num), "%d", p.buttons);
-		rec_row(3, "buttons", num, "detail");
+		rec_row(3, N_("buttons"), num, "detail");
 		snprintf(num, sizeof(num), "%d", p.axes);
-		rec_row(3, "axes", num, "detail");
-		rec_row(3, "rumble", p.has_rumble ? "yes" : "no",
+		rec_row(3, N_("axes"), num, "detail");
+		rec_row(3, N_("rumble"), p.has_rumble ? N_("yes") : N_("no"),
 			p.has_rumble ? "action:rumble" : "detail");
 	} else {
 		const char *kind = friendly_kind(p.vendor, p.product);
 		printf("%s\n", p.name);
-		if (kind) printf("  kind      %s\n", kind);
-		printf("  id        %s\n", p.id);
-		printf("  node      %s\n", p.node);
-		printf("  bus       %s\n", bus_name(p.bus));
-		printf("  usb id    %s:%s\n", p.vendor, p.product);
-		printf("  buttons   %d\n", p.buttons);
-		printf("  axes      %d\n", p.axes);
-		printf("  rumble    %s\n", p.has_rumble ? "yes" : "no");
+		if (kind) printf(_("  kind      %s\n"), kind);
+		printf(_("  id        %s\n"), p.id);
+		printf(_("  node      %s\n"), p.node);
+		printf(_("  bus       %s\n"), bus_name(p.bus));
+		printf(_("  usb id    %s:%s\n"), p.vendor, p.product);
+		printf(_("  buttons   %d\n"), p.buttons);
+		printf(_("  axes      %d\n"), p.axes);
+		printf(_("  rumble    %s\n"), p.has_rumble ? _("yes") : _("no"));
 	}
 
 	if (fd < 0)
 		return EX_OK;	/* everything above came from sysfs */
 
 	if (!rec)
-		puts("\n  axis            value      range        deadzone");
+		puts(_("\n  axis            value      range        deadzone"));
 
 	for (int i = 0; i < AXIS_COUNT; i++) {
 		struct input_absinfo ai;
@@ -524,7 +535,7 @@ static int pads_info(const char *want, bool rec)
 			rec_row(4, axis_names[i].name, val, range, flat);
 		} else {
 			printf("  %-14s %6d   %6d … %-6d  %d\n",
-			       axis_names[i].name, ai.value,
+			       _(axis_names[i].name), ai.value,
 			       ai.minimum, ai.maximum, ai.flat);
 		}
 	}
@@ -545,26 +556,35 @@ static long long now_ms(void)
 	return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static const char *button_name(int code)
+/*
+ * ⚠ NAMED _label AND NOT _name, DELIBERATELY. The convention across this
+ * project is that a *_name() function is read by a PROGRAM and is never
+ * translated — bus_name() below returns USB and Bluetooth, which are what the
+ * bus calls itself. These are the opposite: "left bumper" and "d-pad up" are
+ * sentences on a screen, and they travel in the `label` column of `pads test`
+ * for the window to draw. tests/i18n_test.sh enforces the _name() half of that
+ * rule, so the two could not keep the same suffix.
+ */
+static const char *button_label(int code)
 {
 	switch (code) {
-	case BTN_SOUTH:		return "A / cross";
-	case BTN_EAST:		return "B / circle";
-	case BTN_NORTH:		return "Y / triangle";
-	case BTN_WEST:		return "X / square";
-	case BTN_TL:		return "left bumper";
-	case BTN_TR:		return "right bumper";
-	case BTN_TL2:		return "left trigger";
-	case BTN_TR2:		return "right trigger";
-	case BTN_SELECT:	return "select / share";
-	case BTN_START:		return "start / options";
-	case BTN_MODE:		return "guide / home";
-	case BTN_THUMBL:	return "left stick click";
-	case BTN_THUMBR:	return "right stick click";
-	case BTN_DPAD_UP:	return "d-pad up";
-	case BTN_DPAD_DOWN:	return "d-pad down";
-	case BTN_DPAD_LEFT:	return "d-pad left";
-	case BTN_DPAD_RIGHT:	return "d-pad right";
+	case BTN_SOUTH:		return N_("A / cross");
+	case BTN_EAST:		return N_("B / circle");
+	case BTN_NORTH:		return N_("Y / triangle");
+	case BTN_WEST:		return N_("X / square");
+	case BTN_TL:		return N_("left bumper");
+	case BTN_TR:		return N_("right bumper");
+	case BTN_TL2:		return N_("left trigger");
+	case BTN_TR2:		return N_("right trigger");
+	case BTN_SELECT:	return N_("select / share");
+	case BTN_START:		return N_("start / options");
+	case BTN_MODE:		return N_("guide / home");
+	case BTN_THUMBL:	return N_("left stick click");
+	case BTN_THUMBR:	return N_("right stick click");
+	case BTN_DPAD_UP:	return N_("d-pad up");
+	case BTN_DPAD_DOWN:	return N_("d-pad down");
+	case BTN_DPAD_LEFT:	return N_("d-pad left");
+	case BTN_DPAD_RIGHT:	return N_("d-pad right");
 	default:		return NULL;
 	}
 }
@@ -618,7 +638,9 @@ static int pads_test(const char *want, int seconds)
 		/* A disconnected pad reports POLLERR/POLLHUP forever and would
 		 * otherwise spin here until the deadline. */
 		if (pfd.revents & (POLLERR | POLLHUP)) {
-			rec_row(4, "gone", "-", "controller disconnected", "-");
+			/* ⛔ "gone" IS THE KIND COLUMN and the window switches on
+			 * it; only the label beside it is a word. */
+			rec_row(4, "gone", "-", N_("controller disconnected"), "-");
 			fflush(stdout);
 			break;
 		}
@@ -637,15 +659,15 @@ static int pads_test(const char *want, int seconds)
 			snprintf(val, sizeof(val), "%d", ev[i].value);
 
 			if (ev[i].type == EV_KEY) {
-				const char *nm = button_name(ev[i].code);
+				const char *nm = button_label(ev[i].code);
 				snprintf(code, sizeof(code), "%d", ev[i].code);
 				rec_row(4, "button", code,
-					nm ? nm : "unnamed button", val);
+					nm ? nm : N_("unnamed button"), val);
 			} else if (ev[i].type == EV_ABS) {
 				const char *nm = axis_label(ev[i].code);
 				snprintf(code, sizeof(code), "%d", ev[i].code);
 				rec_row(4, "axis", code,
-					nm ? nm : "unnamed axis", val);
+					nm ? nm : N_("unnamed axis"), val);
 			}
 			/* EV_SYN and EV_MSC are framing, not input. */
 		}
@@ -676,7 +698,7 @@ static int pads_rumble(const char *want, int strong_pct, int weak_pct, int ms)
 		return EX_FAIL;
 
 	if (!p.has_rumble) {
-		fprintf(stderr, "syn-arcade: %s has no rumble motors\n", p.name);
+		fprintf(stderr, _("syn-arcade: %s has no rumble motors\n"), p.name);
 		return EX_FAIL;
 	}
 
@@ -700,7 +722,7 @@ static int pads_rumble(const char *want, int strong_pct, int weak_pct, int ms)
 	e.u.rumble.weak_magnitude   = (unsigned)(0xffff * weak_pct / 100);
 
 	if (ioctl(fd, EVIOCSFF, &e) < 0) {
-		fprintf(stderr, "syn-arcade: cannot upload rumble effect: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot upload rumble effect: %s\n"),
 			strerror(errno));
 		close(fd);
 		return EX_FAIL;
@@ -713,14 +735,14 @@ static int pads_rumble(const char *want, int strong_pct, int weak_pct, int ms)
 	play.value = 1;
 
 	if (write(fd, &play, sizeof(play)) != (ssize_t)sizeof(play)) {
-		fprintf(stderr, "syn-arcade: cannot start rumble: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot start rumble: %s\n"),
 			strerror(errno));
 		ioctl(fd, EVIOCRMFF, e.id);
 		close(fd);
 		return EX_FAIL;
 	}
 
-	printf("rumbling %s — strong %d%%, weak %d%%, %dms\n",
+	printf(_("rumbling %s — strong %d%%, weak %d%%, %dms\n"),
 	       p.name, strong_pct, weak_pct, ms);
 	fflush(stdout);
 
@@ -788,7 +810,7 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 	for (int i = 0; i < CAL_AXES; i++)
 		usable += have[i] ? 1 : 0;
 	if (usable == 0) {
-		fprintf(stderr, "syn-arcade: %s reports no stick axes\n", p.name);
+		fprintf(stderr, _("syn-arcade: %s reports no stick axes\n"), p.name);
 		close(fd);
 		return EX_FAIL;
 	}
@@ -804,20 +826,21 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 		}
 		close(fd);
 		if (failed) {
-			fprintf(stderr, "syn-arcade: could not reset %d axes\n",
-				failed);
+			fprintf(stderr, P_("syn-arcade: could not reset %d axis\n",
+			                   "syn-arcade: could not reset %d axes\n",
+			                   failed), failed);
 			return EX_FAIL;
 		}
-		printf("deadzones cleared on %s\n", p.name);
-		puts("Replug the controller to get the driver's own defaults back.");
+		printf(_("deadzones cleared on %s\n"), p.name);
+		puts(_("Replug the controller to get the driver's own defaults back."));
 		return EX_OK;
 	}
 
 	/* ── an explicit percentage skips the measuring ──────────────────── */
 	if (explicit_pct >= 0) {
 		if (explicit_pct > 50) {
-			fprintf(stderr, "syn-arcade: a deadzone over 50%% would "
-					"ignore half the stick\n");
+			fprintf(stderr, _("syn-arcade: a deadzone over 50%% would "
+			                  "ignore half the stick\n"));
 			close(fd);
 			return EX_USAGE;
 		}
@@ -831,15 +854,18 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 		}
 		close(fd);
 		if (failed) {
-			fprintf(stderr, "syn-arcade: could not set %d axes\n", failed);
+			fprintf(stderr, P_("syn-arcade: could not set %d axis\n",
+			                   "syn-arcade: could not set %d axes\n",
+			                   failed), failed);
 			return EX_FAIL;
 		}
-		printf("deadzone set to %d%% on %s\n", explicit_pct, p.name);
+		printf(_("deadzone set to %d%% on %s\n"), explicit_pct, p.name);
 		return EX_OK;
 	}
 
 	/* ── measure ─────────────────────────────────────────────────────── */
-	printf("Let go of both sticks. Measuring %s for %d seconds…\n",
+	printf(P_("Let go of both sticks. Measuring %s for %d second…\n",
+	          "Let go of both sticks. Measuring %s for %d seconds…\n", seconds),
 	       p.name, seconds);
 	fflush(stdout);
 
@@ -856,7 +882,7 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 		}
 		if (r == 0) continue;
 		if (pfd.revents & (POLLERR | POLLHUP)) {
-			fputs("syn-arcade: controller disconnected\n", stderr);
+			fputs(_("syn-arcade: controller disconnected\n"), stderr);
 			close(fd);
 			return EX_FAIL;
 		}
@@ -885,9 +911,9 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 		int range = ai[i].maximum - ai[i].minimum;
 		if (range > 0 && worst[i] * 4 > range) {
 			fprintf(stderr,
-			 "syn-arcade: %s moved %d of %d — that is a stick being\n"
-			 "held, not drift. Nothing changed; let go and run it again.\n",
-			 axis_label(axes[i]) ? axis_label(axes[i]) : "an axis",
+			 _("syn-arcade: %s moved %d of %d — that is a stick being\n"
+			   "held, not drift. Nothing changed; let go and run it again.\n"),
+			 axis_label(axes[i]) ? _(axis_label(axes[i])) : _("an axis"),
 			 worst[i], range);
 			close(fd);
 			return EX_FAIL;
@@ -919,15 +945,17 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 		}
 
 		int pct_x10 = range > 0 ? flat * 1000 / range : 0;
-		printf("  %-14s drift %4d → deadzone %4d  (%d.%d%%)\n",
-		       axis_label(axes[i]) ? axis_label(axes[i]) : "axis",
+		printf(_("  %-14s drift %4d → deadzone %4d  (%d.%d%%)\n"),
+		       axis_label(axes[i]) ? _(axis_label(axes[i])) : _("axis"),
 		       worst[i], flat, pct_x10 / 10, pct_x10 % 10);
 	}
 
 	close(fd);
 
 	if (failed) {
-		fprintf(stderr, "syn-arcade: could not set %d axes\n", failed);
+		fprintf(stderr, P_("syn-arcade: could not set %d axis\n",
+		                   "syn-arcade: could not set %d axes\n", failed),
+			failed);
 		return EX_FAIL;
 	}
 
@@ -938,9 +966,9 @@ static int pads_calibrate(const char *want, int seconds, int explicit_pct,
 	 * `pads apply` re-runs this from the saved state, and the session calls
 	 * it at login; a pad plugged in mid-session needs it again.
 	 */
-	puts("\nSaved. Deadzones live in the kernel's copy of the device, so they");
-	puts("are lost when it is unplugged — `syn-arcade pads apply` puts them");
-	puts("back, and your session runs that at login.");
+	puts(_("\nSaved. Deadzones live in the kernel's copy of the device, so they\n"
+	       "are lost when it is unplugged — `syn-arcade pads apply` puts them\n"
+	       "back, and your session runs that at login."));
 	return EX_OK;
 }
 
@@ -996,11 +1024,11 @@ static int pads_save(const char *want, int pct)
 	free(neu);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
-	printf("saved %d%% for %s (%s)\n", pct, p.name, key);
+	printf(_("saved %d%% for %s (%s)\n"), pct, p.name, key);
 	return EX_OK;
 }
 
@@ -1062,7 +1090,8 @@ static int pads_apply(void)
 	free(v);
 
 	if (applied)
-		printf("applied saved deadzones to %d axes\n", applied);
+		printf(P_("applied saved deadzones to %d axis\n",
+		          "applied saved deadzones to %d axes\n", applied), applied);
 	return EX_OK;
 }
 
@@ -1117,19 +1146,19 @@ int cmd_pads(int argc, char **argv)
 	const char *who = first_operand(rest_c, rest);
 
 	if (strcmp(sub, "info") == 0) {
-		if (!who) { fputs("syn-arcade: pads info <controller>\n", stderr);
+		if (!who) { fputs(_("syn-arcade: pads info <controller>\n"), stderr);
 			    return EX_USAGE; }
 		return pads_info(who, opt_flag(rest_c, rest, "--rec"));
 	}
 
 	if (strcmp(sub, "test") == 0) {
-		if (!who) { fputs("syn-arcade: pads test <controller>\n", stderr);
+		if (!who) { fputs(_("syn-arcade: pads test <controller>\n"), stderr);
 			    return EX_USAGE; }
 		return pads_test(who, opt_int(rest_c, rest, "--seconds", 30));
 	}
 
 	if (strcmp(sub, "rumble") == 0) {
-		if (!who) { fputs("syn-arcade: pads rumble <controller>\n", stderr);
+		if (!who) { fputs(_("syn-arcade: pads rumble <controller>\n"), stderr);
 			    return EX_USAGE; }
 		return pads_rumble(who,
 				   opt_int(rest_c, rest, "--strong", 80),
@@ -1138,7 +1167,7 @@ int cmd_pads(int argc, char **argv)
 	}
 
 	if (strcmp(sub, "calibrate") == 0) {
-		if (!who) { fputs("syn-arcade: pads calibrate <controller>\n", stderr);
+		if (!who) { fputs(_("syn-arcade: pads calibrate <controller>\n"), stderr);
 			    return EX_USAGE; }
 		return pads_calibrate(who,
 				      opt_int(rest_c, rest, "--seconds", 5),
@@ -1149,14 +1178,14 @@ int cmd_pads(int argc, char **argv)
 	if (strcmp(sub, "save") == 0) {
 		int pct = opt_int(rest_c, rest, "--deadzone", -1);
 		if (!who || pct < 0) {
-			fputs("syn-arcade: pads save <controller> --deadzone=N\n",
+			fputs(_("syn-arcade: pads save <controller> --deadzone=N\n"),
 			      stderr);
 			return EX_USAGE;
 		}
 		return pads_save(who, pct);
 	}
 
-	fprintf(stderr, "syn-arcade: unknown pads command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown pads command '%s'\n"), sub);
 	return EX_USAGE;
 }
 

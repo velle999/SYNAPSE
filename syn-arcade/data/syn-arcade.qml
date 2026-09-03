@@ -31,10 +31,18 @@ import Quickshell
 import Quickshell.Io
 import QtQuick.Controls
 
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS A DIRECTORY IMPORT. quickshell has no
+// translator at all — qsTr() compiles, returns its own argument, and translates
+// nothing while looking exactly like a marked string in review — so qml/I18n.qml
+// reads a JSON catalog compiled from the same po/*.po the binary's .mo comes
+// from. Both of this program's windows import it, so a word they share is
+// translated once.
+import "qml"
+
 FloatingWindow {
     id: root
 
-    title: "SYNAPSE Arcade"
+    title: I18n.tr("SYNAPSE Arcade")
     implicitWidth: 820
     implicitHeight: 600
     // The controller rows carry a name, a bus and two buttons. Below this the
@@ -343,7 +351,10 @@ FloatingWindow {
         // also an A — which shows up much later, in a game, as a button that
         // does two things.
         case "taken":
-            root.wizNote = "That is already " + r.detail + " — try another."
+            // ⚠ r.detail is an SDL CONTROL NAME (`leftshoulder`) and is not
+            // translated; the sentence around it is.
+            root.wizNote = I18n.tr("That is already %1 — try another.")
+                                  .arg(r.detail)
             break
         case "cancelled":
         case "error":
@@ -703,8 +714,13 @@ FloatingWindow {
                 spacing: 6
 
                 Repeater {
-                    model: ["Overlay", "Controllers", "Mappings", "Fit to screen",
-                            "Big screen", "Shortcuts"]
+                    // ⚠ THE WORDS THEMSELVES, because nothing matches on them:
+                    // the selected tab is an INDEX, and tabChip draws
+                    // modelData. Translating the model is therefore safe here
+                    // and would not be if a tab were looked up by name.
+                    model: [I18n.tr("Overlay"), I18n.tr("Controllers"),
+                            I18n.tr("Mappings"), I18n.tr("Fit to screen"),
+                            I18n.tr("Big screen"), I18n.tr("Shortcuts")]
                     Rectangle {
                         id: tabChip
                         required property int index
@@ -733,7 +749,7 @@ FloatingWindow {
                 Item { Layout.fillWidth: true }
 
                 ArcButton {
-                    text: "Refresh"
+                    text: I18n.tr("Refresh")
                     onTriggered: { root.status = ""; root.reload() }
                 }
             }
@@ -753,7 +769,7 @@ FloatingWindow {
                     visible: root.tab === 0
 
                     Text {
-                        text: "MangoHud overlay"
+                        text: I18n.tr("MangoHud overlay")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -772,11 +788,11 @@ FloatingWindow {
                     // pressed in the expectation of something else.
                     Text {
                         Layout.fillWidth: true
-                        text: "Frame rate, temperatures and load, drawn over a game. "
+                        text: I18n.tr("Frame rate, temperatures and load, drawn over a game. "
                             + "MangoHud draws INSIDE a game and cannot draw on the "
                             + "desktop, so switching it on here puts nothing on screen "
                             + "until you start one. A game that is already running picks "
-                            + "the change up straight away."
+                            + "the change up straight away.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -787,34 +803,49 @@ FloatingWindow {
                         Layout.topMargin: 6
                         spacing: 8
                         ArcButton {
-                            text: (root.hudFields.state === "hidden") ? "Show in games"
-                                                                     : "Hide in games"
+                            // ⛔ THE TEST IS ON THE RECORD, NOT ON THE LABEL.
+                            // `state` is the raw cell from `hud --rec`; only
+                            // what is DRAWN goes through the catalog.
+                            text: (root.hudFields.state === "hidden")
+                                  ? I18n.tr("Show in games")
+                                  : I18n.tr("Hide in games")
                             primary: true
                             onTriggered: root.run(["hud", "toggle"])
                         }
                         ArcButton {
-                            text: "Move it"
+                            text: I18n.tr("Move it")
                             onTriggered: root.run(["hud", "cycle"])
                         }
                     }
 
                     FieldRow {
-                        label: "State"
+                        label: I18n.tr("State")
                         // ⚠ The bare word is what the record carries and it is
                         // right — `visible` is a fact about the config, and
                         // every other consumer of these records wants it that
                         // way. It is only READING IT BACK as though it meant
                         // "on screen now" that misleads, and only here, where
                         // somebody is looking at a desktop with no game on it.
-                        value: root.hudFields.state === "visible" ? "on — shows in games"
-                             : root.hudFields.state === "hidden"  ? "off"
-                             : (root.hudFields.state || "—")
+                        value: root.hudFields.state === "visible"
+                               ? I18n.tr("on — shows in games")
+                             : root.hudFields.state === "hidden"
+                               ? I18n.tr("off")
+                             // i18n-dynamic: the state word comes from src/hud.c via N_()
+                             : (I18n.tr(root.hudFields.state) || "—")
                     }
-                    FieldRow { label: "Position";   value: root.hudFields.position || "—" }
-                    FieldRow { label: "Font size";  value: root.hudFields.font_size || "—" }
-                    FieldRow { label: "Background"; value: root.hudFields.background_alpha || "—" }
+                    // ⚠ THE POSITION IS AN ID — `top-left` — and src/hud.c puts
+                    // the same eight words in the catalog through a SECOND
+                    // table, so this draws the translation and `hud position`
+                    // still takes the id back.
+                    FieldRow { label: I18n.tr("Position")
+                               // i18n-dynamic: hud_position_labels[] in src/hud.c
+                               value: I18n.tr(root.hudFields.position || "") || "—" }
+                    FieldRow { label: I18n.tr("Font size")
+                               value: root.hudFields.font_size || "—" }
+                    FieldRow { label: I18n.tr("Background")
+                               value: root.hudFields.background_alpha || "—" }
                     FieldRow {
-                        label: "Config file"
+                        label: I18n.tr("Config file")
                         value: root.hudFields.config || "—"
                         // The one field where "not writable" is the whole story:
                         // MangoHud reads exactly one config and /etc's outranks
@@ -827,10 +858,10 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: !root.hudWritable && (root.hudFields.config || "") !== ""
-                        text: "⚠ That file is not writable by you, so nothing here reaches "
+                        text: I18n.tr("⚠ That file is not writable by you, so nothing here reaches "
                             + "MangoHud. /etc/MangoHud.conf outranks your own config. "
                             + "\"Take ownership\" copies the settings now in effect into "
-                            + "your own file."
+                            + "your own file.")
                         color: root.bad
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -838,7 +869,7 @@ FloatingWindow {
                     }
                     ArcButton {
                         visible: !root.hudWritable && (root.hudFields.config || "") !== ""
-                        text: "Take ownership"
+                        text: I18n.tr("Take ownership")
                         onTriggered: root.run(["hud", "adopt"])
                     }
 
@@ -853,7 +884,7 @@ FloatingWindow {
                     visible: root.tab === 1
 
                     Text {
-                        text: "Controllers"
+                        text: I18n.tr("Controllers")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -862,8 +893,8 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: root.pads.length === 0
-                        text: "Nothing plugged in. Steam handles its own controller "
-                            + "setup — this is for everything outside it."
+                        text: I18n.tr("Nothing plugged in. Steam handles its own controller "
+                            + "setup — this is for everything outside it.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -913,10 +944,16 @@ FloatingWindow {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: padRow.modelData.kind + " · "
+                                        // ⚠ `kind` is a DEVICE NAME (DualSense)
+                                        // and `bus` is what the bus calls
+                                        // itself; neither is translated. The
+                                        // rumble word is, and the test is on
+                                        // the raw record cell.
+                                        // i18n-dynamic: friendly_kind() fallback is N_() in src/pad.c
+                                        text: I18n.tr(padRow.modelData.kind) + " · "
                                             + padRow.modelData.bus + " · "
                                             + (padRow.modelData.rumble === "yes"
-                                               ? "rumble" : "no rumble")
+                                               ? I18n.tr("rumble") : I18n.tr("no rumble"))
                                         color: root.dim
                                         font.pixelSize: root.ui(11)
                                         font.family: root.uiFont
@@ -925,18 +962,18 @@ FloatingWindow {
                                 }
 
                                 ArcButton {
-                                    text: "Test"
+                                    text: I18n.tr("Test")
                                     onTriggered: root.run(["pads", "test",
                                         padRow.modelData.id, "--seconds=10"])
                                 }
                                 ArcButton {
-                                    text: "Rumble"
+                                    text: I18n.tr("Rumble")
                                     enabled: padRow.modelData.rumble === "yes"
                                     onTriggered: root.run(["pads", "rumble",
                                         padRow.modelData.id])
                                 }
                                 ArcButton {
-                                    text: "Calibrate"
+                                    text: I18n.tr("Calibrate")
                                     onTriggered: root.run(["pads", "calibrate",
                                         padRow.modelData.id, "--seconds=5"])
                                 }
@@ -947,8 +984,8 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: root.pads.length > 0
-                        text: "Calibrate measures stick drift for five seconds — let go of "
-                            + "both sticks first, or it will refuse the reading."
+                        text: I18n.tr("Calibrate measures stick drift for five seconds — let go of "
+                            + "both sticks first, or it will refuse the reading.")
                         color: root.dim
                         font.pixelSize: root.ui(11)
                         font.family: root.uiFont
@@ -964,7 +1001,7 @@ FloatingWindow {
                     visible: root.tab === 2
 
                     Text {
-                        text: "Controller mappings"
+                        text: I18n.tr("Controller mappings")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -973,9 +1010,9 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: !root.wizOn
-                        text: "For a pad whose buttons come out in the wrong places. "
+                        text: I18n.tr("For a pad whose buttons come out in the wrong places. "
                             + "Press each control once and this writes the mapping; every "
-                            + "SDL game reads it from the next launch."
+                            + "SDL game reads it from the next launch.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -988,13 +1025,13 @@ FloatingWindow {
                         spacing: 8
 
                         ArcButton {
-                            text: "Set up with the controller"
+                            text: I18n.tr("Set up with the controller")
                             primary: true
                             onTriggered: root.wizStart()
                         }
                         Item { Layout.fillWidth: true }
                         Text {
-                            text: "or paste one:"
+                            text: I18n.tr("or paste one:")
                             color: root.dim
                             font.pixelSize: root.ui(12)
                             font.family: root.uiFont
@@ -1026,7 +1063,7 @@ FloatingWindow {
                             }
                         }
                         ArcButton {
-                            text: "Add"
+                            text: I18n.tr("Add")
                             onTriggered: if (pasteField.text.trim() !== "") {
                                 root.run(["map", "add", pasteField.text.trim()])
                                 pasteField.text = ""
@@ -1057,7 +1094,8 @@ FloatingWindow {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: root.wizPad || "looking for a controller…"
+                                text: root.wizPad
+                                      || I18n.tr("looking for a controller…")
                                 color: root.dim
                                 font.pixelSize: root.ui(12)
                                 font.family: root.uiFont
@@ -1068,8 +1106,10 @@ FloatingWindow {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: root.wizAsk.detail ? "Press " + root.wizAsk.detail
-                                                         : "…"
+                                text: root.wizAsk.detail
+                                      // i18n-dynamic: wiz_controls[] N_() in src/sdlwiz.c
+                                      ? I18n.tr("Press %1").arg(I18n.tr(root.wizAsk.detail))
+                                      : "…"
                                 color: root.ink
                                 font.pixelSize: root.ui(26)
                                 font.family: root.uiFont
@@ -1089,8 +1129,9 @@ FloatingWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: root.wizAsk.total
-                                      ? (Number(root.wizAsk.index) + 1) + " of "
-                                        + root.wizAsk.total
+                                      ? I18n.tr("%1 of %2")
+                                            .arg(Number(root.wizAsk.index) + 1)
+                                            .arg(root.wizAsk.total)
                                       : ""
                                 color: root.dim
                                 font.pixelSize: root.ui(13)
@@ -1129,7 +1170,7 @@ FloatingWindow {
                                 // it: plenty of pads have no Guide button and
                                 // no second stick, and a wizard that cannot be
                                 // told so is a wizard nobody finishes.
-                                text: "A control this pad does not have — skip it."
+                                text: I18n.tr("A control this pad does not have — skip it.")
                                 color: root.dim
                                 font.pixelSize: root.ui(11)
                                 font.family: root.uiFont
@@ -1140,15 +1181,15 @@ FloatingWindow {
                                 Layout.alignment: Qt.AlignHCenter
                                 spacing: 8
                                 ArcButton {
-                                    text: "Skip"
+                                    text: I18n.tr("Skip")
                                     onTriggered: root.wizSay("skip")
                                 }
                                 ArcButton {
-                                    text: "Back"
+                                    text: I18n.tr("Back")
                                     onTriggered: root.wizSay("back")
                                 }
                                 ArcButton {
-                                    text: "Cancel"
+                                    text: I18n.tr("Cancel")
                                     onTriggered: root.wizSay("cancel")
                                 }
                             }
@@ -1191,8 +1232,12 @@ FloatingWindow {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: mapRow.modelData.guid + "  ·  "
-                                            + mapRow.modelData.bindings + " bindings"
+                                        // ⚠ ONE msgid with both numbers in it:
+                                        // a language that counts differently
+                                        // cannot be built from a suffix.
+                                        text: I18n.tr("%1  ·  %2 bindings")
+                                                  .arg(mapRow.modelData.guid)
+                                                  .arg(mapRow.modelData.bindings)
                                         color: root.dim
                                         font.pixelSize: root.ui(11)
                                         font.family: "monospace"
@@ -1201,7 +1246,7 @@ FloatingWindow {
                                 }
 
                                 ArcButton {
-                                    text: "Remove"
+                                    text: I18n.tr("Remove")
                                     onTriggered: root.run(["map", "remove",
                                         mapRow.modelData.guid])
                                 }
@@ -1212,8 +1257,8 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: !root.wizOn && root.maps.length === 0
-                        text: "No mappings added — the pads SDL already knows are working "
-                            + "from its own database, and need nothing here."
+                        text: I18n.tr("No mappings added — the pads SDL already knows are working "
+                            + "from its own database, and need nothing here.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1229,7 +1274,7 @@ FloatingWindow {
                     visible: root.tab === 5
 
                     Text {
-                        text: "Gaming shortcuts"
+                        text: I18n.tr("Gaming shortcuts")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -1237,9 +1282,9 @@ FloatingWindow {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "Two compositor keys that drive the overlay from inside a "
+                        text: I18n.tr("Two compositor keys that drive the overlay from inside a "
                             + "running game. They are written to synuirc as ordinary bind "
-                            + "lines, so the Super+/ palette can rebind them like any other."
+                            + "lines, so the Super+/ palette can rebind them like any other.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1247,19 +1292,20 @@ FloatingWindow {
                     }
 
                     FieldRow {
-                        label: "Installed"
-                        value: root.bindFields.installed || "—"
+                        label: I18n.tr("Installed")
+                        // i18n-dynamic: yes/no are marked N_() in src/binds.c
+                        value: I18n.tr(root.bindFields.installed || "") || "—"
                     }
                     FieldRow {
-                        label: "Toggle overlay"
+                        label: I18n.tr("Toggle overlay")
                         value: root.bindFields["toggle overlay"] || "—"
                     }
                     FieldRow {
-                        label: "Move overlay"
+                        label: I18n.tr("Move overlay")
                         value: root.bindFields["move overlay"] || "—"
                     }
                     FieldRow {
-                        label: "Config file"
+                        label: I18n.tr("Config file")
                         value: root.bindFields.config || "—"
                     }
 
@@ -1267,13 +1313,14 @@ FloatingWindow {
                         Layout.topMargin: 6
                         spacing: 8
                         ArcButton {
-                            text: root.bindFields.installed === "yes" ? "Reinstall"
-                                                                     : "Install shortcuts"
+                            text: root.bindFields.installed === "yes"
+                                  ? I18n.tr("Reinstall")
+                                  : I18n.tr("Install shortcuts")
                             primary: root.bindFields.installed !== "yes"
                             onTriggered: root.run(["binds", "install", "--reload"])
                         }
                         ArcButton {
-                            text: "Remove"
+                            text: I18n.tr("Remove")
                             visible: root.bindFields.installed === "yes"
                             onTriggered: root.run(["binds", "remove", "--reload"])
                         }
@@ -1305,10 +1352,11 @@ FloatingWindow {
                     visible: root.tab === 3
 
                     Text {
-                        text: root.fitEditing ? (root.fitId ? "Edit a wrapper"
-                                                            : "New wrapper")
-                            : root.fitPicking ? "Which game?"
-                            : "Fit a game to the screen"
+                        text: root.fitEditing
+                              ? (root.fitId ? I18n.tr("Edit a wrapper")
+                                            : I18n.tr("New wrapper"))
+                            : root.fitPicking ? I18n.tr("Which game?")
+                            : I18n.tr("Fit a game to the screen")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -1319,13 +1367,13 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: !root.fitEditing && !root.fitPicking
-                        text: "An old game renders at 640×480 or 1024×768 and has no idea "
+                        text: I18n.tr("An old game renders at 640×480 or 1024×768 and has no idea "
                             + "what this monitor is, so it sits in the middle of a black "
                             + "screen. gamescope gives it a display of exactly the size it "
                             + "wants and stretches the result to fill yours. What you make "
                             + "here goes in the applications menu — and on the desktop if "
                             + "you ask — so it is a shortcut you click, not a line you have "
-                            + "to remember."
+                            + "to remember.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1337,12 +1385,12 @@ FloatingWindow {
                         visible: !root.fitEditing && !root.fitPicking
                         spacing: 8
                         ArcButton {
-                            text: "From an installed game"
+                            text: I18n.tr("From an installed game")
                             primary: true
                             onTriggered: root.fitOpenPicker()
                         }
                         ArcButton {
-                            text: "From a command"
+                            text: I18n.tr("From a command")
                             onTriggered: root.fitOpenNew()
                         }
                         Item { Layout.fillWidth: true }
@@ -1388,11 +1436,14 @@ FloatingWindow {
                                         // The two resolutions are the whole
                                         // reason the wrapper exists, so they
                                         // are what the row says.
+                                        // ⚠ THE SIZES AND THE FILTER ARE
+                                        // gamescope's own words and stay as
+                                        // they are; only the tail is a phrase.
                                         text: fitRow.modelData.game + " → "
                                             + fitRow.modelData.screen
                                             + " · " + fitRow.modelData.filter
                                             + (fitRow.modelData.desktop === "yes"
-                                               ? " · on the desktop" : "")
+                                               ? I18n.tr(" · on the desktop") : "")
                                         color: root.dim
                                         font.pixelSize: root.ui(11)
                                         font.family: root.uiFont
@@ -1401,7 +1452,7 @@ FloatingWindow {
                                 }
 
                                 ArcButton {
-                                    text: "Play"
+                                    text: I18n.tr("Play")
                                     // ⚠ --detach. This window IS quickshell,
                                     // and a game started as its child inherits
                                     // quickshell's pipes: closing the window
@@ -1410,11 +1461,11 @@ FloatingWindow {
                                         fitRow.modelData.id, "--detach"])
                                 }
                                 ArcButton {
-                                    text: "Edit"
+                                    text: I18n.tr("Edit")
                                     onTriggered: root.fitOpenEdit(fitRow.modelData.id)
                                 }
                                 ArcButton {
-                                    text: "Remove"
+                                    text: I18n.tr("Remove")
                                     onTriggered: root.run(["fit", "remove",
                                         fitRow.modelData.id])
                                 }
@@ -1426,7 +1477,7 @@ FloatingWindow {
                         Layout.fillWidth: true
                         visible: !root.fitEditing && !root.fitPicking
                                  && root.fits.length === 0
-                        text: "Nothing wrapped yet."
+                        text: I18n.tr("Nothing wrapped yet.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1436,9 +1487,9 @@ FloatingWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: root.fitPicking
-                        text: "Everything installed, games first. Its command, folder and "
+                        text: I18n.tr("Everything installed, games first. Its command, folder and "
                             + "icon come across with it — and if it already runs gamescope, "
-                            + "that line is taken apart rather than wrapped again."
+                            + "that line is taken apart rather than wrapped again.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1452,10 +1503,10 @@ FloatingWindow {
                         ArcInput {
                             id: appSearch
                             Layout.fillWidth: true
-                            placeholder: "Search…"
+                            placeholder: I18n.tr("Search…")
                         }
                         ArcButton {
-                            text: "Cancel"
+                            text: I18n.tr("Cancel")
                             onTriggered: root.fitPicking = false
                         }
                     }
@@ -1533,7 +1584,7 @@ FloatingWindow {
                             spacing: 8
 
                             Text {
-                                text: "Name in the menu"
+                                text: I18n.tr("Name in the menu")
                                 color: root.dim
                                 font.pixelSize: root.ui(11)
                                 font.family: root.uiFont
@@ -1541,12 +1592,12 @@ FloatingWindow {
                             ArcInput {
                                 id: fitNameField
                                 Layout.fillWidth: true
-                                placeholder: "The Sims (Fullscreen)"
+                                placeholder: I18n.tr("The Sims (Fullscreen)")
                             }
 
                             Text {
                                 Layout.topMargin: 4
-                                text: "Command"
+                                text: I18n.tr("Command")
                                 color: root.dim
                                 font.pixelSize: root.ui(11)
                                 font.family: root.uiFont
@@ -1554,12 +1605,12 @@ FloatingWindow {
                             ArcInput {
                                 id: fitExecField
                                 Layout.fillWidth: true
-                                placeholder: "wine Sims.exe"
+                                placeholder: I18n.tr("wine Sims.exe")
                             }
 
                             Text {
                                 Layout.topMargin: 4
-                                text: "Folder to run it in"
+                                text: I18n.tr("Folder to run it in")
                                 color: root.dim
                                 font.pixelSize: root.ui(11)
                                 font.family: root.uiFont
@@ -1567,7 +1618,7 @@ FloatingWindow {
                             ArcInput {
                                 id: fitDirField
                                 Layout.fillWidth: true
-                                placeholder: "(the game's own directory)"
+                                placeholder: I18n.tr("(the game's own directory)")
                             }
 
                             // ⚠ THE ONE THING THIS TAB EXISTS TO GET RIGHT.
@@ -1580,7 +1631,7 @@ FloatingWindow {
                             // reads.
                             Text {
                                 Layout.topMargin: 8
-                                text: "What the game renders at"
+                                text: I18n.tr("What the game renders at")
                                 color: root.ink
                                 font.pixelSize: root.ui(12)
                                 font.family: root.uiFont
@@ -1608,7 +1659,7 @@ FloatingWindow {
 
                             Text {
                                 Layout.topMargin: 8
-                                text: "The screen it fills"
+                                text: I18n.tr("The screen it fills")
                                 color: root.ink
                                 font.pixelSize: root.ui(12)
                                 font.family: root.uiFont
@@ -1635,7 +1686,7 @@ FloatingWindow {
 
                             Text {
                                 Layout.topMargin: 8
-                                text: "Upscaler"
+                                text: I18n.tr("Upscaler")
                                 color: root.ink
                                 font.pixelSize: root.ui(12)
                                 font.family: root.uiFont
@@ -1656,7 +1707,7 @@ FloatingWindow {
                                     }
                                 }
                                 Text {
-                                    text: "sharpness"
+                                    text: I18n.tr("sharpness")
                                     color: root.dim
                                     font.pixelSize: root.ui(11)
                                     font.family: root.uiFont
@@ -1671,7 +1722,7 @@ FloatingWindow {
 
                             Text {
                                 Layout.topMargin: 8
-                                text: "Variables — one NAME=VALUE per line"
+                                text: I18n.tr("Variables — one NAME=VALUE per line")
                                 color: root.dim
                                 font.pixelSize: root.ui(11)
                                 font.family: root.uiFont
@@ -1680,34 +1731,34 @@ FloatingWindow {
                                 id: fitEnvArea
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 54
-                                placeholder: "WINEPREFIX=/home/you/Games/thegame"
+                                placeholder: I18n.tr("WINEPREFIX=/home/you/Games/thegame")
                             }
 
                             ColumnLayout {
                                 Layout.topMargin: 8
                                 spacing: 6
                                 ArcCheck {
-                                    label: "Put it in the applications menu"
+                                    label: I18n.tr("Put it in the applications menu")
                                     checked: root.fitMenu
                                     onToggled: root.fitMenu = !root.fitMenu
                                 }
                                 ArcCheck {
-                                    label: "Put an icon on the desktop"
+                                    label: I18n.tr("Put an icon on the desktop")
                                     checked: root.fitDesktop
                                     onToggled: root.fitDesktop = !root.fitDesktop
                                 }
                                 ArcCheck {
-                                    label: "Force the game's own window to fill the display"
+                                    label: I18n.tr("Force the game's own window to fill the display")
                                     checked: root.fitForceWin
                                     onToggled: root.fitForceWin = !root.fitForceWin
                                 }
                                 ArcCheck {
-                                    label: "Performance overlay over the game"
+                                    label: I18n.tr("Performance overlay over the game")
                                     checked: root.fitOverlay
                                     onToggled: root.fitOverlay = !root.fitOverlay
                                 }
                                 ArcCheck {
-                                    label: "Run it under gamemode"
+                                    label: I18n.tr("Run it under gamemode")
                                     checked: root.fitGamemode
                                     onToggled: root.fitGamemode = !root.fitGamemode
                                 }
@@ -1762,13 +1813,13 @@ FloatingWindow {
                         Layout.fillWidth: true
                         spacing: 8
                         ArcButton {
-                            text: root.fitId ? "Save" : "Create"
+                            text: root.fitId ? I18n.tr("Save") : I18n.tr("Create")
                             primary: true
                             enabled: fitExecField.text.trim() !== ""
                             onTriggered: root.fitSave()
                         }
                         ArcButton {
-                            text: "Cancel"
+                            text: I18n.tr("Cancel")
                             onTriggered: root.fitEditing = false
                         }
                         Item { Layout.fillWidth: true }
@@ -1794,7 +1845,7 @@ FloatingWindow {
                     visible: root.tab === 4
 
                     Text {
-                        text: "Big screen mode"
+                        text: I18n.tr("Big screen mode")
                         color: root.ink
                         font.pixelSize: root.ui(16)
                         font.family: root.uiFont
@@ -1802,9 +1853,9 @@ FloatingWindow {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "The ten-foot interface: your Steam library, Big Picture "
+                        text: I18n.tr("The ten-foot interface: your Steam library, Big Picture "
                             + "and the machine's own switches as tiles, drivable from a "
-                            + "game controller."
+                            + "game controller.")
                         color: root.dim
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1815,8 +1866,9 @@ FloatingWindow {
                         Layout.topMargin: 4
                         spacing: 8
                         ArcButton {
-                            text: root.bigFields.running === "yes" ? "Show it"
-                                                                   : "Open big screen"
+                            text: root.bigFields.running === "yes"
+                                  ? I18n.tr("Show it")
+                                  : I18n.tr("Open big screen")
                             primary: true
                             // ⚠ --detach. This window IS quickshell, and `run`
                             // starts a child Process: without the fork the big
@@ -1826,14 +1878,14 @@ FloatingWindow {
                                 ? ["big", "show"] : ["big", "start", "--detach"])
                         }
                         ArcButton {
-                            text: "Close it"
+                            text: I18n.tr("Close it")
                             visible: root.bigFields.running === "yes"
                             onTriggered: root.run(["big", "stop"])
                         }
                         Item { Layout.fillWidth: true }
                         Text {
-                            text: root.bigFields.running === "yes" ? "running"
-                                                                   : "not running"
+                            text: root.bigFields.running === "yes"
+                                  ? I18n.tr("running") : I18n.tr("not running")
                             color: root.bigFields.running === "yes" ? root.good : root.dim
                             font.pixelSize: root.ui(12)
                             font.family: root.uiFont
@@ -1841,7 +1893,7 @@ FloatingWindow {
                     }
 
                     FieldRow {
-                        label: "Opens with"
+                        label: I18n.tr("Opens with")
                         value: root.bindFields["big screen mode"] || "—"
                     }
 
@@ -1853,7 +1905,7 @@ FloatingWindow {
                     // why it is there.
                     Text {
                         Layout.topMargin: 6
-                        text: "Which screen"
+                        text: I18n.tr("Which screen")
                         color: root.ink
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1875,7 +1927,7 @@ FloatingWindow {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "Opens on " + (root.bigFields.screen || "—")
+                        text: I18n.tr("Opens on %1").arg(root.bigFields.screen || "—")
                         color: root.dim
                         font.pixelSize: root.ui(11)
                         font.family: root.uiFont
@@ -1889,7 +1941,7 @@ FloatingWindow {
                     // to get out of with a gamepad.
                     Text {
                         Layout.topMargin: 8
-                        text: "Music player"
+                        text: I18n.tr("Music player")
                         color: root.ink
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1915,7 +1967,8 @@ FloatingWindow {
                             for (const p of root.bigPlayers)
                                 if (p.current === "current") return p.note
                             return root.bigPlayers.length === 0
-                                ? "No music player installed — synpkg install cliamp"
+                                ? I18n.tr("No music player installed — "
+                                          + "synpkg install cliamp")
                                 : ""
                         }
                         color: root.dim
@@ -1930,7 +1983,7 @@ FloatingWindow {
                     Text {
                         Layout.topMargin: 8
                         visible: root.bigSources.length > 0
-                        text: "Where the music comes from"
+                        text: I18n.tr("Where the music comes from")
                         color: root.ink
                         font.pixelSize: root.ui(12)
                         font.family: root.uiFont
@@ -1958,7 +2011,8 @@ FloatingWindow {
                         spacing: 8
                         ArcButton {
                             text: root.bigFields["at login"] === "on"
-                                  ? "Don't start at login" : "Start at login"
+                                  ? I18n.tr("Don't start at login")
+                                  : I18n.tr("Start at login")
                             onTriggered: root.run(["big", "autostart",
                                 root.bigFields["at login"] === "on" ? "off" : "on"])
                         }
@@ -1968,7 +2022,8 @@ FloatingWindow {
                         // one button are one setting.
                         ArcButton {
                             text: root.bigFields["guide button"] === "on"
-                                  ? "Guide button off" : "Guide button on"
+                                  ? I18n.tr("Guide button off")
+                                  : I18n.tr("Guide button on")
                             onTriggered: root.run(["big", "guide",
                                 root.bigFields["guide button"] === "on" ? "off" : "on"])
                         }
@@ -1977,11 +2032,11 @@ FloatingWindow {
 
                     FieldRow {
                         Layout.topMargin: 6
-                        label: "Steam library"
-                        value: (root.bigFields.games || "0") + " games"
+                        label: I18n.tr("Steam library")
+                        value: I18n.tr("%1 games").arg(root.bigFields.games || "0")
                     }
                     FieldRow {
-                        label: "quickshell"
+                        label: I18n.tr("quickshell")
                         value: root.bigFields.quickshell || "—"
                         warn: (root.bigFields.quickshell || "") !== "installed"
                     }
@@ -2205,12 +2260,23 @@ FloatingWindow {
         Layout.fillWidth: true
         spacing: 10
 
+        // ⛔ A FIXED 120 px LABEL COLUMN OVERRAN IN EVERY LANGUAGE BUT ENGLISH.
+        // "Config file" is 120 px wide; "Konfigurationsdatei" is not, and it
+        // printed straight over the path beside it — a fixed pixel width is a
+        // measurement of one language's words.
+        //
+        // ⚠ minimumWidth KEEPS THE COLUMN ALIGNED for the short labels, which
+        // is what makes this read as a table at all; the row grows only for a
+        // label that genuinely needs it, and elides rather than overlapping if
+        // the window is too narrow for even that.
         Text {
-            Layout.preferredWidth: 120
+            Layout.preferredWidth: Math.max(120, implicitWidth)
+            Layout.maximumWidth: 260
             text: parent.label
             color: root.dim
             font.pixelSize: root.ui(12)
             font.family: root.uiFont
+            elide: Text.ElideRight
         }
         Text {
             Layout.fillWidth: true

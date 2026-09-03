@@ -56,6 +56,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -198,7 +199,7 @@ static bool fit_icon_path(char *buf, size_t n, const char *id)
 static bool value_ok(const char *what, const char *v)
 {
 	if (strchr(v, '\n') || strchr(v, '\r')) {
-		fprintf(stderr, "syn-arcade: %s cannot contain a newline\n", what);
+		fprintf(stderr, _("syn-arcade: %s cannot contain a newline\n"), what);
 		return false;
 	}
 	return true;
@@ -315,7 +316,7 @@ static int fit_store(const fit_t *f)
 	size_t len = 0;
 	FILE *m = open_memstream(&out, &len);
 	if (!m) {
-		fputs("syn-arcade: out of memory\n", stderr);
+		fputs(_("syn-arcade: out of memory\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -357,7 +358,7 @@ static int fit_store(const fit_t *f)
 	int rc = write_file_inplace(path, out);
 	free(out);
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
@@ -502,7 +503,7 @@ static char *fit_desktop_text(const fit_t *f)
 	FILE *m = open_memstream(&out, &len);
 	if (!m) {
 		free(cmd);
-		fputs("syn-arcade: out of memory\n", stderr);
+		fputs(_("syn-arcade: out of memory\n"), stderr);
 		exit(EX_FAIL);
 	}
 
@@ -572,8 +573,8 @@ static int fit_apply(const fit_t *f, bool quiet)
 	char menu[FIT_PATH_MAX], icon[FIT_PATH_MAX];
 	if (!fit_menu_path(menu, sizeof(menu), f->id) ||
 	    !fit_icon_path(icon, sizeof(icon), f->id)) {
-		fputs("syn-arcade: cannot resolve where to write the shortcut "
-		      "(is HOME set?)\n", stderr);
+		fputs(_("syn-arcade: cannot resolve where to write the shortcut "
+		        "(is HOME set?)\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -583,11 +584,11 @@ static int fit_apply(const fit_t *f, bool quiet)
 	if (f->menu) {
 		int w = write_file_inplace(menu, text);
 		if (w < 0) {
-			fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+			fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 				menu, strerror(-w));
 			rc = EX_FAIL;
 		} else if (!quiet) {
-			printf("menu     %s\n", menu);
+			printf(_("menu     %s\n"), menu);
 		}
 	} else if (file_exists(menu)) {
 		unlink(menu);
@@ -596,7 +597,7 @@ static int fit_apply(const fit_t *f, bool quiet)
 	if (f->desktop) {
 		int w = write_file_inplace(icon, text);
 		if (w < 0) {
-			fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+			fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 				icon, strerror(-w));
 			rc = EX_FAIL;
 		} else {
@@ -606,7 +607,7 @@ static int fit_apply(const fit_t *f, bool quiet)
 			 * execs that one directly. */
 			chmod(icon, 0755);
 			if (!quiet)
-				printf("desktop  %s\n", icon);
+				printf(_("desktop  %s\n"), icon);
 			deskicons_refresh();
 		}
 	} else if (file_exists(icon)) {
@@ -668,18 +669,23 @@ static int fit_list(bool rec)
 	char ids[FIT_MAX][FIT_ID_MAX];
 	int n = fit_ids(ids, FIT_MAX);
 
+	/* ⛔ NOTHING IN THIS FILE'S RECORDS IS MARKED, and that is not an
+	 * oversight. The window does not draw these cells as words: it maps the
+	 * whole row into its own model and draws its own labels — `case
+	 * "force_window": root.fitForceWin = r.value === "yes"` — so the field
+	 * names are KEYS and the yes/no values are MATCHED. See include/i18n.h. */
 	if (rec)
 		rec_row(8, "id", "name", "game", "screen", "filter",
 			   "menu", "desktop", "command");
 
 	if (n == 0) {
 		if (!rec)
-			puts("No gamescope wrappers yet.\n"
-			     "\n"
-			     "`syn-arcade fit new --name=\"The Sims\" "
-			     "--exec=\"wine Sims.exe\" --game=1024x768`\n"
-			     "makes one, or use the Fit to screen tab of "
-			     "`syn-arcade gui`.");
+			puts(_("No gamescope wrappers yet.\n"
+			       "\n"
+			       "`syn-arcade fit new --name=\"The Sims\" "
+			       "--exec=\"wine Sims.exe\" --game=1024x768`\n"
+			       "makes one, or use the Fit to screen tab of "
+			       "`syn-arcade gui`."));
 		return EX_EMPTY;
 	}
 
@@ -749,23 +755,23 @@ static int fit_print(const fit_t *fp, bool rec)
 		for (int i = 0; i < f.envc; i++)
 			rec_row(2, "env", f.env[i]);
 	} else {
-		printf("name      %s\n", f.name);
-		printf("game      %s\n", g);
-		printf("screen    %s\n", s);
-		printf("filter    %s\n", f.filter[0] ? f.filter : "(none)");
+		printf(_("name      %s\n"), f.name);
+		printf(_("game      %s\n"), g);
+		printf(_("screen    %s\n"), s);
+		printf(_("filter    %s\n"), f.filter[0] ? f.filter : _("(none)"));
 		for (int i = 0; i < f.envc; i++)
-			printf("env       %s\n", f.env[i]);
+			printf(_("env       %s\n"), f.env[i]);
 		if (f.workdir[0])
-			printf("workdir   %s\n", f.workdir);
+			printf(_("workdir   %s\n"), f.workdir);
 		/* An id means this has been created. `fit inspect` prints the
 		 * same record for something that has not, and naming files
 		 * that do not exist there would read as a wrapper that already
 		 * existed. */
 		if (f.id[0]) {
-			printf("menu      %s\n",
-			       f.menu ? menu : "(not in the menu)");
-			printf("desktop   %s\n",
-			       f.desktop ? icon : "(no desktop icon)");
+			printf(_("menu      %s\n"),
+			       f.menu ? menu : _("(not in the menu)"));
+			printf(_("desktop   %s\n"),
+			       f.desktop ? icon : _("(no desktop icon)"));
 		}
 		printf("\n%s\n", cmd);
 	}
@@ -778,7 +784,7 @@ static int fit_show(const char *id, bool rec)
 {
 	fit_t f;
 	if (!fit_load(id, &f)) {
-		fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+		fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 		return EX_FAIL;
 	}
 	return fit_print(&f, rec);
@@ -874,9 +880,9 @@ static int fit_screens(bool rec)
 
 	if (n == 0) {
 		if (!rec)
-			fputs("syn-arcade: cannot ask the compositor which "
-			      "screens are attached (no synctl, or synui is not "
-			      "running)\n", stderr);
+			fputs(_("syn-arcade: cannot ask the compositor which "
+			        "screens are attached (no synctl, or synui is not "
+			        "running)\n"), stderr);
 		return EX_EMPTY;
 	}
 
@@ -1338,21 +1344,21 @@ static void fit_warn(const fit_t *f)
 	 * costs a whole extra composite of every frame. */
 	if (strstr(f->exec, "gamescope"))
 		fprintf(stderr,
-			"syn-arcade: ⚠ the command already runs gamescope, so "
-			"this wraps one inside\n"
-			"  another. Give --exec the game's own command — the "
-			"part after `--`.\n");
+			_("syn-arcade: ⚠ the command already runs gamescope, so "
+			  "this wraps one inside\n"
+			  "  another. Give --exec the game's own command — the "
+			  "part after `--`.\n"));
 
 	if (f->gw && f->sw && f->gw == f->sw && f->gh == f->sh)
 		fprintf(stderr,
-			"syn-arcade: ⚠ the game size and the screen size are "
-			"the same, so there is\n"
-			"  nothing to upscale. Set --game to the resolution the "
-			"game actually renders at.\n");
+			_("syn-arcade: ⚠ the game size and the screen size are "
+			  "the same, so there is\n"
+			  "  nothing to upscale. Set --game to the resolution the "
+			  "game actually renders at.\n"));
 
 	if (system("command -v gamescope >/dev/null 2>&1") != 0)
-		fputs("syn-arcade: ⚠ gamescope is not installed — "
-		      "`synpkg install gamescope`\n", stderr);
+		fputs(_("syn-arcade: ⚠ gamescope is not installed — "
+		        "`synpkg install gamescope`\n"), stderr);
 }
 
 static const char *opt_str(int argc, char **argv, const char *name)
@@ -1569,8 +1575,8 @@ static bool fit_from_desktop(fit_t *f, const char *path)
 {
 	app_t a;
 	if (!desktop_read(path, &a)) {
-		fprintf(stderr, "syn-arcade: %s is not an application entry "
-			"this can read\n", path);
+		fprintf(stderr, _("syn-arcade: %s is not an application entry "
+		                  "this can read\n"), path);
 		return false;
 	}
 	exec_strip_codes(a.exec);
@@ -1619,8 +1625,8 @@ static int fit_new(int argc, char **argv)
 		return EX_USAGE;
 
 	if (!f.exec[0]) {
-		fputs("syn-arcade: a wrapper needs something to run — "
-		      "--exec=\"wine Game.exe\" or --from=<a .desktop file>\n",
+		fputs(_("syn-arcade: a wrapper needs something to run — "
+		        "--exec=\"wine Game.exe\" or --from=<a .desktop file>\n"),
 		      stderr);
 		return EX_USAGE;
 	}
@@ -1643,9 +1649,9 @@ static int fit_new(int argc, char **argv)
 	 * and a caller that wants it should not have to parse a sentence. */
 	char *cmd = fit_command(&f);
 	printf("%s\n", f.id);
-	printf("%s — %s%s\n", f.name,
-	       f.menu ? "in the Games menu" : "not in the menu",
-	       f.desktop ? ", and on the desktop" : "");
+	printf(_("%s — %s%s\n"), f.name,
+	       f.menu ? _("in the Games menu") : _("not in the menu"),
+	       f.desktop ? _(", and on the desktop") : "");
 	printf("%s\n", cmd);
 	free(cmd);
 	return rc;
@@ -1655,13 +1661,13 @@ static int fit_edit(const char *id, int argc, char **argv)
 {
 	fit_t f;
 	if (!fit_load(id, &f)) {
-		fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+		fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 		return EX_FAIL;
 	}
 	if (!fit_flags(&f, argc, argv))
 		return EX_USAGE;
 	if (!f.exec[0]) {
-		fputs("syn-arcade: a wrapper needs something to run\n", stderr);
+		fputs(_("syn-arcade: a wrapper needs something to run\n"), stderr);
 		return EX_USAGE;
 	}
 
@@ -1681,7 +1687,7 @@ static int fit_remove(const char *id)
 {
 	fit_t f;
 	if (!fit_load(id, &f)) {
-		fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+		fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 		return EX_FAIL;
 	}
 
@@ -1697,7 +1703,7 @@ static int fit_remove(const char *id)
 	if (had_icon)
 		deskicons_refresh();
 
-	printf("removed %s (%s)\n", id, f.name);
+	printf(_("removed %s (%s)\n"), id, f.name);
 	return EX_OK;
 }
 
@@ -1717,13 +1723,13 @@ static int fit_run(const char *id, bool detach)
 {
 	fit_t f;
 	if (!fit_load(id, &f)) {
-		fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+		fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 		return EX_FAIL;
 	}
 
 	if (system("command -v gamescope >/dev/null 2>&1") != 0) {
-		fputs("syn-arcade: gamescope is not installed — "
-		      "`synpkg install gamescope`\n", stderr);
+		fputs(_("syn-arcade: gamescope is not installed — "
+		        "`synpkg install gamescope`\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -1737,7 +1743,7 @@ static int fit_run(const char *id, bool detach)
 	}
 
 	execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-	fprintf(stderr, "syn-arcade: cannot run /bin/sh: %s\n", strerror(errno));
+	fprintf(stderr, _("syn-arcade: cannot run /bin/sh: %s\n"), strerror(errno));
 	free(cmd);
 	return EX_FAIL;
 }
@@ -1750,10 +1756,14 @@ static int fit_choices(const char *key)
 	if (!strcmp(key, "filter"))	list = fit_filters;
 	else if (!strcmp(key, "scaler"))list = fit_scalers;
 	else {
-		fprintf(stderr, "syn-arcade: no choices for '%s'\n", key);
+		fprintf(stderr, _("syn-arcade: no choices for '%s'\n"), key);
 		return EX_USAGE;
 	}
 
+	/* ⛔ id AND label ARE THE SAME STRING HERE, and neither is marked: these
+	 * are gamescope's OWN option words — `fsr`, `nis`, `integer` — passed
+	 * straight back on the command line. Unlike hud's positions, there is no
+	 * translation of `fsr` that means anything. */
 	rec_row(2, "id", "label");
 	for (int i = 0; list[i]; i++)
 		rec_row(2, list[i], list[i]);
@@ -1799,7 +1809,7 @@ int cmd_fit(int argc, char **argv)
 	 */
 	if (!strcmp(sub, "inspect")) {
 		if (rest_c < 1) {
-			fputs("syn-arcade: fit inspect needs a .desktop file\n",
+			fputs(_("syn-arcade: fit inspect needs a .desktop file\n"),
 			      stderr);
 			return EX_USAGE;
 		}
@@ -1819,8 +1829,8 @@ int cmd_fit(int argc, char **argv)
 
 	/* Everything below names a wrapper. */
 	if (rest_c < 1) {
-		fprintf(stderr, "syn-arcade: fit %s needs the name of a "
-			"wrapper (`syn-arcade fit` lists them)\n", sub);
+		fprintf(stderr, _("syn-arcade: fit %s needs the name of a "
+		                  "wrapper (`syn-arcade fit` lists them)\n"), sub);
 		return EX_USAGE;
 	}
 
@@ -1835,13 +1845,13 @@ int cmd_fit(int argc, char **argv)
 		if (islower((unsigned char)*p) || isdigit((unsigned char)*p) ||
 		    *p == '-')
 			continue;
-		fprintf(stderr, "syn-arcade: '%s' is not a wrapper name — they "
-			"are lower case letters, digits and dashes "
-			"(`syn-arcade fit` lists them)\n", id);
+		fprintf(stderr, _("syn-arcade: '%s' is not a wrapper name — they "
+		                  "are lower case letters, digits and dashes "
+		                  "(`syn-arcade fit` lists them)\n"), id);
 		return EX_USAGE;
 	}
 	if (!*id) {
-		fputs("syn-arcade: fit needs the name of a wrapper\n", stderr);
+		fputs(_("syn-arcade: fit needs the name of a wrapper\n"), stderr);
 		return EX_USAGE;
 	}
 	int flag_c = rest_c - 1;
@@ -1858,7 +1868,7 @@ int cmd_fit(int argc, char **argv)
 	if (!strcmp(sub, "command")) {
 		fit_t f;
 		if (!fit_load(id, &f)) {
-			fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+			fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 			return EX_FAIL;
 		}
 		char *cmd = fit_command(&f);
@@ -1870,12 +1880,12 @@ int cmd_fit(int argc, char **argv)
 	if (!strcmp(sub, "apply")) {
 		fit_t f;
 		if (!fit_load(id, &f)) {
-			fprintf(stderr, "syn-arcade: no wrapper called '%s'\n", id);
+			fprintf(stderr, _("syn-arcade: no wrapper called '%s'\n"), id);
 			return EX_FAIL;
 		}
 		return fit_apply(&f, false);
 	}
 
-	fprintf(stderr, "syn-arcade: unknown fit command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown fit command '%s'\n"), sub);
 	return EX_USAGE;
 }

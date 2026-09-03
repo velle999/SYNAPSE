@@ -53,6 +53,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -299,28 +300,30 @@ static void strip_removal_mark(char *text)
 static bool combo_ok(const char *combo)
 {
 	if (!combo || !*combo) {
-		fputs("syn-arcade: empty key combination\n", stderr);
+		fputs(_("syn-arcade: empty key combination\n"), stderr);
 		return false;
 	}
 	if (strchr(combo, ' ') || strchr(combo, '\t')) {
-		fprintf(stderr, "syn-arcade: '%s' — a combo has no spaces in it "
-				"(super+F11, not super + F11)\n", combo);
+		fprintf(stderr, _("syn-arcade: '%s' — a combo has no spaces in it "
+		                  "(super+F11, not super + F11)\n"), combo);
 		return false;
 	}
 	if (!strchr(combo, '+')) {
-		fprintf(stderr, "syn-arcade: '%s' has no modifier. Use "
-				"super+, ctrl+, alt+ or shift+\n", combo);
+		/* ⚠ The four modifier names are what synui reads and what
+		 * somebody types; they stay as they are inside the sentence. */
+		fprintf(stderr, _("syn-arcade: '%s' has no modifier. Use "
+		                  "super+, ctrl+, alt+ or shift+\n"), combo);
 		return false;
 	}
 
 	const char *key = strrchr(combo, '+') + 1;
 	if (!*key) {
-		fprintf(stderr, "syn-arcade: '%s' ends in '+' with no key\n", combo);
+		fprintf(stderr, _("syn-arcade: '%s' ends in '+' with no key\n"), combo);
 		return false;
 	}
 	if (strcmp(key, "=") == 0) {
-		fputs("syn-arcade: spell '=' as 'equal' — synui wants the XKB\n"
-		      "keysym name, and 'super+=' is silently ignored\n", stderr);
+		fputs(_("syn-arcade: spell '=' as 'equal' — synui wants the XKB\n"
+		        "keysym name, and 'super+=' is silently ignored\n"), stderr);
 		return false;
 	}
 	return true;
@@ -474,33 +477,44 @@ static int binds_show(bool rec)
 
 	if (rec) {
 		rec_row(3, "field", "value", "action");
-		rec_row(3, "installed", b.present ? "yes" : "no",
+		/* ⛔ THE STATE WORDS ARE MATCHED **AND** DRAWN. The window tests
+		 * `installed === "yes"` in four places and also puts the same
+		 * cell on screen, so the record must keep the English word and
+		 * the window must translate only where it DRAWS. N_() is what
+		 * makes that possible: in the catalog, unchanged in the row.
+		 *
+		 * ⛔ AND THE `action` COLUMN IS NEVER TOUCHED — `action:remove`
+		 * and `set:toggle` are instructions, not words. Nor are the key
+		 * combinations, which are XKB names synui reads back. */
+		rec_row(3, N_("installed"), b.present ? N_("yes") : N_("no"),
 			b.present ? "action:remove" : "action:install");
-		rec_row(3, "toggle overlay", b.present ? b.toggle : "(not bound)",
-			"set:toggle");
-		rec_row(3, "move overlay", b.present ? b.cycle : "(not bound)",
-			"set:cycle");
-		rec_row(3, "big screen mode", b.present ? b.big : "(not bound)",
-			"set:big");
-		rec_row(3, "big screen at login", b.autostart_big ? "on" : "off",
+		rec_row(3, N_("toggle overlay"),
+			b.present ? b.toggle : N_("(not bound)"), "set:toggle");
+		rec_row(3, N_("move overlay"),
+			b.present ? b.cycle : N_("(not bound)"), "set:cycle");
+		rec_row(3, N_("big screen mode"),
+			b.present ? b.big : N_("(not bound)"), "set:big");
+		rec_row(3, N_("big screen at login"),
+			b.autostart_big ? N_("on") : N_("off"),
 			b.autostart_big ? "action:autostart-off"
 					: "action:autostart-on");
-		rec_row(3, "guide button", (b.present && b.guard) ? "on" : "off",
+		rec_row(3, N_("guide button"),
+			(b.present && b.guard) ? N_("on") : N_("off"),
 			(b.present && b.guard) ? "action:guide-off"
 					       : "action:guide-on");
-		rec_row(3, "config", path, "detail");
+		rec_row(3, N_("config"), path, "detail");
 	} else if (b.present) {
-		printf("installed in %s\n", path);
-		printf("  %-14s toggle the overlay\n", b.toggle);
-		printf("  %-14s move it around the screen\n", b.cycle);
-		printf("  %-14s big screen mode\n", b.big);
-		printf("  %-14s big screen mode at login\n",
-		       b.autostart_big ? "on" : "off");
-		printf("  %-14s the pad's guide button opens big screen mode\n",
-		       b.guard ? "on" : "off");
+		printf(_("installed in %s\n"), path);
+		printf(_("  %-14s toggle the overlay\n"), b.toggle);
+		printf(_("  %-14s move it around the screen\n"), b.cycle);
+		printf(_("  %-14s big screen mode\n"), b.big);
+		printf(_("  %-14s big screen mode at login\n"),
+		       b.autostart_big ? _("on") : _("off"));
+		printf(_("  %-14s the pad's guide button opens big screen mode\n"),
+		       b.guard ? _("on") : _("off"));
 	} else {
-		printf("not installed (%s)\n", path);
-		puts("`syn-arcade binds install` adds them.");
+		printf(_("not installed (%s)\n"), path);
+		puts(_("`syn-arcade binds install` adds them."));
 	}
 	return EX_OK;
 }
@@ -527,8 +541,8 @@ static int binds_write(const binds_t *b, bool *seeded_out, bool *changed_out)
 	char eff[4096], user[4096];
 	if (!rc_effective_path(eff, sizeof(eff)) ||
 	    !rc_user_path(user, sizeof(user))) {
-		fputs("syn-arcade: cannot resolve a synui config path "
-		      "(is HOME set?)\n", stderr);
+		fputs(_("syn-arcade: cannot resolve a synui config path "
+		        "(is HOME set?)\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -593,14 +607,14 @@ static int binds_write(const binds_t *b, bool *seeded_out, bool *changed_out)
 	free(out);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			user, strerror(-rc));
 		return EX_FAIL;
 	}
 
 	if (seeded)
-		printf("copied %s → %s (synui reads only one, so the whole file "
-		       "had to move)\n", eff, user);
+		printf(_("copied %s → %s (synui reads only one, so the whole file "
+		         "had to move)\n"), eff, user);
 	if (seeded_out)
 		*seeded_out = seeded;
 	return EX_OK;
@@ -612,8 +626,8 @@ static int binds_activate(bool reload)
 	if (reload)
 		return binds_reload();
 
-	puts("\nNot active yet. synui re-reads its config on Super+Shift+W,\n"
-	     "on Ctrl+Shift+R in the Super+/ palette, or on:");
+	puts(_("\nNot active yet. synui re-reads its config on Super+Shift+W,\n"
+	       "on Ctrl+Shift+R in the Super+/ palette, or on:"));
 	puts("    syn-arcade binds reload");
 	return EX_OK;
 }
@@ -632,9 +646,11 @@ static int binds_install(const char *toggle, const char *cycle, const char *big,
 	for (int i = 0; i < 3; i++)
 		for (int j = i + 1; j < 3; j++)
 			if (strcasecmp(combos[i], combos[j]) == 0) {
-				fprintf(stderr, "syn-arcade: %s and %s are both "
-					"'%s' — synui would apply whichever it "
-					"read last\n", what[i], what[j],
+				/* ⚠ what[] is the FLAG NAMES (--toggle …) and is
+				 * never marked. */
+				fprintf(stderr, _("syn-arcade: %s and %s are both "
+				                  "'%s' — synui would apply whichever it "
+				                  "read last\n"), what[i], what[j],
 					combos[i]);
 				return EX_USAGE;
 			}
@@ -656,23 +672,23 @@ static int binds_install(const char *toggle, const char *cycle, const char *big,
 	if (rc != EX_OK)
 		return rc;
 
-	printf("installed in %s\n", user);
-	printf("  %-14s toggle the overlay\n", toggle);
-	printf("  %-14s move it around the screen\n", cycle);
-	printf("  %-14s big screen mode\n", big);
+	printf(_("installed in %s\n"), user);
+	printf(_("  %-14s toggle the overlay\n"), toggle);
+	printf(_("  %-14s move it around the screen\n"), cycle);
+	printf(_("  %-14s big screen mode\n"), big);
 	if (b.guard)
-		puts("  the pad's guide button opens big screen mode "
-		     "(from your next login)");
+		puts(_("  the pad's guide button opens big screen mode "
+		       "(from your next login)"));
 	if (b.autostart_big)
-		puts("  big screen mode starts at login");
+		puts(_("  big screen mode starts at login"));
 
 	/* The overlay config has to EXIST before a game starts or MangoHud's
 	 * inotify watch never attaches — a keybind installed without it would
 	 * be dead in every game already running. */
 	char hudpath[4096];
 	if (hud_effective_config(hudpath, sizeof(hudpath)) && !file_exists(hudpath))
-		puts("\nRun `syn-arcade hud ensure` too — MangoHud needs the config\n"
-		     "file to exist before a game starts, or it never watches it.");
+		puts(_("\nRun `syn-arcade hud ensure` too — MangoHud needs the config\n"
+		       "file to exist before a game starts, or it never watches it."));
 
 	return binds_activate(reload);
 }
@@ -753,8 +769,8 @@ static int binds_refresh(bool quiet, bool reload)
 
 	if (!b.present) {
 		if (!quiet)
-			printf("nothing to refresh — no syn-arcade block in %s\n"
-			       "`syn-arcade binds install` adds one.\n", path);
+			printf(_("nothing to refresh — no syn-arcade block in %s\n"
+			         "`syn-arcade binds install` adds one.\n"), path);
 		return EX_OK;
 	}
 
@@ -768,9 +784,9 @@ static int binds_refresh(bool quiet, bool reload)
 
 		const struct { const char *combo; bool saw; const char *what; }
 		check[3] = {
-			{ b.toggle, b.saw_toggle, "the overlay toggle" },
-			{ b.cycle,  b.saw_cycle,  "moving the overlay" },
-			{ b.big,    b.saw_big,    "big screen mode" },
+			{ b.toggle, b.saw_toggle, N_("the overlay toggle") },
+			{ b.cycle,  b.saw_cycle,  N_("moving the overlay") },
+			{ b.big,    b.saw_big,    N_("big screen mode") },
 		};
 
 		for (int i = 0; i < 3; i++) {
@@ -778,11 +794,11 @@ static int binds_refresh(bool quiet, bool reload)
 				continue;
 			free(outside);
 			fprintf(stderr,
-				"syn-arcade: not refreshing — %s is already bound "
-				"in %s\nto something else, and synui would apply "
-				"whichever line it read last.\n"
-				"Pick another key: syn-arcade binds install "
-				"--big=super+F9\n",
+				_("syn-arcade: not refreshing — %s is already bound "
+				  "in %s\nto something else, and synui would apply "
+				  "whichever line it read last.\n"
+				  "Pick another key: syn-arcade binds install "
+				  "--big=super+F9\n"),
 				check[i].combo, path);
 			return EX_FAIL;
 		}
@@ -796,15 +812,15 @@ static int binds_refresh(bool quiet, bool reload)
 
 	if (!changed) {
 		if (!quiet)
-			printf("already up to date (%s)\n", path);
+			printf(_("already up to date (%s)\n"), path);
 		return EX_OK;
 	}
 
 	if (!quiet) {
-		printf("refreshed the syn-arcade block in %s\n", path);
-		printf("  %-14s toggle the overlay\n", b.toggle);
-		printf("  %-14s move it around the screen\n", b.cycle);
-		printf("  %-14s big screen mode\n", b.big);
+		printf(_("refreshed the syn-arcade block in %s\n"), path);
+		printf(_("  %-14s toggle the overlay\n"), b.toggle);
+		printf(_("  %-14s move it around the screen\n"), b.cycle);
+		printf(_("  %-14s big screen mode\n"), b.big);
 	}
 
 	/* At login (--quiet) there is nothing to reload: synui has not read its
@@ -813,7 +829,7 @@ static int binds_refresh(bool quiet, bool reload)
 	if (reload)
 		return binds_reload();
 	if (!quiet)
-		puts("\nNot active until synui reloads: syn-arcade binds reload");
+		puts(_("\nNot active until synui reloads: syn-arcade binds reload"));
 	return EX_OK;
 }
 
@@ -849,9 +865,9 @@ static int binds_ensure(bool quiet, bool reload)
 
 	if (removal_marked(path)) {
 		if (!quiet)
-			printf("the syn-arcade shortcuts were removed on "
-			       "purpose (%s)\n"
-			       "`syn-arcade binds install` puts them back.\n",
+			printf(_("the syn-arcade shortcuts were removed on "
+			         "purpose (%s)\n"
+			         "`syn-arcade binds install` puts them back.\n"),
 			       path);
 		return EX_OK;
 	}
@@ -876,8 +892,8 @@ int binds_autostart_set(bool on)
 		return EX_FAIL;
 
 	if (b.autostart_big == on && (b.present || !on)) {
-		printf("big screen mode at login is already %s\n",
-		       on ? "on" : "off");
+		printf(_("big screen mode at login is already %s\n"),
+		       on ? _("on") : _("off"));
 		return EX_OK;
 	}
 
@@ -886,7 +902,7 @@ int binds_autostart_set(bool on)
 	 * that never mentioned it, and creating a block to say so would install
 	 * three keybinds nobody asked for. */
 	if (!on && !b.present) {
-		puts("big screen mode at login is off (nothing installed)");
+		puts(_("big screen mode at login is off (nothing installed)"));
 		return EX_OK;
 	}
 
@@ -901,15 +917,15 @@ int binds_autostart_set(bool on)
 	rc_user_path(user, sizeof(user));
 
 	if (on) {
-		printf("big screen mode will start at login (%s)\n", user);
+		printf(_("big screen mode will start at login (%s)\n"), user);
 		/* Said out loud because turning ON an autostart also writes the
 		 * gaming keybinds — they are one block, and the way BACK out of
 		 * a full-screen ten-foot interface is one of them. */
-		printf("  %-14s opens and closes it\n", b.big);
+		printf(_("  %-14s opens and closes it\n"), b.big);
 	} else {
-		printf("big screen mode will no longer start at login (%s)\n",
+		printf(_("big screen mode will no longer start at login (%s)\n"),
 		       user);
-		printf("  %-14s still opens it\n", b.big);
+		printf(_("  %-14s still opens it\n"), b.big);
 	}
 
 	/*
@@ -922,9 +938,9 @@ int binds_autostart_set(bool on)
 	 * Printing the usual "not active yet, reload to apply" would be a
 	 * sentence that is wrong in both directions.
 	 */
-	puts(on ? "\nIt takes effect at your next login. To see it now: "
-		  "syn-arcade big start"
-		: "\nIt takes effect at your next login.");
+	puts(on ? _("\nIt takes effect at your next login. To see it now: "
+		    "syn-arcade big start")
+		: _("\nIt takes effect at your next login."));
 	return EX_OK;
 }
 
@@ -948,17 +964,17 @@ int binds_guard_set(bool on)
 
 	if (!b.present) {
 		if (!on) {
-			puts("the guide button is off (nothing installed)");
+			puts(_("the guide button is off (nothing installed)"));
 			return EX_OK;
 		}
 		/* Turning it ON with no block means writing one, which also
 		 * writes three keybinds. Said out loud rather than done
 		 * quietly — see binds_autostart_set for the same rule. */
-		puts("no syn-arcade block in your synui config yet — "
-		     "installing one\n(that is the three gaming keys as well; "
-		     "`syn-arcade binds show` lists them)");
+		puts(_("no syn-arcade block in your synui config yet — "
+		       "installing one\n(that is the three gaming keys as well; "
+		       "`syn-arcade binds show` lists them)"));
 	} else if (b.guard == on) {
-		printf("the guide button is already %s\n", on ? "on" : "off");
+		printf(_("the guide button is already %s\n"), on ? _("on") : _("off"));
 		return EX_OK;
 	}
 
@@ -972,15 +988,15 @@ int binds_guard_set(bool on)
 	rc_user_path(user, sizeof(user));
 
 	if (on) {
-		printf("the guide button will open big screen mode (%s)\n", user);
-		puts("\n⚠ It takes effect at your NEXT LOGIN. The watcher is an\n"
-		     "autostart, and synui runs those once when the session\n"
-		     "starts — nothing can add one to a session already running.\n"
-		     "To have it now without logging out:  syn-arcade big guard &");
+		printf(_("the guide button will open big screen mode (%s)\n"), user);
+		puts(_("\n⚠ It takes effect at your NEXT LOGIN. The watcher is an\n"
+		       "autostart, and synui runs those once when the session\n"
+		       "starts — nothing can add one to a session already running.\n"
+		       "To have it now without logging out:  syn-arcade big guard &"));
 	} else {
-		printf("the guide button will no longer open big screen mode "
-		       "(%s)\n", user);
-		puts("\nA watcher already running stays until you log out.");
+		printf(_("the guide button will no longer open big screen mode "
+		         "(%s)\n"), user);
+		puts(_("\nA watcher already running stays until you log out."));
 	}
 	return EX_OK;
 }
@@ -993,12 +1009,12 @@ static int binds_remove(bool reload)
 
 	char *text = read_file(user);
 	if (!text) {
-		printf("nothing to remove (%s does not exist)\n", user);
+		printf(_("nothing to remove (%s does not exist)\n"), user);
 		return EX_OK;
 	}
 	if (!has_block(text)) {
 		free(text);
-		printf("nothing to remove (no syn-arcade block in %s)\n", user);
+		printf(_("nothing to remove (no syn-arcade block in %s)\n"), user);
 		return EX_OK;
 	}
 
@@ -1027,19 +1043,19 @@ static int binds_remove(bool reload)
 	free(out);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			user, strerror(-rc));
 		return EX_FAIL;
 	}
 
-	printf("removed the syn-arcade block from %s\n", user);
+	printf(_("removed the syn-arcade block from %s\n"), user);
 	/* Deliberately NOT deleting a file this package seeded. By now it is
 	 * the only synui config on the machine, and the rest of it is the
 	 * user's. */
 	if (reload)
 		return binds_reload();
-	puts("The shortcuts stay live until synui reloads: "
-	     "`syn-arcade binds reload`.");
+	puts(_("The shortcuts stay live until synui reloads: "
+	       "`syn-arcade binds reload`."));
 	return EX_OK;
 }
 
@@ -1055,18 +1071,18 @@ static int binds_remove(bool reload)
 int binds_reload(void)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("SYNUI_SOCKET")) {
-		fputs("syn-arcade: no synui session to reload (not in a "
-		      "desktop session?)\n", stderr);
+		fputs(_("syn-arcade: no synui session to reload (not in a "
+		        "desktop session?)\n"), stderr);
 		return EX_FAIL;
 	}
 
 	int rc = system("synctl dispatch wallpaper_reload >/dev/null 2>&1");
 	if (rc != 0) {
-		fputs("syn-arcade: could not reach synui. The shortcuts are\n"
-		      "written and will be active at your next login.\n", stderr);
+		fputs(_("syn-arcade: could not reach synui. The shortcuts are\n"
+		        "written and will be active at your next login.\n"), stderr);
 		return EX_FAIL;
 	}
-	puts("synui reloaded — the shortcuts are live.");
+	puts(_("synui reloaded — the shortcuts are live."));
 	return EX_OK;
 }
 
@@ -1140,11 +1156,14 @@ int cmd_binds(int argc, char **argv)
 		}
 		if (strcmp(arg, "on") == 0 || strcmp(arg, "off") == 0)
 			return binds_guard_set(strcmp(arg, "on") == 0);
-		fprintf(stderr, "syn-arcade: binds guide takes on, off or "
-				"status (not '%s')\n", arg);
+		/* ⚠ on/off/status are what somebody TYPES — never translated,
+		 * here or in the `binds guide status` line above, which a script
+		 * reads. */
+		fprintf(stderr, _("syn-arcade: binds guide takes on, off or "
+		                  "status (not '%s')\n"), arg);
 		return EX_USAGE;
 	}
 
-	fprintf(stderr, "syn-arcade: unknown binds command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown binds command '%s'\n"), sub);
 	return EX_USAGE;
 }

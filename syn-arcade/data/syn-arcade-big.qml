@@ -70,6 +70,14 @@ import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick.Controls
 
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS A DIRECTORY IMPORT. quickshell has no
+// translator at all — qsTr() compiles, returns its own argument, and translates
+// nothing while looking exactly like a marked string in review — so qml/I18n.qml
+// reads a JSON catalog compiled from the same po/*.po the binary's .mo comes
+// from. Both of this program's windows import it, so a word they share is
+// translated once.
+import "qml"
+
 ShellRoot {
     id: shell
 
@@ -537,8 +545,8 @@ ShellRoot {
         // dead button this file keeps warning about. It says so instead.
         const t = shell.apps.filter(a => a.id === "visualizer")
         if (!t.length) {
-            shell.notice = "The visualizer needs projectM — "
-                         + "synpkg install projectm-pulseaudio"
+            shell.notice = I18n.tr("The visualizer needs projectM — "
+                                   + "synpkg install projectm-pulseaudio")
             noticeTimer.restart()
             return
         }
@@ -650,7 +658,8 @@ ShellRoot {
         // the bug above.
         if (i < 0) {
             shell.launchingName = ""
-            shell.notice = "Six applications are already open — close one first"
+            shell.notice = I18n.tr("Six applications are already open — "
+                                   + "close one first")
             noticeTimer.restart()
             return
         }
@@ -870,10 +879,15 @@ ShellRoot {
         // simply not appear, which is why the selection is remembered by NAME
         // below rather than by row number.
         if (shell.windows.length)
-            out.push({ title: "Running", kind: "running", items: shell.windows })
+            // ⛔ TWO FIELDS FOR ONE WORD, and that is the whole point. `title`
+            // is the IDENTITY — see rowTitle above and colKey() — and `label`
+            // is what the row is called on screen. One shelf, two facts.
+            out.push({ title: "Running", label: I18n.tr("Running"),
+                       kind: "running", items: shell.windows })
 
         if (shell.games.length)
-            out.push({ title: "Games", kind: "game", items: shell.games })
+            out.push({ title: "Games", label: I18n.tr("Games"),
+                       kind: "game", items: shell.games })
 
         // ── one row: Recent, Play, Media, Apps ──────────────────────────────
         //
@@ -891,22 +905,27 @@ ShellRoot {
         // the same "a shelf that can be empty is not drawn" rule Running
         // follows, which is also why the selection is remembered by NAME.
         if (shell.recentApps.length)
-            out.push({ title: "Recent", kind: "app", items: shell.recentApps })
+            out.push({ title: "Recent", label: I18n.tr("Recent"),
+                       kind: "app", items: shell.recentApps })
 
         const play = shell.byShelf("play")
-        if (play.length) out.push({ title: "Play", kind: "app", items: play })
+        if (play.length) out.push({ title: "Play", label: I18n.tr("Play"),
+                                    kind: "app", items: play })
 
         // Installed media applications first, then whatever answered on the
         // network — a Plex client on this machine is a better tile than the
         // same server's web page, and both being here is the point.
         const media = shell.byShelf("media").concat(shell.media)
-        if (media.length) out.push({ title: "Media", kind: "app", items: media })
+        if (media.length) out.push({ title: "Media", label: I18n.tr("Media"),
+                                     kind: "app", items: media })
 
         const apps = shell.byShelf("apps")
-        if (apps.length) out.push({ title: "Apps", kind: "app", items: apps })
+        if (apps.length) out.push({ title: "Apps", label: I18n.tr("Apps"),
+                                    kind: "app", items: apps })
 
         if (shell.news.length)
-            out.push({ title: "News", kind: "news", items: shell.news })
+            out.push({ title: "News", label: I18n.tr("News"),
+                       kind: "news", items: shell.news })
 
         return out
     }
@@ -1236,10 +1255,10 @@ ShellRoot {
         const out = []
         if (shell.musicLive)
             out.push({ id: "now-playing", kind: "music",
-                       name: shell.music.title || "Music" })
+                       name: shell.music.title || I18n.tr("Music") })
         if (shell.musicDrivable)
             out.push({ id: "music-source", kind: "page", page: "source",
-                       name: "Music Source",
+                       name: I18n.tr("Music Source"),
                        note: shell.musicSourceName
                              ? "· " + shell.musicSourceName : "" })
         return out.concat(shell.byShelf("system"))
@@ -1251,7 +1270,7 @@ ShellRoot {
         if (page === "albums") {
             // Said out loud, because a server on the other end of a network
             // can take a moment and an empty panel reads as a broken button.
-            shell.menuBusy = "Reading the library…"
+            shell.menuBusy = I18n.tr("Reading the library…")
             shell.albumItems = []
             if (!albumsProc.running) albumsProc.running = true
         }
@@ -1259,7 +1278,7 @@ ShellRoot {
             // A file read rather than a network round trip, so this is said
             // for the moment rather than the minute — but said, because the
             // list arrives asynchronously either way.
-            shell.menuBusy = "Reading your stations…"
+            shell.menuBusy = I18n.tr("Reading your stations…")
             shell.ytItems = []
             if (!ytProc.running) ytProc.running = true
         }
@@ -1267,7 +1286,7 @@ ShellRoot {
             // ⚠ THIS ONE REALLY DOES CROSS THE INTERNET — yt-dlp asking
             // YouTube what the account has — so it is said out loud for the
             // same reason the Plex library is.
-            shell.menuBusy = "Reading your playlists…"
+            shell.menuBusy = I18n.tr("Reading your playlists…")
             shell.ytMineItems = []
             if (!ytMineProc.running) ytMineProc.running = true
         }
@@ -1937,7 +1956,7 @@ ShellRoot {
     // in this file where somebody can press A twice in a second.
     function chooseSource(it) {
         if (sourceSetProc.running) return
-        shell.menuBusy = "Switching to " + it.name + "…"
+        shell.menuBusy = I18n.tr("Switching to %1…").arg(it.name)
         sourceSetProc.next = it.action || "play"
         sourceSetProc.src = it.id
         sourceSetProc.command = [shell.bin, "big", "music", "source", it.id]
@@ -1988,7 +2007,8 @@ ShellRoot {
                 // and there is no keyboard within reach of a sofa.
                 shell.launchApp({ id: "music-" + sourceSetProc.next,
                                   name: sourceSetProc.next === "install"
-                                        ? "Installing yt-dlp" : "Signing in",
+                                        ? I18n.tr("Installing yt-dlp")
+                                        : I18n.tr("Signing in"),
                                   pointer: "0", keys: "1" },
                                 ["big", "music", sourceSetProc.next,
                                  sourceSetProc.src])
@@ -2001,7 +2021,7 @@ ShellRoot {
 
     function playAlbum(it) {
         if (albumPlayProc.running) return
-        shell.menuBusy = "Loading " + it.name + "…"
+        shell.menuBusy = I18n.tr("Loading %1…").arg(it.name)
         albumPlayProc.command = [shell.bin, "big", "music", "plex", it.id]
         albumPlayProc.running = true
     }
@@ -2022,7 +2042,7 @@ ShellRoot {
     // somebody to press A again.
     function playYt(it) {
         if (ytPlayProc.running) return
-        shell.menuBusy = "Loading " + it.name + "…"
+        shell.menuBusy = I18n.tr("Loading %1…").arg(it.name)
         ytPlayProc.command = [shell.bin, "big", "music", "yt", it.id]
         ytPlayProc.running = true
     }
@@ -2067,9 +2087,9 @@ ShellRoot {
         // that action with this page and left it reachable from nowhere.
         const cmd = it.id === "setup" ? ["big", "music", "setup"]
                                       : ["big", "music", "yt", it.id]
-        const name = it.id === "setup" ? "cliamp setup"
-                   : it.id === "login" ? "Signing in"
-                                       : "Search"
+        const name = it.id === "setup" ? I18n.tr("cliamp setup")
+                   : it.id === "login" ? I18n.tr("Signing in")
+                                       : I18n.tr("Search")
 
         shell.launchApp({ id: "music-yt-" + it.id, name: name,
                           pointer: "0", keys: "1" }, cmd)
@@ -2640,7 +2660,7 @@ ShellRoot {
                     spacing: win.u * 0.2
 
                     Text {
-                        text: "SYNAPSE"
+                        text: I18n.tr("SYNAPSE")
                         color: win.accent
                         font.pixelSize: win.u * 1.5
                         font.family: shell.uiFont
@@ -2648,7 +2668,7 @@ ShellRoot {
                         font.bold: true
                     }
                     Text {
-                        text: "big screen"
+                        text: I18n.tr("big screen")
                         color: win.dim
                         font.pixelSize: win.u * 0.8
                         font.family: shell.uiFont
@@ -2758,8 +2778,8 @@ ShellRoot {
                     font.pixelSize: win.u * 0.85
                     font.family: shell.uiFont
                     text: shell.activeApp
-                          ? (shell.activeApp.name || "Something")
-                            + " is still open   ·   Guide goes back to it"
+                          ? I18n.tr("%1 is still open   ·   Guide goes back to it")
+                                .arg(shell.activeApp.name || I18n.tr("Something"))
                           : ""
                 }
             }
@@ -2884,7 +2904,7 @@ ShellRoot {
                             if (!sh || !it) return ""
 
                             if (sh.kind === "news")
-                                return it.source || "news"
+                                return it.source || I18n.tr("news")
 
                             // Deliberately NOT the exec string for the app and
                             // action shelves. "systemctl suspend" under the
@@ -2895,19 +2915,24 @@ ShellRoot {
                             if (sh.kind !== "game") {
                                 if (it.kind === "server")
                                     return it.source === "plex"
-                                        ? "Plex server on this network"
-                                        : "Jellyfin server on this network"
+                                        ? I18n.tr("Plex server on this network")
+                                        : I18n.tr("Jellyfin server on this network")
                                 return ""
                             }
 
                             const bits = []
                             const sz = parseFloat(it.size)
-                            if (sz > 0) bits.push((sz / 1073741824).toFixed(1) + " GB")
+                            if (sz > 0)
+                                bits.push(I18n.tr("%1 GB")
+                                              .arg((sz / 1073741824).toFixed(1)))
                             const lp = parseFloat(it.lastplayed)
                             // 0 is Steam's "never", not 1970.
                             if (lp > 0)
-                                bits.push("last played "
-                                          + new Date(lp * 1000).toLocaleDateString(Qt.locale()))
+                                // ⚠ toLocaleDateString(Qt.locale()) already
+                                // follows the desktop's language; the words in
+                                // front of it did not.
+                                bits.push(I18n.tr("last played %1")
+                                    .arg(new Date(lp * 1000).toLocaleDateString(Qt.locale())))
                             return bits.join("   ·   ")
                         }
                     }
@@ -3035,7 +3060,15 @@ ShellRoot {
                                     Text {
                                         id: label
                                         x: win.u * 1.6
-                                        text: shelf.sh.title
+                                        // ⛔ `label`, NOT `title`. A shelf's
+                                        // TITLE is this shell's identity for a
+                                        // row — `rowTitle` keeps the selection
+                                        // across a rebuild by matching it, and
+                                        // colKey() remembers a scroll position
+                                        // under it — so it stays English, and
+                                        // shelves() carries a second field for
+                                        // the word on screen.
+                                        text: shelf.sh.label
                                         color: win.dim
                                         font.pixelSize: win.u * 0.9
                                         font.family: shell.uiFont
@@ -3444,31 +3477,36 @@ ShellRoot {
                             // do, because that is where the selection is and
                             // "Select" would be describing a tile nobody is
                             // pointing at.
+                            // ⛔ `k` IS THE LETTER ON THE PAD IN SOMEBODY'S
+                            // HAND — A, B, X, LB/RB, Guide — and is never
+                            // translated. `v` is what it does, and is.
                             if (shell.mediaFocus)
-                                return [ { k: "A", v: "Press" },
-                                         { k: "B", v: "Back to the tiles" } ]
+                                return [ { k: "A", v: I18n.tr("Press") },
+                                         { k: "B", v: I18n.tr("Back to the tiles") } ]
                             const out = [
-                                { k: "A", v: running ? "Switch to" : "Select" },
-                                { k: "B", v: "Back" }
+                                { k: "A", v: running ? I18n.tr("Switch to")
+                                                     : I18n.tr("Select") },
+                                { k: "B", v: I18n.tr("Back") }
                             ]
-                            if (running) out.push({ k: "X", v: "Close" })
-                            out.push({ k: "LB/RB", v: "Jump" })
+                            if (running) out.push({ k: "X", v: I18n.tr("Close") })
+                            out.push({ k: "LB/RB", v: I18n.tr("Jump") })
                             // Start is where sleep, restart and power off went
                             // when they stopped being a row. A switch nobody
                             // can find is a switch that is not there, and this
                             // legend is the only place on a television it can
                             // be advertised.
                             if (shell.menuItems.length)
-                                out.push({ k: "Start", v: "System" })
+                                out.push({ k: "Start", v: I18n.tr("System") })
                             // ⚠ ONLY WHEN THERE IS ONE TO TOGGLE. projectM is
                             // an optional dependency, so on a machine without
                             // it there is no visualizer tile — and advertising
                             // a chord that does nothing is the lesson at the
                             // top of this model, one button further along.
                             if (shell.apps.some(a => a.id === "visualizer"))
-                                out.push({ k: "L3+R3", v: "Visualizer" })
+                                out.push({ k: "L3+R3", v: I18n.tr("Visualizer") })
                             out.push({ k: "Guide",
-                                       v: shell.activeApp ? "Resume" : "Desktop" })
+                                       v: shell.activeApp ? I18n.tr("Resume")
+                                                          : I18n.tr("Desktop") })
                             return out
                         }
                         Row {
@@ -3661,7 +3699,7 @@ ShellRoot {
             Text {
                 anchors.centerIn: parent
                 visible: !shell.loaded
-                text: "Reading your library…"
+                text: I18n.tr("Reading your library…")
                 color: win.dim
                 font.pixelSize: win.u * 1.4
                 font.family: shell.uiFont
@@ -3676,9 +3714,9 @@ ShellRoot {
                 color: win.dim
                 font.pixelSize: win.u * 1.2
                 font.family: shell.uiFont
-                text: "Nothing to show yet.\n\n"
+                text: I18n.tr("Nothing to show yet.\n\n"
                       + "Install Steam, or check `syn-arcade big` in a terminal — "
-                      + "it says what it found and what it did not."
+                      + "it says what it found and what it did not.")
             }
 
             // Launching takes a moment (Steam has to be woken up), and a
@@ -3691,7 +3729,7 @@ ShellRoot {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Starting " + shell.launchingName + "…"
+                    text: I18n.tr("Starting %1…").arg(shell.launchingName)
                     color: win.ink
                     font.pixelSize: win.u * 1.8
                     font.family: shell.uiFont
@@ -3762,11 +3800,15 @@ ShellRoot {
                         Text {
                             text: {
                                 if (shell.menuBusy) return shell.menuBusy.toUpperCase()
-                                if (shell.menuPage === "source") return "MUSIC SOURCE"
-                                if (shell.menuPage === "albums") return "PLEX ALBUMS"
-                                if (shell.menuPage === "yt") return "YOUTUBE MUSIC"
-                                if (shell.menuPage === "ytmine") return "YOUR PLAYLISTS"
-                                return shell.musicLive ? "NOW PLAYING" : "SYSTEM"
+                                // ⚠ THE CAPITALS ARE THE DESIGN, not shouting:
+                                // this is a letter-spaced header strip. A
+                                // language without case leaves them as they are.
+                                if (shell.menuPage === "source") return I18n.tr("MUSIC SOURCE")
+                                if (shell.menuPage === "albums") return I18n.tr("PLEX ALBUMS")
+                                if (shell.menuPage === "yt") return I18n.tr("YOUTUBE MUSIC")
+                                if (shell.menuPage === "ytmine") return I18n.tr("YOUR PLAYLISTS")
+                                return shell.musicLive ? I18n.tr("NOW PLAYING")
+                                                       : I18n.tr("SYSTEM")
                             }
                             color: win.dim
                             font.pixelSize: win.u * 0.8
@@ -4022,10 +4064,14 @@ ShellRoot {
                                     Text {
                                         visible: entry.isMusic || entry.hasNote
                                         width: entryText.width
+                                        // ⚠ A AND ‹ › ARE BUTTONS ON THE PAD and
+                                        // stay as they are; the sentence around
+                                        // them is one msgid so a translator can
+                                        // move them.
                                         text: entry.isMusic
                                             ? (String(shell.music.state) === "playing"
-                                               ? "Playing" : "Paused")
-                                              + "   ·   A pause   ·   ‹ › track"
+                                               ? I18n.tr("Playing   ·   A pause   ·   ‹ › track")
+                                               : I18n.tr("Paused   ·   A pause   ·   ‹ › track"))
                                             : String(entry.modelData.note || "")
                                         color: win.dim
                                         font.pixelSize: win.u * 0.75
@@ -4058,15 +4104,15 @@ ShellRoot {
                             // to choose from" would be the third dead end this
                             // row has had. It names the command instead.
                             text: shell.menuPage === "albums"
-                                ? "Nothing came back from Plex. Check the "
-                                  + "server, or run `cliamp setup` to give it "
-                                  + "an address and a token."
+                                ? I18n.tr("Nothing came back from Plex. Check the "
+                                          + "server, or run `cliamp setup` to give it "
+                                          + "an address and a token.")
                                 : shell.menuPage === "ytmine"
-                                ? "Nothing came back from that account. If "
-                                  + "you have just signed in to the browser, "
-                                  + "try Sign in again — it checks the "
-                                  + "session and says what it can see."
-                                : "Nothing to choose from."
+                                ? I18n.tr("Nothing came back from that account. If "
+                                          + "you have just signed in to the browser, "
+                                          + "try Sign in again — it checks the "
+                                          + "session and says what it can see.")
+                                : I18n.tr("Nothing to choose from.")
                         }
 
                         // ⚠ A SEPARATE HINT, because the stations page is
@@ -4087,9 +4133,9 @@ ShellRoot {
                             color: win.dim
                             font.pixelSize: win.u * 0.9
                             font.family: shell.uiFont
-                            text: "No saved stations yet. Search finds one and "
+                            text: I18n.tr("No saved stations yet. Search finds one and "
                                   + "can keep it; a mix (list=RD…) plays on "
-                                  + "like a radio station."
+                                  + "like a radio station.")
                         }
                     }
                 }
@@ -4141,8 +4187,11 @@ ShellRoot {
                             font.pixelSize: win.u * 1.7
                             font.family: shell.uiFont
                             font.bold: true
-                            text: "Close " + (shell.closing ? shell.closing.name
-                                                            : "") + "?"
+                            // ⚠ THE QUESTION MARK IS INSIDE THE msgid. Greek
+                            // ends a question with `;` and Arabic with `؟`, and
+                            // a mark appended in code cannot be either.
+                            text: I18n.tr("Close %1?")
+                                      .arg(shell.closing ? shell.closing.name : "")
                         }
 
                         Text {
@@ -4152,7 +4201,7 @@ ShellRoot {
                             color: win.dim
                             font.pixelSize: win.u * 1.0
                             font.family: shell.uiFont
-                            text: "Anything unsaved in it will be lost."
+                            text: I18n.tr("Anything unsaved in it will be lost.")
                         }
 
                         Row {
@@ -4160,8 +4209,8 @@ ShellRoot {
                             spacing: win.u * 2
 
                             Repeater {
-                                model: [ { k: "A", v: "Close it" },
-                                         { k: "B", v: "Keep it open" } ]
+                                model: [ { k: "A", v: I18n.tr("Close it") },
+                                         { k: "B", v: I18n.tr("Keep it open") } ]
                                 Row {
                                     id: choice
                                     required property var modelData
@@ -4481,8 +4530,11 @@ ShellRoot {
                     font.pixelSize: kwin.u * 0.85
                     font.family: shell.uiFont
                     text: {
-                        const t = "Guide  ▸  big screen"
-                        return keysProc.running ? t + "      Start  ▸  keyboard" : t
+                        // ⚠ Guide and Start are BUTTONS; the words after the
+                        // arrow are what they do.
+                        const t = I18n.tr("Guide  ▸  big screen")
+                        return keysProc.running
+                            ? t + "      " + I18n.tr("Start  ▸  keyboard") : t
                     }
                 }
             }
@@ -4564,8 +4616,8 @@ ShellRoot {
                         color: kwin.dim
                         font.pixelSize: kwin.u * 0.75
                         font.family: shell.uiFont
-                        text: "A  type      X  backspace      Y  space      "
-                              + "LB/RB  layout      B  close      Guide  big screen"
+                        text: I18n.tr("A  type      X  backspace      Y  space      "
+                              + "LB/RB  layout      B  close      Guide  big screen")
                     }
                 }
             }

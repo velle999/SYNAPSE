@@ -68,6 +68,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -79,6 +80,25 @@
 const char *const hud_positions[HUD_POS_COUNT] = {
 	"top-left",	"top-center",	"top-right",	"middle-right",
 	"bottom-right",	"bottom-center","bottom-left",	"middle-left",
+};
+
+/*
+ * The same eight, as WORDS.
+ *
+ * ⛔ A SECOND TABLE RATHER THAN A MARKED FIRST ONE, and the reason is what
+ * `hud choices hud-position` prints: an `id` column and a `label` column. The
+ * id is what `hud position <id>` takes back and what MangoHud's own config
+ * file stores; the label is what a window draws. They happened to be the same
+ * eight strings, and marking that one array would have put the id in the
+ * catalog too — so a German window would offer the user a position no command
+ * accepts. See include/i18n.h.
+ *
+ * ⚠ N_(), not _(): these travel in a RECORD, so the row has to carry the
+ * English word for the window to look up at the draw site.
+ */
+const char *const hud_position_labels[HUD_POS_COUNT] = {
+	N_("top-left"),	    N_("top-center"),    N_("top-right"),   N_("middle-right"),
+	N_("bottom-right"), N_("bottom-center"), N_("bottom-left"), N_("middle-left"),
 };
 
 /* The path this package makes authoritative. */
@@ -308,8 +328,8 @@ static const char *hud_default_config(void)
 static void hud_load(lines_t *L, char *path, size_t pathn)
 {
 	if (!hud_effective_config(path, pathn)) {
-		fputs("syn-arcade: cannot resolve a MangoHud config path "
-		      "(is HOME set?)\n", stderr);
+		fputs(_("syn-arcade: cannot resolve a MangoHud config path "
+		        "(is HOME set?)\n"), stderr);
 		exit(EX_FAIL);
 	}
 
@@ -332,16 +352,16 @@ static int hud_store(const lines_t *L, const char *path)
 {
 	if (!file_writable(path)) {
 		fprintf(stderr,
-		 "syn-arcade: %s is not writable by you.\n"
-		 "\n"
-		 "MangoHud reads exactly one config file and /etc/MangoHud.conf\n"
-		 "outranks the per-user one, so nothing you set as a user can win\n"
-		 "while that file exists. Fix it once with:\n"
-		 "\n"
-		 "    syn-arcade hud adopt\n"
-		 "\n"
-		 "which copies the settings now in effect into your own config and\n"
-		 "points MANGOHUD_CONFIGFILE at it for future logins.\n", path);
+		 _("syn-arcade: %s is not writable by you.\n"
+		   "\n"
+		   "MangoHud reads exactly one config file and /etc/MangoHud.conf\n"
+		   "outranks the per-user one, so nothing you set as a user can win\n"
+		   "while that file exists. Fix it once with:\n"
+		   "\n"
+		   "    syn-arcade hud adopt\n"
+		   "\n"
+		   "which copies the settings now in effect into your own config and\n"
+		   "points MANGOHUD_CONFIGFILE at it for future logins.\n"), path);
 		return EX_FAIL;
 	}
 
@@ -362,7 +382,7 @@ static int hud_store(const lines_t *L, const char *path)
 	free(text);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
@@ -421,17 +441,22 @@ static int hud_show_state(bool rec)
 
 	if (rec) {
 		rec_row(3, "field", "value", "action");
-		rec_row(3, "state", hidden ? "hidden" : "visible", "toggle:hud");
-		rec_row(3, "position", pos, "choice:hud-position");
-		rec_row(3, "font_size", fsz, "set:font_size");
-		rec_row(3, "background_alpha", alpha, "set:background_alpha");
-		rec_row(3, "config", path,
+		/* ⛔ THE `action` COLUMN IS AN INSTRUCTION TO THE WINDOW —
+		 * `toggle:hud`, `set:font_size` — and is never a word. Nor is
+		 * `pos`, which is the id from hud_positions[]: the window draws
+		 * it through the label column of `hud choices`. */
+		rec_row(3, N_("state"), hidden ? N_("hidden") : N_("visible"),
+			"toggle:hud");
+		rec_row(3, N_("position"), pos, "choice:hud-position");
+		rec_row(3, N_("font_size"), fsz, "set:font_size");
+		rec_row(3, N_("background_alpha"), alpha, "set:background_alpha");
+		rec_row(3, N_("config"), path,
 			file_writable(path) ? "detail" : "detail readonly");
 	} else {
-		printf("state     %s\n", hidden ? "hidden" : "visible");
-		printf("position  %s\n", pos);
-		printf("config    %s%s\n", path,
-		       file_writable(path) ? "" : "   (NOT WRITABLE BY YOU)");
+		printf(_("state     %s\n"), hidden ? _("hidden") : _("visible"));
+		printf(_("position  %s\n"), _(pos));
+		printf(_("config    %s%s\n"), path,
+		       file_writable(path) ? "" : _("   (NOT WRITABLE BY YOU)"));
 	}
 
 	lines_free(&L);
@@ -461,8 +486,11 @@ static int hud_show_state(bool rec)
  */
 static void hud_said(const char *what)
 {
-	printf("hud %s — MangoHud draws inside a game, not on the desktop\n",
-	       what);
+	/* ⚠ `what` is a hud_positions[] id or "on"/"off"; it goes through the
+	 * catalog because the label table above put the eight positions in it,
+	 * and falls back unchanged for anything else. */
+	printf(_("hud %s — MangoHud draws inside a game, not on the desktop\n"),
+	       _(what));
 }
 
 static int hud_set_hidden(bool hide)
@@ -528,7 +556,8 @@ static int hud_cycle(int step)
 static int hud_set_position(const char *pos)
 {
 	if (hud_position_index(pos) < 0) {
-		fprintf(stderr, "syn-arcade: unknown position '%s'. One of:", pos);
+		/* ⚠ THE LIST IS THE IDs, UNTRANSLATED — it is what to type next. */
+		fprintf(stderr, _("syn-arcade: unknown position '%s'. One of:"), pos);
 		for (int i = 0; i < HUD_POS_COUNT; i++)
 			fprintf(stderr, " %s", hud_positions[i]);
 		fputc('\n', stderr);
@@ -551,8 +580,8 @@ static int hud_set_key(const char *key, const char *value)
 	/* '#' would be swallowed as a comment by MangoHud's parser and silently
 	 * truncate the value — and a newline would forge an extra setting. */
 	if (strchr(value, '#') || strchr(value, '\n')) {
-		fprintf(stderr, "syn-arcade: '#' and newlines cannot appear in a "
-				"MangoHud value\n");
+		fprintf(stderr, _("syn-arcade: '#' and newlines cannot appear in a "
+		                  "MangoHud value\n"));
 		return EX_USAGE;
 	}
 
@@ -571,7 +600,7 @@ static int hud_set_key(const char *key, const char *value)
 static int hud_choices(const char *key)
 {
 	if (strcmp(key, "hud-position") != 0) {
-		fprintf(stderr, "syn-arcade: no choices for '%s'\n", key);
+		fprintf(stderr, _("syn-arcade: no choices for '%s'\n"), key);
 		return EX_USAGE;
 	}
 
@@ -583,7 +612,7 @@ static int hud_choices(const char *key)
 
 	rec_row(3, "id", "label", "current");
 	for (int i = 0; i < HUD_POS_COUNT; i++)
-		rec_row(3, hud_positions[i], hud_positions[i],
+		rec_row(3, hud_positions[i], hud_position_labels[i],
 			strcmp(hud_positions[i], cur) == 0 ? "current" : "-");
 
 	lines_free(&L);
@@ -607,17 +636,17 @@ static int hud_ensure(void)
 		return EX_OK;
 
 	if (!file_writable(path)) {
-		fprintf(stderr, "syn-arcade: %s is missing and not creatable\n", path);
+		fprintf(stderr, _("syn-arcade: %s is missing and not creatable\n"), path);
 		return EX_FAIL;
 	}
 
 	int rc = write_file_inplace(path, hud_default_config());
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot create %s: %s\n",
+		fprintf(stderr, _("syn-arcade: cannot create %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
-	printf("created %s\n", path);
+	printf(_("created %s\n"), path);
 	return EX_OK;
 }
 
@@ -639,7 +668,7 @@ static int hud_adopt(void)
 		return EX_FAIL;
 
 	if (strcmp(eff, user) == 0 && file_exists(user)) {
-		printf("already yours: %s\n", user);
+		printf(_("already yours: %s\n"), user);
 		return EX_OK;
 	}
 
@@ -648,24 +677,24 @@ static int hud_adopt(void)
 		src = xstrdup(hud_default_config());
 
 	if (file_exists(user)) {
-		printf("kept your existing %s (nothing copied over it)\n", user);
+		printf(_("kept your existing %s (nothing copied over it)\n"), user);
 		free(src);
 	} else {
 		int rc = write_file_inplace(user, src);
 		free(src);
 		if (rc < 0) {
-			fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+			fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 				user, strerror(-rc));
 			return EX_FAIL;
 		}
-		printf("copied %s → %s\n", eff, user);
+		printf(_("copied %s → %s\n"), eff, user);
 	}
 
 	const char *env = getenv("MANGOHUD_CONFIGFILE");
 	if (!env || strcmp(env, user) != 0)
-		printf("\nLog out and back in (or `export MANGOHUD_CONFIGFILE=%s`)\n"
-		       "for this to take effect — /etc/MangoHud.conf outranks it until\n"
-		       "that variable is set.\n", user);
+		printf(_("\nLog out and back in (or `export MANGOHUD_CONFIGFILE=%s`)\n"
+		         "for this to take effect — /etc/MangoHud.conf outranks it until\n"
+		         "that variable is set.\n"), user);
 	return EX_OK;
 }
 
@@ -677,19 +706,20 @@ static int hud_path(void)
 
 	const char *env = getenv("MANGOHUD_CONFIGFILE");
 
-	printf("effective   %s\n", eff);
-	printf("writable    %s\n", file_writable(eff) ? "yes" : "NO");
-	printf("yours       %s%s\n", user,
-	       file_exists(user) ? "" : "   (does not exist)");
-	printf("pinned by   %s\n", (env && *env) ? "MANGOHUD_CONFIGFILE" : "(nothing)");
+	printf(_("effective   %s\n"), eff);
+	printf(_("writable    %s\n"), file_writable(eff) ? _("yes") : _("NO"));
+	printf(_("yours       %s%s\n"), user,
+	       file_exists(user) ? "" : _("   (does not exist)"));
+	printf(_("pinned by   %s\n"),
+	       (env && *env) ? "MANGOHUD_CONFIGFILE" : _("(nothing)"));
 
 	if (!(env && *env) && file_exists("/etc/MangoHud.conf") &&
 	    strcmp(eff, user) != 0) {
-		printf("\n⚠ /etc/MangoHud.conf outranks your own config, so nothing you\n"
-		       "  set as a user reaches MangoHud. `syn-arcade hud adopt` fixes it.\n");
+		printf(_("\n⚠ /etc/MangoHud.conf outranks your own config, so nothing you\n"
+		         "  set as a user reaches MangoHud. `syn-arcade hud adopt` fixes it.\n"));
 	}
-	printf("\nNote: a game with its own ~/.config/MangoHud/<program>.conf or a\n"
-	       "wine-<exe>.conf outranks all of the above, for that game only.\n");
+	printf(_("\nNote: a game with its own ~/.config/MangoHud/<program>.conf or a\n"
+	         "wine-<exe>.conf outranks all of the above, for that game only.\n"));
 	return EX_OK;
 }
 
@@ -733,12 +763,12 @@ int cmd_hud(int argc, char **argv)
 
 	if (strcmp(sub, "set") == 0) {
 		if (argc < 3) {
-			fputs("syn-arcade: hud set <key> <value>\n", stderr);
+			fputs(_("syn-arcade: hud set <key> <value>\n"), stderr);
 			return EX_USAGE;
 		}
 		return hud_set_key(argv[1], argv[2]);
 	}
 
-	fprintf(stderr, "syn-arcade: unknown hud command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown hud command '%s'\n"), sub);
 	return EX_USAGE;
 }

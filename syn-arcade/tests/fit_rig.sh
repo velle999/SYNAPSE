@@ -132,6 +132,15 @@ shot_state() {
         return 1
     fi
 
+    # ⛔ AND ITS NEIGHBOURS. syn-arcade.qml does `import "qml"` for the
+    # translation singleton, and a directory import is resolved against the
+    # file's OWN location — which is this temporary copy. Without qml/ beside
+    # it quickshell prints one WARN about an unresolvable import and then a
+    # ReferenceError per lookup, DRAWS THE WINDOW ANYWAY with every translated
+    # string empty, and exits 0. The screenshots came out with blank labels and
+    # this rig called it a pass.
+    cp -r "$(dirname "$QML")/qml" "$TMP/qml" 2>/dev/null || true
+
     QT_QPA_PLATFORM=wayland QS_APP_ID=syn-arcade SYNARCADE_BIN="$REAL" \
         quickshell -p "$copy" > "$TMP/$name.log" 2>&1 &
     QS_PID=$!
@@ -142,8 +151,26 @@ shot_state() {
         tail -20 "$TMP/$name.log"
         return 1
     fi
-    grep -aE "ERROR|Error|is not a type|Cannot assign|undefined" "$TMP/$name.log" \
-        | head -10
+    # ⛔ A MATCH IS A FAILURE, NOT A NOTE. This printed the lines and carried
+    # on, so an unresolvable import — which quickshell reports as a WARN and a
+    # string of ReferenceErrors rather than as a failure to load — produced a
+    # green run and a screenshot of a window with no words in it.
+    #
+    # ⚠ AND `Error` ALONE IS TOO WIDE. Qt tries to register an app id with the
+    # desktop portal and the nested session already has one, so every run
+    # carries a QDBusError from qt.qpa.services that has nothing to do with
+    # this QML. Excluded by NAME rather than by loosening the pattern, so the
+    # next unrelated error is still a failure.
+    local bad
+    bad=$(grep -aE "ERROR|Error|is not a type|Cannot assign|undefined" \
+              "$TMP/$name.log" |
+          grep -av 'qt\.qpa\.services' | head -10)
+    if [ -n "$bad" ]; then
+        echo "FAIL: quickshell reported errors on '$name'"
+        printf '%s\n' "$bad" | sed 's/^/        /'
+        kill "$QS_PID" 2>/dev/null; wait "$QS_PID" 2>/dev/null; QS_PID=
+        return 1
+    fi
 
     grim -o HEADLESS-1 "$OUT/$name.png" 2>/dev/null || grim "$OUT/$name.png"
     kill "$QS_PID" 2>/dev/null

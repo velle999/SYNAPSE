@@ -1,0 +1,13 @@
+# The translation singleton, as its own module directory.
+#
+# ⚠ NOT BESIDE syn-arcade.qml. A qmldir makes its directory an explicit QML
+# module, and syn-arcade.qml and syn-arcade-big.qml are the files quickshell is
+# pointed AT — putting one next to them changes how those files themselves are
+# resolved. A subdirectory has no such effect, and it keeps the generated
+# catalogs (qml/i18n/*.json) beside the singleton that looks for them, which is
+# how I18n.qml finds them at all.
+#
+# ⚠ TWO WINDOWS, ONE SINGLETON. syn-arcade has a desktop window and a big
+# screen one, launched as separate quickshell processes; both import "qml" and
+# both get the same catalog, so a word they share is translated once.
+singleton I18n 1.0 I18n.qml

@@ -63,6 +63,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <arpa/inet.h>
@@ -645,7 +646,7 @@ static int big_games(bool rec, bool all)
 				"lastplayed", "size", "library");
 			return EX_EMPTY;
 		}
-		fputs("syn-arcade: no Steam installation found\n", stderr);
+		fputs(_("syn-arcade: no Steam installation found\n"), stderr);
 		return EX_EMPTY;
 	}
 
@@ -663,7 +664,7 @@ static int big_games(bool rec, bool all)
 				g[i].logo, lp, sz, g[i].library);
 		}
 	} else if (n == 0) {
-		printf("no games installed under %s\n", root);
+		printf(_("no games installed under %s\n"), root);
 	} else {
 		for (int i = 0; i < n; i++) {
 			char sz[32];
@@ -671,7 +672,7 @@ static int big_games(bool rec, bool all)
 			printf("%-10s %-48.48s %8s%s\n", g[i].appid, g[i].name,
 			       sz, g[i].art[0] ? "" : "   (no art)");
 		}
-		printf("\n%d game%s in %s\n", n, n == 1 ? "" : "s", root);
+		printf(P_("\n%d game in %s\n", "\n%d games in %s\n", n), n, root);
 	}
 
 	free(g);
@@ -727,7 +728,7 @@ static int spawn_detached_pid(char *const argv[], pid_t *out)
 
 	pid_t pid = fork();
 	if (pid < 0) {
-		fprintf(stderr, "syn-arcade: fork: %s\n", strerror(errno));
+		fprintf(stderr, _("syn-arcade: fork: %s\n"), strerror(errno));
 		if (errfd >= 0) close(errfd);
 		return EX_FAIL;
 	}
@@ -1137,8 +1138,8 @@ static const char *music_prog(void)
 		 * config file is the kind of thing nobody thinks to check —
 		 * they check the config, see the right name, and look
 		 * elsewhere. stderr, so `--rec` output is untouched. */
-		fprintf(stderr, "syn-arcade: big.conf says music = %s, which is "
-				"not installed — using what is\n", want);
+		fprintf(stderr, _("syn-arcade: big.conf says music = %s, which is "
+				"not installed — using what is\n"), want);
 	}
 
 	static const char *const cands[] = {
@@ -1702,8 +1703,8 @@ static int big_recent(bool rec)
 	int n = recent_collect(list, RECENT_MAX);
 
 	if (n < 0) {
-		fputs("syn-arcade: no synui to ask — `big recent` needs a "
-		      "running compositor and synctl on PATH\n", stderr);
+		fputs(_("syn-arcade: no synui to ask — `big recent` needs a "
+		      "running compositor and synctl on PATH\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -1729,7 +1730,7 @@ static int big_recent(bool rec)
 	}
 
 	if (!n) {
-		puts("(nothing opened on this desktop yet)");
+		puts(_("(nothing opened on this desktop yet)"));
 		return EX_OK;
 	}
 	for (int i = 0; i < n; i++)
@@ -2247,8 +2248,8 @@ static int big_windows(bool rec)
 	int n = windows_collect(wins, WINS_MAX);
 
 	if (n < 0) {
-		fputs("syn-arcade: no synui to ask — `big windows` needs a "
-		      "running compositor and synctl on PATH\n", stderr);
+		fputs(_("syn-arcade: no synui to ask — `big windows` needs a "
+		      "running compositor and synctl on PATH\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -2261,7 +2262,7 @@ static int big_windows(bool rec)
 	}
 
 	if (!n) {
-		puts("nothing is open");
+		puts(_("nothing is open"));
 		return EX_OK;
 	}
 	for (int i = 0; i < n; i++)
@@ -2284,8 +2285,8 @@ static int big_windows(bool rec)
 static int big_window_act(const char *app_id, bool close_it)
 {
 	if (!app_id || !*app_id) {
-		fprintf(stderr, "syn-arcade: big %s needs an app-id "
-				"(`syn-arcade big windows` lists them)\n",
+		fprintf(stderr, _("syn-arcade: big %s needs an app-id "
+				"(`syn-arcade big windows` lists them)\n"),
 			close_it ? "close" : "focus");
 		return EX_USAGE;
 	}
@@ -2295,7 +2296,7 @@ static int big_window_act(const char *app_id, bool close_it)
 			 (char *)app_id, NULL };
 	char *reply = run_capture(argv, 3);
 	if (!reply) {
-		fputs("syn-arcade: synui did not answer — is it running?\n",
+		fputs(_("syn-arcade: synui did not answer — is it running?\n"),
 		      stderr);
 		return EX_FAIL;
 	}
@@ -2329,8 +2330,8 @@ static int big_window_act(const char *app_id, bool close_it)
 static int big_run(const char *id, bool wait_for_it)
 {
 	if (!id || !*id) {
-		fputs("syn-arcade: big run needs a tile id "
-		      "(`syn-arcade big apps` lists them)\n", stderr);
+		fputs(_("syn-arcade: big run needs a tile id "
+		      "(`syn-arcade big apps` lists them)\n"), stderr);
 		return EX_USAGE;
 	}
 
@@ -2356,13 +2357,13 @@ static int big_run(const char *id, bool wait_for_it)
 	if (strncmp(id, "app:", 4) == 0) {
 		struct recent r;
 		if (!recent_find(id + 4, &r)) {
-			fprintf(stderr, "syn-arcade: '%s' is not among the "
-					"recently opened applications\n", id + 4);
+			fprintf(stderr, _("syn-arcade: '%s' is not among the "
+					"recently opened applications\n"), id + 4);
 			return EX_USAGE;
 		}
 		if (!r.exec[0]) {
-			fprintf(stderr, "syn-arcade: '%s' has no command to "
-					"run\n", r.name);
+			fprintf(stderr, _("syn-arcade: '%s' has no command to "
+					"run\n"), r.name);
 			return EX_FAIL;
 		}
 
@@ -2382,8 +2383,8 @@ static int big_run(const char *id, bool wait_for_it)
 		char url[512];
 		if (media_url(id, url, sizeof(url)))
 			return big_open(url, wait_for_it);
-		fprintf(stderr, "syn-arcade: no media server called '%s' — "
-				"`syn-arcade big media --refresh` looks again\n", id);
+		fprintf(stderr, _("syn-arcade: no media server called '%s' — "
+				"`syn-arcade big media --refresh` looks again\n"), id);
 		return EX_USAGE;
 	}
 
@@ -2443,7 +2444,7 @@ static int big_run(const char *id, bool wait_for_it)
 		return spawn_wait(argv, rows[i].full, rows[i].transient);
 	}
 
-	fprintf(stderr, "syn-arcade: no tile called '%s'\n", id);
+	fprintf(stderr, _("syn-arcade: no tile called '%s'\n"), id);
 	return EX_USAGE;
 }
 
@@ -2469,14 +2470,14 @@ static int big_run(const char *id, bool wait_for_it)
 static int big_steam(const char *gamescope)
 {
 	if (!have("steam")) {
-		fputs("syn-arcade: Steam is not installed — "
-		      "synpkg install steam\n", stderr);
+		fputs(_("syn-arcade: Steam is not installed — "
+		      "synpkg install steam\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (gamescope && *gamescope && !have("gamescope")) {
-		fputs("syn-arcade: gamescope is not installed — running Big "
-		      "Picture without it\n", stderr);
+		fputs(_("syn-arcade: gamescope is not installed — running Big "
+		      "Picture without it\n"), stderr);
 		gamescope = NULL;
 	}
 
@@ -2543,19 +2544,19 @@ static int big_steam(const char *gamescope)
 static int big_launch(const char *appid)
 {
 	if (!appid || !*appid) {
-		fputs("syn-arcade: big launch needs an appid\n", stderr);
+		fputs(_("syn-arcade: big launch needs an appid\n"), stderr);
 		return EX_USAGE;
 	}
 	for (const char *p = appid; *p; p++) {
 		if (!isdigit((unsigned char)*p)) {
-			fprintf(stderr, "syn-arcade: '%s' is not an appid — "
-					"`syn-arcade big games` lists them\n",
+			fprintf(stderr, _("syn-arcade: '%s' is not an appid — "
+					"`syn-arcade big games` lists them\n"),
 				appid);
 			return EX_USAGE;
 		}
 	}
 	if (!have("steam")) {
-		fputs("syn-arcade: Steam is not installed\n", stderr);
+		fputs(_("syn-arcade: Steam is not installed\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -2593,14 +2594,14 @@ static bool url_ok(const char *url)
 static int big_open(const char *url, bool wait_for_it)
 {
 	if (!url_ok(url)) {
-		fprintf(stderr, "syn-arcade: '%s' is not an http(s) URL\n",
+		fprintf(stderr, _("syn-arcade: '%s' is not an http(s) URL\n"),
 			url ? url : "");
 		return EX_USAGE;
 	}
 
 	const char *browser = browser_prog();
 	if (!browser) {
-		fputs("syn-arcade: no web browser installed\n", stderr);
+		fputs(_("syn-arcade: no web browser installed\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -3093,7 +3094,7 @@ static int big_media(bool rec, bool refresh)
 			rec_row(8, "id", "name", "url", "source", "kind",
 				"iconfile", "pointer", "keys");
 	} else if (n == 0) {
-		puts("no Plex or Jellyfin server answered on this network");
+		puts(_("no Plex or Jellyfin server answered on this network"));
 	} else {
 		for (int i = 0; i < n; i++)
 			printf("%-12s %-28s %s\n", found[i].id, found[i].name,
@@ -3238,9 +3239,9 @@ static const struct source *music_source(void)
 		/* Said out loud and falls back, for the same reason `music =`
 		 * does: a config file that names a source nobody implements is
 		 * a typo, and silence sends somebody to look at the player. */
-		fprintf(stderr, "syn-arcade: big.conf says music_source = %s, "
+		fprintf(stderr, _("syn-arcade: big.conf says music_source = %s, "
 				"which is not one of plex, ytmusic, spotify, "
-				"local or radio — using radio\n", want);
+				"local or radio — using radio\n"), want);
 	}
 	return source_by_id("radio");
 }
@@ -3535,10 +3536,10 @@ static int big_music_release(void)
 	}
 
 	if (!music_stop_player()) {
-		fputs("syn-arcade: the music player did not stop\n", stderr);
+		fputs(_("syn-arcade: the music player did not stop\n"), stderr);
 		return EX_FAIL;
 	}
-	puts("stopped the music this session started");
+	puts(_("stopped the music this session started"));
 	return EX_OK;
 }
 
@@ -3983,10 +3984,12 @@ static int big_music_status(bool rec)
 	}
 
 	if (!state[0]) {
-		puts("no music player is running");
+		puts(_("no music player is running"));
 		return EX_EMPTY;
 	}
-	printf("%-8s %s\n", state, title[0] ? title : "(nothing)");
+	/* ⚠ `state` IS A RECORD WORD — play/pause/stop — and stays as it is;
+	 * this line is a table whose left column a script may read. */
+	printf("%-8s %s\n", state, title[0] ? title : _("(nothing)"));
 	return EX_OK;
 }
 
@@ -4215,13 +4218,15 @@ static void music_start_insist(void)
 		}
 
 		if (skipped)
-			fprintf(stderr, "syn-arcade: skipped %d track%s that "
-					"would not play\n", skipped,
-				skipped == 1 ? "" : "s");
+			fprintf(stderr,
+				P_("syn-arcade: skipped %d track that would "
+				   "not play\n",
+				   "syn-arcade: skipped %d tracks that would "
+				   "not play\n", skipped), skipped);
 		else
-			fputs("syn-arcade: nothing at the front of the queue "
+			fputs(_("syn-arcade: nothing at the front of the queue "
 			      "would play — the tracks may be unavailable in "
-			      "this country\n", stderr);
+			      "this country\n"), stderr);
 	}
 
 	if (lock >= 0)
@@ -4379,9 +4384,9 @@ static int plex_albums(bool rec)
 {
 	char sect[32];
 	if (!plex_music_section(sect, sizeof(sect))) {
-		fputs("syn-arcade: no Plex music library — check the [plex] "
+		fputs(_("syn-arcade: no Plex music library — check the [plex] "
 		      "section of ~/.config/cliamp/config.toml, or run "
-		      "`cliamp setup`\n", stderr);
+		      "`cliamp setup`\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -4389,7 +4394,7 @@ static int plex_albums(bool rec)
 	snprintf(path, sizeof(path), "/library/sections/%s/all?type=9", sect);
 	char *xml = plex_get(path);
 	if (!xml) {
-		fputs("syn-arcade: the Plex server did not answer\n", stderr);
+		fputs(_("syn-arcade: the Plex server did not answer\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -4418,7 +4423,7 @@ static int plex_albums(bool rec)
 	free(xml);
 
 	if (!n && !rec)
-		puts("no albums in the Plex music library");
+		puts(_("no albums in the Plex music library"));
 	return n ? EX_OK : EX_EMPTY;
 }
 
@@ -4438,7 +4443,7 @@ static int plex_play_album(const char *key)
 	snprintf(path, sizeof(path), "/library/metadata/%s/children", key);
 	char *xml = plex_get(path);
 	if (!xml) {
-		fputs("syn-arcade: the Plex server did not answer\n", stderr);
+		fputs(_("syn-arcade: the Plex server did not answer\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -4448,7 +4453,7 @@ static int plex_play_album(const char *key)
 
 	if (!music_restart()) {
 		free(xml);
-		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		fputs(_("syn-arcade: cliamp did not come up\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -4516,7 +4521,7 @@ static int plex_play_album(const char *key)
 		fclose(titles);
 
 	if (!queued) {
-		fputs("syn-arcade: that album has no playable tracks\n", stderr);
+		fputs(_("syn-arcade: that album has no playable tracks\n"), stderr);
 		return EX_EMPTY;
 	}
 
@@ -4530,7 +4535,7 @@ static int plex_play_album(const char *key)
 	/* `toggle`, not `play` — see big_music: a player that has just started
 	 * is `stopped`, and resume does nothing from there. */
 	music_cmd("toggle");
-	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
+	printf(P_("queued %d track\n", "queued %d tracks\n", queued), queued);
 	return EX_OK;
 }
 
@@ -4645,8 +4650,8 @@ static int local_queue(void)
 {
 	char dir[SYN_PATH];
 	if (!music_dir(dir, sizeof(dir))) {
-		fprintf(stderr, "syn-arcade: no music directory — there is "
-				"nothing at %s\n", dir);
+		fprintf(stderr, _("syn-arcade: no music directory — there is "
+				"nothing at %s\n"), dir);
 		return EX_EMPTY;
 	}
 
@@ -4654,13 +4659,13 @@ static int local_queue(void)
 	int n = 0;
 	local_scan(dir, found, &n, 0);
 	if (!n) {
-		fprintf(stderr, "syn-arcade: no music files under %s\n", dir);
+		fprintf(stderr, _("syn-arcade: no music files under %s\n"), dir);
 		return EX_EMPTY;
 	}
 	qsort(found, (size_t)n, SYN_PATH, path_cmp);
 
 	if (!music_restart()) {
-		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		fputs(_("syn-arcade: cliamp did not come up\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -4693,7 +4698,8 @@ static int local_queue(void)
 	music_last_remember("local", dir);
 
 	music_cmd("toggle");
-	printf("queued %d track%s from %s\n", n, n == 1 ? "" : "s", dir);
+	printf(P_("queued %d track from %s\n", "queued %d tracks from %s\n", n),
+	       n, dir);
 	return EX_OK;
 }
 
@@ -5073,9 +5079,9 @@ static int yt_stations(bool rec)
 	}
 
 	if (!n && !rec)
-		printf("no YouTube Music stations yet — add one with\n"
+		printf(_("no YouTube Music stations yet — add one with\n"
 		       "    syn-arcade big music yt add <url>\n"
-		       "where <url> is a playlist, album, mix or track.\n");
+		       "where <url> is a playlist, album, mix or track.\n"));
 	return n ? EX_OK : EX_EMPTY;
 }
 
@@ -5126,20 +5132,20 @@ static int yt_play(const char *what)
 {
 	char url[SYN_PATH];
 	if (!what || !*what) {
-		fputs("syn-arcade: nothing to play\n", stderr);
+		fputs(_("syn-arcade: nothing to play\n"), stderr);
 		return EX_USAGE;
 	}
 	if (strncmp(what, "http", 4) == 0)
 		snprintf(url, sizeof(url), "%s", what);
 	else if (!yt_station_url(what, url, sizeof(url))) {
-		fprintf(stderr, "syn-arcade: no station %s — `big music yt` "
-				"lists them\n", what);
+		fprintf(stderr, _("syn-arcade: no station %s — `big music yt` "
+				"lists them\n"), what);
 		return EX_USAGE;
 	}
 
 	if (!have("yt-dlp")) {
-		fputs("syn-arcade: yt-dlp is not installed, so nothing on "
-		      "YouTube can be resolved — synpkg install yt-dlp\n",
+		fputs(_("syn-arcade: yt-dlp is not installed, so nothing on "
+		      "YouTube can be resolved — synpkg install yt-dlp\n"),
 		      stderr);
 		return EX_FAIL;
 	}
@@ -5148,7 +5154,7 @@ static int yt_play(const char *what)
 	static char urls[YT_MAX][SYN_PATH];
 	int n = yt_enumerate(url, titles, urls, YT_MAX);
 	if (!n) {
-		fputs("syn-arcade: nothing playable came back from that URL\n",
+		fputs(_("syn-arcade: nothing playable came back from that URL\n"),
 		      stderr);
 		return EX_EMPTY;
 	}
@@ -5183,15 +5189,20 @@ static int yt_play(const char *what)
 		head++;
 
 	if (head >= n) {
-		fputs("syn-arcade: nothing in that list will play — the "
-		      "tracks may be unavailable in this country\n", stderr);
+		fputs(_("syn-arcade: nothing in that list will play — the "
+		      "tracks may be unavailable in this country\n"), stderr);
 		return EX_EMPTY;
 	}
 	if (head)
-		fprintf(stderr, "syn-arcade: %d track%s at the front of that "
-				"list will not play — starting past %s\n",
-			head, head == 1 ? "" : "s",
-			head == 1 ? "it" : "them");
+		/* ⚠ NOT `%d track%s … past %s` with "it"/"them" as arguments: a
+		 * language whose plural does not split at one, or which inflects
+		 * the pronoun differently, cannot be written that way. Two whole
+		 * sentences, and ngettext picks. */
+		fprintf(stderr,
+			P_("syn-arcade: %d track at the front of that list will "
+			   "not play — starting past it\n",
+			   "syn-arcade: %d tracks at the front of that list will "
+			   "not play — starting past them\n", head), head);
 
 	/*
 	 * ⚠ THE SOURCE IS SET FIRST, AND IT IS NOT BOOKKEEPING — IT IS WHAT
@@ -5214,7 +5225,7 @@ static int yt_play(const char *what)
 		big_conf_set("music_source", yt->id);
 
 	if (!music_restart()) {
-		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		fputs(_("syn-arcade: cliamp did not come up\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -5311,7 +5322,7 @@ static int yt_play(const char *what)
 	 * exists, while remembering the station resumes the station. */
 	music_last_remember("ytmusic", url);
 
-	printf("queued %d track%s\n", queued, queued == 1 ? "" : "s");
+	printf(P_("queued %d track\n", "queued %d tracks\n", queued), queued);
 
 	/* ⚠ AND ONLY NOW IS IT ASKED WHETHER IT REALLY STARTED. This is the
 	 * check the note above forbids taking early, and by here the queue is
@@ -5332,13 +5343,13 @@ static int yt_play(const char *what)
 static int yt_search(const char *query, bool rec)
 {
 	if (!query || !*query) {
-		fputs("syn-arcade: big music yt search takes something to "
-		      "search for\n", stderr);
+		fputs(_("syn-arcade: big music yt search takes something to "
+		      "search for\n"), stderr);
 		return EX_USAGE;
 	}
 	if (!have("yt-dlp")) {
-		fputs("syn-arcade: yt-dlp is not installed — "
-		      "synpkg install yt-dlp\n", stderr);
+		fputs(_("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -5363,7 +5374,7 @@ static int yt_search(const char *query, bool rec)
 	}
 
 	if (!n && !rec)
-		puts("nothing came back for that");
+		puts(_("nothing came back for that"));
 	return n ? EX_OK : EX_EMPTY;
 }
 
@@ -5384,14 +5395,14 @@ static int yt_mine(bool rec)
 	char browser[64];
 	if (!yt_cookie_browser(browser, sizeof(browser))) {
 		if (!rec)
-			fputs("syn-arcade: not signed in, so there are no "
-			      "playlists to read — `big music yt login`\n",
+			fputs(_("syn-arcade: not signed in, so there are no "
+			      "playlists to read — `big music yt login`\n"),
 			      stderr);
 		return EX_FAIL;
 	}
 	if (!have("yt-dlp")) {
-		fputs("syn-arcade: yt-dlp is not installed — "
-		      "synpkg install yt-dlp\n", stderr);
+		fputs(_("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -5410,9 +5421,9 @@ static int yt_mine(bool rec)
 	}
 
 	if (!n && !rec)
-		printf("nothing came back from %s's YouTube session.\n"
+		printf(_("nothing came back from %s's YouTube session.\n"
 		       "Sign in to YouTube in that browser and try again — "
-		       "`big music yt login` checks it.\n", browser);
+		       "`big music yt login` checks it.\n"), browser);
 	return n ? EX_OK : EX_EMPTY;
 }
 
@@ -5469,13 +5480,13 @@ static int yt_login(const char *browser)
 				n++;
 			}
 
-		puts("Which browser are you signed in to YouTube with?");
+		puts(_("Which browser are you signed in to YouTube with?"));
 		puts("");
 		for (int i = 0; i < n; i++)
 			printf("  %2d  %s%s\n", i + 1, shown[i],
-			       here[i] ? "   · installed here" : "");
+			       here[i] ? _("   · installed here") : "");
 		puts("");
-		fputs("Number or name (Enter to cancel): ", stdout);
+		fputs(_("Number or name (Enter to cancel): "), stdout);
 		fflush(stdout);
 
 		char line[64];
@@ -5483,7 +5494,7 @@ static int yt_login(const char *browser)
 			return EX_FAIL;
 		char *t = trim(line);
 		if (!*t) {
-			puts("nothing changed.");
+			puts(_("nothing changed."));
 			return EX_OK;
 		}
 
@@ -5496,8 +5507,8 @@ static int yt_login(const char *browser)
 		if (numeric) {
 			int pick = atoi(t);
 			if (pick < 1 || pick > n) {
-				fprintf(stderr, "syn-arcade: there is no %d on "
-						"that list\n", pick);
+				fprintf(stderr, _("syn-arcade: there is no %d on "
+						"that list\n"), pick);
 				return EX_USAGE;
 			}
 			return yt_login(shown[pick - 1]);
@@ -5506,13 +5517,13 @@ static int yt_login(const char *browser)
 	}
 
 	if (!yt_browser_known(browser)) {
-		fprintf(stderr, "syn-arcade: yt-dlp cannot read cookies from "
-				"'%s'\n", browser);
+		fprintf(stderr, _("syn-arcade: yt-dlp cannot read cookies from "
+				"'%s'\n"), browser);
 		return EX_USAGE;
 	}
 	if (!have("yt-dlp")) {
-		fputs("syn-arcade: yt-dlp is not installed — "
-		      "synpkg install yt-dlp\n", stderr);
+		fputs(_("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -5521,11 +5532,11 @@ static int yt_login(const char *browser)
 	 * that there is one answer to "which session is this package using"
 	 * and every path gets the same one. */
 	if (big_conf_set("yt_cookies", browser) != EX_OK) {
-		fputs("syn-arcade: could not write big.conf\n", stderr);
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
 		return EX_FAIL;
 	}
 
-	printf("checking what %s's YouTube session can see…\n", browser);
+	printf(_("checking what %s's YouTube session can see…\n"), browser);
 	fflush(stdout);
 
 	static char titles[YT_FIND][256];
@@ -5539,22 +5550,22 @@ static int yt_login(const char *browser)
 		 * the account were empty. */
 		big_conf_set("yt_cookies", "");
 		fprintf(stderr,
-			"\nsyn-arcade: %s has no YouTube session — nothing came "
+			_("\nsyn-arcade: %s has no YouTube session — nothing came "
 			"back.\n"
 			"\n"
 			"Open %s, sign in at music.youtube.com, and run this "
 			"again.\n"
 			"You are still signed out, and the stations you "
-			"already have still play.\n", browser, browser);
+			"already have still play.\n"), browser, browser);
 		return EX_FAIL;
 	}
 
-	printf("\nsigned in with %s — %d playlist%s:\n\n",
-	       browser, n, n == 1 ? "" : "s");
+	printf(P_("\nsigned in with %s — %d playlist:\n\n",
+	          "\nsigned in with %s — %d playlists:\n\n", n), browser, n);
 	for (int i = 0; i < n; i++)
 		printf("    %s\n", titles[i]);
-	printf("\nThey are on the television under Music Source ▸ YouTube "
-	       "Music ▸ Your playlists.\n");
+	printf(_("\nThey are on the television under Music Source ▸ YouTube "
+	       "Music ▸ Your playlists.\n"));
 	return EX_OK;
 }
 
@@ -5578,12 +5589,12 @@ static int yt_find(void)
 		return term_run_and_hold("syn-arcade big music yt find");
 
 	if (!have("yt-dlp")) {
-		fputs("syn-arcade: yt-dlp is not installed — "
-		      "synpkg install yt-dlp\n", stderr);
+		fputs(_("syn-arcade: yt-dlp is not installed — "
+		      "synpkg install yt-dlp\n"), stderr);
 		return EX_FAIL;
 	}
 
-	fputs("Search YouTube Music: ", stdout);
+	fputs(_("Search YouTube Music: "), stdout);
 	fflush(stdout);
 
 	char query[256];
@@ -5591,7 +5602,7 @@ static int yt_find(void)
 		return EX_FAIL;
 	char *q = trim(query);
 	if (!*q) {
-		puts("nothing to search for.");
+		puts(_("nothing to search for."));
 		return EX_OK;
 	}
 
@@ -5600,19 +5611,19 @@ static int yt_find(void)
 
 	static char titles[YT_FIND][256];
 	static char urls[YT_FIND][SYN_PATH];
-	printf("\nsearching…\n\n");
+	printf(_("\nsearching…\n\n"));
 	fflush(stdout);
 	int n = yt_enumerate(spec, titles, urls, YT_FIND);
 	if (!n) {
-		puts("nothing came back for that.");
+		puts(_("nothing came back for that."));
 		return EX_EMPTY;
 	}
 
 	for (int i = 0; i < n; i++)
 		printf("  %2d  %s\n", i + 1, titles[i]);
 
-	fputs("\nPlay which? (number, `s<number>` to save it as a station, "
-	      "Enter to cancel): ", stdout);
+	fputs(_("\nPlay which? (number, `s<number>` to save it as a station, "
+	      "Enter to cancel): "), stdout);
 	fflush(stdout);
 
 	char line[32];
@@ -5628,7 +5639,7 @@ static int yt_find(void)
 
 	int pick = atoi(t);
 	if (pick < 1 || pick > n) {
-		fprintf(stderr, "syn-arcade: there is no %d on that list\n",
+		fprintf(stderr, _("syn-arcade: there is no %d on that list\n"),
 			pick);
 		return EX_USAGE;
 	}
@@ -5645,13 +5656,13 @@ static int yt_find(void)
 				fprintf(f, "%s\t%s\n", urls[pick - 1],
 					titles[pick - 1]);
 				fclose(f);
-				printf("kept as a station: %s\n",
+				printf(_("kept as a station: %s\n"),
 				       titles[pick - 1]);
 			}
 		}
 	}
 
-	printf("\nplaying %s…\n", titles[pick - 1]);
+	printf(_("\nplaying %s…\n"), titles[pick - 1]);
 	return yt_play(urls[pick - 1]);
 }
 
@@ -5665,7 +5676,7 @@ static int yt_find(void)
 static int yt_add(const char *url)
 {
 	if (!url || strncmp(url, "http", 4) != 0) {
-		fputs("syn-arcade: big music yt add takes a URL\n", stderr);
+		fputs(_("syn-arcade: big music yt add takes a URL\n"), stderr);
 		return EX_USAGE;
 	}
 
@@ -5690,19 +5701,19 @@ static int yt_add(const char *url)
 
 	char path[SYN_PATH];
 	if (!yt_stations_path(path, sizeof(path)) || mkdir_parents(path) != 0) {
-		fputs("syn-arcade: could not open the station list\n", stderr);
+		fputs(_("syn-arcade: could not open the station list\n"), stderr);
 		return EX_FAIL;
 	}
 
 	FILE *f = fopen(path, "a");
 	if (!f) {
-		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		fprintf(stderr, _("syn-arcade: %s: %s\n"), path, strerror(errno));
 		return EX_FAIL;
 	}
 	fprintf(f, "%s\t%s\n", url, name[0] ? name : url);
 	fclose(f);
 
-	printf("added %s\n", name[0] ? name : url);
+	printf(_("added %s\n"), name[0] ? name : url);
 	return EX_OK;
 }
 
@@ -6005,8 +6016,8 @@ static int big_music_source_set(const char *id)
 {
 	const struct source *s = source_by_id(id);
 	if (!s) {
-		fprintf(stderr, "syn-arcade: no music source called '%s' — "
-				"`syn-arcade big music source` lists them\n", id);
+		fprintf(stderr, _("syn-arcade: no music source called '%s' — "
+				"`syn-arcade big music source` lists them\n"), id);
 		return EX_USAGE;
 	}
 
@@ -6020,13 +6031,13 @@ static int big_music_source_set(const char *id)
 	const bool was_playing = strcmp(was, "playing") == 0;
 
 	if (big_conf_set("music_source", s->id) != EX_OK) {
-		fputs("syn-arcade: could not write "
-		      "~/.config/syn-arcade/big.conf\n", stderr);
+		fputs(_("syn-arcade: could not write "
+		      "~/.config/syn-arcade/big.conf\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (!was_running) {
-		printf("music source: %s\n", s->name);
+		printf(_("music source: %s\n"), s->name);
 		return EX_OK;
 	}
 
@@ -6039,7 +6050,7 @@ static int big_music_source_set(const char *id)
 		if (rc != EX_OK)
 			return rc;
 	} else if (!music_restart()) {
-		fputs("syn-arcade: cliamp did not come up\n", stderr);
+		fputs(_("syn-arcade: cliamp did not come up\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -6050,7 +6061,7 @@ static int big_music_source_set(const char *id)
 			    strcmp(s->id, "local") == 0))
 		music_cmd("toggle");
 
-	printf("music source: %s\n", s->name);
+	printf(_("music source: %s\n"), s->name);
 	return EX_OK;
 }
 
@@ -6076,8 +6087,8 @@ static int big_music_browse(void)
 {
 	const char *term = terminal_prog();
 	if (!term) {
-		fputs("syn-arcade: no terminal is installed to open cliamp "
-		      "in\n", stderr);
+		fputs(_("syn-arcade: no terminal is installed to open cliamp "
+		      "in\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -6139,7 +6150,7 @@ static int term_run_and_hold(const char *command)
 {
 	const char *term = terminal_prog();
 	if (!term) {
-		fputs("syn-arcade: no terminal is installed to run this in\n",
+		fputs(_("syn-arcade: no terminal is installed to run this in\n"),
 		      stderr);
 		return EX_FAIL;
 	}
@@ -6182,12 +6193,12 @@ static int term_run_and_hold(const char *command)
 static int big_music_install(const struct source *s)
 {
 	if (!s || strcmp(s->id, "ytmusic") != 0) {
-		fputs("syn-arcade: nothing to install for that source\n",
+		fputs(_("syn-arcade: nothing to install for that source\n"),
 		      stderr);
 		return EX_USAGE;
 	}
 	if (have("yt-dlp")) {
-		puts("yt-dlp is already installed");
+		puts(_("yt-dlp is already installed"));
 		return EX_OK;
 	}
 	return term_run_and_hold("synpkg --noconfirm install yt-dlp");
@@ -6289,17 +6300,17 @@ static int big_music(int argc, char **argv, bool rec)
 	for (int i = 0; verbs[i] && !known; i++)
 		known = strcmp(verb, verbs[i]) == 0;
 	if (!known) {
-		fprintf(stderr, "syn-arcade: big music takes status, play, "
+		fprintf(stderr, _("syn-arcade: big music takes status, play, "
 				"pause, toggle, next, prev, stop, source, plex, "
 				"yt, browse, install, setup or release "
-				"(got '%s')\n", verb);
+				"(got '%s')\n"), verb);
 		return EX_USAGE;
 	}
 
 	if (!music_headless()) {
-		fprintf(stderr, "syn-arcade: the music player is %s, which big "
+		fprintf(stderr, _("syn-arcade: the music player is %s, which big "
 				"screen mode cannot drive — set `music = cliamp` "
-				"in ~/.config/syn-arcade/big.conf\n",
+				"in ~/.config/syn-arcade/big.conf\n"),
 			music_prog() ? music_prog() : "not installed");
 		return EX_FAIL;
 	}
@@ -6421,7 +6432,7 @@ static int big_music(int argc, char **argv, bool rec)
 		}
 
 		if (!music_ensure_running()) {
-			fputs("syn-arcade: cliamp did not come up\n", stderr);
+			fputs(_("syn-arcade: cliamp did not come up\n"), stderr);
 			return EX_FAIL;
 		}
 
@@ -6472,7 +6483,7 @@ static int big_music(int argc, char **argv, bool rec)
 	 */
 	if (!strcmp(verb, "vis")) {
 		if (!music_socket_live()) {
-			fputs("syn-arcade: no music player is running\n", stderr);
+			fputs(_("syn-arcade: no music player is running\n"), stderr);
 			return EX_FAIL;
 		}
 		/* 20 rather than cliamp's default 30: this drives ten
@@ -6480,7 +6491,7 @@ static int big_music(int argc, char **argv, bool rec)
 		 * draw are frames it pays a subprocess to hand it anyway. */
 		execlp("cliamp", "cliamp", "visstream", "--fps", "20",
 		       (char *)NULL);
-		fputs("syn-arcade: could not start the visualizer stream\n",
+		fputs(_("syn-arcade: could not start the visualizer stream\n"),
 		      stderr);
 		return EX_FAIL;
 	}
@@ -6489,7 +6500,7 @@ static int big_music(int argc, char **argv, bool rec)
 	    !strcmp(verb, "next") || !strcmp(verb, "prev") ||
 	    !strcmp(verb, "stop")) {
 		if (!music_socket_live()) {
-			fputs("syn-arcade: no music player is running\n", stderr);
+			fputs(_("syn-arcade: no music player is running\n"), stderr);
 			return EX_FAIL;
 		}
 
@@ -6791,15 +6802,15 @@ static int big_transport_status(bool rec)
 	}
 
 	if (!any) {
-		puts("nothing is playing");
+		puts(_("nothing is playing"));
 		return EX_EMPTY;
 	}
-	printf("%-10s %s\n", "player", p.app);
-	printf("%-10s %s\n", "state", p.state);
+	printf("%-10s %s\n", _("player"), p.app);
+	printf("%-10s %s\n", _("state"), p.state);
 	if (p.title[0])
-		printf("%-10s %s\n", "title", p.title);
+		printf("%-10s %s\n", _("title"), p.title);
 	if (p.artist[0])
-		printf("%-10s %s\n", "artist", p.artist);
+		printf("%-10s %s\n", _("artist"), p.artist);
 	return EX_OK;
 }
 
@@ -6832,15 +6843,15 @@ static int big_transport_cmd(const char *verb)
 	 * typo is a typo on every machine, and answering it with "nothing is
 	 * playing" sends somebody to look at their music player. */
 	if (!method) {
-		fprintf(stderr, "syn-arcade: big transport takes status, play, "
+		fprintf(stderr, _("syn-arcade: big transport takes status, play, "
 				"pause, toggle, next, prev or stop (got "
-				"'%s')\n", verb);
+				"'%s')\n"), verb);
 		return EX_USAGE;
 	}
 
 	struct playing p;
 	if (!transport_pick(&p)) {
-		fputs("syn-arcade: nothing is playing\n", stderr);
+		fputs(_("syn-arcade: nothing is playing\n"), stderr);
 		return EX_EMPTY;
 	}
 
@@ -6858,7 +6869,7 @@ static int big_transport_cmd(const char *verb)
 	 * how a button teaches somebody it is broken. */
 	if ((!strcmp(verb, "next") && !p.can_next) ||
 	    (!strcmp(verb, "prev") && !p.can_prev)) {
-		fprintf(stderr, "syn-arcade: %s cannot skip %s\n", p.app,
+		fprintf(stderr, _("syn-arcade: %s cannot skip %s\n"), p.app,
 			!strcmp(verb, "next") ? "forward" : "back");
 		return EX_FAIL;
 	}
@@ -6867,7 +6878,7 @@ static int big_transport_cmd(const char *verb)
 		"busctl", "--user", "call", p.bus, "/org/mpris/MediaPlayer2",
 		"org.mpris.MediaPlayer2.Player", (char *)method, NULL }, 3);
 	if (!out) {
-		fprintf(stderr, "syn-arcade: %s did not answer %s\n", p.app,
+		fprintf(stderr, _("syn-arcade: %s did not answer %s\n"), p.app,
 			method);
 		return EX_FAIL;
 	}
@@ -7096,14 +7107,14 @@ static int big_visualizer(void)
 {
 	const char *prog = visualizer_prog();
 	if (!prog) {
-		fputs("syn-arcade: projectM is not installed — "
-		      "synpkg install projectm-pulseaudio\n", stderr);
+		fputs(_("syn-arcade: projectM is not installed — "
+		      "synpkg install projectm-pulseaudio\n"), stderr);
 		return EX_FAIL;
 	}
 
 	char monitor[320] = "";
 	if (!monitor_source(monitor, sizeof(monitor))) {
-		fputs("syn-arcade: no audio monitor to listen to, so the "
+		fputs(_("syn-arcade: no audio monitor to listen to, so the "
 		      "visualizer is not being started.\n"
 		      "\n"
 		      "It would open a microphone instead — which on a "
@@ -7111,20 +7122,20 @@ static int big_visualizer(void)
 		      "card into headset mode and takes the machine's audio "
 		      "down with it. Check that\n"
 		      "something is playing and that `pactl list sources "
-		      "short` shows a .monitor.\n", stderr);
+		      "short` shows a .monitor.\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (visualizer_pin_device(monitor) != EX_OK)
-		fprintf(stderr, "syn-arcade: could not write projectM's own "
-			"config — it may open a microphone instead of %s\n",
+		fprintf(stderr, _("syn-arcade: could not write projectM's own "
+			"config — it may open a microphone instead of %s\n"),
 			monitor);
 
 	setenv("PULSE_SOURCE", monitor, 1);
 	setenv("SDL_AUDIO_INCLUDE_MONITORS", "1", 1);
 
 	execlp(prog, prog, (char *)NULL);
-	fprintf(stderr, "syn-arcade: could not start %s\n", prog);
+	fprintf(stderr, _("syn-arcade: could not start %s\n"), prog);
 	return EX_FAIL;
 }
 
@@ -7302,9 +7313,9 @@ static int news_feeds(char feeds[][512], int max)
 				if (!*t || *t == '#')
 					continue;
 				if (!url_ok(t)) {
-					fprintf(stderr, "syn-arcade: %s: "
+					fprintf(stderr, _("syn-arcade: %s: "
 						"ignoring '%s' — not an http(s) "
-						"URL\n", path, t);
+						"URL\n"), path, t);
 					continue;
 				}
 				snprintf(feeds[n++], 512, "%s", t);
@@ -7422,8 +7433,8 @@ static int big_news(bool rec, bool refresh)
 	}
 
 	if (!net_allowed() && !rec) {
-		fputs("syn-arcade: the network is turned off for this run "
-		      "(SYN_ARCADE_NO_NET)\n", stderr);
+		fputs(_("syn-arcade: the network is turned off for this run "
+		      "(SYN_ARCADE_NO_NET)\n"), stderr);
 		return EX_EMPTY;
 	}
 
@@ -7446,7 +7457,7 @@ static int big_news(bool rec, bool refresh)
 			rec_row(5, "id", "title", "source", "link", "feed");
 			return EX_EMPTY;
 		}
-		fputs("syn-arcade: no headlines — is this machine online?\n",
+		fputs(_("syn-arcade: no headlines — is this machine online?\n"),
 		      stderr);
 		return EX_EMPTY;
 	}
@@ -7477,7 +7488,7 @@ static int big_news(bool rec, bool refresh)
 		for (int i = 0; i < n; i++)
 			printf("%-56.56s  %s\n", items[i].title,
 			       items[i].source[0] ? items[i].source : "");
-		printf("\n%d headline%s\n", n, n == 1 ? "" : "s");
+		printf(P_("\n%d headline\n", "\n%d headlines\n", n), n);
 	}
 
 	free(buf);
@@ -7527,8 +7538,8 @@ static bool keysym_ok(const char *s)
 static int keys_stream(void)
 {
 	if (!have("wtype")) {
-		fputs("syn-arcade: wtype is not installed — the on-screen "
-		      "keyboard needs it to type\n", stderr);
+		fputs(_("syn-arcade: wtype is not installed — the on-screen "
+		      "keyboard needs it to type\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -7769,8 +7780,8 @@ static void resolve_output(const char *cli, char *buf, size_t n)
 		snprintf(buf, n, "%s", pref);
 		return;
 	}
-	fprintf(stderr, "syn-arcade: no output called '%s' — using the primary "
-			"screen (`synctl outputs` lists them)\n", pref);
+	fprintf(stderr, _("syn-arcade: no output called '%s' — using the primary "
+			"screen (`synctl outputs` lists them)\n"), pref);
 	output_flagged("primary", buf, n);
 }
 
@@ -7861,13 +7872,13 @@ static int have_layer_shell(void)
 static int big_start(const char *output, bool detach)
 {
 	if (!getenv("WAYLAND_DISPLAY")) {
-		fputs("syn-arcade: no Wayland session — big screen mode is a "
-		      "layer-shell surface and needs one\n", stderr);
+		fputs(_("syn-arcade: no Wayland session — big screen mode is a "
+		      "layer-shell surface and needs one\n"), stderr);
 		return EX_FAIL;
 	}
 	if (!have("quickshell")) {
-		fputs("syn-arcade: quickshell is not installed — "
-		      "synpkg install quickshell\n", stderr);
+		fputs(_("syn-arcade: quickshell is not installed — "
+		      "synpkg install quickshell\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -7876,11 +7887,11 @@ static int big_start(const char *output, bool detach)
 	if (have_layer_shell() == 0) {
 		const char *de = getenv("XDG_CURRENT_DESKTOP");
 		fprintf(stderr,
-			"syn-arcade: %s does not offer zwlr_layer_shell_v1, and "
+			_("syn-arcade: %s does not offer zwlr_layer_shell_v1, and "
 			"big screen mode is built from layer-shell surfaces — "
 			"there is nothing it can map here.\n"
 			"            It needs synui, or another wlroots-based "
-			"compositor.\n",
+			"compositor.\n"),
 			(de && *de) ? de : "this compositor");
 		return EX_FAIL;
 	}
@@ -7889,14 +7900,14 @@ static int big_start(const char *output, bool detach)
 	 * answer. In the detached case everything after the fork writes to
 	 * /dev/null, including the lock's own refusal. */
 	if (big_running(NULL)) {
-		fputs("syn-arcade: big screen mode is already running\n", stderr);
+		fputs(_("syn-arcade: big screen mode is already running\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (detach) {
 		pid_t pid = fork();
 		if (pid < 0) {
-			fprintf(stderr, "syn-arcade: fork: %s\n", strerror(errno));
+			fprintf(stderr, _("syn-arcade: fork: %s\n"), strerror(errno));
 			return EX_FAIL;
 		}
 		if (pid > 0)
@@ -7921,7 +7932,7 @@ static int big_start(const char *output, bool detach)
 
 	int fd = open(path, O_RDWR | O_CREAT, 0600);
 	if (fd < 0) {
-		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		fprintf(stderr, _("syn-arcade: %s: %s\n"), path, strerror(errno));
 		return EX_FAIL;
 	}
 
@@ -7941,7 +7952,7 @@ static int big_start(const char *output, bool detach)
 	 */
 	if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
 		close(fd);
-		fputs("syn-arcade: big screen mode is already running\n", stderr);
+		fputs(_("syn-arcade: big screen mode is already running\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -8005,7 +8016,7 @@ static int big_start(const char *output, bool detach)
 
 	execlp("quickshell", "quickshell", "-p", big_qml(), (char *)NULL);
 
-	fputs("syn-arcade: could not start quickshell\n", stderr);
+	fputs(_("syn-arcade: could not start quickshell\n"), stderr);
 	return EX_FAIL;
 }
 
@@ -8013,12 +8024,12 @@ static int big_stop(void)
 {
 	pid_t pid = 0;
 	if (!big_running(&pid)) {
-		fputs("syn-arcade: big screen mode is not running\n", stderr);
+		fputs(_("syn-arcade: big screen mode is not running\n"), stderr);
 		return EX_FAIL;
 	}
 	if (pid <= 0) {
-		fputs("syn-arcade: big screen mode is running but its pid file "
-		      "is empty\n", stderr);
+		fputs(_("syn-arcade: big screen mode is running but its pid file "
+		      "is empty\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -8039,15 +8050,15 @@ static int big_stop(void)
 		bool ours = strstr(who, "quickshell") || strstr(who, "syn-arcade");
 		free(who);
 		if (!ours) {
-			fprintf(stderr, "syn-arcade: pid %d is not big screen "
-					"mode — refusing to signal it\n",
+			fprintf(stderr, _("syn-arcade: pid %d is not big screen "
+					"mode — refusing to signal it\n"),
 				(int)pid);
 			return EX_FAIL;
 		}
 	}
 
 	if (kill(pid, SIGTERM) != 0) {
-		fprintf(stderr, "syn-arcade: could not stop pid %d: %s\n",
+		fprintf(stderr, _("syn-arcade: could not stop pid %d: %s\n"),
 			(int)pid, strerror(errno));
 		return EX_FAIL;
 	}
@@ -8125,13 +8136,13 @@ static int big_listen(void)
 		return EX_FAIL;
 
 	if (mkfifo(path, 0600) != 0 && errno != EEXIST) {
-		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		fprintf(stderr, _("syn-arcade: %s: %s\n"), path, strerror(errno));
 		return EX_FAIL;
 	}
 
 	int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "syn-arcade: %s: %s\n", path, strerror(errno));
+		fprintf(stderr, _("syn-arcade: %s: %s\n"), path, strerror(errno));
 		return EX_FAIL;
 	}
 
@@ -8216,15 +8227,15 @@ static int big_show_hide(const char *word, const char *output)
 		 * has nothing to act on. */
 		if (strcmp(word, "show") == 0)
 			return big_start(output, false);
-		fputs("syn-arcade: big screen mode is not running\n", stderr);
+		fputs(_("syn-arcade: big screen mode is not running\n"), stderr);
 		return EX_FAIL;
 	}
 
 	if (big_ctl_send(word))
 		return EX_OK;
 
-	fputs("syn-arcade: big screen mode is running but is not listening — "
-	      "it predates this command\n", stderr);
+	fputs(_("syn-arcade: big screen mode is running but is not listening — "
+	      "it predates this command\n"), stderr);
 	return EX_FAIL;
 }
 
@@ -8256,8 +8267,8 @@ static void guard_press(void)
 static int big_guard(void)
 {
 	if (!getenv("WAYLAND_DISPLAY")) {
-		fputs("syn-arcade: no Wayland session — `big guard` opens big "
-		      "screen mode and needs one\n", stderr);
+		fputs(_("syn-arcade: no Wayland session — `big guard` opens big "
+		      "screen mode and needs one\n"), stderr);
 		return EX_FAIL;
 	}
 	return pads_guide_watch(guard_running, guard_press);
@@ -8313,23 +8324,23 @@ static int big_output(const char *want, bool rec)
 			return EX_OK;
 		}
 
-		printf("%s  (%s)\n", screen[0] ? screen : "first screen", pref);
+		printf("%s  (%s)\n", screen[0] ? screen : _("first screen"), pref);
 		return EX_OK;
 	}
 
 	if (strcmp(want, "primary") != 0 && strcmp(want, "focused") != 0 &&
 	    !output_exists(want)) {
-		fprintf(stderr, "syn-arcade: no screen called '%s'. Use "
+		fprintf(stderr, _("syn-arcade: no screen called '%s'. Use "
 			"`primary`, `focused`, or a connector name from "
-			"`synctl outputs`\n", want);
+			"`synctl outputs`\n"), want);
 		return EX_USAGE;
 	}
 
 	if (big_conf_set("output", want) != EX_OK) {
-		fputs("syn-arcade: could not write big.conf\n", stderr);
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
 		return EX_FAIL;
 	}
-	printf("big screen mode opens on %s\n", want);
+	printf(_("big screen mode opens on %s\n"), want);
 	return EX_OK;
 }
 
@@ -8378,18 +8389,19 @@ static int big_player(const char *want, bool rec)
 			return EX_OK;
 		}
 
-		printf("%s%s\n", now ? now : "(none installed)",
-		       pinned ? "   (named in big.conf)" : "   (first installed)");
+		printf("%s%s\n", now ? now : _("(none installed)"),
+		       pinned ? _("   (named in big.conf)")
+			      : _("   (first installed)"));
 		return EX_OK;
 	}
 
 	if (!have(want)) {
-		fprintf(stderr, "syn-arcade: %s is not installed\n", want);
+		fprintf(stderr, _("syn-arcade: %s is not installed\n"), want);
 		return EX_FAIL;
 	}
 
 	if (big_conf_set("music", want) != EX_OK) {
-		fputs("syn-arcade: could not write big.conf\n", stderr);
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
 		return EX_FAIL;
 	}
 
@@ -8397,11 +8409,11 @@ static int big_player(const char *want, bool rec)
 	 * somebody would come here and it is invisible until they are back on
 	 * the sofa with a pad in their hand. */
 	if (strcmp(want, "cliamp") == 0)
-		printf("music player: cliamp — played without a window, with "
-		       "transport in the Start menu\n");
+		printf(_("music player: cliamp — played without a window, with "
+		       "transport in the Start menu\n"));
 	else
-		printf("music player: %s — the Music tile opens its window; "
-		       "only cliamp can be driven from the sofa\n", want);
+		printf(_("music player: %s — the Music tile opens its window; "
+		       "only cliamp can be driven from the sofa\n"), want);
 	return EX_OK;
 }
 
@@ -8466,23 +8478,23 @@ static int big_status(bool rec)
 		return EX_OK;
 	}
 
-	printf("big screen mode  %s%s%s\n",
+	printf(_("big screen mode  %s%s%s\n"),
 	       running ? "running" : "not running",
 	       running && pid > 0 ? "  pid " : "",
 	       running && pid > 0 ? pidbuf : "");
-	printf("  at login       %s\n", autostart ? "on" : "off");
-	printf("  screen         %s\n", screenbuf);
-	printf("  guide button   %s\n", guide ? "on — opens this from the desktop"
+	printf(_("  at login       %s\n"), autostart ? "on" : "off");
+	printf(_("  screen         %s\n"), screenbuf);
+	printf(_("  guide button   %s\n"), guide ? "on — opens this from the desktop"
 	     : "off (`syn-arcade big guide on`)");
-	printf("  music player   %s%s\n", music_prog() ? music_prog() : "none installed",
+	printf(_("  music player   %s%s\n"), music_prog() ? music_prog() : "none installed",
 	       have("cliamp") ? "" : "   (cliamp not installed — the Music tile "
 				     "opens a window instead of playing)");
-	printf("  Steam          %s\n", steam_found ? root
+	printf(_("  Steam          %s\n"), steam_found ? root
 	     : "NOT FOUND — the library tiles will be empty");
-	printf("  games          %d\n", games);
-	printf("  gamescope      %s\n", have("gamescope") ? "installed"
+	printf(_("  games          %d\n"), games);
+	printf(_("  gamescope      %s\n"), have("gamescope") ? "installed"
 	     : "not installed (--gamescope does nothing)");
-	printf("  quickshell     %s\n", have("quickshell") ? "installed"
+	printf(_("  quickshell     %s\n"), have("quickshell") ? "installed"
 	     : "NOT INSTALLED — `big start` needs it");
 	return EX_OK;
 }
@@ -8673,8 +8685,8 @@ int cmd_big(int argc, char **argv)
 		if (!strcmp(arg, "on") || !strcmp(arg, "off"))
 			return binds_guard_set(strcmp(arg, "on") == 0);
 
-		fprintf(stderr, "syn-arcade: big guide takes on, off or status "
-				"(not '%s')\n", arg);
+		fprintf(stderr, _("syn-arcade: big guide takes on, off or status "
+				"(not '%s')\n"), arg);
 		return EX_USAGE;
 	}
 
@@ -8695,11 +8707,11 @@ int cmd_big(int argc, char **argv)
 		if (!strcmp(arg, "on") || !strcmp(arg, "off"))
 			return binds_autostart_set(strcmp(arg, "on") == 0);
 
-		fprintf(stderr, "syn-arcade: big autostart takes on, off or "
-				"status (not '%s')\n", arg);
+		fprintf(stderr, _("syn-arcade: big autostart takes on, off or "
+				"status (not '%s')\n"), arg);
 		return EX_USAGE;
 	}
 
-	fprintf(stderr, "syn-arcade: unknown big command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown big command '%s'\n"), sub);
 	return EX_USAGE;
 }

@@ -28,6 +28,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ EVERY ASSERTION BELOW IS IN ENGLISH, AND THE BINARY ANSWERS THE DESKTOP'S
+# LANGUAGE. syn-arcade's human path goes through gettext as of pkgrel 51, so an
+# installed syn-arcade on a German desktop fails every assertion that names one
+# of its sentences — and passes on every English one, which is how this ships
+# broken.
+#
+# ⚠ LANGUAGE is UNSET, not set. gettext reads LANGUAGE **before** LC_ALL, so a
+# desktop with LANGUAGE=de still answers German to an LC_ALL=C.UTF-8 process
+# and the pin does nothing at all.
+#
+# ⚠ THE RECORDS WOULD NOT HAVE NOTICED — they are never translated, and
+# tests/i18n_test.sh proves it by running each one under a real German locale.
+# It is the `says`-and-match assertions over the human path that need this.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 SA=${1:-./build/syn-arcade}
 [ -x "$SA" ] || { echo "not executable: $SA" >&2; exit 1; }
 SA=$(readlink -f "$SA")
@@ -72,12 +88,42 @@ says() {
     trap - PIPE
 }
 
+# ⛔ AND `producer | grep -q` IS THE SAME BUG WITHOUT says() IN FRONT OF IT.
+#
+# says() above solves this for the commands whose output it captures, and 139
+# assertions use it. Seventy-four did not: `"$SA" big games --rec | cut -f2 |
+# grep -qx "…"` runs the BINARY straight into the pipe, and grep -q exits the
+# instant it matches — so syn-arcade takes SIGPIPE partway through writing its
+# records and `set -o pipefail` (line 28) reports 141 for an assertion that
+# MATCHED. Measured elsewhere in this project at about 1.2% per pipeline, which
+# over seventy-four of them is roughly one failing run in two on a busy machine,
+# naming a different true assertion each time.
+#
+# `has` counts instead of exiting early: `grep -c` has to read to EOF to produce
+# a count, so it cannot kill anything upstream of it.
+#
+# ⚠ THE COUNT GOES INTO A VARIABLE rather than to /dev/null. GNU grep 3.12 does
+# read to EOF for `grep -c x >/dev/null`, but ugrep — which is `grep` in an
+# interactive shell on this machine — takes an early exit when its stdout is
+# /dev/null and hands back the same 141. The variable removes the question.
+has() { local n; n=$(grep -c "$@") || true; [ "${n:-0}" -gt 0 ]; }
+
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
 # The real one, kept so the assertions at the end can prove nothing reached it —
 # the `fit` section redirects HOME, and $HOME by then is a temporary directory.
 REAL_HOME=$HOME
+
+# ⛔ AND WHAT WAS ALREADY THERE, because "nothing reached the real menu" is not
+# the same claim as "the real menu is empty of wrappers". A person who USES this
+# feature has syn-fit-*.desktop files in it — the machine this is written on has
+# one for SimCity 3000 — and asserting the absolute made the suite fail on
+# exactly the boxes where syn-arcade works. Snapshotted here, before anything
+# runs, and compared at the end.
+REAL_FIT_MENU=$(find "$REAL_HOME/.local/share/applications" -name 'syn-fit-*' \
+                2>/dev/null | sort)
+REAL_FIT_DESK=$(find "$REAL_HOME/Desktop" -name 'syn-fit-*' 2>/dev/null | sort)
 
 # ── the sandbox ─────────────────────────────────────────────────────────────
 #
@@ -261,7 +307,7 @@ WIZC=src/sdlwiz.c
 says "$SA" map bogus-verb 2>&1 | grep -q "unknown map command"
 check "map still refuses a verb it does not have" $?
 
-"$SA" 2>&1 | grep -q "map learn"
+"$SA" 2>&1 | has "map learn"
 check "the wizard is in the help, where somebody with a bad pad will look" $?
 
 # ⚠ dlopen, NOT a link. meson.build argues that libSDL has no business being
@@ -322,10 +368,10 @@ check "...and the control being asked for is the binary's word, not the window's
 # A refusal test, and it looks at the VISIBLE strings rather than the file:
 # the comment above this code in the QML explains what it used to say, and a
 # plain grep would fail on the explanation for the fix.
-! grep -E '^\s*(text|value):' "$GUIQML" | grep -q 'antimicrox'
+! grep -E '^\s*(text|value):' "$GUIQML" | has 'antimicrox'
 check "the window no longer sends anybody to another program" $?
 
-! grep -E '^\s*\+ "' "$GUIQML" | grep -q 'antimicrox'
+! grep -E '^\s*\+ "' "$GUIQML" | has 'antimicrox'
 check "...not on a continuation line either" $?
 
 grep -q '"Show in games"' "$GUIQML"
@@ -805,7 +851,7 @@ check "removing the block keeps the rest of the config" $?
 # is.
 { cat "$SYSRC"; echo "# >>> syn-arcade"; echo "bind = super+F11 spawn x"; } > "$RC"
 "$SA" binds remove >/dev/null 2>&1
-grep -qE "^# (>>>|<<<) syn-arcade" "$RC" || grep -q "spawn syn-arcade" "$RC"
+grep -qE "^# (>>>|<<<) syn-arcade" "$RC" || has "spawn syn-arcade" "$RC"
 [ $? != 0 ]
 check "an unterminated block is still removed" $?
 
@@ -1046,18 +1092,18 @@ check "three installed games — not the tool, not the half-downloaded one" $?
 
 # A space is NOT percent-encoded — the record separator is a tab, and
 # encoding spaces would make every name in the suite unreadable.
-"$SA" big games --rec | cut -f2 | grep -qx "Second Disk Game"
+"$SA" big games --rec | cut -f2 | has -x "Second Disk Game"
 check "a game on the SECOND library is found (libraryfolders.vdf is read)" $?
 
-"$SA" big games --rec | cut -f2 | grep -q "Proton"
+"$SA" big games --rec | cut -f2 | has "Proton"
 [ $? != 0 ]
 check "Proton is not a game" $?
 
-"$SA" big games --rec | cut -f2 | grep -q "Still Downloading"
+"$SA" big games --rec | cut -f2 | has "Still Downloading"
 [ $? != 0 ]
 check "a manifest without StateFlags 4 is not installed" $?
 
-"$SA" big games --all --rec | cut -f2 | grep -q "Proton"
+"$SA" big games --all --rec | cut -f2 | has "Proton"
 check "--all puts the tools back" $?
 
 # Most recently played first. On a gamepad every row down the list is a
@@ -1069,13 +1115,13 @@ check "the most recently played game is first" $?
 [ "$("$SA" big games --rec | sed -n 4p | cut -f2)" = "Hashed Art Game" ]
 check "...and the least recent is last" $?
 
-"$SA" big games --rec | grep -q "10/library_600x900.jpg"
+"$SA" big games --rec | has "10/library_600x900.jpg"
 check "cover art: the current per-appid layout" $?
 
-"$SA" big games --rec | grep -q "40_library_600x900.jpg"
+"$SA" big games --rec | has "40_library_600x900.jpg"
 check "cover art: the legacy flat layout" $?
 
-"$SA" big games --rec | grep -q "deadbeefdeadbeef/library_capsule.jpg"
+"$SA" big games --rec | has "deadbeefdeadbeef/library_capsule.jpg"
 check "cover art: the content-hash layout Steam uses now" $?
 
 # A library on a drive that is not plugged in is listed in the vdf and has no
@@ -1096,7 +1142,7 @@ check "...and it exits 100, which is 'nothing to list', not failure" $?
 says "$SA" big apps --rec | head -1 | grep -q "^id.*name.*exec"
 check "apps --rec names its columns first" $?
 
-"$SA" big apps --rec | cut -f1 | grep -q "^desktop$"
+"$SA" big apps --rec | cut -f1 | has "^desktop$"
 check "there is always a way out of a full-screen surface" $?
 
 # ⚠ AND A WAY TO CLOSE IT, WHICH IS NOT THE SAME THING. Stepping aside leaves
@@ -1105,7 +1151,7 @@ check "there is always a way out of a full-screen surface" $?
 # hides it, and a layer-shell surface is not a window, so nothing in the dock
 # or the switcher could close it either. Reported as "it runs in the background
 # but is not a program I can close".
-"$SA" big apps --rec | cut -f1 | grep -q "^quit$"
+"$SA" big apps --rec | cut -f1 | has "^quit$"
 check "...and a way to CLOSE it, not merely leave it" $?
 
 "$SA" big apps --rec | awk -F'\t' '$1 == "quit" && $6 == "system" { f = 1 } END { exit !f }'
@@ -1118,7 +1164,7 @@ check "...on the system shelf, beside the machine's own switches" $?
 grep -q "data/icons/quit.svg" meson.build
 check "...and its glyph is actually installed" $?
 
-"$SA" big apps --rec | cut -f1 | grep -q "^poweroff$"
+"$SA" big apps --rec | cut -f1 | has "^poweroff$"
 check "...and the machine's own switches are there" $?
 
 says "$SA" big run nosuchtile | grep -q "no tile called"
@@ -1155,16 +1201,16 @@ check "nothing is running to begin with" $?
 # missing column arrives in QML as undefined, which reads as false, which is
 # a browser you cannot move a cursor in and nothing anywhere saying why.
 head1=$("$SA" big apps --rec | head -1)
-printf '%s' "$head1" | grep -q "shelf"
+printf '%s' "$head1" | has "shelf"
 check "apps --rec carries the shelf column" $?
 
-printf '%s' "$head1" | grep -q "pointer"
+printf '%s' "$head1" | has "pointer"
 check "...and whether a tile wants the controller as a mouse" $?
 
-printf '%s' "$head1" | grep -q "keys"
+printf '%s' "$head1" | has "keys"
 check "...and whether it wants the on-screen keyboard" $?
 
-"$SA" big apps --rec | cut -f6 | grep -qx "system"
+"$SA" big apps --rec | cut -f6 | has -x "system"
 check "the power tiles are on the system shelf" $?
 
 # The browser and the terminal are the two tiles the whole pointer/keyboard
@@ -1318,7 +1364,7 @@ printf '%s\n' "$rows" | awk -F'\t' 'NR==1 { exit ($12 == "accessories-text-edito
 check "...and the .desktop Icon= name passed through for the theme to resolve" $?
 
 recent_stub '[]'
-PATH="$RCB:$PATH" "$SA" big recent | grep -qi "nothing opened on this desktop"
+PATH="$RCB:$PATH" "$SA" big recent | has -i "nothing opened on this desktop"
 check "...and says so plainly when nothing has been" $?
 
 # ── running one ─────────────────────────────────────────────────────────────
@@ -1450,7 +1496,7 @@ check "media --rec carries a glyph for what it found" $?
 # a box, and sent at the wrong moment it fullscreens whatever the tile was
 # covering. `full` is the column that keeps it away from the first case.
 
-printf '%s' "$head1" | grep -q "full"
+printf '%s' "$head1" | has "full"
 check "...and whether it needs help filling the screen" $?
 
 # An action opens no window, so a toggle sent on its behalf can only land on
@@ -1484,7 +1530,7 @@ check "...and a window that got there on its own is left alone" $?
 # of the waitpid would turn every hand-off into a "close" and throw the
 # television back over the browser somebody just opened. These two are one
 # contract, written in two languages.
-awk '/^static void fullscreen_after_launch/,/^}/' "$BIGC" | grep -q "fork()"
+awk '/^static void fullscreen_after_launch/,/^}/' "$BIGC" | has "fork()"
 check "the window wait is forked, so it cannot delay the app's exit" $?
 
 grep -q "lived < 3000" data/syn-arcade-big.qml
@@ -1508,7 +1554,9 @@ grep -q "readonly property var procs: \[proc0" "$BIGQML"
 check "...replaced by a pool, so a second launch has somewhere to go" $?
 
 # The pool is only a fix if a full pool SAYS so rather than dropping the press.
-grep -q "already open — close one first" "$BIGQML"
+# ⚠ MATCHED ON THE TAIL ONLY. The sentence is one msgid now and I18n.tr()
+# wraps it across two source lines, so the whole thing is never on one line.
+grep -q "close one first" "$BIGQML"
 check "...and a full pool says so instead of doing nothing" $?
 
 # The register is the compositor's, not a tally kept in the shell — a private
@@ -1546,7 +1594,11 @@ check "...and an app it cannot start again is not drawn" $?
 # is the mistake the system switches were moved behind Start to undo, and a
 # shelf here would push Games down — the change the shelf order was rearranged
 # to make in the first place.
-grep -q 'title: "Recent", kind: "app"' "$BIGQML"
+# ⚠ `label:` SITS BETWEEN THEM NOW — a shelf carries an English `title` as its
+# identity and a translated `label` for the screen, so the two fields this cares
+# about are no longer adjacent. Both are asserted, on the one line that has them.
+grep -q 'title: "Recent".*kind: "app"' "$BIGQML" ||
+    grep -qz 'title: "Recent".*kind: "app"' "$BIGQML"
 check "...and it is a bar, so it costs no row of its own" $?
 
 # Sleep, restart and power off are actions somebody takes, not applications to
@@ -1589,23 +1641,23 @@ check "...and a sideways wheel has a handler of its own" $?
 # ⚠ ALONG THE ROW, which is the direction the shelves actually run in. Mapping
 # the wheel to up/down moved the selection between shelves — the one direction
 # a thumb already does easily, and the one a row of fifty games does not go in.
-grep -A4 "function wheelWords" "$BIGQML" | grep -q 'return \["right", "left"\]'
+grep -A4 "function wheelWords" "$BIGQML" | has 'return \["right", "left"\]'
 check "...and a turn of it runs ALONG the row, not between rows" $?
 
-grep -A4 "function wheelWords" "$BIGQML" | grep -q "Qt.ShiftModifier"
+grep -A4 "function wheelWords" "$BIGQML" | has "Qt.ShiftModifier"
 check "...with shift for the rows, for the hand that has a keyboard" $?
 
 # The Start menu is a column, so there the wheel is its list.
-grep -A4 "function wheelWords" "$BIGQML" | grep -q 'shell.menuOpen)          return \["down", "up"\]'
+grep -A4 "function wheelWords" "$BIGQML" | has 'shell.menuOpen)          return \["down", "up"\]'
 check "...except in the Start menu, which is a column" $?
 
-grep -A24 "function wheelTurn" "$BIGQML" | grep -q "shell.nav("
+grep -A24 "function wheelTurn" "$BIGQML" | has "shell.nav("
 check "...through nav(), like every other input" $?
 
 # ⚠ A notch is 120 units and a touchpad sends a stream of small ones. Acting on
 # every event tears through a shelf; rounding each one to a step moves nothing
 # on a fine wheel. The remainder has to be KEPT.
-grep -A24 "function wheelTurn" "$BIGQML" | grep -q "acc += acc > 0 ? -notch : notch"
+grep -A24 "function wheelTurn" "$BIGQML" | has "acc += acc > 0 ? -notch : notch"
 check "...accumulating, so a trackpad neither flies nor stalls" $?
 
 # ⚠ AND THE RIG HAS TO ACTUALLY DRIVE ONE. A rig that only renders cannot tell
@@ -1692,7 +1744,7 @@ mkdir -p "$XDG_CACHE_HOME/syn-arcade"
 printf 'id\ttitle\tsource\tlink\tfeed\nnews-0\tOld%%20News\tSomewhere\thttps://example.com/1\tnews\n' \
     > "$XDG_CACHE_HOME/syn-arcade/news.tsv"
 
-"$SA" big news --rec | grep -q "Old%20News"
+"$SA" big news --rec | has "Old%20News"
 check "a cached headline is served without touching the network" $?
 
 # The refresh path with no network must NOT flatten the cache. Old news beats
@@ -1948,10 +2000,10 @@ wait "$NAVPID" 2>/dev/null
 
 navout=$(cat "$NAVOUT")
 
-printf '%s\n' "$navout" | grep -qx "accept"
+printf '%s\n' "$navout" | has -x "accept"
 check "the bottom face button is 'accept'" $?
 
-printf '%s\n' "$navout" | grep -qx "back"
+printf '%s\n' "$navout" | has -x "back"
 check "the right face button is 'back'" $?
 
 # A press and its release are one word, not two. A stream reporting both halves
@@ -1959,19 +2011,19 @@ check "the right face button is 'back'" $?
 [ "$(printf '%s\n' "$navout" | grep -c '^accept$')" = 1 ]
 check "a button RELEASE emits nothing" $?
 
-printf '%s\n' "$navout" | grep -qx "guide"
+printf '%s\n' "$navout" | has -x "guide"
 check "the guide button is its own word" $?
 
-printf '%s\n' "$navout" | grep -qx "page-right"
+printf '%s\n' "$navout" | has -x "page-right"
 check "a shoulder button pages" $?
 
-printf '%s\n' "$navout" | grep -qx "menu"
+printf '%s\n' "$navout" | has -x "menu"
 check "start is 'menu'" $?
 
-printf '%s\n' "$navout" | grep -qx "up"
+printf '%s\n' "$navout" | has -x "up"
 check "a d-pad tap arriving in ONE read still becomes a direction" $?
 
-printf '%s\n' "$navout" | grep -qx "right"
+printf '%s\n' "$navout" | has -x "right"
 check "...on both axes" $?
 
 # Two taps, so exactly two directions before the held one. Returning to centre
@@ -2290,7 +2342,7 @@ check "...and it is the one thing there that watches releases too" $?
 # Turning it OFF is above this guard and deliberately ungated — that press
 # always arrives while stepped aside, because the visualizer is what is on
 # screen.
-awk '/function toggleVisualizer/,/^    }/' "$BIGQML" | grep -q 'if (shell.away) return'
+awk '/function toggleVisualizer/,/^    }/' "$BIGQML" | has 'if (shell.away) return'
 check "...but it does not launch over a game, or with the interface away" $?
 
 awk '/function toggleVisualizer/,/^    }/' "$BIGQML" |
@@ -2307,7 +2359,7 @@ check "the shell acts on it wherever the selection happens to be" $?
 # ⚠ AND ABOVE THE KEYBOARD BRANCH when stepped aside, or it would be swallowed
 # as a letter whenever the on-screen keyboard was open — which is the half that
 # matters most, since the visualizer is turned off from in front of it.
-awk '/function navAway/,/^    }/' "$BIGQML" | grep -q 'cmd === "visualizer"'
+awk '/function navAway/,/^    }/' "$BIGQML" | has 'cmd === "visualizer"'
 check "...including while it is the thing on screen" $?
 
 # ⚠ COMING BACK IS HOW IT STOPS, which is not a second mechanism: the tile is
@@ -2333,7 +2385,7 @@ check "V is the keyboard's spelling of the chord" $?
 
 # ⚠ ADVERTISED, but only where it does something — the same rule the X button
 # in that legend already follows.
-grep -q '{ k: "L3+R3", v: "Visualizer" }' "$BIGQML"
+grep -q 'k: "L3+R3", v: I18n.tr("Visualizer")' "$BIGQML"
 check "...and the legend names it when there is one to toggle" $?
 
 # ── and ASKING it to end is not the same as it ENDING ───────────────────────
@@ -2589,10 +2641,10 @@ export SYN_ARCADE_MUSIC_WAIT_MS=1000
 music() { ( PATH="$MSTUB:$PATH"; export PATH; says "$SA" big music "$@" ); }
 
 rm -f "$BIGCONF"
-music source | grep -qE '^plex +Plex'
+music source | has -E '^plex +Plex'
 check "the source picker lists Plex first" $?
 
-music source | grep -qE '^radio +Radio +· current'
+music source | has -E '^radio +Radio +· current'
 check "...and an unset config reads as radio, which is what cliamp does" $?
 
 music source --rec |
@@ -2739,7 +2791,7 @@ srcpath source --rec |
     awk -F'\t' '$1 == "ytmusic" && $4 == "install" { f = 1 } END { exit !f }'
 check "YouTube Music offers to install yt-dlp on a machine without it" $?
 
-srcpath source | grep -q "needs yt-dlp"
+srcpath source | has "needs yt-dlp"
 check "...and the row says so rather than describing the button" $?
 
 srcpath source --rec |
@@ -2797,11 +2849,11 @@ check "...whatever enabled = true does or does not mean to cliamp" $?
 # in it says what the row now holds. The OAuth client is a narrower thing and
 # has its own row on the page rather than a warning on this one.
 rm -f "$CLIAMPCONF" "$BIGCONF"
-yt source | grep -q "sign in for your own playlists"
+yt source | has "sign in for your own playlists"
 check "...and a signed-out row says what signing in would buy" $?
 
 printf 'yt_cookies = vivaldi\n' > "$BIGCONF"
-yt source | grep -q "your playlists and your stations"
+yt source | has "your playlists and your stations"
 check "...and a signed-in one says what it now holds" $?
 rm -f "$BIGCONF"
 
@@ -2938,7 +2990,7 @@ awk '/static bool music_ensure_running/,/^}/' src/big.c |
 check "...and claimed only where a player was really started" $?
 
 # The claim is dropped with the player, on every path that ends one.
-awk '/static bool music_stop_player/,/^}/' src/big.c | grep -q 'music_mark_ours(false)'
+awk '/static bool music_stop_player/,/^}/' src/big.c | has 'music_mark_ours(false)'
 check "...and dropped again when it stops" $?
 
 # ⚠ AND WHEN THERE IS NOTHING LEFT TO CLAIM. A player that already went — quit
@@ -2962,7 +3014,7 @@ check "...and it lets go of the music before it goes" $?
 # ⚠ A TIMER AS WELL AS onExited. Quitting is the one action with no way back,
 # and a Quit that hung on a music player refusing to die would be a television
 # nobody can get out of.
-awk '/id: quitTimer/,/^    }/' "$BIGQML" | grep -q 'Qt.quit()'
+awk '/id: quitTimer/,/^    }/' "$BIGQML" | has 'Qt.quit()'
 check "...and cannot hang on a player that refuses to stop" $?
 
 # ── YouTube Music stations, which is what "plays like the radio does" means ──
@@ -3007,7 +3059,7 @@ rm -f "$YTLIST"
 
 # An empty list is not an error, it is a machine nobody has added one to — and
 # it has to say HOW, because an empty panel on a television is a broken button.
-ytrun yt | grep -q 'big music yt add'
+ytrun yt | has 'big music yt add'
 check "an empty station list says how to add one" $?
 
 # ⚠ THE NAME IS RESOLVED, NOT TYPED. A station you have to name is one nobody
@@ -3060,7 +3112,7 @@ ytrun yt search "anything" --rec |
     awk -F'\t' '$2 == "Found One" { f = 1 } END { exit !f }'
 check "...and finds things with it off, keyed by URL so playing one is one path" $?
 
-ytrun yt search 2>&1 | grep -q "takes something to search for"
+ytrun yt search 2>&1 | has "takes something to search for"
 check "...and a search with nothing to search for says so" $?
 
 # ── ⚠ THE FRONT OF THE QUEUE IS ASKED ABOUT BEFORE IT IS PLAYED ─────────────
@@ -3159,12 +3211,12 @@ rm -f "$BIGCONF"
 
 # ⚠ A SIGNED-OUT MACHINE GETS A SENTENCE, NOT AN EMPTY LIST. "You have no
 # playlists" is a lie somebody would reasonably act on by making some.
-ytrun yt mine 2>&1 | grep -q "not signed in"
+ytrun yt mine 2>&1 | has "not signed in"
 check "reading playlists while signed out says so, rather than showing none" $?
 
 # ⚠ VERIFIED, NOT MERELY WRITTEN DOWN — every failure here is silent by nature,
 # and yt-dlp says so on a stderr a television never shows.
-ytrun yt login vivaldi | grep -q "Late Night Drive"
+ytrun yt login vivaldi | has "Late Night Drive"
 check "signing in reports what the session can actually see" $?
 
 grep -q '^yt_cookies = vivaldi$' "$BIGCONF"
@@ -3176,7 +3228,7 @@ check "...so a signed-in machine can list its own playlists" $?
 
 # ⚠ THE ID IS THE PLAYLIST URL, so playing one is the same command as playing a
 # station — there is no second play path to keep in step.
-ytrun yt mine --rec | grep -q 'playlist%3Flist%3DLM'
+ytrun yt mine --rec | has 'playlist%3Flist%3DLM'
 check "...keyed by URL, so playing one is the station path" $?
 
 # ⚠ THE COOKIES GO ON EVERY ENUMERATION, not only the library one: a private
@@ -3399,7 +3451,7 @@ printf 'https://www.youtube.com/watch?v=zzzzzzzzzzz\tThe Real Song Name\n' > "$T
 ( CLIAMP_TRACK="https://www.youtube.com/watch?v=zzzzzzzzzzz&list=RDzzzzzzzzzzz"
   CLIAMP_TITLE="watch"
   export CLIAMP_TRACK CLIAMP_TITLE
-  music status ) | grep -q 'The Real Song Name'
+  music status ) | has 'The Real Song Name'
 check "a queued YouTube track is named from what queued it, not 'watch'" $?
 
 # ⚠ THE OTHER SIDE: a track nothing here queued keeps cliamp's own answer. A
@@ -3407,7 +3459,7 @@ check "a queued YouTube track is named from what queued it, not 'watch'" $?
 ( CLIAMP_TRACK="http://radio.cliamp.stream/lofi/stream"
   CLIAMP_TITLE="Lofi Stream"
   export CLIAMP_TRACK CLIAMP_TITLE
-  music status ) | grep -q 'Lofi Stream'
+  music status ) | has 'Lofi Stream'
 check "...and a station cliamp DOES know keeps the name it gave" $?
 rm -f "$TITLES"
 
@@ -3431,7 +3483,7 @@ art_of() {
       music status --rec ) | awk -F'\t' 'NR==2 {print $4}'
 }
 
-music status --rec | head -1 | grep -q 'art'
+music status --rec | head -1 | has 'art'
 check "the records name a column for the track's picture" $?
 
 [ "$(art_of 'https://www.youtube.com/watch?v=zzzzzzzzzzz&list=RDzzzzzzzzzzz')" \
@@ -3456,7 +3508,7 @@ check "...at the one size that is always present and 16:9" $?
 check "a Plex stream is given no picture rather than a guessed one" $?
 
 ( CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE'
-  export CLIAMP_TRACK; music status --rec ) | grep -q SECRETVALUE
+  export CLIAMP_TRACK; music status --rec ) | has SECRETVALUE
 [ $? != 0 ]
 check "...and the new column leaks no more of a token than the old ones" $?
 
@@ -3626,7 +3678,7 @@ awk '/static int plex_play_album/,/^}/' src/big.c |
     grep -q 'music_last_remember("plex", key)'
 check "a Plex album is remembered by its key, never by its track URLs" $?
 
-awk '/static int local_queue/,/^}/' src/big.c | grep -q 'music_last_remember'
+awk '/static int local_queue/,/^}/' src/big.c | has 'music_last_remember'
 check "...and the local library remembers its directory too" $?
 
 # ⚠ AFTER THE BAIL-OUT, not before it. An album that turned out to have no
@@ -3908,7 +3960,7 @@ check "...and the player is named the way it names itself" $?
 # ⚠ `as`, A LIST WITH ONE ENTRY — which is how every MPRIS player publishes an
 # artist, and which the JSON reader had to learn to step over. Without it the
 # artist is silently always empty.
-tport status --rec | grep -q "Someone"
+tport status --rec | has "Someone"
 check "the artist is read out of a one-element D-Bus array" $?
 
 # ⚠ THE TIE-BREAK, and it is what decides whose buttons these are on a machine
@@ -3953,11 +4005,11 @@ check "a skip the player says it cannot do is refused, not faked" $?
 # a television, in the footer, on every screen.
 BUS_FTITLE='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
 export BUS_FTITLE
-tport status --rec | grep -q "SECRETVALUE"
+tport status --rec | has "SECRETVALUE"
 [ $? != 0 ]
 check "a token in a track title never reaches the media buttons" $?
 
-tport status --rec | grep -q "file.flac"
+tport status --rec | has "file.flac"
 check "...and what is left is the name of the track" $?
 
 BUS_FTITLE="A Video"; export BUS_FTITLE
@@ -4113,15 +4165,15 @@ check "...and it says whether Guide really ended the visualizer" $?
 # somebody's credential drawn four metres wide in the Start menu, in every
 # screenshot of it, and in the records this command prints.
 CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
-music status --rec | grep -q SECRETVALUE
+music status --rec | has SECRETVALUE
 [ $? != 0 ]
 check "a Plex token never reaches the records the shell reads" $?
 
-music status | grep -q SECRETVALUE
+music status | has SECRETVALUE
 [ $? != 0 ]
 check "...nor the line a person sees" $?
 
-music status | grep -q 'file.flac'
+music status | has 'file.flac'
 check "...and what is left still names the track" $?
 
 # The map that gives it a real name. Written by whatever queued the track,
@@ -4132,7 +4184,7 @@ printf '%s\t%s\n' \
     'http://192.168.40.153:32400/library/parts/1/2/file.flac' \
     'Linkin%20Park%20%E2%80%94%20With%20You' \
     > "$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
-music status | grep -q 'Linkin Park — With You'
+music status | has 'Linkin Park — With You'
 check "a queued track is drawn with the name it was queued under" $?
 
 rm -f "$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
@@ -4144,7 +4196,7 @@ CLIAMP_TRACK=''
 [ "$?" != 0 ]
 check "with no network the Plex library says so instead of drawing nothing" $?
 
-music plex 2>&1 | grep -q "cliamp setup"
+music plex 2>&1 | has "cliamp setup"
 check "...and names the command that would give it a server" $?
 
 # ── projectM, and the microphone it must not listen to ──────────────────────
@@ -4566,27 +4618,27 @@ Categories=Game;
 ADOPT
 
 out=$("$SA" fit inspect "$T/adopt.desktop" 2>&1)
-printf '%s\n' "$out" | grep -q "^game      800x600$"
+printf '%s\n' "$out" | has "^game      800x600$"
 check "an existing gamescope line gives up its game size" $?
 
-printf '%s\n' "$out" | grep -q "^screen    2560x1440$"
+printf '%s\n' "$out" | has "^screen    2560x1440$"
 check "...and its screen size" $?
 
-printf '%s\n' "$out" | grep -q "^env       WINEPREFIX=/home/you/Games/gangsters$"
+printf '%s\n' "$out" | has "^env       WINEPREFIX=/home/you/Games/gangsters$"
 check "...and its environment" $?
 
-printf '%s\n' "$out" | grep -q -- "-- wine gangsters.exe$"
+printf '%s\n' "$out" | has -- "-- wine gangsters.exe$"
 check "...and the game's own command, from after the --" $?
 
 [ "$(printf '%s\n' "$out" | grep -c gamescope)" = 1 ]
 check "...exactly ONE gamescope in the result, not two" $?
 
-printf '%s\n' "$out" | grep -q "^name      Gangsters (Fullscreen)$"
+printf '%s\n' "$out" | has "^name      Gangsters (Fullscreen)$"
 check "a name that already says Fullscreen is not given a second one" $?
 
 # --fsr-sharpness is gamescope's own alias for --sharpness; a line using it
 # would otherwise lose the setting silently.
-printf '%s\n' "$out" | grep -q -- "--sharpness 2"
+printf '%s\n' "$out" | has -- "--sharpness 2"
 check "--fsr-sharpness is read as sharpness" $?
 
 # inspect must not CREATE anything: the window calls it to fill a form, and a
@@ -4639,11 +4691,15 @@ says "$SA" fit show nosuchwrapper | grep -q "no wrapper called"
 check "showing something absent is refused" $?
 
 # ⚠ The live desktop's own menu, which this section is redirected away from.
-[ -z "$(find "$REAL_HOME/.local/share/applications" -name 'syn-fit-*' \
-        2>/dev/null)" ]
+# ⛔ COMPARED WITH THE SNAPSHOT taken at the top, not with the empty set: see
+# the note beside REAL_FIT_MENU. What is asserted is that this run ADDED
+# nothing, which is the actual claim.
+[ "$(find "$REAL_HOME/.local/share/applications" -name 'syn-fit-*' \
+     2>/dev/null | sort)" = "$REAL_FIT_MENU" ]
 check "no wrapper reached the real applications menu" $?
 
-[ -z "$(find "$REAL_HOME/Desktop" -name 'syn-fit-*' 2>/dev/null)" ]
+[ "$(find "$REAL_HOME/Desktop" -name 'syn-fit-*' 2>/dev/null | sort)" \
+  = "$REAL_FIT_DESK" ]
 check "no wrapper reached the real desktop" $?
 
 unset XDG_DATA_HOME
@@ -4660,7 +4716,7 @@ echo "sandbox"
 
 [ ! -e "$HOME/.config/syn-arcade/deadzones.state" ] ||
     [ -n "$(find "$HOME/.config/syn-arcade" -newer "$T" 2>/dev/null)" ] && true
-find "$T" -name deadzones.state | grep -q . || true
+find "$T" -name deadzones.state | has . || true
 
 # The real synuirc must not have been touched. Compare against its own mtime
 # captured before anything ran would be better still, but its ABSENCE from the
@@ -4803,7 +4859,7 @@ check "...and something brings it back" $?
 # left it resident with nothing in the dock to close. Asserted as a PAIR: two
 # tiles that both quit is the state this replaced, and it looks correct from
 # every angle except the one that matters.
-grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "shell.stepAside()"
+grep -A2 'if (it.id === "desktop")' "$BIGQML" | has "shell.stepAside()"
 check "the Desktop tile steps aside and stays loaded" $?
 
 #
@@ -4811,13 +4867,13 @@ check "the Desktop tile steps aside and stays loaded" $?
 # something to do first (let go of the headless music player) and there are
 # three doors onto it. The pair is still the assertion: Desktop steps aside,
 # Quit ends the process.
-grep -A2 'if (it.id === "quit")' "$BIGQML" | grep -q "shell.quitNow()"
+grep -A2 'if (it.id === "quit")' "$BIGQML" | has "shell.quitNow()"
 check "...and the Quit tile is the one that ends the process" $?
 
-awk '/function quitNow/,/^    }/' "$BIGQML" | grep -q 'releaseProc.running = true'
+awk '/function quitNow/,/^    }/' "$BIGQML" | has 'releaseProc.running = true'
 check "...which really does end it, once the music is let go" $?
 
-grep -A2 'if (it.id === "desktop")' "$BIGQML" | grep -q "Qt.quit()"
+grep -A2 'if (it.id === "desktop")' "$BIGQML" | has "Qt.quit()"
 [ $? != 0 ]
 check "...so Desktop is not a second Quit" $?
 
@@ -4930,7 +4986,7 @@ check "...and S is the keyboard's spelling of Start" $?
 
 # A switch nobody can find is a switch that is not there, and on a television
 # the legend is the only place it can be advertised.
-grep -q 'k: "Start", v: "System"' "$BIGQML"
+grep -q 'k: "Start", v: I18n.tr("System")' "$BIGQML"
 check "...and the legend says so" $?
 
 # Closed BEFORE the action runs: sleep comes back to this screen, and coming
@@ -5209,7 +5265,7 @@ if [ -f "$BIGSRC" ]; then
     # The probe is asked of the REGISTRY, not of a desktop name. A list of
     # desktop names is wrong about every wlroots compositor not on it, and
     # wrong about both names synui itself logs in under.
-    if grep -n 'have_layer_shell()' "$BIGSRC" | grep -q 'XDG_CURRENT_DESKTOP'; then
+    if grep -n 'have_layer_shell()' "$BIGSRC" | has 'XDG_CURRENT_DESKTOP'; then
         bad "the layer-shell test reads XDG_CURRENT_DESKTOP instead of the registry"
     else
         ok "the layer-shell test asks the compositor, not the desktop name"
@@ -5228,6 +5284,24 @@ if [ -f "$BIGSRC" ]; then
     grep -q 'have_layer_shell() == 0' "$BIGSRC" \
         && ok "only a definite no refuses — an unanswerable probe does not" \
         || bad "the guard refuses on anything but a definite no"
+fi
+
+# ── the shape this file has now been fixed for TWICE ────────────────────────
+#
+# Once by adding says(), which covered the 139 assertions that capture their
+# output, and once by adding has(), which covered the 74 that did not. A third
+# round is a certainty without a gate.
+#
+# ⚠ `says` IN FRONT IS THE EXEMPTION. It captures into a variable and ignores
+# SIGPIPE, so its own printf cannot be killed and nothing upstream of grep is
+# left in the pipe.
+selfgrep=$(grep -nE '\| *grep -q' "$0" | grep -v 'says ' |
+           grep -vE '^[0-9]+:[[:space:]]*#' || true)
+if [ -n "$selfgrep" ]; then
+    bad "this suite pipes into 'grep -q' — use 'has', or 'says' in front"
+    printf '%s\n' "$selfgrep" | sed 's/^/        /' >&2
+else
+    ok "no producer in this file pipes into 'grep -q' (141 on a MATCH)"
 fi
 
 # ── verdict ─────────────────────────────────────────────────────────────────

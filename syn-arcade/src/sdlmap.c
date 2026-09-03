@@ -61,6 +61,7 @@
  */
 #define _GNU_SOURCE
 #include "arcade.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -136,12 +137,15 @@ static bool mapping_ok(const char *line)
 	mapping_t m;
 
 	if (!mapping_parse(line, &m)) {
-		fputs("syn-arcade: that is not a mapping line. The format is\n"
-		      "  <32-hex-GUID>,<Name>,a:b0,b:b1,…,platform:Linux\n"
-		      "\n"
-		      "If you do not have one, do not go and find one:\n"
-		      "      syn-arcade map learn\n"
-		      "presses through the controls with you and writes it.\n",
+		/* ⚠ The FORMAT LINE and the command are typed, not read: a
+		 * translator keeps `platform:Linux` and `syn-arcade map learn`
+		 * exactly as they stand. */
+		fputs(_("syn-arcade: that is not a mapping line. The format is\n"
+		        "  <32-hex-GUID>,<Name>,a:b0,b:b1,…,platform:Linux\n"
+		        "\n"
+		        "If you do not have one, do not go and find one:\n"
+		        "      syn-arcade map learn\n"
+		        "presses through the controls with you and writes it.\n"),
 		      stderr);
 		return false;
 	}
@@ -154,14 +158,14 @@ static bool mapping_ok(const char *line)
 	size_t glen = strlen(m.guid);
 	if (strcmp(m.guid, "xinput") != 0) {
 		if (glen != 32) {
-			fprintf(stderr, "syn-arcade: the GUID is %zu characters, "
-					"not 32 — '%s'\n", glen, m.guid);
+			fprintf(stderr, _("syn-arcade: the GUID is %zu characters, "
+			                  "not 32 — '%s'\n"), glen, m.guid);
 			return false;
 		}
 		for (const char *p = m.guid; *p; p++) {
 			if (isxdigit((unsigned char)*p)) continue;
-			fprintf(stderr, "syn-arcade: '%c' is not a hex digit — a "
-					"GUID is 32 hex characters\n", *p);
+			fprintf(stderr, _("syn-arcade: '%c' is not a hex digit — a "
+			                  "GUID is 32 hex characters\n"), *p);
 			return false;
 		}
 	}
@@ -176,18 +180,18 @@ static bool mapping_ok(const char *line)
 		const char *other = strstr(line, "platform:");
 		if (other) {
 			fprintf(stderr,
-			 "syn-arcade: this mapping is for another platform (%.20s…)\n"
-			 "SDL loads it and never applies it. Change it to "
-			 "platform:Linux.\n", other);
+			 _("syn-arcade: this mapping is for another platform (%.20s…)\n"
+			   "SDL loads it and never applies it. Change it to "
+			   "platform:Linux.\n"), other);
 		} else {
-			fputs("syn-arcade: no `platform:` field. Add "
-			      "`platform:Linux,` to the end.\n", stderr);
+			fputs(_("syn-arcade: no `platform:` field. Add "
+			        "`platform:Linux,` to the end.\n"), stderr);
 		}
 		return false;
 	}
 
 	if (strchr(line, '\n')) {
-		fputs("syn-arcade: a mapping is one line\n", stderr);
+		fputs(_("syn-arcade: a mapping is one line\n"), stderr);
 		return false;
 	}
 	return true;
@@ -206,7 +210,7 @@ static int map_list(bool rec)
 		if (rec)
 			rec_row(3, "guid", "name", "bindings");
 		else
-			printf("no mappings yet (%s)\n", path);
+			printf(_("no mappings yet (%s)\n"), path);
 		return EX_EMPTY;
 	}
 
@@ -234,14 +238,15 @@ static int map_list(bool rec)
 			rec_row(3, m.guid, m.name, nbuf);
 		} else {
 			printf("%s\n", m.name);
-			printf("  %s   (%d bindings)\n", m.guid, binds);
+			printf(P_("  %s   (%d binding)\n",
+			          "  %s   (%d bindings)\n", binds), m.guid, binds);
 		}
 		n++;
 	}
 	free(text);
 
 	if (n == 0) {
-		if (!rec) printf("no mappings in %s\n", path);
+		if (!rec) printf(_("no mappings in %s\n"), path);
 		return EX_EMPTY;
 	}
 	return EX_OK;
@@ -300,21 +305,26 @@ static int map_add(const char *line)
 	free(neu);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		/* ⚠ strerror() is translated BY GLIBC, in the same locale.
+		 * Nothing to mark; the sentence around it is what needs it. */
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
 
-	printf("%s %s\n", replaced ? "replaced" : "added", m.name);
+	/* ⚠ NOT `printf("%s %s", verb, name)` with the verb marked separately:
+	 * a language that puts the verb after the name, or inflects it for the
+	 * noun, cannot be written that way. Two whole sentences. */
+	printf(replaced ? _("replaced %s\n") : _("added %s\n"), m.name);
 	printf("  %s\n", m.guid);
 
 	const char *env = getenv("SDL_GAMECONTROLLERCONFIG_FILE");
 	if (!env || !*env)
-		printf("\n⚠ SDL_GAMECONTROLLERCONFIG_FILE is not set in this shell, so\n"
-		       "  nothing will read this yet. Log out and back in, or:\n"
-		       "      export SDL_GAMECONTROLLERCONFIG_FILE=%s\n", path);
+		printf(_("\n⚠ SDL_GAMECONTROLLERCONFIG_FILE is not set in this shell, so\n"
+		         "  nothing will read this yet. Log out and back in, or:\n"
+		         "      export SDL_GAMECONTROLLERCONFIG_FILE=%s\n"), path);
 	else
-		puts("\nGames started from now on will use it.");
+		puts(_("\nGames started from now on will use it."));
 	return EX_OK;
 }
 
@@ -334,7 +344,7 @@ static int map_remove(const char *what)
 
 	char *old = read_file(path);
 	if (!old) {
-		printf("nothing to remove (%s does not exist)\n", path);
+		printf(_("nothing to remove (%s does not exist)\n"), path);
 		return EX_OK;
 	}
 
@@ -361,7 +371,7 @@ static int map_remove(const char *what)
 
 	if (removed == 0) {
 		free(neu);
-		fprintf(stderr, "syn-arcade: no mapping matches '%s'\n", what);
+		fprintf(stderr, _("syn-arcade: no mapping matches '%s'\n"), what);
 		return EX_FAIL;
 	}
 
@@ -369,11 +379,14 @@ static int map_remove(const char *what)
 	free(neu);
 
 	if (rc < 0) {
-		fprintf(stderr, "syn-arcade: cannot write %s: %s\n",
+		/* ⚠ strerror() is translated BY GLIBC, in the same locale.
+		 * Nothing to mark; the sentence around it is what needs it. */
+		fprintf(stderr, _("syn-arcade: cannot write %s: %s\n"),
 			path, strerror(-rc));
 		return EX_FAIL;
 	}
-	printf("removed %d mapping%s\n", removed, removed == 1 ? "" : "s");
+	printf(P_("removed %d mapping\n", "removed %d mappings\n", removed),
+	       removed);
 	return EX_OK;
 }
 
@@ -394,23 +407,27 @@ static int map_status(void)
 	const char *env = getenv("SDL_GAMECONTROLLERCONFIG_FILE");
 	const char *inline_env = getenv("SDL_GAMECONTROLLERCONFIG");
 
-	printf("database    %s%s\n", own,
-	       file_exists(own) ? "" : "   (does not exist yet)");
-	printf("SDL reads   %s\n", (env && *env) ? env : "(nothing — variable unset)");
+	printf(_("database    %s%s\n"), own,
+	       file_exists(own) ? "" : _("   (does not exist yet)"));
+	printf(_("SDL reads   %s\n"),
+	       (env && *env) ? env : _("(nothing — variable unset)"));
 
 	if (!env || !*env) {
-		printf("\n⚠ SDL_GAMECONTROLLERCONFIG_FILE is unset, so no game will read\n"
-		       "  any of this. It is set by this package's session profile at\n"
-		       "  /etc/profile.d/syn-arcade.sh — log out and back in, or set it\n"
-		       "  by hand for one shell.\n");
+		printf(_("\n⚠ SDL_GAMECONTROLLERCONFIG_FILE is unset, so no game will read\n"
+		         "  any of this. It is set by this package's session profile at\n"
+		         "  /etc/profile.d/syn-arcade.sh — log out and back in, or set it\n"
+		         "  by hand for one shell.\n"));
 	} else if (strcmp(env, own) != 0) {
-		printf("\n⚠ SDL is pointed at a DIFFERENT file from the one `syn-arcade\n"
-		       "  map add` writes. Mappings added here will not be read.\n");
+		printf(_("\n⚠ SDL is pointed at a DIFFERENT file from the one `syn-arcade\n"
+		         "  map add` writes. Mappings added here will not be read.\n"));
 	}
 
 	if (inline_env && *inline_env)
-		printf("\nNote: SDL_GAMECONTROLLERCONFIG is also set, with %zu bytes of\n"
-		       "inline mappings. Those are read as well.\n", strlen(inline_env));
+		printf(P_("\nNote: SDL_GAMECONTROLLERCONFIG is also set, with %zu byte of\n"
+		          "inline mappings. Those are read as well.\n",
+		          "\nNote: SDL_GAMECONTROLLERCONFIG is also set, with %zu bytes of\n"
+		          "inline mappings. Those are read as well.\n",
+		          strlen(inline_env)), strlen(inline_env));
 	return EX_OK;
 }
 
@@ -433,10 +450,10 @@ int cmd_map(int argc, char **argv)
 
 	if (strcmp(sub, "add") == 0) {
 		if (argc < 2) {
-			fputs("syn-arcade: map add '<mapping string>'\n"
-			      "\n"
-			      "Quote it — a mapping is full of semicolons and commas\n"
-			      "that a shell would otherwise eat.\n", stderr);
+			fputs(_("syn-arcade: map add '<mapping string>'\n"
+			        "\n"
+			        "Quote it — a mapping is full of semicolons and commas\n"
+			        "that a shell would otherwise eat.\n"), stderr);
 			return EX_USAGE;
 		}
 		return map_add(argv[1]);
@@ -451,12 +468,12 @@ int cmd_map(int argc, char **argv)
 
 	if (strcmp(sub, "remove") == 0) {
 		if (argc < 2) {
-			fputs("syn-arcade: map remove <guid or name>\n", stderr);
+			fputs(_("syn-arcade: map remove <guid or name>\n"), stderr);
 			return EX_USAGE;
 		}
 		return map_remove(argv[1]);
 	}
 
-	fprintf(stderr, "syn-arcade: unknown map command '%s'\n", sub);
+	fprintf(stderr, _("syn-arcade: unknown map command '%s'\n"), sub);
 	return EX_USAGE;
 }
