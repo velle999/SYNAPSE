@@ -3158,7 +3158,39 @@ pkgver=0.1.0
 #   and wallhaven_window.sh presses Enter/w/Esc at the window and asserts the
 #   switch's promise from the ledger — nothing leaves the machine before
 #   consent. wppick_wallhaven_test.c is the unit half.
-pkgrel=591
+# 592: THE BROWSER ON ONE MONITOR, NOT ON ALL OF THEM.
+#
+#   Reported after 591 went in: with the switch on, the browser opened on every
+#   screen at once.
+#
+#   ⛔ AN UNNAMED OUTPUT MEANT "ALL OF THEM". wallhaven.qml is Variants over
+#   Quickshell.screens with `visible: root.output === modelData.name ||
+#   root.output === ""`, and nothing ever set root.output — so the empty case,
+#   which means NOBODY SAID, was reading as a request for a window per screen.
+#   On one monitor the two are the same picture, which is why it shipped twice.
+#
+#   ⚠ NO WAYLAND PROTOCOL TELLS A LAYER-SHELL CLIENT WHERE FOCUS IS, so the
+#   window cannot work this out — the name has to come from synui, which knows
+#   because it is answering the keypress that asked for the browser. That is
+#   exactly the welcome guide's mechanism and it is now shared: input.c's
+#   exec_named_output() runs `synui-<thing> <verb> <output>` for both.
+#
+#   ⚠ AND THE FIRST WINDOW CANNOT BE TOLD OVER IPC. `quickshell -p file.qml`
+#   takes no positional argument and the IPC path needs a process already up,
+#   so the launcher exports SYNUI_WALLHAVEN_OUTPUT for the start and calls
+#   `ipc call wallhaven toggle <output>` for every toggle after it. Same split,
+#   same spelling, as SYNUI_WELCOME_OUTPUT.
+#
+#   Started from a prompt with no name at all, it opens on the FIRST screen —
+#   Osd.qml's rule. One screen's worth of not knowing is not three windows.
+#
+#   ⚠ BOTH RIGS RUN ON TWO HEADLESS OUTPUTS NOW. With one, "the focused
+#   monitor" and "every monitor" draw the same picture and neither rig could
+#   have failed: wallhaven_window.sh counts the layer surfaces synui accepted
+#   (two, on the old code — confirmed by putting the old line back), and
+#   wallhaven_key.sh checks the name the launcher was given against
+#   `synctl outputs` rather than against "not empty".
+pkgrel=592
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -9672,6 +9672,11 @@ void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn);
  * not in either shipped shell — it is its own quickshell, started by
  * synui-welcome(1) when nothing is listening. `fn` is toggle|show|hide. */
 void synui_welcome_ipc(syn_server_t *s, const char *fn);
+/* The same shape for the wallhaven browser (quickshell/wallhaven.qml, started
+ * by synui-wallhaven(1)): run the launcher with the verb and the name of the
+ * FOCUSED output. The name is what stops the browser opening a window on every
+ * screen — no Wayland protocol tells a layer-shell client where focus is. */
+void synui_wallhaven_ipc(syn_server_t *s, const char *fn);
 /* The same call with an explicit argument instead of the focused output's name.
  * The bar's own settings are per-monitor and the compositor has no business
  * picking which monitor a control-panel row means, so the rows that drive the

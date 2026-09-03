@@ -49,7 +49,23 @@ ShellRoot {
     id: root
 
     property bool open: true
-    property string output: ""
+
+    /*
+     * ⛔ WHICH MONITOR, AND WHY IT COMES FROM OUTSIDE. No Wayland protocol tells
+     * a layer-shell client where keyboard focus is, so this window cannot work
+     * it out; synui knows, because it is answering the keypress that asked for
+     * the browser, and synui-wallhaven passes the name on.
+     *
+     * ⚠ AN ENVIRONMENT VARIABLE FOR THE FIRST WINDOW, IPC FOR EVERY ONE AFTER.
+     * `quickshell -p file.qml` cannot be handed a positional argument, and the
+     * IPC path only exists once a process is running — so the first window, the
+     * one this is for, could not be told any other way. Same split as the
+     * welcome guide's SYNUI_WELCOME_OUTPUT.
+     *
+     * Empty means nobody said (started from a prompt), and that resolves to the
+     * FIRST screen rather than to all of them — see `visible` below.
+     */
+    property string output: Quickshell.env("SYNUI_WALLHAVEN_OUTPUT") || ""
 
     // The rows of the current page, and where in the listing we are.
     property var items: []
@@ -274,8 +290,19 @@ ShellRoot {
             required property var modelData
             screen: modelData
 
+            /*
+             * ⛔ ONE WINDOW, NOT ONE PER SCREEN. `root.output === ""` used to
+             * mean EVERY monitor, and on a multi-monitor desk that is what it
+             * did: the browser opened on all of them at once, each with its own
+             * grid and its own keyboard focus to lose. An unknown output is one
+             * screen's worth of not knowing, not three windows — so it falls
+             * back to the first screen, which is the rule Osd.qml already uses
+             * for the same reason.
+             */
             visible: root.open
-                     && (root.output === modelData.name || root.output === "")
+                     && (root.output === modelData.name
+                         || (root.output === ""
+                             && modelData.name === Quickshell.screens[0].name))
 
             // The whole screen, so a click on the desktop dismisses: no Wayland
             // protocol tells a layer surface that a click landed elsewhere, so

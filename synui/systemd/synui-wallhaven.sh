@@ -245,17 +245,28 @@ cmd_set() {
 qml_path() { [ -f "$QML_USER" ] && printf '%s\n' "$QML_USER" || printf '%s\n' "$QML_PKG"; }
 
 cmd_window() {
-    local verb=$1 qml; qml=$(qml_path)
+    local verb=$1 out=${2:-} qml; qml=$(qml_path)
     [ -f "$qml" ] || die "$qml is missing — is synui installed?"
     # ⛔ NO need_on HERE. The window asks — see the switch note at the top of
     # this file. A key press has no stderr, so a refusal here was a key that did
     # nothing; the window opening on "this is off, turn it on?" is the same
     # question in the one place the person who pressed the key can read it.
-    if quickshell -p "$qml" ipc call wallhaven "$verb" >/dev/null 2>&1; then
+    # ⚠ THE OUTPUT RIDES ON BOTH PATHS AND NEITHER OF THEM IS THE OTHER. A
+    # running instance is told over IPC; the FIRST one cannot be — `quickshell
+    # -p file.qml` has no way to hand a config a positional argument, and the
+    # IPC path only exists once a process is up. So the very first window, the
+    # one this is for, is told by the environment, exactly as synui-welcome
+    # tells the guide.
+    #
+    # ⛔ hide TAKES NO ARGUMENT. It is the one verb with nothing to place.
+    if [ "$verb" = hide ]; then
+        quickshell -p "$qml" ipc call wallhaven hide >/dev/null 2>&1
         return 0
     fi
-    [ "$verb" = hide ] && return 0
-    exec quickshell -p "$qml"
+    if quickshell -p "$qml" ipc call wallhaven "$verb" "$out" >/dev/null 2>&1; then
+        return 0
+    fi
+    SYNUI_WALLHAVEN_OUTPUT="$out" exec quickshell -p "$qml"
 }
 
 usage() {
@@ -264,7 +275,11 @@ synui-wallhaven — browse wallhaven.cc and set one as the wallpaper
 
   synui-wallhaven                    open the browser (Super+Ctrl+W, or w in
                                      the Super+W wallpaper picker)
-  synui-wallhaven toggle|show|hide   the window, across a process boundary
+  synui-wallhaven toggle|show|hide [output]
+                                     the window, across a process boundary.
+                                     synui names the focused monitor when it is
+                                     the caller; without a name the window opens
+                                     on the first screen, never on all of them.
   synui-wallhaven search [--rec]     what is on wallhaven right now
        --categories=BITS             general/anime/people as three bits (111)
        --sort=WHICH                  toplist (popular), date_added, random,
@@ -292,7 +307,7 @@ USAGE
 }
 
 case "${1:-toggle}" in
-    toggle|show|hide) cmd_window "${1:-toggle}" ;;
+    toggle|show|hide) cmd_window "${1:-toggle}" "${2:-}" ;;
     search)  shift; cmd_search "$@" ;;
     get)     shift; cmd_get "$@" ;;
     set)     shift; cmd_set "$@" ;;

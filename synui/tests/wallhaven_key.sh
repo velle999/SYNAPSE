@@ -11,8 +11,11 @@
 # launcher actually being RUN — not that a dispatch was accepted:
 #
 #   1. Super+Ctrl+W with nothing open runs the launcher exactly once
-#   2. `w` inside the Super+W picker runs the same launcher, once
-#   3. …and the picker is DOWN afterwards, which is proved by a SECOND `w`
+#   2. …NAMING THE FOCUSED OUTPUT, which is what puts the browser on one monitor
+#      instead of on every one (a layer-shell client is told nothing about focus
+#      by any protocol, so an unnamed launch is a window per screen)
+#   3. `w` inside the Super+W picker runs the same launcher, once
+#   4. …and the picker is DOWN afterwards, which is proved by a SECOND `w`
 #      reaching nothing — two full-screen surfaces both holding the keyboard is
 #      the failure this closes
 #
@@ -101,7 +104,9 @@ export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc" SYNUI_WINDOWS="$TMP/windows.conf"
 export GSETTINGS_BACKEND=memory
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
-export WLR_HEADLESS_OUTPUTS=1
+# ⛔ TWO. With one screen, "names the focused output" and "names nothing" are the
+# same picture, and the monitor the name carries could be anything.
+export WLR_HEADLESS_OUTPUTS=2
 
 "$SYNUI" -d >"$LOG" 2>&1 &
 SYNUI_PID=$!
@@ -136,9 +141,18 @@ settle
        This is the reported bug's own shape: the bind exists, the dispatch is
        accepted, and nothing runs.
        Ledger: $(tr '\n' '|' < "$CALLS")"
-grep -q '^wallhaven toggle$' "$CALLS" ||
-    fail "the launcher was run, but not as 'toggle': $(tr '\n' '|' < "$CALLS")"
+grep -q '^wallhaven toggle ' "$CALLS" ||
+    fail "the launcher was run, but not as 'toggle <output>': $(tr '\n' '|' < "$CALLS")"
 ok "Super+Ctrl+W runs 'synui-wallhaven toggle', once"
+
+# ⛔ AND IT NAMES A REAL MONITOR. An empty name is what opened the browser on
+# every screen at once; a name synctl does not know would put it on none.
+NAMED=$(sed -n 's/^wallhaven toggle //p' "$CALLS" | head -1)
+synctl outputs | grep -q "\"name\":\"$NAMED\"" ||
+    fail "the launcher was named the output '$NAMED', which is not one of this
+       compositor's screens:
+       $(synctl outputs)"
+ok "…naming the focused output ($NAMED), so the browser opens on one screen"
 
 # ── 2. `w` in the picker, and 3. the picker is down afterwards ──────────
 synctl dispatch wallpaper >/dev/null

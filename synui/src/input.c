@@ -863,7 +863,7 @@ void synui_bar_ipc(syn_server_t *s, const char *target, const char *fn)
  * user, but a shell in the path is a shell to get wrong later, and nothing here
  * needs one.
  */
-void synui_welcome_ipc(syn_server_t *s, const char *fn)
+static void exec_named_output(syn_server_t *s, const char *prog, const char *fn)
 {
     syn_output_t *o = server_focused_output(s);
     const char *out = (o && o->wlr_output && o->wlr_output->name)
@@ -871,9 +871,29 @@ void synui_welcome_ipc(syn_server_t *s, const char *fn)
     if (fork() == 0) {
         setsid();
         synui_child_reset_signals();
-        execlp("synui-welcome", "synui-welcome", fn, out, (char *)NULL);
+        execlp(prog, prog, fn, out, (char *)NULL);
         _exit(1);
     }
+}
+
+void synui_welcome_ipc(syn_server_t *s, const char *fn)
+{
+    exec_named_output(s, "synui-welcome", fn);
+}
+
+/*
+ * …and the wallhaven browser, which is a third process for the same reason.
+ *
+ * ⛔ THE OUTPUT IS THE POINT OF THIS CALL. A layer-shell client is told nothing
+ * about focus by any Wayland protocol, so a browser started with no output puts
+ * a window on EVERY screen — which is what shipped in 590 and 591, reported as
+ * the browser opening on all monitors at once. synui is the one process that
+ * knows which monitor the key was pressed on, and it is answering that keypress
+ * as it makes this call.
+ */
+void synui_wallhaven_ipc(syn_server_t *s, const char *fn)
+{
+    exec_named_output(s, "synui-wallhaven", fn);
 }
 
 /*
@@ -1554,7 +1574,10 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * which tree the QML comes from and the toggle across a process
          * boundary; the window itself owns the network switch, and says so on
          * its own face while it is off. The Super+W picker's Wallhaven row and
-         * its [w] button spawn the identical command.
+         * its [w] button make the identical call.
+         *
+         * ⚠ AND IT NAMES THE FOCUSED OUTPUT, like the welcome guide — without
+         * it the browser opens on every monitor at once.
          *
          * ⛔ AND THE PICKER GOES AWAY FIRST. The browser is a focusable
          * full-screen layer surface, so with the picker still up two
@@ -1562,7 +1585,7 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * drivable — which is exactly what this key did while the picker was
          * open. wppick_hide() on a picker that is not visible is a no-op. */
         if (s->wppick.visible) wppick_hide(s);
-        synui_spawn("synui-wallhaven toggle");
+        synui_wallhaven_ipc(s, "toggle");
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);
     } else if (strcmp(action, "crop") == 0) {

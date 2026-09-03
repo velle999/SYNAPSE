@@ -58,11 +58,18 @@ static int checks;
 static int  spawns;
 static char last_spawn[256];
 
-void synui_spawn(const char *cmd)
+/* ⚠ NOT synui_spawn(). The browser is reached through the call that NAMES THE
+ * FOCUSED OUTPUT — without a name a layer-shell client opens a window on every
+ * monitor, which is what 590 and 591 did. wppick.c still spawns for the
+ * wallpaper engine, so both are stubbed and only this one is counted. */
+void synui_wallhaven_ipc(syn_server_t *s, const char *fn)
 {
+    (void)s;
     spawns++;
-    snprintf(last_spawn, sizeof(last_spawn), "%s", cmd ? cmd : "");
+    snprintf(last_spawn, sizeof(last_spawn), "%s", fn ? fn : "");
 }
+
+void synui_spawn(const char *cmd) { (void)cmd; }
 
 void synui_render_wppick(syn_server_t *s) { (void)s; }
 void ctlpanel_child_closed(syn_server_t *s, const char *a) { (void)s; (void)a; }
@@ -169,8 +176,8 @@ int main(void)
     int handled = wppick_key(&srv, XKB_KEY_w, 0);
     CHECK(handled == 1, "w is answered by the picker");
     CHECK(spawns == 1, "…exactly one spawn (got %d)", spawns);
-    CHECK(strcmp(last_spawn, "synui-wallhaven toggle") == 0,
-          "…and it is the launcher, not quickshell: '%s'", last_spawn);
+    CHECK(strcmp(last_spawn, "toggle") == 0,
+          "…through the launcher call that names the output: '%s'", last_spawn);
     CHECK(srv.wppick.visible == 0,
           "…and the picker is down, so the two do not both hold the keyboard");
 
@@ -202,8 +209,8 @@ int main(void)
                              BTN_LEFT, 1000);
     CHECK(taken == 1, "a click on [w] is the panel's");
     CHECK(spawns == 1, "…one click, one spawn (got %d)", spawns);
-    CHECK(strcmp(last_spawn, "synui-wallhaven toggle") == 0,
-          "…the same command the key sends");
+    CHECK(strcmp(last_spawn, "toggle") == 0,
+          "…the same call the key makes");
     CHECK(srv.wppick.visible == 0, "…and the picker is down");
 
     /* ── A click on a ROW is still a row ────────────────────── */

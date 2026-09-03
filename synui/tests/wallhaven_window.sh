@@ -16,6 +16,11 @@
 #   2. Enter on that pane turns the switch on — and only then does a search go
 #   3. `w` opens the Super+W picker and this window goes away
 #   4. Esc closes it, which is the 590 regression's own assertion
+#   5. ⛔ ONE window on a TWO-screen desk, not one per screen — 590 and 591 put
+#      the browser on every monitor at once, because an unnamed output meant
+#      "all of them" rather than "nobody said"
+#   6. …and on the monitor it was NAMED, which is how synui puts it where the
+#      key was pressed
 #
 # The ledger is a fake `synui-wallhaven` and a fake `synctl` on PATH: the window
 # reaches both through Quickshell's Process, so being called is the whole of
@@ -47,11 +52,12 @@ unset SYNUI_SOCKET WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Run the window once under a fresh headless compositor.
-#   $1 the switch's answer (on|off), $2 a key for wtype ("" for none)
-# Prints the ledger; leaves RUN_ALIVE=yes/no in a file beside it.
+#   $1 the switch's answer (on|off), $2 a key for wtype ("" for none),
+#   $3 the output to name ("" for none — the browser's own fallback)
+# Leaves LEDGER_TEXT, LOG_TEXT, RUN_ALIVE and OUTPUTS set.
 LEDGER=
 run() {
-    _state=$1; _key=$2
+    _state=$1; _key=$2; _out=${3:-}
     TMP=$(mktemp -d /tmp/synui-whwin.XXXXXX) || exit 1
     chmod 700 "$TMP"
     LEDGER="$TMP/calls"
@@ -97,7 +103,9 @@ EOS
     export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
     export SYNUI_CONFIG="$TMP/synuirc" SYNUI_WINDOWS="$TMP/windows.conf"
     export GSETTINGS_BACKEND=memory
-    export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1
+    # ⛔ TWO SCREENS. With one, "on the focused monitor" and "on every monitor"
+    # draw exactly the same picture and the bug this rig closes is invisible.
+    export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=2
 
     "$SYNUI" -d > "$TMP/synui.log" 2>&1 &
     SYNUI_PID=$!
@@ -119,7 +127,9 @@ EOS
     # whatever session launched the rig, and would drive the LIVE desktop.
     export SYNUI_SOCKET="$TMP/synui-$SOCK.sock"
 
-    quickshell -p "$QML" > "$TMP/qs.log" 2>&1 &
+    # The launcher's job in miniature: the FIRST window is told which monitor by
+    # the environment, because `quickshell -p file.qml` takes no argument.
+    SYNUI_WALLHAVEN_OUTPUT="$_out" quickshell -p "$QML" > "$TMP/qs.log" 2>&1 &
     QS_PID=$!
     sleep 3
     [ -n "$_key" ] && { wtype -s 200 -k "$_key" || fail "wtype could not send $_key"; }
@@ -130,6 +140,10 @@ EOS
     # SHELL's job notice, printed when it reaps them, not the kill's output.
     { kill -9 "$QS_PID" "$SYNUI_PID"; wait "$QS_PID" "$SYNUI_PID"; } 2>/dev/null
     LEDGER_TEXT=$(cat "$LEDGER")
+    # Every layer surface synui accepted, one per line: "'<namespace>' on <out>".
+    LOG_TEXT=$(grep "layer surface" "$TMP/synui.log" 2>/dev/null)
+    OUTPUTS=$(sed -n "s/.*layer surface '[^']*' on \([^ ]*\).*/\1/p" \
+                  "$TMP/synui.log" 2>/dev/null)
     rm -rf "$TMP"
     unset SYNUI_SOCKET WAYLAND_DISPLAY
 }
@@ -176,6 +190,24 @@ run on Escape
     fail "Escape did not close the window. This is exactly the shape 590
        shipped: a footer advertising keys that reach nothing."
 ok "Esc closes the window"
+
+# ── 5. one window on a two-screen desk, with nobody naming a monitor ────
+run on ""
+[ "$(echo "$LOG_TEXT" | grep -c "layer surface")" = 1 ] ||
+    fail "⛔ the browser mapped $(echo "$LOG_TEXT" | grep -c 'layer surface')
+       surfaces on a two-screen desk. An output nobody named means ONE screen's
+       worth of not knowing — it is not a request for a window on each.
+       Surfaces: $(echo "$LOG_TEXT" | tr '\n' '|')"
+ok "no output named: one window, not one per screen"
+
+# ── 6. …and on the monitor it was named ─────────────────────────────────
+run on "" HEADLESS-2
+[ "$OUTPUTS" = "HEADLESS-2" ] ||
+    fail "named HEADLESS-2, the browser mapped on '$OUTPUTS'. This is how synui
+       puts it where the key was pressed; on the wrong screen it is the same bug
+       wearing a different hat.
+       Surfaces: $(echo "$LOG_TEXT" | tr '\n' '|')"
+ok "named output: exactly that monitor, and only it"
 
 echo "PASS ($pass checks)"
 exit 0

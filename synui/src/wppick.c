@@ -83,16 +83,20 @@ static int wppick_we_index(syn_server_t *s, int row);
  * ⚠ THE LAUNCHER AND NOT quickshell DIRECTLY. synui-wallhaven owns which tree
  * the QML comes from and the toggle across a process boundary; the window owns
  * the network switch, and says so on its own face when it is off. Super+Ctrl+W
- * (input.c) spawns the identical command.
+ * (input.c) makes the identical call.
+ *
+ * ⛔ AND IT NAMES THE FOCUSED OUTPUT. synui_wallhaven_ipc() is what puts the
+ * browser on ONE monitor: a layer-shell client is told nothing about focus, so
+ * one started without a name opens a window on every screen at once.
  *
  * ⛔ THE CALLER CLOSES THE PANEL. The browser wants the keyboard, and two
  * full-screen surfaces both asking for it is a panel nobody can drive — but the
  * row path commits from inside wppick_apply(), whose callers close immediately
  * afterwards, so a wppick_hide() here would be one close too many.
  */
-static void wppick_wallhaven_open(void)
+static void wppick_wallhaven_open(syn_server_t *s)
 {
-    synui_spawn("synui-wallhaven toggle");
+    synui_wallhaven_ipc(s, "toggle");
 }
 
 /* The Wallhaven row's index, which is also where the header button takes its
@@ -442,7 +446,7 @@ static void wppick_apply(syn_server_t *s, int idx, bool commit)
     if (wppick_is_action(s, idx)) {
         if (!commit) return;
         /* ⚠ NOT hidden here — see wppick_wallhaven_open(). */
-        wppick_wallhaven_open();
+        wppick_wallhaven_open(s);
         return;
     }
 
@@ -1215,7 +1219,7 @@ int wppick_click(syn_server_t *s, double lx, double ly, uint32_t button,
      * only one this panel has. */
     if (hit_spot_at(&s->wppick.hit, lx, ly) == 0) {
         s->wppick.pending_we = -1;
-        wppick_wallhaven_open();
+        wppick_wallhaven_open(s);
         wppick_hide(s);
         return 1;
     }
@@ -1381,7 +1385,7 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
          * so a deferred row is abandoned rather than applied, exactly as Esc
          * abandons it: pressing w is going somewhere else, not choosing. */
         s->wppick.pending_we = -1;
-        wppick_wallhaven_open();
+        wppick_wallhaven_open(s);
         wppick_hide(s);
         return 1;
     case XKB_KEY_r:

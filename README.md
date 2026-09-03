@@ -1394,7 +1394,9 @@ an ordinary local wallpaper from then on.
 button (and the **Wallhaven** row at the bottom of its built-ins is the same
 door); the browser's header carries **Wallpapers**, which comes back. One key,
 either direction, and whichever window you left goes away rather than fighting
-the new one for the keyboard.
+the new one for the keyboard. Both open on the monitor you are on — started from
+a prompt instead, with no monitor to name, the browser opens on the first
+screen.
 
 > ⛔ **Off by default.** This is the only part of the wallpaper picker that
 > leaves your machine, and the second thing in the whole desktop that talks to
