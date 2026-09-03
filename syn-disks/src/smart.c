@@ -35,6 +35,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -46,6 +47,15 @@ static const char *smart_tool(void)
 	return (env && *env) ? env : "smartctl";
 }
 
+/*
+ * One `field <TAB> value` row, or one aligned line for a person.
+ *
+ * ⛔ TRANSLATED AT THE DRAW SITE, NEVER IN THE ROW. data/syn-disks.qml DRAWS
+ * both of these and MATCHES on both — `field === "retry"` decides whether a row
+ * is a row at all, and `value === "FAILING"` is what turns the text red. So the
+ * record carries the English word and the window looks it up when it paints;
+ * the call sites mark theirs N_() so a translator sees them.
+ */
 static void row(const char *key, const char *val)
 {
 	if (!val || !*val)
@@ -53,7 +63,7 @@ static void row(const char *key, const char *val)
 	if (g_out == OUT_REC)
 		rec_row(2, key, val);
 	else
-		printf("  %s%-22s%s %s\n", C_DIM(), key, C_RESET(), val);
+		printf("  %s%-22s%s %s\n", C_DIM(), _(key), C_RESET(), _(val));
 }
 
 /* Text after "<prefix>:" on the line that starts with it, trimmed. NULL if the
@@ -142,17 +152,17 @@ int cmd_smart(int argc, char **argv)
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--elevate"))  elevate = true;
-		else if (argv[i][0] == '-')         die("smart: unknown option '%s'", argv[i]);
+		else if (argv[i][0] == '-')         die(_("smart: unknown option '%s'"), argv[i]);
 		else if (!target)                   target = argv[i];
-		else die("smart: one device at a time");
+		else die(_("smart: one device at a time"));
 	}
 
 	if (!target)
-		die("smart: need a disk (see: syn-disks list)");
+		die(_("smart: need a disk (see: syn-disks list)"));
 
 	char *k = sd_kernel_name(target);
 	if (!k)
-		die("%s: not a block device", target);
+		die(_("%s: not a block device"), target);
 	/* SMART is a property of the DRIVE. Asked about a partition, answer about
 	 * the disk it is on rather than failing — that is what was meant. */
 	if (sd_is_partition(k)) {
@@ -168,11 +178,11 @@ int cmd_smart(int argc, char **argv)
 	if (!have_cmd(tool)) {
 		if (g_out == OUT_REC) {
 			rec_row(2, "field", "value");
-			rec_row(2, "health", "unavailable");
-			rec_row(2, "reason", "smartmontools is not installed");
+			rec_row(2, N_("health"), N_("unavailable"));
+			rec_row(2, N_("reason"), N_("smartmontools is not installed"));
 		} else {
-			fprintf(stderr, "syn-disks: %s is not installed — "
-			        "install smartmontools to read drive health\n", tool);
+			fprintf(stderr, _("syn-disks: %s is not installed — "
+			        "install smartmontools to read drive health\n"), tool);
 		}
 		free(dev);
 		free(k);
@@ -210,10 +220,12 @@ int cmd_smart(int argc, char **argv)
 		           || strstr(out, "requires root") != NULL;
 		if (g_out == OUT_REC) {
 			rec_row(2, "field", "value");
-			rec_row(2, "health", "unavailable");
-			rec_row(2, "reason", denied && !elevate
-			        ? "reading health needs authorisation"
-			        : (*out ? lines[0] : "smartctl could not open the device"));
+			rec_row(2, N_("health"), N_("unavailable"));
+			/* ⚠ lines[0] is smartctl's OWN text and is not ours to mark. */
+			rec_row(2, N_("reason"), denied && !elevate
+			        ? N_("reading health needs authorisation")
+			        : (*out ? lines[0]
+			                : N_("smartctl could not open the device")));
 			/* The GUI turns this into the button it should offer next,
 			 * rather than deciding for itself what a refusal meant. */
 			rec_row(2, "retry", denied && !elevate ? "elevate" : "");
@@ -222,7 +234,7 @@ int cmd_smart(int argc, char **argv)
 			        *out ? lines[0] : "smartctl could not open the device",
 			        C_RESET());
 			if (denied && !elevate)
-				fprintf(stderr, "  try: syn-disks smart --elevate %s\n", dev);
+				fprintf(stderr, _("  try: syn-disks smart --elevate %s\n"), dev);
 		}
 		free(lines);
 		free(out);
@@ -244,19 +256,21 @@ int cmd_smart(int argc, char **argv)
 	                            "SMART overall-health self-assessment test result");
 	char *crit = field_after(lines, nlines, "Critical Warning");
 
-	const char *verdict = "unknown";
+	const char *verdict = N_("unknown");
 	if (overall)
-		verdict = strstr(overall, "PASS") ? "healthy" : "FAILING";
+		/* ⚠ THE WINDOW TURNS THE ROW RED ON `value === "FAILING"`, so this
+		 * word is matched as well as drawn — N_() and not _(). */
+		verdict = strstr(overall, "PASS") ? N_("healthy") : N_("FAILING");
 	else if (crit)
 		verdict = (!strcmp(crit, "0x00") || !strcmp(crit, "0")) ? "healthy" : "FAILING";
 
-	row("health", verdict);
+	row(N_("health"), verdict);
 
 	/* SATA calls it "Device Model", NVMe calls it "Model Number". */
 	char *model = field_after(lines, nlines, "Device Model");
 	if (!model)
 		model = field_after(lines, nlines, "Model Number");
-	row("model", model);
+	row(N_("model"), model);
 	free(model);
 
 	char *temp = field_after(lines, nlines, "Temperature");
@@ -265,7 +279,7 @@ int cmd_smart(int argc, char **argv)
 	if (temp && *temp) {
 		char *t = strchr(temp, ' ') ? xstrndup(temp, strcspn(temp, " ")) : xstrdup(temp);
 		char *shown = xasprintf("%s °C", t);
-		row("temperature", shown);
+		row(N_("temperature"), shown);
 		free(shown);
 		free(t);
 	}
@@ -280,9 +294,9 @@ int cmd_smart(int argc, char **argv)
 		 * nothing to most people looking at this window. */
 		double years = strtod(hours, NULL) / 24.0 / 365.25;
 		char *shown = years >= 0.5
-		            ? xasprintf("%s (about %.1f years)", hours, years)
+		            ? xasprintf(_("%s (about %.1f years)"), hours, years)
 		            : xstrdup(hours);
-		row("powered on (hours)", shown);
+		row(N_("powered on (hours)"), shown);
 		free(shown);
 	}
 	free(hours);
@@ -290,15 +304,15 @@ int cmd_smart(int argc, char **argv)
 	char *cycles = field_after(lines, nlines, "Power Cycles");
 	if (!cycles)
 		cycles = attr_raw(lines, nlines, "Power_Cycle_Count");
-	row("power cycles", cycles);
+	row(N_("power cycles"), cycles);
 	free(cycles);
 
 	char *wear = field_after(lines, nlines, "Percentage Used");
-	row("wear used", wear);
+	row(N_("wear used"), wear);
 	free(wear);
 
 	char *written = field_after(lines, nlines, "Data Units Written");
-	row("data written", written);
+	row(N_("data written"), written);
 	free(written);
 
 	/* The three counters that actually predict a failing SATA drive. A
@@ -306,9 +320,9 @@ int cmd_smart(int argc, char **argv)
 	 * are reported even when zero — a row that only appears once it is bad
 	 * cannot be checked for being good. */
 	static const struct { const char *attr; const char *label; } COUNTERS[] = {
-		{ "Reallocated_Sector_Ct", "reallocated sectors" },
-		{ "Current_Pending_Sector", "pending sectors" },
-		{ "Offline_Uncorrectable", "uncorrectable sectors" },
+		{ "Reallocated_Sector_Ct", N_("reallocated sectors") },
+		{ "Current_Pending_Sector", N_("pending sectors") },
+		{ "Offline_Uncorrectable", N_("uncorrectable sectors") },
 	};
 	for (size_t i = 0; i < sizeof COUNTERS / sizeof *COUNTERS; i++) {
 		char *v = attr_raw(lines, nlines, COUNTERS[i].attr);
@@ -318,7 +332,7 @@ int cmd_smart(int argc, char **argv)
 	}
 
 	char *rot = field_after(lines, nlines, "Rotation Rate");
-	row("rotation rate", rot);
+	row(N_("rotation rate"), rot);
 	free(rot);
 
 	free(crit);

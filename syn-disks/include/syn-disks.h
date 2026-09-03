@@ -94,6 +94,10 @@ char *pct_decode(const char *s);
  * encoded here, so callers pass plain strings and cannot forget. */
 void rec_row(int nfields, ...);
 
+/* Bind the message catalog. Called once from main(), before anything prints.
+ * Lives in util.c; see include/i18n.h for what is and is not translated. */
+void syn_disks_i18n_init(void);
+
 char **split(char *text, char sep, size_t *n);
 void   strip_trailing_newline(char *s);
 /* Trim ASCII whitespace from both ends, in place. sysfs pads model, vendor and

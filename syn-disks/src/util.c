@@ -6,8 +6,11 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
+#include "config.h"
 
 #include <ctype.h>
+#include <locale.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -28,7 +31,7 @@ void *xmalloc(size_t n)
 {
 	void *p = malloc(n ? n : 1);
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -36,7 +39,7 @@ void *xrealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n ? n : 1);
 	if (!q)
-		die("out of memory");
+		die(_("out of memory"));
 	return q;
 }
 
@@ -44,7 +47,7 @@ char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p)
-		die("out of memory");
+		die(_("out of memory"));
 	return p;
 }
 
@@ -62,7 +65,7 @@ char *xasprintf(const char *fmt, ...)
 	va_start(ap, fmt);
 	char *out = NULL;
 	if (vasprintf(&out, fmt, ap) < 0)
-		die("out of memory");
+		die(_("out of memory"));
 	va_end(ap);
 	return out;
 }
@@ -73,7 +76,7 @@ void die(const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	fprintf(stderr, "syn-disks: ");
+	fprintf(stderr, _("syn-disks: "));
 	vfprintf(stderr, fmt, ap);
 	fputc('\n', stderr);
 	va_end(ap);
@@ -84,7 +87,7 @@ void warn(const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	fprintf(stderr, "syn-disks: ");
+	fprintf(stderr, _("syn-disks: "));
 	vfprintf(stderr, fmt, ap);
 	fputc('\n', stderr);
 	va_end(ap);
@@ -258,7 +261,7 @@ char *human_size(unsigned long long bytes)
 		v /= 1024.0;
 		i++;
 	}
-	return i == 0 ? xasprintf("%llu B", bytes)
+	return i == 0 ? xasprintf(_("%llu B"), bytes)
 	              : xasprintf("%.1f %s", v, unit[i]);
 }
 
@@ -658,4 +661,43 @@ char *kv_val(const char *line, const char *key)
 		return q ? xstrndup(v, (size_t)(q - v)) : NULL;
 	}
 	return NULL;
+}
+
+/*
+ * Bind the message catalog. Called once from main() before anything prints.
+ *
+ * ⛔ THE ENV OVERRIDE IS WHAT MAKES THIS TESTABLE. The compiled-in path is
+ * under the install prefix, so an UNINSTALLED binary finds no catalog at all
+ * and answers English in every locale — a test that runs it under two locales
+ * and diffs would then pass on a real bug. synpkg 47 shipped that mistake and
+ * only found it by deliberately mistranslating a record. Nothing changes for
+ * an installed syn-disks: the variable is not set.
+ */
+void syn_disks_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+
+	/*
+	 * ⛔ AND LC_NUMERIC STAYS AT C, WHICH IS NOT OPTIONAL HERE.
+	 *
+	 * setlocale(LC_ALL, "") changes what printf's %f prints: a German locale
+	 * writes 476,8 where C writes 476.8. Sizes go into the RECORD — `list`
+	 * carries a human-readable size beside the exact byte count — so the
+	 * window's parser and every script reading `--rec` would get a different
+	 * number format on a German desktop than on an English one. Caught by
+	 * diffing the records under two locales; nothing else would have shown it,
+	 * because every string in that row was already correct.
+	 *
+	 * ⚠ The human output keeps the C decimal point too. That is the deliberate
+	 * half of the trade: one program cannot print 476,8 to a person and 476.8
+	 * into a record from the same hu_bytes(), and the record is the half that
+	 * something parses.
+	 */
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_DISKS_LOCALEDIR");
+	bindtextdomain(SYN_DISKS_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNDISKS_LOCALEDIR);
+	bind_textdomain_codeset(SYN_DISKS_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_DISKS_GETTEXT_DOMAIN);
 }

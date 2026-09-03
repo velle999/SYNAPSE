@@ -75,6 +75,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -304,7 +305,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 		*fix = "none";
 
 	if (!kname || !*kname)
-		return xstrdup("there is no such device");
+		return xstrdup(_("there is no such device"));
 
 	/* GUARD_ADD skips every one of these, and that is the whole reason it
 	 * exists. A new partition is written into space nothing is using, so
@@ -317,11 +318,11 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 		 * running system would be true, fixable-looking, and utterly
 		 * misleading. */
 		if (guard_holds_root(kname))
-			return xstrdup("the running system is on it");
+			return xstrdup(_("the running system is on it"));
 
 		char *point = guard_mounted_under(kname);
 		if (point) {
-			char *why = xasprintf("it is mounted at %s", point);
+			char *why = xasprintf(_("it is mounted at %s"), point);
 			free(point);
 			if (fix)
 				*fix = "unmount";
@@ -330,7 +331,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 
 		char *swap = guard_swap_under(kname);
 		if (swap) {
-			char *why = xasprintf("%s is in use as swap", swap);
+			char *why = xasprintf(_("%s is in use as swap"), swap);
 			free(swap);
 			if (fix)
 				*fix = "swapoff";
@@ -339,7 +340,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 
 		char *holder = guard_holder_of(kname);
 		if (holder) {
-			char *why = xasprintf("%s is unlocked on top of it", holder);
+			char *why = xasprintf(_("%s is unlocked on top of it"), holder);
 			free(holder);
 			if (fix)
 				*fix = "lock";
@@ -349,7 +350,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 		if (mode == GUARD_DESTROY) {
 			char *fst = fstab_under(kname, 0);
 			if (fst) {
-				char *why = xasprintf("/etc/fstab expects it at %s", fst);
+				char *why = xasprintf(_("/etc/fstab expects it at %s"), fst);
 				free(fst);
 				if (fix)
 					*fix = "fstab";
@@ -376,7 +377,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 		 * leaves somebody believing the drive is broken. */
 		if (fix)
 			*fix = "readonly";
-		return xstrdup("the kernel has it marked read-only");
+		return xstrdup(_("the kernel has it marked read-only"));
 	}
 
 	return NULL;
@@ -415,8 +416,8 @@ char *guard_write_protected_now(const char *kname, const char **fix)
 	/* The FACT and no more: where to look is the `fix` code's job, and saying
 	 * it twice on a status bar that holds three lines pushes out the tool's own
 	 * words to repeat something already said. */
-	return xstrdup("the device refused every write; the kernel has now "
-	               "marked it read-only");
+	return xstrdup(_("the device refused every write; the kernel has now "
+	                 "marked it read-only"));
 }
 
 void guard_report_refusal(const char *dev, const char *why, const char *fix)
@@ -435,7 +436,7 @@ void guard_report_refusal(const char *dev, const char *why, const char *fix)
 		return;
 	}
 
-	fprintf(stderr, "%ssyn-disks: refusing — %s.%s\n",
+	fprintf(stderr, _("%ssyn-disks: refusing — %s.%s\n"),
 	        C_BAD(), why, C_RESET());
 	guard_print_fix(dev, fix);
 }
@@ -447,34 +448,34 @@ void guard_print_fix(const char *dev, const char *fix)
 	 * is not, and offering a fixed-with-one-command tone for that would be an
 	 * invitation. */
 	if (!strcmp(fix, "unmount"))
-		fprintf(stderr, "  Unmount it first: syn-disks unmount %s\n", dev);
+		fprintf(stderr, _("  Unmount it first: syn-disks unmount %s\n"), dev);
 	else if (!strcmp(fix, "swapoff"))
-		fprintf(stderr, "  Turn it off first: swapoff %s\n", dev);
+		fprintf(stderr, _("  Turn it off first: swapoff %s\n"), dev);
 	else if (!strcmp(fix, "lock"))
-		fprintf(stderr, "  Lock it first: udisksctl lock -b %s\n", dev);
+		fprintf(stderr, _("  Lock it first: udisksctl lock -b %s\n"), dev);
 	else if (!strcmp(fix, "fstab"))
-		fprintf(stderr, "  Remove its line from /etc/fstab first, or this "
-		        "machine will not boot.\n");
+		fprintf(stderr, _("  Remove its line from /etc/fstab first, or this "
+		        "machine will not boot.\n"));
 	else if (!strcmp(fix, "readonly"))
-		fprintf(stderr, "  Many sticks and SD cards have a write-protect "
+		fprintf(stderr, _("  Many sticks and SD cards have a write-protect "
 		        "switch on the body; if this one does, check it. If it does "
 		        "not, the drive has marked ITSELF read-only and nothing here "
-		        "will clear it: blockdev --getro %s\n", dev);
+		        "will clear it: blockdev --getro %s\n"), dev);
 	else if (!strcmp(fix, "latched"))
-		fprintf(stderr, "  It accepted the request and then refused every "
+		fprintf(stderr, _("  It accepted the request and then refused every "
 		        "sector, so the drive's controller has switched itself "
 		        "read-only — the usual end of a worn or over-reported flash "
 		        "chip. Nothing in software undoes that. Check the kernel's "
 		        "account of it: journalctl -k | grep -i 'sense\\|write "
-		        "protect'\n");
+		        "protect'\n"));
 	else if (!strcmp(fix, "reread"))
-		fprintf(stderr, "  The layout may have changed since it was read: "
-		        "syn-disks table %s\n", dev);
+		fprintf(stderr, _("  The layout may have changed since it was read: "
+		        "syn-disks table %s\n"), dev);
 	else if (!strcmp(fix, "mktable"))
-		fprintf(stderr, "  Make one first: syn-disks mktable %s "
-		        "--type=gpt --yes\n", dev);
+		fprintf(stderr, _("  Make one first: syn-disks mktable %s "
+		        "--type=gpt --yes\n"), dev);
 	else
-		fprintf(stderr, "  There is no flag that overrides this.\n");
+		fprintf(stderr, _("  There is no flag that overrides this.\n"));
 }
 
 bool guard_refuse(const char *kname, const char *dev, const char *verb,
@@ -488,8 +489,13 @@ bool guard_refuse(const char *kname, const char *dev, const char *verb,
 	if (g_out == OUT_REC) {
 		guard_report_refusal(dev, why, fix);
 	} else {
-		fprintf(stderr, "%ssyn-disks: refusing to %s %s — %s.%s\n",
-		        C_BAD(), verb, dev, why, C_RESET());
+		/* The verb arrives marked with N_() at the call site and is
+		 * translated HERE, at the draw site — the same split info_row() and
+		 * smart.c's row() use. It never reaches a record: the --rec path a
+		 * few lines up writes `dev`, `why` and `fix` and no verb at all, so
+		 * translating it cannot move a column. */
+		fprintf(stderr, _("%ssyn-disks: refusing to %s %s — %s.%s\n"),
+		        C_BAD(), _(verb), dev, why, C_RESET());
 		guard_print_fix(dev, fix);
 	}
 

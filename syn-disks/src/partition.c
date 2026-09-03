@@ -43,6 +43,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -73,9 +74,9 @@ static void parse_opts(int argc, char **argv, const char *verb, popts_t *o)
 		else if (!strncmp(a, "--start=", 8))  o->start = a + 8;
 		else if (!strcmp(a, "--yes"))         o->yes = true;
 		else if (!strcmp(a, "--dry-run") || !strcmp(a, "-n")) o->dry = true;
-		else if (a[0] == '-') die("%s: unknown option '%s'", verb, a);
+		else if (a[0] == '-') die(_("%s: unknown option '%s'"), verb, a);
 		else if (!o->target)  o->target = a;
-		else die("%s: one device at a time (got '%s' as well)", verb, a);
+		else die(_("%s: one device at a time (got '%s' as well)"), verb, a);
 	}
 }
 
@@ -117,17 +118,17 @@ int pt_plan_do(char *const argv[], const char *script, const char *dev,
 			if (warn && *warn)
 				rec_row(2, "warn", warn);
 			if (!have_cmd(tool)) {
-				char *b = xasprintf("%s is not installed", tool);
+				char *b = xasprintf(_("%s is not installed"), tool);
 				rec_row(2, "blocked", b);
 				free(b);
 			}
 		} else {
-			printf("would run: %s\n", line);
+			printf(_("would run: %s\n"), line);
 			if (script && *script)
-				printf("  with: %s", script);
+				printf(_("  with: %s"), script);
 			printf("%s%s%s\n", C_WARN(), what, C_RESET());
 			if (warn && *warn)
-				printf("%swarning: %s%s\n", C_WARN(), warn, C_RESET());
+				printf(_("%swarning: %s%s\n"), C_WARN(), warn, C_RESET());
 		}
 		free(line);
 		return dry ? 0 : 2;
@@ -135,7 +136,7 @@ int pt_plan_do(char *const argv[], const char *script, const char *dev,
 	free(line);
 
 	if (!have_cmd(tool)) {
-		fprintf(stderr, "syn-disks: %s is not installed\n", tool);
+		fprintf(stderr, _("syn-disks: %s is not installed\n"), tool);
 		return 3;
 	}
 
@@ -174,7 +175,7 @@ int pt_plan_do(char *const argv[], const char *script, const char *dev,
 		printf("%s\n", *out ? out : "done");
 	} else {
 		if (late) {
-			fprintf(stderr, "%ssyn-disks: %s — %s.%s\n", C_BAD(), dev, late,
+			fprintf(stderr, _("%ssyn-disks: %s — %s.%s\n"), C_BAD(), dev, late,
 			        C_RESET());
 			guard_print_fix(dev, fix);
 		}
@@ -199,7 +200,7 @@ static int sfdisk_do(char *const argv[], const char *script, const char *dev,
 	 * belongs here rather than in the shared runner — where it would have to
 	 * be right about every tool this program might ever drive. */
 	if (rc == 3 && g_out != OUT_REC)
-		fprintf(stderr, "  Install util-linux to partition from here.\n");
+		fprintf(stderr, _("  Install util-linux to partition from here.\n"));
 	return rc;
 }
 
@@ -235,7 +236,7 @@ static char *disk_of(const char *arg, const char *verb, char **kname_out,
 {
 	char *k = sd_kernel_name(arg);
 	if (!k)
-		die("%s: %s is not a block device", verb, arg);
+		die(_("%s: %s is not a block device"), verb, arg);
 
 	if (number_out)
 		*number_out = 0;
@@ -266,17 +267,17 @@ int cmd_mkpart(int argc, char **argv)
 	parse_opts(argc, argv, "mkpart", &o);
 
 	if (!o.target)
-		die("mkpart: need a disk (see: syn-disks list)");
+		die(_("mkpart: need a disk (see: syn-disks list)"));
 
 	const fs_kind_t *kind = NULL;
 	if (o.fs) {
 		kind = fs_find(o.fs);
 		if (!kind)
-			die("mkpart: '%s' is not a filesystem this offers", o.fs);
+			die(_("mkpart: '%s' is not a filesystem this offers"), o.fs);
 	}
 	if (!fs_label_ok(o.label))
-		die("mkpart: a label may hold up to 32 letters, digits, spaces, "
-		    "'-', '_' and '.' — '%s' does not", o.label);
+		die(_("mkpart: a label may hold up to 32 letters, digits, spaces, "
+		    "'-', '_' and '.' — '%s' does not"), o.label);
 
 	char *disk = disk_of(o.target, "mkpart", NULL, NULL);
 
@@ -297,7 +298,7 @@ int cmd_mkpart(int argc, char **argv)
 	 * somebody who has a write-protect switch set off to run mktable, which
 	 * then refuses for the reason they could have been told first. */
 	char *ddisk = xasprintf("/dev/%s", disk);
-	if (guard_refuse(disk, ddisk, "partition", GUARD_ADD)) {
+	if (guard_refuse(disk, ddisk, N_("partition"), GUARD_ADD)) {
 		free(ddisk);
 		pt_free_layout(slots, n);
 		free(disk);
@@ -313,7 +314,7 @@ int cmd_mkpart(int argc, char **argv)
 	 * route out of the dialogue was a command line the person is not in. */
 	if (!*ptt) {
 		pt_free_layout(slots, n);
-		char *why = xasprintf("%s has no partition table", ddisk);
+		char *why = xasprintf(_("%s has no partition table"), ddisk);
 		guard_report_refusal(ddisk, why, "mktable");
 		free(why);
 		free(ddisk);
@@ -324,8 +325,8 @@ int cmd_mkpart(int argc, char **argv)
 
 	unsigned long long want = 0;
 	if (o.size && !parse_size(o.size, &want))
-		die("mkpart: '%s' is not a size — try 20G, 512MiB or a plain number "
-		    "of bytes", o.size);
+		die(_("mkpart: '%s' is not a size — try 20G, 512MiB or a plain number "
+		    "of bytes"), o.size);
 
 	/* --start names WHICH free space, by any byte offset inside it.
 	 *
@@ -342,8 +343,8 @@ int cmd_mkpart(int argc, char **argv)
 	 * names free space or it names none and this refuses. */
 	unsigned long long at = 0;
 	if (o.start && !parse_size(o.start, &at))
-		die("mkpart: '%s' is not an offset — it is a number of bytes, as "
-		    "`syn-disks table` prints it", o.start);
+		die(_("mkpart: '%s' is not an offset — it is a number of bytes, as "
+		    "`syn-disks table` prints it"), o.start);
 
 	const pt_slot_t *best = NULL;
 	for (size_t i = 0; i < n; i++) {
@@ -368,7 +369,7 @@ int cmd_mkpart(int argc, char **argv)
 	if (!best && o.start) {
 		pt_free_layout(slots, n);
 		char *dd = xasprintf("/dev/%s", disk);
-		char *why = xasprintf("there is no free space at byte %llu of %s", at,
+		char *why = xasprintf(_("there is no free space at byte %llu of %s"), at,
 		                      dd);
 		/* Its own code: this is the one refusal here that is not about the
 		 * drive at all. The offset came from a `table` that has since been
@@ -383,7 +384,7 @@ int cmd_mkpart(int argc, char **argv)
 	if (!best) {
 		pt_free_layout(slots, n);
 		char *dd = xasprintf("/dev/%s", disk);
-		char *why = xasprintf("%s has no free space", dd);
+		char *why = xasprintf(_("%s has no free space"), dd);
 		guard_report_refusal(dd, why, "none");
 		free(why);
 		free(dd);
@@ -403,8 +404,8 @@ int cmd_mkpart(int argc, char **argv)
 
 	if (avail < PT_ALIGN) {
 		pt_free_layout(slots, n);
-		fprintf(stderr, "%ssyn-disks: the free space on /dev/%s is too small "
-		        "for a partition%s\n", C_BAD(), disk, C_RESET());
+		fprintf(stderr, _("%ssyn-disks: the free space on /dev/%s is too small "
+		        "for a partition%s\n"), C_BAD(), disk, C_RESET());
 		free(disk);
 		return 1;
 	}
@@ -413,9 +414,18 @@ int cmd_mkpart(int argc, char **argv)
 	if (want && size > avail) {
 		char *asked = human_size(want);
 		char *have = human_size(avail);
-		fprintf(stderr, "%ssyn-disks: %s asked for, but %s free space on "
-		        "/dev/%s is %s%s\n", C_BAD(), asked,
-		        o.start ? "the chosen" : "the largest", disk, have, C_RESET());
+		/* Two whole sentences: "the chosen"/"the largest" interpolated into
+		 * one would reach the reader in English however the line around it
+		 * was translated, and an adjective dropped into a slot cannot agree
+		 * with the noun it lands beside. */
+		if (o.start)
+			fprintf(stderr, _("%ssyn-disks: %s asked for, but the chosen free "
+			        "space on /dev/%s is %s%s\n"),
+			        C_BAD(), asked, disk, have, C_RESET());
+		else
+			fprintf(stderr, _("%ssyn-disks: %s asked for, but the largest free "
+			        "space on /dev/%s is %s%s\n"),
+			        C_BAD(), asked, disk, have, C_RESET());
 		free(asked);
 		free(have);
 		pt_free_layout(slots, n);
@@ -429,7 +439,7 @@ int cmd_mkpart(int argc, char **argv)
 
 	int number = pt_next_number(disk);
 	if (number == 0)
-		die("mkpart: /dev/%s already has 128 partitions", disk);
+		die(_("mkpart: /dev/%s already has 128 partitions"), disk);
 
 	char *dev = xasprintf("/dev/%s", disk);
 	/* Sectors, because that is what a script speaks. Converted at this one
@@ -450,7 +460,7 @@ int cmd_mkpart(int argc, char **argv)
 	cmd[c] = NULL;
 
 	char *hu = human_size(size);
-	char *what = xasprintf("adds a %s partition to %s", hu, dev);
+	char *what = xasprintf(_("adds a %s partition to %s"), hu, dev);
 
 	/* Recorded BEFORE sfdisk runs. The new partition is whichever name is
 	 * there afterwards and was not there before — asking sysfs for "the
@@ -467,8 +477,8 @@ int cmd_mkpart(int argc, char **argv)
 			/* The partition is on the disk; the kernel has simply not caught
 			 * up, and saying "done" without saying that would leave somebody
 			 * looking for a node that appears a second later. */
-			fprintf(stderr, "%ssyn-disks: partition written, but the kernel "
-			        "has not shown it yet — run `partprobe %s`%s\n",
+			fprintf(stderr, _("%ssyn-disks: partition written, but the kernel "
+			        "has not shown it yet — run `partprobe %s`%s\n"),
 			        C_WARN(), dev, C_RESET());
 		} else if (kind) {
 			char *pdev = xasprintf("/dev/%s", fresh);
@@ -493,12 +503,12 @@ int cmd_mkpart(int argc, char **argv)
 				 * halfway through. */
 				rec_row(3, pdev, "ok", o.fs);
 			} else {
-				printf("%s is now %s\n", pdev, o.fs);
+				printf(_("%s is now %s\n"), pdev, o.fs);
 			}
 			free(out);
 			free(pdev);
 		} else if (g_out != OUT_REC) {
-			printf("/dev/%s\n", fresh);
+			printf(_("/dev/%s\n"), fresh);
 		}
 		free(fresh);
 	}
@@ -520,24 +530,24 @@ int cmd_rmpart(int argc, char **argv)
 	parse_opts(argc, argv, "rmpart", &o);
 
 	if (!o.target)
-		die("rmpart: need a partition (see: syn-disks table <disk>)");
+		die(_("rmpart: need a partition (see: syn-disks table <disk>)"));
 
 	char *k = NULL;
 	int number = 0;
 	char *disk = disk_of(o.target, "rmpart", &k, &number);
 
 	if (number == 0) {
-		fprintf(stderr, "%ssyn-disks: %s is a whole drive, not a partition%s\n",
+		fprintf(stderr, _("%ssyn-disks: %s is a whole drive, not a partition%s\n"),
 		        C_BAD(), o.target, C_RESET());
-		fprintf(stderr, "  To erase its table: syn-disks mktable %s "
-		        "--type=gpt --yes\n", o.target);
+		fprintf(stderr, _("  To erase its table: syn-disks mktable %s "
+		        "--type=gpt --yes\n"), o.target);
 		free(disk);
 		free(k);
 		return 1;
 	}
 
 	char *dev = xasprintf("/dev/%s", k);
-	if (guard_refuse(k, dev, "delete", GUARD_DESTROY)) {
+	if (guard_refuse(k, dev, N_("delete"), GUARD_DESTROY)) {
 		free(dev);
 		free(disk);
 		free(k);
@@ -559,7 +569,7 @@ int cmd_rmpart(int argc, char **argv)
 	cmd[c] = NULL;
 
 	char *hu = human_size(sd_size_bytes(k));
-	char *what = xasprintf("destroys %s and the %s on it", dev, hu);
+	char *what = xasprintf(_("destroys %s and the %s on it"), dev, hu);
 
 	/* No script: --delete takes the number as an argument and reads nothing. */
 	int rc = sfdisk_do(cmd, NULL, dev, what, o.yes, o.dry);
@@ -582,16 +592,16 @@ int cmd_resize(int argc, char **argv)
 	parse_opts(argc, argv, "resize", &o);
 
 	if (!o.target)
-		die("resize: need a partition (see: syn-disks table <disk>)");
+		die(_("resize: need a partition (see: syn-disks table <disk>)"));
 	if (!o.size)
-		die("resize: need --size=SIZE (the new size, which must be larger)");
+		die(_("resize: need --size=SIZE (the new size, which must be larger)"));
 
 	char *k = NULL;
 	int number = 0;
 	char *disk = disk_of(o.target, "resize", &k, &number);
 
 	if (number == 0) {
-		fprintf(stderr, "%ssyn-disks: %s is a whole drive, not a partition%s\n",
+		fprintf(stderr, _("%ssyn-disks: %s is a whole drive, not a partition%s\n"),
 		        C_BAD(), o.target, C_RESET());
 		free(disk);
 		free(k);
@@ -600,8 +610,8 @@ int cmd_resize(int argc, char **argv)
 
 	unsigned long long want = 0;
 	if (!parse_size(o.size, &want))
-		die("resize: '%s' is not a size — try 20G, 512MiB or a plain number "
-		    "of bytes", o.size);
+		die(_("resize: '%s' is not a size — try 20G, 512MiB or a plain number "
+		    "of bytes"), o.size);
 
 	char *dev = xasprintf("/dev/%s", k);
 
@@ -610,7 +620,7 @@ int cmd_resize(int argc, char **argv)
 	 * else — mounted, swap, unlocked on top, holding "/" — applies exactly as
 	 * it does to a deletion, because growing a partition still rewrites the
 	 * table underneath a live filesystem. */
-	if (guard_refuse(k, dev, "resize", GUARD_MODIFY)) {
+	if (guard_refuse(k, dev, N_("resize"), GUARD_MODIFY)) {
 		free(dev);
 		free(disk);
 		free(k);
@@ -623,13 +633,13 @@ int cmd_resize(int argc, char **argv)
 	if (size <= now) {
 		char *hnow = human_size(now);
 		char *hwant = human_size(size);
-		fprintf(stderr, "%ssyn-disks: refusing to shrink %s from %s to %s.%s\n",
+		fprintf(stderr, _("%ssyn-disks: refusing to shrink %s from %s to %s.%s\n"),
 		        C_BAD(), dev, hnow, hwant, C_RESET());
-		fprintf(stderr, "  The filesystem inside would still believe it owns "
+		fprintf(stderr, _("  The filesystem inside would still believe it owns "
 		        "the blocks past the new end,\n"
 		        "  and would destroy itself the next time it wrote to one. "
 		        "Shrink the filesystem\n"
-		        "  first, with the tool that belongs to it.\n");
+		        "  first, with the tool that belongs to it.\n"));
 		free(hwant);
 		free(hnow);
 		free(dev);
@@ -664,8 +674,8 @@ int cmd_resize(int argc, char **argv)
 	if (ceiling && size > ceiling) {
 		char *hwant = human_size(size);
 		char *hmax = human_size(ceiling);
-		fprintf(stderr, "%ssyn-disks: %s asked for, but %s can only grow to "
-		        "%s — the free space after it ends there%s\n",
+		fprintf(stderr, _("%ssyn-disks: %s asked for, but %s can only grow to "
+		        "%s — the free space after it ends there%s\n"),
 		        C_BAD(), hwant, dev, hmax, C_RESET());
 		free(hmax);
 		free(hwant);
@@ -697,14 +707,14 @@ int cmd_resize(int argc, char **argv)
 
 	char *hnow = human_size(now);
 	char *hnew = human_size(size);
-	char *what = xasprintf("grows %s from %s to %s; the filesystem inside "
-	                       "still ends where it did", dev, hnow, hnew);
+	char *what = xasprintf(_("grows %s from %s to %s; the filesystem inside "
+	                       "still ends where it did"), dev, hnow, hnew);
 
 	int rc = sfdisk_do(cmd, script, dev, what, o.yes, o.dry);
 
 	if (rc == 0 && o.yes && !o.dry && g_out != OUT_REC)
-		printf("%sthe partition is bigger; the filesystem is not. Grow it "
-		       "with resize2fs, btrfs filesystem resize or xfs_growfs.%s\n",
+		printf(_("%sthe partition is bigger; the filesystem is not. Grow it "
+		       "with resize2fs, btrfs filesystem resize or xfs_growfs.%s\n"),
 		       C_WARN(), C_RESET());
 
 	free(what);
@@ -727,17 +737,17 @@ int cmd_mktable(int argc, char **argv)
 	parse_opts(argc, argv, "mktable", &o);
 
 	if (!o.target)
-		die("mktable: need a disk (see: syn-disks list)");
+		die(_("mktable: need a disk (see: syn-disks list)"));
 
 	const char *type = o.type ? o.type : "gpt";
 	if (strcmp(type, "gpt") && strcmp(type, "dos"))
-		die("mktable: --type must be gpt or dos, not '%s'", type);
+		die(_("mktable: --type must be gpt or dos, not '%s'"), type);
 
 	char *k = sd_kernel_name(o.target);
 	if (!k)
-		die("mktable: %s is not a block device", o.target);
+		die(_("mktable: %s is not a block device"), o.target);
 	if (sd_is_partition(k))
-		die("mktable: %s is a partition — a table belongs to a whole drive",
+		die(_("mktable: %s is a partition — a table belongs to a whole drive"),
 		    o.target);
 
 	char *dev = xasprintf("/dev/%s", k);
@@ -747,7 +757,7 @@ int cmd_mktable(int argc, char **argv)
 	 * filesystem anywhere on the drive is enough to refuse — and that is why
 	 * this is the one partitioning operation the system drive can never
 	 * reach. */
-	if (guard_refuse(k, dev, "erase the partition table of", GUARD_DESTROY)) {
+	if (guard_refuse(k, dev, N_("erase the partition table of"), GUARD_DESTROY)) {
 		free(dev);
 		free(k);
 		return 1;
@@ -765,10 +775,13 @@ int cmd_mktable(int argc, char **argv)
 	cmd[c] = NULL;
 
 	int count = sd_count_partitions(k);
+	/* ⚠ ngettext, not `%d partition%s` with a ternary for the s: no catalog
+	 * can express that, and Polish and Arabic do not split at one. */
 	char *what = count > 0
-	    ? xasprintf("destroys the %d partition%s on %s and everything on them",
-	                count, count == 1 ? "" : "s", dev)
-	    : xasprintf("writes a new %s table on %s", type, dev);
+	    ? xasprintf(P_("destroys the %d partition on %s and everything on it",
+	                   "destroys the %d partitions on %s and everything on them",
+	                   count), count, dev)
+	    : xasprintf(_("writes a new %s table on %s"), type, dev);
 
 	int rc = sfdisk_do(cmd, script, dev, what, o.yes, o.dry);
 

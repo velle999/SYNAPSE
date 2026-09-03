@@ -24,10 +24,17 @@ import Quickshell
 import Quickshell.Io
 import QtQuick.Controls
 
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS A DIRECTORY IMPORT. quickshell has no
+// translator at all — qsTr() compiles, returns its own argument, and translates
+// nothing while looking exactly like a marked string in review — so qml/I18n.qml
+// reads a JSON catalog compiled from the same po/*.po the binary's .mo comes
+// from.
+import "qml"
+
 FloatingWindow {
     id: root
 
-    title: "SYNAPSE Disks"
+    title: I18n.tr("SYNAPSE Disks")
     implicitWidth: 980
     implicitHeight: 660
     // The sidebar is a fixed 230 and the partition table has six columns.
@@ -51,8 +58,8 @@ FloatingWindow {
             return
         }
         root.visible = true
-        root.status = "still working — this window will close when the drive "
-                    + "is finished with"
+        root.status = I18n.tr("still working — this window will close when the "
+                              + "drive is finished with")
         closeGuard.restart()
     }
 
@@ -434,7 +441,7 @@ FloatingWindow {
                 root.drives = root.parseRecords(this.text)
                 root.loading = false
                 if (root.drives.length === 0) {
-                    root.say("no drives reported")
+                    root.say(I18n.tr("no drives reported"))
                     return
                 }
                 // Keep the current selection across a refresh when the drive is
@@ -602,11 +609,14 @@ FloatingWindow {
         // words are rarely a verdict — mkfs failing halfway still opens with
         // its version banner, which alone reads like a success.
         const why = root.oneLine((r && r.detail) || root.opErr)
-        const what = "could not " + root.opVerb
+        // ⚠ ONE msgid WITH THE VERB IN IT. `opVerb` is a phrase set beside
+        // each runOp() call ("formatting", "unmounting"), and a language that
+        // inflects the verb cannot build this from "could not " + a noun.
+        const what = I18n.tr("could not %1").arg(root.opVerb)
                    + (root.opTarget !== "" ? " " + root.opTarget : "")
         let said = why !== "" ? what + " — " + why
-                 : (code !== 0 ? what + " (exit " + code + ")"
-                               : what + " — the tool reported nothing")
+                 : (code !== 0 ? I18n.tr("%1 (exit %2)").arg(what).arg(code)
+                               : I18n.tr("%1 — the tool reported nothing").arg(what))
         // A failure carries a `fix` code exactly as a refusal does, and it is
         // worth more than the tool's sentence: the switch on the body of a
         // stick is the answer, and no amount of mke2fs output says so. "none"
@@ -629,7 +639,7 @@ FloatingWindow {
         root.opOut = ""
         root.opErr = ""
         root.opDone = done || ""
-        root.opVerb = args[0] || "do that"
+        root.opVerb = args[0] || I18n.tr("do that")
         root.opTarget = (args.length > 1 && args[1].indexOf("-") !== 0) ? args[1] : ""
         actProc.command = [root.bin, "--rec"].concat(args)
         actProc.running = true
@@ -755,41 +765,47 @@ FloatingWindow {
 
     readonly property string dlgTitle: {
         switch (root.dlg) {
-        case "format": return "Erase " + root.dlgDev
-        case "add":    return "New partition on " + root.selDisk
-        case "delete": return "Delete " + root.dlgDev
-        case "resize": return "Grow " + root.dlgDev
-        case "copy":   return "Copy " + root.dlgDev
-        case "table":  return "Partition table on " + root.dlgDev
+        case "format": return I18n.tr("Erase %1").arg(root.dlgDev)
+        case "add":    return I18n.tr("New partition on %1").arg(root.selDisk)
+        case "delete": return I18n.tr("Delete %1").arg(root.dlgDev)
+        case "resize": return I18n.tr("Grow %1").arg(root.dlgDev)
+        case "copy":   return I18n.tr("Copy %1").arg(root.dlgDev)
+        case "table":  return I18n.tr("Partition table on %1").arg(root.dlgDev)
         default:       return ""
         }
     }
     readonly property string dlgBlurb: {
         switch (root.dlg) {
-        case "format": return "Everything on this device will be destroyed. There is no undo."
+        case "format": return I18n.tr("Everything on this device will be destroyed. "
+                                    + "There is no undo.")
         case "add":    return root.gap
-            ? "Into the " + root.human(root.gap.bytes) + " of free space selected below."
-            : "Into the largest free space on this drive."
-        case "delete": return "The partition and everything on it are destroyed. There is no undo."
-        case "resize": return "It grows into the free space that follows it, and nothing else. "
-                            + "The filesystem inside still ends where it does now — grow that "
-                            + "afterwards, with the tool that belongs to it."
-        case "copy":   return "Every byte of " + root.dlgDev + " is written over the partition "
-                            + "you choose. Everything on that one is destroyed."
-        case "table":  return "A drive needs one before it can hold partitions. Writing a new "
-                            + "table discards every partition on this drive — and, on a drive "
-                            + "formatted without one, the filesystem written straight onto it."
+            ? I18n.tr("Into the %1 of free space selected below.")
+                  .arg(root.human(root.gap.bytes))
+            : I18n.tr("Into the largest free space on this drive.")
+        case "delete": return I18n.tr("The partition and everything on it are destroyed. "
+                                    + "There is no undo.")
+        case "resize": return I18n.tr("It grows into the free space that follows it, and "
+                                    + "nothing else. The filesystem inside still ends where "
+                                    + "it does now — grow that afterwards, with the tool "
+                                    + "that belongs to it.")
+        case "copy":   return I18n.tr("Every byte of %1 is written over the partition you "
+                                    + "choose. Everything on that one is destroyed.")
+                                 .arg(root.dlgDev)
+        case "table":  return I18n.tr("A drive needs one before it can hold partitions. "
+                                    + "Writing a new table discards every partition on this "
+                                    + "drive — and, on a drive formatted without one, the "
+                                    + "filesystem written straight onto it.")
         default:       return ""
         }
     }
     readonly property string dlgGo: {
         switch (root.dlg) {
-        case "format": return "Erase and format"
-        case "add":    return "Create it"
-        case "delete": return "Delete it"
-        case "resize": return "Grow it"
-        case "copy":   return "Copy over it"
-        case "table":  return "Write the table"
+        case "format": return I18n.tr("Erase and format")
+        case "add":    return I18n.tr("Create it")
+        case "delete": return I18n.tr("Delete it")
+        case "resize": return I18n.tr("Grow it")
+        case "copy":   return I18n.tr("Copy over it")
+        case "table":  return I18n.tr("Write the table")
         default:       return ""
         }
     }
@@ -853,7 +869,7 @@ FloatingWindow {
             return
         }
         if (final)
-            root.status = "could not work out what that would do"
+            root.status = I18n.tr("could not work out what that would do")
     }
 
     // The way out, from the `fix` FIELD and never from the wording of the
@@ -873,32 +889,35 @@ FloatingWindow {
     // that just failed.
     function hintFor(code, dev) {
         switch (code) {
-        case "unmount": return "It is mounted. Unmount it and this becomes possible."
-        case "swapoff": return "Swap is live on it — run: swapoff " + dev
-        case "lock":    return "A volume is unlocked on top of it; lock it first."
-        case "fstab":   return "/etc/fstab expects this at the next boot."
+        // ⛔ THE `code` IS THE RECORD'S `fix` FIELD — an identifier the binary
+        // writes and this switch matches. It is never translated; only what
+        // comes back out of here is.
+        case "unmount": return I18n.tr("It is mounted. Unmount it and this becomes possible.")
+        case "swapoff": return I18n.tr("Swap is live on it — run: swapoff %1").arg(dev)
+        case "lock":    return I18n.tr("A volume is unlocked on top of it; lock it first.")
+        case "fstab":   return I18n.tr("/etc/fstab expects this at the next boot.")
         // The switch on the side of the stick, which is the answer nine times
         // out of ten and is not something software can undo. Said in full
         // because "read-only" on its own reads as a broken drive: this window
         // watched mke2fs report "Read-only file system while setting up
         // superblock" and had nothing better to offer than that sentence.
-        case "readonly": return "The kernel says this device is write-protected. "
-                              + "Many sticks and cards have a switch on the body — "
-                              + "check that first if this one has one; no option "
-                              + "here overrides it."
+        case "readonly": return I18n.tr("The kernel says this device is write-protected. "
+                                      + "Many sticks and cards have a switch on the body — "
+                                      + "check that first if this one has one; no option "
+                                      + "here overrides it.")
         // The same flag, found on the other side of a write, and NOT the same
         // answer. Nobody flips a switch halfway through a format, and this
         // stick had none to flip: it took the request, refused every sector,
         // and the kernel then re-read it as read-only. Saying "check the
         // switch" to that is an instruction to go looking for a part the
         // device does not have.
-        case "latched": return "It accepted this and then refused every write, "
-                             + "so the drive has switched itself read-only. That "
-                             + "is a worn or over-reported flash chip, and "
-                             + "nothing in software undoes it."
-        case "mktable": return "There is no partition table to put a partition in."
-        case "reread":  return "The drive has changed since this was read — refresh it."
-        case "none":    return "There is nothing that overrides this."
+        case "latched": return I18n.tr("It accepted this and then refused every write, "
+                                     + "so the drive has switched itself read-only. That "
+                                     + "is a worn or over-reported flash chip, and "
+                                     + "nothing in software undoes it.")
+        case "mktable": return I18n.tr("There is no partition table to put a partition in.")
+        case "reread":  return I18n.tr("The drive has changed since this was read — refresh it.")
+        case "none":    return I18n.tr("There is nothing that overrides this.")
         default:        return ""
         }
     }
@@ -917,8 +936,9 @@ FloatingWindow {
     function unmountForDialog() {
         if (!root.fixDev || root.busy) return
         root.replanAfterOp = true
-        root.runOp(["unmount", root.fixDev], "unmounting " + root.fixDev + "…",
-                   root.fixDev + " unmounted")
+        root.runOp(["unmount", root.fixDev],
+                   I18n.tr("unmounting %1…").arg(root.fixDev),
+                   I18n.tr("%1 unmounted").arg(root.fixDev))
     }
 
     function askDialog(kind, dev) {
@@ -962,34 +982,48 @@ FloatingWindow {
         root.dlg = ""
         switch (kind) {
         case "format":
-            root.runOp(args.concat(["--yes"]), "formatting " + dev + "…",
-                       dev + " is now " + root.opFs
-                       + (root.opLabel !== "" ? ", labelled " + root.opLabel : ""))
+            // ⚠ TWO WHOLE SENTENCES rather than one with a clause bolted on:
+            // a language that puts the label before the filesystem cannot be
+            // written as a suffix.
+            root.runOp(args.concat(["--yes"]),
+                       I18n.tr("formatting %1…").arg(dev),
+                       root.opLabel !== ""
+                       ? I18n.tr("%1 is now %2, labelled %3")
+                             .arg(dev).arg(root.opFs).arg(root.opLabel)
+                       : I18n.tr("%1 is now %2").arg(dev).arg(root.opFs))
             break
         case "add":
-            root.runOp(args.concat(["--yes"]), "making a partition on " + root.selDisk + "…",
-                       "the partition was made on " + root.selDisk)
+            root.runOp(args.concat(["--yes"]),
+                       I18n.tr("making a partition on %1…").arg(root.selDisk),
+                       I18n.tr("the partition was made on %1").arg(root.selDisk))
             break
         case "delete":
-            root.runOp(args.concat(["--yes"]), "deleting " + dev + "…",
-                       dev + " is gone")
+            root.runOp(args.concat(["--yes"]),
+                       I18n.tr("deleting %1…").arg(dev),
+                       I18n.tr("%1 is gone").arg(dev))
             break
         case "resize":
-            root.runOp(args.concat(["--yes"]), "growing " + dev + "…",
-                       dev + " is bigger — the filesystem inside it is not yet")
+            root.runOp(args.concat(["--yes"]),
+                       I18n.tr("growing %1…").arg(dev),
+                       I18n.tr("%1 is bigger — the filesystem inside it is not yet")
+                           .arg(dev))
             break
         case "copy":
             // No progress to report: dd says nothing until it is finished, and
             // a copy of a large partition takes minutes. The status line says
             // what is happening and the window is busy until it is not.
             root.runOp(args.concat(["--yes"]),
-                       "copying " + dev + " onto " + root.copyDst + " — this can take a while…",
-                       root.copyDst + " now holds a copy of " + dev)
+                       I18n.tr("copying %1 onto %2 — this can take a while…")
+                           .arg(dev).arg(root.copyDst),
+                       I18n.tr("%1 now holds a copy of %2")
+                           .arg(root.copyDst).arg(dev))
             break
         case "table":
             root.runOp(args.concat(["--yes"]),
-                       "writing a " + root.opPtType + " table on " + dev + "…",
-                       dev + " has a new " + root.opPtType + " table — it is empty")
+                       I18n.tr("writing a %1 table on %2…")
+                           .arg(root.opPtType).arg(dev),
+                       I18n.tr("%1 has a new %2 table — it is empty")
+                           .arg(dev).arg(root.opPtType))
             break
         }
     }
@@ -1034,11 +1068,12 @@ FloatingWindow {
         // "it is mounted at /mnt/data" beside the partition somebody just
         // asked to copy reads as a fault in the destination list rather than
         // as the reason a thing cannot be copied onto itself.
-        if (row.device === root.dlgDev) return "this is the partition being copied"
+        if (row.device === root.dlgDev)
+            return I18n.tr("this is the partition being copied")
         if (row.protected) return row.protected
         const src = root.slotOf(root.dlgDev)
         if (src && root.num(row.bytes) < root.num(src.bytes))
-            return "too small — needs " + root.human(src.bytes)
+            return I18n.tr("too small — needs %1").arg(root.human(src.bytes))
         return ""
     }
 
@@ -1172,7 +1207,7 @@ FloatingWindow {
                 id: navTitle
                 x: 16
                 y: 14
-                text: "Disks"
+                text: I18n.tr("Disks")
                 color: root.cAccent
                 font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
             }
@@ -1245,7 +1280,7 @@ FloatingWindow {
             Btn {
                 id: aboutBtn
                 anchors { left: parent.left; leftMargin: 14; bottom: parent.bottom; bottomMargin: 12 }
-                label: "About"
+                label: I18n.tr("About")
                 onGo: root.aboutOpen = true
             }
         }
@@ -1261,7 +1296,7 @@ FloatingWindow {
                 anchors { left: parent.left; leftMargin: 18; top: parent.top; topMargin: 14 }
                 width: parent.width - 220
                 elide: Text.ElideRight
-                text: root.drive ? root.drive.name : "No drive selected"
+                text: root.drive ? root.drive.name : I18n.tr("No drive selected")
                 color: root.cText
                 font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
             }
@@ -1273,6 +1308,9 @@ FloatingWindow {
                 text: {
                     if (!root.drive) return ""
                     const d = root.drive
+                    // ⚠ `kind` and `bus` are RECORD VALUES — ssd, hdd, usb,
+                    // nvme — which sysfs.c never marks; they are what the
+                    // hardware calls itself.
                     let s = d.device + " · " + d.size + " · " + d.kind + " · " + d.bus
                     if (d.table && d.table !== "none") s += " · " + d.table
                     if (d.serial) s += " · " + d.serial
@@ -1285,14 +1323,14 @@ FloatingWindow {
             Btn {
                 id: healthBtn
                 anchors { right: refreshBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                label: root.healthBusy ? "reading…" : "Health"
+                label: root.healthBusy ? I18n.tr("reading…") : I18n.tr("Health")
                 enabled2: root.drive !== null && !root.healthBusy
                 onGo: root.readHealth(false)
             }
             Btn {
                 id: refreshBtn
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
-                label: root.loading ? "reading…" : "Refresh"
+                label: root.loading ? I18n.tr("reading…") : I18n.tr("Refresh")
                 // Asking by hand IS the new context, so this is one of the two
                 // places allowed to drop the last message.
                 onGo: { root.status = ""; root.reload() }
@@ -1345,7 +1383,7 @@ FloatingWindow {
                 // unallocated bar is the honest picture of it: nothing is
                 // allocated on it.
                 if (out.length === 0)
-                    out.push({ dev: "", start: "", label: "unallocated",
+                    out.push({ dev: "", start: "", label: I18n.tr("unallocated"),
                                frac: 1, gap: true })
                 return out
             }
@@ -1422,7 +1460,11 @@ FloatingWindow {
             height: root.parts.length > 0 ? 20 : 0
             clip: true
 
-            readonly property var titles: ["Device", "Label", "Type", "Size", "Mounted at", "Used"]
+            // ⚠ THE WORDS THEMSELVES, because nothing matches on them — the
+            // columns are indexed, and this Repeater only draws them.
+            readonly property var titles: [I18n.tr("Device"), I18n.tr("Label"),
+                                           I18n.tr("Type"), I18n.tr("Size"),
+                                           I18n.tr("Mounted at"), I18n.tr("Used")]
             // Fixed fractions rather than content-derived widths, so the table
             // does not reflow on every refresh and make a changed value look
             // like a moved row.
@@ -1525,7 +1567,7 @@ FloatingWindow {
                     Text {
                         width: headRow.colWidth(4)
                         elide: Text.ElideRight
-                        text: pRow.modelData.mounts || "not mounted"
+                        text: pRow.modelData.mounts || I18n.tr("not mounted")
                         color: pRow.modelData.mounts ? root.cGood : root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -1584,7 +1626,7 @@ FloatingWindow {
             anchors.centerIn: table
             visible: !root.loading && root.parts.length === 0 && root.drive !== null
             horizontalAlignment: Text.AlignHCenter
-            text: "This drive has no partition table.\nNothing is allocated on it."
+            text: I18n.tr("This drive has no partition table.\nNothing is allocated on it.")
             color: root.cDim
             font { family: root.uiFont; pixelSize: root.ui(11) }
         }
@@ -1604,7 +1646,7 @@ FloatingWindow {
             Text {
                 id: healthTitle
                 anchors { top: parent.top; left: parent.left; margins: 16 }
-                text: "Drive health"
+                text: I18n.tr("Drive health")
                 color: root.cAccent
                 font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
             }
@@ -1628,7 +1670,13 @@ FloatingWindow {
                             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             width: 150
                             elide: Text.ElideRight
-                            text: parent.modelData.field
+                            // ⛔ TRANSLATED WHERE IT IS DRAWN, and NOWHERE
+                            // near the comparisons: `modelData.field ===
+                            // "retry"` above and `value === "FAILING"` below
+                            // both read the RAW cell, which src/smart.c marks
+                            // N_() so the row still carries the English word.
+                            // i18n-dynamic: src/smart.c marks these N_()
+                            text: I18n.tr(parent.modelData.field)
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
@@ -1636,7 +1684,8 @@ FloatingWindow {
                             anchors { left: parent.left; leftMargin: 150; right: parent.right
                                       verticalCenter: parent.verticalCenter }
                             elide: Text.ElideRight
-                            text: parent.modelData.value
+                            // i18n-dynamic: src/smart.c marks these N_()
+                            text: I18n.tr(parent.modelData.value)
                             color: parent.modelData.value === "FAILING" ? root.cBad
                                  : parent.modelData.value === "healthy" ? root.cGood
                                  : root.cText
@@ -1657,12 +1706,12 @@ FloatingWindow {
                 // The binary says whether authorising would help, rather than
                 // this file guessing what a refusal meant.
                 Btn {
-                    label: "Authorise and retry"
+                    label: I18n.tr("Authorise and retry")
                     visible: root.health["retry"] === "elevate"
                     onGo: root.readHealth(true)
                 }
                 Btn {
-                    label: "Close"
+                    label: I18n.tr("Close")
                     onGo: { root.healthRows = []; root.health = ({}) }
                 }
             }
@@ -1686,17 +1735,17 @@ FloatingWindow {
                 spacing: 6
 
                 Text {
-                    text: "SYNAPSE Disks"
+                    text: I18n.tr("SYNAPSE Disks")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
                 }
                 Text {
                     width: aboutCol.width
                     wrapMode: Text.WordWrap
-                    text: "Reads the storage tree from the kernel. Mounting and "
+                    text: I18n.tr("Reads the storage tree from the kernel. Mounting and "
                         + "safe removal go through udisks2, health through "
                         + "smartmontools, and formatting through polkit — each "
-                        + "of which does its own authorisation."
+                        + "of which does its own authorisation.")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
@@ -1704,14 +1753,14 @@ FloatingWindow {
                 Text {
                     width: aboutCol.width
                     wrapMode: Text.WordWrap
-                    text: "Formatting anything on the disk holding this running "
-                        + "system is refused, and there is no override."
+                    text: I18n.tr("Formatting anything on the disk holding this running "
+                        + "system is refused, and there is no override.")
                     color: root.cWarn
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Item { width: 1; height: 4 }
                 Text {
-                    text: "Support: buymeacoffee.com/velle999"
+                    text: I18n.tr("Support: buymeacoffee.com/velle999")
                     color: root.cAccent
                     font { family: root.uiFont; pixelSize: root.ui(11); underline: true }
 
@@ -1724,7 +1773,7 @@ FloatingWindow {
             }
             Btn {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 14 }
-                label: "Close"
+                label: I18n.tr("Close")
                 onGo: root.aboutOpen = false
             }
         }
@@ -1777,7 +1826,7 @@ FloatingWindow {
                 // ── Filesystem: format, and a new partition ─────────────────
                 Text {
                     visible: root.dlg === "format" || root.dlg === "add"
-                    text: "Filesystem"
+                    text: I18n.tr("Filesystem")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
@@ -1834,7 +1883,7 @@ FloatingWindow {
                 // ── Table type: mktable ─────────────────────────────────────
                 Text {
                     visible: root.dlg === "table"
-                    text: "Kind of table"
+                    text: I18n.tr("Kind of table")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
@@ -1881,8 +1930,9 @@ FloatingWindow {
                     wrapMode: Text.WordWrap
                     visible: root.dlg === "table"
                     text: root.opPtType === "gpt"
-                        ? "the modern one — any size, up to 128 partitions"
-                        : "for old BIOS machines and devices that expect it; nothing past 2TB"
+                        ? I18n.tr("the modern one — any size, up to 128 partitions")
+                        : I18n.tr("for old BIOS machines and devices that expect it; "
+                                + "nothing past 2TB")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
@@ -1920,10 +1970,10 @@ FloatingWindow {
                     width: dlgCol.width
                     wrapMode: Text.WordWrap
                     visible: root.dlg === "add" || root.dlg === "resize"
-                    text: "20G, 512MiB or a plain number of bytes. IEC suffixes are powers of "
-                        + "1024; KB, MB and GB are powers of 1000."
+                    text: I18n.tr("20G, 512MiB or a plain number of bytes. IEC suffixes are powers of "
+                        + "1024; KB, MB and GB are powers of 1000.")
                         + (root.dlg === "resize" && root.growMax > 0
-                           ? " Up to " + root.human(root.growMax) + " here."
+                           ? I18n.tr(" Up to %1 here.").arg(root.human(root.growMax))
                            : "")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
@@ -1932,7 +1982,7 @@ FloatingWindow {
                 // ── Label: format, and a new partition being formatted ──────
                 Text {
                     visible: root.dlg === "format" || (root.dlg === "add" && root.opFs !== "none")
-                    text: "Label (optional)"
+                    text: I18n.tr("Label (optional)")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
@@ -1959,7 +2009,7 @@ FloatingWindow {
                 // ── Destination: copy ───────────────────────────────────────
                 Text {
                     visible: root.dlg === "copy"
-                    text: "Copy it onto"
+                    text: I18n.tr("Copy it onto")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
@@ -2055,9 +2105,9 @@ FloatingWindow {
                     width: dlgCol.width
                     wrapMode: Text.WordWrap
                     visible: root.dlg === "copy" && root.copyDst === ""
-                    text: "Nothing on this drive can take it. A destination has to be a "
+                    text: I18n.tr("Nothing on this drive can take it. A destination has to be a "
                         + "partition that already exists and is at least as large — make one "
-                        + "with New… first."
+                        + "with New… first.")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
@@ -2067,7 +2117,8 @@ FloatingWindow {
                 // What will actually run, produced by the same code path that
                 // would run it. Not a sentence this file composed.
                 Text {
-                    text: root.plan["refused"] ? "This is not allowed:" : "This will run:"
+                    text: root.plan["refused"] ? I18n.tr("This is not allowed:")
+                                               : I18n.tr("This will run:")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
@@ -2084,8 +2135,8 @@ FloatingWindow {
                         text: root.plan["refused"] ? root.plan["refused"]
                             : root.plan["command"] ? root.plan["command"]
                             : (root.dlg === "copy" && root.copyDst === "")
-                              ? "choose a destination above"
-                              : "working it out…"
+                              ? I18n.tr("choose a destination above")
+                              : I18n.tr("working it out…")
                         color: root.plan["refused"] ? root.cBad : root.cText
                         font { family: "monospace"; pixelSize: root.ui(10) }
                     }
@@ -2140,11 +2191,11 @@ FloatingWindow {
                 spacing: 8
 
                 Btn {
-                    label: "Cancel"
+                    label: I18n.tr("Cancel")
                     onGo: root.dlg = ""
                 }
                 Btn {
-                    label: "Unmount it"
+                    label: I18n.tr("Unmount it")
                     visible: root.plan["fix"] === "unmount"
                     onGo: root.unmountForDialog()
                 }
@@ -2156,7 +2207,7 @@ FloatingWindow {
                 // "Make one first: syn-disks mktable …" is a fine sentence in
                 // a terminal and no help at all to somebody holding a mouse.
                 Btn {
-                    label: "Make a partition table…"
+                    label: I18n.tr("Make a partition table…")
                     visible: root.plan["fix"] === "mktable"
                     onGo: root.askDialog("table", root.selDisk)
                 }
@@ -2199,8 +2250,8 @@ FloatingWindow {
                 width: 200
                 elide: Text.ElideRight
                 text: root.part ? root.part.device
-                    : root.gap ? "free space · " + root.human(root.gap.bytes)
-                    : "select a partition"
+                    : root.gap ? I18n.tr("free space · %1").arg(root.human(root.gap.bytes))
+                    : I18n.tr("select a partition")
                 color: (root.part || root.gap) ? root.cText : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(12)
                        bold: root.part !== null || root.gap !== null }
@@ -2227,31 +2278,31 @@ FloatingWindow {
                 spacing: 8
 
                 Btn {
-                    label: "Mount"
+                    label: I18n.tr("Mount")
                     enabled2: root.part !== null && root.part.mounts === ""
                     onGo: root.runOp(["mount", root.devOf(root.part)],
-                                     "mounting " + root.part.device + "…",
-                                     root.part.device + " mounted")
+                                     I18n.tr("mounting %1…").arg(root.part.device),
+                                     I18n.tr("%1 mounted").arg(root.part.device))
                 }
                 Btn {
-                    label: "Unmount"
+                    label: I18n.tr("Unmount")
                     enabled2: root.part !== null && root.part.mounts !== ""
                     onGo: root.runOp(["unmount", root.devOf(root.part)],
-                                     "unmounting " + root.part.device + "…",
-                                     root.part.device + " unmounted")
+                                     I18n.tr("unmounting %1…").arg(root.part.device),
+                                     I18n.tr("%1 unmounted").arg(root.part.device))
                 }
                 Btn {
-                    label: "Eject drive"
+                    label: I18n.tr("Eject drive")
                     // Ejecting the drive the system is running from is a
                     // request the hardware will refuse and the user will read
                     // as a bug. It is not offered.
                     enabled2: root.drive !== null && root.drive.system !== "system"
                     onGo: root.runOp(["eject", root.devOf(root.drive)],
-                                     "powering down " + root.drive.device + "…",
-                                     root.drive.device + " is safe to unplug")
+                                     I18n.tr("powering down %1…").arg(root.drive.device),
+                                     I18n.tr("%1 is safe to unplug").arg(root.drive.device))
                 }
                 Btn {
-                    label: "Format…"
+                    label: I18n.tr("Format…")
                     danger: true
                     enabled2: root.part !== null
                     onGo: root.askDialog("format", root.devOf(root.part))
@@ -2279,13 +2330,13 @@ FloatingWindow {
                 // DRIVE, so it is enabled whenever one is selected; the guard
                 // refuses the system disk, in the dialogue, in its own words.
                 Btn {
-                    label: "Partition table…"
+                    label: I18n.tr("Partition table…")
                     danger: true
                     enabled2: root.selDisk !== ""
                     onGo: root.askDialog("table", root.selDisk)
                 }
                 Btn {
-                    label: "New…"
+                    label: I18n.tr("New…")
                     danger: true
                     // The selected gap if there is one, and otherwise the
                     // largest — which is what the binary does when nothing
@@ -2294,7 +2345,7 @@ FloatingWindow {
                     onGo: root.askDialog("add", root.selDisk)
                 }
                 Btn {
-                    label: "Delete…"
+                    label: I18n.tr("Delete…")
                     danger: true
                     // `slot`, not `part`: an unlocked volume shows in the table
                     // and is not a partition, and sfdisk cannot delete one.
@@ -2302,13 +2353,13 @@ FloatingWindow {
                     onGo: root.askDialog("delete", root.selPart)
                 }
                 Btn {
-                    label: "Resize…"
+                    label: I18n.tr("Resize…")
                     danger: true
                     enabled2: root.slot !== null
                     onGo: root.askDialog("resize", root.selPart)
                 }
                 Btn {
-                    label: "Copy…"
+                    label: I18n.tr("Copy…")
                     danger: true
                     enabled2: root.slot !== null
                     onGo: root.askDialog("copy", root.selPart)
@@ -2341,7 +2392,11 @@ FloatingWindow {
                 maximumLineCount: 3
                 elide: Text.ElideRight
                 text: root.status !== "" ? root.status
-                    : root.drives.length + " drive" + (root.drives.length === 1 ? "" : "s")
+                    // ⚠ ONE msgid PER FORM: `n + " drive" + (n===1?"":"s")`
+                    // is English grammar written in JavaScript.
+                    : (root.drives.length === 1
+                       ? I18n.tr("%1 drive").arg(root.drives.length)
+                       : I18n.tr("%1 drives").arg(root.drives.length))
                 color: root.status !== "" ? root.cText : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
             }
@@ -2394,9 +2449,9 @@ FloatingWindow {
                         // because of it: closing this window used to SIGKILL
                         // syn-disks, and the mkfs it had started then died of
                         // SIGPIPE part way through writing a filesystem.
-                        text: "The drive is being written to. This window stays "
+                        text: I18n.tr("The drive is being written to. This window stays "
                             + "until it finishes, and closing it could not stop "
-                            + "the write in any case — leave the drive plugged in."
+                            + "the write in any case — leave the drive plugged in.")
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }

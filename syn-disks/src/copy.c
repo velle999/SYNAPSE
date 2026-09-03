@@ -46,6 +46,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -65,15 +66,15 @@ static char *resolve_part(const char *arg, const char *role)
 {
 	char *k = sd_kernel_name(arg);
 	if (!k)
-		die("copypart: %s is not a block device", arg);
+		die(_("copypart: %s is not a block device"), arg);
 
 	if (!sd_is_partition(k)) {
-		fprintf(stderr, "%ssyn-disks: %s is a whole drive, and %s must be a "
-		        "partition%s\n", C_BAD(), arg, role, C_RESET());
-		fprintf(stderr, "  Copying a drive means copying its partition table "
+		fprintf(stderr, _("%ssyn-disks: %s is a whole drive, and %s must be a "
+		        "partition%s\n"), C_BAD(), arg, role, C_RESET());
+		fprintf(stderr, _("  Copying a drive means copying its partition table "
 		        "too, which would give two disks\n"
 		        "  the same identity. Copy the partitions one at a time: "
-		        "syn-disks table %s\n", arg);
+		        "syn-disks table %s\n"), arg);
 		free(k);
 		return NULL;
 	}
@@ -89,16 +90,16 @@ int cmd_copypart(int argc, char **argv)
 		const char *a = argv[i];
 		if (!strcmp(a, "--yes"))                              yes = true;
 		else if (!strcmp(a, "--dry-run") || !strcmp(a, "-n")) dry = true;
-		else if (a[0] == '-') die("copypart: unknown option '%s'", a);
+		else if (a[0] == '-') die(_("copypart: unknown option '%s'"), a);
 		else if (!src_arg)    src_arg = a;
 		else if (!dst_arg)    dst_arg = a;
-		else die("copypart: two partitions — the source and the destination "
-		         "(got '%s' as well)", a);
+		else die(_("copypart: two partitions — the source and the destination "
+		         "(got '%s' as well)"), a);
 	}
 
 	if (!src_arg || !dst_arg)
-		die("copypart: need a source and a destination partition "
-		    "(see: syn-disks table <disk>)");
+		die(_("copypart: need a source and a destination partition "
+		    "(see: syn-disks table <disk>)"));
 
 	char *sk = resolve_part(src_arg, "the source");
 	if (!sk)
@@ -114,7 +115,7 @@ int cmd_copypart(int argc, char **argv)
 	 * st_rdev to the same name. Comparing the strings the user typed would let
 	 * a partition be copied over itself, which zeroes it. */
 	if (!strcmp(sk, dk)) {
-		fprintf(stderr, "%ssyn-disks: %s and %s are the same partition%s\n",
+		fprintf(stderr, _("%ssyn-disks: %s and %s are the same partition%s\n"),
 		        C_BAD(), src_arg, dst_arg, C_RESET());
 		free(dk);
 		free(sk);
@@ -127,7 +128,7 @@ int cmd_copypart(int argc, char **argv)
 	/* GUARD_READ on the source: its extent is not touched, but its BYTES are,
 	 * and a filesystem being written to while it is read is copied in a state
 	 * it was never in. */
-	if (guard_refuse(sk, sdev, "copy", GUARD_READ)) {
+	if (guard_refuse(sk, sdev, N_("copy"), GUARD_READ)) {
 		free(ddev);
 		free(sdev);
 		free(dk);
@@ -136,7 +137,7 @@ int cmd_copypart(int argc, char **argv)
 	}
 	/* GUARD_DESTROY on the destination, because that is precisely what this
 	 * does to it — everything on it is gone, exactly as with rmpart. */
-	if (guard_refuse(dk, ddev, "overwrite", GUARD_DESTROY)) {
+	if (guard_refuse(dk, ddev, N_("overwrite"), GUARD_DESTROY)) {
 		free(ddev);
 		free(sdev);
 		free(dk);
@@ -148,7 +149,7 @@ int cmd_copypart(int argc, char **argv)
 	unsigned long long dbytes = sd_size_bytes(dk);
 
 	if (sbytes == 0) {
-		fprintf(stderr, "%ssyn-disks: %s reports no size%s\n",
+		fprintf(stderr, _("%ssyn-disks: %s reports no size%s\n"),
 		        C_BAD(), sdev, C_RESET());
 		free(ddev);
 		free(sdev);
@@ -164,16 +165,16 @@ int cmd_copypart(int argc, char **argv)
 	if (dbytes < sbytes) {
 		char *hs = human_size(sbytes);
 		char *hd = human_size(dbytes);
-		char *why = xasprintf("%s holds %s and %s is only %s",
+		char *why = xasprintf(_("%s holds %s and %s is only %s"),
 		                      sdev, hs, ddev, hd);
 		if (g_out == OUT_REC) {
 			guard_report_refusal(ddev, why, "none");
 		} else {
-			fprintf(stderr, "%ssyn-disks: refusing to copy %s onto %s — %s.%s\n",
+			fprintf(stderr, _("%ssyn-disks: refusing to copy %s onto %s — %s.%s\n"),
 			        C_BAD(), sdev, ddev, why, C_RESET());
-			fprintf(stderr, "  A copy that stopped short would be a filesystem "
+			fprintf(stderr, _("  A copy that stopped short would be a filesystem "
 			        "describing blocks that are not there.\n"
-			        "  Grow it first: syn-disks resize %s --size=%llu --yes\n",
+			        "  Grow it first: syn-disks resize %s --size=%llu --yes\n"),
 			        ddev, sbytes);
 		}
 		free(why);
@@ -189,15 +190,15 @@ int cmd_copypart(int argc, char **argv)
 	/* The UUID warning is unconditional, and the size one is added to it when
 	 * it applies. One `warn` field, because a front-end that had to render an
 	 * arbitrary number of them would render none. */
-	char *warn = xasprintf("the copy carries %s's filesystem UUID and label; "
+	char *warn = xasprintf(_("the copy carries %s's filesystem UUID and label; "
 	                       "with both attached, anything that finds a "
-	                       "filesystem by UUID may pick either", sdev);
+	                       "filesystem by UUID may pick either"), sdev);
 	if (dbytes > sbytes) {
 		char *hs = human_size(sbytes);
 		char *hd = human_size(dbytes);
-		char *both = xasprintf("%s · %s is %s and the copy is %s, so the "
+		char *both = xasprintf(_("%s · %s is %s and the copy is %s, so the "
 		                       "filesystem inside it will still end where %s's "
-		                       "does — grow it with the tool that belongs to it",
+		                       "does — grow it with the tool that belongs to it"),
 		                       warn, ddev, hd, hs, sdev);
 		free(warn);
 		warn = both;
@@ -226,8 +227,8 @@ int cmd_copypart(int argc, char **argv)
 	cmd[c] = NULL;
 
 	char *hs = human_size(sbytes);
-	char *what = xasprintf("destroys everything on %s and replaces it with the "
-	                       "%s on %s", ddev, hs, sdev);
+	char *what = xasprintf(_("destroys everything on %s and replaces it with the "
+	                       "%s on %s"), ddev, hs, sdev);
 
 	/* No script: dd is driven entirely by its arguments, and the empty stdin
 	 * it gets is what stops it reading the terminal if one of them is ever

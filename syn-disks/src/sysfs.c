@@ -21,6 +21,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <stdlib.h>

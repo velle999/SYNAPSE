@@ -39,7 +39,54 @@ pkgname=syn-disks
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=24
+# ── 0.1.0-25: thirteen languages, and the records left exactly as they were ──
+#
+# syn-disks spoke English everywhere — the CLI you use over SSH, and the window
+# quickshell draws from data/syn-disks.qml. 305 strings now in de, fr, es, pt,
+# it, nl, pl, ru, ja, zh, ko, hi and ar, from ONE po/ compiled twice: a .mo for
+# this binary and JSON for the window, so a word they share is translated once
+# and cannot disagree.
+#
+# ⛔ AND EVERY --rec RECORD STAYS ENGLISH, WHICH IS THE POINT. The first row of
+# every record NAMES THE COLUMNS and the window keys off those names; it matches
+# on values too — a slot is `free` or `part`, a mount is `mounted`, a result is
+# `ok` or `error`. This program writes partition tables, so a record that
+# changed shape in one language is a window that has misread which slot is free,
+# on the screen where somebody is about to erase a disk.
+#
+# The split is therefore by DESTINATION and not by file: info_row() translates
+# its KEY at the draw site and never the value, and smart.c's row() translates
+# both — because the window matches `field === "retry"` and `value === "FAILING"`
+# out of the record, not out of the drawn cell.
+#
+# ⛔ THE TEST THAT MATTERS IS A HOSTILE CATALOG. tests/i18n_test.sh builds one
+# from the TEMPLATE with every msgstr marked, then runs every offline --rec
+# command under it and diffs the bytes. A marked column name is invisible to a
+# real-catalog diff until somebody translates that entry, and by then it is a
+# window that has stopped recognising its own records.
+#
+# ── and four English words the languages found ──────────────────────────────
+#
+# ⚠ FOUR SENTENCES WERE BUILT OUT OF PIECES, so translating the sentence left
+# English inside it. `refusing to %s %s` took its verb from guard_refuse()'s
+# caller as a bare "format"/"delete"/"erase the partition table of"; the
+# too-small-free-space line interpolated "the chosen"/"the largest"; `%s is now
+# %s%s` appended " — labelled"; and `%s is a partition%s%s` glued " of /dev/"
+# on. A fragment that small carries no grammar and cannot agree with the noun it
+# lands beside. Three are whole sentences now, one per branch, and the verb
+# travels marked with N_() and is translated at the draw site — where it can
+# never reach a record, because the --rec path writes no verb at all.
+#
+# ⛔ LC_NUMERIC IS PINNED TO C. setlocale(LC_ALL, "") changes what printf's %f
+# prints: a German locale writes 476,8 where C writes 476.8, and human_size()
+# feeds the RECORD. Caught by diffing the records under two locales, which is
+# the only thing that would have shown it.
+#
+# ⚠ usage() IS DELIBERATELY NOT TRANSLATED, as in syn-arcade, syntty, synpkg
+# and syn-edit. It is a manual page in one fputs, every line a flag spelling
+# with a column of text aligned to it. Whether that whole set moves is one
+# decision, taken once, for all of them — not one component going first.
+pkgrel=25
 pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

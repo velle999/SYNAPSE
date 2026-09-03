@@ -23,6 +23,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ EVERY GOLDEN OUTPUT BELOW IS IN ENGLISH, AND THE BINARY ANSWERS THE
+# DESKTOP'S LANGUAGE. syn-disks' human path goes through gettext as of pkgrel
+# 25, so an installed syn-disks on a German desktop fails every assertion that
+# names one of its sentences — and passes on every English one, which is how
+# this ships broken.
+#
+# ⚠ LANGUAGE is UNSET, not set. gettext reads LANGUAGE **before** LC_ALL, so a
+# desktop with LANGUAGE=de still answers German to an LC_ALL=C.UTF-8 process
+# and the pin does nothing at all.
+#
+# ⚠ THE RECORDS WOULD NOT HAVE NOTICED — they are never translated, and
+# tests/i18n_test.sh proves it under a catalog that translates everything. It
+# is the --no-color human assertions that need this.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 SD=${1:-./build/syn-disks}
 [ -x "$SD" ] || { echo "not executable: $SD" >&2; exit 1; }
 SD=$(readlink -f "$SD")

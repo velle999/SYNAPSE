@@ -5,6 +5,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 #include "config.h"
 
 #include <stdlib.h>
@@ -121,7 +122,7 @@ static int cmd_gui(int argc, char **argv)
 		argv++;
 	}
 	if (want_format && (argc == 0 || !*argv[0]))
-		die("gui --format: need a device to format");
+		die(_("gui --format: need a device to format"));
 
 	/* The device to open on travels in the environment; quickshell takes no
 	 * arguments of its own. Resolved to a kernel name first, so that the
@@ -138,13 +139,13 @@ static int cmd_gui(int argc, char **argv)
 	if (argc > 0 && *argv[0]) {
 		k = sd_kernel_name(argv[0]);
 		if (!k)
-			die("%s: not a block device", argv[0]);
+			die(_("%s: not a block device"), argv[0]);
 	}
 
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-disks gui needs a graphical session");
+		die(_("no display — syn-disks gui needs a graphical session"));
 	if (!have_cmd("quickshell"))
-		die("quickshell is not installed — synpkg install quickshell");
+		die(_("quickshell is not installed — synpkg install quickshell"));
 
 	if (k) {
 		/* The window is a view of a DRIVE with something highlighted inside
@@ -192,11 +193,16 @@ static int cmd_gui(int argc, char **argv)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die(_("could not start quickshell"));
 }
 
 int main(int argc, char **argv)
 {
+	/* ⚠ FIRST, BEFORE ANYTHING PRINTS — including usage(). A message looked up
+	 * before the catalog is bound is English whatever the desktop's language
+	 * is, and the failure is silent. */
+	syn_disks_i18n_init();
+
 	g_color = isatty(STDOUT_FILENO) && !getenv("NO_COLOR");
 
 	int i = 1;
@@ -210,6 +216,8 @@ int main(int argc, char **argv)
 		} else if (!strcmp(a, "--no-color") || !strcmp(a, "--no-colour")) {
 			g_color = false;
 		} else if (!strcmp(a, "-V") || !strcmp(a, "--version")) {
+			/* ⚠ NOT MARKED. `syn-disks --version` prints a version
+			 * and nothing else; a script reads it. */
 			printf("syn-disks " SYNDISKS_VERSION "\n");
 			return 0;
 		} else if (!strcmp(a, "-h") || !strcmp(a, "--help")) {
@@ -246,7 +254,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "about"))   return cmd_about(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))     return cmd_gui(rest_argc, rest);
 
-	fprintf(stderr, "syn-disks: unknown command '%s'\n\n", cmd);
+	fprintf(stderr, _("syn-disks: unknown command '%s'\n\n"), cmd);
 	usage(stderr);
 	return 2;
 }

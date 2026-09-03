@@ -65,6 +65,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -93,7 +94,7 @@ static char *canonical_dev(const char *arg, char **kname_out)
 {
 	char *k = sd_kernel_name(arg);
 	if (!k)
-		die("%s: not a block device", arg);
+		die(_("%s: not a block device"), arg);
 	if (kname_out)
 		*kname_out = k;
 	char *dev = xasprintf("/dev/%s", k);
@@ -118,7 +119,7 @@ static int udisks_op(const char *kname, const char *verb, const char *flag)
 {
 	const char *tool = udisks_tool();
 	if (!have_cmd(tool))
-		die("%s is not installed — install udisks2 to mount from here", tool);
+		die(_("%s is not installed — install udisks2 to mount from here"), tool);
 
 	char *dev = xasprintf("/dev/%s", kname);
 
@@ -145,7 +146,7 @@ static int udisks_op(const char *kname, const char *verb, const char *flag)
 static int udisks_cmd(int argc, char **argv, const char *verb, const char *what)
 {
 	if (argc < 1)
-		die("%s: need a %s", verb, what);
+		die(_("%s: need a %s"), verb, what);
 	char *k = NULL;
 	char *dev = canonical_dev(argv[0], &k);
 	free(dev);
@@ -167,11 +168,11 @@ int cmd_unmount(int argc, char **argv)
 int cmd_eject(int argc, char **argv)
 {
 	if (argc < 1)
-		die("eject: need a disk (see: syn-disks list)");
+		die(_("eject: need a disk (see: syn-disks list)"));
 
 	char *k = sd_kernel_name(argv[0]);
 	if (!k)
-		die("%s: not a block device", argv[0]);
+		die(_("%s: not a block device"), argv[0]);
 
 	/* power-off takes the DRIVE, not one of its partitions. Handed a
 	 * partition, udisks fails with a message about the wrong object, which
@@ -358,15 +359,15 @@ bool fs_kernel_can_mount(const fs_kind_t *fs, char **why)
 
 	if (why) {
 		if (tree_missing)
-			*why = xasprintf("this kernel can no longer load modules — its "
+			*why = xasprintf(_("this kernel can no longer load modules — its "
 			                 "module tree is gone, which is what a kernel "
 			                 "upgrade with no reboot leaves behind. %s will "
 			                 "be created correctly but will not mount here "
-			                 "until you reboot", fs->name);
+			                 "until you reboot"), fs->name);
 		else
-			*why = xasprintf("this kernel cannot mount %s — it will be "
+			*why = xasprintf(_("this kernel cannot mount %s — it will be "
 			                 "created correctly, but nothing here will read "
-			                 "it", fs->name);
+			                 "it"), fs->name);
 	}
 	return false;
 }
@@ -591,9 +592,9 @@ void fs_owner_prepare(const fs_kind_t *fs)
 		 * a failure to make the directory fresh into silence. */
 		scratch_dir_clear(dir);
 		if (mkdir(dir, 0755) != 0)
-			fprintf(stderr, "syn-disks: cannot make %s fresh (%s) — the new "
+			fprintf(stderr, _("syn-disks: cannot make %s fresh (%s) — the new "
 			        "filesystem may be owned by root, and anything left in "
-			        "that directory will be copied onto the device\n",
+			        "that directory will be copied onto the device\n"),
 			        dir, strerror(errno));
 	} else if (!strcmp(fs->name, "xfs")) {
 		const char *path = owner_scratch("proto");
@@ -608,8 +609,8 @@ void fs_owner_prepare(const fs_kind_t *fs)
 			        (unsigned)owner, (unsigned)fs_owner_gid());
 			fclose(f);
 		} else {
-			fprintf(stderr, "syn-disks: cannot write %s — the new filesystem "
-			        "will be owned by root\n", path);
+			fprintf(stderr, _("syn-disks: cannot write %s — the new filesystem "
+			        "will be owned by root\n"), path);
 		}
 	}
 }
@@ -693,23 +694,23 @@ int cmd_format(int argc, char **argv)
 		else if (!strncmp(a, "--label=", 8))  label = a + 8;
 		else if (!strcmp(a, "--yes"))         yes = true;
 		else if (!strcmp(a, "--dry-run") || !strcmp(a, "-n")) dry = true;
-		else if (a[0] == '-')                 die("format: unknown option '%s'", a);
+		else if (a[0] == '-')                 die(_("format: unknown option '%s'"), a);
 		else if (!target)                     target = a;
-		else die("format: one device at a time (got '%s' as well)", a);
+		else die(_("format: one device at a time (got '%s' as well)"), a);
 	}
 
 	if (!target)
-		die("format: need a device (see: syn-disks parts <disk>)");
+		die(_("format: need a device (see: syn-disks parts <disk>)"));
 	if (!fs)
-		die("format: need --fs=TYPE (one of: ext4 btrfs xfs vfat exfat ntfs)");
+		die(_("format: need --fs=TYPE (one of: ext4 btrfs xfs vfat exfat ntfs)"));
 
 	const fs_kind_t *kind = fs_find(fs);
 	if (!kind)
-		die("format: '%s' is not a filesystem this offers", fs);
+		die(_("format: '%s' is not a filesystem this offers"), fs);
 
 	if (!fs_label_ok(label))
-		die("format: a label may hold up to 32 letters, digits, spaces, "
-		    "'-', '_' and '.' — '%s' does not", label);
+		die(_("format: a label may hold up to 32 letters, digits, spaces, "
+		    "'-', '_' and '.' — '%s' does not"), label);
 
 	char *k = NULL;
 	char *dev = canonical_dev(target, &k);
@@ -724,16 +725,16 @@ int cmd_format(int argc, char **argv)
 	 * writes over a whole device, so it refuses the whole drive. */
 	char *shared = guard_shares_root_disk(k);
 	if (shared) {
-		char *why = xasprintf("it is on /dev/%s, the disk holding this "
-		                      "running system", shared);
+		char *why = xasprintf(_("it is on /dev/%s, the disk holding this "
+		                      "running system"), shared);
 		if (g_out == OUT_REC) {
 			guard_report_refusal(dev, why, "none");
 		} else {
-			fprintf(stderr, "%ssyn-disks: refusing to format %s — %s.%s\n",
+			fprintf(stderr, _("%ssyn-disks: refusing to format %s — %s.%s\n"),
 			        C_BAD(), dev, why, C_RESET());
 			fprintf(stderr,
-			        "  There is no flag that overrides this. If you truly "
-			        "mean to, use mkfs.%s directly.\n", fs);
+			        _("  There is no flag that overrides this. If you truly "
+			        "mean to, use mkfs.%s directly.\n"), fs);
 		}
 		free(why);
 		free(shared);
@@ -756,7 +757,7 @@ int cmd_format(int argc, char **argv)
 	 * GUARD_DESTROY, because that is what formatting is: mounted, live swap, a
 	 * volume unlocked on top, an fstab entry, and the read-only flag all stop
 	 * it, each with the way out beside it. */
-	if (guard_refuse(k, dev, "format", GUARD_DESTROY)) {
+	if (guard_refuse(k, dev, N_("format"), GUARD_DESTROY)) {
 		free(dev);
 		free(k);
 		return 1;
@@ -768,8 +769,8 @@ int cmd_format(int argc, char **argv)
 	 * Only an actual write is refused. */
 	bool have_tool = have_cmd(kind->tool);
 	if (!have_tool && yes && !dry) {
-		fprintf(stderr, "syn-disks: %s is not installed — cannot make an %s "
-		        "filesystem\n", kind->tool, fs);
+		fprintf(stderr, _("syn-disks: %s is not installed — cannot make an %s "
+		        "filesystem\n"), kind->tool, fs);
 		free(dev);
 		free(k);
 		return 3;
@@ -794,7 +795,7 @@ int cmd_format(int argc, char **argv)
 			/* The GUI needs this to disable its own confirm button rather
 			 * than offering an action that will fail at the last step. */
 			if (!have_tool) {
-				char *why = xasprintf("%s is not installed", kind->tool);
+				char *why = xasprintf(_("%s is not installed"), kind->tool);
 				rec_row(2, "blocked", why);
 				free(why);
 			}
@@ -808,10 +809,10 @@ int cmd_format(int argc, char **argv)
 				kwhy = NULL;
 			}
 		} else {
-			printf("would run: %s\n", line);
-			printf("%sthis erases everything on %s%s\n", C_WARN(), dev, C_RESET());
+			printf(_("would run: %s\n"), line);
+			printf(_("%sthis erases everything on %s%s\n"), C_WARN(), dev, C_RESET());
 			if (!fs_kernel_can_mount(kind, &kwhy)) {
-				printf("%swarning: %s%s\n", C_WARN(), kwhy, C_RESET());
+				printf(_("%swarning: %s%s\n"), C_WARN(), kwhy, C_RESET());
 				free(kwhy);
 				kwhy = NULL;
 			}
@@ -864,12 +865,18 @@ int cmd_format(int argc, char **argv)
 		rec_row(4, dev, st == 0 ? "ok" : "failed",
 		        st == 0 ? out : detail, fix);
 	} else if (st == 0) {
-		printf("%s is now %s%s\n", dev, fs, label && *label ? " — labelled" : "");
+		/* Two sentences, not one with a fragment appended: " — labelled" on
+		 * its own is a piece no language can inflect, and the whole line is
+		 * what a reader looks up. */
+		if (label && *label)
+			printf(_("%s is now %s — labelled\n"), dev, fs);
+		else
+			printf(_("%s is now %s\n"), dev, fs);
 		/* Said again after the write, not only in the plan: a scripted
 		 * --yes never saw the dry run, and the mount failure it is about to
 		 * hit looks like a bad format rather than a missing driver. */
 		if (!fs_kernel_can_mount(kind, &kwhy)) {
-			printf("%swarning: %s%s\n", C_WARN(), kwhy, C_RESET());
+			printf(_("%swarning: %s%s\n"), C_WARN(), kwhy, C_RESET());
 			free(kwhy);
 			kwhy = NULL;
 		}
@@ -882,7 +889,7 @@ int cmd_format(int argc, char **argv)
 			/* Sentence then way out, exactly as a refusal reads — the two
 			 * halves of our answer stay together and the tool's chatter goes
 			 * after both, rather than between them. */
-			fprintf(stderr, "%ssyn-disks: could not format %s — %s.%s\n",
+			fprintf(stderr, _("%ssyn-disks: could not format %s — %s.%s\n"),
 			        C_BAD(), dev, late, C_RESET());
 			guard_print_fix(dev, fix);
 		}

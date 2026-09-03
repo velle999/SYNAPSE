@@ -31,6 +31,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -220,11 +221,11 @@ int pt_next_number(const char *disk)
 int cmd_table(int argc, char **argv)
 {
 	if (argc < 1)
-		die("table: need a disk (see: syn-disks list)");
+		die(_("table: need a disk (see: syn-disks list)"));
 
 	char *k = sd_kernel_name(argv[0]);
 	if (!k)
-		die("%s: not a block device", argv[0]);
+		die(_("%s: not a block device"), argv[0]);
 
 	/* A partition names its disk perfectly well, and asking for the table of
 	 * one is asking about the drive it is on. Refusing would be technically

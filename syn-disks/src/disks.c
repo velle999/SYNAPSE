@@ -13,6 +13,7 @@
  */
 #define _GNU_SOURCE
 #include "syn-disks.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -114,7 +115,7 @@ static void usage_of_device(const char *kname, unsigned long long *used,
 int cmd_list(int argc, char **argv)
 {
 	for (int i = 0; i < argc; i++)
-		die("list: unknown option '%s'", argv[i]);
+		die(_("list: unknown option '%s'"), argv[i]);
 
 	size_t nd = 0;
 	char **disks = sd_all_disks(&nd);
@@ -171,7 +172,10 @@ int cmd_list(int argc, char **argv)
 			       C_RESET(), size, C_RESET(),
 			       C_DIM(), sd_kind(k), C_RESET(),
 			       is_system ? C_WARN() : C_DIM(),
-			       is_system ? "system disk" : "", C_RESET());
+			       /* The record path a few lines up writes the bare token
+			        * "system"; this is the sentence a person reads, so it is
+			        * the one that translates. */
+			       is_system ? _("system disk") : "", C_RESET());
 		}
 
 		free(sbytes);
@@ -275,19 +279,24 @@ static void emit_volume(const char *k, int depth)
 int cmd_parts(int argc, char **argv)
 {
 	if (argc < 1)
-		die("parts: need a disk (see: syn-disks list)");
+		die(_("parts: need a disk (see: syn-disks list)"));
 
 	char *k = sd_kernel_name(argv[0]);
 	if (!k)
-		die("%s: not a block device", argv[0]);
+		die(_("%s: not a block device"), argv[0]);
 
 	if (sd_is_partition(k)) {
 		/* Asking for the partitions OF a partition is nearly always a
 		 * mistyped disk name, and answering "none" would look like an
 		 * empty disk rather than a wrong question. */
 		char *parent = sd_parent_disk(k);
-		die("%s is a partition%s%s", argv[0],
-		    parent ? " of /dev/" : "", parent ? parent : "");
+		/* Two whole sentences rather than one with " of /dev/" glued in:
+		 * a fragment that small carries no grammar, and the languages that
+		 * need a case ending on the disk name cannot put one on a piece
+		 * they never see. */
+		if (parent)
+			die(_("%s is a partition of /dev/%s"), argv[0], parent);
+		die(_("%s is a partition"), argv[0]);
 	}
 
 	if (g_out == OUT_REC)
@@ -312,7 +321,7 @@ int cmd_parts(int argc, char **argv)
 			emit_volume(k, 0);
 			n++;
 		} else if (g_out == OUT_HUMAN) {
-			printf("%sno partition table%s\n", C_DIM(), C_RESET());
+			printf(_("%sno partition table%s\n"), C_DIM(), C_RESET());
 		}
 	}
 
@@ -323,6 +332,18 @@ int cmd_parts(int argc, char **argv)
 
 /* ── info ───────────────────────────────────────────────────────────────── */
 
+/*
+ * One `field <TAB> value` row, or one aligned line for a person.
+ *
+ * ⛔ THE KEY IS TRANSLATED AT THE DRAW SITE AND NOWHERE ELSE. It is the RECORD's
+ * field name — `syn-disks --rec info sdz1` is what a script greps for `uuid` or
+ * `mounted at` — so the row has to carry the English word. The call sites mark
+ * their keys with N_(), which puts them in the catalog and returns them
+ * unchanged; the human branch below looks them up.
+ *
+ * ⚠ NOT THE VALUE. A value here is a model name, a UUID, a size, a mount point
+ * or a device path — data, every one of them.
+ */
 static void info_row(const char *key, const char *val)
 {
 	if (!val || !*val)
@@ -330,27 +351,27 @@ static void info_row(const char *key, const char *val)
 	if (g_out == OUT_REC)
 		rec_row(2, key, val);
 	else
-		printf("  %s%-18s%s %s\n", C_DIM(), key, C_RESET(), val);
+		printf("  %s%-18s%s %s\n", C_DIM(), _(key), C_RESET(), val);
 }
 
 int cmd_info(int argc, char **argv)
 {
 	if (argc < 1)
-		die("info: need a device");
+		die(_("info: need a device"));
 
 	char *k = sd_kernel_name(argv[0]);
 	if (!k)
-		die("%s: not a block device", argv[0]);
+		die(_("%s: not a block device"), argv[0]);
 
 	if (g_out == OUT_REC)
 		rec_row(2, "field", "value");
 
 	char *dev = xasprintf("/dev/%s", k);
-	info_row("device", dev);
-	info_row("kernel name", k);
+	info_row(N_("device"), dev);
+	info_row(N_("kernel name"), k);
 
 	bool part = sd_is_partition(k);
-	info_row("type", part ? "partition" : "disk");
+	info_row(N_("type"), part ? "partition" : "disk");
 
 	/* Identity belongs to the DRIVE. A partition has no model, no serial and
 	 * no firmware of its own, and disk_title() falling back to the kernel
@@ -359,27 +380,30 @@ int cmd_info(int argc, char **argv)
 	char *title = NULL, *vendor = NULL, *serial = NULL;
 	if (!part) {
 		title = disk_title(k);
-		info_row("model", title);
+		info_row(N_("model"), title);
 		vendor = disk_vendor(k);
-		info_row("vendor", vendor);
+		info_row(N_("vendor"), vendor);
 		serial = sd_attr(k, "device/serial");
-		info_row("serial", serial);
+		info_row(N_("serial"), serial);
 	}
 	char *fw = sd_attr(k, "device/rev");
 	if (!fw || !*fw) {
 		free(fw);
 		fw = sd_attr(k, "device/firmware_rev");
 	}
-	info_row("firmware", fw);
+	info_row(N_("firmware"), fw);
 
 	unsigned long long bytes = sd_size_bytes(k);
 	char *size = human_size(bytes);
+	/* ⛔ NOT MARKED: this is the VALUE half of a record row, and a script
+	 * reads it. `bytes` here is a unit, the way KiB and GiB are — the
+	 * FIELD NAME beside it is what info_row() translates. */
 	char *exact = xasprintf("%llu bytes", bytes);
-	info_row("size", size);
-	info_row("size (exact)", exact);
+	info_row(N_("size"), size);
+	info_row(N_("size (exact)"), exact);
 
-	info_row("kind", sd_kind(k));
-	info_row("bus", sd_transport(k));
+	info_row(N_("kind"), sd_kind(k));
+	info_row(N_("bus"), sd_transport(k));
 
 	char *ro = sd_attr(k, "ro");
 	if (ro)
@@ -389,45 +413,46 @@ int cmd_info(int argc, char **argv)
 		char *parent = sd_parent_disk(k);
 		if (parent) {
 			char *pdev = xasprintf("/dev/%s", parent);
-			info_row("part of", pdev);
+			info_row(N_("part of"), pdev);
 			free(pdev);
 			free(parent);
 		}
 		char *start = sd_attr(k, "start");
 		if (start) {
+			/* ⛔ NOT MARKED — a record value; see the note by `exact`. */
 			char *at = xasprintf("sector %s", start);
-			info_row("starts at", at);
+			info_row(N_("starts at"), at);
 			free(at);
 			free(start);
 		}
 	} else {
 		char *lbs = sd_attr(k, "queue/logical_block_size");
 		char *pbs = sd_attr(k, "queue/physical_block_size");
-		info_row("logical block", lbs);
-		info_row("physical block", pbs);
+		info_row(N_("logical block"), lbs);
+		info_row(N_("physical block"), pbs);
 		free(lbs);
 		free(pbs);
 	}
 
 	const lsblk_t *lb = lsblk_for(k);
-	info_row("filesystem", lb->fstype);
-	info_row("label", lb->label);
-	info_row("uuid", lb->uuid);
-	info_row("partition type", lb->parttype);
-	info_row("partition label", lb->partlabel);
-	info_row("partition table", lb->pttype);
+	info_row(N_("filesystem"), lb->fstype);
+	info_row(N_("label"), lb->label);
+	info_row(N_("uuid"), lb->uuid);
+	info_row(N_("partition type"), lb->parttype);
+	info_row(N_("partition label"), lb->partlabel);
+	info_row(N_("partition table"), lb->pttype);
 
 	char *mounts = mounts_joined(k);
-	info_row("mounted at", *mounts ? mounts : "not mounted");
+	info_row(N_("mounted at"), *mounts ? mounts : "not mounted");
 
 	unsigned long long used = 0, total = 0;
 	usage_of_device(k, &used, &total);
 	if (total) {
 		char *hu = human_size(used);
 		char *ht = human_size(total);
-		char *line = xasprintf("%s of %s (%llu%% full)", hu, ht,
+		char *line = xasprintf(_("%s of %s (%llu%% full)"), hu, ht,
 		                       used * 100 / total);
-		info_row("usage", line);
+		info_row(N_("usage"), line);
 		free(line);
 		free(ht);
 		free(hu);
@@ -445,7 +470,7 @@ int cmd_info(int argc, char **argv)
 			free(joined);
 			joined = g;
 		}
-		info_row("physical disk", joined);
+		info_row(N_("physical disk"), joined);
 		free(joined);
 	}
 
@@ -458,7 +483,7 @@ int cmd_info(int argc, char **argv)
 			for (size_t j = 0; j < nr && !shared; j++)
 				if (!strcmp(base[i], rb[j]))
 					shared = true;
-		info_row("holds this system", shared ? "yes" : "no");
+		info_row(N_("holds this system"), shared ? "yes" : "no");
 		sd_free_list(rb, nr);
 		free(rootdev);
 	}
