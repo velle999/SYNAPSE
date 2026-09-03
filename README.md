@@ -756,7 +756,7 @@ pinned places, recent files, mounted volumes with fill meters, search that walks
 the tree (`Ctrl`+`F`), archives, and drag-and-drop — into another window, onto
 the desktop, or out to any other application.
 
-Two things are worth saying out loud because they are the whole design:
+Two things are the whole design:
 
 - **Delete means the trash.** The XDG trash, so what Dolphin or Nautilus put
   there is what you see, and restoring puts a file back where it came from. The
@@ -1126,11 +1126,11 @@ actually run *here* is answered at install time rather than in the listing.
 
 `qs.Ui` and `qs.Commons` are **implemented over SynapseOS's own theme** — the
 same 27 type names and the same contracts, drawing this desktop's font, spacing
-and ink. That is deliberate rather than lazy: Omarchy is MIT, so vendoring their
-23 KB `Style.qml` would be perfectly legal, and it carries *their* spacing scale,
-*their* font tokens and *their* palette. A widget would come out looking like a
-piece of Omarchy sitting on SynapseOS. What a widget actually asks `Style` is
-"how big is body text here" — a question this desktop already answers.
+and ink. Omarchy is MIT, so vendoring their 23 KB `Style.qml` would be perfectly
+legal, and it carries *their* spacing scale, *their* font tokens and *their*
+palette. A widget would come out looking like a piece of Omarchy sitting on
+SynapseOS. What a widget actually asks `Style` is "how big is body text here" —
+a question this desktop already answers.
 
 That matters more than it sounds, because a QML property that does not resolve
 is not an error, it is **zero** — a widget written against a module this desktop
