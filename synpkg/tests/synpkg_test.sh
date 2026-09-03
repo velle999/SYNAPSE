@@ -1043,6 +1043,48 @@ if [ -f "$QML" ]; then
     awk '/function reload\(\)/,/^    }/' "$QML" | has 'outcome' \
         && bad "reload() clears the outcome — the message dies with the action" \
         || ok "reload() leaves the outcome alone"
+
+    # ── the AppImage pane ───────────────────────────────────────────────────
+    #
+    # ⛔ AN AppImage MUST NEVER REACH THE ALPM PATH. `synpkg remove
+    # ai.opencode.desktop` asks pacman about a name it has never heard of —
+    # and an id that happened to collide with a real package name would remove
+    # the PACKAGE. Same reasoning as the SynapseOS branch beside it.
+    # ⚠ Piped into has(), which is `grep -c` and reads to EOF — the suite's own
+    # rule, because `grep -q` exits on the first match and SIGPIPEs the awk.
+    awk '/function act\(row, verb\)/,/^    }/' "$QML" | has 'source === "appimage"' \
+        && ok "act() routes an AppImage away from the package transaction" \
+        || bad "an AppImage row would be handed to pacman"
+    awk '/function act\(row, verb\)/,/^    }/' "$QML" | has '"appimage", "remove"' \
+        && ok "…to the appimage verb" \
+        || bad "the AppImage branch does not call the appimage verb"
+
+    # ⛔ zenity, NOT a QML FileDialog. QtQuick.Dialogs is not shipped by
+    # quickshell, so FileDialog is a type this window cannot import — the same
+    # reason syn-play picks its files this way.
+    has 'zenity' "$QML" \
+        && ok "the chooser is zenity, which quickshell can actually run" \
+        || bad "no chooser — an install needs a file and there is no FileDialog here"
+    # ⚠ A USE, not the word. The comment above the chooser explains why there is
+    # no FileDialog here, so a bare grep for the name matches the explanation
+    # and fails on a file that is correct — which is exactly what it did.
+    has -E 'import QtQuick\.Dialogs|FileDialog *\{' "$QML" \
+        && bad "QtQuick.Dialogs is not shipped by quickshell — this will not load" \
+        || ok "…and no FileDialog, which would not import"
+
+    # ⚠ --noconfirm on the install, like every other action: this window has no
+    # terminal to answer a prompt in and the C side refuses to assume yes.
+    awk '/function installImage/,/^    }/' "$QML" | has '"-y"' \
+        && ok "installing passes --noconfirm" \
+        || bad "the GUI install would stall on a prompt it cannot show"
+
+    # ⛔ THE FILTER BOX SHARES THE TOOLBAR'S LEFT EDGE with two things that are
+    # never both visible. It anchored to parent.left whenever the mode toggle
+    # was hidden, so on the AppImage tab it was drawn OVER the install button —
+    # which was on screen, hit-testable and completely invisible.
+    awk '/id: searchBar/,/height: 30/' "$QML" | has 'aiInstallBtn' \
+        && ok "the filter box starts after the install button, not over it" \
+        || bad "the filter box covers the install button on the AppImage tab"
 else
     bad "synpkg.qml not found beside the tests: $QML"
 fi

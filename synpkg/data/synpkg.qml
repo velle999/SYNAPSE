@@ -351,6 +351,11 @@ FloatingWindow {
         { id: "flathub",   label: I18n.tr("Flathub"),      kind: "source" },
         { id: "arsenal",   label: I18n.tr("Arsenal"),      kind: "list" },
         { id: "system",    label: I18n.tr("SynapseOS"),    kind: "list" },
+        // ⚠ BELOW the four source tabs, and a `list` rather than a `source`.
+        // AppImages are not a source: there is nothing to search, so the search
+        // box and the browse/installed modes that a source tab carries would
+        // all be furniture that cannot answer. See appimage.c.
+        { id: "appimage",  label: I18n.tr("AppImages"),    kind: "list" },
         { id: "about",     label: I18n.tr("About"),        kind: "about" }
     ]
 
@@ -375,6 +380,11 @@ FloatingWindow {
         if (id === "flathub")   return I18n.tr("sandboxed applications from Flathub, with their own runtimes")
         if (id === "arsenal")   return I18n.tr("BlackArch security tooling, by category")
         if (id === "system")    return I18n.tr("this system's own components, rebuilt from git by syn-update")
+        // ⛔ THE HINT SAYS WHAT THIS PAGE CANNOT DO, because every other tab on
+        // this window can be searched and upgraded and this one cannot. A row
+        // sitting in a package manager looks upgradable unless something says
+        // otherwise.
+        if (id === "appimage")  return I18n.tr("single-file applications you installed yourself — synpkg cannot search for these or update them")
         return ""
     }
 
@@ -819,6 +829,26 @@ FloatingWindow {
             "update", "system"))
     }
 
+    /*
+     * An installed AppImage as a row.
+     *
+     * ⚠ `installed` IS TRUE FOR EVERY ONE OF THEM, and that is not a
+     * simplification: this list IS the installed set. There is no catalogue to
+     * be not-installed from, which is the same fact the missing search box is.
+     *
+     * ⚠ `present` IS THE ONE THING WORTH SAYING PER ROW. An image whose file
+     * somebody deleted by hand leaves a menu entry that does nothing, and this
+     * pane is the only place that can explain it — so it goes in the
+     * description rather than being quietly listed as though it were fine.
+     */
+    function appimageRows(table) {
+        return table.map(r => root.makeRow(
+            r.id, "", true, r.version, "appimage", 0,
+            r.present === "yes" ? r.image
+                                : I18n.tr("the file is gone — %1").arg(r.image),
+            "", "appimage"))
+    }
+
     // ── Backend ─────────────────────────────────────────────────────────────
     // A step is {kind, tab, args}. Steps run in sequence and APPEND, which is
     // what lets the Updates tab be the union of pacman, the AUR and Flatpak
@@ -864,6 +894,8 @@ FloatingWindow {
                     out = root.suggestRows(table)
                 } else if (listProc.kind === "system") {
                     out = root.systemRows(table)
+                } else if (listProc.kind === "appimage") {
+                    out = root.appimageRows(table)
                 } else {
                     out = root.pkgRows(table, listProc.tab)
                 }
@@ -877,6 +909,62 @@ FloatingWindow {
                 Qt.callLater(root.runNext)
             }
         }
+    }
+
+    /*
+     * ── Installing one, which needs a FILE ──────────────────────────────────
+     *
+     * ⛔ zenity, NOT a QML FileDialog. QtQuick.Dialogs is not shipped by
+     * quickshell, so `FileDialog` is a type this window cannot import — the
+     * same reason syn-play picks its files this way and syn's Resolve
+     * installer picks its zip. zenity is already in this suite's dependency
+     * graph.
+     *
+     * ⚠ ASKED ONCE, at startup, rather than discovered when somebody presses
+     * the button and nothing happens. `command -v` and not `which`: which is
+     * not installed everywhere and answers 0 for a shell builtin.
+     */
+    property bool hasPicker: true
+
+    Process {
+        running: true
+        command: ["sh", "-c", "command -v zenity >/dev/null 2>&1"]
+        onExited: (code) => root.hasPicker = (code === 0)
+    }
+
+    Process {
+        id: pickImage
+        // ⚠ THE FILTER IS A HINT, NOT A GATE. AppImages are routinely named
+        // without the extension, so the chooser offers "All files" too and the
+        // C side is what actually decides whether a file is one — it refuses a
+        // non-AppImage and says so.
+        command: ["zenity", "--file-selection",
+                  "--title=" + I18n.tr("Choose an AppImage"),
+                  "--file-filter=" + I18n.tr("AppImages") + " | *.AppImage *.appimage",
+                  "--file-filter=" + I18n.tr("All files") + " | *"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const path = this.text.trim()
+                if (path === "") return          // cancelled, which is not an error
+                root.installImage(path)
+            }
+        }
+    }
+
+    function installImage(path) {
+        if (root.busy !== "") return
+        root.busy = path
+        root.outcome = ""
+        actProc.errLine = ""
+        // The basename, because the full path of a 150MB file in a status line
+        // pushes everything else off the end of it.
+        const base = path.split("/").pop()
+        root.statusLine = I18n.tr("installing %1…").arg(base)
+        // ⚠ --noconfirm like every other action here: this window has no
+        // terminal to answer a prompt in.
+        actProc.command = [root.bin, "--tsv", "-y", "appimage", "install", path]
+        actProc.running = true
     }
 
     function runChain(steps) {
@@ -1034,6 +1122,26 @@ FloatingWindow {
         if (row.source === "system") {
             root.inTerminal([root.bin, "system", "apply", row.name],
                             I18n.tr("rebuilding %1 in a terminal").arg(row.name))
+            return
+        }
+
+        /*
+         * ⛔ AN AppImage IS NOT AN ALPM PACKAGE and must never reach the
+         * transaction below. `synpkg remove ai.opencode.desktop` would ask
+         * pacman about a name it has never heard of; worse, an AppImage id
+         * that happened to collide with a real package name would remove the
+         * PACKAGE. The same reasoning as the SynapseOS branch above it.
+         *
+         * ⚠ No install verb here: an install needs a FILE, which is a chooser
+         * and not a row. See pickImage below.
+         */
+        if (row.source === "appimage") {
+            root.busy = row.name
+            root.outcome = ""
+            actProc.errLine = ""
+            root.statusLine = I18n.tr("removing %1…").arg(row.name)
+            actProc.command = [root.bin, "--tsv", "-y", "appimage", "remove", row.name]
+            actProc.running = true
             return
         }
 
@@ -1226,6 +1334,11 @@ FloatingWindow {
             runChain([{ kind: "about", args: ["about"] }])
         } else if (section === "system") {
             runChain([{ kind: "system", args: ["system", "check"] }])
+        } else if (section === "appimage") {
+            // Reads a manifest file. No network, no database, no lock — which
+            // is why it is a single step with no note: there is nothing slow
+            // enough to narrate.
+            runChain([{ kind: "appimage", args: ["appimage", "list"] }])
         } else if (section === "suggested") {
             // The only category tab that opens on content: the catalogue is 100
             // rows, so showing all of it is a readable page rather than a dump.
@@ -1619,6 +1732,53 @@ FloatingWindow {
                 // the failure tidy if some future layout gets there anyway.
                 clip: true
 
+                /*
+                 * ⚠ IN THE TOOLBAR AND NOT IN THE EMPTY STATE, unlike the
+                 * "Enable Flathub" offer further down. That one answers a
+                 * condition — the remote is missing — and stops being true.
+                 * This is the only way to add an AppImage at all, and it has to
+                 * stay reachable once the list has rows in it. The toolbar's
+                 * left half is free here: the browse/search/installed toggle
+                 * beside it is a SOURCE tab's furniture, and this is not one.
+                 *
+                 * ⛔ A BUTTON IS ITS OWN LABEL. It says what pressing it does,
+                 * not what the pane is called.
+                 */
+                Rectangle {
+                    id: aiInstallBtn
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    visible: root.section === "appimage"
+                    width: aiLabel.implicitWidth + 24
+                    height: 26
+                    radius: 4
+                    color: aiMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                    border { width: 1; color: root.cAccent }
+                    // ⚠ Dimmed rather than hidden without zenity: a button that
+                    // vanishes on some machines is a feature nobody can ask
+                    // about. See hasPicker.
+                    opacity: root.hasPicker ? 1.0 : 0.45
+
+                    Text {
+                        id: aiLabel
+                        anchors.centerIn: parent
+                        text: root.hasPicker ? I18n.tr("Install an AppImage…")
+                                             : I18n.tr("Install an AppImage… (needs zenity)")
+                        color: root.cAccent
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+                    MouseArea {
+                        id: aiMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: root.hasPicker ? Qt.PointingHandCursor
+                                                    : Qt.ArrowCursor
+                        onClicked: {
+                            if (!root.hasPicker || root.busy !== "") return
+                            if (!pickImage.running) pickImage.running = true
+                        }
+                    }
+                }
+
                 Row {
                     id: modeToggle
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
@@ -1677,9 +1837,24 @@ FloatingWindow {
                 // why it is always present rather than only on a search pane.
                 Rectangle {
                     id: searchBar
+                    /*
+                     * ⚠ THREE THINGS SHARE THIS TOOLBAR'S LEFT EDGE and only
+                     * one of them is ever visible at a time: the source tabs'
+                     * mode toggle, the AppImage tab's install button, and
+                     * nothing. This box has to start after whichever it is.
+                     *
+                     * ⛔ It anchored to `modeToggle.visible ? … : parent.left`,
+                     * so on the AppImage tab it began at the left edge and was
+                     * drawn OVER the install button — declared earlier, so the
+                     * box wins. The button was on screen, hit-testable, and
+                     * completely invisible. The rig's first screenshot of the
+                     * tab is what showed it.
+                     */
                     anchors {
-                        left: modeToggle.visible ? modeToggle.right : parent.left
-                        leftMargin: modeToggle.visible ? 10 : 0
+                        left: modeToggle.visible ? modeToggle.right
+                            : aiInstallBtn.visible ? aiInstallBtn.right
+                            : parent.left
+                        leftMargin: (modeToggle.visible || aiInstallBtn.visible) ? 10 : 0
                         right: parent.right
                         verticalCenter: parent.verticalCenter
                     }
@@ -1944,6 +2119,11 @@ FloatingWindow {
                         if (root.section === "updates")   return I18n.tr("Everything is up to date.")
                         if (root.section === "held")      return I18n.tr("Nothing is being held back.\nHold an update from the Updates page to stop it arriving.")
                         if (root.section === "system")    return I18n.tr("SynapseOS components are current.")
+                        // ⛔ SAYS WHAT THIS PAGE CANNOT DO, because the empty
+                        // state is where somebody forms their idea of what the
+                        // page is for — and every other tab in this window can
+                        // be searched.
+                        if (root.section === "appimage")  return I18n.tr("No AppImages installed.\nUse the button above to add one — synpkg cannot search for these, so you bring the file.")
                         if (root.section === "suggested") return root.currentGroup === ""
                                                                  ? I18n.tr("Pick a category.")
                                                                  : I18n.tr("You already have everything suggested.")

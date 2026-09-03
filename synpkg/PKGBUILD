@@ -244,7 +244,42 @@ pkgver=0.1.0
 #   ⚠ AND A FOURTH, from the pre-commit hook: copy_file() opened the target and
 #   then chmod'd it BY NAME — a path resolved twice, with 0755 as the mode and
 #   the name under a directory the caller chose. fchmod on the descriptor.
-pkgrel=53
+# 54: the AppImage pane — the GUI half of 53.
+#
+#   An AppImages tab beside the five sources, an "Install an AppImage…" button
+#   in its toolbar, Remove per row, and the hint and empty state both saying
+#   what this page cannot do. Every other tab in this window can be searched
+#   and upgraded; a row sitting in a package manager looks upgradable unless
+#   something says otherwise, so two places say it.
+#
+#   ⛔ A `list` SECTION AND NOT A `source` ONE. A source tab carries a
+#   browse/search/installed toggle and a search box, and all of that would be
+#   furniture that cannot answer: there is no index to search.
+#
+#   ⛔ AN AppImage NEVER REACHES THE ALPM PATH. act() branches on
+#   `source === "appimage"` before the transaction, exactly as it does for a
+#   SynapseOS component — `synpkg remove ai.opencode.desktop` would ask pacman
+#   about a name it has never heard of, and an id colliding with a real package
+#   name would remove the PACKAGE.
+#
+#   ⛔ zenity, NOT a QML FileDialog. QtQuick.Dialogs is not shipped by
+#   quickshell, so FileDialog is a type this window cannot import — the same
+#   reason syn-play picks its files that way. Probed once at startup with
+#   `command -v` rather than discovered when somebody presses the button, and
+#   the button dims and says why rather than vanishing.
+#
+#   ⚠ THE FILTER BOX WAS DRAWN OVER THE BUTTON. Three things share the
+#   toolbar's left edge and only one is ever visible: the source tabs' mode
+#   toggle, this button, or nothing. The box anchored to `modeToggle.visible ?
+#   … : parent.left`, so on this tab it started at the left edge and covered a
+#   button that was on screen, hit-testable and completely invisible. The rig's
+#   first screenshot of the tab is what showed it; a grep of the QML would not
+#   have.
+#
+#   ⚠ AND THE FileDialog ASSERTION FAILED ON A CORRECT FILE. It grepped for the
+#   word, and the comment explaining why there is no FileDialog contains it. It
+#   matches a USE now — an import or an element.
+pkgrel=54
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

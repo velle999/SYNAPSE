@@ -370,6 +370,9 @@ appimage remove` is a real uninstall rather than a hunt through
 > letting the row sit in a list that looks upgradable. Replace one by
 > installing a newer file over the top.
 
+The window has an **AppImages** tab beside the five sources, with an *Install an
+AppImage…* button and Remove on each row.
+
 You do not have to open it to find something. Type a name into the **start
 menu**, or into the command bar, and if nothing installed answers to it the
 repositories are asked instead: the menu lists what would provide it, and the

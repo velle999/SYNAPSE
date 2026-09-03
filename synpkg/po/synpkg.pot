@@ -39,7 +39,13 @@ msgstr ""
 msgid "About"
 msgstr ""
 
+msgid "All files"
+msgstr ""
+
 msgid "All sources"
+msgstr ""
+
+msgid "AppImages"
 msgstr ""
 
 msgid "Arsenal"
@@ -49,6 +55,9 @@ msgid "BlackArch security tooling, by category"
 msgstr ""
 
 msgid "Browse"
+msgstr ""
+
+msgid "Choose an AppImage"
 msgstr ""
 
 msgid "Enable BlackArch"
@@ -84,6 +93,12 @@ msgstr ""
 msgid "Install"
 msgstr ""
 
+msgid "Install an AppImage…"
+msgstr ""
+
+msgid "Install an AppImage… (needs zenity)"
+msgstr ""
+
 msgid "Installed"
 msgstr ""
 
@@ -94,6 +109,12 @@ msgid "Installed packages"
 msgstr ""
 
 msgid "Installed tools"
+msgstr ""
+
+msgid ""
+"No AppImages installed.\n"
+"Use the button above to add one — synpkg cannot search for these, so you "
+"bring the file."
 msgstr ""
 
 msgid "No Flatpak applications installed."
@@ -303,10 +324,18 @@ msgstr ""
 msgid "search the repositories — press Enter"
 msgstr ""
 
+msgid ""
+"single-file applications you installed yourself — synpkg cannot search for "
+"these or update them"
+msgstr ""
+
 msgid "the Arch User Repository — recipes built from source on this machine"
 msgstr ""
 
 msgid "the curated SynapseOS software list"
+msgstr ""
+
+msgid "the file is gone — %1"
 msgstr ""
 
 msgid "this system's own components, rebuilt from git by syn-update"
