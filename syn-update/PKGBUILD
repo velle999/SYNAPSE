@@ -126,7 +126,23 @@ pkgver=0.1.0
 #   Naming one of those on the command line used to build nothing and exit 0.
 #   It now says where the thing actually comes from, from a second roster the
 #   suite checks against the first.
-pkgrel=55
+# 56: an updated machine reports the release it is actually running. os-release
+#   was stamped once at ISO build, copied onto the disk by the installer, and
+#   never rewritten — so a box installed from 0.2.6 media and updated for a
+#   month still said 0.2.6 in fastfetch, in lsb_release, in the login motd and
+#   in every bug report, while its tree said 0.2.9.5. A successful apply now
+#   re-stamps it from the SAME source of truth build.sh uses, iso_version in
+#   profiledef.sh.
+#   ⛔ AND IT WRITES A REAL /etc/os-release. That path is a SYMLINK into
+#   /usr/lib/os-release, which belongs to Arch's `filesystem` package and has no
+#   backup array — the installer's `cp` had been following it and writing our
+#   identity into filesystem's file, where the next upgrade of that package
+#   silently restores Arch's. Fixed at the source too (syn-install 111).
+#   ⚠ THE FIRST APPLY DOES NOT STAMP. The running process is the script it
+#   is replacing, and syn-update 55 has no stamper — so the apply that
+#   builds this one still reports the old version, and the NEXT one
+#   corrects it. Same shape as the COMPONENTS note at 36.
+pkgrel=56
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

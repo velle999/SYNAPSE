@@ -181,6 +181,11 @@ declare -A NEVER_ADD_HOW=(
 # with the command that installs it, and naming it is the opt-in.
 MANIFEST="${SYN_UPDATE_MANIFEST:-/etc/synapseos/components.conf}"
 
+# The three files that say which release this machine is running. Seamed as one
+# directory so stamp_os_identity() can be tested without root and without
+# rewriting the identity of the box running the test.
+ETC="${SYN_UPDATE_ETC:-/etc}"
+
 # name -> selected|declined, and whether the file existed at all. The flag is
 # separate because an EMPTY manifest and an ABSENT one mean opposite things:
 # empty is "offered everything, took none of it", absent is "never asked".
@@ -290,6 +295,153 @@ save_manifest() {
     fi
     rm -f "$tmp"
     return 0
+}
+
+# Re-stamp the release version this machine reports about itself.
+#
+# THE BUG. os-release is written once — build.sh stamps airootfs from
+# iso_version, syn-install copies it onto the disk — and NOTHING ever rewrote it
+# again. A box installed from 0.2.6 media and updated ever since reported 0.2.6
+# forever: fastfetch, the motd on the login screen, `lsb_release`, every bug
+# report. The tree it was updated from said 0.2.9.5. This is the same fault the
+# ISO had from v0.1.1 to v0.1.6 (see build.sh's OS identity block), one layer
+# later — the write was fine, the machine was just lying about itself.
+#
+# ⚠ AND os-release IS NOT WHERE IT LOOKS. On an installed system /etc/os-release
+# is a SYMLINK to ../usr/lib/os-release, and that file belongs to Arch's
+# `filesystem` package. It got there by accident: systemd's tmpfiles etc.conf
+# creates the symlink during pacstrap, and the installer's `cp /etc/os-release
+# /mnt/etc/os-release` then FOLLOWS it and writes SynapseOS's identity through
+# into filesystem's file. `pacman -Qkk filesystem` has been reporting that as a
+# checksum mismatch on every installed machine ever since.
+#
+# filesystem does not list /usr/lib/os-release in a backup array, so the first
+# `pacman -Syu` that upgrades filesystem overwrites it with Arch's — and the
+# machine forgets it is SynapseOS entirely: NAME, ID, PRETTY_NAME, the lot. It
+# has not fired yet only because filesystem does not upgrade often.
+#
+# So this writes a REAL FILE at /etc/os-release rather than through the symlink.
+# os-release(5) gives /etc precedence over /usr/lib, `filesystem` does not ship
+# /etc/os-release at all (only /usr/lib/os-release), and tmpfiles' rule for it is
+# `L`, not `L+` — it creates the symlink only where nothing exists, so it will
+# not undo this. After that a filesystem upgrade can restore /usr/lib/os-release
+# to Arch's with no effect on what anything reads.
+#
+# Called from a successful apply only. `check` is read-only, and a run that
+# failed to build has not moved the machine to a new release.
+stamp_os_identity() {
+    local ver osr tmp
+
+    # The SAME source of truth build.sh uses, read the same way: iso_version in
+    # profiledef.sh is the DISTRO version. Not SYNAPSEOS_VERSION and not any
+    # pkgver — the packages stay 0.1.0-N on purpose.
+    ver=$(sed -n 's/^iso_version="\([^"]*\)".*/\1/p' \
+          "$SRC/archiso/profiledef.sh" 2>/dev/null)
+    if [ -z "$ver" ]; then
+        warn "could not read iso_version from $SRC/archiso/profiledef.sh —
+    leaving the reported version alone rather than guessing at it."
+        return 0
+    fi
+
+    osr="$ETC/os-release"
+    [ -e "$osr" ] || return 0
+
+    # Read THROUGH the symlink (cat, not readlink) — the current content is the
+    # starting point, so fields this does not touch are carried across intact.
+    tmp=$(mktemp) || return 0
+    cat "$osr" > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+
+    # Refuse to stamp a file that is not ours. On a machine where a filesystem
+    # upgrade already restored Arch's, rewriting VERSION_ID would produce an
+    # os-release reading NAME="Arch Linux" VERSION_ID="0.2.9.5" — a worse lie
+    # than the stale one, and one nothing else could detect.
+    if ! grep -q '^ID=synapseos$' "$tmp"; then
+        rm -f "$tmp"
+        warn "$osr does not identify as SynapseOS — not stamping a version into
+    somebody else's os-release. Reinstall or restore it first."
+        return 0
+    fi
+
+    # The loose version pattern is build.sh's, which makes this idempotent: it
+    # rewrites whatever version is already there, whatever that version is.
+    local _v='[0-9][0-9A-Za-z.+~-]*'
+    sed -i \
+        -e "s|^PRETTY_NAME=\"SynapseOS ${_v}\"|PRETTY_NAME=\"SynapseOS ${ver}\"|" \
+        -e "s|^VERSION=\"${_v}\"|VERSION=\"${ver}\"|" \
+        -e "s|^VERSION_ID=\"${_v}\"|VERSION_ID=\"${ver}\"|" \
+        -e "s|^BUILD_ID=${_v}|BUILD_ID=${ver}|" \
+        -e "s|^IMAGE_VERSION=${_v}|IMAGE_VERSION=${ver}|" \
+        "$tmp"
+
+    # Prove it landed rather than trusting sed's exit status, which is 0 whether
+    # or not the pattern matched — a silent no-match is exactly how the version
+    # persisted in the first place.
+    if ! grep -q "^VERSION_ID=\"${ver}\"$" "$tmp"; then
+        rm -f "$tmp"
+        warn "could not stamp $ver into $osr — its VERSION_ID line does not look
+    like one this knows how to rewrite. Left as it was."
+        return 0
+    fi
+
+    if [ "$(cat "$osr" 2>/dev/null)" = "$(cat "$tmp")" ] && [ ! -L "$osr" ]; then
+        rm -f "$tmp"          # already correct AND already a real file
+    else
+        # install, not `cp` and not `sed -i` on the path: this has to REPLACE
+        # the symlink with a regular file, not write through it into the
+        # filesystem package's copy, which is the whole point.
+        #
+        # ⚠ The privilege test is on the DIRECTORY, not the file. Replacing a
+        # symlink is an unlink-and-create in its parent, so `-w` on the path
+        # answers the wrong question twice over: it follows the symlink and
+        # reports on filesystem's file, which is the one thing not being written.
+        if [ -w "$(dirname "$osr")" ]; then
+            install -Dm644 "$tmp" "$osr"
+        else
+            sudo install -Dm644 "$tmp" "$osr"
+        fi && ok "reported version is now $ver" \
+           || warn "could not write $osr — this machine still reports its old version"
+        rm -f "$tmp"
+    fi
+
+    stamp_banner_version "$ETC/issue" "$ver"
+    stamp_banner_version "$ETC/motd"  "$ver"
+
+    # os-release is where /etc/lsb-release is derived FROM, so a new version
+    # here leaves lsb_release quoting the old one until the next transaction
+    # that happens to move syn or lsb-release. See 75-syn-lsb-release.hook.
+    if [ -x /usr/lib/syn/syn-lsb-release ]; then
+        sudo /usr/lib/syn/syn-lsb-release 2>/dev/null || true
+    fi
+}
+
+# The getty banner and the login motd carry the version as prose, and both go
+# stale with os-release.
+#
+# ⚠ ONLY WHERE THE FILE ALREADY CARRIES A SynapseOS VERSION. A machine whose
+# /etc/issue is still stock Arch (`\S{PRETTY_NAME} \r (\l)`, which interpolates
+# from os-release and is therefore already correct) must be left alone —
+# installing branding is syn-install's job, and an updater that started writing
+# banners nobody asked for would be a surprise on every machine that predates
+# the installer copying them.
+stamp_banner_version() {   # stamp_banner_version <file> <version>
+    local f=$1 ver=$2 tmp
+    local _v='[0-9][0-9A-Za-z.+~-]*'
+
+    [ -f "$f" ] || return 0
+    grep -q "SynapseOS ${_v}\|Version ${_v}" "$f" 2>/dev/null || return 0
+
+    tmp=$(mktemp) || return 0
+    sed -e "s|SynapseOS ${_v} |SynapseOS ${ver} |" \
+        -e "s|Version ${_v} |Version ${ver} |" "$f" > "$tmp" 2>/dev/null \
+        || { rm -f "$tmp"; return 0; }
+
+    if [ "$(cat "$f")" = "$(cat "$tmp")" ]; then
+        rm -f "$tmp"; return 0
+    fi
+    if [ -w "$f" ]; then install -Dm644 "$tmp" "$f"
+    else sudo install -Dm644 "$tmp" "$f"; fi \
+        || warn "could not update the version in $f"
+    rm -f "$tmp"
 }
 
 # ── output ───────────────────────────────────────────────────
@@ -1261,6 +1413,12 @@ cmd_apply() {
     # the no-file reading and the file it would have written say the same thing
     # until something actually changes.
     save_manifest
+
+    # The tree just moved, and the release version is part of what moved. Here
+    # rather than beside the git pull because a pull that fails to BUILD has not
+    # put a new release on this disk — the same reasoning as save_manifest, and
+    # it needs the root this command already holds.
+    stamp_os_identity
 
     # The bar's badge is a file, and this is the command that just made it
     # wrong. See ping_refresh_quietly.

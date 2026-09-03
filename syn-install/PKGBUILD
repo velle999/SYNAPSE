@@ -245,7 +245,15 @@ pkgver=0.1.0
 #   terminal at all.
 #   Seven checks in layout_test.sh, against BOTH lists — the installer's and
 #   the ISO's are independent collectors and have drifted before.
-pkgrel=110
+# 111: `cp /etc/os-release /mnt/etc/os-release` was following a symlink. By
+#   that point pacstrap has installed `filesystem` (which ships
+#   /usr/lib/os-release) and run systemd's tmpfiles (which declares the /etc
+#   symlink to it), so the copy wrote SynapseOS's identity THROUGH into
+#   filesystem's own file — a permanent `pacman -Qkk filesystem` mismatch on
+#   every machine ever installed, and an identity the first upgrade of that
+#   package would silently replace with Arch's. --remove-destination puts a real
+#   file at /etc/os-release, which os-release(5) gives precedence anyway.
+pkgrel=111
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
