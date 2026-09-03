@@ -1,7 +1,18 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=21
+# 22: the pinned downloads carry their revision in the local name. makepkg
+#   decides whether to fetch by whether a file of that NAME is already in
+#   SRCDEST — "-> Found <name>", skip — and validates the checksum only after.
+#   So when `_whisperrev` moved from the tiny model to small at pkgrel 16, the
+#   box that had downloaded tiny in August kept that file under the identical
+#   name and failed every build from then on, while a clean machine built
+#   perfectly. The failure names the checksum, which is the one thing that was
+#   right. ⚠ And two of the four PASSED, because the tokenizer and vocabulary
+#   are byte-identical across whisper sizes — so it read as partial corruption
+#   rather than a whole stale model. Nothing about the package changes: the
+#   installed paths are what piper and faster-whisper look for and stay put.
+pkgrel=22
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -112,14 +123,36 @@ _piperrev=v1.0.0
 _whisperrev=536b0662742c02347bc0e980a01041f333bce120
 _hf=https://huggingface.co
 
+# ⛔ THE REVISION IS IN THE LOCAL NAME, AND THAT IS NOT DECORATION.
+#
+# makepkg decides whether to download by whether a file of that name is already
+# in SRCDEST — it prints "-> Found <name>" and skips — and only THEN validates
+# the checksum. So a pinned revision that moves leaves the previous download
+# sitting under the identical name, and every build from then on stops at
+#
+#     whisper-model.bin ... FAILED
+#
+# which reads as "upstream changed the file" or "somebody typed the checksum
+# wrong". It is neither: the checksum is right and the file on disk is old.
+#
+# It happened here. `_whisperrev` moved from the tiny model to small at
+# pkgrel 16, and the box that had downloaded tiny in August failed every build
+# afterwards while a clean machine built perfectly — the worst shape a build
+# failure can have, because the machine that can reproduce it is the one that
+# cannot see why. Two of the four passed, which made it look like partial
+# corruption rather than a whole stale model: the tokenizer and vocabulary are
+# byte-identical across whisper sizes.
+#
+# With the revision in the name a moved pin asks for a file that is not there,
+# so it is fetched. The stale one is simply never looked at again.
 source=(
     "git+$url.git#commit=$_commit"
-    "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx"
-    "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx.json"
-    "whisper-model.bin::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/model.bin"
-    "whisper-config.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/config.json"
-    "whisper-tokenizer.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/tokenizer.json"
-    "whisper-vocabulary.txt::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/vocabulary.txt"
+    "piper-$_piperrev-$_voice.onnx::$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx"
+    "piper-$_piperrev-$_voice.onnx.json::$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx.json"
+    "whisper-${_whisperrev:0:12}-model.bin::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/model.bin"
+    "whisper-${_whisperrev:0:12}-config.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/config.json"
+    "whisper-${_whisperrev:0:12}-tokenizer.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/tokenizer.json"
+    "whisper-${_whisperrev:0:12}-vocabulary.txt::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/vocabulary.txt"
     "chibi.sh"
     "chibi.desktop"
     "chibi-64.png"
@@ -300,18 +333,21 @@ package() {
     _check_vendored_sonames "$pkgdir/usr/lib/chibi/pydeps" || return 1
 
     # ── Models ───────────────────────────────────────────────────────────
-    install -Dm644 "$srcdir/$_voice.onnx" \
+    # ⚠ The SOURCE names carry the revision (see source= above); the INSTALLED
+    # names must not. What lands on the disk is what piper and faster-whisper
+    # look for by name, and neither has ever heard of this PKGBUILD's pins.
+    install -Dm644 "$srcdir/piper-$_piperrev-$_voice.onnx" \
         "$pkgdir/usr/share/piper-voices/$_voice.onnx"
-    install -Dm644 "$srcdir/$_voice.onnx.json" \
+    install -Dm644 "$srcdir/piper-$_piperrev-$_voice.onnx.json" \
         "$pkgdir/usr/share/piper-voices/$_voice.onnx.json"
 
-    install -Dm644 "$srcdir/whisper-model.bin" \
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-model.bin" \
         "$pkgdir/usr/share/faster-whisper/small/model.bin"
-    install -Dm644 "$srcdir/whisper-config.json" \
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-config.json" \
         "$pkgdir/usr/share/faster-whisper/small/config.json"
-    install -Dm644 "$srcdir/whisper-tokenizer.json" \
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-tokenizer.json" \
         "$pkgdir/usr/share/faster-whisper/small/tokenizer.json"
-    install -Dm644 "$srcdir/whisper-vocabulary.txt" \
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-vocabulary.txt" \
         "$pkgdir/usr/share/faster-whisper/small/vocabulary.txt"
 
     # ── Launcher, desktop entry, icons ───────────────────────────────────

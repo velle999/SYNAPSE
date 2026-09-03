@@ -181,10 +181,14 @@ archiso/out/*.b2sum
 # synnet and synapse_kmod all have a REAL tracked src/.
 /chibi/src/
 /chibi/chibi-llm/
-/chibi/whisper-model.bin
-/chibi/whisper-config.json
-/chibi/whisper-tokenizer.json
-/chibi/whisper-vocabulary.txt
+# ⚠ GLOBS, because the local names now carry the pinned revision — see the
+# source= block in chibi/PKGBUILD for why they do. Naming the four files
+# literally would have left every future revision's download untracked-but-
+# unignored, and a 461MB model in `git status`.
+/chibi/whisper-*-model.bin
+/chibi/whisper-*-config.json
+/chibi/whisper-*-tokenizer.json
+/chibi/whisper-*-vocabulary.txt
 /chibi/*.onnx
 /chibi/*.onnx.json
 
