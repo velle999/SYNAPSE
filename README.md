@@ -106,11 +106,13 @@ a partition on it (`/dev/sdb1`).
 **Windows** — in **Command Prompt**, in the folder you downloaded to:
 
 ```bat
-copy /b SynapseOS-<ver>-x86_64.iso.part00 + SynapseOS-<ver>-x86_64.iso.part01 SynapseOS-<ver>-x86_64.iso
+copy /b SynapseOS-<ver>-x86_64.iso.part00 + SynapseOS-<ver>-x86_64.iso.part01 + SynapseOS-<ver>-x86_64.iso.part02 SynapseOS-<ver>-x86_64.iso
 certutil -hashfile SynapseOS-<ver>-x86_64.iso SHA256
 ```
 
-Name every part, in order, joined by `+`. `/b` is **not optional**: without it
+Name every part, in order, joined by `+` — three of them as of 0.3.0, and a
+release with more needs every one named, because a line copied from here that
+stops short succeeds and leaves a short ISO. `/b` is **not optional**: without it
 `copy` runs in text mode and stops at the first `0x1A` byte — a few hundred KB
 into the image — leaving a short file, no error message, and a stick that will
 not boot. Compare what `certutil` prints against the contents of the `.sha256`
