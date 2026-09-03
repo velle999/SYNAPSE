@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=20
+pkgrel=21
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -15,7 +15,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=93b935496d3db4228cb2fd50c149a1f5f0d1c9eb
+_commit=759e2d7bd51b37cd4b2453e8f12dbc587fc447b0
 
 # Runtime deps.
 #
