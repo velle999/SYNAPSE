@@ -366,6 +366,116 @@ msgid ""
 "  is another package manager running?"
 msgstr ""
 
+msgid "HOME is not set, so there is nowhere to install an AppImage"
+msgstr ""
+
+msgid "out of memory"
+msgstr ""
+
+msgid ""
+"ignoring an unreadable line in the AppImage manifest (a path longer than "
+"this can hold)"
+msgstr ""
+
+#, c-format
+msgid "cannot write %s: %s"
+msgstr ""
+
+#, c-format
+msgid "could not return to %s"
+msgstr ""
+
+#, c-format
+msgid "cannot read %s: %s"
+msgstr ""
+
+#, c-format
+msgid ""
+"Reading %s\n"
+"  (an AppImage is unpacked by running it; it is not signed and no repository "
+"stands behind it)\n"
+msgstr ""
+
+#, c-format
+msgid "cannot create a scratch directory: %s"
+msgstr ""
+
+#, c-format
+msgid "cannot resolve %s: %s"
+msgstr ""
+
+#, c-format
+msgid "cannot stage %s: %s"
+msgstr ""
+
+#, c-format
+msgid "synpkg: %s is not an AppImage, or its runtime refused to unpack it\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"synpkg: %s carries no .desktop entry, so there is nothing to put in a menu\n"
+msgstr ""
+
+#, c-format
+msgid "%s has a .desktop with no Name"
+msgstr ""
+
+#, c-format
+msgid "%s %s installed\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"  %s\n"
+"  %s\n"
+msgstr ""
+
+#, c-format
+msgid "  (no icon in the image — the menu entry will use a generic one)\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"  ⚠ synpkg cannot update this. AppImages carry no update\n"
+"    information, so `synpkg updates` will never mention it —\n"
+"    replace it by installing a newer file over the top.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"No AppImages installed by synpkg.\n"
+"  synpkg appimage install <file>\n"
+msgstr ""
+
+msgid "   (file is gone)"
+msgstr ""
+
+#, c-format
+msgid ""
+"\n"
+"  ⚠ None of these can be updated by synpkg — an AppImage carries\n"
+"    no update information. `synpkg updates` does not cover them.\n"
+msgstr ""
+
+#, c-format
+msgid "synpkg: no AppImage called '%s' (synpkg appimage list)\n"
+msgstr ""
+
+#, c-format
+msgid "%s removed\n"
+msgstr ""
+
+msgid "synpkg appimage install needs a file"
+msgstr ""
+
+msgid "synpkg appimage remove needs a name (synpkg appimage list)"
+msgstr ""
+
+#, c-format
+msgid "synpkg: appimage takes install, list or remove (not '%s')\n"
+msgstr ""
+
 msgid ""
 "blackarch-keyring is not installed — signing key rotations will never reach "
 "this machine.\n"
@@ -542,10 +652,6 @@ msgid ""
 "  pkexec would not carry that setting to the root process, so the\n"
 "  escalated write would land on /etc/pacman.conf instead. Re-run as\n"
 "  a user who can write the file you named."
-msgstr ""
-
-#, c-format
-msgid "cannot read %s: %s"
 msgstr ""
 
 #, c-format
@@ -976,9 +1082,6 @@ msgid ""
 msgstr ""
 
 msgid "unrecognised choice"
-msgstr ""
-
-msgid "out of memory"
 msgstr ""
 
 msgid ""

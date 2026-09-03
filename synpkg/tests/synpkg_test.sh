@@ -1632,5 +1632,96 @@ else
 fi
 
 echo
+echo "── AppImages ──"
+#
+# ⛔ NOT A FIFTH BACKEND, and the assertions are mostly about what it refuses to
+# pretend. The mechanical half is what nobody gets right by hand; the honesty
+# half is what stops it looking like a source `search` and `updates` cover.
+
+# ⚠ Its own temp tree, removed by NAME. Nothing here writes outside it, and the
+# HOME every command below sees is inside it — an `appimage install` run against
+# the suite's real HOME would put a menu entry on the machine running the tests.
+T=$(mktemp -d) || exit 1
+trap 'rm -rf "$T"' EXIT
+AIH=$T/aihome
+mkdir -p "$AIH/.local/state/synpkg"
+ai() { HOME="$AIH" "$SYNPKG" appimage "$@" 2>&1; }
+
+ai list > "$T/ai-empty.txt"
+has 'No AppImages installed' "$T/ai-empty.txt" \
+    && ok "an empty list says so and names the command" \
+    || bad "the empty list is not helpful: $(cat "$T/ai-empty.txt")"
+
+# ⚠ A REAL IMAGE IS NOT REQUIRED and must not be: the suite runs where there is
+# no network and no 150MB download. These are the paths that do not need one.
+ai frobnicate > "$T/ai-bad.txt"
+has 'install, list or remove' "$T/ai-bad.txt" \
+    && ok "an unknown subcommand names the ones that exist" \
+    || bad "the refusal does not say what is allowed"
+
+ai remove nothing-here > "$T/ai-gone.txt"
+has 'no AppImage called' "$T/ai-gone.txt" \
+    && ok "removing something that was never installed is refused" \
+    || bad "remove accepted an unknown name"
+
+# ⛔ THE CALLER'S FILE IS NOT MODIFIED. The first version made the ARGUMENT
+# executable so its runtime could unpack it, which is a package manager
+# chmod'ing a file it was only asked to read — and the +x outlived the refusal.
+# `synpkg appimage install /etc/hostname` was the case that showed it.
+printf 'not an appimage\n' > "$T/notimage"
+chmod 644 "$T/notimage"
+ai install "$T/notimage" > "$T/ai-refuse.txt"
+has 'is not an AppImage' "$T/ai-refuse.txt" \
+    && ok "a file that is not an AppImage is refused" \
+    || bad "a plain file was not refused: $(cat "$T/ai-refuse.txt")"
+[ "$(stat -c %a "$T/notimage")" = 644 ] \
+    && ok "…and it is left exactly as it was found, not made executable" \
+    || bad "the refused file's mode changed to $(stat -c %a "$T/notimage")"
+
+# ⛔ AND NO UNPACKED TREE IS LEFT BEHIND. Only the success path used to clean
+# up, so every refusal left an extracted copy in /tmp — and refusals are the
+# attempts people repeat.
+[ -z "$(find /tmp -maxdepth 1 -name 'synpkg-appimage-*' 2>/dev/null)" ] \
+    && ok "a refused install leaves no scratch directory" \
+    || bad "scratch directories left: $(find /tmp -maxdepth 1 -name 'synpkg-appimage-*')"
+
+# ⛔ THE HONESTY, asserted. A row that does not say synpkg cannot update it is a
+# row somebody reasonably assumes `updates` covers.
+printf 'x\t1.0\t%s/img.AppImage\t%s/x.desktop\n' "$AIH" "$AIH" \
+    > "$AIH/.local/state/synpkg/appimages" 2>/dev/null ||
+  { mkdir -p "$AIH/.local/state/synpkg"
+    printf 'x\t1.0\t%s/img.AppImage\t%s/x.desktop\n' "$AIH" "$AIH" \
+      > "$AIH/.local/state/synpkg/appimages"; }
+ai list > "$T/ai-list.txt"
+has 'None of these can be updated' "$T/ai-list.txt" \
+    && ok "the list says outright that updates does not cover these" \
+    || bad "the list implies these are upgradable"
+# ⚠ A recorded image whose file somebody deleted by hand is a menu entry that
+# does nothing, and this is the only place that can explain it.
+has 'file is gone' "$T/ai-list.txt" \
+    && ok "…and a recorded image whose file has gone says so" \
+    || bad "a missing image is listed as though it were there"
+
+# ⛔ THE RECORD IS ENGLISH AND MACHINE-READABLE, like every other --tsv table.
+HOME="$AIH" "$SYNPKG" --tsv appimage list > "$T/ai-tsv.txt" 2>&1
+[ "$(head -1 "$T/ai-tsv.txt")" = "$(printf 'id\tversion\timage\tdesktop\tpresent')" ] \
+    && ok "the record names its five columns" \
+    || bad "unexpected --tsv header: $(head -1 "$T/ai-tsv.txt")"
+
+# ⛔ A MANIFEST LINE THAT CANNOT BE READ EXACTLY IS DROPPED, not truncated. A cut
+# path is one `remove` unlinks nothing at while reporting success.
+python3 - "$AIH/.local/state/synpkg/appimages" <<'LONG'
+import sys
+p = sys.argv[1]
+open(p, "a").write("toolong\t1.0\t/" + ("a" * 5000) + "\t/b\n")
+LONG
+HOME="$AIH" "$SYNPKG" --tsv appimage list > "$T/ai-long.txt" 2>&1
+if has '^toolong' "$T/ai-long.txt"; then
+    bad "an over-long manifest path was accepted — remove would act on a cut path"
+else
+    ok "a manifest line too long to hold is dropped, not truncated"
+fi
+
+echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -81,6 +81,16 @@ static void usage(FILE *out)
 "  flatpak ignore|unignore [app]   hold a Flatpak back (flatpak mask)\n"
 "  flatpak categories      browse Flathub by category\n"
 "  flatpak category <name> the applications in one Flathub category\n"
+"  appimage install <file> | list | remove <name>\n"
+"                          an AppImage: place it in ~/Applications, put its\n"
+"                          menu entry and icons where the desktop looks, and\n"
+"                          record what was placed so remove is a real\n"
+"                          uninstall.\n"
+"                          ⛔ NOT a fourth source. AppImages have no index, so\n"
+"                          `search` cannot reach them; they carry no update\n"
+"                          information, so `updates` never mentions them; and\n"
+"                          they are unsigned. Install a newer file over the\n"
+"                          top to upgrade one\n"
 "  system <check|apply|ignore|unignore|ignored>\n"
 "                          SynapseOS's own components, via syn-update\n"
 "                           apply takes component names: system apply synui\n"
@@ -236,6 +246,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "groups"))    return cmd_groups(rest_argc, rest);
 	if (!strcmp(cmd, "arsenal"))   return cmd_arsenal(rest_argc, rest);
 	if (!strcmp(cmd, "cachyos"))   return cmd_cachyos(rest_argc, rest);
+	if (!strcmp(cmd, "appimage"))  return cmd_appimage(rest_argc, rest);
 	if (!strcmp(cmd, "aur"))       return cmd_aur(rest_argc, rest);
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);
 	if (!strcmp(cmd, "system"))    return cmd_system(rest_argc, rest);

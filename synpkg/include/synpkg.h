@@ -227,6 +227,9 @@ size_t sp_curated_count(void);
 /* ── arsenal.c ──────────────────────────────────────────────────────────── */
 int cmd_arsenal(int argc, char **argv);
 int cmd_cachyos(int argc, char **argv);
+/* AppImages. ⛔ NOT a search/upgrade backend — see the header of appimage.c
+ * for why it cannot be one and what it does instead. */
+int cmd_appimage(int argc, char **argv);
 /* Is [cachyos] in pacman.conf? The Kernel pane's rows depend on it. */
 bool cachyos_repo_enabled(void);
 

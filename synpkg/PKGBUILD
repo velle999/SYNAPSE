@@ -199,7 +199,52 @@ pkgver=0.1.0
 #   to the Flatpak path — handed to alpm it would report "not installed", a true
 #   sentence about a package name that never existed, for an application that is
 #   plainly on the screen.
-pkgrel=52
+# 53: AppImages — the mechanical work, and nothing it cannot honestly promise.
+#
+#   velle installed an AppImage by hand and asked whether synpkg should do it.
+#   It should: what a person does by hand is chmod, place, extract the .desktop,
+#   rewrite Exec to an absolute path, pull three icon sizes out, name the entry
+#   so the dock can pin it, and update two caches. Everyone gets some of that
+#   wrong, which is the whole reason AppImageLauncher exists.
+#
+#   ⛔ BUT IT IS NOT A FIFTH BACKEND, and refusing to pretend otherwise is the
+#   design. The repositories, the AUR, Flathub and BlackArch are all searchable
+#   and all upgradable. An AppImage is neither: there is no index (AppImageHub
+#   is a stale scrape), no update information in most images, and no signature.
+#   So `search` deliberately does not learn about them, and `install` and `list`
+#   both say outright that `updates` will never mention them.
+#
+#   ⚠ THE ENTRY IS NAMED AFTER StartupWMClass. A dock pin keys on the app_id,
+#   which for an Electron image is its WMClass — file the .desktop under any
+#   other basename and the dock cannot resolve one for the running window: a
+#   generic icon, no "New Window", and a pin that does not survive a restart.
+#
+#   Three faults found by testing rather than by reading, each now asserted:
+#
+#   ⛔ IT chmod +x'd THE CALLER'S FILE. An AppImage must be executable to be
+#   unpacked by its own runtime, and the first version did that to the ARGUMENT
+#   — a package manager modifying a file it was asked only to read.
+#   `synpkg appimage install /etc/hostname` tried to make a system file
+#   executable and only failed because the caller does not own it; the +x also
+#   outlived the refusal. It stages a copy now and makes THAT executable.
+#
+#   ⛔ EVERY REFUSAL LEAKED ITS UNPACKED TREE. Only the success path cleaned the
+#   scratch directory, so each rejected attempt left an extracted copy in /tmp —
+#   400MB for a 152MB Electron image, and rejected attempts are the ones people
+#   repeat.
+#
+#   ⛔ THE MANIFEST TRUNCATED SILENTLY. 512-byte path fields against a longer
+#   line buffer, which the compiler called correctly: a cut path is one `remove`
+#   unlinks nothing at while reporting success. A line that cannot be held
+#   exactly is dropped with a warning rather than trimmed to fit.
+#
+#   ⚠ `search` AND `updates` ARE UNTOUCHED, on purpose. Adding AppImages to
+#   either would be the dishonest version of this.
+#
+#   ⚠ AND A FOURTH, from the pre-commit hook: copy_file() opened the target and
+#   then chmod'd it BY NAME — a path resolved twice, with 0755 as the mode and
+#   the name under a directory the caller chose. fchmod on the descriptor.
+pkgrel=53
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

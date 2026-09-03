@@ -40,6 +40,7 @@ sources = files(
   'src/arsenal.c',
   'src/cachyos.c',
   'src/ext.c',
+  'src/appimage.c',
   'src/appstream.c',
   'src/ignore.c',
   'src/settings.c',

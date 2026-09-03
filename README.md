@@ -355,6 +355,21 @@ enable-flathub` and `synpkg arsenal enable-repo`, or the buttons the GUI offers
 where it says they are off. `synpkg about` reports which sources are actually
 wired up on your machine.
 
+**AppImages have a verb but are deliberately not a sixth source.** `synpkg
+appimage install ~/Downloads/thing.AppImage` does the mechanical work nobody
+gets right by hand — places it in `~/Applications`, extracts the `.desktop` and
+the icons, rewrites `Exec` to an absolute path, names the entry after the
+window class so the **dock can pin it**, and records what it placed so `synpkg
+appimage remove` is a real uninstall rather than a hunt through
+`~/.local/share`.
+
+> ⛔ **It cannot search and it cannot update, and it says so.** AppImages have
+> no index — there is nothing for `synpkg search` to reach — most carry no
+> update information, so `synpkg updates` will never mention one, and none of
+> them is signed. Both `install` and `list` state that outright rather than
+> letting the row sit in a list that looks upgradable. Replace one by
+> installing a newer file over the top.
+
 You do not have to open it to find something. Type a name into the **start
 menu**, or into the command bar, and if nothing installed answers to it the
 repositories are asked instead: the menu lists what would provide it, and the
