@@ -1215,7 +1215,39 @@ pkgver=0.1.0
 #   button having closed too much. Asserted through music.log rather than a
 #   screenshot: row 0 of the settings page opens a page and row 0 of the main
 #   page toggles the player, so the wrong answer writes a line.
-pkgrel=53
+# 54: THE SAME SETTINGS AT THE DESK, AND A PANEL THAT COULD NOT BE SCROLLED.
+#
+#   Shelves, Start menu and Keep the screen awake in `syn-arcade gui` too, on
+#   the Big screen tab beside the settings that were already there. Both
+#   surfaces draw whatever `big settings` says exists, so a row added to the
+#   table in big.c turns up in both with no change to either window — and the
+#   rule that Desktop and Quit have no switch lives in that table rather than
+#   in either one, which is what stops one of them growing a switch the other
+#   refuses to.
+#
+#   ⚠ `big choices <id>`, because a MOUSE PICKS AND A GAMEPAD CYCLES. The
+#   television asks for the next value and never needs the list; the window
+#   draws a row of chips and needs all of it. The values could not travel as a
+#   joined field in the settings record: rec_row percent-encodes, and a comma
+#   inside a label encodes to exactly what a comma separator does. Same shape
+#   as `hud choices hud-position`, for the same reason.
+#
+#   ⛔ AND THE BIG SCREEN PANEL COULD NOT BE SCROLLED AT ALL. It was a
+#   ColumnLayout anchored to fill the tab, so content past the window's height
+#   was not merely off screen — there was no Flickable to drag and no scrollbar
+#   to say there was more. It was already at the edge before this: Web apps sat
+#   on the last visible row of a 720-high window. Now the same Flickable the
+#   Fit editor uses, scrollbar and all — measured in the rig at h=566 ch=966,
+#   so it really does have somewhere to go.
+#   ⚠ The ColumnLayout's `Item { Layout.fillHeight: true }` tail filler went
+#   with it. Inside a Flickable the content decides its own height, and a
+#   fill-height spacer grows contentHeight without limit.
+#
+#   ⚠ THE RIG REACHES THE BOTTOM BY PATCHING `contentY`, which is how it gets
+#   there with no input device — the three settings groups live below the fold,
+#   so a panel that stopped scrolling would take them with it and the existing
+#   04-big shot would still look perfect.
+pkgrel=54
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

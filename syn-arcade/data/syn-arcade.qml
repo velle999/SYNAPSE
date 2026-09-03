@@ -434,6 +434,13 @@ FloatingWindow {
     property var bigPlayers: []
     property var bigBackgrounds: []
     property var bigWebapps: []
+    property var bigSettings: []
+    property var bigAwake: []
+
+    // The rows of one settings group, in the order big.c lists them.
+    function bigSettingsIn(group) {
+        return root.bigSettings.filter(r => r.group === group)
+    }
     property var bigSources: []
 
     Process {
@@ -467,6 +474,27 @@ FloatingWindow {
         id: bigWebappProc
         stdout: StdioCollector {
             onStreamFinished: root.bigWebapps = root.parseRecords(this.text)
+        }
+    }
+    // ⚠ ONE READ FOR ALL THREE GROUPS. `big settings --rec` carries the group
+    // in a column, so the panels below filter one model rather than running
+    // three commands that could answer at three different moments and draw a
+    // window disagreeing with itself.
+    Process {
+        id: bigSettingProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigSettings = root.parseRecords(this.text)
+        }
+    }
+    // ⚠ AND A SECOND COMMAND FOR THE ONE ROW THAT IS NOT A SWITCH. keep_awake
+    // has three values, and a window that draws them side by side needs all of
+    // them — where the television only ever asks for the next one. See
+    // big_choices() in src/big.c for why they do not travel in the record
+    // above.
+    Process {
+        id: bigAwakeProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigAwake = root.parseRecords(this.text)
         }
     }
     Process {
@@ -711,6 +739,10 @@ FloatingWindow {
         bigBackgroundProc.running = true
         bigWebappProc.command = [root.bin, "big", "webapps", "--rec"]
         bigWebappProc.running = true
+        bigSettingProc.command = [root.bin, "big", "settings", "--rec"]
+        bigSettingProc.running = true
+        bigAwakeProc.command = [root.bin, "big", "choices", "keep_awake", "--rec"]
+        bigAwakeProc.running = true
     }
 
     Component.onCompleted: root.reload()
@@ -1856,318 +1888,478 @@ FloatingWindow {
                 // are GONE from there rather than repeated here. Two panels
                 // writing one setting is the shape of every "I turned it off
                 // and it came back" report in this project.
-                ColumnLayout {
+                //
+                // ⛔ AND IT SCROLLS NOW. This panel was a ColumnLayout anchored
+                // to fill the tab, which is fine until the content is taller
+                // than the window — and then the rows past the bottom edge are
+                // not merely off screen, they are UNREACHABLE. There is no
+                // Flickable to drag and no scrollbar to say there is more, so
+                // a setting below the fold is one nobody can get to and
+                // nothing on screen says so. It was already close: Web apps
+                // sat at the last visible row on a 720-high window before the
+                // three settings groups were added below it.
+                //
+                // The Fit tab's editor already had this shape; this is the
+                // same one, scrollbar and all.
+                Flickable {
+                    // A view that scrolls says so — see SynScrollBar above.
+                    ScrollBar.vertical: SynScrollBar {}
+                    id: bigFlick
                     anchors.fill: parent
                     anchors.margins: 16
-                    spacing: 10
                     visible: root.tab === 4
+                    clip: true
+                    contentWidth: width
+                    contentHeight: bigForm.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    Text {
-                        text: I18n.tr("Big screen mode")
-                        color: root.ink
-                        font.pixelSize: root.ui(16)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: I18n.tr("The ten-foot interface: your Steam library, Big Picture "
-                            + "and the machine's own switches as tiles, drivable from a "
-                            + "game controller.")
-                        color: root.dim
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        wrapMode: Text.WordWrap
-                    }
+                    ColumnLayout {
+                        id: bigForm
+                        width: bigFlick.width
+                        spacing: 10
 
-                    RowLayout {
-                        Layout.topMargin: 4
-                        spacing: 8
-                        ArcButton {
-                            text: root.bigFields.running === "yes"
-                                  ? I18n.tr("Show it")
-                                  : I18n.tr("Open big screen")
-                            primary: true
-                            // ⚠ --detach. This window IS quickshell, and `run`
-                            // starts a child Process: without the fork the big
-                            // screen shell would be that child, so closing this
-                            // window would close its pipes.
-                            onTriggered: root.run(root.bigFields.running === "yes"
-                                ? ["big", "show"] : ["big", "start", "--detach"])
-                        }
-                        ArcButton {
-                            text: I18n.tr("Close it")
-                            visible: root.bigFields.running === "yes"
-                            onTriggered: root.run(["big", "stop"])
-                        }
-                        Item { Layout.fillWidth: true }
                         Text {
-                            text: root.bigFields.running === "yes"
-                                  ? I18n.tr("running") : I18n.tr("not running")
-                            color: root.bigFields.running === "yes" ? root.good : root.dim
+                            text: I18n.tr("Big screen mode")
+                            color: root.ink
+                            font.pixelSize: root.ui(16)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("The ten-foot interface: your Steam library, Big Picture "
+                                + "and the machine's own switches as tiles, drivable from a "
+                                + "game controller.")
+                            color: root.dim
                             font.pixelSize: root.ui(12)
                             font.family: root.uiFont
+                            wrapMode: Text.WordWrap
                         }
-                    }
 
-                    FieldRow {
-                        label: I18n.tr("Opens with")
-                        value: root.bindFields["big screen mode"] || "—"
-                    }
+                        RowLayout {
+                            Layout.topMargin: 4
+                            spacing: 8
+                            ArcButton {
+                                text: root.bigFields.running === "yes"
+                                      ? I18n.tr("Show it")
+                                      : I18n.tr("Open big screen")
+                                primary: true
+                                // ⚠ --detach. This window IS quickshell, and `run`
+                                // starts a child Process: without the fork the big
+                                // screen shell would be that child, so closing this
+                                // window would close its pipes.
+                                onTriggered: root.run(root.bigFields.running === "yes"
+                                    ? ["big", "show"] : ["big", "start", "--detach"])
+                            }
+                            ArcButton {
+                                text: I18n.tr("Close it")
+                                visible: root.bigFields.running === "yes"
+                                onTriggered: root.run(["big", "stop"])
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: root.bigFields.running === "yes"
+                                      ? I18n.tr("running") : I18n.tr("not running")
+                                color: root.bigFields.running === "yes" ? root.good : root.dim
+                                font.pixelSize: root.ui(12)
+                                font.family: root.uiFont
+                            }
+                        }
 
-                    // ⚠ The screen it opens on, first because it is the
-                    // setting that fails invisibly: at login nobody has
-                    // pointed at anything, so "wherever the pointer is" opens
-                    // the television interface on whichever monitor the cursor
-                    // was parked on — and nothing on that screen can explain
-                    // why it is there.
-                    Text {
-                        Layout.topMargin: 6
-                        text: I18n.tr("Which screen")
-                        color: root.ink
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Repeater {
-                            model: root.bigScreens
-                            ArcChip {
+                        FieldRow {
+                            label: I18n.tr("Opens with")
+                            value: root.bindFields["big screen mode"] || "—"
+                        }
+
+                        // ⚠ The screen it opens on, first because it is the
+                        // setting that fails invisibly: at login nobody has
+                        // pointed at anything, so "wherever the pointer is" opens
+                        // the television interface on whichever monitor the cursor
+                        // was parked on — and nothing on that screen can explain
+                        // why it is there.
+                        Text {
+                            Layout.topMargin: 6
+                            text: I18n.tr("Which screen")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigScreens
+                                ArcChip {
+                                    required property var modelData
+                                    label: modelData.label
+                                    on: modelData.current === "current"
+                                    onPicked: root.run(["big", "output", modelData.id])
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Opens on %1").arg(root.bigFields.screen || "—")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                        }
+
+                        // ⚠ The music player, and the note under the chips is the
+                        // point of the row: cliamp is the only one big screen mode
+                        // can DRIVE. With it, Music plays without a window and the
+                        // Start menu grows transport and a Now Playing meter; with
+                        // anything else the tile opens a window somebody then has
+                        // to get out of with a gamepad.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Music player")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigPlayers
+                                ArcChip {
+                                    required property var modelData
+                                    label: modelData.label
+                                    on: modelData.current === "current"
+                                    onPicked: root.run(["big", "player", modelData.id])
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: {
+                                for (const p of root.bigPlayers)
+                                    if (p.current === "current") return p.note
+                                return root.bigPlayers.length === 0
+                                    ? I18n.tr("No music player installed — "
+                                              + "synpkg install cliamp")
+                                    : ""
+                            }
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+
+                        // Only worth showing for a player that HAS sources, which
+                        // is the driven one: everything else browses its own
+                        // library in its own window.
+                        Text {
+                            Layout.topMargin: 8
+                            visible: root.bigSources.length > 0
+                            text: I18n.tr("Where the music comes from")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.bigSources.length > 0
+                            spacing: 6
+                            Repeater {
+                                model: root.bigSources
+                                ArcChip {
+                                    required property var modelData
+                                    label: modelData.name
+                                    on: modelData.current === "1"
+                                    onPicked: root.run(["big", "music", "source",
+                                                        modelData.id])
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // ⚠ The background, and the note under it is the point of
+                        // the row rather than decoration. "Follow the desktop" is
+                        // the default and resolves to synui's own wallpaper — but
+                        // it resolves to NOTHING when that wallpaper is the kanji
+                        // rain (a live surface, not a file) or a path that has
+                        // since been deleted, and the only symptom of either is a
+                        // television that looks plain. The line says which picture
+                        // is actually being drawn, so the difference between "off"
+                        // and "on but unresolvable" is visible here rather than
+                        // being a thing to guess at from a sofa.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Background")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        ListView {
+                            // A view that scrolls says so — see SynScrollBar above.
+                            //
+                            // ⛔ AND THIS ONE HAS A CAPPED HEIGHT, which is what
+                            // makes it scroll at all: the picture list is as long
+                            // as somebody's Pictures folder — thirty rows on this
+                            // machine — and a chip row left to its natural width
+                            // would run off the edge of the panel with nothing
+                            // saying there was more behind it.
+                            ScrollBar.horizontal: SynScrollBar {}
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 40
+                            orientation: ListView.Horizontal
+                            clip: true
+                            spacing: 6
+                            model: root.bigBackgrounds
+                            delegate: ArcChip {
                                 required property var modelData
                                 label: modelData.label
                                 on: modelData.current === "current"
-                                onPicked: root.run(["big", "output", modelData.id])
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: I18n.tr("Opens on %1").arg(root.bigFields.screen || "—")
-                        color: root.dim
-                        font.pixelSize: root.ui(11)
-                        font.family: root.uiFont
-                    }
-
-                    // ⚠ The music player, and the note under the chips is the
-                    // point of the row: cliamp is the only one big screen mode
-                    // can DRIVE. With it, Music plays without a window and the
-                    // Start menu grows transport and a Now Playing meter; with
-                    // anything else the tile opens a window somebody then has
-                    // to get out of with a gamepad.
-                    Text {
-                        Layout.topMargin: 8
-                        text: I18n.tr("Music player")
-                        color: root.ink
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Repeater {
-                            model: root.bigPlayers
-                            ArcChip {
-                                required property var modelData
-                                label: modelData.label
-                                on: modelData.current === "current"
-                                onPicked: root.run(["big", "player", modelData.id])
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: {
-                            for (const p of root.bigPlayers)
-                                if (p.current === "current") return p.note
-                            return root.bigPlayers.length === 0
-                                ? I18n.tr("No music player installed — "
-                                          + "synpkg install cliamp")
-                                : ""
-                        }
-                        color: root.dim
-                        font.pixelSize: root.ui(11)
-                        font.family: root.uiFont
-                        wrapMode: Text.WordWrap
-                    }
-
-                    // Only worth showing for a player that HAS sources, which
-                    // is the driven one: everything else browses its own
-                    // library in its own window.
-                    Text {
-                        Layout.topMargin: 8
-                        visible: root.bigSources.length > 0
-                        text: I18n.tr("Where the music comes from")
-                        color: root.ink
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: root.bigSources.length > 0
-                        spacing: 6
-                        Repeater {
-                            model: root.bigSources
-                            ArcChip {
-                                required property var modelData
-                                label: modelData.name
-                                on: modelData.current === "1"
-                                onPicked: root.run(["big", "music", "source",
+                                onPicked: root.run(["big", "background",
                                                     modelData.id])
                             }
                         }
-                        Item { Layout.fillWidth: true }
-                    }
-
-                    // ⚠ The background, and the note under it is the point of
-                    // the row rather than decoration. "Follow the desktop" is
-                    // the default and resolves to synui's own wallpaper — but
-                    // it resolves to NOTHING when that wallpaper is the kanji
-                    // rain (a live surface, not a file) or a path that has
-                    // since been deleted, and the only symptom of either is a
-                    // television that looks plain. The line says which picture
-                    // is actually being drawn, so the difference between "off"
-                    // and "on but unresolvable" is visible here rather than
-                    // being a thing to guess at from a sofa.
-                    Text {
-                        Layout.topMargin: 8
-                        text: I18n.tr("Background")
-                        color: root.ink
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    ListView {
-                        // A view that scrolls says so — see SynScrollBar above.
-                        //
-                        // ⛔ AND THIS ONE HAS A CAPPED HEIGHT, which is what
-                        // makes it scroll at all: the picture list is as long
-                        // as somebody's Pictures folder — thirty rows on this
-                        // machine — and a chip row left to its natural width
-                        // would run off the edge of the panel with nothing
-                        // saying there was more behind it.
-                        ScrollBar.horizontal: SynScrollBar {}
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 40
-                        orientation: ListView.Horizontal
-                        clip: true
-                        spacing: 6
-                        model: root.bigBackgrounds
-                        delegate: ArcChip {
-                            required property var modelData
-                            label: modelData.label
-                            on: modelData.current === "current"
-                            onPicked: root.run(["big", "background",
-                                                modelData.id])
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.bigFields.background || "—"
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
                         }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.bigFields.background || "—"
-                        color: root.dim
-                        font.pixelSize: root.ui(11)
-                        font.family: root.uiFont
-                        wrapMode: Text.WordWrap
-                    }
 
-                    // ⚠ The three web services, and `installed` is why the
-                    // record carries a fourth column. Twitch, YouTube and
-                    // Spotify are opened in a browser told to behave like an
-                    // application; with no browser on the machine there is
-                    // nothing to open them in, and three switches that quietly
-                    // do nothing are worse than three that say why.
-                    Text {
-                        Layout.topMargin: 8
-                        text: I18n.tr("Web apps")
-                        color: root.ink
-                        font.pixelSize: root.ui(12)
-                        font.family: root.uiFont
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: I18n.tr("Tiles on the media shelf. They open in "
-                            + "your browser as their own full-screen window, "
-                            + "with the controller acting as the mouse and "
-                            + "keyboard they need.")
-                        color: root.dim
-                        font.pixelSize: root.ui(11)
-                        font.family: root.uiFont
-                        wrapMode: Text.WordWrap
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Repeater {
-                            model: root.bigWebapps
-                            ArcChip {
-                                required property var modelData
-                                label: modelData.label
-                                on: modelData.current === "on"
-                                // ⚠ Sends the OPPOSITE of what it shows. These
-                                // are switches, not a one-of-many pick like the
-                                // rows above — the chip that is already `on` is
-                                // the one somebody presses to turn it off.
-                                onPicked: root.run(["big", "webapps",
-                                    modelData.id,
-                                    modelData.current === "on" ? "off" : "on"])
+                        // ⚠ The three web services, and `installed` is why the
+                        // record carries a fourth column. Twitch, YouTube and
+                        // Spotify are opened in a browser told to behave like an
+                        // application; with no browser on the machine there is
+                        // nothing to open them in, and three switches that quietly
+                        // do nothing are worse than three that say why.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Web apps")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Tiles on the media shelf. They open in "
+                                + "your browser as their own full-screen window, "
+                                + "with the controller acting as the mouse and "
+                                + "keyboard they need.")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigWebapps
+                                ArcChip {
+                                    required property var modelData
+                                    label: modelData.label
+                                    on: modelData.current === "on"
+                                    // ⚠ Sends the OPPOSITE of what it shows. These
+                                    // are switches, not a one-of-many pick like the
+                                    // rows above — the chip that is already `on` is
+                                    // the one somebody presses to turn it off.
+                                    onPicked: root.run(["big", "webapps",
+                                        modelData.id,
+                                        modelData.current === "on" ? "off" : "on"])
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: root.bigWebapps.length > 0
+                                     && root.bigWebapps[0].installed !== "yes"
+                            text: I18n.tr("No browser installed — these tiles "
+                                          + "cannot open.")
+                            color: root.bad
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+
+                        // ── what the television draws, and what Start offers ────
+                        //
+                        // ⚠ THE SAME SETTINGS THE TELEVISION'S OWN PAGE WRITES,
+                        // through the same command. Start ▸ Settings is where
+                        // somebody on a sofa reaches them; this is where somebody
+                        // at the desk does, and neither is a second copy of the
+                        // list — both draw whatever `big settings` says exists, so
+                        // a row added in big.c turns up in both with no change
+                        // here.
+                        //
+                        // ⛔ AND `big settings` REPORTS NO WAY-OUT ROW, so neither
+                        // surface can offer to hide Desktop or Quit. That rule
+                        // lives in the table in C rather than in either window,
+                        // which is what stops one of them growing a switch the
+                        // other refuses to.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Shelves")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Which rows big screen mode draws. One "
+                                + "switched off is not drawn and cannot be "
+                                + "navigated to; switching it back on gives it its "
+                                + "place back.")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigSettingsIn("display")
+                                ArcChip {
+                                    required property var modelData
+                                    // i18n-dynamic: settings[].label is N_() in src/big.c
+                                    label: I18n.tr(modelData.label)
+                                    on: modelData.value === "on"
+                                    // ⚠ Sends the OPPOSITE of what it shows, like
+                                    // the web apps above: these are switches, not
+                                    // a one-of-many pick.
+                                    onPicked: root.run(["big", "settings",
+                                        modelData.id,
+                                        modelData.value === "on" ? "off" : "on"])
+                                }
                             }
                         }
-                        Item { Layout.fillWidth: true }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        visible: root.bigWebapps.length > 0
-                                 && root.bigWebapps[0].installed !== "yes"
-                        text: I18n.tr("No browser installed — these tiles "
-                                      + "cannot open.")
-                        color: root.bad
-                        font.pixelSize: root.ui(11)
-                        font.family: root.uiFont
-                        wrapMode: Text.WordWrap
-                    }
 
-                    RowLayout {
-                        Layout.topMargin: 10
-                        spacing: 8
-                        ArcButton {
-                            text: root.bigFields["at login"] === "on"
-                                  ? I18n.tr("Don't start at login")
-                                  : I18n.tr("Start at login")
-                            onTriggered: root.run(["big", "autostart",
-                                root.bigFields["at login"] === "on" ? "off" : "on"])
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Start menu")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
                         }
-                        // The pad's GUIDE button, from the desktop. Big screen
-                        // mode's own Guide takes you out to the desktop; this
-                        // watcher is what brings it back, so the two halves of
-                        // one button are one setting.
-                        ArcButton {
-                            text: root.bigFields["guide button"] === "on"
-                                  ? I18n.tr("Guide button off")
-                                  : I18n.tr("Guide button on")
-                            onTriggered: root.run(["big", "guide",
-                                root.bigFields["guide button"] === "on" ? "off" : "on"])
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("What the menu behind Start offers. "
+                                + "Desktop and Quit are always on it: they are the "
+                                + "way out of a full-screen surface that owns the "
+                                + "keyboard, and a gamepad has no key combination "
+                                + "to fall back on.")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
                         }
-                        Item { Layout.fillWidth: true }
-                    }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigSettingsIn("menu")
+                                ArcChip {
+                                    required property var modelData
+                                    // i18n-dynamic: settings[].label is N_() in src/big.c
+                                    label: I18n.tr(modelData.label)
+                                    on: modelData.value === "on"
+                                    onPicked: root.run(["big", "settings",
+                                        modelData.id,
+                                        modelData.value === "on" ? "off" : "on"])
+                                }
+                            }
+                        }
 
-                    FieldRow {
-                        Layout.topMargin: 6
-                        label: I18n.tr("Steam library")
-                        value: I18n.tr("%1 games").arg(root.bigFields.games || "0")
-                    }
-                    FieldRow {
-                        label: I18n.tr("quickshell")
-                        value: root.bigFields.quickshell || "—"
-                        warn: (root.bigFields.quickshell || "") !== "installed"
-                    }
+                        // ── power ───────────────────────────────────────────────
+                        //
+                        // ⚠ A ONE-OF-MANY PICK, unlike everything above it, which
+                        // is why it reads its values from `big choices` rather
+                        // than flipping a boolean. Three chips, and the one that
+                        // is on is the current answer.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Keep the screen awake")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Whether big screen mode holds the "
+                                + "desktop's idle timeouts off. It has none of its "
+                                + "own — dim, blank, lock and suspend stay the "
+                                + "compositor's. `While playing` covers the two "
+                                + "cases nothing else does: music through cliamp "
+                                + "has no window for the compositor to notice, and "
+                                + "a gamepad is not Wayland input, so a "
+                                + "controller-only game reads as an idle machine.")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigAwake
+                                ArcChip {
+                                    required property var modelData
+                                    // i18n-dynamic: set_awake[] is N_() in src/big.c
+                                    label: I18n.tr(modelData.label)
+                                    on: modelData.current === "current"
+                                    onPicked: root.run(["big", "settings",
+                                                        "keep_awake", modelData.id])
+                                }
+                            }
+                        }
 
-                    Item { Layout.fillHeight: true }
+                        RowLayout {
+                            Layout.topMargin: 10
+                            spacing: 8
+                            ArcButton {
+                                text: root.bigFields["at login"] === "on"
+                                      ? I18n.tr("Don't start at login")
+                                      : I18n.tr("Start at login")
+                                onTriggered: root.run(["big", "autostart",
+                                    root.bigFields["at login"] === "on" ? "off" : "on"])
+                            }
+                            // The pad's GUIDE button, from the desktop. Big screen
+                            // mode's own Guide takes you out to the desktop; this
+                            // watcher is what brings it back, so the two halves of
+                            // one button are one setting.
+                            ArcButton {
+                                text: root.bigFields["guide button"] === "on"
+                                      ? I18n.tr("Guide button off")
+                                      : I18n.tr("Guide button on")
+                                onTriggered: root.run(["big", "guide",
+                                    root.bigFields["guide button"] === "on" ? "off" : "on"])
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        FieldRow {
+                            Layout.topMargin: 6
+                            label: I18n.tr("Steam library")
+                            value: I18n.tr("%1 games").arg(root.bigFields.games || "0")
+                        }
+                        FieldRow {
+                            label: I18n.tr("quickshell")
+                            value: root.bigFields.quickshell || "—"
+                            warn: (root.bigFields.quickshell || "") !== "installed"
+                        }
+
+                    }
                 }
             }
 

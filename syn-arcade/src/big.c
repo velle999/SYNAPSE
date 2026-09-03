@@ -8975,6 +8975,49 @@ static bool setting_shown(const char *key)
 }
 
 /*
+ * `big choices <id>` — every value a setting can take, for a window that draws
+ * them side by side.
+ *
+ * ⚠ THE TELEVISION DOES NOT NEED THIS and the desktop window does, which is
+ * the whole reason it is a second command rather than a column on the one
+ * above. A gamepad has one button and cycles; a mouse has a row of chips and
+ * picks. Joining the values into a field of the settings record would have
+ * meant a separator inside a percent-encoded cell — and a comma in a label
+ * encodes to exactly what a comma separator does, so the two would have been
+ * indistinguishable the first time a value got a comma in it.
+ *
+ * The same shape as `hud choices hud-position`: an id column, a label column,
+ * and which one is current.
+ */
+static int big_choices(const char *id, bool rec)
+{
+	const struct setting *s = id ? setting_find(id) : NULL;
+	if (!s) {
+		fprintf(stderr, _("syn-arcade: no choices for '%s'\n"),
+			id ? id : "");
+		return EX_USAGE;
+	}
+
+	const char *cur = setting_get(s);
+	if (rec) {
+		/* ⛔ THE ID COLUMN IS ENGLISH AND THE LABEL COLUMN IS THE WORD.
+		 * `big settings keep_awake always` takes the id back; marking
+		 * the id array would put it in the catalog and give a German
+		 * window a value no command accepts. See include/i18n.h. */
+		rec_row(3, "id", "label", "current");
+		for (int i = 0; i < s->nvals; i++)
+			rec_row(3, s->vals[i].id, s->vals[i].label,
+				strcmp(s->vals[i].id, cur) == 0 ? "current" : "-");
+		return EX_OK;
+	}
+	for (int i = 0; i < s->nvals; i++)
+		printf("  %-10s %-14s %s\n", s->vals[i].id,
+		       _(s->vals[i].label),
+		       strcmp(s->vals[i].id, cur) == 0 ? "*" : "");
+	return EX_OK;
+}
+
+/*
  * `big settings` — the page behind Start.
  *
  *   big settings                    every row, and what it is set to
@@ -9554,6 +9597,10 @@ int cmd_big(int argc, char **argv)
 	if (!strcmp(sub, "settings"))
 		return big_settings(first_operand(rest_c, rest),
 				    second_operand(rest_c, rest), rec);
+	/* Every value one of them can take. The television cycles and never
+	 * asks; the desktop window draws them as a row of chips. */
+	if (!strcmp(sub, "choices"))
+		return big_choices(first_operand(rest_c, rest), rec);
 	/* Holds a Wayland idle inhibitor for as long as it runs, and releases
 	 * it by exiting. The shell runs one while `keep_awake` says it should;
 	 * see big_awake. */

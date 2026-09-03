@@ -200,6 +200,9 @@ msgstr ""
 msgid "Keep it open"
 msgstr ""
 
+msgid "Keep the screen awake"
+msgstr ""
+
 msgid "Loading %1…"
 msgstr ""
 
@@ -515,16 +518,35 @@ msgstr ""
 msgid "What the game renders at"
 msgstr ""
 
+msgid ""
+"What the menu behind Start offers. Desktop and Quit are always on it: they "
+"are the way out of a full-screen surface that owns the keyboard, and a "
+"gamepad has no key combination to fall back on."
+msgstr ""
+
 msgid "What this menu offers"
 msgstr ""
 
 msgid "Where the music comes from"
 msgstr ""
 
+msgid ""
+"Whether big screen mode holds the desktop's idle timeouts off. It has none "
+"of its own — dim, blank, lock and suspend stay the compositor's. `While "
+"playing` covers the two cases nothing else does: music through cliamp has no "
+"window for the compositor to notice, and a gamepad is not Wayland input, so "
+"a controller-only game reads as an idle machine."
+msgstr ""
+
 msgid "Whether the screen is allowed to sleep"
 msgstr ""
 
 msgid "Which game?"
+msgstr ""
+
+msgid ""
+"Which rows big screen mode draws. One switched off is not drawn and cannot "
+"be navigated to; switching it back on gives it its place back."
 msgstr ""
 
 msgid "Which rows the television shows"
@@ -1139,7 +1161,8 @@ msgstr ""
 msgid "Sleep, restart and power off"
 msgstr ""
 
-msgid "Keep the screen awake"
+#, c-format
+msgid "syn-arcade: no choices for '%s'\n"
 msgstr ""
 
 #, c-format
@@ -1657,10 +1680,6 @@ msgstr ""
 
 #, c-format
 msgid "syn-arcade: cannot run /bin/sh: %s\n"
-msgstr ""
-
-#, c-format
-msgid "syn-arcade: no choices for '%s'\n"
 msgstr ""
 
 msgid "syn-arcade: fit inspect needs a .desktop file\n"

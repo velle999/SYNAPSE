@@ -5546,6 +5546,35 @@ sysrows > "$T/sysrows-on.txt"
 has -Fx poweroff "$T/sysrows-on.txt" \
     && ok "…and switching it back on brings them back" \
     || bad "the power rows did not come back"
+
+# ── `big choices`, which the DESKTOP window needs and the television does not ─
+#
+# A gamepad has one button and cycles; a mouse has a row of chips and picks. So
+# the desktop window is the only caller that needs every value at once.
+ch() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big choices "$@" 2>&1; }
+
+ch keep_awake --rec > "$T/choices.txt"
+[ "$(head -1 "$T/choices.txt")" = "$(printf 'id\tlabel\tcurrent')" ] \
+    && ok "big choices names an id, a label and which is current" \
+    || bad "unexpected choices header: $(head -1 "$T/choices.txt")"
+[ "$(tail -n +2 "$T/choices.txt" | wc -l)" = 3 ] \
+    && ok "…and keep_awake offers all three" \
+    || bad "keep_awake offered $(tail -n +2 "$T/choices.txt" | wc -l) values"
+# ⛔ EXACTLY ONE CURRENT. A row set that marks none leaves the window with no
+# chip lit and nothing saying which is in force; one that marks two is a
+# one-of-many pick that is not one.
+[ "$(awk -F'\t' 'NR>1 && $3 == "current"' "$T/choices.txt" | wc -l)" = 1 ] \
+    && ok "…with exactly one marked current" \
+    || bad "not exactly one current value"
+# A switch is the same shape, which is what lets the window draw both from one
+# delegate.
+[ "$(ch show_news --rec | tail -n +2 | wc -l)" = 2 ] \
+    && ok "a switch answers the same way, with two" \
+    || bad "show_news did not offer two values"
+ch nonsense >/dev/null 2>&1; [ $? = 2 ] \
+    && ok "…and there are no choices for a setting that does not exist" \
+    || bad "big choices accepted an unknown setting"
+
 rm -f "$BGH/syn-arcade/big.conf"
 
 echo

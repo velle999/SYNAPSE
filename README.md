@@ -1693,9 +1693,10 @@ clicks**, or `V` — because it is the one thing somebody turns on while somethi
 is already playing. Behind the Now Playing row it draws `cliamp`'s own FFT bands,
 streamed a frame per line.
 
-**Settings, on the Start menu.** Which rows the television draws — Running,
-Games, Recent, Play, Media, Apps, News — and what the Start menu itself offers,
-each a switch. A machine used as a console does not need a News shelf and one in
+**Settings, on the Start menu** — and on the Big screen tab of `syn-arcade gui`,
+which is the same list drawn for a mouse instead of a d-pad. Which rows the
+television draws — Running, Games, Recent, Play, Media, Apps, News — and what
+the Start menu itself offers, each a switch. A machine used as a console does not need a News shelf and one in
 a room with children does not want Power off on a menu; both are one press from
 the sofa, and `syn-arcade big settings` writes the same file at a prompt.
 

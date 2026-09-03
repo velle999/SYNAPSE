@@ -188,6 +188,17 @@ shot_state 03-picker 's/property int tab: 0/property int tab: 3/;
                       s/property bool   fitPicking: false/property bool   fitPicking: true/'
 shot_state 04-big    's/property int tab: 0/property int tab: 4/'
 
+# ⛔ AND THE BOTTOM OF IT, which is a shot the tab index alone cannot reach.
+# The Big screen panel was a ColumnLayout anchored to fill the tab: content
+# past the window's height was not merely off screen, it was UNREACHABLE — no
+# Flickable to drag, no scrollbar to say there was more. It is a Flickable now,
+# and `contentY` is how this rig reaches the far end of one without an input
+# device. The three settings groups live down there, so a panel that stopped
+# scrolling would take them with it and 04-big would still look perfect.
+shot_state 05-big-settings 's/property int tab: 0/property int tab: 4/;
+                            s/boundsBehavior: Flickable.StopAtBounds\n/&/;
+                            s/contentHeight: bigForm.implicitHeight/&\n                    contentY: 620/'
+
 echo
 echo "screenshots in $OUT"
 ls -1 "$OUT"
