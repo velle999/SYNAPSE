@@ -38,9 +38,13 @@
 #                   synapd. Restoring GPU should not cost a full ISO build.
 #   --no-clean      Skip cleaning previous build artifacts
 #   --jobs N        Parallel build jobs (default: nproc)
-#   --sign          GPG-sign the ISO. Needs SYNAPSE_SIGNING_KEY=<fingerprint>
-#                   and `sudo -E`, or the variable does not survive into the
-#                   build. See "Signing a release" in README.md.
+#   --no-sign       Do NOT sign the ISO. Signing is the DEFAULT, and the key is
+#                   named by archiso/release-key.fingerprint — a release build
+#                   needs nothing typed and nothing remembered. Use this for a
+#                   throwaway image, or on a host that has no release key.
+#   --sign          Accepted, and does nothing: signing is already the default.
+#                   Set SYNAPSE_SIGNING_KEY=<fingerprint> (with `sudo -E`) only
+#                   to override WHICH key. See "Signing a release" in README.md.
 #   --help          This help
 #
 # Requirements:
@@ -94,7 +98,12 @@ WITH_MODEL=false
 # CPU-only by default — see --gpu note in the header before changing this.
 WITH_GPU=cpu
 CLEAN=true
-SIGN=false
+# ⚠ SIGNED BY DEFAULT. This was `false`, so every release had to remember both
+# `--sign` and `sudo -E` — and 0.3.0 shipped an unsigned ISO because one build
+# was started without them. An unsigned release is a decision, not a slip, so
+# it is the thing you have to ask for: --no-sign. Which key is named by
+# archiso/release-key.fingerprint, so there is nothing left to remember.
+SIGN=true
 LLAMA_ONLY=false
 
 # ── Colors ────────────────────────────────────────────────────
@@ -159,10 +168,16 @@ for arg in "$@"; do
         --gpu=*)      WITH_GPU="${arg#--gpu=}" ;;
         --llama-only) LLAMA_ONLY=true ;;
         --no-clean)   CLEAN=false ;;
-        --sign)       SIGN=true ;;
+        --sign)       SIGN=true ;;   # default; kept so old invocations still work
+        --no-sign)    SIGN=false ;;
         --jobs=*)     JOBS="${arg#--jobs=}" ;;
         --help|-h)
-            sed -n '3,35p' "$0" | grep '^#' | sed 's/^# \?//'
+            # ⚠ Printed by DELIMITER, not by line number. This was `sed -n
+            # '3,35p'` for long enough that the header grew past 35, and --help
+            # silently stopped listing --no-clean, --jobs, --llama-only and the
+            # signing flags — the options most worth knowing about were the ones
+            # it cut. A range that ends where the banner ends cannot drift.
+            awk '/^# ={10,}/{n++; next} n==1' "$0" | sed 's/^# \?//'
             exit 0 ;;
         *)  warn "Unknown option: $arg" ;;
     esac
@@ -389,6 +404,17 @@ step "Preflight checks"
 [[ "$(id -u)" -eq 0 ]] || err "Must run as root (needed for mkarchiso)"
 
 command -v pacman &>/dev/null || err "pacman not found — must build on Arch Linux"
+
+# ⛔ THE SIGNING KEY IS CHECKED HERE, NOT AT THE END. Signing is the last step of
+# an hour-long build, so a missing key used to be discovered after the expensive
+# part — at the exact moment when the cheap way out is to shrug and publish it
+# unsigned. Proving the key can sign takes a fraction of a second, and it costs
+# nothing to do it before mkarchiso rather than after.
+if [[ "$SIGN" == "true" ]]; then
+    "${SCRIPT_DIR}/sign-iso.sh" --check-key \
+        || err "cannot sign with the key named in archiso/release-key.fingerprint (see above).
+     Fix the key, or build unsigned on purpose with --no-sign."
+fi
 
 # ── Packages that must never be INSTALLED on the live ISO ─────
 #
@@ -1438,48 +1464,39 @@ ISO_FILE=$(ls -t "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
 [[ -n "$ISO_FILE" ]] || err "ISO not found in ${OUT_DIR}"
 ok "ISO built: ${ISO_FILE}"
 
+# ── Hand the output back BEFORE signing ──────────────────────
+#
+# ⛔ BEFORE, not after. The .asc is written next to the ISO by the invoking
+# user, while out/ is created by mkarchiso as ROOT — so on a machine where out/
+# did not already exist from an earlier build, the signature died on a directory
+# it could not write, at the end of the build. It has only ever worked here
+# because out/ was already velle's from a previous run.
+#
+# The chown further down still runs: it covers the checksum files, which are
+# written after this point.
+if [[ -n "${SUDO_USER:-}" ]]; then
+    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" \
+        "${OUT_DIR}" "${ISO_FILE}" 2>/dev/null || true
+fi
+
 # ── Sign ──────────────────────────────────────────────────────
 #
-# ⛔ AS THE INVOKING USER, NOT AS ROOT. mkarchiso needs root, so this whole
-# script runs under sudo — and a bare `gpg` here reads ROOT's keyring, which on
-# any sane machine holds no release key at all. It would have failed with
-# "no default secret key" on the one machine it was written for, and on a box
-# where root DID have a key it would quietly sign with the wrong one.
-#
-# ⚠ THE KEY IS NAMED, NEVER DEFAULTED. `gpg --detach-sign` with no -u picks the
-# first usable secret key, which is whatever the developer happens to have —
-# and a release signed with somebody's personal identity instead of the release
-# key is not a thing you can quietly undo afterwards. SYNAPSE_SIGNING_KEY says
-# which, and its absence is an error rather than a guess.
+# ⚠ ONE OWNER. Which key, as which user, and the verify that follows all live in
+# sign-iso.sh — which is also what you run to sign an image that was built
+# without a signature. This block used to carry its own copy of the gpg
+# invocation, and two copies of "sign the release correctly" is one more than
+# can be kept true.
 if [[ "$SIGN" == "true" ]]; then
     step "Signing ISO"
-
-    if [[ -z "${SYNAPSE_SIGNING_KEY:-}" ]]; then
-        err "--sign needs SYNAPSE_SIGNING_KEY set to the release key's fingerprint.
-     Signing with whatever key gpg picks first is how a release ends up
-     carrying somebody's personal identity. See archiso/README.md."
-    fi
-
-    # Root's HOME is /root; the key lives in the invoking user's keyring.
-    _sign_as=(); _sign_home="${HOME}"
-    if [[ -n "${SUDO_USER:-}" ]]; then
-        _sign_as=(sudo -u "${SUDO_USER}" -H --)
-        _sign_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
-    fi
-
-    "${_sign_as[@]}" gpg --detach-sign --armor --yes \
-        --local-user "${SYNAPSE_SIGNING_KEY}" "${ISO_FILE}" \
-        || err "signing failed — is ${SYNAPSE_SIGNING_KEY} in ${SUDO_USER:-$USER}'s keyring?"
-
-    # ⛔ VERIFIED IMMEDIATELY, against the file that will actually ship. gpg
-    # exits 0 on plenty of things that are not a good signature over this ISO,
-    # and an unverifiable .asc published beside a download is worse than none:
-    # it invites people to run a check that cannot pass.
-    "${_sign_as[@]}" gpg --verify "${ISO_FILE}.asc" "${ISO_FILE}" \
-        || err "the signature just written does not verify against ${ISO_FILE}"
-
-    chown "${SUDO_USER:-$USER}" "${ISO_FILE}.asc" 2>/dev/null || true
-    ok "Signed and verified: ${ISO_FILE}.asc  (key ${SYNAPSE_SIGNING_KEY})"
+    # ⚠ The failure message names the recovery, because the ISO is FINE: a
+    # detached signature does not touch the image, so a failure here costs a
+    # passphrase, never a rebuild.
+    "${SCRIPT_DIR}/sign-iso.sh" "${ISO_FILE}" \
+        || err "signing failed — the ISO itself is built and intact.
+     Nothing needs rebuilding. Sign it with:
+       ./archiso/sign-iso.sh $(basename "${ISO_FILE}")"
+else
+    warn "Unsigned build (--no-sign) — sign it later with ./archiso/sign-iso.sh"
 fi
 
 # ── Checksums ─────────────────────────────────────────────────
@@ -1511,10 +1528,35 @@ echo "  ╰───────────────────────
 echo -e "${C_RESET}"
 echo -e "  ISO:    ${C_BOLD}${ISO_FILE}${C_RESET}"
 echo -e "  Size:   ${C_DIM}$(du -h "${ISO_FILE}" | cut -f1)${C_RESET}"
+
+# ⚠ SIGNED OR NOT IS STATED, always. "It did not say anything about signing" is
+# indistinguishable from "it signed it", and that is how an unsigned ISO gets
+# published by someone who believed otherwise. Read off the FILE rather than the
+# SIGN flag: the flag says what was asked for, the .asc says what is there.
+if [[ -f "${ISO_FILE}.asc" ]]; then
+    echo -e "  Signed: ${C_OK}yes${C_RESET} ${C_DIM}$(basename "${ISO_FILE}").asc${C_RESET}"
+else
+    echo -e "  Signed: ${C_WARN}NO${C_RESET} ${C_DIM}— ./archiso/sign-iso.sh $(basename "${ISO_FILE}")${C_RESET}"
+fi
 echo
-echo -e "  ${C_BRAND}To write to USB:${C_RESET}"
-echo -e "  ${C_DIM}dd if=${ISO_FILE} of=/dev/sdX bs=4M status=progress${C_RESET}"
+echo -e "  ${C_BRAND}1. Test in QEMU:${C_RESET}"
+echo -e "  ${C_DIM}./archiso/build_scripts/qemu-test.sh ${ISO_FILE}${C_RESET}"
+echo -e "  ${C_DIM}QEMU_NO_CD=1 ./archiso/build_scripts/qemu-test.sh   # boot the INSTALLED disk, no media${C_RESET}"
 echo
-echo -e "  ${C_BRAND}To test in QEMU:${C_RESET}"
-echo -e "  ${C_DIM}./build_scripts/qemu-test.sh ${ISO_FILE}${C_RESET}"
+# ⛔ write-usb.sh, NOT a bare dd. dd reporting the byte count does not mean the
+# stick holds those bytes — a short or unflushed tail leaves the label, the
+# version file and the kernel all readable while grub.cfg and the squashfs are
+# garbage, which reads as a broken ISO on a machine where the ISO is blameless.
+# 0.2.9.2 and 0.1.7 both went that way. write-usb.sh reads the whole stick back
+# with cmp and prints VERIFIED GOOD or fails; the summary used to print the dd
+# line that cost those two releases.
+echo -e "  ${C_BRAND}2. Write to USB${C_RESET} ${C_DIM}(reads the stick back and verifies it — this erases /dev/sdX):${C_RESET}"
+echo -e "  ${C_DIM}lsblk                                              # find the DISK, not a partition${C_RESET}"
+echo -e "  ${C_DIM}sudo ./archiso/write-usb.sh /dev/sdX ${SYNAPSEOS_VERSION}${C_RESET}"
+echo
+echo -e "  ${C_BRAND}3. Publish the GitHub release:${C_RESET}"
+echo -e "  ${C_DIM}\$EDITOR archiso/release-notes/${SYNAPSEOS_VERSION}.md              # optional, but it is the page${C_RESET}"
+echo -e "  ${C_DIM}./archiso/publish-release.sh ${SYNAPSEOS_VERSION}${C_RESET}"
+echo -e "  ${C_DIM}   splits the ISO into 1900 MiB parts (GitHub caps assets at 2 GiB),${C_RESET}"
+echo -e "  ${C_DIM}   uploads them with the checksums and the .asc, as YOUR user (gh's token).${C_RESET}"
 echo

@@ -1,0 +1,18 @@
+# The SynapseOS release signing key.
+#
+# A fingerprint is public — it is what people are told to check the ISO
+# against, and it is on soslinux.org. Nothing secret lives here; the key
+# itself is in the release box's keyring and nowhere else.
+#
+# This file exists so that signing is NAMED without anyone having to remember
+# to name it. gpg --detach-sign with no -u picks the first usable secret key,
+# and a release signed with somebody's personal identity is not something you
+# can quietly take back — so the choice is written down once, in the repo,
+# rather than typed into an environment variable per build.
+#
+# Rotating the key: change the line below, publish the new public key on
+# soslinux.org, and keep the old one published — the ISOs it signed are still
+# out there.
+#
+# SynapseOS Release Signing <releases@soslinux.org>  ed25519, expires 2029-08-28
+65489EF5C20D0BD94211472BED336DB7952B609E

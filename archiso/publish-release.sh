@@ -244,7 +244,12 @@ else
     echo >&2
     echo "publish-release: WARNING — no $iso.asc, this release will be UNSIGNED." >&2
     echo "  Users can check the download is intact and nothing more." >&2
-    echo "  Build with: SYNAPSE_SIGNING_KEY=<fingerprint> sudo -E ./build.sh --sign" >&2
+    # ⚠ The fix is one command and does NOT need a rebuild — a detached
+    # signature never touches the image. Saying "build with --sign" here, at the
+    # moment somebody is publishing an already-built ISO, offered them an hour
+    # they were never going to spend, so the warning got read as unavoidable.
+    echo "  Sign it now, no rebuild:  ./archiso/sign-iso.sh $ver" >&2
+    echo "  Then re-run this. (Ctrl-C now if that is what you want.)" >&2
     echo >&2
 fi
 

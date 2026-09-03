@@ -74,23 +74,47 @@ machine:
 gpg --armor --export <fingerprint> > synapseos-release-key.asc
 ```
 
+Put the fingerprint in `archiso/release-key.fingerprint`. That file is how the
+key gets *named* without anyone having to remember to name it — a fingerprint is
+public (it is what users check against), so it lives in the repo.
+
 ### Building and publishing
 
 ```bash
-SYNAPSE_SIGNING_KEY=<fingerprint> sudo -E ./build.sh --sign
-./publish-release.sh 0.2.9.5
+sudo ./build.sh
+./publish-release.sh 0.3.0
 ```
 
-⛔ **`sudo -E`, not plain `sudo`.** The build needs root for mkarchiso, and
-without `-E` the environment — including `SYNAPSE_SIGNING_KEY` — does not
-survive into it.
+**Signing is the default.** It used to need `--sign` *and* `sudo -E` *and*
+`SYNAPSE_SIGNING_KEY` in the environment, and 0.3.0 shipped unsigned because one
+build was started without them. An unsigned release is a decision, so it is now
+the thing you ask for — `--no-sign` — rather than the thing you get by
+forgetting. `SYNAPSE_SIGNING_KEY=<fpr> sudo -E ./build.sh` still overrides
+*which* key, for a build that is not signing with the project key.
 
-`build.sh` signs as the **invoking** user, not as root: root's keyring holds no
-release key, and a bare `gpg` under sudo would either fail or, on a machine
-where root did have a key, quietly sign with the wrong one. It names the key
+The key's passphrase is prompted for, so a signing build is not unattended.
+
+### Signing after the fact
+
+```bash
+./sign-iso.sh                 # newest ISO in out/
+./sign-iso.sh 0.3.0           # by version
+./sign-iso.sh --check-key     # prove the key is usable; sign nothing
+```
+
+**A forgotten signature never costs a rebuild.** The signature is detached — the
+ISO's bytes do not change — so the `.sha256` and `.b2sum` from build time stay
+correct and only the `.asc` is missing. `sign-iso.sh` is also what `build.sh`
+calls, so there is one copy of "sign the release correctly" rather than two, and
+`build.sh` runs `--check-key` in its **preflight**: a build host without the key
+says so in the first ten seconds instead of after an hour of mkarchiso.
+
+Both scripts sign as the **invoking** user, not as root: root's keyring holds no
+release key, and a bare `gpg` under sudo would either fail or, on a machine where
+root did have a key, quietly sign with the wrong one. Both name the key
 explicitly for the same reason — `gpg --detach-sign` with no `-u` picks whatever
-secret key comes first, and a release accidentally signed with someone's
-personal identity is not something you can quietly take back.
+secret key comes first, and a release accidentally signed with someone's personal
+identity is not something you can quietly take back.
 
 Both scripts **verify the signature they just made or are about to publish**.
 An `.asc` that cannot verify is worse than none: it invites a stranger doing the
@@ -112,8 +136,16 @@ silent fallback to some other key.
 ## Write to USB
 
 ```bash
-sudo dd if=out/SynapseOS-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+lsblk                                    # find the DISK (/dev/sdb), not a partition
+sudo ./write-usb.sh /dev/sdX 0.3.0
 ```
+
+**Not a bare `dd`.** `dd` reporting the byte count does not mean the stick holds
+those bytes: a short or unflushed tail leaves the label, the version file and the
+kernel all readable while `grub.cfg` and the squashfs are garbage — which reads
+as a broken ISO on a machine where the ISO is blameless. 0.2.9.2 and 0.1.7 both
+went that way. `write-usb.sh` verifies the source, writes it, then reads the
+whole stick back with `cmp` and prints VERIFIED GOOD or fails.
 
 ## Install to Disk
 
