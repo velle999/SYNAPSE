@@ -354,6 +354,12 @@ msgstr ""
 msgid "CUDA (NVIDIA)"
 msgstr ""
 
+msgid "Vulkan"
+msgstr ""
+
+msgid "ROCm/HIP (AMD)"
+msgstr ""
+
 msgid "CPU"
 msgstr ""
 

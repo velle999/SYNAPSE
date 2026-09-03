@@ -152,6 +152,18 @@ FPL
     nfinger=$("$BIN" --rec fprint 2>/dev/null | grep -c '^finger	')
     check "the fingerprint pane emits its ten rows on any machine" "10" "$nfinger"
 
+    # ⛔ AND THE FOUR ACCELERATOR ROWS, FOR THE SAME REASON. ai.c lists one row
+    # per ggml backend library present, so which of them exist is decided by
+    # which synapse-llama package this machine happens to have — and the two
+    # labels that were NOT marked were exactly the two with no library here.
+    # This passed, and failed on velle's box where libggml-vulkan.so exists.
+    # Four stub files, four rows, every machine.
+    libs=$tmp/libdir; mkdir -p "$libs"
+    for so in cuda vulkan hip cpu; do : > "$libs/libggml-$so.so"; done
+    export SYN_SETTINGS_LIBDIR="$libs"
+    naccel=$("$BIN" --rec ai 2>/dev/null | grep -c '^accel	')
+    check "the AI pane emits all four accelerator rows on any machine" "4" "$naccel"
+
     for pane in display region time power system network bluetooth kernel \
                 apps ai speech fprint assistant; do
         "$BIN" --rec "$pane" 2>/dev/null | awk -F'\t' '
@@ -305,6 +317,34 @@ check "every rec_row cell is N_() or a token a program reads" "" "$(printf '%s' 
 else
     printf '  skip  no binary, so the drawn labels were not checked\n'
 fi
+
+# ── ⛔ AND NO DRAWN LABEL HIDES IN A STATIC TABLE ──────────────────────────
+#
+# The rec_row gate above reads the ARGUMENTS of each call, and `accel[i][1]` is
+# not a literal — the words live in a table three lines up. Two of that table's
+# four entries were unmarked for two releases because no check could see them:
+# not the runtime one (this machine has no library for them) and not the static
+# one (they are not literals at the call). So the tables are read too.
+#
+# ⚠ A TABLE ENTRY THAT IS ALL lower-case, digits, dots, colons or dashes is a
+# TOKEN — a path, a unit name, a kind — and those are the record's own words.
+# Anything else in a table that can feed a drawn column is a label.
+tbl=$(python3 - "$root" <<'PYEOF'
+import re, sys, glob, os
+bad = []
+for f in sorted(glob.glob(os.path.join(sys.argv[1], "src", "*.c"))):
+    s = open(f, encoding="utf-8").read()
+    for m in re.finditer(r"static const char \*const \w+\[\][^=]*=\s*\{(.*?)\n\s*\};", s, re.S):
+        line = s[:m.start()].count("\n") + 1
+        stripped = re.sub(r'N_\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', "X", m.group(1))
+        for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', stripped):
+            if len(lit) < 3 or lit.startswith("/"): continue
+            if re.match(r"^[a-z0-9_.:-]+$", lit): continue
+            bad.append("%s:%d: %s" % (os.path.basename(f), line, lit[:40]))
+print(" ".join(bad))
+PYEOF
+)
+check "no drawn label sits unmarked in a static table" "" "$tbl"
 
 # ── 3. the language set matches the desktop's ─────────────
 # A file manager in English on a German desktop reads as the application being

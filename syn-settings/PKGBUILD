@@ -182,7 +182,27 @@ pkgver=0.1.0
 #   Six more drawn words marked with it: "not driven", "none this boot",
 #   "listening", "24-hour"/"12-hour", and what synui-clock says when it is not
 #   there. 326 msgids in each of the thirteen catalogs.
-pkgrel=47
+# 48: the same class again, in a table this time — and two gates that cannot
+#   read this machine.
+#   47's gate failed on velle's box a second time, on `Vulkan`. ai.c lists one
+#   accelerator row per ggml backend library PRESENT, and of its four labels two
+#   were marked and two were not — the two with no library here. Nothing could
+#   see them: not the runtime check (the rows are never emitted on this box) and
+#   not the rec_row check (the words are in a table, so the call site passes
+#   `accel[i][1]` and not a literal).
+#   ⛔ ALL FOUR ARE MARKED NOW, OR NONE WOULD BE. They are product names and
+#   every translator will leave them alone; that is not the point. A label in a
+#   drawn column is either in the catalog or it is not reachable, and "it
+#   happens to be a proper noun" is not a property a check can read.
+#   ⛔ AND THE LIBRARY DIRECTORY IS A SEAM, `SYN_SETTINGS_LIBDIR`, exactly as
+#   SYN_DISKS_SYSFS is one. tests/i18n_test.sh points it at four stub files and
+#   gets all four rows on any machine — the second half of the same fix the
+#   fingerprint fixture was.
+#   ⚠ AND A THIRD GATE READS THE STATIC TABLES. A table entry that is all
+#   lower-case, digits, dots, colons or dashes is a token the record owns;
+#   anything else in a table that can feed a drawn column is a label and must
+#   be N_(). That is what would have caught these two here.
+pkgrel=48
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

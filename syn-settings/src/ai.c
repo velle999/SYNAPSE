@@ -23,6 +23,7 @@
 #include "i18n.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -216,18 +217,40 @@ int pane_ai(void)
 	 * named for it, and the variant packages differ by exactly which ones they
 	 * ship beside the always-present CPU one. */
 	{
+		/*
+		 * ⛔ ALL FOUR MARKED, OR NONE. Two of them were and two were not, and
+		 * the two that were not are exactly the two this machine has no
+		 * library for — so the drawn-label gate could not see them here and
+		 * failed on velle's box, where libggml-vulkan.so exists. They are
+		 * product names and every translator will leave them as they are;
+		 * that is not the point. The point is that a label in this column is
+		 * either in the catalog or it is not reachable, and "it happens to be
+		 * a proper noun" is not a property a check can read.
+		 */
 		static const char *const accel[][2] = {
-			{ "/usr/lib/libggml-cuda.so",   N_("CUDA (NVIDIA)") },
-			{ "/usr/lib/libggml-vulkan.so", "Vulkan" },
-			{ "/usr/lib/libggml-hip.so",    "ROCm/HIP (AMD)" },
-			{ "/usr/lib/libggml-cpu.so",    N_("CPU") },
+			{ "libggml-cuda.so",   N_("CUDA (NVIDIA)")  },
+			{ "libggml-vulkan.so", N_("Vulkan")         },
+			{ "libggml-hip.so",    N_("ROCm/HIP (AMD)") },
+			{ "libggml-cpu.so",    N_("CPU")            },
 		};
+		/*
+		 * ⚠ AND THE DIRECTORY IS A SEAM, for the same reason SYN_DISKS_SYSFS
+		 * is one. Which of these rows exists is decided by what is installed
+		 * on the machine asking, so a gate that reads the record reads THIS
+		 * machine — twice now that has meant a check passing here and failing
+		 * on a box with different hardware. tests/i18n_test.sh points this at
+		 * four stub files and gets all four rows on any machine.
+		 */
+		const char *libdir = getenv("SYN_SETTINGS_LIBDIR");
+		if (!libdir || !*libdir) libdir = "/usr/lib";
 		int found = 0;
 		for (size_t i = 0; i < sizeof accel / sizeof accel[0]; i++) {
+			char path[512];
+			snprintf(path, sizeof path, "%s/%s", libdir, accel[i][0]);
 			struct stat st;
-			if (stat(accel[i][0], &st) != 0) continue;
+			if (stat(path, &st) != 0) continue;
 			rec_row("accel\t%s\t%s\t-\t%s\t-",
-			        accel[i][1], N_("available"), accel[i][0]);
+			        accel[i][1], N_("available"), path);
 			found = 1;
 		}
 		if (!found)
