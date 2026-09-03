@@ -815,6 +815,21 @@ fetch_src() {
 }
 
 checkout_remote() {
+    # ⛔ --force PROMISED TO DISCARD LOCAL CHANGES AND DID NOT DISCARD ALL OF
+    # THEM. `reset --hard` restores tracked files and leaves UNTRACKED ones
+    # exactly where they are — so a tree made dirty by a stray file (which is
+    # what a build leaving something behind produces, and what chibi 22's
+    # rename produced on every machine at once) passed the guard under --force,
+    # got reset, and was still dirty on the next run. Refusing for ever, with
+    # the one documented escape hatch not escaping.
+    #
+    # ⚠ `-fd` AND DELIBERATELY NOT `-fdx`. Without -x, git clean leaves IGNORED
+    # files alone — which is the 461MB whisper model and every other cached
+    # download this tree is supposed to keep. -x would re-download half a
+    # gigabyte on every forced update to fix a stray text file.
+    if [ "${FORCE:-0}" = 1 ]; then
+        git -C "$SRC" clean --quiet -fd
+    fi
     git -C "$SRC" checkout --quiet -B "$REPO_REF" "origin/$REPO_REF" ||
         die "could not check out origin/$REPO_REF"
     git -C "$SRC" reset --quiet --hard "origin/$REPO_REF"

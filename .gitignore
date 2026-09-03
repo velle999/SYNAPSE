@@ -190,10 +190,23 @@ archiso/out/*.asc
 # source= block in chibi/PKGBUILD for why they do. Naming the four files
 # literally would have left every future revision's download untracked-but-
 # unignored, and a 461MB model in `git status`.
-/chibi/whisper-*-model.bin
-/chibi/whisper-*-config.json
-/chibi/whisper-*-tokenizer.json
-/chibi/whisper-*-vocabulary.txt
+#
+# ⛔ AND THE GLOB REACHES BACK BEFORE THE DASH, WHICH IS THE WHOLE POINT.
+# chibi 22 renamed these from `whisper-model.bin` to
+# `whisper-<rev>-model.bin` and rewrote these four lines to match the new
+# shape only — so every machine that had ever built chibi kept four files on
+# disk that the new patterns did not cover. They became untracked, and
+# syn-update REFUSES to fetch into a tree with local modifications: on both of
+# velle's machines every check died with "refusing to overwrite local changes"
+# and the window reported "Could not determine update status".
+#
+# `whisper-*model.bin` — no dash before `model` — matches the old name with the
+# star empty and the new one with the star eating `<rev>-`. A rename that
+# leaves files behind has to keep ignoring the name it left.
+/chibi/whisper-*model.bin
+/chibi/whisper-*config.json
+/chibi/whisper-*tokenizer.json
+/chibi/whisper-*vocabulary.txt
 /chibi/*.onnx
 /chibi/*.onnx.json
 

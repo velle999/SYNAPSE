@@ -142,7 +142,45 @@ pkgver=0.1.0
 #   is replacing, and syn-update 55 has no stamper — so the apply that
 #   builds this one still reports the old version, and the NEXT one
 #   corrects it. Same shape as the COMPONENTS note at 36.
-pkgrel=56
+# 57: EVERY CHECK ON BOTH MACHINES DIED, AND THE WINDOW WOULD NOT SAY WHY.
+#
+#   velle: "could not determine update status on both machines now". The
+#   updater was working perfectly and refusing for a good reason; nothing on
+#   screen carried the reason.
+#
+#   ⛔ THE CAUSE WAS A RENAME IN ANOTHER PACKAGE. chibi 22 moved its whisper
+#   downloads from `whisper-model.bin` to `whisper-<rev>-model.bin` and rewrote
+#   .gitignore to match the NEW shape only. Every machine that had ever built
+#   chibi kept four files on disk — 462MB of them — that the new patterns did
+#   not cover. They became untracked, fetch_src refuses to fetch into a tree
+#   with local modifications, and every check since has died. Both machines at
+#   once, because both had built chibi before the rename.
+#   Fixed in .gitignore: `whisper-*model.bin`, no dash before `model`, matches
+#   the old name with the star empty and the new one with the star eating the
+#   revision. A rename that leaves files behind has to keep ignoring the name
+#   it left.
+#
+#   ⛔ AND --force PROMISED TO DISCARD LOCAL CHANGES AND DID NOT DISCARD ALL OF
+#   THEM. checkout_remote was `checkout -B` plus `reset --hard`, and NEITHER
+#   touches untracked files — so the one documented escape hatch passed the
+#   guard, reset, and left the tree exactly as dirty as it found it. The
+#   refusal would have repeated for ever. `git clean -fd` under FORCE now.
+#   ⚠ -fd AND NOT -fdx. Without -x, git clean leaves IGNORED files alone, which
+#   is the 461MB model and every other cached download this tree is meant to
+#   keep; -x would re-download half a gigabyte to remove a stray text file.
+#
+#   ⛔ THE WINDOW THREW THE ANSWER AWAY. syn-update prints its failures as
+#   `fail  <reason>` and shell.qml matched none of its sections, so it fell to
+#   "Could not determine update status — see the log" — which reads as the
+#   updater being broken rather than as one sentence away from the fix. It
+#   surfaces the last `fail` line now.
+#   ⚠ THE LAST, not the first: syn-update warns before it dies, and the warning
+#   is not the outcome.
+#
+#   tests/dirty_tree_test.sh is the regression suite — the ignore patterns
+#   against BOTH of chibi's naming schemes, and --force leaving a clean tree
+#   without deleting what it ignores. Reverting any of the three fixes fails it.
+pkgrel=57
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

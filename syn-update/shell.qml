@@ -394,7 +394,29 @@ ShellRoot {
         } else if (root.upToDate) {
             root.statusLine = "SynapseOS is up to date"
         } else {
-            root.statusLine = "Could not determine update status — see the log"
+            /*
+             * ⛔ SAY WHAT IT SAID. syn-update prints its own failures as
+             * `fail  <reason>` and this window threw every one of them away
+             * for a sentence that names no cause: on both of velle's machines
+             * the tool printed "refusing to overwrite local changes in
+             * /var/lib/synapse-src (re-run with --force to discard them)" and
+             * the window said "Could not determine update status", which reads
+             * as the updater being broken rather than as one sentence away
+             * from the answer.
+             *
+             * ⚠ THE LAST ONE, not the first. syn-update warns before it dies —
+             * "…has local modifications; they will be discarded by --force" is
+             * a `warn` and the `fail` after it is the reason the run stopped.
+             * Taking the first line that matched would report a warning as the
+             * outcome.
+             */
+            let failed = ""
+            for (const raw of String(text).split("\n")) {
+                const m = raw.match(/^fail\s+(.*\S)/)
+                if (m) failed = m[1]
+            }
+            root.statusLine = failed !== "" ? failed
+                            : "Could not determine update status — see the log"
         }
     }
 
