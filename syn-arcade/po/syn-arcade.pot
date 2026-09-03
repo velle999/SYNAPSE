@@ -325,9 +325,6 @@ msgstr ""
 msgid "Position"
 msgstr ""
 
-msgid "Power"
-msgstr ""
-
 msgid "Press"
 msgstr ""
 
@@ -376,6 +373,9 @@ msgstr ""
 msgid "Running"
 msgstr ""
 
+msgid "SCREEN"
+msgstr ""
+
 msgid "SETTINGS"
 msgstr ""
 
@@ -395,6 +395,9 @@ msgid "SYSTEM"
 msgstr ""
 
 msgid "Save"
+msgstr ""
+
+msgid "Screen"
 msgstr ""
 
 msgid "Search"
@@ -661,6 +664,11 @@ msgid ""
 msgstr ""
 
 msgid "syn-arcade: synui did not answer — is it running?\n"
+msgstr ""
+
+msgid ""
+"syn-arcade: this synui has no `record` action — screen recording needs a "
+"newer one\n"
 msgstr ""
 
 msgid ""
@@ -1426,6 +1434,12 @@ msgid "the overlay toggle"
 msgstr ""
 
 msgid "moving the overlay"
+msgstr ""
+
+#, c-format
+msgid ""
+"%s is already bound in %s — leaving it alone.\n"
+"Big screen mode is still on %s.\n"
 msgstr ""
 
 #, c-format

@@ -898,6 +898,38 @@ else
 fi
 say menu 0.6                  # out, leaving nothing open for the blocks below
 
+# ── the Power button's selector ─────────────────────────────────────────────
+#
+# ⛔ THE ASSERTION IS THAT IT ASKS RATHER THAN ACTS. Sleep, restart and power
+# off are three irreversible things and a remote has one button for them; a key
+# wired straight to any of them is a key that does the wrong one. So the press
+# has to leave a PANEL on screen, and a run where the machine suspended or
+# rebooted instead would not reach the next line at all.
+#
+# ⚠ `power` IS THE NAV WORD THE FIFO SENDS, not a keysym — the stub's `big nav`
+# reads words, and this rig has no way to put an XF86 keysym on a real seat.
+# What the keysyms map to is measured separately; this proves the word reaches
+# the page.
+say power 0.9
+shot 04a-power-selector       # Desktop, Quit, Sleep, Restart, Power off
+if cmp -s "$OUT/03f-start-menu-closed.png" "$OUT/04a-power-selector.png"; then
+    echo "FAIL: the power button put nothing on screen" >&2
+    SETTINGS_FAILED=1
+else
+    echo "power: the button opened a selector"
+fi
+# ⛔ AND B MUST LEAVE IT. This page is opened directly rather than walked down
+# to, so "up one level" is the way out — a selector somebody cannot dismiss is
+# worse than no selector, and this one is full of irreversible rows.
+say back 0.7
+shot 04b-power-dismissed
+if cmp -s "$OUT/04a-power-selector.png" "$OUT/04b-power-dismissed.png"; then
+    echo "FAIL: B did not dismiss the power selector" >&2
+    SETTINGS_FAILED=1
+else
+    echo "power: B dismissed it"
+fi
+
 # ── the visualizer, which must NOT survive coming back ──────────────────────
 #
 # ⚠ THE BUG THIS RELEASE EXISTS FOR: covered by the interface, projectM gets no

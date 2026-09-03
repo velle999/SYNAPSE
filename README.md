@@ -1693,6 +1693,17 @@ clicks**, or `V` — because it is the one thing somebody turns on while somethi
 is already playing. Behind the Now Playing row it draws `cliamp`'s own FFT bands,
 streamed a frame per line.
 
+**A television remote works, button for button.** A Media Center remote arrives
+as ordinary key presses, so there is nothing to configure — the **green Media
+Center button** opens big screen mode from the desktop and steps it aside again,
+**OK** selects, **Info** opens the Start menu, **Record** starts a screen
+recording, and **Power** opens a selector rather than acting: sleep, restart and
+power off are three irreversible things and a remote has one button for them.
+Five of a remote's buttons are invisible to Qt — `KEY_OK`, `KEY_INFO` and
+`KEY_EPG` produce a key code of zero and `KEY_NEXT`/`KEY_PREVIOUS` have no
+keysym at all — so those are matched on the hardware scancode, which is why they
+work here and do nothing in most applications.
+
 **Settings, on the Start menu** — and on the Big screen tab of `syn-arcade gui`,
 which is the same list drawn for a mouse instead of a d-pad. Which rows the
 television draws — Running, Games, Recent, Play, Media, Apps, News — and what

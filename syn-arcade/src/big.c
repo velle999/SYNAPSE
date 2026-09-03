@@ -2455,6 +2455,44 @@ static int big_window_act(const char *app_id, bool close_it)
 }
 
 /*
+ * `big record` — start or stop a screen recording.
+ *
+ * ⚠ synui's, not a recorder of this package's own. The compositor already owns
+ * screen recording: `record` is one of its bind actions (super+shift+r by
+ * default), it knows which output to capture, whether the control panel asked
+ * for audio, and it draws the indicator that says a recording is running. A
+ * second recorder started from here would be a second answer to "am I
+ * recording", and the two would disagree the first time somebody used the
+ * keyboard instead of the remote.
+ *
+ * ⚠ AND IT IS A TOGGLE, because there is only one button. A remote's Record
+ * key is pressed to start and pressed again to stop, and synui's action is
+ * already that toggle — so this is one dispatch and no state of its own.
+ */
+static int big_record(void)
+{
+	char *argv[] = { (char *)"synctl", (char *)"dispatch",
+			 (char *)"record", NULL };
+	char *reply = run_capture(argv, 3);
+	if (!reply) {
+		fputs(_("syn-arcade: synui did not answer — is it running?\n"),
+		      stderr);
+		return EX_FAIL;
+	}
+	/* ⚠ `dispatch` ANSWERS HONESTLY about an action it does not know, and
+	 * that is worth passing on: a synui too old to have the record action
+	 * would otherwise look like a Record button that does nothing. */
+	if (strstr(reply, "unknown action")) {
+		fputs(_("syn-arcade: this synui has no `record` action — "
+			"screen recording needs a newer one\n"), stderr);
+		free(reply);
+		return EX_FAIL;
+	}
+	free(reply);
+	return EX_OK;
+}
+
+/*
  * Run one of those tiles, by id.
  *
  * The shell presses THIS rather than the exec string it was handed, so that
@@ -8910,7 +8948,13 @@ static const struct setting settings[] = {
 	{ "show_power", N_("Sleep, restart and power off"), "menu",
 	  N_("Start menu"), SET_SWITCH, "on" },
 
-	{ "keep_awake", N_("Keep the screen awake"), "power", N_("Power"),
+	/* ⚠ THE GROUP IS "SCREEN" AND NOT "POWER", and the rename came with the
+	 * remote's Power button. That button now opens a page headed POWER —
+	 * sleep, restart, power off — and a settings page headed the same way
+	 * but reached through Start ▸ Settings, containing one row about
+	 * blanking, is two different answers to the same word. This group has
+	 * only ever been about whether the screen is allowed to sleep. */
+	{ "keep_awake", N_("Keep the screen awake"), "power", N_("Screen"),
 	  set_awake, (int)(sizeof(set_awake) / sizeof(set_awake[0])), "playing" },
 };
 
@@ -9606,6 +9650,10 @@ int cmd_big(int argc, char **argv)
 	 * see big_awake. */
 	if (!strcmp(sub, "awake"))
 		return big_awake();
+	/* The remote's Record button. synui owns screen recording; this is the
+	 * television's way of pressing the same toggle super+shift+r does. */
+	if (!strcmp(sub, "record"))
+		return big_record();
 	if (!strcmp(sub, "visualizer"))
 		return big_visualizer();
 

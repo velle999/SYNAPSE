@@ -1342,6 +1342,24 @@ ShellRoot {
         return shell.away || shell.mediaState === "playing"
     }
 
+    /*
+     * The remote's Record button, and nothing else in this file starts one.
+     *
+     * ⚠ GUARDED ON `running` like every other one-press Process here: setting
+     * `running = true` on a quickshell Process that is already running is a
+     * silent no-op, and Record is a button somebody presses twice when the
+     * first press seems not to have done anything.
+     */
+    function recordToggle() {
+        if (recordProc.running) return
+        recordProc.running = true
+    }
+
+    Process {
+        id: recordProc
+        command: [shell.bin, "big", "record"]
+    }
+
     Process {
         id: awakeProc
         command: [shell.bin, "big", "awake"]
@@ -1422,6 +1440,11 @@ ShellRoot {
         "set-display": "settings",
         "set-menu":    "settings",
         "set-power":   "settings"
+        // ⚠ `power` IS DELIBERATELY ABSENT. It is not reached by walking down
+        // from anywhere — the Power button opens it directly — so "up one
+        // level" from it is the main page, which is what a page not named here
+        // already means. Sending it to `settings` would land somebody on a
+        // page they had never seen.
     })
 
     readonly property var menuItems: {
@@ -1447,7 +1470,7 @@ ShellRoot {
                   name: I18n.tr("Start menu"),
                   note: I18n.tr("What this menu offers") },
                 { id: "set-power", kind: "page", page: "set-power",
-                  name: I18n.tr("Power"),
+                  name: I18n.tr("Screen"),
                   note: I18n.tr("Whether the screen is allowed to sleep") }
             ]
         if (shell.menuPage === "set-display")
@@ -1456,6 +1479,28 @@ ShellRoot {
             return shell.settingItems.filter(x => x.group === "menu")
         if (shell.menuPage === "set-power")
             return shell.settingItems.filter(x => x.group === "power")
+
+        /*
+         * ── the Power button's page ─────────────────────────────────────────
+         *
+         * ⚠ A SELECTOR AND NOT AN ACTION, which is the whole point of putting
+         * it behind a button. Sleep, restart and power off are three different
+         * irreversible things and a remote's Power key is one button; a key
+         * that picked one of them would be a key that does the wrong one.
+         *
+         * ⚠ THE SAME ROWS THE START MENU DRAWS, filtered rather than listed
+         * again — `kind === "action"` is what big.c marks the machine's own
+         * switches with, and the visualizer beside them is an `app`. So a page
+         * this file never has to be told about follows: `show_power` off takes
+         * the three away here exactly as it does behind Start, and Desktop and
+         * Quit remain because they are not switchable anywhere.
+         *
+         * ⛔ WHICH ALSO MEANS THIS PAGE IS NEVER EMPTY. The way out is always
+         * on it, so a Power press with the power rows switched off still opens
+         * something a person can act on rather than a blank panel.
+         */
+        if (shell.menuPage === "power")
+            return shell.byShelf("system").filter(a => a.kind === "action")
 
         const out = []
         if (shell.musicLive)
@@ -2154,6 +2199,23 @@ ShellRoot {
         onExited: shell.refreshMusic()
     }
 
+    /*
+     * Open the menu already on a page — what the remote's Power button does.
+     *
+     * ⚠ NOT menuToggle() FOLLOWED BY openMenuPage(). Toggle closes an open
+     * menu, so pressing Power while the menu happened to be up would shut it
+     * instead of showing the power options; and its guard is about the MAIN
+     * page's rows, which says nothing about whether the page being asked for
+     * has any.
+     */
+    function openMenuOn(page) {
+        shell.menuPage = page
+        shell.menuIndex = 0
+        shell.menuBusy = ""
+        if (!shell.menuItems.length) return
+        shell.menuOpen = true
+    }
+
     function menuMove(d) {
         const n = shell.menuItems.length
         if (!n) return
@@ -2575,6 +2637,19 @@ ShellRoot {
         // is not an inconsistency to tidy away — there is nothing to type into
         // on this screen, and nothing to suspend from behind somebody's game.
         case "menu":       shell.menuToggle(); break
+        /*
+         * ⚠ A WORD LIKE EVERY OTHER INPUT, and not a key handler calling
+         * openMenuOn() behind nav()'s back. This file's rule is that every
+         * input arrives in one place; a remote button wired straight to a
+         * function is one the FIFO cannot drive, which means one the rig
+         * cannot test — and the remote is precisely the device nobody has on
+         * the desk to try it on.
+         *
+         * There is no pad button for it today. That is not a reason to skip
+         * the word: the keyboard and the remote both send it now, and a pad
+         * chord would need nothing added here.
+         */
+        case "power":      shell.openMenuOn("power"); break
         // Back goes UP a shelf, and from the top one it steps aside. A button
         // that does nothing at the top of the screen is a button somebody
         // presses three times before reaching for the keyboard they left on
@@ -4141,7 +4216,12 @@ ShellRoot {
                                 if (shell.menuPage === "settings") return I18n.tr("SETTINGS")
                                 if (shell.menuPage === "set-display") return I18n.tr("SHELVES")
                                 if (shell.menuPage === "set-menu") return I18n.tr("START MENU")
-                                if (shell.menuPage === "set-power") return I18n.tr("POWER")
+                                // ⚠ SCREEN, not POWER — the Power BUTTON has a
+                                // page of its own now, and two panels headed
+                                // the same word meaning different things is
+                                // the one thing a heading must not do.
+                                if (shell.menuPage === "set-power") return I18n.tr("SCREEN")
+                                if (shell.menuPage === "power") return I18n.tr("POWER")
                                 return shell.musicLive ? I18n.tr("NOW PLAYING")
                                                        : I18n.tr("SYSTEM")
                             }
@@ -4752,6 +4832,53 @@ ShellRoot {
                 }
 
                 Keys.onPressed: (event) => {
+                    /*
+                     * ── the buttons Qt CANNOT NAME ──────────────────────────
+                     *
+                     * ⛔ THREE OF A MEDIA CENTER REMOTE'S BUTTONS ARRIVE AS
+                     * `key === 0`, AND NO `case Qt.Key_*` CAN EVER CATCH THEM.
+                     * The kernel's rc6_mce keytable sends KEY_OK, KEY_INFO and
+                     * KEY_EPG; xkeyboard-config gives those XF86OK, XF86Info
+                     * and XF86MediaSelectProgramGuide; and Qt has no
+                     * Qt::Key for any of the three, so QKeyEvent::key() is
+                     * literally zero. OK and Info did nothing at all — on the
+                     * device this interface is FOR.
+                     *
+                     * ⛔ AND `nativeVirtualKey` IS NOT EXPOSED TO QML. QML's
+                     * KeyEvent carries key, text, modifiers and
+                     * nativeScanCode; reading the keysym would be the obvious
+                     * answer and the property is simply not there — asking for
+                     * it yields undefined and a TypeError on the next line.
+                     * The scancode is the only discriminator left.
+                     *
+                     * ⚠ nativeScanCode IS THE EVDEV CODE PLUS 8, which is the
+                     * X convention Qt's Wayland plugin keeps. The numbers
+                     * below are `KEY_* + 8` from linux/input-event-codes.h,
+                     * and those codes are kernel ABI — they do not move.
+                     *
+                     * ⚠ KEY_NEXT AND KEY_PREVIOUS HAVE NO KEYSYM AT ALL. Not
+                     * an unnamed one: xkeyboard-config maps nothing to
+                     * keycodes 415 and 420, so there is no XF86 name to hand
+                     * Qt in the first place. Track skip on a remote is these
+                     * two, not the XF86AudioNext a keyboard sends.
+                     */
+                    if (event.key === 0) {
+                        switch (event.nativeScanCode) {
+                        case 360: shell.nav("accept"); event.accepted = true; return   // KEY_OK
+                        case 366: shell.nav("menu");   event.accepted = true; return   // KEY_INFO
+                        case 373: shell.nav("guide");  event.accepted = true; return   // KEY_EPG
+                        case 415: shell.mediaCmd("next"); event.accepted = true; return // KEY_NEXT
+                        case 420: shell.mediaCmd("prev"); event.accepted = true; return // KEY_PREVIOUS
+                        // ⚠ KEY_POWER2 IS WHAT AN MCE REMOTE'S POWER BUTTON
+                        // SENDS, and xkeyboard-config maps NOTHING to keycode
+                        // 364 — not an unnamed keysym, no keysym at all. The
+                        // keyboard's own power key is KEY_POWER, which does
+                        // have one (XF86PowerOff) and is handled below.
+                        case 364: shell.nav("power"); event.accepted = true; return
+                        default: return
+                        }
+                    }
+
                     switch (event.key) {
                     // ── the keys on a keyboard, a remote and half the
                     // headphones in the house ──────────────────────────────
@@ -4782,8 +4909,41 @@ ShellRoot {
                     case Qt.Key_MediaPause:  shell.mediaCmd("toggle"); break
                     case Qt.Key_MediaNext:   shell.mediaCmd("next"); break
                     case Qt.Key_MediaPrevious: shell.mediaCmd("prev"); break
+                    // Qt.Key_Stop is XF86Stop, which is a KEYBOARD's stop
+                    // (and a browser's). Kept beside the media one because a
+                    // keyboard is still a way to drive this; the REMOTE's stop
+                    // is Qt.Key_Cancel, below.
                     case Qt.Key_MediaStop:
                     case Qt.Key_Stop:        shell.mediaCmd("stop"); break
+                    /*
+                     * ⛔ THE REMOTE'S PAUSE BUTTON IS NOT A MEDIA KEY.
+                     * rc6_mce sends KEY_PAUSE for it — evdev 119, the same
+                     * code as a keyboard's Pause/Break — so xkb gives it the
+                     * plain `Pause` keysym and Qt gives it Qt::Key_Pause.
+                     * Never Qt::Key_MediaPause, which is what XF86AudioPause
+                     * becomes and which no MCE remote sends. Play worked and
+                     * Pause did nothing, and the two buttons looked like one
+                     * feature half implemented.
+                     *
+                     * ⚠ `toggle` AND NOT A PAUSE VERB, because the transport
+                     * this drives is MPRIS and PlayPause is the operation
+                     * every player implements. A remote with separate Play and
+                     * Pause buttons pressed twice is somebody expecting the
+                     * second press to have done something, and toggle is right
+                     * from either.
+                     */
+                    case Qt.Key_Pause:       shell.mediaCmd("toggle"); break
+                    /*
+                     * ⛔ AND Qt::Key_Cancel IS THE STOP BUTTON, not Back. It
+                     * was folded in with Back below, which made the one button
+                     * on the remote that means "stop playing" navigate up a
+                     * shelf instead. `Cancel` is the keysym xkeyboard-config
+                     * puts on <STOP> — evdev KEY_STOP, 128 — and nothing else
+                     * on any evdev keyboard produces it. A real Back button
+                     * sends KEY_BACK and arrives as Qt::Key_Back, which is
+                     * still handled as Back below.
+                     */
+                    case Qt.Key_Cancel:      shell.mediaCmd("stop"); break
                     // ⚠ A REMOTE'S TRANSPORT IS NOT A KEYBOARD'S. An HDMI-CEC
                     // or infrared receiver puts KEY_PLAY, KEY_STOP,
                     // KEY_REWIND and KEY_FASTFORWARD on the wire — which XKB
@@ -4814,8 +4974,12 @@ ShellRoot {
                     // it had been folded in with Escape, the first press of it
                     // would have closed the interface, and the way back in is
                     // a key combination nobody holding a remote can press.
-                    case Qt.Key_Back:
-                    case Qt.Key_Cancel:   shell.nav("back"); break
+                    case Qt.Key_Back:     shell.nav("back"); break
+                    // MCE's Exit, which sends KEY_EXIT and arrives as
+                    // XF86Close. Up one level, the same as Back — it is what
+                    // somebody presses to leave the thing they are looking at,
+                    // and on a television that is a step, not a quit.
+                    case Qt.Key_Close:    shell.nav("back"); break
                     // OK on a remote that spells it KEY_SELECT rather than
                     // KEY_ENTER. Both exist in the wild, on the same shelf.
                     case Qt.Key_Select:   shell.nav("accept"); break
@@ -4832,6 +4996,42 @@ ShellRoot {
                     // from the same hand.
                     case Qt.Key_Guide:
                     case Qt.Key_HomePage: shell.nav("guide"); break
+                    // ⚠ THE GREEN BUTTON, and it is the same button in both
+                    // directions. KEY_MEDIA — the Media Center key — opens big
+                    // screen mode from the desktop through a synui bind (see
+                    // binds.c), and pressing it again while the interface is
+                    // up has to be the way back out, exactly as super+F10 is a
+                    // toggle rather than an opener. Stepping aside rather than
+                    // quitting, so the same press brings it back.
+                    case Qt.Key_LaunchMedia: shell.nav("guide"); break
+                    /*
+                     * ⛔ THE POWER BUTTON ASKS, IT DOES NOT ACT. Sleep, restart
+                     * and power off are three irreversible things and a remote
+                     * has one button for them — a key that picked one would be
+                     * a key that does the wrong one, from four metres away,
+                     * with somebody's game still running.
+                     *
+                     * ⚠ Sleep is on this too. KEY_SLEEP is what the Power
+                     * button sends on some remotes and what a keyboard's moon
+                     * key sends on others, and suspending outright from a
+                     * television remote has the same problem as powering off:
+                     * it is one press away from whatever else that hand meant.
+                     */
+                    case Qt.Key_PowerOff:
+                    case Qt.Key_Sleep:    shell.nav("power"); break
+                    /*
+                     * Record. synui owns screen recording — it knows the
+                     * output, whether the control panel asked for audio, and
+                     * it draws the indicator — so this presses the same toggle
+                     * super+shift+r does rather than starting a recorder of
+                     * its own. See big_record() in big.c.
+                     *
+                     * ⚠ NOT launchApp(): recording is not a tile and must not
+                     * step the interface aside. Recording the television's own
+                     * menu is a reasonable thing to want, and a launcher that
+                     * hid itself to start would make it impossible.
+                     */
+                    case Qt.Key_MediaRecord: shell.recordToggle(); break
                     // Channel up/down is the shelf-sized jump, the same one
                     // Page Up and Page Down make.
                     case Qt.Key_ChannelUp:   shell.nav("page-left"); break

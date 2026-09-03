@@ -769,6 +769,48 @@ check "the combos can be changed" $?
 [ "$(grep -c 'syn-arcade hud toggle' "$RC")" = 1 ]
 check "...still leaving ONE block" $?
 
+# ── the Media Center key ────────────────────────────────────────────────────
+#
+# The green button on an MCE remote sends KEY_MEDIA, which xkeyboard-config
+# spells XF86AudioMedia. No modifier: a remote has none to hold.
+grep -q "^bind = XF86AudioMedia spawn syn-arcade big toggle$" "$RC"
+check "the Media Center key opens big screen mode" $?
+
+# ⛔ AND IT MUST NOT BE READ BACK AS THE USER'S CHOSEN KEY. It runs the same
+# command as super+F10, so binds_read — which recovers the chosen key by
+# matching that command — would take the LAST such line and write it back as
+# `big`, silently replacing super+F10 with a key most keyboards do not have.
+"$SA" binds install >/dev/null 2>&1
+"$SA" binds refresh >/dev/null 2>&1
+"$SA" binds refresh >/dev/null 2>&1
+says "$SA" binds show > "$T/binds-after-refresh.txt"
+has 'super+F10' "$T/binds-after-refresh.txt"
+check "...and two refreshes later big screen mode is still on super+F10" $?
+[ "$(grep -c 'XF86AudioMedia' "$RC")" = 1 ]
+check "...with exactly one media line, not one per refresh" $?
+
+# ⛔ SOMEBODY ELSE'S BINDING WINS, AND THE REST STILL REFRESHES. The three
+# configurable keys answer a collision by refusing, because the answer is to
+# pick another key. There is no other key to pick for this one — so refusing
+# would mean anybody who binds their music player to it can never refresh their
+# gaming keys again, over a line they never asked for.
+MEDIARC=$T/media-taken/synui/synuirc
+mkdir -p "$(dirname "$MEDIARC")"
+cat > "$MEDIARC" <<'RCX'
+bind = XF86AudioMedia spawn some-music-player
+# >>> syn-arcade  — the gaming shortcuts. Do not edit between the markers;
+bind = super+F11 spawn syn-arcade hud toggle
+bind = super+F12 spawn syn-arcade hud cycle
+bind = super+F10 spawn syn-arcade big toggle
+# <<< syn-arcade
+RCX
+XDG_CONFIG_HOME="$T/media-taken" "$SA" binds refresh >/dev/null 2>&1
+check "refresh SUCCEEDS when the media key is already taken" $?
+[ "$(grep -c 'XF86AudioMedia' "$MEDIARC")" = 1 ]
+check "...leaving exactly their line, not ours as well" $?
+has 'some-music-player' "$MEDIARC"
+check "...and it is theirs that survived" $?
+
 # ⚠ synui parses a bind it cannot understand by IGNORING the line, so every bad
 # combo below is a key that silently does nothing.
 says "$SA" binds install --toggle=F11 | grep -q "no modifier"
@@ -5599,11 +5641,111 @@ has 'quitNow' "$BGH/esc.qml" \
     || bad "Escape stopped quitting"
 
 for k in Key_Select Key_Menu Key_Guide Key_HomePage Key_ChannelUp Key_ChannelDown \
-         Key_AudioRewind Key_AudioForward Key_Play Key_Stop Key_Cancel Key_Settings; do
+         Key_AudioRewind Key_AudioForward Key_Play Key_Stop Key_Cancel Key_Settings \
+         Key_Pause Key_Close Key_LaunchMedia Key_PowerOff Key_Sleep \
+         Key_MediaRecord; do
     has "Qt.$k" "$BIGQML" \
         && ok "$k reaches the shell" \
         || bad "Qt.$k is unhandled — that button does nothing on a remote"
 done
+
+# ⛔ PAUSE IS Qt.Key_Pause AND NOT Qt.Key_MediaPause, which is the whole reason
+# Play worked and Pause did nothing. The kernel's rc6_mce keytable sends
+# KEY_PAUSE — evdev 119, the same code as a keyboard's Pause/Break — so xkb
+# gives it the plain `Pause` keysym. XF86AudioPause, which IS Key_MediaPause,
+# is what a keyboard sends and no MCE remote does.
+awk '/case Qt.Key_Pause:/,/break/' "$BIGQML" > "$BGH/pause.qml"
+has 'mediaCmd' "$BGH/pause.qml" \
+    && ok "the remote's Pause reaches the transport" \
+    || bad "Qt.Key_Pause does not drive the player — Play works and Pause does not"
+
+# ⛔ AND Qt.Key_Cancel IS STOP, NOT BACK. It was folded in with Back, which made
+# the one button that means "stop playing" navigate up a shelf. `Cancel` is what
+# xkeyboard-config puts on <STOP> (evdev KEY_STOP, 128) and nothing else on any
+# evdev keyboard produces it.
+awk '/case Qt.Key_Cancel:/,/break/' "$BIGQML" > "$BGH/cancel.qml"
+has 'mediaCmd' "$BGH/cancel.qml" \
+    && ok "…and the remote's Stop stops rather than going back" \
+    || bad "Qt.Key_Cancel is still wired to navigation"
+
+# ⛔ THREE BUTTONS ARRIVE AS key === 0 AND NO case CAN CATCH THEM. Qt has no
+# Qt::Key for XF86OK, XF86Info or XF86MediaSelectProgramGuide, and KEY_NEXT and
+# KEY_PREVIOUS have no keysym at all — xkeyboard-config maps nothing to those
+# keycodes. The scancode is the only thing left, and QML's KeyEvent does not
+# expose nativeVirtualKey, so it is the only thing available too.
+has 'event.key === 0' "$BIGQML" \
+    && ok "the keys Qt cannot name are matched by scancode" \
+    || bad "nothing handles key === 0 — OK, Info and Guide do nothing"
+awk '/event.key === 0/,/^ *}$/' "$BIGQML" > "$BGH/scan.qml"
+for pair in "360:accept" "366:menu" "373:guide"; do
+    code=${pair%%:*}; verb=${pair##*:}
+    has "case $code:" "$BGH/scan.qml" \
+        && ok "scancode $code reaches nav(\"$verb\")" \
+        || bad "scancode $code is unhandled"
+done
+# ── the Power button asks rather than acts ──────────────────────────────────
+#
+# ⛔ SLEEP, RESTART AND POWER OFF ARE THREE IRREVERSIBLE THINGS AND A REMOTE HAS
+# ONE BUTTON. A key wired straight to any of them is a key that does the wrong
+# one, from four metres away, with somebody's game still running. So it opens a
+# selector, and the page is the rows big.c already marks as the machine's own
+# switches rather than a second list here.
+for k in Key_PowerOff Key_Sleep; do
+    awk -v k="$k" '$0 ~ ("case Qt." k ":"),/break/' "$BIGQML" > "$BGH/pwr.qml"
+    has 'nav("power")' "$BGH/pwr.qml" \
+        && ok "$k opens the power selector rather than acting" \
+        || bad "Qt.$k does not open a selector — it may act on one press"
+done
+# ⚠ THROUGH nav() AND NOT AROUND IT. A button wired straight to a function is
+# one the FIFO cannot send and therefore one the rig cannot drive — and the
+# remote is exactly the device nobody has on the desk to try by hand.
+has 'case "power":' "$BIGQML" \
+    && ok "…as a nav word, so the pad and the rig can reach it too" \
+    || bad "power is not a nav word — only a key can open it" 
+has 'menuPage === "power"' "$BIGQML" \
+    && ok "…and there is a power page for it to open" \
+    || bad "no power page exists"
+# ⛔ THE WAY OUT IS ON IT, so the page can never be empty — `show_power` off
+# takes the three switches away and leaves Desktop and Quit.
+awk '/menuPage === "power"/,/^$/' "$BIGQML" > "$BGH/pwrpage.qml"
+has 'kind === "action"' "$BGH/pwrpage.qml" \
+    && ok "…drawn from big.c's own action rows, so Desktop and Quit stay" \
+    || bad "the power page builds its own list"
+
+# ── Record is synui's recorder, not a second one ────────────────────────────
+awk '/case Qt.Key_MediaRecord:/,/break/' "$BIGQML" > "$BGH/rec.qml"
+has 'recordToggle' "$BGH/rec.qml" \
+    && ok "the remote's Record key reaches the recorder" \
+    || bad "Qt.Key_MediaRecord is unhandled"
+says "$SA" --help > "$T/help.txt"
+has 'big record' "$T/help.txt" \
+    && ok "…and 'big record' is documented" \
+    || bad "big record is undocumented"
+# ⚠ synui OWNS screen recording: it knows the output, whether audio was asked
+# for, and it draws the indicator. A recorder of this package's own would be a
+# second answer to "am I recording", and the two would disagree the first time
+# somebody used super+shift+r instead of the remote.
+has 'dispatch' <(grep -A6 'static int big_record' src/big.c) \
+    && ok "…by dispatching synui's own record action" \
+    || bad "big record does not go through synui"
+
+# ⚠ KEY_OK + 8 = 360, KEY_INFO + 8 = 366, KEY_EPG + 8 = 373. The +8 is the X
+# convention Qt's Wayland plugin keeps, and the evdev codes are kernel ABI — so
+# these numbers are checked against the header rather than remembered.
+IEC=/usr/include/linux/input-event-codes.h
+if [ -f "$IEC" ]; then
+    for pair in "KEY_OK:360" "KEY_INFO:366" "KEY_EPG:373" \
+                "KEY_NEXT:415" "KEY_PREVIOUS:420" "KEY_POWER2:364"; do
+        name=${pair%%:*}; want=${pair##*:}
+        raw=$(awk -v n="$name" '$1=="#define" && $2==n {print $3}' "$IEC" | head -1)
+        got=$(printf '%d' "$raw" 2>/dev/null)
+        [ -n "$got" ] && [ "$((got + 8))" = "$want" ] \
+            && ok "$name is $got, so the shell's $want is right" \
+            || bad "$name is $got — the shell says $want, expected $((got + 8))"
+    done
+else
+    ok "(skipped the evdev code check: no linux headers installed)"
+fi
 
 # ⛔ EVERY ONE OF THOSE MUST BE A REAL Qt ENUM. An unknown Qt.Key_Foo in QML is
 # `undefined`, and `case undefined:` simply never matches an integer — a dead

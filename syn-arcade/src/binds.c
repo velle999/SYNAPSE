@@ -73,6 +73,28 @@
  * binds any F-key at all, so this collides with nothing on a stock desktop. */
 #define DEFAULT_BIG    "super+F10"
 
+/*
+ * ⚠ AND THE MEDIA CENTER KEY, WHICH IS NOT A CHOICE.
+ *
+ * The green button on a Windows Media Center remote sends KEY_MEDIA, which
+ * xkeyboard-config spells XF86AudioMedia — and it is the button that MEANS
+ * "put the television interface on". Nothing else on this system wants it, so
+ * unlike the three above it is not a preference: there is no `--media=` and no
+ * row to rebind. Somebody who does not want it deletes the line, and refresh
+ * will not put it back over a `bind =` they wrote themselves (see
+ * combo_bound_in).
+ *
+ * ⛔ IT RUNS THE SAME COMMAND AS super+F10 AND THAT IS A TRAP IN THE READER.
+ * binds_read matches `bind = %s spawn syn-arcade big toggle` to recover which
+ * key the user chose; a second line with the same command would be read as
+ * THEIR choice and written back as `big`, quietly replacing super+F10 with the
+ * media key on the next refresh. The reader checks the combo against this
+ * constant and records it separately. Measured, not assumed: a bare
+ * `bind = XF86AudioMedia spawn …` was fired in a nested synui alongside
+ * super+F10 and both spawned.
+ */
+#define MEDIA_KEY      "XF86AudioMedia"
+
 /* What big screen mode is started by, at login and from the keybind. Written
  * into synuirc in two forms — a `bind =` and an `autostart =` — so it is one
  * constant rather than a string to keep in step in two places. */
@@ -152,6 +174,16 @@ typedef struct {
 	 * that difference: a key it is about to ADD is the only one that can
 	 * collide with something else in the file. */
 	bool saw_toggle, saw_cycle, saw_big;
+
+	/* The media key is not configurable, so this is not "which key" — it is
+	 * only whether the block already carried the line, which is what keeps
+	 * refresh from reporting a collision with the copy it wrote itself. */
+	bool saw_media;
+
+	/* Whether to put the media line in the block at all. False when the
+	 * user has XF86AudioMedia bound to something of their own: see
+	 * binds_refresh. */
+	bool media;
 
 	/* The guard is the same problem in the other direction: it defaults ON,
 	 * so "not in the block" has to be distinguishable from "switched off"
@@ -347,6 +379,11 @@ BLOCK_BEGIN "  — the gaming shortcuts. Do not edit between the markers;\n"
 "# controller. The key opens it, and hides it again while leaving it running.\n"
 "bind = %s spawn " BIG_TOGGLE_CMD "\n"
 "#\n"
+"# The green button on a Media Center remote (KEY_MEDIA), which is the button\n"
+"# that means \"put the television interface on\". Same toggle, no modifier —\n"
+"# a remote has none to hold.\n"
+"%s"
+"#\n"
 "# The controller's GUIDE button, from the desktop. Big screen mode's own\n"
 "# Guide takes you OUT to the desktop; this watches the pad while big screen\n"
 "# mode is not running and brings it back — the half a console has that a\n"
@@ -356,6 +393,13 @@ BLOCK_BEGIN "  — the gaming shortcuts. Do not edit between the markers;\n"
 "%s"
 BLOCK_END "\n",
 		b->toggle, b->cycle, b->big,
+		/* ⚠ Omitted, not commented out, when somebody else already has
+		 * this key. A commented `bind =` would be read back by nothing
+		 * and would look like a line syn-arcade had disabled and
+		 * forgotten about. */
+		b->media ? "bind = " MEDIA_KEY " spawn " BIG_TOGGLE_CMD "\n"
+			 : "# (the Media Center key is bound elsewhere in this "
+			   "file — left alone)\n",
 		b->guard ? "autostart = " BIG_GUARD_CMD "\n"
 			 : GUARD_OFF_MARK "\n",
 		/* ⚠ An autostart line, not a systemd user unit. synui does not
@@ -391,6 +435,7 @@ static bool binds_read(binds_t *b, char *path, size_t pathn)
 	snprintf(b->toggle, sizeof(b->toggle), "%s", DEFAULT_TOGGLE);
 	snprintf(b->cycle, sizeof(b->cycle), "%s", DEFAULT_CYCLE);
 	snprintf(b->big, sizeof(b->big), "%s", DEFAULT_BIG);
+	b->media = true;
 	b->guard = true;		/* on unless the block says otherwise */
 
 	char local[4096];
@@ -426,6 +471,16 @@ static bool binds_read(binds_t *b, char *path, size_t pathn)
 		}
 		if (sscanf(ln, "bind = %127s spawn syn-arcade big %63s",
 			   combo, verb) == 2 && strcmp(verb, "toggle") == 0) {
+			/* ⛔ THE MEDIA KEY RUNS THE SAME COMMAND and must not be
+			 * mistaken for the user's chosen key. Without this the
+			 * line this package writes itself would be read back as
+			 * a preference and super+F10 would be replaced by
+			 * XF86AudioMedia at the next refresh — the shortcut
+			 * silently becoming a key most keyboards do not have. */
+			if (strcasecmp(combo, MEDIA_KEY) == 0) {
+				b->saw_media = true;
+				continue;
+			}
 			snprintf(b->big, sizeof(b->big), "%s", combo);
 			b->saw_big = true;
 			continue;
@@ -788,6 +843,27 @@ static int binds_refresh(bool quiet, bool reload)
 			{ b.cycle,  b.saw_cycle,  N_("moving the overlay") },
 			{ b.big,    b.saw_big,    N_("big screen mode") },
 		};
+
+		/*
+		 * ⛔ THE MEDIA KEY IS NOT IN THAT LIST, AND MUST NOT BE. The
+		 * three above are PREFERENCES: a collision is answered by
+		 * picking another key, which is why refusing and saying so is
+		 * right for them. The media key is not a preference — there is
+		 * no `--media=` to move it to — so refusing would mean somebody
+		 * who binds XF86AudioMedia to their music player can never
+		 * refresh their gaming keys again, for a line they never asked
+		 * for.
+		 *
+		 * So theirs wins and ours is left out. The rest of the block
+		 * refreshes as normal.
+		 */
+		if (!b.saw_media && combo_bound_in(outside, MEDIA_KEY)) {
+			b.media = false;
+			if (!quiet)
+				printf(_("%s is already bound in %s — leaving "
+					 "it alone.\nBig screen mode is still on "
+					 "%s.\n"), MEDIA_KEY, path, b.big);
+		}
 
 		for (int i = 0; i < 3; i++) {
 			if (check[i].saw || !combo_bound_in(outside, check[i].combo))

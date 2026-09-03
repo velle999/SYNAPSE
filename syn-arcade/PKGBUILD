@@ -1247,7 +1247,73 @@ pkgver=0.1.0
 #   there with no input device — the three settings groups live below the fold,
 #   so a panel that stopped scrolling would take them with it and the existing
 #   04-big shot would still look perfect.
-pkgrel=54
+# 55: THE REMOTE, MEASURED RATHER THAN GUESSED.
+#
+#   velle, with one in hand: play, volume, the arrows and mute worked; pause did
+#   not; the Media Center key did nothing; OK was not Enter and Info opened
+#   nothing. Every one of those turned out to be a different fault, and the
+#   fixes came from a probe rather than from reading Qt's headers — a nested
+#   headless synui, wtype sending each keysym, and a QML client logging what
+#   arrived.
+#
+#   ⛔ PAUSE IS NOT A MEDIA KEY. rc-core's rc6_mce table sends KEY_PAUSE for it
+#   — evdev 119, the same code as a keyboard's Pause/Break — so xkb gives it the
+#   plain `Pause` keysym and Qt gives it Qt::Key_Pause. Never Key_MediaPause,
+#   which is what XF86AudioPause becomes and which no MCE remote sends. Play
+#   worked and Pause did nothing, and the two looked like one feature half done.
+#
+#   ⛔ THREE BUTTONS ARRIVE AS key === 0 AND NO `case Qt.Key_*` CAN EVER CATCH
+#   THEM. Qt has no enum for XF86OK, XF86Info or XF86MediaSelectProgramGuide, so
+#   OK, Info and Guide had a key code of literally zero; KEY_NEXT and
+#   KEY_PREVIOUS have no keysym AT ALL, xkeyboard-config maps nothing to those
+#   keycodes. Matched on nativeScanCode instead — the evdev code plus 8, and the
+#   suite checks every number against linux/input-event-codes.h rather than
+#   trusting it.
+#   ⚠ AND nativeVirtualKey IS NOT EXPOSED TO QML. Reading the keysym is the
+#   obvious answer and the property simply is not there.
+#
+#   ⛔ Qt::Key_Cancel WAS WIRED TO BACK, AND IT IS THE STOP BUTTON. `Cancel` is
+#   what xkeyboard-config puts on <STOP> (KEY_STOP, 128) and nothing else on any
+#   evdev keyboard produces it — so the one button meaning "stop playing"
+#   navigated up a shelf. A real Back sends KEY_BACK and is untouched.
+#
+#   THE GREEN BUTTON, from the desktop, as a synui bind: `bind = XF86AudioMedia
+#   spawn syn-arcade big toggle`, written into the block beside super+F10.
+#   ⚠ IT RUNS THE SAME COMMAND AS super+F10 AND THAT IS A TRAP IN THE READER.
+#   binds_read recovers the user's chosen key by matching that command, so a
+#   second line with it would be read back as their choice and written out as
+#   `big` — silently replacing super+F10 with a key most keyboards do not have.
+#   The reader checks the combo against MEDIA_KEY and records it separately.
+#   ⚠ AND SOMEBODY ELSE'S BINDING WINS. The three configurable keys answer a
+#   collision by refusing, because the answer is to pick another key; there is
+#   no other key to pick for this one, so refusing would mean anybody who binds
+#   their music player to it can never refresh their gaming keys again. Ours is
+#   left out and the rest of the block refreshes.
+#
+#   THE POWER BUTTON ASKS RATHER THAN ACTS — a page of Desktop, Quit, Sleep,
+#   Restart and Power off, opening on Desktop, which is the harmless row. Sleep,
+#   restart and power off are three irreversible things and a remote has one
+#   button for them. The page is `byShelf("system")` filtered to actions, so
+#   `show_power` off takes the three away here exactly as it does behind Start
+#   and the way out stays — which also means the page can never be empty.
+#   ⚠ MCE's Power button sends KEY_POWER2, and xkeyboard-config maps NOTHING to
+#   keycode 364. A keyboard's power key is KEY_POWER, which has XF86PowerOff.
+#
+#   RECORD IS synui's RECORDER. `big record` dispatches the compositor's own
+#   `record` action — the same toggle super+shift+r is — so there is one answer
+#   to whether this machine is recording. A recorder of this package's own would
+#   disagree with the indicator the first time somebody used the keyboard.
+#
+#   ⚠ EVERY REMOTE BUTTON GOES THROUGH nav(), including the new ones. A button
+#   wired straight to a function is one the FIFO cannot send and therefore one
+#   the rig cannot drive — and the remote is exactly the device nobody has on
+#   the desk to try by hand. `power` is a nav word for that reason.
+#
+#   ⚠ THE SETTINGS GROUP IS "SCREEN" NOW, not "Power". The Power button has a
+#   page headed POWER; a settings page headed the same word but reached through
+#   Start ▸ Settings, holding one row about blanking, is two answers to one
+#   word. That group has only ever been about whether the screen may sleep.
+pkgrel=55
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
