@@ -1,0 +1,28 @@
+# Re-stamp /etc/lsb-release with SynapseOS's identity whenever either half of
+# the arrangement moves.
+#
+# lsb-release: it OWNS the file, and owns it with no backup array — so pacman
+#   overwrites it on every install and upgrade, with no .pacnew and no warning,
+#   putting "Arch Linux" back. Nobody installs it deliberately; it arrives as a
+#   dependency of steam and proton-cachyos-slr, which is why this is worth a
+#   hook rather than a one-time edit at install.
+# syn: it owns the script, and on a machine where lsb-release was already there
+#   before SynapseOS's own package landed, nothing else would ever correct it.
+#
+# PostTransaction, because the file we rewrite is the one pacman is in the
+# middle of writing. PreTransaction would be overwritten seconds later.
+#
+# The script is a no-op where /etc/lsb-release does not exist, so removing
+# lsb-release leaves nothing behind and re-adding it is corrected again here.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = lsb-release
+Target = syn
+
+[Action]
+Description = Stamping SynapseOS identity into /etc/lsb-release...
+When = PostTransaction
+Exec = /usr/lib/syn/syn-lsb-release

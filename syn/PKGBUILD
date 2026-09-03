@@ -34,7 +34,15 @@ pkgver=0.1.0
 #   not have". It is an optdepend NO box has now — it came off the base set and
 #   the ISO in syn-install 100 — and the sentence was the reason syntty is the
 #   terminal this window spawns, so it had to say something true.
-pkgrel=29
+# 30: `lsb_release` answered "Arch Linux" on a machine whose os-release has said
+#   SynapseOS since it was installed. It does not read os-release at all — it
+#   scans /etc for a *-release file with `find -type f`, which skips the
+#   /etc/os-release SYMLINK, and everything it prints comes from sourcing
+#   /etc/lsb-release, which Arch ships hardcoded. That file is owned by the
+#   `lsb-release` package with NO backup array, so pacman puts "Arch Linux" back
+#   on every upgrade of it, silently — hence a hook, not a one-time edit. It is
+#   a dependency of steam and proton-cachyos-slr, so it is on any gaming box.
+pkgrel=30
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -73,6 +81,8 @@ source=("syn.sh"
         "syn-resolve.sh"
         "syn-printer.sh"
         "syn-resolve.hook"
+        "syn-lsb-release.sh"
+        "syn-lsb-release.hook"
         "syn-resolve-gui.sh"
         "resolve.qml"
         "syn-resolve-gui.desktop"
@@ -82,6 +92,8 @@ source=("syn.sh"
         "nix-render.nix"
         "nix-profile-example.nix")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -109,10 +121,17 @@ package() {
     install -Dm755 "$srcdir/syn-resolve.sh" "$pkgdir/usr/lib/syn/syn-resolve"
     install -Dm755 "$srcdir/syn-printer.sh" "$pkgdir/usr/lib/syn/syn-printer"
 
+    # Same again, and this one is ONLY ever run by its hook — it takes no
+    # arguments and rewrites a file in /etc, which is not a thing to leave
+    # sitting in PATH for somebody to run by accident.
+    install -Dm755 "$srcdir/syn-lsb-release.sh" "$pkgdir/usr/lib/syn/syn-lsb-release"
+
     # Flat in the source array because makepkg resolves a local source to its
     # BASENAME (see the note above); it gets its real, ordered name here.
     install -Dm644 "$srcdir/syn-resolve.hook" \
                    "$pkgdir/usr/share/libalpm/hooks/74-syn-resolve.hook"
+    install -Dm644 "$srcdir/syn-lsb-release.hook" \
+                   "$pkgdir/usr/share/libalpm/hooks/75-syn-lsb-release.hook"
 
     # ── DaVinci Doctor ──────────────────────────────────────────────────
     #
