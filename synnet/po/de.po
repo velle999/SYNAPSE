@@ -1,0 +1,180 @@
+# German translations for synnet package.
+# Copyright (C) 2026 THE synnet'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the synnet package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: synnet\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"PO-Revision-Date: 2026-09-03 00:15-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
+msgstr "synnet: --firewall braucht root (sudo synnet --firewall)\n"
+
+#, c-format
+msgid "synnet: could not write %s\n"
+msgstr "synnet: %s konnte nicht geschrieben werden\n"
+
+msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
+msgstr "synnet: Eingangs-Firewall AUS — nichts Eingehendes wird gefiltert. `synnet --firewall on` schaltet sie zurück.\n"
+
+#, c-format
+msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
+msgstr "synnet: die Firewall ist in %s abgeschaltet — `synnet --firewall on` schaltet sie wieder ein\n"
+
+msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
+msgstr "synnet: die Eingangs-Firewall konnte nicht angewendet werden — diese Maschine ist NICHT eingangsgefiltert\n"
+
+msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
+msgstr "synnet: Eingangs-Firewall angewendet (Eingang standardmäßig verworfen; Loopback, bestehende Verbindungen, ICMP, private Quelladressen und DHCP werden angenommen)\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s braucht root (sudo synnet %s %s)\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
+msgstr "synnet: '%s' ist kein zulässiger Schnittstellenname (1-15 Zeichen: Buchstaben, Ziffern, '_', '.', '-')\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: %s konnte nicht aktualisiert werden\n"
+
+#, c-format
+msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s in %s als vertrauenswürdig eingetragen — die Firewall ist abgeschaltet, im Kernel hat sich also nichts geändert.\n"
+
+#, c-format
+msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s in %s als nicht mehr vertrauenswürdig eingetragen — die Firewall ist abgeschaltet, im Kernel hat sich also nichts geändert.\n"
+
+#, c-format
+msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: %s eingetragen, aber die Firewall konnte nicht neu geladen werden — diese Maschine ist gerade NICHT eingangsgefiltert\n"
+
+#, c-format
+msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
+msgstr "synnet: %s wird vertraut — DHCP und DNS von diesem Link werden angenommen\n"
+
+#, c-format
+msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
+msgstr "synnet: %s wird nicht mehr vertraut — DHCP und DNS von diesem Link werden nicht mehr angenommen\n"
+
+#, c-format
+msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
+msgstr "synnet: %s gibt es noch nicht — die Regel greift über den Namen und wirkt, sobald er auftaucht.\n"
+
+#, c-format
+msgid "synnet: unknown option '%s'\n"
+msgstr "synnet: unbekannte Option '%s'\n"
+
+#, c-format
+msgid "synnet: invalid IPv4 address: %s\n"
+msgstr "synnet: ungültige IPv4-Adresse: %s\n"
+
+#, c-format
+msgid ""
+"synnet %s — nftables enforcement status\n"
+"\n"
+msgstr "synnet %s — nftables-Durchsetzungsstatus\n\n"
+
+msgid "  Input firewall\n"
+msgstr "  Eingangs-Firewall\n"
+
+#, c-format
+msgid "    OFF — switched off in %s.\n"
+msgstr "    AUS — in %s abgeschaltet.\n"
+
+msgid ""
+"    Nothing inbound is filtered. Turn it back on with\n"
+"    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
+msgstr "    Nichts Eingehendes wird gefiltert. Wieder einschalten mit\n    `sudo synnet --firewall on` oder in Einstellungen ▸ Netzwerk.\n"
+
+#, c-format
+msgid "    not asserted — no %s.\n"
+msgstr "    nicht durchgesetzt — kein %s.\n"
+
+msgid ""
+"    The daemon publishes that file at start; if synnet is\n"
+"    running and it is missing, the daemon predates this or\n"
+"    could not write to /run/synnet.\n"
+msgstr "    Der Daemon veröffentlicht diese Datei beim Start; wenn synnet\n    läuft und sie fehlt, ist der Daemon älter als dies oder konnte\n    nicht nach /run/synnet schreiben.\n"
+
+msgid ""
+"    ACTIVE — default-drop input, LAN and established traffic\n"
+"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+msgstr "    AKTIV — Eingang standardmäßig verworfen, LAN und bestehende\n    Verbindungen erlaubt. Von synnet beim Start durchgesetzt und jede Minute geprüft.\n"
+
+#, c-format
+msgid ""
+"    ⚠ rebuilt %s time(s) this run — something on this box\n"
+"      is flushing nftables.\n"
+msgstr "    ⚠ in diesem Lauf %s mal neu aufgebaut — irgendetwas auf dieser\n      Maschine leert nftables.\n"
+
+msgid ""
+"    FAILED to apply — this box is NOT ingress-filtered.\n"
+"    See `journalctl -u synnet` for what nft said.\n"
+msgstr "    Anwenden FEHLGESCHLAGEN — diese Maschine ist NICHT eingangsgefiltert.\n    `journalctl -u synnet` zeigt, was nft gesagt hat.\n"
+
+msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
+msgstr "  Container-/VM-Links (DHCP + DNS werden darauf angenommen)\n"
+
+#, c-format
+msgid "    none — %s is empty or absent.\n"
+msgstr "    keine — %s ist leer oder fehlt.\n"
+
+msgid ""
+"    A container bridge needs one: its guest's first DHCP\n"
+"    packet comes from 0.0.0.0 and the drop policy eats it.\n"
+"    `sudo synnet --trust-if waydroid0` adds one.\n"
+msgstr "    Eine Container-Bridge braucht einen: das erste DHCP-Paket ihres\n    Gasts kommt von 0.0.0.0, und die Drop-Regel verschluckt es.\n    `sudo synnet --trust-if waydroid0` fügt einen hinzu.\n"
+
+#, c-format
+msgid "    %-15s (up)\n"
+msgstr "    %-15s (aktiv)\n"
+
+#, c-format
+msgid "    %-15s (not present yet — matched by name)\n"
+msgstr "    %-15s (noch nicht vorhanden — wird über den Namen erfasst)\n"
+
+#, c-format
+msgid ""
+"    ⚠ synnet last applied %s of these. Run\n"
+"      `sudo synnet --firewall` to load the current list.\n"
+msgstr "    ⚠ synnet hat zuletzt %s davon angewendet. Führe\n      `sudo synnet --firewall` aus, um die aktuelle Liste zu laden.\n"
+
+msgid "  Live ruleset\n"
+msgstr "  Aktives Regelwerk\n"
+
+msgid ""
+"    (not shown — listing nftables needs root: sudo synnet --status)\n"
+"\n"
+msgstr "    (nicht gezeigt — nftables aufzulisten braucht root: sudo synnet --status)\n\n"
+
+msgid ""
+"    (not shown — nft is not installed)\n"
+"\n"
+msgstr "    (nicht gezeigt — nft ist nicht installiert)\n\n"
+
+msgid ""
+"    the input chain is NOT loaded in the kernel.\n"
+"\n"
+msgstr "    die Eingangskette ist NICHT im Kernel geladen.\n\n"
+
+msgid "  Blocked destinations (egress)\n"
+msgstr "  Blockierte Ziele (ausgehend)\n"
+
+msgid "    (not shown — needs root)\n"
+msgstr "    (nicht gezeigt — braucht root)\n"
+
+msgid "    none — the synnet table is not loaded.\n"
+msgstr "    keine — die synnet-Tabelle ist nicht geladen.\n"

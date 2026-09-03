@@ -1,0 +1,180 @@
+# Korean translations for synnet package.
+# Copyright (C) 2026 THE synnet'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the synnet package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: synnet\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"PO-Revision-Date: 2026-09-03 00:15-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
+msgstr "synnet: --firewall에는 root가 필요합니다 (sudo synnet --firewall)\n"
+
+#, c-format
+msgid "synnet: could not write %s\n"
+msgstr "synnet: %s에 쓰지 못했습니다\n"
+
+msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
+msgstr "synnet: 인바운드 방화벽이 꺼져 있습니다 — 들어오는 것은 아무것도 걸러지지 않습니다. `synnet --firewall on`으로 되돌립니다.\n"
+
+#, c-format
+msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
+msgstr "synnet: %s에서 방화벽이 꺼져 있습니다 — 다시 켜려면 `synnet --firewall on`\n"
+
+msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
+msgstr "synnet: 인바운드 방화벽을 적용하지 못했습니다 — 이 컴퓨터는 인바운드 필터링이 되지 않습니다\n"
+
+msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
+msgstr "synnet: 인바운드 방화벽을 적용했습니다 (인바운드 기본 차단, 루프백·established·ICMP·사설 대역 출발지·DHCP는 허용)\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s에는 root가 필요합니다 (sudo synnet %s %s)\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
+msgstr "synnet: '%s'은(는) 올바른 인터페이스 이름이 아닙니다 (1~15자: 문자, 숫자, '_', '.', '-')\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: %s을(를) 갱신하지 못했습니다\n"
+
+#, c-format
+msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s을(를) %s에 신뢰 대상으로 기록했습니다 — 방화벽이 꺼져 있어 커널에서는 아무것도 바뀌지 않았습니다.\n"
+
+#, c-format
+msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s을(를) %s의 신뢰 목록에서 제거했습니다 — 방화벽이 꺼져 있어 커널에서는 아무것도 바뀌지 않았습니다.\n"
+
+#, c-format
+msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: %s을(를) 기록했지만 방화벽을 다시 불러오지 못했습니다 — 이 컴퓨터는 지금 인바운드 필터링이 되지 않습니다\n"
+
+#, c-format
+msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
+msgstr "synnet: %s을(를) 신뢰합니다 — 그 링크의 DHCP와 DNS는 허용됩니다\n"
+
+#, c-format
+msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
+msgstr "synnet: 더 이상 %s을(를) 신뢰하지 않습니다 — 그 링크의 DHCP와 DNS는 더 이상 허용되지 않습니다\n"
+
+#, c-format
+msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
+msgstr "synnet: %s은(는) 아직 없습니다 — 규칙은 이름으로 일치시키므로 나타나면 바로 적용됩니다.\n"
+
+#, c-format
+msgid "synnet: unknown option '%s'\n"
+msgstr "synnet: 알 수 없는 옵션 '%s'\n"
+
+#, c-format
+msgid "synnet: invalid IPv4 address: %s\n"
+msgstr "synnet: 잘못된 IPv4 주소: %s\n"
+
+#, c-format
+msgid ""
+"synnet %s — nftables enforcement status\n"
+"\n"
+msgstr "synnet %s — nftables 적용 상태\n\n"
+
+msgid "  Input firewall\n"
+msgstr "  인바운드 방화벽\n"
+
+#, c-format
+msgid "    OFF — switched off in %s.\n"
+msgstr "    꺼짐 — %s에서 꺼져 있습니다.\n"
+
+msgid ""
+"    Nothing inbound is filtered. Turn it back on with\n"
+"    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
+msgstr "    들어오는 것은 아무것도 걸러지지 않습니다. 다시 켜려면\n    `sudo synnet --firewall on` 또는 설정 ▸ 네트워크 에서.\n"
+
+#, c-format
+msgid "    not asserted — no %s.\n"
+msgstr "    적용되지 않음 — %s이(가) 없습니다.\n"
+
+msgid ""
+"    The daemon publishes that file at start; if synnet is\n"
+"    running and it is missing, the daemon predates this or\n"
+"    could not write to /run/synnet.\n"
+msgstr "    데몬은 시작할 때 그 파일을 씁니다. synnet이 실행 중인데도\n    없다면 데몬이 이보다 오래되었거나 /run/synnet에 쓰지 못한\n    것입니다.\n"
+
+msgid ""
+"    ACTIVE — default-drop input, LAN and established traffic\n"
+"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+msgstr "    활성 — 인바운드 기본 차단, LAN과 established 트래픽은 허용.\n    synnet이 부팅 시 적용하고 1분마다 다시 확인합니다.\n"
+
+#, c-format
+msgid ""
+"    ⚠ rebuilt %s time(s) this run — something on this box\n"
+"      is flushing nftables.\n"
+msgstr "    ⚠ 이번 실행에서 %s번 다시 만들어졌습니다 — 이 컴퓨터의 무언가가\n      nftables를 비우고 있습니다.\n"
+
+msgid ""
+"    FAILED to apply — this box is NOT ingress-filtered.\n"
+"    See `journalctl -u synnet` for what nft said.\n"
+msgstr "    적용에 실패했습니다 — 이 컴퓨터는 인바운드 필터링이 되지 않습니다.\n    nft가 무엇이라고 했는지는 `journalctl -u synnet`에 있습니다.\n"
+
+msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
+msgstr "  컨테이너 / VM 링크 (여기서는 DHCP + DNS를 허용)\n"
+
+#, c-format
+msgid "    none — %s is empty or absent.\n"
+msgstr "    없음 — %s이(가) 비어 있거나 없습니다.\n"
+
+msgid ""
+"    A container bridge needs one: its guest's first DHCP\n"
+"    packet comes from 0.0.0.0 and the drop policy eats it.\n"
+"    `sudo synnet --trust-if waydroid0` adds one.\n"
+msgstr "    컨테이너 브리지에는 하나가 필요합니다. 게스트의 첫 DHCP 패킷은\n    0.0.0.0에서 오는데, 차단 정책이 이를 삼켜 버립니다.\n    `sudo synnet --trust-if waydroid0`으로 하나 추가하십시오.\n"
+
+#, c-format
+msgid "    %-15s (up)\n"
+msgstr "    %-15s (활성)\n"
+
+#, c-format
+msgid "    %-15s (not present yet — matched by name)\n"
+msgstr "    %-15s (아직 없음 — 이름으로 일치)\n"
+
+#, c-format
+msgid ""
+"    ⚠ synnet last applied %s of these. Run\n"
+"      `sudo synnet --firewall` to load the current list.\n"
+msgstr "    ⚠ synnet이 마지막으로 적용한 것은 %s개였습니다. 현재 목록을 불러오려면\n      `sudo synnet --firewall`을 실행하십시오.\n"
+
+msgid "  Live ruleset\n"
+msgstr "  현재 규칙 집합\n"
+
+msgid ""
+"    (not shown — listing nftables needs root: sudo synnet --status)\n"
+"\n"
+msgstr "    (표시되지 않음 — nftables를 나열하려면 root가 필요합니다: sudo synnet --status)\n\n"
+
+msgid ""
+"    (not shown — nft is not installed)\n"
+"\n"
+msgstr "    (표시되지 않음 — nft가 설치되어 있지 않습니다)\n\n"
+
+msgid ""
+"    the input chain is NOT loaded in the kernel.\n"
+"\n"
+msgstr "    인바운드 체인이 커널에 로드되어 있지 않습니다.\n\n"
+
+msgid "  Blocked destinations (egress)\n"
+msgstr "  차단된 대상 (아웃바운드)\n"
+
+msgid "    (not shown — needs root)\n"
+msgstr "    (표시되지 않음 — root가 필요합니다)\n"
+
+msgid "    none — the synnet table is not loaded.\n"
+msgstr "    없음 — synnet 테이블이 로드되어 있지 않습니다.\n"

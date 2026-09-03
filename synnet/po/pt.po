@@ -1,0 +1,180 @@
+# Portuguese translations for synnet package.
+# Copyright (C) 2026 THE synnet'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the synnet package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: synnet\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"PO-Revision-Date: 2026-09-03 00:15-0500\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
+msgstr "synnet: --firewall precisa de root (sudo synnet --firewall)\n"
+
+#, c-format
+msgid "synnet: could not write %s\n"
+msgstr "synnet: não foi possível escrever %s\n"
+
+msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
+msgstr "synnet: firewall de entrada DESLIGADA — nada de entrada é filtrado. `synnet --firewall on` repõe-na.\n"
+
+#, c-format
+msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
+msgstr "synnet: a firewall está desligada em %s — `synnet --firewall on` para a voltar a ligar\n"
+
+msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
+msgstr "synnet: não foi possível aplicar a firewall de entrada — esta máquina NÃO está filtrada à entrada\n"
+
+msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
+msgstr "synnet: firewall de entrada aplicada (descarte por omissão à entrada; aceitam-se loopback, ligações estabelecidas, ICMP, origens de gama privada e DHCP)\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s precisa de root (sudo synnet %s %s)\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
+msgstr "synnet: '%s' não é um nome de interface válido (1-15 caracteres: letras, dígitos, '_', '.', '-')\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: não foi possível atualizar %s\n"
+
+#, c-format
+msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s marcada como de confiança em %s — a firewall está desligada, por isso nada mudou no núcleo.\n"
+
+#, c-format
+msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: %s retirada das de confiança em %s — a firewall está desligada, por isso nada mudou no núcleo.\n"
+
+#, c-format
+msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: %s registada, mas não foi possível recarregar a firewall — esta máquina NÃO está filtrada à entrada neste momento\n"
+
+#, c-format
+msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
+msgstr "synnet: %s passa a ser de confiança — DHCP e DNS a partir dessa ligação são aceites\n"
+
+#, c-format
+msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
+msgstr "synnet: %s deixa de ser de confiança — DHCP e DNS a partir dessa ligação já não são aceites\n"
+
+#, c-format
+msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
+msgstr "synnet: %s ainda não existe — a regra corresponde por nome e faz efeito quando ela aparecer.\n"
+
+#, c-format
+msgid "synnet: unknown option '%s'\n"
+msgstr "synnet: opção desconhecida '%s'\n"
+
+#, c-format
+msgid "synnet: invalid IPv4 address: %s\n"
+msgstr "synnet: endereço IPv4 inválido: %s\n"
+
+#, c-format
+msgid ""
+"synnet %s — nftables enforcement status\n"
+"\n"
+msgstr "synnet %s — estado de aplicação do nftables\n\n"
+
+msgid "  Input firewall\n"
+msgstr "  Firewall de entrada\n"
+
+#, c-format
+msgid "    OFF — switched off in %s.\n"
+msgstr "    DESLIGADA — desligada em %s.\n"
+
+msgid ""
+"    Nothing inbound is filtered. Turn it back on with\n"
+"    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
+msgstr "    Nada de entrada é filtrado. Volte a ligá-la com\n    `sudo synnet --firewall on`, ou em Definições ▸ Rede.\n"
+
+#, c-format
+msgid "    not asserted — no %s.\n"
+msgstr "    não aplicada — não há %s.\n"
+
+msgid ""
+"    The daemon publishes that file at start; if synnet is\n"
+"    running and it is missing, the daemon predates this or\n"
+"    could not write to /run/synnet.\n"
+msgstr "    O serviço publica esse ficheiro ao arrancar; se o synnet está\n    a correr e ele falta, o serviço é anterior a isto ou não\n    conseguiu escrever em /run/synnet.\n"
+
+msgid ""
+"    ACTIVE — default-drop input, LAN and established traffic\n"
+"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+msgstr "    ATIVA — descarte por omissão à entrada, LAN e tráfego\n    estabelecido permitidos. Aplicada pelo synnet no arranque e reverificada a cada minuto.\n"
+
+#, c-format
+msgid ""
+"    ⚠ rebuilt %s time(s) this run — something on this box\n"
+"      is flushing nftables.\n"
+msgstr "    ⚠ reconstruída %s vezes nesta execução — algo nesta máquina está\n      a esvaziar o nftables.\n"
+
+msgid ""
+"    FAILED to apply — this box is NOT ingress-filtered.\n"
+"    See `journalctl -u synnet` for what nft said.\n"
+msgstr "    FALHOU ao aplicar — esta máquina NÃO está filtrada à entrada.\n    Veja `journalctl -u synnet` para o que o nft disse.\n"
+
+msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
+msgstr "  Ligações de contentor / VM (aceitam-se DHCP + DNS nelas)\n"
+
+#, c-format
+msgid "    none — %s is empty or absent.\n"
+msgstr "    nenhuma — %s está vazio ou não existe.\n"
+
+msgid ""
+"    A container bridge needs one: its guest's first DHCP\n"
+"    packet comes from 0.0.0.0 and the drop policy eats it.\n"
+"    `sudo synnet --trust-if waydroid0` adds one.\n"
+msgstr "    Uma ponte de contentor precisa de uma: o primeiro pacote DHCP do\n    convidado vem de 0.0.0.0, e a regra de descarte come-o.\n    `sudo synnet --trust-if waydroid0` adiciona uma.\n"
+
+#, c-format
+msgid "    %-15s (up)\n"
+msgstr "    %-15s (ativo)\n"
+
+#, c-format
+msgid "    %-15s (not present yet — matched by name)\n"
+msgstr "    %-15s (ainda não existe — corresponde por nome)\n"
+
+#, c-format
+msgid ""
+"    ⚠ synnet last applied %s of these. Run\n"
+"      `sudo synnet --firewall` to load the current list.\n"
+msgstr "    ⚠ o synnet aplicou da última vez %s destes. Execute\n      `sudo synnet --firewall` para carregar a lista atual.\n"
+
+msgid "  Live ruleset\n"
+msgstr "  Conjunto de regras em vigor\n"
+
+msgid ""
+"    (not shown — listing nftables needs root: sudo synnet --status)\n"
+"\n"
+msgstr "    (não mostrado — listar o nftables precisa de root: sudo synnet --status)\n\n"
+
+msgid ""
+"    (not shown — nft is not installed)\n"
+"\n"
+msgstr "    (não mostrado — o nft não está instalado)\n\n"
+
+msgid ""
+"    the input chain is NOT loaded in the kernel.\n"
+"\n"
+msgstr "    a cadeia de entrada NÃO está carregada no núcleo.\n\n"
+
+msgid "  Blocked destinations (egress)\n"
+msgstr "  Destinos bloqueados (saída)\n"
+
+msgid "    (not shown — needs root)\n"
+msgstr "    (não mostrado — precisa de root)\n"
+
+msgid "    none — the synnet table is not loaded.\n"
+msgstr "    nenhum — a tabela synnet não está carregada.\n"

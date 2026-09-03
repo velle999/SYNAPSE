@@ -6,7 +6,10 @@
 #include <signal.h>
 #include <errno.h>
 #include <syslog.h>
+#include <locale.h>
 #include "../include/synnet.h"
+#include "../include/i18n.h"
+#include "config.h"
 
 static synnet_state_t g_state;
 
@@ -42,8 +45,30 @@ static void usage(void) {
         SYNNET_VERSION);
 }
 
+/*
+ * ⛔ LC_NUMERIC STAYS AT C, AND FOR THIS PROGRAM THAT IS THE nft SCRIPT.
+ * setlocale(LC_ALL, "") changes what printf's %f writes and what atof() reads,
+ * and everything synnet composes with snprintf goes somewhere that is not a
+ * person: an nft ruleset, a key=value state file syn-settings parses, and a
+ * prompt whose answer is matched against BLOCK and ALLOW. A decimal comma in
+ * any of the three is a rule the kernel refuses or a number a sibling misreads.
+ */
+static void i18n_start(void) {
+    setlocale(LC_ALL, "");
+    setlocale(LC_NUMERIC, "C");
+
+    const char *dir = getenv("SYNNET_LOCALEDIR");
+    bindtextdomain(SYNNET_GETTEXT_DOMAIN, dir && *dir ? dir : SYNNET_LOCALEDIR);
+    bind_textdomain_codeset(SYNNET_GETTEXT_DOMAIN, "UTF-8");
+    textdomain(SYNNET_GETTEXT_DOMAIN);
+}
+
+void synnet_i18n_init(void) { i18n_start(); }
+
 int main(int argc, char *argv[]) {
     int foreground = 0, dry_run = 0, debug = 0;
+
+    synnet_i18n_init();
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--foreground")) foreground = 1;
@@ -74,20 +99,20 @@ int main(int argc, char *argv[]) {
              * letting nft's own message arrive on stderr, where it reads like a
              * bug in synnet. */
             if (geteuid() != 0) {
-                fprintf(stderr, "synnet: --firewall needs root "
-                                "(sudo synnet --firewall)\n");
+                fputs(_("synnet: --firewall needs root "
+                        "(sudo synnet --firewall)\n"), stderr);
                 return 1;
             }
             if (want && synnet_firewall_set_enabled(!strcmp(want, "on")) != 0) {
-                fprintf(stderr, "synnet: could not write %s\n",
+                fprintf(stderr, _("synnet: could not write %s\n"),
                         synnet_fw_pref_path());
                 return 1;
             }
 
             if (want && !strcmp(want, "off")) {
                 synnet_nft_drop_firewall();
-                printf("synnet: input firewall OFF — nothing inbound is "
-                       "filtered. `synnet --firewall on` puts it back.\n");
+                fputs(_("synnet: input firewall OFF — nothing inbound is "
+                        "filtered. `synnet --firewall on` puts it back.\n"), stdout);
                 return 0;
             }
 
@@ -95,20 +120,20 @@ int main(int argc, char *argv[]) {
              * a minute: the next tick reads the file and takes the chain away
              * again. Say what is actually in the way. */
             if (!want && !synnet_firewall_enabled()) {
-                fprintf(stderr, "synnet: the firewall is switched off in %s — "
-                                "`synnet --firewall on` to turn it back on\n",
+                fprintf(stderr, _("synnet: the firewall is switched off in %s — "
+                                  "`synnet --firewall on` to turn it back on\n"),
                         synnet_fw_pref_path());
                 return 1;
             }
 
             if (synnet_nft_ensure_firewall() != 0) {
-                fprintf(stderr, "synnet: could not apply the input firewall — "
-                                "this box is NOT ingress-filtered\n");
+                fputs(_("synnet: could not apply the input firewall — "
+                        "this box is NOT ingress-filtered\n"), stderr);
                 return 1;
             }
-            printf("synnet: input firewall applied "
-                   "(default-drop input; loopback, established, ICMP, "
-                   "private-range sources and DHCP accepted)\n");
+            fputs(_("synnet: input firewall applied "
+                    "(default-drop input; loopback, established, ICMP, "
+                    "private-range sources and DHCP accepted)\n"), stdout);
             return 0;
         } else if ((!strcmp(argv[i], "--trust-if") ||
                     !strcmp(argv[i], "--untrust-if")) && i + 1 < argc) {
@@ -123,8 +148,10 @@ int main(int argc, char *argv[]) {
             const char *ifn = argv[++i];
 
             if (geteuid() != 0) {
-                fprintf(stderr, "synnet: %s needs root "
-                                "(sudo synnet %s %s)\n",
+                /* ⚠ The two %s are FLAG SPELLINGS — what you type — so they
+                 * stay English while the sentence around them moves. */
+                fprintf(stderr, _("synnet: %s needs root "
+                                  "(sudo synnet %s %s)\n"),
                         on ? "--trust-if" : "--untrust-if",
                         on ? "--trust-if" : "--untrust-if", ifn);
                 return 1;
@@ -132,13 +159,13 @@ int main(int argc, char *argv[]) {
 
             int r = synnet_trusted_iface_set(ifn, on);
             if (r == -2) {
-                fprintf(stderr, "synnet: '%s' is not a legal interface name "
-                                "(1-15 chars: letters, digits, '_', '.', '-')\n",
+                fprintf(stderr, _("synnet: '%s' is not a legal interface name "
+                                  "(1-15 chars: letters, digits, '_', '.', '-')\n"),
                         ifn);
                 return 1;
             }
             if (r != 0) {
-                fprintf(stderr, "synnet: could not update %s\n",
+                fprintf(stderr, _("synnet: could not update %s\n"),
                         synnet_fw_ifaces_path());
                 return 1;
             }
@@ -148,21 +175,33 @@ int main(int argc, char *argv[]) {
              * looks healthy to it and would keep dropping the container's DHCP
              * until the next reboot. Reload the chain now. */
             if (!synnet_firewall_enabled()) {
-                printf("synnet: %s %s in %s — the firewall is switched off, so "
-                       "nothing changed in the kernel.\n",
-                       on ? "trusted" : "untrusted", ifn,
-                       synnet_fw_ifaces_path());
+                /* ⛔ TWO WHOLE SENTENCES. "trusted"/"untrusted" dropped into a
+                 * %s reach every reader in English however the line around
+                 * them is translated, and neither can agree with the interface
+                 * name beside it. */
+                if (on)
+                    printf(_("synnet: trusted %s in %s — the firewall is switched "
+                             "off, so nothing changed in the kernel.\n"),
+                           ifn, synnet_fw_ifaces_path());
+                else
+                    printf(_("synnet: untrusted %s in %s — the firewall is switched "
+                             "off, so nothing changed in the kernel.\n"),
+                           ifn, synnet_fw_ifaces_path());
                 return 0;
             }
             if (synnet_nft_ensure_firewall() != 0) {
-                fprintf(stderr, "synnet: %s recorded, but the firewall could "
-                                "not be reloaded — this box is NOT ingress-"
-                                "filtered right now\n", ifn);
+                fprintf(stderr, _("synnet: %s recorded, but the firewall could "
+                                  "not be reloaded — this box is NOT ingress-"
+                                  "filtered right now\n"), ifn);
                 return 1;
             }
-            printf("synnet: %s %s — DHCP and DNS from that link are %s\n",
-                   on ? "trusting" : "no longer trusting", ifn,
-                   on ? "accepted" : "no longer accepted");
+            /* ⛔ FOUR WORDS IN TWO SLOTS IS ONE SENTENCE PER BRANCH. */
+            if (on)
+                printf(_("synnet: trusting %s — DHCP and DNS from that link "
+                         "are accepted\n"), ifn);
+            else
+                printf(_("synnet: no longer trusting %s — DHCP and DNS from "
+                         "that link are no longer accepted\n"), ifn);
             {
                 /* Matched by name, so an interface that does not exist yet is
                  * fine and is the normal case: container bridges appear when
@@ -170,8 +209,8 @@ int main(int argc, char *argv[]) {
                 char sys[512];
                 snprintf(sys, sizeof(sys), "/sys/class/net/%s", ifn);
                 if (on && access(sys, F_OK) != 0)
-                    printf("synnet: %s does not exist yet — the rule matches by "
-                           "name and takes effect when it appears.\n", ifn);
+                    printf(_("synnet: %s does not exist yet — the rule matches "
+                             "by name and takes effect when it appears.\n"), ifn);
             }
             return 0;
 
@@ -182,7 +221,7 @@ int main(int argc, char *argv[]) {
         } else if (!strcmp(argv[i], "--block") && i+1 < argc) {
             return synnet_apply_rule(argv[++i], SYNNET_ACTION_BLOCK);
         } else {
-            fprintf(stderr, "synnet: unknown option '%s'\n", argv[i]);
+            fprintf(stderr, _("synnet: unknown option '%s'\n"), argv[i]);
             usage();
             return 1;
         }

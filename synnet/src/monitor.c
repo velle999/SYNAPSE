@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "../include/synnet.h"
+#include "../include/i18n.h"
 
 /* ── synapd IPC (reuse syn protocol) ────────────────────── */
 #define SYN_MAGIC        0x53594E41u
@@ -958,7 +959,7 @@ void synnet_shutdown(synnet_state_t *s) {
  * remove the IP from the drop set. */
 int synnet_apply_rule(const char *ip, synnet_action_t action) {
     if (!is_valid_ipv4(ip)) {
-        fprintf(stderr, "synnet: invalid IPv4 address: %s\n", ip);
+        fprintf(stderr, _("synnet: invalid IPv4 address: %s\n"), ip);
         syslog(LOG_ERR, "synnet: invalid IP '%s'", ip ? ip : "(null)");
         return 1;
     }
@@ -1026,34 +1027,36 @@ static const char *fw_state_get(const char *key) {
  *   3. the egress blocklist, as before.
  */
 int synnet_status(void) {
-    printf("synnet %s — nftables enforcement status\n\n", SYNNET_VERSION);
+    printf(_("synnet %s — nftables enforcement status\n\n"), SYNNET_VERSION);
 
     /* ── 1. what synnet says it did ─────────────────────────── */
     const char *st = fw_state_get("state");
-    printf("  Input firewall\n");
+    fputs(_("  Input firewall\n"), stdout);
     if (!synnet_firewall_enabled()) {
         /* Checked BEFORE the published state, because "off" is a decision and
          * every other line here describes a machine that is trying to be
          * filtered. Reporting "not asserted" for a firewall somebody switched
          * off would send them looking for a fault. */
-        printf("    OFF — switched off in %s.\n", synnet_fw_pref_path());
-        printf("    Nothing inbound is filtered. Turn it back on with\n");
-        printf("    `sudo synnet --firewall on`, or in Settings ▸ Network.\n");
+        printf(_("    OFF — switched off in %s.\n"), synnet_fw_pref_path());
+        fputs(_("    Nothing inbound is filtered. Turn it back on with\n"
+                "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"),
+              stdout);
     } else if (st[0] == '\0') {
-        printf("    not asserted — no %s.\n", synnet_fw_state_path());
-        printf("    The daemon publishes that file at start; if synnet is\n");
-        printf("    running and it is missing, the daemon predates this or\n");
-        printf("    could not write to /run/synnet.\n");
+        printf(_("    not asserted — no %s.\n"), synnet_fw_state_path());
+        fputs(_("    The daemon publishes that file at start; if synnet is\n"
+                "    running and it is missing, the daemon predates this or\n"
+                "    could not write to /run/synnet.\n"), stdout);
     } else if (strcmp(st, "active") == 0) {
         const char *n = fw_state_get("reasserts");
-        printf("    ACTIVE — default-drop input, LAN and established traffic\n");
-        printf("    trusted. Asserted by synnet at boot and re-checked every minute.\n");
+        fputs(_("    ACTIVE — default-drop input, LAN and established traffic\n"
+                "    trusted. Asserted by synnet at boot and re-checked every "
+                "minute.\n"), stdout);
         if (n[0] && strcmp(n, "0") != 0)
-            printf("    ⚠ rebuilt %s time(s) this run — something on this box\n"
-                   "      is flushing nftables.\n", n);
+            printf(_("    ⚠ rebuilt %s time(s) this run — something on this box\n"
+                     "      is flushing nftables.\n"), n);
     } else {
-        printf("    FAILED to apply — this box is NOT ingress-filtered.\n");
-        printf("    See `journalctl -u synnet` for what nft said.\n");
+        fputs(_("    FAILED to apply — this box is NOT ingress-filtered.\n"
+                "    See `journalctl -u synnet` for what nft said.\n"), stdout);
     }
     printf("\n");
 
@@ -1066,12 +1069,12 @@ int synnet_status(void) {
     {
         char ifaces[SYNNET_MAX_IFACES][SYNNET_IFNAME_MAX];
         size_t n = trusted_ifaces_load(ifaces, SYNNET_MAX_IFACES);
-        printf("  Container / VM links (DHCP + DNS accepted on these)\n");
+        fputs(_("  Container / VM links (DHCP + DNS accepted on these)\n"), stdout);
         if (n == 0) {
-            printf("    none — %s is empty or absent.\n", synnet_fw_ifaces_path());
-            printf("    A container bridge needs one: its guest's first DHCP\n");
-            printf("    packet comes from 0.0.0.0 and the drop policy eats it.\n");
-            printf("    `sudo synnet --trust-if waydroid0` adds one.\n");
+            printf(_("    none — %s is empty or absent.\n"), synnet_fw_ifaces_path());
+            fputs(_("    A container bridge needs one: its guest's first DHCP\n"
+                    "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
+                    "    `sudo synnet --trust-if waydroid0` adds one.\n"), stdout);
         } else {
             const char *live = fw_state_get("links");
             for (size_t i = 0; i < n; i++) {
@@ -1080,56 +1083,62 @@ int synnet_status(void) {
                 /* Absent is normal, not a fault: the rule is matched by name
                  * and starts working the moment the container brings the
                  * bridge up. Said out loud so nobody goes looking for a typo. */
-                printf("    %-15s %s\n", ifaces[i],
-                       access(sys, F_OK) == 0 ? "(up)"
-                                              : "(not present yet — matched by name)");
+                /* ⛔ TWO WHOLE LINES. A parenthetical in a %s is a fragment no
+                 * language can place, and "(up)" beside a German sentence is
+                 * the half nobody translated. */
+                if (access(sys, F_OK) == 0)
+                    printf(_("    %-15s (up)\n"), ifaces[i]);
+                else
+                    printf(_("    %-15s (not present yet — matched by name)\n"),
+                           ifaces[i]);
             }
             /* Only when the firewall is actually up and asserted: an "off" or
              * never-applied firewall not matching this list is not news, it is
              * the definition of those states. */
             if (strcmp(st, "active") == 0 && live[0] && atoi(live) != (int)n)
-                printf("    ⚠ synnet last applied %s of these. Run\n"
-                       "      `sudo synnet --firewall` to load the current list.\n",
-                       live);
+                printf(_("    ⚠ synnet last applied %s of these. Run\n"
+                         "      `sudo synnet --firewall` to load the current "
+                         "list.\n"), live);
         }
         printf("\n");
     }
 
     /* ── 2. what the kernel actually holds ──────────────────── */
-    printf("  Live ruleset\n");
+    fputs(_("  Live ruleset\n"), stdout);
     fflush(stdout);
     if (geteuid() != 0) {
         /* Said BEFORE trying, not after failing. This is the exact spot the old
          * version turned a permission error into a factual claim about the
          * firewall. */
-        printf("    (not shown — listing nftables needs root: sudo synnet --status)\n\n");
+        fputs(_("    (not shown — listing nftables needs root: "
+                "sudo synnet --status)\n\n"), stdout);
     } else if (system("command -v nft >/dev/null 2>&1") != 0) {
         /* ⚠ THE SAME LIE ONE LEVEL DOWN. `nft` failing does not mean the chain
          * is absent — it also means nft is not installed, or is not on this
          * process's PATH. Claiming "NOT loaded in the kernel" from that is the
          * exact reasoning error this whole function was rewritten to remove,
          * and it is the one a container hits first. */
-        printf("    (not shown — nft is not installed)\n\n");
+        fputs(_("    (not shown — nft is not installed)\n\n"), stdout);
     } else {
         int r = run_nft("nft list chain inet " SYNNET_NFT_TABLE " "
                         SYNNET_NFT_INPUT " 2>/dev/null");
         if (r != 0)
-            printf("    the input chain is NOT loaded in the kernel.\n\n");
+            fputs(_("    the input chain is NOT loaded in the kernel.\n\n"), stdout);
         else
             printf("\n");
     }
 
     /* ── 3. the egress blocklist ────────────────────────────── */
-    printf("  Blocked destinations (egress)\n");
+    fputs(_("  Blocked destinations (egress)\n"), stdout);
     fflush(stdout);
     if (geteuid() != 0) {
-        printf("    (not shown — needs root)\n");
+        fputs(_("    (not shown — needs root)\n"), stdout);
         return 0;
     }
     int r = run_nft("nft list set inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
                     " 2>/dev/null");
     if (r != 0)
-        printf("    none — the synnet table is not loaded.\n");
+        fputs(_("    none — the synnet table is not loaded.\n"), stdout);
     return 0;
 }
 

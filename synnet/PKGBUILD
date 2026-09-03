@@ -65,7 +65,58 @@ pkgver=0.1.0
 #   wholesale would open every host port to whatever the guest runs — an
 #   arbitrary Android APK, for Waydroid — and would add nothing, since an
 #   addressed guest is already trusted. The gateway services are the whole delta.
-pkgrel=10
+# ── 0.1.0-11: thirteen languages, and three things that are not words ────────
+#
+# Everything synnet prints on stdout is now in de, fr, es, pt, it, nl, pl, ru,
+# ja, zh, ko, hi and ar — 39 strings, the whole of `--status` and every
+# diagnostic the CLI gives.
+#
+# ⛔ AND THREE DESTINATIONS STAY ENGLISH, EACH FOR ITS OWN REASON.
+#
+#   · THE JOURNAL. Every syslog() line is unmarked. When the firewall fails to
+#     load, syn-settings' network pane tells somebody "`journalctl -u synnet`
+#     has what nft said" — that is the line they will read, paste into a search
+#     and attach to a bug report. A journal that changed language with the
+#     desktop is one nobody else can help with.
+#
+#   · THE STATE FILE. /run/synnet/firewall.state is key=value, and
+#     syn-settings parses `state`, `links` and `reasserts` out of it to decide
+#     whether this machine reports itself filtered. Text between two programs.
+#
+#   · THE AI PROMPTS. synnet asks synapd "Reply with just BLOCK or ALLOW" and
+#     then matches on those two words. A translated prompt is a different
+#     question, answered in a language nothing here reads.
+#
+#   And the nft script least of all — it is a program's input.
+#
+# ⛔ tests/i18n_test.sh RUNS THE FIREWALL UNDER A CATALOG THAT TRANSLATES
+# EVERYTHING and diffs the ruleset the daemon actually hands `nft` and the
+# state file it publishes. Both must be byte-identical; `--status` must not be.
+# ⚠ It runs under fakeroot when there is no root, because `--firewall` refuses
+# without it and returns having written nothing — two empty logs comparing
+# equal is the shape of a check that tests nothing and says ok. Proved by
+# marking the state-file writer and watching it fail.
+# ⚠ `since=` is the one field excluded: it is the epoch second the firewall was
+# asserted, and a diff that always fails is a diff nobody reads.
+#
+# ⚠ AND THE nft HALF IS A GUARD, NOT A DEMONSTRATION. Every line of that script
+# concatenates literals with the SYNNET_NFT_* macros, and xgettext extracts only
+# the FIRST literal of such a run — so a `_()` around one marks a msgid the
+# runtime string can never equal, and gettext hands it straight back. Tried; it
+# changed nothing. What the check catches is the first plain whole-literal
+# fragment somebody adds, which is exactly when it starts mattering.
+#
+# ⚠ FOUR SENTENCES WERE ASSEMBLED FROM PIECES — trusted/untrusted,
+# trusting/no-longer-trusting, accepted/no-longer-accepted and (up)/(not
+# present yet) — and a word in a %s slot reaches every reader in English
+# however the line around it is translated. Whole sentences per branch now. The
+# two %s that stay English are the FLAG SPELLINGS in "sudo synnet --trust-if",
+# which are what you type.
+#
+# ⛔ LC_NUMERIC IS PINNED TO C. Everything synnet composes with snprintf goes
+# somewhere that is not a person: an nft ruleset, a key=value file a sibling
+# parses, and a prompt whose answer is matched against two English words.
+pkgrel=11
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
