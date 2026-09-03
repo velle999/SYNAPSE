@@ -28,9 +28,12 @@
 # builds one, and turning it on means making it the default output. What keeps
 # that from being a trap:
 #
-#   * playback.props sets node.passive = true, so the chain's OUTPUT follows
-#     the real default sink instead of pinning one. Plugging in headphones
-#     still moves the audio; the equalizer rides along.
+#   * playback.props NAMES the device the chain feeds (target.object). It used
+#     to leave that to wireplumber, on the reasoning that a chain with no
+#     target follows the default sink and headphones would keep working. That
+#     reasoning has a hole in it — once the chain IS the default there is no
+#     default left to follow, and on 2026-09-03 the fallback started landing
+#     on an ALSA loopback and took the desktop silent. See target_sink.
 #   * turning it OFF restores the sink that was default when it was turned on,
 #     recorded in the state file. Without that, switching off would leave the
 #     desktop pointing at a device that no longer exists and audio would stop
@@ -262,10 +265,15 @@ conf_write() {
         echo "      }"
         echo "      playback.props = {"
         echo "        node.name    = \"effect_output.${SINK_NAME}\""
-        # The line that lets the output follow the real default sink; see the
-        # header. Without it the chain pins whichever device was default when it
-        # started and headphones stop working.
+        # Passive so the chain does not drive the graph on its own; it says
+        # nothing about WHERE the audio goes, which is the next line's job.
         echo "        node.passive = true"
+        # The device this chain feeds, named rather than left to wireplumber
+        # to guess — see target_sink. Omitted only when there is no sink to
+        # name at all, which is the pre-2026-09-03 behaviour and no worse than
+        # it was.
+        local to
+        to=$(target_sink) && echo "        target.object = \"$to\""
         echo "      }"
         echo "    }"
         echo "  }"
@@ -409,6 +417,80 @@ chain_target_sink() {
         sed -n 's/^[[:space:]]*|-> \([^:]*\):.*/\1/p' | head -1
 }
 
+# ── THE CHAIN'S OUTPUT HAS TO NAME ITS DEVICE ───────────────────────────────
+#
+# Until 2026-09-03 playback.props carried node.passive and NOTHING ELSE, and
+# which device the chain fed was left entirely to wireplumber. The header
+# above still explains why that looked right: a chain with no target follows
+# the default sink, so plugging in headphones moved the audio and the
+# equalizer rode along.
+#
+# It only works while there is an obvious answer to follow. The moment the
+# chain becomes the default sink, "the default" IS the chain, and wireplumber
+# has to pick something else for it — it will not link a node to its own
+# link-group. With one real sink on the box that fallback lands on the
+# speakers and nobody ever finds out. This desk grew a third sink on
+# 2026-08-31 (/etc/modules-load.d/sc3u-oss.conf loads snd-aloop so SimCity
+# 3000's OpenAL has an OSS device — see the Loki notes), and the fallback
+# started landing on `alsa_output.platform-snd_aloop.0.analog-stereo`:
+#
+#     effect_output.synui_eq:output_FL -> alsa_output.platform-snd_aloop...
+#
+# The ALSA loopback goes nowhere anyone can hear. So switching the equalizer
+# on took the whole desktop silent — reported as "using equalizer mutes
+# output" — and it was NOT a volume, a mute or a dead chain: the DSP ran
+# perfectly the entire time, into a device with no speakers on the end of it.
+# Priority is not the tiebreaker either; the loopback sits at
+# priority.session 696 against the speakers' 2009 and still won.
+#
+# So the target is named, and the auto-follow goes. That trade is deliberate:
+# a chain that stays on the device it was given is wrong only for someone who
+# connects a headset while the equalizer is on (toggle it off and on and it
+# picks the headset up), whereas a chain that follows can silence the machine
+# outright the day an unrelated package adds a sink. Silence with no error
+# anywhere is the worse failure, and this box proves it is reachable.
+#
+# Order matters, and it is not the obvious one:
+#
+#   1. the current default, when that is not already us — the device the user
+#      is listening to right now, which is what eq_on is about to redirect;
+#   2. the live link — only reached when we ARE the default, i.e. a chain that
+#      is already running gets rebuilt (a preset change after a crash). That
+#      is what carries a headset connected mid-session across the restart;
+#   3. prev_sink, the device recorded when the equalizer was switched on.
+#
+# Reading the live link FIRST would be wrong on exactly the path that matters:
+# chain_start writes the conf before it kills the old chain, so on a restart
+# after this bug the link still names the loopback and step 1 is the only
+# thing that gets the desktop off it.
+target_sink() {
+    local t
+    for t in "$(current_default_sink)" "$(chain_target_sink)" "$prev_sink"; do
+        [[ -n $t && $t != "$NODE_NAME" ]] || continue
+        # It has to still exist. A remembered headset that is not on the box
+        # any more would be written into the conf and the chain would come up
+        # feeding nothing at all — the same silence, from the other direction.
+        pactl list short sinks 2>/dev/null | grep -q "$t" || continue
+        echo "$t"
+        return 0
+    done
+    return 1
+}
+
+# The chain's own output is a sink-input like any other, so a loop that moves
+# "every stream" into the equalizer moves the equalizer into itself. Nothing
+# errors: WirePlumber will not link a node to its own link-group, it simply
+# re-picks a target for it, and where that lands is the tiebreak's business
+# rather than ours. Skipped by name.
+#
+# `pactl list sink-inputs` is verbose output, and pactl's field names are
+# TRANSLATED, so LC_ALL=C is not optional here.
+chain_out_input_id() {
+    LC_ALL=C pactl list sink-inputs 2>/dev/null | awk -v want="effect_output.${SINK_NAME}" '
+        /^Sink Input #/ { id = $3; sub("#", "", id) }
+        index($0, "node.name = \"" want "\"") { print id; exit }'
+}
+
 # ── EXACTLY ONE STAGE MAY OWN THE VOLUME ────────────────────────────────────
 #
 # The chain is a sink that FEEDS another sink, so both apply their own volume
@@ -479,6 +561,14 @@ eq_on() {
         # "restore" mean "pin the equalizer", which outlives the chain itself.
         # Empty is the common case and is meaningful — see default_sink_pin.
         prev_pin=$(default_sink_pin)
+        # Never our own node, even so. The default and the pin are two facts
+        # and they come apart: pick another output from the mixer while the
+        # equalizer is on and the DEFAULT moves while the PIN stays ours, so
+        # the guard above passes and this would record "the equalizer" as the
+        # thing to restore. Nothing restores prev_pin verbatim today, and this
+        # is the line that keeps that from becoming a trap the day something
+        # does.
+        [[ $prev_pin == "$NODE_NAME" ]] && prev_pin=
     fi
 
     chain_start || return 1
@@ -492,10 +582,13 @@ eq_on() {
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true
 
     # Move streams that are already playing, or the equalizer only applies to
-    # applications started after it — which reads as "it did nothing".
-    local id
+    # applications started after it — which reads as "it did nothing". Our own
+    # output is not one of them; see chain_out_input_id.
+    local id mine
+    mine=$(chain_out_input_id)
     while read -r id _; do
-        [[ -n $id ]] && pactl move-sink-input "$id" "$NODE_NAME" 2>/dev/null || true
+        [[ -n $id && $id != "$mine" ]] || continue
+        pactl move-sink-input "$id" "$NODE_NAME" 2>/dev/null || true
     done < <(pactl list short sink-inputs 2>/dev/null)
 
     enabled=on
@@ -544,6 +637,30 @@ eq_off() {
     # is, auto-switching is the safer thing to leave behind.
     if [[ -z $prev_pin || $prev_pin != "$restore_to" ]]; then
         default_sink_unpin
+        # And then CHECK, because unpinning does not point the audio anywhere:
+        # it hands the choice back to wireplumber, which takes the highest
+        # priority.session it can see. That is only obviously right while one
+        # device is obviously best. This desk has two sinks tied at 1009 — the
+        # analog output and the ALSA loopback that snd-aloop adds for SimCity's
+        # OSS audio — and the tie went to the loopback, so switching the
+        # equalizer OFF handed the whole desktop to a device with no speakers
+        # on the end of it. Silent, and nothing logs a word.
+        #
+        # So the pin goes back whenever the automatic choice disagrees with the
+        # device we just restored to. That costs the auto-switching this unpin
+        # exists to protect, but only on a box where the automatic answer is
+        # already wrong — and a headset, which wins on priority, still gets
+        # picked and leaves the pin off.
+        local landed n=0
+        while ((n < 10)); do
+            landed=$(current_default_sink)
+            [[ $landed == "$restore_to" ]] && break
+            n=$((n + 1))    # not ((n++)) — see chain_stop
+            sleep 0.05
+        done
+        if [[ -n $restore_to && $landed != "$restore_to" ]]; then
+            pactl set-default-sink "$restore_to" 2>/dev/null || true
+        fi
     fi
 
     enabled=off
@@ -577,9 +694,11 @@ eq_reapply() {
     # The sink is new, so the default has to be asserted and the streams moved
     # across. Only on this path: the retune above leaves both alone.
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true
-    local id
+    local id mine
+    mine=$(chain_out_input_id)
     while read -r id _; do
-        [[ -n $id ]] && pactl move-sink-input "$id" "$NODE_NAME" 2>/dev/null || true
+        [[ -n $id && $id != "$mine" ]] || continue
+        pactl move-sink-input "$id" "$NODE_NAME" 2>/dev/null || true
     done < <(pactl list short sink-inputs 2>/dev/null)
 }
 

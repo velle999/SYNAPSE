@@ -3046,7 +3046,7 @@ pkgver=0.1.0
 #   through a real locale — localedef into a scratch LOCPATH, because this box
 #   has none of the thirteen generated and ⛔ LANGUAGE is vetoed under C, which
 #   is the same rule I18n.qml implements on the QML side.
-pkgrel=587
+pkgrel=588
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
