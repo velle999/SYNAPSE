@@ -766,6 +766,138 @@ shot 03j-album-chosen
 say back 0.6
 shot 03f-start-menu-closed
 
+# ── the settings pages, and a shelf that really goes away ───────────────────
+#
+# ⚠ THE ASSERTION IS THE SHELVES, NOT THE PANEL. A settings page that draws
+# nine rows and switches nothing is exactly what a grep of the QML would pass,
+# and it is the shape of every bug in this file's history: something that
+# reports success and does nothing. So this switches a shelf OFF and compares
+# the TILES either side of it — a picture that did not change is a switch that
+# did not work, whatever the row says.
+#
+# ⚠ AND IT PUTS IT BACK. Everything below counts rows and columns from a known
+# start; a run that left Games switched off would break every step after it
+# while looking like a navigation bug.
+say menu 0.8
+# Now Playing, Music Source, then Settings — one above the visualizer and three
+# above Desktop, so this is the last row an accept is safe on. See the warning
+# at the top of this section.
+say down; say down 0.5
+shot 03u-settings-row
+say accept 0.9
+shot 03v-settings-page        # Shelves / Start menu / Power
+say accept 0.9
+shot 03w-settings-shelves     # Running, Games, Recent, Play, Media, Apps, News
+
+# ⚠ B GOES UP ONE LEVEL, not out. These are the first pages two deep, and the
+# menu used to send every Back to the top page — which from here would look
+# like the button closing too much rather than going up.
+#
+# ⛔ ASSERTED THROUGH music.log AND NOT A SCREENSHOT, because the two answers
+# look almost identical and a picture of this screen is not stable enough to
+# tell them apart: the game art loads over the first seconds of a run, so two
+# shots of the same panel taken a few seconds apart differ in the tiles BEHIND
+# it. What separates the answers is what the next press does. Row 0 of the
+# settings page is Shelves and opens a page; row 0 of the MAIN page is Now
+# Playing and toggles the music. So an accept after this B either does nothing
+# to the player or writes a line — and the line is the failure.
+before=$(wc -l < "$TMP/music.log" 2>/dev/null || echo 0)
+say back 0.6
+shot 03x-settings-up-one      # …and this must be the settings page again
+say accept 0.9
+after=$(wc -l < "$TMP/music.log" 2>/dev/null || echo 0)
+if [ "$before" = "$after" ]; then
+    echo "settings: B went up one level, not out to the main page"
+else
+    echo "FAIL: B from Shelves landed on the main page — accept hit Now Playing" >&2
+    SETTINGS_FAILED=1
+fi
+
+# That accept opened Shelves again. Onto Games, and switch it off.
+say down 0.5                  # Running → Games
+say accept 1.2                # cycles it: on → off
+shot 03y-games-switched-off
+
+# Out of the menu entirely, to look at the tiles.
+say menu 0.9
+shot 03z-shelves-without-games
+if cmp -s "$OUT/03f-start-menu-closed.png" "$OUT/03z-shelves-without-games.png"; then
+    echo "FAIL: switching the Games shelf off changed NOTHING on screen" >&2
+    SETTINGS_FAILED=1
+else
+    echo "settings: the Games shelf went away"
+fi
+# And the file says so, which is the half a screenshot cannot see: a shelf gone
+# from the picture could be a shelf that failed to load.
+if grep -q '^show_games = off$' "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "settings: big.conf says show_games = off"
+else
+    echo "FAIL: big.conf did not record show_games = off" >&2
+    SETTINGS_FAILED=1
+fi
+
+# ⚠ PUT IT BACK, and prove the way back works too — a switch that only goes one
+# way is a shelf somebody loses for good from four metres away.
+say menu 0.8
+say down; say down 0.5
+say accept 0.9                # settings
+say accept 0.9                # shelves
+say down 0.5                  # Games
+say accept 1.2                # off → on
+say menu 0.9
+shot 03za-shelves-with-games-back
+# ⚠ AGAINST THE SHELF-OFF PICTURE, not against the one before any of this. The
+# game art loads over the first seconds of a run and the selection has moved
+# since, so "identical to how it started" is a comparison that fails for
+# reasons that have nothing to do with the switch. "Different from the picture
+# with Games missing" is the actual question.
+if cmp -s "$OUT/03z-shelves-without-games.png" \
+          "$OUT/03za-shelves-with-games-back.png"; then
+    echo "FAIL: switching Games back on changed NOTHING on screen" >&2
+    SETTINGS_FAILED=1
+else
+    echo "settings: the Games shelf came back"
+fi
+if grep -q '^show_games = on$' "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "settings: big.conf says show_games = on"
+else
+    echo "FAIL: big.conf did not record show_games = on" >&2
+    SETTINGS_FAILED=1
+fi
+
+# ── the Power page, and a row that is not a switch ──────────────────────────
+#
+# ⚠ THE ONE ROW HERE WITH THREE VALUES, which is the whole reason the shell
+# asks big.c for `next` instead of flipping a boolean. A page that can only
+# draw On and Off would show this row cycling between two of its three states
+# with the third unreachable, and nothing about the picture would say so.
+say menu 0.8
+say down; say down 0.5        # Settings
+say accept 0.9
+say down; say down 0.5        # Shelves → Start menu → Power
+say accept 0.9
+shot 03zb-settings-power      # Keep the screen awake · While playing
+say accept 1.0                # playing → always
+shot 03zc-power-cycled
+if grep -q '^keep_awake = always$' "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "settings: keep_awake cycled past its default to always"
+else
+    echo "FAIL: keep_awake did not cycle to always" >&2
+    SETTINGS_FAILED=1
+fi
+# ⚠ ROUND, not up. Three presses from `playing` must come back to `playing` —
+# a cycle that stops at the end of the list is a setting somebody can leave in
+# a state they cannot get out of without a keyboard.
+say accept 1.0                # always → never
+say accept 1.0                # never  → playing
+if grep -q '^keep_awake = playing$' "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "settings: three presses came back round to playing"
+else
+    echo "FAIL: keep_awake did not come back round to playing" >&2
+    SETTINGS_FAILED=1
+fi
+say menu 0.6                  # out, leaving nothing open for the blocks below
+
 # ── the visualizer, which must NOT survive coming back ──────────────────────
 #
 # ⚠ THE BUG THIS RELEASE EXISTS FOR: covered by the interface, projectM gets no
@@ -943,5 +1075,9 @@ echo "copied to $DEST"
 # output in the middle of eighty that nobody reads twice.
 if [ -n "${WHEEL_FAILED:-}" ]; then
     echo "RIG FAILED: see the wheel block" >&2
+    exit 1
+fi
+if [ -n "${SETTINGS_FAILED:-}" ]; then
+    echo "RIG FAILED: see the settings block" >&2
     exit 1
 fi

@@ -895,6 +895,18 @@ ShellRoot {
     readonly property var shelves: {
         const out = []
 
+        // ⚠ FILTERED ON THE WAY OUT, not at each push. Every shelf below is
+        // already conditional on having something in it, and threading a
+        // second condition through seven of them is seven places to forget
+        // one. The switch is asked by the shelf's English `title`, which is
+        // the identity this file already keeps the selection under — see
+        // shelfShown().
+        //
+        // ⚠ A SHELF SWITCHED OFF IS NOT DRAWN AND IS NOT NAVIGABLE, which is
+        // the same state an empty one is already in, so nothing downstream
+        // needed teaching: `rowTitle` remembers by name and comes back to the
+        // right row when it is switched on again.
+
         // What is already open goes FIRST, because it is the shelf somebody
         // pressing Guide came here for: they are not browsing, they are going
         // back to something. It is also the only shelf that can be empty and
@@ -949,7 +961,7 @@ ShellRoot {
             out.push({ title: "News", label: I18n.tr("News"),
                        kind: "news", items: shell.news })
 
-        return out
+        return out.filter(sh => shell.shelfShown(sh.title))
     }
 
     // ── what is playing ─────────────────────────────────────────────────────
@@ -1233,6 +1245,133 @@ ShellRoot {
         }
     }
 
+    // ── the settings pages ──────────────────────────────────────────────────
+    //
+    // ⚠ THE SHELL KNOWS NOTHING ABOUT WHAT A SETTING CAN BE. Every row here is
+    // an id, a word, and the word its current value goes by; pressing A sends
+    // `big settings <id> next` and reads the list again. So a switch and a
+    // three-way choice are the same row to this file, and a setting that grows
+    // a fourth value grows it in big.c alone — there is no list of values here
+    // to fall out of step with the one that enforces them.
+    //
+    // ⚠ AND THE VALUE IS CARRIED TWICE, as `value` and `valuelabel`. `value`
+    // is the English id this file MATCHES on — `on`, `playing` — and the label
+    // is the word it DRAWS. Reading the drawn word would work in English and
+    // hide every shelf on a German television.
+    property var settingItems: []
+
+    Process {
+        id: settingsProc
+        command: [shell.bin, "big", "settings", "--rec"]
+        // ⚠ AT STARTUP, not when a settings page is first opened. Two things
+        // read this before anybody has been near the menu: which shelves are
+        // drawn, and whether the screen is being held awake. Loading it lazily
+        // would draw every shelf for the first frames of every session and
+        // then take some away, which is the one thing a launcher must not do
+        // while somebody is already reaching for a tile.
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.settingItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, kind: "setting",
+                    // i18n-dynamic: settings[].label is N_() in src/big.c
+                    name: I18n.tr(r.label),
+                    group: r.group,
+                    value: r.value,
+                    // i18n-dynamic: set_onoff[]/set_awake[] are N_() in src/big.c
+                    valueLabel: I18n.tr(r.valuelabel)
+                }))
+                shell.menuBusy = ""
+            }
+        }
+    }
+
+    function refreshSettings() {
+        if (!settingsProc.running) settingsProc.running = true
+    }
+
+    /*
+     * What one setting is set to, as its ENGLISH id.
+     *
+     * ⚠ "" until `big settings` has answered, and every caller has to treat
+     * that as "not yet" rather than as a value. Comparing it to a value id is
+     * safe — nothing equals "" — which is why this returns the empty string
+     * rather than guessing the default: a guess would be a policy applied for
+     * a second at every startup and then changed, which for the idle inhibitor
+     * means an inhibitor taken and dropped on every launch.
+     */
+    function settingValue(id) {
+        const hit = shell.settingItems.filter(x => x.id === id)
+        return hit.length ? hit[0].value : ""
+    }
+
+    /*
+     * ── Keeping the screen awake ────────────────────────────────────────────
+     *
+     * ⚠ NOT AN IDLE MACHINE OF ITS OWN. synui has one — dim, saver, blank,
+     * lock, suspend — and every stage of it asks first whether anything holds
+     * a Wayland idle inhibitor. This decides whether big screen mode is one of
+     * the things holding one; the timeouts stay the desktop's, which is the
+     * same rule the Sleep tile follows in running `systemctl suspend` rather
+     * than reimplementing it.
+     *
+     * ⚠ TWO CASES THAT NOTHING ELSE COVERS, and they are why `playing` is the
+     * default rather than `never`:
+     *
+     *   · MUSIC THROUGH cliamp HAS NO SURFACE. It is a headless player driven
+     *     over a socket — no window, no MPRIS inhibit, nothing for the
+     *     compositor to notice — so the desktop dims, blanks and eventually
+     *     suspends in the middle of an album. Firefox and mpv hold their own
+     *     inhibitor through org.freedesktop.ScreenSaver; this one cannot.
+     *
+     *   · A GAMEPAD IS NOT WAYLAND INPUT. A controller-only game is read from
+     *     evdev by this package's own nav stream; the compositor sees no
+     *     pointer and no key for as long as somebody plays, and counts the
+     *     whole session as idle. `away` is true for exactly that time.
+     *
+     * ⚠ `mediaState` IS STALE WHILE AWAY — it is polled only while the
+     * launcher is on screen — which is why `away` is asked FIRST and not
+     * anded with it. Stepped aside, the fact that something is up is the
+     * answer; the poll would be answering about the moment before it left.
+     */
+    readonly property bool keepAwake: {
+        const v = shell.settingValue("keep_awake")
+        if (v === "always") return true
+        if (v === "never") return false
+        if (v === "") return false		// not read yet — see settingValue
+        return shell.away || shell.mediaState === "playing"
+    }
+
+    Process {
+        id: awakeProc
+        command: [shell.bin, "big", "awake"]
+        // ⚠ A BINDING, never an assignment. `running = true` on a Process that
+        // is already running is a silent no-op in quickshell; a binding is
+        // what makes the inhibitor follow the policy in both directions.
+        running: shell.keepAwake
+    }
+
+    /*
+     * Is a shelf switched on?
+     *
+     * ⚠ ASKED BY THE SHELF'S OWN ENGLISH `title`, which is the identity this
+     * file already keeps a selection under — see rowTitle and colKey(). The
+     * settings ids are `show_` plus that word, lower-cased, so there is one
+     * spelling of "the Games shelf" on both sides rather than a mapping table
+     * that can drift.
+     *
+     * ⚠ AND AN UNANSWERED QUESTION IS YES. `settingItems` is empty for the
+     * first frames of every session, before `big settings` has replied, and a
+     * launcher that starts by drawing nothing and fills in a moment later is
+     * indistinguishable from one that failed to start.
+     */
+    function shelfShown(title) {
+        if (!shell.settingItems.length) return true
+        const want = "show_" + String(title).toLowerCase()
+        const hit = shell.settingItems.filter(x => x.id === want)
+        return !hit.length || hit[0].value === "on"
+    }
+
     function refreshSources() {
         if (!sourcesProc.running) sourcesProc.running = true
     }
@@ -1267,12 +1406,56 @@ ShellRoot {
     // list on a different page rather than a second panel: one delegate, one
     // set of keys, and a d-pad that cannot end up driving the thing underneath.
     property string menuPage: "main"	// main | source | albums | yt | ytmine
+					// settings | set-display | set-menu
+					// | set-power
+
+    /*
+     * ⚠ WHICH PAGE IS ABOVE WHICH — because Back used to mean "main" and the
+     * settings pages are the first ones two levels deep. From Shelves, a Back
+     * that went straight out would skip the page it was opened from, which
+     * reads as the button having closed too much rather than gone up.
+     *
+     * A page not named here is one level down from main, which is what every
+     * music page was and still is.
+     */
+    readonly property var menuUp: ({
+        "set-display": "settings",
+        "set-menu":    "settings",
+        "set-power":   "settings"
+    })
 
     readonly property var menuItems: {
         if (shell.menuPage === "source") return shell.sourceItems
         if (shell.menuPage === "albums") return shell.albumItems
         if (shell.menuPage === "yt") return shell.ytItems
         if (shell.menuPage === "ytmine") return shell.ytMineItems
+
+        // ⚠ THREE PAGES AND NOT ONE LIST, and the panel's own heading strip is
+        // why. Ten rows of "Games · On" with nothing between the shelves and
+        // the power setting is a list where every row looks like every other
+        // one from four metres; a page per group puts the group's name in the
+        // heading that is already drawn above the rows, and costs no new
+        // furniture at all. It also makes each page short enough not to
+        // scroll, which is the difference between a d-pad walking a list and
+        // a d-pad hunting one.
+        if (shell.menuPage === "settings")
+            return [
+                { id: "set-display", kind: "page", page: "set-display",
+                  name: I18n.tr("Shelves"),
+                  note: I18n.tr("Which rows the television shows") },
+                { id: "set-menu", kind: "page", page: "set-menu",
+                  name: I18n.tr("Start menu"),
+                  note: I18n.tr("What this menu offers") },
+                { id: "set-power", kind: "page", page: "set-power",
+                  name: I18n.tr("Power"),
+                  note: I18n.tr("Whether the screen is allowed to sleep") }
+            ]
+        if (shell.menuPage === "set-display")
+            return shell.settingItems.filter(x => x.group === "display")
+        if (shell.menuPage === "set-menu")
+            return shell.settingItems.filter(x => x.group === "menu")
+        if (shell.menuPage === "set-power")
+            return shell.settingItems.filter(x => x.group === "power")
 
         const out = []
         if (shell.musicLive)
@@ -1283,6 +1466,12 @@ ShellRoot {
                        name: I18n.tr("Music Source"),
                        note: shell.musicSourceName
                              ? "· " + shell.musicSourceName : "" })
+        // ⚠ ABOVE the system rows, and above the way out in particular.
+        // Desktop and Quit are the last two things on this menu and they are
+        // where a hand goes without looking; a page opened by mistake on the
+        // way to Quit is a page somebody has to find their way back out of.
+        out.push({ id: "settings", kind: "page", page: "settings",
+                   name: I18n.tr("Settings"), note: "" })
         return out.concat(shell.byShelf("system"))
     }
 
@@ -1304,6 +1493,13 @@ ShellRoot {
             shell.ytItems = []
             if (!ytProc.running) ytProc.running = true
         }
+        // ⚠ RE-READ ON EVERY OPEN, not cached from the last time. big.conf is
+        // a file, and `syn-arcade big settings` at a prompt is a supported way
+        // to change one — a menu showing what it read half an hour ago is the
+        // same fault the Now Playing row has a comment about.
+        if (page === "set-display" || page === "set-menu"
+            || page === "set-power")
+            shell.refreshSettings()
         if (page === "ytmine") {
             // ⚠ THIS ONE REALLY DOES CROSS THE INTERNET — yt-dlp asking
             // YouTube what the account has — so it is said out loud for the
@@ -1964,6 +2160,39 @@ ShellRoot {
         shell.menuIndex = Math.max(0, Math.min(n - 1, shell.menuIndex + d))
     }
 
+    /*
+     * Pressing A on a settings row: the next value round.
+     *
+     * ⚠ THE CYCLING IS big.c's, and asking for `next` rather than sending a
+     * value is what keeps it there. This file does not know that `keep_awake`
+     * has three values and `show_news` two, so it cannot get that wrong, and a
+     * row added to the table in C appears here working with no change at all.
+     *
+     * ⚠ GUARDED ON `running`, like chooseSource above it. Setting `running =
+     * true` on a quickshell Process that is already running is a SILENT no-op,
+     * and a settings row is exactly the sort of thing somebody presses twice
+     * in a second to see it move.
+     *
+     * ⚠ AND THE APPS ARE READ AGAIN AFTERWARDS, not just the settings. The
+     * Start menu's own rows are `big apps` output — the visualizer and the
+     * three power actions are gated in apps_table() — so switching one off
+     * changes a list this file holds a copy of. Without this the row would
+     * flip to Off and the thing it hides would still be on the menu behind it.
+     */
+    function cycleSetting(it) {
+        if (settingSetProc.running) return
+        settingSetProc.command = [shell.bin, "big", "settings", it.id, "next"]
+        settingSetProc.running = true
+    }
+
+    Process {
+        id: settingSetProc
+        onExited: {
+            shell.refreshSettings()
+            if (!appsProc.running) appsProc.running = true
+        }
+    }
+
     // ── choosing a source, and picking an album ─────────────────────────────
     //
     // Both are one command that takes a couple of seconds — the player is
@@ -2129,6 +2358,10 @@ ShellRoot {
         if (it.kind === "page") {
             shell.openMenuPage(it.page)
             return
+        }
+        if (it.kind === "setting") {
+            shell.cycleSetting(it)
+            return				// stays open, like the transport
         }
         if (it.kind === "source") {
             shell.chooseSource(it)
@@ -2310,7 +2543,7 @@ ShellRoot {
             // browses twice.
             case "back":
                 if (shell.menuPage !== "main") {
-                    shell.menuPage = "main"
+                    shell.menuPage = shell.menuUp[shell.menuPage] || "main"
                     shell.menuIndex = 0
                 } else {
                     shell.menuOpen = false
@@ -3859,9 +4092,23 @@ ShellRoot {
                     // ⚠ AND ON THE STATIONS PAGE, for the same reason and more
                     // so: a station's name is whatever YouTube calls the thing,
                     // which is routinely a sentence.
+                    //
+                    // ⚠ AND ON THE SETTINGS PAGES, for a different reason: two
+                    // columns rather than one long name. "Keep the screen
+                    // awake" beside "While playing" is a label and a value
+                    // competing for one panel's width, and at 0.42 the label
+                    // elided to "Keep the screen a…" — which is a setting
+                    // nobody can read the name of. All four of them, not just
+                    // the two that need it: a panel that changes width as you
+                    // step between sibling pages reads as the interface
+                    // flinching.
                     readonly property bool wideMenu: shell.menuPage === "albums"
                                                      || shell.menuPage === "yt"
                                                      || shell.menuPage === "ytmine"
+                                                     || shell.menuPage === "settings"
+                                                     || shell.menuPage === "set-display"
+                                                     || shell.menuPage === "set-menu"
+                                                     || shell.menuPage === "set-power"
                     width: Math.min(parent.width * (wideMenu ? 0.60 : 0.42),
                                     win.u * (wideMenu ? 34 : 24))
                     height: menuCol.implicitHeight + win.u * 2.4
@@ -3886,6 +4133,15 @@ ShellRoot {
                                 if (shell.menuPage === "albums") return I18n.tr("PLEX ALBUMS")
                                 if (shell.menuPage === "yt") return I18n.tr("YOUTUBE MUSIC")
                                 if (shell.menuPage === "ytmine") return I18n.tr("YOUR PLAYLISTS")
+                                // ⚠ THE HEADING IS WHAT MAKES THE SETTINGS
+                                // PAGES READABLE. Each one is a list of short
+                                // rows that say a word and a value; without
+                                // the group's name above them, "Games · On"
+                                // and "Visualizer · On" are the same row.
+                                if (shell.menuPage === "settings") return I18n.tr("SETTINGS")
+                                if (shell.menuPage === "set-display") return I18n.tr("SHELVES")
+                                if (shell.menuPage === "set-menu") return I18n.tr("START MENU")
+                                if (shell.menuPage === "set-power") return I18n.tr("POWER")
                                 return shell.musicLive ? I18n.tr("NOW PLAYING")
                                                        : I18n.tr("SYSTEM")
                             }
@@ -3940,6 +4196,16 @@ ShellRoot {
 
                                 readonly property bool isMusic:
                                     entry.modelData.kind === "music"
+
+                                // A settings row says a word and what it is
+                                // set to. The value goes on the RIGHT rather
+                                // than on the note line under the label: this
+                                // is the one page where every row carries the
+                                // same kind of second fact, and a column of
+                                // them is read down in one movement where nine
+                                // stacked pairs are read one pair at a time.
+                                readonly property bool isSetting:
+                                    entry.modelData.kind === "setting"
 
                                 // A row carries a second line when it has
                                 // something to say about itself: an album's
@@ -4086,8 +4352,21 @@ ShellRoot {
                                         // three near-identical drawings would
                                         // be three things to keep in step.
                                         const k = entry.modelData.kind
-                                        if (k === "music" || k === "page"
-                                            || k === "source" || k === "album")
+                                        // ⚠ `page` IS NOT ENOUGH ON ITS OWN
+                                        // ANY MORE. It meant "the music source
+                                        // page" for as long as that was the
+                                        // only page there was, and the settings
+                                        // pages arriving as `page` rows put a
+                                        // music note beside Shelves, Start menu
+                                        // and Power. The music glyph belongs to
+                                        // the music pages; a settings row has
+                                        // no icon and simply leaves the column
+                                        // empty, which the Image below is
+                                        // already built for.
+                                        if (k === "music" || k === "source"
+                                            || k === "album"
+                                            || (k === "page"
+                                                && entry.modelData.page === "source"))
                                             return shell.musicIcon
                                                    ? "file://" + shell.musicIcon : ""
                                         return entry.modelData.iconfile
@@ -4106,12 +4385,44 @@ ShellRoot {
                                 // width, so a machine missing one glyph keeps
                                 // its menu in a column instead of shuffling
                                 // one row left.
+                                // ⚠ ANCHORED TO `entry` AND SIZED BY ITS OWN
+                                // TEXT, so the label beside it can subtract a
+                                // width that exists. A value drawn in the same
+                                // Column as the label would be the second line
+                                // this page does not want; drawn over it, the
+                                // longer labels would run under it.
+                                Text {
+                                    id: entryValue
+                                    visible: entry.isSetting
+                                    anchors.right: entry.right
+                                    anchors.rightMargin: win.u * 0.7
+                                    anchors.verticalCenter: entryText.verticalCenter
+                                    text: entry.isSetting
+                                          ? String(entry.modelData.valueLabel || "")
+                                          : ""
+                                    // The VALUE is what somebody came to this
+                                    // row to read, so it is the bright half —
+                                    // the label is already known to whoever
+                                    // navigated to it.
+                                    color: entry.chosen ? win.accent : win.ink
+                                    font.pixelSize: win.u * 1.0
+                                    font.family: shell.uiFont
+                                    font.bold: entry.chosen
+                                }
+
                                 Column {
                                     id: entryText
                                     anchors.left: entryIcon.right
                                     anchors.leftMargin: win.u * 0.7
                                     anchors.right: entry.right
+                                    // ⚠ Room for the value when there is one.
+                                    // `Running` and `Sleep, restart and power
+                                    // off` are the same column, and the long
+                                    // one elides into the short one's value
+                                    // without this.
                                     anchors.rightMargin: win.u * 0.7
+                                        + (entry.isSetting
+                                           ? entryValue.width + win.u * 0.7 : 0)
                                     // One anchor with a computed margin rather
                                     // than two conditional ones: an ordinary
                                     // row centres, and the music row sits up

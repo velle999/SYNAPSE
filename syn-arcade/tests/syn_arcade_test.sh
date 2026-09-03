@@ -5452,6 +5452,103 @@ fi
 rm -f "$BGH/syn-arcade/big.conf"
 
 echo
+echo "── settings: what the television shows, and the power row ──"
+#
+# The page behind Start ▸ Settings. The shell draws whatever this table says,
+# presses `next` and reads it again, so everything about what a setting IS
+# lives here — which is what these assertions are for.
+
+st() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big settings "$@" 2>&1; }
+strec() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big settings --rec 2>/dev/null; }
+sysrows() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big apps --rec 2>/dev/null \
+            | awk -F'\t' '$6 == "system" {print $1}'; }
+
+rm -f "$BGH/syn-arcade/big.conf"
+
+# ⚠ EVERY SHELF ON, WITH NOTHING WRITTEN. A launcher whose first run hides half
+# of itself is one nobody finds the settings page to fix.
+offbydefault=$(strec | tail -n +2 | awk -F'\t' '$1 ~ /^show_/ && $5 != "on"')
+[ -z "$offbydefault" ] \
+    && ok "every shelf and menu row is on with no config written" \
+    || bad "something is off by default: $offbydefault"
+
+[ "$(st keep_awake)" = playing ] \
+    && ok "keep_awake defaults to 'playing', not 'always'" \
+    || bad "keep_awake defaulted to $(st keep_awake)"
+
+# ⛔ THE IDS AND THE VALUES STAY ENGLISH; the two label columns are what gets
+# drawn. i18n_test.sh proves the record does not move under a foreign locale;
+# this proves the record carries BOTH halves, because a shell given only the
+# label has nothing to send back and one given only the id has nothing to draw.
+head1=$(strec | head -1)
+[ "$head1" = "$(printf 'id\tlabel\tgroup\tgrouplabel\tvalue\tvaluelabel')" ] \
+    && ok "the record names all six columns" \
+    || bad "unexpected header: $head1"
+
+# ── cycling ────────────────────────────────────────────────────────────────
+#
+# ⚠ `next` IS WHAT THE TELEVISION PRESSES. The shell does not know that
+# keep_awake has three values and show_news two — it sends `next` and redraws —
+# so a cycle that ran off the end would be a setting somebody could not get out
+# of without a keyboard.
+[ "$(st show_news next)" = off ] && ok "next flips a switch off" \
+    || bad "show_news next did not go off"
+[ "$(st show_news next)" = on ] && ok "…and round again" \
+    || bad "show_news did not come back on"
+
+[ "$(st keep_awake next)" = always ] || bad "keep_awake: playing → always"
+[ "$(st keep_awake next)" = never ] || bad "keep_awake: always → never"
+[ "$(st keep_awake next)" = playing ] \
+    && ok "a three-value row cycles round rather than stopping at the end" \
+    || bad "keep_awake did not come back round to playing"
+
+# ⚠ A VALUE THE TABLE DOES NOT KNOW READS AS THE DEFAULT. big.conf is a file
+# people edit; the alternative to falling back is a shelf that is neither on
+# nor off, which draws as nothing and cannot be switched back on from a sofa.
+printf 'show_news = yes\n' > "$BGH/syn-arcade/big.conf"
+[ "$(st show_news)" = on ] \
+    && ok "a hand-edited value nothing recognises reads as the default" \
+    || bad "show_news = yes read back as $(st show_news)"
+rm -f "$BGH/syn-arcade/big.conf"
+
+st nonsense on >/dev/null 2>&1; [ $? = 2 ] \
+    && ok "an unknown setting is refused with status 2" \
+    || bad "an unknown setting was not refused"
+# ⚠ CAPTURED FIRST. This command is EXPECTED to exit 2, so `st … | grep` would
+# report the refusal's own status rather than grep's verdict — which is what
+# says() exists for. See the header.
+says st keep_awake sometimes > "$T/setting-bad.txt"
+has 'never, playing, always' "$T/setting-bad.txt" \
+    && ok "…and a bad value names the legal ones" \
+    || bad "a bad value did not list what is allowed: $(cat "$T/setting-bad.txt")"
+
+# ── the Start menu's own rows ───────────────────────────────────────────────
+#
+# ⛔ THE WAY OUT HAS NO SWITCH. Desktop and Quit are how somebody leaves a
+# full-screen surface that owns the keyboard, and on a gamepad there is no key
+# combination to fall back on — so they must survive every setting being off.
+st show_power off >/dev/null
+st show_visualizer off >/dev/null
+sysrows > "$T/sysrows-off.txt"
+if has -Fx desktop "$T/sysrows-off.txt" && has -Fx quit "$T/sysrows-off.txt"; then
+    ok "Desktop and Quit survive every switch being off"
+else
+    bad "the way out went away: $(tr '\n' ' ' < "$T/sysrows-off.txt")"
+fi
+if has -E '^(sleep|restart|poweroff)$' "$T/sysrows-off.txt"; then
+    bad "show_power off left a power row on the menu: $(tr '\n' ' ' < "$T/sysrows-off.txt")"
+else
+    ok "show_power off takes all three power rows off the menu"
+fi
+
+st show_power on >/dev/null
+sysrows > "$T/sysrows-on.txt"
+has -Fx poweroff "$T/sysrows-on.txt" \
+    && ok "…and switching it back on brings them back" \
+    || bad "the power rows did not come back"
+rm -f "$BGH/syn-arcade/big.conf"
+
+echo
 echo "── the remote ──"
 #
 # ⛔ BACK IS NOT ESCAPE. Escape quits deliberately — somebody at a keyboard has

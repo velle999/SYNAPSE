@@ -1162,7 +1162,60 @@ pkgver=0.1.0
 #   ⚠ An unknown Qt.Key_* in QML is `undefined`, and `case undefined:` never
 #   matches an integer — a dead branch that raises nothing. The suite checks
 #   every one of them against Qt's own qnamespace.h.
-pkgrel=52
+# 53: THE TELEVISION HAS SETTINGS, AND STOPS BLANKING IN THE MIDDLE OF THINGS.
+#
+#   Start ▸ Settings, three pages, every row a press of A. Which shelves the
+#   television draws (Running, Games, Recent, Play, Media, Apps, News), what
+#   the Start menu itself offers, and whether the screen is allowed to sleep.
+#   `syn-arcade big settings` is the same thing at a prompt, and all of it is
+#   big.conf.
+#
+#   ⚠ THE SHELL LEARNS NOTHING ABOUT WHAT A SETTING CAN BE. Every row is an id,
+#   a word and the word its value goes by; A sends `big settings <id> next` and
+#   the list is read again. So a switch and a three-way choice are the same row
+#   in the QML, and a setting that grows a fourth value grows it in big.c
+#   alone. There is no list of values in the shell to fall out of step.
+#
+#   ⛔ THE WAY OUT HAS NO SWITCH. Desktop and Quit survive every setting being
+#   off, and the suite asserts it. This is a full-screen surface holding the
+#   keyboard, and on a gamepad there is no key combination to fall back on — a
+#   setting able to hide the exit is one able to trap somebody in front of
+#   their own television. Sleep, restart and power off are hideable BECAUSE
+#   leaving is still there when they are gone.
+#
+#   Power, which is the half that was missing rather than merely unreachable.
+#   `keep_awake = never | playing | always`, defaulting to `playing`, and it
+#   holds a Wayland idle inhibitor through synui's own synui-idle-inhibit.
+#   ⚠ NOT A SECOND IDLE MACHINE. Dim, blank, lock and suspend stay synui's, and
+#   every stage of that already asks whether anything holds an inhibitor — the
+#   same rule the Sleep tile follows in running `systemctl suspend` rather than
+#   reimplementing it. Timeouts here would be the couch and the desk drifting
+#   apart.
+#   ⚠ TWO CASES NOTHING ELSE COVERS, which is why the default is not `never`:
+#   cliamp is a HEADLESS player with no surface and no MPRIS inhibit, so the
+#   machine dims and suspends in the middle of an album; and a gamepad is not
+#   Wayland input, so a controller-only game is read from evdev by this package
+#   while the compositor counts the whole session as idle.
+#   ⚠ RELEASED BY EXITING, never by being told to stop. `big awake` holds the
+#   helper's stdin open and the helper exits on EOF, so a SIGKILL it cannot
+#   catch releases the inhibitor too — asserted both ways. A helper that had to
+#   be told would leave a machine that never sleeps again after one crash.
+#   ⚠ AND NO access() IN FRONT OF THE fork. Checking the helper's name and then
+#   execl'ing the same name resolves it twice, which check-toctou.sh refuses —
+#   and the check could report nothing the failed exec does not. 127 from the
+#   child is the answer to missing, not-executable and a failed exec alike.
+#
+#   ⚠ `page` WAS NOT ENOUGH ON ITS OWN ANY MORE. It meant "the music source
+#   page" for as long as that was the only page there was, so the settings
+#   pages arriving as `page` rows put a music note beside Shelves and Power.
+#   Found by the rig's screenshots, not by a grep.
+#
+#   ⚠ AND B NOW GOES UP ONE LEVEL. These are the first pages two deep, and
+#   Back sent every one of them to the top — which from Shelves reads as the
+#   button having closed too much. Asserted through music.log rather than a
+#   screenshot: row 0 of the settings page opens a page and row 0 of the main
+#   page toggles the player, so the wrong answer writes a line.
+pkgrel=53
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

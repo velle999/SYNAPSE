@@ -686,6 +686,9 @@ static int big_games(bool rec, bool all)
  * page rather than a program, and the cache that says which page. */
 static int big_stop(void);
 static int big_open(const char *url, bool wait_for_it);
+/* Whether a shelf or a Start menu row is switched on — the settings table is
+ * further down this file, and apps_table() is the first thing that asks. */
+static bool setting_shown(const char *key);
 static bool media_url(const char *id, char *out, size_t n);
 
 static bool have(const char *prog)
@@ -1562,7 +1565,7 @@ static int apps_table(struct row *rows, int max)
 	 * while something else is already playing. It needs help filling the
 	 * screen: projectM opens a 512x512 window by default, which on a
 	 * television is a stamp in the middle of a wall. */
-	if (visualizer_prog())
+	if (visualizer_prog() && setting_shown("show_visualizer"))
 		rows[n++] = (struct row){ "visualizer", "Visualizer",
 			"syn-arcade big visualizer", "visualizer", "app",
 			"system", false, false, true, true };
@@ -1588,12 +1591,27 @@ static int apps_table(struct row *rows, int max)
 		"system", false, false, false, false };
 	rows[n++] = (struct row){ "quit", "Quit", "", "quit", "action",
 		"system", false, false, false, false };
-	rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
-		"sleep", "action", "system", false, false, false, false };
-	rows[n++] = (struct row){ "restart", "Restart", "systemctl reboot",
-		"restart", "action", "system", false, false, false, false };
-	rows[n++] = (struct row){ "poweroff", "Power off", "systemctl poweroff",
-		"poweroff", "action", "system", false, false, false, false };
+
+	/* ⛔ THE THREE THAT CAN BE SWITCHED OFF, AND THE TWO ABOVE THAT CANNOT.
+	 * Desktop and Quit are the way out of a full-screen surface that owns
+	 * the keyboard, and on a gamepad there is no key combination to fall
+	 * back on — a setting able to hide them would be a setting able to trap
+	 * somebody in front of their own television. These three are safe to
+	 * hide because leaving is still there when they are gone, and a machine
+	 * somebody else's children can reach is the case they are hidden for.
+	 *
+	 * Settings itself is drawn by the shell rather than emitted here: it is
+	 * a page of this menu and not a tile, so it has no command to run and
+	 * nothing for `big run` to do with it. */
+	if (setting_shown("show_power")) {
+		rows[n++] = (struct row){ "sleep", "Sleep", "systemctl suspend",
+			"sleep", "action", "system", false, false, false, false };
+		rows[n++] = (struct row){ "restart", "Restart", "systemctl reboot",
+			"restart", "action", "system", false, false, false, false };
+		rows[n++] = (struct row){ "poweroff", "Power off",
+			"systemctl poweroff", "poweroff", "action", "system",
+			false, false, false, false };
+	}
 
 	return n;
 }
@@ -8712,6 +8730,345 @@ static int big_background(const char *want, bool rec, bool path_only)
 }
 
 /*
+ * `big awake` — hold the screen awake for as long as this process lives.
+ *
+ * ⚠ NOT A SECOND IDLE MACHINE, and that is the whole design. synui already has
+ * one — dim, saver, blank, lock, suspend, in power.c — and it already asks a
+ * single question before every stage of it: is anything holding a Wayland idle
+ * inhibitor. Firefox and mpv hold one through the org.freedesktop.ScreenSaver
+ * bus name; this holds the same one through the Wayland protocol, so a
+ * television showing a film and a browser playing one look identical to the
+ * compositor. Big screen mode gets a say in whether the desktop's timeouts run.
+ * It does not get timeouts of its own, or the couch and the desk drift apart.
+ *
+ * ⚠ THE INHIBITOR IS SYNUI'S HELPER AND NOT A REIMPLEMENTATION.
+ * /usr/lib/synui/synui-idle-inhibit binds zwp_idle_inhibit_manager_v1, creates
+ * an unmapped surface and holds an inhibitor while its stdin says so. Writing
+ * a '1' and then simply never closing the pipe is the whole protocol; it exits
+ * on EOF, which is what makes this self-cleaning — whatever kills `big awake`,
+ * including a SIGKILL it cannot catch, closes the pipe and releases the
+ * inhibitor. A helper that had to be told to stop would leave a machine that
+ * never sleeps again after a crash.
+ *
+ * ⛔ AND THE HELPER'S ABSENCE IS SAID OUT LOUD. It ships with synui, and on a
+ * machine where it is missing the honest answer is an error on stderr and a
+ * non-zero exit — not a process that sits there holding nothing while the
+ * setting reads On. That answer comes from the child's exit status rather than
+ * an access() check in front of the fork: checking the name and then execl'ing
+ * the same name resolves it twice, which is the check-then-use the repo's own
+ * pre-commit hook refuses, and the check could report nothing the failed exec
+ * does not.
+ */
+#define SYNUI_IDLE_INHIBIT "/usr/lib/synui/synui-idle-inhibit"
+
+static int big_awake(void)
+{
+	int fds[2];
+	if (pipe(fds) != 0) {
+		fprintf(stderr, "syn-arcade: pipe: %s\n", strerror(errno));
+		return EX_FAIL;
+	}
+
+	pid_t pid = fork();
+	if (pid < 0) {
+		fprintf(stderr, "syn-arcade: fork: %s\n", strerror(errno));
+		close(fds[0]);
+		close(fds[1]);
+		return EX_FAIL;
+	}
+	if (pid == 0) {
+		close(fds[1]);
+		if (dup2(fds[0], STDIN_FILENO) < 0)
+			_exit(127);
+		close(fds[0]);
+		execl(SYNUI_IDLE_INHIBIT, SYNUI_IDLE_INHIBIT, (char *)NULL);
+		_exit(127);
+	}
+
+	close(fds[0]);
+	/* ⚠ The '1' is written and the write end stays OPEN. Closing it here
+	 * would be an EOF, and the helper would exit having inhibited nothing
+	 * for a few microseconds. */
+	if (write(fds[1], "1", 1) != 1) {
+		fprintf(stderr, "syn-arcade: write: %s\n", strerror(errno));
+		kill(pid, SIGTERM);
+		waitpid(pid, NULL, 0);
+		close(fds[1]);
+		return EX_FAIL;
+	}
+
+	/* ⚠ SIGPIPE IGNORED, because the pipe this process holds is one whose
+	 * reader can die first — a compositor restart takes the helper with it.
+	 * The default disposition would kill this process silently, and the
+	 * shell would see its inhibitor Process exit with no way to tell that
+	 * from a clean stop. waitpid answers instead, and the exit code says
+	 * which it was. */
+	signal(SIGPIPE, SIG_IGN);
+
+	int st = 0;
+	while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+		;
+	close(fds[1]);
+
+	/* ⚠ ASKED OF THE EXIT STATUS AND NOT OF access() FIRST. An access()
+	 * check here would be a name resolved twice — once to decide the helper
+	 * is there and once by execl to run it — which is the check-then-use
+	 * tools/check-toctou.sh refuses, and it would buy nothing: the only
+	 * thing it could report is what a failed exec reports anyway. 127 is
+	 * the child's own answer to every way this can go wrong — missing, not
+	 * executable, or an exec that failed — and naming the path covers all
+	 * three for somebody reading a log. */
+	if (WIFEXITED(st) && WEXITSTATUS(st) == 127) {
+		fprintf(stderr, _("syn-arcade: could not run %s — the screen "
+			"cannot be held awake without synui's idle-inhibit "
+			"helper\n"), SYNUI_IDLE_INHIBIT);
+		return EX_FAIL;
+	}
+	return EX_OK;
+}
+
+/*
+ * ── Settings: what the television SHOWS, and what it does about POWER ───────
+ *
+ * Everything here is one table. A setting is an id, a label, the group it is
+ * drawn under, and the values it can take — and every one of them cycles,
+ * because the only input this has to work with is a d-pad and an A button four
+ * metres away. There are no sliders and no text entry on a television.
+ *
+ * ⛔ THE IDS ARE ENGLISH AND THE LABELS ARE MARKED, and they are separate
+ * fields even where they read alike. `show_news` is a big.conf key and `News`
+ * is a word on a screen; `always` is a value `big settings keep_awake always`
+ * takes back and "Always" is what the row says. Marking one array would put
+ * the key in the catalog and give a German television a setting no command
+ * accepts — the same fault hud_positions[] had. See include/i18n.h.
+ *
+ * ⚠ THE SHELL NEVER LEARNS WHAT THE VALUES ARE. It draws the label it is given
+ * and presses `big settings <id> next`, which cycles here. So a setting that
+ * grows a fourth value grows it in this file alone, and a two-value switch and
+ * a three-value choice are the same row to the shell — there is no separate
+ * "toggle" path to keep in step.
+ */
+struct set_val {
+	const char *id;		/* what big.conf stores — English, always */
+	const char *label;	/* N_() — the shell translates at the draw site */
+};
+
+/* on/off, spelled once: most of these are switches and all of them share it. */
+static const struct set_val set_onoff[] = {
+	{ "on",  N_("On")  },
+	{ "off", N_("Off") },
+};
+
+/*
+ * ⚠ `playing` IS THE DEFAULT AND `always` IS NOT, and the difference is a
+ * television left showing a menu all night. An inhibitor held for as long as
+ * big screen is on screen is one held by a launcher nobody is watching, which
+ * is how a machine that should have slept at midnight is warm at eight.
+ */
+static const struct set_val set_awake[] = {
+	{ "never",   N_("Never")         },
+	{ "playing", N_("While playing") },
+	{ "always",  N_("Always")        },
+};
+
+struct setting {
+	const char *id;			/* the big.conf key */
+	const char *label;		/* N_() */
+	const char *group;		/* an id: display | menu | power */
+	const char *group_label;	/* N_() */
+	const struct set_val *vals;
+	int nvals;
+	const char *dflt;		/* one of vals[].id */
+};
+
+#define SET_SWITCH set_onoff, (int)(sizeof(set_onoff) / sizeof(set_onoff[0]))
+
+/*
+ * ⚠ THE SHELF IDS ARE THE ONES THE SHELL ALREADY KNOWS. `running`, `games`,
+ * `recent`, `play`, `media`, `apps` and `news` are the shelf titles in
+ * syn-arcade-big.qml — the English `title` field, not the drawn `label` — so
+ * the shell can ask "is this shelf on" with the identity it already holds
+ * rather than a second spelling that can drift out of step with it.
+ *
+ * ⚠ AND THE WAY OUT IS NOT ON THIS LIST. Desktop and Quit have no switch and
+ * must not have one: they are how somebody leaves a full-screen surface that
+ * owns the keyboard, and a setting that can hide the exit is a setting that
+ * can trap a person in front of their own television. Sleep, restart and power
+ * off can go, because leaving is still there when they do.
+ */
+static const struct setting settings[] = {
+	{ "show_running", N_("Running"), "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_games",   N_("Games"),   "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_recent",  N_("Recent"),  "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_play",    N_("Play"),    "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_media",   N_("Media"),   "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_apps",    N_("Apps"),    "display", N_("Shelves"), SET_SWITCH, "on" },
+	{ "show_news",    N_("News"),    "display", N_("Shelves"), SET_SWITCH, "on" },
+
+	{ "show_visualizer", N_("Visualizer"), "menu", N_("Start menu"),
+	  SET_SWITCH, "on" },
+	{ "show_power", N_("Sleep, restart and power off"), "menu",
+	  N_("Start menu"), SET_SWITCH, "on" },
+
+	{ "keep_awake", N_("Keep the screen awake"), "power", N_("Power"),
+	  set_awake, (int)(sizeof(set_awake) / sizeof(set_awake[0])), "playing" },
+};
+
+#define SETTINGS_N ((int)(sizeof(settings) / sizeof(settings[0])))
+
+static const struct setting *setting_find(const char *id)
+{
+	for (int i = 0; i < SETTINGS_N; i++)
+		if (strcmp(settings[i].id, id) == 0)
+			return &settings[i];
+	return NULL;
+}
+
+/*
+ * What a setting is set to, as one of its own value ids.
+ *
+ * ⚠ A VALUE THE TABLE DOES NOT KNOW READS AS THE DEFAULT. big.conf is a file a
+ * person edits, so `show_news = yes` is a thing that will be in one — and the
+ * alternative to falling back is a shelf that is neither on nor off, which
+ * draws as nothing and cannot be switched back on from the television.
+ */
+static const char *setting_get(const struct setting *s)
+{
+	char buf[64];
+	if (big_conf_get(s->id, buf, sizeof(buf)))
+		for (int i = 0; i < s->nvals; i++)
+			if (strcmp(s->vals[i].id, buf) == 0)
+				return s->vals[i].id;
+	return s->dflt;
+}
+
+/* The label for a value id — the English word, for the shell to look up. */
+static const char *setting_label(const struct setting *s, const char *val)
+{
+	for (int i = 0; i < s->nvals; i++)
+		if (strcmp(s->vals[i].id, val) == 0)
+			return s->vals[i].label;
+	return val;
+}
+
+/* The next value round, which is what pressing A on a row does. */
+static const char *setting_next(const struct setting *s, const char *val)
+{
+	for (int i = 0; i < s->nvals; i++)
+		if (strcmp(s->vals[i].id, val) == 0)
+			return s->vals[(i + 1) % s->nvals].id;
+	return s->dflt;
+}
+
+/*
+ * Is this shelf, or this Start menu row, switched on?
+ *
+ * Asked by name from the drawing side of this file — apps_table() for the
+ * Start menu's own rows, and by the shell for the shelves. An id nothing knows
+ * is ON: a caller asking about a shelf with no switch has one that cannot be
+ * turned off, which is the honest answer for Desktop and Quit.
+ */
+static bool setting_shown(const char *key)
+{
+	const struct setting *s = setting_find(key);
+	return !s || strcmp(setting_get(s), "on") == 0;
+}
+
+/*
+ * `big settings` — the page behind Start.
+ *
+ *   big settings                    every row, and what it is set to
+ *   big settings <id>               one value
+ *   big settings <id> <value>       set it
+ *   big settings <id> next          the next value round — what A does
+ *
+ * ⚠ `next` IS A VALUE AND NOT A VERB, deliberately. As `big settings next
+ * <id>` it would be one more word the operand parser has to tell from a
+ * setting id, and the day somebody adds a setting called `next` it would
+ * become ambiguous in a way nothing would catch. In the value position it
+ * cannot collide with anything: no setting has a value spelled `next`, and the
+ * table is checked before the word is.
+ */
+static int big_settings(const char *id, const char *val, bool rec)
+{
+	if (!id) {
+		if (rec) {
+			/* ⛔ ENGLISH, all of it. `id`, `group` and `value` are
+			 * matched on by the shell — it asks whether `value` is
+			 * `on` and keys a row off `id` — and the two label
+			 * columns are what it draws. Both travel, because the
+			 * shell cannot look up a word it was never given. */
+			rec_row(6, "id", "label", "group", "grouplabel",
+				"value", "valuelabel");
+			for (int i = 0; i < SETTINGS_N; i++) {
+				const char *v = setting_get(&settings[i]);
+				rec_row(6, settings[i].id, settings[i].label,
+					settings[i].group,
+					settings[i].group_label, v,
+					setting_label(&settings[i], v));
+			}
+			return EX_OK;
+		}
+		const char *group = "";
+		for (int i = 0; i < SETTINGS_N; i++) {
+			if (strcmp(group, settings[i].group) != 0) {
+				group = settings[i].group;
+				printf("%s%s\n", i ? "\n" : "",
+				       _(settings[i].group_label));
+			}
+			const char *v = setting_get(&settings[i]);
+			printf("  %-18s %-12s %s\n", settings[i].id, v,
+			       _(setting_label(&settings[i], v)));
+		}
+		return EX_OK;
+	}
+
+	const struct setting *s = setting_find(id);
+	if (!s) {
+		fprintf(stderr, _("syn-arcade: no setting called '%s'\n"), id);
+		return EX_USAGE;
+	}
+
+	const char *cur = setting_get(s);
+	if (!val) {
+		puts(cur);
+		return EX_OK;
+	}
+
+	const char *want = NULL;
+	if (strcmp(val, "next") == 0)
+		want = setting_next(s, cur);
+	else
+		for (int i = 0; i < s->nvals; i++)
+			if (strcmp(s->vals[i].id, val) == 0)
+				want = s->vals[i].id;
+
+	if (!want) {
+		/* The legal values, because a television is not a place to go
+		 * and read a manual and this is the only thing that knows
+		 * them. */
+		char list[160] = "";
+		for (int i = 0; i < s->nvals; i++) {
+			if (list[0])
+				strncat(list, ", ",
+					sizeof(list) - strlen(list) - 1);
+			strncat(list, s->vals[i].id,
+				sizeof(list) - strlen(list) - 1);
+		}
+		fprintf(stderr, _("syn-arcade: %s takes %s (not '%s')\n"),
+			s->id, list, val);
+		return EX_USAGE;
+	}
+
+	if (big_conf_set(s->id, want) != EX_OK) {
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
+		return EX_FAIL;
+	}
+	puts(want);
+	return EX_OK;
+}
+
+/*
  * `big webapps` — read, or switch one on and off.
  *
  * The record carries `installed` so the window can say WHY a tile is missing.
@@ -9190,6 +9547,18 @@ int cmd_big(int argc, char **argv)
 	if (!strcmp(sub, "webapps"))
 		return big_webapps(first_operand(rest_c, rest),
 				   second_operand(rest_c, rest), rec);
+	/* The settings page behind Start — which shelves are drawn, which of
+	 * the machine's own switches the menu offers, and what big screen mode
+	 * does about the screen going to sleep. Two operands like webapps: the
+	 * setting, and the value or `next`. */
+	if (!strcmp(sub, "settings"))
+		return big_settings(first_operand(rest_c, rest),
+				    second_operand(rest_c, rest), rec);
+	/* Holds a Wayland idle inhibitor for as long as it runs, and releases
+	 * it by exiting. The shell runs one while `keep_awake` says it should;
+	 * see big_awake. */
+	if (!strcmp(sub, "awake"))
+		return big_awake();
 	if (!strcmp(sub, "visualizer"))
 		return big_visualizer();
 

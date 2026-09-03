@@ -1693,6 +1693,27 @@ clicks**, or `V` — because it is the one thing somebody turns on while somethi
 is already playing. Behind the Now Playing row it draws `cliamp`'s own FFT bands,
 streamed a frame per line.
 
+**Settings, on the Start menu.** Which rows the television draws — Running,
+Games, Recent, Play, Media, Apps, News — and what the Start menu itself offers,
+each a switch. A machine used as a console does not need a News shelf and one in
+a room with children does not want Power off on a menu; both are one press from
+the sofa, and `syn-arcade big settings` writes the same file at a prompt.
+
+> **The way out has no switch.** Desktop and Quit survive every setting being
+> off. Big screen mode is a full-screen surface holding the keyboard, and on a
+> gamepad there is no key combination to fall back on — a setting able to hide
+> the exit would be one able to trap somebody in front of their own television.
+
+**Whether the screen is allowed to sleep** is the third page, and it defaults to
+holding the desktop's idle timeouts off **while something is playing**. Two
+things nothing else covers: music through `cliamp` is a headless player with no
+window for the compositor to notice, and a gamepad is not Wayland input — so a
+controller-only game reads as an idle machine and the screen blanks in the
+middle of it. Big screen mode holds a Wayland idle inhibitor for as long as
+either is true. It has **no timeouts of its own**: dim, blank, lock and suspend
+stay `synui`'s, the same way the Sleep tile runs `systemctl suspend` rather than
+reimplementing it.
+
 **A tile press fills the television.** From four metres away a titlebar and a
 strip of wallpaper around the edge are the whole difference between an appliance
 and somebody's computer left switched on, so launching from a tile fullscreens
