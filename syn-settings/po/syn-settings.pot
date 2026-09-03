@@ -535,6 +535,44 @@ msgstr ""
 msgid "see detail"
 msgstr ""
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr ""
+
+msgid "not driven"
+msgstr ""
+
+msgid "Right index"
+msgstr ""
+
+msgid "Right middle"
+msgstr ""
+
+msgid "Right thumb"
+msgstr ""
+
+msgid "Right ring"
+msgstr ""
+
+msgid "Right little"
+msgstr ""
+
+msgid "Left index"
+msgstr ""
+
+msgid "Left middle"
+msgstr ""
+
+msgid "Left thumb"
+msgstr ""
+
+msgid "Left ring"
+msgstr ""
+
+msgid "Left little"
+msgstr ""
+
 msgid "fprintd"
 msgstr ""
 
@@ -544,6 +582,9 @@ msgid ""
 msgstr ""
 
 msgid "reader"
+msgstr ""
+
+msgid "none found"
 msgstr ""
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
@@ -566,6 +607,20 @@ msgid ""
 msgstr ""
 
 msgid "the lock screen offers the reader whenever one of these is on file"
+msgstr ""
+
+msgid "enrolled"
+msgstr ""
+
+msgid "not enrolled"
+msgstr ""
+
+msgid "already on file; enrolling again replaces it"
+msgstr ""
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
 msgstr ""
 
 msgid "the stock Arch kernel; what SynapseOS ships"
@@ -617,6 +672,16 @@ msgstr ""
 msgid ""
 "  ⚠ the bootloader config is root-only, so this pane cannot say whether an "
 "entry exists — “Make bootable” regenerates it and makes it readable"
+msgstr ""
+
+msgid "⚠ running, unowned"
+msgstr ""
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
 msgstr ""
 
 msgid ""
@@ -691,6 +756,21 @@ msgstr ""
 msgid "container links"
 msgstr ""
 
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr ""
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr ""
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr ""
+
 msgid "rebuilt"
 msgstr ""
 
@@ -746,6 +826,9 @@ msgid "shipped"
 msgstr ""
 
 msgid "last-suspend"
+msgstr ""
+
+msgid "none this boot"
 msgstr ""
 
 msgid "when this boot last went to sleep"
@@ -805,6 +888,12 @@ msgid "needs syn-speak(1), shipped by the synui package"
 msgstr ""
 
 msgid "Answer to its name"
+msgstr ""
+
+msgid "listening"
+msgstr ""
+
+msgid "off"
 msgstr ""
 
 msgid ""
@@ -951,10 +1040,19 @@ msgstr ""
 msgid "time-format"
 msgstr ""
 
+msgid "24-hour"
+msgstr ""
+
+msgid "12-hour"
+msgstr ""
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr ""
 
 msgid "time-seconds"
+msgstr ""
+
+msgid "on"
 msgstr ""
 
 msgid "seconds in the bar clock"
@@ -969,14 +1067,35 @@ msgstr ""
 msgid "desktop-clock"
 msgstr ""
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr ""
+
 msgid "what the bar is showing right now"
+msgstr ""
+
+msgid "synui-clock returned nothing"
+msgstr ""
+
+msgid "synui-clock not installed — not a synui session"
+msgstr ""
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr ""
+
+msgid "Off — answer anything that reaches this machine, on any network"
 msgstr ""
 
 msgid "gpu"
 msgstr ""
 
+msgid "GPU  (offload every layer)"
+msgstr ""
+
 msgid "cpu"
 msgstr ""
 
-msgid "off"
+msgid "CPU  (no GPU offload)"
+msgstr ""
+
+msgid "Off  (mask the daemon)"
 msgstr ""

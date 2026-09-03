@@ -48,16 +48,16 @@
  * finger` is one substitution away in every design that keeps only one string.
  */
 static const struct { const char *token, *label; } FINGERS[] = {
-	{ "right-index-finger",  "Right index"  },
-	{ "right-middle-finger", "Right middle" },
-	{ "right-thumb",         "Right thumb"  },
-	{ "right-ring-finger",   "Right ring"   },
-	{ "right-little-finger", "Right little" },
-	{ "left-index-finger",   "Left index"   },
-	{ "left-middle-finger",  "Left middle"  },
-	{ "left-thumb",          "Left thumb"   },
-	{ "left-ring-finger",    "Left ring"    },
-	{ "left-little-finger",  "Left little"  },
+	{ "right-index-finger",  N_("Right index")  },
+	{ "right-middle-finger", N_("Right middle") },
+	{ "right-thumb",         N_("Right thumb")  },
+	{ "right-ring-finger",   N_("Right ring")   },
+	{ "right-little-finger", N_("Right little") },
+	{ "left-index-finger",   N_("Left index")   },
+	{ "left-middle-finger",  N_("Left middle")  },
+	{ "left-thumb",          N_("Left thumb")   },
+	{ "left-ring-finger",    N_("Left ring")    },
+	{ "left-little-finger",  N_("Left little")  },
 };
 #define NFINGERS ((int)(sizeof(FINGERS) / sizeof(*FINGERS)))
 
@@ -132,8 +132,8 @@ int pane_fprint(void)
 	 */
 	bool device = listed && strstr(listing, "found 0 devices") == NULL;
 	if (!device) {
-		rec_row("device\t%s\tnone found\t-\t%s\t-",
-		        N_("reader"),
+		rec_row("device\t%s\t%s\t-\t%s\t-",
+		        N_("reader"), N_("none found"),
 		        N_("fprintd is installed but reports no fingerprint reader on this machine"));
 		return 0;
 	}
@@ -161,15 +161,29 @@ int pane_fprint(void)
 		        N_("fingerprints"), have,
 		        N_("the lock screen offers the reader whenever one of these is on file"));
 
+	/*
+	 * ⛔ EVERY CELL A PERSON READS IS MARKED, AND THE RECORD STILL CARRIES
+	 * ENGLISH. These ten rows only exist on a machine with a reader, so for
+	 * two releases they were the only drawn labels in this program that were
+	 * not msgids and no check on a reader-less box could see it: the drawn-
+	 * label check reads the RECORD, and a record that is never emitted here
+	 * says nothing. It failed on velle's ThinkPad, where the reader is
+	 * enrolled, and took syn-update down with it.
+	 *
+	 * ⚠ AND `enrolled` STAYS ENGLISH IN THE ROW, which is the whole point of
+	 * N_(). data/syn-settings.qml compares `root.selValue === "enrolled"` to
+	 * decide whether the button says "Enrol again…", and it translates the
+	 * cell only on its way to the screen.
+	 */
 	for (int i = 0; i < NFINGERS; i++) {
 		bool on = enrolled(listing, FINGERS[i].token);
 		rec_row("finger\t%s\t%s\t%s\t%s\tenroll:%s",
 		        FINGERS[i].label,
-		        on ? "enrolled" : "not enrolled",
+		        on ? N_("enrolled") : N_("not enrolled"),
 		        on ? "ok" : "-",
-		        on ? "already on file; enrolling again replaces it"
-		           : "enrol this finger — you will be asked to lift and rest "
-		             "it on the reader several times",
+		        on ? N_("already on file; enrolling again replaces it")
+		           : N_("enrol this finger — you will be asked to lift and rest "
+		                "it on the reader several times"),
 		        FINGERS[i].token);
 	}
 

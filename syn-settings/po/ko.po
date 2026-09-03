@@ -488,7 +488,8 @@ msgstr "저장됨 — 누르면 바꾸고, 칸을 비우면 지웁니다"
 msgid ""
 "the assistant is set to this backend and has no key, so every request will "
 "fail"
-msgstr "어시스턴트가 이 백엔드로 설정되어 있지만 키가 없어 모든 요청이 실패합니다"
+msgstr ""
+"어시스턴트가 이 백엔드로 설정되어 있지만 키가 없어 모든 요청이 실패합니다"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "저장된 키가 없습니다. 이 백엔드로 바꾸기 전에 하나 설정하세요"
@@ -560,6 +561,44 @@ msgstr "AVRCP 음량"
 msgid "see detail"
 msgstr "자세히 보기"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "연결하는 헤드셋이 음량 100%를 알릴 수 있습니다 (AVRCP 특성). SPA_DATA_DIR에 wireplumber 수정이 들어 있습니다"
+
+msgid "not driven"
+msgstr "구동되지 않음"
+
+msgid "Right index"
+msgstr "오른손 검지"
+
+msgid "Right middle"
+msgstr "오른손 중지"
+
+msgid "Right thumb"
+msgstr "오른손 엄지"
+
+msgid "Right ring"
+msgstr "오른손 약지"
+
+msgid "Right little"
+msgstr "오른손 새끼"
+
+msgid "Left index"
+msgstr "왼손 검지"
+
+msgid "Left middle"
+msgstr "왼손 중지"
+
+msgid "Left thumb"
+msgstr "왼손 엄지"
+
+msgid "Left ring"
+msgstr "왼손 약지"
+
+msgid "Left little"
+msgstr "왼손 새끼"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -571,6 +610,9 @@ msgstr ""
 
 msgid "reader"
 msgstr "판독기"
+
+msgid "none found"
+msgstr "찾지 못함"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "fprintd가 설치되어 있지만 이 컴퓨터에서 지문 판독기를 찾지 못했습니다"
@@ -597,6 +639,20 @@ msgstr ""
 
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr "이 중 하나라도 등록되어 있으면 잠금 화면이 판독기를 제공합니다"
+
+msgid "enrolled"
+msgstr "등록됨"
+
+msgid "not enrolled"
+msgstr "등록되지 않음"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "이미 등록되어 있습니다. 다시 등록하면 대체됩니다"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "이 손가락을 등록합니다 — 리더에서 손가락을 떼었다 올리는 동작을 여러 번 요청합니다"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "Arch의 기본 커널. SynapseOS가 제공하는 것입니다"
@@ -657,6 +713,16 @@ msgstr ""
 "  ⚠ 부트로더 설정은 root만 읽을 수 있어 이 창에서는 항목이 있는지 알 수 없습"
 "니다 — “부팅 가능하게 만들기”가 다시 만들고 읽을 수 있게 합니다"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ 실행 중, 소유 패키지 없음"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "설치된 어떤 커널 패키지도 지금 부팅한 릴리스를 소유하지 않습니다 — 즉 위의 어느 줄도 지금 실행 중인 커널이 아닙니다. 대개는 커널을 업그레이드한 뒤 아직 재부팅하지 않았다는 뜻이며, 재부팅하기 전까지 실행 중인 커널의 모듈은 /usr/lib/modules에서 사라집니다."
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -673,21 +739,29 @@ msgstr "부트로더 설정을 찾지 못해 커널이 부팅 가능한지 알 �
 msgid ""
 "“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
 "itself."
-msgstr "“부팅 가능하게 만들기”는 grub-mkconfig를 실행하며, 설치된 커널을 스스로 모두 찾습니다."
+msgstr ""
+"“부팅 가능하게 만들기”는 grub-mkconfig를 실행하며, 설치된 커널을 스스로 모두 "
+"찾습니다."
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "“부팅 가능하게 만들기”는 kernel-install을 실행하며, Boot Loader Spec 항목을 씁니다."
+msgstr ""
+"“부팅 가능하게 만들기”는 kernel-install을 실행하며, Boot Loader Spec 항목을 "
+"씁니다."
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
-msgstr "“부팅 가능하게 만들기”는 limine-update를 실행하며, 커널 항목을 다시 만듭니다."
+msgstr ""
+"“부팅 가능하게 만들기”는 limine-update를 실행하며, 커널 항목을 다시 만듭니다."
 
 msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "limine에는 항목 생성기가 설치되어 있지 않습니다 — “부팅 가능하게 만들기”가 limine-mkinitcpio-hook을 설치해 생성기를 넣고, 앞으로의 커널이 자동으로 처리되도록 pacman 훅도 함께 넣습니다."
+msgstr ""
+"limine에는 항목 생성기가 설치되어 있지 않습니다 — “부팅 가능하게 만들기”가 "
+"limine-mkinitcpio-hook을 설치해 생성기를 넣고, 앞으로의 커널이 자동으로 처리"
+"되도록 pacman 훅도 함께 넣습니다."
 
 msgid "bootloader"
 msgstr "부트로더"
@@ -741,6 +815,21 @@ msgstr "인바운드 필터링"
 
 msgid "container links"
 msgstr "컨테이너 연결"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "이 컴퓨터가 컨테이너나 가상 머신(Waydroid, libvirt, Docker)을 위해 DHCP와 DNS를 제공하는 브리지. 게스트는 0.0.0.0에서 주소를 요청하는데, 기본 차단 정책이 이를 삼켜 버립니다 — 게스트는 네트워크를 잃고, 어디에도 방화벽이라는 말은 나오지 않습니다."
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ synnet이 마지막으로 적용한 개수가 다릅니다. `sudo synnet --firewall`이 현재 목록을 불러옵니다."
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "`sudo synnet --trust-if <iface>`로 하나 추가하십시오."
 
 msgid "rebuilt"
 msgstr "재구성 횟수"
@@ -803,6 +892,9 @@ msgstr "기본 제공"
 msgid "last-suspend"
 msgstr "마지막 절전"
 
+msgid "none this boot"
+msgstr "이번 부팅에는 없음"
+
 msgid "when this boot last went to sleep"
 msgstr "이번 부팅이 마지막으로 잠든 시각"
 
@@ -863,6 +955,12 @@ msgstr "synui 패키지가 제공하는 syn-speak(1)이 필요합니다"
 
 msgid "Answer to its name"
 msgstr "이름에 응답하기"
+
+msgid "listening"
+msgstr "듣는 중"
+
+msgid "off"
+msgstr "끔"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1016,11 +1114,20 @@ msgstr "NTP 사용"
 msgid "time-format"
 msgstr "시간 형식"
 
+msgid "24-hour"
+msgstr "24시간제"
+
+msgid "12-hour"
+msgstr "12시간제"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "막대와 잠금 화면, 그리고 바탕화면 시계"
 
 msgid "time-seconds"
 msgstr "초 표시"
+
+msgid "on"
+msgstr "켬"
 
 msgid "seconds in the bar clock"
 msgstr "막대 시계의 초"
@@ -1034,17 +1141,38 @@ msgstr "날짜를 적는 순서"
 msgid "desktop-clock"
 msgstr "바탕화면 시계"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "synui 표시줄이 보여줄 내용 — 실행 중이 아닙니다"
+
 msgid "what the bar is showing right now"
 msgstr "막대가 지금 보여 주는 것"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock이 아무것도 반환하지 않았습니다"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "synui-clock이 설치되어 있지 않습니다 — synui 세션이 아닙니다"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "켬 — 로컬 네트워크 밖에서 오는 요청하지 않은 연결을 거부"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "끔 — 어떤 네트워크에서든 이 컴퓨터에 도달하는 모든 것에 응답"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (모든 레이어 오프로드)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "끔"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (GPU 오프로드 없음)"
+
+msgid "Off  (mask the daemon)"
+msgstr "끔  (데몬 마스크)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

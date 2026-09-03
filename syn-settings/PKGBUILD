@@ -144,7 +144,45 @@ pkgver=0.1.0
 #   chosen by the same value, and the value itself still reaches the binary
 #   unchanged. Same for "%1 row"/"%1 rows", which no longer picks its form with
 #   an English == 1.
-pkgrel=46
+# 47: ten drawn labels that only exist on a machine with a fingerprint reader.
+#   syn-settings 46's i18n gate FAILED on velle's ThinkPad and passed here, and
+#   `syn-update` aborted mid-build with every component after it unbuilt. The
+#   check runs the program and reads the record, and this box has no reader — so
+#   fprint.c's ten finger rows are never emitted here and their labels ("Right
+#   index", "Left thumb", …) had never been marked, along with two sentences and
+#   the enrolled/not-enrolled words beside them.
+#   ⛔ THE GATE NOW FAKES THE READER. tests/i18n_test.sh puts an fprintd-list on
+#   PATH that reports one device and two enrolled fingers, which works in both
+#   directions: on a box without fprintd it ADDS the command, and on one with it
+#   have_cmd() walks PATH in order and finds this first. Ten rows on every
+#   machine, and one more assertion that they are really there — shadowing that
+#   silently did nothing would put the check straight back to reading hardware.
+#   ⚠ AND `enrolled` STAYS ENGLISH IN THE ROW. data/syn-settings.qml compares
+#   `root.selValue === "enrolled"` to decide whether the button offers "Enrol
+#   again…"; N_() puts the word in the catalog and leaves the record alone, and
+#   the window translates the cell on its way to the screen.
+#
+# ── and the same class in six more places, found by a check that runs nothing ─
+#
+#   A second gate reads the SOURCE instead: every string literal handed to
+#   rec_row() as an ARGUMENT is a cell somebody reads, so it is N_() or one of a
+#   listed set of tokens a program matches — `current`, a unit name, a
+#   `toggle:`/`choice:` action — and there is no third category. Machine-
+#   independent, and it found what the runtime one cannot see from here.
+#   ⛔ PROSE INSIDE A rec_row FORMAT STRING IS DRAWN AND REACHES NO TEMPLATE.
+#   xgettext extracts the format whole, and the whole format is not the cell the
+#   window looks up. Six of them: the AVRCP note, the unowned-kernel sentence,
+#   the two firewall choices and the three AI-backend ones. All are arguments
+#   now, and the choice list is translated at the draw site like every other
+#   opportunistic cell.
+#   ⚠ THE KERNEL SENTENCE PUT ITS RELEASE AT THE END. Whole-cell lookup cannot
+#   match a sentence with a version in the middle of it — every machine composes
+#   a different string — so the release trails and the marked sentence is a
+#   PREFIX, which is the shape this pane already used and the gate accepts.
+#   Six more drawn words marked with it: "not driven", "none this boot",
+#   "listening", "24-hour"/"12-hour", and what synui-clock says when it is not
+#   there. 326 msgids in each of the thirteen catalogs.
+pkgrel=47
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

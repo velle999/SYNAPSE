@@ -551,6 +551,44 @@ msgstr "AVRCP 音量"
 msgid "see detail"
 msgstr "见详情"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "耳机在连接时可能会报告 100% 音量（AVRCP 的怪癖）；SPA_DATA_DIR 中带有 wireplumber 的修正"
+
+msgid "not driven"
+msgstr "未驱动"
+
+msgid "Right index"
+msgstr "右手食指"
+
+msgid "Right middle"
+msgstr "右手中指"
+
+msgid "Right thumb"
+msgstr "右手拇指"
+
+msgid "Right ring"
+msgstr "右手无名指"
+
+msgid "Right little"
+msgstr "右手小指"
+
+msgid "Left index"
+msgstr "左手食指"
+
+msgid "Left middle"
+msgstr "左手中指"
+
+msgid "Left thumb"
+msgstr "左手拇指"
+
+msgid "Left ring"
+msgstr "左手无名指"
+
+msgid "Left little"
+msgstr "左手小指"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -561,6 +599,9 @@ msgstr "指纹守护进程是可选依赖；没有它任何读取器都无法使
 
 msgid "reader"
 msgstr "读取器"
+
+msgid "none found"
+msgstr "未找到"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "已安装 fprintd，但它未在这台机器上报告任何指纹读取器"
@@ -583,6 +624,20 @@ msgstr "读取器可以工作，但没有可比对的内容 —— 只有录入�
 
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr "只要录入了其中之一，锁屏就会提供该读取器"
+
+msgid "enrolled"
+msgstr "已录入"
+
+msgid "not enrolled"
+msgstr "未录入"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "已经录入；再次录入会覆盖它"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "录入这根手指 — 系统会要求你抬起并重新放在读取器上数次"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "Arch 自带的内核；SynapseOS 附带的就是它"
@@ -639,6 +694,16 @@ msgstr ""
 "  ⚠ 引导程序配置仅 root 可读，因此本面板无法判断是否存在引导项 ——“设为可引导”"
 "会重新生成它并让它可读"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ 正在运行，无所属软件包"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "没有任何已安装的内核软件包拥有你启动的这个版本 — 因此上面的行都不是你正在运行的内核。通常这只是说明内核升级之后还没有重启；在重启之前，运行中内核的模块已从 /usr/lib/modules 中消失。"
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -659,7 +724,8 @@ msgstr "“设为可引导”会运行 grub-mkconfig，它会自行找到每个�
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "“设为可引导”会运行 kernel-install，它会写入一条 Boot Loader Spec 条目。"
+msgstr ""
+"“设为可引导”会运行 kernel-install，它会写入一条 Boot Loader Spec 条目。"
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
@@ -669,7 +735,9 @@ msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "limine 未安装条目生成器 —— “设为可引导”会安装 limine-mkinitcpio-hook，它提供了一个，并附带一个 pacman 钩子，使今后的内核自动得到处理。"
+msgstr ""
+"limine 未安装条目生成器 —— “设为可引导”会安装 limine-mkinitcpio-hook，它提供"
+"了一个，并附带一个 pacman 钩子，使今后的内核自动得到处理。"
 
 msgid "bootloader"
 msgstr "引导程序"
@@ -721,6 +789,21 @@ msgstr "入站过滤"
 
 msgid "container links"
 msgstr "容器链接"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "本机为容器或虚拟机（Waydroid、libvirt、Docker）提供 DHCP 和 DNS 的网桥。客户机会从 0.0.0.0 请求地址，而默认丢弃策略会把它吃掉 — 客户机于是没有网络，却没有任何地方提到防火墙。"
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ synnet 上次应用的数量与此不同；`sudo synnet --firewall` 会载入当前列表。"
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "用 `sudo synnet --trust-if <iface>` 添加一个。"
 
 msgid "rebuilt"
 msgstr "重建次数"
@@ -783,6 +866,9 @@ msgstr "随附"
 msgid "last-suspend"
 msgstr "上次挂起"
 
+msgid "none this boot"
+msgstr "本次启动尚无"
+
 msgid "when this boot last went to sleep"
 msgstr "本次启动上一次进入睡眠的时间"
 
@@ -841,6 +927,12 @@ msgstr "需要 synui 软件包提供的 syn-speak(1)"
 
 msgid "Answer to its name"
 msgstr "响应自己的名字"
+
+msgid "listening"
+msgstr "正在聆听"
+
+msgid "off"
+msgstr "关闭"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -992,11 +1084,20 @@ msgstr "NTP 已启用"
 msgid "time-format"
 msgstr "时间格式"
 
+msgid "24-hour"
+msgstr "24 小时制"
+
+msgid "12-hour"
+msgstr "12 小时制"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "状态栏、锁屏和桌面时钟"
 
 msgid "time-seconds"
 msgstr "显示秒"
+
+msgid "on"
+msgstr "开启"
 
 msgid "seconds in the bar clock"
 msgstr "状态栏时钟中的秒"
@@ -1010,17 +1111,38 @@ msgstr "日期的书写顺序"
 msgid "desktop-clock"
 msgstr "桌面时钟"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "synui 的状态栏本会显示的内容 — 它没有在运行"
+
 msgid "what the bar is showing right now"
 msgstr "状态栏此刻显示的内容"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock 没有返回任何内容"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "未安装 synui-clock — 这不是 synui 会话"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "开启 — 拒绝来自本地网络之外的主动连接"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "关闭 — 在任何网络上都回应任何到达本机的请求"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (卸载每一层)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "关闭"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (不卸载到 GPU)"
+
+msgid "Off  (mask the daemon)"
+msgstr "关闭  (屏蔽守护进程)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

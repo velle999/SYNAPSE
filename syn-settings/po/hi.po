@@ -558,6 +558,44 @@ msgstr "AVRCP ध्वनि स्तर"
 msgid "see detail"
 msgstr "विवरण देखें"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "जुड़ते समय हेडसेट 100% ध्वनि की सूचना दे सकता है (AVRCP की विचित्रता); SPA_DATA_DIR में wireplumber का सुधार है"
+
+msgid "not driven"
+msgstr "संचालित नहीं"
+
+msgid "Right index"
+msgstr "दायाँ तर्जनी"
+
+msgid "Right middle"
+msgstr "दायाँ मध्यमा"
+
+msgid "Right thumb"
+msgstr "दायाँ अंगूठा"
+
+msgid "Right ring"
+msgstr "दायाँ अनामिका"
+
+msgid "Right little"
+msgstr "दायाँ कनिष्ठा"
+
+msgid "Left index"
+msgstr "बायाँ तर्जनी"
+
+msgid "Left middle"
+msgstr "बायाँ मध्यमा"
+
+msgid "Left thumb"
+msgstr "बायाँ अंगूठा"
+
+msgid "Left ring"
+msgstr "बायाँ अनामिका"
+
+msgid "Left little"
+msgstr "बायाँ कनिष्ठा"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -568,6 +606,9 @@ msgstr "अंगुली-छाप डीमन वैकल्पिक न�
 
 msgid "reader"
 msgstr "रीडर"
+
+msgid "none found"
+msgstr "कोई नहीं मिला"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr "fprintd संस्थापित है पर इस मशीन पर कोई अंगुली-छाप रीडर नहीं बताता"
@@ -592,6 +633,20 @@ msgstr ""
 
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr "इनमें से एक भी दर्ज होते ही लॉक स्क्रीन रीडर देने लगती है"
+
+msgid "enrolled"
+msgstr "दर्ज"
+
+msgid "not enrolled"
+msgstr "दर्ज नहीं"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "पहले से दर्ज है; दोबारा दर्ज करने पर बदल जाएगा"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "इस उँगली को दर्ज करें — आपसे कई बार उँगली उठाकर रीडर पर रखने को कहा जाएगा"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "Arch का अपना कर्नेल; वही जो SynapseOS देता है"
@@ -651,6 +706,16 @@ msgstr ""
 "  ⚠ बूटलोडर विन्यास केवल root के लिए पठनीय है, इसलिए यह पटल नहीं बता सकता कि कोई "
 "प्रविष्टि है या नहीं — “बूट योग्य बनाएँ” उसे फिर से बनाता है और पठनीय कर देता है"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ चल रहा है, बिना पैकेज"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "कोई भी संस्थापित कर्नेल पैकेज उस रिलीज़ का स्वामी नहीं है जिससे आपने बूट किया — यानी ऊपर की कोई भी पंक्ति वह कर्नेल नहीं है जिस पर आप हैं। आमतौर पर इसका मतलब बस यह है कि कर्नेल अपग्रेड के बाद अभी रीबूट नहीं किया गया; तब तक चल रहे कर्नेल के मॉड्यूल /usr/lib/modules से गायब रहते हैं।"
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -673,7 +738,9 @@ msgstr "“बूट योग्य बनाएँ” grub-mkconfig चला�
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "“बूट योग्य बनाएँ” kernel-install चलाता है, जो एक Boot Loader Spec प्रविष्टि लिखता है।"
+msgstr ""
+"“बूट योग्य बनाएँ” kernel-install चलाता है, जो एक Boot Loader Spec प्रविष्टि लिखता "
+"है।"
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
@@ -683,7 +750,10 @@ msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "limine में कोई प्रविष्टि जनक संस्थापित नहीं है — “बूट योग्य बनाएँ” limine-mkinitcpio-hook संस्थापित करता है, जो एक जनक देता है और साथ में एक pacman हुक, ताकि आगे के कर्नेल अपने आप सँभाले जाएँ।"
+msgstr ""
+"limine में कोई प्रविष्टि जनक संस्थापित नहीं है — “बूट योग्य बनाएँ” limine-mkinitcpio-"
+"hook संस्थापित करता है, जो एक जनक देता है और साथ में एक pacman हुक, ताकि आगे के कर्नेल "
+"अपने आप सँभाले जाएँ।"
 
 msgid "bootloader"
 msgstr "बूटलोडर"
@@ -736,6 +806,21 @@ msgstr "आवक छनाई"
 
 msgid "container links"
 msgstr "कंटेनर कड़ियाँ"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "वे ब्रिज जिन पर यह मशीन किसी कंटेनर या VM (Waydroid, libvirt, Docker) के लिए DHCP और DNS देती है। अतिथि 0.0.0.0 से अपना पता माँगता है, जिसे डिफ़ॉल्ट-ड्रॉप नीति निगल जाती — तब अतिथि के पास नेटवर्क नहीं होता और कहीं फ़ायरवॉल का ज़िक्र नहीं आता।"
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ synnet ने पिछली बार इनकी अलग संख्या लागू की थी; `sudo synnet --firewall` वर्तमान सूची लोड करता है।"
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "`sudo synnet --trust-if <iface>` से एक जोड़ें।"
 
 msgid "rebuilt"
 msgstr "पुनर्निर्मित"
@@ -798,6 +883,9 @@ msgstr "साथ आया"
 msgid "last-suspend"
 msgstr "पिछली सुप्तावस्था"
 
+msgid "none this boot"
+msgstr "इस बूट में कोई नहीं"
+
 msgid "when this boot last went to sleep"
 msgstr "इस बूट में अंतिम बार कब नींद हुई"
 
@@ -856,6 +944,12 @@ msgstr "synui पैकेज में आने वाला syn-speak(1) च�
 
 msgid "Answer to its name"
 msgstr "अपने नाम पर उत्तर देना"
+
+msgid "listening"
+msgstr "सुन रहा है"
+
+msgid "off"
+msgstr "बंद"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1009,11 +1103,20 @@ msgstr "NTP सक्षम"
 msgid "time-format"
 msgstr "समय का प्रारूप"
 
+msgid "24-hour"
+msgstr "24-घंटे"
+
+msgid "12-hour"
+msgstr "12-घंटे"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "पट्टी, लॉक पर्दा और डेस्कटॉप घड़ी"
 
 msgid "time-seconds"
 msgstr "सेकंड"
+
+msgid "on"
+msgstr "चालू"
 
 msgid "seconds in the bar clock"
 msgstr "पट्टी की घड़ी में सेकंड"
@@ -1027,17 +1130,38 @@ msgstr "तिथि लिखने का क्रम"
 msgid "desktop-clock"
 msgstr "डेस्कटॉप घड़ी"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "synui की पट्टी क्या दिखाती — वह चल नहीं रही"
+
 msgid "what the bar is showing right now"
 msgstr "पट्टी इस समय क्या दिखा रही है"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock ने कुछ नहीं लौटाया"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "synui-clock संस्थापित नहीं है — यह synui सत्र नहीं है"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "चालू — स्थानीय नेटवर्क के बाहर से बिन-माँगे कनेक्शन अस्वीकार करें"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "बंद — किसी भी नेटवर्क पर, इस मशीन तक पहुँचने वाली हर चीज़ का उत्तर दें"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (हर परत ऑफ़लोड करें)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "बंद"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (कोई GPU ऑफ़लोड नहीं)"
+
+msgid "Off  (mask the daemon)"
+msgstr "बंद  (डेमॉन को मास्क करें)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

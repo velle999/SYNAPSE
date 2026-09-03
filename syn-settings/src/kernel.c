@@ -349,13 +349,26 @@ int pane_kernel(void)
 	 * It is equally the signature of a hand-built or removed kernel, which is
 	 * the case where "none of the rows above is what you booted" genuinely
 	 * changes what the rest of this pane means. */
+	/*
+	 * ⛔ THE RELEASE MOVED TO THE END OF THE SENTENCE, ON PURPOSE. The window
+	 * looks up the WHOLE CELL, so a sentence with a kernel release in the
+	 * middle of it can never be a msgid — every machine composes a different
+	 * string. With the variable trailing, the marked sentence is a PREFIX of
+	 * the cell, which is the shape the rest of this pane already uses and the
+	 * one tests/i18n_test.sh's drawn-label check accepts.
+	 *
+	 * ⚠ AND THE VALUE IS AN ARGUMENT NOW. `⚠ running, unowned` sat inside the
+	 * format string, where it is drawn on screen and reaches no template.
+	 */
 	if (running[0] && !running_is_owned)
-		rec_row("-\t%s\t⚠ running, unowned\tYou booted %s, and no installed "
-		        "kernel package owns that release — so none of the rows above "
-		        "is the kernel you are on. Usually this just means a kernel "
-		        "upgrade has not been rebooted into yet; until you do, modules "
-		        "for the running kernel are gone from /usr/lib/modules.\t-",
-		        running, running);
+		rec_row("-\t%s\t%s\t%s (%s)\t-",
+		        running, N_("⚠ running, unowned"),
+		        N_("No installed kernel package owns the release you booted — "
+		           "so none of the rows above is the kernel you are on. Usually "
+		           "this just means a kernel upgrade has not been rebooted into "
+		           "yet; until you do, modules for the running kernel are gone "
+		           "from /usr/lib/modules."),
+		        running);
 
 	/* Removing the kernel you booted from is the one action here that can
 	 * leave a machine unbootable, so the running one carries no action at all

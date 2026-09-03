@@ -174,10 +174,10 @@ int pane_power(void)
 			p = eol ? eol + 1 : NULL;
 		}
 		rec_row("sleep\t%s\t%s\t-\t%s\t-",
-		        N_("last-suspend"), last_entry[0] ? last_entry : "none this boot",
+		        N_("last-suspend"), last_entry[0] ? last_entry : N_("none this boot"),
 		        N_("when this boot last went to sleep"));
 		rec_row("sleep\t%s\t%s\t-\t%s\t-",
-		        N_("last-resume"), last_exit[0] ? last_exit : "none this boot",
+		        N_("last-resume"), last_exit[0] ? last_exit : N_("none this boot"),
 		        N_("when it came back"));
 	}
 

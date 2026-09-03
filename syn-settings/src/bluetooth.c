@@ -204,10 +204,13 @@ int pane_bluetooth(void)
 	/* The one quirk worth carrying into the UI rather than leaving in a wiki:
 	 * on this hardware an AVRCP-capable sink announces full volume the moment
 	 * it connects, which is loud and startling and is not a SynapseOS bug. */
-	rec_row("note\t%s\t%s\t-\t"
-	        "a connecting headset may announce 100%% volume (AVRCP quirk); SPA_DATA_DIR carries the wireplumber fix\t"
-	        "-",
-	        N_("avrcp-volume"), N_("see detail"));
+	/* ⛔ THE SENTENCE IS AN ARGUMENT. In the format string it is drawn and
+	 * reaches no template: xgettext extracts the format whole, and the whole
+	 * format is not the cell the window looks up. */
+	rec_row("note\t%s\t%s\t-\t%s\t-",
+	        N_("avrcp-volume"), N_("see detail"),
+	        N_("a connecting headset may announce 100% volume (AVRCP quirk); "
+	           "SPA_DATA_DIR carries the wireplumber fix"));
 
 	return 0;
 }

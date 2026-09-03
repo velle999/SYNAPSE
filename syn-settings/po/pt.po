@@ -502,7 +502,9 @@ msgstr "guardada — clique para a substituir, ou esvazie a caixa para a remover
 msgid ""
 "the assistant is set to this backend and has no key, so every request will "
 "fail"
-msgstr "o assistente está definido para este motor e não tem chave, por isso todos os pedidos vão falhar"
+msgstr ""
+"o assistente está definido para este motor e não tem chave, por isso todos "
+"os pedidos vão falhar"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "nenhuma chave guardada; defina uma antes de mudar para este motor"
@@ -575,6 +577,44 @@ msgstr "volume AVRCP"
 msgid "see detail"
 msgstr "ver o detalhe"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "uns auscultadores ao ligar podem anunciar volume a 100% (esquisitice do AVRCP); SPA_DATA_DIR traz a correção do wireplumber"
+
+msgid "not driven"
+msgstr "não controlado"
+
+msgid "Right index"
+msgstr "Indicador direito"
+
+msgid "Right middle"
+msgstr "Médio direito"
+
+msgid "Right thumb"
+msgstr "Polegar direito"
+
+msgid "Right ring"
+msgstr "Anelar direito"
+
+msgid "Right little"
+msgstr "Mindinho direito"
+
+msgid "Left index"
+msgstr "Indicador esquerdo"
+
+msgid "Left middle"
+msgstr "Médio esquerdo"
+
+msgid "Left thumb"
+msgstr "Polegar esquerdo"
+
+msgid "Left ring"
+msgstr "Anelar esquerdo"
+
+msgid "Left little"
+msgstr "Mindinho esquerdo"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -587,6 +627,9 @@ msgstr ""
 
 msgid "reader"
 msgstr "leitor"
+
+msgid "none found"
+msgstr "nenhum encontrado"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
@@ -616,6 +659,20 @@ msgstr ""
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr ""
 "o ecrã de bloqueio oferece o leitor assim que um destes estiver registado"
+
+msgid "enrolled"
+msgstr "registada"
+
+msgid "not enrolled"
+msgstr "não registada"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "já está registada; registar de novo substitui-a"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "registar este dedo — ser-lhe-á pedido que o levante e o pouse no leitor várias vezes"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "o núcleo padrão do Arch; aquele que o SynapseOS inclui"
@@ -683,6 +740,16 @@ msgstr ""
 "painel não pode dizer se existe uma entrada — «Tornar inicializável» "
 "regenera-a e torna-a legível"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ em execução, sem pacote"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "Nenhum pacote de kernel instalado é dono da versão que arrancou — por isso nenhuma das linhas acima é o kernel em que está. Normalmente isso só quer dizer que ainda não reiniciou depois de uma atualização do kernel; até lá, os módulos do kernel em execução desapareceram de /usr/lib/modules."
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -701,21 +768,30 @@ msgstr ""
 msgid ""
 "“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
 "itself."
-msgstr "«Tornar inicializável» executa o grub-mkconfig, que encontra sozinho cada núcleo instalado."
+msgstr ""
+"«Tornar inicializável» executa o grub-mkconfig, que encontra sozinho cada "
+"núcleo instalado."
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "«Tornar inicializável» executa o kernel-install, que escreve uma entrada Boot Loader Spec."
+msgstr ""
+"«Tornar inicializável» executa o kernel-install, que escreve uma entrada "
+"Boot Loader Spec."
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
-msgstr "«Tornar inicializável» executa o limine-update, que regenera as entradas de núcleo."
+msgstr ""
+"«Tornar inicializável» executa o limine-update, que regenera as entradas de "
+"núcleo."
 
 msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "o limine não tem instalado nenhum gerador de entradas — «Tornar inicializável» instala o limine-mkinitcpio-hook, que traz um, mais um hook do pacman para que os núcleos futuros sejam tratados automaticamente."
+msgstr ""
+"o limine não tem instalado nenhum gerador de entradas — «Tornar "
+"inicializável» instala o limine-mkinitcpio-hook, que traz um, mais um hook "
+"do pacman para que os núcleos futuros sejam tratados automaticamente."
 
 msgid "bootloader"
 msgstr "gestor de arranque"
@@ -770,6 +846,21 @@ msgstr "filtragem de entrada"
 
 msgid "container links"
 msgstr "ligações de contentores"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "Pontes em que esta máquina serve DHCP e DNS para um contentor ou VM (Waydroid, libvirt, Docker). Um convidado pede o seu endereço a partir de 0.0.0.0, o que a política de descarte por omissão engoliria — o convidado fica então sem rede e nada fala em firewall."
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ o synnet aplicou da última vez um número diferente; `sudo synnet --firewall` carrega a lista atual."
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "Adicione uma com `sudo synnet --trust-if <iface>`."
 
 msgid "rebuilt"
 msgstr "reconstruída"
@@ -834,6 +925,9 @@ msgstr "incluído"
 msgid "last-suspend"
 msgstr "última suspensão"
 
+msgid "none this boot"
+msgstr "nenhum neste arranque"
+
 msgid "when this boot last went to sleep"
 msgstr "quando este arranque adormeceu pela última vez"
 
@@ -894,6 +988,12 @@ msgstr "precisa do syn-speak(1), incluído no pacote synui"
 
 msgid "Answer to its name"
 msgstr "Responder ao seu nome"
+
+msgid "listening"
+msgstr "à escuta"
+
+msgid "off"
+msgstr "desligado"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1049,11 +1149,20 @@ msgstr "NTP ativado"
 msgid "time-format"
 msgstr "formato da hora"
 
+msgid "24-hour"
+msgstr "24 horas"
+
+msgid "12-hour"
+msgstr "12 horas"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "a barra, o ecrã de bloqueio e o relógio do ambiente de trabalho"
 
 msgid "time-seconds"
 msgstr "segundos"
+
+msgid "on"
+msgstr "ligado"
 
 msgid "seconds in the bar clock"
 msgstr "os segundos no relógio da barra"
@@ -1067,17 +1176,38 @@ msgstr "a ordem pela qual a data é escrita"
 msgid "desktop-clock"
 msgstr "relógio do ambiente de trabalho"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "o que a barra do synui MOSTRARIA — não está a correr"
+
 msgid "what the bar is showing right now"
 msgstr "o que a barra está a mostrar neste momento"
+
+msgid "synui-clock returned nothing"
+msgstr "o synui-clock não devolveu nada"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "o synui-clock não está instalado — não é uma sessão synui"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "Ligado — recusar ligações não solicitadas de fora da rede local"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "Desligado — responder a tudo o que chegue a esta máquina, em qualquer rede"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (descarregar todas as camadas)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "desligado"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (sem descarga para a GPU)"
+
+msgid "Off  (mask the daemon)"
+msgstr "Desligado  (mascarar o serviço)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

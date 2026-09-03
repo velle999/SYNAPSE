@@ -1495,7 +1495,14 @@ FloatingWindow {
                     model: root.appList
                     delegate: SettingsButton {
                         required property var modelData
-                        label: modelData.current ? modelData.name + " ✓" : modelData.name
+                        // ⚠ TRANSLATED OPPORTUNISTICALLY, exactly as the `value`
+                        // and `state` cells are: "On — refuse unsolicited
+                        // connections…" is a word, an application name and a
+                        // locale code are not, and I18n.tr() returns anything it
+                        // does not recognise unchanged. Nothing matches on the
+                        // result — the write below sends modelData.id.
+                        // i18n-dynamic: the names arrive in the record and are marked N_() in src/*.c
+                        label: I18n.tr(modelData.name) + (modelData.current ? " ✓" : "")
                         onGo: root.runWrite(
                             ["set", "app", root.actionArgFor(root.selAction, "app"),
                              modelData.id],
@@ -1524,7 +1531,14 @@ FloatingWindow {
                     model: root.choiceList
                     delegate: SettingsButton {
                         required property var modelData
-                        label: modelData.current ? modelData.name + " ✓" : modelData.name
+                        // ⚠ TRANSLATED OPPORTUNISTICALLY, exactly as the `value`
+                        // and `state` cells are: "On — refuse unsolicited
+                        // connections…" is a word, an application name and a
+                        // locale code are not, and I18n.tr() returns anything it
+                        // does not recognise unchanged. Nothing matches on the
+                        // result — the write below sends modelData.id.
+                        // i18n-dynamic: the names arrive in the record and are marked N_() in src/*.c
+                        label: I18n.tr(modelData.name) + (modelData.current ? " ✓" : "")
                         onGo: root.runWrite(
                             ["set", root.actionArgFor(root.selAction, "choice"),
                              modelData.id],

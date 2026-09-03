@@ -502,7 +502,9 @@ msgstr "сохранён — нажмите, чтобы заменить, или
 msgid ""
 "the assistant is set to this backend and has no key, so every request will "
 "fail"
-msgstr "помощник настроен на этот движок и не имеет ключа, поэтому любой запрос завершится ошибкой"
+msgstr ""
+"помощник настроен на этот движок и не имеет ключа, поэтому любой запрос "
+"завершится ошибкой"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "ключ не сохранён; задайте его, прежде чем переключаться на этот движок"
@@ -574,6 +576,44 @@ msgstr "громкость AVRCP"
 msgid "see detail"
 msgstr "см. подробности"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "подключающаяся гарнитура может объявить громкость 100% (особенность AVRCP); в SPA_DATA_DIR лежит исправление для wireplumber"
+
+msgid "not driven"
+msgstr "не используется"
+
+msgid "Right index"
+msgstr "Правый указательный"
+
+msgid "Right middle"
+msgstr "Правый средний"
+
+msgid "Right thumb"
+msgstr "Правый большой"
+
+msgid "Right ring"
+msgstr "Правый безымянный"
+
+msgid "Right little"
+msgstr "Правый мизинец"
+
+msgid "Left index"
+msgstr "Левый указательный"
+
+msgid "Left middle"
+msgstr "Левый средний"
+
+msgid "Left thumb"
+msgstr "Левый большой"
+
+msgid "Left ring"
+msgstr "Левый безымянный"
+
+msgid "Left little"
+msgstr "Левый мизинец"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -586,6 +626,9 @@ msgstr ""
 
 msgid "reader"
 msgstr "считыватель"
+
+msgid "none found"
+msgstr "не найден"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
@@ -616,6 +659,20 @@ msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr ""
 "экран блокировки предлагает считыватель, как только один из них "
 "зарегистрирован"
+
+msgid "enrolled"
+msgstr "зарегистрирован"
+
+msgid "not enrolled"
+msgstr "не зарегистрирован"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "уже сохранён; повторная регистрация заменит его"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "зарегистрировать этот палец — вас несколько раз попросят поднять его и снова приложить к сканеру"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "обычное ядро Arch; то, что поставляет SynapseOS"
@@ -681,6 +738,16 @@ msgstr ""
 "может сказать, есть ли запись — «Сделать загружаемым» создаёт её заново и "
 "делает читаемой"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ работает, без пакета"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "Ни один установленный пакет ядра не владеет запущенным выпуском — значит, ни одна строка выше не является тем ядром, на котором вы работаете. Обычно это означает лишь, что после обновления ядра ещё не было перезагрузки; до неё модули для работающего ядра отсутствуют в /usr/lib/modules."
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -699,21 +766,30 @@ msgstr ""
 msgid ""
 "“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
 "itself."
-msgstr "«Сделать загружаемым» выполняет grub-mkconfig, который сам находит каждое установленное ядро."
+msgstr ""
+"«Сделать загружаемым» выполняет grub-mkconfig, который сам находит каждое "
+"установленное ядро."
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "«Сделать загружаемым» выполняет kernel-install, который записывает запись Boot Loader Spec."
+msgstr ""
+"«Сделать загружаемым» выполняет kernel-install, который записывает запись "
+"Boot Loader Spec."
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
-msgstr "«Сделать загружаемым» выполняет limine-update, который заново создаёт записи ядер."
+msgstr ""
+"«Сделать загружаемым» выполняет limine-update, который заново создаёт записи "
+"ядер."
 
 msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "у limine не установлен генератор записей — «Сделать загружаемым» ставит limine-mkinitcpio-hook, который его даёт, плюс хук pacman, чтобы будущие ядра обрабатывались сами."
+msgstr ""
+"у limine не установлен генератор записей — «Сделать загружаемым» ставит "
+"limine-mkinitcpio-hook, который его даёт, плюс хук pacman, чтобы будущие "
+"ядра обрабатывались сами."
 
 msgid "bootloader"
 msgstr "загрузчик"
@@ -767,6 +843,21 @@ msgstr "фильтрация входящего"
 
 msgid "container links"
 msgstr "связи контейнеров"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "Мосты, на которых эта машина раздаёт DHCP и DNS контейнеру или виртуальной машине (Waydroid, libvirt, Docker). Гость запрашивает адрес с 0.0.0.0, что политика «по умолчанию отбрасывать» иначе съедает — гость остаётся без сети, и ничто не указывает на брандмауэр."
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ в прошлый раз synnet применил другое их число; `sudo synnet --firewall` загружает текущий список."
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "Добавьте его командой `sudo synnet --trust-if <iface>`."
 
 msgid "rebuilt"
 msgstr "пересобран"
@@ -830,6 +921,9 @@ msgstr "поставляется"
 msgid "last-suspend"
 msgstr "последний сон"
 
+msgid "none this boot"
+msgstr "не было с этой загрузки"
+
 msgid "when this boot last went to sleep"
 msgstr "когда эта загрузка в последний раз уходила в сон"
 
@@ -890,6 +984,12 @@ msgstr "требуется syn-speak(1) из пакета synui"
 
 msgid "Answer to its name"
 msgstr "Отзываться на своё имя"
+
+msgid "listening"
+msgstr "слушает"
+
+msgid "off"
+msgstr "выкл"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1047,11 +1147,20 @@ msgstr "NTP включён"
 msgid "time-format"
 msgstr "формат времени"
 
+msgid "24-hour"
+msgstr "24-часовой"
+
+msgid "12-hour"
+msgstr "12-часовой"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "панель, экран блокировки и часы рабочего стола"
 
 msgid "time-seconds"
 msgstr "секунды"
+
+msgid "on"
+msgstr "вкл"
 
 msgid "seconds in the bar clock"
 msgstr "секунды в часах на панели"
@@ -1065,17 +1174,38 @@ msgstr "порядок, в котором записывается дата"
 msgid "desktop-clock"
 msgstr "часы рабочего стола"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "что показывала БЫ панель synui — она не запущена"
+
 msgid "what the bar is showing right now"
 msgstr "что панель показывает прямо сейчас"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock ничего не вернул"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "synui-clock не установлен — это не сеанс synui"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "Вкл — отклонять непрошеные подключения извне локальной сети"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "Выкл — отвечать на всё, что доходит до этой машины, в любой сети"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (переносить все слои)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "выкл"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (без переноса на GPU)"
+
+msgid "Off  (mask the daemon)"
+msgstr "Выкл  (замаскировать демон)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

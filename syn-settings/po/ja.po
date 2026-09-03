@@ -495,7 +495,9 @@ msgstr "保存済み — クリックすると差し替え、欄を空にする�
 msgid ""
 "the assistant is set to this backend and has no key, so every request will "
 "fail"
-msgstr "アシスタントはこのバックエンドに設定されていますが鍵がないため、すべての要求が失敗します"
+msgstr ""
+"アシスタントはこのバックエンドに設定されていますが鍵がないため、すべての要求"
+"が失敗します"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr ""
@@ -569,6 +571,44 @@ msgstr "AVRCP 音量"
 msgid "see detail"
 msgstr "詳細を参照"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "接続時にヘッドセットが音量 100% を通知することがあります (AVRCP の癖)。SPA_DATA_DIR に wireplumber 向けの修正が入っています"
+
+msgid "not driven"
+msgstr "未使用"
+
+msgid "Right index"
+msgstr "右手 人差し指"
+
+msgid "Right middle"
+msgstr "右手 中指"
+
+msgid "Right thumb"
+msgstr "右手 親指"
+
+msgid "Right ring"
+msgstr "右手 薬指"
+
+msgid "Right little"
+msgstr "右手 小指"
+
+msgid "Left index"
+msgstr "左手 人差し指"
+
+msgid "Left middle"
+msgstr "左手 中指"
+
+msgid "Left thumb"
+msgstr "左手 親指"
+
+msgid "Left ring"
+msgstr "左手 薬指"
+
+msgid "Left little"
+msgstr "左手 小指"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -580,6 +620,9 @@ msgstr ""
 
 msgid "reader"
 msgstr "読み取り装置"
+
+msgid "none found"
+msgstr "見つかりません"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
@@ -608,6 +651,20 @@ msgstr ""
 
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr "いずれかが登録されていれば、ロック画面は読み取り装置を提示します"
+
+msgid "enrolled"
+msgstr "登録済み"
+
+msgid "not enrolled"
+msgstr "未登録"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "登録済みです。もう一度登録すると置き換わります"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "この指を登録します — 読み取り部から指を離して置き直す操作を数回求められます"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "Arch の標準カーネル。SynapseOS が同梱するものです"
@@ -669,6 +726,16 @@ msgstr ""
 "  ⚠ ブートローダーの設定は root のみが読めるため、この画面ではエントリーの有"
 "無を判断できません — 「起動可能にする」が再生成して読めるようにします"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ 実行中、所有パッケージなし"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "起動しているリリースを所有するカーネルパッケージが一つもありません — つまり上の行のどれも、いま動いているカーネルではありません。たいていはカーネルを更新したあとまだ再起動していないというだけで、再起動するまで動作中のカーネル用のモジュールは /usr/lib/modules にありません。"
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -687,21 +754,30 @@ msgstr ""
 msgid ""
 "“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
 "itself."
-msgstr "「起動可能にする」は grub-mkconfig を実行し、インストール済みのカーネルをすべて自動で見つけます。"
+msgstr ""
+"「起動可能にする」は grub-mkconfig を実行し、インストール済みのカーネルをすべ"
+"て自動で見つけます。"
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "「起動可能にする」は kernel-install を実行し、Boot Loader Spec のエントリーを書き込みます。"
+msgstr ""
+"「起動可能にする」は kernel-install を実行し、Boot Loader Spec のエントリーを"
+"書き込みます。"
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
-msgstr "「起動可能にする」は limine-update を実行し、カーネルのエントリーを作り直します。"
+msgstr ""
+"「起動可能にする」は limine-update を実行し、カーネルのエントリーを作り直しま"
+"す。"
 
 msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "limine にはエントリー生成器がインストールされていません — 「起動可能にする」が limine-mkinitcpio-hook をインストールし、生成器と、今後のカーネルを自動で扱う pacman フックを追加します。"
+msgstr ""
+"limine にはエントリー生成器がインストールされていません — 「起動可能にする」"
+"が limine-mkinitcpio-hook をインストールし、生成器と、今後のカーネルを自動で"
+"扱う pacman フックを追加します。"
 
 msgid "bootloader"
 msgstr "ブートローダー"
@@ -755,6 +831,21 @@ msgstr "受信フィルタリング"
 
 msgid "container links"
 msgstr "コンテナーの接続"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "このマシンがコンテナや仮想マシン (Waydroid、libvirt、Docker) のために DHCP と DNS を提供しているブリッジ。ゲストは 0.0.0.0 からアドレスを要求しますが、既定の drop ポリシーはそれを飲み込んでしまいます — ゲストはネットワークを失い、どこにもファイアウォールとは書かれません。"
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ synnet が前回適用した数と異なります。`sudo synnet --firewall` で現在の一覧を読み込みます。"
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "`sudo synnet --trust-if <iface>` で追加できます。"
 
 msgid "rebuilt"
 msgstr "再構築"
@@ -817,6 +908,9 @@ msgstr "同梱"
 msgid "last-suspend"
 msgstr "前回のサスペンド"
 
+msgid "none this boot"
+msgstr "今回の起動ではなし"
+
 msgid "when this boot last went to sleep"
 msgstr "この起動が最後にスリープした時刻"
 
@@ -877,6 +971,12 @@ msgstr "synui パッケージに含まれる syn-speak(1) が必要です"
 
 msgid "Answer to its name"
 msgstr "名前に応答する"
+
+msgid "listening"
+msgstr "待ち受け中"
+
+msgid "off"
+msgstr "オフ"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1036,11 +1136,20 @@ msgstr "NTP 有効"
 msgid "time-format"
 msgstr "時刻の書式"
 
+msgid "24-hour"
+msgstr "24 時間制"
+
+msgid "12-hour"
+msgstr "12 時間制"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "バー、ロック画面、デスクトップ時計"
 
 msgid "time-seconds"
 msgstr "秒を表示"
+
+msgid "on"
+msgstr "オン"
 
 msgid "seconds in the bar clock"
 msgstr "バーの時計に秒を表示します"
@@ -1054,17 +1163,38 @@ msgstr "日付を書く順序"
 msgid "desktop-clock"
 msgstr "デスクトップ時計"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "synui のバーが表示するはずのもの — 実行されていません"
+
 msgid "what the bar is showing right now"
 msgstr "バーが今表示している内容"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock は何も返しませんでした"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "synui-clock がインストールされていません — synui のセッションではありません"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "オン — ローカルネットワーク外からの求めていない接続を拒否する"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "オフ — どのネットワークでも、このマシンに届いたものすべてに応答する"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (全レイヤーをオフロード)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "オフ"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (GPU オフロードなし)"
+
+msgid "Off  (mask the daemon)"
+msgstr "オフ  (デーモンをマスクする)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

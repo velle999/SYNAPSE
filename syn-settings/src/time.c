@@ -331,14 +331,14 @@ int pane_time(void)
 	char fmt[16];
 	clock_get("format", "12", fmt, sizeof fmt);
 	rec_row("%s\t%s\t%s\t%s",
-	        N_("time-format"), !strcmp(fmt, "24") ? "24-hour" : "12-hour",
+	        N_("time-format"), !strcmp(fmt, "24") ? N_("24-hour") : N_("12-hour"),
 	        elsewhere ? why : N_("the bar, the lock screen and the desktop clock"),
 	        clock_action(have_clock, elsewhere, "choice:time-format"));
 
 	char secs[16];
 	clock_get("seconds", "0", secs, sizeof secs);
 	rec_row("%s\t%s\t%s\t%s",
-	        N_("time-seconds"), atoi(secs) ? "on" : "off",
+	        N_("time-seconds"), atoi(secs) ? N_("on") : N_("off"),
 	        elsewhere ? why : N_("seconds in the bar clock"),
 	        clock_action(have_clock, elsewhere, "toggle:time-seconds"));
 
@@ -358,13 +358,13 @@ int pane_time(void)
 	if (clock_preview(prev, sizeof prev))
 		rec_row("%s\t%s\t%s\t-",
 		        N_("desktop-clock"), prev,
-		        elsewhere ? "what synui's bar WOULD show — it is not running"
+		        elsewhere ? N_("what synui's bar WOULD show — it is not running")
 		                  : N_("what the bar is showing right now"));
 	else
 		rec_row("%s\t%s\t%s\t-",
 		        N_("desktop-clock"), N_("unknown"),
-		        have_clock ? "synui-clock returned nothing"
-		                   : "synui-clock not installed — not a synui session");
+		        have_clock ? N_("synui-clock returned nothing")
+		                   : N_("synui-clock not installed — not a synui session"));
 
 	return 0;
 }
@@ -437,10 +437,17 @@ int do_choices(int argc, char **argv)
 	 * machine that is in fact filtered. */
 	if (!strcmp(key, "firewall")) {
 		int on = synnet_firewall_on();
-		rec_row("on	On — refuse unsolicited connections from outside "
-		        "the local network	%s", on ? "current" : "-");
-		rec_row("off	Off — answer anything that reaches this machine, "
-		        "on any network	%s", on ? "-" : "current");
+		/* ⛔ THE NAMES ARE ARGUMENTS, NOT PART OF THE FORMAT — a word inside
+		 * the format is drawn and never reaches a template. The id in the
+		 * first column stays English: the window compares it, and
+		 * data/syn-settings.qml translates only `name` on its way to a
+		 * button. */
+		rec_row("on\t%s\t%s",
+		        N_("On — refuse unsolicited connections from outside "
+		           "the local network"), on ? "current" : "-");
+		rec_row("off\t%s\t%s",
+		        N_("Off — answer anything that reaches this machine, "
+		           "on any network"), on ? "-" : "current");
 		return 0;
 	}
 
@@ -463,12 +470,12 @@ int do_choices(int argc, char **argv)
 			cur[strcspn(cur, "\n")] = '\0';
 			tsv_clean(cur);
 		}
-		rec_row("%s\tGPU  (offload every layer)\t%s",
-		        N_("gpu"), !strcmp(cur, "gpu") ? "current" : "-");
-		rec_row("%s\tCPU  (no GPU offload)\t%s",
-		        N_("cpu"), !strcmp(cur, "cpu") ? "current" : "-");
-		rec_row("%s\tOff  (mask the daemon)\t%s",
-		        N_("off"), !strcmp(cur, "off") ? "current" : "-");
+		rec_row("%s\t%s\t%s", N_("gpu"), N_("GPU  (offload every layer)"),
+		        !strcmp(cur, "gpu") ? "current" : "-");
+		rec_row("%s\t%s\t%s", N_("cpu"), N_("CPU  (no GPU offload)"),
+		        !strcmp(cur, "cpu") ? "current" : "-");
+		rec_row("%s\t%s\t%s", N_("off"), N_("Off  (mask the daemon)"),
+		        !strcmp(cur, "off") ? "current" : "-");
 		return 0;
 	}
 

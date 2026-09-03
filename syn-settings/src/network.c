@@ -266,14 +266,22 @@ static void firewall_rows(void)
 		int stale = want && !strcmp(st, "active") && applied[0] &&
 		            (unsigned)atoi(applied) != n;
 
-		rec_row("firewall\t%s\t%s\t%s\t"
-		        "Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, libvirt, Docker). A guest asks for its address from 0.0.0.0, which the default-drop policy would otherwise eat — the guest then has no network and nothing says firewall. %s\t"
-		        "-",
+		/* ⛔ THE SENTENCE IS AN ARGUMENT, NOT PART OF THE FORMAT. Written into
+		 * the format string it is drawn on screen and reaches no template at
+		 * all — xgettext extracts the format as one msgid, and the cell the
+		 * window looks up is that sentence with a second one appended, which
+		 * matches nothing. */
+		rec_row("firewall\t%s\t%s\t%s\t%s %s\t-",
 		        N_("container links"), n ? list : N_("none"), stale ? N_("warn") : "-",
+		        N_("Bridges this machine serves DHCP and DNS on for a container "
+		           "or VM (Waydroid, libvirt, Docker). A guest asks for its "
+		           "address from 0.0.0.0, which the default-drop policy would "
+		           "otherwise eat — the guest then has no network and nothing "
+		           "says firewall."),
 		        stale
-		          ? "⚠ synnet last applied a different number of these; "
-		            "`sudo synnet --firewall` loads the current list."
-		          : "Add one with `sudo synnet --trust-if <iface>`.");
+		          ? N_("⚠ synnet last applied a different number of these; "
+		               "`sudo synnet --firewall` loads the current list.")
+		          : N_("Add one with `sudo synnet --trust-if <iface>`."));
 	}
 
 	/* Only when it has actually happened. A zero here would be a row about

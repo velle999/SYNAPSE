@@ -164,7 +164,7 @@ int pane_speech(void)
 		 * that a microphone is open right now, and this is the row where the
 		 * difference matters. */
 		rec_row("switch\t%s\t%s\t-\t%s\ttoggle:wake-word",
-		        N_("Answer to its name"), !strcmp(wake, "on") ? "listening" : "off",
+		        N_("Answer to its name"), !strcmp(wake, "on") ? N_("listening") : N_("off"),
 		        N_("Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until it is turned off; the bar shows a microphone while it is on"));
 	} else {
 		rec_row("switch\t%s\tunavailable\t-\t%s\t-",

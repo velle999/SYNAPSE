@@ -19,6 +19,7 @@
  */
 #define _GNU_SOURCE
 #include "synsettings.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <stdlib.h>
@@ -208,7 +209,7 @@ int pane_display(void)
 
 		rec_row("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
 		        shortname, status, enabled, mode, edidbuf,
-		        driven ? size : mine ? "not driven" : "-",
+		        driven ? size : mine ? N_("not driven") : "-",
 		        at, scale, action);
 		free(names[i]);
 	}

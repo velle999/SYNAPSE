@@ -504,7 +504,9 @@ msgstr "zapisany — kliknij, aby go zastąpić, albo wyczyść pole, aby go usu
 msgid ""
 "the assistant is set to this backend and has no key, so every request will "
 "fail"
-msgstr "asystent jest ustawiony na ten backend i nie ma klucza, więc każde żądanie zawiedzie"
+msgstr ""
+"asystent jest ustawiony na ten backend i nie ma klucza, więc każde żądanie "
+"zawiedzie"
 
 msgid "no key stored; set one before switching to this backend"
 msgstr "nie zapisano klucza; ustaw go przed przełączeniem na ten backend"
@@ -576,6 +578,44 @@ msgstr "głośność AVRCP"
 msgid "see detail"
 msgstr "zobacz szczegóły"
 
+msgid ""
+"a connecting headset may announce 100% volume (AVRCP quirk); SPA_DATA_DIR "
+"carries the wireplumber fix"
+msgstr "podłączający się zestaw słuchawkowy może zgłosić 100% głośności (osobliwość AVRCP); SPA_DATA_DIR zawiera poprawkę dla wireplumbera"
+
+msgid "not driven"
+msgstr "nieobsługiwane"
+
+msgid "Right index"
+msgstr "Prawy wskazujący"
+
+msgid "Right middle"
+msgstr "Prawy środkowy"
+
+msgid "Right thumb"
+msgstr "Prawy kciuk"
+
+msgid "Right ring"
+msgstr "Prawy serdeczny"
+
+msgid "Right little"
+msgstr "Prawy mały"
+
+msgid "Left index"
+msgstr "Lewy wskazujący"
+
+msgid "Left middle"
+msgstr "Lewy środkowy"
+
+msgid "Left thumb"
+msgstr "Lewy kciuk"
+
+msgid "Left ring"
+msgstr "Lewy serdeczny"
+
+msgid "Left little"
+msgstr "Lewy mały"
+
 msgid "fprintd"
 msgstr "fprintd"
 
@@ -588,6 +628,9 @@ msgstr ""
 
 msgid "reader"
 msgstr "czytnik"
+
+msgid "none found"
+msgstr "nie znaleziono"
 
 msgid "fprintd is installed but reports no fingerprint reader on this machine"
 msgstr ""
@@ -616,6 +659,20 @@ msgstr ""
 
 msgid "the lock screen offers the reader whenever one of these is on file"
 msgstr "ekran blokady proponuje czytnik, gdy tylko któryś z nich jest zapisany"
+
+msgid "enrolled"
+msgstr "zarejestrowany"
+
+msgid "not enrolled"
+msgstr "niezarejestrowany"
+
+msgid "already on file; enrolling again replaces it"
+msgstr "już zapisany; ponowna rejestracja go zastąpi"
+
+msgid ""
+"enrol this finger — you will be asked to lift and rest it on the reader "
+"several times"
+msgstr "zarejestruj ten palec — zostaniesz poproszony o kilkukrotne uniesienie go i położenie na czytniku"
 
 msgid "the stock Arch kernel; what SynapseOS ships"
 msgstr "standardowe jądro Archa; to, które dostarcza SynapseOS"
@@ -678,6 +735,16 @@ msgstr ""
 "nie powie, czy wpis istnieje — „Uczyń uruchamialnym” tworzy ją na nowo i "
 "czyni czytelną"
 
+msgid "⚠ running, unowned"
+msgstr "⚠ działa, bez pakietu"
+
+msgid ""
+"No installed kernel package owns the release you booted — so none of the "
+"rows above is the kernel you are on. Usually this just means a kernel "
+"upgrade has not been rebooted into yet; until you do, modules for the "
+"running kernel are gone from /usr/lib/modules."
+msgstr "Żaden zainstalowany pakiet jądra nie zawiera uruchomionej wersji — więc żaden z wierszy powyżej nie jest jądrem, na którym pracujesz. Zwykle znaczy to tylko, że po aktualizacji jądra nie było jeszcze restartu; do tego czasu modułów dla działającego jądra nie ma w /usr/lib/modules."
+
 msgid ""
 "The running kernel has no actions: removing what you booted from is how a "
 "machine stops booting. Reboot into another one first."
@@ -696,21 +763,30 @@ msgstr ""
 msgid ""
 "“Make bootable” runs grub-mkconfig, which finds every installed kernel by "
 "itself."
-msgstr "„Uczyń uruchamialnym” uruchamia grub-mkconfig, który sam znajduje każde zainstalowane jądro."
+msgstr ""
+"„Uczyń uruchamialnym” uruchamia grub-mkconfig, który sam znajduje każde "
+"zainstalowane jądro."
 
 msgid ""
 "“Make bootable” runs kernel-install, which writes a Boot Loader Spec entry."
-msgstr "„Uczyń uruchamialnym” uruchamia kernel-install, który zapisuje wpis Boot Loader Spec."
+msgstr ""
+"„Uczyń uruchamialnym” uruchamia kernel-install, który zapisuje wpis Boot "
+"Loader Spec."
 
 msgid ""
 "“Make bootable” runs limine-update, which regenerates the kernel entries."
-msgstr "„Uczyń uruchamialnym” uruchamia limine-update, który na nowo tworzy wpisy jąder."
+msgstr ""
+"„Uczyń uruchamialnym” uruchamia limine-update, który na nowo tworzy wpisy "
+"jąder."
 
 msgid ""
 "limine has no entry generator installed — “Make bootable” installs limine-"
 "mkinitcpio-hook, which adds one plus a pacman hook so future kernels are "
 "handled automatically."
-msgstr "limine nie ma zainstalowanego generatora wpisów — „Uczyń uruchamialnym” instaluje limine-mkinitcpio-hook, który go dostarcza, wraz z hakiem pacmana, dzięki czemu przyszłe jądra są obsługiwane automatycznie."
+msgstr ""
+"limine nie ma zainstalowanego generatora wpisów — „Uczyń uruchamialnym” "
+"instaluje limine-mkinitcpio-hook, który go dostarcza, wraz z hakiem pacmana, "
+"dzięki czemu przyszłe jądra są obsługiwane automatycznie."
 
 msgid "bootloader"
 msgstr "program rozruchowy"
@@ -764,6 +840,21 @@ msgstr "filtrowanie wejścia"
 
 msgid "container links"
 msgstr "połączenia kontenerów"
+
+msgid ""
+"Bridges this machine serves DHCP and DNS on for a container or VM (Waydroid, "
+"libvirt, Docker). A guest asks for its address from 0.0.0.0, which the "
+"default-drop policy would otherwise eat — the guest then has no network and "
+"nothing says firewall."
+msgstr "Mostki, na których ta maszyna udostępnia DHCP i DNS dla kontenera lub maszyny wirtualnej (Waydroid, libvirt, Docker). Gość prosi o adres z 0.0.0.0, co domyślna reguła odrzucania by pochłonęła — gość nie ma wtedy sieci, a nic nie mówi o zaporze."
+
+msgid ""
+"⚠ synnet last applied a different number of these; `sudo synnet --firewall` "
+"loads the current list."
+msgstr "⚠ synnet ostatnio zastosował inną ich liczbę; `sudo synnet --firewall` wczytuje bieżącą listę."
+
+msgid "Add one with `sudo synnet --trust-if <iface>`."
+msgstr "Dodaj jeden poleceniem `sudo synnet --trust-if <iface>`."
 
 msgid "rebuilt"
 msgstr "odbudowana"
@@ -826,6 +917,9 @@ msgstr "dostarczone"
 msgid "last-suspend"
 msgstr "ostatnie uśpienie"
 
+msgid "none this boot"
+msgstr "żaden w tym uruchomieniu"
+
 msgid "when this boot last went to sleep"
 msgstr "kiedy ten rozruch ostatnio zasnął"
 
@@ -886,6 +980,12 @@ msgstr "wymaga syn-speak(1) z pakietu synui"
 
 msgid "Answer to its name"
 msgstr "Odpowiadanie na swoje imię"
+
+msgid "listening"
+msgstr "nasłuchuje"
+
+msgid "off"
+msgstr "wyłączone"
 
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
@@ -1041,11 +1141,20 @@ msgstr "NTP włączone"
 msgid "time-format"
 msgstr "format czasu"
 
+msgid "24-hour"
+msgstr "24-godzinny"
+
+msgid "12-hour"
+msgstr "12-godzinny"
+
 msgid "the bar, the lock screen and the desktop clock"
 msgstr "pasek, ekran blokady i zegar pulpitu"
 
 msgid "time-seconds"
 msgstr "sekundy"
+
+msgid "on"
+msgstr "włączone"
 
 msgid "seconds in the bar clock"
 msgstr "sekundy w zegarze na pasku"
@@ -1059,17 +1168,38 @@ msgstr "kolejność, w jakiej zapisywana jest data"
 msgid "desktop-clock"
 msgstr "zegar pulpitu"
 
+msgid "what synui's bar WOULD show — it is not running"
+msgstr "co pokazałby pasek synui — nie jest uruchomiony"
+
 msgid "what the bar is showing right now"
 msgstr "co pasek pokazuje w tej chwili"
+
+msgid "synui-clock returned nothing"
+msgstr "synui-clock nic nie zwrócił"
+
+msgid "synui-clock not installed — not a synui session"
+msgstr "synui-clock nie jest zainstalowany — to nie sesja synui"
+
+msgid "On — refuse unsolicited connections from outside the local network"
+msgstr "Włączona — odrzucaj niezamówione połączenia spoza sieci lokalnej"
+
+msgid "Off — answer anything that reaches this machine, on any network"
+msgstr "Wyłączona — odpowiadaj na wszystko, co dotrze do tej maszyny, w każdej sieci"
 
 msgid "gpu"
 msgstr "gpu"
 
+msgid "GPU  (offload every layer)"
+msgstr "GPU  (przenieś każdą warstwę)"
+
 msgid "cpu"
 msgstr "cpu"
 
-msgid "off"
-msgstr "wyłączone"
+msgid "CPU  (no GPU offload)"
+msgstr "CPU  (bez przenoszenia na GPU)"
+
+msgid "Off  (mask the daemon)"
+msgstr "Wyłączone  (zamaskuj demona)"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

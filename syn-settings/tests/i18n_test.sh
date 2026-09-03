@@ -114,6 +114,44 @@ if [ -x "$BIN" ]; then
     # are now. (Verified: unmarking one label fails this; against the committed
     # copy it passed.)
     msgcat --no-wrap -o "$tmp/flat.pot" "$tmp/syn-settings.pot" 2>/dev/null
+
+    # ⛔ THE FINGERPRINT PANE IS FAKED, AND THAT IS NOT TIDINESS — IT IS THE
+    # ONLY REASON THIS CHECK SEES THOSE TEN ROWS AT ALL.
+    #
+    # fprint.c emits one row per finger, but ONLY on a machine where
+    # fprintd-list reports a reader. Every box without one takes an early
+    # return two rows in, so ten drawn labels and two sentences sat unmarked
+    # through two releases: this check passed here, and failed on velle's
+    # ThinkPad — where the reader is enrolled — with 13 unreachable strings,
+    # taking `syn-update` down mid-build for every component after it.
+    #
+    # ⚠ SHADOWED BY PREPENDING TO PATH, WHICH WORKS IN BOTH DIRECTIONS. On a
+    # box with no fprintd it ADDS the command; on one that has it, have_cmd()
+    # walks PATH in order and finds this first. Either way the pane emits the
+    # same twelve rows and this check reads the same words.
+    #
+    # ⚠ THE MORAL, AGAIN: a check that reads the RECORD reads THIS MACHINE.
+    # Rows appear and disappear with the hardware, the installed packages and
+    # the bootloader. Anything asserted about them has to hold for rows this
+    # box will never emit — which means faking the reader, not hoping for one.
+    fake=$tmp/fakebin; mkdir -p "$fake"
+    cat > "$fake/fprintd-list" <<'FPL'
+#!/bin/sh
+echo "found 1 devices"
+echo "Device at /net/reactivated/Fprint/Device/0"
+echo "Fingerprints for user tester on Synaptics (press):"
+echo " - #0: right-index-finger"
+echo " - #1: left-thumb"
+FPL
+    printf '#!/bin/sh\nexit 0\n' > "$fake/fprintd-enroll"
+    chmod +x "$fake/fprintd-list" "$fake/fprintd-enroll"
+    PATH="$fake:$PATH"
+
+    # ...and it really is emitting them, or the shadowing silently did nothing
+    # and this check is back to reading whatever hardware happens to be here.
+    nfinger=$("$BIN" --rec fprint 2>/dev/null | grep -c '^finger	')
+    check "the fingerprint pane emits its ten rows on any machine" "10" "$nfinger"
+
     for pane in display region time power system network bluetooth kernel \
                 apps ai speech fprint assistant; do
         "$BIN" --rec "$pane" 2>/dev/null | awk -F'\t' '
@@ -161,6 +199,88 @@ if [ -x "$BIN" ]; then
             END { exit !found }
         ' "$tmp/flat.pot" || printf '%s\n' "$v"
     done > "$tmp/unreachable"
+# ── ⛔ AND THE SAME CLASS, WITHOUT RUNNING ANYTHING ────────────────────────
+#
+# The check above is the strong one, but it can only see rows THIS MACHINE
+# emits — that is how ten finger labels survived two releases. This one reads
+# the SOURCE: every string literal handed to rec_row() as an ARGUMENT is a cell
+# a person reads, so it is either N_() or one of the tokens listed below, and
+# there is no third category.
+#
+# ⚠ ARGUMENTS ONLY, NOT THE FORMAT. The format is the row's shape — tabs,
+# `%s`, and the leading `kind` token — and xgettext would extract it whole.
+# ⛔ WHICH IS ALSO A TRAP: prose written INTO the format string is drawn and
+# reaches no template, because the msgid is the whole format and the cell is
+# only part of it. network.c had a 300-character sentence there. The check
+# below also refuses a run of English inside a rec_row format.
+bare=$(python3 - "$root" <<'PYEOF'
+import re, sys, glob, os
+root = sys.argv[1]
+
+# ⛔ EVERY ENTRY HERE IS A THING A PROGRAM READS, NOT A WORD ANYBODY TRANSLATES.
+#   current            — data/syn-settings.qml compares `f[2] === "current"`
+#   toggle:/choice:/mode:/enroll:/forget:/unavailable:  — the action column
+#   *.service/.socket/.timer  — systemd unit names
+#   wifi               — an argument to strcmp, not a cell
+#   override           — a state token the window colours on
+#   synapse, computer  — the DEFAULT wake words, i.e. somebody's data
+ALLOW = {"current", "wifi", "override", "synapse, computer"}
+PREFIX = ("toggle:", "choice:", "mode:", "enroll:", "forget:", "unavailable:")
+SUFFIX = (".service", ".socket", ".timer", ".target", ".conf", ".desktop")
+
+def split_args(call):
+    args, depth, cur, k = [], 0, "", 0
+    while k < len(call):
+        c = call[k]
+        if c == '"':
+            cur += c; k += 1
+            while k < len(call) and call[k] != '"':
+                if call[k] == "\\": cur += call[k]; k += 1
+                cur += call[k]; k += 1
+            cur += '"'; k += 1; continue
+        if c == "(": depth += 1
+        if c == ")": depth -= 1
+        if c == "," and depth == 0:
+            args.append(cur.strip()); cur = ""; k += 1; continue
+        cur += c; k += 1
+    args.append(cur.strip())
+    return args
+
+bad = []
+for f in sorted(glob.glob(os.path.join(root, "src", "*.c"))):
+    s = open(f, encoding="utf-8").read()
+    rel = os.path.basename(f)
+    for m in re.finditer(r"rec_row\(", s):
+        i, depth, j = m.end(), 1, m.end()
+        while j < len(s) and depth:
+            if s[j] == "(": depth += 1
+            elif s[j] == ")": depth -= 1
+            elif s[j] == '"':
+                j += 1
+                while j < len(s) and s[j] != '"':
+                    if s[j] == "\\": j += 1
+                    j += 1
+            j += 1
+        call = s[i:j - 1]
+        line = s[:m.start()].count("\n") + 1
+        args = split_args(call)
+
+        # the format: no run of English prose in it
+        fmt = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', args[0]))
+        if re.search(r"[A-Za-z]{3,} [a-z]{3,} [a-z]{3,}", fmt):
+            bad.append("%s:%d: prose in the rec_row FORMAT" % (rel, line))
+
+        for a in (" ".join(x.split()) for x in args[1:]):
+            outside = re.sub(r'N_\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', "X", a)
+            for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', outside):
+                if len(lit) < 4 or lit in ALLOW: continue
+                if lit.startswith(PREFIX) or lit.endswith(SUFFIX): continue
+                bad.append("%s:%d: %s" % (rel, line, lit[:50]))
+print("\n".join(bad))
+PYEOF
+)
+check "every rec_row cell is N_() or a token a program reads" "" "$(printf '%s' "$bare" | tr '\n' ' ')"
+
     n=$(grep -c '' "$tmp/unreachable")
     sample=$(head -2 "$tmp/unreachable" | cut -c1-60 | tr '\n' '|')
     check "every word the window draws is in the template" "0" "$n${sample:+ — $sample}"
