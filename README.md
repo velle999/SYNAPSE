@@ -215,8 +215,38 @@ a question whose own answer does not work.
 
 **And the desktop speaks it too.** The control panel, the dock, the desktop
 menu, the lock screen, the screensaver, the power, filter and CRT panels — in
-the same fourteen languages. That is 820 strings, complete in all thirteen
-catalogs, following the locale with nothing to configure.
+the same fourteen languages, following the locale with nothing to configure.
+The bar speaks them as well, through a different road: quickshell ships no
+translator at all, so `qsTr()` compiles, looks up nothing and hands back its own
+argument while looking exactly like a marked string in review. The same `.po`
+files are compiled a second time into JSON, and a singleton reads them.
+
+**And so do the applications.** Fifteen of them carry catalogs — the disk
+utility, the file manager, the package manager, the settings app, the editor,
+the calendar, the terminal, the media player, the vault, the cleaner, the
+sandbox, the network daemon, the arcade, the studio and the compositor itself —
+which is about 4,000 strings per language on top of the installer's and the
+shell's. `synsh` keeps its own compiled-in catalog rather than using gettext,
+deliberately: it runs on the ISO before `/usr` is necessarily complete, and a
+shell that cannot find its `.mo` files must still be able to say why.
+
+**What is never translated is the wire.** Every one of those tools answers
+`--rec` with tab-separated records that its own window parses, and a record is
+not writing — the first row names the columns, and the values are matched on:
+a vault is `open` or `locked`, a cleanup category is `browsercache`, a firewall
+is `active`. So the drawn word and the record's word are two separate strings
+even where they are spelled the same, and each suite proves it by running every
+offline `--rec` command under a catalog that translates *everything* and
+diffing the bytes. A marked column name is invisible to an ordinary
+translation diff until somebody translates that entry, and by then it is a
+window that has stopped recognising its own rows.
+
+The same line runs through the rest of it: a journal stays English because
+`journalctl -u synnet` is what somebody pastes into a search; an AI prompt stays
+English because the model is asked to answer `BLOCK` or `ALLOW` and those two
+words are matched; `[Y/n]` stays `[Y/n]`; and an exit status is a number in
+every language, which is exactly why "the sandbox could not be built" can be
+told from "the command failed" at all.
 
 Hindi and Arabic **render**, which is a different question from being
 translated. `synui` draws its own text rather than handing it to a toolkit, so
@@ -225,11 +255,11 @@ FriBidi for reading order. Arabic joins and runs right-to-left, Devanagari
 matras sit before the consonants they belong to. The other eleven need neither
 and take the same path they always did.
 
-Still English: the **bar** — it is a quickshell surface with a tree of its own,
-and so are the desktop widgets it draws — and a few compositor panels:
-Bluetooth, the wallpaper picker, notifications, the news reader, and the
-clock's date format. The dock is translated and the bar is not, which is worth
-saying plainly given they sit next to each other.
+Still English: the desktop **widgets** the bar draws, and a few compositor
+panels — the wallpaper picker, notifications, the clock's date format, and most
+of the Bluetooth and news panels, which have their headings translated and
+little else. Every one of those is a screen somebody can reach, so it is worth
+saying plainly rather than rounding up to "translated".
 
 ### Installing it
 
