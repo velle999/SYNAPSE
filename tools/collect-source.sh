@@ -197,6 +197,13 @@ tmp=$(mktemp "$(dirname "$out")/.$(basename "$out").XXXXXX")
 err=$(mktemp "$(dirname "$out")/.$(basename "$out").err.XXXXXX")
 trap 'rm -f "$tmp" "$err"' EXIT
 
+# ⛔ *~, *.orig AND *.rej ARE EXCLUDED BELOW. They are in .gitignore and tar
+# does not read it: this walks the WORKING TREE, which is the point — a
+# component is publishable before it is committed. msgmerge writes `de.po~`
+# beside every catalog it updates unless it is told --backup=none, and thirteen
+# of them rode into syn-disks 0.1.0-25's and syn-arcade 0.1.0-51's published
+# sources. Harmless to the build, and exactly the kind of thing somebody
+# downloads a release to read.
 st=0
 tar czf "$tmp" \
     --transform "s|^$name/|$prefix/|" \
@@ -207,6 +214,9 @@ tar czf "$tmp" \
     --exclude="$name/src/pkg" \
     --exclude="$name/*.pkg.tar*" \
     --exclude="$name/*.tar.gz" \
+    --exclude="*~" \
+    --exclude="*.orig" \
+    --exclude="*.rej" \
     --exclude="$name/*.ko" \
     --exclude="$name/*.o" \
     --exclude="$name/*.mod*" \
