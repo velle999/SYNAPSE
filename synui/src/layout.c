@@ -1,7 +1,7 @@
 /*
  * layout.c — SynapseOS window layout engine
  *
- * Implements six layout modes:
+ * Implements seven layout modes:
  *
  *   TILING   — Master-stack tiling (dwm-style)
  *              First window is master (left, 60% width).
@@ -38,6 +38,12 @@
  *   AI       — Ask synapd to suggest positions based on
  *              workspace intent + running apps. If AI is
  *              unavailable, falls back to TILING.
+ *
+ *   CASCADE  — Overlapping cards, each offset down-and-right so every
+ *              titlebar stays reachable, and the pile SPLITS into
+ *              several once one would run off the screen. The only
+ *              layout here whose windows overlap on purpose. See the
+ *              section comment above layout_cascade().
  *
  * Border width: 2px (configurable).
  * Gap between windows: 8px.

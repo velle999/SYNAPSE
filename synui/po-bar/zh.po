@@ -108,21 +108,26 @@ msgstr ""
 msgid "AGE"
 msgstr "年龄"
 
-#: welcome/pages.js:152
+#: welcome/pages.js:222
 msgid "AI Backend"
 msgstr "AI 后端"
 
-#: welcome/pages.js:86 welcome/pages.js:146
+#: welcome/pages.js:86 welcome/pages.js:216
 msgid "AI Command Bar"
 msgstr "AI 命令栏"
 
-#: welcome/pages.js:150
+#: welcome/pages.js:220
 msgid "AI Model"
 msgstr "AI 模型"
 
 #: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "AI 外壳 (synsh)"
+
+#: welcome/pages.js:170
+msgid ""
+"AI — asks the local model where each window goes. Tiling when the AI is off."
+msgstr "AI — 根据窗口本身问本地模型该放在哪里。AI 关闭时就是 Tiling。"
 
 #: StartMenu.qml:748
 msgid "APPLICATIONS"
@@ -132,7 +137,7 @@ msgstr "应用程序"
 msgid "AVAILABLE TO INSTALL"
 msgstr "可供安装"
 
-#: welcome/pages.js:190
+#: welcome/pages.js:260
 msgid "About this system"
 msgstr "关于本系统"
 
@@ -144,11 +149,11 @@ msgstr "附件"
 msgid "Adjust"
 msgstr "调整"
 
-#: welcome/pages.js:167
+#: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "也可以从命令栏得到答案。"
 
-#: StartMenu.qml:627 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:195
 msgid "Appearance"
 msgstr "外观"
 
@@ -164,7 +169,7 @@ msgstr "在终端中应用"
 msgid "Arrow keys move · Enter opens · Esc closes the guide."
 msgstr "方向键移动 · 回车打开 · Esc 关闭本指南"
 
-#: welcome/pages.js:147
+#: welcome/pages.js:217
 msgid "Ask for a command; it answers with one you can run."
 msgstr "问它要一条命令，它会给出一条你可以直接运行的。"
 
@@ -204,7 +209,7 @@ msgstr "电池"
 msgid "Back"
 msgstr "返回"
 
-#: welcome/pages.js:171
+#: welcome/pages.js:241
 msgid "Bar out of the way, effects off, the machine to the game."
 msgstr "让开状态栏，关掉特效，把机器交给游戏。"
 
@@ -252,7 +257,7 @@ msgstr ""
 msgid "CPU + memory"
 msgstr "CPU + 内存"
 
-#: welcome/pages.js:166
+#: welcome/pages.js:236
 msgid "Calculator"
 msgstr "计算器"
 
@@ -260,7 +265,15 @@ msgstr "计算器"
 msgid "Cancel"
 msgstr "取消"
 
-#: welcome/pages.js:172
+#: welcome/pages.js:156
+msgid "Cascade this desktop"
+msgstr "层叠此桌面"
+
+#: welcome/pages.js:178
+msgid "Cascade — overlapping cards, offset so every titlebar stays reachable."
+msgstr "Cascade — 重叠的卡片，逐一错开，让每个标题栏都够得着。"
+
+#: welcome/pages.js:242
 msgid "Cat Mode"
 msgstr "猫咪模式"
 
@@ -300,7 +313,7 @@ msgstr "点击停止（或 Super+Shift+R）"
 msgid "Clock"
 msgstr "时钟"
 
-#: welcome/pages.js:132
+#: welcome/pages.js:202
 msgid "Clock, system monitor, music, notes — on the desktop."
 msgstr "时钟、系统监视、音乐、便笺——就放在桌面上。"
 
@@ -308,13 +321,21 @@ msgstr "时钟、系统监视、音乐、便笺——就放在桌面上。"
 msgid "Confirm"
 msgstr "确定"
 
-#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:258
 msgid "Control Panel"
 msgstr "控制面板"
+
+#: welcome/pages.js:159
+msgid "Control Panel ▸ Desktop ▸ Layout names all seven."
+msgstr "控制面板 ▸ Desktop ▸ 布局里七种都列着名字。"
 
 #: modules/Updates.qml:92
 msgid "Could not check for updates\n"
 msgstr "无法检查更新\n"
+
+#: welcome/pages.js:151
+msgid "Cycle layout"
+msgstr "切换布局"
 
 #: widgets/Tuxagotchi.qml:149
 msgid "DISCIPLINE"
@@ -324,7 +345,7 @@ msgstr "管教"
 msgid "Desktop"
 msgstr "桌面"
 
-#: welcome/pages.js:131
+#: welcome/pages.js:201
 msgid "Desktop Widgets"
 msgstr "桌面小部件"
 
@@ -348,11 +369,11 @@ msgstr ""
 msgid "Display"
 msgstr "显示"
 
-#: welcome/pages.js:129
+#: welcome/pages.js:199
 msgid "Display Settings"
 msgstr "显示设置"
 
-#: welcome/pages.js:193
+#: welcome/pages.js:263
 msgid "Documentation and downloads: soslinux.org"
 msgstr "文档与下载：soslinux.org"
 
@@ -363,6 +384,18 @@ msgstr "启动时不再显示本指南"
 #: components/BarMenu.qml:357 components/Mixer.qml:224 welcome/Guide.qml:487
 msgid "Done"
 msgstr "完成"
+
+#: welcome/pages.js:184
+msgid "Dragging, snapping or maximizing a window takes it out of the layout."
+msgstr "拖动、贴边或最大化会让窗口脱离布局。"
+
+#: welcome/pages.js:147
+msgid ""
+"Each desktop keeps its own layout and remembers it across a restart. "
+"Super+Tab walks the one you are on through the seven below, in order."
+msgstr ""
+"每个桌面各有自己的布局，重启后依然记得。Super+Tab 让当前桌面按下面七种的顺序"
+"轮换。"
 
 #: StartMenu.qml:491
 msgid "Education"
@@ -380,15 +413,15 @@ msgstr "均衡器：%1"
 msgid "Every desktop setting, in one place."
 msgstr "桌面的每一项设置，都在一处。"
 
-#: welcome/pages.js:189
+#: welcome/pages.js:259
 msgid "Every setting, grouped."
 msgstr "每一项设置，分门别类。"
 
-#: welcome/pages.js:158 welcome/pages.js:159
+#: welcome/pages.js:228 welcome/pages.js:229
 msgid "Everything else"
 msgstr "其他一切"
 
-#: welcome/pages.js:187
+#: welcome/pages.js:257
 msgid "Everything this guide skipped."
 msgstr "这份指南略过的全部内容。"
 
@@ -399,6 +432,10 @@ msgstr "已喂饱"
 #: widgets/Tuxagotchi.qml:144
 msgid "FUN"
 msgstr "开心"
+
+#: welcome/pages.js:164
+msgid "Floating — nothing is placed for you; windows stay where you put them."
+msgstr "Floating — 不替你摆放；窗口留在你放的位置。"
 
 #: BarConfig.qml:68
 msgid "Focus timer"
@@ -420,11 +457,11 @@ msgstr "专注 · 点击停止"
 msgid "Focus — %1 · click to stop"
 msgstr "专注 — %1 · 点击停止"
 
-#: welcome/pages.js:153
+#: welcome/pages.js:223
 msgid "GPU, CPU or off. Off masks the sockets, so it holds."
 msgstr "GPU、CPU 或关闭。关闭会把套接字一并屏蔽，所以是真的关掉了。"
 
-#: welcome/pages.js:170
+#: welcome/pages.js:240
 msgid "Game Mode"
 msgstr "游戏模式"
 
@@ -440,7 +477,7 @@ msgstr "图形"
 msgid "HEALTH"
 msgstr "健康"
 
-#: welcome/pages.js:169
+#: welcome/pages.js:239
 msgid "Headlines, fetched on the desktop's own schedule."
 msgstr "新闻标题，按桌面自己的节奏抓取。"
 
@@ -452,7 +489,11 @@ msgstr "健康 %1 %"
 msgid "Held back"
 msgstr "已保留"
 
-#: welcome/pages.js:165
+#: welcome/pages.js:146
+msgid "How the windows are arranged"
+msgstr "窗口是怎么排布的"
+
+#: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
 msgstr "空闲、睡眠，以及合盖时的动作。"
 
@@ -468,7 +509,7 @@ msgstr "安装它"
 msgid "Internet"
 msgstr "互联网"
 
-#: welcome/pages.js:101 welcome/pages.js:186
+#: welcome/pages.js:101 welcome/pages.js:256
 msgid "Keyboard Shortcuts"
 msgstr "键盘快捷键"
 
@@ -476,11 +517,15 @@ msgstr "键盘快捷键"
 msgid "LAUNCH"
 msgstr "启动"
 
-#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
+#: welcome/pages.js:145
+msgid "Layouts"
+msgstr "布局"
+
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:244
 msgid "Lock Screen"
 msgstr "锁定屏幕"
 
-#: welcome/pages.js:175
+#: welcome/pages.js:245
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "立刻锁定；屏保按自己的计时器锁定。"
 
@@ -504,7 +549,7 @@ msgstr "失误"
 msgid "MIXER"
 msgstr "混音器"
 
-#: welcome/pages.js:120 welcome/pages.js:121
+#: welcome/pages.js:190 welcome/pages.js:191
 msgid "Make it yours"
 msgstr "把它变成你的"
 
@@ -519,6 +564,11 @@ msgid ""
 msgstr ""
 "内存 %1 / %2 GiB\n"
 "点击打开任务管理器"
+
+#: welcome/pages.js:167
+msgid ""
+"Monocle — one window per monitor, filling the screen; Alt+Tab changes it."
+msgstr "Monocle — 每台显示器一个窗口铺满屏幕；Alt+Tab 换一个。"
 
 #: StartMenu.qml:488
 msgid "Multimedia"
@@ -540,7 +590,7 @@ msgstr "网络"
 msgid "Network + Bluetooth"
 msgstr "网络 + 蓝牙"
 
-#: welcome/pages.js:162
+#: welcome/pages.js:232
 msgid "Network / Wi-Fi"
 msgstr "网络 / Wi-Fi"
 
@@ -548,11 +598,11 @@ msgstr "网络 / Wi-Fi"
 msgid "Network Setup"
 msgstr "网络设置"
 
-#: welcome/pages.js:148
+#: welcome/pages.js:218
 msgid "Neural Overlay"
 msgstr "神经浮层"
 
-#: welcome/pages.js:168
+#: welcome/pages.js:238
 msgid "News"
 msgstr "新闻"
 
@@ -560,7 +610,7 @@ msgstr "新闻"
 msgid "Next"
 msgstr "下一步"
 
-#: welcome/pages.js:134
+#: welcome/pages.js:204
 msgid "Night light, colour blindness filters, CRT."
 msgstr "夜灯、色盲滤镜、CRT。"
 
@@ -596,7 +646,7 @@ msgstr "没有正在播放的内容"
 msgid "Office"
 msgstr "办公"
 
-#: welcome/pages.js:122
+#: welcome/pages.js:192
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
@@ -624,6 +674,10 @@ msgstr "输出"
 msgid "POWER"
 msgstr "电源"
 
+#: welcome/pages.js:158
+msgid "Pick a layout"
+msgstr "挑一种布局"
+
 #: components/BarMenu.qml:247
 msgid "Plugins"
 msgstr "插件"
@@ -632,7 +686,7 @@ msgstr "插件"
 msgid "Power"
 msgstr "电源"
 
-#: welcome/pages.js:164
+#: welcome/pages.js:234
 msgid "Power Saving"
 msgstr "省电"
 
@@ -648,7 +702,7 @@ msgstr "正在录制"
 msgid "Recording %1"
 msgstr "正在录制 %1"
 
-#: welcome/pages.js:130
+#: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
 msgstr "分辨率、刷新率、缩放和显示器排布。"
 
@@ -672,11 +726,11 @@ msgstr "系统"
 msgid "Science"
 msgstr "科学"
 
-#: welcome/pages.js:133
+#: welcome/pages.js:203
 msgid "Screen Filters"
 msgstr "屏幕滤镜"
 
-#: welcome/pages.js:135
+#: welcome/pages.js:205
 msgid "Screensaver"
 msgstr "屏幕保护"
 
@@ -712,11 +766,15 @@ msgstr "软件管理器"
 msgid "Sound"
 msgstr "声音"
 
+#: welcome/pages.js:176
+msgid "Spiral — each window halves what is left, winding inward."
+msgstr "Spiral — 每个窗口取走剩下的一半，向内盘绕。"
+
 #: welcome/pages.js:103
 msgid "Start menu"
 msgstr "开始菜单"
 
-#: welcome/pages.js:128
+#: welcome/pages.js:198
 msgid "Stills, slideshows and animated wallpapers."
 msgstr "静态图、幻灯片和动态壁纸。"
 
@@ -727,6 +785,14 @@ msgid ""
 msgstr ""
 "正在停止 — 正在写完文件…\n"
 "wf-recorder 仍在写入"
+
+#: welcome/pages.js:157
+msgid "Straight to cascade, the same way."
+msgstr "同样，直接切到层叠。"
+
+#: welcome/pages.js:154
+msgid "Straight to tiling, from any layout, taking stray windows back."
+msgstr "从任何布局回到平铺，连跑掉的窗口一起收回。"
 
 #: welcome/pages.js:111
 msgid ""
@@ -779,11 +845,11 @@ msgstr "任务管理器"
 msgid "Terminal"
 msgstr "终端"
 
-#: welcome/pages.js:141
+#: welcome/pages.js:211
 msgid "The AI"
 msgstr "关于 AI"
 
-#: welcome/pages.js:142
+#: welcome/pages.js:212
 msgid "The AI is local"
 msgstr "AI 就在本机"
 
@@ -795,7 +861,7 @@ msgstr "已安装内容的完整网格——也就是程序坞上的九宫格。
 msgid "The full palette — searchable, and the place to rebind."
 msgstr "完整的列表——可搜索，也是改键的地方。"
 
-#: welcome/pages.js:149
+#: welcome/pages.js:219
 msgid "The full-screen conversation view."
 msgstr "全屏的对话视图。"
 
@@ -807,25 +873,37 @@ msgstr "按键"
 msgid "The keys worth knowing"
 msgstr "值得记住的按键"
 
-#: welcome/pages.js:160
+#: welcome/pages.js:152
+msgid "The next layout for this desktop only."
+msgstr "只把这个桌面换到下一种布局。"
+
+#: welcome/pages.js:230
 msgid "The rest of the desktop, and where it lives."
 msgstr "桌面的其余部分，以及它们放在哪儿。"
 
-#: welcome/pages.js:126
+#: welcome/pages.js:196
 msgid "Themes, accent colour, glass and corners."
 msgstr "主题、强调色、玻璃和圆角。"
 
-#: welcome/pages.js:173
+#: welcome/pages.js:243
 msgid "There is a cat. That is the whole feature."
 msgstr "有一只猫。这就是全部功能。"
 
-#: welcome/pages.js:182
+#: welcome/pages.js:252
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
 msgstr ""
 "想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长"
 "版。"
+
+#: welcome/pages.js:153
+msgid "Tile this desktop"
+msgstr "平铺此桌面"
+
+#: welcome/pages.js:161
+msgid "Tiling — the first window takes the left 60%, the rest share the right."
+msgstr "Tiling — 第一个窗口占左边 60 %，其余分享右边。"
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
@@ -851,7 +929,7 @@ msgstr "更新提醒"
 msgid "Updates"
 msgstr "更新"
 
-#: welcome/pages.js:191
+#: welcome/pages.js:261
 msgid "Version, hardware and what is installed."
 msgstr "版本、硬件，以及装了些什么。"
 
@@ -867,7 +945,7 @@ msgstr "天气"
 msgid "WEIGHT"
 msgstr "体重"
 
-#: welcome/pages.js:127
+#: welcome/pages.js:197
 msgid "Wallpaper"
 msgstr "壁纸"
 
@@ -887,11 +965,11 @@ msgstr "欢迎使用 SynapseOS"
 msgid "What is running, and what it is costing."
 msgstr "什么在运行，占用了多少。"
 
-#: welcome/pages.js:136
+#: welcome/pages.js:206
 msgid "What the desktop does when you walk away."
 msgstr "你离开时桌面会做什么。"
 
-#: welcome/pages.js:151
+#: welcome/pages.js:221
 msgid "Which model is loaded, and how to fetch another."
 msgstr "当前加载了哪个模型，以及如何获取另一个。"
 
@@ -917,11 +995,11 @@ msgstr ""
 "%1\n"
 "点击打开网络设置"
 
-#: welcome/pages.js:163
+#: welcome/pages.js:233
 msgid "Wireless, wired and the firewall."
 msgstr "无线、有线和防火墙。"
 
-#: welcome/pages.js:180 welcome/pages.js:181
+#: welcome/pages.js:250 welcome/pages.js:251
 msgid "You're set"
 msgstr "一切就绪"
 
@@ -1017,6 +1095,10 @@ msgstr "加载中…"
 msgid "muted"
 msgstr "已静音"
 
+#: welcome/pages.js:173
+msgid "niri — an endless strip of columns; a new window lengthens the strip."
+msgstr "niri — 没有尽头的列条带；新窗口把条带拉长。"
+
 #: modules/Network.qml:121
 msgid "no address"
 msgstr "无地址"
@@ -1093,7 +1175,7 @@ msgstr "仍在处理上一个"
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   立即重试"
 
-#: welcome/pages.js:143
+#: welcome/pages.js:213
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
@@ -1154,3 +1236,17 @@ msgstr "‹ 返回"
 #: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  返回"
+
+#~ msgid ""
+#~ "Every layout skips floating, maximized and fullscreen windows — and "
+#~ "dragging, snapping or maximizing a window is what makes it floating. "
+#~ "Super+F frees one; tiling takes them all back."
+#~ msgstr ""
+#~ "所有布局都会跳过浮动、最大化和全屏的窗口 — 而拖动、贴边或最大化，正是让窗"
+#~ "口变成浮动的动作。Super+F 放回一个；平铺把它们全都收回来。"
+
+#~ msgid ""
+#~ "Straight to tiling from anywhere, and takes back every window that was "
+#~ "dragged, snapped or maximized out of the layout."
+#~ msgstr ""
+#~ "从任何布局直接回到平铺，并把被拖动、贴边或最大化而脱离布局的窗口全部收回。"

@@ -1643,11 +1643,11 @@ pkgver=0.1.0
 #     Present and unreadable, which is what "the secondary colour is too dark"
 #     was. The chip reads Theme.fgDim now: the ink 65% of the way from the
 #     surface to the foreground, recomputed per theme.
-#   The guide is quickshell/welcome.qml + welcome/: six pages (welcome, the
-#   keys, make it yours, the AI, everything else, you are set), a rail that
-#   doubles as the contents page, a description under every row, and the
-#   "Don't show again" checkbox in the footer of every page rather than
-#   stranded on the last one.
+#   The guide is quickshell/welcome.qml + welcome/: seven pages (welcome, the
+#   keys, layouts, make it yours, the AI, everything else, you are set — the
+#   layouts page arrived in 593), a rail that doubles as the contents page, a
+#   description under every row, and the "Don't show again" checkbox in the
+#   footer of every page rather than stranded on the last one.
 #   ⚠ IT IS ITS OWN QUICKSHELL, NOT A WINDOW IN THE BAR, and that is the whole
 #   design. TWO BARS SHIP — `bar_shell = synapse|antiquity` — and a guide inside
 #   the SYNAPSE bar would simply not exist for anyone running the other one; the
@@ -3190,7 +3190,40 @@ pkgver=0.1.0
 #   (two, on the old code — confirmed by putting the old line back), and
 #   wallhaven_key.sh checks the name the launcher was given against
 #   `synctl outputs` rather than against "not empty".
-pkgrel=592
+# 593: THE GUIDE NEVER SAID WHAT A LAYOUT WAS.
+#
+#   The welcome guide named Super+Tab in one line of prose on its keys page —
+#   "cycle layout" — and that was the whole of it. Seven layouts ship, they are
+#   the thing that makes this desktop feel unlike the last one, and the first
+#   window a new install shows never said what any of them does. Pressing the
+#   key on an empty desktop moves nothing, so the honest reading of the guide
+#   was that Super+Tab did nothing.
+#
+#   Page three is Layouts now: the three doors that already exist (layout_cycle,
+#   retile, cascade), a fourth onto Control Panel ▸ Desktop ▸ Layout, and a line
+#   per layout in CYCLE ORDER, so the list can be followed with the key it
+#   documents.
+#
+#   ⚠ ONLY THREE LAYOUTS ARE REACHABLE BY ACTION. There is no
+#   `layout_set <name>`, so the other four cannot be rows: a row Enter does
+#   nothing with is the dead spot GuideRow refuses to draw. They are notes, and
+#   the control panel row is the door that reaches all seven.
+#
+#   ⚠ AND EVERY LINE HAS TO FIT THE CARD. The card is 620px whatever the
+#   monitor is, the arrows step row to row and SKIP prose, and nothing scrolls
+#   the list from the keyboard — so a note past the bottom edge is reachable by
+#   wheel alone. The first draft ran three notes over and lost spiral and
+#   cascade off the end; the copy is one line per layout because of it, checked
+#   in English, German (the longest) and Arabic.
+#
+#   ⚠ A ROW WITH AN ARGUMENT TAKES NO LIVE CHORD. GuideState's bind probe keeps
+#   only the binds carrying NO argument, so binds[action] is the chord for the
+#   BARE action — and "Pick a layout" dispatches `control Desktop`. It would
+#   have shown Super+C, which opens the panel's front door instead.
+#
+#   All thirteen catalogs filled in the same pass; the guide's every word lives
+#   in welcome/pages.js, which po-bar/POTFILES already reads.
+pkgrel=593
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

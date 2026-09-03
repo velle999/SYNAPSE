@@ -236,6 +236,16 @@ QtObject {
 
     function keyFor(row) {
         if (!row || !row.action) return row && row.key ? row.key : ""
+        /*
+         * ⚠ A ROW WITH AN ARGUMENT TAKES NO LIVE CHORD. The probe above keeps
+         * only the binds that carry NO argument, so `binds[action]` is by
+         * construction the chord for the BARE action — and the bare action is
+         * not what this row runs. The layouts page's "Pick a layout" dispatches
+         * `control Desktop`; showing Super+C beside it would promise a key that
+         * opens the panel's front door instead. Its own `key` still shows, for
+         * a row that genuinely has a chord of its own.
+         */
+        if (row.arg) return row.key || ""
         const live = root.binds[row.action]
         return live !== undefined && live !== "" ? live : (row.key || "")
     }

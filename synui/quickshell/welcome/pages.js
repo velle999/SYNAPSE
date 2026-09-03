@@ -116,6 +116,76 @@ function pages(I18n) { return [
         ]
     },
     {
+        /*
+         * ⚠ THE SEVEN LAYOUTS ARE NOT SEVEN DOORS. Only three of them can be
+         * reached by dispatching an action — `retile`, `cascade` and
+         * `layout_cycle`; there is no `layout_set <name>`, so a row per layout
+         * would be a row Enter does nothing with, which is the dead spot
+         * GuideRow's header refuses to draw. They are prose, and the control
+         * panel's Layout row is the door that reaches all seven.
+         *
+         * The doors come FIRST and the prose after, so the page opens with the
+         * selection on its first row rather than scrolled past the
+         * explanations to find one — GuideState.firstSelectable() skips notes,
+         * and the ListView follows the selection.
+         *
+         * The order the notes are in is the CYCLE order (layout.c's
+         * syn_layout_t ordinals), because Super+Tab walks it and a list in any
+         * other order would be a list you cannot follow with the key.
+         *
+         * ⚠ AND EVERY LINE HERE IS ONE LINE ON PURPOSE. The card is 620px tall
+         * whatever the monitor is, the arrow keys step from row to row and SKIP
+         * prose, and nothing in the guide scrolls the list from the keyboard —
+         * so a note past the bottom of the card is reachable by wheel alone.
+         * The first draft of this page ran three notes over and lost spiral and
+         * cascade off the end. Anything added here has to fit, or it has to
+         * replace something.
+         */
+        id:    "layouts",
+        nav: I18n.tr("Layouts"),
+        title: I18n.tr("How the windows are arranged"),
+        blurb: I18n.tr("Each desktop keeps its own layout and remembers it across a "
+             + "restart. Super+Tab walks the one you are on through the seven below, "
+             + "in order."),
+        rows: [
+            { label: I18n.tr("Cycle layout"), key: "Super+Tab", action: "layout_cycle",
+              desc: I18n.tr("The next layout for this desktop only.") },
+            { label: I18n.tr("Tile this desktop"), key: "Super+Shift+T", action: "retile",
+              desc: I18n.tr("Straight to tiling, from any layout, taking stray windows "
+                  + "back.") },
+            { label: I18n.tr("Cascade this desktop"), key: "Super+Shift+Y", action: "cascade",
+              desc: I18n.tr("Straight to cascade, the same way.") },
+            { label: I18n.tr("Pick a layout"), key: "", action: "control", arg: "Desktop",
+              desc: I18n.tr("Control Panel ▸ Desktop ▸ Layout names all seven.") },
+            { kind: "note",
+              text: I18n.tr("Tiling — the first window takes the left 60%, the rest "
+                  + "share the right.") },
+            { kind: "note",
+              text: I18n.tr("Floating — nothing is placed for you; windows stay where "
+                  + "you put them.") },
+            { kind: "note",
+              text: I18n.tr("Monocle — one window per monitor, filling the screen; "
+                  + "Alt+Tab changes it.") },
+            { kind: "note",
+              text: I18n.tr("AI — asks the local model where each window goes. Tiling "
+                  + "when the AI is off.") },
+            { kind: "note",
+              text: I18n.tr("niri — an endless strip of columns; a new window lengthens "
+                  + "the strip.") },
+            { kind: "note",
+              text: I18n.tr("Spiral — each window halves what is left, winding inward.") },
+            { kind: "note",
+              text: I18n.tr("Cascade — overlapping cards, offset so every titlebar "
+                  + "stays reachable.") },
+            /* Last, and last for a reason: it is the only line here that is not
+             * one of the seven, so it is the one that may fall off the bottom
+             * on a desktop whose UI font is larger than the default. */
+            { kind: "note",
+              text: I18n.tr("Dragging, snapping or maximizing a window takes it out "
+                  + "of the layout.") }
+        ]
+    },
+    {
         id:    "look",
         nav: I18n.tr("Make it yours"),
         title: I18n.tr("Make it yours"),

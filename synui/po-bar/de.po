@@ -115,21 +115,28 @@ msgstr ""
 msgid "AGE"
 msgstr "ALTER"
 
-#: welcome/pages.js:152
+#: welcome/pages.js:222
 msgid "AI Backend"
 msgstr "KI-Backend"
 
-#: welcome/pages.js:86 welcome/pages.js:146
+#: welcome/pages.js:86 welcome/pages.js:216
 msgid "AI Command Bar"
 msgstr "KI-Befehlszeile"
 
-#: welcome/pages.js:150
+#: welcome/pages.js:220
 msgid "AI Model"
 msgstr "KI-Modell"
 
 #: StartMenu.qml:530
 msgid "AI Shell (synsh)"
 msgstr "KI-Shell (synsh)"
+
+#: welcome/pages.js:170
+msgid ""
+"AI — asks the local model where each window goes. Tiling when the AI is off."
+msgstr ""
+"AI — fragt das lokale Modell, wohin jedes Fenster gehört. Tiling, wenn die "
+"KI aus ist."
 
 #: StartMenu.qml:748
 msgid "APPLICATIONS"
@@ -139,7 +146,7 @@ msgstr "ANWENDUNGEN"
 msgid "AVAILABLE TO INSTALL"
 msgstr "ZUR INSTALLATION VERFÜGBAR"
 
-#: welcome/pages.js:190
+#: welcome/pages.js:260
 msgid "About this system"
 msgstr "Über dieses System"
 
@@ -151,11 +158,11 @@ msgstr "Zubehör"
 msgid "Adjust"
 msgstr "Anpassen"
 
-#: welcome/pages.js:167
+#: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "Antwortet auch aus der Befehlszeile."
 
-#: StartMenu.qml:627 welcome/pages.js:125
+#: StartMenu.qml:627 welcome/pages.js:195
 msgid "Appearance"
 msgstr "Erscheinungsbild"
 
@@ -171,7 +178,7 @@ msgstr "Im Terminal anwenden"
 msgid "Arrow keys move · Enter opens · Esc closes the guide."
 msgstr "Pfeiltasten bewegen · Enter öffnet · Esc schließt die Einführung."
 
-#: welcome/pages.js:147
+#: welcome/pages.js:217
 msgid "Ask for a command; it answers with one you can run."
 msgstr ""
 "Fragen Sie nach einem Befehl; die Antwort ist einer, den Sie ausführen "
@@ -213,7 +220,7 @@ msgstr "AKK"
 msgid "Back"
 msgstr "Zurück"
 
-#: welcome/pages.js:171
+#: welcome/pages.js:241
 msgid "Bar out of the way, effects off, the machine to the game."
 msgstr "Leiste aus dem Weg, Effekte aus, die Maschine gehört dem Spiel."
 
@@ -261,7 +268,7 @@ msgstr ""
 msgid "CPU + memory"
 msgstr "CPU + Speicher"
 
-#: welcome/pages.js:166
+#: welcome/pages.js:236
 msgid "Calculator"
 msgstr "Rechner"
 
@@ -269,7 +276,17 @@ msgstr "Rechner"
 msgid "Cancel"
 msgstr "Abbrechen"
 
-#: welcome/pages.js:172
+#: welcome/pages.js:156
+msgid "Cascade this desktop"
+msgstr "Diese Arbeitsfläche staffeln"
+
+#: welcome/pages.js:178
+msgid "Cascade — overlapping cards, offset so every titlebar stays reachable."
+msgstr ""
+"Cascade — überlappende Karten, versetzt, damit jede Titelleiste erreichbar "
+"bleibt."
+
+#: welcome/pages.js:242
 msgid "Cat Mode"
 msgstr "Katzenmodus"
 
@@ -310,7 +327,7 @@ msgstr "Klicken zum Beenden (oder Super+Umschalt+R)"
 msgid "Clock"
 msgstr "Uhr"
 
-#: welcome/pages.js:132
+#: welcome/pages.js:202
 msgid "Clock, system monitor, music, notes — on the desktop."
 msgstr "Uhr, Systemmonitor, Musik, Notizen — auf dem Schreibtisch."
 
@@ -318,13 +335,21 @@ msgstr "Uhr, Systemmonitor, Musik, Notizen — auf dem Schreibtisch."
 msgid "Confirm"
 msgstr "Bestätigen"
 
-#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:188
+#: StartMenu.qml:524 StartMenu.qml:626 welcome/pages.js:88 welcome/pages.js:258
 msgid "Control Panel"
 msgstr "Systemsteuerung"
+
+#: welcome/pages.js:159
+msgid "Control Panel ▸ Desktop ▸ Layout names all seven."
+msgstr "Systemsteuerung ▸ Desktop ▸ Layout nennt alle sieben."
 
 #: modules/Updates.qml:92
 msgid "Could not check for updates\n"
 msgstr "Aktualisierungen konnten nicht geprüft werden\n"
+
+#: welcome/pages.js:151
+msgid "Cycle layout"
+msgstr "Layout durchschalten"
 
 #: widgets/Tuxagotchi.qml:149
 msgid "DISCIPLINE"
@@ -334,7 +359,7 @@ msgstr "DISZIPLIN"
 msgid "Desktop"
 msgstr "Desktop"
 
-#: welcome/pages.js:131
+#: welcome/pages.js:201
 msgid "Desktop Widgets"
 msgstr "Desktop-Widgets"
 
@@ -358,11 +383,11 @@ msgstr ""
 msgid "Display"
 msgstr "Anzeige"
 
-#: welcome/pages.js:129
+#: welcome/pages.js:199
 msgid "Display Settings"
 msgstr "Anzeigeeinstellungen"
 
-#: welcome/pages.js:193
+#: welcome/pages.js:263
 msgid "Documentation and downloads: soslinux.org"
 msgstr "Dokumentation und Downloads: soslinux.org"
 
@@ -373,6 +398,18 @@ msgstr "Diese Einführung beim Start nicht mehr zeigen"
 #: components/BarMenu.qml:357 components/Mixer.qml:224 welcome/Guide.qml:487
 msgid "Done"
 msgstr "Fertig"
+
+#: welcome/pages.js:184
+msgid "Dragging, snapping or maximizing a window takes it out of the layout."
+msgstr "Ziehen, Andocken oder Maximieren nimmt ein Fenster aus dem Layout."
+
+#: welcome/pages.js:147
+msgid ""
+"Each desktop keeps its own layout and remembers it across a restart. "
+"Super+Tab walks the one you are on through the seven below, in order."
+msgstr ""
+"Jede Arbeitsfläche behält ihr eigenes Layout über einen Neustart hinweg. "
+"Super+Tab führt die aktuelle der Reihe nach durch die sieben unten."
 
 #: StartMenu.qml:491
 msgid "Education"
@@ -390,15 +427,15 @@ msgstr "Equalizer: %1"
 msgid "Every desktop setting, in one place."
 msgstr "Jede Desktop-Einstellung, an einem Ort."
 
-#: welcome/pages.js:189
+#: welcome/pages.js:259
 msgid "Every setting, grouped."
 msgstr "Jede Einstellung, gruppiert."
 
-#: welcome/pages.js:158 welcome/pages.js:159
+#: welcome/pages.js:228 welcome/pages.js:229
 msgid "Everything else"
 msgstr "Alles Übrige"
 
-#: welcome/pages.js:187
+#: welcome/pages.js:257
 msgid "Everything this guide skipped."
 msgstr "Alles, was diese Einführung ausgelassen hat."
 
@@ -409,6 +446,11 @@ msgstr "SATT"
 #: widgets/Tuxagotchi.qml:144
 msgid "FUN"
 msgstr "SPASS"
+
+#: welcome/pages.js:164
+msgid "Floating — nothing is placed for you; windows stay where you put them."
+msgstr ""
+"Floating — nichts wird platziert; die Fenster bleiben, wohin Sie sie setzen."
 
 #: BarConfig.qml:68
 msgid "Focus timer"
@@ -430,11 +472,11 @@ msgstr "Fokus · klicken zum Beenden"
 msgid "Focus — %1 · click to stop"
 msgstr "Fokus — %1 · klicken zum Beenden"
 
-#: welcome/pages.js:153
+#: welcome/pages.js:223
 msgid "GPU, CPU or off. Off masks the sockets, so it holds."
 msgstr "GPU, CPU oder aus. Aus blendet die Sockets aus, also hält es auch."
 
-#: welcome/pages.js:170
+#: welcome/pages.js:240
 msgid "Game Mode"
 msgstr "Spielmodus"
 
@@ -450,7 +492,7 @@ msgstr "Grafik"
 msgid "HEALTH"
 msgstr "GESUNDHEIT"
 
-#: welcome/pages.js:169
+#: welcome/pages.js:239
 msgid "Headlines, fetched on the desktop's own schedule."
 msgstr "Schlagzeilen, geholt nach dem Zeitplan des Desktops."
 
@@ -462,7 +504,11 @@ msgstr "Zustand %1 %"
 msgid "Held back"
 msgstr "Zurückgehalten"
 
-#: welcome/pages.js:165
+#: welcome/pages.js:146
+msgid "How the windows are arranged"
+msgstr "Wie die Fenster angeordnet werden"
+
+#: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
 msgstr "Leerlauf, Ruhezustand und was der Deckel auslöst."
 
@@ -478,7 +524,7 @@ msgstr "Installieren"
 msgid "Internet"
 msgstr "Internet"
 
-#: welcome/pages.js:101 welcome/pages.js:186
+#: welcome/pages.js:101 welcome/pages.js:256
 msgid "Keyboard Shortcuts"
 msgstr "Tastenkürzel"
 
@@ -486,11 +532,15 @@ msgstr "Tastenkürzel"
 msgid "LAUNCH"
 msgstr "START"
 
-#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:174
+#: welcome/pages.js:145
+msgid "Layouts"
+msgstr "Layouts"
+
+#: StartMenu.qml:641 StartMenu.qml:758 welcome/pages.js:244
 msgid "Lock Screen"
 msgstr "Bildschirm sperren"
 
-#: welcome/pages.js:175
+#: welcome/pages.js:245
 msgid "Locks now; the screensaver locks on its own timer."
 msgstr "Sperrt sofort; der Bildschirmschoner sperrt nach eigener Zeit."
 
@@ -514,7 +564,7 @@ msgstr "FEHLER"
 msgid "MIXER"
 msgstr "MIXER"
 
-#: welcome/pages.js:120 welcome/pages.js:121
+#: welcome/pages.js:190 welcome/pages.js:191
 msgid "Make it yours"
 msgstr "Machen Sie es zu Ihrem"
 
@@ -529,6 +579,12 @@ msgid ""
 msgstr ""
 "Speicher %1 / %2 GiB\n"
 "Klicken für den Task-Manager"
+
+#: welcome/pages.js:167
+msgid ""
+"Monocle — one window per monitor, filling the screen; Alt+Tab changes it."
+msgstr ""
+"Monocle — ein Fenster je Monitor, bildschirmfüllend; Alt+Tab wechselt es."
 
 #: StartMenu.qml:488
 msgid "Multimedia"
@@ -550,7 +606,7 @@ msgstr "Netzwerk"
 msgid "Network + Bluetooth"
 msgstr "Netzwerk + Bluetooth"
 
-#: welcome/pages.js:162
+#: welcome/pages.js:232
 msgid "Network / Wi-Fi"
 msgstr "Netzwerk / WLAN"
 
@@ -558,11 +614,11 @@ msgstr "Netzwerk / WLAN"
 msgid "Network Setup"
 msgstr "Netzwerk einrichten"
 
-#: welcome/pages.js:148
+#: welcome/pages.js:218
 msgid "Neural Overlay"
 msgstr "Neuronale Überlagerung"
 
-#: welcome/pages.js:168
+#: welcome/pages.js:238
 msgid "News"
 msgstr "Nachrichten"
 
@@ -570,7 +626,7 @@ msgstr "Nachrichten"
 msgid "Next"
 msgstr "Weiter"
 
-#: welcome/pages.js:134
+#: welcome/pages.js:204
 msgid "Night light, colour blindness filters, CRT."
 msgstr "Nachtlicht, Farbenblindheitsfilter, CRT."
 
@@ -606,7 +662,7 @@ msgstr "Es läuft nichts"
 msgid "Office"
 msgstr "Büro"
 
-#: welcome/pages.js:122
+#: welcome/pages.js:192
 msgid ""
 "One theme moves the whole desktop: the compositor's panels, the bar, the "
 "widgets, GTK and Qt applications, and the cursor."
@@ -634,6 +690,10 @@ msgstr "Ausgabe"
 msgid "POWER"
 msgstr "ENERGIE"
 
+#: welcome/pages.js:158
+msgid "Pick a layout"
+msgstr "Ein Layout wählen"
+
 #: components/BarMenu.qml:247
 msgid "Plugins"
 msgstr "Plugins"
@@ -642,7 +702,7 @@ msgstr "Plugins"
 msgid "Power"
 msgstr "Energie"
 
-#: welcome/pages.js:164
+#: welcome/pages.js:234
 msgid "Power Saving"
 msgstr "Energiesparen"
 
@@ -658,7 +718,7 @@ msgstr "Aufnahme"
 msgid "Recording %1"
 msgstr "Aufnahme %1"
 
-#: welcome/pages.js:130
+#: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
 msgstr "Auflösung, Bildwiederholrate, Skalierung und Bildschirmanordnung."
 
@@ -682,11 +742,11 @@ msgstr "SYSTEM"
 msgid "Science"
 msgstr "Wissenschaft"
 
-#: welcome/pages.js:133
+#: welcome/pages.js:203
 msgid "Screen Filters"
 msgstr "Bildschirmfilter"
 
-#: welcome/pages.js:135
+#: welcome/pages.js:205
 msgid "Screensaver"
 msgstr "Bildschirmschoner"
 
@@ -722,11 +782,16 @@ msgstr "Software-Verwaltung"
 msgid "Sound"
 msgstr "Ton"
 
+#: welcome/pages.js:176
+msgid "Spiral — each window halves what is left, winding inward."
+msgstr ""
+"Spiral — jedes Fenster halbiert, was übrig ist, und windet sich nach innen."
+
 #: welcome/pages.js:103
 msgid "Start menu"
 msgstr "Startmenü"
 
-#: welcome/pages.js:128
+#: welcome/pages.js:198
 msgid "Stills, slideshows and animated wallpapers."
 msgstr "Standbilder, Diaschauen und animierte Hintergründe."
 
@@ -737,6 +802,14 @@ msgid ""
 msgstr ""
 "Wird beendet — Datei wird fertiggestellt …\n"
 "wf-recorder schreibt noch"
+
+#: welcome/pages.js:157
+msgid "Straight to cascade, the same way."
+msgstr "Genauso direkt zu Cascade."
+
+#: welcome/pages.js:154
+msgid "Straight to tiling, from any layout, taking stray windows back."
+msgstr "Aus jedem Layout direkt zu Tiling, samt entlaufener Fenster."
 
 #: welcome/pages.js:111
 msgid ""
@@ -793,11 +866,11 @@ msgstr "Task-Manager"
 msgid "Terminal"
 msgstr "Terminal"
 
-#: welcome/pages.js:141
+#: welcome/pages.js:211
 msgid "The AI"
 msgstr "Die KI"
 
-#: welcome/pages.js:142
+#: welcome/pages.js:212
 msgid "The AI is local"
 msgstr "Die KI läuft lokal"
 
@@ -810,7 +883,7 @@ msgstr ""
 msgid "The full palette — searchable, and the place to rebind."
 msgstr "Die vollständige Palette — durchsuchbar, und der Ort zum Neubelegen."
 
-#: welcome/pages.js:149
+#: welcome/pages.js:219
 msgid "The full-screen conversation view."
 msgstr "Die bildschirmfüllende Gesprächsansicht."
 
@@ -822,25 +895,38 @@ msgstr "Die Tasten"
 msgid "The keys worth knowing"
 msgstr "Die Tasten, die sich lohnen"
 
-#: welcome/pages.js:160
+#: welcome/pages.js:152
+msgid "The next layout for this desktop only."
+msgstr "Das nächste Layout, nur für diese Arbeitsfläche."
+
+#: welcome/pages.js:230
 msgid "The rest of the desktop, and where it lives."
 msgstr "Der Rest des Desktops, und wo er wohnt."
 
-#: welcome/pages.js:126
+#: welcome/pages.js:196
 msgid "Themes, accent colour, glass and corners."
 msgstr "Themen, Akzentfarbe, Glas und Ecken."
 
-#: welcome/pages.js:173
+#: welcome/pages.js:243
 msgid "There is a cat. That is the whole feature."
 msgstr "Es gibt eine Katze. Das ist die ganze Funktion."
 
-#: welcome/pages.js:182
+#: welcome/pages.js:252
 msgid ""
 "This guide is on Super+Escape whenever you want it back — and the shortcuts "
 "palette on Super+/ is the longer version of page two."
 msgstr ""
 "Diese Einführung liegt auf Super+Escape, wann immer Sie sie zurückwollen — "
 "und die Kürzel-Palette auf Super+/ ist die lange Fassung von Seite zwei."
+
+#: welcome/pages.js:153
+msgid "Tile this desktop"
+msgstr "Diese Arbeitsfläche kacheln"
+
+#: welcome/pages.js:161
+msgid "Tiling — the first window takes the left 60%, the rest share the right."
+msgstr ""
+"Tiling — das erste Fenster nimmt die linken 60 %, der Rest teilt sich rechts."
 
 #: welcome/pages.js:87
 msgid "Type a command, or ask for one in plain English."
@@ -866,7 +952,7 @@ msgstr "Aktualisierungsmelder"
 msgid "Updates"
 msgstr "Aktualisierungen"
 
-#: welcome/pages.js:191
+#: welcome/pages.js:261
 msgid "Version, hardware and what is installed."
 msgstr "Version, Hardware und was installiert ist."
 
@@ -882,7 +968,7 @@ msgstr "WETTER"
 msgid "WEIGHT"
 msgstr "GEWICHT"
 
-#: welcome/pages.js:127
+#: welcome/pages.js:197
 msgid "Wallpaper"
 msgstr "Hintergrundbild"
 
@@ -902,11 +988,11 @@ msgstr "Willkommen bei SynapseOS"
 msgid "What is running, and what it is costing."
 msgstr "Was läuft, und was es kostet."
 
-#: welcome/pages.js:136
+#: welcome/pages.js:206
 msgid "What the desktop does when you walk away."
 msgstr "Was der Desktop tut, wenn Sie weggehen."
 
-#: welcome/pages.js:151
+#: welcome/pages.js:221
 msgid "Which model is loaded, and how to fetch another."
 msgstr "Welches Modell geladen ist, und wie Sie ein anderes holen."
 
@@ -932,11 +1018,11 @@ msgstr ""
 "%1\n"
 "Klicken für die Netzwerkeinstellungen"
 
-#: welcome/pages.js:163
+#: welcome/pages.js:233
 msgid "Wireless, wired and the firewall."
 msgstr "Drahtlos, Kabel und die Firewall."
 
-#: welcome/pages.js:180 welcome/pages.js:181
+#: welcome/pages.js:250 welcome/pages.js:251
 msgid "You're set"
 msgstr "Sie sind startklar"
 
@@ -1032,6 +1118,11 @@ msgstr "wird geladen …"
 msgid "muted"
 msgstr "stumm"
 
+#: welcome/pages.js:173
+msgid "niri — an endless strip of columns; a new window lengthens the strip."
+msgstr ""
+"niri — ein endloser Streifen aus Spalten; ein neues Fenster verlängert ihn."
+
 #: modules/Network.qml:121
 msgid "no address"
 msgstr "keine Adresse"
@@ -1108,7 +1199,7 @@ msgstr "arbeitet noch am letzten"
 msgid "syn-update ping   to try now"
 msgstr "syn-update ping   um es jetzt zu versuchen"
 
-#: welcome/pages.js:143
+#: welcome/pages.js:213
 msgid ""
 "synapd runs a language model on this machine. Nothing here calls out to a "
 "service, and turning it off really does stop it."
@@ -1171,3 +1262,19 @@ msgstr "‹ zurück"
 #: StartMenu.qml:1102
 msgid "◂  Back"
 msgstr "◂  Zurück"
+
+#~ msgid ""
+#~ "Every layout skips floating, maximized and fullscreen windows — and "
+#~ "dragging, snapping or maximizing a window is what makes it floating. "
+#~ "Super+F frees one; tiling takes them all back."
+#~ msgstr ""
+#~ "Jedes Layout überspringt schwebende, maximierte und Vollbildfenster — und "
+#~ "Ziehen, Andocken oder Maximieren macht ein Fenster schwebend. Super+F "
+#~ "gibt eines zurück, Tiling holt alle zurück."
+
+#~ msgid ""
+#~ "Straight to tiling from anywhere, and takes back every window that was "
+#~ "dragged, snapped or maximized out of the layout."
+#~ msgstr ""
+#~ "Von überall direkt zu Tiling — und holt jedes Fenster zurück, das durch "
+#~ "Ziehen, Andocken oder Maximieren aus dem Layout gefallen ist."

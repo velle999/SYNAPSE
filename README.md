@@ -449,7 +449,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 |---|---|
 | **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. **It also speaks llama.cpp's own HTTP API**, on a second socket at `/run/synapd/http.sock` — `/health`, `/props`, `/v1/models`, `/completion` and `/v1/chat/completions` — so anything written against llama-server or the OpenAI shape can use the model that is *already resident* instead of loading a second copy of it. A unix socket rather than a port, because a loopback port is reachable by every process on the machine, a web page included: `curl --unix-socket /run/synapd/http.sock http://localhost/v1/chat/completions -d '{"messages":[…]}'`. A whole conversation goes through the model's own chat template. `"stream": true` gets real event-stream framing, but the answer arrives in one event. **For frontends that only take a URL** — which is nearly all of them — Settings ▸ AI has a **llama.cpp API port** switch that turns on a loopback proxy at `http://127.0.0.1:8080/v1` (`syn-settings set llama-api on`, or `systemctl enable --now synapd-http-proxy.socket`). Shipped disabled: it has no authentication, so every process on the machine can reach it while it is on. |
 | **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell — **in fourteen languages**: English, Deutsch, Français, Español, Português, Italiano, Nederlands, Polski, Русский, 日本語, 中文, 한국어, हिन्दी, العربية. It follows the language the image was booted in and needs no configuration; `syn lang de` changes it for a session, `set language de` in `~/.synshrc` for good. Requests are understood in all fourteen whatever it is set to — the phrase tables hold every language at once, so somebody working in German who types `list files` out of habit still gets it, and accents are optional in both directions (`wie spaet ist es`, `que hora es`). What the language changes is what it **says**, never what it **runs**: `ls` is `ls` everywhere and so is every exit code. It is also a competent everyday shell — concurrent pipelines, `$VAR`, `$(command)`, globs, `NAME=value`, `2>&1`, `&` and `jobs` — with `tests/shell_test.sh` asserting each of those against the way it used to fail. |
-| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, spiral, monocle, floating and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
+| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — seven layouts — tiling, spiral, monocle, floating, cascade, AI and niri-style scrollable tiling, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
@@ -578,7 +578,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`U` / `Super`+`Shift`+`U` | Read the selected text aloud / start and stop reading (`syn-speak`) |
 | `Super`+`Shift`+`V` | Dictate — speak and it types what you said (`vibe voice type`) |
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, big clock, analog clock, music, quick-launch, post-it, Tuxagotchi) |
-| `Super`+`Escape` | Welcome guide — six pages on what this desktop does and which keys do it (see [The welcome guide](#the-welcome-guide)) |
+| `Super`+`Escape` | Welcome guide — seven pages on what this desktop does and which keys do it, layouts included (see [The welcome guide](#the-welcome-guide)) |
 | `Super`+`Tab` | Cycle layout |
 | `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Switch window. By default this is **mission control** — every window on this desktop at once, and the desktops along the bottom; hold `Alt`, tap `Tab` to walk the tiles, let go to pick. `alt_tab_style = switcher` (or Control panel ▸ Windows ▸ *Alt+Tab is mission control*) puts the most-recently-used thumbnail strip back |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
@@ -664,11 +664,17 @@ ordinary take, so it is off by default and the panel row says the rate out loud.
 
 ### The welcome guide
 
-`Super`+`Escape`, and it comes up on your first login. Six pages on what this
-desktop is and which keys do it — Welcome, The keys, Make it yours, The AI,
-Everything else, You're set — with a rail down the left that doubles as a
+`Super`+`Escape`, and it comes up on your first login. Seven pages on what this
+desktop is and which keys do it — Welcome, The keys, Layouts, Make it yours, The
+AI, Everything else, You're set — with a rail down the left that doubles as a
 contents page and a line under every row saying what the thing actually is.
 Arrows move, `Enter` opens, `Esc` closes.
+
+The **Layouts** page is the one that needs saying out loud: seven window layouts
+ship, `Super`+`Tab` walks the desktop you are on through them in order, and the
+page names each one in that order beside the keys that jump straight to tiling
+and cascade. Full descriptions:
+[The Desktop ▸ Layouts](https://github.com/velle999/SYNAPSE/wiki/The-Desktop#layouts).
 
 ```bash
 synui-welcome              # or the "Welcome Guide" entry in the applications menu
