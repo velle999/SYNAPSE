@@ -21,7 +21,61 @@
 # decisions in this code regardless, with the cost of N spawns on top.
 pkgname=syn-clean
 pkgver=0.1.0
-pkgrel=3
+# ── 0.1.0-4: thirteen languages, and a suite that was deleting your /tmp ─────
+#
+# ⛔ FIRST, THE BUG, because it is the reason to take this release.
+#
+# tests/clean_test.sh opens by saying every path this program touches is
+# composed from SYNCLEAN_HOME, "because a suite that could reach the real $HOME
+# is one bad category string away from deleting the caches of whoever ran it".
+# That was true of every path EXCEPT two: the `tmp` category sweeps /tmp and
+# /var/tmp, which are not under $HOME and were hard-coded. The suite runs
+# `clean --all`, `--all` includes `tmp`, and so **`meson test` deleted the real
+# /tmp and /var/tmp files of whoever typed it** — anything of theirs older than
+# a day, recursing into directories once the top entry qualified.
+#
+# It ate this session's own scratch files three times before it was noticed,
+# which is how it was found: not by reading the code, but by a diff that kept
+# coming out different.
+#
+# $SYNCLEAN_TMPDIRS is the seam now — colon-separated, defaulting to the real
+# pair, the same shape and the same purpose as SYNCLEAN_HOME. Both suites point
+# it at a fixture, and clean_test.sh plants a month-old file OUTSIDE that
+# fixture and asserts `clean --all` leaves it alone. Verified by planting one in
+# the real /tmp: it survives now and did not before.
+#
+# ⚠ AND IT MADE THE i18n GATE FLAKY, which is the thread that led here. `--rec
+# scan` reports a byte count and a file count for that row, and both move while
+# the test is running — two locale runs seconds apart disagreeing about a number
+# that has nothing to do with language. The record diff is only meaningful with
+# the seam pinned.
+#
+# ── and the translation ──────────────────────────────────────────────────────
+#
+# 66 strings in de, fr, es, pt, it, nl, pl, ru, ja, zh, ko, hi and ar, from ONE
+# po/ compiled twice: a .mo for the binary and JSON for the quickshell window.
+#
+# ⛔ EVERY CATEGORY CARRIES AN id AND A LABEL ONE STRUCT FIELD APART.
+# `syn-clean clean browsercache` takes that exact id back and the window sends
+# it; "Browser cache" is what a person reads. Only the second is marked, and the
+# suite asserts every id in the record is still the English one under a catalog
+# that translates everything.
+#
+# ⚠ AND `conflicts` IS MATCHED AGAINST /proc/<pid>/comm — a list of process
+# names, not a list of words.
+#
+# ⛔ THREE SENTENCES WERE ASSEMBLED FROM PIECES. "categor" plus "y" or "ies" is
+# an English plural rule written into a format string, where no translator can
+# reach it; "Would free"/"Freed" is a verb in a %s slot; and "  (needs root)"
+# and " — needs sudo" are fragments appended to a translated sentence. Whole
+# lines and P_() now.
+#
+# ⚠ ONE SUITE ASSERTION WAS ON A WRAP. tests/qml_test.sh greps for "full-disk
+# encryption" — the window has to say what actually works, not only what does
+# not — and a rewrap that put a quote in the middle of that phrase reported the
+# sentence gone while it was sitting right there. The constraint is stated at
+# the sentence itself now.
+pkgrel=4
 pkgdesc="Free disk space, and destroy files you mean to destroy — caches, thumbnails, trash, secure delete"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

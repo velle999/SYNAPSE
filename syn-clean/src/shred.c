@@ -9,6 +9,7 @@
  */
 #define _GNU_SOURCE
 #include "synclean.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -189,7 +190,7 @@ static int shred_dir(int dfd, int passes, unsigned long long *bytes,
 
 		if (S_ISDIR(st.st_mode)) {
 			if (st.st_dev != dev) {
-				warn("%s is on another filesystem — left alone", e->d_name);
+				warn(_("%s is on another filesystem — left alone"), e->d_name);
 				continue;
 			}
 			if (depth > 64) { rc = -1; continue; }

@@ -11,12 +11,30 @@
 # SynapseOS Project — GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every assertion below looks for
+# an English phrase, and once syn-clean is installed the binary answers the
+# desktop's language — so on a German box they fail for a program that is
+# working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
+
 S=${1:-./build/syn-clean}
 [ -x "$S" ] || { echo "not executable: $S" >&2; exit 1; }
 
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 export SYNCLEAN_HOME="$T/home"
+
+# ⛔ AND THE TWO ROOTS SYNCLEAN_HOME CANNOT REACH. The `tmp` category sweeps
+# /tmp and /var/tmp, which are not under $HOME — so `clean --all` below, which
+# this suite runs, was deleting the REAL /tmp files of whoever typed
+# `meson test`, anything of theirs older than a day. The guarantee at the top
+# of this file was true of every path except these two.
+export SYNCLEAN_TMPDIRS="$T/tmproot"
+mkdir -p "$T/tmproot"
 
 pass=0 fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
@@ -91,7 +109,19 @@ chk "…and says what was missing" $?
 # ⚠ Cookies sign you out of every site; root categories cannot be done as this
 # user at all. A sweep that swallowed either is a sweep people learn not to run.
 mk "$SYNCLEAN_HOME/.mozilla/firefox/abc.default/cookies.sqlite" 8000
+# ⛔ AND THE PROOF THAT THE /tmp SEAM HOLDS, checked around the one command
+# that used to escape it. An old file outside the fixture must survive `clean
+# --all`; before SYNCLEAN_TMPDIRS existed this deleted it, and everything else
+# of yours in /tmp with it.
+mkdir -p "$T/nottmp"
+: > "$T/nottmp/precious"
+touch -d '30 days ago' "$T/nottmp/precious" 2>/dev/null || touch "$T/nottmp/precious"
+: > "$T/tmproot/sweepable"
+touch -d '30 days ago' "$T/tmproot/sweepable" 2>/dev/null || true
+
 "$S" --rec --yes clean --all >/dev/null 2>&1
+[ -f "$T/nottmp/precious" ]
+chk "⛔ --all sweeps only \$SYNCLEAN_TMPDIRS, not the real /tmp" $?
 [ -f "$SYNCLEAN_HOME/.mozilla/firefox/abc.default/cookies.sqlite" ]
 chk "--all does NOT delete cookies" $?
 [ ! -f "$SYNCLEAN_HOME/.cache/someapp/blob" ]

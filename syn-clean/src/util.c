@@ -5,12 +5,34 @@
  */
 #define _GNU_SOURCE
 #include "synclean.h"
+#include "i18n.h"
+#include "config.h"
 
+#include <locale.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
 out_mode_t g_out = OUT_HUMAN;
+
+/*
+ * ⛔ LC_NUMERIC STAYS AT C. This program reports SIZES, and human_size() is a
+ * "%.1f" — a German locale writes 1,4 GiB where C writes 1.4 GiB, and the
+ * `bytes` column of every record is what the window turns back into a number.
+ * A decimal comma there is a front end that has misread how much it is about
+ * to delete.
+ */
+void syn_clean_i18n_init(void)
+{
+	setlocale(LC_ALL, "");
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_CLEAN_LOCALEDIR");
+	bindtextdomain(SYN_CLEAN_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNCLEAN_LOCALEDIR);
+	bind_textdomain_codeset(SYN_CLEAN_GETTEXT_DOMAIN, "UTF-8");
+	textdomain(SYN_CLEAN_GETTEXT_DOMAIN);
+}
 bool g_dry = false;
 bool g_yes = false;
 

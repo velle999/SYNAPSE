@@ -9,6 +9,16 @@
 # SynapseOS Project — GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE LOCALE THIS SUITE ASSERTS IN IS PINNED. Every assertion below looks for
+# an English phrase, and once syn-clean is installed the binary answers the
+# desktop's language — so on a German box they fail for a program that is
+# working exactly as intended.
+# ⚠ LANGUAGE is UNSET, not set: gettext reads it before LC_ALL, so an ambient
+# LANGUAGE=de wins over LC_ALL=C and the pin does nothing.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
+
 QML=${1:-data/syn-clean.qml}
 [ -f "$QML" ] || { echo "no such file: $QML" >&2; exit 1; }
 
@@ -61,6 +71,9 @@ grep -qi 'copy-on-write' "$QML"
 chk "the shred page warns about copy-on-write" $?
 grep -q 'shredSnaps' "$QML"
 chk "…and names snapshots when there are any" $?
+# ⚠ A PHRASE, so the string must not be wrapped through the middle of it. That
+# is a real constraint on the source and it is stated at the sentence itself: a
+# rewrap once reported this line gone while it was sitting right there.
 grep -qi 'full-disk encryption' "$QML"
 chk "…and says what would actually work" $?
 

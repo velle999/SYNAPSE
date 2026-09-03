@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include "config.h"
 #include "synclean.h"
+#include "i18n.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -48,9 +49,12 @@ static bool confirm(const char *what)
 	/* ⚠ A front end pipes; a pipe has nobody to answer, so --rec without --yes
 	 * is refused rather than silently taken as consent. */
 	if (!isatty(STDIN_FILENO)) {
-		warn("nothing to ask on a pipe — pass --yes if you mean it");
+		warn("%s", _("nothing to ask on a pipe — pass --yes if you mean it"));
 		return false;
 	}
+	/* ⚠ THE [y/N] STAYS, and so does the letter confirm() reads. A translated
+	 * prompt whose accepted key moved is a dialogue nobody can answer — and a
+	 * script that pipes `y` is answering in the only language this has. */
 	fprintf(stderr, "%s [y/N] ", what);
 	fflush(stderr);
 	char buf[16];
@@ -84,15 +88,22 @@ int cmd_scan(int nsel, char **sel)
 		} else {
 			char h[32];
 			human_size(b, h, sizeof h);
-			printf("  %-14s %10s  %6llu  %s%s\n", c->id, h, n, c->what,
-			       c->needs_root ? "  (needs root)" : "");
+			/* ⛔ TWO WHOLE LINES. "  (needs root)" appended in a %s is a
+			 * fragment no language can place, and the `what` beside it is
+			 * translated HERE — the record a few lines up carries the
+			 * English so the window can look it up. */
+			if (c->needs_root)
+				printf(_("  %-14s %10s  %6llu  %s  (needs root)\n"),
+				       c->id, h, n, _(c->what));
+			else
+				printf(_("  %-14s %10s  %6llu  %s\n"), c->id, h, n, _(c->what));
 		}
 	}
 
 	if (g_out != OUT_REC) {
 		char h[32];
 		human_size(total, h, sizeof h);
-		printf("\n  %s could be freed.\n", h);
+		printf(_("\n  %s could be freed.\n"), h);
 	}
 	return 0;
 }
@@ -108,7 +119,7 @@ int cmd_clean(int nsel, char **sel)
 	 * thing somebody must choose by name. A sweep that included it would be a
 	 * cleaner people learn not to run. */
 	if (all) {
-		if (!confirm("Clean every cache, thumbnail and trashed file?"))
+		if (!confirm(_("Clean every cache, thumbnail and trashed file?")))
 			return 1;
 	} else if (nsel > 0) {
 		/* ⛔ AND A NAMED CATEGORY ASKS TOO. Naming one says which files, not
@@ -117,8 +128,12 @@ int cmd_clean(int nsel, char **sel)
 		 * back. The window has already asked by the time it gets here, which is
 		 * exactly what its --yes means. */
 		char q[256];
-		snprintf(q, sizeof q, "Remove %d categor%s of files?",
-		         nsel, nsel == 1 ? "y" : "ies");
+		/* ⛔ NOT A SUFFIX SPLICED ON. "categor" plus "y" or "ies" is an
+		 * English plural rule written into the format, and there is no
+		 * language where a translator could reach it. */
+		snprintf(q, sizeof q,
+		         P_("Remove %d category of files?",
+		            "Remove %d categories of files?", nsel), nsel);
 		if (!confirm(q)) return 1;
 	}
 
@@ -156,14 +171,17 @@ int cmd_clean(int nsel, char **sel)
 	if (g_out != OUT_REC) {
 		char h[32];
 		human_size(total, h, sizeof h);
-		printf("%s %s.\n", g_dry ? "Would free" : "Freed", h);
+		/* Two sentences: a verb in a %s slot is a word no language can
+		 * inflect for what follows it. */
+		if (g_dry) printf(_("Would free %s.\n"), h);
+		else       printf(_("Freed %s.\n"), h);
 	}
 	return rc;
 }
 
 int cmd_shred(int npaths, char **paths, int passes)
 {
-	if (npaths < 1) { warn("shred needs a path"); return 2; }
+	if (npaths < 1) { warn("%s", _("shred needs a path")); return 2; }
 
 	/* ⛔ THE GROUND IS REPORTED BEFORE ANYTHING IS TOUCHED, and it is reported
 	 * from the FIRST path's own filesystem rather than from /: somebody
@@ -176,16 +194,19 @@ int cmd_shred(int npaths, char **paths, int passes)
 		rec_header("fstype\tcow\tsnapshots");
 		rec_row("%s\t%d\t%d", g.fstype, g.cow ? 1 : 0, g.snapshots ? 1 : 0);
 	} else if (g.cow) {
-		warn("%s is copy-on-write: overwriting does NOT replace the old blocks.", g.fstype);
+		warn(_("%s is copy-on-write: overwriting does NOT replace the old blocks."),
+		     g.fstype);
 		if (g.snapshots)
-			warn("  and /.snapshots holds read-only copies this cannot reach.");
-		warn("  The file will be gone. Recovering its contents from the raw disk");
-		warn("  may still be possible. Full-disk encryption is the real answer.");
+			warn("%s", _("  and /.snapshots holds read-only copies this cannot reach."));
+		warn("%s", _("  The file will be gone. Recovering its contents from the raw disk"));
+		warn("%s", _("  may still be possible. Full-disk encryption is the real answer."));
 	}
 
 	if (!g_yes && !g_dry) {
 		char q[512];
-		snprintf(q, sizeof q, "Destroy %d item(s)? This cannot be undone.", npaths);
+		snprintf(q, sizeof q,
+		         P_("Destroy %d item? This cannot be undone.",
+		            "Destroy %d items? This cannot be undone.", npaths), npaths);
 		if (!confirm(q)) return 1;
 	}
 
@@ -197,12 +218,15 @@ int cmd_shred(int npaths, char **paths, int passes)
 	if (g_out != OUT_REC) {
 		char h[32];
 		human_size(bytes, h, sizeof h);
-		if (g_dry) printf("Would overwrite and delete %s.\n", h);
+		if (g_dry) printf(_("Would overwrite and delete %s.\n"), h);
 		else if (g.cow)
-			printf("Deleted %s, overwritten %d time(s) — see the warning above.\n",
-			       h, passes);
+			printf(P_("Deleted %s, overwritten %d time — see the warning above.\n",
+			          "Deleted %s, overwritten %d times — see the warning above.\n",
+			          passes), h, passes);
 		else
-			printf("Overwritten %d time(s) and deleted: %s.\n", passes, h);
+			printf(P_("Overwritten %d time and deleted: %s.\n",
+			          "Overwritten %d times and deleted: %s.\n", passes),
+			       passes, h);
 	}
 	return rc;
 }
@@ -217,7 +241,7 @@ static int cmd_list(void)
 			rec_row("%s\t%s\t%d", id, la, c->needs_root ? 1 : 0);
 			free(id); free(la);
 		} else {
-			printf("  %-14s %s\n", c->id, c->label);
+			printf("  %-14s %s\n", c->id, _(c->label));
 		}
 	}
 	return 0;
@@ -226,10 +250,10 @@ static int cmd_list(void)
 int cmd_gui(void)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-clean gui needs a graphical session");
+		die("%s", _("no display — syn-clean gui needs a graphical session"));
 	if (access("/usr/bin/quickshell", X_OK) != 0 &&
 	    access("/usr/local/bin/quickshell", X_OK) != 0)
-		die("quickshell is not installed — synpkg install quickshell");
+		die("%s", _("quickshell is not installed — synpkg install quickshell"));
 
 	/* The window's own Wayland identity, so the dock resolves its .desktop and
 	 * it does not inherit the app_id of whatever launched it. */
@@ -241,12 +265,14 @@ int cmd_gui(void)
 
 	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
 	execvp(child[0], child);
-	die("could not start quickshell");
+	die("%s", _("could not start quickshell"));
 	return 1;
 }
 
 int main(int argc, char **argv)
 {
+	syn_clean_i18n_init();
+
 	char *pos[64];
 	int n = 0, passes = 3;
 
@@ -261,7 +287,7 @@ int main(int argc, char **argv)
 		if (!strcmp(v, "--help") || !strcmp(v, "-h")) { usage(stdout); return 0; }
 		if (!strcmp(v, "--version")) { printf("syn-clean %s\n", SYNCLEAN_VERSION); return 0; }
 		if (v[0] == '-' && v[1] == '-') {
-			warn("unknown option '%s'", v);
+			warn(_("unknown option '%s'"), v);
 			usage(stderr);
 			return 2;
 		}
@@ -280,7 +306,7 @@ int main(int argc, char **argv)
 	if (!strcmp(c, "list"))  return cmd_list();
 	if (!strcmp(c, "gui"))   return cmd_gui();
 
-	warn("unknown command '%s'", c);
+	warn(_("unknown command '%s'"), c);
 	usage(stderr);
 	return 2;
 }

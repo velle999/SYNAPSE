@@ -15,6 +15,14 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
+// ⛔ THE TRANSLATION SINGLETON, AND IT IS NOT qsTr(). quickshell 0.3.1 installs
+// no QTranslator, so qsTr() compiles, looks up nothing and returns its own
+// argument while looking exactly like a marked string in review — so
+// qml/I18n.qml reads a JSON catalog compiled from the same po/ the CLI's .mo
+// comes from, and a word this window and `syn-clean list` share is translated
+// once and cannot disagree.
+import "qml"
+
 ShellRoot {
     id: root
 
@@ -134,7 +142,7 @@ ShellRoot {
         onExited: (code) => {
             root.busy = false
             const said = cleanErr.text.trim().replace(/\s*\n\s*/g, " ")
-            root.status = code === 0 ? "" : (said || "some of that could not be removed")
+            root.status = code === 0 ? "" : (said || I18n.tr("some of that could not be removed"))
             root.picked = ({})
             root.rescan()
         }
@@ -144,7 +152,7 @@ ShellRoot {
         if (root.busy) return
         const ids = root.rows.filter(r => root.picked[r.id] && !r.needsRoot)
                              .map(r => r.id)
-        if (ids.length === 0) { root.status = "Nothing is ticked."; return }
+        if (ids.length === 0) { root.status = I18n.tr("Nothing is ticked."); return }
         root.busy = true
         root.status = ""
         // ⛔ --yes BECAUSE THE WINDOW ALREADY ASKED. The binary refuses to take
@@ -194,8 +202,13 @@ ShellRoot {
             root.busy = false
             const said = shredErr.text.trim().replace(/\s*\n\s*/g, " ")
             root.status = code === 0
-                ? "Gone. " + (root.shredCow ? "See the warning above about " + root.shredGround + "." : "")
-                : (said || "that could not be destroyed")
+                // ⛔ WHOLE CELLS. "Gone. " glued to a second sentence glued to a
+                // filesystem name can never be a msgid, and the fragment in the
+                // middle is one no language can place for itself.
+                ? (root.shredCow
+                   ? I18n.tr("Gone. See the warning above about %1.").arg(root.shredGround)
+                   : I18n.tr("Gone."))
+                : (said || I18n.tr("that could not be destroyed"))
             root.shredPath = ""
             root.rescan()
         }
@@ -213,7 +226,7 @@ ShellRoot {
     // ── the window ──────────────────────────────────────────────────────────
 
     FloatingWindow {
-        title: "Disk Cleanup"
+        title: I18n.tr("Disk Cleanup")
         implicitWidth: root.ui(620)
         implicitHeight: root.ui(560)
         color: root.cBg
@@ -230,8 +243,11 @@ ShellRoot {
                 Row {
                     spacing: 8
                     Repeater {
-                        model: [ { id: "clean", label: "Clean up" },
-                                 { id: "shred", label: "Destroy a file" } ]
+                        // ⚠ THE id IS THE PAGE, the label is what is drawn.
+                        // `root.page === modelData.id` is compared in four
+                        // places, so the id stays English.
+                        model: [ { id: "clean", label: I18n.tr("Clean up") },
+                                 { id: "shred", label: I18n.tr("Destroy a file") } ]
                         delegate: Rectangle {
                             required property var modelData
                             width: tabTxt.implicitWidth + 22
@@ -272,8 +288,9 @@ ShellRoot {
                         spacing: 10
 
                         Text {
-                            text: root.busy ? "Looking…"
-                                            : "Tick what to remove. Nothing goes until you press the button."
+                            text: root.busy ? I18n.tr("Looking…")
+                                            : I18n.tr("Tick what to remove. Nothing goes "
+                                                    + "until you press the button.")
                             color: root.cDim
                             width: parent.width
                             wrapMode: Text.WordWrap
@@ -335,15 +352,26 @@ ShellRoot {
                                               verticalCenter: parent.verticalCenter }
                                     spacing: 1
                                     Text {
-                                        text: catRow.modelData.label
+                                        // ⚠ The record carries the English so
+                                        // the window can look it up; this is
+                                        // the draw site.
+                                        // i18n-dynamic: the labels are marked N_() in src/scan.c
+                                        text: I18n.tr(catRow.modelData.label)
                                         color: catRow.modelData.needsRoot ? root.cDim : root.cText
                                         font { family: root.uiFont
                                                pixelSize: root.ui(13); bold: true }
                                     }
                                     Text {
-                                        text: catRow.modelData.needsRoot
-                                              ? catRow.modelData.what + " — needs sudo"
-                                              : catRow.modelData.what
+                                        // ⛔ A WHOLE CELL EITHER WAY. " — needs
+                                        // sudo" appended to a translated
+                                        // sentence is a fragment nothing can
+                                        // look up and no language can place.
+                                        text: {
+                                            // i18n-dynamic: the `what` strings are marked N_() in src/scan.c
+                                            const w = I18n.tr(catRow.modelData.what)
+                                            return catRow.modelData.needsRoot
+                                                   ? I18n.tr("%1 — needs sudo").arg(w) : w
+                                        }
                                         color: catRow.modelData.losesLogins ? root.cWarn : root.cDim
                                         font { family: root.uiFont; pixelSize: root.ui(10) }
                                     }
@@ -380,8 +408,8 @@ ShellRoot {
                                 Text {
                                     anchors.centerIn: parent
                                     text: root.totalPicked > 0
-                                          ? "Remove " + root.human(root.totalPicked)
-                                          : "Remove"
+                                          ? I18n.tr("Remove %1").arg(root.human(root.totalPicked))
+                                          : I18n.tr("Remove")
                                     color: goMa.containsMouse ? root.cPanel : root.cAccent
                                     font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }
@@ -400,7 +428,7 @@ ShellRoot {
                                 border { width: 1; color: root.cDim }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Look again"
+                                    text: I18n.tr("Look again")
                                     color: root.cText
                                     font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }
@@ -429,8 +457,8 @@ ShellRoot {
                         Text {
                             width: parent.width
                             wrapMode: Text.WordWrap
-                            text: "Overwrite a file or folder and delete it. There is no undo "
-                                  + "and it does not go to the Trash."
+                            text: I18n.tr("Overwrite a file or folder and delete it. "
+                                        + "There is no undo and it does not go to the Trash.")
                             color: root.cText
                             font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
@@ -458,7 +486,7 @@ ShellRoot {
                                 anchors { left: parent.left; leftMargin: 10
                                           verticalCenter: parent.verticalCenter }
                                 visible: pathField.text === ""
-                                text: "/path/to/the/file"
+                                text: I18n.tr("/path/to/the/file")
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
@@ -482,13 +510,28 @@ ShellRoot {
                                 wrapMode: Text.WordWrap
                                 color: root.cWarn
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
-                                text: "This is " + root.shredGround + ", which is copy-on-write: "
-                                      + "overwriting writes new blocks and leaves the old ones. "
+                                // ⛔ ONE MSGID PER WHOLE SENTENCE, with the
+                                // filesystem name as an argument. Concatenated
+                                // it could never match anything, and the
+                                // snapshot clause is its own sentence rather
+                                // than a phrase spliced into the middle.
+                                text: I18n.tr("This is %1, which is copy-on-write: overwriting "
+                                            + "writes new blocks and leaves the old ones. ")
+                                          .arg(root.shredGround)
                                       + (root.shredSnaps
-                                         ? "Snapshots in /.snapshots also hold copies this cannot reach. "
+                                         ? I18n.tr("Snapshots in /.snapshots also hold copies "
+                                                 + "this cannot reach. ")
                                          : "")
-                                      + "The file will be gone; its contents may still be recoverable "
-                                      + "from the raw disk. Full-disk encryption is what actually prevents that."
+                                      // ⚠ "Full-disk encryption" IS NOT SPLIT ACROSS
+                                      // TWO LITERALS. tests/qml_test.sh greps for
+                                      // that phrase — the window has to say what
+                                      // actually works, not only what does not —
+                                      // and a rewrap that put a quote in the
+                                      // middle of it reported the sentence gone
+                                      // while it was sitting right there.
+                                      + I18n.tr("The file will be gone; its contents may still be "
+                                              + "recoverable from the raw disk. "
+                                              + "Full-disk encryption is what actually prevents that.")
                             }
                         }
 
@@ -500,7 +543,7 @@ ShellRoot {
                             border { width: 1; color: root.cBad }
                             Text {
                                 anchors.centerIn: parent
-                                text: "Overwrite and delete it"
+                                text: I18n.tr("Overwrite and delete it")
                                 color: shMa.containsMouse ? root.cPanel : root.cBad
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
                             }

@@ -11,6 +11,7 @@
  */
 #define _GNU_SOURCE
 #include "synclean.h"
+#include "i18n.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -30,29 +31,41 @@
  * browser's next start is a profile it cannot read. Every category that names a
  * process refuses while that process is running.
  */
+/*
+ * ⛔ THE FIRST FIELD IS THE COMMAND AND THE SECOND IS THE SENTENCE, one struct
+ * field apart. `syn-clean clean browsercache` takes that exact id back and the
+ * window sends it, so it stays English in every language; the label and the
+ * "what" are marked with N_() and translated where they are DRAWN, which
+ * leaves the record carrying the English word for the window to look up.
+ *
+ * ⛔ AND `conflicts` IS MATCHED AGAINST /proc/<pid>/comm. It is a list of
+ * process names, not a list of words.
+ */
 const category_t g_categories[] = {
-	{ "thumbnails", "Thumbnails", "image previews, rebuilt on demand",
+	{ "thumbnails", N_("Thumbnails"), N_("image previews, rebuilt on demand"),
 	  false, NULL, false },
-	{ "usercache", "Application cache", "~/.cache, minus the rows below",
+	{ "usercache", N_("Application cache"), N_("~/.cache, minus the rows below"),
 	  false, NULL, false },
-	{ "trash", "Trash", "files you already deleted",
+	{ "trash", N_("Trash"), N_("files you already deleted"),
 	  false, NULL, false },
-	{ "crash", "Crash reports", "core dumps and crash logs",
+	{ "crash", N_("Crash reports"), N_("core dumps and crash logs"),
 	  false, NULL, false },
-	{ "browsercache", "Browser cache", "pages and images, re-downloaded as needed",
+	{ "browsercache", N_("Browser cache"),
+	  N_("pages and images, re-downloaded as needed"),
 	  false, "firefox chromium vivaldi-bin chrome brave", false },
 	/* ⚠ SIGNS YOU OUT EVERYWHERE. Not grouped with the caches for that reason:
 	 * a cache is invisible when it goes, and this is the one category whose
 	 * effect the user will notice on every site they use. */
-	{ "cookies", "Cookies", "SIGNS YOU OUT of every site",
+	{ "cookies", N_("Cookies"), N_("SIGNS YOU OUT of every site"),
 	  false, "firefox chromium vivaldi-bin chrome brave", true },
-	{ "tmp", "Temporary files", "your own leftovers in /tmp and /var/tmp",
+	{ "tmp", N_("Temporary files"), N_("your own leftovers in /tmp and /var/tmp"),
 	  false, NULL, false },
-	{ "orphans", "Orphaned packages", "installed as dependencies, needed by nothing",
+	{ "orphans", N_("Orphaned packages"),
+	  N_("installed as dependencies, needed by nothing"),
 	  true, NULL, false },
-	{ "pkgcache", "Package cache", "downloaded packages already installed",
+	{ "pkgcache", N_("Package cache"), N_("downloaded packages already installed"),
 	  true, NULL, false },
-	{ "journal", "System logs", "the journal, trimmed to the last week",
+	{ "journal", N_("System logs"), N_("the journal, trimmed to the last week"),
 	  true, NULL, false },
 };
 const size_t g_ncategories = sizeof g_categories / sizeof g_categories[0];
@@ -249,7 +262,7 @@ static int tree(const char *path, walk_t *w, bool remove)
 static char **roots_for(const category_t *c, int *n)
 {
 	char **v = calloc(24, sizeof *v);
-	if (!v) die("out of memory");
+	if (!v) die("%s", _("out of memory"));
 	int i = 0;
 
 	if (!strcmp(c->id, "thumbnails")) {
@@ -356,7 +369,36 @@ static void cookie_one(const char *path, void *ctx)
  */
 static int tmp_sweep(unsigned long long *bytes, unsigned long long *files, bool remove)
 {
-	const char *dirs[] = { "/tmp", "/var/tmp", NULL };
+	/*
+	 * ⛔ THE ONE PAIR OF ROOTS SYNCLEAN_HOME DOES NOT COVER, AND THE SUITE WAS
+	 * DELETING THROUGH THEM.
+	 *
+	 * clean_test.sh opens by saying every path this program touches is composed
+	 * from SYNCLEAN_HOME, "because a suite that could reach the real $HOME is
+	 * one bad category string away from deleting the caches of whoever ran it".
+	 * These two were hard-coded, so `clean --all` — which the suite runs — swept
+	 * the REAL /tmp and /var/tmp of whoever typed `meson test`, removing
+	 * anything of theirs older than a day. It ate this session's own scratch
+	 * files while the translation work was going on, which is how it was found.
+	 *
+	 * ⚠ AND IT MADE tests/i18n_test.sh FLAKY, for the same reason: `--rec scan`
+	 * reports a byte count and a file count for this row, and both move while
+	 * the test is running. Two locale runs seconds apart disagreed about a
+	 * number that had nothing to do with language.
+	 *
+	 * A colon-separated override, defaulting to the real pair. Same shape and
+	 * same purpose as SYNCLEAN_HOME.
+	 */
+	const char *env = getenv("SYNCLEAN_TMPDIRS");
+	const char *dirs[8] = { "/tmp", "/var/tmp", NULL };
+	char buf[1024];
+	if (env && *env) {
+		snprintf(buf, sizeof buf, "%s", env);
+		size_t n = 0;
+		for (char *t = strtok(buf, ":"); t && n < 7; t = strtok(NULL, ":"))
+			dirs[n++] = t;
+		dirs[n] = NULL;
+	}
 	uid_t me = getuid();
 	time_t now = time(NULL);
 	for (const char **dp = dirs; *dp; dp++) {
@@ -466,13 +508,13 @@ int category_clean(const category_t *c, unsigned long long *freed)
 
 	const char *live = category_blocked_by(c);
 	if (live) {
-		warn("%s is running — close it first, or its profile is what gets cleaned",
+		warn(_("%s is running — close it first, or its profile is what gets cleaned"),
 		     live);
 		*freed = 0;
 		return 1;
 	}
 	if (c->needs_root) {
-		warn("'%s' needs root: run `syn-clean clean %s` with sudo", c->id, c->id);
+		warn(_("'%s' needs root: run `syn-clean clean %s` with sudo"), c->id, c->id);
 		*freed = 0;
 		return 1;
 	}

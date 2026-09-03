@@ -7,6 +7,7 @@ cc = meson.get_compiler('c')
 conf = configuration_data()
 conf.set_quoted('SYNCLEAN_VERSION', meson.project_version())
 conf.set_quoted('SYNCLEAN_DATADIR', get_option('prefix') / get_option('datadir') / 'syn-clean')
+conf.set_quoted('SYNCLEAN_LOCALEDIR', get_option('prefix') / get_option('localedir'))
 configure_file(output: 'config.h', configuration: conf)
 
 inc = include_directories('include', '.')
@@ -27,6 +28,16 @@ install_data('data/syn-clean.desktop',
 install_data('data/syn-clean.svg',
              install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
 
+# ⛔ THE SINGLETON AND ITS qmldir, AS A MODULE DIRECTORY. quickshell is pointed
+# at syn-clean.qml; a qmldir beside that file would change how the file itself
+# is resolved, so the translation singleton lives one level down and the
+# generated catalogs land beside it (qml/i18n/*.json), which is the only place
+# Qt.resolvedUrl("i18n") from inside I18n.qml will look.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-clean' / 'qml')
+
+subdir('po')
+
 # ⛔ THE SUITE RUNS ENTIRELY INSIDE A SCRATCH SYNCLEAN_HOME. A test for a
 # program that deletes directory trees must never be able to reach the real
 # one, and `SYNCLEAN_HOME` exists for exactly that: it is the only way the
@@ -42,3 +53,14 @@ qml_test = find_program('tests/qml_test.sh')
 test('qml', qml_test,
      args: [meson.current_source_dir() / 'data' / 'syn-clean.qml'],
      timeout: 60)
+
+# ⛔ THE ONE THAT PROVES THE RECORDS DID NOT MOVE. It builds a catalog from the
+# TEMPLATE with every msgstr marked and runs the offline --rec commands under
+# it: a record that changes has a string reaching gettext, whether or not any
+# real catalog carries that entry today. A marked category `id` is invisible to
+# a real-catalog diff until somebody translates it, and by then it is a window
+# asking to clean something that does not exist.
+test('i18n', find_program('tests/i18n_test.sh'),
+     args: [meson.current_source_dir(), syn_clean.full_path()],
+     depends: [syn_clean],
+     timeout: 120)

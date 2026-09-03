@@ -72,6 +72,14 @@ char *xstrdup(const char *s);
 char *xasprintf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 char *pct_encode(const char *s);
 char *home_path(const char *rel);          /* $SYNCLEAN_HOME or $HOME + rel */
+
+/*
+ * ⛔ AND $SYNCLEAN_TMPDIRS FOR THE TWO ROOTS home_path() CANNOT REACH.
+ * The `tmp` category sweeps /tmp and /var/tmp, which are not under $HOME and
+ * so were outside the guarantee the rest of this program's paths give. A suite
+ * that ran `clean --all` swept the real ones. Colon-separated; the default is
+ * "/tmp:/var/tmp". See tmp_sweep() in scan.c.
+ */
 void  human_size(unsigned long long b, char *out, size_t n);
 
 /* ── what there is to clean ─────────────────────────────────────────────── */
