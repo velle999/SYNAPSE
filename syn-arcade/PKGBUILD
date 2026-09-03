@@ -1126,7 +1126,43 @@ pkgver=0.1.0
 #   relationship its layout depends on. A face is a face at any distance; a
 #   ten-foot UI's sizes are not the desktop's.
 #   tools/preflight.sh gates this repo-wide now, and names the exemption.
-pkgrel=51
+# 52: THE TELEVISION HAS A BACKGROUND, AND THREE MORE TILES.
+#
+#   Background. Big screen mode drew a flat #05060a behind its tiles, which on
+#   a wall-sized panel four metres away reads as a screen that has not finished
+#   loading — the desktop it is the other face of has a picture, and this
+#   looked like a different, emptier machine. `background` in big.conf, and
+#   the default `desktop` follows synui's wallpaper.
+#   ⚠ IT READS synui's OWN CONFIG rather than a copy of it, in synui's own
+#   order — wallpaper.state over synuirc, a per-output line over the global
+#   key. A path copied in at install time would be right once and wrong the
+#   first time somebody pressed Super+W.
+#   ⚠ `matrix` and `none` resolve to NOTHING on purpose. The kanji rain is a
+#   live GL surface with no still to hand a QML Image, so the alternative to
+#   drawing nothing is a broken file:// URL that draws nothing anyway and says
+#   so in a log nobody on a sofa is reading.
+#
+#   Twitch, YouTube and Spotify. None of the three ships a Linux application
+#   worth putting on a television, so the tiles open the site in the browser
+#   told to behave like one — --kiosk for Firefox's family, --app= for
+#   Chromium's. ⛔ pointer AND keys on every row: that pair is what brings up
+#   the controller-mouse and the on-screen keyboard, and a browser tile without
+#   them is a web page on a television that cannot be clicked or typed into.
+#   That is the bug the Plex tile shipped with. Switchable in the window; all
+#   three are on where a browser exists.
+#
+#   The remote. Half a television remote's buttons landed on `default: return`.
+#   Back, Select, Menu, Guide, Home, channel up/down and the transport keys an
+#   infrared receiver sends (Key_Play/Stop/AudioRewind/AudioForward, which are
+#   NOT the XF86Audio* spellings a keyboard sends) all reach the shell now.
+#   ⛔ BACK IS NOT ESCAPE. Escape quits, deliberately — somebody at a keyboard
+#   has a way back that somebody on a sofa does not. Folding Back in with it
+#   would mean the most-pressed button on the remote closed the interface, and
+#   the way back in is a key combination nobody holding a remote can press.
+#   ⚠ An unknown Qt.Key_* in QML is `undefined`, and `case undefined:` never
+#   matches an integer — a dead branch that raises nothing. The suite checks
+#   every one of them against Qt's own qnamespace.h.
+pkgrel=52
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -5304,6 +5304,198 @@ else
     ok "no producer in this file pipes into 'grep -q' (141 on a MATCH)"
 fi
 
+# ── the television's background, and the web app tiles ──────────────────────
+#
+# ⚠ THE PIXELS ARE bigscreen_rig.sh's JOB, not this suite's. What is checked
+# here is everything a grep CAN answer: that the setting round-trips through
+# big.conf, that the guards refuse what they say they refuse, and that the tile
+# rows carry the two columns a browser on a television cannot work without.
+echo
+echo "── background ──"
+
+BGH=$(mktemp -d); trap 'rm -rf "$BGH"' EXIT
+mkdir -p "$BGH/syn-arcade" "$BGH/synui"
+bg() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big background "$@" 2>&1; }
+
+# Unset means `desktop`, not empty. A default that only exists when somebody
+# has already chosen it is not a default.
+case "$(bg)" in
+    desktop*) ok "background defaults to following the desktop" ;;
+    *) bad "the default is not 'desktop': $(bg)" ;;
+esac
+
+# ⚠ synui's OWN FILE, in its own format — a bare token line and a `mode` line.
+# Reading it is the whole feature: a path copied into big.conf at install time
+# would be right once and wrong the first time somebody pressed Super+W.
+magick -size 8x8 xc:'#123456' "$BGH/wp.png" 2>/dev/null ||
+    convert -size 8x8 xc:'#123456' "$BGH/wp.png" 2>/dev/null || true
+if [ -f "$BGH/wp.png" ]; then
+    printf '%s\nmode fill\n' "$BGH/wp.png" > "$BGH/synui/wallpaper.state"
+    [ "$(bg --path)" = "$BGH/wp.png" ] \
+        && ok "…and follows synui's wallpaper.state" \
+        || bad "wallpaper.state was not read: $(bg --path)"
+
+    # ⛔ THE STATE FILE BEATS synuirc, which is the order synui itself applies
+    # them in (config.c applies the state last). Getting this backwards would
+    # mean the television showed the wallpaper somebody replaced months ago
+    # while the desktop showed the one they picked this morning.
+    printf 'wallpaper = /nonexistent-on-purpose.png\n' > "$BGH/synui/synuirc"
+    [ "$(bg --path)" = "$BGH/wp.png" ] \
+        && ok "…and the state file beats synuirc, as synui applies them" \
+        || bad "synuirc won over wallpaper.state: $(bg --path)"
+
+    # `matrix` is a live GL surface, not a file. There is no still of it to
+    # hand a QML Image, so it has to resolve to nothing rather than to a
+    # wrong picture — or to a broken file:// URL that draws blank.
+    printf 'matrix\n' > "$BGH/synui/wallpaper.state"
+    [ -z "$(bg --path)" ] \
+        && ok "…and the kanji rain resolves to nothing, not a broken path" \
+        || bad "matrix produced a path: $(bg --path)"
+
+    printf '%s\nmode fill\n' "$BGH/wp.png" > "$BGH/synui/wallpaper.state"
+else
+    ok "(skipped the wallpaper reads: no ImageMagick to make a picture with)"
+fi
+
+# ⚠ A PATH THAT DOES NOT RESOLVE IS REFUSED AT THE VERB. Written through, it
+# would produce a television that looks exactly as it did before — the setting
+# silently ignored — with nothing on that screen able to explain itself.
+XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big background /no/such/picture.png \
+    >/dev/null 2>&1 \
+    && bad "an unreadable background path was accepted" \
+    || ok "an unreadable background path is refused"
+
+XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big background none >/dev/null 2>&1
+[ -z "$(bg --path)" ] \
+    && ok "'none' draws nothing — the plain colour" \
+    || bad "'none' still produced a path: $(bg --path)"
+
+# ⚠ NO OUTPUT IS THE ANSWER, NOT A FAILURE. The shell runs this and reads one
+# line; exiting non-zero for the plain colour would put an error in its log on
+# every start for a setting working exactly as asked.
+XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big background --path >/dev/null 2>&1 \
+    && ok "…and still exits 0, because empty IS the answer" \
+    || bad "--path exited non-zero for the plain colour"
+
+echo
+echo "── web apps ──"
+
+wa() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big webapps "$@" 2>&1; }
+apps() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big apps --rec 2>/dev/null; }
+
+rm -f "$BGH/syn-arcade/big.conf"
+for id in twitch youtube spotify; do
+    case "$(wa)" in
+        *"$id"*on*) ok "$id is on by default" ;;
+        *) bad "$id is not on with no setting written: $(wa)" ;;
+    esac
+done
+
+# ⛔ THE LAST ONE OFF MUST WRITE `none`, NEVER AN EMPTY VALUE. big_conf_get
+# ignores an assignment with nothing after the `=`, so an empty list reads back
+# as UNSET — which is all three ON, the exact opposite of what switching the
+# last one off asked for.
+for id in twitch youtube spotify; do wa "$id" off >/dev/null; done
+has "^webapps = none$" "$BGH/syn-arcade/big.conf" \
+    && ok "switching the last one off writes 'none', not an empty value" \
+    || bad "the empty list was written back: $(cat "$BGH/syn-arcade/big.conf")"
+wastate() { printf '%s' "$(wa)" | awk -v i="$1" '$1 == i {print $2}'; }
+[ "$(wastate twitch)" = off ] \
+    && ok "…and it reads back as off rather than defaulting on again" \
+    || bad "'none' read back as the unset default"
+
+# A list must not match by substring: `webapps = youtube` answering for a
+# `youtube-music` that does not exist yet is the shape of the bug.
+wa youtube on >/dev/null
+[ "$(wastate youtube)" = on ] && ok "one back on is on" || bad "youtube did not come back on"
+[ "$(wastate twitch)" = off ] && ok "…and the others stayed off" \
+    || bad "turning one on turned the others on"
+
+# ⛔ pointer AND keys ON EVERY WEB TILE. This is the Plex tile's bug: a row
+# without those columns is a browser on a television with no mouse and no
+# keyboard, which looks like the site being broken rather than the tile.
+for id in twitch youtube spotify; do wa "$id" on >/dev/null; done
+APPSREC=$(apps)
+if printf '%s' "$APPSREC" | cut -f1 | grep -Fxq twitch; then
+    for id in twitch youtube spotify; do
+        row=$(printf '%s\n' "$APPSREC" | awk -F'\t' -v i="$id" '$1 == i')
+        if [ -z "$row" ]; then
+            bad "$id has no row in \`big apps\` with a browser installed"
+            continue
+        fi
+        p=$(printf '%s' "$row" | cut -f7); k=$(printf '%s' "$row" | cut -f8)
+        [ "$p" = 1 ] && [ "$k" = 1 ] \
+            && ok "$id carries pointer and keys" \
+            || bad "$id has pointer=$p keys=$k — a browser with neither"
+        # The shelf is the media one, beside Plex and Kodi: on a sofa Twitch is
+        # where a stream is, not "a web browser pointed at Twitch".
+        [ "$(printf '%s' "$row" | cut -f6)" = media ] \
+            && ok "…and sits on the media shelf" \
+            || bad "$id is not on the media shelf"
+        # And a glyph, or the tile draws a blank square on the television.
+        f=$(printf '%s' "$row" | cut -f10)
+        [ -n "$f" ] && [ -f "$f" ] \
+            && ok "…and has a drawing" \
+            || bad "$id has no iconfile ($f)"
+    done
+else
+    ok "(skipped the tile columns: no browser installed to build a command with)"
+fi
+
+# Switched off is GONE from the table, not a dead tile on the shelf.
+wa spotify off >/dev/null
+if apps | cut -f1 | grep -Fxq spotify; then
+    bad "a switched-off web app still has a tile"
+else
+    ok "a switched-off web app has no tile at all"
+fi
+rm -f "$BGH/syn-arcade/big.conf"
+
+echo
+echo "── the remote ──"
+#
+# ⛔ BACK IS NOT ESCAPE. Escape quits deliberately — somebody at a keyboard has
+# a way back that somebody on a sofa does not. A remote's Back is its
+# most-pressed button and means "up one level"; folded in with Escape, the first
+# press would close the interface and the way back in is a key combination
+# nobody holding a remote can press.
+BIGQML=data/syn-arcade-big.qml
+has 'case Qt.Key_Back:' "$BIGQML" \
+    && ok "the remote's Back key is handled" \
+    || bad "Qt.Key_Back is not handled — a remote's Back does nothing"
+awk '/case Qt.Key_Back:/,/break/' "$BIGQML" > "$BGH/back.qml"
+has 'shell.nav("back")' "$BGH/back.qml" \
+    && ok "…as Back, not as quit" \
+    || bad "Back does not reach nav(\"back\")"
+awk '/case Qt.Key_Escape:/,/break/' "$BIGQML" > "$BGH/esc.qml"
+has 'quitNow' "$BGH/esc.qml" \
+    && ok "…and Escape still quits, as it always did" \
+    || bad "Escape stopped quitting"
+
+for k in Key_Select Key_Menu Key_Guide Key_HomePage Key_ChannelUp Key_ChannelDown \
+         Key_AudioRewind Key_AudioForward Key_Play Key_Stop Key_Cancel Key_Settings; do
+    has "Qt.$k" "$BIGQML" \
+        && ok "$k reaches the shell" \
+        || bad "Qt.$k is unhandled — that button does nothing on a remote"
+done
+
+# ⛔ EVERY ONE OF THOSE MUST BE A REAL Qt ENUM. An unknown Qt.Key_Foo in QML is
+# `undefined`, and `case undefined:` simply never matches an integer — a dead
+# branch that raises no error, logs nothing, and looks exactly like a handled
+# key. Checked against Qt's own header rather than trusted.
+QNS=/usr/include/qt6/QtCore/qnamespace.h
+if [ -f "$QNS" ]; then
+    unknown=$(grep -oE 'Qt\.Key_[A-Za-z0-9_]+' "$BIGQML" | sort -u |
+              sed 's/^Qt\.//' | while read -r k; do
+                  grep -qE "^ *$k( |=)" "$QNS" || echo "$k"
+              done)
+    [ -z "$unknown" ] \
+        && ok "every Qt.Key_* in the shell is a real Qt enum" \
+        || bad "these are not Qt enums, so their case never matches: $unknown"
+else
+    ok "(skipped the Qt enum check: no qt6 headers installed)"
+fi
+
 # ── verdict ─────────────────────────────────────────────────────────────────
 
 echo

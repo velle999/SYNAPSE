@@ -14,6 +14,24 @@ conf.set_quoted('SYNARCADE_DATADIR',
 # compiled from the same .po by po/meson.build. See include/i18n.h.
 conf.set_quoted('SYNARCADE_LOCALEDIR',
                 get_option('prefix') / get_option('datadir') / 'locale')
+
+# Two paths that belong to OTHER packages, and that is why they are configured
+# here rather than written into the C.
+#
+#   SYNUI_WALLPAPER_DEFAULT  what synui's `wallpaper = default` token resolves
+#               to. Big screen mode follows the desktop's wallpaper, so it has
+#               to interpret synui's own vocabulary — and `default` is the one
+#               token that means a file rather than naming one.
+# (`big background --rec` lists the picture files itself, from the same
+# directories synui's Super+W picker scans — see big_background().)
+#
+# ⚠ NEITHER IS A BUILD DEPENDENCY. Both are read at RUN time, and a machine
+# without synui or without the wallpapers simply has no picture to offer — the
+# background falls back to the flat colour it drew before. Making these
+# dependencies would mean a television interface that will not build without a
+# compositor it does not link against.
+conf.set_quoted('SYNUI_WALLPAPER_DEFAULT',
+                get_option('prefix') / get_option('datadir') / 'synui' / 'wallpaper.png')
 configure_file(output: 'config.h', configuration: conf)
 
 # ONE dependency beyond libc — libwayland-client — and it is worth saying why
@@ -129,6 +147,9 @@ install_data(
   'data/icons/kodi.svg',
   'data/icons/plex.svg',
   'data/icons/jellyfin.svg',
+  'data/icons/twitch.svg',
+  'data/icons/youtube.svg',
+  'data/icons/spotify.svg',
   'data/icons/firefox.svg',
   'data/icons/terminal.svg',
   'data/icons/syn-arcade.svg',

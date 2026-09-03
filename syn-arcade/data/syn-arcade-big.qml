@@ -191,6 +191,28 @@ ShellRoot {
         }
     }
 
+    // ── the picture behind the tiles ────────────────────────────────────────
+    //
+    // ⚠ NOT A RECORD, and it is the one reader here that is not. Every other
+    // Process in this file parses a table; this one wants a single path and
+    // `--rec` would make the shell hunt for the current row of a choice list it
+    // has no other use for. One line, or nothing at all for the plain colour.
+    //
+    // ⚠ TRIMMED. StdioCollector hands back the trailing newline with the path,
+    // and "file:///home/x/a.png\n" is a URL that resolves to nothing — an
+    // Image that silently stays blank, on a screen four metres away, with the
+    // interface otherwise working perfectly.
+    property string background: ""
+
+    Process {
+        id: backgroundProc
+        command: [shell.bin, "big", "background", "--path"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: shell.background = this.text.trim()
+        }
+    }
+
     // ── what was opened recently ────────────────────────────────────────────
     //
     // The applications THIS DESKTOP has opened, newest first, straight out of
@@ -2537,6 +2559,63 @@ ShellRoot {
             onVisibleChanged: if (visible) keys.forceActiveFocus()
             Component.onCompleted: if (visible) keys.forceActiveFocus()
 
+            // ── the wallpaper behind everything ─────────────────────────────
+            //
+            // The television used to be a flat #05060a with tiles on it, which
+            // on a wall-sized panel four metres away reads as a screen that has
+            // not finished loading — the desktop this is the other face of has
+            // a picture, and the ten-foot interface looked like a different,
+            // emptier machine.
+            //
+            // ⚠ RESOLVED BY big.c, NOT FOUND HERE. `big background --path`
+            // hands back one path that exists or NOTHING AT ALL, and the shell
+            // is a renderer: it does not know synui has a config, that there
+            // are two files to read in a particular order, or that a wallpaper
+            // can be a live kanji rain that is not a picture. An empty answer
+            // is the plain colour, which is what this looked like before.
+            //
+            // ⚠ FIRST CHILD, so everything else draws over it. The artBand
+            // below and every shelf are declared after it, which is what puts
+            // them in front — there is no z juggling here and there should not
+            // be one.
+            Image {
+                anchors.fill: parent
+                source: shell.background ? "file://" + shell.background : ""
+                visible: source !== ""
+                // Crop, not fit: a letterboxed wallpaper puts two bars of the
+                // flat colour back on the screen, which is the thing this
+                // exists to remove. A television is 16:9 and so is most of what
+                // anybody sets as a wallpaper, so the crop is usually nothing.
+                fillMode: Image.PreserveAspectCrop
+                // ⚠ ASYNCHRONOUS, and it is not a nicety. This is a 4K PNG on
+                // some machines and the load happens on the render thread
+                // otherwise — a visible stall every time the interface opens,
+                // on the one screen where a stall looks like the box having
+                // crashed.
+                asynchronous: true
+                cache: true
+                // ⚠ SIZED DOWN ON PURPOSE. Without sourceSize Qt keeps the
+                // full-resolution image in memory as well as the scaled one,
+                // and the shells that open this are already the largest surface
+                // on the machine.
+                sourceSize.width: win.width
+                sourceSize.height: win.height
+
+                // ⚠ THE TILES HAVE TO WIN. A wallpaper at full strength behind
+                // a grid of translucent tiles is a legibility problem, not a
+                // decoration — the tile borders are #332c4d against #191527 and
+                // a busy picture eats both. The scrim is a flat wash at the
+                // window's own colour, heavy enough that the text contrast
+                // measured against a solid #05060a still holds over any
+                // picture, and light enough that the picture is unmistakably
+                // there.
+                Rectangle {
+                    anchors.fill: parent
+                    color: win.color
+                    opacity: 0.72
+                }
+            }
+
             // ── the artwork band: the top of the screen IS the picture ──────
             //
             // ⚠ THIS WAS A FULL-SCREEN WASH AND IT WAS VERY NEARLY INVISIBLE.
@@ -4392,7 +4471,60 @@ ShellRoot {
                     case Qt.Key_MediaPause:  shell.mediaCmd("toggle"); break
                     case Qt.Key_MediaNext:   shell.mediaCmd("next"); break
                     case Qt.Key_MediaPrevious: shell.mediaCmd("prev"); break
-                    case Qt.Key_MediaStop:   shell.mediaCmd("stop"); break
+                    case Qt.Key_MediaStop:
+                    case Qt.Key_Stop:        shell.mediaCmd("stop"); break
+                    // ⚠ A REMOTE'S TRANSPORT IS NOT A KEYBOARD'S. An HDMI-CEC
+                    // or infrared receiver puts KEY_PLAY, KEY_STOP,
+                    // KEY_REWIND and KEY_FASTFORWARD on the wire — which XKB
+                    // spells XF86AudioPlay only for the first one. The other
+                    // three arrive as Qt.Key_Stop, Qt.Key_AudioRewind and
+                    // Qt.Key_AudioForward, none of which was handled: the
+                    // buttons did nothing, on the device this interface is
+                    // FOR.
+                    case Qt.Key_Play:        shell.mediaCmd("toggle"); break
+                    case Qt.Key_AudioForward: shell.mediaCmd("next"); break
+                    case Qt.Key_AudioRewind:  shell.mediaCmd("prev"); break
+
+                    // ── the buttons a television remote has and a keyboard
+                    // does not ──────────────────────────────────────────────
+                    //
+                    // A CEC remote over HDMI and an infrared one through a
+                    // receiver both arrive as ordinary key presses — the
+                    // kernel's rc-core maps them to KEY_* and XKB gives them
+                    // the XF86 keysyms below. So there is nothing to add for
+                    // the remote as a DEVICE; what was missing was that half
+                    // its buttons landed on `default: return` and did nothing
+                    // at all.
+                    //
+                    // ⛔ BACK IS NOT ESCAPE. Escape QUITS here, deliberately —
+                    // somebody at a keyboard has a way back that somebody on a
+                    // sofa does not. A remote's Back button is the single
+                    // most-pressed button on it and means "up one level"; if
+                    // it had been folded in with Escape, the first press of it
+                    // would have closed the interface, and the way back in is
+                    // a key combination nobody holding a remote can press.
+                    case Qt.Key_Back:
+                    case Qt.Key_Cancel:   shell.nav("back"); break
+                    // OK on a remote that spells it KEY_SELECT rather than
+                    // KEY_ENTER. Both exist in the wild, on the same shelf.
+                    case Qt.Key_Select:   shell.nav("accept"); break
+                    // Menu/Settings — the Start menu, which is where the
+                    // machine's own switches live. Same verb the S key and the
+                    // pad's Start button reach.
+                    case Qt.Key_Menu:
+                    case Qt.Key_Settings: shell.nav("menu"); break
+                    // ⚠ Guide and Home BOTH step aside, which is the pad's
+                    // GUIDE button and not a quit: the interface stays loaded
+                    // and the same button brings it back. On a remote those
+                    // two keys are what somebody presses to "get out of this",
+                    // and getting out on a television has to be reversible
+                    // from the same hand.
+                    case Qt.Key_Guide:
+                    case Qt.Key_HomePage: shell.nav("guide"); break
+                    // Channel up/down is the shelf-sized jump, the same one
+                    // Page Up and Page Down make.
+                    case Qt.Key_ChannelUp:   shell.nav("page-left"); break
+                    case Qt.Key_ChannelDown: shell.nav("page-right"); break
                     case Qt.Key_Up:       shell.nav("up"); break
                     case Qt.Key_Down:     shell.nav("down"); break
                     case Qt.Key_Left:     shell.nav("left"); break

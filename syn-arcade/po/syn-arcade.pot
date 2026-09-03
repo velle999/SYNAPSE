@@ -242,6 +242,9 @@ msgstr ""
 msgid "News"
 msgstr ""
 
+msgid "No browser installed — these tiles cannot open."
+msgstr ""
+
 msgid ""
 "No mappings added — the pads SDL already knows are working from its own "
 "database, and need nothing here."
@@ -456,6 +459,11 @@ msgstr ""
 msgid "The visualizer needs projectM — synpkg install projectm-pulseaudio"
 msgstr ""
 
+msgid ""
+"Tiles on the media shelf. They open in your browser as their own full-screen "
+"window, with the controller acting as the mouse and keyboard they need."
+msgstr ""
+
 msgid "Toggle overlay"
 msgstr ""
 
@@ -475,6 +483,9 @@ msgid "Visualizer"
 msgstr ""
 
 msgid "WINEPREFIX=/home/you/Games/thegame"
+msgstr ""
+
+msgid "Web apps"
 msgstr ""
 
 msgid "What the game renders at"
@@ -1047,6 +1058,50 @@ msgid ""
 "one\n"
 msgstr ""
 
+msgid "Follow the desktop"
+msgstr ""
+
+msgid "Plain colour"
+msgstr ""
+
+#, c-format
+msgid "  drawing        %s\n"
+msgstr ""
+
+#, c-format
+msgid "  drawing        nothing — the plain colour\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: cannot read '%s'. Use `desktop`, `none`, or the path to an "
+"image\n"
+msgstr ""
+
+#, c-format
+msgid "big screen background: %s\n"
+msgstr ""
+
+#, c-format
+msgid "  (no browser installed — these tiles cannot open)\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no web app called '%s'\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big webapps <name> on|off\n"
+msgstr ""
+
+#, c-format
+msgid "%s: on\n"
+msgstr ""
+
+#, c-format
+msgid "%s: off\n"
+msgstr ""
+
 msgid "first screen"
 msgstr ""
 
@@ -1085,6 +1140,15 @@ msgid ""
 "driven from the sofa\n"
 msgstr ""
 
+msgid "nothing to draw — the plain colour"
+msgstr ""
+
+msgid "none switched on"
+msgstr ""
+
+msgid "  (no browser installed)"
+msgstr ""
+
 #, c-format
 msgid "big screen mode  %s%s%s\n"
 msgstr ""
@@ -1099,6 +1163,14 @@ msgstr ""
 
 #, c-format
 msgid "  guide button   %s\n"
+msgstr ""
+
+#, c-format
+msgid "  background     %s\n"
+msgstr ""
+
+#, c-format
+msgid "  web apps       %s\n"
 msgstr ""
 
 #, c-format

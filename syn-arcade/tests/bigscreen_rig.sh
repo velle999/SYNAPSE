@@ -518,6 +518,37 @@ if [ -n "${SIZE:-}" ]; then
         "${SIZE%x*}" "${SIZE#*x}" > "$TMP/synui/outputs.conf"
 fi
 
+# ── a wallpaper for the shell to find ───────────────────────────────────────
+#
+# Big screen mode's background follows synui's, which it resolves by reading
+# synui's OWN config — so without one staged here the interface draws the flat
+# colour and the whole feature is untested by a run that otherwise looks
+# perfect. This is the file `background = desktop` is supposed to end up at.
+#
+# ⚠ IN THE SEALED CONFIG DIR, like everything else. XDG_CONFIG_HOME is $TMP, so
+# this is $TMP/synui/wallpaper.state and NOT the real session's — the whole
+# point of the seatbelts at the top of this file.
+#
+# A generated picture rather than one of the shipped ones: the check below asks
+# whether the background is DRAWN, and it can only answer that from a colour
+# that appears nowhere else on the screen. #05060a is the flat fallback and the
+# palette is violets, so a saturated green is unambiguous.
+mkdir -p "$TMP/synui"
+WPFILE="$TMP/synui/rig-wallpaper.png"
+if command -v magick >/dev/null 2>&1; then
+    magick -size 320x180 xc:'#0d7a3a' "$WPFILE" 2>/dev/null || WPFILE=
+elif command -v convert >/dev/null 2>&1; then
+    convert -size 320x180 xc:'#0d7a3a' "$WPFILE" 2>/dev/null || WPFILE=
+else
+    WPFILE=
+fi
+if [ -n "$WPFILE" ]; then
+    printf '%s\nmode fill\n' "$WPFILE" > "$TMP/synui/wallpaper.state"
+    echo "wallpaper staged: $WPFILE"
+else
+    echo "NOTE: no ImageMagick — the background check below is SKIPPED, not passed"
+fi
+
 if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
     echo "SKIP: no DRM render node — synui renders through fx_renderer (GLES2)"
     exit 77
@@ -867,6 +898,42 @@ ls -la "$OUT"
 # render while reasoning about today's change — which cost an hour here,
 # diagnosing an intermittency that was a stale screenshot every time.
 DEST=${BIGRIG_OUT:-/tmp/bigrig-out}
+# ── did the background actually reach the screen? ───────────────────────────
+#
+# ⚠ ASKED OF THE PIXELS, not of the QML. `big background --path` returning a
+# path proves the C side; an Image element in the file proves nothing at all —
+# a wrong URL, a missing sourceSize, a scrim at the wrong opacity or a z-order
+# that buries it all render as the screen that was there before, which is
+# exactly what this feature exists to change.
+#
+# The scrim is 0.72 of #05060a over the picture, so the staged #0d7a3a arrives
+# as roughly #0a2717 — dark, but decisively GREENER than it is red or blue,
+# which the flat fallback (#05060a, blue-dominant) never is.
+if [ -n "$WPFILE" ]; then
+    echo "── the background ──"
+    read -r R G B <<<"$(python3 - "$OUT/01-main.png" <<'PYEOF'
+import sys, zlib, struct
+# The one pixel that is background on every layout: bottom-left, below the
+# shelves and left of the footer's buttons.
+try:
+    from PIL import Image
+    im = Image.open(sys.argv[1]).convert("RGB")
+    print(*im.getpixel((12, im.height - 90)))
+except Exception:
+    print(-1, -1, -1)
+PYEOF
+)"
+    if [ "$R" = "-1" ]; then
+        echo "  SKIP  no PIL — cannot read the pixels back"
+    elif [ "$G" -gt "$R" ] && [ "$G" -gt "$B" ]; then
+        echo "  ok    the wallpaper is drawn (rgb $R,$G,$B — green dominant)"
+    else
+        echo "  FAIL  the background is not on screen (rgb $R,$G,$B)"
+        echo "        the flat colour is #05060a; a drawn wallpaper here is green"
+        exit 1
+    fi
+fi
+
 mkdir -p "$DEST" && rm -f "$DEST"/*.png && cp "$OUT"/*.png "$DEST"/
 echo "copied to $DEST"
 

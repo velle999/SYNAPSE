@@ -1274,6 +1274,111 @@ static bool music_headless(void)
  *            window twice with a mouse. Reported from the sofa as "open the
  *            visualizer, hit Guide, go back and it is frozen".
  */
+/* ── The web services that have no application here ──────────────────────── */
+
+/*
+ * Twitch, YouTube and Spotify ship no Linux desktop application worth putting
+ * on a television — Spotify's is a browser in a wrapper, and the other two are
+ * a web page and nothing else. What a ten-foot interface can do is open the
+ * site the way an application would: one window, no tab strip, no address bar,
+ * full screen, and the controller acting as the mouse and keyboard it needs.
+ *
+ * ⚠ pointer AND keys, BOTH true, and this is the trap the Plex tile fell into.
+ * Those two columns are what tell the shell to bring up the controller-mouse
+ * and the on-screen keyboard when the tile is launched. A browser tile without
+ * them opens a web page on a television with no way to click anything and no
+ * way to type — which looks like the site being broken, not the tile.
+ *
+ * ⚠ AND THEY ARE OPTIONAL, because a television is a personal arrangement.
+ * `webapps` in big.conf is a comma-separated list of the ones to show; unset
+ * means all of them, since somebody who never opens Twitch loses nothing by a
+ * tile they do not press, and somebody who wants it gone can say so.
+ *
+ *   webapps = twitch,youtube      Spotify off
+ *   webapps = none                all three off
+ *   (unset)                       all three on
+ */
+struct webapp {
+	const char *id;
+	const char *name;	/* a proper noun — the same in all 13 languages */
+	const char *url;
+};
+
+static const struct webapp webapps[] = {
+	{ "twitch",  "Twitch",  "https://www.twitch.tv/" },
+	{ "youtube", "YouTube", "https://www.youtube.com/" },
+	{ "spotify", "Spotify", "https://open.spotify.com/" },
+};
+#define WEBAPPS_N ((int)(sizeof(webapps) / sizeof(webapps[0])))
+
+/* Is <id> in the `webapps` list? Unset means all; `none` means none. */
+static bool webapp_enabled(const char *id)
+{
+	char want[256];
+	if (!big_conf_get("webapps", want, sizeof(want)))
+		return true;
+	if (strcmp(want, "none") == 0)
+		return false;
+
+	/* Substring matching would let "youtube" answer for a list containing
+	 * only "youtube-music", so this walks the fields. */
+	for (char *p = want; *p; ) {
+		while (*p == ' ' || *p == ',')
+			p++;
+		char *end = p;
+		while (*end && *end != ',')
+			end++;
+		char save = *end;
+		*end = '\0';
+		bool hit = strcmp(trim(p), id) == 0;
+		*end = save;
+		if (hit)
+			return true;
+		p = end;
+	}
+	return false;
+}
+
+/*
+ * The browser, told to behave like an application, as one command line.
+ *
+ * ⚠ THE FLAG IS PER FAMILY AND THERE IS NO COMMON ONE. Firefox has --kiosk,
+ * which is full-screen with no chrome at all; Chromium's family has --app=URL,
+ * which is a window with no tab strip, plus --start-fullscreen. Handing either
+ * flag to the other browser is not a no-op — Chromium treats an unknown
+ * --kiosk as a URL and opens a search for the word, and a television four
+ * metres away shows a search results page for "kiosk" with no explanation.
+ *
+ * ⚠ AND THE FALLBACK IS A PLAIN URL, NOT AN ERROR. On a browser nobody here
+ * has a flag for, an ordinary window on the right site is a working tile with
+ * chrome around it. Refusing to build the command would be a missing tile.
+ *
+ * ⛔ ONE BUFFER PER ENTRY, and NOT the single static icon_file() uses. The
+ * caller builds all three rows in one loop and keeps every pointer, so a shared
+ * buffer would leave Twitch and YouTube both holding the Spotify command — three
+ * tiles that all open the same site, which looks like the sites being wrong.
+ * Keyed on the index rather than strdup'd so there is nothing to free.
+ */
+static const char *webapp_cmd(int i)
+{
+	static char cmd[WEBAPPS_N][SYN_PATH];
+	const char *br = browser_prog();
+	const char *url = webapps[i].url;
+
+	if (!br)
+		return NULL;
+
+	if (strcmp(br, "firefox") == 0 || strcmp(br, "librewolf") == 0)
+		snprintf(cmd[i], SYN_PATH, "%s --kiosk %s", br, url);
+	else if (strcmp(br, "chromium") == 0 || strcmp(br, "brave") == 0 ||
+		 strcmp(br, "google-chrome-stable") == 0)
+		snprintf(cmd[i], SYN_PATH, "%s --app=%s --start-fullscreen", br, url);
+	else
+		snprintf(cmd[i], SYN_PATH, "%s %s", br, url);
+	return cmd[i];
+}
+
+
 struct row {
 	const char *id, *name, *exec, *icon, *kind, *shelf;
 	bool pointer, keys, full, transient;
@@ -1415,6 +1520,27 @@ static int apps_table(struct row *rows, int max)
 			"jellyfin-media-player", "jellyfin", "app", "media",
 			true, false, true, false };
 
+	/* ── the web services with no application of their own ──
+	 *
+	 * On the media shelf beside Plex and Kodi rather than among the apps,
+	 * because that is what they are to somebody on a sofa: Twitch is where
+	 * a stream is, not "a web browser pointed at Twitch". The Web tile
+	 * below is still the browser.
+	 *
+	 * ⚠ pointer AND keys, on every one of them. See webapp_cmd(): these
+	 * open a browser, and a browser on a television with no controller
+	 * mouse and no on-screen keyboard is a page nobody can use. */
+	for (int w = 0; w < WEBAPPS_N; w++) {
+		if (!webapp_enabled(webapps[w].id))
+			continue;
+		const char *cmd = webapp_cmd(w);
+		if (!cmd)		/* no browser — no tile, not a dead one */
+			continue;
+		rows[n++] = (struct row){ webapps[w].id, webapps[w].name,
+			cmd, webapps[w].id, "app", "media",
+			true, true, true, false };
+	}
+
 	/* ── apps: the two that need a pointer and a keyboard ── */
 	if (browser_prog())
 		rows[n++] = (struct row){ "web", "Web", browser_prog(),
@@ -1472,7 +1598,13 @@ static int apps_table(struct row *rows, int max)
 	return n;
 }
 
-#define APPS_MAX 32
+/* ⚠ RAISED WITH THE WEBAPP TILES. apps_table() writes into a caller array of
+ * this size and the three web services are three more rows on a machine that
+ * already had Steam, Heroic, Lutris, RetroArch, Moonlight, Greenlight, GFN,
+ * music, Kodi, Plex, Jellyfin, the browser, a terminal and five system rows. It
+ * is a stack array with no bounds check on the writes; overflowing it would
+ * corrupt the caller's frame rather than drop a tile. */
+#define APPS_MAX 40
 
 static int big_apps(bool rec)
 {
@@ -8274,6 +8406,388 @@ static int big_guard(void)
 	return pads_guide_watch(guard_running, guard_press);
 }
 
+/* ── The television's background ─────────────────────────────────────────── */
+
+/*
+ * Big screen mode drew a flat #05060a and nothing else, which is the one thing
+ * a television interface cannot get away with: on a wall-sized panel four
+ * metres away, a field of near-black behind a grid of tiles reads as a screen
+ * that has not finished loading. The desktop has a wallpaper; the ten-foot
+ * interface is the same machine and looks like a different, emptier one.
+ *
+ * `background` in big.conf, and the default is `desktop`:
+ *
+ *   background = desktop     follow synui's wallpaper (the default)
+ *   background = none        the flat colour, as it was
+ *   background = /path.png   a picture chosen for the television alone
+ *
+ * ⚠ FOLLOWING THE DESKTOP MEANS READING synui's CONFIG, NOT A COPY OF IT. The
+ * wallpaper is a thing somebody changes with Super+W, and a path copied into
+ * big.conf at install time would be right once and wrong for ever after. The
+ * resolution order below is synui's own, and matches wallpaper.c: the state
+ * file the picker writes beats synuirc, and a per-output line beats the global
+ * key in whichever file it appears — because that is what the desktop is
+ * actually showing on the screen the television opens on.
+ */
+
+/* Interpret one wallpaper token the way synui's wallpaper_apply_token does.
+ *
+ * ⚠ `matrix` AND `none` BOTH RESOLVE TO NOTHING HERE, and they are not the
+ * same thing over there. matrix is synui's kanji rain — a live GL surface, not
+ * a file — and there is no still image of it to hand a QML Image. Rather than
+ * draw a wrong picture, both fall back to the flat colour, which is what the
+ * screen looked like before this existed. */
+static bool wp_token_path(const char *tok, char *buf, size_t n)
+{
+	buf[0] = '\0';
+	if (!tok || !*tok)
+		return false;
+	if (strcmp(tok, "matrix") == 0 || strcmp(tok, "none") == 0)
+		return false;
+	if (strcmp(tok, "default") == 0) {
+		snprintf(buf, n, "%s", SYNUI_WALLPAPER_DEFAULT);
+		return buf[0] != '\0';
+	}
+	/* ~ expands, as synuirc's own reader does. */
+	if (tok[0] == '~' && (tok[1] == '/' || tok[1] == '\0'))
+		return home_path(buf, n, tok[1] ? tok + 2 : "");
+	snprintf(buf, n, "%s", tok);
+	return true;
+}
+
+/*
+ * Walk one synui config file for wallpaper tokens.
+ *
+ * `out` is the connector big screen mode will open on, or NULL for whatever the
+ * global key says. A per-output line for THAT connector wins over the global
+ * one within the same file, and is remembered separately so a later global line
+ * cannot overwrite it — synuirc is read in order and an override may be written
+ * before or after the key it overrides.
+ *
+ * Handles both spellings because the two files are not the same format:
+ * synuirc is `wallpaper = <tok>` / `wallpaper_output = <NAME> <tok>`, and
+ * wallpaper.state is a bare token line / `output <NAME> <tok>`.
+ */
+static void wp_scan_file(const char *path, const char *out,
+			 char *glob, size_t globn, char *per, size_t pern)
+{
+	char *text = read_file(path);
+	if (!text)
+		return;
+
+	char *save = NULL;
+	for (char *ln = strtok_r(text, "\n", &save); ln;
+	     ln = strtok_r(NULL, "\n", &save)) {
+		char *t = trim(ln);
+		if (!*t || *t == '#')
+			continue;
+
+		/* synuirc: key = value */
+		char *eq = strchr(t, '=');
+		if (eq) {
+			*eq = '\0';
+			char *k = trim(t);
+			char *v = trim(eq + 1);
+			if (strcmp(k, "wallpaper") == 0) {
+				snprintf(glob, globn, "%s", v);
+			} else if (strcmp(k, "wallpaper_output") == 0 && out) {
+				char *sp = strchr(v, ' ');
+				if (!sp)
+					continue;
+				*sp = '\0';
+				if (strcmp(trim(v), out) == 0)
+					snprintf(per, pern, "%s", trim(sp + 1));
+			}
+			continue;
+		}
+
+		/* wallpaper.state: `output <NAME> <tok>`, `mode <name>`, or a
+		 * bare token. `mode` is scaling and says nothing about which
+		 * picture, so it is skipped rather than mistaken for one. */
+		if (strncmp(t, "mode ", 5) == 0)
+			continue;
+		if (strncmp(t, "output ", 7) == 0) {
+			if (!out)
+				continue;
+			char *v = trim(t + 7);
+			char *sp = strchr(v, ' ');
+			if (!sp)
+				continue;
+			*sp = '\0';
+			char *val = trim(sp + 1);
+			if (strncmp(val, "mode ", 5) == 0)
+				continue;
+			if (strcmp(trim(v), out) == 0)
+				snprintf(per, pern, "%s", val);
+			continue;
+		}
+		snprintf(glob, globn, "%s", t);
+	}
+	free(text);
+}
+
+/* synui's effective wallpaper for one output, as a readable image path. */
+static bool synui_wallpaper(const char *out, char *buf, size_t n)
+{
+	char glob[SYN_PATH] = "", per[SYN_PATH] = "";
+	char path[SYN_PATH];
+
+	/* synuirc first, then the state file OVER it — config.c applies the
+	 * state last for exactly this reason, and it is what makes a Super+W
+	 * pick the answer rather than the line somebody edited months ago. */
+	if (config_path(path, sizeof(path), "synui/synuirc"))
+		wp_scan_file(path, out, glob, sizeof(glob), per, sizeof(per));
+	if (config_path(path, sizeof(path), "synui/wallpaper.state"))
+		wp_scan_file(path, out, glob, sizeof(glob), per, sizeof(per));
+
+	if (!wp_token_path(per[0] ? per : glob, buf, n))
+		return false;
+	/* A path that does not resolve is the same as none: the shell is handed
+	 * a file it can open or an empty string, and never a broken URL to fail
+	 * on silently four metres from anybody who could fix it. */
+	if (access(buf, R_OK) != 0) {
+		buf[0] = '\0';
+		return false;
+	}
+	return true;
+}
+
+/*
+ * The picture to draw behind the tiles, or empty for the flat colour.
+ *
+ * ⚠ RESOLVED HERE rather than in the QML, for the same reason icon_file() and
+ * the cover art are: the shell is a renderer. It is handed a path that exists
+ * or an empty string. It does not know synui has a config, that there are two
+ * files, or that a wallpaper can be a kanji rain that is not a picture at all.
+ */
+static bool big_background_path(char *buf, size_t n)
+{
+	char want[SYN_PATH];
+	buf[0] = '\0';
+
+	if (!big_conf_get("background", want, sizeof(want)))
+		snprintf(want, sizeof(want), "desktop");
+
+	if (strcmp(want, "none") == 0)
+		return false;
+	if (strcmp(want, "desktop") == 0) {
+		char out[128] = "";
+		resolve_output(NULL, out, sizeof(out));
+		return synui_wallpaper(out[0] ? out : NULL, buf, n);
+	}
+
+	if (!wp_token_path(want, buf, n))
+		return false;
+	if (access(buf, R_OK) != 0) {
+		buf[0] = '\0';
+		return false;
+	}
+	return true;
+}
+
+/*
+ * `big background` — read, set, or list the choices.
+ *
+ * The list is deliberately short: the two rules, and then whatever the machine
+ * ships in its wallpaper directory. A file picker is the wrong shape for a
+ * settings panel driven from across a room, and `background = /any/path` in
+ * big.conf is still there for the person who wants one.
+ */
+static int big_background(const char *want, bool rec, bool path_only)
+{
+	char cur[SYN_PATH] = "", path[SYN_PATH] = "";
+	bool have_cur = big_conf_get("background", cur, sizeof(cur));
+	if (!have_cur)
+		snprintf(cur, sizeof(cur), "desktop");
+	bool drawn = big_background_path(path, sizeof(path));
+
+	/* What the SHELL asks for, and it is deliberately not the record below:
+	 * quickshell wants one line it can turn into a file:// URL, not a table
+	 * of choices it would have to find the current row of. NO OUTPUT AT ALL
+	 * means the plain colour — an empty read is the answer, not a failure,
+	 * which is why this exits EX_OK either way. */
+	if (path_only) {
+		if (drawn)
+			printf("%s\n", path);
+		return EX_OK;
+	}
+
+	if (!want) {
+		if (rec) {
+			rec_row(3, "id", "label", "current");
+			rec_row(3, "desktop", N_("Follow the desktop"),
+				strcmp(cur, "desktop") == 0 ? "current" : "-");
+			rec_row(3, "none", N_("Plain colour"),
+				strcmp(cur, "none") == 0 ? "current" : "-");
+
+			/* ⚠ THE SAME DIRECTORIES synui's OWN PICKER SCANS,
+			 * and in its order. Super+W on the desktop and this
+			 * row on the television are two ways to answer one
+			 * question — "which picture" — and a list that
+			 * disagreed with the one next door would be a bug
+			 * report about missing wallpapers, not a shorter list.
+			 * See wppick_scan_into() in synui/src/wppick.c; the
+			 * paths are duplicated rather than shared because
+			 * syn-arcade does not link against the compositor and
+			 * must not start doing so for a settings row.
+			 *
+			 * ⚠ Two columns for one picture, and they must NOT be
+			 * shared. The id is the absolute path — what big.conf
+			 * holds and what the shell opens, and no translation
+			 * may touch it. The label is the file's stem opened
+			 * out into words, which is a thing on a screen. */
+			const char *rel[] = { "Pictures/Wallpapers",
+					      "Pictures/wallpapers", "Pictures",
+					      ".local/share/wallpapers",
+					      "Wallpapers" };
+			char dirs[8][SYN_PATH];
+			int nd = 0;
+			for (size_t i = 0; i < sizeof(rel) / sizeof(rel[0]); i++)
+				if (home_path(dirs[nd], SYN_PATH, rel[i]))
+					nd++;
+			snprintf(dirs[nd++], SYN_PATH, "/usr/share/backgrounds");
+			snprintf(dirs[nd++], SYN_PATH, "/usr/share/wallpapers");
+
+			for (int di = 0; di < nd; di++) {
+				DIR *d = opendir(dirs[di]);
+				if (!d)
+					continue;
+				struct dirent *e;
+				while ((e = readdir(d))) {
+					if (e->d_name[0] == '.')
+						continue;
+					const char *dot = strrchr(e->d_name, '.');
+					if (!dot || (strcasecmp(dot, ".png") &&
+						     strcasecmp(dot, ".jpg") &&
+						     strcasecmp(dot, ".jpeg")))
+						continue;
+					char id[SYN_PATH * 2], label[128];
+					snprintf(id, sizeof(id), "%s/%s",
+						 dirs[di], e->d_name);
+					size_t stem = (size_t)(dot - e->d_name);
+					if (stem >= sizeof(label))
+						stem = sizeof(label) - 1;
+					memcpy(label, e->d_name, stem);
+					label[stem] = '\0';
+					for (char *q = label; *q; q++)
+						if (*q == '-' || *q == '_')
+							*q = ' ';
+					rec_row(3, id, label,
+						strcmp(cur, id) == 0 ? "current" : "-");
+				}
+				closedir(d);
+			}
+			return EX_OK;
+		}
+
+		printf("%s\n", cur);
+		if (drawn)
+			printf(_("  drawing        %s\n"), path);
+		else
+			printf(_("  drawing        nothing — the plain colour\n"));
+		return EX_OK;
+	}
+
+	/* ⚠ CHECKED BEFORE IT IS WRITTEN, and the check is the point of the
+	 * verb. A path that does not resolve produces a television that looks
+	 * exactly as it did before — the setting silently ignored — with
+	 * nothing on that screen able to say why. */
+	if (strcmp(want, "desktop") != 0 && strcmp(want, "none") != 0) {
+		char probe[SYN_PATH];
+		if (!wp_token_path(want, probe, sizeof(probe)) ||
+		    access(probe, R_OK) != 0) {
+			fprintf(stderr, _("syn-arcade: cannot read '%s'. Use "
+				"`desktop`, `none`, or the path to an image\n"),
+				want);
+			return EX_USAGE;
+		}
+	}
+
+	if (big_conf_set("background", want) != EX_OK) {
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
+		return EX_FAIL;
+	}
+	printf(_("big screen background: %s\n"), want);
+	return EX_OK;
+}
+
+/*
+ * `big webapps` — read, or switch one on and off.
+ *
+ * The record carries `installed` so the window can say WHY a tile is missing.
+ * Without a browser there is nothing to open these in, and a settings panel
+ * offering three switches that do nothing is worse than one that explains
+ * itself.
+ */
+static int big_webapps(const char *id, const char *onoff, bool rec)
+{
+	const char *br = browser_prog();
+
+	if (!id) {
+		if (rec) {
+			rec_row(4, "id", "label", "current", "installed");
+			for (int i = 0; i < WEBAPPS_N; i++)
+				rec_row(4, webapps[i].id, webapps[i].name,
+					webapp_enabled(webapps[i].id) ? "on" : "off",
+					br ? "yes" : "no");
+			return EX_OK;
+		}
+		for (int i = 0; i < WEBAPPS_N; i++)
+			printf("  %-8s %s\n", webapps[i].id,
+			       webapp_enabled(webapps[i].id) ? "on" : "off");
+		if (!br)
+			printf(_("  (no browser installed — these tiles cannot "
+				 "open)\n"));
+		return EX_OK;
+	}
+
+	int found = -1;
+	for (int i = 0; i < WEBAPPS_N; i++)
+		if (strcmp(webapps[i].id, id) == 0)
+			found = i;
+	if (found < 0) {
+		fprintf(stderr, _("syn-arcade: no web app called '%s'\n"), id);
+		return EX_USAGE;
+	}
+	if (!onoff || (strcmp(onoff, "on") && strcmp(onoff, "off"))) {
+		fprintf(stderr, _("syn-arcade: usage: big webapps <name> on|off\n"));
+		return EX_USAGE;
+	}
+
+	/* Rewritten as a whole list rather than toggled in place: the setting
+	 * IS the list, and computing it from the current answers keeps the file
+	 * saying the same thing whether it was there before or not. */
+	bool want[WEBAPPS_N];
+	for (int i = 0; i < WEBAPPS_N; i++)
+		want[i] = webapp_enabled(webapps[i].id);
+	want[found] = strcmp(onoff, "on") == 0;
+
+	char list[256] = "";
+	for (int i = 0; i < WEBAPPS_N; i++) {
+		if (!want[i])
+			continue;
+		if (list[0])
+			strncat(list, ",", sizeof(list) - strlen(list) - 1);
+		strncat(list, webapps[i].id, sizeof(list) - strlen(list) - 1);
+	}
+	/* ⚠ `none`, NEVER an empty value. big_conf_get ignores an assignment
+	 * with nothing after the `=`, so writing an empty list would read back
+	 * as "unset" — which is all three ON, the exact opposite of what was
+	 * asked for by switching the last one off. */
+	if (!list[0])
+		snprintf(list, sizeof(list), "none");
+
+	if (big_conf_set("webapps", list) != EX_OK) {
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
+		return EX_FAIL;
+	}
+	if (want[found])
+		printf(_("%s: on\n"), webapps[found].name);
+	else
+		printf(_("%s: off\n"), webapps[found].name);
+	return EX_OK;
+}
+
 /*
  * Which screen big screen mode opens on: read, or set.
  *
@@ -8451,6 +8965,36 @@ static int big_status(bool rec)
 	snprintf(screenbuf, sizeof(screenbuf), "%s (%s)",
 		 screen[0] ? screen : "first screen", pref);
 
+	/* The SETTING and what it resolved to, in one cell, for the same reason
+	 * the screen line above carries both: `desktop` is the answer somebody
+	 * chose, and the file is the answer they will actually see — and when
+	 * those disagree (a wallpaper that is the kanji rain, or a path that has
+	 * since been deleted) the television simply looks plain, with nothing on
+	 * it able to say why. */
+	char bg[SYN_PATH] = "", bgbuf[SYN_PATH * 2 + 16];
+	char bgpref[SYN_PATH];
+	if (!big_conf_get("background", bgpref, sizeof(bgpref)))
+		snprintf(bgpref, sizeof(bgpref), "desktop");
+	if (big_background_path(bg, sizeof(bg)))
+		snprintf(bgbuf, sizeof(bgbuf), "%s (%s)", bgpref, bg);
+	else
+		snprintf(bgbuf, sizeof(bgbuf), "%s (%s)", bgpref,
+			 _("nothing to draw — the plain colour"));
+
+	char webbuf[256] = "";
+	for (int i = 0; i < WEBAPPS_N; i++) {
+		if (!webapp_enabled(webapps[i].id))
+			continue;
+		if (webbuf[0])
+			strncat(webbuf, ", ", sizeof(webbuf) - strlen(webbuf) - 1);
+		strncat(webbuf, webapps[i].name, sizeof(webbuf) - strlen(webbuf) - 1);
+	}
+	if (!webbuf[0])
+		snprintf(webbuf, sizeof(webbuf), "%s", _("none switched on"));
+	else if (!browser_prog())
+		strncat(webbuf, _("  (no browser installed)"),
+			sizeof(webbuf) - strlen(webbuf) - 1);
+
 	if (rec) {
 		rec_row(3, "field", "value", "action");
 		rec_row(3, "running", running ? "yes" : "no",
@@ -8467,6 +9011,8 @@ static int big_status(bool rec)
 			guide ? "action:guide-off" : "action:guide-on");
 		rec_row(3, "music player", music_prog() ? music_prog()
 			: "NONE INSTALLED", "choice:big-player");
+		rec_row(3, "background", bgbuf, "choice:big-background");
+		rec_row(3, "web apps", webbuf, "choice:big-webapps");
 		rec_row(3, "cliamp", have("cliamp") ? "installed"
 			: "NOT INSTALLED", "detail");
 		rec_row(3, "Steam", steam_found ? root : "NOT FOUND", "detail");
@@ -8486,6 +9032,8 @@ static int big_status(bool rec)
 	printf(_("  screen         %s\n"), screenbuf);
 	printf(_("  guide button   %s\n"), guide ? "on — opens this from the desktop"
 	     : "off (`syn-arcade big guide on`)");
+	printf(_("  background     %s\n"), bgbuf);
+	printf(_("  web apps       %s\n"), webbuf);
 	printf(_("  music player   %s%s\n"), music_prog() ? music_prog() : "none installed",
 	       have("cliamp") ? "" : "   (cliamp not installed — the Music tile "
 				     "opens a window instead of playing)");
@@ -8634,6 +9182,14 @@ int cmd_big(int argc, char **argv)
 		return big_output(first_operand(rest_c, rest), rec);
 	if (!strcmp(sub, "player"))
 		return big_player(first_operand(rest_c, rest), rec);
+	if (!strcmp(sub, "background"))
+		return big_background(first_operand(rest_c, rest), rec,
+				      opt_present(rest_c, rest, "--path"));
+	/* Two operands, unlike every other setting verb here: which one, and
+	 * whether it is on. `big webapps` alone reports all three. */
+	if (!strcmp(sub, "webapps"))
+		return big_webapps(first_operand(rest_c, rest),
+				   second_operand(rest_c, rest), rec);
 	if (!strcmp(sub, "visualizer"))
 		return big_visualizer();
 

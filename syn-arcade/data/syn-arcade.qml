@@ -432,6 +432,8 @@ FloatingWindow {
     property var bigFields: ({})
     property var bigScreens: []
     property var bigPlayers: []
+    property var bigBackgrounds: []
+    property var bigWebapps: []
     property var bigSources: []
 
     Process {
@@ -453,6 +455,18 @@ FloatingWindow {
         id: bigPlayerProc
         stdout: StdioCollector {
             onStreamFinished: root.bigPlayers = root.parseRecords(this.text)
+        }
+    }
+    Process {
+        id: bigBackgroundProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigBackgrounds = root.parseRecords(this.text)
+        }
+    }
+    Process {
+        id: bigWebappProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigWebapps = root.parseRecords(this.text)
         }
     }
     Process {
@@ -693,6 +707,10 @@ FloatingWindow {
         bigPlayerProc.running = true
         bigSourceProc.command = [root.bin, "big", "music", "source", "--rec"]
         bigSourceProc.running = true
+        bigBackgroundProc.command = [root.bin, "big", "background", "--rec"]
+        bigBackgroundProc.running = true
+        bigWebappProc.command = [root.bin, "big", "webapps", "--rec"]
+        bigWebappProc.running = true
     }
 
     Component.onCompleted: root.reload()
@@ -2004,6 +2022,114 @@ FloatingWindow {
                             }
                         }
                         Item { Layout.fillWidth: true }
+                    }
+
+                    // ⚠ The background, and the note under it is the point of
+                    // the row rather than decoration. "Follow the desktop" is
+                    // the default and resolves to synui's own wallpaper — but
+                    // it resolves to NOTHING when that wallpaper is the kanji
+                    // rain (a live surface, not a file) or a path that has
+                    // since been deleted, and the only symptom of either is a
+                    // television that looks plain. The line says which picture
+                    // is actually being drawn, so the difference between "off"
+                    // and "on but unresolvable" is visible here rather than
+                    // being a thing to guess at from a sofa.
+                    Text {
+                        Layout.topMargin: 8
+                        text: I18n.tr("Background")
+                        color: root.ink
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
+                        font.bold: true
+                    }
+                    ListView {
+                        // A view that scrolls says so — see SynScrollBar above.
+                        //
+                        // ⛔ AND THIS ONE HAS A CAPPED HEIGHT, which is what
+                        // makes it scroll at all: the picture list is as long
+                        // as somebody's Pictures folder — thirty rows on this
+                        // machine — and a chip row left to its natural width
+                        // would run off the edge of the panel with nothing
+                        // saying there was more behind it.
+                        ScrollBar.horizontal: SynScrollBar {}
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        orientation: ListView.Horizontal
+                        clip: true
+                        spacing: 6
+                        model: root.bigBackgrounds
+                        delegate: ArcChip {
+                            required property var modelData
+                            label: modelData.label
+                            on: modelData.current === "current"
+                            onPicked: root.run(["big", "background",
+                                                modelData.id])
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.bigFields.background || "—"
+                        color: root.dim
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // ⚠ The three web services, and `installed` is why the
+                    // record carries a fourth column. Twitch, YouTube and
+                    // Spotify are opened in a browser told to behave like an
+                    // application; with no browser on the machine there is
+                    // nothing to open them in, and three switches that quietly
+                    // do nothing are worse than three that say why.
+                    Text {
+                        Layout.topMargin: 8
+                        text: I18n.tr("Web apps")
+                        color: root.ink
+                        font.pixelSize: root.ui(12)
+                        font.family: root.uiFont
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Tiles on the media shelf. They open in "
+                            + "your browser as their own full-screen window, "
+                            + "with the controller acting as the mouse and "
+                            + "keyboard they need.")
+                        color: root.dim
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
+                        wrapMode: Text.WordWrap
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: root.bigWebapps
+                            ArcChip {
+                                required property var modelData
+                                label: modelData.label
+                                on: modelData.current === "on"
+                                // ⚠ Sends the OPPOSITE of what it shows. These
+                                // are switches, not a one-of-many pick like the
+                                // rows above — the chip that is already `on` is
+                                // the one somebody presses to turn it off.
+                                onPicked: root.run(["big", "webapps",
+                                    modelData.id,
+                                    modelData.current === "on" ? "off" : "on"])
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: root.bigWebapps.length > 0
+                                 && root.bigWebapps[0].installed !== "yes"
+                        text: I18n.tr("No browser installed — these tiles "
+                                      + "cannot open.")
+                        color: root.bad
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
+                        wrapMode: Text.WordWrap
                     }
 
                     RowLayout {
