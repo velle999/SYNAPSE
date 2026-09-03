@@ -56,11 +56,19 @@
 #include "synui.h"
 #include "i18n.h"
 
-/* Built-in wallpapers offered by the picker. Order is the on-screen order. */
+/* Built-in wallpapers offered by the picker. Order is the on-screen order.
+ *
+ * ⚠ THE LAST ONE IS NOT A WALLPAPER. "Wallhaven" opens the browser instead of
+ * painting anything — where the other rows answer "which picture", it answers
+ * "I do not want any of these". It sits at the bottom of the built-ins, above
+ * the scan, because a row that leaves the panel does not belong among the ones
+ * that change it. See wppick_is_action() for what stops it behaving like a
+ * picture. */
 const struct wppick_option wppick_options[] = {
-    { "Synapse", "Default image wallpaper",       "default" },
-    { "Matrix",  "Animated kanji rain (GPU)",     "matrix"  },
-    { "None",    "Solid background color",        "none"    },
+    { "Synapse",   "Default image wallpaper",       "default"   },
+    { "Matrix",    "Animated kanji rain (GPU)",     "matrix"    },
+    { "None",      "Solid background color",        "none"      },
+    { "Wallhaven", "Browse wallhaven.cc for more",  "wallhaven" },
 };
 const int wppick_option_count =
     (int)(sizeof(wppick_options) / sizeof(wppick_options[0]));
@@ -68,6 +76,22 @@ const int wppick_option_count =
 /* Defined down with the Workshop scan, but the apply/preview paths above it
  * need to tell a Workshop row from an image row. */
 static int wppick_we_index(syn_server_t *s, int row);
+
+/*
+ * Is this row an ACTION rather than a wallpaper?
+ *
+ * ⛔ THE PANEL APPLIES ON HIGHLIGHT. Moving onto a row sets that wallpaper so
+ * you see it while the panel is still open — which is the whole reason the
+ * picker feels the way it does, and which would make merely SCROLLING PAST the
+ * Wallhaven row open a network browser. So an action row does nothing at all
+ * until Enter, and the preview path checks this first.
+ */
+static bool wppick_is_action(syn_server_t *s, int idx)
+{
+    if (idx < 0 || idx >= wppick_option_count) return false;
+    (void)s;
+    return strcmp(wppick_options[idx].token, "wallhaven") == 0;
+}
 
 /* ── Scope ───────────────────────────────────────────────── */
 
@@ -379,6 +403,25 @@ static void wppick_apply(syn_server_t *s, int idx, bool commit)
 {
     if (idx < 0 || idx >= wppick_total(s)) return;
 
+    /* ⛔ An action row changes no wallpaper, ever — and on the preview pass it
+     * does nothing whatsoever. See wppick_is_action(): this panel applies as
+     * the highlight moves, so without this, scrolling past the row would open
+     * the browser. On Enter it opens it and gets out of the way, because the
+     * browser wants the keyboard and two full-screen surfaces both asking for
+     * it is a panel nobody can drive.
+     *
+     * ⚠ synui-wallhaven, not quickshell directly. The launcher is what knows
+     * the network switch is off, which tree the QML comes from, and how to
+     * toggle an instance that is already up. */
+    if (wppick_is_action(s, idx)) {
+        if (!commit) return;
+        /* ⚠ NOT hidden here. Every path that commits a deferred row closes the
+         * panel immediately afterwards, and a second wppick_hide() from inside
+         * the thing it is committing is one close too many to reason about. */
+        synui_spawn("synui-wallhaven toggle");
+        return;
+    }
+
     const char *scope = wppick_scope_output(s);
     syn_wallpaper_src_t was;
     wppick_scope_state(s, &was, NULL);
@@ -600,7 +643,20 @@ static void wppick_restore(syn_server_t *s)
  *     for it with the only destructive act in the panel. */
 static void wppick_preview(syn_server_t *s, int idx)
 {
-    if (wppick_we_index(s, idx) >= 0 || wppick_scope_has_we(s)) {
+    /* ⚠ AN ACTION ROW DEFERS THE SAME WAY A WORKSHOP ROW DOES, and that is why
+     * it uses the same field rather than a second one. `pending_we` holds a ROW
+     * INDEX and means "this row is waiting for Enter" — which is precisely what
+     * an action row needs, and Enter's existing commit path then reaches
+     * wppick_apply() with commit set.
+     *
+     * ⛔ WITHOUT THIS THE ROW IS DEAD. Enter only commits a DEFERRED row; for
+     * everything else it persists whatever the highlight already applied and
+     * closes. An action row applies nothing on highlight, so it was never
+     * deferred, so Enter had nothing to commit and the row did nothing at all —
+     * which the rig caught, and which reading the apply path alone would not
+     * have shown. */
+    if (wppick_is_action(s, idx) ||
+        wppick_we_index(s, idx) >= 0 || wppick_scope_has_we(s)) {
         s->wppick.pending_we = idx;
         return;
     }

@@ -1184,6 +1184,18 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+backspace", "ai_ask" },
         { "super+w",         "wallpaper" },
         { "super+shift+w",   "wallpaper_reload" },
+        /* ⚠ super+ctrl+w keeps the whole W family about the wallpaper: W is the
+         * picker, Shift+W reloads it, Ctrl+W is where more wallpapers come
+         * from. Checked against every other default before it was chosen —
+         * this table binds sixty-nine combinations and the only ctrl ones are
+         * the scale and workspace keys, so ctrl+w collides with nothing.
+         *
+         * ⛔ THE KEY OPENS A BROWSER THAT REFUSES UNTIL IT IS SWITCHED ON.
+         * synui-wallhaven is off by default — it is the only part of the
+         * wallpaper picker that leaves the machine — so this is a key that
+         * says how to turn it on rather than one that quietly starts talking
+         * to a third party because somebody leaned on ctrl. */
+        { "super+ctrl+w",    "wallhaven" },
         { "super+e",         "filters" },
         { "super+p",         "power" },
         /* The screensaver panel. Z for zzz — the only mnemonic anybody guesses

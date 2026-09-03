@@ -3073,7 +3073,54 @@ pkgver=0.1.0
 #   `vpointer_click X Y left`, which clicked ZERO times because there is no
 #   `left` keyword — the third argument is a count and atoi("left") is 0. The
 #   tool refuses that form now rather than doing nothing quietly.
-pkgrel=589
+# 590: WHERE MORE WALLPAPERS COME FROM — wallhaven.cc, in the picker.
+#
+#   Super+W lists what is already on the disk. Super+Ctrl+W, and a "Wallhaven"
+#   row at the bottom of the picker's built-ins, is a grid of what is on
+#   wallhaven.cc: category chips, sorted by what is popular, paged. Picking one
+#   downloads it into ~/Pictures/Wallpapers — the FIRST directory wppick_scan()
+#   walks — and hands it to synctl dispatch wallpaper, which lands in
+#   wppick_set_path(). So a wallpaper taken from wallhaven is a local wallpaper
+#   from then on, in Super+W's list, with nothing remembering where it came
+#   from and one definition of "make this the wallpaper".
+#
+#   ⛔ OFF BY DEFAULT. This is the second thing in synui that talks to the
+#   internet — weather is the other — and `synui-wallhaven on` is the whole
+#   opt-in. Nothing resolves a name until it is given, the launcher checks
+#   before it starts the window, and the results are pinned to wallhaven's
+#   `sfw` purity, which is not a setting: the other levels need an API key,
+#   and asking somebody to paste a credential into a wallpaper picker is a
+#   promise this cannot keep.
+#
+#   ⚠ QUICKSHELL, NOT COMPOSITOR CODE, and that was decided by measurement. A
+#   grid of remote thumbnails is HTTP, JSON and JPEG decoding, and this process
+#   is the one place on the machine where a slow DNS lookup is a frozen
+#   desktop; weather.c and news.c each pay for their network with a worker
+#   thread and a stop flag wired into libcurl's progress callback. A QML Image
+#   loads an https URL by itself, asynchronously, with its own cache —
+#   confirmed against a real wallhaven thumbnail in a nested compositor before
+#   a line of this was written.
+#
+#   ⛔ NO jq. This tree deliberately has none (see depends=); the JSON is read
+#   by python3, which synui already depends on and synui-media-inhibit already
+#   uses.
+#
+#   ⛔ THE PICKER APPLIES ON HIGHLIGHT, so an action row had to be DEFERRED or
+#   scrolling past it would open a network browser. It reuses `pending_we` —
+#   the field Workshop rows already use to mean "this row is waiting for Enter"
+#   — rather than a second mechanism.
+#   ⚠ AND WITHOUT THAT THE ROW WAS DEAD, which reading the apply path alone did
+#   not show: Enter only commits a DEFERRED row, so a row that applied nothing
+#   on highlight was never deferred and Enter had nothing to commit. The rig
+#   caught it; the count of spawns is the assertion, because the whole key
+#   sequence has to go in one wtype.
+#
+#   ⚠ Theme.wpAccent IS A STRING, not a color — `.r`/`.g`/`.b` are not on it.
+#   The first chip style filled with the accent and inked with the popup
+#   background, which on a dark wallpaper is dark on dark: the three chips that
+#   were ON were the three nobody could read. Caught in the rig's first
+#   screenshot.
+pkgrel=590
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -3811,6 +3858,16 @@ package() {
     # guide belongs to neither — see the header of systemd/synui-welcome.sh.
     install -Dm755 systemd/synui-welcome.sh \
         "$pkgdir/usr/bin/synui-welcome"
+    # Where more wallpapers come from. The launcher, the CLI and the network
+    # switch are one script; wallhaven.qml rides in on the quickshell/*.qml
+    # glob above, like welcome.qml.
+    #
+    # ⛔ OFF BY DEFAULT and there is nothing to enable here — the switch is a
+    # state file the user writes with `synui-wallhaven on`. A package that
+    # turned on a third-party network call at install time would be the exact
+    # surprise the weather switch exists to prevent.
+    install -Dm755 systemd/synui-wallhaven.sh \
+        "$pkgdir/usr/bin/synui-wallhaven"
 
     # NOT /usr/bin: it takes root to do anything, it is named by exactly one
     # sudoers rule, and it is not a command to find by tab-completing. Same

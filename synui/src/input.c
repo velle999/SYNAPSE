@@ -1541,6 +1541,20 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * a copy of wppick's row table that would drift out of step with it. */
         if (arg && *arg) wppick_set_path(s, arg);
         else             wppick_toggle(s);
+    } else if (strcmp(action, "wallhaven") == 0) {
+        /* Where more wallpapers come from. Not a compositor panel — it is a
+         * quickshell surface of its own, for the same reason the welcome guide
+         * is: a grid of remote thumbnails means HTTP, JSON and JPEG decoding,
+         * and this process is the one place on the machine where a slow DNS
+         * lookup is a frozen desktop. weather.c and news.c each pay for their
+         * network with a worker thread and a stop flag wired into libcurl's
+         * progress callback; a picker does not need to.
+         *
+         * ⚠ THE LAUNCHER AND NOT quickshell DIRECTLY. synui-wallhaven owns the
+         * network switch (off by default), which tree the QML comes from, and
+         * the toggle across a process boundary. The Super+W picker's own
+         * Wallhaven row spawns the identical command. */
+        synui_spawn("synui-wallhaven toggle");
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);
     } else if (strcmp(action, "crop") == 0) {
