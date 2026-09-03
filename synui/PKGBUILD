@@ -3223,7 +3223,47 @@ pkgver=0.1.0
 #
 #   All thirteen catalogs filled in the same pass; the guide's every word lives
 #   in welcome/pages.js, which po-bar/POTFILES already reads.
-pkgrel=593
+# 594: TRANSPARENCY OFF MADE THE MENU TRANSPARENT.
+#
+#   Reported with two screenshots seconds apart: the start menu frosted and
+#   readable with Transparency on, and the desktop clock legible straight
+#   through it with Transparency off. Ironic, and exactly backwards.
+#
+#   ⛔ THE FLAG WAS ON THE WRONG ARM OF A TERNARY. Theme.popupAlpha resolves in
+#   three steps — the bar's own alpha, then `glassSurfaces`, then the scheme's
+#   0.97 — and glassSurfaces sat SECOND, which is the same as not being there:
+#   the desktops that reach the second arm are the ones where nothing set a bar
+#   opacity, and the flag exists for the ones where something did. A bar dialled
+#   to 0.05 and pinned there took the menus down with it whatever the master
+#   switch said, and with `transparency = off` synui stops frosting behind
+#   them — so the switch whose name is "nothing sees through" produced the most
+#   see-through menu this desktop can draw. theme.c's own comment beside the
+#   glass_surfaces export describes this failure in as many words; the QML
+#   asked the question one line too late to prevent it.
+#
+#   ⚠ THE BAR IS NOT WRONG THERE AND IS LEFT ALONE. A clear bar with no blur is
+#   a supported look and a working one — its ink comes off the wallpaper
+#   (barPalette, the per-module strip, the scrim) and that is what
+#   `bar_opacity = 0` has always meant. The menus have no such machinery, which
+#   is the whole reason the flag exists for them and not for the strip.
+#
+#   ⛔ AND THE FIRST FIX WENT TOO FAR, on the way to this one: gating the C-side
+#   syn_bar_alpha_asked()/syn_dock_alpha_asked() on the master switch as well.
+#   `transparency` DEFAULTS TO OFF (config.c), so that quietly deleted
+#   `bar_opacity` on every desktop that had never switched transparency on —
+#   caught by tests/bar_opacity.sh, which is the rig that says what that row
+#   means.
+#
+#   tests/glass_master_off.sh is the regression: two compositors differing in
+#   one line of theme.state, asserting that OFF draws a real surface AND that ON
+#   still draws glass — the second half is what stops "make it all opaque" from
+#   passing. It measures the MEDIAN colour of a strip inside the panel, because
+#   a frosted surface is dithered by blur_noise and its most common single
+#   triple covers a fifth of a perfectly good panel; menu_surface_pages.sh had
+#   the same probe and gains the same fix, plus the theme.state it turns out it
+#   always needed — without one it had been testing a solid 0.97 menu and
+#   agreeing with itself.
+pkgrel=594
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

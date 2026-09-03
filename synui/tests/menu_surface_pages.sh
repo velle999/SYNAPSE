@@ -115,6 +115,15 @@ im.save('$T/wp.png')" || fail "could not write the test wallpaper"
     # alpha is low enough for the correction to be the thing deciding its look.
     printf 'bar_opacity = 0.05\n' > "$CFG/settings.state"
 
+    # ⚠ AND A GLASS DESKTOP TO GO WITH IT, which this rig did without until 594
+    # and cannot any more. The menus follow the bar down only where glass is
+    # actually being DRAWN (Theme.popupAlpha, keyed on theme.state's
+    # glass_surfaces) — so a hermetic HOME with no theme.state at all now opens
+    # a solid 0.97 menu, both runs agree trivially, and the rig passes without
+    # ever reaching the correction it exists to test. Prism with transparency on
+    # is the desktop the reported bug was on.
+    printf 'theme=prism\ntransparency=on\nactive_opacity=0.90\n' > "$CFG/theme.state"
+
     "$SYNUI" -d > "$T/synui.log" 2>&1 &
     SYNUI_PID=$!
     i=0
@@ -164,28 +173,37 @@ def load(p):
     return np.asarray(Image.open(p).convert("RGB"), dtype=np.int16)
 
 def modal(img):
-    """The most common colour in the panel's body, and how much of it that is.
+    """The panel body's colour, and how uniform that body is.
 
     The strip probed is inside the panel and below the search box, in the rows
     every page has: a short page and a long one have different LISTS, and the
-    background is what is being compared."""
+    background is what is being compared.
+
+    ⚠ THE MEDIAN, NOT THE MOST COMMON COLOUR. A frosted surface is not one
+    colour — blur_noise dithers it by design — so on the glass desktop this rig
+    now sets up, the commonest single RGB triple covers about a fifth of a
+    perfectly good panel and the old 50% guard failed the passing case. The
+    median is the same answer for a solid panel and an honest one for a frosted
+    panel; the deviation beside it is what says "this is a surface at all"."""
     body = img[70:150, 20:320].reshape(-1, 3)
-    cols, counts = np.unique(body, axis=0, return_counts=True)
-    i = counts.argmax()
-    return tuple(int(v) for v in cols[i]), float(counts[i]) / len(body)
+    med = np.median(body, axis=0)
+    mad = float(np.median(np.abs(body - med), axis=0).max())
+    return tuple(int(v) for v in med), mad
 
 a, b = load(sys.argv[1]), load(sys.argv[2])
 (ca, fa), (cb, fb) = modal(a), modal(b)
-print(f"  panel surface   1 category {ca} {fa:.0%}   11 categories {cb} {fb:.0%}")
+print(f"  panel surface   1 category {ca} (deviation {fa:.0f})"
+      f"   11 categories {cb} (deviation {fb:.0f})")
 
 fails = []
 
-# The probe has to be looking AT the panel. A capture where the modal colour is
-# a scattering of text pixels is one where the panel is not there at all.
+# The probe has to be looking AT the panel. A strip whose pixels are all over
+# the place is text, or an edge, or nothing — and whatever it is, the colour
+# compared below is not a surface. Frost dithers by a couple of levels.
 for name, f in (("1-category", fa), ("11-category", fb)):
-    if f < 0.5:
-        fails.append(f"the {name} probe is only {f:.0%} one colour — that is not "
-                     f"a panel background, so the comparison below means nothing")
+    if f > 8:
+        fails.append(f"the {name} probe deviates by {f:.0f} — that is not a panel "
+                     f"background, so the comparison below means nothing")
 
 # ── 1. one menu, one material ────────────────────────────────
 agree = max(abs(x - y) for x, y in zip(ca, cb)) <= 4

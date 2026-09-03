@@ -612,11 +612,28 @@ QtObject {
      * The scheme constant is still the fallback for a desktop that has set no
      * opacity and whose theme is not glass — the twelve retro presets, which
      * should look exactly as they always did.
+     *
+     * ⛔ AND IT IS THE FIRST QUESTION ASKED, NOT THE LAST. `glassSurfaces` was
+     * on the second arm of this ternary, which is the same as not being here at
+     * all: the desktops that reach it are the ones where nothing set a bar
+     * opacity, and the whole point of the flag is the ones where something did.
+     * So a desktop with the bar dialled to 0.05 and `transparency` switched OFF
+     * — no frost behind anything, by synui's own rule — drew the start menu at
+     * 0.05 anyway, and the switch whose name is "no see-through" produced the
+     * most see-through menu this desktop can draw. velle, 2026-09-03, with the
+     * desktop clock legible through the start menu.
+     *
+     * ⚠ THE BAR IS NOT WRONG THERE AND IS DELIBERATELY LEFT ALONE. A clear bar
+     * with no blur is a supported look and a working one: its ink comes off the
+     * wallpaper (barPalette, the per-module strip, the scrim) and it is what
+     * `bar_opacity = 0` has always meant. The menus have no such machinery —
+     * see popupAlphaGlass above — which is exactly why the flag exists for
+     * them and not for the strip.
      */
     readonly property real  popupAlpha:
-        root.barAlphaAsked >= 0   ? root.barAlphaAsked
-      : root.glassSurfaces        ? root.popupAlphaGlass
-      : (p.popupAlpha !== undefined ? p.popupAlpha : 0.97)
+        !root.glassSurfaces       ? (p.popupAlpha !== undefined ? p.popupAlpha : 0.97)
+      : root.barAlphaAsked >= 0   ? root.barAlphaAsked
+      : root.popupAlphaGlass
 
     // The scrim is BLACK or WHITE and not the theme's bar colour, which is the
     // one place this diverges from `bg` meaning "the theme's surface at some

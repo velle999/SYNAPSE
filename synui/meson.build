@@ -2406,6 +2406,18 @@ test('menu_surface_pages', menu_surface_pages,
      depends : [synui_exe],
      timeout : 180)
 
+# `transparency = off` means nothing sees through — the master switch reaching
+# the surfaces that ask for their own alpha (the bar, the shell's popups, the
+# widget cards), which it did not until 594: a pinned bar_opacity of 0.05
+# survived it and the frost did not, so switching transparency OFF made the
+# start menu MORE see-through than leaving it on. Two runs, one compositor
+# each, differing in one line of theme.state.
+glass_master_off = find_program('tests/glass_master_off.sh')
+test('glass_master_off', glass_master_off,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
 # asserting the spiral's smallest window beats master-stack's — the claim the
 # layout exists to make — plus the no-overlap invariant its remainder
