@@ -180,7 +180,44 @@ pkgver=0.1.0
 #   tests/dirty_tree_test.sh is the regression suite — the ignore patterns
 #   against BOTH of chibi's naming schemes, and --force leaving a clean tree
 #   without deleting what it ignores. Reverting any of the three fixes fails it.
-pkgrel=57
+# 58: EVERY ESCALATION GOES THROUGH sudo_safe, BECAUSE A BARE ONE CAN LOCK THE
+#     ACCOUNT.
+#
+#   os_identity_test.sh had been failing 2 of 25 for a while, on an assertion
+#   that says the stamper must not reach for sudo when the target is writable.
+#   It was right, and the cause was worse than an untestable branch.
+#
+#   ⛔ THE lsb-release REFRESH WAS AN UNGATED BARE `sudo` ON AN ABSOLUTE PATH.
+#   `sudo /usr/lib/syn/syn-lsb-release`, with no privilege test — the only line
+#   in stamp_os_identity() that did not have one — and no regard for $ETC, so a
+#   run pointed at a staged tree (which is every run of the suite) reached past
+#   its fixture and rewrote the identity of the machine doing the testing.
+#
+#   ⛔ AND A BARE sudo WITH NO TERMINAL DOES NOT REFUSE. The comment above
+#   install_manifest said it did — "sudo with no terminal simply refuses" — and
+#   that was the assumption holding up every bare escalation in this file. It
+#   opens a PAM conversation, the conversation fails for want of anywhere to
+#   prompt, and pam_faillock counts that as a WRONG PASSWORD against a user who
+#   never typed one. deny is effectively 3; greetd and synui-lock share the
+#   system-auth stack, so the symptom is a login screen rejecting a correct
+#   password with nothing on it saying why, and retrying pushes unlock_time
+#   forward. It has bitten velle twice, from another tool doing exactly this.
+#   syn-update runs from a GUI button with no terminal and from a systemd timer.
+#
+#   sudo_safe(): a terminal gets a prompt, no terminal gets `sudo -n`, which
+#   never records a failure because it refuses before PAM opens a conversation.
+#   Strictly safer than a bare sudo and identical wherever one would have
+#   worked. Seventeen call sites — the manifest and os-release writers, the
+#   banner writer, the pacman database refresh, the source-tree chown and
+#   mkdir, and the whole local-repo path (cp, rm, repo-add, ln, mkdir, mv),
+#   which is eleven of them and had none.
+#   ⚠ can_sudo() already guarded several of these. sudo_safe closes the gap it
+#   cannot: the cached credential can expire between the guard and the call.
+#
+#   os_identity_test.sh gains the invariant as a check of its own — comments and
+#   quoted strings stripped, so `Run this once in a terminal: sudo chown …` is
+#   still allowed to say sudo. Run against 57 it names all nineteen.
+pkgrel=58
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

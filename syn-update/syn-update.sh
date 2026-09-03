@@ -212,20 +212,38 @@ load_manifest() {
     return 0
 }
 
+# ⛔ ESCALATE WITH THIS, NEVER WITH A BARE `sudo`.
+#
+# A `sudo` with no controlling terminal does NOT "simply refuse". It opens a PAM
+# conversation, that conversation fails for want of anywhere to prompt, and
+# pam_faillock COUNTS THAT AS A WRONG PASSWORD against a user who never typed
+# one. deny is effectively 3, so three of them lock the ACCOUNT — and because
+# greetd and synui-lock reach the same system-auth stack, the symptom is a login
+# screen rejecting a correct password with nothing on it saying why. It cost
+# velle two lockouts from another tool doing exactly this.
+#
+# `sudo -n` never records a failure: it refuses before PAM opens a conversation.
+# So where there is a terminal to prompt on, prompt; where there is not, use -n
+# and let the caller report what it could not do. This is strictly safer than a
+# bare sudo and identical wherever one would have worked.
+sudo_safe() {
+    if [ -t 0 ]; then sudo "$@"; else sudo -n "$@"; fi
+}
+
 # Put a staged manifest in place, escalating only when that is actually needed.
 #
 # ⚠ The test is the FILE, not the uid. The same mistake in synpkg's ignore.c
 # escalated a run that had been pointed at a fixture, and pkexec — which strips
-# the environment — wrote the system file instead. Here the failure is milder
-# (sudo with no terminal simply refuses) but it makes both writers untestable
-# and makes SYN_UPDATE_MANIFEST a setting that only half works.
+# the environment — wrote the system file instead. Here it also makes both
+# writers untestable and makes SYN_UPDATE_MANIFEST a setting that only half
+# works.
 install_manifest() {   # install_manifest <staged-file>
     local dir; dir=$(dirname "$MANIFEST")
     if [ -w "$MANIFEST" ] || { [ ! -e "$MANIFEST" ] && [ -w "$dir" ]; }; then
         install -Dm644 "$1" "$MANIFEST"
     else
         # -D so /etc/synapseos is created on a system that has never had it.
-        sudo install -Dm644 "$1" "$MANIFEST"
+        sudo_safe install -Dm644 "$1" "$MANIFEST"
     fi
 }
 
@@ -397,7 +415,7 @@ stamp_os_identity() {
         if [ -w "$(dirname "$osr")" ]; then
             install -Dm644 "$tmp" "$osr"
         else
-            sudo install -Dm644 "$tmp" "$osr"
+            sudo_safe install -Dm644 "$tmp" "$osr"
         fi && ok "reported version is now $ver" \
            || warn "could not write $osr — this machine still reports its old version"
         rm -f "$tmp"
@@ -409,8 +427,25 @@ stamp_os_identity() {
     # os-release is where /etc/lsb-release is derived FROM, so a new version
     # here leaves lsb_release quoting the old one until the next transaction
     # that happens to move syn or lsb-release. See 75-syn-lsb-release.hook.
-    if [ -x /usr/lib/syn/syn-lsb-release ]; then
-        sudo /usr/lib/syn/syn-lsb-release 2>/dev/null || true
+    #
+    # ⛔ ONLY WHEN $ETC IS THE REAL /etc, and this was the one line in the
+    # function that did not care. The helper writes /etc/lsb-release by absolute
+    # path — so a run pointed at a staged tree, which is every run of the test
+    # suite, reached past its fixture and rewrote the identity of the machine
+    # doing the testing. SYN_UPDATE_ETC exists precisely so that cannot happen.
+    #
+    # ⛔ AND THROUGH sudo_safe, NEVER A BARE sudo. This was `sudo …` with no
+    # gate at all: on any path without a terminal — the GUI's, the ping timer's
+    # — that is a failed PAM conversation, which pam_faillock counts as a wrong
+    # password. See sudo_safe above for what three of those do to the account.
+    #
+    # ⚠ AND IT SAYS WHEN IT COULD NOT, instead of `|| true`. lsb_release quoting
+    # last month's version is a small wrong answer that is very hard to trace
+    # back to an updater that reported success.
+    if [ "$ETC" = /etc ] && [ -x /usr/lib/syn/syn-lsb-release ]; then
+        sudo_safe /usr/lib/syn/syn-lsb-release >/dev/null 2>&1 ||
+            warn "could not refresh /etc/lsb-release — lsb_release will quote
+    the old version until the next upgrade that moves syn or lsb-release"
     fi
 }
 
@@ -439,7 +474,7 @@ stamp_banner_version() {   # stamp_banner_version <file> <version>
         rm -f "$tmp"; return 0
     fi
     if [ -w "$f" ]; then install -Dm644 "$tmp" "$f"
-    else sudo install -Dm644 "$tmp" "$f"; fi \
+    else sudo_safe install -Dm644 "$tmp" "$f"; fi \
         || warn "could not update the version in $f"
     rm -f "$tmp"
 }
@@ -630,21 +665,21 @@ sync_pacman_dbs() {
 
     if [ "$state" = force ]; then
         info "refreshing pacman's databases (pacman -Syy — a signature is older than its database)"
-        sudo pacman -Syy --noconfirm ||
+        sudo_safe pacman -Syy --noconfirm ||
             warn "database refresh failed — building against the databases already on disk"
         return 0
     fi
 
     info "refreshing pacman's databases (pacman -Sy)"
     local out rc
-    out=$(sudo pacman -Sy --noconfirm 2>&1); rc=$?
+    out=$(sudo_safe pacman -Sy --noconfirm 2>&1); rc=$?
     printf '%s\n' "$out"
     [ "$rc" = 0 ] && return 0
 
     # ⚠ THE ESCALATION, and it is why the cheap path is safe to take first.
     if db_sig_failure "$out"; then
         info "that looks like a stale signature — forcing a full refresh (pacman -Syy)"
-        sudo pacman -Syy --noconfirm ||
+        sudo_safe pacman -Syy --noconfirm ||
             warn "database refresh failed — building against the databases already on disk"
         return 0
     fi
@@ -755,7 +790,7 @@ setup_src() {
             can_sudo || die "$SRC is not writable by $(id -un), and this session cannot ask for a password.
   Run this once in a terminal:  sudo chown -R $(id -un):$(id -gn) $SRC"
             info "taking ownership of $SRC"
-            sudo chown -R "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
+            sudo_safe chown -R "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
         fi
         return 0
     fi
@@ -784,14 +819,20 @@ setup_src() {
     # Pre-created by syn-install in the common case, so nothing here needs root.
     # Only reach for sudo when the directory is genuinely absent, or is there but
     # owned by someone else.
+    #
+    # ⚠ can_sudo() ALREADY GUARDS THESE — it is `sudo -n true || [ -t 0 ]`, so a
+    # session with neither a cached credential nor a terminal dies with advice
+    # instead of escalating. sudo_safe closes the gap between the two anyway:
+    # the credential can expire between the guard and the call, and on that path
+    # a bare sudo would be a failed PAM conversation rather than a clean refusal.
     if [ ! -d "$SRC" ]; then
         can_sudo || die "$SRC does not exist yet, and this session cannot ask for a password.
   Run this once in a terminal:  sudo install -d -o $(id -un) -g $(id -gn) $SRC"
-        sudo install -d -o "$(id -un)" -g "$(id -gn)" "$SRC" || die "cannot create $SRC"
+        sudo_safe install -d -o "$(id -un)" -g "$(id -gn)" "$SRC" || die "cannot create $SRC"
     elif [ ! -w "$SRC" ]; then
         can_sudo || die "$SRC is not writable by $(id -un), and this session cannot ask for a password.
   Run this once in a terminal:  sudo chown $(id -un):$(id -gn) $SRC"
-        sudo chown "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
+        sudo_safe chown "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
     fi
     git clone --branch "$REPO_REF" "$REPO_URL" "$SRC" || die "clone failed"
     ok "cloned"
@@ -1464,7 +1505,7 @@ refresh_local_repo() {
     for c in "${BUILT[@]}"; do
         pkg=$(ls -1t "$SRC/$c/$c"-*.pkg.tar.zst 2>/dev/null | grep -v -- "-debug-" | head -1)
         [ -n "$pkg" ] || continue
-        sudo cp -f "$pkg" "$LOCAL_REPO/" && copied=$((copied + 1))
+        sudo_safe cp -f "$pkg" "$LOCAL_REPO/" && copied=$((copied + 1))
     done
 
     # Then RECONCILE: publish anything that is installed at a version the repo
@@ -1495,14 +1536,14 @@ refresh_local_repo() {
             read -r _ ver < <(pacman -Qp "$pkg" 2>/dev/null)
             [ "$ver" = "$inst" ] || continue
             [ -e "$LOCAL_REPO/$(basename "$pkg")" ] && continue
-            sudo cp -f "$pkg" "$LOCAL_REPO/" &&
+            sudo_safe cp -f "$pkg" "$LOCAL_REPO/" &&
                 reconciled=$((reconciled + 1))
         done
     done
 
     prune_superseded
     rebuild_db
-    sudo pacman -Sy --quiet --noconfirm >/dev/null 2>&1 || true
+    sudo_safe pacman -Sy --quiet --noconfirm >/dev/null 2>&1 || true
     [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
     [ "$reconciled" -gt 0 ] &&
         ok "published $reconciled installed package(s) the repo was missing"
@@ -1525,19 +1566,19 @@ rebuild_db() {
     if [ ${#pkgs[@]} -eq 0 ]; then
         # repo-add with no packages errors out; an empty repo is legitimate
         # here (everything in it was superseded), so just clear the index.
-        sudo rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
+        sudo_safe rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
         warn "$LOCAL_REPO now holds no packages; [synapseos] is empty"
         return 0
     fi
 
-    sudo rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
-    sudo repo-add --quiet "$LOCAL_REPO/synapseos.db.tar.gz" "${pkgs[@]}" >/dev/null 2>&1 ||
+    sudo_safe rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
+    sudo_safe repo-add --quiet "$LOCAL_REPO/synapseos.db.tar.gz" "${pkgs[@]}" >/dev/null 2>&1 ||
         { warn "repo-add failed; [synapseos] index may be incomplete"; return 0; }
 
     # syn-install creates these by hand at install time, so recreate them here
     # rather than assuming repo-add left them behind.
-    sudo ln -sf synapseos.db.tar.gz    "$LOCAL_REPO/synapseos.db"
-    sudo ln -sf synapseos.files.tar.gz "$LOCAL_REPO/synapseos.files"
+    sudo_safe ln -sf synapseos.db.tar.gz    "$LOCAL_REPO/synapseos.db"
+    sudo_safe ln -sf synapseos.files.tar.gz "$LOCAL_REPO/synapseos.files"
     return 0
 }
 
@@ -1568,8 +1609,8 @@ prune_superseded() {
         [ -n "$inst" ] || continue          # not installed: not a downgrade risk
 
         if [ "$(vercmp "$ver" "$inst")" -lt 0 ]; then
-            sudo mkdir -p "$LOCAL_REPO/superseded"
-            sudo mv -f "$f" "$LOCAL_REPO/superseded/" && moved=$((moved + 1))
+            sudo_safe mkdir -p "$LOCAL_REPO/superseded"
+            sudo_safe mv -f "$f" "$LOCAL_REPO/superseded/" && moved=$((moved + 1))
         fi
     done
     shopt -u nullglob

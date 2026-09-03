@@ -178,6 +178,35 @@ case "$out" in *UNEXPECTED-SUDO*|*"could not"*) bad "absent banners were a probl
 [ -e "$w/etc/motd" ] && bad "it created a motd that was not there" \
                      || ok "…and it does not create one"
 
+# ── no bare `sudo` anywhere in the script ───────────────────────────────────
+#
+# ⛔ A SCRIPT-WIDE INVARIANT, CHECKED HERE BECAUSE THIS IS WHERE IT BROKE. The
+# lsb-release refresh was `sudo /usr/lib/syn/syn-lsb-release` with no gate at
+# all, and the stub at the top caught it only because this suite happens to run
+# the function containing it.
+#
+# A `sudo` with no controlling terminal does not refuse — it opens a PAM
+# conversation, that conversation fails for want of anywhere to prompt, and
+# pam_faillock counts it as a wrong password against a user who never typed one.
+# Three of those lock the ACCOUNT, and because greetd and synui-lock share the
+# system-auth stack the symptom is a login screen rejecting a correct password
+# with nothing on it saying why. syn-update runs from a GUI button with no
+# terminal and from a systemd timer, so every escalation has to go through
+# sudo_safe: a terminal gets a prompt, no terminal gets `sudo -n`, which never
+# records a failure because it refuses before PAM opens a conversation.
+#
+# ⚠ Comments and double-quoted strings are stripped first. Several matches in
+# this script are `Run this once in a terminal:  sudo chown …` — advice printed
+# to a human, which is exactly what should be there.
+bare=$(sed 's/#.*//; s/"[^"]*"//g' "$E" |
+       grep -nE '(^|[;&|]|\bthen\b|\belse\b|\bdo\b|\bif\b)[[:space:]]*sudo[[:space:]]' |
+       grep -vE 'sudo_safe|sudo -n|sudo -v')
+if [ -z "$bare" ]; then
+    ok "every escalation goes through sudo_safe"
+else
+    bad "bare sudo — a tty-less run counts a faillock failure: $(echo "$bare" | tr '\n' ' ')"
+fi
+
 echo ""
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
