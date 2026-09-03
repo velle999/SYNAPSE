@@ -456,6 +456,9 @@ msgstr "टर्मिनल"
 msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
 msgstr "synui टर्मिनल के रूप में जो चलाता है — synuirc, mimeapps.list नहीं"
 
+msgid "synui's built-in fallback — nothing set"
+msgstr "synui का अंतर्निहित विकल्प — कुछ भी सेट नहीं"
+
 msgid "nothing installed handles this"
 msgstr "संस्थापित किसी भी चीज़ में यह नहीं सँभाला जाता"
 

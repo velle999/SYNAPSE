@@ -477,6 +477,9 @@ msgstr "Terminal"
 msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
 msgstr "ce que synui lance comme terminal — synuirc, pas mimeapps.list"
 
+msgid "synui's built-in fallback — nothing set"
+msgstr "solution de repli intégrée de synui — rien de défini"
+
 msgid "nothing installed handles this"
 msgstr "rien d'installé ne gère cela"
 

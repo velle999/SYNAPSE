@@ -460,6 +460,9 @@ msgstr "الطرفية"
 msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
 msgstr "ما يشغّله synui كطرفية — synuirc وليس mimeapps.list"
 
+msgid "synui's built-in fallback — nothing set"
+msgstr "البديل المدمج في synui — لم يُضبط شيء"
+
 msgid "nothing installed handles this"
 msgstr "لا شيء مثبّت يتولّى هذا"
 

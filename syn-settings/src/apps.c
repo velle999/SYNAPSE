@@ -433,7 +433,21 @@ static int terminal_current(char *out, size_t cap, char *src, size_t srccap)
 	for (int i = 0; g_terminals[i]; i++) {
 		if (have_cmd(g_terminals[i])) {
 			snprintf(out, cap, "%s", g_terminals[i]);
-			snprintf(src, srccap, "synui's built-in fallback — nothing set");
+			/* ⚠ MARKED, because this cell is PROSE where every other
+			 * value of `src` is a path. The window translates the
+			 * detail column at the draw site, and a lookup can only
+			 * find a cell that is a msgid.
+			 *
+			 * ⛔ AND IT IS ONLY EVER EMITTED ON A MACHINE WITH NO
+			 * `terminal =` IN synuirc — which is a fresh install, and
+			 * is not the box this is written on. It went unmarked
+			 * because nothing here can draw it: the row said
+			 * "chosen" and a path. It failed in a clean build root.
+			 * tests/i18n_test.sh now collects this pane under an
+			 * empty config as well, for the same reason it stubs
+			 * fprintd and SYN_SETTINGS_LIBDIR. */
+			snprintf(src, srccap, "%s",
+			         N_("synui's built-in fallback — nothing set"));
 			return 2;
 		}
 	}

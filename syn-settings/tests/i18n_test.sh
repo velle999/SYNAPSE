@@ -164,9 +164,30 @@ FPL
     naccel=$("$BIN" --rec ai 2>/dev/null | grep -c '^accel	')
     check "the AI pane emits all four accelerator rows on any machine" "4" "$naccel"
 
+    # ⛔ AND THE apps PANE IS COLLECTED TWICE, THE SECOND TIME WITH NO CONFIG.
+    #
+    # Third time this class has bitten: the fingerprint rows needed a stubbed
+    # fprintd and the accelerator rows a stubbed library directory, both because
+    # a pane emits different rows on different machines. The apps pane does it
+    # from the CONFIG rather than from the hardware — `terminal_current()` reads
+    # synuirc, and only where no `terminal =` is set does it report the built-in
+    # fallback in words instead of naming a file. Every developer box has that
+    # knob set, so the sentence was unreachable here and perfectly reachable in
+    # a clean build root, where it failed the build.
+    #
+    # An empty HOME and XDG_CONFIG_HOME is what a fresh install looks like.
+    empty=$tmp/noconfig; mkdir -p "$empty"
+
     for pane in display region time power system network bluetooth kernel \
-                apps ai speech fprint assistant; do
-        "$BIN" --rec "$pane" 2>/dev/null | awk -F'\t' '
+                apps ai speech fprint assistant apps@fresh; do
+        case "$pane" in
+            apps@fresh) set -- --rec apps ;;
+            *)          set -- --rec "$pane" ;;
+        esac
+        case "$pane" in
+            apps@fresh) HOME="$empty" XDG_CONFIG_HOME="$empty" "$BIN" "$@" 2>/dev/null ;;
+            *)          "$BIN" "$@" 2>/dev/null ;;
+        esac | awk -F'\t' '
             NR == 1 { for (i = 1; i <= NF; i++)
                           if ($i == "key" || $i == "detail" ||
                               $i == "role" || $i == "covers") w[i] = 1

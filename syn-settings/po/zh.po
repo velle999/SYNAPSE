@@ -449,6 +449,9 @@ msgstr "终端"
 msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
 msgstr "synui 作为终端启动的程序 —— synuirc，而不是 mimeapps.list"
 
+msgid "synui's built-in fallback — nothing set"
+msgstr "synui 的内置回退 — 未设置"
+
 msgid "nothing installed handles this"
 msgstr "已安装的程序中没有能处理这个的"
 

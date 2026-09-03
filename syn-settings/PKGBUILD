@@ -202,7 +202,21 @@ pkgver=0.1.0
 #   lower-case, digits, dots, colons or dashes is a token the record owns;
 #   anything else in a table that can feed a drawn column is a label and must
 #   be N_(). That is what would have caught these two here.
-pkgrel=48
+# 49: a drawn label no machine here can reach. The apps pane reports which
+#   terminal synui would launch, and where NOTHING is set it reports the
+#   built-in fallback in words rather than naming a file — a sentence, where
+#   every other value of that cell is a path. It was unmarked, and could not be
+#   caught here: every developer box has `terminal =` in synuirc, so the row
+#   says "chosen" and a path. A clean build root has no config, hit the other
+#   branch, and failed the build inside makepkg.
+#   ⚠ THIRD TIME FOR THIS CLASS. The fingerprint rows needed a stubbed fprintd
+#   and the accelerator rows a stubbed library directory, both because a pane
+#   emits different rows on different machines. This one varies with the
+#   CONFIG rather than the hardware, so the suite now collects the apps pane a
+#   second time under an empty HOME and XDG_CONFIG_HOME — which is what a fresh
+#   install looks like. Verified by unmarking the string again and watching the
+#   suite fail on this box with the same message the build root printed.
+pkgrel=49
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

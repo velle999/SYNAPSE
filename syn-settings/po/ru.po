@@ -472,6 +472,9 @@ msgstr "Терминал"
 msgid "what synui launches for a terminal — synuirc, not mimeapps.list"
 msgstr "что synui запускает в качестве терминала — synuirc, а не mimeapps.list"
 
+msgid "synui's built-in fallback — nothing set"
+msgstr "встроенный запасной вариант synui — ничего не задано"
+
 msgid "nothing installed handles this"
 msgstr "ничто из установленного этим не занимается"
 
