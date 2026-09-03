@@ -4,7 +4,7 @@ iso_name="SynapseOS"
 iso_label="SYNAPSEOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
 iso_publisher="SynapseOS Project <https://github.com/velle999/SYNAPSE>"
 iso_application="SynapseOS — Where the kernel thinks."
-iso_version="0.2.9.5"
+iso_version="0.3.0"
 install_dir="arch"
 buildmodes=('iso')
 bootmodes=('bios.syslinux' 'uefi.grub')

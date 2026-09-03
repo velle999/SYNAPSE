@@ -1,10 +1,10 @@
 NAME="SynapseOS"
-PRETTY_NAME="SynapseOS 0.2.9.5"
+PRETTY_NAME="SynapseOS 0.3.0"
 ID=synapseos
 ID_LIKE=arch
-VERSION="0.2.9.5"
-VERSION_ID="0.2.9.5"
-BUILD_ID=0.2.9.5
+VERSION="0.3.0"
+VERSION_ID="0.3.0"
+BUILD_ID=0.3.0
 ANSI_COLOR="38;5;51"
 HOME_URL="https://github.com/velle999/SYNAPSE"
 DOCUMENTATION_URL="https://github.com/velle999/SYNAPSE#readme"
