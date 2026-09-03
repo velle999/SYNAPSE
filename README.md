@@ -2260,6 +2260,13 @@ the EULA alongside it. The Xpress M2020/M2020W needs this because it is an SPL
 device that predates driverless IPP; almost any printer made since roughly 2015
 needs no driver at all.
 
+**And an update never brings it either.** `samsung-m2020` is on `syn-update`'s
+never-add list, so it stays current on the machines that print with it and
+arrives on no others — the installer cannot offer it as a checkbox, and a
+component nothing has ever offered is otherwise read as new. That is a licence
+question before it is a preference one: the driver is meant to reach a machine
+through the command that shows the EULA first.
+
 **Omarchy is three relationships, and all three words apply somewhere.** The bar
 takes third-party widgets in [Omarchy](https://omarchy.org/)'s shell-plugin
 format (`MIT`, © David Heinemeier Hansson), and what that means for licensing

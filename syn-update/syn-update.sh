@@ -107,6 +107,32 @@ declare -A NEVER_ADD=(
     # during a limine install, and syn-settings' Kernel pane offers it when it
     # finds limine with no entry generator.
     [limine-mkinitcpio-hook]="writes limine boot entries; on any other bootloader it would override the mkinitcpio hook and pull in limine"
+    # A driver for ONE printer, the Samsung Xpress M2020W, which is an SPL
+    # device the driverless-IPP path cannot see. It is in COMPONENTS because
+    # the machines that do print with it must keep getting fixes.
+    #
+    # It could never be a checkbox at install time: Samsung's EULA licenses the
+    # ULD binaries "strictly for the personal use" of whoever downloaded them,
+    # which is why the ISO stopped carrying it and `syn printer samsung`
+    # fetches it onto the machine that will print with it — after showing the
+    # licence. So syn-install never writes its name into components.conf, and
+    # an absent name is the ONE thing this file reads as "never offered, still
+    # new" — which made every fresh install take a printer driver on its first
+    # apply, with the licence step skipped on the way past.
+    #
+    # Reported by velle 2026-09-03 as the updater installing a printer driver
+    # on systems where nobody asked for one.
+    [samsung-m2020]="a driver for one Samsung SPL printer; \`syn printer samsung\` installs it, licence and all"
+)
+
+# How the ones above are MEANT to arrive. Kept beside the reason rather than
+# folded into it, because these two sentences are read in different places: the
+# reason says why an update did not bring it, this says what to type instead,
+# and a name given on the command line deserves the second one.
+declare -A NEVER_ADD_HOW=(
+    [syn-install]="it comes with the ISO"
+    [limine-mkinitcpio-hook]="syn-install adds it during a limine install, and syn-settings' Kernel pane offers it"
+    [samsung-m2020]="syn printer samsung"
 )
 
 # ── what this machine was OFFERED, and what it DECLINED ──────────────────────
@@ -1534,7 +1560,7 @@ cmd_status() {
             continue
         fi
         if [ -n "${NEVER_ADD[$c]:-}" ]; then
-            note="never added automatically"
+            note="never added automatically — ${NEVER_ADD_HOW[$c]:-installed by hand}"
         elif [ "$MANIFEST_PRESENT" = 1 ] && [ -z "${COMP_KNOWN[$c]+set}" ]; then
             note="new here — the next apply installs it"
         else
@@ -1856,6 +1882,16 @@ done
 # build-all.sh's KNOWN= list with no build rule. Refuse it by name instead, and
 # say what the unbuildable ones are rather than pretending they are typos.
 for _s in "${SELECT[@]}"; do
+    # Naming one of these builds nothing: scan() drops a NEVER_ADD component
+    # that is not installed before it can reach either list, so `apply` would
+    # print "nothing to build" and exit 0 — the silent no-op the paragraph
+    # above exists to refuse. Say where it actually comes from instead. Once it
+    # IS installed the name is ordinary and updates it like any other.
+    if [ -n "${NEVER_ADD[$_s]:-}" ] && ! pacman -Qq "$_s" >/dev/null 2>&1; then
+        die "$_s is not added by an update:
+    ${NEVER_ADD[$_s]}
+  Install it with: ${NEVER_ADD_HOW[$_s]:-its own installer}"
+    fi
     if [ -n "${UNSUPPORTED[$_s]:-}" ]; then
         die "$_s cannot be built on an installed system:
     ${UNSUPPORTED[$_s]}

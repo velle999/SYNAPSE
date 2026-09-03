@@ -853,6 +853,65 @@ case "$(report_headline "" "")" in
     *)                   bad "the held guard changed the ordinary summary" ;;
 esac
 
+# ── NEVER_ADD: what an update must not bring, and what to type instead ───────
+#
+# The guard runs at argument-parsing time, so it is extracted the same way
+# everything else here is. `pacman` is a FUNCTION, which beats PATH — the
+# suite must never consult the packages actually installed on the machine
+# running it, or it would pass or fail depending on whose desk it is on.
+never_add_guard() {   # never_add_guard <name> <installed:yes|no>
+    local tmp; tmp=$(mktemp -d)
+    {
+        echo 'die() { echo "fail  $*"; exit 1; }'
+        echo "pacman() { [ '$2' = yes ]; }"
+        sed -n '/^declare -A NEVER_ADD=(/,/^)/p' "$script"
+        sed -n '/^declare -A NEVER_ADD_HOW=(/,/^)/p' "$script"
+        echo 'declare -A UNSUPPORTED=()'
+        sed -n '/^COMPONENTS=(/,/^)/p' "$script"
+        echo "SELECT=($1)"
+        sed -n '/^for _s in "\${SELECT\[@\]}"; do/,/^done$/p' "$script"
+        echo 'echo "reached the command"'
+    } > "$tmp/g.sh"
+    bash "$tmp/g.sh" 2>&1
+    rm -rf "$tmp"
+}
+
+echo ""
+echo "=== a component that must never arrive on its own ==="
+
+case "$(never_add_guard samsung-m2020 no)" in
+    *"syn printer samsung"*)
+        ok "naming an un-installed NEVER_ADD component says where it comes from" ;;
+    *"reached the command"*)
+        bad "apply accepted a component it would silently build nothing for" ;;
+    *)  bad "the refusal does not say how to install it" ;;
+esac
+
+case "$(never_add_guard samsung-m2020 yes)" in
+    *"reached the command"*)
+        ok "once installed, the same name updates like any other component" ;;
+    *)  bad "an installed NEVER_ADD component can no longer be updated by name" ;;
+esac
+
+case "$(never_add_guard synui no)" in
+    *"reached the command"*)
+        ok "an ordinary component is not caught by the guard" ;;
+    *)  bad "the guard refuses a component that is only declined" ;;
+esac
+
+# Two rosters. A future entry added to one and not the other would print
+# "installed by hand" at somebody rather than a command they can run.
+rosters=$(
+    { sed -n '/^declare -A NEVER_ADD=(/,/^)/p' "$script"
+      sed -n '/^declare -A NEVER_ADD_HOW=(/,/^)/p' "$script"
+      echo 'for k in "${!NEVER_ADD[@]}"; do [ -n "${NEVER_ADD_HOW[$k]:-}" ] || echo "$k"; done'
+    } | bash)
+if [ -z "$rosters" ]; then
+    ok "every NEVER_ADD component says how it is meant to arrive"
+else
+    bad "no install path for: $rosters"
+fi
+
 echo ""
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
