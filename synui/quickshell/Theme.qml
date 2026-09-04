@@ -1391,7 +1391,38 @@ QtObject {
             clock:     ink,
             hoverBg:   Qt.rgba(wash.r, wash.g, wash.b, 0.18),
             activeBg:  Qt.rgba(wash.r, wash.g, wash.b, 0.28),
-            dim:       pk("#3a4a52", "#6b7280"),
+            /*
+             * ⚠ THE SAME BUG fgDim WAS FIXED FOR, AND THIS IS WHERE IT LIVED
+             * ON. 492 measured the theme's dim against the surface and left
+             * BOTH strip palettes returning the literal pair it had just
+             * called out — and the strip is the one surface the theme knows
+             * nothing about, because a clear bar is drawn on the WALLPAPER.
+             *
+             * Measured on a portrait bar over a bright sky: the empty
+             * workspace digits came out #6b7280 on cream at 2.84:1, and on the
+             * dark end of the SAME strip #3a4a52 lands at 1.03:1 — present,
+             * and not readable. It surfaced on the portrait panel first only
+             * because that is where a light span and eight empty desktops
+             * happen at once; it was never portrait's bug.
+             *
+             * ⛔ ALPHA, NOT AN OPAQUE MIX, and that is the whole point here.
+             * fgDim can blend toward popupBg because it KNOWS popupBg. This
+             * palette carries `inkOnDark` and no colour at all, so the only
+             * way to sit a fixed fraction of the way from the real background
+             * to the ink is to let the compositor do the blend. It then tracks
+             * every wallpaper, per span, for free.
+             *
+             * ⚠ The objection alpha carries for fgDim does not reach here:
+             * that one also fills mixer sliders, the knob and the grip's dots,
+             * where a groove would show through. On the strip `dim` is only
+             * ever a glyph — the workspace digits and the muted/stale/off
+             * icons — and hoverBg and activeBg two lines up are already alpha.
+             *
+             * 0.75 is measured, not taste: 5.4:1 on that cream and 6.1:1 on
+             * that dark green, against 9.9:1 and 9.5:1 for the ink itself. So
+             * it is still visibly the quieter of the two, and it is legible.
+             */
+            dim:       Qt.rgba(wash.r, wash.g, wash.b, 0.75),
             blue:      pk("#4dabff", "#1d4ed8"),
             green:     pk("#a6e3a1", "#166534"),
             red:       pk("#f38ba8", "#b91c1c"),
@@ -1437,7 +1468,11 @@ QtObject {
             clock:    clear ? ink : root.clock,
             hoverBg:  clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.18) : root.hoverBg,
             activeBg: clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.28) : root.activeBg,
-            dim:      pk("#3a4a52", "#6b7280"),
+            // Same fix as barPaletteInked, which carries the reasoning — and
+            // the same `clear ? ink : theme` shape every line above uses. An
+            // opaque strip IS a themed surface, so it takes the dim that was
+            // measured against one rather than a second guess at it.
+            dim:      clear ? Qt.rgba(wash.r, wash.g, wash.b, 0.75) : root.fgDim,
             blue:     pk("#4dabff", "#1d4ed8"),
             green:    pk("#a6e3a1", "#166534"),
             red:      pk("#f38ba8", "#b91c1c"),

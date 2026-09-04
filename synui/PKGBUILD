@@ -3357,7 +3357,43 @@ pkgver=0.1.0
 #   back to `minimal` with nothing said. tests/clock_faces.sh is that check, and
 #   it also asserts the option names are NOT translated — a translated one
 #   writes a word config.c cannot read back.
-pkgrel=599
+# 600: THE DIM INK WAS FIXED ONCE AND KEPT SHIPPING. 492 replaced
+#   pick("#3a4a52", "#6b7280") — "a grey from memory" — with a blend measured
+#   against the surface, and did it for `Theme.fgDim` ALONE. Both STRIP
+#   palettes went on returning the identical pair, and the strip is the one
+#   surface a theme can know nothing about: a clear bar is drawn on the
+#   WALLPAPER.
+#
+#   Measured off a screenshot rather than argued. On a portrait bar over a
+#   bright sky the empty workspace digits came out #6b7280 on cream at
+#   2.84:1; on the dark green at that same bar's left the other half of the
+#   pair, #3a4a52, lands at 1.03:1. The ink beside them is 9.9:1 and 9.5:1.
+#   `pal.dim` is the empty desktop digit, the muted volume, the stale weather,
+#   the disabled network and the paused media — text that is there and cannot
+#   be read.
+#
+#   ⚠ IT LOOKED LIKE A PORTRAIT BUG AND WAS NEVER ONE. The portrait panel is
+#   only where a light-measuring span and eight empty desktops coincide; the
+#   dark-strip half of the literal is the worse of the two.
+#
+#   ⛔ THE FIX IS ALPHA, NOT AN OPAQUE MIX. fgDim can blend toward popupBg
+#   because it KNOWS popupBg; this palette carries `inkOnDark` and no colour at
+#   all, so the only way to sit a fixed fraction from the real background to the
+#   ink is to let the compositor blend it — which then tracks every wallpaper,
+#   per span, for nothing. ⚠ The objection alpha carries for fgDim does not
+#   reach here: that one also fills mixer sliders, the knob and the grip's dots,
+#   where a groove would show through, and on the strip `dim` is only ever a
+#   glyph. hoverBg and activeBg beside it are already alpha.
+#
+#   0.75 is measured, not taste: 5.4:1 on that cream and 6.1:1 on that dark
+#   green, still visibly quieter than the ink. An opaque strip takes root.fgDim,
+#   the same `clear ? ink : theme` shape every other line in barPalette uses.
+#
+#   tests/bar_dim_ink.sh is the guard, and it checks BOTH literals — the same
+#   reason bar_palette_keys.sh does. No pixel test can reach this: it needs a
+#   wallpaper whose measured ink flips, an empty desktop, and the monitor it
+#   lands on.
+pkgrel=600
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -1828,6 +1828,23 @@ test('bar_palette_keys', bar_palette_keys_t,
      args    : [meson.current_source_dir() / 'quickshell'],
      timeout : 30)
 
+# `bar_dim_ink`: the strip's dim ink is built from its OWN ink, never a hex
+# literal. 492 measured the dim against the surface and fixed `Theme.fgDim`
+# alone; both STRIP palettes kept returning the exact pair that fix called out,
+# and the strip is the one surface a theme knows nothing about — a clear bar is
+# drawn on the wallpaper. Measured off a screenshot: #6b7280 on the pale sky a
+# portrait bar sat over is 2.84:1, and #3a4a52 on the dark end of that same
+# strip is 1.03:1, against ~9.5:1 for the ink beside it. That is the empty
+# workspace digit, the muted volume and the stale weather — present, and not
+# readable. ⚠ It is not a portrait bug: portrait is only where a light-measuring
+# span and eight empty desktops coincide. No pixel test can reach it (it needs a
+# wallpaper whose measured ink flips), so the guard is mechanical. Reads files
+# only — never skips.
+bar_dim_ink_t = find_program('tests/bar_dim_ink.sh')
+test('bar_dim_ink', bar_dim_ink_t,
+     args    : [meson.current_source_dir() / 'quickshell'],
+     timeout : 30)
+
 # `weather_surfaces`: one fetch, three surfaces, and the FILE between them. The
 # lock screen, the bar module and the desktop widget all show the weather and
 # none of them fetches it — src/weather.c publishes weather.state and everything
