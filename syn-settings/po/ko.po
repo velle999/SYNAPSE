@@ -148,6 +148,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "새로 고침"
 
+msgid "Remote Desktop"
+msgstr "원격 데스크톱"
+
 msgid "Remove"
 msgstr "제거"
 
@@ -162,6 +165,9 @@ msgstr "SYNAPSE 설정"
 
 msgid "Save key"
 msgstr "키 저장"
+
+msgid "Speech"
+msgstr "음성"
 
 msgid "System"
 msgstr "시스템"
@@ -295,6 +301,11 @@ msgstr ""
 "을 제안합니다"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "화면 낭독기, 호출어, 그리고 이 컴퓨터가 말하고 듣는 데 쓰는 목소리"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -306,6 +317,11 @@ msgstr "절전이 제대로 되려면 필요한 유닛과 마지막 절전의 �
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "각 파일 종류를 무엇이 여는지 — 그리고 실제로 누가 고른 것인지"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "이 데스크톱에 다른 컴퓨터에서 접속할 수 있는지, 그리고 얼마나 먼 곳에서 가능한지"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -960,6 +976,84 @@ msgstr "콘솔 키맵"
 msgid "keymap-xkb"
 msgstr "xkb 배치"
 
+msgid "Remote desktop"
+msgstr "원격 데스크톱"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "syn-remote(1) 이 필요합니다 · synpkg install syn-remote"
+
+msgid "running"
+msgstr "실행 중"
+
+msgid "stopped"
+msgstr "멈춤"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "다른 컴퓨터에서 VNC로 이 데스크톱에 접속합니다. 켜기 전까지는 꺼져 있고, 켜면 이후 로그인마다 함께 시작합니다"
+
+msgid "Server"
+msgstr "서버"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "wayvnc 가 설치되어 있지 않아 제공할 것이 없습니다"
+
+msgid "Session"
+msgstr "세션"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "아직 실행 중인 데스크톱이 없습니다 · 누군가 로그인하기 전에는 공유할 것이 없습니다"
+
+msgid "Reachable from"
+msgstr "접속 가능 범위"
+
+msgid "the network"
+msgstr "네트워크"
+
+msgid "this machine only"
+msgstr "이 컴퓨터만"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "이 LAN 의 모든 기기가 접속할 수 있습니다. synnet 은 사설 대역 트래픽을 의도적으로 통과시키므로, 사이를 막는 것은 인증서와 비밀번호뿐입니다"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "루프백만 · 바깥에서는 SSH 터널로. \"네트워크\" 를 고르면 LAN 에 올라갑니다"
+
+msgid "Port"
+msgstr "포트"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 은 첫 번째 VNC 포트입니다 · `syn-remote port` 로 바꿉니다"
+
+msgid "Sign in with"
+msgstr "로그인 방법"
+
+msgid "your account password"
+msgstr "계정 비밀번호"
+
+msgid "a generated password"
+msgstr "생성된 비밀번호"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "어느 쪽이든 연결은 암호화됩니다 · `syn-remote password` 가 생성된 것을 보여 줍니다"
+
+msgid "Connected now"
+msgstr "현재 접속"
+
+msgid "somebody is looking at this screen"
+msgstr "누군가 이 화면을 보고 있습니다"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "서버 · 위의 스위치가 이것을 켭니다"
+
 msgid "wifi"
 msgstr "Wi-Fi"
 
@@ -1175,6 +1269,18 @@ msgstr "synui-clock이 아무것도 반환하지 않았습니다"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "synui-clock이 설치되어 있지 않습니다 — synui 세션이 아닙니다"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "이 컴퓨터만  (바깥에서는 SSH 터널로)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "네트워크  (이 LAN 의 모든 기기가 접속할 수 있습니다)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "생성된 비밀번호  (syn-remote password 가 보여 줍니다)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "자신의 계정 비밀번호  (세 번 실패하면 잠깁니다)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "켬 — 로컬 네트워크 밖에서 오는 요청하지 않은 연결을 거부"

@@ -151,6 +151,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "Actualiser"
 
+msgid "Remote Desktop"
+msgstr "Bureau à distance"
+
 msgid "Remove"
 msgstr "Supprimer"
 
@@ -165,6 +168,9 @@ msgstr "Paramètres SYNAPSE"
 
 msgid "Save key"
 msgstr "Enregistrer la clé"
+
+msgid "Speech"
+msgstr "Parole"
 
 msgid "System"
 msgstr "Système"
@@ -309,6 +315,11 @@ msgstr ""
 "l'écran de verrouillage ne le propose qu'une fois quelque chose enregistré"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "le lecteur d'écran, le mot de réveil et les voix avec lesquelles cette machine peut parler et entendre"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -323,6 +334,11 @@ msgstr ""
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr ""
 "ce qui ouvre chaque type de fichier — et si quelqu'un l'a réellement choisi"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "si ce bureau peut être atteint depuis une autre machine, et depuis quelle distance"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -997,6 +1013,84 @@ msgstr "disposition console"
 msgid "keymap-xkb"
 msgstr "disposition xkb"
 
+msgid "Remote desktop"
+msgstr "Bureau à distance"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "nécessite syn-remote(1) · synpkg install syn-remote"
+
+msgid "running"
+msgstr "en marche"
+
+msgid "stopped"
+msgstr "arrêté"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "Atteindre ce bureau depuis une autre machine, en VNC. Éteint jusqu'à ce que vous l'allumiez, et il démarre ensuite à chaque session"
+
+msgid "Server"
+msgstr "Serveur"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "wayvnc n'est pas installé, rien ne peut donc servir"
+
+msgid "Session"
+msgstr "Session"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "aucun bureau ne tourne encore · il n'y a rien à partager tant que personne ne s'est connecté"
+
+msgid "Reachable from"
+msgstr "Joignable depuis"
+
+msgid "the network"
+msgstr "le réseau"
+
+msgid "this machine only"
+msgstr "cette machine seulement"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "Chaque appareil de ce réseau local peut l'atteindre. synnet laisse passer le trafic des plages privées à dessein : seuls le certificat et le mot de passe font barrage"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "Boucle locale seulement · atteignable d'ailleurs par un tunnel SSH. « Le réseau » le met sur le LAN"
+
+msgid "Port"
+msgstr "Port"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 est le premier port VNC · à changer avec `syn-remote port`"
+
+msgid "Sign in with"
+msgstr "Se connecter avec"
+
+msgid "your account password"
+msgstr "le mot de passe de votre compte"
+
+msgid "a generated password"
+msgstr "un mot de passe engendré"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "Dans les deux cas la connexion est chiffrée · `syn-remote password` affiche celui qui a été engendré"
+
+msgid "Connected now"
+msgstr "Connecté en ce moment"
+
+msgid "somebody is looking at this screen"
+msgstr "quelqu'un regarde cet écran"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "le serveur · c'est l'interrupteur ci-dessus qui l'allume"
+
 msgid "wifi"
 msgstr "Wi-Fi"
 
@@ -1222,6 +1316,18 @@ msgstr "synui-clock n'a rien renvoyé"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "synui-clock n'est pas installé — ce n'est pas une session synui"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "Cette machine seulement  (par un tunnel SSH depuis ailleurs)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "Le réseau  (chaque appareil de ce LAN peut l'atteindre)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "Un mot de passe engendré  (syn-remote password l'affiche)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "Le mot de passe de votre compte  (bloqué après trois essais)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr ""

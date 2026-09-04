@@ -144,6 +144,9 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
+msgid "Remote Desktop"
+msgstr ""
+
 msgid "Remove"
 msgstr ""
 
@@ -157,6 +160,9 @@ msgid "SYNAPSE Settings"
 msgstr ""
 
 msgid "Save key"
+msgstr ""
+
+msgid "Speech"
 msgstr ""
 
 msgid "System"
@@ -280,6 +286,11 @@ msgid ""
 msgstr ""
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr ""
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -288,6 +299,11 @@ msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
+msgstr ""
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
 msgstr ""
 
 msgid ""
@@ -882,6 +898,84 @@ msgstr ""
 msgid "keymap-xkb"
 msgstr ""
 
+msgid "Remote desktop"
+msgstr ""
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr ""
+
+msgid "running"
+msgstr ""
+
+msgid "stopped"
+msgstr ""
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr ""
+
+msgid "Server"
+msgstr ""
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr ""
+
+msgid "Session"
+msgstr ""
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr ""
+
+msgid "Reachable from"
+msgstr ""
+
+msgid "the network"
+msgstr ""
+
+msgid "this machine only"
+msgstr ""
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr ""
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr ""
+
+msgid "Port"
+msgstr ""
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr ""
+
+msgid "Sign in with"
+msgstr ""
+
+msgid "your account password"
+msgstr ""
+
+msgid "a generated password"
+msgstr ""
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr ""
+
+msgid "Connected now"
+msgstr ""
+
+msgid "somebody is looking at this screen"
+msgstr ""
+
+msgid "the server · the switch above is what turns it on"
+msgstr ""
+
 msgid "wifi"
 msgstr ""
 
@@ -1086,6 +1180,18 @@ msgid "synui-clock returned nothing"
 msgstr ""
 
 msgid "synui-clock not installed — not a synui session"
+msgstr ""
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr ""
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr ""
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr ""
+
+msgid "Your own account password  (locks out after three tries)"
 msgstr ""
 
 msgid "On — refuse unsolicited connections from outside the local network"

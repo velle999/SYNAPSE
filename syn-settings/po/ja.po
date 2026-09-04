@@ -150,6 +150,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "更新"
 
+msgid "Remote Desktop"
+msgstr "リモートデスクトップ"
+
 msgid "Remove"
 msgstr "削除"
 
@@ -164,6 +167,9 @@ msgstr "SYNAPSE 設定"
 
 msgid "Save key"
 msgstr "キーを保存"
+
+msgid "Speech"
+msgstr "音声"
 
 msgid "System"
 msgstr "システム"
@@ -302,6 +308,11 @@ msgstr ""
 "紋を提示します"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "スクリーンリーダー、ウェイクワード、そしてこのマシンが話し聞くための音声"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -313,6 +324,11 @@ msgstr "サスペンドの動作が依存するユニットと、直近のサス
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "各ファイル種別を開くもの — そしてそれを実際に誰かが選んだのかどうか"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "このデスクトップに別のマシンから接続できるか、そしてどこまで届くか"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -975,6 +991,84 @@ msgstr "コンソールのキーマップ"
 msgid "keymap-xkb"
 msgstr "xkb レイアウト"
 
+msgid "Remote desktop"
+msgstr "リモートデスクトップ"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "syn-remote(1) が必要です · synpkg install syn-remote"
+
+msgid "running"
+msgstr "動作中"
+
+msgid "stopped"
+msgstr "停止"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "このデスクトップに別のマシンから VNC で接続します。有効にするまでは切のままで、有効にすると以後ログインのたびに起動します"
+
+msgid "Server"
+msgstr "サーバー"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "wayvnc が入っていないため、提供できるものがありません"
+
+msgid "Session"
+msgstr "セッション"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "まだデスクトップが動いていません · 誰かがログインするまで共有できるものはありません"
+
+msgid "Reachable from"
+msgstr "接続元"
+
+msgid "the network"
+msgstr "ネットワーク"
+
+msgid "this machine only"
+msgstr "このマシンのみ"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "この LAN 上のすべての機器が接続できます。synnet はプライベート範囲の通信を意図的に通すため、間に立つのは証明書とパスワードだけです"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "ループバックのみ · 外からは SSH トンネル経由で。「ネットワーク」にすると LAN に出ます"
+
+msgid "Port"
+msgstr "ポート"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 は最初の VNC ポートです · `syn-remote port` で変更できます"
+
+msgid "Sign in with"
+msgstr "サインイン方法"
+
+msgid "your account password"
+msgstr "アカウントのパスワード"
+
+msgid "a generated password"
+msgstr "生成されたパスワード"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "どちらでも通信は暗号化されます · `syn-remote password` で生成されたものを表示できます"
+
+msgid "Connected now"
+msgstr "現在の接続"
+
+msgid "somebody is looking at this screen"
+msgstr "誰かがこの画面を見ています"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "サーバー · 上のスイッチが起動させます"
+
 msgid "wifi"
 msgstr "Wi-Fi"
 
@@ -1197,6 +1291,18 @@ msgstr "synui-clock は何も返しませんでした"
 msgid "synui-clock not installed — not a synui session"
 msgstr ""
 "synui-clock がインストールされていません — synui のセッションではありません"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "このマシンのみ  (外からは SSH トンネル経由)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "ネットワーク  (この LAN 上のすべての機器が接続できます)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "生成されたパスワード  (syn-remote password で表示)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "自分のアカウントのパスワード  (3 回失敗でロック)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "オン — ローカルネットワーク外からの求めていない接続を拒否する"

@@ -405,6 +405,39 @@ int do_choices(int argc, char **argv)
 	if (!strcmp(key, "assistant-backend"))
 		return assistant_choices();
 
+	/* ⛔ THE ID IS syn-remote's WORD AND THE LABEL IS THE PERSON'S. `local` and
+	 * `lan` are what the tool takes and are never translated; the sentence
+	 * beside each is, and is the only part anybody reads. Both lists are two
+	 * items and always will be, so they are rendered here rather than asked
+	 * for — the same call date-format's comment makes in reverse. */
+	if (!strcmp(key, "remote-scope") || !strcmp(key, "remote-auth")) {
+		char cur[32] = "";
+		if (have_cmd("syn-remote")) {
+			char *a[] = { (char *)"syn-remote",
+			              (char *)(!strcmp(key, "remote-scope") ? "listen" : "auth"),
+			              NULL };
+			run_capture_quiet(a, cur, sizeof cur);
+			cur[strcspn(cur, "\n")] = '\0';
+			tsv_clean(cur);
+		}
+		if (!strcmp(key, "remote-scope")) {
+			rec_row("local\t%s\t%s",
+			        N_("This machine only  (reach it over an SSH tunnel)"),
+			        strcmp(cur, "lan") ? "current" : "-");
+			rec_row("lan\t%s\t%s",
+			        N_("The network  (every device on this LAN can reach it)"),
+			        !strcmp(cur, "lan") ? "current" : "-");
+		} else {
+			rec_row("password\t%s\t%s",
+			        N_("A generated password  (syn-remote password prints it)"),
+			        strcmp(cur, "pam") ? "current" : "-");
+			rec_row("pam\t%s\t%s",
+			        N_("Your own account password  (locks out after three tries)"),
+			        !strcmp(cur, "pam") ? "current" : "-");
+		}
+		return 0;
+	}
+
 	if (!strcmp(key, "date-format")) {
 		char cur[64];
 		clock_get("date", "iso", cur, sizeof cur);

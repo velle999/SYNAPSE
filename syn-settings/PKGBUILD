@@ -216,7 +216,28 @@ pkgver=0.1.0
 #   second time under an empty HOME and XDG_CONFIG_HOME — which is what a fresh
 #   install looks like. Verified by unmarking the string again and watching the
 #   suite fail on this box with the same message the build root printed.
-pkgrel=49
+# 50: A REMOTE DESKTOP PANE — and the SPEECH PANE, which had been unreachable.
+#   syn-remote(1) is new, and a service with no row in this window is a service
+#   reachable from a terminal and nowhere else. The pane reads
+#   `syn-remote status --rec` and runs syn-remote's own commands; it owns no
+#   part of the server, on the rule the speech and AI panes already follow.
+#
+#   ⛔ AND pane_speech() WAS ALREADY IN EXACTLY THAT STATE. It existed in C,
+#   usage() named it, `set` had a handler for every row on it — and
+#   data/syn-settings.qml's `panes` list did not mention it, so the screen
+#   reader and the wake word were reachable from a prompt and from nowhere
+#   else. Nothing failed: the binary answered, the window simply never asked.
+#   The person who wants a screen reader is the person who cannot read the
+#   terminal to start one, which is the sentence speech.c opens with. Both
+#   panes are in the list now, and the suite reads BOTH sources and fails on a
+#   pane either side does not have — the check that would have caught it.
+#
+#   ⚠ THE SCOPE ROW SAYS IT IN WORDS. synnet's default-drop input chain accepts
+#   everything from 10/8, 172.16/12 and 192.168/16 (monitor.c), so "0.0.0.0"
+#   does not mean "bound wide, still firewalled" — it means every device on the
+#   network can reach this desktop and there is no second door left to unlock.
+#   An IP tells that to somebody who already knows it.
+pkgrel=50
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

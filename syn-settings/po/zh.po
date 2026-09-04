@@ -147,6 +147,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "刷新"
 
+msgid "Remote Desktop"
+msgstr "远程桌面"
+
 msgid "Remove"
 msgstr "移除"
 
@@ -161,6 +164,9 @@ msgstr "SYNAPSE 设置"
 
 msgid "Save key"
 msgstr "保存密钥"
+
+msgid "Speech"
+msgstr "语音"
 
 msgid "System"
 msgstr "系统"
@@ -292,6 +298,11 @@ msgstr ""
 "读取器、已登记的手指，以及再登记一个——锁屏只有在已有登记时才会提供指纹选项"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "屏幕朗读、唤醒词，以及这台机器用来说和听的声音"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -302,6 +313,11 @@ msgstr "正常挂起所依赖的服务单元，以及上一次挂起的结果"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "各类文件由什么打开——以及是否真有人选择过"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "这个桌面能否从另一台机器连接，以及能从多远连接"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -929,6 +945,84 @@ msgstr "控制台键盘布局"
 msgid "keymap-xkb"
 msgstr "xkb 布局"
 
+msgid "Remote desktop"
+msgstr "远程桌面"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "需要 syn-remote(1) · synpkg install syn-remote"
+
+msgid "running"
+msgstr "运行中"
+
+msgid "stopped"
+msgstr "已停止"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "通过 VNC 从另一台机器连接这个桌面。在你打开它之前一直是关的，打开之后每次登录都会随之启动"
+
+msgid "Server"
+msgstr "服务器"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "未安装 wayvnc，因此没有任何东西可以提供服务"
+
+msgid "Session"
+msgstr "会话"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "还没有桌面在运行 · 在有人登录之前没有可共享的东西"
+
+msgid "Reachable from"
+msgstr "可从何处连接"
+
+msgid "the network"
+msgstr "网络"
+
+msgid "this machine only"
+msgstr "仅本机"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "这个局域网上的每台设备都能连上。synnet 有意放行私有网段的流量，挡在中间的只有证书和密码"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "仅回环 · 从别处经 SSH 隧道连接。选“网络”会把它放到局域网上"
+
+msgid "Port"
+msgstr "端口"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 是第一个 VNC 端口 · 用 `syn-remote port` 更改"
+
+msgid "Sign in with"
+msgstr "登录方式"
+
+msgid "your account password"
+msgstr "你的账户密码"
+
+msgid "a generated password"
+msgstr "一个生成的密码"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "两种方式的连接都是加密的 · `syn-remote password` 会打印生成的那个"
+
+msgid "Connected now"
+msgstr "当前连接"
+
+msgid "somebody is looking at this screen"
+msgstr "有人正在看这个屏幕"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "服务器 · 上面的开关负责启动它"
+
 msgid "wifi"
 msgstr "Wi-Fi"
 
@@ -1140,6 +1234,18 @@ msgstr "synui-clock 没有返回任何内容"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "未安装 synui-clock — 这不是 synui 会话"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "仅本机  (从别处经 SSH 隧道)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "网络  (这个局域网上的每台设备都能连上)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "一个生成的密码  (syn-remote password 会打印)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "你自己的账户密码  (三次失败后锁定)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "开启 — 拒绝来自本地网络之外的主动连接"

@@ -70,7 +70,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region network bluetooth power kernel system apps time ai; do
+for pane in display region network bluetooth power kernel system apps time ai remote; do
     check_table "$pane"
 done
 
@@ -107,7 +107,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech fprint assistant; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote; do
     check_actions "$pane"
 done
 
@@ -1875,6 +1875,36 @@ for pair in "speech-rate:175" "speech-volume:100" "wake-words:synapse,computer";
     fi
 done
 rm -rf "$tmpcfg"
+
+# ── every pane the binary answers is a pane the window offers ────────────────
+#
+# ⛔ THE ONE THAT WAS ALREADY WRONG. pane_speech() existed, `usage()` named it,
+# `set` had a handler for every row on it — and data/syn-settings.qml's `panes`
+# list did not mention it, so the screen reader and the wake word were
+# reachable from a terminal and from nowhere else. Nothing failed: the binary
+# answered, the window simply never asked.
+#
+# Read out of the SOURCES rather than from a list here, because a third copy of
+# the list is the thing this is trying to prevent.
+qml="$(dirname "$0")/../data/syn-settings.qml"
+main="$(dirname "$0")/../src/main.c"
+if [ -r "$qml" ] && [ -r "$main" ]; then
+    missing=
+    for pane in $(sed -n 's/.*if (!strcmp(pane, "\([a-z]*\)")).*/\1/p' "$main"); do
+        grep -q "id: \"$pane\"" "$qml" || missing="$missing $pane"
+    done
+    [ -z "$missing" ] && ok "every --rec pane is in the window's list" \
+                      || bad "panes the binary answers and the window never offers:$missing"
+
+    # …and the other way, which fails differently: a sidebar entry for a pane
+    # the binary refuses draws an empty page with an error nobody sees.
+    orphan=
+    for pane in $(sed -n 's/.*{ id: "\([a-z]*\)".*/\1/p' "$qml"); do
+        grep -q "strcmp(pane, \"$pane\")" "$main" || orphan="$orphan $pane"
+    done
+    [ -z "$orphan" ] && ok "...and every pane in the window's list is answered" \
+                     || bad "the window offers panes the binary does not answer:$orphan"
+fi
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"

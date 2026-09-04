@@ -31,13 +31,16 @@ static void usage(void)
 "usage: syn-settings <command> [args]\n"
 "\n"
 "  gui [pane]        open the settings window (display, region, time, network,\n"
-"                    bluetooth, power, apps, kernel, ai, speech, system)\n"
+"                    bluetooth, power, apps, kernel, ai, speech, remote,\n"
+"                    system)\n"
 "\n"
 "  --rec display     connectors: kernel state beside what the compositor drives\n"
 "  --rec region      keyboard layout and locale\n"
 "  --rec time        the system clock — zone, NTP — and how the desktop\n"
 "                    WRITES it: 12/24-hour, seconds, date order\n"
 "  --rec power       sleep-critical units, sleep hooks, last suspend\n"
+"  --rec remote      whether this desktop can be reached from another\n"
+"                    machine, and from how far away\n"
 "  --rec speech      the screen reader, the wake word, and the voice this\n"
 "                    box can actually use\n"
 "  --rec ai         the AI backend switch, the units that can restart it,\n"
@@ -211,6 +214,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "apps"))      return pane_apps();
 		if (!strcmp(pane, "ai"))        return pane_ai();
 		if (!strcmp(pane, "speech"))    return pane_speech();
+		if (!strcmp(pane, "remote"))    return pane_remote();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
 		if (!strcmp(pane, "assistant")) return pane_assistant();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);

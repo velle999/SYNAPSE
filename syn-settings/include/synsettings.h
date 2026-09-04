@@ -223,6 +223,7 @@ int pane_apps(void);
 int pane_time(void);
 int pane_ai(void);
 int pane_speech(void);
+int pane_remote(void);
 
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *

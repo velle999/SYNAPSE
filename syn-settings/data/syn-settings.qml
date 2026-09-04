@@ -268,6 +268,14 @@ FloatingWindow {
         { id: "ai",        label: I18n.tr("AI"),       blurb: I18n.tr("the backend switch, the units that can restart it behind your back, and which model is on disk") },
         { id: "assistant", label: I18n.tr("Assistant"), blurb: I18n.tr("which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key") },
         { id: "fprint",    label: I18n.tr("Fingerprint"), blurb: I18n.tr("the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is") },
+        // ⛔ speech WAS MISSING FROM THIS LIST. The pane existed in C, `usage()`
+        // named it and `set` had handlers for every row on it — and the window
+        // never offered it, so the screen reader and the wake word were
+        // reachable from a terminal and nowhere else. The person who wants a
+        // screen reader is the person who cannot read the terminal to start
+        // one, which is the sentence speech.c opens with.
+        { id: "speech",    label: I18n.tr("Speech"),   blurb: I18n.tr("the screen reader, the wake word, and the voices this machine can speak and hear with") },
+        { id: "remote",    label: I18n.tr("Remote Desktop"), blurb: I18n.tr("whether this desktop can be reached from another machine, and from how far away") },
         { id: "system",    label: I18n.tr("System"),   blurb: I18n.tr("identity, and which layer each configuration file comes from") }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"

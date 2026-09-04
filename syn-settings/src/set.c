@@ -250,6 +250,45 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
+	/* ── syn-remote ───────────────────────────────────────────────────── */
+	/*
+	 * ⚠ THROUGH syn-remote, never by writing its files. `syn-remote on` also
+	 * makes the TLS certificate and the password on first use, enables the user
+	 * unit and starts it; a settings app that flipped a key and stopped would
+	 * leave a switch reading On with nothing listening.
+	 */
+	if (!strcmp(key, "remote-desktop")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("remote-desktop takes on or off");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed "
+			              "\xc2\xb7 synpkg install syn-remote");
+		char *a[] = { (char *)"syn-remote", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "remote-scope")) {
+		/* ⛔ THE VALUES ARE syn-remote's OWN WORDS, not the row's. The row
+		 * draws "this machine only" and "the network" because that is what a
+		 * person needs to read; what travels here is `local` and `lan`, which
+		 * is what the tool takes — and translating one would break the other. */
+		if (strcmp(val, "local") && strcmp(val, "lan"))
+			return refuse("remote-scope takes local or lan");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed");
+		char *a[] = { (char *)"syn-remote", (char *)"listen", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "remote-auth")) {
+		if (strcmp(val, "pam") && strcmp(val, "password"))
+			return refuse("remote-auth takes pam or password");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed");
+		char *a[] = { (char *)"syn-remote", (char *)"auth", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "wake-word")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("wake-word takes on or off");

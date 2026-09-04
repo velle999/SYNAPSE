@@ -151,6 +151,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "Vernieuwen"
 
+msgid "Remote Desktop"
+msgstr "Extern bureaublad"
+
 msgid "Remove"
 msgstr "Verwijderen"
 
@@ -165,6 +168,9 @@ msgstr "SYNAPSE-instellingen"
 
 msgid "Save key"
 msgstr "Sleutel opslaan"
+
+msgid "Speech"
+msgstr "Spraak"
 
 msgid "System"
 msgstr "Systeem"
@@ -308,6 +314,11 @@ msgstr ""
 "vergrendelscherm biedt het pas aan als er al iets is"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "de schermlezer, het wekwoord en de stemmen waarmee deze machine spreekt en luistert"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -320,6 +331,11 @@ msgstr ""
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "wat elk soort bestand opent — en of iemand dat ook echt gekozen heeft"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "of dit bureaublad vanaf een andere machine te bereiken is, en van hoe ver"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -995,6 +1011,84 @@ msgstr "console-indeling"
 msgid "keymap-xkb"
 msgstr "xkb-indeling"
 
+msgid "Remote desktop"
+msgstr "Extern bureaublad"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "heeft syn-remote(1) nodig · synpkg install syn-remote"
+
+msgid "running"
+msgstr "draait"
+
+msgid "stopped"
+msgstr "gestopt"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "Dit bureaublad vanaf een andere machine bereiken, via VNC. Uit totdat je het aanzet, en daarna start het bij elke aanmelding mee"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "wayvnc is niet geïnstalleerd, dus er kan niets bedienen"
+
+msgid "Session"
+msgstr "Sessie"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "er draait nog geen bureaublad · er bestaat niets om te delen totdat iemand zich aanmeldt"
+
+msgid "Reachable from"
+msgstr "Bereikbaar vanaf"
+
+msgid "the network"
+msgstr "het netwerk"
+
+msgid "this machine only"
+msgstr "alleen deze machine"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "Elk apparaat op dit lokale netwerk kan erbij. synnet laat verkeer uit privébereiken met opzet door — het certificaat en het wachtwoord zijn wat er in de weg staat"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "Alleen loopback · van elders bereikbaar via een SSH-tunnel. “Het netwerk” zet het op het LAN"
+
+msgid "Port"
+msgstr "Poort"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 is de eerste VNC-poort · wijzig hem met `syn-remote port`"
+
+msgid "Sign in with"
+msgstr "Aanmelden met"
+
+msgid "your account password"
+msgstr "je eigen accountwachtwoord"
+
+msgid "a generated password"
+msgstr "een gegenereerd wachtwoord"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "Hoe dan ook is de verbinding versleuteld · `syn-remote password` toont het gegenereerde"
+
+msgid "Connected now"
+msgstr "Nu verbonden"
+
+msgid "somebody is looking at this screen"
+msgstr "iemand kijkt naar dit scherm"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "de server · de schakelaar hierboven is wat hem aanzet"
+
 msgid "wifi"
 msgstr "wifi"
 
@@ -1217,6 +1311,18 @@ msgstr "synui-clock gaf niets terug"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "synui-clock is niet geïnstalleerd — geen synui-sessie"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "Alleen deze machine  (van elders via een SSH-tunnel)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "Het netwerk  (elk apparaat op dit LAN kan erbij)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "Een gegenereerd wachtwoord  (syn-remote password toont het)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "Je eigen accountwachtwoord  (blokkeert na drie pogingen)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "Aan — ongevraagde verbindingen van buiten het lokale netwerk weigeren"

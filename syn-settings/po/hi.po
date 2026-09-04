@@ -148,6 +148,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "ताज़ा करें"
 
+msgid "Remote Desktop"
+msgstr "रिमोट डेस्कटॉप"
+
 msgid "Remove"
 msgstr "हटाएँ"
 
@@ -162,6 +165,9 @@ msgstr "SYNAPSE सेटिंग्स"
 
 msgid "Save key"
 msgstr "कुंजी सहेजें"
+
+msgid "Speech"
+msgstr "वाणी"
 
 msgid "System"
 msgstr "सिस्टम"
@@ -296,6 +302,11 @@ msgstr ""
 "कुछ दर्ज हो"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "स्क्रीन रीडर, जगाने वाला शब्द, और वे आवाज़ें जिनसे यह मशीन बोलती और सुनती है"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr "सिस्टम घड़ी — और डेस्कटॉप उसे कैसे लिखता है: 12 या 24 घंटे, और दिनांक किस क्रम में"
@@ -305,6 +316,11 @@ msgstr "सस्पेंड ठीक चलने के लिए जिन 
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "हर तरह की फ़ाइल क्या खोलता है — और क्या वाकई किसी ने उसे चुना था"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "क्या इस डेस्कटॉप तक किसी दूसरी मशीन से पहुँचा जा सकता है, और कितनी दूर से"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -948,6 +964,84 @@ msgstr "कंसोल कीमैप"
 msgid "keymap-xkb"
 msgstr "xkb विन्यास"
 
+msgid "Remote desktop"
+msgstr "रिमोट डेस्कटॉप"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "syn-remote(1) चाहिए · synpkg install syn-remote"
+
+msgid "running"
+msgstr "चल रहा है"
+
+msgid "stopped"
+msgstr "रुका हुआ"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "इस डेस्कटॉप तक किसी दूसरी मशीन से VNC के ज़रिए पहुँचें। जब तक आप चालू न करें तब तक बंद, और उसके बाद हर लॉगिन पर साथ चलता है"
+
+msgid "Server"
+msgstr "सर्वर"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "wayvnc स्थापित नहीं है, इसलिए कुछ भी सेवा नहीं दे सकता"
+
+msgid "Session"
+msgstr "सत्र"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "अभी कोई डेस्कटॉप नहीं चल रहा · जब तक कोई लॉगिन न करे, साझा करने को कुछ है ही नहीं"
+
+msgid "Reachable from"
+msgstr "कहाँ से पहुँच"
+
+msgid "the network"
+msgstr "नेटवर्क से"
+
+msgid "this machine only"
+msgstr "केवल इसी मशीन से"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "इस लैन का हर उपकरण इस तक पहुँच सकता है। synnet निजी दायरों का ट्रैफ़िक जान-बूझकर आने देता है — बीच में सिर्फ़ प्रमाणपत्र और पासवर्ड खड़े हैं"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "केवल लूपबैक · कहीं और से SSH सुरंग के ज़रिए। “नेटवर्क” इसे लैन पर रख देता है"
+
+msgid "Port"
+msgstr "पोर्ट"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "5900 पहला VNC पोर्ट है · इसे `syn-remote port` से बदलें"
+
+msgid "Sign in with"
+msgstr "साइन इन करें"
+
+msgid "your account password"
+msgstr "अपने खाते के पासवर्ड से"
+
+msgid "a generated password"
+msgstr "एक बनाए गए पासवर्ड से"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "दोनों ही हाल में कनेक्शन एन्क्रिप्टेड रहता है · `syn-remote password` बनाया गया पासवर्ड दिखाता है"
+
+msgid "Connected now"
+msgstr "अभी जुड़े हुए"
+
+msgid "somebody is looking at this screen"
+msgstr "कोई इस स्क्रीन को देख रहा है"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "सर्वर · ऊपर वाला स्विच ही इसे चालू करता है"
+
 msgid "wifi"
 msgstr "वाई-फ़ाई"
 
@@ -1161,6 +1255,18 @@ msgstr "synui-clock ने कुछ नहीं लौटाया"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "synui-clock संस्थापित नहीं है — यह synui सत्र नहीं है"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "केवल यह मशीन  (कहीं और से SSH सुरंग के ज़रिए)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "नेटवर्क  (इस लैन का हर उपकरण पहुँच सकता है)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "एक बनाया गया पासवर्ड  (syn-remote password उसे दिखाता है)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "आपके अपने खाते का पासवर्ड  (तीन कोशिशों के बाद बंद)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "चालू — स्थानीय नेटवर्क के बाहर से बिन-माँगे कनेक्शन अस्वीकार करें"

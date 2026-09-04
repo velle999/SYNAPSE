@@ -153,6 +153,9 @@ msgstr ""
 msgid "Refresh"
 msgstr "تحديث"
 
+msgid "Remote Desktop"
+msgstr "سطح المكتب البعيد"
+
 msgid "Remove"
 msgstr "إزالة"
 
@@ -167,6 +170,9 @@ msgstr "إعدادات SYNAPSE"
 
 msgid "Save key"
 msgstr "حفظ المفتاح"
+
+msgid "Speech"
+msgstr "النطق"
 
 msgid "System"
 msgstr "النظام"
@@ -300,6 +306,11 @@ msgstr ""
 "تسجيل شيء"
 
 msgid ""
+"the screen reader, the wake word, and the voices this machine can speak and "
+"hear with"
+msgstr "قارئ الشاشة وكلمة التنبيه والأصوات التي يتكلم بها هذا الجهاز ويسمع"
+
+msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
 msgstr ""
@@ -310,6 +321,11 @@ msgstr "الوحدات التي يعتمد عليها التعليق السلي�
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "ما الذي يفتح كل نوع من الملفات — وهل اختاره أحد فعلاً"
+
+msgid ""
+"whether this desktop can be reached from another machine, and from how far "
+"away"
+msgstr "هل يمكن الوصول إلى سطح المكتب هذا من جهاز آخر، ومن أي مدى"
 
 msgid ""
 "which service the assistant sends your messages to — the model on this "
@@ -952,6 +968,84 @@ msgstr "تخطيط الطرفية النصية"
 msgid "keymap-xkb"
 msgstr "تخطيط xkb"
 
+msgid "Remote desktop"
+msgstr "سطح المكتب البعيد"
+
+msgid "needs syn-remote(1) · synpkg install syn-remote"
+msgstr "يحتاج syn-remote(1) · synpkg install syn-remote"
+
+msgid "running"
+msgstr "يعمل"
+
+msgid "stopped"
+msgstr "متوقف"
+
+msgid ""
+"Reach this desktop from another machine over VNC. Off until you switch it "
+"on, and it starts with every login once you have"
+msgstr "الوصول إلى سطح المكتب هذا من جهاز آخر عبر VNC. معطّل حتى تُفعّله، وبعدها يبدأ مع كل ولوج"
+
+msgid "Server"
+msgstr "الخادم"
+
+msgid "wayvnc is not installed, so nothing can serve"
+msgstr "‏wayvnc غير مثبَّت، فلا شيء يمكنه الخدمة"
+
+msgid "Session"
+msgstr "الجلسة"
+
+msgid ""
+"no desktop is running yet · nothing exists to share until somebody logs in"
+msgstr "لا يوجد سطح مكتب يعمل بعد · لا شيء لمشاركته حتى يلج أحد"
+
+msgid "Reachable from"
+msgstr "يُوصل إليه من"
+
+msgid "the network"
+msgstr "الشبكة"
+
+msgid "this machine only"
+msgstr "هذا الجهاز فقط"
+
+msgid ""
+"Every device on this LAN can reach it. synnet accepts private-range traffic "
+"by design, so the certificate and the password are what stand in the way"
+msgstr "كل جهاز على هذه الشبكة المحلية يستطيع الوصول إليه. يمرّر synnet حركة النطاقات الخاصة عن قصد، فلا يقف في الطريق سوى الشهادة وكلمة السر"
+
+msgid ""
+"Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
+"puts it on the LAN"
+msgstr "الاسترجاع المحلي فقط · ويُوصل إليه من الخارج عبر نفق SSH. اختيار «الشبكة» يضعه على الشبكة المحلية"
+
+msgid "Port"
+msgstr "المنفذ"
+
+msgid "5900 is the first VNC port · change it with `syn-remote port`"
+msgstr "‏5900 هو أول منفذ VNC · غيّره بـ `syn-remote port`"
+
+msgid "Sign in with"
+msgstr "الولوج بـ"
+
+msgid "your account password"
+msgstr "كلمة سر حسابك"
+
+msgid "a generated password"
+msgstr "كلمة سر مولَّدة"
+
+msgid ""
+"Either way the connection is encrypted · `syn-remote password` prints the "
+"generated one"
+msgstr "في الحالتين يكون الاتصال معمّى · و`syn-remote password` يطبع المولَّدة"
+
+msgid "Connected now"
+msgstr "متصل الآن"
+
+msgid "somebody is looking at this screen"
+msgstr "هناك من ينظر إلى هذه الشاشة"
+
+msgid "the server · the switch above is what turns it on"
+msgstr "الخادم · المفتاح أعلاه هو ما يشغّله"
+
 msgid "wifi"
 msgstr "واي فاي"
 
@@ -1166,6 +1260,18 @@ msgstr "لم يُرجع synui-clock شيئاً"
 
 msgid "synui-clock not installed — not a synui session"
 msgstr "synui-clock غير مثبَّت — وهذه ليست جلسة synui"
+
+msgid "This machine only  (reach it over an SSH tunnel)"
+msgstr "هذا الجهاز فقط  (من الخارج عبر نفق SSH)"
+
+msgid "The network  (every device on this LAN can reach it)"
+msgstr "الشبكة  (كل جهاز على هذه الشبكة المحلية يصل إليه)"
+
+msgid "A generated password  (syn-remote password prints it)"
+msgstr "كلمة سر مولَّدة  (يطبعها syn-remote password)"
+
+msgid "Your own account password  (locks out after three tries)"
+msgstr "كلمة سر حسابك أنت  (تُقفل بعد ثلاث محاولات)"
 
 msgid "On — refuse unsolicited connections from outside the local network"
 msgstr "مُفعَّل — رفض الاتصالات غير المطلوبة من خارج الشبكة المحلية"
