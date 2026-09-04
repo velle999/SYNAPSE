@@ -76,6 +76,12 @@ check "…and English"                           yes "$(draws linux en_US.UTF-8)
 check "a real terminal draws Japanese"     yes "$(draws foot ja_JP.UTF-8)"
 check "…and Arabic"                        yes "$(draws xterm-256color ar_SA.UTF-8)"
 
+# ⚠ AN EMPTY TERM IS A PIPE, NOT A VT — the graphical installer runs this
+# script for its lists and reads them into QML, which draws everything. This
+# read `linux|''` for one commit, which would have handed the one window that
+# CAN show Japanese the English rows.
+check "a pipe is not a console"            yes "$(draws '' ja_JP.UTF-8)"
+
 # ── 2. …and the catalog follows the screen ────────────────
 #
 # The catalogs themselves are fine — this is about which one is LOADED.

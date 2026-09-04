@@ -288,7 +288,13 @@ pkgver=0.1.0
 #   ⚠ STILL ENGLISH: syn-install-gui.qml, which carries no catalog at all — it
 #   reads --boot-language to preselect the row and then says everything in
 #   English. That is the remaining half of "the installer was in English".
-pkgrel=112
+# 113: …and an EMPTY TERM is a PIPE, not a console. 112's console_can_draw()
+#   read `linux|''`, treating "no terminal" as a VT. A bare TERM is how the
+#   GRAPHICAL installer runs this script for its lists — it reads them into QML,
+#   which draws every script there is — so that would have handed the one window
+#   that CAN show Japanese the English rows: the same bug, arriving from the
+#   other direction. `linux` is the whole of the deny side.
+pkgrel=113
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -87,12 +87,18 @@ SYN_LANG=en
 #
 # ⚠ TERM IS THE TEST, not the locale alone. Run from a terminal on the desktop
 # — syntty, foot, an SSH session — the same script CAN draw all of it, and
-# refusing there would be a second bug. `linux` is the VT; empty is a bare
-# process with no terminal at all, where nobody reads the output anyway.
+# refusing there would be a second bug.
+#
+# ⚠ AND `linux` IS THE WHOLE OF THE DENY SIDE, empty included on the yes side.
+# A bare TERM is not a VT, it is a PIPE: the graphical installer runs this
+# script for its lists and reads the output into QML, which draws every script
+# there is. Refusing there would hand the one window that can show Japanese the
+# English rows, which is the bug this function exists to prevent, arriving from
+# the other direction.
 console_can_draw() {
     local code=${1%%[_.@-]*}
     case "${TERM:-}" in
-        linux|'') ;;
+        linux) ;;
         *) return 0 ;;
     esac
     case "${code,,}" in
