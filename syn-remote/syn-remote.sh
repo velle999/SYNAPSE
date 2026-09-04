@@ -95,6 +95,59 @@ set_setting() {   # set_setting <key> <value>
 bind_address() { setting address 127.0.0.1; }
 bind_port()    { setting port "$DEFAULT_PORT"; }
 
+# ── The names the certificate vouches for ─────────────────
+#
+# ⛔ A CERTIFICATE IS CHECKED AGAINST THE ADDRESS THAT WAS DIALLED, so the only
+# addresses worth putting in it are the ones somebody will type. The generated
+# set is every address this machine HOLDS, which covers the LAN and covers
+# nothing else — see the block in cert_sans. These are the extras, kept as one
+# comma-separated setting.
+
+# ⛔ STRICT, BECAUSE THIS VALUE REACHES openssl AS PART OF -addext. A comma
+# would forge a second SAN, and anything outside this set has no business in a
+# hostname or an address anyway. A leading dash would be read as an option by
+# whatever the value is eventually passed to — the same rule valid_name follows.
+valid_san() {
+    case "${1:-}" in
+        ""|-*)                     return 1 ;;
+        *[!A-Za-z0-9.:_-]*)        return 1 ;;
+    esac
+    return 0
+}
+
+# IP or DNS, as openssl's -addext spells it.
+san_kind() {
+    case "$1" in
+        *:*)                          printf 'IP'  ;;   # IPv6
+        *[!0-9.]*)                    printf 'DNS' ;;
+        [0-9]*.[0-9]*.[0-9]*.[0-9]*)  printf 'IP'  ;;
+        *)                            printf 'DNS' ;;
+    esac
+}
+
+# ⚠ THE SAME ANSWER, SPELLED THE OTHER WAY. openssl WRITES `IP:1.2.3.4` and
+# READS IT BACK as `IP Address:1.2.3.4`; using one spelling for both is how a
+# name that is present reads as missing and re-issues the certificate on every
+# single run.
+san_read_label() {
+    [ "$(san_kind "$1")" = IP ] && printf 'IP Address' || printf 'DNS'
+}
+
+# ⛔ ANCHORED, WHOLE-FIELD. openssl prints one line — "DNS:synapse,
+# DNS:synapse.local, IP Address:127.0.0.1" — so a plain grep for "DNS:synapse"
+# is also satisfied by "DNS:synapse.local", and a name that is genuinely absent
+# reads as present. Split on the comma and match the whole field instead.
+cert_has_san() {   # cert_has_san <label> <value>
+    openssl x509 -in "$CERT" -noout -ext subjectAltName 2>/dev/null |
+        tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' |
+        grep -qxF "$1:$2"
+}
+
+# The configured extras, one per line.
+extra_sans() {
+    setting names "" | tr ',' '\n' | sed '/^[[:space:]]*$/d'
+}
+
 # ── Credentials ───────────────────────────────────────────
 #
 # ⚠ enable_auth REQUIRES ALL THREE — certificate, private key and password
@@ -137,6 +190,19 @@ ensure_credentials() {
                     awk '{print $4}' | cut -d/ -f1); do
             sans="$sans,IP:$ip"
         done
+        # ⛔ AND THE NAMES THIS MACHINE CANNOT WORK OUT FOR ITSELF. Everything
+        # above is an address the box actually holds, which is exactly the set
+        # that is WRONG the moment it is reached through anything else: a port
+        # forward presents a public IP the box has never seen, and a dynamic-DNS
+        # name resolves to one. A viewer validates against the address it
+        # DIALLED, so neither can ever match a certificate built only from local
+        # addresses — measured: dialling 203.0.113.7 or a DDNS name against this
+        # server fails "IP address mismatch" / "Hostname mismatch" while the LAN
+        # address passes. `syn-remote names add` is how that gap is closed.
+        local extra
+        for extra in $(extra_sans); do
+            sans="$sans,$(san_kind "$extra"):$extra"
+        done
         printf '%s' "$sans"
     }
 
@@ -144,13 +210,19 @@ ensure_credentials() {
     # silently invalidates a certificate that was correct when it was made, and
     # the symptom is identical to the bug above: every client hangs. Cheap to
     # check, and openssl is already a dependency.
-    local want_ip need_new=0
+    local want need_new=0
     [ -s "$CERT" ] && [ -s "$KEY" ] || need_new=1
     if [ "$need_new" -eq 0 ]; then
-        for want_ip in $(ip -4 -o addr show scope global 2>/dev/null |
-                         awk '{print $4}' | cut -d/ -f1); do
-            openssl x509 -in "$CERT" -noout -ext subjectAltName 2>/dev/null |
-                grep -q "IP Address:$want_ip" || need_new=1
+        for want in $(ip -4 -o addr show scope global 2>/dev/null |
+                      awk '{print $4}' | cut -d/ -f1); do
+            cert_has_san "IP Address" "$want" || need_new=1
+        done
+        # ⚠ THE CONFIGURED NAMES ARE PART OF THE SAME QUESTION. Adding one has
+        # to re-issue, or the setting would be saved, reported, and carried by
+        # no certificate — the shape of failure this package already has a
+        # paragraph about.
+        for want in $(extra_sans); do
+            cert_has_san "$(san_read_label "$want")" "$want" || need_new=1
         done
     fi
 
@@ -523,6 +595,83 @@ cmd_auth() {
         write_wayvnc_config
         systemctl --user restart "$UNIT" >/dev/null 2>&1
     fi
+}
+
+# ── The names the certificate answers to ──────────────────
+
+# Re-issue if anything above changed, put it in wayvnc's config, and restart a
+# running server so it is serving the certificate that was just made rather
+# than the one it started with.
+# ⚠ SAYS NOTHING ITSELF. ensure_credentials already explains a re-issue, and
+# telling somebody twice that their clients must re-trust reads as two events.
+reissue() {
+    ensure_credentials
+    write_wayvnc_config
+    if systemctl --user is-active "$UNIT" >/dev/null 2>&1; then
+        systemctl --user restart "$UNIT" >/dev/null 2>&1
+    fi
+    return 0
+}
+
+cmd_names() {
+    local action=${1:-} name=${2:-}
+    case "$action" in
+        ""|list)
+            local have
+            have=$(extra_sans)
+            if [ -n "$have" ]; then
+                printf 'The certificate also vouches for:\n\n'
+                printf '%s\n' "$have" | sed 's/^/  /'
+                printf '\n'
+            else
+                printf 'The certificate vouches for this machine'"'"'s own addresses only.\n\n'
+            fi
+            note "Always included: $(uname -n 2>/dev/null || echo synapse), localhost,"
+            note "and every address this machine holds."
+            # ⛔ SAID EVERY TIME, because the failure it prevents is silent and
+            # looks like a firewall. A viewer validates against what it DIALLED,
+            # so an address this machine cannot see — a public IP in front of a
+            # port forward, a dynamic-DNS name — is not in there and cannot be.
+            note ""
+            note "An address reached through a port forward, or a dynamic-DNS name,"
+            note "is NOT one of those and has to be named here:"
+            note "  $PROG names add myhouse.duckdns.org"
+            ;;
+        add)
+            valid_san "$name" ||
+                die "a name is letters, digits, dot, colon, dash or underscore"
+            if extra_sans | grep -qxF "$name"; then
+                note "$name is already in the list."
+            else
+                local cur
+                cur=$(setting names "")
+                set_setting names "${cur:+$cur,}$name" ||
+                    die "could not save the name"
+            fi
+            # ⚠ UNCONDITIONALLY, even when the name was already saved. A setting
+            # that is stored and a certificate that carries it are two facts, and
+            # repairing the second here is what stops `names` reporting a name
+            # that nothing vouches for.
+            reissue
+            printf 'The certificate now vouches for %s.\n' "$name"
+            ;;
+        remove|rm)
+            valid_san "$name" || die "no such name"
+            extra_sans | grep -qxF "$name" ||
+                die "'$name' is not one of the added names"
+            local kept
+            kept=$(extra_sans | grep -vxF "$name" | paste -sd, -)
+            set_setting names "$kept" || die "could not save the change"
+            # ⛔ FORCED. Removing a name means the certificate must stop vouching
+            # for it, and nothing else here would notice: the re-issue check asks
+            # whether every WANTED name is present, and a name that is no longer
+            # wanted is still present quite happily.
+            rm -f "$CERT" "$KEY"
+            reissue
+            printf 'The certificate no longer vouches for %s.\n' "$name"
+            ;;
+        *)  die "names takes nothing, 'add <name>' or 'remove <name>'" ;;
+    esac
 }
 
 # ── The other end: connecting OUT ─────────────────────────
@@ -982,6 +1131,10 @@ syn-remote — the desktop, from somewhere else
   syn-remote port [N]          which port (default 5900)
   syn-remote password [new|X]  the password a viewer is asked for
   syn-remote auth pam|password sign in with your account, or that password
+  syn-remote names [add|remove <name>]
+                               extra names and addresses the certificate
+                               vouches for — needed for a port forward or a
+                               dynamic-DNS name, which this machine cannot see
 
 Reaching somebody else's desktop:
 
@@ -1024,6 +1177,7 @@ case "${1:-status}" in
     port)       shift; cmd_port "$@" ;;
     password)   shift; cmd_password "$@" ;;
     auth)       shift; cmd_auth "$@" ;;
+    names)      shift; cmd_names "$@" ;;
     hosts)      shift; cmd_hosts "$@" ;;
     add)        shift; cmd_add "$@" ;;
     forget)     shift; cmd_forget "$@" ;;

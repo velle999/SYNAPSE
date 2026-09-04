@@ -92,7 +92,27 @@ pkgver=0.1.0
 #     syntty when the host is unpinned, exactly as the certificate and password
 #     buttons already did, and actProc collects stderr so no button can ever
 #     fail invisibly again.
-pkgrel=5
+# 6: the certificate could only ever vouch for addresses this machine HOLDS,
+#   which is exactly the set that is wrong when it is reached through anything
+#   else. cert_sans() enumerates `ip -4 -o addr show scope global`, so a public
+#   IP in front of a port forward — or the dynamic-DNS name that resolves to it
+#   — was never in there and could not be. Measured against a live server:
+#   dialling 203.0.113.7 fails "IP address mismatch" and a DDNS name fails
+#   "Hostname mismatch", while the LAN address passes. `syn-remote names
+#   add|remove` is the escape hatch.
+#   ⚠ ADDING ONE RE-ISSUES, because a name that is saved and not in the
+#     certificate is the split this package already has a paragraph about. And
+#     REMOVING one re-issues too — the check asks whether every WANTED name is
+#     present, and a name that is no longer wanted is still present quite
+#     happily.
+#   ⛔ THE SAN LOOKUP IS ANCHORED. openssl prints the SANs on ONE
+#     comma-separated line, so a plain grep for "DNS:synapse" is satisfied by
+#     "DNS:synapse.local" — get it wrong and every run decides a present name
+#     is missing and re-issues, silently breaking every client that pinned the
+#     last certificate.
+#   ⛔ AND THE VALUE IS VALIDATED. It reaches openssl inside -addext, where a
+#     comma forges a second SAN.
+pkgrel=6
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

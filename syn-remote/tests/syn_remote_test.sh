@@ -444,6 +444,61 @@ grep -q 'CN=$(uname -n' "$SR" &&
 
 # ⚠ 3. A MOVED ADDRESS INVALIDATES A CERTIFICATE THAT WAS CORRECT. Same
 # symptom, and a DHCP lease is enough to cause it.
+# ── the names the certificate vouches for ─────────────────
+#
+# ⛔ EVERY GENERATED SAN IS AN ADDRESS THE MACHINE HOLDS, which is exactly the
+# set that is wrong when it is reached through anything else. A port forward
+# presents a public IP the box has never seen and a DDNS name resolves to one;
+# a viewer validates against what it DIALLED, so neither can ever match. These
+# drive the escape hatch against a real certificate.
+NT="$T/names"; mkdir -p "$NT"
+names() { XDG_CONFIG_HOME="$NT" "$SR" "$@" 2>&1; }
+ncert="$NT/syn-remote/cert.pem"
+sanline() { openssl x509 -in "$ncert" -noout -ext subjectAltName 2>/dev/null | tail -1; }
+
+names names add myhouse.duckdns.org >/dev/null
+names names add 203.0.113.7 >/dev/null
+case "$(sanline)" in
+    *"DNS:myhouse.duckdns.org"*) ok "an added name reaches the certificate" ;;
+    *) bad "the added name is not in the certificate" ;;
+esac
+# ⛔ CLASSIFIED, NOT GUESSED. An address written as a DNS name never matches:
+# gnutls checks IP SANs for an IP and DNS SANs for a name, and the two are
+# separate fields.
+case "$(sanline)" in
+    *"IP Address:203.0.113.7"*) ok "...and an address goes in as an IP, not a name" ;;
+    *) bad "the added address was not classified as an IP" ;;
+esac
+# ⛔ THE ANCHORED LOOKUP. openssl prints the SANs on ONE comma-separated line,
+# so an unanchored grep for "DNS:synapse" is satisfied by "DNS:synapse.local".
+# Get that wrong and every run decides a present name is missing and re-issues
+# the certificate — which silently breaks every client that pinned the last one.
+before=$(openssl x509 -in "$ncert" -noout -fingerprint -sha256 2>/dev/null)
+names names add 203.0.113.7 >/dev/null
+check "adding a name twice does not re-issue the certificate" "$before" \
+      "$(openssl x509 -in "$ncert" -noout -fingerprint -sha256 2>/dev/null)"
+# And the local addresses survive the extras being added.
+case "$(sanline)" in
+    *"IP Address:127.0.0.1"*) ok "...and the generated addresses are still there" ;;
+    *) bad "adding a name dropped the machine's own addresses" ;;
+esac
+# ⛔ REMOVING MUST FORCE A RE-ISSUE. The re-issue check asks whether every
+# WANTED name is present; a name that is no longer wanted is still present, so
+# nothing would notice and the certificate would go on vouching for it.
+names names remove 203.0.113.7 >/dev/null
+case "$(sanline)" in
+    *"203.0.113.7"*) bad "a removed address is still in the certificate" ;;
+    *) ok "removing a name re-issues without it" ;;
+esac
+# ⛔ THE VALUE REACHES openssl INSIDE -addext, so a comma forges a second SAN.
+names names add 'evil,DNS:bank.example.com' >/dev/null 2>&1
+case "$(sanline)" in
+    *bank.example.com*) bad "a comma in a name forged a second SAN" ;;
+    *) ok "a name that could forge a SAN is refused" ;;
+esac
+
+# ⚠ 3. A MOVED ADDRESS INVALIDATES A CERTIFICATE THAT WAS CORRECT. Same
+# symptom, and a DHCP lease is enough to cause it.
 grep -q "This machine's address changed" "$SR" &&
     ok "a certificate is re-issued when the address moves" ||
     bad "nothing re-issues the certificate when this machine's address changes"
