@@ -47,7 +47,25 @@ pkgver=0.1.0
 #   is the seam. ⚠ Where a password LIVES is decided in the script alone — a
 #   keyring if one answers, a 0600 file if not — because secret-tool exits 0
 #   with no keyring running, and only reading the write back tells those apart.
-pkgrel=3
+# 4: nothing could connect, and every layer looked healthy. Three faults, all
+#   in the TLS handshake and all silent:
+#
+#   ⛔ THE CERTIFICATE NAMED A HOST NOBODY DIALS. `hostname` is not installed
+#     on SynapseOS, so `$(hostname || echo synapseos)` always fell to the
+#     literal, and there was no subjectAltName at all — so a client validating
+#     against the IP it connected to could never match. Measured: 127.0.0.1 and
+#     192.168.40.153 both failed "IP address mismatch"; only "synapseos"
+#     passed. Now CN comes from `uname -n` and the SANs carry every name and
+#     address, re-issued when the machine's address moves.
+#   ⛔ THE VIEWER INVERTED vnc_display_set_credential. It returns non-zero on
+#     FAILURE despite being declared gboolean; `if (!...)` turned every success
+#     into an abort, before the certificate was ever sent.
+#   ⛔ AND IT NEVER ANSWERED CA_CERT_DATA, which wayvnc's only supported
+#     security type requires.
+#
+#   All three produced the same symptom and no client-side error: "Client
+#   handshake timed out" in the SERVER's journal, which reads like a firewall.
+pkgrel=4
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -66,7 +84,12 @@ license=('GPL-2.0-or-later')
 # no way to pass a username, and gtk-vnc's own gvncviewer example builds a
 # dialog. gtk-vnc's credential API is the one seam where a REMEMBERED password
 # can answer the server, which is the whole of `syn-remote saved`.
-depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3')
+# ⚠ python IS the certificate fetcher and not an optional nicety. VNC does not
+# start in TLS — the RFB banner, the security-type list and the VeNCrypt subtype
+# are all in the clear first — so `openssl s_client`, which speaks TLS from the
+# first byte, cannot reach the certificate at all. Trust-on-first-use needs
+# something that can do the preamble; that is syn-remote-getcert.
+depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python')
 # ⚠ synui ships /usr/lib/synui/synui-idle-inhibit, which is what holds the
 # machine awake. Optional rather than required so this still installs on a
 # SynapseOS built without the compositor — the screen is still woken, it just
@@ -116,6 +139,8 @@ package() {
     # PATH is an invitation to pass a password as an argument, which is exactly
     # what stdin is there to avoid.
     install -Dm755 syn-remote-view "$pkgdir/usr/lib/syn-remote/syn-remote-view"
+    install -Dm755 syn-remote-getcert.py \
+        "$pkgdir/usr/lib/syn-remote/syn-remote-getcert"
 
     # ⛔ NOT ENABLED HERE, and not by a scriptlet either. A package that
     # installs a remote desktop and switches it on is a package that opens a

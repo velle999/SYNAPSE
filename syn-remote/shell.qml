@@ -358,7 +358,7 @@ ShellRoot {
      * so a reader can tell an empty list from a broken command, which a bare
      * "no output" cannot.
      */
-    property var hosts: []      // [{name, host, port, user, secret}]
+    property var hosts: []      // [{name, host, port, user, secret, pinned}]
     property string selected: ""
     property bool   busy: false
     property string problem: ""
@@ -385,8 +385,9 @@ ShellRoot {
             // The header row, and anything that is not five columns. A short
             // row is a format change, not a connection, and inventing fields
             // for it would put an empty host in the list that cannot be opened.
-            if (f[0] === "name" || f.length < 5) continue
-            out.push({ name: f[0], host: f[1], port: f[2], user: f[3], secret: f[4] })
+            if (f[0] === "name" || f.length < 6) continue
+            out.push({ name: f[0], host: f[1], port: f[2], user: f[3],
+                       secret: f[4], pinned: f[5] === "yes" })
         }
         root.hosts = out
         if (out.length && !root.chosen) root.selected = out[0].name
@@ -398,6 +399,26 @@ ShellRoot {
         if (s === "keyring") return "Password remembered in the keyring"
         if (s === "file")    return "Password remembered in a file on disk"
         return "No password remembered — it will ask"
+    }
+
+    /*
+     * ⛔ AN UNPINNED CONNECTION CANNOT OPEN AT ALL, so the row says so rather
+     * than letting somebody press Connect and watch nothing happen. wayvnc
+     * offers one security type this viewer speaks (VeNCrypt X509Plain), so the
+     * server's certificate has to be checked before anything else — and until
+     * it has been, the TLS session comes up and is dropped with no error
+     * anywhere but "Client handshake timed out" in the SERVER's journal.
+     */
+    function pinWords(h) {
+        return h.pinned ? "Certificate trusted"
+                        : "⚠ Certificate not checked yet — connect will ask first"
+    }
+
+    // ⚠ syntty, for the same reason the password flow uses it: `trust` shows a
+    // fingerprint and waits for a yes, and that is a question for a person at a
+    // terminal, not something a window should answer on their behalf.
+    function trustServer(name) {
+        run(["syntty", "--hold", "-e", "syn-remote", "trust", name])
     }
 
     Process {
@@ -542,7 +563,9 @@ ShellRoot {
                                     text: modelData.host + ":" + modelData.port
                                         + (modelData.user ? "   as " + modelData.user : "")
                                         + "   ·   " + root.secretWords(modelData.secret)
-                                    color: modelData.secret === "none" ? root.cWarn : root.cDim
+                                        + "   ·   " + root.pinWords(modelData)
+                                    color: !modelData.pinned || modelData.secret === "none"
+                                           ? root.cWarn : root.cDim
                                     font.family: root.uiFont
                                     font.pixelSize: root.ui(11)
                                     elide: Text.ElideRight
@@ -621,6 +644,14 @@ ShellRoot {
                         text: root.chosen ? "Connect to " + root.chosen.name : "Connect"
                         tint: root.cAccent
                         onClicked: root.run(["syn-remote", "connect", root.chosen.name])
+                    }
+                    Act {
+                        // The label names which of the two this press does, for
+                        // the same reason the password button does.
+                        text: root.chosen && root.chosen.pinned
+                              ? "Re-check the certificate" : "Check the certificate"
+                        tint: root.chosen && !root.chosen.pinned ? root.cWarn : root.cText
+                        onClicked: root.trustServer(root.chosen.name)
                     }
                     Act {
                         // The label changes because the ACTION changes: there is

@@ -105,17 +105,73 @@ ensure_credentials() {
     mkdir -p "$CONF_DIR" || die "cannot create $CONF_DIR"
     chmod 700 "$CONF_DIR" 2>/dev/null
 
-    if [ ! -s "$CERT" ] || [ ! -s "$KEY" ]; then
+    # ⛔ EVERY NAME AND ADDRESS A CLIENT MIGHT DIAL, AS A subjectAltName.
+    #
+    # A TLS client checks the certificate against the address it CONNECTED to
+    # — gtk-vnc calls gnutls_x509_crt_check_hostname — so a certificate that
+    # does not carry that address cannot be validated no matter how correct
+    # everything else is. The first version of this had no SAN at all and a CN
+    # of `hostname`, which is worth two separate warnings:
+    #
+    #   ⛔ `hostname` IS NOT INSTALLED ON SynapseOS. The fallback in
+    #     `$(hostname || echo synapseos)` therefore always fired, so every
+    #     certificate this ever produced was issued to the literal name
+    #     "synapseos" — a name nothing on any network resolves to. `uname -n`
+    #     is coreutils and always answers.
+    #
+    #   ⛔ AND NOBODY DIALS A HOSTNAME ANYWAY. `syn-remote address` tells
+    #     people to point a viewer at an IP, so the IP is the name that has to
+    #     be in the certificate. A CN alone would not have been enough even
+    #     with the right hostname in it.
+    #
+    # Measured: with the old certificate, validating as 127.0.0.1 or as
+    # 192.168.40.153 both failed with "IP address mismatch"; only the literal
+    # "synapseos" passed. The server was fine, the firewall was fine, and every
+    # correct client hung at the handshake.
+    cert_sans() {
+        local host sans
+        host=$(uname -n 2>/dev/null || echo synapse)
+        sans="DNS:$host,DNS:$host.local,DNS:localhost,IP:127.0.0.1"
+        local ip
+        for ip in $(ip -4 -o addr show scope global 2>/dev/null |
+                    awk '{print $4}' | cut -d/ -f1); do
+            sans="$sans,IP:$ip"
+        done
+        printf '%s' "$sans"
+    }
+
+    # ⚠ AND IT HAS TO BE RE-ISSUED WHEN THE ADDRESS MOVES. A DHCP lease change
+    # silently invalidates a certificate that was correct when it was made, and
+    # the symptom is identical to the bug above: every client hangs. Cheap to
+    # check, and openssl is already a dependency.
+    local want_ip need_new=0
+    [ -s "$CERT" ] && [ -s "$KEY" ] || need_new=1
+    if [ "$need_new" -eq 0 ]; then
+        for want_ip in $(ip -4 -o addr show scope global 2>/dev/null |
+                         awk '{print $4}' | cut -d/ -f1); do
+            openssl x509 -in "$CERT" -noout -ext subjectAltName 2>/dev/null |
+                grep -q "IP Address:$want_ip" || need_new=1
+        done
+    fi
+
+    if [ "$need_new" -eq 1 ]; then
         have openssl || die "openssl is needed to make the TLS certificate"
+        [ -s "$CERT" ] && note "This machine's address changed — re-issuing the TLS certificate."
         note "Making a TLS certificate for this machine..."
         # Self-signed and long-lived: there is no authority to ask, the client
         # pins it on first connection, and a certificate that expires in a year
         # is a remote desktop that stops working while nobody is at the machine.
         openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-            -subj "/CN=$(hostname 2>/dev/null || echo synapseos)" \
+            -subj "/CN=$(uname -n 2>/dev/null || echo synapse)" \
+            -addext "subjectAltName=$(cert_sans)" \
             -keyout "$KEY" -out "$CERT" >/dev/null 2>&1 ||
             die "could not create the certificate"
         chmod 600 "$KEY" "$CERT"
+        # ⚠ A RE-ISSUED CERTIFICATE IS A NEW ONE, and every client that pinned
+        # the old one will refuse it — correctly, since that is what pinning is
+        # for. Said here so the reason is in the journal when it happens.
+        note "Clients that already trust this machine must accept the new certificate:"
+        note "  syn-remote trust <name> --renew"
     fi
 
     if [ -z "$(setting password "")" ]; then
@@ -444,6 +500,13 @@ cmd_auth() {
 HOSTS="$CONF_DIR/hosts"
 SECRETS="$CONF_DIR/secrets"
 VIEWER=/usr/lib/syn-remote/syn-remote-view
+GETCERT=/usr/lib/syn-remote/syn-remote-getcert
+# ⛔ ONE PINNED CERTIFICATE PER SAVED CONNECTION, not one trust store. wayvnc's
+# certificate is self-signed, so there is no authority to check it against and
+# the only meaningful question is "is this the same machine I trusted before".
+# A shared store would answer that for the wrong host the moment two machines
+# were saved.
+PINS="$CONF_DIR/certs"
 
 # ⛔ A NAME IS A KEY IN THREE PLACES — this file, the keyring attribute, and the
 # window title — so it is restricted rather than escaped. A tab would split a
@@ -567,10 +630,12 @@ cmd_hosts() {
         # ⚠ MACHINE-READABLE AND NEVER TRANSLATED — the window and the TUI both
         # match on these values. First row names the columns, as everywhere
         # else here.
-        printf 'name\thost\tport\tuser\tsecret\n'
+        printf 'name\thost\tport\tuser\tsecret\tpinned\n'
         while IFS=$'\t' read -r n h p u; do
             [ -n "$n" ] || continue
-            printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" "$(secret_where "$n")"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" \
+                   "$(secret_where "$n")" \
+                   "$([ -s "$(pin_path "$n")" ] && echo yes || echo no)"
         done < "$HOSTS"
         return 0
     fi
@@ -622,6 +687,17 @@ cmd_add() {
     note "Open it:                $PROG connect $name"
 }
 
+# What to read out to somebody trusting THIS machine from somewhere else.
+cmd_fingerprint() {
+    # ⚠ DOES NOT CALL ensure_credentials. Reading out a fingerprint is a
+    # question, and a question must not mint a 2048-bit key and a ten-year
+    # certificate as a side effect — least of all on a machine that only ever
+    # connects OUT and will never serve anything.
+    [ -s "$CERT" ] ||
+        die "this machine has no certificate yet — it gets one from: $PROG on"
+    printf '%s\n' "$(fingerprint "$CERT")"
+}
+
 cmd_forget() {
     local name=${1:-}
     valid_name "$name" || die "usage: $PROG forget <name>"
@@ -636,7 +712,8 @@ cmd_forget() {
     # clean up — and it would silently come back if the same name were added
     # again, attached to a host it was never meant for.
     secret_clear "$name"
-    printf 'Forgot %s, and its password.\n' "$name"
+    rm -f "$(pin_path "$name")"
+    printf 'Forgot %s, its password and its certificate.\n' "$name"
 }
 
 cmd_saved() {
@@ -670,6 +747,81 @@ cmd_saved() {
     esac
 }
 
+# ── Trusting a server ─────────────────────────────────────
+#
+# ⛔ WITHOUT THIS, NOTHING CONNECTS AT ALL — and the way it failed is worth
+# writing down, because every layer looked healthy. wayvnc offers exactly one
+# security type this viewer can speak (VeNCrypt X509Plain), so the client must
+# validate the server's certificate; gtk-vnc asks for a CA to check it against
+# and gnutls then matches the ADDRESS DIALLED against the certificate's names.
+# With no pinned certificate the TLS session comes up and is then dropped —
+# no error on the client, and on the server nothing but "Client handshake
+# timed out", which reads like a firewall problem and is not.
+
+pin_path() { printf '%s/%s.pem' "$PINS" "$1"; }
+
+fingerprint() {   # fingerprint <pem-file>
+    openssl x509 -in "$1" -noout -fingerprint -sha256 2>/dev/null |
+        sed 's/.*=//'
+}
+
+cmd_trust() {
+    local name=${1:-} renew=${2:-}
+    valid_name "$name" || die "usage: $PROG trust <name> [--renew]"
+    local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
+    local host port user
+    IFS=$'\t' read -r host port user <<< "$rec"
+
+    hosts_init
+    mkdir -p "$PINS" && chmod 700 "$PINS" 2>/dev/null
+    local pin; pin=$(pin_path "$name")
+
+    if [ -s "$pin" ] && [ "$renew" != "--renew" ]; then
+        printf 'Already trusting %s:\n\n  %s\n\n' "$name" "$(fingerprint "$pin")"
+        note "To accept a new certificate:  $PROG trust $name --renew"
+        return 0
+    fi
+
+    [ -x "$GETCERT" ] || die "the certificate fetcher is missing: $GETCERT"
+
+    local tmp="$pin.new"
+    "$GETCERT" "$host" "$port" > "$tmp" 2>"$tmp.err" || {
+        err "$(cat "$tmp.err" 2>/dev/null)"
+        rm -f "$tmp" "$tmp.err"
+        die "could not fetch a certificate from $host:$port"
+    }
+    rm -f "$tmp.err"
+    [ -s "$tmp" ] || { rm -f "$tmp"; die "$host:$port sent no certificate"; }
+
+    printf '%s is offering this certificate:\n\n' "$name"
+    printf '  subject     %s\n' "$(openssl x509 -in "$tmp" -noout -subject 2>/dev/null | sed 's/^subject=//')"
+    printf '  valid to    %s\n' "$(openssl x509 -in "$tmp" -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
+    printf '  SHA-256     %s\n\n' "$(fingerprint "$tmp")"
+
+    # ⚠ CONFIRMED BY A HUMAN, AGAINST THE FINGERPRINT. This is the one moment
+    # the certificate is not yet trusted, so it is the only moment the identity
+    # can be checked at all — every later connection just compares against what
+    # was accepted here. Auto-accepting would make the pin a record of whoever
+    # answered first rather than of the machine somebody meant.
+    if [ -t 0 ]; then
+        printf 'Compare that with `syn-remote fingerprint` on %s.\n' "$name"
+        printf 'Trust it? [y/N] '
+        local ans; IFS= read -r ans
+        case "$ans" in
+            [Yy]*) ;;
+            *) rm -f "$tmp"; printf 'Not trusted; nothing was saved.\n'; return 1 ;;
+        esac
+    else
+        rm -f "$tmp"
+        err "not a terminal — refusing to accept a certificate nobody has seen"
+        die "run:  $PROG trust $name"
+    fi
+
+    mv -f "$tmp" "$pin"
+    chmod 600 "$pin" 2>/dev/null
+    printf 'Trusted. %s will be checked against this certificate from now on.\n' "$name"
+}
+
 # ── Opening one ───────────────────────────────────────────
 
 cmd_connect() {
@@ -680,6 +832,24 @@ cmd_connect() {
     IFS=$'\t' read -r host port user <<< "$rec"
 
     [ -x "$VIEWER" ] || die "the viewer is missing: $VIEWER"
+
+    # ⛔ NO PIN, NO CONNECTION — and it must say so rather than let the viewer
+    # hang. Without a certificate to validate against, the TLS session comes up
+    # and is then dropped with no error anywhere except "Client handshake timed
+    # out" in the SERVER's journal. That is a bug report nobody can act on, so
+    # the check happens here where the fix has a name.
+    local pin; pin=$(pin_path "$name")
+    if [ ! -s "$pin" ]; then
+        if [ -t 0 ]; then
+            note "First connection to $name — its certificate has to be checked."
+            printf '\n'
+            cmd_trust "$name" || exit 1
+            printf '\n'
+        else
+            err "$name has no trusted certificate yet"
+            die "run:  $PROG trust $name"
+        fi
+    fi
 
     local pw; pw=$(secret_get "$name" || true)
 
@@ -692,6 +862,7 @@ cmd_connect() {
     # its own prompt in that case rather than failing to authenticate.
     printf '%s' "$pw" | exec "$VIEWER" \
         --host "$host" --port "$port" --name "$name" \
+        --cacert "$pin" \
         ${user:+--user "$user"}
 }
 
@@ -768,7 +939,9 @@ Reaching somebody else's desktop:
   syn-remote add <name> <host>[:port] [user]
   syn-remote connect <name>    open it
   syn-remote saved <name> [set|clear]   the password it is opened with
-  syn-remote forget <name>     drop it, and its password
+  syn-remote trust <name> [--renew]    check and pin its certificate
+  syn-remote fingerprint       this machine's own certificate, to read out
+  syn-remote forget <name>     drop it, its password and its certificate
   syn-remote gui | tui         the same list, in a window or in the terminal
 
 The server is wayvnc; this adds the parts a wrapper has to: it wakes a blanked
@@ -806,6 +979,8 @@ case "${1:-status}" in
     forget)     shift; cmd_forget "$@" ;;
     saved)      shift; cmd_saved "$@" ;;
     connect|view) shift; cmd_connect "$@" ;;
+    trust)      shift; cmd_trust "$@" ;;
+    fingerprint) shift; cmd_fingerprint "$@" ;;
     gui)        shift; cmd_gui "$@" ;;
     tui)        shift; cmd_tui "$@" ;;
     -h|--help|help) usage ;;

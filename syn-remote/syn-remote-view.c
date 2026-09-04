@@ -55,6 +55,7 @@ typedef struct {
     char       *port;
     char       *user;
     char       *password;    /* from stdin; may be NULL */
+    char       *cacert;      /* PEM of the pinned server certificate */
 
     gboolean    connected;
     /*
@@ -291,11 +292,39 @@ static void on_credential(GtkWidget *widget, GValueArray *creds, gpointer data)
          * wrong that anybody can see.
          */
         case VNC_DISPLAY_CREDENTIAL_CLIENTNAME: val = "syn-remote";               break;
+        /*
+         * ⛔ THE SERVER'S CERTIFICATE, AND IT IS NOT OPTIONAL HERE. wayvnc
+         * offers exactly one security type this viewer can speak — VeNCrypt
+         * X509Plain — so gtk-vnc always asks for a CA to validate the peer
+         * against, and gnutls then checks the address we dialled against the
+         * certificate's names. A self-signed certificate is its own CA, which
+         * is why the pinned PEM goes straight in here.
+         *
+         * Left unset, the connection is simply dropped after the TLS session
+         * comes up: no error, no auth failure, and on the server "Client
+         * handshake timed out". Measured, both ways round.
+         */
+        case VNC_DISPLAY_CREDENTIAL_CA_CERT_DATA:
+            if (!v->cacert) continue;
+            val = v->cacert;
+            break;
         default:                                continue;
         }
 
-        if (!vnc_display_set_credential(VNC_DISPLAY(widget),
-                                        g_value_get_enum(cred), val)) {
+        /*
+         * ⛔ NON-ZERO MEANS FAILURE. vnc_display_set_credential is declared
+         * `gboolean` and reads exactly like every other GLib predicate, and it
+         * is the opposite: gtk-vnc's own gvncviewer writes
+         * `if (vnc_display_set_credential(...)) { "Failed to set credential" }`.
+         *
+         * This was `if (!...)`, which turned every SUCCESS into an abort — and
+         * because CLIENTNAME is the first credential the server asks for, the
+         * viewer bailed out before it ever reached the certificate, leaving
+         * the handshake half-finished. The server's only symptom was "Client
+         * handshake timed out", which reads like a network problem and is not.
+         */
+        if (vnc_display_set_credential(VNC_DISPLAY(widget),
+                                       g_value_get_enum(cred), val)) {
             status_set(v, "<b>Could not send the credentials.</b>");
             vnc_display_close(VNC_DISPLAY(v->vnc));
             return;
@@ -411,11 +440,14 @@ int main(int argc, char **argv)
 {
     View        v = { 0 };
     char       *host = NULL, *port = NULL, *name = NULL, *user = NULL;
+    char       *cacert = NULL;
     GOptionEntry entries[] = {
         { "host", 0, 0, G_OPTION_ARG_STRING, &host, "the machine to reach", "HOST" },
         { "port", 0, 0, G_OPTION_ARG_STRING, &port, "its port (default 5900)", "PORT" },
         { "name", 0, 0, G_OPTION_ARG_STRING, &name, "the saved connection's name", "NAME" },
         { "user", 0, 0, G_OPTION_ARG_STRING, &user, "the user to sign in as", "USER" },
+        { "cacert", 0, 0, G_OPTION_ARG_FILENAME, &cacert,
+          "PEM of the server certificate this connection has pinned", "FILE" },
         { NULL, 0, 0, 0, NULL, NULL, NULL }
     };
     GOptionContext *ctx;
@@ -456,6 +488,22 @@ int main(int argc, char **argv)
     v.name     = name ? name : g_strdup("");
     v.user     = user ? user : NULL;
     v.password = read_password_from_stdin();
+
+    /*
+     * ⚠ READ HERE, NOT IN THE CALLBACK. The credential handler runs inside
+     * gtk-vnc's handshake; a file read that fails there has nowhere useful to
+     * report to and would look like a rejected certificate. A missing pin is
+     * worth saying out loud, once, before any of it starts.
+     */
+    if (cacert) {
+        GError *e = NULL;
+        if (!g_file_get_contents(cacert, &v.cacert, NULL, &e)) {
+            g_printerr("syn-remote-view: cannot read the pinned certificate %s: %s\n",
+                       cacert, e ? e->message : "unknown error");
+            g_clear_error(&e);
+            v.cacert = NULL;
+        }
+    }
 
     /*
      * ⚠ gtk_init_check, NOT gtk_init. gtk_init prints its own message and calls

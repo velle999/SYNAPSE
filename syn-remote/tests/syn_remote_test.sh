@@ -221,7 +221,7 @@ check "...and the user"                "velle"        "$("$SR" hosts --tsv | awk
 check "a host with no port gets 5900"  "5900"         "$("$SR" hosts --tsv | awk -F'\t' '$1=="attic"{print $3}')"
 
 # The header row is why an empty list can be told from a broken command.
-check "the record names its columns" "name	host	port	user	secret" \
+check "the record names its columns" "name	host	port	user	secret	pinned" \
       "$("$SR" hosts --tsv | head -1)"
 
 # ⛔ A NAME IS A KEY IN THREE FILES. A tab would split a record and a newline
@@ -327,6 +327,14 @@ check "...and its password with it" "" "$(cat "$SR_TEST_KEYRING.couch" 2>/dev/nu
 "$SR" add probe 10.0.0.9 someone >/dev/null 2>&1
 printf 'topsecret\n' | "$SR" saved probe set >/dev/null 2>&1
 
+# ⚠ A PIN IS NOW A PRECONDITION OF CONNECTING, so these have to provide one.
+# A connection with no trusted certificate is refused before the viewer is ever
+# reached — which is the whole point of section 12b — so without this the argv
+# checks below would be testing the refusal, not the launch.
+mkdir -p "$XDG_CONFIG_HOME/syn-remote/certs"
+: > "$XDG_CONFIG_HOME/syn-remote/certs/probe.pem"
+printf 'x\n' > "$XDG_CONFIG_HOME/syn-remote/certs/probe.pem"
+
 cat > "$T/fakeviewer" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" > "$SR_TEST_ARGV"
@@ -352,11 +360,128 @@ grep -q -- "--user someone" "$SR_TEST_ARGV" &&
 # An entry with NO saved password must still open — an empty pipe means
 # "nothing stored", and the viewer draws its own prompt.
 "$SR" add bare 10.0.0.10 >/dev/null 2>&1
+printf 'x\n' > "$XDG_CONFIG_HOME/syn-remote/certs/bare.pem"
 ( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; VIEWER="$T/fakeviewer"; cmd_connect bare ) >/dev/null 2>&1
 check "a connection with no password still launches the viewer" "" \
       "$(cat "$SR_TEST_STDIN" 2>/dev/null)"
 grep -q -- "--host 10.0.0.10" "$SR_TEST_ARGV" &&
     ok "...with the host it was given" || bad "the viewer was not launched for it"
+
+# ── 12b. ⛔ the TLS handshake, which is what actually broke ─
+#
+# Nothing could connect at all, and every layer looked healthy: the port was
+# open, the firewall passed it, wayvnc answered RFB 003.008. Three faults, all
+# in the handshake, all producing the SAME symptom and no client-side error —
+# "Client handshake timed out" in the SERVER's journal, which reads like a
+# network problem. Each one is pinned here.
+
+view="$here/../syn-remote-view.c"
+
+echo "=== the TLS handshake ==="
+
+# ⛔ 1. THE CERTIFICATE HAS TO NAME THE ADDRESS A CLIENT DIALS. gtk-vnc calls
+# gnutls_x509_crt_check_hostname, so a certificate with no subjectAltName can
+# never validate against an IP. Measured against the old one: 127.0.0.1 and the
+# LAN address both failed "IP address mismatch"; only the literal "synapseos"
+# passed, and nothing resolves that.
+grep -q 'addext "subjectAltName=' "$SR" &&
+    ok "the certificate carries subjectAltNames" ||
+    bad "the certificate is generated with no SAN — no client can validate it"
+grep -q 'IP:127.0.0.1' "$SR" &&
+    ok "...including the loopback address" ||
+    bad "the SAN list omits 127.0.0.1"
+grep -q "ip -4 -o addr show scope global" "$SR" &&
+    ok "...and every address this machine actually has" ||
+    bad "the SAN list does not include this machine's real addresses"
+
+# ⛔ 2. `hostname` IS NOT INSTALLED ON SynapseOS. `$(hostname || echo ...)`
+# therefore ALWAYS took the fallback, so every certificate ever issued named
+# the wrong host. uname is coreutils and always answers.
+! grep -q 'CN=$(hostname' "$SR" &&
+    ok "the CN does not come from the absent \`hostname\` binary" ||
+    bad "the CN still uses \`hostname\`, which is not installed here"
+grep -q 'CN=$(uname -n' "$SR" &&
+    ok "...it comes from uname -n" || bad "the CN does not come from uname -n"
+
+# ⚠ 3. A MOVED ADDRESS INVALIDATES A CERTIFICATE THAT WAS CORRECT. Same
+# symptom, and a DHCP lease is enough to cause it.
+grep -q "This machine's address changed" "$SR" &&
+    ok "a certificate is re-issued when the address moves" ||
+    bad "nothing re-issues the certificate when this machine's address changes"
+
+# ⛔ 4. THE VIEWER'S RETURN CHECK. vnc_display_set_credential returns non-zero
+# on FAILURE despite being declared gboolean — gtk-vnc's own gvncviewer writes
+# `if (vnc_display_set_credential(...)) { failed }`. Inverted, every success
+# became an abort, and because CLIENTNAME is asked for first the viewer bailed
+# out before the certificate was ever sent.
+! grep -q 'if (!vnc_display_set_credential' "$view" &&
+    ok "the viewer does not treat a set_credential success as failure" ||
+    bad "the viewer inverts vnc_display_set_credential — non-zero means FAILURE"
+
+# ⛔ 5. AND IT MUST ANSWER CA_CERT_DATA, which is the only way a self-signed
+# server can be validated at all.
+grep -q 'VNC_DISPLAY_CREDENTIAL_CA_CERT_DATA' "$view" &&
+    ok "the viewer answers the CA certificate credential" ||
+    bad "the viewer never answers CA_CERT_DATA — the handshake stalls"
+grep -q '"cacert"' "$view" &&
+    ok "...from a pinned file given on the command line" ||
+    bad "the viewer has no way to be given a pinned certificate"
+
+# ── 12c. trust on first use ───────────────────────────────
+"$SR" add tls 10.0.0.44 >/dev/null 2>&1
+check "a new connection starts unpinned" "no" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="tls"{print $6}')"
+# ⛔ NEVER ACCEPT A CERTIFICATE NOBODY HAS SEEN. Without a terminal there is no
+# one to compare the fingerprint against, and a pin taken on trust is a record
+# of whoever answered the port rather than of the machine somebody meant.
+# ⛔ NEVER ACCEPT A CERTIFICATE NOBODY HAS SEEN. Driven through the source seam
+# so the REAL fetcher runs — pointing GETCERT at the installed path would test
+# whether this machine happens to have syn-remote installed.
+out=$(
+    SYN_REMOTE_SOURCE_ONLY=1; . "$SR"
+    GETCERT="$here/../syn-remote-getcert.py"
+    cmd_trust tls 2>&1 </dev/null
+)
+case "$out" in
+    *"not a terminal"*|*"could not fetch"*|*"sent no certificate"*)
+        ok "trust refuses to pin without a human, or says it could not reach the host" ;;
+    *)  bad "trust produced something unexpected: $out" ;;
+esac
+# And connect must SAY so rather than hand the viewer a doomed connection.
+out=$("$SR" connect tls 2>&1 </dev/null)
+case "$out" in
+    *"no trusted certificate"*) ok "connect refuses an unpinned server, by name" ;;
+    *) bad "connect did not refuse an unpinned server: $out" ;;
+esac
+grep -q -- '--cacert "$pin"' "$SR" &&
+    ok "connect hands the viewer the pinned certificate" ||
+    bad "connect does not pass --cacert"
+
+# ⚠ A QUESTION MUST NOT MINT A KEY. `fingerprint` reads this machine's own
+# certificate out loud; on a box that only ever connects OUT, generating a
+# 2048-bit key and a ten-year certificate as a side effect of asking is wrong.
+# ⚠ IN A FRESH CONFIG DIR. Earlier cases in this suite have already made a
+# certificate here, and asking whether one EXISTS is meaningless in a directory
+# that already has one.
+fresh="$T/fresh"; mkdir -p "$fresh"
+out=$(XDG_CONFIG_HOME="$fresh" "$SR" fingerprint 2>&1 </dev/null)
+case "$out" in
+    *"no certificate yet"*) ok "fingerprint does not create a certificate just to answer" ;;
+    *) bad "fingerprint said: $out" ;;
+esac
+[ -e "$fresh/syn-remote/cert.pem" ] &&
+    bad "fingerprint created a certificate as a side effect" ||
+    ok "...and left none behind"
+# ...and it does read a real one out when there is one.
+[ -n "$("$SR" fingerprint 2>/dev/null)" ] &&
+    ok "...but does read out the certificate this machine has" ||
+    bad "fingerprint printed nothing for a machine that has a certificate"
+
+# Forgetting takes the pin with it, like the password.
+"$SR" forget tls >/dev/null 2>&1
+[ -e "$XDG_CONFIG_HOME/syn-remote/certs/tls.pem" ] &&
+    bad "forget left the pinned certificate behind" ||
+    ok "forget drops the pinned certificate too"
 
 # ── 13. the window and the launcher ───────────────────────
 gui="$here/../syn-remote-gui.sh"
@@ -391,7 +516,6 @@ grep -q 'TextField' "$qml" && ! grep -q 'echoMode: TextInput.Password' "$qml" &&
     bad "shell.qml grew a password field; the password would cross argv"
 
 # ── 14. the viewer's own reasons ──────────────────────────
-view="$here/../syn-remote-view.c"
 grep -q 'VNC_DISPLAY_CREDENTIAL_PASSWORD' "$view" &&
     ok "the viewer answers the password credential" ||
     bad "the viewer never answers VNC_DISPLAY_CREDENTIAL_PASSWORD"
