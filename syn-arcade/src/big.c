@@ -2885,7 +2885,7 @@ static bool gdm_field(const char *text, const char *key, char *out, size_t n)
 	return false;
 }
 
-/* The host out of "http://192.168.40.153:32400/web". */
+/* The host out of "http://192.168.1.50:32400/web". */
 static bool url_host(const char *url, char *out, size_t n)
 {
 	if (!url || !out || n == 0)
@@ -2907,7 +2907,7 @@ static bool url_host(const char *url, char *out, size_t n)
  * ⚠ THE SERVER THAT ANSWERS ITS OWN BROADCAST IS WHY THIS EXISTS. The localhost
  * probe below is there because a server does not RELIABLY answer itself — but
  * plenty of them do, and then the same server has described itself twice under
- * two different addresses: once as 192.168.40.153 in the GDM reply and once as
+ * two different addresses: once as 192.168.1.50 in the GDM reply and once as
  * 127.0.0.1 from the probe. servers_add() deduplicates on the URL, and those
  * are two different strings, so the Media shelf showed Plex twice — once under
  * the server's own name and once as "Plex (this machine)".

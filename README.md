@@ -2047,7 +2047,7 @@ and nothing to wake by connecting.
 
 ```bash
 syn-remote wakeable on       # arm the wired card for a magic packet
-syn-remote wake sosdesk      # send one to a saved connection
+syn-remote wake desktop      # send one to a saved connection
 ```
 
 **⛔ Arming it writes two places and it needs both.** NetworkManager

@@ -54,7 +54,7 @@ pkgver=0.1.0
 #     on SynapseOS, so `$(hostname || echo synapseos)` always fell to the
 #     literal, and there was no subjectAltName at all — so a client validating
 #     against the IP it connected to could never match. Measured: 127.0.0.1 and
-#     192.168.40.153 both failed "IP address mismatch"; only "synapseos"
+#     192.168.1.50 both failed "IP address mismatch"; only "synapseos"
 #     passed. Now CN comes from `uname -n` and the SANs carry every name and
 #     address, re-issued when the machine's address moves.
 #   ⛔ THE VIEWER INVERTED vnc_display_set_credential. It returns non-zero on
@@ -140,7 +140,7 @@ pkgver=0.1.0
 #     to the left. A connection saved with no user name is exactly that record
 #     — the TUI had been showing it the wrong password state for as long as
 #     there has been a TUI. Records are re-separated onto US (0x1f) to read.
-pkgrel=7
+pkgrel=8
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

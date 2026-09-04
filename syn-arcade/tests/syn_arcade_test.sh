@@ -3546,10 +3546,10 @@ check "...at the one size that is always present and 16:9" $?
 # Plex stream's art would need the token that must never be written down here,
 # and a local file's lives in tags nothing on this path reads. Both keep the
 # placeholder the tile has always drawn.
-[ -z "$(art_of 'http://192.168.40.153:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE')" ]
+[ -z "$(art_of 'http://192.168.1.50:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE')" ]
 check "a Plex stream is given no picture rather than a guessed one" $?
 
-( CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE'
+( CLIAMP_TRACK='http://192.168.1.50:32400/library/parts/1/2/f.flac?X-Plex-Token=SECRETVALUE'
   export CLIAMP_TRACK; music status --rec ) | has SECRETVALUE
 [ $? != 0 ]
 check "...and the new column leaks no more of a token than the old ones" $?
@@ -4045,7 +4045,7 @@ check "a skip the player says it cannot do is refused, not faked" $?
 # same fact, and cliamp publishes the file path as the track title. For a Plex
 # stream that path carries the account token in its query — four metres wide on
 # a television, in the footer, on every screen.
-BUS_FTITLE='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
+BUS_FTITLE='http://192.168.1.50:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
 export BUS_FTITLE
 tport status --rec | has "SECRETVALUE"
 [ $? != 0 ]
@@ -4206,7 +4206,7 @@ check "...and it says whether Guide really ended the visualizer" $?
 # comes back as a URL with `?X-Plex-Token=…` on the end. Left alone, that is
 # somebody's credential drawn four metres wide in the Start menu, in every
 # screenshot of it, and in the records this command prints.
-CLIAMP_TRACK='http://192.168.40.153:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
+CLIAMP_TRACK='http://192.168.1.50:32400/library/parts/1/2/file.flac?X-Plex-Token=SECRETVALUE'
 music status --rec | has SECRETVALUE
 [ $? != 0 ]
 check "a Plex token never reaches the records the shell reads" $?
@@ -4223,7 +4223,7 @@ check "...and what is left still names the track" $?
 # have to agree on, and the reason the token is not in the cache either.
 mkdir -p "$XDG_CACHE_HOME/syn-arcade"
 printf '%s\t%s\n' \
-    'http://192.168.40.153:32400/library/parts/1/2/file.flac' \
+    'http://192.168.1.50:32400/library/parts/1/2/file.flac' \
     'Linkin%20Park%20%E2%80%94%20With%20You' \
     > "$XDG_CACHE_HOME/syn-arcade/music-titles.rec"
 music status | has 'Linkin Park — With You'

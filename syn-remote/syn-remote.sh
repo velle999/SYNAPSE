@@ -182,7 +182,7 @@ ensure_credentials() {
     #     with the right hostname in it.
     #
     # Measured: with the old certificate, validating as 127.0.0.1 or as
-    # 192.168.40.153 both failed with "IP address mismatch"; only the literal
+    # 192.168.1.50 both failed with "IP address mismatch"; only the literal
     # "synapseos" passed. The server was fine, the firewall was fine, and every
     # correct client hung at the handshake.
     cert_sans() {

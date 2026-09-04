@@ -1331,7 +1331,7 @@ pkgver=0.1.0
 #   installed itself. ⚠ The suite asserts the row is actually GIVEN it, because
 #   a variable that is set, read into a property and never reaches the row
 #   passes every other check written for it.
-pkgrel=56
+pkgrel=57
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
