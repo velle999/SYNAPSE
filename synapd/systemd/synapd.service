@@ -29,10 +29,40 @@ ExecStart=/usr/bin/synapd \
     --socket /run/synapd/synapd.sock \
     --threads 4 \
     --context 4096 \
-    --gpu-layers -1
+    --gpu-layers -1 \
+    --auto-offload on \
+    --offload-floor 1024 \
+    --offload-game 4096 \
+    --offload-dwell 120 \
+    --offload-poll 20
 # --gpu-layers -1 = auto-detect and offload to the GPU when one is present
 # (synapd falls back to CPU when it isn't). The welcome menu's AI Backend
 # toggle drops a synapd.service.d override here to force GPU or CPU.
+#
+# ── --auto-offload: give the VRAM back when something else needs it ──
+#
+# synapd holds the largest single allocation on the card — 7300 MiB with it up
+# against 2655 MiB without, measured for the suspend hook — and until now it
+# held that for the whole session no matter what else the desktop was doing.
+# With this on it watches free VRAM and re-fits the model to what is left,
+# running the shed layers on the CPU instead, then takes them back when the
+# pressure goes.
+#
+# ⛔ EVERY MOVE IS A MODEL RELOAD. llama.cpp fixes n_gpu_layers when the model
+# is created and cannot migrate a layer, so a change costs tens of seconds and
+# the conversation's KV cache. That is why the poll is 20s and the dwell 120s
+# rather than anything that would react instantly: the numbers are chosen so
+# the daemon yields, not so it yields fast.
+#
+# --offload-floor  MiB to keep free for everyone else (not an amount to use).
+# --offload-game   the same, while a client declares high demand — synui's game
+#                  mode sends SYN_MSG_DEMAND when a game takes the screen. It
+#                  used to run `systemctl stop synapd` instead, which took the
+#                  retrieval embedder down with it for the length of the game.
+# --offload-dwell  the minimum seconds between two moves.
+#
+# `--auto-offload off` restores the old behaviour exactly: the layer count is
+# decided once, at load, and never revisited.
 
 ExecReload=/bin/kill -HUP $MAINPID
 

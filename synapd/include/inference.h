@@ -1,5 +1,6 @@
 #ifndef INFERENCE_H
 #define INFERENCE_H
+#include <stddef.h>
 #include "synapd.h"
 
 /* One turn of a conversation, as an OpenAI-shaped client sends them. */
@@ -11,8 +12,24 @@ typedef struct { const char *role; const char *content; } syn_chat_msg_t;
  * falls back to the plain system+prompt route. Caller frees. */
 char *inference_render_chat(synapd_state_t *s, const syn_chat_msg_t *m, size_t n);
 
+/* The chat model's size in MiB and its block count, straight from the file —
+ * no model need be loaded, which is the state the offload policy reasons about. */
+void inference_geometry(const char *model_path, size_t *mib, int *n_layer);
+/* Free/total VRAM in MiB on the first GPU ggml can USE. 0/0 = no usable GPU,
+ * which means "nothing to manage", NOT "no VRAM free". */
+void inference_vram(size_t *free_mib, size_t *total_mib);
+
 int  inference_init(synapd_state_t *s);
+/*
+ * Release the CHAT model only. Suspend, a model switch and an offload re-fit
+ * all come through here, and none of them is about the retrieval embedder —
+ * which is why the embedder is a separate object with its own lifetime. See
+ * the note at the top of inference.c for the three comments that promised this
+ * separation while the code did the opposite.
+ */
 void inference_destroy(synapd_state_t *s);
+/* Chat model AND embedder. Process exit only. */
+void inference_shutdown(synapd_state_t *s);
 int  inference_run(synapd_state_t *s,
                    const char *system_ctx,
                    const char *prompt,

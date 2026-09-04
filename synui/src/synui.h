@@ -2772,7 +2772,14 @@ typedef struct {
 typedef struct {
     int  active;        /* engaged right now */
     int  forced;        /* Super+G: -1 forced off, 0 auto, +1 forced on */
-    int  ai_suspended;  /* we stopped synapd and owe it a restart */
+    int  ai_suspended;  /* we told synapd the GPU is wanted, and owe it the
+                         * withdrawal — the name predates the mechanism, which
+                         * is now a hint rather than `systemctl stop` */
+    /* ⚠ WHETHER synapd ACTUALLY ANSWERED, not whether we asked. The bar's
+     * tooltip states what happened to the AI, and the last time it stated that
+     * from synui's own hope it read as success in exactly the case that was
+     * broken. This is set from the daemon's reply. */
+    int  ai_ack;
     /* Each is "we did this and owe the undo", never "this is the current
      * state" — so a setting flipped mid-game, or a wallpaper the user had off
      * already, is not clobbered on the way out. */
@@ -8209,6 +8216,11 @@ void layout_apply_visible(syn_server_t *s);
 void view_refresh_visibility(syn_server_t *s);
 
 /* ── ai_interface.c ──────────────────────────────────────── */
+/* Tell synapd something else wants the GPU (1) or may have it back (0).
+ * Runs on the compositor thread with 300 ms timeouts; a synapd that is absent
+ * or too old is an ordinary state and answers -1. See ai_interface.c. */
+int  ai_notify_demand(int high);
+
 int  ai_thread_start(syn_server_t *s);
 void ai_thread_stop(syn_server_t *s);    /* join the thread, close the pipes */
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req);

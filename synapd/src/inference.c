@@ -146,20 +146,6 @@ struct synapd_inference {
     struct llama_sampler *sampler;
     pthread_mutex_t       lock;       /* one inference at a time per ctx */
 
-    /* Retrieval embeddings. Deliberately a second model+context rather than a
-     * mode of the first: llama.cpp fixes cparams.embeddings at context
-     * creation, and pooled embedding decode wants every token flagged for
-     * output, which is the opposite of what generation does.
-     *
-     * Also deliberately NOT released by SYN_MSG_SLEEP. That path frees the
-     * 4.4G chat model so a game can have the VRAM; dragging the embedder out
-     * with it would kill chibi's memory the moment a game launched, to reclaim
-     * 274 MB. Its own lock, so an embed and a chat turn do not block each
-     * other. */
-    struct llama_model   *embed_model;
-    struct llama_context *embed_ctx;
-    pthread_mutex_t       embed_lock;
-    int                   embed_dim;
     char                  model_path[512];
     uint32_t              context_size;
     int                   n_threads;
@@ -186,6 +172,36 @@ struct synapd_inference {
     uint64_t total_tokens_in;
     uint64_t total_tokens_out;
     double   total_inference_ms;
+};
+
+/*
+ * ── Retrieval embeddings ──
+ *
+ * Deliberately a second model+context rather than a mode of the first:
+ * llama.cpp fixes cparams.embeddings at context creation, and pooled embedding
+ * decode wants every token flagged for output, which is the opposite of what
+ * generation does.
+ *
+ * ⛔ AND DELIBERATELY NOT INSIDE synapd_inference. It used to be, with three
+ * comments in two files each promising that SYN_MSG_SLEEP "never touches
+ * these" and that RAG "keeps answering through a gaming session". It did not:
+ * SLEEP calls inference_destroy(), inference_destroy() freed this struct's
+ * embed_model along with everything else, and so every suspend — and every
+ * model switch — took chibi's memory down with the chat model, to reclaim
+ * 274 MB that was never the problem. Three comments describing an intention
+ * the code did not implement.
+ *
+ * Moving it OUT is the fix, rather than a fourth comment or a flag on the
+ * destroy: the separation is now structural. This object has its own
+ * lifetime, created once and freed only by inference_shutdown(), so there is
+ * no longer a code path that could take it away by accident. Its own lock too,
+ * so an embed and a chat turn do not block each other.
+ */
+struct synapd_embed {
+    struct llama_model   *model;
+    struct llama_context *ctx;
+    pthread_mutex_t       lock;
+    int                   dim;
 };
 
 /* ── GPU layer auto-detection ─────────────────────────────── */
@@ -307,6 +323,57 @@ static int detect_gpu_layers(const char *model_path, off_t model_bytes) {
     return layers;
 }
 
+/*
+ * What the offload policy needs to know about the model, read from the FILE.
+ *
+ * ⚠ FROM THE FILE, NOT FROM A LOADED MODEL, and deliberately: the policy has
+ * to reason about a model that is currently unloaded — that is the whole state
+ * it is trying to get out of. Asking the loaded model would answer nothing
+ * exactly when the answer matters.
+ */
+void inference_geometry(const char *model_path, size_t *mib, int *n_layer)
+{
+    struct stat st;
+    if (mib)     *mib     = 0;
+    if (n_layer) *n_layer = 0;
+    if (!model_path) return;
+
+    if (stat(model_path, &st) == 0 && mib)
+        *mib = (size_t)(st.st_size / (1024 * 1024));
+    if (n_layer)
+        *n_layer = gguf_block_count(model_path);
+}
+
+/*
+ * Free and total VRAM on the first GPU ggml can actually USE, in MiB.
+ *
+ * ⚠ ggml_backend_dev_*, NOT nvidia-smi and NOT lspci. detect_gpu_layers()
+ * learned this the hard way — a card on the PCI bus says nothing about whether
+ * this libllama has a backend for it, and the version that shelled out to
+ * lspci reported "detected GPU" while running every layer on the CPU. Same
+ * source as the load-time decision, so the two cannot disagree about the card.
+ *
+ * 0/0 means no usable GPU, which the caller must read as "nothing to manage"
+ * rather than as "no VRAM free" — the difference between doing nothing and
+ * shedding a model that was never on the card.
+ */
+void inference_vram(size_t *free_mib, size_t *total_mib)
+{
+    if (free_mib)  *free_mib  = 0;
+    if (total_mib) *total_mib = 0;
+
+    for (size_t i = 0, n = ggml_backend_dev_count(); i < n; i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU)
+            continue;
+        size_t f = 0, t = 0;
+        ggml_backend_dev_memory(dev, &f, &t);
+        if (free_mib)  *free_mib  = f / (1024 * 1024);
+        if (total_mib) *total_mib = t / (1024 * 1024);
+        return;
+    }
+}
+
 /* Read one GGUF metadata string from a loaded model. Leaves out[] empty (not
  * unterminated) when the key is absent, so callers can test out[0]. */
 static void meta_str(struct llama_model *m, const char *key,
@@ -367,6 +434,77 @@ static void template_probe(synapd_inference_t *inf) {
 }
 
 /* ── Init ─────────────────────────────────────────────────── */
+/*
+ * Bring the embedder up, once.
+ *
+ * Absent or unreadable is NOT fatal: synapd's job is the chat model, and a box
+ * with no embedder should still answer queries. Embed requests then fail with
+ * a clear message instead of the daemon refusing to start.
+ *
+ * ⚠ IDEMPOTENT, AND THAT IS THE POINT. inference_init() runs again on every
+ * suspend/resume, every model switch and every offload re-fit; this returns
+ * immediately on all of them, so a 274 MB model is loaded once per daemon
+ * lifetime instead of once per chat reload.
+ */
+static void embed_init(synapd_state_t *s)
+{
+    struct stat st;
+
+    if (s->embed) return;
+    if (!s->config.embed_model_path) return;
+
+    synapd_embed_t *e = calloc(1, sizeof(*e));
+    if (!e) return;
+    pthread_mutex_init(&e->lock, NULL);
+
+    if (stat(s->config.embed_model_path, &st) == 0) {
+
+        struct llama_model_params eparams = llama_model_default_params();
+        eparams.n_gpu_layers = 99;   /* 274 MB -- always worth offloading whole */
+
+        e->model = llama_model_load_from_file(s->config.embed_model_path,
+                                                      eparams);
+        if (!e->model) {
+            syn_log(LOG_WARNING, "inference: embedding model failed to load (%s); "
+                    "embeddings disabled", s->config.embed_model_path);
+        } else {
+            struct llama_context_params ecp = llama_context_default_params();
+            ecp.embeddings = true;
+            ecp.n_ctx      = 2048;
+            /* Pooled embedding decode submits the whole sequence at once, so
+             * both batch sizes must cover it -- leave n_ubatch at the default
+             * 512 and a 600-token passage silently fails to decode. */
+            ecp.n_batch    = 2048;
+            ecp.n_ubatch   = 2048;
+            ecp.n_threads  = s->config.n_threads;
+            /* pooling_type is left UNSPECIFIED on purpose so llama.cpp uses the
+             * value baked into the GGUF (nomic-bert.pooling_type = 1, MEAN).
+             * Hardcoding MEAN would silently produce wrong vectors for any
+             * other embedder someone points this at. */
+
+            e->ctx = llama_init_from_model(e->model, ecp);
+            if (!e->ctx) {
+                syn_log(LOG_WARNING, "inference: embedding context failed; "
+                        "embeddings disabled");
+                llama_model_free(e->model);
+                e->model = NULL;
+            } else {
+                e->dim = llama_model_n_embd(e->model);
+                syn_log(LOG_INFO, "inference: embeddings ready (%s, dim=%d)",
+                        s->config.embed_model_path, e->dim);
+            }
+        }
+    } else {
+        syn_log(LOG_INFO, "inference: no embedding model at %s; embeddings disabled",
+                s->config.embed_model_path);
+    }
+
+    /* Kept even with no model in it: `e->model == NULL` is the "embeddings
+     * unavailable" answer inference_embed() gives, and allocating the holder
+     * once means that answer never depends on a second allocation later. */
+    s->embed = e;
+}
+
 int inference_init(synapd_state_t *s) {
     struct stat st;
     if (stat(s->config.model_path, &st) < 0) {
@@ -388,6 +526,41 @@ int inference_init(synapd_state_t *s) {
     inf->n_gpu_layers = s->config.n_gpu_layers < 0
                         ? detect_gpu_layers(s->config.model_path, st.st_size)
                         : s->config.n_gpu_layers;
+
+    /*
+     * ⛔ THE CAP IS APPLIED HERE BECAUSE THIS IS THE ONLY PLACE IT CAN BE.
+     * llama.cpp fixes n_gpu_layers when the model is created and has no API to
+     * move a layer between VRAM and RAM afterwards, so the offload policy
+     * cannot "shift" anything — it sets a cap and asks for a reload, and this
+     * is where the cap turns into a model. offload.c has the policy;
+     * pressure.h has the reasoning.
+     *
+     * ⚠ IT ONLY EVER LOWERS. A cap above what fits would be the policy
+     * overruling detect_gpu_layers()' measurement of the actual card, which is
+     * the one number here that was taken from the hardware.
+     */
+    int cap = atomic_load(&s->offload_cap);
+    if (cap >= 0 && inf->n_gpu_layers > cap) {
+        syn_log(LOG_INFO, "inference: offload capped at %d layers (was %d) — "
+                "something else on this machine needs the VRAM",
+                cap, inf->n_gpu_layers);
+        inf->n_gpu_layers = cap;
+    }
+
+    /*
+     * What we are ABOUT to hold, recorded before the load so a failure leaves
+     * a truthful figure rather than the previous model's. GPU_LAYERS_ALL is a
+     * "clamp me" sentinel, not a count: llama reduces it to the real block
+     * count, so publishing 999 would have the policy believing it holds 999
+     * layers and never shedding enough.
+     */
+    {
+        int blocks   = gguf_block_count(s->config.model_path);
+        int resident = inf->n_gpu_layers;
+        if (blocks > 0 && resident > blocks) resident = blocks;
+        if (resident < 0) resident = 0;
+        atomic_store(&s->offload_resident, resident);
+    }
 
     syn_log(LOG_INFO, "inference: loading model %s (ctx=%u threads=%d gpu_layers=%d)",
              inf->model_path, inf->context_size, inf->n_threads, inf->n_gpu_layers);
@@ -511,51 +684,13 @@ int inference_init(synapd_state_t *s) {
                 (double)inf->temperature, (double)inf->top_p, inf->top_k);
     }
 
-    /* ── Embedding model (optional) ──────────────────────────────────────
-     * Absent or unreadable is NOT fatal: synapd's job is the chat model, and a
-     * box with no embedder should still answer queries. Embed requests then
-     * fail with a clear message instead of the daemon refusing to start. */
-    pthread_mutex_init(&inf->embed_lock, NULL);
-    if (s->config.embed_model_path && stat(s->config.embed_model_path, &st) == 0) {
-        struct llama_model_params eparams = llama_model_default_params();
-        eparams.n_gpu_layers = 99;   /* 274 MB -- always worth offloading whole */
 
-        inf->embed_model = llama_model_load_from_file(s->config.embed_model_path,
-                                                      eparams);
-        if (!inf->embed_model) {
-            syn_log(LOG_WARNING, "inference: embedding model failed to load (%s); "
-                    "embeddings disabled", s->config.embed_model_path);
-        } else {
-            struct llama_context_params ecp = llama_context_default_params();
-            ecp.embeddings = true;
-            ecp.n_ctx      = 2048;
-            /* Pooled embedding decode submits the whole sequence at once, so
-             * both batch sizes must cover it -- leave n_ubatch at the default
-             * 512 and a 600-token passage silently fails to decode. */
-            ecp.n_batch    = 2048;
-            ecp.n_ubatch   = 2048;
-            ecp.n_threads  = inf->n_threads;
-            /* pooling_type is left UNSPECIFIED on purpose so llama.cpp uses the
-             * value baked into the GGUF (nomic-bert.pooling_type = 1, MEAN).
-             * Hardcoding MEAN would silently produce wrong vectors for any
-             * other embedder someone points this at. */
 
-            inf->embed_ctx = llama_init_from_model(inf->embed_model, ecp);
-            if (!inf->embed_ctx) {
-                syn_log(LOG_WARNING, "inference: embedding context failed; "
-                        "embeddings disabled");
-                llama_model_free(inf->embed_model);
-                inf->embed_model = NULL;
-            } else {
-                inf->embed_dim = llama_model_n_embd(inf->embed_model);
-                syn_log(LOG_INFO, "inference: embeddings ready (%s, dim=%d)",
-                        s->config.embed_model_path, inf->embed_dim);
-            }
-        }
-    } else if (s->config.embed_model_path) {
-        syn_log(LOG_INFO, "inference: no embedding model at %s; embeddings disabled",
-                s->config.embed_model_path);
-    }
+    /* Idempotent: only the first load pays for it. Deliberately AFTER the chat
+     * model is up, so a box whose embedder is missing or broken still gets its
+     * assistant, and a slow embedder never delays the thing people are waiting
+     * for. */
+    embed_init(s);
 
     s->inference   = inf;
     s->model_loaded = 1;
@@ -893,31 +1028,39 @@ int inference_classify_syscall(synapd_state_t *s,
  * Returns the dimension, or -1.
  */
 int inference_embed(synapd_state_t *s, const char *text, float *out, int out_cap) {
-    if (!s || !s->inference || !text || !out) return -1;
-    synapd_inference_t *inf = s->inference;
+    /*
+     * ⚠ NOT GUARDED ON s->inference. The embedder is its own object with its
+     * own lifetime now, and the whole point of that is that RAG keeps
+     * answering while the CHAT model is away — asleep for a suspend, being
+     * switched, or shed onto the CPU by the offload policy. Requiring the chat
+     * model here would put back exactly the coupling that made chibi's memory
+     * go dark every time a game started.
+     */
+    if (!s || !s->embed || !text || !out) return -1;
+    synapd_embed_t *e = s->embed;
 
-    if (!inf->embed_ctx || !inf->embed_model) return -1;
-    if (out_cap < inf->embed_dim) return -1;
+    if (!e->ctx || !e->model) return -1;
+    if (out_cap < e->dim) return -1;
 
-    pthread_mutex_lock(&inf->embed_lock);
+    pthread_mutex_lock(&e->lock);
 
-    const struct llama_vocab *vocab = llama_model_get_vocab(inf->embed_model);
+    const struct llama_vocab *vocab = llama_model_get_vocab(e->model);
 
     int n_tok = -llama_tokenize(vocab, text, (int32_t)strlen(text),
                                 NULL, 0, true /* add_special */, false);
     if (n_tok <= 0) {
-        pthread_mutex_unlock(&inf->embed_lock);
+        pthread_mutex_unlock(&e->lock);
         return -1;
     }
 
     /* Truncate rather than fail: a passage longer than the context is a caller
      * chunking badly, and a short vector beats no vector at retrieval time. */
-    int n_ctx_max = (int)llama_n_ctx(inf->embed_ctx);
+    int n_ctx_max = (int)llama_n_ctx(e->ctx);
     if (n_tok > n_ctx_max) n_tok = n_ctx_max;
 
     llama_token *toks = malloc((size_t)n_tok * sizeof(llama_token));
     if (!toks) {
-        pthread_mutex_unlock(&inf->embed_lock);
+        pthread_mutex_unlock(&e->lock);
         return -1;
     }
     llama_tokenize(vocab, text, (int32_t)strlen(text), toks, n_tok, true, false);
@@ -935,33 +1078,33 @@ int inference_embed(synapd_state_t *s, const char *text, float *out, int out_cap
     }
     batch.n_tokens = n_tok;
 
-    llama_memory_clear(llama_get_memory(inf->embed_ctx), true);
+    llama_memory_clear(llama_get_memory(e->ctx), true);
 
-    int rc = llama_decode(inf->embed_ctx, batch);
+    int rc = llama_decode(e->ctx, batch);
     llama_batch_free(batch);
     free(toks);
 
     if (rc != 0) {
         syn_log(LOG_WARNING, "inference: embed decode failed (rc=%d)", rc);
-        pthread_mutex_unlock(&inf->embed_lock);
+        pthread_mutex_unlock(&e->lock);
         return -1;
     }
 
-    const float *emb = llama_get_embeddings_seq(inf->embed_ctx, 0);
+    const float *emb = llama_get_embeddings_seq(e->ctx, 0);
     if (!emb) {
         syn_log(LOG_WARNING, "inference: no pooled embedding returned");
-        pthread_mutex_unlock(&inf->embed_lock);
+        pthread_mutex_unlock(&e->lock);
         return -1;
     }
 
-    int dim = inf->embed_dim;
+    int dim = e->dim;
     double sum = 0.0;
     for (int i = 0; i < dim; i++) sum += (double)emb[i] * (double)emb[i];
     double norm = sqrt(sum);
     if (norm <= 0.0) norm = 1.0;   /* degenerate input; pass through unscaled */
     for (int i = 0; i < dim; i++) out[i] = (float)((double)emb[i] / norm);
 
-    pthread_mutex_unlock(&inf->embed_lock);
+    pthread_mutex_unlock(&e->lock);
     return dim;
 }
 
@@ -1024,6 +1167,19 @@ void inference_describe(synapd_state_t *s, char *buf, size_t len) {
 }
 
 /* ── Destroy ──────────────────────────────────────────────── */
+/*
+ * Release the CHAT model, and only the chat model.
+ *
+ * ⛔ THIS IS THE ONE EVERY RUNTIME PATH CALLS — suspend, a model switch, an
+ * offload re-fit — and none of them is about the embedder. It used to free the
+ * embedder too, because the embedder lived in this struct, which is how every
+ * suspend and every model switch quietly took chibi's memory down with it for
+ * the sake of 274 MB. Three separate comments promised that could not happen.
+ * The embedder is a separate object now (see the note at the top of this file),
+ * so the promise is kept by the structure rather than by a comment.
+ *
+ * inference_shutdown() is the one that takes everything.
+ */
 void inference_destroy(synapd_state_t *s) {
     if (!s->inference) return;
     synapd_inference_t *inf = s->inference;
@@ -1035,20 +1191,37 @@ void inference_destroy(synapd_state_t *s) {
     pthread_mutex_unlock(&inf->lock);
     pthread_mutex_destroy(&inf->lock);
 
-    /* Separate lock and separate objects -- SLEEP never touches these, so
-     * shutdown is the only place they are freed. */
-    pthread_mutex_lock(&inf->embed_lock);
-    if (inf->embed_ctx)   llama_free(inf->embed_ctx);
-    if (inf->embed_model) llama_model_free(inf->embed_model);
-    pthread_mutex_unlock(&inf->embed_lock);
-    pthread_mutex_destroy(&inf->embed_lock);
-
     syn_log(LOG_INFO,
-        "inference: shutdown — total in=%llu out=%llu tokens",
+        "inference: chat model released — total in=%llu out=%llu tokens",
         (unsigned long long)inf->total_tokens_in,
         (unsigned long long)inf->total_tokens_out);
 
     free(inf);
     s->inference   = NULL;
     s->model_loaded = 0;
+    atomic_store(&s->offload_resident, 0);
+}
+
+/*
+ * Everything, for process exit only.
+ *
+ * ⚠ The embedder is freed HERE and nowhere else. If a second caller ever
+ * appears, the question to answer first is what happens to RAG while that
+ * caller's operation is in flight — which is the question the old single
+ * destroy never asked.
+ */
+void inference_shutdown(synapd_state_t *s) {
+    inference_destroy(s);
+
+    if (!s->embed) return;
+    synapd_embed_t *e = s->embed;
+
+    pthread_mutex_lock(&e->lock);
+    if (e->ctx)   llama_free(e->ctx);
+    if (e->model) llama_model_free(e->model);
+    pthread_mutex_unlock(&e->lock);
+    pthread_mutex_destroy(&e->lock);
+
+    free(e);
+    s->embed = NULL;
 }

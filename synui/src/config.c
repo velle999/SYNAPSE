@@ -319,7 +319,8 @@
  * IPC) and the idle stages are held off (a gamepad is not seat input, so the
  * screen would otherwise dim mid-game). Super+G forces it on/off:
  *   game_mode = on|off                 (default on)
- *   game_suspend_ai = on|off           (default on — stop synapd while gaming)
+ *   game_suspend_ai = on|off           (default on — hand synapd's VRAM to the
+ *                                       game; it keeps running, on the CPU)
  *   game_inhibit_idle = on|off         (default on — no dim/blank/lock)
  *   game_leave_grace = 6000            (ms; 0 = leave the moment a game goes)
  *       How long the fullscreen client may be ABSENT before game mode believes
@@ -356,8 +357,15 @@
  *       X11 primary flag. `primary` is the monitor marked PRIMARY in the
  *       display panel (Super+D, `p`); `ask` restores the old obey-the-client
  *       behaviour.
- *   game_ai_stop_cmd = sudo -n systemctl stop synapd.socket synapd.service
- *   game_ai_start_cmd = sudo -n systemctl start synapd.socket synapd.service
+ *   game_ai_stop_cmd  = <empty>   (deprecated — see below)
+ *   game_ai_start_cmd = <empty>   (deprecated — see below)
+ *
+ *   ⛔ BOTH DEFAULT TO EMPTY AND NOTHING RUNS THEM UNLESS SET. Game mode tells
+ *   synapd the GPU is wanted (SYN_MSG_DEMAND) and synapd re-fits its model to
+ *   what is left, rather than the daemon being stopped outright — which used
+ *   to take the retrieval embedder down with it for the length of every game.
+ *   A box that set either of these keeps the old behaviour; a default one no
+ *   longer shells out to sudo at all.
  *       synapd is a *system* unit, so a plain `systemctl stop` from the session
  *       user gets bounced by polkit ("interactive authentication required") —
  *       and synui_spawn is fire-and-forget, so that failure was invisible: game
@@ -1932,10 +1940,23 @@ static void config_set_defaults(syn_config_t *cfg)
      * noticing. Six seconds covers the worst measured gap (Cyberpunk 2077's
      * startup, ~3s) with room over it. */
     cfg->game_leave_grace_ms = 6000;
-    snprintf(cfg->game_ai_stop_cmd,  sizeof(cfg->game_ai_stop_cmd),
-             "sudo -n systemctl stop synapd.socket synapd.service");
-    snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
-             "sudo -n systemctl start synapd.socket synapd.service");
+    /*
+     * ⛔ EMPTY NOW, AND THAT IS THE CHANGE. These used to hold
+     * `sudo -n systemctl stop|start synapd.socket synapd.service`, and game
+     * mode ran them because synapd was said to have no unload IPC. It has had
+     * one since the suspend hook; game mode sends SYN_MSG_DEMAND instead and
+     * synapd re-fits the model to the VRAM left, so the daemon — and the
+     * retrieval embedder inside it, which was never the GPU problem — stays up
+     * through a game.
+     *
+     * ⚠ KEPT AS SETTINGS RATHER THAN DELETED. A box that WROTE one of these
+     * into synuirc chose that behaviour, and silently ignoring a line somebody
+     * put in a config file is worse than honouring it: game.c runs each one
+     * only when it is non-empty, so an existing config keeps working exactly
+     * as it did and a default install stops shelling out at all.
+     */
+    cfg->game_ai_stop_cmd[0]  = '\0';
+    cfg->game_ai_start_cmd[0] = '\0';
     /* On by default: both are invisible behind an opaque fullscreen game and
      * both give back real work. Off by default: the bar (RAM only, and the
      * restart shows) and the kmod (measurably near-nothing, and it costs

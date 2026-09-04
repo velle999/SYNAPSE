@@ -29,7 +29,7 @@ pkgver=0.1.0
 #   ⚠ INVISIBLE ON ANY BOX THAT HAS EVER PICKED A MODEL BY HAND, because
 #   /var/lib/synapd/model.selected outranks the config — which is why it
 #   survived this long on the machine it was written on.
-pkgrel=50
+pkgrel=51
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

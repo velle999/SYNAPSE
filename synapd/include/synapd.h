@@ -83,6 +83,23 @@ typedef enum {
     SYN_MSG_SLEEP          = 0x09, /* release the model; replies when VRAM is freed */
     SYN_MSG_WAKE           = 0x0A, /* start a background reload; replies at once */
     SYN_MSG_EMBED          = 0x0B, /* embed text; replies with float32[n_embd] */
+    /*
+     * "Something else needs this GPU." Payload is the literal "high" or
+     * "normal" — no number, because the sender does not know how much VRAM it
+     * is about to want and a made-up figure would be worse than a flag.
+     *
+     * ⚠ IT IS A HINT, NOT A COMMAND. It raises the floor the offload policy
+     * defends (pressure.h) and lets the same arithmetic decide what that means
+     * for the layer count; it never names a layer count itself. So a client
+     * cannot drive the model somewhere the policy would not go on its own, and
+     * there is one set of rules to reason about rather than two.
+     *
+     * synui's game mode is the sender. It used to run
+     * `sudo -n systemctl stop synapd.socket synapd.service`, which took the
+     * embedder down with the chat model and left chibi's memory dark for the
+     * length of a game.
+     */
+    SYN_MSG_DEMAND         = 0x0C, /* "high" | "normal"; replies with what it did */
     SYN_MSG_RESPONSE       = 0x80, /* response flag OR'd with request type */
     SYN_MSG_ERROR          = 0xFF,
 } syn_msg_type_t;
@@ -153,10 +170,37 @@ typedef struct {
     int         top_p_set;
     int         top_k_set;
     const char *embed_model_path; /* NULL/missing = embeddings unavailable */
+
+    /*
+     * ── Automatic offload ──
+     *
+     * Give VRAM back when something else on the desktop needs it, and take it
+     * again when that thing goes away. See pressure.h for the policy and why
+     * the band is asymmetric.
+     *
+     * ⚠ auto_offload OFF IS NOT "PIN TO THE GPU" — it is the behaviour synapd
+     * has always had: decide once at load and never revisit it. Nothing about
+     * the load-time detect_gpu_layers() path changes when this is off.
+     */
+    int         auto_offload;      /* 1 = watch VRAM and re-fit (default) */
+    unsigned    offload_floor_mib; /* headroom to leave free for everyone else */
+    unsigned    offload_game_mib;  /* the same, while a client declares high demand */
+    unsigned    offload_dwell_s;   /* minimum seconds between two moves */
+    unsigned    offload_poll_s;    /* how often to look */
 } synapd_config_t;
 
 /* ── Inference state (opaque to most subsystems) ─────────── */
 typedef struct synapd_inference synapd_inference_t;
+
+/*
+ * The retrieval embedder, and it is a SEPARATE object from the chat model on
+ * purpose — see the long note in inference.c. It outlives every unload the
+ * chat model goes through (suspend, a model switch, an offload re-fit) because
+ * none of those are about it, and because chibi's memory going dark every time
+ * a game starts is a bug that shipped for months behind three comments saying
+ * it could not happen.
+ */
+typedef struct synapd_embed synapd_embed_t;
 
 /* ── Context store ────────────────────────────────────────── */
 #define CONTEXT_MAX_EVENTS  2048
@@ -220,6 +264,8 @@ typedef struct synapd_state {
 
     /* Subsystems */
     synapd_inference_t *inference;
+    /* Created on the first load, freed only by inference_shutdown(). */
+    synapd_embed_t     *embed;
     synapd_context_t    context;
     synapd_scheduler_t  scheduler;
 
@@ -269,6 +315,26 @@ typedef struct synapd_state {
      */
     char                switch_file[128];   /* the file that would not load */
     char                switch_err[192];    /* "unknown pre-tokenizer type…" */
+
+    /* ── Automatic offload ────────────────────────────────
+     *
+     * ⛔ offload_cap IS READ BY inference_init(), WHICH IS THE ONLY PLACE A
+     * LAYER COUNT CAN TAKE EFFECT. llama.cpp fixes n_gpu_layers when the model
+     * is created and offers no way to move a layer afterwards, so every change
+     * here is a destroy-and-reload. -1 means "no cap": auto-detect decides, as
+     * it always did.
+     */
+    _Atomic int         offload_cap;
+    /* What the last load actually ended up with, so the policy can reason
+     * about what it is holding rather than about what it asked for — a cap of
+     * 30 on a 24-layer model is 24 resident, and the difference is a move the
+     * daemon would otherwise repeat for ever. */
+    _Atomic int         offload_resident;
+    /* Last thing a client said over SYN_MSG_DEMAND. */
+    _Atomic int         demand_high;
+    pthread_t           offload_thread;
+    _Atomic int         offload_stop;
+    int                 offload_running;    /* the thread was actually started */
 
 } synapd_state_t;
 

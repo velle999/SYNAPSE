@@ -60,6 +60,11 @@ void power_notify_activity(syn_server_t *s) { (void)s; }
 void synmon_start(syn_server_t *s) { (void)s; }
 void synmon_stop(syn_server_t *s)  { (void)s; }
 void synui_spawn(const char *cmd)  { (void)cmd; }
+/* Game mode tells synapd the GPU is wanted instead of stopping the daemon.
+ * -1 is the "no synapd answered" answer, which is the right one for a test rig
+ * with no socket — and it keeps this suite from depending on whether a real
+ * synapd happens to be running on the machine building synui. */
+int  ai_notify_demand(int high)    { (void)high; return -1; }
 void wlr_output_schedule_frame(struct wlr_output *o) { (void)o; }
 
 /* The rectangle the game is DRAWN in. Stubbed so a test can state a letterbox

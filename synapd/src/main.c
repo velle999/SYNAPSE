@@ -38,6 +38,7 @@
 #include "socket_server.h"
 #include "selected.h"
 #include "context.h"
+#include "offload.h"
 #include "scheduler.h"
 #include "log.h"
 
@@ -65,7 +66,33 @@ struct synapd_state g_state = {
         .top_p          = 0.95f,
         .top_k          = 40,
         .embed_model_path = SYNAPD_DEFAULT_EMBED_MODEL,
-    }
+        /*
+         * ── Automatic offload, ON by default ──
+         *
+         * The daemon holds the largest single allocation on the card (7300 MiB
+         * with synapd up against 2655 without, measured for the suspend hook),
+         * and until now it held it for the whole session whatever else the
+         * desktop was trying to do. Defaulting this off would leave the common
+         * case — a game or a render starting while the assistant sits idle —
+         * exactly as bad as it was, for everybody who never finds the setting.
+         *
+         * ⚠ 1024 MiB is a FLOOR TO LEAVE FREE, not an amount to use. 4096 while
+         * a client declares high demand, because a game asking for the card is
+         * asking for most of it.
+         *
+         * ⚠ AND THE POLL IS SLOW ON PURPOSE. Every move destroys and reloads a
+         * multi-GB model; 20s to notice plus a 120s dwell is the difference
+         * between a daemon that yields and one that spends its life loading.
+         */
+        .auto_offload      = 1,
+        .offload_floor_mib = 1024,
+        .offload_game_mib  = 4096,
+        .offload_dwell_s   = 120,
+        .offload_poll_s    = 20,
+    },
+    .offload_cap      = -1,   /* -1 = no cap; auto-detect decides, as it always did */
+    .offload_resident = 0,
+    .demand_high      = 0,
 };
 
 /* ── Signal handling ──────────────────────────────────────── */
@@ -230,6 +257,11 @@ int main(int argc, char *argv[]) {
         {"temperature", required_argument, 0, 'T'},
         {"top-p",      required_argument, 0, 'P'},
         {"top-k",      required_argument, 0, 'K'},
+        {"auto-offload",   required_argument, 0, 'A'},
+        {"offload-floor",  required_argument, 0, 'F'},
+        {"offload-game",   required_argument, 0, 'G'},
+        {"offload-dwell",  required_argument, 0, 'W'},
+        {"offload-poll",   required_argument, 0, 'L'},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
         {"version",    no_argument,       0, 'v'},
@@ -238,7 +270,7 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:dfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:A:F:G:W:L:dfvh", long_opts, NULL)) != -1) {
         switch (opt) {
         /* The *_set flags are what let a per-model profile fill in a value
          * without overriding one the operator asked for by name. */
@@ -254,6 +286,14 @@ int main(int argc, char *argv[]) {
         case 't': g_state.config.n_threads      = atoi(optarg); break;
         case 'g': g_state.config.n_gpu_layers   = atoi(optarg); break;
         case 'c': g_state.config.context_window = atoi(optarg); break;
+        /* ⚠ "on"/"off", not 0/1: this reaches the service file and a drop-in a
+         * person edits, and `--auto-offload 0` reads as a count of something. */
+        case 'A': g_state.config.auto_offload = (strcmp(optarg, "off") != 0 &&
+                                                 strcmp(optarg, "0")   != 0); break;
+        case 'F': g_state.config.offload_floor_mib = (unsigned)atoi(optarg); break;
+        case 'G': g_state.config.offload_game_mib  = (unsigned)atoi(optarg); break;
+        case 'W': g_state.config.offload_dwell_s   = (unsigned)atoi(optarg); break;
+        case 'L': g_state.config.offload_poll_s    = (unsigned)atoi(optarg); break;
         case 'd': g_state.debug = 1; foreground = 1; break;
         case 'f': foreground = 1; break;
         case 'v':
@@ -336,6 +376,10 @@ int main(int argc, char *argv[]) {
     }
     atomic_store(&g_state.model_loading, 0);
 
+    /* ⚠ AFTER the first load, so the watcher's first poll sees a real
+     * offload_resident rather than a zero that reads as "already in RAM". */
+    offload_start(&g_state);
+
     if (scheduler_init(&g_state) < 0) {
         syn_log(LOG_WARNING, "synapd: scheduler_init failed — synapse_kmod not loaded?");
         /* non-fatal: synapd works without the kernel module */
@@ -356,7 +400,10 @@ int main(int argc, char *argv[]) {
     syn_log(LOG_INFO, "synapd: shutting down");
     http_server_stop(&g_state);
     socket_server_stop(&g_state);
-    inference_destroy(&g_state);
+    /* Before the model goes: the watcher reloads it, and joining after the free
+     * is how a shutdown turns into a use-after-free at the worst moment. */
+    offload_stop(&g_state);
+    inference_shutdown(&g_state);
     context_flush(&g_state);
     context_destroy(&g_state);
     scheduler_destroy(&g_state);

@@ -38,6 +38,7 @@
 #include "synapd.h"
 #include "socket_server.h"
 #include "inference.h"
+#include "offload.h"
 #include "context.h"
 #include "selected.h"
 #include "log.h"
@@ -136,10 +137,18 @@ static int send_error(int fd, uint32_t req_id, const char *msg) {
 /* Embeddings for retrieval (chibi's thoth store).
  *
  * Note what is NOT here: no model_sleeping / model_loading guard, and the
- * dispatcher does not put this under model_rw. Those all protect the chat
- * model, which SYN_MSG_SLEEP unloads to free VRAM for a game. The embedder is
- * a separate resident model, so RAG keeps answering through a gaming session
- * instead of going dark exactly when the desktop is busiest.
+ * dispatcher does not put this under model_rw. Those all protect the CHAT
+ * model, which SYN_MSG_SLEEP releases for a suspend and the offload policy
+ * re-fits when something else wants the card.
+ *
+ * ⚠ THIS CLAIM IS ONLY TRUE AS OF synapd 51. It was written when the embedder
+ * lived inside synapd_inference, where inference_destroy() freed it along with
+ * everything else — so every suspend and every model switch DID take RAG down,
+ * for the sake of 274 MB that was never the pressure, while three comments in
+ * two files said it could not happen. The embedder is its own object with its
+ * own lifetime now (see the note at the top of inference.c), so RAG really
+ * does keep answering through a gaming session instead of going dark exactly
+ * when the desktop is busiest.
  *
  * Reply payload is raw little-endian float32[dim] -- the caller gets the
  * dimension from the payload length. */
@@ -376,6 +385,37 @@ static void *reload_thread(void *arg) {
     return NULL;
 }
 
+/*
+ * "Something else needs this GPU."
+ *
+ * ⚠ A HINT, NOT A COMMAND — offload.h says why the sender may not name a layer
+ * count. It raises the floor the policy defends and the watcher decides what
+ * that means; this returns immediately, because the sender is synui's game
+ * mode and a game launching is the worst possible moment to block the
+ * compositor for the tens of seconds a reload takes.
+ */
+static void handle_demand(work_item_t *w) {
+    char *arg = (char *)w->payload;
+    if (!arg || w->hdr.payload_len == 0) {
+        send_error(w->client_fd, w->hdr.request_id, "demand takes 'high' or 'normal'");
+        return;
+    }
+    arg[w->hdr.payload_len - 1] = '\0';
+
+    int high;
+    if      (strcmp(arg, "high")   == 0) high = 1;
+    else if (strcmp(arg, "normal") == 0) high = 0;
+    else {
+        send_error(w->client_fd, w->hdr.request_id,
+                   "demand takes 'high' or 'normal'");
+        return;
+    }
+
+    const char *msg = offload_set_demand(w->state, high);
+    send_response(w->client_fd, w->hdr.request_id,
+                  SYN_MSG_DEMAND, msg, strlen(msg) + 1);
+}
+
 static void handle_wake(work_item_t *w) {
     synapd_state_t *s = w->state;
 
@@ -564,6 +604,7 @@ static void *worker_thread(void *arg) {
 
         /* Take the WRITE lock themselves, so they must not be nested here. */
         case SYN_MSG_SLEEP:         handle_sleep(w);         break;
+        case SYN_MSG_DEMAND:        handle_demand(w);        break;
         case SYN_MSG_WAKE:          handle_wake(w);          break;
         case SYN_MSG_RELOAD:        handle_reload(w);        break;
 

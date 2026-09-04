@@ -21,13 +21,27 @@
  *
  * What it does while a game is up:
  *
- *   - Stops synapd. It pins ~4GB of VRAM and llama.cpp worker threads, and it
- *     has no unload/sleep IPC — synapd.h offers only RELOAD and SHUTDOWN — so
- *     stopping the service is the only way to hand the GPU and those cores to
- *     the game. It is started again on exit, and reloads its model then.
+ *   - Tells synapd the GPU is wanted, and tells it again when the game leaves.
  *
- *   - Stops the synapd poller. With synapd down it would do nothing but spin on
- *     connect failures and log them.
+ *     ⛔ IT NO LONGER STOPS THE DAEMON. It used to, and the reason written here
+ *     was that synapd "has no unload/sleep IPC — synapd.h offers only RELOAD
+ *     and SHUTDOWN". That stopped being true when SLEEP was added for the
+ *     suspend hook, and this comment outlived the fact by long enough that the
+ *     sledgehammer looked like the considered choice.
+ *
+ *     The cost of it was never only the chat model. `systemctl stop` takes the
+ *     whole daemon, including the retrieval embedder — a separate 274 MB model
+ *     that has nothing to do with the GPU pressure — so chibi's memory went
+ *     dark for the length of every game. synapd's own source carried three
+ *     comments promising that could not happen.
+ *
+ *     Now it is one message (SYN_MSG_DEMAND, "high"/"normal") and synapd
+ *     decides what to do about it: it re-fits the model to the VRAM actually
+ *     left and keeps answering, slower, from RAM. What it must NOT be handed
+ *     is a layer count — the compositor knows a game started; it does not know
+ *     how big the model is or what card this is.
+ *
+ *   - Leaves the synapd poller running, because synapd is still there.
  *
  *   - Holds off the idle stages. A gamepad is not a seat input device, so to the
  *     compositor a controller-only session looks perfectly idle: without this
@@ -91,7 +105,16 @@ static void game_publish(syn_server_t *s)
      * how a stop that got undone by socket activation still read as success.
      * This is still only what synui *asked for* — synui-game-status checks
      * whether it held. */
-    fprintf(f, "ai=%s\n", s->game.ai_suspended ? "suspended" :
+    /*
+     * ⚠ THREE STATES, AND "yielded" IS THE ONE THE DAEMON CONFIRMED. synapd is
+     * no longer stopped for a game — it is told the GPU is wanted and re-fits
+     * its model to what is left — so the old "suspended" value, and the
+     * indicator's check that synapd had actually gone away, now describe a
+     * mechanism that is not there. A tooltip warning "synapd STILL RUNNING"
+     * would fire on every game and be exactly backwards.
+     */
+    fprintf(f, "ai=%s\n", s->game.ai_ack ? "yielded" :
+                          s->game.ai_suspended ? "asked" :
                           s->config.game_suspend_ai ? "running" : "untouched");
     fclose(f);
 
@@ -259,13 +282,24 @@ static void game_enter(syn_server_t *s, syn_view_t *v)
     wlr_log(WLR_INFO, "synui: game: ON (%s)", s->game.app);
 
     if (s->config.game_suspend_ai && !s->game.ai_suspended) {
-        /* Stop the poller BEFORE the daemon, or it spends the shutdown window
-         * reconnecting to a socket that is going away. */
-        synmon_stop(s);
-        synui_spawn(s->config.game_ai_stop_cmd);
+        s->game.ai_ack       = (ai_notify_demand(1) == 0);
         s->game.ai_suspended = 1;
-        wlr_log(WLR_INFO, "synui: game: suspending synapd (freeing GPU/CPU) — `%s`",
-                s->config.game_ai_stop_cmd);
+
+        /*
+         * ⚠ THE POLLER STAYS UP, because synapd does. It was stopped here only
+         * because the daemon was about to be, and a poller reconnecting to a
+         * socket that is going away does nothing but log.
+         *
+         * The command below is empty by default and exists only so a box that
+         * SET it keeps the behaviour it configured — see game_ai_stop_cmd in
+         * config.c. Nothing runs when it is empty, which is the normal case.
+         */
+        if (s->config.game_ai_stop_cmd[0]) {
+            synmon_stop(s);
+            synui_spawn(s->config.game_ai_stop_cmd);
+            wlr_log(WLR_INFO, "synui: game: running the configured AI stop "
+                    "command — `%s`", s->config.game_ai_stop_cmd);
+        }
     }
 
     /* Drop the post-process pass, which is what actually costs a game frames.
@@ -345,14 +379,21 @@ static void game_leave(syn_server_t *s)
     wlr_log(WLR_INFO, "synui: game: OFF");
 
     if (s->game.ai_suspended) {
-        synui_spawn(s->config.game_ai_start_cmd);
+        ai_notify_demand(0);
         s->game.ai_suspended = 0;
-        /* The poller reconnects on its own once synapd is back up (it retries),
-         * so it can be restarted immediately — synapd is still reloading its
-         * model at this point and will not answer for a few seconds. */
-        synmon_start(s);
-        wlr_log(WLR_INFO, "synui: game: restoring synapd — `%s`",
-                s->config.game_ai_start_cmd);
+        s->game.ai_ack       = 0;
+        wlr_log(WLR_INFO, "synui: game: synapd may have the GPU back");
+
+        /* Only if this box configured the old command pair — see above. The
+         * poller reconnects on its own once synapd is up again (it retries),
+         * so it can be restarted immediately even though the model is still
+         * loading and will not answer for a few seconds. */
+        if (s->config.game_ai_start_cmd[0]) {
+            synui_spawn(s->config.game_ai_start_cmd);
+            synmon_start(s);
+            wlr_log(WLR_INFO, "synui: game: running the configured AI start "
+                    "command — `%s`", s->config.game_ai_start_cmd);
+        }
     }
 
     /* Undo, each gated on "we are the ones who did it". A setting the user
@@ -541,8 +582,9 @@ void game_toggle(syn_server_t *s)
     game_publish(s);
 }
 
-/* Compositor shutdown. If we stopped synapd, start it again — otherwise a synui
- * that exits (or crashes) mid-game leaves the box with no AI and no clue why. */
+/* Compositor shutdown. Put the AI's GPU back, otherwise a synui that exits (or
+ * crashes) mid-game leaves synapd shed onto the CPU for the rest of the session
+ * with nothing left to explain why the assistant got slow. */
 void game_finish(syn_server_t *s)
 {
     /* The event loop is going away with the compositor, so the grace timer has
@@ -553,10 +595,19 @@ void game_finish(syn_server_t *s)
     }
 
     if (s->game.ai_suspended) {
-        synui_spawn(s->config.game_ai_start_cmd);
+        /*
+         * ⚠ THE HINT HAS TO BE WITHDRAWN EXPLICITLY, because it now outlives
+         * us. Stopping the unit was self-correcting in the worst case — a
+         * systemd unit comes back — but a demand flag set inside a daemon that
+         * keeps running does not, and synapd would sit at the game floor
+         * indefinitely with the game long gone.
+         */
+        ai_notify_demand(0);
         s->game.ai_suspended = 0;
-        wlr_log(WLR_INFO, "synui: game: shutting down with synapd suspended "
-                          "— restoring it");
+        wlr_log(WLR_INFO, "synui: game: shutting down mid-game — synapd may "
+                          "have the GPU back");
+        if (s->config.game_ai_start_cmd[0])
+            synui_spawn(s->config.game_ai_start_cmd);
     }
     /* The in-process ones do not matter here — synui is exiting and takes
      * config.effects with it. These are separate PROCESSES, and leaving a

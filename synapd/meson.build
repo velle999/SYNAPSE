@@ -71,7 +71,7 @@ executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
         'src/http_server.c',
         'src/context.c','src/scheduler.c','src/log.c','src/profile.c',
-        'src/selected.c'),
+        'src/selected.c','src/pressure.c','src/offload.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
@@ -112,6 +112,16 @@ test('profile', profile_test)
 # no llama, no socket. SYNAPD_MODEL_DIR and SYNAPD_SELECTED_FILE are redirected
 # at a scratch tree the test builds, which is the only way to exercise a
 # confinement whose whole job is to refuse everything outside one directory.
+# The offload policy. pressure.c is pure (no llama, no ggml, no sockets, no
+# daemon state) so this links it alone — and it has to be testable without a
+# GPU, because the rule that matters is a FEEDBACK LOOP: shedding layers raises
+# the free-VRAM figure the policy is reading, and a naive threshold oscillates
+# for ever. That cannot be checked by looking at a real card once.
+pressure_test = executable('pressure_test',
+  files('tests/pressure_test.c','src/pressure.c'),
+  include_directories: include_directories('include'))
+test('pressure', pressure_test)
+
 selected_test = executable('selected_test',
   files('tests/selected_test.c','src/selected.c','src/log.c'),
   include_directories: include_directories('include'),

@@ -13,7 +13,6 @@ a shell here-doc would happily let a window title close the quote.
 
 import json
 import os
-import subprocess
 import sys
 
 
@@ -35,38 +34,32 @@ def read_state(path):
     return state
 
 
-def synapd_is_active():
-    """Ask systemd, rather than repeating what synui hoped for.
-
-    The tooltip used to state "synapd suspended (GPU freed)" for any state=on.
-    It was a fixed string, so it read as success in exactly the case that was
-    broken: synapd is socket-activated, and a stop that is immediately undone
-    by the next client connecting looks identical from synui's side. Costs one
-    short-lived subprocess, and only while game mode is on.
-    """
-    try:
-        r = subprocess.run(["systemctl", "is-active", "synapd.service"],
-                           capture_output=True, text=True, timeout=2)
-        return r.stdout.strip() == "active"
-    except (OSError, subprocess.SubprocessError):
-        return None       # cannot tell — say so instead of picking a side
-
-
 def ai_line(ai):
+    """What actually happened to the AI, from the value synui published.
+
+    ⛔ THIS NO LONGER ASKS systemd WHETHER synapd IS STOPPED. It used to, and
+    warned "⚠ synapd STILL RUNNING — the suspend did not hold" when it was:
+    correct while game mode stopped the unit, and exactly backwards now that it
+    does not. synapd stays up through a game and re-fits its model to the VRAM
+    left, so a running synapd IS the success case and that warning would fire
+    every single time.
+
+    ⚠ "yielded" is set from synapd's own reply, not from synui's intention —
+    which is the property the systemd check was there to provide, kept without
+    the subprocess. The distinction that mattered is still drawn: "asked"
+    means the daemon never answered.
+    """
     if ai == "untouched":
-        return "synapd left running (game_suspend_ai = off)"
-    if ai != "suspended":
-        # Either an older synui, or one that decided not to suspend.
-        return "synapd running"
-    live = synapd_is_active()
-    if live is None:
-        return "synapd suspend requested (could not verify)"
-    if live:
-        # The whole point of this line. Socket activation is the usual cause:
-        # stopping synapd.service alone leaves synapd.socket listening, and the
-        # next client to connect starts it straight back up.
-        return "⚠ synapd STILL RUNNING — the suspend did not hold"
-    return "synapd suspended (GPU freed)"
+        return "synapd left alone (game_suspend_ai = off)"
+    if ai == "yielded":
+        return "synapd yielded the GPU — still answering, from RAM"
+    if ai == "asked":
+        return "⚠ synapd did not answer — the GPU was not handed over"
+    if ai == "suspended":
+        # A synui old enough to have stopped the unit outright.
+        return "synapd suspended (GPU freed)"
+    # Either an older synui still, or one that decided not to act.
+    return "synapd running"
 
 
 def main():
