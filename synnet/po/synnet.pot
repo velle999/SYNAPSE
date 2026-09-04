@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:27-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -91,6 +91,43 @@ msgstr ""
 msgid ""
 "synnet: %s does not exist yet — the rule matches by name and takes effect "
 "when it appears.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr ""
+
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+
+#, c-format
+msgid "synnet: %s is closed\n"
 msgstr ""
 
 #, c-format
@@ -188,6 +225,22 @@ msgstr ""
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
+msgstr ""
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr ""
+
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr ""
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
 msgstr ""
 
 msgid "  Blocked destinations (egress)\n"

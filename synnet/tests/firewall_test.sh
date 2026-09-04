@@ -58,6 +58,10 @@ export SYNNET_FW_STATE_FILE="$tmp/firewall.state"
 # and CI's container would not — the same test proving different things
 # depending on where it ran.
 export SYNNET_FW_IFACES_FILE="$tmp/trusted-ifaces"
+# ⚠ AND THE SAME FOR THE OPEN-PORT LIST, for the same reason: the package ships
+# /etc/synnet/open-ports, and a rule a developer had added on their own box
+# would put an extra accept into every ruleset asserted below.
+export SYNNET_FW_PORTS_FILE="$tmp/open-ports"
 
 # ⚠ THIS RUNS BOTH AS A USER AND AS ROOT. CI is a container running as root,
 # a developer is not, and the first version of this file assumed the second:
@@ -323,6 +327,93 @@ if [ "$ran" = yes ]; then
     if [ "$AM_ROOT" = no ]; then
         out=$("$SYNNET" --trust-if waydroid0 2>&1)
         has "needs root" "$out" "--trust-if below root says so"
+    fi
+fi
+
+echo ""
+echo "=== --open / --close ==="
+
+# ⛔ THE ONLY VERB THAT WIDENS INGRESS. `--allow` is an unblock and `--trust-if`
+# is DHCP+DNS, so before this there was no supported way to let a non-private
+# source reach a port at all — a VPN on 100.64.0.0/10 came up outbound and then
+# had every packet inside the tunnel eaten by the drop policy, silently.
+if [ "$ran" = yes ]; then
+    printf '# keep me\n' > "$SYNNET_FW_PORTS_FILE"
+    run_as_root --open tcp/5900 100.64.0.0/10 >/dev/null 2>&1
+    body=$(cat "$SYNNET_FW_PORTS_FILE")
+    has "tcp/5900 100.64.0.0/10" "$body" "--open records the rule"
+    has "# keep me" "$body" \
+        "…without eating the comments in a file meant to be hand-edited"
+    has 'ip saddr 100.64.0.0/10 tcp dport 5900 accept' "$(cat "$NFT_LOG")" \
+        "…and loads it as a source-scoped accept there and then"
+
+    run_as_root --open tcp/5900 100.64.0.0/10 >/dev/null 2>&1
+    n=$(grep -c '^tcp/5900' "$SYNNET_FW_PORTS_FILE")
+    [ "$n" = 1 ] && ok "opening the same rule twice is idempotent" \
+                 || bad "--open stacked duplicate entries (got $n)"
+
+    run_as_root --close tcp/5900 100.64.0.0/10 >/dev/null 2>&1
+    hasnt "tcp/5900" "$(cat "$SYNNET_FW_PORTS_FILE")" "--close removes it"
+
+    # ⛔ `any` IS A DIFFERENT RULE AND A DIFFERENT SENTENCE. It is one word away
+    # from a VPN-scoped opening and it means the internet; the person who typed
+    # it has to be told which of the two they just did.
+    out=$(run_as_root --open tcp/22 any 2>&1)
+    has "ANY source" "$out" "opening to any source warns that it means the internet"
+    has 'tcp dport 22 accept' "$(cat "$NFT_LOG")" \
+        "…and the rule it loads carries no source match"
+    hasnt 'saddr' "$(grep 'dport 22' "$NFT_LOG" | tail -1)" \
+        "…nothing narrows a rule that was asked to be wide"
+    run_as_root --close tcp/22 any >/dev/null 2>&1
+
+    # ⛔ AN IPv6 CIDR IS ip6 saddr, NOT ip saddr. nft refuses the wrong family,
+    # and since the whole chain is ONE atomic load, refusing it costs the
+    # firewall rather than the rule.
+    run_as_root --open udp/51820 'fd00::/8' >/dev/null 2>&1
+    has 'ip6 saddr fd00::/8 udp dport 51820 accept' "$(cat "$NFT_LOG")" \
+        "an IPv6 source becomes ip6 saddr, not ip saddr"
+    run_as_root --close udp/51820 'fd00::/8' >/dev/null 2>&1
+
+    # ⛔ EVERY VALUE HERE IS PASTED INTO THE ATOMIC nft SCRIPT. A rule that is
+    # not exactly what it claims to be does not make one bad rule, it makes a
+    # syntax error that fails the load and unfilters the box.
+    for spec in "sctp/80 any" "tcp/0 any" "tcp/99999 any" "tcp/22 10.0.0.0/64" \
+                "tcp/22 notanaddress" "tcp/2 2 any" "tcp/22 10.0.0.0/8bogus"; do
+        out=$(run_as_root --open $spec 2>&1)
+        has "is not a legal rule" "$out" "refused at the CLI: '$spec'"
+    done
+
+    # ⛔ A LINE WITH NO SOURCE IS IGNORED, NOT DEFAULTED. `tcp/5900` alone reads
+    # as a note to oneself and would mean "open to the internet" — the two are
+    # one missing word apart, so a hand edit that did not say which it meant
+    # must not be guessed at.
+    printf 'tcp/5900\n' > "$SYNNET_FW_PORTS_FILE"
+    # ⚠ TRUNCATED FIRST. The stub APPENDS, so the ruleset from the --open case
+    # above is still in here — and an assertion that a rule is absent, made
+    # against a cumulative log, passes or fails on what an earlier case did.
+    : > "$NFT_LOG"
+    run_as_root --firewall >/dev/null 2>&1
+    hasnt 'dport 5900' "$(cat "$NFT_LOG")" \
+        "a rule with no source is dropped rather than read as 'any'"
+    has 'policy drop' "$(cat "$NFT_LOG")" \
+        "…and the firewall still loaded, so that was the rule being refused"
+
+    printf 'tcp/5900 100.64.0.0/10\n' > "$SYNNET_FW_PORTS_FILE"
+    out=$("$SYNNET" --status 2>&1)
+    has "tcp/5900" "$out" "--status lists what is open"
+    has "100.64.0.0/10" "$out" "…and the source it is open to"
+
+    printf 'tcp/22 any\n' > "$SYNNET_FW_PORTS_FILE"
+    out=$("$SYNNET" --status 2>&1)
+    has "ANYWHERE" "$out" "--status spells out an opening to the whole internet"
+
+    rm -f "$SYNNET_FW_PORTS_FILE"
+    out=$("$SYNNET" --status 2>&1)
+    has "Ports opened" "$out" "…and the section is printed even when nothing is open"
+
+    if [ "$AM_ROOT" = no ]; then
+        out=$("$SYNNET" --open tcp/5900 any 2>&1)
+        has "needs root" "$out" "--open below root says so"
     fi
 fi
 

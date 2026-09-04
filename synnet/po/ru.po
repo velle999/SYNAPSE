@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,7 +15,8 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: для --firewall нужен root (sudo synnet --firewall)\n"
@@ -24,54 +25,121 @@ msgstr "synnet: для --firewall нужен root (sudo synnet --firewall)\n"
 msgid "synnet: could not write %s\n"
 msgstr "synnet: не удалось записать %s\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: входной брандмауэр ВЫКЛЮЧЕН — входящее не фильтруется. `synnet --firewall on` вернёт его.\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: входной брандмауэр ВЫКЛЮЧЕН — входящее не фильтруется. `synnet --"
+"firewall on` вернёт его.\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
-msgstr "synnet: брандмауэр выключен в %s — `synnet --firewall on` включит его снова\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
+msgstr ""
+"synnet: брандмауэр выключен в %s — `synnet --firewall on` включит его снова\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
-msgstr "synnet: не удалось применить входной брандмауэр — эта машина НЕ фильтруется на входе\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
+msgstr ""
+"synnet: не удалось применить входной брандмауэр — эта машина НЕ фильтруется "
+"на входе\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: входной брандмауэр применён (по умолчанию вход отбрасывается; пропускаются loopback, установленные соединения, ICMP, источники из частных диапазонов и DHCP)\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: входной брандмауэр применён (по умолчанию вход отбрасывается; "
+"пропускаются loopback, установленные соединения, ICMP, источники из частных "
+"диапазонов и DHCP)\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: для %s нужен root (sudo synnet %s %s)\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: «%s» — недопустимое имя интерфейса (1-15 символов: буквы, цифры, «_», «.», «-»)\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: «%s» — недопустимое имя интерфейса (1-15 символов: буквы, цифры, "
+"«_», «.», «-»)\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: не удалось обновить %s\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s помечен доверенным в %s — брандмауэр выключен, поэтому в ядре ничего не изменилось.\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: %s помечен доверенным в %s — брандмауэр выключен, поэтому в ядре "
+"ничего не изменилось.\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s снят с доверенных в %s — брандмауэр выключен, поэтому в ядре ничего не изменилось.\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: %s снят с доверенных в %s — брандмауэр выключен, поэтому в ядре "
+"ничего не изменилось.\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: %s записан, но брандмауэр не удалось перезагрузить — эта машина сейчас НЕ фильтруется на входе\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s записан, но брандмауэр не удалось перезагрузить — эта машина "
+"сейчас НЕ фильтруется на входе\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
 msgstr "synnet: %s теперь доверенный — DHCP и DNS с этого канала принимаются\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
-msgstr "synnet: %s больше не доверенный — DHCP и DNS с этого канала больше не принимаются\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
+msgstr ""
+"synnet: %s больше не доверенный — DHCP и DNS с этого канала больше не "
+"принимаются\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
-msgstr "synnet: %s ещё не существует — правило сопоставляется по имени и заработает, когда он появится.\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
+msgstr ""
+"synnet: %s ещё не существует — правило сопоставляется по имени и заработает, "
+"когда он появится.\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: «%s» — недопустимое правило. Запишите его как <tcp|udp>/<порт> и источник, например «tcp/5900 100.64.0.0/10» или «tcp/5900 any»\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: «%s» записано в %s — брандмауэр выключен, поэтому в ядре ничего не изменилось.\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: «%s» удалено из %s — брандмауэр выключен, поэтому в ядре ничего не изменилось.\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: «%s» записано, но брандмауэр не удалось перезагрузить — эта машина сейчас НЕ фильтруется на входе\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s открыт\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ это открыто для ЛЮБОГО источника, включая интернет, если эта машина доступна оттуда. Укажите CIDR, чтобы сузить.\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s закрыт\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -85,7 +153,9 @@ msgstr "synnet: неверный адрес IPv4: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — состояние применения nftables\n\n"
+msgstr ""
+"synnet %s — состояние применения nftables\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  Входной брандмауэр\n"
@@ -97,7 +167,9 @@ msgstr "    ВЫКЛ — выключен в %s.\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    Входящее не фильтруется. Включите обратно командой\n    `sudo synnet --firewall on` или в Настройках ▸ Сеть.\n"
+msgstr ""
+"    Входящее не фильтруется. Включите обратно командой\n"
+"    `sudo synnet --firewall on` или в Настройках ▸ Сеть.\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -107,26 +179,37 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    Демон публикует этот файл при старте; если synnet работает,\n    а файла нет, демон старше этого или не смог записать в\n    /run/synnet.\n"
+msgstr ""
+"    Демон публикует этот файл при старте; если synnet работает,\n"
+"    а файла нет, демон старше этого или не смог записать в\n"
+"    /run/synnet.\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    АКТИВЕН — вход по умолчанию отбрасывается, LAN и\n    установленные соединения разрешены. Применён synnet при старте и проверяется каждую минуту.\n"
+msgstr ""
+"    АКТИВЕН — вход по умолчанию отбрасывается, LAN и\n"
+"    установленные соединения разрешены. Применён synnet при старте и "
+"проверяется каждую минуту.\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
-msgstr "    ⚠ пересобран %s раз(а) за этот запуск — что-то на этой машине\n      очищает nftables.\n"
+msgstr ""
+"    ⚠ пересобран %s раз(а) за этот запуск — что-то на этой машине\n"
+"      очищает nftables.\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    НЕ УДАЛОСЬ применить — эта машина НЕ фильтруется на входе.\n    Что сказал nft — в `journalctl -u synnet`.\n"
+msgstr ""
+"    НЕ УДАЛОСЬ применить — эта машина НЕ фильтруется на входе.\n"
+"    Что сказал nft — в `journalctl -u synnet`.\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
-msgstr "  Каналы контейнеров и виртуальных машин (на них принимаются DHCP + DNS)\n"
+msgstr ""
+"  Каналы контейнеров и виртуальных машин (на них принимаются DHCP + DNS)\n"
 
 #, c-format
 msgid "    none — %s is empty or absent.\n"
@@ -136,7 +219,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    Мосту контейнера он нужен: первый DHCP-пакет его гостя приходит\n    с 0.0.0.0, и правило отбрасывания его съедает.\n    `sudo synnet --trust-if waydroid0` добавит один.\n"
+msgstr ""
+"    Мосту контейнера он нужен: первый DHCP-пакет его гостя приходит\n"
+"    с 0.0.0.0, и правило отбрасывания его съедает.\n"
+"    `sudo synnet --trust-if waydroid0` добавит один.\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -150,7 +236,9 @@ msgstr "    %-15s (ещё нет — сопоставляется по имен�
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ в прошлый раз synnet применил %s из них. Выполните\n      `sudo synnet --firewall`, чтобы загрузить текущий список.\n"
+msgstr ""
+"    ⚠ в прошлый раз synnet применил %s из них. Выполните\n"
+"      `sudo synnet --firewall`, чтобы загрузить текущий список.\n"
 
 msgid "  Live ruleset\n"
 msgstr "  Действующий набор правил\n"
@@ -158,17 +246,37 @@ msgstr "  Действующий набор правил\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (не показано — для вывода nftables нужен root: sudo synnet --status)\n\n"
+msgstr ""
+"    (не показано — для вывода nftables нужен root: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (не показано — nft не установлен)\n\n"
+msgstr ""
+"    (не показано — nft не установлен)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    входная цепочка НЕ загружена в ядро.\n\n"
+msgstr ""
+"    входная цепочка НЕ загружена в ядро.\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  Порты, открытые для источников, которые иначе были бы отброшены\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    нет — этой машины достигают только петля, ответы, ICMP\n    и источники из частных диапазонов.\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  ОТОВСЮДУ, включая интернет\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  от %s\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  Заблокированные назначения (исходящие)\n"

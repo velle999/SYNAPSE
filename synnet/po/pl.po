@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,7 +15,8 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
+"|| n%100>=20) ? 1 : 2);\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall wymaga roota (sudo synnet --firewall)\n"
@@ -24,54 +25,123 @@ msgstr "synnet: --firewall wymaga roota (sudo synnet --firewall)\n"
 msgid "synnet: could not write %s\n"
 msgstr "synnet: nie udało się zapisać %s\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: zapora wejściowa WYŁĄCZONA — nic przychodzącego nie jest filtrowane. `synnet --firewall on` przywraca ją.\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: zapora wejściowa WYŁĄCZONA — nic przychodzącego nie jest filtrowane. "
+"`synnet --firewall on` przywraca ją.\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
-msgstr "synnet: zapora jest wyłączona w %s — `synnet --firewall on` włącza ją z powrotem\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
+msgstr ""
+"synnet: zapora jest wyłączona w %s — `synnet --firewall on` włącza ją z "
+"powrotem\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
-msgstr "synnet: nie udało się zastosować zapory wejściowej — ta maszyna NIE jest filtrowana na wejściu\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
+msgstr ""
+"synnet: nie udało się zastosować zapory wejściowej — ta maszyna NIE jest "
+"filtrowana na wejściu\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: zapora wejściowa zastosowana (domyślne odrzucanie na wejściu; dopuszczone loopback, połączenia nawiązane, ICMP, źródła z zakresów prywatnych i DHCP)\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: zapora wejściowa zastosowana (domyślne odrzucanie na wejściu; "
+"dopuszczone loopback, połączenia nawiązane, ICMP, źródła z zakresów "
+"prywatnych i DHCP)\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: %s wymaga roota (sudo synnet %s %s)\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: '%s' nie jest poprawną nazwą interfejsu (1-15 znaków: litery, cyfry, '_', '.', '-')\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: '%s' nie jest poprawną nazwą interfejsu (1-15 znaków: litery, cyfry, "
+"'_', '.', '-')\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: nie udało się zaktualizować %s\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s zapisany jako zaufany w %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: %s zapisany jako zaufany w %s — zapora jest wyłączona, więc w jądrze "
+"nic się nie zmieniło.\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s usunięty z zaufanych w %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: %s usunięty z zaufanych w %s — zapora jest wyłączona, więc w jądrze "
+"nic się nie zmieniło.\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: %s zapisany, ale nie udało się przeładować zapory — ta maszyna NIE jest teraz filtrowana na wejściu\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s zapisany, ale nie udało się przeładować zapory — ta maszyna NIE "
+"jest teraz filtrowana na wejściu\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
-msgstr "synnet: %s jest teraz zaufany — DHCP i DNS z tego łącza są przyjmowane\n"
+msgstr ""
+"synnet: %s jest teraz zaufany — DHCP i DNS z tego łącza są przyjmowane\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
-msgstr "synnet: %s nie jest już zaufany — DHCP i DNS z tego łącza nie są już przyjmowane\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
+msgstr ""
+"synnet: %s nie jest już zaufany — DHCP i DNS z tego łącza nie są już "
+"przyjmowane\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
-msgstr "synnet: %s jeszcze nie istnieje — reguła dopasowuje po nazwie i zadziała, gdy się pojawi.\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
+msgstr ""
+"synnet: %s jeszcze nie istnieje — reguła dopasowuje po nazwie i zadziała, "
+"gdy się pojawi.\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: „%s” nie jest prawidłową regułą. Zapisz ją jako <tcp|udp>/<port> i źródło, np. „tcp/5900 100.64.0.0/10” lub „tcp/5900 any”\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: zapisano „%s” w %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: usunięto „%s” z %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: zapisano „%s”, ale nie udało się przeładować zapory — ta maszyna NIE jest teraz filtrowana na wejściu\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s jest otwarty\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ to jest otwarte dla DOWOLNEGO źródła, w tym dla internetu, jeśli ta maszyna jest z niego osiągalna. Podaj CIDR, aby to zawęzić.\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s jest zamknięty\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -85,7 +155,9 @@ msgstr "synnet: nieprawidłowy adres IPv4: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — stan egzekwowania nftables\n\n"
+msgstr ""
+"synnet %s — stan egzekwowania nftables\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  Zapora wejściowa\n"
@@ -97,7 +169,9 @@ msgstr "    WYŁĄCZONA — wyłączona w %s.\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    Nic przychodzącego nie jest filtrowane. Włącz z powrotem przez\n    `sudo synnet --firewall on` albo w Ustawieniach ▸ Sieć.\n"
+msgstr ""
+"    Nic przychodzącego nie jest filtrowane. Włącz z powrotem przez\n"
+"    `sudo synnet --firewall on` albo w Ustawieniach ▸ Sieć.\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -107,26 +181,37 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    Usługa publikuje ten plik przy starcie; jeśli synnet działa,\n    a pliku nie ma, usługa jest starsza niż to albo nie mogła\n    zapisać w /run/synnet.\n"
+msgstr ""
+"    Usługa publikuje ten plik przy starcie; jeśli synnet działa,\n"
+"    a pliku nie ma, usługa jest starsza niż to albo nie mogła\n"
+"    zapisać w /run/synnet.\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    AKTYWNA — domyślne odrzucanie na wejściu, LAN i ruch\n    nawiązany dozwolone. Zastosowana przez synnet przy starcie i sprawdzana co minutę.\n"
+msgstr ""
+"    AKTYWNA — domyślne odrzucanie na wejściu, LAN i ruch\n"
+"    nawiązany dozwolone. Zastosowana przez synnet przy starcie i sprawdzana "
+"co minutę.\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
-msgstr "    ⚠ odbudowana %s raz(y) w tym uruchomieniu — coś na tej maszynie\n      czyści nftables.\n"
+msgstr ""
+"    ⚠ odbudowana %s raz(y) w tym uruchomieniu — coś na tej maszynie\n"
+"      czyści nftables.\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    NIE UDAŁO SIĘ zastosować — ta maszyna NIE jest filtrowana na wejściu.\n    Zobacz `journalctl -u synnet`, co powiedział nft.\n"
+msgstr ""
+"    NIE UDAŁO SIĘ zastosować — ta maszyna NIE jest filtrowana na wejściu.\n"
+"    Zobacz `journalctl -u synnet`, co powiedział nft.\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
-msgstr "  Łącza kontenerów / maszyn wirtualnych (przyjmowane na nich DHCP + DNS)\n"
+msgstr ""
+"  Łącza kontenerów / maszyn wirtualnych (przyjmowane na nich DHCP + DNS)\n"
 
 #, c-format
 msgid "    none — %s is empty or absent.\n"
@@ -136,7 +221,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    Mostek kontenera go potrzebuje: pierwszy pakiet DHCP jego gościa\n    przychodzi z 0.0.0.0, a reguła odrzucania go pochłania.\n    `sudo synnet --trust-if waydroid0` dodaje jeden.\n"
+msgstr ""
+"    Mostek kontenera go potrzebuje: pierwszy pakiet DHCP jego gościa\n"
+"    przychodzi z 0.0.0.0, a reguła odrzucania go pochłania.\n"
+"    `sudo synnet --trust-if waydroid0` dodaje jeden.\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -150,7 +238,9 @@ msgstr "    %-15s (jeszcze nie istnieje — dopasowany po nazwie)\n"
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ synnet zastosował ostatnio %s z nich. Uruchom\n      `sudo synnet --firewall`, aby wczytać bieżącą listę.\n"
+msgstr ""
+"    ⚠ synnet zastosował ostatnio %s z nich. Uruchom\n"
+"      `sudo synnet --firewall`, aby wczytać bieżącą listę.\n"
 
 msgid "  Live ruleset\n"
 msgstr "  Aktywny zestaw reguł\n"
@@ -158,17 +248,37 @@ msgstr "  Aktywny zestaw reguł\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (nie pokazano — wypisanie nftables wymaga roota: sudo synnet --status)\n\n"
+msgstr ""
+"    (nie pokazano — wypisanie nftables wymaga roota: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (nie pokazano — nft nie jest zainstalowany)\n\n"
+msgstr ""
+"    (nie pokazano — nft nie jest zainstalowany)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    łańcuch wejściowy NIE jest wczytany w jądrze.\n\n"
+msgstr ""
+"    łańcuch wejściowy NIE jest wczytany w jądrze.\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  Porty otwarte dla źródeł, które ta maszyna inaczej by odrzuciła\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    brak — tę maszynę osiągają tylko pętla zwrotna, odpowiedzi, ICMP\n    i źródła z zakresów prywatnych.\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  ZEWSZĄD, także z internetu\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  z %s\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  Zablokowane cele (wyjście)\n"

@@ -116,7 +116,28 @@ pkgver=0.1.0
 # ⛔ LC_NUMERIC IS PINNED TO C. Everything synnet composes with snprintf goes
 # somewhere that is not a person: an nft ruleset, a key=value file a sibling
 # parses, and a prompt whose answer is matched against two English words.
-pkgrel=11
+# 12: `--open` / `--close`, the verb that was missing.
+#   ⛔ NOTHING COULD OPEN A PORT TO A SOURCE OUTSIDE THE PRIVATE RANGES, and the
+#     knob that looks like it does is `--allow`, which is an UNBLOCK — it only
+#     removes an address from the drop set `--block` fills. `--trust-if` is
+#     DHCP+DNS on a gateway bridge and deliberately not `allow in on <iface>`.
+#     So a mesh VPN was unusable and gave no clue why: Tailscale's 100.64.0.0/10
+#     is not a private range, so the tunnel came up (established outbound, and
+#     replies are accepted) and then every packet inside it hit the drop policy,
+#     with nothing in any log mentioning the firewall.
+#   ⚠ THE SOURCE IS NEVER OPTIONAL IN THE STORED FORM. A bare `tcp/5900` is
+#     ignored with a note rather than read as `any`: "open to my VPN" and "open
+#     to the internet" are one missing word apart, and a default would
+#     eventually guess wrong in the direction that matters. `--open` with no
+#     CIDR writes `any` in full AND says out loud what that means.
+#   ⚠ Every value is validated before it reaches the ruleset — proto, port
+#     range, and the CIDR's prefix length against its OWN family. The chain is
+#     one atomic `nft -f`, so a rule nft refuses does not cost that rule, it
+#     costs the whole firewall.
+#   New: /etc/synnet/open-ports (backup=), `ports=` in the published state, and
+#   a --status section that is printed even when empty — a section that
+#   disappears when nothing is open says nothing at all.
+pkgrel=12
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -124,7 +145,7 @@ depends=('nftables' 'synapd')
 makedepends=('meson' 'ninja')
 # ⚠ backup=, or every upgrade would overwrite the list of bridges the user has
 # trusted — silently un-firewalling their containers on a routine syn-update.
-backup=('etc/synnet/trusted-ifaces')
+backup=('etc/synnet/trusted-ifaces' 'etc/synnet/open-ports')
 # ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
 # what makepkg looks for on disk, so a build from this checkout uses the tarball
 # build-all.sh just collected and never downloads. The URL after it is for
@@ -151,4 +172,7 @@ package() {
     # pane both report this list, and neither is something you should have to
     # sudo in order to read.
     install -Dm644 config/trusted-ifaces "$pkgdir/etc/synnet/trusted-ifaces"
+    # Same reasoning, and more so: what is open is exactly the thing somebody
+    # should be able to read without being root.
+    install -Dm644 config/open-ports "$pkgdir/etc/synnet/open-ports"
 }

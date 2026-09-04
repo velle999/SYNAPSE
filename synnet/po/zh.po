@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -23,41 +23,65 @@ msgstr "synnet: --firewall 需要 root（sudo synnet --firewall）\n"
 msgid "synnet: could not write %s\n"
 msgstr "synnet: 无法写入 %s\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: 入站防火墙已关闭 — 任何入站流量都不会被过滤。`synnet --firewall on` 可以恢复它。\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: 入站防火墙已关闭 — 任何入站流量都不会被过滤。`synnet --firewall on` "
+"可以恢复它。\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
 msgstr "synnet: 防火墙在 %s 中被关闭 — 用 `synnet --firewall on` 重新打开\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
 msgstr "synnet: 无法应用入站防火墙 — 这台机器没有入站过滤\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: 已应用入站防火墙（入站默认丢弃；允许回环、已建立的连接、ICMP、私有地址段来源和 DHCP）\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: 已应用入站防火墙（入站默认丢弃；允许回环、已建立的连接、ICMP、私有地"
+"址段来源和 DHCP）\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: %s 需要 root（sudo synnet %s %s）\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: '%s' 不是合法的接口名（1-15 个字符：字母、数字、'_'、'.'、'-'）\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: '%s' 不是合法的接口名（1-15 个字符：字母、数字、'_'、'.'、'-'）\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: 无法更新 %s\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: 已把 %s 记入 %s 为受信任 — 防火墙已关闭，因此内核中什么也没有改变。\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: 已把 %s 记入 %s 为受信任 — 防火墙已关闭，因此内核中什么也没有改变。\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: 已把 %s 从 %s 的受信任列表移除 — 防火墙已关闭，因此内核中什么也没有改变。\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: 已把 %s 从 %s 的受信任列表移除 — 防火墙已关闭，因此内核中什么也没有改"
+"变。\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
 msgstr "synnet: 已记录 %s，但无法重新载入防火墙 — 这台机器现在没有入站过滤\n"
 
 #, c-format
@@ -65,12 +89,43 @@ msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
 msgstr "synnet: 信任 %s — 来自该链路的 DHCP 和 DNS 会被接受\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
 msgstr "synnet: 不再信任 %s — 来自该链路的 DHCP 和 DNS 不再被接受\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
 msgstr "synnet: %s 还不存在 — 规则按名称匹配，它出现时即生效。\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: '%s' 不是合法规则。请写成 <tcp|udp>/<端口> 加来源，例如 'tcp/5900 100.64.0.0/10' 或 'tcp/5900 any'\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: 已将 '%s' 记录到 %s — 防火墙已关闭，因此内核中没有任何变化。\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: 已将 '%s' 从 %s 中移除 — 防火墙已关闭，因此内核中没有任何变化。\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: 已记录 '%s'，但无法重新加载防火墙 — 本机当前未启用入站过滤\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s 已开放\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ 这对任何来源都开放，如果本机可从互联网访问，也包括互联网。请指定 CIDR 以缩小范围。\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s 已关闭\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -84,7 +139,9 @@ msgstr "synnet: 无效的 IPv4 地址: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — nftables 执行状态\n\n"
+msgstr ""
+"synnet %s — nftables 执行状态\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  入站防火墙\n"
@@ -96,7 +153,9 @@ msgstr "    已关闭 — 在 %s 中被关闭。\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    任何入站流量都不会被过滤。用\n    `sudo synnet --firewall on` 或在 设置 ▸ 网络 中重新打开。\n"
+msgstr ""
+"    任何入站流量都不会被过滤。用\n"
+"    `sudo synnet --firewall on` 或在 设置 ▸ 网络 中重新打开。\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -106,12 +165,16 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    守护进程在启动时发布该文件；如果 synnet 正在运行而文件不在，\n    说明守护进程早于此版本，或者无法写入 /run/synnet。\n"
+msgstr ""
+"    守护进程在启动时发布该文件；如果 synnet 正在运行而文件不在，\n"
+"    说明守护进程早于此版本，或者无法写入 /run/synnet。\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    已生效 — 入站默认丢弃，允许局域网和已建立的连接。\n    由 synnet 在启动时应用，并每分钟复查一次。\n"
+msgstr ""
+"    已生效 — 入站默认丢弃，允许局域网和已建立的连接。\n"
+"    由 synnet 在启动时应用，并每分钟复查一次。\n"
 
 #, c-format
 msgid ""
@@ -122,7 +185,9 @@ msgstr "    ⚠ 本次运行中重建了 %s 次 — 这台机器上有东西在�
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    应用失败 — 这台机器没有入站过滤。\n    nft 说了什么，见 `journalctl -u synnet`。\n"
+msgstr ""
+"    应用失败 — 这台机器没有入站过滤。\n"
+"    nft 说了什么，见 `journalctl -u synnet`。\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
 msgstr "  容器 / 虚拟机链路（在这些链路上接受 DHCP + DNS）\n"
@@ -135,7 +200,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    容器网桥需要一个：客户机的第一个 DHCP 包来自 0.0.0.0，\n    会被丢弃策略吃掉。\n    `sudo synnet --trust-if waydroid0` 可以添加一个。\n"
+msgstr ""
+"    容器网桥需要一个：客户机的第一个 DHCP 包来自 0.0.0.0，\n"
+"    会被丢弃策略吃掉。\n"
+"    `sudo synnet --trust-if waydroid0` 可以添加一个。\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -149,7 +217,9 @@ msgstr "    %-15s (尚不存在 — 按名称匹配)\n"
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ synnet 上次应用了其中 %s 个。运行\n      `sudo synnet --firewall` 以载入当前列表。\n"
+msgstr ""
+"    ⚠ synnet 上次应用了其中 %s 个。运行\n"
+"      `sudo synnet --firewall` 以载入当前列表。\n"
 
 msgid "  Live ruleset\n"
 msgstr "  当前规则集\n"
@@ -157,17 +227,37 @@ msgstr "  当前规则集\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (未显示 — 列出 nftables 需要 root: sudo synnet --status)\n\n"
+msgstr ""
+"    (未显示 — 列出 nftables 需要 root: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (未显示 — 未安装 nft)\n\n"
+msgstr ""
+"    (未显示 — 未安装 nft)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    入站链未加载到内核中。\n\n"
+msgstr ""
+"    入站链未加载到内核中。\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  向本机原本会丢弃的来源开放的端口\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    无 — 只有回环、响应、ICMP 和私有地址段的来源\n    能到达本机。\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  来自任何地方，包括互联网\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  来自 %s\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  被阻止的目标（出站）\n"

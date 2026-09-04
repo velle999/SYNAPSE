@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -24,54 +24,123 @@ msgstr "synnet: --firewall heeft root nodig (sudo synnet --firewall)\n"
 msgid "synnet: could not write %s\n"
 msgstr "synnet: kon %s niet schrijven\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: inkomende firewall UIT — er wordt niets binnenkomends gefilterd. `synnet --firewall on` zet hem terug.\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: inkomende firewall UIT — er wordt niets binnenkomends gefilterd. "
+"`synnet --firewall on` zet hem terug.\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
-msgstr "synnet: de firewall staat uit in %s — `synnet --firewall on` zet hem weer aan\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
+msgstr ""
+"synnet: de firewall staat uit in %s — `synnet --firewall on` zet hem weer "
+"aan\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
-msgstr "synnet: kon de inkomende firewall niet toepassen — deze machine is NIET ingangsgefilterd\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
+msgstr ""
+"synnet: kon de inkomende firewall niet toepassen — deze machine is NIET "
+"ingangsgefilterd\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: inkomende firewall toegepast (standaard weigeren op inkomend; loopback, bestaande verbindingen, ICMP, bronnen uit privébereik en DHCP toegestaan)\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: inkomende firewall toegepast (standaard weigeren op inkomend; "
+"loopback, bestaande verbindingen, ICMP, bronnen uit privébereik en DHCP "
+"toegestaan)\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: %s heeft root nodig (sudo synnet %s %s)\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: '%s' is geen geldige interfacenaam (1-15 tekens: letters, cijfers, '_', '.', '-')\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: '%s' is geen geldige interfacenaam (1-15 tekens: letters, cijfers, "
+"'_', '.', '-')\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: kon %s niet bijwerken\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s als vertrouwd genoteerd in %s — de firewall staat uit, dus in de kernel is niets veranderd.\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: %s als vertrouwd genoteerd in %s — de firewall staat uit, dus in de "
+"kernel is niets veranderd.\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s uit de vertrouwde lijst gehaald in %s — de firewall staat uit, dus in de kernel is niets veranderd.\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: %s uit de vertrouwde lijst gehaald in %s — de firewall staat uit, "
+"dus in de kernel is niets veranderd.\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: %s genoteerd, maar de firewall kon niet herladen worden — deze machine is op dit moment NIET ingangsgefilterd\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s genoteerd, maar de firewall kon niet herladen worden — deze "
+"machine is op dit moment NIET ingangsgefilterd\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
-msgstr "synnet: %s wordt vertrouwd — DHCP en DNS van die link worden geaccepteerd\n"
+msgstr ""
+"synnet: %s wordt vertrouwd — DHCP en DNS van die link worden geaccepteerd\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
-msgstr "synnet: %s wordt niet meer vertrouwd — DHCP en DNS van die link worden niet meer geaccepteerd\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
+msgstr ""
+"synnet: %s wordt niet meer vertrouwd — DHCP en DNS van die link worden niet "
+"meer geaccepteerd\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
-msgstr "synnet: %s bestaat nog niet — de regel matcht op naam en werkt zodra hij verschijnt.\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
+msgstr ""
+"synnet: %s bestaat nog niet — de regel matcht op naam en werkt zodra hij "
+"verschijnt.\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: '%s' is geen geldige regel. Schrijf hem als <tcp|udp>/<poort> en een bron, bijv. 'tcp/5900 100.64.0.0/10' of 'tcp/5900 any'\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' vastgelegd in %s — de firewall staat uit, er is dus niets veranderd in de kernel.\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' verwijderd uit %s — de firewall staat uit, er is dus niets veranderd in de kernel.\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: '%s' vastgelegd, maar de firewall kon niet opnieuw worden geladen — deze machine is op dit moment NIET ingangsgefilterd\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s is open\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ dat staat open voor ELKE bron, ook voor internet als deze machine daarvandaan bereikbaar is. Geef een CIDR op om het te beperken.\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s is gesloten\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -85,7 +154,9 @@ msgstr "synnet: ongeldig IPv4-adres: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — nftables-handhavingsstatus\n\n"
+msgstr ""
+"synnet %s — nftables-handhavingsstatus\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  Inkomende firewall\n"
@@ -97,7 +168,9 @@ msgstr "    UIT — uitgezet in %s.\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    Er wordt niets binnenkomends gefilterd. Zet hem weer aan met\n    `sudo synnet --firewall on`, of in Instellingen ▸ Netwerk.\n"
+msgstr ""
+"    Er wordt niets binnenkomends gefilterd. Zet hem weer aan met\n"
+"    `sudo synnet --firewall on`, of in Instellingen ▸ Netwerk.\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -107,23 +180,33 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    De daemon publiceert dat bestand bij het starten; als synnet\n    draait en het ontbreekt, is de daemon ouder dan dit of kon hij\n    niet naar /run/synnet schrijven.\n"
+msgstr ""
+"    De daemon publiceert dat bestand bij het starten; als synnet\n"
+"    draait en het ontbreekt, is de daemon ouder dan dit of kon hij\n"
+"    niet naar /run/synnet schrijven.\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    ACTIEF — standaard weigeren op inkomend, LAN en bestaand\n    verkeer toegestaan. Toegepast door synnet bij het opstarten en elke minuut herzien.\n"
+msgstr ""
+"    ACTIEF — standaard weigeren op inkomend, LAN en bestaand\n"
+"    verkeer toegestaan. Toegepast door synnet bij het opstarten en elke "
+"minuut herzien.\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
-msgstr "    ⚠ %s keer herbouwd tijdens deze run — iets op deze machine leegt\n      nftables.\n"
+msgstr ""
+"    ⚠ %s keer herbouwd tijdens deze run — iets op deze machine leegt\n"
+"      nftables.\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    Toepassen MISLUKT — deze machine is NIET ingangsgefilterd.\n    Zie `journalctl -u synnet` voor wat nft zei.\n"
+msgstr ""
+"    Toepassen MISLUKT — deze machine is NIET ingangsgefilterd.\n"
+"    Zie `journalctl -u synnet` voor wat nft zei.\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
 msgstr "  Container-/VM-links (DHCP + DNS worden hierop geaccepteerd)\n"
@@ -136,7 +219,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    Een containerbridge heeft er een nodig: het eerste DHCP-pakket van\n    de gast komt van 0.0.0.0, en de drop-regel eet het op.\n    `sudo synnet --trust-if waydroid0` voegt er een toe.\n"
+msgstr ""
+"    Een containerbridge heeft er een nodig: het eerste DHCP-pakket van\n"
+"    de gast komt van 0.0.0.0, en de drop-regel eet het op.\n"
+"    `sudo synnet --trust-if waydroid0` voegt er een toe.\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -150,7 +236,9 @@ msgstr "    %-15s (nog niet aanwezig — matcht op naam)\n"
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ synnet paste er de vorige keer %s toe. Voer\n      `sudo synnet --firewall` uit om de huidige lijst te laden.\n"
+msgstr ""
+"    ⚠ synnet paste er de vorige keer %s toe. Voer\n"
+"      `sudo synnet --firewall` uit om de huidige lijst te laden.\n"
 
 msgid "  Live ruleset\n"
 msgstr "  Actieve regelset\n"
@@ -158,17 +246,37 @@ msgstr "  Actieve regelset\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (niet getoond — nftables opsommen vereist root: sudo synnet --status)\n\n"
+msgstr ""
+"    (niet getoond — nftables opsommen vereist root: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (niet getoond — nft is niet geïnstalleerd)\n\n"
+msgstr ""
+"    (niet getoond — nft is niet geïnstalleerd)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    de invoerketen is NIET in de kernel geladen.\n\n"
+msgstr ""
+"    de invoerketen is NIET in de kernel geladen.\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  Poorten die openstaan voor bronnen die deze machine anders zou verwerpen\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    geen — alleen loopback, antwoorden, ICMP en bronnen uit\n    privéreeksen bereiken deze machine.\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  van OVERAL, ook van internet\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  van %s\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  Geblokkeerde bestemmingen (uitgaand)\n"

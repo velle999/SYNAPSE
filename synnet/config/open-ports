@@ -1,0 +1,49 @@
+# /etc/synnet/open-ports — ports let through to a source this machine would
+# otherwise DROP. One rule per line. '#' starts a comment.
+#
+#   <tcp|udp>/<port>  <source>
+#
+# where <source> is a CIDR, or the word `any`.
+#
+# WHAT THIS IS FOR
+#
+# synnet runs a default-drop input firewall. It accepts loopback, replies to
+# things this box connected out to, ICMP, and any source in a private range
+# (10/8, 172.16/12, 192.168/16, plus IPv6 ULA and link-local). Everything else
+# is dropped — which is the point, and which is also why a service bound to
+# 0.0.0.0 can still be unreachable from somewhere you expected to reach it.
+#
+# ⛔ NEITHER OF THE OTHER TWO KNOBS DOES THIS.
+#
+#   · `synnet --allow <ip>` is an UNBLOCK. It removes an address from the drop
+#     SET that `--block` puts things into. It does not open anything, and its
+#     name is the single most misleading thing in this program.
+#   · `synnet --trust-if <iface>` accepts DHCP and DNS on a bridge this box is
+#     the gateway for. It is deliberately not `allow in on <iface>`.
+#
+# So until a rule is written here, a source outside the private ranges cannot
+# reach a port on this machine at all. The case that keeps coming up is a mesh
+# VPN: Tailscale hands out 100.64.0.0/10, which is NOT a private range, so the
+# tunnel comes up (it is established outbound, and replies are accepted) and
+# then every packet inside it is eaten by the drop policy, with nothing in any
+# log mentioning the firewall.
+#
+#   sudo synnet --open tcp/5900 100.64.0.0/10    add one and apply it now
+#   sudo synnet --close tcp/5900 100.64.0.0/10   take one away
+#   synnet --status                              show the list
+#
+# ⚠ THE SOURCE IS NOT OPTIONAL. A line reading just `tcp/5900` is IGNORED, with
+# a note in the journal — not read as `any`. "Open to my VPN" and "open to the
+# internet" are one missing word apart, and a file that guessed which one you
+# meant would eventually guess wrong in the direction that matters.
+#
+# Editing this file by hand does NOT change the running firewall: the daemon
+# only rebuilds a chain that has gone missing, and one that is merely out of
+# date looks healthy to it. Run `sudo synnet --firewall` after editing.
+
+# Nothing is open by default, and that is the right default for a machine that
+# may end up on a café network. Uncomment or add what this box actually needs:
+
+#tcp/5900  100.64.0.0/10   # remote desktop (syn-remote), over a Tailscale mesh
+#udp/51820 any             # a WireGuard endpoint others dial in to
+#tcp/22    192.168.0.0/16  # redundant — private ranges are already accepted

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -24,54 +24,122 @@ msgstr "synnet: --firewall には root が必要です (sudo synnet --firewall)\
 msgid "synnet: could not write %s\n"
 msgstr "synnet: %s に書き込めませんでした\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: 受信ファイアウォールはオフです — 受信側は何もフィルタされません。`synnet --firewall on` で戻せます。\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: 受信ファイアウォールはオフです — 受信側は何もフィルタされません。"
+"`synnet --firewall on` で戻せます。\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
-msgstr "synnet: ファイアウォールは %s でオフになっています — 戻すには `synnet --firewall on`\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
+msgstr ""
+"synnet: ファイアウォールは %s でオフになっています — 戻すには `synnet --"
+"firewall on`\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
-msgstr "synnet: 受信ファイアウォールを適用できませんでした — このマシンは受信側でフィルタされていません\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
+msgstr ""
+"synnet: 受信ファイアウォールを適用できませんでした — このマシンは受信側でフィ"
+"ルタされていません\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: 受信ファイアウォールを適用しました (受信は既定で破棄。ループバック、確立済み接続、ICMP、プライベート範囲の送信元、DHCP は許可)\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: 受信ファイアウォールを適用しました (受信は既定で破棄。ループバック、"
+"確立済み接続、ICMP、プライベート範囲の送信元、DHCP は許可)\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: %s には root が必要です (sudo synnet %s %s)\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: '%s' は有効なインターフェース名ではありません (1〜15 文字: 英数字、'_'、'.'、'-')\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: '%s' は有効なインターフェース名ではありません (1〜15 文字: 英数"
+"字、'_'、'.'、'-')\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: %s を更新できませんでした\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s を %s に信頼済みとして記録しました — ファイアウォールはオフなので、カーネル側は何も変わっていません。\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: %s を %s に信頼済みとして記録しました — ファイアウォールはオフなの"
+"で、カーネル側は何も変わっていません。\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s を %s の信頼済みから外しました — ファイアウォールはオフなので、カーネル側は何も変わっていません。\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: %s を %s の信頼済みから外しました — ファイアウォールはオフなので、"
+"カーネル側は何も変わっていません。\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: %s は記録しましたが、ファイアウォールを再読み込みできませんでした — このマシンは今、受信側でフィルタされていません\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s は記録しましたが、ファイアウォールを再読み込みできませんでした — "
+"このマシンは今、受信側でフィルタされていません\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
-msgstr "synnet: %s を信頼します — このリンクからの DHCP と DNS は許可されます\n"
+msgstr ""
+"synnet: %s を信頼します — このリンクからの DHCP と DNS は許可されます\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
-msgstr "synnet: %s をもう信頼しません — このリンクからの DHCP と DNS は許可されなくなります\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
+msgstr ""
+"synnet: %s をもう信頼しません — このリンクからの DHCP と DNS は許可されなくな"
+"ります\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
-msgstr "synnet: %s はまだ存在しません — ルールは名前で照合するので、現れた時点で効きます。\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
+msgstr ""
+"synnet: %s はまだ存在しません — ルールは名前で照合するので、現れた時点で効き"
+"ます。\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: '%s' は正しい規則ではありません。<tcp|udp>/<ポート> と送信元の形式で書いてください (例: 'tcp/5900 100.64.0.0/10' または 'tcp/5900 any')\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' を %s に記録しました — ファイアウォールは無効なので、カーネルでは何も変わっていません。\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' を %s から削除しました — ファイアウォールは無効なので、カーネルでは何も変わっていません。\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: '%s' を記録しましたが、ファイアウォールを再読み込みできませんでした — このマシンは現在、入力フィルタリングされていません\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s を開放しました\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ これはすべての送信元に開放されています。このマシンが到達可能であればインターネットからも届きます。CIDR を指定して範囲を狭めてください。\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s を閉じました\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -85,7 +153,9 @@ msgstr "synnet: 不正な IPv4 アドレス: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — nftables の適用状況\n\n"
+msgstr ""
+"synnet %s — nftables の適用状況\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  受信ファイアウォール\n"
@@ -97,7 +167,9 @@ msgstr "    オフ — %s でオフになっています。\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    受信側は何もフィルタされません。戻すには\n    `sudo synnet --firewall on`、または 設定 ▸ ネットワーク で。\n"
+msgstr ""
+"    受信側は何もフィルタされません。戻すには\n"
+"    `sudo synnet --firewall on`、または 設定 ▸ ネットワーク で。\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -107,23 +179,32 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    デーモンは起動時にこのファイルを書き出します。synnet が動いて\n    いるのに無い場合、デーモンがこれより古いか、/run/synnet に\n    書き込めなかったということです。\n"
+msgstr ""
+"    デーモンは起動時にこのファイルを書き出します。synnet が動いて\n"
+"    いるのに無い場合、デーモンがこれより古いか、/run/synnet に\n"
+"    書き込めなかったということです。\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    有効 — 受信は既定で破棄し、LAN と確立済みの通信は許可。\n    synnet が起動時に適用し、毎分確認しています。\n"
+msgstr ""
+"    有効 — 受信は既定で破棄し、LAN と確立済みの通信は許可。\n"
+"    synnet が起動時に適用し、毎分確認しています。\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
-msgstr "    ⚠ この実行中に %s 回再構築されました — このマシンの何かが\n      nftables を消しています。\n"
+msgstr ""
+"    ⚠ この実行中に %s 回再構築されました — このマシンの何かが\n"
+"      nftables を消しています。\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    適用に失敗しました — このマシンは受信側でフィルタされていません。\n    nft が何と言ったかは `journalctl -u synnet` にあります。\n"
+msgstr ""
+"    適用に失敗しました — このマシンは受信側でフィルタされていません。\n"
+"    nft が何と言ったかは `journalctl -u synnet` にあります。\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
 msgstr "  コンテナ / 仮想マシンのリンク (これらでは DHCP と DNS を許可)\n"
@@ -136,7 +217,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    コンテナのブリッジには必要です。ゲストの最初の DHCP パケットは\n    0.0.0.0 から来るため、破棄ポリシーに飲み込まれます。\n    `sudo synnet --trust-if waydroid0` で追加できます。\n"
+msgstr ""
+"    コンテナのブリッジには必要です。ゲストの最初の DHCP パケットは\n"
+"    0.0.0.0 から来るため、破棄ポリシーに飲み込まれます。\n"
+"    `sudo synnet --trust-if waydroid0` で追加できます。\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -150,7 +234,9 @@ msgstr "    %-15s (まだ存在しません — 名前で照合)\n"
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ synnet が前回適用したのは %s 個でした。現在の一覧を読み込むには\n      `sudo synnet --firewall` を実行してください。\n"
+msgstr ""
+"    ⚠ synnet が前回適用したのは %s 個でした。現在の一覧を読み込むには\n"
+"      `sudo synnet --firewall` を実行してください。\n"
 
 msgid "  Live ruleset\n"
 msgstr "  現在のルールセット\n"
@@ -158,17 +244,37 @@ msgstr "  現在のルールセット\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (非表示 — nftables の一覧には root が必要です: sudo synnet --status)\n\n"
+msgstr ""
+"    (非表示 — nftables の一覧には root が必要です: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (非表示 — nft がインストールされていません)\n\n"
+msgstr ""
+"    (非表示 — nft がインストールされていません)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    受信チェーンはカーネルに読み込まれていません。\n\n"
+msgstr ""
+"    受信チェーンはカーネルに読み込まれていません。\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  本来は破棄される送信元に開放しているポート\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    なし — このマシンに届くのはループバック、応答、ICMP、\n    プライベート範囲の送信元だけです。\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  すべての場所から (インターネットを含む)\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  %s から\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  ブロック済みの宛先 (送信)\n"

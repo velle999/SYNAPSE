@@ -39,7 +39,16 @@ static void usage(void) {
         "                  guest's first DHCP packet comes from 0.0.0.0 and is\n"
         "                  otherwise dropped, so its network never comes up.\n"
         "                  Applied immediately and remembered. (root)\n"
-        "  --allow <ip>    Allow IP\n"
+        "  --open <proto>/<port> [<cidr>]\n"
+        "  --close <proto>/<port> [<cidr>]\n"
+        "                  Let a source the base chain would DROP reach a port\n"
+        "                  — e.g. `--open tcp/5900 100.64.0.0/10` for a VPN.\n"
+        "                  The source defaults to `any`, which means the whole\n"
+        "                  internet if this box is reachable from it. This is\n"
+        "                  NOT what --allow does: that only un-blocks an\n"
+        "                  address. Applied immediately and remembered. (root)\n"
+        "  --allow <ip>    Un-block an IP that --block blocked. Does NOT open\n"
+        "                  the firewall to it; see --open\n"
         "  --block <ip>    Block IP\n"
         "  -h, --help      This help\n",
         SYNNET_VERSION);
@@ -216,6 +225,81 @@ int main(int argc, char *argv[]) {
 
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(); return 0;
+        } else if ((!strcmp(argv[i], "--open") || !strcmp(argv[i], "--close"))
+                   && i + 1 < argc) {
+            /* ⛔ THE ONLY VERB THAT WIDENS INGRESS. `--allow` is an unblock and
+             * `--trust-if` is DHCP+DNS; neither can let a non-private source
+             * reach a port, which is why a VPN on 100.64.0.0/10 established
+             * outbound and then had every packet inside the tunnel dropped. */
+            int on = !strcmp(argv[i], "--open");
+            const char *pp = argv[++i];
+            /* The source is optional, so take the next argument only if there
+             * IS one and it is not another flag — otherwise `--open tcp/22
+             * --status` would eat the flag as a CIDR and refuse it. */
+            const char *src = NULL;
+            if (i + 1 < argc && argv[i+1][0] != '-') src = argv[++i];
+
+            char spec[SYNNET_PORTRULE_MAX * 2];
+            snprintf(spec, sizeof(spec), "%s %s", pp, src ? src : "any");
+
+            if (geteuid() != 0) {
+                /* ⚠ The two %s are FLAG SPELLINGS — what you type — so they
+                 * stay English while the sentence around them moves. */
+                fprintf(stderr, _("synnet: %s needs root (sudo synnet %s %s)\n"),
+                        on ? "--open" : "--close",
+                        on ? "--open" : "--close", spec);
+                return 1;
+            }
+
+            int r = synnet_open_port_set(spec, on);
+            if (r == -2) {
+                fprintf(stderr,
+                        _("synnet: '%s' is not a legal rule. Write it as "
+                          "<tcp|udp>/<port> and a source, e.g. "
+                          "'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"), spec);
+                return 1;
+            }
+            if (r != 0) {
+                fprintf(stderr, _("synnet: could not update %s\n"),
+                        synnet_fw_ports_path());
+                return 1;
+            }
+
+            /* ⚠ THE FILE IS NOT THE FIREWALL — the same trap --trust-if
+             * documents. The daemon's re-assert tick only rebuilds a chain
+             * that has GONE; one that is merely out of date looks healthy. */
+            if (!synnet_firewall_enabled()) {
+                /* ⛔ TWO WHOLE SENTENCES per branch. */
+                if (on)
+                    printf(_("synnet: recorded '%s' in %s — the firewall is "
+                             "switched off, so nothing changed in the kernel.\n"),
+                           spec, synnet_fw_ports_path());
+                else
+                    printf(_("synnet: removed '%s' from %s — the firewall is "
+                             "switched off, so nothing changed in the kernel.\n"),
+                           spec, synnet_fw_ports_path());
+                return 0;
+            }
+            if (synnet_nft_ensure_firewall() != 0) {
+                fprintf(stderr, _("synnet: '%s' recorded, but the firewall could "
+                                  "not be reloaded — this box is NOT ingress-"
+                                  "filtered right now\n"), spec);
+                return 1;
+            }
+            if (on) {
+                printf(_("synnet: %s is open\n"), spec);
+                /* ⛔ SAID OUT LOUD, EVERY TIME. `any` is the difference between
+                 * a port reachable from one VPN and a port reachable from the
+                 * internet, and it is one word — the person who typed it has to
+                 * be told which of the two they just did. */
+                if (!src || !strcmp(src, "any"))
+                    fputs(_("synnet: ⚠ that is open to ANY source, including "
+                            "the internet if this machine is reachable from "
+                            "it. Name a CIDR to narrow it.\n"), stdout);
+            } else {
+                printf(_("synnet: %s is closed\n"), spec);
+            }
+            return 0;
         } else if (!strcmp(argv[i], "--allow") && i+1 < argc) {
             return synnet_apply_rule(argv[++i], SYNNET_ACTION_ALLOW);
         } else if (!strcmp(argv[i], "--block") && i+1 < argc) {

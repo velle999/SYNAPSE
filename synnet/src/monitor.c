@@ -165,12 +165,13 @@ static int is_valid_ipv4(const char *ip) {
 }
 
 static int run_nft(const char *fmt, ...) {
-    /* The input-firewall script is ~1KB of base rules plus two rules for every
-     * trusted interface, so this has to hold SYNNET_MAX_IFACES of them and not
-     * merely the fixed part. Under-sizing it would trip the truncation guard
-     * below and leave the box unfiltered rather than partly filtered — the safe
-     * failure, but a needless one. */
-    char cmd[16384];
+    /* The input-firewall script is ~1KB of base rules, plus two rules for every
+     * trusted interface AND one for every opened port, so this has to hold
+     * SYNNET_MAX_IFACES and SYNNET_MAX_PORTS of them and not merely the fixed
+     * part. Under-sizing it would trip the truncation guard below and leave the
+     * box unfiltered rather than partly filtered — the safe failure, but a
+     * needless one. */
+    char cmd[32768];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(cmd, sizeof(cmd), fmt, ap);
@@ -363,6 +364,269 @@ static size_t trusted_ifaces_load(char out[][SYNNET_IFNAME_MAX], size_t max) {
     return n;
 }
 
+/* ── Ports opened to a source the base chain would drop ───
+ *
+ * See SYNNET_FW_PORTS in the header for why this exists at all: `--allow` is an
+ * unblock, `--trust-if` is DHCP+DNS, and neither of them can let a non-private
+ * source reach a port.
+ */
+const char *synnet_fw_ports_path(void) {
+    const char *e = getenv("SYNNET_FW_PORTS_FILE");
+    return (e && *e) ? e : SYNNET_FW_PORTS;
+}
+
+/* How many port rules the last apply loaded, for the published state file. */
+static unsigned g_fw_ports;
+
+/*
+ * Is this a legal source? A CIDR, or the word `any`.
+ *
+ * ⚠ THE PREFIX LENGTH IS CHECKED AGAINST THE FAMILY, not against 128 for both.
+ * nft refuses `ip saddr 10.0.0.0/64` and refusing it HERE costs one rule;
+ * letting it reach the atomic load costs the whole firewall.
+ *
+ * `family` is filled with AF_INET / AF_INET6, or AF_UNSPEC for `any`.
+ */
+static int src_valid(const char *src, int *family) {
+    if (!src || !*src) return 0;
+    if (strcmp(src, "any") == 0) { *family = AF_UNSPEC; return 1; }
+
+    const char *slash = strchr(src, '/');
+    if (!slash || !slash[1]) return 0;
+
+    char addr[64];
+    size_t alen = (size_t)(slash - src);
+    if (alen == 0 || alen >= sizeof(addr)) return 0;
+    memcpy(addr, src, alen);
+    addr[alen] = '\0';
+
+    /* ⛔ DIGITS ONLY, AND NOT VIA atoi. atoi("8bogus") is 8, so a prefix with a
+     * tail would validate here and then be pasted into the ruleset intact. */
+    for (const char *d = slash + 1; *d; d++)
+        if (!isdigit((unsigned char)*d)) return 0;
+    if (strlen(slash + 1) > 3) return 0;
+    int bits = atoi(slash + 1);
+
+    struct in_addr a4;
+    struct in6_addr a6;
+    if (inet_pton(AF_INET, addr, &a4) == 1) {
+        if (bits < 0 || bits > 32) return 0;
+        *family = AF_INET;
+        return 1;
+    }
+    if (inet_pton(AF_INET6, addr, &a6) == 1) {
+        if (bits < 0 || bits > 128) return 0;
+        *family = AF_INET6;
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Parse `<proto>/<port>` plus a source into the stored form.
+ *
+ * ⚠ EVERYTHING HERE IS INTERPOLATED INTO THE ATOMIC nft SCRIPT, so this is the
+ * same rule iface_name_valid() follows: a value that is not exactly what it
+ * claims to be does not make one bad rule, it makes a syntax error that fails
+ * the load and takes the WHOLE firewall with it. Nothing reaches the script
+ * that has not been through here.
+ */
+int synnet_port_rule_norm(const char *proto_port, const char *src,
+                          char *out, size_t outsz) {
+    if (!proto_port || !out) return -1;
+
+    const char *slash = strchr(proto_port, '/');
+    if (!slash || !slash[1]) return -1;
+
+    char proto[8];
+    size_t plen = (size_t)(slash - proto_port);
+    if (plen == 0 || plen >= sizeof(proto)) return -1;
+    memcpy(proto, proto_port, plen);
+    proto[plen] = '\0';
+    if (strcmp(proto, "tcp") != 0 && strcmp(proto, "udp") != 0) return -1;
+
+    for (const char *d = slash + 1; *d; d++)
+        if (!isdigit((unsigned char)*d)) return -1;
+    if (strlen(slash + 1) > 5) return -1;
+    long port = strtol(slash + 1, NULL, 10);
+    if (port < 1 || port > 65535) return -1;
+
+    const char *s = (src && *src) ? src : "any";
+    int fam;
+    if (!src_valid(s, &fam)) return -1;
+
+    int n = snprintf(out, outsz, "%s/%ld %s", proto, port, s);
+    if (n < 0 || (size_t)n >= outsz) return -1;
+    return 0;
+}
+
+/* Split a stored line back into its parts. Returns 0 on success. */
+static int port_rule_split(const char *line, char *proto, size_t protosz,
+                           long *port, char *src, size_t srcsz, int *family) {
+    char pp[SYNNET_PORTRULE_MAX], sr[SYNNET_PORTRULE_MAX];
+    /* ⚠ Two fields, whitespace-separated, and the source is REQUIRED in the
+     * stored form. A line missing it is a line whose meaning cannot be told
+     * from a typo, so it is refused rather than defaulted — defaulting it to
+     * `any` here would silently open a port to the internet. */
+    if (sscanf(line, "%63s %63s", pp, sr) != 2) return -1;
+
+    char norm[SYNNET_PORTRULE_MAX];
+    if (synnet_port_rule_norm(pp, sr, norm, sizeof(norm)) != 0) return -1;
+
+    const char *slash = strchr(pp, '/');
+    size_t plen = (size_t)(slash - pp);
+    if (plen >= protosz) return -1;
+    memcpy(proto, pp, plen);
+    proto[plen] = '\0';
+    *port = strtol(slash + 1, NULL, 10);
+    if (snprintf(src, srcsz, "%s", sr) < 0) return -1;
+    return src_valid(sr, family) ? 0 : -1;
+}
+
+/* Read the file into `out`, skipping comments, blanks, duplicates and anything
+ * that is not a legal rule. A missing file is the normal state of a box that
+ * has opened nothing. */
+static size_t open_ports_load(char out[][SYNNET_PORTRULE_MAX], size_t max) {
+    FILE *f = fopen(synnet_fw_ports_path(), "r");
+    if (!f) return 0;
+
+    size_t n = 0;
+    char line[256];
+    while (n < max && fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = strchr(line, '#');
+        if (p) *p = '\0';
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        size_t l = strlen(p);
+        while (l && (p[l-1] == ' ' || p[l-1] == '\t')) p[--l] = '\0';
+        if (!*p) continue;
+
+        char pp[SYNNET_PORTRULE_MAX], sr[SYNNET_PORTRULE_MAX];
+        char norm[SYNNET_PORTRULE_MAX];
+        int got = sscanf(p, "%63s %63s", pp, sr);
+        if (got < 1 ||
+            synnet_port_rule_norm(pp, got == 2 ? sr : NULL,
+                                  norm, sizeof(norm)) != 0) {
+            syslog(LOG_WARNING, "synnet: ignoring '%s' in %s — not a legal "
+                                "port rule", p, synnet_fw_ports_path());
+            continue;
+        }
+        /* ⛔ A LINE WITH NO SOURCE IS REFUSED, NOT DEFAULTED. `tcp/5900` alone
+         * reads as a note to oneself and would mean "open to the internet".
+         * The CLI always writes the source, so a bare line is a hand edit that
+         * has not said what it meant. */
+        if (got != 2) {
+            syslog(LOG_WARNING, "synnet: ignoring '%s' in %s — no source given; "
+                                "write 'any' if that is what was meant",
+                   p, synnet_fw_ports_path());
+            continue;
+        }
+        int dup = 0;
+        for (size_t i = 0; i < n; i++)
+            if (strcmp(out[i], norm) == 0) { dup = 1; break; }
+        if (dup) continue;
+
+        memcpy(out[n++], norm, strlen(norm) + 1);
+    }
+    fclose(f);
+    return n;
+}
+
+/* Add or remove one rule. Append-and-filter, the same shape (and for the same
+ * reason) as synnet_trusted_iface_set: this is a `backup=` file that ships with
+ * commented examples, and rewriting it from the parsed list would eat them. */
+int synnet_open_port_set(const char *spec, int open) {
+    char want[SYNNET_PORTRULE_MAX];
+    {
+        char pp[SYNNET_PORTRULE_MAX], sr[SYNNET_PORTRULE_MAX];
+        int got = sscanf(spec ? spec : "", "%63s %63s", pp, sr);
+        if (got < 1) return -2;
+        if (synnet_port_rule_norm(pp, got == 2 ? sr : NULL,
+                                  want, sizeof(want)) != 0) return -2;
+    }
+
+    const char *path = synnet_fw_ports_path();
+
+    char rules[SYNNET_MAX_PORTS][SYNNET_PORTRULE_MAX];
+    size_t n = open_ports_load(rules, SYNNET_MAX_PORTS);
+    int present = 0;
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(rules[i], want) == 0) { present = 1; break; }
+
+    if (open) {
+        if (present) return 0;                  /* idempotent */
+        if (n >= SYNNET_MAX_PORTS) return -1;
+
+        char dir[PATH_MAX];
+        snprintf(dir, sizeof(dir), "%s", path);
+        char *slash = strrchr(dir, '/');
+        if (slash && slash != dir) {
+            *slash = '\0';
+            if (mkdir(dir, 0755) != 0 && errno != EEXIST) return -1;
+        }
+
+        /* ⚠ A file whose last line has no newline would otherwise get the new
+         * rule glued onto the end of it — the same trap the interface list
+         * documents, and here it would produce a rule nobody wrote. */
+        int need_nl = 0;
+        FILE *r = fopen(path, "r");
+        if (r) {
+            if (fseek(r, -1, SEEK_END) == 0) {
+                int c = fgetc(r);
+                if (c != '\n' && c != EOF) need_nl = 1;
+            }
+            fclose(r);
+        }
+        FILE *f = fopen(path, "a");
+        if (!f) return -1;
+        if (need_nl) fputc('\n', f);
+        fprintf(f, "%s\n", want);
+        fclose(f);
+        return 0;
+    }
+
+    if (!present) return 0;                     /* idempotent */
+
+    /* Filter it out, keeping every comment and every other line byte for byte. */
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    char tmp[PATH_MAX];
+    if ((size_t)snprintf(tmp, sizeof(tmp), "%s.new", path) >= sizeof(tmp)) {
+        fclose(f); return -1;
+    }
+    FILE *o = fopen(tmp, "w");
+    if (!o) { fclose(f); return -1; }
+
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        char copy[256];
+        snprintf(copy, sizeof(copy), "%s", line);
+        copy[strcspn(copy, "\r\n")] = '\0';
+        char *h = strchr(copy, '#');
+        if (h) *h = '\0';
+        char *p = copy;
+        while (*p == ' ' || *p == '\t') p++;
+        size_t l = strlen(p);
+        while (l && (p[l-1] == ' ' || p[l-1] == '\t')) p[--l] = '\0';
+
+        int drop = 0;
+        if (*p) {
+            char pp[SYNNET_PORTRULE_MAX], sr[SYNNET_PORTRULE_MAX];
+            char norm[SYNNET_PORTRULE_MAX];
+            if (sscanf(p, "%63s %63s", pp, sr) == 2 &&
+                synnet_port_rule_norm(pp, sr, norm, sizeof(norm)) == 0 &&
+                strcmp(norm, want) == 0)
+                drop = 1;
+        }
+        if (!drop) fputs(line, o);
+    }
+    fclose(f);
+    if (fclose(o) != 0) { unlink(tmp); return -1; }
+    if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
+    return 0;
+}
+
 /* Add or remove one name.
  *
  * Append-and-filter rather than load-modify-rewrite, the same shape the
@@ -501,9 +765,14 @@ static void firewall_publish_state(const char *state) {
             "policy=drop\n"
             "trust=lan\n"
             "links=%u\n"
+            /* ⚠ ADDITIVE, and it has to be: syn-settings reads `state`, `links`
+             * and `reasserts` out of here by name, so a new key costs nothing
+             * and a renamed one costs the network pane. */
+            "ports=%u\n"
             "since=%lld\n"
             "reasserts=%lu\n",
-            state, g_fw_ifaces, (long long)time(NULL), g_fw_reasserts);
+            state, g_fw_ifaces, g_fw_ports, (long long)time(NULL),
+            g_fw_reasserts);
     fclose(f);
     if (rename(tmp, synnet_fw_state_path()) != 0)
         unlink(tmp);
@@ -560,7 +829,7 @@ int synnet_nft_ensure_firewall(void) {
         /* DHCP client: offer/ack can arrive before we hold a trusted-range IP. */
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n";
 
-    char script[16384];
+    char script[32768];
     int off = snprintf(script, sizeof(script), "%s", base);
     if (off < 0 || (size_t)off >= sizeof(script)) {
         syslog(LOG_ERR, "synnet: base firewall script does not fit — not applied");
@@ -610,6 +879,59 @@ int synnet_nft_ensure_firewall(void) {
         applied++;
     }
 
+    /* ── the ports opened to a source the base chain drops ──
+     *
+     * ⛔ THE ONLY RULE HERE THAT WIDENS INGRESS, which is why it is the only one
+     * a person has to write down on purpose. Everything above accepts a source
+     * that is already trusted (loopback, established, private ranges); these
+     * accept a port from somewhere that is not.
+     *
+     * ⚠ Appended LAST, and that is safe because the chain has no drop RULE —
+     * it has a drop POLICY, which is only reached when no rule has matched. So
+     * order among the accepts cannot change the verdict, and putting these at
+     * the end keeps the base set readable in `nft list chain`.
+     *
+     * Every value here has been through synnet_port_rule_norm(), so `proto` is
+     * tcp or udp, `port` is 1-65535 and `src` is a CIDR of a known family or
+     * `any`. Nothing else can reach the script. */
+    char prules[SYNNET_MAX_PORTS][SYNNET_PORTRULE_MAX];
+    size_t pn = open_ports_load(prules, SYNNET_MAX_PORTS);
+    size_t papplied = 0;
+
+    for (size_t i = 0; i < pn; i++) {
+        char proto[8], src[SYNNET_PORTRULE_MAX];
+        long port; int fam;
+        if (port_rule_split(prules[i], proto, sizeof(proto), &port,
+                            src, sizeof(src), &fam) != 0)
+            continue;   /* load already validated; belt and braces */
+
+        char match[128];
+        if (fam == AF_INET)
+            snprintf(match, sizeof(match), "ip saddr %s ", src);
+        else if (fam == AF_INET6)
+            snprintf(match, sizeof(match), "ip6 saddr %s ", src);
+        else
+            match[0] = '\0';    /* any */
+
+        int w = snprintf(script + off, sizeof(script) - (size_t)off,
+            "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+            " %s%s dport %ld accept comment \"synnet-open\"\n",
+            match, proto, port);
+        /* ⚠ Stop, do not truncate — the same rule the interface loop follows.
+         * A clipped rule is a syntax error that fails the load and unfilters
+         * the box; dropping the tail leaves a working firewall missing one
+         * opening, which is recoverable and says so in the journal. */
+        if (w < 0 || (size_t)w >= sizeof(script) - (size_t)off) {
+            script[off] = '\0';
+            syslog(LOG_WARNING, "synnet: firewall script full at %zu of %zu "
+                                "open port(s) — '%s' and after are NOT applied",
+                   papplied, pn, prules[i]);
+            break;
+        }
+        off += w;
+        papplied++;
+    }
+
     if (off + 12 >= (int)sizeof(script)) {   /* "SYNNET_FW\n" and slack */
         syslog(LOG_ERR, "synnet: no room to close the firewall script — not applied");
         firewall_publish(0);
@@ -622,10 +944,17 @@ int synnet_nft_ensure_firewall(void) {
      * a state file saying "failed, 1 link" is a better report than one that
      * quietly keeps the previous run's number. */
     g_fw_ifaces = (unsigned)applied;
+    g_fw_ports  = (unsigned)papplied;
     firewall_publish(rc == 0);
     if (rc == 0 && applied)
         syslog(LOG_INFO, "synnet: %zu container/VM link(s) trusted for DHCP+DNS",
                applied);
+    /* ⛔ NAMED IN THE JOURNAL, EVERY ONE. These are the only rules that let a
+     * source the base chain would drop reach this machine, so "what is open"
+     * must be answerable from the log alone, months later, by somebody who did
+     * not open it. */
+    for (size_t i = 0; rc == 0 && i < papplied; i++)
+        syslog(LOG_NOTICE, "synnet: open %s", prules[i]);
     return rc;
 }
 
@@ -1126,6 +1455,48 @@ int synnet_status(void) {
             fputs(_("    the input chain is NOT loaded in the kernel.\n\n"), stdout);
         else
             printf("\n");
+    }
+
+    /* ── 1c. the ports opened to a source we would drop ─────
+     *
+     * ⛔ THE ONLY THING HERE THAT LETS THE OUTSIDE IN, so it is printed even
+     * when the list is empty — an empty section says "nothing is open", and a
+     * section that vanishes says nothing at all. Read from the file rather
+     * than the published state for the same reason the links are: a rule that
+     * was added but never applied has to be visible AS that.
+     */
+    {
+        char prules[SYNNET_MAX_PORTS][SYNNET_PORTRULE_MAX];
+        size_t n = open_ports_load(prules, SYNNET_MAX_PORTS);
+        fputs(_("  Ports opened to sources this box would otherwise drop\n"),
+              stdout);
+        if (n == 0) {
+            fputs(_("    none — only loopback, replies, ICMP and private-range\n"
+                    "    sources reach this machine.\n"), stdout);
+        } else {
+            for (size_t i = 0; i < n; i++) {
+                char proto[8], src[SYNNET_PORTRULE_MAX];
+                long port; int fam;
+                if (port_rule_split(prules[i], proto, sizeof(proto), &port,
+                                    src, sizeof(src), &fam) != 0)
+                    continue;
+                /* ⛔ TWO WHOLE SENTENCES, not one with a word swapped in.
+                 * "any" is the difference between a port open to one VPN and a
+                 * port open to the internet, and that is not a distinction to
+                 * carry in a %s beside a translated line. */
+                if (fam == AF_UNSPEC)
+                    printf(_("    %s/%ld  from ANYWHERE, including the internet\n"),
+                           proto, port);
+                else
+                    printf(_("    %s/%ld  from %s\n"), proto, port, src);
+            }
+            const char *livep = fw_state_get("ports");
+            if (strcmp(st, "active") == 0 && livep[0] && atoi(livep) != (int)n)
+                printf(_("    ⚠ synnet last applied %s of these. Run\n"
+                         "      `sudo synnet --firewall` to load the current "
+                         "list.\n"), livep);
+        }
+        printf("\n");
     }
 
     /* ── 3. the egress blocklist ────────────────────────────── */

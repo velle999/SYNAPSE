@@ -118,6 +118,45 @@ const char *synnet_fw_ifaces_path(void); /* honours $SYNNET_FW_IFACES_FILE */
  * something calls synnet_nft_ensure_firewall(). `--trust-if` does. */
 int  synnet_trusted_iface_set(const char *ifname, int trusted);
 
+/*
+ * ── Ports opened to a source that is not on the LAN ──────────────────────────
+ *
+ * ⛔ THE ONE THING `--allow` DOES NOT DO. `synnet --allow <ip>` reads like it
+ * opens the firewall and does not: it removes an address from the DROP SET,
+ * which only ever undoes a previous `--block`. The base chain trusts RFC1918
+ * sources and drops everything else, and until this there was NO supported way
+ * to let a non-private source reach a port — so a VPN on 100.64.0.0/10
+ * (Tailscale and friends) established outbound and then had every packet
+ * inside the tunnel eaten by the input policy, with nothing anywhere saying so.
+ *
+ * A rule is `<proto>/<port> <source>`, e.g. `tcp/5900 100.64.0.0/10`, and the
+ * source is a CIDR or the word `any`.
+ *
+ * ⚠ THE SOURCE IS NEVER OPTIONAL IN THE STORED FORM. A line that omitted it
+ * would read as "closed to everyone but me" and mean "open to the internet",
+ * and the two are one missing word apart. The CLI writes `any` in full rather
+ * than leaving the field empty, so the file always states what it did.
+ */
+#define SYNNET_FW_PORTS     "/etc/synnet/open-ports"
+#define SYNNET_PORTRULE_MAX 64   /* "tcp/65535 " + an IPv6 CIDR, with room */
+#define SYNNET_MAX_PORTS    32   /* far past plausible; bounds the nft script */
+const char *synnet_fw_ports_path(void);  /* honours $SYNNET_FW_PORTS_FILE */
+
+/* Add or remove one rule. 0 on success, -1 if the file could not be written,
+ * -2 if the spec is not a legal rule.
+ *
+ * ⚠ THE CALLER HAS TO RE-APPLY THE FIREWALL, for the same reason --trust-if
+ * does: the daemon's re-assert tick rebuilds a chain that has GONE, and one
+ * that is merely out of date looks healthy to it.
+ */
+int  synnet_open_port_set(const char *spec, int open);
+
+/* Normalise a rule to its stored form. Returns 0 and fills `out` (at least
+ * SYNNET_PORTRULE_MAX bytes) or -1 if the spec is not legal. `src` may be NULL
+ * or empty, which means `any`. */
+int  synnet_port_rule_norm(const char *proto_port, const char *src,
+                           char *out, size_t outsz);
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,

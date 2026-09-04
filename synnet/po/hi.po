@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 00:15-0500\n"
+"POT-Creation-Date: 2026-09-04 03:13-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -23,54 +23,115 @@ msgstr "synnet: --firewall को root चाहिए (sudo synnet --firewall)\
 msgid "synnet: could not write %s\n"
 msgstr "synnet: %s लिखा नहीं जा सका\n"
 
-msgid "synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall on` puts it back.\n"
-msgstr "synnet: इनपुट फ़ायरवॉल बंद — आने वाला कुछ भी फ़िल्टर नहीं होता। `synnet --firewall on` इसे वापस लाता है।\n"
+msgid ""
+"synnet: input firewall OFF — nothing inbound is filtered. `synnet --firewall "
+"on` puts it back.\n"
+msgstr ""
+"synnet: इनपुट फ़ायरवॉल बंद — आने वाला कुछ भी फ़िल्टर नहीं होता। `synnet --firewall "
+"on` इसे वापस लाता है।\n"
 
 #, c-format
-msgid "synnet: the firewall is switched off in %s — `synnet --firewall on` to turn it back on\n"
-msgstr "synnet: फ़ायरवॉल %s में बंद है — फिर से चालू करने के लिए `synnet --firewall on`\n"
+msgid ""
+"synnet: the firewall is switched off in %s — `synnet --firewall on` to turn "
+"it back on\n"
+msgstr ""
+"synnet: फ़ायरवॉल %s में बंद है — फिर से चालू करने के लिए `synnet --firewall on`\n"
 
-msgid "synnet: could not apply the input firewall — this box is NOT ingress-filtered\n"
+msgid ""
+"synnet: could not apply the input firewall — this box is NOT ingress-"
+"filtered\n"
 msgstr "synnet: इनपुट फ़ायरवॉल लागू नहीं हो सका — यह मशीन इनग्रेस-फ़िल्टर्ड नहीं है\n"
 
-msgid "synnet: input firewall applied (default-drop input; loopback, established, ICMP, private-range sources and DHCP accepted)\n"
-msgstr "synnet: इनपुट फ़ायरवॉल लागू (इनपुट डिफ़ॉल्ट-ड्रॉप; लूपबैक, स्थापित कनेक्शन, ICMP, निजी रेंज के स्रोत और DHCP स्वीकृत)\n"
+msgid ""
+"synnet: input firewall applied (default-drop input; loopback, established, "
+"ICMP, private-range sources and DHCP accepted)\n"
+msgstr ""
+"synnet: इनपुट फ़ायरवॉल लागू (इनपुट डिफ़ॉल्ट-ड्रॉप; लूपबैक, स्थापित कनेक्शन, ICMP, निजी "
+"रेंज के स्रोत और DHCP स्वीकृत)\n"
 
 #, c-format
 msgid "synnet: %s needs root (sudo synnet %s %s)\n"
 msgstr "synnet: %s को root चाहिए (sudo synnet %s %s)\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, '_', '.', '-')\n"
-msgstr "synnet: '%s' मान्य इंटरफ़ेस नाम नहीं है (1-15 अक्षर: अक्षर, अंक, '_', '.', '-')\n"
+msgid ""
+"synnet: '%s' is not a legal interface name (1-15 chars: letters, digits, "
+"'_', '.', '-')\n"
+msgstr ""
+"synnet: '%s' मान्य इंटरफ़ेस नाम नहीं है (1-15 अक्षर: अक्षर, अंक, '_', '.', '-')\n"
 
 #, c-format
 msgid "synnet: could not update %s\n"
 msgstr "synnet: %s अद्यतन नहीं हो सका\n"
 
 #, c-format
-msgid "synnet: trusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s को %s में विश्वसनीय दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
+msgid ""
+"synnet: trusted %s in %s — the firewall is switched off, so nothing changed "
+"in the kernel.\n"
+msgstr ""
+"synnet: %s को %s में विश्वसनीय दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं "
+"बदला।\n"
 
 #, c-format
-msgid "synnet: untrusted %s in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: %s को %s से अविश्वसनीय दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
+msgid ""
+"synnet: untrusted %s in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: %s को %s से अविश्वसनीय दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं "
+"बदला।\n"
 
 #, c-format
-msgid "synnet: %s recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: %s दर्ज हो गया, पर फ़ायरवॉल फिर से लोड नहीं हो सका — यह मशीन अभी इनग्रेस-फ़िल्टर्ड नहीं है\n"
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s दर्ज हो गया, पर फ़ायरवॉल फिर से लोड नहीं हो सका — यह मशीन अभी इनग्रेस-"
+"फ़िल्टर्ड नहीं है\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
 msgstr "synnet: %s पर भरोसा — उस लिंक से DHCP और DNS स्वीकार किए जाते हैं\n"
 
 #, c-format
-msgid "synnet: no longer trusting %s — DHCP and DNS from that link are no longer accepted\n"
-msgstr "synnet: अब %s पर भरोसा नहीं — उस लिंक से DHCP और DNS अब स्वीकार नहीं किए जाते\n"
+msgid ""
+"synnet: no longer trusting %s — DHCP and DNS from that link are no longer "
+"accepted\n"
+msgstr ""
+"synnet: अब %s पर भरोसा नहीं — उस लिंक से DHCP और DNS अब स्वीकार नहीं किए जाते\n"
 
 #, c-format
-msgid "synnet: %s does not exist yet — the rule matches by name and takes effect when it appears.\n"
-msgstr "synnet: %s अभी मौजूद नहीं — नियम नाम से मेल खाता है और उसके आते ही लागू होगा।\n"
+msgid ""
+"synnet: %s does not exist yet — the rule matches by name and takes effect "
+"when it appears.\n"
+msgstr ""
+"synnet: %s अभी मौजूद नहीं — नियम नाम से मेल खाता है और उसके आते ही लागू होगा।\n"
+
+#, c-format
+msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr "synnet: '%s' एक वैध नियम नहीं है। इसे <tcp|udp>/<पोर्ट> और एक स्रोत के रूप में लिखें, जैसे 'tcp/5900 100.64.0.0/10' या 'tcp/5900 any'\n"
+
+#, c-format
+msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' को %s में दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
+
+#, c-format
+msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgstr "synnet: '%s' को %s से हटाया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
+
+#, c-format
+msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgstr "synnet: '%s' दर्ज हो गया, पर फ़ायरवॉल पुनः लोड नहीं हो सका — यह मशीन अभी इनग्रेस-फ़िल्टर्ड नहीं है\n"
+
+#, c-format
+msgid "synnet: %s is open\n"
+msgstr "synnet: %s खुला है\n"
+
+msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
+msgstr "synnet: ⚠ यह किसी भी स्रोत के लिए खुला है, और यदि यह मशीन इंटरनेट से पहुँच योग्य है तो इंटरनेट के लिए भी। इसे सीमित करने के लिए CIDR दें।\n"
+
+#, c-format
+msgid "synnet: %s is closed\n"
+msgstr "synnet: %s बंद है\n"
 
 #, c-format
 msgid "synnet: unknown option '%s'\n"
@@ -84,7 +145,9 @@ msgstr "synnet: अमान्य IPv4 पता: %s\n"
 msgid ""
 "synnet %s — nftables enforcement status\n"
 "\n"
-msgstr "synnet %s — nftables प्रवर्तन स्थिति\n\n"
+msgstr ""
+"synnet %s — nftables प्रवर्तन स्थिति\n"
+"\n"
 
 msgid "  Input firewall\n"
 msgstr "  इनपुट फ़ायरवॉल\n"
@@ -96,7 +159,9 @@ msgstr "    बंद — %s में बंद किया गया।\n"
 msgid ""
 "    Nothing inbound is filtered. Turn it back on with\n"
 "    `sudo synnet --firewall on`, or in Settings ▸ Network.\n"
-msgstr "    आने वाला कुछ भी फ़िल्टर नहीं होता। फिर से चालू करें\n    `sudo synnet --firewall on` से, या सेटिंग्स ▸ नेटवर्क में।\n"
+msgstr ""
+"    आने वाला कुछ भी फ़िल्टर नहीं होता। फिर से चालू करें\n"
+"    `sudo synnet --firewall on` से, या सेटिंग्स ▸ नेटवर्क में।\n"
 
 #, c-format
 msgid "    not asserted — no %s.\n"
@@ -106,23 +171,32 @@ msgid ""
 "    The daemon publishes that file at start; if synnet is\n"
 "    running and it is missing, the daemon predates this or\n"
 "    could not write to /run/synnet.\n"
-msgstr "    डेमॉन शुरू होते ही वह फ़ाइल लिखता है; अगर synnet चल रहा है और\n    वह नहीं है, तो डेमॉन इससे पुराना है या /run/synnet में लिख\n    नहीं सका।\n"
+msgstr ""
+"    डेमॉन शुरू होते ही वह फ़ाइल लिखता है; अगर synnet चल रहा है और\n"
+"    वह नहीं है, तो डेमॉन इससे पुराना है या /run/synnet में लिख\n"
+"    नहीं सका।\n"
 
 msgid ""
 "    ACTIVE — default-drop input, LAN and established traffic\n"
 "    trusted. Asserted by synnet at boot and re-checked every minute.\n"
-msgstr "    सक्रिय — इनपुट डिफ़ॉल्ट-ड्रॉप, LAN और स्थापित ट्रैफ़िक की अनुमति।\n    synnet इसे बूट पर लागू करता है और हर मिनट जाँचता है।\n"
+msgstr ""
+"    सक्रिय — इनपुट डिफ़ॉल्ट-ड्रॉप, LAN और स्थापित ट्रैफ़िक की अनुमति।\n"
+"    synnet इसे बूट पर लागू करता है और हर मिनट जाँचता है।\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
-msgstr "    ⚠ इस रन में %s बार फिर से बना — इस मशीन पर कुछ nftables को\n      खाली कर रहा है।\n"
+msgstr ""
+"    ⚠ इस रन में %s बार फिर से बना — इस मशीन पर कुछ nftables को\n"
+"      खाली कर रहा है।\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
 "    See `journalctl -u synnet` for what nft said.\n"
-msgstr "    लागू करने में विफल — यह मशीन इनग्रेस-फ़िल्टर्ड नहीं है।\n    nft ने क्या कहा, यह `journalctl -u synnet` में है।\n"
+msgstr ""
+"    लागू करने में विफल — यह मशीन इनग्रेस-फ़िल्टर्ड नहीं है।\n"
+"    nft ने क्या कहा, यह `journalctl -u synnet` में है।\n"
 
 msgid "  Container / VM links (DHCP + DNS accepted on these)\n"
 msgstr "  कंटेनर / VM लिंक (इन पर DHCP + DNS स्वीकार्य)\n"
@@ -135,7 +209,10 @@ msgid ""
 "    A container bridge needs one: its guest's first DHCP\n"
 "    packet comes from 0.0.0.0 and the drop policy eats it.\n"
 "    `sudo synnet --trust-if waydroid0` adds one.\n"
-msgstr "    कंटेनर ब्रिज को एक चाहिए: उसके अतिथि का पहला DHCP पैकेट\n    0.0.0.0 से आता है, और ड्रॉप नीति उसे निगल जाती है।\n    `sudo synnet --trust-if waydroid0` एक जोड़ता है।\n"
+msgstr ""
+"    कंटेनर ब्रिज को एक चाहिए: उसके अतिथि का पहला DHCP पैकेट\n"
+"    0.0.0.0 से आता है, और ड्रॉप नीति उसे निगल जाती है।\n"
+"    `sudo synnet --trust-if waydroid0` एक जोड़ता है।\n"
 
 #, c-format
 msgid "    %-15s (up)\n"
@@ -149,7 +226,9 @@ msgstr "    %-15s (अभी मौजूद नहीं — नाम से �
 msgid ""
 "    ⚠ synnet last applied %s of these. Run\n"
 "      `sudo synnet --firewall` to load the current list.\n"
-msgstr "    ⚠ synnet ने पिछली बार इनमें से %s लागू किए थे। वर्तमान सूची लोड करने के लिए\n      `sudo synnet --firewall` चलाएँ।\n"
+msgstr ""
+"    ⚠ synnet ने पिछली बार इनमें से %s लागू किए थे। वर्तमान सूची लोड करने के लिए\n"
+"      `sudo synnet --firewall` चलाएँ।\n"
 
 msgid "  Live ruleset\n"
 msgstr "  वर्तमान नियम-समूह\n"
@@ -157,17 +236,37 @@ msgstr "  वर्तमान नियम-समूह\n"
 msgid ""
 "    (not shown — listing nftables needs root: sudo synnet --status)\n"
 "\n"
-msgstr "    (नहीं दिखाया — nftables सूचीबद्ध करने को root चाहिए: sudo synnet --status)\n\n"
+msgstr ""
+"    (नहीं दिखाया — nftables सूचीबद्ध करने को root चाहिए: sudo synnet --status)\n"
+"\n"
 
 msgid ""
 "    (not shown — nft is not installed)\n"
 "\n"
-msgstr "    (नहीं दिखाया — nft संस्थापित नहीं है)\n\n"
+msgstr ""
+"    (नहीं दिखाया — nft संस्थापित नहीं है)\n"
+"\n"
 
 msgid ""
 "    the input chain is NOT loaded in the kernel.\n"
 "\n"
-msgstr "    इनपुट चेन कर्नेल में लोड नहीं है।\n\n"
+msgstr ""
+"    इनपुट चेन कर्नेल में लोड नहीं है।\n"
+"\n"
+
+msgid "  Ports opened to sources this box would otherwise drop\n"
+msgstr "  उन स्रोतों के लिए खुले पोर्ट जिन्हें यह मशीन अन्यथा गिरा देती\n"
+
+msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
+msgstr "    कोई नहीं — इस मशीन तक केवल लूपबैक, उत्तर, ICMP और निजी\n    श्रेणियों के स्रोत पहुँचते हैं।\n"
+
+#, c-format
+msgid "    %s/%ld  from ANYWHERE, including the internet\n"
+msgstr "    %s/%ld  कहीं से भी, इंटरनेट सहित\n"
+
+#, c-format
+msgid "    %s/%ld  from %s\n"
+msgstr "    %s/%ld  %s से\n"
 
 msgid "  Blocked destinations (egress)\n"
 msgstr "  अवरुद्ध गंतव्य (आउटगोइंग)\n"

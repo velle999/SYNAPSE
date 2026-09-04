@@ -113,7 +113,13 @@ cmd_net() {
         status) systemctl status synnet --no-pager -l | tail -10 ;;
         allow) [ -z "${2:-}" ] && { echo "Usage: syn net allow <ip>"; exit 1; }; synnet --allow "$2" ;;
         block) [ -z "${2:-}" ] && { echo "Usage: syn net block <ip>"; exit 1; }; synnet --block "$2" ;;
-        *) echo "Usage: syn net [status|allow <ip>|block <ip>]" ;;
+        # ⛔ open/close ARE NOT allow/block. allow is an UNBLOCK — it takes an
+        # address back out of the drop set that block fills — and it opens
+        # nothing. These are the only verbs that let a source the base chain
+        # would drop reach a port, which is why the source is spelled out.
+        open)  [ -z "${2:-}" ] && { echo "Usage: syn net open <tcp|udp>/<port> [<cidr>]"; exit 1; }; synnet --open "$2" ${3:+"$3"} ;;
+        close) [ -z "${2:-}" ] && { echo "Usage: syn net close <tcp|udp>/<port> [<cidr>]"; exit 1; }; synnet --close "$2" ${3:+"$3"} ;;
+        *) echo "Usage: syn net [status|allow <ip>|block <ip>|open <proto>/<port> [<cidr>]|close <proto>/<port> [<cidr>]]" ;;
     esac
 }
 

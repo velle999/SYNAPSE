@@ -45,7 +45,10 @@ pkgver=0.1.0
 # 31: a `remote` row in the Nix profile example, for syn-remote — the ISO
 #   carries it now, so a profile that names every other component and not this
 #   one is a profile that quietly leaves it out.
-pkgrel=31
+# 32: `syn net open` / `syn net close`, following synnet 12. ⛔ These are NOT
+#   `allow`/`block`: allow is an UNBLOCK, and until synnet grew these verbs
+#   nothing could let a source outside the private ranges reach a port at all.
+pkgrel=32
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
