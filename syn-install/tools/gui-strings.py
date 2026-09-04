@@ -14,8 +14,16 @@ non-literal, and a non-literal argument extracts NOTHING while looking exactly
 like a marked string. Those are reported as errors rather than skipped: that is
 the one failure mode of this whole scheme.
 
+--check also reads the file the other way round: every property that PUTS
+WORDS ON THE SCREEN — text, subtext, title, blurb, placeholderText — must get
+them from root.t()/root.tf() and not from a bare literal. A missed one is not a
+broken build or a wrong key, it is a button that stays English in thirteen
+languages while everything around it changes, which is what "Re-check" did
+while the paragraph above it told people to press it.
+
     tools/gui-strings.py            # one key per line, \\n escaped
     tools/gui-strings.py --check    # exit 1 on a non-literal argument
+                                    #   or an unmarked visible string
 
 SynapseOS Project
 SPDX-License-Identifier: GPL-2.0-or-later
@@ -110,10 +118,48 @@ def scan(path):
     return keys, bad
 
 
+# The properties a person reads. Everything else a QML string can be — an id, a
+# colour, a path, a record field, an app_id — is not prose and is not this.
+TEXT_PROPS = ("text", "subtext", "title", "blurb", "label", "placeholderText")
+PROP = re.compile(r"^[ \t]*(%s):[ \t]*(.*)$" % "|".join(TEXT_PROPS), re.M)
+
+
+def unmarked(path):
+    """Visible-text properties whose value contains an unmarked literal."""
+    text = strip_comments(path.read_text(encoding="utf-8"))
+    out = []
+    for m in PROP.finditer(text):
+        # A value can run over several lines (a ternary, a folded sentence), so
+        # take it to the next property or closing brace rather than to the
+        # newline — otherwise a marked multi-line value reads as unmarked.
+        val, i, depth = [], m.end(2), 0
+        val.append(m.group(2))
+        for line in text[i:].split("\n")[1:]:
+            if re.match(r"^[ \t]*[A-Za-z_.]+:", line) or re.match(r"^[ \t]*[}\]]", line):
+                break
+            val.append(line)
+            if len(val) > 12:
+                break
+        joined = " ".join(val)
+        # Strip every marked call's argument list, then look at what is left.
+        rest = re.sub(r"root\.tf?\(", " (", joined)
+        lits = re.findall(STR, joined)
+        marked = "root.t(" in joined or "root.tf(" in joined
+        human = [l for l in lits if re.search(r"[A-Za-z]{2}", l[1:-1])]
+        if not human or marked:
+            continue
+        line_no = text[: m.start()].count("\n") + 1
+        out.append(f"{path.name}:{line_no}: {m.group(1)} is drawn from a bare literal — "
+                   f"it stays English in every language: {joined.strip()[:60]}")
+    return out
+
+
 def main():
     here = pathlib.Path(__file__).resolve().parent.parent
     qml = here / "syn-install-gui.qml"
     keys, bad = scan(qml)
+    if "--check" in sys.argv:
+        bad += unmarked(qml)
     for b in bad:
         print(b, file=sys.stderr)
     if "--check" in sys.argv:

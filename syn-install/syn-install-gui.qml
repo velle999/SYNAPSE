@@ -56,6 +56,14 @@ FloatingWindow {
     // nothing on screen and every later launch exits 0 having drawn nothing.
     onClosed: Qt.quit()
 
+    // Which way the window reads. Used by the layout below; see the comment on
+    // LayoutMirroring there.
+    readonly property bool rtl: {
+        const code = String(root.aLocale).split(/[_.@-]/)[0].toLowerCase()
+        return code === "ar" || code === "he" || code === "fa" || code === "ur"
+    }
+
+
     // Every checkbox starts at its Standard value, which is what aPreset starts
     // at. Without this `picks` is an empty object, every row draws unticked, and
     // a Custom install that nobody touched would write "no" to all of them.
@@ -188,9 +196,19 @@ FloatingWindow {
      */
     Process {
         id: stringsProbe
-        command: [root.bin, "--strings", root.aLocale]
+        // ⛔ THE COMMAND IS ASSIGNED, NOT BOUND. It was
+        // `command: [root.bin, "--strings", root.aLocale]`, and the handler
+        // below starts the process from the SAME property change — so the
+        // process was launched with whatever `command` still held, which is the
+        // PREVIOUS locale. On the path this exists for that previous value is
+        // the startup default, en_US.UTF-8, and English prints zero records: a
+        // live image, which always has a boot-language answer, opened the
+        // window in the chosen language and then wiped it back to English a
+        // moment later. Nothing warned; the dump was correct and the reader was
+        // correct. Assigning it here removes the ordering question.
         stdout: StdioCollector {
-            onStreamFinished: root.strings = root.parseStrings(this.text)
+            id: stringsOut
+            onStreamFinished: root.strings = root.parseStrings(stringsOut.text)
         }
     }
     onALocaleChanged: {
@@ -199,6 +217,7 @@ FloatingWindow {
         // in quickshell — the second language picked in quick succession would
         // simply never load. Stop first.
         stringsProbe.running = false
+        stringsProbe.command = [root.bin, "--strings", root.aLocale]
         stringsProbe.running = true
     }
     // Where the profile is written. /run is a tmpfs, which is the point: it
@@ -608,7 +627,15 @@ FloatingWindow {
     property string release: ""
 
     property int page: 0
-    readonly property var pageNames: ["Welcome", "Disk", "Software", "Account", "Region", "Summary", "Install"]
+    // ⚠ MARKED, AND THEREFORE A BINDING. This is the rail across the top of the
+    // window — the seven words a person reads first — and as a plain array of
+    // literals it stayed English in all thirteen languages while the page under
+    // it was translated. Reading root.t() here is what re-evaluates the list
+    // when the language is picked on the Region page.
+    readonly property var pageNames: [root.t("Welcome"), root.t("Disk"),
+                                      root.t("Software"), root.t("Account"),
+                                      root.t("Region"), root.t("Summary"),
+                                      root.t("Install")]
 
     // ── Disk records ────────────────────────────────────────────────────────
     //
@@ -616,6 +643,19 @@ FloatingWindow {
     // `syn-install --list-disks`. `live` marks the installer's own media and
     // `usable` is that plus the minimum size; both are decided there, not here.
     property var disks: []
+
+    // …and `reason` is a TOKEN, drawn here. It used to be English prose on the
+    // wire, which no window can translate — see list_disks(). Anything
+    // unrecognised is printed as it arrived, so an older syn-install still says
+    // something rather than nothing.
+    function diskReason(r) {
+        if (r === "live") return root.t("the installer's own media")
+        if (r.indexOf("small:") === 0) {
+            const p = r.split(":")
+            return root.tf("%1 GiB — SynapseOS needs at least %2 GiB", p[1], p[2])
+        }
+        return r
+    }
 
     Process {
         id: diskProc
@@ -1342,6 +1382,15 @@ FloatingWindow {
         activeFocusOnTab: ch.selectable
         signal picked()
         implicitHeight: 44
+        // ⚠ AND A WIDTH FROM ITS CONTENT. Every card below is laid out at a
+        // pixel width measured against the ENGLISH label, and nothing clipped
+        // or wrapped when the label got longer — the Row inside is anchored, so
+        // it simply drew straight over the next card. Japanese put
+        // "~0.4 GB — 性能はかなり下がります" through the card beside it, and
+        // `systemd-boot` was over its 118px in English already. The call sites
+        // ask for Math.max(their number, this), so English keeps the width it
+        // was drawn at and a longer language gets the room instead of a mess.
+        implicitWidth: chRow.implicitWidth + 24
         radius: 6
         color: ch.checked ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.14)
              : cma.containsMouse && ch.selectable ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
@@ -1349,6 +1398,7 @@ FloatingWindow {
         border.color: ch.checked ? root.cAccent : root.cLine
         opacity: ch.selectable ? 1 : 0.45
         Row {
+            id: chRow
             anchors.left: parent.left
             anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
@@ -1708,15 +1758,32 @@ FloatingWindow {
         id: hd
         property string title: ""
         property string blurb: ""
+        // ⚠ AS WIDE AS THE PAGE, so the block below can sit against the right
+        // margin in Arabic. The 640 is a MEASURE, not a position: a paragraph
+        // is read by the line, and a blurb wrapped at the full card width is a
+        // worse paragraph in every language.
+        width: parent ? parent.width : 640
         spacing: 4
         // Addressed through the id, never `parent`: inside a Column, `parent`
         // happens to be this same object, so the two read alike right up until
         // something is nested one level deeper and it silently is not.
-        Text { text: hd.title; color: root.cText; font.pixelSize: 20; font.bold: true }
+        // ⚠ THE TITLE IS GIVEN THE BLURB'S WIDTH so the two agree in Arabic.
+        // A Text with no width has nothing to align inside, so under mirroring
+        // it stays where a left-to-right language puts it while the paragraph
+        // under it moves to the right margin — one heading and one paragraph,
+        // on opposite sides of the card.
+        Text {
+            text: hd.title; color: root.cText; font.pixelSize: 20; font.bold: true
+            width: Math.min(640, hd.width); elide: Text.ElideRight
+            // ⛔ x, NOT anchors. A Column DROPS a child that anchors itself —
+            // it disappears and contributes no height, silently.
+            x: hd.LayoutMirroring.enabled ? hd.width - width : 0
+        }
         Text {
             text: hd.blurb; color: root.cDim; font.pixelSize: 13
             visible: hd.blurb !== ""
-            width: 640; wrapMode: Text.WordWrap
+            width: Math.min(640, hd.width); wrapMode: Text.WordWrap
+            x: hd.LayoutMirroring.enabled ? hd.width - width : 0
         }
     }
 
@@ -1724,6 +1791,26 @@ FloatingWindow {
     Rectangle {
         anchors.fill: parent
         color: root.cBg
+
+        // ── Arabic reads the other way ──────────────────────────────────────
+        //
+        // Translating the sentences is not the whole of a right-to-left
+        // language: the step rail counts from the right, the radio dot sits on
+        // the right of its label, Back and Next swap sides, and a wrapped
+        // paragraph starts at the right margin. Qt does all of it from one
+        // flag, and childrenInherit is what carries it into the pages —
+        // without that only this rectangle mirrors and every row inside stays
+        // left-handed.
+        //
+        // ⛔ IT GOES ON AN ITEM, NOT ON THE WINDOW. `LayoutMirroring` attached
+        // to the FloatingWindow logs "only works with Items and Windows" and
+        // does nothing at all — quickshell's window type is neither.
+        // ⚠ AND IT FOLLOWS THE ANSWER, not the environment: the language is
+        // picked on the Region page, in this window, so a locale read once at
+        // startup would leave somebody who chose Arabic here reading it left
+        // to right.
+        LayoutMirroring.enabled: root.rtl
+        LayoutMirroring.childrenInherit: true
 
         // Step rail.
         Row {
@@ -1822,7 +1909,12 @@ FloatingWindow {
                         Row {
                             spacing: 8
                             Btn {
-                                text: root.netProbing ? "Checking…" : "Re-check"
+                                // ⚠ THE BLURB ABOVE NAMES THIS BUTTON. "press
+                                // Re-check" and the word on the button have to
+                                // be the same word, so if one is translated
+                                // both are.
+                                text: root.netProbing ? root.t("Checking…")
+                                                      : root.t("Re-check")
                                 canPress: !root.netProbing
                                 onClicked: root.netProbe()
                             }
@@ -1886,7 +1978,7 @@ FloatingWindow {
                             width: parent.width
                             text: modelData.dev + "   " + modelData.size
                             subtext: modelData.usable ? modelData.model
-                                                      : modelData.model + " — " + modelData.reason
+                                                      : modelData.model + " — " + root.diskReason(modelData.reason)
                             selectable: modelData.usable
                             checked: root.aDisk === modelData.dev
                             onPicked: root.aDisk = modelData.dev
@@ -1906,13 +1998,13 @@ FloatingWindow {
                         Row {
                             spacing: 6
                             Choice {
-                                width: 190; text: root.t("Erase the disk")
+                                width: Math.max(190, implicitWidth); text: root.t("Erase the disk")
                                 subtext: root.t("every partition and all data")
                                 checked: root.aMode === "erase"
                                 onPicked: root.aMode = "erase"
                             }
                             Choice {
-                                width: 190; text: root.t("Install alongside")
+                                width: Math.max(190, implicitWidth); text: root.t("Install alongside")
                                 subtext: root.t("use free space, UEFI only")
                                 checked: root.aMode === "alongside"
                                 onPicked: root.aMode = "alongside"
@@ -1930,7 +2022,7 @@ FloatingWindow {
                             Repeater {
                                 model: ["ext4", "btrfs", "xfs", "f2fs"]
                                 Choice {
-                                    width: 92; text: modelData
+                                    width: Math.max(92, implicitWidth); text: modelData
                                     checked: root.aFs === modelData
                                     onPicked: root.aFs = modelData
                                 }
@@ -1945,7 +2037,7 @@ FloatingWindow {
                             Repeater {
                                 model: ["grub", "systemd-boot", "limine"]
                                 Choice {
-                                    width: 118; text: modelData
+                                    width: Math.max(118, implicitWidth); text: modelData
                                     checked: root.aBoot === modelData
                                     onPicked: root.aBoot = modelData
                                 }
@@ -1956,7 +2048,7 @@ FloatingWindow {
                 Row {
                     spacing: 18
                     Choice {
-                        width: 240
+                        width: Math.max(240, implicitWidth)
                         text: root.t("Snapshots")
                         subtext: root.t("btrfs + limine only")
                         selectable: root.aFs === "btrfs" && root.aBoot === "limine"
@@ -1964,7 +2056,7 @@ FloatingWindow {
                         onPicked: root.aSnapshots = !root.aSnapshots
                     }
                     Choice {
-                        width: 240
+                        width: Math.max(240, implicitWidth)
                         text: root.t("Encrypt the disk")
                         subtext: root.t("LUKS2")
                         checked: root.aEncrypt
@@ -2113,8 +2205,14 @@ FloatingWindow {
                                                 // silently re-ticked at the
                                                 // machine — the summary and the
                                                 // install then agree.
+                                                // ⚠ THE WORD IS MARKED, THE SPACING IS NOT.
+                                                // "  (required)" as one literal would put
+                                                // two leading spaces into the catalog key,
+                                                // which no translator can see and every
+                                                // editor eats.
                                                 text: cell.modelData.label
-                                                    + (root.forcedOn(cell.modelData.key) ? "  (required)" : "")
+                                                    + (root.forcedOn(cell.modelData.key)
+                                                       ? "  " + root.t("(required)") : "")
                                                 checked: root.pickOn(cell.modelData.key)
                                                     || root.forcedOn(cell.modelData.key)
                                                 onToggled: {
@@ -2247,29 +2345,29 @@ FloatingWindow {
                         Row {
                             spacing: 6
                             Choice {
-                                width: 190; text: root.t("Mistral 7B"); subtext: root.t("~4.1 GB — recommended")
+                                width: Math.max(190, implicitWidth); text: root.t("Mistral 7B"); subtext: root.t("~4.1 GB — recommended")
                                 checked: root.aModel === "mistral-7b"
                                 onPicked: root.aModel = "mistral-7b"
                             }
                             Choice {
-                                width: 170; text: root.t("Phi-3 Mini"); subtext: root.t("~2.2 GB — weaker")
+                                width: Math.max(170, implicitWidth); text: root.t("Phi-3 Mini"); subtext: root.t("~2.2 GB — weaker")
                                 checked: root.aModel === "phi3"
                                 onPicked: root.aModel = "phi3"
                             }
                             Choice {
-                                width: 170; text: root.t("Qwen2 0.5B"); subtext: root.t("~0.4 GB — much weaker")
+                                width: Math.max(170, implicitWidth); text: root.t("Qwen2 0.5B"); subtext: root.t("~0.4 GB — much weaker")
                                 checked: root.aModel === "tiny"
                                 onPicked: root.aModel = "tiny"
                             }
                             Choice {
-                                width: 150; text: root.t("None"); subtext: root.t("AI stays inert")
+                                width: Math.max(150, implicitWidth); text: root.t("None"); subtext: root.t("AI stays inert")
                                 checked: root.aModel === "none"
                                 onPicked: root.aModel = "none"
                             }
                         }
                     }
                     Choice {
-                        width: 340
+                        width: Math.max(340, implicitWidth)
                         visible: root.hasNvidia
                         text: root.t("NVIDIA GPU inference")
                         subtext: root.t("the CUDA runtime, ~4.7 GiB")
@@ -2337,7 +2435,7 @@ FloatingWindow {
                         // name — better to refuse the click than to let the
                         // install stop twenty minutes later.
                         Choice {
-                            width: 200; text: root.t("SynapseUI")
+                            width: Math.max(200, implicitWidth); text: root.t("SynapseUI")
                             subtext: root.pickOn("comp_synui") ? root.t("the native compositor")
                                                                : root.t("synui is not selected")
                             enabled: root.pickOn("comp_synui")
@@ -2346,17 +2444,17 @@ FloatingWindow {
                             onPicked: if (root.pickOn("comp_synui")) { root.aDesktop = "synui"; root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 150; text: root.t("KDE Plasma")
+                            width: Math.max(150, implicitWidth); text: root.t("KDE Plasma")
                             checked: root.aDesktop === "kde"
                             onPicked: { root.aDesktop = "kde";   root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 130; text: root.t("GNOME")
+                            width: Math.max(130, implicitWidth); text: root.t("GNOME")
                             checked: root.aDesktop === "gnome"
                             onPicked: { root.aDesktop = "gnome"; root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 130; text: root.t("None"); subtext: root.t("headless")
+                            width: Math.max(130, implicitWidth); text: root.t("None"); subtext: root.t("headless")
                             checked: root.aDesktop === "tty"
                             onPicked: { root.aDesktop = "tty";   root.aDesktopChosen = true }
                         }

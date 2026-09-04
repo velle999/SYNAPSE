@@ -970,12 +970,18 @@ list_disks() {
         model=$(lsblk -dno MODEL "$dev" 2>/dev/null | head -1)
         model="${model#"${model%%[![:space:]]*}"}"
         model="${model%"${model##*[![:space:]]}"}"
+        # ⚠ THE REASON IS A TOKEN, NOT A SENTENCE. This field is only ever
+        # DRAWN — by the graphical installer, beside the disk it disqualifies —
+        # and a record is not writing: English prose on the wire is prose the
+        # window cannot translate, which is how the one disk row that says
+        # something stayed English in all thirteen languages. `live`, and
+        # `small:<GiB>:<minimum GiB>` for the other; the window renders both.
         live=0; usable=1; reason=""
         if is_live_disk "$dev"; then
-            live=1; usable=0; reason="the installer's own media"
+            live=1; usable=0; reason="live"
         elif [ "$bytes" -lt "$MIN_DISK_BYTES" ]; then
             usable=0
-            reason="$((bytes / 1024 / 1024 / 1024)) GiB — SynapseOS needs at least $((MIN_DISK_BYTES / 1024 / 1024 / 1024)) GiB"
+            reason="small:$((bytes / 1024 / 1024 / 1024)):$((MIN_DISK_BYTES / 1024 / 1024 / 1024))"
         fi
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$dev" "$bytes" "$(numfmt --to=iec --suffix=B "$bytes" 2>/dev/null || echo "$bytes")" \

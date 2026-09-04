@@ -144,6 +144,32 @@ have=$(grep -c 'SYN_INSTALL_BIN' "$root/syn-install-gui.sh")
 [ "$have" -ge 1 ] && ok "the launcher dumps from the binary the window calls" \
                   || bad "syn-install-gui.sh does not honour SYN_INSTALL_BIN"
 
+# ── 2b. …and the language change is dispatched in the right order ─
+#
+# ⛔ SOURCE CHECKS, deliberately, because the failure is a QML property-update
+# ORDER and only a running window shows it. `command` used to be BOUND —
+# `command: [root.bin, "--strings", root.aLocale]` — and onALocaleChanged
+# starts the process from that same property change, so the child was launched
+# with the command's PREVIOUS value: the startup default, en_US.UTF-8, which
+# prints zero records. A live image always carries a boot-language answer, so
+# the window opened in the chosen language and wiped itself back to English a
+# moment later — with a correct dump and a correct parser on either side of it.
+# ⚠ COMMENTS STRIPPED FIRST — this trap is described at length inside the very
+# block being searched, and a check that matched its own explanation would fail
+# on a correct file.
+code() { sed -n "$1" "$root/syn-install-gui.qml" | sed 's,//.*,,'; }
+
+bound=$(code '/id: stringsProbe/,/^    }/p' | grep -c 'command:')
+check "the strings probe does not bind its command" 0 "$bound"
+
+# …and the handler assigns it, before starting.
+assign=$(code '/onALocaleChanged/,/^    }/p' |
+         grep -o 'stringsProbe\.\(command\|running\) *= *[^ ]*' | tr -d ' ')
+want='stringsProbe.running=false
+stringsProbe.command=[root.bin,
+stringsProbe.running=true'
+check "…the handler stops it, sets it, starts it — in that order" "$want" "$assign"
+
 # ── 3. the reader, cut out of the shipped file ────────────
 QMLBIN=/usr/lib/qt6/bin/qml
 python3 - "$root/syn-install-gui.qml" > "$T/funcs.js" <<'PY'

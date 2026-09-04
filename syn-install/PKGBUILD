@@ -334,7 +334,46 @@ pkgver=0.1.0
 #   ⛔ SUCCESS IS EXIT 7: `qml` exits ZERO on a file it could not load.
 #   tests/i18n_test.sh and tools/gui-strings.py --check are in CI now too; the
 #   catalogs had never been checked there at all.
-pkgrel=114
+# 115: …AND THE WINDOW WIPED ITSELF BACK TO ENGLISH ON EVERY LIVE IMAGE. 114
+#   was verified by reading the dump and running the reader; both were right,
+#   and the window was still English the moment a boot-language answer existed
+#   — which on a live image is always. Found by opening it in a nested headless
+#   synui and looking at it.
+#
+#   ⛔ THE PROBE'S COMMAND WAS A BINDING. `command: [root.bin, "--strings",
+#   root.aLocale]` on the Process, and onALocaleChanged starts it FROM THAT SAME
+#   property change — so the child ran with whatever `command` still held: the
+#   startup default, en_US.UTF-8, which prints ZERO records by design. Correct
+#   dump, correct parser, correct catalogs, English window. The command is
+#   ASSIGNED in the handler now, and tests/guilang_test.sh asserts the order
+#   from the source, because only a running window shows the failure.
+#
+#   And four more the screenshots showed:
+#
+#   ⛔ THE STEP RAIL — the seven words at the top, read first — was a plain array
+#   of literals. Marked, and therefore a binding, so it follows the language
+#   picked on the Region page. Welcome/Region/Summary are new keys.
+#   ⛔ EVERY Choice CARD WAS A FIXED PIXEL WIDTH measured against the ENGLISH
+#   label, and the Row inside is anchored: a longer label did not clip or wrap,
+#   it drew straight over the next card. Japanese put "~0.4 GB — 性能はかなり
+#   下がります" through the card beside it, and `systemd-boot` was over its 118px
+#   in English already. Choice has an implicitWidth from its content now and the
+#   call sites ask for Math.max(their number, it).
+#   ⛔ THE DISK `reason` WAS ENGLISH PROSE ON THE WIRE — the one row that says
+#   why a disk cannot be chosen. A record is not writing: it is a token now
+#   (`live`, `small:<GiB>:<min>`) and the window draws the sentence.
+#   ⛔ "Re-check" AND "(required)" were bare literals. The first is NAMED by the
+#   paragraph above it ("then press Re-check"), so the sentence was translated
+#   and the button it pointed at was not. `gui-strings.py --check` now reads the
+#   file the other way round as well: a text/subtext/title/blurb/label drawn
+#   from a bare literal is an error.
+#
+#   ⚠ AND ARABIC READS THE OTHER WAY. Translating the sentences is not the whole
+#   of an RTL language: the rail counts from the right, the radio dot sits right
+#   of its label, Back and Next swap. LayoutMirroring does all of it from one
+#   flag — ⛔ attached to an ITEM, since on quickshell's FloatingWindow it logs
+#   "only works with Items and Windows" and does nothing.
+pkgrel=115
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
