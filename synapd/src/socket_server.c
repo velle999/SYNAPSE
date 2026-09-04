@@ -397,9 +397,10 @@ static void *reload_thread(void *arg) {
  *
  * ⚠ A HINT, NOT A COMMAND — offload.h says why the sender may not name a layer
  * count. It raises the floor the policy defends and the watcher decides what
- * that means; this returns immediately, because the sender is synui's game
- * mode and a game launching is the worst possible moment to block the
- * compositor for the tens of seconds a reload takes.
+ * that means; this returns immediately, because a caller that wants the card is
+ * the worst possible thing to block for the tens of seconds a reload takes.
+ *
+ * ⚠ Game mode is NOT the sender any more — see SYN_MSG_DEMAND in synapd.h.
  */
 static void handle_demand(work_item_t *w) {
     char *arg = (char *)w->payload;

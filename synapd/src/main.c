@@ -73,12 +73,26 @@ struct synapd_state g_state = {
          * with synapd up against 2655 without, measured for the suspend hook),
          * and until now it held it for the whole session whatever else the
          * desktop was trying to do. Defaulting this off would leave the common
-         * case — a game or a render starting while the assistant sits idle —
-         * exactly as bad as it was, for everybody who never finds the setting.
+         * case — a render, an encode or a CUDA job starting while the assistant
+         * sits idle — exactly as bad as it was, for everybody who never finds
+         * the setting.
+         *
+         * ⚠ THIS IS THE WHOLE OF THE AUTOMATIC BEHAVIOUR AND IT NEEDS NO
+         * CLIENT. The watcher reads free VRAM every poll and defends the floor
+         * on its own; SYN_MSG_DEMAND only swaps which floor. Nothing in the
+         * tree sends that message as of synui 601, and the watcher is
+         * unaffected by that — it never depended on one.
+         *
+         * ⛔ AND IT IS VRAM AND NOTHING ELSE. Shedding a layer moves it into
+         * system RAM and onto the CPU: this subsystem RELIEVES the card by
+         * spending the other two. That is the right trade for a desktop under
+         * GPU pressure where somebody still wants an answer, and the wrong one
+         * for anything competing for RAM or cores — which is why game mode
+         * releases the model instead of asking for this.
          *
          * ⚠ 1024 MiB is a FLOOR TO LEAVE FREE, not an amount to use. 4096 while
-         * a client declares high demand, because a game asking for the card is
-         * asking for most of it.
+         * a client declares high demand, on the reasoning that something asking
+         * for the card is asking for most of it.
          *
          * ⚠ AND THE POLL IS SLOW ON PURPOSE. Every move destroys and reloads a
          * multi-GB model; 20s to notice plus a 120s dwell is the difference

@@ -89,11 +89,16 @@ const char *offload_set_demand(synapd_state_t *s, int high)
         return high ? "already at high demand" : "already at normal demand";
 
     /*
-     * ⚠ THE THREAD DOES THE WORK, NOT THIS CALL. The sender is synui's game
-     * mode, and a game launching is exactly when the desktop must not stall:
-     * re-fitting here would block the compositor's IPC for the tens of seconds
+     * ⚠ THE THREAD DOES THE WORK, NOT THIS CALL. A caller declaring high
+     * demand is about to want the card, which is exactly when it must not be
+     * made to wait: re-fitting here would block its IPC for the tens of seconds
      * a reload takes. The next poll picks it up, and the poll interval is the
-     * worst case for how long the game waits for its VRAM.
+     * worst case for how long it waits.
+     *
+     * ⚠ NO SENDER IN THE TREE as of synui 601 — game mode releases the model
+     * outright, because shedding a layer moves it into RAM and onto the CPU
+     * rather than freeing it. This stays for the case it was right for: a
+     * desktop under GPU pressure where somebody still wants an answer.
      */
     syn_log(LOG_INFO, "offload: demand is now %s", high ? "HIGH" : "normal");
     return high ? "high demand noted — VRAM will be released at the next poll"

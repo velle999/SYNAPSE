@@ -41,7 +41,15 @@ pkgver=0.1.0
 #     length of a game. Read during a game, that message described a daemon
 #     stuck mid-reload for an hour. Same for the log line, which said "for
 #     suspend" about a release with two very different senders.
-pkgrel=52
+#   ⚠ AND THREE MORE OF THE SAME, found by asking whether the watcher still
+#     works with no client sending DEMAND. It does — offload_thread reads free
+#     VRAM every poll and defends offload_floor_mib on its own, and demand only
+#     swaps which floor — but offload.c, socket_server.c and main.c all still
+#     named game mode as the sender. main.c now also says the thing that is
+#     easy to miss: this subsystem relieves the CARD by spending RAM and CPU,
+#     so it is the right answer for GPU pressure and the wrong one for anything
+#     competing for the other two.
+pkgrel=53
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
