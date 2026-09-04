@@ -71,7 +71,7 @@ executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
         'src/http_server.c',
         'src/context.c','src/scheduler.c','src/log.c','src/profile.c',
-        'src/selected.c','src/pressure.c','src/offload.c'),
+        'src/selected.c','src/pressure.c','src/offload.c','src/sysload.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
@@ -121,6 +121,15 @@ pressure_test = executable('pressure_test',
   files('tests/pressure_test.c','src/pressure.c'),
   include_directories: include_directories('include'))
 test('pressure', pressure_test)
+
+# What the machine is short of, out of /proc. Same split and the same reason:
+# the branches worth testing are a kernel with no PSI and a machine actually
+# stalling, and a build machine can be asked to be neither — so sysload.c takes
+# its proc directory as a parameter and the suite hands it fixture files.
+sysload_test = executable('sysload_test',
+  files('tests/sysload_test.c','src/sysload.c'),
+  include_directories: include_directories('include'))
+test('sysload', sysload_test)
 
 selected_test = executable('selected_test',
   files('tests/selected_test.c','src/selected.c','src/log.c'),

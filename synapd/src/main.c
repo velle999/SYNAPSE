@@ -103,6 +103,27 @@ struct synapd_state g_state = {
         .offload_game_mib  = 4096,
         .offload_dwell_s   = 120,
         .offload_poll_s    = 20,
+        /*
+         * ── RAM and cores ──
+         *
+         * ⚠ CONSERVATIVE ON PURPOSE, both of them. These release the model
+         * outright, and coming back costs tens of seconds — so they are set
+         * where they answer a machine in real trouble and stay silent through
+         * ordinary use. 1536 MiB of MemAvailable on a desktop is trouble; a
+         * minute in which tasks spent 40% of their time stalled is a machine
+         * that is genuinely fighting for something.
+         *
+         * ⚠ AND THE CPU HALF BUYS LESS THAN IT LOOKS. An idle model costs no
+         * CPU at all — llama.cpp computes only while answering — so releasing
+         * on core pressure does not hand a build any cycles it was not already
+         * getting. What it does is take synapd out of the running as a FUTURE
+         * competitor, and give back the RAM at the same time. Worth doing,
+         * worth not overstating.
+         *
+         * Either at 0 switches that half off and leaves the VRAM policy alone.
+         */
+        .offload_ram_floor_mib = 1536,
+        .offload_psi_limit_pct = 40,
     },
     .offload_cap      = -1,   /* -1 = no cap; auto-detect decides, as it always did */
     .offload_resident = 0,
@@ -207,6 +228,16 @@ static void usage(const char *prog) {
         "  -T, --temperature F    Sampling temperature, 0 = greedy (default: 0.8)\n"
         "  -P, --top-p F          Nucleus sampling cutoff (default: 0.95)\n"
         "  -K, --top-k N          Top-k candidates, 0 = off (default: 40)\n"
+        "\n"
+        "Giving the machine back (see offload.h, pressure.h):\n"
+        "  -A, --auto-offload on|off  Watch and re-fit while running (default: on)\n"
+        "  -F, --offload-floor MIB    Free VRAM to defend (default: 1024)\n"
+        "  -G, --offload-game MIB     The same while a client declares high demand (4096)\n"
+        "  -R, --offload-ram MIB      Release the model below this MemAvailable (1536)\n"
+        "  -S, --offload-psi PCT      Release above this stall percentage (60s avg, 40)\n"
+        "  -W, --offload-dwell SEC    Minimum between moves (default: 120)\n"
+        "  -L, --offload-poll SEC     How often to look (default: 20)\n"
+        "\n"
         "  -d, --debug            Debug mode (no daemonize, verbose log)\n"
         "  -f, --foreground       Run in foreground (no daemonize)\n"
         "  -v, --version          Print version\n"
@@ -276,6 +307,8 @@ int main(int argc, char *argv[]) {
         {"offload-game",   required_argument, 0, 'G'},
         {"offload-dwell",  required_argument, 0, 'W'},
         {"offload-poll",   required_argument, 0, 'L'},
+        {"offload-ram",    required_argument, 0, 'R'},
+        {"offload-psi",    required_argument, 0, 'S'},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
         {"version",    no_argument,       0, 'v'},
@@ -284,7 +317,7 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:A:F:G:W:L:dfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:A:F:G:W:L:R:S:dfvh", long_opts, NULL)) != -1) {
         switch (opt) {
         /* The *_set flags are what let a per-model profile fill in a value
          * without overriding one the operator asked for by name. */
@@ -308,6 +341,8 @@ int main(int argc, char *argv[]) {
         case 'G': g_state.config.offload_game_mib  = (unsigned)atoi(optarg); break;
         case 'W': g_state.config.offload_dwell_s   = (unsigned)atoi(optarg); break;
         case 'L': g_state.config.offload_poll_s    = (unsigned)atoi(optarg); break;
+        case 'R': g_state.config.offload_ram_floor_mib = (unsigned)atoi(optarg); break;
+        case 'S': g_state.config.offload_psi_limit_pct = (unsigned)atoi(optarg); break;
         case 'd': g_state.debug = 1; foreground = 1; break;
         case 'f': foreground = 1; break;
         case 'v':

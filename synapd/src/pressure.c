@@ -20,7 +20,7 @@ static size_t div_up(size_t a, size_t b) {
 void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
 {
     out->target_layers = in->layers_resident;
-    out->change        = 0;
+    out->act           = SYN_PRESSURE_HOLD;
     out->why           = "no change";
 
     /*
@@ -46,6 +46,69 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
         return;
     }
 
+    /*
+     * ── RAM and CPU, decided FIRST ───────────────────────────────────────
+     *
+     * ⛔ ORDER IS THE WHOLE POINT. Shedding a layer to relieve the card puts
+     * that layer in RAM and on the cores, so running the VRAM rule first on a
+     * machine that is short of MEMORY would answer a shortage by deepening it.
+     * When both are tight there is no layer count that helps and the only move
+     * that does anything is to let the model go.
+     */
+    const int mem_known = in->mem_total_mib > 0 && in->ram_floor_mib > 0;
+    const int psi_known = in->psi_available && in->psi_limit_pct > 0;
+
+    const int ram_short = (mem_known && in->mem_avail_mib < in->ram_floor_mib) ||
+                          (psi_known && in->psi_mem_pct > in->psi_limit_pct);
+    /*
+     * ⚠ AND NOT WHILE WE ARE THE ONES USING THEM. See `busy` in pressure.h: a
+     * generation saturates n_threads, so answering a question is indis-
+     * tinguishable from a build to a stall counter, and releasing then would
+     * unload the model out from under the person waiting for it.
+     */
+    const int cpu_short = psi_known && !in->busy && in->psi_cpu_pct > in->psi_limit_pct;
+
+    if (in->released) {
+        /*
+         * ⛔ MEASURED AGAINST WHAT COMING BACK WOULD COST, exactly as the VRAM
+         * restore is, and for the same reason: we are part of what we measure.
+         * Releasing the model gave those megabytes back, so `mem_avail` is
+         * large BECAUSE we are gone. Reloading on that figure puts the machine
+         * straight back under the floor and the next poll releases again.
+         */
+        if (cpu_short) {
+            out->why = "still released — the cores are still busy";
+            return;
+        }
+        if (mem_known) {
+            const size_t margin = in->ram_floor_mib / 2;
+            const size_t wanted = in->ram_floor_mib + margin + in->model_ram_mib;
+            if (in->mem_avail_mib < wanted) {
+                out->why = "still released — RAM has not recovered past what "
+                           "reloading would take";
+                return;
+            }
+        } else if (ram_short) {
+            out->why = "still released — memory is still short";
+            return;
+        }
+        out->act = SYN_PRESSURE_RELOAD;
+        out->why = "the machine is quiet again — taking the model back";
+        return;
+    }
+
+    if (ram_short) {
+        out->act = SYN_PRESSURE_RELEASE;
+        out->why = "system memory is short — a layer count cannot help, "
+                   "releasing the model";
+        return;
+    }
+    if (cpu_short) {
+        out->act = SYN_PRESSURE_RELEASE;
+        out->why = "the cores are stalled on other work — releasing the model";
+        return;
+    }
+
     const size_t floor = in->demand_high && in->game_floor_mib > in->floor_mib
                        ? in->game_floor_mib
                        : in->floor_mib;
@@ -65,6 +128,11 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
              * because the reader's next question is whether synapd is the
              * problem, and this is the line that answers no.
              */
+            /* ⚠ And a release is not the answer either: the card being full
+             * with our layers already in RAM means somebody ELSE has the VRAM,
+             * and unloading a model that is not on the card frees none of it.
+             * The RAM rule above is what would have caught it if the cost of
+             * being in RAM were the problem. */
             out->why = "below the floor with no layers left to give back";
             return;
         }
@@ -74,7 +142,7 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
         if (target < 0) target = 0;
 
         out->target_layers = target;
-        out->change        = 1;
+        out->act           = SYN_PRESSURE_REFIT;
         out->why           = in->demand_high
                            ? "high demand declared — making room"
                            : "free VRAM is under the floor";
@@ -115,6 +183,6 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
     if (target > in->n_layer) target = in->n_layer;
 
     out->target_layers = target;
-    out->change        = 1;
+    out->act           = SYN_PRESSURE_REFIT;
     out->why           = "VRAM recovered — taking layers back";
 }

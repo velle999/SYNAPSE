@@ -188,6 +188,14 @@ typedef struct {
     int         auto_offload;      /* 1 = watch VRAM and re-fit (default) */
     unsigned    offload_floor_mib; /* headroom to leave free for everyone else */
     unsigned    offload_game_mib;  /* the same, while a client declares high demand */
+    /*
+     * ⚠ RAM AND CORES, WHERE A LAYER COUNT IS NO HELP. Shedding a layer puts it
+     * in RAM and on the CPU, so a machine short of either is not helped by a
+     * re-fit — the policy releases the model instead and takes it back when the
+     * machine is quiet. 0 in either of these switches that half off.
+     */
+    unsigned    offload_ram_floor_mib;  /* release below this much MemAvailable */
+    unsigned    offload_psi_limit_pct;  /* `some avg10` above this is a shortage */
     unsigned    offload_dwell_s;   /* minimum seconds between two moves */
     unsigned    offload_poll_s;    /* how often to look */
 } synapd_config_t;
@@ -336,6 +344,13 @@ typedef struct synapd_state {
     /* Last thing a client said over SYN_MSG_DEMAND. */
     _Atomic int         demand_high;
     pthread_t           offload_thread;
+    /*
+     * ⛔ WHOSE RELEASE IT WAS. model_sleeping alone cannot answer that, and the
+     * watcher must not undo a SLEEP that came from a client — the suspend hook
+     * holds one across a suspend, synui's game mode across a game. Set only by
+     * the offload policy, and the only thing that reloads on its own.
+     */
+    _Atomic int         offload_released;
     _Atomic int         offload_stop;
     int                 offload_running;    /* the thread was actually started */
 

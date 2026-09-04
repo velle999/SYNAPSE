@@ -49,7 +49,43 @@ pkgver=0.1.0
 #     easy to miss: this subsystem relieves the CARD by spending RAM and CPU,
 #     so it is the right answer for GPU pressure and the wrong one for anything
 #     competing for the other two.
-pkgrel=53
+# 54: THE WATCHER LOOKS AT RAM AND THE CORES NOW, not only the card. The VRAM
+#   policy relieves the GPU BY SPENDING the other two — a shed layer is
+#   reloaded into system RAM and computed on the CPU — so a machine short of
+#   memory could not be helped by it at all, and shedding into a memory
+#   shortage would have deepened one.
+#   ⛔ THERE IS NO LAYER COUNT THAT HELPS, so the policy gained one other move:
+#     release the model outright and take it back when the machine is quiet.
+#     Order matters and is pinned by a test — short of BOTH VRAM and RAM, it
+#     releases rather than shedding into the shortage.
+#   ⚠ PSI, NOT FREE BYTES. "Free memory" on Linux is not a measure of shortage;
+#     the page cache keeps it small on a machine with nothing wrong. `some
+#     avg60` out of /proc/pressure answers the question actually being asked —
+#     how much of the last minute real tasks spent STALLED. avg60 and not
+#     avg10, because what this decides costs tens of seconds to undo and one
+#     heavy compile of one file is not a reason to unload a model. A kernel
+#     without PSI falls back to the MemAvailable floor alone and says so.
+#   ⛔ AND IT IS PART OF WHAT IT MEASURES, AGAIN. Releasing hands back the RAM
+#     the model held, so `mem_avail` is large precisely BECAUSE we are gone —
+#     the same trap as the VRAM loop. Coming back is measured against what the
+#     reload would itself take (pessimistically, the whole model), so the band
+#     is asymmetric in RAM exactly as it is in VRAM. pressure_test drives the
+#     release loop with the freed memory fed back in and asserts it SETTLES.
+#   ⛔ AND NOT WHEN THE LOAD IS OURS. A generation saturates n_threads, so
+#     synapd answering a question is indistinguishable from a build to a stall
+#     counter — releasing then would unload the model out from under the person
+#     waiting for the answer. requests_active gates the CPU rule.
+#   ⚠ Conservative defaults, deliberately: 1536 MiB available and a 40% stall
+#     limit, either at 0 to switch that half off (-R / -S). And the CPU half
+#     buys less than it looks — an idle model costs no CPU at all, since
+#     llama.cpp computes only while answering — so what it really does is take
+#     synapd out of the running as a future competitor and give the RAM back at
+#     the same time. Said in main.c rather than implied.
+#   New src/sysload.c reads /proc; it takes its directory as a PARAMETER, so
+#   sysload_test drives a no-PSI kernel and a stalling machine off fixtures —
+#   neither of which a build machine can be asked to be. The usage text also
+#   grew the six offload flags, none of which it had ever listed.
+pkgrel=54
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
