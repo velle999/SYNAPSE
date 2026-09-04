@@ -109,6 +109,13 @@ static void devices(void)
  * colons, and an IPv6 address is worse. This is the one place in the file that
  * does NOT want next_field(): `device show` is a two-column form, not the
  * n-column one the escaping in next_field() exists for.
+ *
+ * ⛔ AND EVERY ONE OF THEM LEAVES HERE MASKED. These rows are the two facts on
+ * this pane that identify the machine rather than describe it, and the window
+ * they are drawn in is the one that ends up in a screenshot attached to a
+ * question, or on screen behind a stream. addr_mask() (src/util.c) puts bullets
+ * in their place until --reveal, and the `address:` token in the action column
+ * is how the window knows to offer the button that passes it.
  */
 struct netdev {
 	char dev[64];
@@ -228,34 +235,43 @@ static void addresses(void)
 		else
 			detail = N_("The hardware address of this interface.");
 
-		rec_row("mac\t%s\t%s\t-\t%s\t-",
-		        d->dev, d->mac[0] ? d->mac : N_("none"), detail);
+		char m[128];
+		rec_row("mac\t%s\t%s\t-\t%s\t%s", d->dev,
+		        addr_mask(d->mac[0] ? d->mac : N_("none"), m, sizeof m),
+		        detail, addr_action());
 	}
 
 	for (int j = 0; j < m; j++) {
 		struct netdev *d = &devs[shown[j]];
 		if (!d->ip4[0] && !d->ip6[0]) continue;
-		char val[384] = "";
+		char val[384] = "", m[1024];
 		addr_join(val, sizeof val, d->ip4);
 		addr_join(val, sizeof val, d->ip6);
-		rec_row("ip\t%s\t%s\t-\t%s\t-", d->dev, val,
-		        N_("The addresses this interface holds right now, IPv4 first. A lease can change at any time, so an address is not a permanent way to find this machine again."));
+		rec_row("ip\t%s\t%s\t-\t%s\t%s", d->dev,
+		        addr_mask(val, m, sizeof m),
+		        N_("The addresses this interface holds right now, IPv4 first. A lease can change at any time, so an address is not a permanent way to find this machine again."),
+		        addr_action());
 	}
 
 	/* ⚠ ONE OF EACH, NOT ONE PER INTERFACE. Every device carries an
 	 * IP4.GATEWAY field and it is empty on all but the one holding the default
 	 * route — a bridge has an address and no way off the machine — so a row per
 	 * interface would be a column of blanks around the single answer. */
+	char masked[1024];
 	for (int j = 0; j < m; j++) {
 		if (!devs[shown[j]].gw[0]) continue;
-		rec_row("ip\t%s\t%s\t-\t%s\t-", N_("gateway"), devs[shown[j]].gw,
-		        N_("Where anything that is not on this network is sent. A machine with an address and no gateway reaches the local network and nothing past it."));
+		rec_row("ip\t%s\t%s\t-\t%s\t%s", N_("gateway"),
+		        addr_mask(devs[shown[j]].gw, masked, sizeof masked),
+		        N_("Where anything that is not on this network is sent. A machine with an address and no gateway reaches the local network and nothing past it."),
+		        addr_action());
 		break;
 	}
 	for (int j = 0; j < m; j++) {
 		if (!devs[shown[j]].dns[0]) continue;
-		rec_row("ip\t%s\t%s\t-\t%s\t-", N_("nameservers"), devs[shown[j]].dns,
-		        N_("The servers that turn a name into an address. A network that is up and still cannot open a site is usually this."));
+		rec_row("ip\t%s\t%s\t-\t%s\t%s", N_("nameservers"),
+		        addr_mask(devs[shown[j]].dns, masked, sizeof masked),
+		        N_("The servers that turn a name into an address. A network that is up and still cannot open a site is usually this."),
+		        addr_action());
 		break;
 	}
 }

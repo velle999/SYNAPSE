@@ -46,6 +46,67 @@ void tsv_clean(char *s)
 		if (*s == '\t' || *s == '\n' || *s == '\r') *s = ' ';
 }
 
+/* ── Hiding an address ───────────────────────────────────────────────────────
+ *
+ * A MAC and an IP say which machine this is and where it is, and this window
+ * is the one people screenshot when they ask for help with it — and the one
+ * sitting open behind a stream. So every address in the record arrives MASKED,
+ * and is revealed on request: `--reveal` on the command line, the button in the
+ * window's header.
+ *
+ * ⚠ THE READER MASKS, NOT THE WINDOW. A GUI that hid what the binary printed
+ * would leave `syn-settings --rec network` — the same answer, one pipe away —
+ * printing the address into a terminal that is just as visible, and leave the
+ * window's own scrollback and any tooling reading the record holding it too.
+ *
+ * ⛔ THE MASK KEEPS THE SHAPE AND NOT ONE DIGIT. Every run of address
+ * characters becomes two bullets whatever its real length, so the cell still
+ * says how many groups there are — six for a MAC, four for an IPv4, which the
+ * `kind` column already said — and nothing about what is in them. Keeping the
+ * real widths would hand back the difference between 10.0.0.5 and
+ * 192.168.1.100 to anyone reading over your shoulder.
+ *
+ * ⚠ AND IT MASKS AN ADDRESS, NOT A CELL. A value with neither a dot nor a colon
+ * in it is not one: "none" is what an interface with no hardware address
+ * reports, and bullets in its place would be a machine hiding something it does
+ * not have.
+ */
+int g_reveal = 0;
+
+const char *addr_mask(const char *src, char *dst, size_t cap)
+{
+	if (!cap) return dst;
+	if (!src) { dst[0] = '\0'; return dst; }
+
+	if (g_reveal || !strpbrk(src, ".:")) {
+		snprintf(dst, cap, "%s", src);
+		return dst;
+	}
+
+	size_t w = 0;
+	int grouped = 0;
+	for (const char *p = src; *p; p++) {
+		if (isalnum((unsigned char)*p)) {
+			if (grouped) continue;      /* one mark per run, not per char */
+			grouped = 1;
+			if (w + 6 >= cap) break;
+			memcpy(dst + w, "\xe2\x80\xa2\xe2\x80\xa2", 6);
+			w += 6;
+		} else {
+			grouped = 0;
+			if (w + 1 >= cap) break;
+			dst[w++] = *p;
+		}
+	}
+	dst[w] = '\0';
+	return dst;
+}
+
+const char *addr_action(void)
+{
+	return g_reveal ? "address:shown" : "address:hidden";
+}
+
 int have_cmd(const char *cmd)
 {
 	/* A name with a slash in it is a PATH, and PATH is not consulted for one —

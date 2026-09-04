@@ -29,12 +29,27 @@ syn-settings --rec kernel    # every kernel on offer, installed, running
 syn-settings --rec fprint    # the reader, and which fingers are enrolled
 syn-settings --rec network   # interfaces, the MAC and addresses of each,
                              # the gateway, nameservers, and the firewall
+syn-settings --rec network --reveal    # …with the addresses unmasked
 ```
 
 The `network` pane reports a hardware address per interface, which is what
 another machine needs in order to wake this one: a magic packet is addressed to
 a MAC, not an IP. Only a wired card can be woken that way, and the Wi-Fi row
 says so rather than leaving you to arm something that cannot work.
+
+## Addresses are hidden until you ask
+
+Every MAC and IP reads `••:••:••:••:••:••` — in the window and in the record —
+so a screenshot or a stream does not carry them. The Bluetooth adapter's address
+and every paired device's are masked the same way.
+
+**Reveal addresses**, at the top right of the window, shows them; the button
+reads **Hide addresses** while they are showing, and moving to another pane
+hides them again. On the command line, `--reveal` does the same:
+
+```bash
+syn-settings --rec network --reveal | column -t -s$'\t'
+```
 
 The `apps` pane reports which file made each decision, because a deliberate
 choice and a fallback look identical everywhere else — that is the difference

@@ -237,7 +237,39 @@ pkgver=0.1.0
 #   does not mean "bound wide, still firewalled" — it means every device on the
 #   network can reach this desktop and there is no second door left to unlock.
 #   An IP tells that to somebody who already knows it.
-pkgrel=51
+#
+# 52: THE ADDRESSES ARRIVE MASKED, and a button in the header reveals them. 51
+#   put a MAC and an IP on screen for the first time, which is also the first
+#   time this window has held a fact that identifies the machine rather than
+#   describing it — and this is the window that ends up in a screenshot attached
+#   to a question, or open behind a stream. Every `mac` and `ip` value, and the
+#   Bluetooth adapter's and every paired device's address, now read
+#   ••:••:••:••:••:•• until asked for.
+#
+#   ⛔ THE READER MASKS, NOT THE WINDOW. A GUI that hid what the binary printed
+#   would leave `syn-settings --rec network` — the same answer, one pipe away —
+#   putting the address in a terminal that is just as visible. So the mask is in
+#   the record and `--reveal` is what lifts it; the button passes the flag and
+#   RE-READS, which is why what is on screen is never something the window is
+#   holding and not drawing.
+#
+#   ⛔ THE MASK KEEPS THE SHAPE AND NOT ONE CHARACTER. Every run of address
+#   characters becomes two bullets whatever its real length, so the cell still
+#   says how many groups there are — which the `kind` column already said — and
+#   nothing about what is in them. Keeping the real widths would hand back the
+#   difference between 10.0.0.5 and 192.168.1.100.
+#
+#   ⚠ AND IT MASKS AN ADDRESS, NOT A CELL. An interface with no hardware address
+#   reports "none", and bullets there would be a machine hiding something it
+#   does not have.
+#
+#   ⚠ A NEW ACTION TOKEN, `address:hidden` / `address:shown`. It is how the
+#   window knows a pane has something to reveal, and which way the button
+#   should read, without knowing which panes hold addresses — and it is NOT a
+#   setting: rowSetAction() strips it, or a row that is only an address would
+#   draw as a live control whose Apply button runs `syn-settings address
+#   hidden`. The trap `unavailable:` sprang once already, one column over.
+pkgrel=52
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

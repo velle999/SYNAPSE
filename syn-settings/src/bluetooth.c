@@ -48,8 +48,14 @@ static void controller(void)
 	 * rather than in `state`, with the adapter's name moved to detail. The
 	 * first cut had the name in `value` and a toggle that read the name to
 	 * decide which way to flip. */
-	rec_row("controller\t%s\t%s\t%s\t%s (%s)\ttoggle:bluetooth",
-	        N_("powered"), powered, addr, name, addr);
+	/* ⛔ THE ADAPTER'S ADDRESS IS A MAC LIKE ANY OTHER, and it appears twice in
+	 * this row. Masked in both places, and the row carries BOTH verbs: it is a
+	 * toggle AND it holds an address, which the action column has always been a
+	 * list precisely so it can say. */
+	char m[128];
+	addr_mask(addr, m, sizeof m);
+	rec_row("controller\t%s\t%s\t%s\t%s (%s)\ttoggle:bluetooth %s",
+	        N_("powered"), powered, m, name, m, addr_action());
 	rec_row("controller\t%s\t%s\t-\t%s\t-",
 	        N_("discoverable"), discoverable, N_("visible to anything scanning"));
 	rec_row("controller\t%s\t%s\t-\t%s\t-",
@@ -94,9 +100,16 @@ static void devices(void)
 		snprintf(nbuf, sizeof nbuf, "%s", *name ? name : "(unnamed)");
 		tsv_clean(nbuf);
 
-		rec_row("device\t%s\t%s\t%s\t%s\t-",
-		        addr, nbuf, !strcmp(conn, N_("yes")) ? N_("connected") : N_("not connected"),
-		        N_("paired"));
+		/* ⚠ THE ADDRESS IS THIS ROW'S KEY, so masking it masks the column
+		 * the eye reads down. That is the point: a list of paired addresses
+		 * is a list of everything this machine keeps company with, and the
+		 * NAME beside it is what identifies the row to the person at the
+		 * desk anyway. */
+		char am[128];
+		rec_row("device\t%s\t%s\t%s\t%s\t%s",
+		        addr_mask(addr, am, sizeof am), nbuf,
+		        !strcmp(conn, N_("yes")) ? N_("connected") : N_("not connected"),
+		        N_("paired"), addr_action());
 		any = 1;
 	}
 	if (!any)

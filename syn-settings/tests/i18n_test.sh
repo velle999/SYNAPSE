@@ -202,6 +202,11 @@ FPL
         # runtime never matches one however its parts are marked; and a command,
         # a unit name or a driver name is not a word anybody translates.
         case "$v" in
+            # A MASKED ADDRESS, which is not a word and has no translation: the
+            # Bluetooth pane's rows are keyed on the address, and the record
+            # carries every address masked until --reveal. See addr_mask() in
+            # src/util.c.
+            *"•"*)                   continue ;;
             "nmcli "*)               continue ;;  # a command to type
             nvidia|nouveau|amdgpu|i915) continue ;;  # kernel driver names
             *.service|*.socket|*.timer|*.target|*.mount|*.path) continue ;;

@@ -94,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -1661,6 +1661,25 @@ if [ -f "$QML" ]; then
         && ok "a blocked row is not actionable" \
         || bad "actionable does not exclude blocked rows — they render as live controls"
 
+    # ⛔ AND `address` IS NOT A SETTING EITHER. It says a row's VALUE can be
+    # hidden, and the editor has no button for it — so a row carrying only that
+    # must not draw as a live control, which is the same trap `unavailable`
+    # sprang one column over. It also has to be stripped before the editor
+    # reads the action, or a Bluetooth row arriving as "toggle:bluetooth
+    # address:hidden" toggles a thing called "bluetooth address:hidden".
+    grep -q 'function rowSetAction' "$QML" \
+        && ok "the window separates the verbs that SET from the ones that do not" \
+        || bad "syn-settings.qml has no rowSetAction()"
+    grep -q 'v === "address" || v === "unavailable"' "$QML" \
+        && ok "…and address is one of the ones that do not" \
+        || bad "rowSetAction does not exclude the address token"
+
+    # The button is a re-read, not a second copy of the value held in the
+    # window: what is on screen is always what the binary just printed.
+    grep -q '"--reveal"' "$QML" \
+        && ok "revealing an address re-reads it from the binary" \
+        || bad "the window never passes --reveal"
+
     n=$(grep -c 'Qt.application.font' "$QML" || true)
     [ "$n" = 0 ] && ok "no fallback pins the startup font" \
                  || bad "$n use(s) of Qt.application.font"
@@ -1708,6 +1727,11 @@ GENERAL.TYPE:wifi
 GENERAL.HWADDR:11:22:33:44:55:66
 IP4.GATEWAY:
 
+GENERAL.DEVICE:tun9
+GENERAL.TYPE:tun
+GENERAL.HWADDR:
+IP4.ADDRESS[1]:10.7.7.7/24
+
 GENERAL.DEVICE:lo
 GENERAL.TYPE:loopback
 GENERAL.HWADDR:00:00:00:00:00:00
@@ -1722,7 +1746,12 @@ OUT
 esac
 NMEOF
 chmod +x "$netdir/nmcli"
-netrec() { PATH="$netdir:$PATH" "$BIN" --rec network; }
+# ⚠ REVEALED, BECAUSE THESE CHECK THE PARSE. Every address in the record is
+# masked until asked for (the block after this one), and a row of bullets says
+# nothing about whether the six colons in a hardware address survived being
+# read — which is what the checks below are about.
+netrec()  { PATH="$netdir:$PATH" "$BIN" --rec network --reveal; }
+netmask() { PATH="$netdir:$PATH" "$BIN" --rec network; }
 
 # ⛔ THE COLONS SURVIVE, WHICH IS THE WHOLE PARSE. `device show` prints
 # `FIELD:value` and a hardware address is six more colons — a reader that
@@ -1789,14 +1818,117 @@ netrec | awk -F'\t' '$1=="mac" && $2=="br-9" {print $5}' | grep -q 'containers o
     && ok "…and a bridge is named as a bridge, not a card" \
     || bad "the bridge MAC row reads as a physical card"
 
-# ⚠ NOTHING HERE IS ACTIONABLE, and that is deliberate rather than unfinished:
+# ⚠ NOTHING HERE IS SETTABLE, and that is deliberate rather than unfinished:
 # an address is read, not set — NetworkManager owns setting it — and a row
-# carrying a verb the window has no editor for highlights and clicks dead.
-netrec | awk -F'\t' '($1=="mac" || $1=="ip") && $6 != "-"' | grep -q '' \
+# carrying a verb the window has no editor for highlights and clicks dead. The
+# `address:` token is not such a verb: it says the value can be HIDDEN, and the
+# window is required to leave it out of what makes a row a live control.
+netmask | awk -F'\t' '($1=="mac" || $1=="ip") {
+             a = $6; sub(/address:(hidden|shown)/, "", a); gsub(/ /, "", a)
+             if (a != "" && a != "-") print }' | grep -q '' \
     && bad "an address row offers an action" \
     || ok "no address row claims to be editable"
 
+# ── And none of it is on screen until it is asked for ───────────────────────
+#
+# A MAC and an IP identify this machine rather than describe it, and this pane
+# is what gets screenshotted into a question and left open behind a stream. So
+# the reader masks them and `--reveal` — the window's button, or the flag — is
+# what prints them.
+hidden=$(netmask | awk -F'\t' '$1=="mac" && $2=="eth9" {print $3}')
+case "$hidden" in
+    *AA:BB*) bad "the wired MAC is printed in full with nothing asking for it" ;;
+    *)       ok "a hardware address is masked until it is asked for" ;;
+esac
+[ "$hidden" = "••:••:••:••:••:••" ] \
+    && ok "…and the mask keeps the shape of a MAC" \
+    || bad "the masked MAC reads '$hidden'"
+
+# ⛔ AND NOT ONE DIGIT OF ANY OF THEM. Keeping the real widths would hand back
+# the difference between 10.0.0.5 and 192.168.1.100 to whoever is reading over
+# your shoulder — a mask that leaks the length is a mask of the wrong thing.
+netmask | awk -F'\t' '($1=="mac" || $1=="ip") && $3 ~ /•/ {print $3}' | grep -qE '[0-9a-fA-F]' \
+    && bad "a masked address still carries characters of the real one" \
+    || ok "no character of any address survives the mask"
+
+# ⚠ AND IT MASKS AN ADDRESS, NOT A CELL. A tun device has no hardware address
+# at all and the row says so — bullets in place of "none" would be a machine
+# hiding something it does not have.
+[ "$(netmask | awk -F'\t' '$1=="mac" && $2=="tun9" {print $3}')" = none ] \
+    && ok "an interface with no hardware address still says none" \
+    || bad "'none' was masked into looking like an address"
+
+# The reveal is the SAME READ, unmasked — not a second path that could report
+# something the masked one does not.
+[ "$(netrec | awk -F'\t' '$1=="mac" && $2=="eth9" {print $3}')" = AA:BB:CC:DD:EE:FF ] \
+    && ok "--reveal prints the address in full" \
+    || bad "--reveal did not produce the hardware address"
+[ "$(netrec | awk -F'\t' '$1=="ip" && $2=="gateway" {print $3}')" = 10.9.9.1 ] \
+    && ok "…and the gateway with it" \
+    || bad "--reveal did not produce the gateway"
+
+# ⛔ EVERY SUCH ROW SAYS WHICH IT IS, and that is what the window's button
+# reads: it is drawn on a pane whose ROWS carry an address, and it says
+# "Reveal" or "Hide" by what came back — never by what it last asked for. A row
+# that forgot the token is an address nothing offers to unhide.
+n=$(netmask | awk -F'\t' '($1=="mac" || $1=="ip") && $6 !~ /address:hidden/' | grep -c '' || true)
+[ "$n" = 0 ] && ok "every masked address row carries address:hidden" \
+             || bad "$n masked address row(s) do not say they are hidden"
+n=$(netrec | awk -F'\t' '($1=="mac" || $1=="ip") && $6 !~ /address:shown/' | grep -c '' || true)
+[ "$n" = 0 ] && ok "…and a revealed one carries address:shown" \
+             || bad "$n revealed address row(s) do not say they are shown"
+
 rm -rf "$netdir"
+
+# ── The Bluetooth addresses are addresses too ───────────────────────────────
+#
+# The adapter's own address is a hardware address like any other, and the
+# paired list is a list of everything this machine keeps company with. They are
+# drawn in the same window, in front of the same camera.
+#
+# ⚠ FIXTURED, for the reason the block above is: what this asserts is the shape
+# of rows produced by hardware — an adapter, and something paired to it — that
+# a VM and plenty of desktops do not have.
+btm=$(mktemp -d)
+mkdir -p "$btm/sys/class/bluetooth/hci0" "$btm/bin"
+cat > "$btm/bin/bluetoothctl" <<'BTEOF'
+#!/bin/sh
+case "$1" in
+show)    printf 'Controller AA:11:BB:22:CC:33 (public)
+	Name: fixture
+	Powered: yes
+	Discoverable: no
+	Pairable: yes
+' ;;
+devices) printf 'Device 44:55:66:77:88:99 Headphones
+' ;;
+info)    printf '	Connected: yes
+' ;;
+esac
+BTEOF
+chmod +x "$btm/bin/bluetoothctl"
+btrec() { SYN_SETTINGS_SYS_ROOT="$btm" PATH="$btm/bin:$PATH" "$BIN" --rec bluetooth "$@"; }
+
+btrec | grep -q 'AA:11:BB:22' \
+    && bad "the adapter's address is printed in full with nothing asking for it" \
+    || ok "the adapter's address is masked too"
+btrec | grep -q '44:55:66:77' \
+    && bad "a paired device's address is printed in full" \
+    || ok "…and so is every paired device's"
+btrec --reveal | grep -q 'AA:11:BB:22' \
+    && ok "--reveal prints the adapter's address" \
+    || bad "--reveal did not produce the adapter's address"
+
+# ⛔ THE ROW IS A TOGGLE **AND** AN ADDRESS. The action column has always been a
+# space-separated list precisely so a row can offer two things; the window
+# splits it, and a reader that overwrote the toggle with the address token
+# would take the adapter's on/off switch away.
+a=$(btrec | awk -F'\t' '$1=="controller" && $3=="yes" {print $6}')
+case "$a" in
+    *toggle:bluetooth*address:hidden*) ok "the adapter row keeps its toggle beside the address token" ;;
+    *) bad "the adapter row's action reads '$a'" ;;
+esac
+rm -rf "$btm"
 
 # ── the wallpaper's accent reaches this window ──────────────────────────────
 #

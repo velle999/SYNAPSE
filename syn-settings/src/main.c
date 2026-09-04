@@ -93,6 +93,10 @@ static void usage(void)
 "                            grub-set-default\n"
 "\n"
 "  -n, --dry-run     print what would be run, change nothing\n"
+"      --reveal      print addresses in full. Every MAC and IP in the record\n"
+"                    is masked (\xe2\x80\xa2\xe2\x80\xa2:\xe2\x80\xa2\xe2\x80\xa2:\xe2\x80\xa2\xe2\x80\xa2:\xe2\x80\xa2\xe2\x80\xa2:\xe2\x80\xa2\xe2\x80\xa2:\xe2\x80\xa2\xe2\x80\xa2) until this is passed;\n"
+"                    the window has a button that does the same. Applies to\n"
+"                    the network pane and to the Bluetooth addresses.\n"
 "\n"
 "Most writes are performed by a systemd tool that does its own polkit check;\n"
 "this binary is not setuid and ships no polkit policy of its own. `boot` is\n"
@@ -165,6 +169,8 @@ int main(int argc, char **argv)
 	for (; i < argc; i++) {
 		if (!strcmp(argv[i], "-n") || !strcmp(argv[i], "--dry-run"))
 			g_dry_run = 1;
+		else if (!strcmp(argv[i], "--reveal"))
+			g_reveal = 1;
 		else
 			break;
 	}
@@ -204,6 +210,15 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "--rec")) {
 		if (rest_argc < 1) { usage(); return 2; }
 		const char *pane = rest[0];
+		/* Also accepted AFTER the pane, because that is where it reads
+		 * naturally — `syn-settings --rec network --reveal` — and a flag that
+		 * works in one position and is silently ignored in the other is worse
+		 * than one that does not exist. */
+		for (int k = 1; k < rest_argc; k++) {
+			if (!strcmp(rest[k], "--reveal")) { g_reveal = 1; continue; }
+			fprintf(stderr, "syn-settings: unknown option '%s'\n", rest[k]);
+			return 2;
+		}
 		if (!strcmp(pane, "display")) return pane_display();
 		if (!strcmp(pane, "region"))  return pane_region();
 		if (!strcmp(pane, "time"))    return pane_time();

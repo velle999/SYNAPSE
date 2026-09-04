@@ -117,6 +117,30 @@ void ensure_parent(const char *path);
  * because a value that contains one silently invents a column. */
 void tsv_clean(char *s);
 
+/* ── Addresses, masked ──────────────────────────────────────────────────────
+ *
+ * A MAC and an IP identify this machine to whoever can see the screen, so the
+ * record carries them masked and reveals them only when asked — `--reveal`,
+ * which the window's header button passes. The reasoning, and what the mask
+ * does and does not keep, is at the definition in src/util.c.
+ */
+
+/* `src` with every run of address characters replaced by two bullets, written
+ * into `dst` and returned. Under --reveal, and for a value that is not an
+ * address at all, `src` is copied through unchanged. A mask is LONGER than what
+ * it hides — six bytes a group — so `dst` is never the buffer `src` came from.
+ */
+const char *addr_mask(const char *src, char *dst, size_t cap);
+
+/* The action token a row holding an address carries: "address:hidden" until
+ * --reveal, "address:shown" after it. It is not a setting and the window draws
+ * no editor for it — it is how the window knows this pane has something to
+ * reveal, and which way the button should read, without knowing which panes
+ * hold addresses. */
+const char *addr_action(void);
+
+extern int g_reveal;
+
 /* ── Which desktop is actually running ──────────────────────────────────────
  *
  * Some settings here belong to synui alone — the clock format, the terminal it

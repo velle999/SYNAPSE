@@ -89,6 +89,9 @@ msgstr ""
 msgid "Hide"
 msgstr ""
 
+msgid "Hide addresses"
+msgstr ""
+
 msgid "Install"
 msgstr ""
 
@@ -154,6 +157,9 @@ msgid "Remove key"
 msgstr ""
 
 msgid "Removing %1"
+msgstr ""
+
+msgid "Reveal addresses"
 msgstr ""
 
 msgid "SYNAPSE Settings"

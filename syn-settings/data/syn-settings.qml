@@ -437,9 +437,61 @@ FloatingWindow {
         return root.actionArgFor(root.rowAction(r), "unavailable")
     }
 
+    // ── An address, and whether it is being shown ───────────────────────────
+    //
+    // A MAC and an IP identify the machine rather than describe it, and this
+    // window is the one that ends up in a screenshot attached to a question, or
+    // open behind a stream. So the READER masks them — see addr_mask() in
+    // src/util.c — and hands each such row an `address:hidden` token; the
+    // button below passes `--reveal`, which turns the token into
+    // `address:shown` along with the values.
+    //
+    // ⛔ THE ROWS SAY WHICH WAY IT IS, NOT THIS FILE. `revealed` is what the
+    // button last asked for; `addressesHidden` is what the record that came
+    // back actually contains. Reading the button's own wish would put "Hide"
+    // over a table still full of bullets for as long as the re-read takes, and
+    // leave it there for good if the re-read failed.
+    property bool revealed: false
+    onPaneChanged: root.revealed = false
+    readonly property bool paneHasAddresses: {
+        for (let i = 0; i < root.rows.length; i++)
+            if (root.actionHas(root.rowAction(root.rows[i]), "address")) return true
+        return false
+    }
+    readonly property bool addressesHidden: {
+        for (let i = 0; i < root.rows.length; i++)
+            if (root.actionArgFor(root.rowAction(root.rows[i]), "address") === "hidden")
+                return true
+        return false
+    }
+    function setRevealed(v) { root.revealed = v; root.reload() }
+
+    // The action cell with the verbs that are not SETTINGS taken out, or "-"
+    // when nothing is left. `unavailable` names what is in the way of a
+    // setting and `address` says a row's value can be hidden — a row carrying
+    // only those is a fact, and drawing it as a live control gives it an
+    // accent edge, a pointing cursor and an editor strip whose Apply button
+    // builds `syn-settings address hidden`.
+    //
+    // ⚠ AND THE EDITOR READS WHAT THIS RETURNS. actionArg() takes everything
+    // after the first colon, so a Bluetooth row arriving as
+    // "toggle:bluetooth address:hidden" would otherwise toggle a thing called
+    // "bluetooth address:hidden".
+    function rowSetAction(r) {
+        const t = String(root.rowAction(r)).split(" ")
+        const out = []
+        for (let i = 0; i < t.length; i++) {
+            const v = root.actionVerb(t[i])
+            if (v === "" || v === "-" || v === "address" || v === "unavailable")
+                continue
+            out.push(t[i])
+        }
+        return out.length > 0 ? out.join(" ") : "-"
+    }
+
     function selectRow(i) {
         const r = root.rows[i]
-        const a = root.rowAction(r)
+        const a = root.rowSetAction(r)
         if (a === "-" || a === "" || root.actionHas(a, "unavailable")) {
             root.selRow = -1; root.selAction = ""; return
         }
@@ -885,7 +937,11 @@ FloatingWindow {
         // triggers a reload, and a list left standing would keep its tick on
         // the application that was current BEFORE the write.
         root.appList = []
-        readProc.command = [root.bin, "--rec", root.pane]
+        // ⚠ THE FLAG IS THE WHOLE MECHANISM. The window never holds an
+        // unmasked address it is not drawing: revealing one is a re-read, so
+        // what is on screen and what the binary printed are the same thing.
+        readProc.command = root.revealed ? [root.bin, "--rec", root.pane, "--reveal"]
+                                         : [root.bin, "--rec", root.pane]
         readProc.running = true
     }
 
@@ -998,12 +1054,54 @@ FloatingWindow {
             }
             Text {
                 anchors { left: parent.left; leftMargin: 18
-                          right: refreshBtn.left; rightMargin: 12
+                          right: revealBtn.visible ? revealBtn.left : refreshBtn.left
+                          rightMargin: 12
                           top: headTitle.bottom; topMargin: 4 }
                 elide: Text.ElideRight
                 text: root.paneMeta(root.pane).blurb
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
+            }
+
+            // ── Show me the addresses ───────────────────────────────────────
+            //
+            // Drawn only on a pane that has some, and the rows are what say so
+            // — the window is told which of them hold an address, never which
+            // PANES do, so the reader can start masking a value somewhere else
+            // without a line changing here.
+            //
+            // ⚠ ONE BUTTON FOR THE PANE, NOT ONE PER ROW. A control in every
+            // row of a six-column table is unreadable, and the reason anybody
+            // reaches for this — somebody is watching the screen — is never
+            // about a single interface.
+            //
+            // ⛔ AND IT SAYS WHICH IT WILL DO. A button labelled "Addresses"
+            // that flips between two states is a switch whose position you can
+            // only learn by pressing it; this one names the thing that happens
+            // next, like every other button in this window.
+            Rectangle {
+                id: revealBtn
+                anchors { right: refreshBtn.left; rightMargin: 8
+                          verticalCenter: parent.verticalCenter }
+                visible: root.paneHasAddresses
+                width: revealLabel.implicitWidth + 24; height: 26; radius: 4
+                color: revealMa.containsMouse ? root.wash(0.14) : root.wash(0.07)
+
+                Text {
+                    id: revealLabel
+                    anchors.centerIn: parent
+                    text: root.addressesHidden ? I18n.tr("Reveal addresses")
+                                               : I18n.tr("Hide addresses")
+                    color: root.cText
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                }
+                MouseArea {
+                    id: revealMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.setRevealed(root.addressesHidden)
+                }
             }
 
             Rectangle {
@@ -1110,7 +1208,7 @@ FloatingWindow {
                 // rather than hiding it or pretending it will work.
                 readonly property bool blocked: root.rowBlocked(dataRow.modelData)
                 readonly property bool actionable:
-                    root.rowAction(dataRow.modelData) !== "-" && !dataRow.blocked
+                    root.rowSetAction(dataRow.modelData) !== "-" && !dataRow.blocked
                 readonly property bool chosen: root.selRow === dataRow.index
 
                 color: dataRow.chosen ? root.wash(0.20)
