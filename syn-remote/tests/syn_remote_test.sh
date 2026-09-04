@@ -124,7 +124,22 @@ for f in running atlogin connections address port scope auth session wayvnc; do
     grep -q "^$f	" <<<"$rec" || bad "the record has no $f row"
 done
 ok "...and carries every field the window reads"
-check "a machine with no wayvnc says so" "no" "$(awk -F'\t' '$1=="wayvnc"{print $2}' <<<"$rec")"
+# ⛔ PREPENDING TO PATH CANNOT HIDE A BINARY THAT IS REALLY THERE. This
+# assertion used to read the ordinary environment and expect "no", which is
+# true only on a machine where wayvnc happens not to be installed — so it
+# passed in CI and FAILED on any developer box that has the server this package
+# depends on. The absent case has to be BUILT: a PATH holding everything the
+# script calls with wayvnc removed, which means a directory of links rather
+# than a guess at which coreutils it uses. A guess that misses one turns this
+# into a check of whether `sed` exists.
+farm="$T/nowayvnc"; mkdir -p "$farm"
+for f in /usr/bin/*; do ln -s "$f" "$farm/" 2>/dev/null; done
+rm -f "$farm/wayvnc"
+check "a machine with no wayvnc says so" "no" \
+      "$(PATH="$stub:$farm" "$SR" status --rec | awk -F'\t' '$1=="wayvnc"{print $2}')"
+# ...and it only means anything if it says yes when wayvnc IS there.
+check "...and says so the other way round too" "yes" \
+      "$(awk -F'\t' '$1=="wayvnc"{print $2}' <<<"$rec")"
 
 # ── 6. THE WHOLE POINT: waking a blanked screen ───────────
 #
@@ -186,6 +201,210 @@ grep -q '^ExecStart=/usr/bin/syn-remote run$' "$unit" &&
     bad "the unit's ExecStart is not 'syn-remote run'"
 grep -q '^WantedBy=default.target' "$unit" &&
     ok "...as a user unit" || bad "the unit is not WantedBy=default.target"
+
+# ── 8. saved connections ──────────────────────────────────
+#
+# The other half of this package: reaching somebody ELSE's desktop. What is
+# checked here is what a connection manager can silently get wrong.
+
+echo "=== the other end ==="
+
+HOSTS_F="$XDG_CONFIG_HOME/syn-remote/hosts"
+SECR_F="$XDG_CONFIG_HOME/syn-remote/secrets"
+
+"$SR" add couch 192.168.1.40:5901 velle >/dev/null 2>&1
+"$SR" add attic attic.local        >/dev/null 2>&1
+
+check "add records host and port"      "192.168.1.40" "$("$SR" hosts --tsv | awk -F'\t' '$1=="couch"{print $2}')"
+check "...and the port it was given"   "5901"         "$("$SR" hosts --tsv | awk -F'\t' '$1=="couch"{print $3}')"
+check "...and the user"                "velle"        "$("$SR" hosts --tsv | awk -F'\t' '$1=="couch"{print $4}')"
+check "a host with no port gets 5900"  "5900"         "$("$SR" hosts --tsv | awk -F'\t' '$1=="attic"{print $3}')"
+
+# The header row is why an empty list can be told from a broken command.
+check "the record names its columns" "name	host	port	user	secret" \
+      "$("$SR" hosts --tsv | head -1)"
+
+# ⛔ A NAME IS A KEY IN THREE FILES. A tab would split a record and a newline
+# would forge one, so the name is restricted rather than escaped.
+"$SR" add "two words" host >/dev/null 2>&1
+check "a name with a space is refused" "" "$("$SR" hosts --tsv | awk -F'\t' '$1 ~ / /{print $1}')"
+"$SR" add "$(printf 'tab\there')" host >/dev/null 2>&1
+check "a name with a tab is refused"   2 "$("$SR" hosts --tsv | tail -n +2 | wc -l)"
+"$SR" add nope host:99999 >/dev/null 2>&1
+check "a port over 65535 is refused"   2 "$("$SR" hosts --tsv | tail -n +2 | wc -l)"
+
+check "the connection list is 0600" "600" "$(stat -c '%a' "$HOSTS_F" 2>/dev/null)"
+
+# ── 9. ⛔ the secret-tool trap ─────────────────────────────
+#
+# THE ONE THAT MATTERS. With no keyring daemon running, secret-tool prints
+# "The name is not activatable" to stderr and EXITS 0 — measured on this
+# desktop, which has secret-tool installed and no daemon started. Anything that
+# branches on its exit status therefore reports a password saved when there is
+# no password anywhere, which for a credential store is the worst failure
+# available. The write has to be read back and compared.
+
+cat > "$stub/secret-tool" <<'EOF'
+#!/bin/sh
+# The measured failure, exactly: a complaint on stderr, nothing on stdout, 0.
+echo "secret-tool: The name is not activatable" >&2
+exit 0
+EOF
+chmod +x "$stub/secret-tool"
+
+printf 'hunter2\n' | "$SR" saved couch set >/dev/null 2>&1
+check "a keyring that answers nothing is NOT reported as the store" "file" \
+      "$("$SR" saved couch)"
+check "...and the password is actually retrievable afterwards" "hunter2" \
+      "$( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; secret_get couch )"
+check "the file holding it is 0600" "600" "$(stat -c '%a' "$SECR_F" 2>/dev/null)"
+check "...and does not hold the password in the clear" "0" \
+      "$(grep -c hunter2 "$SECR_F" 2>/dev/null)"
+
+# A password carrying a tab would split the record it is stored in. base64 is
+# what makes that survive — the reason it is there, and not a security claim.
+odd=$(printf 'a\tb c')
+( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; secret_file_put couch "$odd" )
+check "a password containing a tab round-trips" "$odd" \
+      "$( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; secret_get couch )"
+
+# ── 10. a keyring that DOES work ──────────────────────────
+#
+# And when one answers, it wins — and the copy on disk is removed rather than
+# left as a second, stale answer to the same question, which is the one that
+# would be found first if the keyring were ever locked.
+cat > "$stub/secret-tool" <<'EOF'
+#!/bin/sh
+# A keyring that actually stores, backed by files the suite can see.
+#
+# ⛔ KEYED BY THE `host` ATTRIBUTE, exactly as the real secret-tool is. The
+# first version of this stub kept ONE file and ignored the attributes, so every
+# lookup answered with the last password stored — which made a connection with
+# no password of its own appear to have one, and would have let a genuine
+# cross-contamination bug through green. A stub looser than the thing it stands
+# in for tests nothing.
+op=$1; shift
+name=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    host) name=$2; shift ;;
+  esac
+  shift
+done
+f="$SR_TEST_KEYRING.$name"
+case "$op" in
+  store)  cat > "$f" ;;
+  lookup) [ -s "$f" ] && cat "$f" ;;
+  clear)  rm -f "$f" ;;
+esac
+exit 0
+EOF
+chmod +x "$stub/secret-tool"
+export SR_TEST_KEYRING="$T/keyring"
+
+printf 'sekrit\n' | "$SR" saved couch set >/dev/null 2>&1
+check "a working keyring is used, and named"   "keyring" "$("$SR" saved couch)"
+check "...and the copy on disk is taken away"  "0" \
+      "$(grep -c '^couch	' "$SECR_F" 2>/dev/null)"
+check "...and the password reads back"         "sekrit" \
+      "$( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; secret_get couch )"
+
+# ── 11. forgetting takes the password with it ─────────────
+#
+# A forgotten connection whose secret stays behind leaves a credential nothing
+# can reach — and one that would come back attached to a host it was never
+# meant for, if the same name were ever added again.
+"$SR" forget couch >/dev/null 2>&1
+check "forget drops the connection" "" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="couch"{print $1}')"
+check "...and its password with it" "" "$(cat "$SR_TEST_KEYRING.couch" 2>/dev/null)"
+
+# ── 12. ⛔ the password never reaches argv ─────────────────
+#
+# An argument is world-visible in `ps` for as long as the viewer runs, and the
+# environment is readable through /proc/PID/environ for the same window. The
+# password goes down a pipe, which is read once and gone.
+"$SR" add probe 10.0.0.9 someone >/dev/null 2>&1
+printf 'topsecret\n' | "$SR" saved probe set >/dev/null 2>&1
+
+cat > "$T/fakeviewer" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" > "$SR_TEST_ARGV"
+cat > "$SR_TEST_STDIN"
+EOF
+chmod +x "$T/fakeviewer"
+export SR_TEST_ARGV="$T/argv.txt" SR_TEST_STDIN="$T/stdin.txt"
+(
+    SYN_REMOTE_SOURCE_ONLY=1; . "$SR"
+    VIEWER="$T/fakeviewer"
+    cmd_connect probe
+) >/dev/null 2>&1
+
+check "the password arrives on the viewer's stdin" "topsecret" \
+      "$(cat "$SR_TEST_STDIN" 2>/dev/null)"
+check "...and NOT anywhere in its arguments" "0" \
+      "$(grep -c topsecret "$SR_TEST_ARGV" 2>/dev/null)"
+grep -q -- "--host 10.0.0.9" "$SR_TEST_ARGV" &&
+    ok "the viewer is told which host" || bad "the viewer was not given --host"
+grep -q -- "--user someone" "$SR_TEST_ARGV" &&
+    ok "...and which user" || bad "the viewer was not given --user"
+
+# An entry with NO saved password must still open — an empty pipe means
+# "nothing stored", and the viewer draws its own prompt.
+"$SR" add bare 10.0.0.10 >/dev/null 2>&1
+( SYN_REMOTE_SOURCE_ONLY=1; . "$SR"; VIEWER="$T/fakeviewer"; cmd_connect bare ) >/dev/null 2>&1
+check "a connection with no password still launches the viewer" "" \
+      "$(cat "$SR_TEST_STDIN" 2>/dev/null)"
+grep -q -- "--host 10.0.0.10" "$SR_TEST_ARGV" &&
+    ok "...with the host it was given" || bad "the viewer was not launched for it"
+
+# ── 13. the window and the launcher ───────────────────────
+gui="$here/../syn-remote-gui.sh"
+qml="$here/../shell.qml"
+desktop="$here/../syn-remote.desktop"
+
+# ⚠ ALL THREE MUST AGREE. synui's dock looks a pinned app up as
+# "<app_id>.desktop" and never consults StartupWMClass — so an app_id that does
+# not equal this file's basename is a pin that draws correctly and does nothing.
+check "the launcher sets QS_APP_ID" 1 \
+      "$(grep -c 'QS_APP_ID="${QS_APP_ID:-syn-remote}"' "$gui")"
+check "...matching the .desktop basename" "syn-remote" \
+      "$(basename "$desktop" .desktop)"
+check "...and StartupWMClass" "syn-remote" \
+      "$(sed -n 's/^StartupWMClass=//p' "$desktop")"
+grep -q '^Exec=syn-remote-gui$' "$desktop" &&
+    ok "the entry launches the wrapper, not qs directly" ||
+    bad "the .desktop Exec is not syn-remote-gui"
+
+# ⛔ A VIEW THAT SCROLLS SHOWS THAT IT SCROLLS. Also gated by
+# tools/preflight.sh, and checked here so the suite fails where the file is.
+grep -q 'ScrollBar.vertical: SynScrollBar' "$qml" &&
+    ok "the connection list has a scrollbar" ||
+    bad "the list in shell.qml scrolls with no scrollbar"
+
+# The window must not own the credential decision — it shells out for every one
+# of them, so there is exactly one answer to "where is my password".
+check "the window reads the list through the CLI" 1 \
+      "$(grep -c '"syn-remote", "hosts", "--tsv"' "$qml")"
+grep -q 'TextField' "$qml" && ! grep -q 'echoMode: TextInput.Password' "$qml" &&
+    ok "no password field in the window — it cannot reach the store safely" ||
+    bad "shell.qml grew a password field; the password would cross argv"
+
+# ── 14. the viewer's own reasons ──────────────────────────
+view="$here/../syn-remote-view.c"
+grep -q 'VNC_DISPLAY_CREDENTIAL_PASSWORD' "$view" &&
+    ok "the viewer answers the password credential" ||
+    bad "the viewer never answers VNC_DISPLAY_CREDENTIAL_PASSWORD"
+# ⚠ A CREDENTIAL LEFT UNSET STALLS THE HANDSHAKE — the server waits for an
+# answer that never comes and the window sits on "Connecting" with nothing
+# visibly wrong.
+grep -q 'VNC_DISPLAY_CREDENTIAL_CLIENTNAME' "$view" &&
+    ok "...and the clientname one, which would otherwise stall it" ||
+    bad "the viewer ignores CLIENTNAME, which stalls some servers"
+# A wrong stored password must not become an infinite ask-answer-refuse loop.
+grep -q 'creds_refused' "$view" &&
+    ok "a refused password is not offered a second time" ||
+    bad "the viewer would re-send a password the server already refused"
 
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi

@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Remote Desktop
+GenericName=Remote Desktop Viewer
+Comment=Open another machine's desktop, and remember how to sign in to it
+Exec=syn-remote-gui
+Icon=preferences-desktop-remote-desktop
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=remote;desktop;vnc;viewer;connect;screen;
+StartupNotify=true
+# The window's app_id, set by syn-remote-gui as QS_APP_ID, and also what
+# syn-remote-view passes to g_set_prgname so BOTH windows this package opens
+# answer to the same name.
+#
+# ⚠ THIS FILE'S NAME MUST STAY "syn-remote.desktop" — the same string. synui's
+# dock looks a pinned app's launch command up as "<app_id>.desktop" and does not
+# consult StartupWMClass at all, so a rename here is a pin that draws its icon
+# correctly and does nothing when clicked.
+StartupWMClass=syn-remote

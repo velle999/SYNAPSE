@@ -39,7 +39,15 @@ pkgver=0.1.0
 #   paragraph about avoiding. ⚠ It narrows the window rather than closing it: a
 #   watcher that died under a live wayvnc could still over-report until the unit
 #   restarts.
-pkgrel=2
+# 3: the other half — saved connections, a remembered password for each, and a
+#   viewer of our own to spend it. The viewer is not preference: wayvnc
+#   authenticates over VeNCrypt and no packaged VNC client can be handed a
+#   username or a password without somebody typing it, so a manager wrapping one
+#   would remember a password it could never use. gtk-vnc's credential callback
+#   is the seam. ⚠ Where a password LIVES is decided in the script alone — a
+#   keyring if one answers, a 0600 file if not — because secret-tool exits 0
+#   with no keyring running, and only reading the write back tells those apart.
+pkgrel=3
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -51,16 +59,41 @@ license=('GPL-2.0-or-later')
 #
 # wlopm is how a blanked output is turned back on (zwlr_output_power_management
 # — synui implements it). openssl makes the self-signed certificate, once.
-depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd')
+# ⛔ gtk-vnc IS THE VIEWER, and the viewer is why this package has one at all.
+# wayvnc authenticates over VeNCrypt — a username and a password inside the TLS
+# session — and no packaged client can be handed either without a human typing
+# it: TigerVNC's -passwd file is for classic VncAuth and vncviewer(1) documents
+# no way to pass a username, and gtk-vnc's own gvncviewer example builds a
+# dialog. gtk-vnc's credential API is the one seam where a REMEMBERED password
+# can answer the server, which is the whole of `syn-remote saved`.
+depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3')
 # ⚠ synui ships /usr/lib/synui/synui-idle-inhibit, which is what holds the
 # machine awake. Optional rather than required so this still installs on a
 # SynapseOS built without the compositor — the screen is still woken, it just
 # is not held, and the wrapper checks for the file rather than assuming it.
 optdepends=('synui: hold the machine awake while somebody is connected'
-            'openssh: reach a loopback-bound server from another machine')
+            'openssh: reach a loopback-bound server from another machine'
+            'quickshell: the Remote Desktop window — the CLI needs none of it'
+            'syntty: where `saved <name> set` asks for a password'
+            'libsecret: keep saved passwords in a keyring rather than a file')
+
+makedepends=('pkgconf' 'gcc')
 
 source=("$pkgname-$pkgver.tar.gz::https://github.com/velle999/$pkgname/releases/download/$pkgver-$pkgrel/$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
+
+# ⚠ ONE FILE, ONE gcc, NO meson. This is a script package with a single C
+# program in it; a build system for one translation unit is more machinery than
+# the thing it builds. -Wno-deprecated-declarations is for GValueArray, which
+# GLib deprecated and gtk-vnc still marshals `vnc-auth-credential` with — the
+# accessor the library's own example uses.
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    gcc -O2 -Wall -Wextra -Wno-deprecated-declarations \
+        $(pkg-config --cflags gtk+-3.0 gtk-vnc-2.0) \
+        -o syn-remote-view syn-remote-view.c \
+        $(pkg-config --libs gtk+-3.0 gtk-vnc-2.0)
+}
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
@@ -72,6 +105,17 @@ package() {
     # would be looking in /run/user/0 for a session that is not there.
     install -Dm644 syn-remote.service \
         "$pkgdir/usr/lib/systemd/user/syn-remote.service"
+
+    install -Dm755 syn-remote-gui.sh "$pkgdir/usr/bin/syn-remote-gui"
+    install -Dm644 shell.qml "$pkgdir/usr/share/syn-remote/shell.qml"
+    install -Dm644 syn-remote.desktop \
+        "$pkgdir/usr/share/applications/syn-remote.desktop"
+
+    # ⚠ /usr/lib, NOT /usr/bin. The viewer takes its password on stdin from
+    # `syn-remote connect` and is not a thing to run by hand — a copy in the
+    # PATH is an invitation to pass a password as an argument, which is exactly
+    # what stdin is there to avoid.
+    install -Dm755 syn-remote-view "$pkgdir/usr/lib/syn-remote/syn-remote-view"
 
     # ⛔ NOT ENABLED HERE, and not by a scriptlet either. A package that
     # installs a remote desktop and switches it on is a package that opens a

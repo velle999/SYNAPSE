@@ -419,6 +419,336 @@ cmd_auth() {
     fi
 }
 
+# ── The other end: connecting OUT ─────────────────────────
+#
+# Everything above serves THIS machine. Everything below reaches somebody
+# else's, because a remote desktop that only answers the door is half a tool —
+# and the half that is missing is the one a person uses from the couch.
+#
+# ⛔ THE VIEWER IS OURS, AND THAT IS NOT NOT-INVENTED-HERE. It is the only way
+# a saved password can ever be used. wayvnc authenticates over VeNCrypt — a
+# username and a password carried INSIDE the TLS session — and no packaged
+# client can be handed either one without a human typing it:
+#
+#   - TigerVNC's `vncviewer -passwd FILE` is the obfuscated file used by
+#     classic VncAuth (RFB security type 2). It is not consulted for VeNCrypt
+#     Plain, and vncviewer(1) documents no way to supply a username at all.
+#   - gtk-vnc's own gvncviewer builds a dialog in its credential callback.
+#
+# So a connection manager wrapping either of them would remember a password it
+# could never use, and prompt anyway — a padlock drawn on a door that does not
+# lock. syn-remote-view is a GtkVncDisplay and a credential callback that
+# answers from this file instead of from a dialog, which is about two hundred
+# lines and is the entire reason the feature is real.
+
+HOSTS="$CONF_DIR/hosts"
+SECRETS="$CONF_DIR/secrets"
+VIEWER=/usr/lib/syn-remote/syn-remote-view
+
+# ⛔ A NAME IS A KEY IN THREE PLACES — this file, the keyring attribute, and the
+# window title — so it is restricted rather than escaped. A tab would split a
+# record, a newline would forge one, and a leading dash would be read as an
+# option by whatever the name is eventually passed to.
+valid_name() {
+    case "${1:-}" in
+        ""|-*)          return 1 ;;
+        *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    return 0
+}
+
+hosts_init() {
+    mkdir -p "$CONF_DIR" || die "cannot create $CONF_DIR"
+    chmod 700 "$CONF_DIR" 2>/dev/null
+    [ -e "$HOSTS" ] || { : > "$HOSTS"; }
+    chmod 600 "$HOSTS" 2>/dev/null
+}
+
+# One record, by name. Prints `host<TAB>port<TAB>user` or nothing.
+host_record() {
+    [ -r "$HOSTS" ] || return 1
+    awk -F'\t' -v n="$1" '$1==n {print $2 "\t" $3 "\t" $4; found=1; exit}
+                          END {exit !found}' "$HOSTS"
+}
+
+# ── Where a password lives ────────────────────────────────
+#
+# ⛔ NEVER BRANCH ON secret-tool's EXIT STATUS. With no keyring daemon running
+# it prints "The name is not activatable" to stderr and EXITS 0 — measured on
+# this desktop, which has secret-tool installed and no daemon started. For a
+# credential store that is the worst failure available: telling somebody their
+# password is saved when there is no password anywhere. So every write is read
+# back and compared byte for byte, and the answer to "where is it" is whichever
+# store actually produced the bytes.
+#
+# ⚠ AND THE FALLBACK IS A FILE, DELIBERATELY. A keyring-only store would make
+# this feature do nothing at all on a machine with no keyring daemon — which is
+# the default SynapseOS install. The file is 0600 inside a 0700 directory,
+# exactly where this package already keeps the SERVER's password, and it is
+# base64 so a password containing a tab or a newline survives the round trip.
+# ⛔ base64 IS NOT ENCRYPTION and nothing here pretends otherwise: `hosts` names
+# the store for every entry, so a person can see which of their passwords is in
+# a keyring and which is in a file on disk.
+secret_keyring_get() {
+    have secret-tool || return 1
+    secret-tool lookup service syn-remote host "$1" 2>/dev/null
+}
+
+secret_file_get() {
+    [ -r "$SECRETS" ] || return 1
+    local b64
+    b64=$(awk -F'\t' -v n="$1" '$1==n {print $2; exit}' "$SECRETS")
+    [ -n "$b64" ] || return 1
+    printf '%s' "$b64" | base64 -d 2>/dev/null
+}
+
+# keyring | file | none
+secret_where() {
+    [ -n "$(secret_keyring_get "$1")" ] && { printf 'keyring'; return 0; }
+    [ -n "$(secret_file_get    "$1")" ] && { printf 'file';    return 0; }
+    printf 'none'
+}
+
+secret_get() {
+    local v
+    v=$(secret_keyring_get "$1"); [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    v=$(secret_file_get    "$1"); [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    return 1
+}
+
+secret_file_put() {   # secret_file_put <name> <password>
+    hosts_init
+    local tmp="$SECRETS.new"
+    { grep -v "^$1	" "$SECRETS" 2>/dev/null || true
+      printf '%s\t%s\n' "$1" "$(printf '%s' "$2" | base64 -w0)"
+    } > "$tmp" || return 1
+    # ⛔ BEFORE THE RENAME, AND ON EVERY WRITE — the same rule set_setting
+    # learned the hard way. chmod'ing once at creation is undone by the next
+    # write through a fresh temporary.
+    chmod 600 "$tmp" 2>/dev/null
+    mv -f "$tmp" "$SECRETS"
+}
+
+secret_put() {   # secret_put <name> <password>; prints where it landed
+    if have secret-tool; then
+        printf '%s' "$2" | secret-tool store --label="syn-remote: $1" \
+            service syn-remote host "$1" >/dev/null 2>&1
+        # THE READ-BACK. Not the exit status — see the block comment above.
+        if [ "$(secret_keyring_get "$1")" = "$2" ]; then
+            # Any older copy on disk is now a stale second answer to the same
+            # question, and the one that would be found first if the keyring
+            # were ever locked. Removed rather than left to disagree.
+            secret_file_clear "$1"
+            printf 'keyring'; return 0
+        fi
+    fi
+    secret_file_put "$1" "$2" || return 1
+    printf 'file'
+}
+
+secret_file_clear() {
+    [ -r "$SECRETS" ] || return 0
+    local tmp="$SECRETS.new"
+    grep -v "^$1	" "$SECRETS" 2>/dev/null > "$tmp"
+    chmod 600 "$tmp" 2>/dev/null
+    mv -f "$tmp" "$SECRETS"
+}
+
+secret_clear() {
+    have secret-tool && secret-tool clear service syn-remote host "$1" >/dev/null 2>&1
+    secret_file_clear "$1"
+}
+
+# ── The saved connections ─────────────────────────────────
+
+cmd_hosts() {
+    hosts_init
+    if [ "${1:-}" = "--tsv" ]; then
+        # ⚠ MACHINE-READABLE AND NEVER TRANSLATED — the window and the TUI both
+        # match on these values. First row names the columns, as everywhere
+        # else here.
+        printf 'name\thost\tport\tuser\tsecret\n'
+        while IFS=$'\t' read -r n h p u; do
+            [ -n "$n" ] || continue
+            printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" "$(secret_where "$n")"
+        done < "$HOSTS"
+        return 0
+    fi
+
+    if [ ! -s "$HOSTS" ]; then
+        printf 'No saved connections.\n\n'
+        note "Add one:  $PROG add <name> <host>[:port] [user]"
+        return 0
+    fi
+    printf 'Saved connections\n'
+    while IFS=$'\t' read -r n h p u; do
+        [ -n "$n" ] || continue
+        local where; where=$(secret_where "$n")
+        note "$(printf '%-16s %s:%s%s  [%s]' "$n" "$h" "$p" \
+                 "$([ -n "$u" ] && printf ' as %s' "$u")" \
+                 "$(case $where in
+                        keyring) echo 'password in the keyring' ;;
+                        file)    echo 'password in a file on disk' ;;
+                        *)       echo 'no password saved' ;;
+                    esac)")"
+    done < "$HOSTS"
+}
+
+cmd_add() {
+    local name=${1:-} target=${2:-} user=${3:-}
+    valid_name "$name" || die "a name is letters, digits, dot, dash or underscore"
+    [ -n "$target" ] || die "usage: $PROG add <name> <host>[:port] [user]"
+
+    local host port
+    case "$target" in
+        *:*) host=${target%:*}; port=${target##*:} ;;
+        *)   host=$target;      port=$DEFAULT_PORT ;;
+    esac
+    [ -n "$host" ] || die "no host in '$target'"
+    case "$port" in *[!0-9]*|"") die "a port is a number" ;; esac
+    [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || die "a port is 1-65535"
+    case "$host$user" in *$'\t'*|*$'\n'*) die "a host or user cannot contain a tab or newline" ;; esac
+
+    hosts_init
+    local tmp="$HOSTS.new"
+    { grep -v "^$name	" "$HOSTS" 2>/dev/null || true
+      printf '%s\t%s\t%s\t%s\n' "$name" "$host" "$port" "$user"
+    } > "$tmp" || die "could not write $HOSTS"
+    chmod 600 "$tmp" 2>/dev/null
+    mv -f "$tmp" "$HOSTS"
+
+    printf 'Saved %s as %s:%s.\n' "$name" "$host" "$port"
+    note "Remember its password:  $PROG saved $name set"
+    note "Open it:                $PROG connect $name"
+}
+
+cmd_forget() {
+    local name=${1:-}
+    valid_name "$name" || die "usage: $PROG forget <name>"
+    host_record "$name" >/dev/null || die "no saved connection called '$name'"
+    hosts_init
+    local tmp="$HOSTS.new"
+    grep -v "^$name	" "$HOSTS" 2>/dev/null > "$tmp"
+    chmod 600 "$tmp" 2>/dev/null
+    mv -f "$tmp" "$HOSTS"
+    # ⛔ THE PASSWORD GOES WITH IT. A forgotten connection whose secret stays in
+    # the keyring leaves a credential nothing can reach and nothing will ever
+    # clean up — and it would silently come back if the same name were added
+    # again, attached to a host it was never meant for.
+    secret_clear "$name"
+    printf 'Forgot %s, and its password.\n' "$name"
+}
+
+cmd_saved() {
+    local name=${1:-} action=${2:-}
+    valid_name "$name" || die "usage: $PROG saved <name> [set|clear]"
+    host_record "$name" >/dev/null || die "no saved connection called '$name'"
+
+    case "$action" in
+        set)
+            local pw
+            # ⛔ READ, NOT AN ARGUMENT. A password on the command line is in
+            # `ps` for every user on the machine and in the shell's history
+            # afterwards.
+            printf 'Password for %s: ' "$name" >&2
+            IFS= read -rs pw; printf '\n' >&2
+            [ -n "$pw" ] || die "nothing entered — the password is unchanged"
+            local where; where=$(secret_put "$name" "$pw") || die "could not save the password"
+            case "$where" in
+                keyring) printf 'Saved in the keyring.\n' ;;
+                file)    printf 'Saved.\n\n'
+                         note "⚠ There is no keyring running, so it is in a file:"
+                         note "  $SECRETS  (0600, and NOT encrypted)"
+                         note "Start a keyring daemon and set it again to move it." ;;
+            esac ;;
+        clear)
+            secret_clear "$name"
+            printf 'Forgot the password for %s.\n' "$name" ;;
+        ""|status)
+            printf '%s\n' "$(secret_where "$name")" ;;
+        *)  die "saved takes 'set' or 'clear'" ;;
+    esac
+}
+
+# ── Opening one ───────────────────────────────────────────
+
+cmd_connect() {
+    local name=${1:-}
+    valid_name "$name" || die "usage: $PROG connect <name>"
+    local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
+    local host port user
+    IFS=$'\t' read -r host port user <<< "$rec"
+
+    [ -x "$VIEWER" ] || die "the viewer is missing: $VIEWER"
+
+    local pw; pw=$(secret_get "$name" || true)
+
+    # ⛔ ON STDIN, NOT ON argv AND NOT IN THE ENVIRONMENT. argv is world-visible
+    # in `ps`; the environment is readable for the life of the process through
+    # /proc/PID/environ. A pipe is read once and is gone.
+    #
+    # ⚠ AND THE VIEWER STILL ASKS IF THERE IS NOTHING TO SEND. An empty pipe
+    # means "no saved password", not "the password is empty" — the viewer draws
+    # its own prompt in that case rather than failing to authenticate.
+    printf '%s' "$pw" | exec "$VIEWER" \
+        --host "$host" --port "$port" --name "$name" \
+        ${user:+--user "$user"}
+}
+
+# ── The other two faces ───────────────────────────────────
+
+cmd_gui() {
+    have syn-remote-gui || die "syn-remote-gui is not installed"
+    exec syn-remote-gui "$@"
+}
+
+# Arrow keys, a list, and the same three verbs the window has. Reads the same
+# --tsv the window does, so the two cannot disagree about what is saved.
+cmd_tui() {
+    hosts_init
+    local names=() rows=() n h p u sec sel=0
+    while IFS=$'\t' read -r n h p u sec; do
+        [ "$n" = name ] && continue
+        [ -n "$n" ] || continue
+        names+=("$n")
+        rows+=("$(printf '%-16s %s:%s  %s' "$n" "$h" "$p" \
+                  "$(case $sec in keyring) echo '[keyring]';; file) echo '[on disk]';; *) echo '[no password]';; esac)")")
+    done < <(cmd_hosts --tsv)
+
+    [ ${#names[@]} -gt 0 ] || { printf 'No saved connections. Add one:  %s add <name> <host>\n' "$PROG"; return 0; }
+
+    local key
+    while :; do
+        printf '\033[H\033[2J'
+        printf 'syn-remote — saved connections\n\n'
+        local i
+        for i in "${!rows[@]}"; do
+            if [ "$i" -eq "$sel" ]; then printf '  \033[7m%s\033[0m\n' "${rows[$i]}"
+            else                          printf '  %s\n' "${rows[$i]}"; fi
+        done
+        printf '\n  ↑/↓ choose   Enter connect   p password   d forget   q quit\n'
+
+        IFS= read -rsn1 key || break
+        case "$key" in
+            $'\033')
+                # An arrow is ESC [ A/B. Read the rest without blocking, so a
+                # bare Escape is a quit rather than a hang.
+                IFS= read -rsn2 -t 0.1 key || key=""
+                case "$key" in
+                    '[A') sel=$(( (sel - 1 + ${#names[@]}) % ${#names[@]} )) ;;
+                    '[B') sel=$(( (sel + 1) % ${#names[@]} )) ;;
+                    "")   return 0 ;;
+                esac ;;
+            k) sel=$(( (sel - 1 + ${#names[@]}) % ${#names[@]} )) ;;
+            j) sel=$(( (sel + 1) % ${#names[@]} )) ;;
+            "") printf '\033[H\033[2J'; cmd_connect "${names[$sel]}"; return $? ;;
+            p) printf '\n'; cmd_saved "${names[$sel]}" set; printf '\n  [any key]'; IFS= read -rsn1 ;;
+            d) printf '\n'; cmd_forget "${names[$sel]}"; return 0 ;;
+            q) return 0 ;;
+        esac
+    done
+}
+
 usage() {
     cat <<'EOF'
 syn-remote — the desktop, from somewhere else
@@ -432,12 +762,25 @@ syn-remote — the desktop, from somewhere else
   syn-remote password [new|X]  the password a viewer is asked for
   syn-remote auth pam|password sign in with your account, or that password
 
+Reaching somebody else's desktop:
+
+  syn-remote hosts [--tsv]     the connections you have saved
+  syn-remote add <name> <host>[:port] [user]
+  syn-remote connect <name>    open it
+  syn-remote saved <name> [set|clear]   the password it is opened with
+  syn-remote forget <name>     drop it, and its password
+  syn-remote gui | tui         the same list, in a window or in the terminal
+
 The server is wayvnc; this adds the parts a wrapper has to: it wakes a blanked
 screen when somebody connects (a blanked output cannot be captured at all) and
 holds the machine awake while they are there.
 
 Nothing exists to share until somebody has logged in — there is no desktop
 before a login on any Wayland system.
+
+The viewer is syn-remote's own, because wayvnc authenticates over VeNCrypt and
+no packaged VNC client can be handed a username or a password without somebody
+typing it — so a saved password could never be used by one.
 EOF
 }
 
@@ -458,6 +801,13 @@ case "${1:-status}" in
     port)       shift; cmd_port "$@" ;;
     password)   shift; cmd_password "$@" ;;
     auth)       shift; cmd_auth "$@" ;;
+    hosts)      shift; cmd_hosts "$@" ;;
+    add)        shift; cmd_add "$@" ;;
+    forget)     shift; cmd_forget "$@" ;;
+    saved)      shift; cmd_saved "$@" ;;
+    connect|view) shift; cmd_connect "$@" ;;
+    gui)        shift; cmd_gui "$@" ;;
+    tui)        shift; cmd_tui "$@" ;;
     -h|--help|help) usage ;;
     *)          err "unknown command: $1"; usage; exit 1 ;;
 esac
