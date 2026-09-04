@@ -54,9 +54,9 @@ lives on the machine.
 The desktop is `synui`, a wlroots compositor written for this system rather than
 adapted to it — one that knows the AI daemon exists.
 
-> **Status: alpha.** Version 0.2.x. This is a real, actively developed system —
-> the author daily-drives it — but it is early, moves fast, and will break.
-> Try it in a VM before you give it a disk.
+> **Status: beta.** Version 0.3.x. A real, actively developed system — the
+> author daily-drives it, and it is ready for you to do the same. It still
+> moves fast, so expect the occasional rough edge.
 
 ---
 
@@ -481,7 +481,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
 | **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, per-clip motion and retiming, keyframed grades, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets and a render queue. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
 | **`syn-gfn`** | GeForce NOW, in a browser that can hold the mouse — a launcher rather than a client, because pointer lock, keyboard lock, fullscreen, hardware video decode and WebRTC all belong to a browser engine that is already written and already tested against the service. Runs the first Chromium-family browser on the machine in a profile of its own, with keyboard and pointer lock pre-granted for the site (the permission prompt they replace is raised while the page is fullscreen with the cursor captured, where nobody can see it). No browser in `depends`. See [Gaming](#gaming). |
-| **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the two things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, and holds the machine awake while they are there. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
+| **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, holds the machine awake while they are there, and — because **a machine that is asleep answers nothing at all** — arms the wired card for a magic packet (`syn-remote wakeable on`) so a suspended machine can be woken over the network. Going the other way, it saves and opens somebody else's desktop (`add`/`trust`/`connect`), waking it first when it is not answering. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
@@ -900,8 +900,8 @@ xdg-mime default org.kde.dolphin.desktop inode/directory
 
 **SYNAPSE Settings** (`syn-settings`) is the system half of the desktop's
 configuration: displays and resolution, keyboard and language, date and time,
-network, Bluetooth, power and sleep, kernels, default applications, and where
-configuration lives. The control panel (`Super`+`C`) stays what it always was —
+network addresses, Bluetooth, power and sleep, kernels, default applications,
+and where configuration lives. The control panel (`Super`+`C`) stays what it always was —
 the *compositor's* settings, live, while you watch a window change. This is the
 other half, and it is the one that talks to `localectl`, `timedatectl`,
 `bootctl` and `rfkill`.
@@ -919,6 +919,17 @@ The **Kernel** pane installs, removes and switches kernels, on all three
 bootloaders SynapseOS can install (`limine`, `systemd-boot`, GRUB), and it
 distinguishes the three states that look alike from a package list: *installed*,
 *bootable* (an entry exists and an initramfs was built), and *running*.
+
+The **Network** pane answers the two questions the interface list never did:
+what address this machine is on, and what a card's hardware address is. Every
+interface gets a MAC row and, where it holds any, the addresses it has right
+now — plus one gateway row and one nameserver row rather than one per
+interface, because every device carries those fields and only the one holding
+the default route fills them in. ⚠ The `fe80::` link-local address every
+interface always has is left out: it is the width of a real address and reaches
+nothing without an interface named beside it. The MAC is not trivia — a magic
+packet is addressed to one, so this pane and `syn-remote wakeable` are the two
+places to read what another machine needs in order to wake this one.
 
 The **System** pane names the machine. Every SynapseOS install answers to
 `synapse`, so the moment there are two of them on one network Avahi renames one
@@ -2028,6 +2039,52 @@ Sign-in is a generated 20-character password by default, or your own account
 password through PAM (`syn-remote auth pam`), which brings the same three-try
 lockout as any other login on the machine. Settings ▸ **Remote Desktop** is the
 same thing in a window.
+
+**⛔ And a machine that is asleep answers nothing at all.** The screen wake above
+is for a screen that has gone dark on a machine still running; a *suspended* one
+has no server, no port and nothing listening, so there is nothing to connect to
+and nothing to wake by connecting.
+
+```bash
+syn-remote wakeable on       # arm the wired card for a magic packet
+syn-remote wake sosdesk      # send one to a saved connection
+```
+
+**⛔ Arming it writes two places and it needs both.** NetworkManager
+*remembers* — `802-3-ethernet.wake-on-lan` is re-applied at every activation,
+which is what survives a reboot, a replug and a driver that clears the flag on
+link-down. A small helper *applies* it now, because activating the connection
+you are reaching the machine over drops the link underneath you. Setting only
+the first leaves the machine unwakeable until its next reboot; setting only the
+second loses it *at* that reboot, and `wakeable` reports the two separately for
+the same reason. The state is asked of the card rather than read back off the
+setting, so "armed now, forgotten at the next boot" cannot read as working.
+
+⚠ Wired only, and said out loud rather than quietly skipped: Wi-Fi wake needs
+the card to stay associated through suspend and on these cards it does not. ⚠ A
+magic packet is a broadcast, so the machine sending one has to be on the same
+network as the machine being woken — and a machine that was shut down rather
+than suspended also needs Wake-on-LAN enabled in its own firmware setup.
+
+The hardware address to send it to is on the machine itself: `syn-remote
+wakeable` prints it, and Settings ▸ **Network** now lists a MAC for every
+interface beside the addresses it holds.
+
+**And it goes the other way too.** A remote desktop that only answers the door
+is half a tool, so `syn-remote` also saves and opens somebody else's:
+
+```bash
+syn-remote add desk 192.168.1.20 velle   # a machine to reach
+syn-remote trust desk                    # check its certificate, once
+syn-remote connect desk                  # open it — waking it first if it is asleep
+syn-remote gui | tui                     # the same list, in a window or a terminal
+```
+
+⚠ `trust` is not optional. wayvnc's certificate is self-signed, so the first
+connection is trust-on-first-use: until the fingerprint has been checked the TLS
+session comes up and is dropped with no error at the machine you are sitting at,
+and the only trace is *Client handshake timed out* in the server's journal —
+which reads like a firewall and is not one.
 
 ### Privileged desktop actions
 
