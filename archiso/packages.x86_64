@@ -33,11 +33,18 @@ arch-install-scripts
 terminus-font
 ttf-dejavu
 fontconfig
-# Latin/Greek/Cyrillic coverage for the LIVE session itself — the installer's
-# own language picker lists Русский, 日本語, العربية, and dejavu draws none of
-# them, so the menu offering them rendered as boxes. noto-fonts is ~10MB and
-# covers everything except CJK/Indic, which the installer pulls per-language
-# (noto-fonts-cjk alone is ~130MB, too much to put on every ISO).
+# Coverage for the LIVE session itself — the installer's own language picker
+# lists Русский, 日本語, العربية, and dejavu draws none of them, so the menu
+# offering them rendered as boxes. noto-fonts is ~10MB and covers Cyrillic,
+# Greek, ARABIC, DEVANAGARI, Hebrew and Thai — Naskh/Kufi Arabic and Sans/Serif
+# Devanagari are in the base package, so Arabic and Hindi need nothing more.
+#
+# ⚠ AND CJK IS ALREADY HERE, transitively: synui hard-depends on noto-fonts-cjk
+# (see synui/PKGBUILD — it is what src/text.c falls back TO), so every ISO
+# carries it whether or not this file names it — `noto-fonts-cjk 20240730-1` is
+# in 0.3.0's own pkglist. All thirteen languages have their glyphs on the live
+# desktop; the per-language font column in LOCALE_ROWS is about the INSTALLED
+# system, not this one.
 #
 # This also makes the compositor honest elsewhere: a filename or an RSS headline
 # in a script dejavu lacks drew as boxes on the live ISO, whatever the locale.
