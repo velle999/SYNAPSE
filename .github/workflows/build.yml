@@ -352,6 +352,16 @@ jobs:
         run: |
           ./syn-install/tests/layout_test.sh
 
+      # The language chosen at boot, and the two places it has to reach: the
+      # SCREEN (a Linux VT cannot draw CJK, Arabic or Devanagari — 512 glyphs,
+      # no shaper — so the text installer keeps English prose there) and the
+      # SESSION (the live desktop is a systemd unit, so `export LANG` reaches
+      # nothing and the whole session came up English). Both failed on the
+      # 0.3.0 image; both are pure functions plus one stubbed call here.
+      - name: Installer live-session language (console script + systemd env)
+        run: |
+          ./syn-install/tests/livelang_test.sh
+
       # syn-crypt aims LUKS operations at a block device. Resolving that wrongly
       # is not cosmetic — luksRemoveKey on the wrong device damages a disk, and
       # resolving to something that does not exist breaks every command that

@@ -253,7 +253,42 @@ pkgver=0.1.0
 #   every machine ever installed, and an identity the first upgrade of that
 #   package would silently replace with Arch's. --remove-destination puts a real
 #   file at /etc/os-release, which os-release(5) gives precedence anyway.
-pkgrel=111
+# 112: THE LANGUAGE WAS CHOSEN AND THEN NOBODY HEARD IT — TWICE OVER.
+#   Reported from the 0.3.0 image, with screenshots: Japanese drew the menu as
+#   a wall of boxes and Arabic as `y`ml SynapseOS mn ▪lSwr@ ▪lHy@.`, and after
+#   booting into the live session the desktop and the installer were English
+#   anyway.
+#
+#   ⛔ THE CONSOLE CANNOT DRAW THOSE SCRIPTS AND NO SETTING MAKES IT. A Linux VT
+#   font holds at most 512 glyphs and the console has no shaper: Japanese needs
+#   thousands, and Arabic needs to be shaped. Nothing was wrong with the
+#   catalogs. live_language_apply() already knew this — it is why every label in
+#   LOCALE_ROWS is ASCII and why Cyrillic gets its own font — but the installer
+#   was translated afterwards and nothing carried the rule over. console_can_draw()
+#   is that rule, and syn_lang_load() keeps English prose where it says no, with
+#   one English line saying why: an installer that asks which language you want
+#   and then silently carries on in English is the version of this that reads as
+#   broken.
+#   ⚠ TERM IS HALF THE TEST. The same script run from a terminal on the desktop
+#   draws all thirteen, and refusing there would be a second bug.
+#
+#   ⛔ AND THE LIVE SESSION NEVER HEARD AT ALL. The desktop is started by
+#   `systemctl start synui.service` from .bash_profile — a UNIT, whose
+#   environment is the systemd manager's. `export LANG` dies with this process
+#   and /etc/locale.conf is read at BOOT, minutes before anybody chose, so the
+#   compositor, the bar, every SynapseOS app in the session and the graphical
+#   installer it autostarts all came up English however carefully the language
+#   was picked. `systemctl set-environment LANG=` is the manager's own answer
+#   and applies to every unit started after it, which is all of them here.
+#   /etc/environment is written too, for the next login rather than this one.
+#
+#   tests/livelang_test.sh pins both: which scripts a VT can draw (and that a
+#   real terminal draws all of them), and that the set-environment call is made.
+#
+#   ⚠ STILL ENGLISH: syn-install-gui.qml, which carries no catalog at all — it
+#   reads --boot-language to preselect the row and then says everything in
+#   English. That is the remaining half of "the installer was in English".
+pkgrel=112
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

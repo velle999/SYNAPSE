@@ -65,6 +65,43 @@ SYN_LANG_SRC="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 declare -A SYN_T=()
 SYN_LANG=en
 
+# ── Can the screen this is running on DRAW that language? ──
+#
+# ⛔ A LINUX VT CANNOT SHOW CJK, ARABIC OR DEVANAGARI, AND NO SETTING MAKES IT.
+# A console font holds at most 512 glyphs; Japanese needs thousands and Arabic
+# needs a shaper the console does not have. Ask for Japanese at the boot menu
+# and every screen after it came out as a wall of boxes; ask for Arabic and the
+# bytes land on whatever Latin glyphs the font has in those slots, which reads
+# as `y`ml SynapseOS mn ▪lSwr@ ▪lHy@.` (velle, 2026-09-03, with both).
+#
+# That is not a translation bug and it cannot be fixed in the catalogs — it is
+# the console. live_language_apply() has always known it, which is why every
+# label in LOCALE_ROWS is ASCII and why the Cyrillic branch there loads a
+# different font: Cyrillic and Greek FIT in 512 glyphs, and those four scripts
+# cannot.
+#
+# So the choice still applies to the system, the keyboard, the fonts and the
+# desktop — and the TEXT installer keeps English prose, which is readable,
+# instead of a screen of boxes, which is not. The graphical installer and the
+# live desktop draw the real thing (synui shapes text with HarfBuzz).
+#
+# ⚠ TERM IS THE TEST, not the locale alone. Run from a terminal on the desktop
+# — syntty, foot, an SSH session — the same script CAN draw all of it, and
+# refusing there would be a second bug. `linux` is the VT; empty is a bare
+# process with no terminal at all, where nobody reads the output anyway.
+console_can_draw() {
+    local code=${1%%[_.@-]*}
+    case "${TERM:-}" in
+        linux|'') ;;
+        *) return 0 ;;
+    esac
+    case "${code,,}" in
+        ja|zh|ko|ar|hi|he|fa|ur|th|bn|ta|te|kn|ml|pa|gu|or|si|my|km|lo|am|ti)
+            return 1 ;;
+    esac
+    return 0
+}
+
 # syn_lang_load <locale|code> — swap the catalog. Anything unknown, and
 # anything English, leaves the strings as they are written here.
 syn_lang_load() {
@@ -73,6 +110,9 @@ syn_lang_load() {
     code=${code,,}
     [ -n "$code" ] || return 0
     case "$code" in c|posix|en) SYN_LANG=en; SYN_T=(); return 0 ;; esac
+    # The screen has a veto, and it is not about the catalog: a language the
+    # console cannot draw is one the console must not be sent. See above.
+    if ! console_can_draw "$code"; then SYN_LANG=en; SYN_T=(); return 0; fi
     # ⚠ AN UNKNOWN LANGUAGE FALLS BACK TO ENGLISH, IT DOES NOT KEEP THE LAST
     # ONE. This used to return with the previous catalog still loaded, so a
     # second call naming a language we have no file for left the installer
@@ -1052,13 +1092,20 @@ list_locales() {
 # what the graphical installer reads to preselect its own list. One recorded
 # answer, read by three things, rather than three of them asking.
 #
-# ⚠ THE INSTALLER'S OWN PROSE IS STILL ENGLISH. What this sets is the SYSTEM's
-# language — console keymap, locale, desktop keyboard layout, the fonts that
-# get installed, and the language synsh speaks — not the wording of the next
-# fifteen screens. Saying so here because a language step that appears to
-# promise a translated installer and does not deliver one is worse than no
-# language step: the next person to read this should know it is a gap, not a
-# decision that was made and forgotten.
+# What this sets is the SYSTEM's language — console keymap, locale, desktop
+# keyboard layout, the fonts that get installed, the language synsh speaks — AND
+# the installer's own prose, which it did not when this note was first written
+# (the catalogs are lang-*.sh; see syn_lang_load).
+#
+# ⚠ WITH ONE EXCEPTION THE SCREEN IMPOSES: Japanese, Chinese, Korean, Arabic and
+# Hindi cannot be DRAWN on a Linux VT at all — 512 glyphs, no shaper — so the
+# text installer keeps English prose there and says so in one line. See
+# console_can_draw(). Everything else about the choice still applies, and the
+# graphical installer and the desktop draw those scripts properly.
+#
+# ⚠ AND THE GRAPHICAL INSTALLER'S OWN PROSE IS STILL ENGLISH — syn-install-gui.qml
+# carries no catalog at all. It reads `--boot-language` to preselect the right
+# row and then says everything in English. That is a gap, not a decision.
 
 # The file the boot-time answer lands in. Overridable so the tests can point it
 # somewhere writable; /run is tmpfs on the live image and gone after a reboot,
@@ -1156,6 +1203,30 @@ live_language_apply() {
     if [ -n "$locale" ] && LC_ALL="$locale" locale charmap >/dev/null 2>&1; then
         printf 'LANG=%s\n' "$locale" > /etc/locale.conf 2>/dev/null || true
         export LANG="$locale"
+        #
+        # ⛔ AND THE SESSION THAT HAS NOT STARTED YET, WHICH IS THE ONE THAT
+        # SHOWS. Both lines above reach exactly nothing on the live image:
+        # `export` dies with this process, and /etc/locale.conf is read by
+        # systemd AT BOOT, which was minutes ago. The live desktop is started
+        # by `systemctl start synui.service` from .bash_profile — a UNIT, whose
+        # environment is the manager's — so the compositor, the bar, every
+        # SynapseOS application in the session and the graphical installer the
+        # session autostarts all came up in English however carefully the
+        # language was picked thirty seconds earlier. velle, 2026-09-03: booted
+        # the live image and the installer and everything was in English still.
+        #
+        # `set-environment` is the manager's own answer to that: it applies to
+        # every unit started AFTER it, which is all of them here.
+        systemctl set-environment "LANG=$locale" >/dev/null 2>&1 || true
+        #
+        # …and the same fact for anything the session starts that systemd does
+        # not: a login shell on another VT, a script run by hand. /etc/environment
+        # is read by PAM at login, so it is the next login rather than this one —
+        # which is the honest scope for a file, and it costs nothing.
+        if [ -w /etc/environment ] || [ -w /etc ]; then
+            sed -i '/^LANG=/d' /etc/environment 2>/dev/null || true
+            printf 'LANG=%s\n' "$locale" >> /etc/environment 2>/dev/null || true
+        fi
         # ⚠ BUT NOT THE COLLATION. This script sorts package names, device
         # names and locale lists, and a non-C LC_COLLATE changes what `sort`
         # and a `[a-z]` glob mean — quietly, and differently per language.
@@ -1240,6 +1311,18 @@ live_language_step() {
     syn_lang_load "$locale"
 
     tf 'Language: %s  (%s, keyboard %s)\n' "$label" "$locale" "$keymap"
+
+    # ⚠ SAID IN ENGLISH, AND SAID AT ALL. Where the console cannot draw the
+    # script (see console_can_draw), syn_lang_load above has just kept the
+    # English prose — and an installer that asks which language you want and
+    # then carries on in English, with no explanation, reads as a language step
+    # that does not work. The line has to be English by definition: it is about
+    # this screen being unable to show anything else.
+    if ! console_can_draw "$locale"; then
+        printf '  The text installer stays in English: this console cannot draw
+  that alphabet (a console font holds 512 glyphs). Your desktop, the
+  graphical installer and the installed system use %s.\n' "$label"
+    fi
 }
 
 # `--list-timezones` — `name  label`, the shortlist first (labelled) and then
