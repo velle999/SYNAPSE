@@ -37,7 +37,22 @@ pkgver=0.1.0
 #   copies stay identical (tools/check-shared.sh) — main.py, config.py and
 #   data_feeds.py are all on the shared list, and 1080x1920-linux is the one
 #   this package ships.
-pkgrel=23
+# 24: THE CAMERA HAD NO SWITCH, AND IT DEFAULTS TO ON. Reported as "chibi is
+#   turning on the camera but I believe I disabled the vision features" —
+#   nothing had. `vision_enabled` defaults to True, none of the three
+#   config.local.py files on the machine sets it, and there is no environment
+#   override for it, so the camera opens at startup on every install that has
+#   one and the only way to stop it was to edit a Python file. Camera is a row
+#   on 23's settings panel now.
+#
+#   ⛔ AND IT ACTS IMMEDIATELY. Every other row takes effect while running
+#   because a setting that appears to do nothing reads as broken; this one is
+#   worse than that — somebody turning it off wants the light off, and being
+#   told to restart the program while it is still watching them is not an
+#   answer. ⚠ The switch follows the camera, not the reverse: no device, and
+#   the row goes back to Off rather than claiming On over a camera that never
+#   opened.
+pkgrel=24
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -51,7 +66,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=c381a01af4c25cfd5e4cff4762c25b8c25585fe8
+_commit=a9979a312cf950870665c2e63ba8fcdb1753be0a
 
 # Runtime deps.
 #
