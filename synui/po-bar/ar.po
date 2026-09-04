@@ -75,6 +75,16 @@ msgstr[5] "%1 جديد"
 msgid "%1 oz"
 msgstr "%1 أونصة"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "لا أحد ينظر إلى هذه الشاشة"
+msgstr[1] "شخص واحد ينظر إلى هذه الشاشة"
+msgstr[2] "شخصان ينظران إلى هذه الشاشة"
+msgstr[3] "%1 أشخاص ينظرون إلى هذه الشاشة"
+msgstr[4] "%1 شخصًا ينظرون إلى هذه الشاشة"
+msgstr[5] "%1 شخص ينظرون إلى هذه الشاشة"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "يتبقى %1"
@@ -326,6 +336,10 @@ msgstr "انقر للوحة البلوتوث · الزر الأوسط يبدّل
 msgid "Click play/pause · scroll to change track"
 msgstr "انقر للتشغيل/الإيقاف · مرّر لتغيير المقطع"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "انقر لقطع الاتصال بهم"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr "انقر للكتم · مرّر للضبط · انقر باليمين للمازج"
@@ -398,6 +412,10 @@ msgstr ""
 "غير متصل\n"
 "انقر لاختيار شبكة"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "جارٍ قطع الاتصال…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "العرض"
@@ -421,6 +439,10 @@ msgstr "تم"
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "سحب النافذة أو إلصاقها بحافة أو تكبيرها يُخرجها من التخطيط."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "إنهاء"
 
 #: welcome/pages.js:147
 msgid ""
@@ -724,6 +746,10 @@ msgstr "الطاقة"
 msgid "Power Saving"
 msgstr "توفير الطاقة"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "يمكن الوصول إليه من الشبكة كلها، على المنفذ %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "أعد التشغيل"
@@ -795,6 +821,10 @@ msgstr "سجّل الدخول"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "مدير البرمجيات"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "عبر نفق SSH، على المنفذ %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -933,6 +963,10 @@ msgid ""
 msgstr ""
 "هذا الدليل على Super+Escape متى أردته من جديد — ولوحة الاختصارات على Super+/ "
 "هي النسخة المطوّلة من الصفحة الثانية."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "هناك من ينظر إلى هذه الشاشة"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

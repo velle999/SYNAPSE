@@ -53,6 +53,12 @@ msgstr[1] ""
 msgid "%1 oz"
 msgstr ""
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] ""
+msgstr[1] ""
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr ""
@@ -288,6 +294,10 @@ msgstr ""
 msgid "Click play/pause · scroll to change track"
 msgstr ""
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr ""
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
@@ -359,6 +369,10 @@ msgstr ""
 msgid "Disconnected\nClick to pick a network"
 msgstr ""
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr ""
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr ""
@@ -383,6 +397,10 @@ msgstr ""
 
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
+msgstr ""
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
 msgstr ""
 
 #: welcome/pages.js:147
@@ -676,6 +694,10 @@ msgstr ""
 msgid "Power Saving"
 msgstr ""
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr ""
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr ""
@@ -748,6 +770,10 @@ msgstr ""
 
 #: StartMenu.qml:560
 msgid "Software Manager"
+msgstr ""
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
 msgstr ""
 
 #: StartMenu.qml:632
@@ -876,6 +902,10 @@ msgstr ""
 
 #: welcome/pages.js:252
 msgid "This guide is on Super+Escape whenever you want it back — and the shortcuts palette on Super+/ is the longer version of page two."
+msgstr ""
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
 msgstr ""
 
 #: welcome/pages.js:153

@@ -54,6 +54,11 @@ msgstr[0] "新規 %1 件"
 msgid "%1 oz"
 msgstr "%1 oz"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 人がこの画面を見ています"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "残り %1"
@@ -296,6 +301,10 @@ msgstr "クリックで Bluetooth パネル · 中クリックで無線を切り
 msgid "Click play/pause · scroll to change track"
 msgstr "クリックで再生／一時停止 · スクロールで曲を変更"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "クリックで切断"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr "クリックでミュート · スクロールで調整 · 右クリックでミキサー"
@@ -368,6 +377,10 @@ msgstr ""
 "未接続\n"
 "クリックでネットワークを選択"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "切断しています…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "ディスプレイ"
@@ -391,6 +404,10 @@ msgstr "完了"
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "ドラッグ・スナップ・最大化をすると、そのウィンドウは配置から外れます。"
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "終了中"
 
 #: welcome/pages.js:147
 msgid ""
@@ -694,6 +711,10 @@ msgstr "電源"
 msgid "Power Saving"
 msgstr "省電力"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "ネットワーク全体から到達可能、ポート %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "再起動"
@@ -765,6 +786,10 @@ msgstr "サインイン"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "ソフトウェア管理"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "SSH トンネル経由、ポート %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -904,6 +929,10 @@ msgid ""
 msgstr ""
 "このガイドはいつでも Super+Escape で戻ってきます。Super+/ のショートカット一"
 "覧は 2 ページ目の詳しい版です。"
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "誰かがこの画面を見ています"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

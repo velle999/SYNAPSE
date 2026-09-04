@@ -244,7 +244,18 @@ cmd_run() {
 
 # ── Status ────────────────────────────────────────────────
 
+# ⛔ ZERO UNLESS THE SERVER IS ACTUALLY RUNNING, whatever the file says. This
+# is read by the bar, and a state file outliving the thing that wrote it would
+# leave an indicator claiming somebody is watching this screen over a server
+# that is not there — which is worse than no indicator at all, and is the
+# failure synui's Recording.qml has a paragraph about avoiding.
+#
+# ⚠ It narrows the window rather than closing it: a watcher that died under a
+# live wayvnc could still over-report until the unit is restarted. The count is
+# wayvnc's own (connection_count), so that needs the event stream to break
+# while the server survives it.
 connections() {
+    systemctl --user is-active "$UNIT" >/dev/null 2>&1 || { printf '0'; return; }
     sed -n 's/^connections=//p' "$STATE" 2>/dev/null | tail -1
 }
 

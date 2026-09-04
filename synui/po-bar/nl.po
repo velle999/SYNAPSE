@@ -58,6 +58,12 @@ msgstr[1] "%1 nieuw"
 msgid "%1 oz"
 msgstr "%1 oz"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 persoon kijkt naar dit scherm"
+msgstr[1] "%1 personen kijken naar dit scherm"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "nog %1"
@@ -304,6 +310,10 @@ msgstr "Klik voor het Bluetooth-paneel · middelklik schakelt de radio om"
 msgid "Click play/pause · scroll to change track"
 msgstr "Klik om af te spelen/pauzeren · scroll om van nummer te wisselen"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "Klik om ze los te koppelen"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr "Klik om te dempen · scroll om te regelen · rechtsklik voor de mixer"
@@ -376,6 +386,10 @@ msgstr ""
 "Niet verbonden\n"
 "Klik om een netwerk te kiezen"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "Bezig met loskoppelen…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "Beeldscherm"
@@ -398,7 +412,12 @@ msgstr "Klaar"
 
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
-msgstr "Slepen, vastklikken of maximaliseren haalt een venster uit de indeling."
+msgstr ""
+"Slepen, vastklikken of maximaliseren haalt een venster uit de indeling."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "STOPT"
 
 #: welcome/pages.js:147
 msgid ""
@@ -701,6 +720,10 @@ msgstr "Energie"
 msgid "Power Saving"
 msgstr "Energiebesparing"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "Bereikbaar vanaf het hele netwerk, op poort %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Opnieuw opstarten"
@@ -772,6 +795,10 @@ msgstr "Aanmelden"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Softwarebeheer"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "Via een SSH-tunnel, op poort %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -915,6 +942,10 @@ msgid ""
 msgstr ""
 "Deze gids staat op Super+Escape wanneer je hem terug wilt — en het "
 "sneltoetsenpalet op Super+/ is de lange versie van pagina twee."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "Iemand kijkt naar dit scherm"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

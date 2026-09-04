@@ -31,7 +31,15 @@
 #   door to unlock afterwards.
 pkgname=syn-remote
 pkgver=0.1.0
-pkgrel=1
+# 2: the connection count reads ZERO unless the server is actually running,
+#   whatever the state file says. synui's bar reads that count now (596), and a
+#   state file outliving the thing that wrote it would leave an indicator
+#   claiming somebody is watching this screen over a server that is not there —
+#   worse than no indicator at all, and the failure synui's Recording.qml has a
+#   paragraph about avoiding. ⚠ It narrows the window rather than closing it: a
+#   watcher that died under a live wayvnc could still over-report until the unit
+#   restarts.
+pkgrel=2
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

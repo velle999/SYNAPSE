@@ -642,6 +642,13 @@ PanelWindow {
 
                     Recording { barScreen: bar.screen }
 
+                    // Beside the recording pill, and for the same
+                    // reason it is there: both say something is being
+                    // captured that the desktop otherwise looks no
+                    // different for. Hidden whenever nobody is
+                    // connected — see RemoteDesktop.qml.
+                    RemoteDesktop { barScreen: bar.screen }
+
                     // Immediately left of the tray, which is where an
                     // indicator of this kind is looked for — and it is hidden
                     // whenever there is nothing pending, so on a current

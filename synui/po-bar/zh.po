@@ -54,6 +54,11 @@ msgstr[0] "%1 项新增"
 msgid "%1 oz"
 msgstr "%1 盎司"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 人正在看这个屏幕"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "剩余 %1"
@@ -293,6 +298,10 @@ msgstr "点击打开蓝牙面板 · 中键点击切换无线开关"
 msgid "Click play/pause · scroll to change track"
 msgstr "点击播放／暂停 · 滚动切换曲目"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "点击断开他们"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr "点击静音 · 滚动调节 · 右键打开混音器"
@@ -365,6 +374,10 @@ msgstr ""
 "已断开\n"
 "点击选择网络"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "正在断开…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "显示"
@@ -388,6 +401,10 @@ msgstr "完成"
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "拖动、贴边或最大化会让窗口脱离布局。"
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "结束中"
 
 #: welcome/pages.js:147
 msgid ""
@@ -690,6 +707,10 @@ msgstr "电源"
 msgid "Power Saving"
 msgstr "省电"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "整个网络都能连上，端口 %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "重启"
@@ -761,6 +782,10 @@ msgstr "登录"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "软件管理器"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "经 SSH 隧道，端口 %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -896,6 +921,10 @@ msgid ""
 msgstr ""
 "想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长"
 "版。"
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "有人正在看这个屏幕"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

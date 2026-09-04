@@ -127,6 +127,16 @@ QtObject {
     readonly property string record:     "\uF111"
     readonly property string recordStop: "\uF04D"
 
+    // -- Remote desktop (syn-remote) --
+    // fa-eye and fa-eye_slash: somebody is looking at this screen, and the
+    // slash is what the click will do about it. Same fa block as the recording
+    // pair above, for the same reason — one icon family on the bar.
+    // ⚠ Both checked against SymbolsNerdFontMono-Regular.ttf with fontTools
+    // before being used here, which is the rule this file states twice: a
+    // codepoint the font lacks draws as a box, and nothing tests for it.
+    readonly property string remoteEye:     "\uF06E"
+    readonly property string remoteEyeStop: "\uF070"
+
     // -- Media (MPRIS) --
     readonly property string mediaPlay:  "\uF04B"
     readonly property string mediaPause: "\uF04C"

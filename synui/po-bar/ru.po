@@ -63,6 +63,13 @@ msgstr[2] "%1 новых"
 msgid "%1 oz"
 msgstr "%1 унц."
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 человек смотрит на этот экран"
+msgstr[1] "%1 человека смотрят на этот экран"
+msgstr[2] "%1 человек смотрят на этот экран"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "осталось %1"
@@ -310,6 +317,10 @@ msgstr "Нажмите для панели Bluetooth · средний щелч�
 msgid "Click play/pause · scroll to change track"
 msgstr "Нажмите для воспроизведения/паузы · прокрутка меняет трек"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "Нажмите, чтобы отключить их"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
@@ -384,6 +395,10 @@ msgstr ""
 "Нет подключения\n"
 "Нажмите, чтобы выбрать сеть"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "Отключение…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "Экран"
@@ -406,7 +421,13 @@ msgstr "Готово"
 
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
-msgstr "Перетаскивание, прилипание к краю или разворачивание выводит окно из расположения."
+msgstr ""
+"Перетаскивание, прилипание к краю или разворачивание выводит окно из "
+"расположения."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "КОНЕЦ"
 
 #: welcome/pages.js:147
 msgid ""
@@ -712,6 +733,10 @@ msgstr "Питание"
 msgid "Power Saving"
 msgstr "Энергосбережение"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "Доступен из всей сети, на порту %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Перезагрузить"
@@ -783,6 +808,10 @@ msgstr "Войти"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Менеджер программ"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "Через SSH-туннель, на порту %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -922,6 +951,10 @@ msgid ""
 msgstr ""
 "Это руководство живёт на Super+Escape, когда бы оно ни понадобилось, — а "
 "палитра сочетаний на Super+/ есть длинная версия второй страницы."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "Кто-то смотрит на этот экран"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

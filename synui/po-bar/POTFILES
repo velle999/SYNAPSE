@@ -25,6 +25,7 @@ modules/Memory.qml
 modules/Network.qml
 modules/Pomodoro.qml
 modules/Recording.qml
+modules/RemoteDesktop.qml
 modules/Updates.qml
 modules/Volume.qml
 modules/Weather.qml

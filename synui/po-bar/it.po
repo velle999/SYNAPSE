@@ -58,6 +58,12 @@ msgstr[1] "%1 nuovi"
 msgid "%1 oz"
 msgstr "%1 oz"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 persona sta guardando questo schermo"
+msgstr[1] "%1 persone stanno guardando questo schermo"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "%1 rimanenti"
@@ -304,6 +310,10 @@ msgstr "Clicca per il pannello Bluetooth · il clic centrale commuta la radio"
 msgid "Click play/pause · scroll to change track"
 msgstr "Clicca per riprodurre/mettere in pausa · scorri per cambiare traccia"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "Fai clic per disconnetterle"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr "Clicca per silenziare · scorri per regolare · clic destro per il mixer"
@@ -377,6 +387,10 @@ msgstr ""
 "Disconnesso\n"
 "Clicca per scegliere una rete"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "Disconnessione…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "Schermo"
@@ -399,7 +413,13 @@ msgstr "Fatto"
 
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
-msgstr "Trascinare, agganciare o ingrandire una finestra la toglie dalla disposizione."
+msgstr ""
+"Trascinare, agganciare o ingrandire una finestra la toglie dalla "
+"disposizione."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "FINE"
 
 #: welcome/pages.js:147
 msgid ""
@@ -704,6 +724,10 @@ msgstr "Energia"
 msgid "Power Saving"
 msgstr "Risparmio energetico"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "Raggiungibile da tutta la rete, sulla porta %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Riavvia"
@@ -775,6 +799,10 @@ msgstr "Accedi"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Gestore dei programmi"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "Attraverso un tunnel SSH, sulla porta %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -919,6 +947,10 @@ msgid ""
 msgstr ""
 "Questa guida è su Super+Esc ogni volta che la rivuoi — e la tavolozza delle "
 "scorciatoie su Super+/ è la versione lunga della pagina due."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "Qualcuno sta guardando questo schermo"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

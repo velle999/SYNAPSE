@@ -63,6 +63,13 @@ msgstr[2] "%1 nowych"
 msgid "%1 oz"
 msgstr "%1 oz"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 osoba patrzy na ten ekran"
+msgstr[1] "%1 osoby patrzą na ten ekran"
+msgstr[2] "%1 osób patrzy na ten ekran"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "pozostało %1"
@@ -312,6 +319,10 @@ msgstr ""
 msgid "Click play/pause · scroll to change track"
 msgstr "Kliknij, aby odtworzyć/wstrzymać · przewiń, aby zmienić utwór"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "Kliknij, aby ich rozłączyć"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
@@ -385,6 +396,10 @@ msgstr ""
 "Rozłączono\n"
 "Kliknij, aby wybrać sieć"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "Rozłączanie…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "Ekran"
@@ -407,7 +422,13 @@ msgstr "Gotowe"
 
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
-msgstr "Przeciągnięcie, przyciągnięcie do krawędzi lub maksymalizacja wyjmuje okno z układu."
+msgstr ""
+"Przeciągnięcie, przyciągnięcie do krawędzi lub maksymalizacja wyjmuje okno z "
+"układu."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "KONIEC"
 
 #: welcome/pages.js:147
 msgid ""
@@ -712,6 +733,10 @@ msgstr "Zasilanie"
 msgid "Power Saving"
 msgstr "Oszczędzanie energii"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "Osiągalny z całej sieci, na porcie %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Uruchom ponownie"
@@ -783,6 +808,10 @@ msgstr "Zaloguj się"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Menedżer oprogramowania"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "Przez tunel SSH, na porcie %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -924,6 +953,10 @@ msgid ""
 msgstr ""
 "Ten przewodnik jest pod Super+Escape, kiedy tylko go zechcesz — a paleta "
 "skrótów pod Super+/ to dłuższa wersja strony drugiej."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "Ktoś patrzy na ten ekran"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

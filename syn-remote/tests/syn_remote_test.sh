@@ -170,6 +170,15 @@ check "the screen is woken once, not per viewer" 1 "$(grep -c 'wlopm --on' "$T/a
 check "...and released once, when the count reaches zero" 1 "$(grep -c 'inhibit 0' "$T/actions.log")"
 check "the state file follows the count" "connections=0" "$(cat "$STATE" 2>/dev/null)"
 
+# ⛔ AND A STALE FILE NEVER CLAIMS A VIEWER. The bar reads this count; a state
+# file outliving the server it describes would leave an indicator saying
+# somebody is watching this screen over a server that is not there — worse than
+# no indicator, and the failure synui's Recording.qml has a paragraph about.
+printf 'connections=3\n' > "$XDG_RUNTIME_DIR/syn-remote.state"
+check "a stale count reads as nobody while the server is stopped" "0" \
+      "$("$SR" status --rec | awk -F'\t' '$1=="connections"{print $2}')"
+rm -f "$XDG_RUNTIME_DIR/syn-remote.state"
+
 # ── 7. the unit ───────────────────────────────────────────
 unit="$here/../syn-remote.service"
 grep -q '^ExecStart=/usr/bin/syn-remote run$' "$unit" &&

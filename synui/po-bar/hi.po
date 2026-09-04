@@ -58,6 +58,12 @@ msgstr[1] "%1 नए"
 msgid "%1 oz"
 msgstr "%1 औंस"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 व्यक्ति यह स्क्रीन देख रहा है"
+msgstr[1] "%1 लोग यह स्क्रीन देख रहे हैं"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "%1 शेष"
@@ -299,6 +305,10 @@ msgstr "ब्लूटूथ पैनल के लिए क्लिक क�
 msgid "Click play/pause · scroll to change track"
 msgstr "चलाने/रोकने के लिए क्लिक करें · ट्रैक बदलने के लिए स्क्रॉल करें"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "उन्हें हटाने के लिए क्लिक करें"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
@@ -372,6 +382,10 @@ msgstr ""
 "असंबद्ध\n"
 "नेटवर्क चुनने के लिए क्लिक करें"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "हटाया जा रहा है…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "प्रदर्शन"
@@ -395,6 +409,10 @@ msgstr "हो गया"
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "खींचने, चिपकाने या बड़ा करने से खिड़की विन्यास से बाहर हो जाती है।"
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "बंद हो रहा है"
 
 #: welcome/pages.js:147
 msgid ""
@@ -697,6 +715,10 @@ msgstr "बिजली"
 msgid "Power Saving"
 msgstr "बिजली की बचत"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "पूरे नेटवर्क से पहुँच योग्य, पोर्ट %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "फिर से चालू करें"
@@ -768,6 +790,10 @@ msgstr "साइन इन करें"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "सॉफ़्टवेयर प्रबंधक"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "SSH सुरंग के ज़रिए, पोर्ट %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -903,6 +929,10 @@ msgid ""
 msgstr ""
 "यह मार्गदर्शिका जब चाहें Super+Escape पर मिल जाएगी — और Super+/ की शॉर्टकट सूची "
 "दूसरे पन्ने का लंबा रूप है।"
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "कोई यह स्क्रीन देख रहा है"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

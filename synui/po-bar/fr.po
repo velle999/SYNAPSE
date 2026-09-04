@@ -58,6 +58,12 @@ msgstr[1] "%1 nouveaux"
 msgid "%1 oz"
 msgstr "%1 oz"
 
+#: modules/RemoteDesktop.qml:77
+msgid "%1 person is looking at this screen"
+msgid_plural "%1 people are looking at this screen"
+msgstr[0] "%1 personne regarde cet écran"
+msgstr[1] "%1 personnes regardent cet écran"
+
 #: modules/Battery.qml:47
 msgid "%1 remaining"
 msgstr "%1 restantes"
@@ -305,6 +311,10 @@ msgid "Click play/pause · scroll to change track"
 msgstr ""
 "Cliquer pour lire/mettre en pause · faire défiler pour changer de piste"
 
+#: modules/RemoteDesktop.qml:89
+msgid "Click to disconnect them"
+msgstr "Cliquer pour les déconnecter"
+
 #: modules/Volume.qml:60
 msgid "Click to mute · scroll to adjust · right-click for mixer"
 msgstr ""
@@ -380,6 +390,10 @@ msgstr ""
 "Déconnecté\n"
 "Cliquer pour choisir un réseau"
 
+#: modules/RemoteDesktop.qml:71
+msgid "Disconnecting…"
+msgstr "Déconnexion…"
+
 #: StartMenu.qml:631
 msgid "Display"
 msgstr "Affichage"
@@ -403,6 +417,10 @@ msgstr "Terminé"
 #: welcome/pages.js:184
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "Déplacer, ancrer ou agrandir une fenêtre la sort de la disposition."
+
+#: modules/RemoteDesktop.qml:63
+msgid "ENDING"
+msgstr "FIN"
 
 #: welcome/pages.js:147
 msgid ""
@@ -706,6 +724,10 @@ msgstr "Alimentation"
 msgid "Power Saving"
 msgstr "Économie d'énergie"
 
+#: modules/RemoteDesktop.qml:86
+msgid "Reachable from the whole network, on port %1"
+msgstr "Joignable depuis tout le réseau, sur le port %1"
+
 #: StartMenu.qml:760
 msgid "Reboot"
 msgstr "Redémarrer"
@@ -777,6 +799,10 @@ msgstr "Se connecter"
 #: StartMenu.qml:560
 msgid "Software Manager"
 msgstr "Gestionnaire de logiciels"
+
+#: modules/RemoteDesktop.qml:80
+msgid "Somebody is looking at this screen"
+msgstr "Par un tunnel SSH, sur le port %1"
 
 #: StartMenu.qml:632
 msgid "Sound"
@@ -922,6 +948,10 @@ msgid ""
 msgstr ""
 "Ce guide est sur Super+Échap dès que vous le voulez de nouveau — et la "
 "palette de raccourcis sur Super+/ est la version longue de la page deux."
+
+#: modules/RemoteDesktop.qml:88
+msgid "Through an SSH tunnel, on port %1"
+msgstr "Quelqu'un regarde cet écran"
 
 #: welcome/pages.js:153
 msgid "Tile this desktop"

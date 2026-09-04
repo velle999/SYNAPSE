@@ -3309,7 +3309,31 @@ pkgver=0.1.0
 #   English Names only, so the desktop's own launchers are the remaining English
 #   ones. That is a catalog job (`xgettext --language=Desktop` + `msgfmt
 #   --desktop`), not a reader job, and it is the next piece.
-pkgrel=595
+# 596: SOMEBODY IS LOOKING AT THIS SCREEN — the bar indicator for syn-remote(1).
+#   A remote desktop is the one thing on this machine that can be running with
+#   no window, no sound and no trace on screen, and `syn-remote on` survives a
+#   reboot by design — so a session started for one afternoon of help is a
+#   session still listening a month later and nothing about the desktop looks
+#   any different. The pill is what makes being watched visible, and the click
+#   ends the session (`syn-remote stop`, not `off`: turning remote access off
+#   for good is a decision to make in Settings with the rest of the picture in
+#   front of you, not on one click of an alert).
+#
+#   ⚠ IT APPEARS WHEN SOMEBODY IS CONNECTED, NOT WHEN THE SERVER IS RUNNING —
+#   Recording.qml's rule and its reason: a pill that is up whenever the feature
+#   is enabled is furniture, and furniture stops being read.
+#   ⛔ AND THE COUNT IS GATED ON THE SERVER ACTUALLY RUNNING, in syn-remote
+#   itself. It comes from a state file, and a state file outliving what wrote
+#   it would leave this claiming a viewer over a server that is not there —
+#   worse than no indicator, and the hazard Recording.qml avoids by reading
+#   /proc instead.
+#
+#   ⚠ trn(), not tr(), for the count: two is dual in Arabic and 2-4 is its own
+#   form in Russian and Polish. And both glyphs (fa-eye / fa-eye_slash) were
+#   checked against SymbolsNerdFontMono with fontTools before being used, which
+#   is the rule Icons.qml states twice — a codepoint the font lacks draws as a
+#   box that no test notices.
+pkgrel=596
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
