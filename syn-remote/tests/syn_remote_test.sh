@@ -202,6 +202,45 @@ grep -q '^ExecStart=/usr/bin/syn-remote run$' "$unit" &&
 grep -q '^WantedBy=default.target' "$unit" &&
     ok "...as a user unit" || bad "the unit is not WantedBy=default.target"
 
+# ⛔ THE UNIT IS STARTED BEFORE THE COMPOSITOR EXISTS, so its first seconds are
+# a race it is MEANT to lose. With systemd's default start limit — five starts
+# in ten seconds — it burned every retry inside that race and gave up for the
+# whole login: enabled, and dead, until somebody toggled it off and on. Both
+# halves of that fix are load-bearing and neither is visible in the running
+# system until a reboot, which is why they are asserted here.
+grep -q '^StartLimitIntervalSec=0$' "$unit" &&
+    ok "the unit has no start limit, so a lost race is not permanent" ||
+    bad "the unit can still exhaust its start limit while synui is coming up"
+grep -q '^Restart=always$' "$unit" &&
+    ok "...and restarts even on a clean exit, so a new login is picked up" ||
+    bad "Restart is not 'always'; a clean exit would strand the unit inactive"
+
+# ⚠ AND THE WRAPPER WAITS RATHER THAN DYING. `run` used to die the instant
+# $XDG_RUNTIME_DIR/synui-display was missing. Driven here with no compositor
+# and a one-second budget: it must spend that second and then say what it was
+# waiting for, not exit at once.
+#
+# ⛔ WAYLAND_DISPLAY IS UNSET FOR THIS CASE, and wayvnc is stubbed. wayland_socket
+# falls back to $WAYLAND_DISPLAY when there is no synui-display file, so a suite
+# run from inside a desktop would find the LIVE socket, sail past the wait and
+# exec a REAL VNC server on the machine running the tests — a test that opens a
+# port on the developer's desktop. The stub is the second lock: even if the
+# wait were skipped, nothing that serves anything can start from here.
+cat > "$stub/wayvnc" <<'EOF'
+#!/bin/sh
+echo "STUB WAYVNC SHOULD NOT HAVE RUN" >&2
+exit 97
+EOF
+chmod +x "$stub/wayvnc"
+( unset WAYLAND_DISPLAY
+  SYN_REMOTE_SESSION_WAIT=1 "$SR" run >"$T/run.out" 2>"$T/run.err" )
+check "...and no server was started to find that out" 0 \
+      "$(grep -c 'STUB WAYVNC' "$T/run.err")"
+check "run refuses without a session, by name" 1 \
+      "$(grep -c 'no Wayland session after' "$T/run.err")"
+check "...after waiting for one rather than dying at once" 1 \
+      "$(grep -c 'waiting up to' "$T/run.err")"
+
 # ── 8. saved connections ──────────────────────────────────
 #
 # The other half of this package: reaching somebody ELSE's desktop. What is
@@ -514,6 +553,22 @@ check "the window reads the list through the CLI" 1 \
 grep -q 'TextField' "$qml" && ! grep -q 'echoMode: TextInput.Password' "$qml" &&
     ok "no password field in the window — it cannot reach the store safely" ||
     bad "shell.qml grew a password field; the password would cross argv"
+
+# ⛔ CONNECT CANNOT BE A SILENT NO-OP. `syn-remote connect` asks about an
+# unchecked certificate, and asking needs a tty; run straight from the window
+# it printed its refusal on stderr and exited, and the window read neither. The
+# button did nothing, and the only trace anywhere was "Client handshake timed
+# out" in the SERVER's journal — a symptom that reads like a firewall.
+grep -q 'function connectHost' "$qml" &&
+    ok "the window has a connect path that knows about pinning" ||
+    bad "shell.qml connects without checking whether the host is pinned"
+grep -q '"syntty", "--hold", "-e", "syn-remote", "connect"' "$qml" &&
+    ok "...and an unpinned host is connected through a terminal, so it can ask" ||
+    bad "an unpinned Connect never reaches a tty; the button would do nothing"
+# The general form of the same bug: any command that refuses must be readable.
+awk '/id: actProc/,/^    }/' "$qml" | grep -q 'stderr: StdioCollector' &&
+    ok "every button's failure is collected, not discarded" ||
+    bad "actProc throws stderr away; a refused command looks like a dead button"
 
 # ── 14. the viewer's own reasons ──────────────────────────
 grep -q 'VNC_DISPLAY_CREDENTIAL_PASSWORD' "$view" &&

@@ -7,11 +7,30 @@ Documentation=man:wayvnc(1)
 # session either way, because it asks the compositor where its socket is
 # rather than being told at unit-generation time.
 
+# ⛔ NO START LIMIT. This unit is STARTED BEFORE THE COMPOSITOR EXISTS — the
+# user manager reaches default.target while greetd is still bringing up the
+# session — so its first few seconds are a race it is expected to lose. With
+# systemd's default of five starts in ten seconds it burned every retry inside
+# that race and then gave up PERMANENTLY, leaving the unit enabled and dead for
+# the whole login. That is the bug behind "it is switched on but it is not
+# running until I toggle it".
+#
+# ⚠ The wait now lives in `syn-remote run`, which parks for SESSION_WAIT
+# seconds rather than dying, so this is the second half of the same fix: never
+# stop retrying, whatever happens. A remote desktop that gives up is one nobody
+# can use to reach a machine they are not standing next to.
+StartLimitIntervalSec=0
+
 [Service]
 Type=simple
 ExecStart=/usr/bin/syn-remote run
-Restart=on-failure
-RestartSec=3
+# ⚠ always, NOT on-failure. When a session ends, wayvnc loses its Wayland
+# connection and can exit CLEANLY — and on-failure would not restart it, so the
+# unit would sit inactive across the next login with no way back. The user
+# manager outlives the session and default.target is never reached twice, so
+# nothing else would ever start it again.
+Restart=always
+RestartSec=5
 # ⚠ The wrapper backgrounds a watcher and then execs wayvnc, so the main
 # process IS the server and `systemctl --user status` reports on it. The
 # watcher dies with the cgroup.

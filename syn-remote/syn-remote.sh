@@ -226,6 +226,56 @@ wayland_socket() {
     fi
 }
 
+# ⛔ WAIT FOR THE COMPOSITOR, DO NOT DIE ON IT. The user manager reaches
+# default.target BEFORE synui exists. Measured on an installed system: velle's
+# `systemd --user` reached Main User Target at 19:40:50 and had not yet been
+# handed a session, so $XDG_RUNTIME_DIR/synui-display was not there to read.
+# `run` used to die at that instant, and with Restart=on-failure/RestartSec=3
+# against systemd's DEFAULT start limit — five starts in ten seconds — the unit
+# burned every retry inside the race and then gave up PERMANENTLY. Enabled, and
+# dead for the rest of the login.
+#
+# That is the whole of "it says it is on but it is not running until I switch
+# it off and on again": `syn-remote on` does `enable --now`, which starts the
+# unit at a moment when the compositor is already up, so the toggle appears to
+# be the fix when it is only better timing.
+#
+# ⚠ AND THE USER MANAGER OUTLIVES THE SESSION. It is still the same process
+# across a logout and a fresh login, so default.target is never reached a
+# second time and a later login cannot re-trigger the unit either. Waiting here
+# is what makes the unit FOLLOW the session instead of racing it once: when a
+# session ends wayvnc exits, systemd restarts the unit, and this loop parks
+# until somebody logs in again.
+#
+# ⚠ BOUNDED, NOT INFINITE. A unit sitting `active` for ever with no server
+# behind it would make `syn-remote status` — and the bar, which reads it —
+# report a running remote desktop that is not there, which is the one lie this
+# package has a paragraph about not telling. On a timeout it exits instead, and
+# systemd restarts it, so the waiting is visible in the journal rather than
+# hidden inside one long-lived process.
+SESSION_WAIT=${SYN_REMOTE_SESSION_WAIT:-90}
+
+# ⚠ THE SOCKET ON STDOUT, EVERYTHING ELSE ON STDERR — `sock=$(wait_for_session)`
+# has to capture the socket and nothing else, the same rule `note` follows.
+wait_for_session() {
+    local sock waited=0
+    sock=$(wayland_socket)
+    [ -n "$sock" ] && { printf '%s' "$sock"; return 0; }
+
+    err "no desktop session yet — waiting up to ${SESSION_WAIT}s for one"
+    while [ "$waited" -lt "$SESSION_WAIT" ]; do
+        sleep 1
+        waited=$((waited + 1))
+        sock=$(wayland_socket)
+        [ -n "$sock" ] && {
+            err "session appeared after ${waited}s"
+            printf '%s' "$sock"
+            return 0
+        }
+    done
+    return 1
+}
+
 # ── Running ───────────────────────────────────────────────
 
 # The watcher. Everything this wrapper exists for happens here.
@@ -282,8 +332,8 @@ watch_clients() {
 cmd_run() {
     have wayvnc || die "wayvnc is not installed"
     local sock
-    sock=$(wayland_socket)
-    [ -n "$sock" ] || die "no Wayland session — nothing to share yet"
+    sock=$(wait_for_session) ||
+        die "no Wayland session after ${SESSION_WAIT}s — nothing to share yet"
     export WAYLAND_DISPLAY="$sock"
 
     ensure_credentials

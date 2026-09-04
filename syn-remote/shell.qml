@@ -442,12 +442,51 @@ ShellRoot {
     Process {
         id: actProc
         running: false
+        /*
+         * ⛔ stderr IS COLLECTED, because without this a command that refused
+         * to run was INVISIBLE. Every one of these scripts reports what went
+         * wrong on stderr and exits non-zero; listProc read it and actProc
+         * threw it away, so pressing a button that could not work looked
+         * exactly like pressing a button that did nothing — which is what
+         * Connect did on a host whose certificate had never been checked.
+         *
+         * ⚠ CLEARED ON EACH RUN, not accumulated. A message left over from the
+         * previous press would be read as a complaint about this one.
+         */
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.problem = String(this.text).trim()
+        }
         onExited: root.reload()
     }
     function run(args) {
         actProc.running = false
+        root.problem = ""
         actProc.command = args
         actProc.running = true
+    }
+
+    /*
+     * ⛔ CONNECT NEEDS A TERMINAL UNTIL THE CERTIFICATE HAS BEEN CHECKED.
+     * `syn-remote connect` asks about an unknown certificate, and asking needs
+     * a tty — with none it takes its `[ -t 0 ]` else-branch, prints "run:
+     * syn-remote trust <name>" on stderr and exits. Run straight from here
+     * that message went nowhere and the button did nothing at all, while the
+     * server logged the one symptom that reads like a firewall problem:
+     * "Client handshake timed out".
+     *
+     * ⚠ SO IT GOES THROUGH syntty, exactly as Check-the-certificate and
+     * Remember-a-password already do, and for the same reason: the fingerprint
+     * is a question for a person at a terminal, not something this window may
+     * answer on their behalf. --hold so the answer — or the failure — is still
+     * on screen once the viewer has closed.
+     *
+     * A pinned host needs none of that and is launched directly, so the normal
+     * case stays one window and no terminal.
+     */
+    function connectHost(h) {
+        if (!h) return
+        if (h.pinned) run(["syn-remote", "connect", h.name])
+        else          run(["syntty", "--hold", "-e", "syn-remote", "connect", h.name])
     }
 
     // ⚠ syntty, not this window. `saved <name> set` reads the password with
@@ -643,7 +682,7 @@ ShellRoot {
                     Act {
                         text: root.chosen ? "Connect to " + root.chosen.name : "Connect"
                         tint: root.cAccent
-                        onClicked: root.run(["syn-remote", "connect", root.chosen.name])
+                        onClicked: root.connectHost(root.chosen)
                     }
                     Act {
                         // The label names which of the two this press does, for

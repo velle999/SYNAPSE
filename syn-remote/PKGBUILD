@@ -65,7 +65,34 @@ pkgver=0.1.0
 #
 #   All three produced the same symptom and no client-side error: "Client
 #   handshake timed out" in the SERVER's journal, which reads like a firewall.
-pkgrel=4
+# 5: it was switched on and it was not running, and Connect did nothing.
+#   Two faults, unrelated except that each one is invisible from the side you
+#   are standing on.
+#
+#   ⛔ THE UNIT LOST A RACE IT WAS NEVER GOING TO WIN, PERMANENTLY. The user
+#     manager reaches default.target BEFORE the compositor exists — measured on
+#     an installed system, `systemd --user` reached Main User Target at
+#     19:40:50 with no session yet handed to it — so `run` found no
+#     synui-display and died. With Restart=on-failure/RestartSec=3 against
+#     systemd's DEFAULT start limit of five starts in ten seconds, every retry
+#     was spent inside the race and the unit then gave up FOR THE WHOLE LOGIN.
+#     ⚠ And the user manager outlives the session, so default.target is never
+#     reached twice and a later login cannot re-trigger it either. `run` now
+#     waits for the session instead of dying, the start limit is gone, and
+#     Restart=always so the end of one session is picked up as the start of the
+#     next. `syn-remote on` appeared to be the fix only because `enable --now`
+#     starts the unit at a moment the compositor is already up.
+#   ⛔ AND CONNECT WAS A SILENT NO-OP ON AN UNCHECKED CERTIFICATE. `connect`
+#     asks before it pins, asking needs a tty, and the window ran it without
+#     one — so it took its `[ -t 0 ]` else-branch, printed "run: syn-remote
+#     trust <name>" on stderr and exited. actProc collected stdout only, so the
+#     message went nowhere: the button did nothing, and the only trace on
+#     either machine was "Client handshake timed out" in the SERVER's journal,
+#     which reads like a firewall and is not one. Connect now goes through
+#     syntty when the host is unpinned, exactly as the certificate and password
+#     buttons already did, and actProc collects stderr so no button can ever
+#     fail invisibly again.
+pkgrel=5
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
