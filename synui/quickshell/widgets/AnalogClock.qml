@@ -272,7 +272,35 @@ WidgetFrame {
              * second hand where it lands on white either way.
              */
             if (monster) {
-                const bodyR   = half * 0.86
+                /*
+                 * ⚠ 0.78, NOT 0.86 — THE EARS SPEND THE DIFFERENCE. Everything
+                 * on this creature is a fraction of bodyR, so the number is
+                 * really a decision about how much of the box is animal and how
+                 * much is the space its ears stand up into. At 0.86 there was no
+                 * such space: the ears could reach 1.14 * bodyR before they hit
+                 * the edge, which is a pair of horns poking out of a circle
+                 * rather than the tall pointed ears the thing is supposed to
+                 * have. At 0.78 they reach 1.22 and still clear the box.
+                 *
+                 * The dial does not move with it — r stays 0.60 * half — so the
+                 * belly now fills 0.77 of the body's width instead of 0.70,
+                 * which is the other half of what makes this read as a small
+                 * animal holding a big clock.
+                 */
+                const bodyR   = half * 0.78
+                /*
+                 * ⚠ 0.19, AND IT IS WRITTEN TWICE — once here for the belly and
+                 * again below for `cy`, because the marks and hands are placed
+                 * long after this block has gone out of scope. They have to
+                 * agree: the two numbers ARE the same dial.
+                 *
+                 * It was 0.10, which put the clock in the middle of the chest
+                 * instead of down in the belly, and the cost was the eyes — the
+                 * belly's rim rose far enough to cut them in half, so the
+                 * creature looked like it was peering over the top of the clock
+                 * rather than holding one below its face.
+                 */
+                const dialDrop = 0.19
                 const fur     = Qt.rgba(0.98, 0.55, 0.82, 1)     // the coat
                 const furDark = Qt.rgba(0.85, 0.36, 0.66, 1)     // its edge
                 const furLit  = Qt.rgba(1.00, 0.74, 0.90, 1)     // the light on it
@@ -288,14 +316,28 @@ WidgetFrame {
                 }
 
                 /* Ears first, so the head is drawn over their roots and they
-                 * come out of it rather than sitting on it. */
+                 * come out of it rather than sitting on it.
+                 *
+                 * ⚠ THE BASE SITS ON THE HEAD'S TOP CORNER, NOT INSIDE IT. The
+                 * first pair were narrow spikes rooted at 0.4 * bodyR — halfway
+                 * down the skull — and a triangle that starts that deep and ends
+                 * barely clear of the outline is a horn. An ear is broad where
+                 * it meets the head and comes to a point well above it: the base
+                 * spans 0.54 * bodyR along the top-right of the curve, and the
+                 * tip is 1.22 up and slightly OUTBOARD of the base's centre,
+                 * which is the lean that makes a pair of ears look alert rather
+                 * than like two identical cones. */
                 for (const side of [-1, 1]) {
-                    const ex = cx + side * bodyR * 0.62
-                    const ey = cy - bodyR * 0.72
+                    const inner = { x: cx + side * bodyR * 0.46,
+                                    y: cy - bodyR * 0.72 }
+                    const outer = { x: cx + side * bodyR * 1.00,
+                                    y: cy - bodyR * 0.50 }
+                    const tip   = { x: cx + side * bodyR * 0.89,
+                                    y: cy - bodyR * 1.22 }
                     ctx.beginPath()
-                    ctx.moveTo(ex - bodyR * 0.20, ey + bodyR * 0.34)
-                    ctx.lineTo(ex + side * bodyR * 0.12, ey - bodyR * 0.42)
-                    ctx.lineTo(ex + bodyR * 0.24, ey + bodyR * 0.30)
+                    ctx.moveTo(inner.x, inner.y)
+                    ctx.lineTo(tip.x, tip.y)
+                    ctx.lineTo(outer.x, outer.y)
                     ctx.closePath()
                     ctx.fillStyle = Qt.rgba(fur.r, fur.g, fur.b, 1)
                     ctx.fill()
@@ -303,9 +345,30 @@ WidgetFrame {
                     ctx.lineJoin = "round"
                     ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.9)
                     ctx.stroke()
+
+                    /* The inner ear: the same triangle shrunk towards its own
+                     * centre, in the lit fur. Without it the ear is a flat pink
+                     * shape and the head reads as a cut-out. */
+                    const mx = (inner.x + outer.x + tip.x) / 3
+                    const my = (inner.y + outer.y + tip.y) / 3
+                    function inset(p) {
+                        return { x: mx + (p.x - mx) * 0.34,
+                                 y: my + (p.y - my) * 0.40 }
+                    }
+                    const i2 = inset(inner), o2 = inset(outer), t2 = inset(tip)
+                    ctx.beginPath()
+                    ctx.moveTo(i2.x, i2.y)
+                    ctx.lineTo(t2.x, t2.y)
+                    ctx.lineTo(o2.x, o2.y)
+                    ctx.closePath()
+                    ctx.fillStyle = Qt.rgba(furLit.r, furLit.g, furLit.b, 0.38)
+                    ctx.fill()
                 }
 
-                /* Paws, under the body for the same reason. */
+                /* Feet, under the body for the same reason. ⚠ THESE ARE NOT
+                 * THE HANDS. The creature's hands are on the dial's two sides,
+                 * drawn last so they land on top of it; these are the haunches
+                 * it is sitting on, and they stay behind everything. */
                 for (const side of [-1, 1])
                     blob(cx + side * bodyR * 0.74, cy + bodyR * 0.70,
                          bodyR * 0.26, bodyR * 0.22,
@@ -313,7 +376,7 @@ WidgetFrame {
 
                 /* The body. Wider than tall, so the dial sits in a belly rather
                  * than in a head. */
-                blob(cx, cy, bodyR, bodyR * 0.94, Qt.rgba(fur.r, fur.g, fur.b, 1))
+                blob(cx, cy, bodyR, bodyR * 0.86, Qt.rgba(fur.r, fur.g, fur.b, 1))
 
                 /* A highlight along the top left, which is the whole difference
                  * between a drawing of an animal and a pink circle. */
@@ -323,47 +386,149 @@ WidgetFrame {
                 ctx.fillStyle = Qt.rgba(furLit.r, furLit.g, furLit.b, 0.55)
                 ctx.fill()
 
-                /* Eyes, above the dial and inside the body. ⚠ Both pupils look
-                 * at twelve rather than straight ahead: a face whose eyes are
-                 * dead centre reads as a doll, and the offset costs one term. */
+                /* Eyes, above the dial and inside the body.
+                 *
+                 * ⚠ SMALL, CLOSE TOGETHER, AND LOOKING STRAIGHT AT YOU. The
+                 * first draft drew two big white ovals set wide apart with a
+                 * small pupil pushed up towards twelve, on the theory that eyes
+                 * dead centre read as a doll. They do not — what they read as
+                 * is a creature that has noticed you, and a pupil rolled up at
+                 * the clock it is holding reads as one that has not. So each eye
+                 * is one dark bead, taller than wide, with the whole of the iris
+                 * facing forward and a catchlight up on the left doing the work
+                 * the sclera used to: 0.14 of bodyR across against the 0.60 the
+                 * pair of ovals took, which is what puts them on the forehead
+                 * instead of across the whole face.
+                 *
+                 * ⚠ HIGH ENOUGH TO CLEAR THE BELLY. The dial's rim reaches
+                 * r * 1.06 from a centre pushed 0.19 * half down, so an eye any
+                 * lower than about 0.6 * bodyR has its bottom behind the clock,
+                 * which reads as a drawing that does not fit together rather
+                 * than as a creature holding something. */
                 for (const side of [-1, 1]) {
-                    /* ⚠ HIGH ENOUGH TO CLEAR THE BELLY. The dial's rim reaches
-                     * r * 1.10 from a centre pushed 0.06 * half down, and the
-                     * first draft put the eyes at 0.62 — half of each one was
-                     * behind the clock, which reads as a drawing that does not
-                     * fit together rather than as a creature holding something. */
-                    const ex = cx + side * bodyR * 0.46
-                    const ey = cy - bodyR * 0.70
-                    ctx.beginPath()
-                    ctx.ellipse(ex - bodyR * 0.15, ey - bodyR * 0.13,
-                                bodyR * 0.30, bodyR * 0.26)
-                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.96)
-                    ctx.fill()
-                    ctx.lineWidth = px(1.6)
-                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.85)
-                    ctx.stroke()
+                    const ex  = cx + side * bodyR * 0.23
+                    const ey  = cy - bodyR * 0.70
+                    const erx = bodyR * 0.085
+                    const ery = bodyR * 0.120
 
                     ctx.beginPath()
-                    ctx.arc(ex, ey - bodyR * 0.03, bodyR * 0.085, 0, Math.PI * 2)
-                    ctx.fillStyle = Qt.rgba(0.15, 0.08, 0.16, 0.95)
+                    ctx.ellipse(ex - erx, ey - ery, erx * 2, ery * 2)
+                    ctx.fillStyle = Qt.rgba(0.13, 0.09, 0.14, 1)
+                    ctx.fill()
+                    ctx.lineWidth = px(1.2)
+                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.75)
+                    ctx.stroke()
+
+                    /* The catchlight, up on the left of BOTH eyes rather than
+                     * mirrored — a highlight is where the light is, and the
+                     * light on this face comes from the top left, the same
+                     * corner the coat is lit from. Mirroring it is the tell of
+                     * a drawing with no light in it. */
+                    ctx.beginPath()
+                    ctx.ellipse(ex - erx * 0.72, ey - ery * 0.70,
+                                erx * 0.80, ery * 0.72)
+                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.92)
                     ctx.fill()
                 }
 
                 /* The belly the dial sits on, and its rim. */
+                const dcy = cy + half * dialDrop
                 ctx.beginPath()
-                ctx.arc(cx, cy + half * 0.10, r * 1.06, 0, Math.PI * 2)
+                ctx.arc(cx, dcy, r * 1.06, 0, Math.PI * 2)
                 ctx.fillStyle = Qt.rgba(1, 1, 1, 0.97)
                 ctx.fill()
                 ctx.lineWidth = px(2.5)
                 ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.8)
                 ctx.stroke()
+
+                /* ⚠ EVERYTHING BELOW IS DRAWN ON TOP OF THE BELLY, and that is
+                 * the whole point of it being down here rather than up with the
+                 * ears. The teeth and the hands are the two things that touch
+                 * the clock, and a tooth or a paw painted before the white disc
+                 * is a tooth or a paw the disc then covers up. `at()` is no use
+                 * to them either: it still answers around the body's centre for
+                 * a few lines yet, so these place themselves around `dcy`. */
+                function onDial(hour, dist) {
+                    const a = hours(hour)
+                    return { x: cx  + Math.cos(a) * r * dist,
+                             y: dcy + Math.sin(a) * r * dist }
+                }
+
+                /* ── Teeth ──
+                 *
+                 * Two of them, at the dial's upper corners, pointing down out
+                 * of a jaw the clock is otherwise hiding. ⚠ THE MOUTH IS NEVER
+                 * DRAWN: the creature is holding the dial across its face, so
+                 * all that shows of a mouth is the pair of points either side
+                 * of it, and a mouth line added behind them only reads as a
+                 * crack in the belly. */
+                for (const side of [-1, 1]) {
+                    /* ⚠ 1.08, NOT 1.16 — A TOOTH HAS TO TOUCH THE THING IT IS
+                     * BITING. The rim is at 1.06 r, so a tooth centred at 1.16
+                     * sits entirely out in the fur with a gap under it, and at
+                     * this size a small white triangle floating in pink reads as
+                     * a speck of dirt rather than as a fang. Centred at 1.08 its
+                     * point crosses the rim and the jaw closes on the dial. */
+                    const tip = onDial(12 + side * 1.38, 1.08)
+                    const tw  = r * 0.085
+                    const th  = r * 0.20
+                    ctx.beginPath()
+                    ctx.moveTo(tip.x - tw, tip.y - th * 0.42)
+                    ctx.lineTo(tip.x + tw, tip.y - th * 0.42)
+                    // Tilted outward, so the pair splays the way teeth in a jaw
+                    // do rather than hanging like two icicles.
+                    ctx.lineTo(tip.x + side * tw * 0.55, tip.y + th * 0.58)
+                    ctx.closePath()
+                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.98)
+                    ctx.fill()
+                    ctx.lineWidth = px(1.2)
+                    ctx.lineJoin  = "round"
+                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.6)
+                    ctx.stroke()
+                }
+
+                /* ── The hands holding it ──
+                 *
+                 * ⚠ ON THE DIAL'S SIDES, NOT UNDER IT. A paw parked at the foot
+                 * of the clock is a creature standing behind one; a paw at nine
+                 * and another at three, each with its inner edge over the rim,
+                 * is a creature carrying one. So the distance is 1.16 r against
+                 * a paw 0.16 r across — the inner edge lands at 1.00 r, inside
+                 * the 1.06 r rim, and the overlap is what does the holding.
+                 *
+                 * They sit a little above the middle (9:14 and 2:46 rather than
+                 * 9:00 and 3:00) because arms come down to a thing held against
+                 * the chest, and level paws read as a clock resting on a shelf. */
+                for (const side of [-1, 1]) {
+                    const paw = onDial(6 - side * 3.23, 1.10)
+                    blob(paw.x, paw.y, r * 0.21, r * 0.27,
+                         Qt.rgba(fur.r, fur.g, fur.b, 1))
+
+                    /* ⚠ TWO CREASES ON THE INNER EDGE, NOT ONE ACROSS THE
+                     * MIDDLE. A single line through the centre of the lump
+                     * reads as a seam — the lump looks split rather than
+                     * jointed. Fingers are short, they are stacked, and they
+                     * are on the side of the paw that meets the clock, which is
+                     * where a hand's fingers are when it is holding one. */
+                    for (const j of [-1, 1]) {
+                        const fy = paw.y + j * r * 0.10
+                        ctx.beginPath()
+                        ctx.moveTo(paw.x - side * r * 0.16, fy)
+                        ctx.lineTo(paw.x - side * r * 0.02, fy + j * r * 0.03)
+                        ctx.lineWidth   = px(1.4)
+                        ctx.lineCap     = "round"
+                        ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g,
+                                                  furDark.b, 0.65)
+                        ctx.stroke()
+                    }
+                }
             }
 
             /* ⚠ THE DIAL SITS LOW ON THE MONSTER, in the belly rather than in
              * the middle of the box — the ears take the top. Every mark and
              * hand below is placed through at(), so moving the centre once here
              * moves all of them. */
-            if (monster) cy += half * 0.10
+            if (monster) cy += half * 0.19
 
             /* ── The bezel ── */
             // Not on the monster: the belly's own rim, in the creature's fur

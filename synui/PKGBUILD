@@ -3357,7 +3357,7 @@ pkgver=0.1.0
 #   back to `minimal` with nothing said. tests/clock_faces.sh is that check, and
 #   it also asserts the option names are NOT translated — a translated one
 #   writes a word config.c cannot read back.
-pkgrel=597
+pkgrel=598
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
