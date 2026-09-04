@@ -1375,6 +1375,64 @@ check_tarball() {
 # and would cry wolf until it was ignored. What is flagged is reading a
 # localised field name out of pacman, and building an expectation out of a
 # localised `date`. Both are always wrong and both have already happened.
+# ── The assistant's memory index, which fails SILENTLY ───────
+#
+# ⛔ THE FAILURE THIS EXISTS FOR IS THAT THERE IS NO FAILURE. MEMORY.md is
+# loaded whole at the start of a session, and past a size limit only PART of it
+# arrives — no error, no warning, and the missing half looks exactly like a
+# memory that was never written. It was found at ~25 KB against its own stated
+# ~24.4 KB cap on 2026-09-04, having been over for an unknown number of
+# sessions, and the only symptom available was an assistant that did not know
+# things it had been told.
+#
+# ⚠ A NOTE, NOT A FINDING. Nothing about the size of a file in ~/.claude
+# decides whether a SYNAPSE commit can ship, and blocking one for the other
+# would be the wrong coupling — preflight's findings mean "this commit cannot
+# ship as it stands" and this never does.
+#
+# ⚠ AND SILENT WHEN THERE IS NO INDEX. CI, a fresh clone and anybody else's
+# machine have no ~/.claude at all; a check that announces the absence of a
+# file it has no business expecting is noise on every run forever.
+check_memory_index() {
+    # The directory name is the project path with the slashes turned into
+    # dashes — derived rather than written out, so this is not a check that
+    # only works on one machine.
+    local slug idx
+    slug=$(printf '%s' "$HOME" | tr '/' '-')
+    idx="$HOME/.claude/projects/$slug/memory/MEMORY.md"
+    [ -f "$idx" ] || return 0
+
+    # ⚠ READ FROM THE INDEX ITSELF, so there is one source of truth for the
+    # number and it is the line a reader of that file already sees. A reworded
+    # header falls back to the figure it had when this was written.
+    local kb cap size pct
+    kb=$(sed -n 's/.*HARD ~\([0-9][0-9.]*\)KB cap.*/\1/p' "$idx" | head -1)
+    [ -n "$kb" ] || kb=24.4
+    # ⛔ 1000, NOT 1024. Which one the limit means is not documented anywhere,
+    # and the two differ by nearly 600 bytes — so the check takes the SMALLER
+    # reading. Being early is a trim nobody needed; being late is the silent
+    # truncation this exists to catch.
+    cap=$(awk -v k="$kb" 'BEGIN { printf "%d", k * 1000 }')
+    size=$(stat -c '%s' "$idx" 2>/dev/null || echo 0)
+    [ "$size" -gt 0 ] || return 0
+    pct=$(( size * 100 / cap ))
+
+    if [ "$size" -gt "$cap" ]; then
+        note memory "MEMORY.md is $size bytes against a ${kb}KB cap ($pct%) — part of it is NOT loading" \
+            "Everything past the limit is dropped with no error, so a memory that" \
+            "is present in the file is simply absent from the session." \
+            "The fix is the one the index's own header names: move a cluster of" \
+            "related lines into an index_*.md hub and leave ONE line pointing at" \
+            "it. Keep each line's wording, and check nothing is orphaned after."
+    elif [ "$pct" -ge 95 ]; then
+        note memory "MEMORY.md is at $pct% of its ${kb}KB cap ($size bytes)" \
+            "Still loading whole. The next few entries are what tips it over," \
+            "and it goes over silently — cluster something into an index_*.md hub."
+    else
+        ok memory "the assistant's index is $size bytes, $pct% of its ${kb}KB cap"
+    fi
+}
+
 check_locale() {
     local bad=$FINDINGS f hits=""
 
@@ -1566,6 +1624,7 @@ check_tarball
 check_external_membership
 check_external
 check_locale
+check_memory_index
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
         "A pathspec commit carries no index, so the bump cannot be verified here." \
