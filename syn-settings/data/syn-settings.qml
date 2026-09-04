@@ -260,7 +260,7 @@ FloatingWindow {
         { id: "display",   label: I18n.tr("Display"),  blurb: I18n.tr("connectors as the kernel sees them, beside what the compositor drives") },
         { id: "region",    label: I18n.tr("Keyboard & Language"), blurb: I18n.tr("the console keymap and the xkb layout, which are separate settings that sometimes disagree") },
         { id: "time",      label: I18n.tr("Date & Time"), blurb: I18n.tr("the system clock — and how the desktop writes it: 12- or 24-hour, and which date order") },
-        { id: "network",   label: I18n.tr("Network"),  blurb: I18n.tr("interfaces, radios, and whether anything is filtering traffic") },
+        { id: "network",   label: I18n.tr("Network"),  blurb: I18n.tr("addresses, interfaces, radios, and whether anything is filtering traffic") },
         { id: "bluetooth", label: I18n.tr("Bluetooth"), blurb: I18n.tr("the adapter, both kinds of radio block, and what is paired") },
         { id: "power",     label: I18n.tr("Power & Sleep"), blurb: I18n.tr("the units a working suspend depends on, and what the last one did") },
         { id: "apps",      label: I18n.tr("Default Apps"), blurb: I18n.tr("what opens each kind of file — and whether anybody actually chose it") },

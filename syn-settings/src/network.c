@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 /* nmcli -t escapes a literal colon inside a field as "\:", so splitting on
  * every colon would cut a connection name called "Home:5G" in half. Walk it. */
@@ -84,6 +85,178 @@ static void devices(void)
 			snprintf(act, sizeof act, "device:%s", d);
 
 		rec_row("device\t%s\t%s\t%s\t%s\t%s", d, t, s, c, act);
+	}
+}
+
+/* ── Addresses ───────────────────────────────────────────────────────────────
+ *
+ * The device rows above say WHICH interfaces exist and whether they are up.
+ * They never said what any of them IS — and the two questions people actually
+ * arrive at this pane with are "what address is this machine on" and "what is
+ * this card's MAC", neither of which the pane could answer. The second one got
+ * sharper when `syn-remote wakeable` shipped: a magic packet is addressed to a
+ * hardware address, so waking this machine from another one means reading a
+ * MAC off it first, and the only place that existed was a terminal.
+ *
+ * ⚠ ONE nmcli CALL FOR EVERY DEVICE, parsed by FIELD NAME rather than by
+ * position. `device show` prints `FIELD:value` blocks separated by a blank
+ * line, and which fields appear depends on the device — a disconnected wifi
+ * card has a GENERAL.HWADDR and no IP4.ADDRESS at all, so anything counting
+ * lines reads the next device's address as this one's.
+ *
+ * ⚠ AND THE VALUE IS EVERYTHING AFTER THE FIRST COLON, not up to the next one.
+ * `GENERAL.HWADDR:BC:FC:E7:E8:FD:E3` is one field whose value is full of
+ * colons, and an IPv6 address is worse. This is the one place in the file that
+ * does NOT want next_field(): `device show` is a two-column form, not the
+ * n-column one the escaping in next_field() exists for.
+ */
+struct netdev {
+	char dev[64];
+	char type[32];
+	char mac[32];
+	char ip4[192];
+	char ip6[192];
+	char gw[64];
+	char dns[160];
+};
+
+/* Append one more address to a comma-joined cell, silently dropping any that
+ * would not fit — a machine with more IPv6 addresses than the cell holds is
+ * still better served by the first few than by a truncated last one. */
+static void addr_join(char *dst, size_t cap, const char *v)
+{
+	if (!v || !*v) return;
+	size_t l = strlen(dst);
+	size_t need = strlen(v) + (l ? 2 : 0);
+	if (l + need + 1 > cap) return;
+	snprintf(dst + l, cap - l, "%s%s", l ? ", " : "", v);
+}
+
+/* True for a field name with or without nmcli's `[n]` index suffix:
+ * IP4.ADDRESS is written IP4.ADDRESS[1] when there is one of them and
+ * IP4.ADDRESS[1], [2], … when there are several. */
+static int field_is(const char *name, const char *want)
+{
+	size_t l = strlen(want);
+	return !strncmp(name, want, l) && (name[l] == '\0' || name[l] == '[');
+}
+
+static void addresses(void)
+{
+	char out[32768] = "";
+	char *argv[] = { (char *)"nmcli", (char *)"-t", (char *)"-f",
+	                 (char *)"GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,"
+	                         "IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.ADDRESS",
+	                 (char *)"device", (char *)"show", NULL };
+	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) return;
+
+	struct netdev devs[24];
+	int n = 0;
+	memset(devs, 0, sizeof devs);
+
+	for (char *line = out, *eol; line && *line; line = eol) {
+		eol = strchr(line, '\n');
+		if (eol) *eol++ = '\0';
+		char *colon = strchr(line, ':');
+		if (!colon) continue;          /* the blank line between devices */
+		*colon = '\0';
+		const char *name = line, *val = colon + 1;
+
+		/* GENERAL.DEVICE opens a device. Everything after it belongs to that
+		 * one until the next, so a field arriving before any DEVICE line —
+		 * which nothing produces, but which would otherwise write off the
+		 * front of the array — is dropped. */
+		if (field_is(name, "GENERAL.DEVICE")) {
+			if (n == (int)(sizeof devs / sizeof devs[0])) break;
+			snprintf(devs[n].dev, sizeof devs[n].dev, "%s", val);
+			n++;
+			continue;
+		}
+		if (!n || !*val) continue;
+		struct netdev *d = &devs[n - 1];
+
+		if      (field_is(name, "GENERAL.TYPE"))   snprintf(d->type, sizeof d->type, "%s", val);
+		else if (field_is(name, "GENERAL.HWADDR")) snprintf(d->mac, sizeof d->mac, "%s", val);
+		else if (field_is(name, "IP4.GATEWAY"))    snprintf(d->gw, sizeof d->gw, "%s", val);
+		else if (field_is(name, "IP4.ADDRESS"))    addr_join(d->ip4, sizeof d->ip4, val);
+		else if (field_is(name, "IP4.DNS"))        addr_join(d->dns, sizeof d->dns, val);
+		/* ⛔ NOT THE LINK-LOCAL ONE. Every interface has an fe80:: address at
+		 * all times, it is the same length as a real one, and it cannot be
+		 * used to reach anything without naming the interface alongside it —
+		 * so listing it triples the width of the cell to say nothing. An
+		 * interface whose only IPv6 address is link-local has no IPv6
+		 * address worth reporting, and the row says so by leaving it out. */
+		else if (field_is(name, "IP6.ADDRESS")) {
+			if (strncasecmp(val, "fe80:", 5))
+				addr_join(d->ip6, sizeof d->ip6, val);
+		}
+	}
+
+	for (int i = 0; i < n; i++) {
+		struct netdev *d = &devs[i];
+		tsv_clean(d->dev); tsv_clean(d->type); tsv_clean(d->mac);
+		tsv_clean(d->ip4); tsv_clean(d->ip6);
+		tsv_clean(d->gw);  tsv_clean(d->dns);
+	}
+
+	/* Loopback carries no address anybody configures and its MAC is all
+	 * zeroes; the p2p pseudo-device is skipped for the same reason the device
+	 * list skips it. An interface with neither a hardware address nor an
+	 * address of its own is a row with nothing in it. */
+	int shown[24];
+	int m = 0;
+	for (int i = 0; i < n; i++) {
+		struct netdev *d = &devs[i];
+		if (!strcmp(d->type, "loopback") || !strcmp(d->type, "wifi-p2p")) continue;
+		if (!d->mac[0] && !d->ip4[0] && !d->ip6[0]) continue;
+		shown[m++] = i;
+	}
+
+	/* ⛔ THE HARDWARE ADDRESSES TOGETHER, THEN THE IP ONES. Grouped by kind
+	 * rather than interleaved per interface, because the kind column is what
+	 * the window draws as the left edge of the block — interleaving them makes
+	 * two alternating one-row blocks out of what a person reads as two lists. */
+	for (int j = 0; j < m; j++) {
+		struct netdev *d = &devs[shown[j]];
+		const char *detail;
+		if (!strcmp(d->type, "ethernet"))
+			detail = N_("The wired card's hardware address. A magic packet is addressed to this one — `syn-remote wakeable on` arms this card, and then another machine on this network can wake this one while it sleeps.");
+		else if (!strcmp(d->type, "wifi"))
+			detail = N_("This card's hardware address. ⚠ Wi-Fi cannot be woken by a magic packet: the card does not stay associated through a suspend, so only a wired card can be.");
+		else if (!strcmp(d->type, "bridge"))
+			detail = N_("A bridge this machine runs for containers or virtual machines rather than a physical card. A guest on it sees this address as its gateway.");
+		else
+			detail = N_("The hardware address of this interface.");
+
+		rec_row("mac\t%s\t%s\t-\t%s\t-",
+		        d->dev, d->mac[0] ? d->mac : N_("none"), detail);
+	}
+
+	for (int j = 0; j < m; j++) {
+		struct netdev *d = &devs[shown[j]];
+		if (!d->ip4[0] && !d->ip6[0]) continue;
+		char val[384] = "";
+		addr_join(val, sizeof val, d->ip4);
+		addr_join(val, sizeof val, d->ip6);
+		rec_row("ip\t%s\t%s\t-\t%s\t-", d->dev, val,
+		        N_("The addresses this interface holds right now, IPv4 first. A lease can change at any time, so an address is not a permanent way to find this machine again."));
+	}
+
+	/* ⚠ ONE OF EACH, NOT ONE PER INTERFACE. Every device carries an
+	 * IP4.GATEWAY field and it is empty on all but the one holding the default
+	 * route — a bridge has an address and no way off the machine — so a row per
+	 * interface would be a column of blanks around the single answer. */
+	for (int j = 0; j < m; j++) {
+		if (!devs[shown[j]].gw[0]) continue;
+		rec_row("ip\t%s\t%s\t-\t%s\t-", N_("gateway"), devs[shown[j]].gw,
+		        N_("Where anything that is not on this network is sent. A machine with an address and no gateway reaches the local network and nothing past it."));
+		break;
+	}
+	for (int j = 0; j < m; j++) {
+		if (!devs[shown[j]].dns[0]) continue;
+		rec_row("ip\t%s\t%s\t-\t%s\t-", N_("nameservers"), devs[shown[j]].dns,
+		        N_("The servers that turn a name into an address. A network that is up and still cannot open a site is usually this."));
+		break;
 	}
 }
 
@@ -328,6 +501,7 @@ int pane_network(void)
 		        N_("unknown"), N_("NetworkManager is not installed"));
 	} else {
 		devices();
+		addresses();
 		radio("wifi");
 		radio(N_("wwan"));
 	}

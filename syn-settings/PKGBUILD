@@ -237,8 +237,8 @@ pkgver=0.1.0
 #   does not mean "bound wide, still firewalled" — it means every device on the
 #   network can reach this desktop and there is no second door left to unlock.
 #   An IP tells that to somebody who already knows it.
-pkgrel=50
-pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, and where configuration lives"
+pkgrel=51
+pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')

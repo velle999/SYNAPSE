@@ -1668,6 +1668,136 @@ else
     bad "syn-settings.qml not found beside the tests: $QML"
 fi
 
+# ── The address rows ───────────────────────────────────────────────────────
+#
+# The device rows say which interfaces exist and whether they are up. They
+# never said what any of them IS, and the question that made that a gap is
+# `syn-remote wakeable`: a magic packet is addressed to a hardware address, so
+# waking this machine from another one means reading a MAC off it, and the
+# only place that existed was a terminal.
+#
+# ⚠ DRIVEN THROUGH A STAND-IN nmcli, because every one of these depends on
+# hardware this machine happens to have. The developer box has no disconnected
+# wired card, no interface without an address, and exactly one gateway — so
+# asserting against the real thing here tests one arrangement of one machine
+# and passes on every rearrangement it would have caught. have_cmd() walks
+# PATH in order, so prepending a directory shadows the real binary.
+netdir=$(mktemp -d)
+cat > "$netdir/nmcli" <<'NMEOF'
+#!/bin/sh
+case "$*" in
+*"device show"*)
+    cat <<'OUT'
+GENERAL.DEVICE:eth9
+GENERAL.TYPE:ethernet
+GENERAL.HWADDR:AA:BB:CC:DD:EE:FF
+IP4.ADDRESS[1]:10.9.9.9/24
+IP4.GATEWAY:10.9.9.1
+IP4.DNS[1]:10.9.9.1
+IP6.ADDRESS[1]:fe80::1/64
+IP6.ADDRESS[2]:fd00::9/64
+
+GENERAL.DEVICE:br-9
+GENERAL.TYPE:bridge
+GENERAL.HWADDR:12:34:56:78:9A:BC
+IP4.ADDRESS[1]:172.30.0.1/16
+IP4.GATEWAY:
+
+GENERAL.DEVICE:wl9
+GENERAL.TYPE:wifi
+GENERAL.HWADDR:11:22:33:44:55:66
+IP4.GATEWAY:
+
+GENERAL.DEVICE:lo
+GENERAL.TYPE:loopback
+GENERAL.HWADDR:00:00:00:00:00:00
+IP4.ADDRESS[1]:127.0.0.1/8
+
+GENERAL.DEVICE:p2p-dev-wl9
+GENERAL.TYPE:wifi-p2p
+GENERAL.HWADDR:
+OUT
+    ;;
+*) exit 0 ;;
+esac
+NMEOF
+chmod +x "$netdir/nmcli"
+netrec() { PATH="$netdir:$PATH" "$BIN" --rec network; }
+
+# ⛔ THE COLONS SURVIVE, WHICH IS THE WHOLE PARSE. `device show` prints
+# `FIELD:value` and a hardware address is six more colons — a reader that
+# splits on every one of them reports `AA` as the MAC of this machine and
+# looks entirely plausible doing it.
+case "$(netrec | awk -F'\t' '$1=="mac" && $2=="eth9" {print $3}')" in
+    AA:BB:CC:DD:EE:FF) ok "a hardware address survives the field split whole" ;;
+    *) bad "the wired MAC read as '$(netrec | awk -F'\t' '$1=="mac" && $2=="eth9" {print $3}')'" ;;
+esac
+
+# ⚠ AND SO DOES AN IPv6 ONE, which is the same trap with more colons in it.
+netrec | awk -F'\t' '$1=="ip" && $2=="eth9" {print $3}' | grep -q 'fd00::9/64' \
+    && ok "an IPv6 address is not cut at its first colon" \
+    || bad "the IPv6 address did not survive: $(netrec | awk -F'\t' '$1=="ip" && $2=="eth9" {print $3}')"
+
+# ⛔ AND NOT THE LINK-LOCAL ONE. Every interface has an fe80:: address at all
+# times and it reaches nothing without an interface named beside it, so it is
+# the same width as a real address and says nothing.
+netrec | awk -F'\t' '$1=="ip" {print $3}' | grep -q 'fe80:' \
+    && bad "a link-local fe80:: address is listed as an address" \
+    || ok "the link-local address is left out"
+
+# A pane that answers on THIS machine only is the failure this whole file is
+# written against: a card with no address is what every laptop's wired port
+# looks like, and it must still have a hardware address to wake it by.
+[ "$(netrec | awk -F'\t' '$1=="mac" && $2=="wl9" {print $3}')" = 11:22:33:44:55:66 ] \
+    && ok "a card with no address still reports its MAC" \
+    || bad "the disconnected card lost its MAC row"
+[ -z "$(netrec | awk -F'\t' '$1=="ip" && $2=="wl9" {print $3}')" ] \
+    && ok "…and gets no address row to be empty in" \
+    || bad "the disconnected card emitted an address row"
+
+# ⛔ ONE GATEWAY ROW, NOT ONE PER INTERFACE. Every device carries an
+# IP4.GATEWAY field and it is empty on all but the one holding the default
+# route, so a row per interface is a column of blanks around the answer.
+n=$(netrec | awk -F'\t' '$1=="ip" && $2=="gateway"' | grep -c '' || true)
+[ "$n" = 1 ] && ok "the gateway is one row, not one per interface" \
+             || bad "$n gateway rows"
+[ "$(netrec | awk -F'\t' '$1=="ip" && $2=="gateway" {print $3}')" = 10.9.9.1 ] \
+    && ok "…and it is the one interface that has one" \
+    || bad "the gateway row does not carry the default route"
+[ "$(netrec | awk -F'\t' '$1=="ip" && $2=="nameservers" {print $3}')" = 10.9.9.1 ] \
+    && ok "the nameservers are reported" \
+    || bad "no nameserver row"
+
+# Loopback's MAC is all zeroes and the p2p pseudo-device has none at all —
+# neither is a thing anybody reads off a machine, and the device list already
+# skips the second for the same reason.
+netrec | awk -F'\t' '$1=="mac" || $1=="ip"' | grep -qE '	(lo|p2p-dev-wl9)	' \
+    && bad "loopback or the p2p pseudo-device got an address row" \
+    || ok "loopback and the p2p pseudo-device are left out"
+
+# ⛔ THE SENTENCE UNDER THE ROW IS CHOSEN BY WHAT THE INTERFACE IS. Told that a
+# wifi card can be woken by a magic packet, somebody arms it, walks away and
+# finds a machine that never answers — the card does not stay associated
+# through a suspend, and nothing else on the desktop would say so.
+netrec | awk -F'\t' '$1=="mac" && $2=="wl9" {print $5}' | grep -q 'Wi-Fi cannot be woken' \
+    && ok "the wifi row says it cannot be woken by a magic packet" \
+    || bad "the wifi MAC row does not say Wi-Fi cannot be woken"
+netrec | awk -F'\t' '$1=="mac" && $2=="eth9" {print $5}' | grep -q 'syn-remote wakeable on' \
+    && ok "…and the wired row names the command that arms it" \
+    || bad "the wired MAC row does not name syn-remote wakeable"
+netrec | awk -F'\t' '$1=="mac" && $2=="br-9" {print $5}' | grep -q 'containers or virtual machines' \
+    && ok "…and a bridge is named as a bridge, not a card" \
+    || bad "the bridge MAC row reads as a physical card"
+
+# ⚠ NOTHING HERE IS ACTIONABLE, and that is deliberate rather than unfinished:
+# an address is read, not set — NetworkManager owns setting it — and a row
+# carrying a verb the window has no editor for highlights and clicks dead.
+netrec | awk -F'\t' '($1=="mac" || $1=="ip") && $6 != "-"' | grep -q '' \
+    && bad "an address row offers an action" \
+    || ok "no address row claims to be editable"
+
+rm -rf "$netdir"
+
 # ── the wallpaper's accent reaches this window ──────────────────────────────
 #
 # 387 gave the BAR the colour synui measures off the wallpaper, and only the

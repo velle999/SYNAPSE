@@ -215,6 +215,10 @@ msgstr ""
 "قد يُطلب منك الاستيثاق. مع limine قد يعني ذلك بناء مولّد المُدخلات من المصدر، "
 "وهو ما يستغرق عدة دقائق — والأسطر أدناه هي ذلك العمل."
 
+msgid ""
+"addresses, interfaces, radios, and whether anything is filtering traffic"
+msgstr "العناوين، والواجهات، وأجهزة الراديو، وما إذا كان شيء ما يرشّح حركة البيانات"
+
 msgid "connecting %1…"
 msgstr "جارٍ الاتصال بـ %1…"
 
@@ -232,9 +236,6 @@ msgstr "كل نواة متاحة، وأيها مثبّت، وأيها أقلعت
 
 msgid "identity, and which layer each configuration file comes from"
 msgstr "الهوية، ومن أي طبقة يأتي كل ملف إعدادات"
-
-msgid "interfaces, radios, and whether anything is filtering traffic"
-msgstr "الواجهات، وأجهزة الراديو، وما إذا كان شيء ما يرشّح حركة البيانات"
 
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "ارفع إصبعك ثم ضعه من جديد في كل مرة يُطلب منك ذلك؛ يلزم عدة مرات"
@@ -828,6 +829,46 @@ msgid "no connection"
 msgstr "لا اتصال"
 
 msgid ""
+"The wired card's hardware address. A magic packet is addressed to this one — "
+"`syn-remote wakeable on` arms this card, and then another machine on this "
+"network can wake this one while it sleeps."
+msgstr "عنوان العتاد لبطاقة الشبكة السلكية. إلى هذا العنوان تُرسل الحزمة السحرية — `syn-remote wakeable on` يهيّئ هذه البطاقة، فيصبح بإمكان جهاز آخر على هذه الشبكة إيقاظ هذا الجهاز وهو نائم."
+
+msgid ""
+"This card's hardware address. ⚠ Wi-Fi cannot be woken by a magic packet: the "
+"card does not stay associated through a suspend, so only a wired card can be."
+msgstr "عنوان العتاد لهذه البطاقة. ⚠ لا يمكن إيقاظ Wi-Fi بحزمة سحرية: فالبطاقة لا تبقى مرتبطة أثناء التعليق، لذا لا يقدر على ذلك إلا بطاقة سلكية."
+
+msgid ""
+"A bridge this machine runs for containers or virtual machines rather than a "
+"physical card. A guest on it sees this address as its gateway."
+msgstr "جسر تشغّله هذه الآلة للحاويات أو الأجهزة الافتراضية، وليس بطاقة فعلية. والضيف الموصول به يرى هذا العنوان بوابةً له."
+
+msgid "The hardware address of this interface."
+msgstr "عنوان العتاد لهذه الواجهة."
+
+msgid ""
+"The addresses this interface holds right now, IPv4 first. A lease can change "
+"at any time, so an address is not a permanent way to find this machine again."
+msgstr "العناوين التي تحملها هذه الواجهة الآن، وIPv4 أولاً. قد يتغيّر عقد الإيجار في أي وقت، فالعنوان ليس طريقة دائمة للعثور على هذا الجهاز مجدداً."
+
+msgid "gateway"
+msgstr "البوابة"
+
+msgid ""
+"Where anything that is not on this network is sent. A machine with an "
+"address and no gateway reaches the local network and nothing past it."
+msgstr "إلى هنا يُرسَل كل ما ليس على هذه الشبكة. والجهاز الذي له عنوان بلا بوابة يصل إلى الشبكة المحلية ولا شيء بعدها."
+
+msgid "nameservers"
+msgstr "خوادم الأسماء"
+
+msgid ""
+"The servers that turn a name into an address. A network that is up and still "
+"cannot open a site is usually this."
+msgstr "الخوادم التي تحوّل الاسم إلى عنوان. والشبكة التي تعمل ومع ذلك لا تفتح أي موقع، غالباً ما يكون هذا سببها."
+
+msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made, "
 "ICMP, and anything from the local network are let through; unsolicited "
 "traffic from a public address is not."
@@ -983,7 +1024,9 @@ msgstr "متوقف"
 msgid ""
 "Reach this desktop from another machine over VNC. Off until you switch it "
 "on, and it starts with every login once you have"
-msgstr "الوصول إلى سطح المكتب هذا من جهاز آخر عبر VNC. معطّل حتى تُفعّله، وبعدها يبدأ مع كل ولوج"
+msgstr ""
+"الوصول إلى سطح المكتب هذا من جهاز آخر عبر VNC. معطّل حتى تُفعّله، وبعدها يبدأ "
+"مع كل ولوج"
 
 msgid "Server"
 msgstr "الخادم"
@@ -1010,12 +1053,16 @@ msgstr "هذا الجهاز فقط"
 msgid ""
 "Every device on this LAN can reach it. synnet accepts private-range traffic "
 "by design, so the certificate and the password are what stand in the way"
-msgstr "كل جهاز على هذه الشبكة المحلية يستطيع الوصول إليه. يمرّر synnet حركة النطاقات الخاصة عن قصد، فلا يقف في الطريق سوى الشهادة وكلمة السر"
+msgstr ""
+"كل جهاز على هذه الشبكة المحلية يستطيع الوصول إليه. يمرّر synnet حركة النطاقات "
+"الخاصة عن قصد، فلا يقف في الطريق سوى الشهادة وكلمة السر"
 
 msgid ""
 "Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
 "puts it on the LAN"
-msgstr "الاسترجاع المحلي فقط · ويُوصل إليه من الخارج عبر نفق SSH. اختيار «الشبكة» يضعه على الشبكة المحلية"
+msgstr ""
+"الاسترجاع المحلي فقط · ويُوصل إليه من الخارج عبر نفق SSH. اختيار «الشبكة» "
+"يضعه على الشبكة المحلية"
 
 msgid "Port"
 msgstr "المنفذ"

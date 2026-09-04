@@ -1,8 +1,9 @@
 # syn-settings
 
 System settings: displays and resolution, keyboard and language, date and
-time, network, Bluetooth, power and sleep, kernels, the AI backend, the
-screen reader, default applications, and where configuration actually lives.
+time, network addresses, Bluetooth, power and sleep, kernels, the AI backend,
+the screen reader, default applications, and where configuration actually
+lives.
 
 A window with panes, and a command line that answers each pane as records.
 
@@ -14,7 +15,7 @@ syn-settings gui network     # open it on one pane
 ```
 
 Panes: `display`, `region`, `time`, `network`, `bluetooth`, `power`, `apps`,
-`kernel`, `ai`, `speech`, `system`.
+`kernel`, `ai`, `assistant`, `fprint`, `speech`, `remote`, `system`.
 
 ## Reading the same answers from a script
 
@@ -26,7 +27,14 @@ syn-settings --rec apps      # the default app per role, and WHICH file
                              # decided it
 syn-settings --rec kernel    # every kernel on offer, installed, running
 syn-settings --rec fprint    # the reader, and which fingers are enrolled
+syn-settings --rec network   # interfaces, the MAC and addresses of each,
+                             # the gateway, nameservers, and the firewall
 ```
+
+The `network` pane reports a hardware address per interface, which is what
+another machine needs in order to wake this one: a magic packet is addressed to
+a MAC, not an IP. Only a wired card can be woken that way, and the Wi-Fi row
+says so rather than leaving you to arm something that cannot work.
 
 The `apps` pane reports which file made each decision, because a deliberate
 choice and a fallback look identical everywhere else — that is the difference

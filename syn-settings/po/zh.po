@@ -209,6 +209,10 @@ msgstr ""
 "可能会要求你进行身份验证。在 limine 上，这可能意味着从源码构建启动项生成器，"
 "需要好几分钟——下面的输出就是这项工作。"
 
+msgid ""
+"addresses, interfaces, radios, and whether anything is filtering traffic"
+msgstr "地址、网络接口、无线电，以及是否有东西在过滤流量"
+
 msgid "connecting %1…"
 msgstr "正在连接 %1…"
 
@@ -226,9 +230,6 @@ msgstr "所有可用内核、已安装的是哪些，以及你用哪个启动的
 
 msgid "identity, and which layer each configuration file comes from"
 msgstr "身份标识，以及每个配置文件来自哪一层"
-
-msgid "interfaces, radios, and whether anything is filtering traffic"
-msgstr "网络接口、无线电，以及是否有东西在过滤流量"
 
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "每次提示时抬起手指再放回；需要多次采集"
@@ -807,6 +808,46 @@ msgid "no connection"
 msgstr "没有连接"
 
 msgid ""
+"The wired card's hardware address. A magic packet is addressed to this one — "
+"`syn-remote wakeable on` arms this card, and then another machine on this "
+"network can wake this one while it sleeps."
+msgstr "有线网卡的硬件地址。魔术包正是发往这个地址 — `syn-remote wakeable on` 会为这块网卡布防，此后同一网络上的另一台机器就能唤醒睡眠中的这台机器。"
+
+msgid ""
+"This card's hardware address. ⚠ Wi-Fi cannot be woken by a magic packet: the "
+"card does not stay associated through a suspend, so only a wired card can be."
+msgstr "这块网卡的硬件地址。⚠ Wi-Fi 无法用魔术包唤醒：网卡在挂起期间不会保持关联，因此只有有线网卡才行。"
+
+msgid ""
+"A bridge this machine runs for containers or virtual machines rather than a "
+"physical card. A guest on it sees this address as its gateway."
+msgstr "这是本机为容器或虚拟机运行的网桥，不是物理网卡。挂在上面的来宾把这个地址当作自己的网关。"
+
+msgid "The hardware address of this interface."
+msgstr "此网络接口的硬件地址。"
+
+msgid ""
+"The addresses this interface holds right now, IPv4 first. A lease can change "
+"at any time, so an address is not a permanent way to find this machine again."
+msgstr "这个网络接口当前持有的地址，IPv4 在前。租约随时可能变化，因此地址并不是再次找到这台机器的长久办法。"
+
+msgid "gateway"
+msgstr "网关"
+
+msgid ""
+"Where anything that is not on this network is sent. A machine with an "
+"address and no gateway reaches the local network and nothing past it."
+msgstr "凡是不在本网络上的流量都发往这里。有地址而没有网关的机器只能到达本地网络，再往外就到不了了。"
+
+msgid "nameservers"
+msgstr "域名服务器"
+
+msgid ""
+"The servers that turn a name into an address. A network that is up and still "
+"cannot open a site is usually this."
+msgstr "把名字翻译成地址的服务器。网络是通的却打不开网站，通常就是这里的问题。"
+
+msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made, "
 "ICMP, and anything from the local network are let through; unsolicited "
 "traffic from a public address is not."
@@ -960,7 +1001,9 @@ msgstr "已停止"
 msgid ""
 "Reach this desktop from another machine over VNC. Off until you switch it "
 "on, and it starts with every login once you have"
-msgstr "通过 VNC 从另一台机器连接这个桌面。在你打开它之前一直是关的，打开之后每次登录都会随之启动"
+msgstr ""
+"通过 VNC 从另一台机器连接这个桌面。在你打开它之前一直是关的，打开之后每次登录"
+"都会随之启动"
 
 msgid "Server"
 msgstr "服务器"
@@ -987,7 +1030,9 @@ msgstr "仅本机"
 msgid ""
 "Every device on this LAN can reach it. synnet accepts private-range traffic "
 "by design, so the certificate and the password are what stand in the way"
-msgstr "这个局域网上的每台设备都能连上。synnet 有意放行私有网段的流量，挡在中间的只有证书和密码"
+msgstr ""
+"这个局域网上的每台设备都能连上。synnet 有意放行私有网段的流量，挡在中间的只有"
+"证书和密码"
 
 msgid ""
 "Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "

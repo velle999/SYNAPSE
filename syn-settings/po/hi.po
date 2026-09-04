@@ -210,6 +210,10 @@ msgstr ""
 "आपसे प्रमाणीकरण माँगा जा सकता है। limine पर इसका मतलब एंट्री जनरेटर को स्रोत से बनाना "
 "हो सकता है, जिसमें कई मिनट लगते हैं — नीचे की पंक्तियाँ वही काम हैं।"
 
+msgid ""
+"addresses, interfaces, radios, and whether anything is filtering traffic"
+msgstr "पते, इंटरफ़ेस, रेडियो, और क्या कुछ ट्रैफ़िक छान रहा है"
+
 msgid "connecting %1…"
 msgstr "%1 से जुड़ा जा रहा है…"
 
@@ -227,9 +231,6 @@ msgstr "उपलब्ध हर कर्नेल, कौन-से इंस
 
 msgid "identity, and which layer each configuration file comes from"
 msgstr "पहचान, और हर कॉन्फ़िगरेशन फ़ाइल किस परत से आती है"
-
-msgid "interfaces, radios, and whether anything is filtering traffic"
-msgstr "इंटरफ़ेस, रेडियो, और क्या कुछ ट्रैफ़िक छान रहा है"
 
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "हर बार पूछे जाने पर उँगली उठाकर फिर से रखें; कई बार पढ़ना पड़ता है"
@@ -824,6 +825,46 @@ msgid "no connection"
 msgstr "कोई संबंध नहीं"
 
 msgid ""
+"The wired card's hardware address. A magic packet is addressed to this one — "
+"`syn-remote wakeable on` arms this card, and then another machine on this "
+"network can wake this one while it sleeps."
+msgstr "तार वाले कार्ड का हार्डवेयर पता। मैजिक पैकेट इसी पते पर भेजा जाता है — `syn-remote wakeable on` इस कार्ड को तैयार कर देता है, और फिर इस नेटवर्क की कोई दूसरी मशीन इसे नींद से जगा सकती है।"
+
+msgid ""
+"This card's hardware address. ⚠ Wi-Fi cannot be woken by a magic packet: the "
+"card does not stay associated through a suspend, so only a wired card can be."
+msgstr "इस कार्ड का हार्डवेयर पता। ⚠ Wi-Fi को मैजिक पैकेट से नहीं जगाया जा सकता: कार्ड सस्पेंड के दौरान जुड़ा नहीं रहता, इसलिए यह केवल तार वाले कार्ड से ही संभव है।"
+
+msgid ""
+"A bridge this machine runs for containers or virtual machines rather than a "
+"physical card. A guest on it sees this address as its gateway."
+msgstr "यह इस मशीन द्वारा कंटेनरों या वर्चुअल मशीनों के लिए चलाया जाने वाला ब्रिज है, कोई भौतिक कार्ड नहीं। इस पर चलने वाला अतिथि इसी पते को अपना गेटवे मानता है।"
+
+msgid "The hardware address of this interface."
+msgstr "इस इंटरफ़ेस का हार्डवेयर पता।"
+
+msgid ""
+"The addresses this interface holds right now, IPv4 first. A lease can change "
+"at any time, so an address is not a permanent way to find this machine again."
+msgstr "इस इंटरफ़ेस के पास इस समय जो पते हैं, पहले IPv4। लीज़ कभी भी बदल सकती है, इसलिए पता इस मशीन को दोबारा खोजने का स्थायी तरीका नहीं है।"
+
+msgid "gateway"
+msgstr "गेटवे"
+
+msgid ""
+"Where anything that is not on this network is sent. A machine with an "
+"address and no gateway reaches the local network and nothing past it."
+msgstr "जो कुछ भी इस नेटवर्क पर नहीं है, वह यहीं भेजा जाता है। पता होने पर भी बिना गेटवे वाली मशीन स्थानीय नेटवर्क तक पहुँचती है, उससे आगे नहीं।"
+
+msgid "nameservers"
+msgstr "नेमसर्वर"
+
+msgid ""
+"The servers that turn a name into an address. A network that is up and still "
+"cannot open a site is usually this."
+msgstr "वे सर्वर जो नाम को पते में बदलते हैं। नेटवर्क चालू होने के बावजूद कोई साइट न खुले, तो आमतौर पर वजह यही होती है।"
+
+msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made, "
 "ICMP, and anything from the local network are let through; unsolicited "
 "traffic from a public address is not."
@@ -979,7 +1020,9 @@ msgstr "रुका हुआ"
 msgid ""
 "Reach this desktop from another machine over VNC. Off until you switch it "
 "on, and it starts with every login once you have"
-msgstr "इस डेस्कटॉप तक किसी दूसरी मशीन से VNC के ज़रिए पहुँचें। जब तक आप चालू न करें तब तक बंद, और उसके बाद हर लॉगिन पर साथ चलता है"
+msgstr ""
+"इस डेस्कटॉप तक किसी दूसरी मशीन से VNC के ज़रिए पहुँचें। जब तक आप चालू न करें तब तक बंद, और "
+"उसके बाद हर लॉगिन पर साथ चलता है"
 
 msgid "Server"
 msgstr "सर्वर"
@@ -992,7 +1035,8 @@ msgstr "सत्र"
 
 msgid ""
 "no desktop is running yet · nothing exists to share until somebody logs in"
-msgstr "अभी कोई डेस्कटॉप नहीं चल रहा · जब तक कोई लॉगिन न करे, साझा करने को कुछ है ही नहीं"
+msgstr ""
+"अभी कोई डेस्कटॉप नहीं चल रहा · जब तक कोई लॉगिन न करे, साझा करने को कुछ है ही नहीं"
 
 msgid "Reachable from"
 msgstr "कहाँ से पहुँच"
@@ -1006,7 +1050,9 @@ msgstr "केवल इसी मशीन से"
 msgid ""
 "Every device on this LAN can reach it. synnet accepts private-range traffic "
 "by design, so the certificate and the password are what stand in the way"
-msgstr "इस लैन का हर उपकरण इस तक पहुँच सकता है। synnet निजी दायरों का ट्रैफ़िक जान-बूझकर आने देता है — बीच में सिर्फ़ प्रमाणपत्र और पासवर्ड खड़े हैं"
+msgstr ""
+"इस लैन का हर उपकरण इस तक पहुँच सकता है। synnet निजी दायरों का ट्रैफ़िक जान-बूझकर आने "
+"देता है — बीच में सिर्फ़ प्रमाणपत्र और पासवर्ड खड़े हैं"
 
 msgid ""
 "Loopback only · reach it from elsewhere over an SSH tunnel. \"The network\" "
@@ -1031,7 +1077,9 @@ msgstr "एक बनाए गए पासवर्ड से"
 msgid ""
 "Either way the connection is encrypted · `syn-remote password` prints the "
 "generated one"
-msgstr "दोनों ही हाल में कनेक्शन एन्क्रिप्टेड रहता है · `syn-remote password` बनाया गया पासवर्ड दिखाता है"
+msgstr ""
+"दोनों ही हाल में कनेक्शन एन्क्रिप्टेड रहता है · `syn-remote password` बनाया गया पासवर्ड "
+"दिखाता है"
 
 msgid "Connected now"
 msgstr "अभी जुड़े हुए"
