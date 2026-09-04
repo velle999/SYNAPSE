@@ -55,6 +55,10 @@ IDLE_INHIBIT=/usr/lib/synui/synui-idle-inhibit
 STATE="${XDG_RUNTIME_DIR:-/tmp}/syn-remote.state"
 
 DEFAULT_PORT=5900
+# How long `wake` and `connect` wait for a machine to start answering. A desktop
+# with a spinning disk and a NVIDIA card takes its time coming out of S3, and a
+# wait that gives up first turns a wake that WORKED into an error message.
+WAKE_WAIT=${SYN_REMOTE_WAKE_WAIT:-60}
 
 err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
 die()  { err "$*"; exit 1; }
@@ -466,6 +470,7 @@ cmd_status() {
     note "Listening on  $(bind_address):$(bind_port)$([ "$(bind_address)" = 127.0.0.1 ] && echo '   (this machine only)' || echo '   (reachable from the LAN)')"
     note "Sign in with  $([ "$(setting pam off)" = on ] && echo 'your account password (PAM)' || echo "syn-remote password")"
     [ "$n" -gt 0 ] && note "Connected     $n"
+    note "Waking it     $PROG wakeable"
     have wayvnc || note "⚠ wayvnc is not installed — nothing can serve."
     [ -n "$sock" ] || note "⚠ No desktop session yet. Nothing exists to share until somebody logs in."
     return 0
@@ -674,6 +679,197 @@ cmd_names() {
     esac
 }
 
+# ── Being woken ───────────────────────────────────────────
+#
+# The last gap in "reach this desktop from somewhere else": a machine that is
+# asleep answers nothing at all. Wake-on-LAN closes it — the network card stays
+# powered and watches for one magic packet — but it is off by default on most
+# cards and there is no obvious place to switch it on.
+#
+# ⚠ TWO MECHANISMS, TWO JOBS, AND NOT A CHOICE BETWEEN THEM.
+#   NetworkManager REMEMBERS: `802-3-ethernet.wake-on-lan` is re-applied every
+#   time the connection is activated, which is what survives a reboot, a cable
+#   replug and a driver that resets the flag on link-down.
+#   The helper APPLIES: it sets the flag on the live interface now, without
+#   activating anything — because activating the connection you are reaching
+#   this machine over drops the link underneath you.
+# Setting only the first leaves the machine unwakeable until its next reboot;
+# setting only the second loses it AT that reboot.
+WOL_HELPER="${SYN_REMOTE_WOL_HELPER:-/usr/lib/syn-remote/syn-remote-wol}"
+# ⚠ A TEST SEAM, and it redirects a WRITE — so it is named after the tool it
+# stands in for and is never used on a path that escalates. Neither the helper
+# nor nmcli is run through pkexec by the suite: the suite runs the wrapper's
+# own logic against stand-ins and asserts the live connection is untouched.
+NMCLI="${SYN_REMOTE_NMCLI:-nmcli}"
+# ⚠ A TEST SEAM FOR A READ ONLY, and the same trick synui's lid test uses for
+# /sys/class/power_supply: which interface a magic packet would arrive on is a
+# decision made by walking sysfs, and a decision that picks `docker0` is a
+# switch that arms the wrong card and reports success. It is reachable in a
+# fixture; the shipped default is the real one.
+NET_DIR="${SYN_REMOTE_NET_DIR:-/sys/class/net}"
+
+# The interface a magic packet would arrive on: wired, and carrying a link.
+#
+# ⛔ WIRED ONLY, said out loud rather than quietly skipped. Wi-Fi wake
+# (WoWLAN) needs the card to stay associated through suspend, and on the cards
+# in these machines it does not — offering the switch for a wlan device would
+# be offering something that cannot work.
+wired_iface() {
+    local d
+    for d in "$NET_DIR"/*; do
+        [ -e "$d/device" ] || continue          # skip lo, bridges, veth, docker0
+        [ -e "$d/wireless" ] && continue
+        [ -e "$d/phy80211" ] && continue
+        # DEVTYPE is set for bridges, vlans and bonds, which have a `device`
+        # link of their own on some kernels; a plain NIC has none.
+        grep -q '^DEVTYPE=' "$d/uevent" 2>/dev/null && continue
+        [ "$(cat "$d/carrier" 2>/dev/null)" = 1 ] || continue
+        printf '%s' "${d##*/}"
+        return 0
+    done
+    return 1
+}
+
+# `field<TAB>value` from the helper, escalating ONCE if the kernel says the
+# read needs privilege — which it does for everybody but root, because the same
+# ioctl can return a SecureOn password.
+#
+# ⚠ ON THE EXIT CODE, NOT ON `id -u`. Asking "am I root" is asking the wrong
+# question: the answer that matters is whether the ioctl was refused, and a
+# test rig, a container or a machine with the capability granted gets through
+# without a polkit round trip it does not need.
+wol_query() {   # wol_query <iface>
+    local out rc
+    out=$("$WOL_HELPER" get "$1" 2>/dev/null); rc=$?
+    if [ "$rc" -eq 77 ] && have pkexec; then
+        out=$(pkexec "$WOL_HELPER" get "$1" 2>/dev/null); rc=$?
+    fi
+    [ "$rc" -eq 0 ] || return "$rc"
+    printf '%s\n' "$out"
+}
+
+wol_apply() {   # wol_apply <iface> on|off
+    local rc
+    "$WOL_HELPER" set "$1" "$2" >/dev/null 2>&1; rc=$?
+    if [ "$rc" -eq 77 ] && have pkexec; then
+        pkexec "$WOL_HELPER" set "$1" "$2" >/dev/null 2>&1; rc=$?
+    fi
+    return "$rc"
+}
+
+# The NetworkManager connection carrying an interface, if NM is what manages it.
+nm_connection() {   # nm_connection <iface>
+    have "$NMCLI" || return 1
+    "$NMCLI" -t -f NAME,DEVICE connection show --active 2>/dev/null |
+        awk -F: -v d="$1" '$2==d {print $1; found=1; exit} END {exit !found}'
+}
+
+# What NM will re-apply at the next activation: magic, none, or default
+# (= "leave whatever the driver came up with", which is a coin toss).
+nm_wol_setting() {   # nm_wol_setting <connection>
+    have "$NMCLI" || return 1
+    "$NMCLI" -t -f 802-3-ethernet.wake-on-lan connection show "$1" 2>/dev/null |
+        sed 's/^[^:]*://'
+}
+
+cmd_wakeable() {
+    local iface con want=${1:-status}
+    case "$want" in on|off|status|--rec|"") ;; *) die "wakeable takes 'on', 'off' or nothing" ;; esac
+    [ -n "$want" ] || want=status
+    [ "$want" = --rec ] && want=status
+
+    iface=$(wired_iface) || die "no wired network interface with a link — a magic packet has nowhere to arrive"
+    con=$(nm_connection "$iface" || true)
+
+    if [ "$want" != status ]; then
+        local on=off; [ "$want" = on ] && on=on
+        # ⛔ THE LIVE FLAG FIRST. If the card cannot do magic packets at all,
+        # the helper says so and exits 2, and nothing has been written to a
+        # NetworkManager profile that would claim otherwise for ever.
+        local rc; wol_apply "$iface" "$on"; rc=$?
+        case "$rc" in
+            0)  ;;
+            2)   die "$iface cannot be woken by a magic packet — the card does not support it" ;;
+            77)  die "not allowed to change it from here — this needs a session at the machine itself" ;;
+            # ⛔ NAMED, because this is what a half-installed package looks like
+            # from here and "could not change the flag" would send somebody to
+            # look at their network card.
+            127) die "the helper is missing: $WOL_HELPER — reinstall syn-remote" ;;
+            *)   die "could not change the wake flag on $iface" ;;
+        esac
+        if [ -n "$con" ]; then
+            "$NMCLI" connection modify "$con" \
+                  802-3-ethernet.wake-on-lan "$([ "$on" = on ] && echo magic || echo none)" \
+                  >/dev/null 2>&1 ||
+                note "⚠ set on $iface now, but NetworkManager would not remember it — it will be lost at the next reboot."
+        else
+            note "⚠ $iface is not managed by NetworkManager, so this is set until the next reboot only."
+        fi
+    fi
+
+    # ── What it actually is now, asked rather than assumed ──
+    local q supported magic
+    q=$(wol_query "$iface" || true)
+    supported=$(printf '%s\n' "$q" | awk -F'\t' '$1=="supported"{print $2}')
+    magic=$(printf '%s\n' "$q" | awk -F'\t' '$1=="magic"{print $2}')
+
+    if [ "${1:-}" = "--rec" ] || [ "${SYN_REMOTE_REC:-}" = 1 ]; then
+        printf 'field\tvalue\n'
+        printf 'interface\t%s\n' "$iface"
+        printf 'supported\t%s\n' "${supported:-unknown}"
+        printf 'armed\t%s\n'     "${magic:-unknown}"
+        printf 'remembered\t%s\n' "$(if [ -n "$con" ]; then nm_wol_setting "$con"; else echo none; fi)"
+        printf 'mac\t%s\n'       "$(cat "$NET_DIR/$iface/address" 2>/dev/null)"
+        return 0
+    fi
+
+    case "$magic" in
+        yes) printf 'This machine can be woken over the network.\n\n' ;;
+        no)  printf 'This machine cannot be woken over the network.\n\n' ;;
+        *)   printf 'Cannot tell whether this machine can be woken.\n\n' ;;
+    esac
+    note "Interface     $iface  ($(cat "$NET_DIR/$iface/address" 2>/dev/null))"
+    # ⛔ THREE ANSWERS, NOT TWO. "could not ask" is not "no": a helper that is
+    # missing or refused would otherwise be reported as a card that cannot be
+    # woken, which is a hardware verdict this has no business reaching.
+    note "Card can      $(case "$supported" in
+            yes) echo 'wake on a magic packet' ;;
+            no)  echo 'not wake on a magic packet' ;;
+            *)   echo 'not known — the card could not be asked' ;;
+        esac)"
+    note "Right now     $(case "$magic" in
+            yes) echo 'armed' ;;
+            no)  echo 'not armed' ;;
+            *)   echo 'not known' ;;
+        esac)"
+    [ -n "$magic" ] || note "⚠ $WOL_HELPER could not be run, so this is what is remembered, not what is set." 
+    # ⚠ REPORTED SEPARATELY FROM "armed", because they disagree in the case
+    # that matters: armed now, forgotten at the next boot, which reads as
+    # working right up until the reboot nobody connects to it after.
+    if [ -n "$con" ]; then
+        local remembered; remembered=$(nm_wol_setting "$con")
+        note "Next boot     $(case "$remembered" in
+                magic) echo 'still armed' ;;
+                none)  echo 'not armed' ;;
+                *)     echo "whatever the driver decides (NetworkManager: ${remembered:-default})" ;;
+            esac)"
+    fi
+    [ "$magic" = yes ] || { note ""; note "Switch it on:  $PROG wakeable on"; return 0; }
+
+    note ""
+    note "From another machine on this network:"
+    note "  syn-remote wake <name>          (a saved connection)"
+    note "Anything that sends a magic packet to $(cat "$NET_DIR/$iface/address" 2>/dev/null) will do."
+    note ""
+    # ⛔ SAID EVERY TIME IT IS ON, because these are the two reasons it is
+    # armed and still does not work, and neither of them is visible from here.
+    note "A magic packet is a broadcast: it does not cross a router, so the"
+    note "machine sending it has to be on this network. And a machine that was"
+    note "shut down rather than suspended also needs Wake-on-LAN enabled in its"
+    note "own firmware setup."
+    return 0
+}
+
 # ── The other end: connecting OUT ─────────────────────────
 #
 # Everything above serves THIS machine. Everything below reaches somebody
@@ -697,6 +893,18 @@ cmd_names() {
 # lines and is the entire reason the feature is real.
 
 HOSTS="$CONF_DIR/hosts"
+# ⛔ TAB IS AN IFS *WHITESPACE* CHARACTER, so `IFS=$'\t' read` treats a RUN of
+# tabs as one separator and an EMPTY FIELD SIMPLY DISAPPEARS — every field
+# after it shifts one column left, silently. A connection saved with no user
+# name is exactly that record, and it read back with the NEXT column's value in
+# the user's place: the TUI showed the wrong password state for such a host
+# long before there was a mac column for it to eat.
+#
+# ⚠ So every record is re-separated onto a NON-whitespace character before it
+# is read. US (0x1f) is the ASCII unit separator, it is what the character is
+# for, and `add` refuses a value containing a control character — so it cannot
+# appear inside a field and be mistaken for the boundary between two.
+SEP=$'\x1f'
 SECRETS="$CONF_DIR/secrets"
 VIEWER=/usr/lib/syn-remote/syn-remote-view
 GETCERT=/usr/lib/syn-remote/syn-remote-getcert
@@ -726,11 +934,86 @@ hosts_init() {
     chmod 600 "$HOSTS" 2>/dev/null
 }
 
-# One record, by name. Prints `host<TAB>port<TAB>user` or nothing.
+# One record, by name. Prints `host<TAB>port<TAB>user<TAB>mac` or nothing.
+#
+# ⚠ FOUR FIELDS EVEN FOR A RECORD SAVED WITH THREE. awk prints an absent field
+# as empty, so a hosts file written before there was a MAC column reads back
+# with an empty one rather than short — and every caller can split into four
+# variables without asking how old the file is.
 host_record() {
     [ -r "$HOSTS" ] || return 1
-    awk -F'\t' -v n="$1" '$1==n {print $2 "\t" $3 "\t" $4; found=1; exit}
+    awk -F'\t' -v n="$1" '$1==n {print $2 "\t" $3 "\t" $4 "\t" $5; found=1; exit}
                           END {exit !found}' "$HOSTS"
+}
+
+# ── The magic packet ──────────────────────────────────────
+
+# ⛔ SIX PAIRS OF HEX, and nothing else, because this string is expanded into
+# the packet a machine is woken with and is read back out of a file that a
+# person edits. Both separators are accepted because both are what gets pasted:
+# `ip link` prints colons, a router's DHCP table often prints dashes.
+valid_mac() {
+    case "${1:-}" in
+        [0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]) return 0 ;;
+        [0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f]) return 0 ;;
+    esac
+    return 1
+}
+
+# The hardware address a name or an address currently answers from, out of the
+# neighbour table — so `add` can fill the column in while the machine is still
+# awake, which is the only moment it can be learned at all.
+#
+# ⚠ A PING FIRST. The neighbour table only holds what this machine has recently
+# talked to, so a host that has just been named to us is usually not in it; one
+# packet puts it there. A failure is not an error — a machine that is already
+# asleep, or behind a router, simply has no entry to learn, and `add` says so
+# rather than refusing to save the connection.
+mac_of_host() {   # mac_of_host <host>
+    have ip || return 1
+    local ip4
+    ip4=$(getent ahostsv4 "$1" 2>/dev/null | awk 'NR==1{print $1}')
+    [ -n "$ip4" ] || return 1
+    have ping && ping -c1 -W1 -n "$ip4" >/dev/null 2>&1
+    ip neigh show "$ip4" 2>/dev/null |
+        awk '{for (i=1;i<NF;i++) if ($i=="lladdr") {print $(i+1); found=1; exit}}
+             END {exit !found}'
+}
+
+# ⚠ python3, WHICH IS ALREADY A DEPENDENCY (it is the certificate fetcher), and
+# not a new one: bash cannot send this. A magic packet goes to the BROADCAST
+# address, and a socket has to have SO_BROADCAST set before the kernel will let
+# it — which `/dev/udp` gives no way to do. There is no wakeonlan package in the
+# dependency list for the same reason there is no ethtool in it.
+#
+# ⛔ SENT TWICE, to the broadcast address AND to the host's own address. The
+# first is what reaches a sleeping machine; the second is what reaches one whose
+# address the switch still remembers, on a network where broadcast is filtered.
+# Neither is reliable alone and both are one UDP datagram.
+magic_packet() {   # magic_packet <mac> [host]
+    have python3 || { err "python3 is missing — nothing here can send a magic packet"; return 1; }
+    python3 - "$1" "${2:-}" <<'PY'
+import socket, sys
+
+mac = sys.argv[1].replace(":", "").replace("-", "")
+host = sys.argv[2] if len(sys.argv) > 2 else ""
+packet = b"\xff" * 6 + bytes.fromhex(mac) * 16
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+sent = 0
+# Port 9 (discard) and port 7 (echo) are both conventional for this; a card
+# watching for a magic packet does not care which, and some home routers
+# forward only one of them.
+for dest in filter(None, ["255.255.255.255", host]):
+    for port in (9, 7):
+        try:
+            s.sendto(packet, (dest, port))
+            sent += 1
+        except OSError:
+            pass
+sys.exit(0 if sent else 1)
+PY
 }
 
 # ── Where a password lives ────────────────────────────────
@@ -829,13 +1112,18 @@ cmd_hosts() {
         # ⚠ MACHINE-READABLE AND NEVER TRANSLATED — the window and the TUI both
         # match on these values. First row names the columns, as everywhere
         # else here.
-        printf 'name\thost\tport\tuser\tsecret\tpinned\n'
-        while IFS=$'\t' read -r n h p u; do
+        # ⚠ mac is APPENDED, not inserted. The window and the TUI both index
+        # these columns by position, and a column added in the middle would
+        # silently shift every one after it — a saved password reading as a
+        # port number, in a build where nothing failed.
+        printf 'name\thost\tport\tuser\tsecret\tpinned\tmac\n'
+        while IFS="$SEP" read -r n h p u m; do
             [ -n "$n" ] || continue
-            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" \
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" \
                    "$(secret_where "$n")" \
-                   "$([ -s "$(pin_path "$n")" ] && echo yes || echo no)"
-        done < "$HOSTS"
+                   "$([ -s "$(pin_path "$n")" ] && echo yes || echo no)" \
+                   "$m"
+        done < <(tr '\t' "$SEP" < "$HOSTS")
         return 0
     fi
 
@@ -845,23 +1133,36 @@ cmd_hosts() {
         return 0
     fi
     printf 'Saved connections\n'
-    while IFS=$'\t' read -r n h p u; do
+    while IFS="$SEP" read -r n h p u m; do
         [ -n "$n" ] || continue
         local where; where=$(secret_where "$n")
-        note "$(printf '%-16s %s:%s%s  [%s]' "$n" "$h" "$p" \
+        note "$(printf '%-16s %s:%s%s  [%s%s]' "$n" "$h" "$p" \
                  "$([ -n "$u" ] && printf ' as %s' "$u")" \
                  "$(case $where in
                         keyring) echo 'password in the keyring' ;;
                         file)    echo 'password in a file on disk' ;;
                         *)       echo 'no password saved' ;;
-                    esac)")"
-    done < "$HOSTS"
+                    esac)" \
+                 "$([ -n "$m" ] && printf ', can be woken')")"
+    done < <(tr '\t' "$SEP" < "$HOSTS")
 }
 
 cmd_add() {
+    # --mac is pulled out first so it can be written anywhere in the line, and
+    # the positional arguments keep the shape they have always had.
+    local args=() mac=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --mac) mac=${2:-}; shift 2 || true ;;
+            *)     args+=("$1"); shift ;;
+        esac
+    done
+    set -- "${args[@]+"${args[@]}"}"
+
     local name=${1:-} target=${2:-} user=${3:-}
     valid_name "$name" || die "a name is letters, digits, dot, dash or underscore"
-    [ -n "$target" ] || die "usage: $PROG add <name> <host>[:port] [user]"
+    [ -n "$target" ] || die "usage: $PROG add <name> <host>[:port] [user] [--mac <address>]"
+    [ -z "$mac" ] || valid_mac "$mac" || die "a hardware address is six pairs of hex, like bc:fc:e7:e8:fd:e3"
 
     local host port
     case "$target" in
@@ -871,12 +1172,26 @@ cmd_add() {
     [ -n "$host" ] || die "no host in '$target'"
     case "$port" in *[!0-9]*|"") die "a port is a number" ;; esac
     [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || die "a port is 1-65535"
-    case "$host$user" in *$'\t'*|*$'\n'*) die "a host or user cannot contain a tab or newline" ;; esac
+    # ⛔ EVERY CONTROL CHARACTER, not just tab and newline. These fields are
+    # written into a separated record and read back on a separator of their
+    # own, so any one of them could forge a field boundary.
+    case "$host$user" in *[[:cntrl:]]*) die "a host or user cannot contain a control character" ;; esac
+
+    # Learned rather than asked for, and only when it was not given: the
+    # machine being saved is nearly always awake at the moment somebody saves
+    # it, and that is the only moment its hardware address can be read off the
+    # network. Asking a person to find it is asking them to give up.
+    local learned=no
+    if [ -z "$mac" ]; then
+        mac=$(mac_of_host "$host" 2>/dev/null || true)
+        valid_mac "$mac" || mac=""
+        [ -n "$mac" ] && learned=yes
+    fi
 
     hosts_init
     local tmp="$HOSTS.new"
     { grep -v "^$name	" "$HOSTS" 2>/dev/null || true
-      printf '%s\t%s\t%s\t%s\n' "$name" "$host" "$port" "$user"
+      printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$host" "$port" "$user" "$mac"
     } > "$tmp" || die "could not write $HOSTS"
     chmod 600 "$tmp" 2>/dev/null
     mv -f "$tmp" "$HOSTS"
@@ -884,6 +1199,97 @@ cmd_add() {
     printf 'Saved %s as %s:%s.\n' "$name" "$host" "$port"
     note "Remember its password:  $PROG saved $name set"
     note "Open it:                $PROG connect $name"
+    if [ -n "$mac" ]; then
+        note "Wake it when asleep:    $PROG wake $name$([ "$learned" = yes ] && printf '   (%s, read off the network)' "$mac")"
+    else
+        # ⚠ NOT AN ERROR, and not silent either. Everything else about the
+        # connection works; the one thing that will not is waking it, and the
+        # moment to say so is now rather than at midnight from a hotel.
+        note ""
+        note "Its hardware address could not be read, so $PROG cannot wake it."
+        note "On that machine:  syn-remote wakeable   — then:  $PROG add $name $target --mac <address>"
+    fi
+}
+
+# Is anything answering on that port yet?
+#
+# ⚠ bash's own /dev/tcp, so there is no nc/netcat dependency and no difference
+# between the three incompatible netcats a distribution might have installed.
+port_open() {   # port_open <host> <port>
+    timeout 2 bash -c ": >/dev/tcp/$1/$2" 2>/dev/null
+}
+
+# ⛔ A WAKE IS NOT A REQUEST THAT ANSWERS. Nothing comes back from a magic
+# packet — not an acknowledgement, not an error — so the only way to know it
+# worked is to watch the port the machine will start answering on. Without this
+# wait, `connect` would fire the packet and hand a sleeping machine to the
+# viewer, which would fail with a connection error and no hint that a wake was
+# even attempted.
+wait_for_port() {   # wait_for_port <host> <port> <seconds>
+    local waited=0
+    while [ "$waited" -lt "$3" ]; do
+        port_open "$1" "$2" && return 0
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 1
+}
+
+cmd_wake() {
+    local name=${1:-}
+    valid_name "$name" || die "usage: $PROG wake <name>"
+    local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
+    local host port user mac
+    IFS="$SEP" read -r host port user mac <<< "${rec//$'\t'/$SEP}"
+
+    if [ -z "$mac" ]; then
+        # Worth one attempt: a machine that is awake can still be learned from,
+        # and then the column is filled in for the next time it is not.
+        mac=$(mac_of_host "$host" 2>/dev/null || true)
+        valid_mac "$mac" || mac=""
+        if [ -n "$mac" ]; then
+            host_set_mac "$name" "$mac"
+            note "Learned its hardware address: $mac"
+        else
+            err "$name has no hardware address saved, so there is nothing to send a packet to"
+            die "add it with:  $PROG add $name $host:$port${user:+ $user} --mac <address>"
+        fi
+    fi
+
+    if port_open "$host" "$port"; then
+        printf '%s is already awake.\n' "$name"
+        return 0
+    fi
+
+    magic_packet "$mac" "$host" || die "could not send the packet"
+    printf 'Sent a magic packet to %s.\n\n' "$mac"
+    if wait_for_port "$host" "$port" "$WAKE_WAIT"; then
+        printf '%s is awake.\n\n' "$name"
+        note "Open it:  $PROG connect $name"
+        return 0
+    fi
+    # ⛔ NOT A FAILURE OF THE PACKET, which cannot fail visibly. Everything
+    # this end can do was done; what is left is the list of reasons the other
+    # end did not hear it, and they are all somewhere else.
+    err "$name did not answer within ${WAKE_WAIT}s"
+    note ""
+    note "The packet was sent. If it never wakes, the reason is at the other end:"
+    note "  - the machine has to be ON THIS NETWORK — a magic packet is a"
+    note "    broadcast and does not cross a router;"
+    note "  - it has to be armed:  syn-remote wakeable on   (run there);"
+    note "  - a machine that was shut down rather than suspended also needs"
+    note "    Wake-on-LAN turned on in its firmware setup."
+    return 1
+}
+
+# Rewrites one record's MAC in place, leaving every other field as it was.
+host_set_mac() {   # host_set_mac <name> <mac>
+    hosts_init
+    local tmp="$HOSTS.new"
+    awk -F'\t' -v OFS='\t' -v n="$1" -v m="$2" \
+        '$1==n {$5=m} {print $1, $2, $3, $4, $5}' "$HOSTS" > "$tmp" || return 1
+    chmod 600 "$tmp" 2>/dev/null
+    mv -f "$tmp" "$HOSTS"
 }
 
 # What to read out to somebody trusting THIS machine from somewhere else.
@@ -968,8 +1374,8 @@ cmd_trust() {
     local name=${1:-} renew=${2:-}
     valid_name "$name" || die "usage: $PROG trust <name> [--renew]"
     local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
-    local host port user
-    IFS=$'\t' read -r host port user <<< "$rec"
+    local host port user mac
+    IFS="$SEP" read -r host port user mac <<< "${rec//$'\t'/$SEP}"
 
     hosts_init
     mkdir -p "$PINS" && chmod 700 "$PINS" 2>/dev/null
@@ -1024,13 +1430,36 @@ cmd_trust() {
 # ── Opening one ───────────────────────────────────────────
 
 cmd_connect() {
+    local nowake=no
+    case "${1:-}" in --no-wake) nowake=yes; shift ;; esac
+    case "${2:-}" in --no-wake) nowake=yes; set -- "${1:-}" ;; esac
     local name=${1:-}
-    valid_name "$name" || die "usage: $PROG connect <name>"
+    valid_name "$name" || die "usage: $PROG connect <name> [--no-wake]"
     local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
-    local host port user
-    IFS=$'\t' read -r host port user <<< "$rec"
+    local host port user mac
+    IFS="$SEP" read -r host port user mac <<< "${rec//$'\t'/$SEP}"
 
     [ -x "$VIEWER" ] || die "the viewer is missing: $VIEWER"
+
+    # ⛔ ASKED BEFORE THE CERTIFICATE CHECK, because trusting a machine talks to
+    # it: a sleeping host would fail the pin check with a connection error, and
+    # the person would be told their certificate was the problem.
+    #
+    # ⚠ ONLY WHEN THE PORT IS SHUT. A magic packet costs nothing, but sending
+    # one to a machine that is already answering is a wake for a machine that is
+    # awake — and on a shared network it is a packet somebody has to explain.
+    if [ -n "$mac" ] && [ "$nowake" != yes ] && ! port_open "$host" "$port"; then
+        note "$name is not answering — sending a wake packet."
+        if magic_packet "$mac" "$host" && wait_for_port "$host" "$port" "$WAKE_WAIT"; then
+            note "$name is awake."
+        else
+            # Not fatal. The viewer's own error is the better one to end on if
+            # the machine was never asleep in the first place, and a person who
+            # asked to connect asked to connect.
+            note "$name did not answer within ${WAKE_WAIT}s — trying anyway."
+        fi
+        printf '\n' >&2
+    fi
 
     # ⛔ NO PIN, NO CONNECTION — and it must say so rather than let the viewer
     # hang. Without a certificate to validate against, the TLS session comes up
@@ -1077,13 +1506,13 @@ cmd_gui() {
 cmd_tui() {
     hosts_init
     local names=() rows=() n h p u sec sel=0
-    while IFS=$'\t' read -r n h p u sec; do
+    while IFS="$SEP" read -r n h p u sec; do
         [ "$n" = name ] && continue
         [ -n "$n" ] || continue
         names+=("$n")
         rows+=("$(printf '%-16s %s:%s  %s' "$n" "$h" "$p" \
                   "$(case $sec in keyring) echo '[keyring]';; file) echo '[on disk]';; *) echo '[no password]';; esac)")")
-    done < <(cmd_hosts --tsv)
+    done < <(cmd_hosts --tsv | tr '\t' "$SEP")
 
     [ ${#names[@]} -gt 0 ] || { printf 'No saved connections. Add one:  %s add <name> <host>\n' "$PROG"; return 0; }
 
@@ -1096,7 +1525,7 @@ cmd_tui() {
             if [ "$i" -eq "$sel" ]; then printf '  \033[7m%s\033[0m\n' "${rows[$i]}"
             else                          printf '  %s\n' "${rows[$i]}"; fi
         done
-        printf '\n  ↑/↓ choose   Enter connect   p password   d forget   q quit\n'
+        printf '\n  ↑/↓ choose   Enter connect   w wake   p password   d forget   q quit\n'
 
         IFS= read -rsn1 key || break
         case "$key" in
@@ -1112,6 +1541,7 @@ cmd_tui() {
             k) sel=$(( (sel - 1 + ${#names[@]}) % ${#names[@]} )) ;;
             j) sel=$(( (sel + 1) % ${#names[@]} )) ;;
             "") printf '\033[H\033[2J'; cmd_connect "${names[$sel]}"; return $? ;;
+            w) printf '\n'; cmd_wake "${names[$sel]}"; printf '\n  [any key]'; IFS= read -rsn1 ;;
             p) printf '\n'; cmd_saved "${names[$sel]}" set; printf '\n  [any key]'; IFS= read -rsn1 ;;
             d) printf '\n'; cmd_forget "${names[$sel]}"; return 0 ;;
             q) return 0 ;;
@@ -1135,12 +1565,17 @@ syn-remote — the desktop, from somewhere else
                                extra names and addresses the certificate
                                vouches for — needed for a port forward or a
                                dynamic-DNS name, which this machine cannot see
+  syn-remote wakeable [on|off] whether a magic packet may wake this machine
+                               while it is asleep, and what its address is
 
 Reaching somebody else's desktop:
 
   syn-remote hosts [--tsv]     the connections you have saved
-  syn-remote add <name> <host>[:port] [user]
-  syn-remote connect <name>    open it
+  syn-remote add <name> <host>[:port] [user] [--mac <address>]
+                               its hardware address is read off the network if
+                               it is reachable now — it is what `wake` sends to
+  syn-remote connect <name>    open it — waking it first if it is asleep
+  syn-remote wake <name>       just wake it, without opening anything
   syn-remote saved <name> [set|clear]   the password it is opened with
   syn-remote trust <name> [--renew]    check and pin its certificate
   syn-remote fingerprint       this machine's own certificate, to read out
@@ -1150,6 +1585,13 @@ Reaching somebody else's desktop:
 The server is wayvnc; this adds the parts a wrapper has to: it wakes a blanked
 screen when somebody connects (a blanked output cannot be captured at all) and
 holds the machine awake while they are there.
+
+Three different things are called waking a machine, and only the last needs
+switching on. A blanked SCREEN is woken by connecting. A machine held awake
+while somebody is watching needs nothing. A machine that is ASLEEP answers
+nothing at all, and is woken by a magic packet — `wakeable` on the machine that
+sleeps, `wake` on the machine you are sitting at. The two ends are the same
+network: a magic packet is a broadcast and does not cross a router.
 
 Nothing exists to share until somebody has logged in — there is no desktop
 before a login on any Wayland system.
@@ -1178,11 +1620,13 @@ case "${1:-status}" in
     password)   shift; cmd_password "$@" ;;
     auth)       shift; cmd_auth "$@" ;;
     names)      shift; cmd_names "$@" ;;
+    wakeable)   shift; cmd_wakeable "$@" ;;
     hosts)      shift; cmd_hosts "$@" ;;
     add)        shift; cmd_add "$@" ;;
     forget)     shift; cmd_forget "$@" ;;
     saved)      shift; cmd_saved "$@" ;;
     connect|view) shift; cmd_connect "$@" ;;
+    wake)       shift; cmd_wake "$@" ;;
     trust)      shift; cmd_trust "$@" ;;
     fingerprint) shift; cmd_fingerprint "$@" ;;
     gui)        shift; cmd_gui "$@" ;;

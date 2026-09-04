@@ -74,6 +74,14 @@ def fetch(host, port, timeout):
             raise RuntimeError("the server rejected X509Plain")
 
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        # ⛔ TLS 1.2 AT THE LOWEST, stated rather than inherited. Not verifying
+        # (below) is a deliberate part of trust-on-first-use; accepting TLS 1.0
+        # or 1.1 to get there is not, and nothing here needs them — wayvnc
+        # speaks 1.2 and 1.3 through GnuTLS. The default minimum has moved with
+        # the Python version before now, and a fetch that quietly negotiated a
+        # broken version would be handing somebody a fingerprint to trust
+        # forever. CodeQL flags the unstated case for exactly that reason.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         tls = ctx.wrap_socket(s)

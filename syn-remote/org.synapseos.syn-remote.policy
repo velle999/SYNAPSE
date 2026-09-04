@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Lets somebody sitting at this machine arm it to be woken by a magic packet.
+
+  ⚠ allow_active, and deliberately NOT allow_inactive. An SSH login is an
+  inactive session, so reaching in from the network to change whether this
+  machine can be woken from the network falls through to an administrator
+  password — while the person at the keyboard, who could simply hold the power
+  button, is not asked for one.
+
+  What is granted is one flag on one network interface: it cannot open a port,
+  read traffic, or change an address. The helper takes an interface name and
+  nothing else, validates it against what a netdev name can be, and passes it
+  to two ioctls — it never builds a path or a command line out of it.
+
+  SynapseOS Project
+  SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<policyconfig>
+  <vendor>SynapseOS</vendor>
+  <vendor_url>https://soslinux.org</vendor_url>
+
+  <action id="org.synapseos.syn-remote.wol">
+    <description>Change whether this machine can be woken over the network</description>
+    <message>Authentication is required to change whether a magic packet can wake this machine.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/syn-remote/syn-remote-wol</annotate>
+  </action>
+</policyconfig>

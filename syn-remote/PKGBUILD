@@ -112,8 +112,36 @@ pkgver=0.1.0
 #     last certificate.
 #   ⛔ AND THE VALUE IS VALIDATED. It reaches openssl inside -addext, where a
 #     comma forges a second SAN.
-pkgrel=6
-pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken and held awake while somebody is connected"
+# 7: a machine that is ASLEEP answers nothing at all, which is the last gap in
+#   "reach this desktop from somewhere else" — and the thing every other part
+#   of this package works around. `syn-remote wakeable [on|off]` arms the wired
+#   card for a magic packet; `syn-remote wake <name>` sends one, and `connect`
+#   sends one by itself when the machine it is opening is not answering.
+#   ⛔ TWO MECHANISMS, AND BOTH ARE NEEDED. NetworkManager REMEMBERS the flag
+#     (802-3-ethernet.wake-on-lan is re-applied at every activation, which is
+#     what survives a reboot, a replug, and a driver that clears it on
+#     link-down); syn-remote-wol APPLIES it now, because activating the
+#     connection you are reaching the machine over drops the link underneath
+#     you. Setting only the first leaves it unwakeable until the next reboot;
+#     setting only the second loses it AT that reboot.
+#   ⛔ AND THE STATE IS ASKED OF THE CARD, never read back off the setting. The
+#     two disagree in the case that matters — armed now, forgotten at the next
+#     boot — and both ioctls want CAP_NET_ADMIN even to READ, because GWOL can
+#     return a SecureOn password. Hence the helper and its polkit action, and
+#     hence exit 77 meaning "ask again with privilege" rather than everything
+#     going through pkexec on the chance that it is needed.
+#   ⚠ ethtool is NOT a dependency and neither is wakeonlan: this is two ioctls
+#     and one UDP datagram, and python3 (already the certificate fetcher) is
+#     what sends the datagram, because a magic packet is a broadcast and bash
+#     has no way to set SO_BROADCAST on /dev/udp.
+#   ⛔ THE EMPTY COLUMN BUG, FOUND ADDING THE mac FIELD AND FIXED EVERYWHERE:
+#     tab is an IFS *whitespace* character, so `IFS=$'\t' read` collapses a run
+#     of tabs and an EMPTY FIELD VANISHES, shifting every column after it one
+#     to the left. A connection saved with no user name is exactly that record
+#     — the TUI had been showing it the wrong password state for as long as
+#     there has been a TUI. Records are re-separated onto US (0x1f) to read.
+pkgrel=7
+pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -141,7 +169,12 @@ depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python')
 # machine awake. Optional rather than required so this still installs on a
 # SynapseOS built without the compositor — the screen is still woken, it just
 # is not held, and the wrapper checks for the file rather than assuming it.
-optdepends=('synui: hold the machine awake while somebody is connected'
+# ⚠ NetworkManager is OPTIONAL AND LOAD-BEARING, which is why it says which
+# half it is. Without it `wakeable on` still arms the card — it just cannot ask
+# anything to do it again after a reboot, and says so at the time.
+optdepends=('networkmanager: remember the wake setting across reboots'
+            'polkit: arm the card without being root'
+            'synui: hold the machine awake while somebody is connected'
             'openssh: reach a loopback-bound server from another machine'
             'quickshell: the Remote Desktop window — the CLI needs none of it'
             'syntty: where `saved <name> set` asks for a password'
@@ -163,6 +196,10 @@ build() {
         $(pkg-config --cflags gtk+-3.0 gtk-vnc-2.0) \
         -o syn-remote-view syn-remote-view.c \
         $(pkg-config --libs gtk+-3.0 gtk-vnc-2.0)
+
+    # ⚠ Two ioctls and no libraries. This is what ethtool would have been
+    # installed for, and it is smaller than the dependency.
+    gcc -O2 -Wall -Wextra -o syn-remote-wol syn-remote-wol.c
 }
 
 package() {
@@ -188,6 +225,14 @@ package() {
     install -Dm755 syn-remote-view "$pkgdir/usr/lib/syn-remote/syn-remote-view"
     install -Dm755 syn-remote-getcert.py \
         "$pkgdir/usr/lib/syn-remote/syn-remote-getcert"
+
+    # ⛔ /usr/lib AND NOT SETUID. It is reached through pkexec, whose polkit
+    # action names this exact path — a copy in the PATH would be a second way
+    # in that the action does not cover, and a setuid bit would make it one
+    # that answers to anybody rather than to an active local session.
+    install -Dm755 syn-remote-wol "$pkgdir/usr/lib/syn-remote/syn-remote-wol"
+    install -Dm644 org.synapseos.syn-remote.policy \
+        "$pkgdir/usr/share/polkit-1/actions/org.synapseos.syn-remote.policy"
 
     # ⛔ NOT ENABLED HERE, and not by a scriptlet either. A package that
     # installs a remote desktop and switches it on is a package that opens a

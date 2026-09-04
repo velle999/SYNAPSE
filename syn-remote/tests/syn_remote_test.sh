@@ -138,8 +138,15 @@ rm -f "$farm/wayvnc"
 check "a machine with no wayvnc says so" "no" \
       "$(PATH="$stub:$farm" "$SR" status --rec | awk -F'\t' '$1=="wayvnc"{print $2}')"
 # ...and it only means anything if it says yes when wayvnc IS there.
+#
+# ⛔ THE PRESENT CASE HAS TO BE BUILT TOO. This read the ordinary environment
+# and expected "yes", which is true only on a machine that happens to have the
+# server installed — so it passed on every developer box and FAILED IN CI,
+# where nothing installs wayvnc. Both halves of a two-sided assertion have to
+# be constructed, or the suite is testing the machine it is running on.
+: > "$farm/wayvnc"; chmod +x "$farm/wayvnc"
 check "...and says so the other way round too" "yes" \
-      "$(awk -F'\t' '$1=="wayvnc"{print $2}' <<<"$rec")"
+      "$(PATH="$stub:$farm" "$SR" status --rec | awk -F'\t' '$1=="wayvnc"{print $2}')"
 
 # ── 6. THE WHOLE POINT: waking a blanked screen ───────────
 #
@@ -260,7 +267,11 @@ check "...and the user"                "velle"        "$("$SR" hosts --tsv | awk
 check "a host with no port gets 5900"  "5900"         "$("$SR" hosts --tsv | awk -F'\t' '$1=="attic"{print $3}')"
 
 # The header row is why an empty list can be told from a broken command.
-check "the record names its columns" "name	host	port	user	secret	pinned" \
+#
+# ⛔ PINNED IN FULL, AND mac IS LAST. The window and the TUI index these columns
+# by position, so a column inserted anywhere but the end shifts every one after
+# it — a saved password read as a port number, in a build where nothing failed.
+check "the record names its columns" "name	host	port	user	secret	pinned	mac" \
       "$("$SR" hosts --tsv | head -1)"
 
 # ⛔ A NAME IS A KEY IN THREE FILES. A tab would split a record and a newline
@@ -542,7 +553,17 @@ case "$out" in
     *)  bad "trust produced something unexpected: $out" ;;
 esac
 # And connect must SAY so rather than hand the viewer a doomed connection.
-out=$("$SR" connect tls 2>&1 </dev/null)
+#
+# ⛔ WITH A VIEWER IN PLACE, which is why this calls the function rather than
+# the script. `connect` checks that the viewer exists before it asks about the
+# certificate, so on a machine where the package is not INSTALLED — CI, every
+# time — the refusal under test was replaced by "the viewer is missing" and
+# this case failed for a reason that has nothing to do with pinning. The
+# override is the same one section 6 uses for the idle inhibitor: a shell
+# variable in a subshell, not an environment seam the shipped script would
+# have to trust.
+touch "$stub/fakeviewer"; chmod +x "$stub/fakeviewer"
+out=$(VIEWER="$stub/fakeviewer" cmd_connect tls 2>&1 </dev/null)
 case "$out" in
     *"no trusted certificate"*) ok "connect refuses an unpinned server, by name" ;;
     *) bad "connect did not refuse an unpinned server: $out" ;;
@@ -625,6 +646,18 @@ awk '/id: actProc/,/^    }/' "$qml" | grep -q 'stderr: StdioCollector' &&
     ok "every button's failure is collected, not discarded" ||
     bad "actProc throws stderr away; a refused command looks like a dead button"
 
+# ── 13b. the certificate fetcher's TLS ────────────────────
+#
+# ⛔ NOT VERIFYING IS THE POINT; NEGOTIATING ANYTHING IS NOT. This fetch exists
+# to obtain the certificate that verification would need, so it cannot verify —
+# and that makes the version it negotiates the only protection left. Python's
+# default minimum has moved between releases, so it is stated in the file
+# rather than inherited from whichever interpreter the machine has.
+getcert="$here/../syn-remote-getcert.py"
+grep -q 'minimum_version = ssl.TLSVersion.TLSv1_2' "$getcert" &&
+    ok "the certificate fetcher will not go below TLS 1.2" ||
+    bad "syn-remote-getcert does not state a minimum TLS version"
+
 # ── 14. the viewer's own reasons ──────────────────────────
 grep -q 'VNC_DISPLAY_CREDENTIAL_PASSWORD' "$view" &&
     ok "the viewer answers the password credential" ||
@@ -639,6 +672,230 @@ grep -q 'VNC_DISPLAY_CREDENTIAL_CLIENTNAME' "$view" &&
 grep -q 'creds_refused' "$view" &&
     ok "a refused password is not offered a second time" ||
     bad "the viewer would re-send a password the server already refused"
+
+# ── 15. waking a machine that is asleep ───────────────────
+#
+# ⛔ NOT ONE PACKET LEAVES THIS MACHINE. A magic packet is a BROADCAST, so a
+# suite that sent a real one would wake whatever is listening on the network of
+# whoever is running the tests — including a build machine in somebody else's
+# office. Everything below drives the wrapper's own logic against stand-ins,
+# and the packet itself is asserted byte for byte against a fake socket.
+#
+# ⛔ AND NOT ONE LIVE SETTING IS TOUCHED. `wakeable on` writes two places — the
+# card's flag and the NetworkManager profile — and both are seamed here. The
+# last case in this section asserts the real `nmcli` was never called at all,
+# because a suite that quietly reconfigured the developer's network while
+# printing "ok" is the worst outcome available.
+
+wolstate="$T/wol.state"; echo yes > "$wolstate"
+cat > "$stub/wolhelper" <<'EOF'
+#!/bin/sh
+case "$1" in
+  get) ;;
+  set) [ "${WOL_SUPPORTED:-yes}" = no ] && [ "$3" = on ] && exit 2
+       printf '%s' "$3" | sed 's/^on$/yes/;s/^off$/no/' > "$WOL_STATE" ;;
+  *)   exit 1 ;;
+esac
+printf 'field\tvalue\ninterface\t%s\nsupported\t%s\nmagic\t%s\n' \
+       "$2" "${WOL_SUPPORTED:-yes}" "$(cat "$WOL_STATE")"
+EOF
+chmod +x "$stub/wolhelper"
+
+cat > "$stub/nmclistub" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$NM_LOG"
+case "$*" in
+  *"NAME,DEVICE connection show --active"*) echo "Wired connection 1:eth0" ;;
+  *"802-3-ethernet.wake-on-lan connection show"*)
+      echo "802-3-ethernet.wake-on-lan:$(cat "$NM_SETTING")" ;;
+  *"connection modify"*)
+      printf '%s' "$*" | sed -n 's/.*wake-on-lan \([a-z]*\).*/\1/p' > "$NM_SETTING" ;;
+esac
+exit 0
+EOF
+chmod +x "$stub/nmclistub"
+
+# A fixture of network interfaces, because the real /sys/class/net on the
+# machine running this is whatever that machine happens to have — and the thing
+# under test is precisely which one gets picked out of a mixed bag.
+net="$T/net"; mkdir -p "$net"
+mkdir -p "$net/lo"                                        # no device link at all
+mkdir -p "$net/docker0"; echo 1 > "$net/docker0/carrier"  # a bridge: DEVTYPE, no device
+printf 'DEVTYPE=bridge\n' > "$net/docker0/uevent"
+mkdir -p "$net/wlan0/device" "$net/wlan0/phy80211"        # wireless: WoWLAN is not this
+echo 1 > "$net/wlan0/carrier"
+mkdir -p "$net/eth1/device"; echo 0 > "$net/eth1/carrier" # wired, but no cable
+mkdir -p "$net/eth0/device"; echo 1 > "$net/eth0/carrier" # the answer
+printf 'INTERFACE=eth0\n' > "$net/eth0/uevent"
+echo "aa:bb:cc:dd:ee:ff" > "$net/eth0/address"
+
+export NM_LOG="$T/nmcli.log" NM_SETTING="$T/nm.setting" WOL_STATE="$wolstate"
+echo default > "$NM_SETTING"
+wk() { SYN_REMOTE_NET_DIR="$net" SYN_REMOTE_WOL_HELPER="$stub/wolhelper" \
+       SYN_REMOTE_NMCLI="$stub/nmclistub" "$SR" wakeable "$@"; }
+
+check "the wired interface with a link is the one picked" "eth0" \
+      "$(wk --rec | awk -F'\t' '$1=="interface"{print $2}')"
+# Each of these was a real candidate for being picked by accident.
+check "...and its address is read from it" "aa:bb:cc:dd:ee:ff" \
+      "$(wk --rec | awk -F'\t' '$1=="mac"{print $2}')"
+
+# ⛔ THE STATE IS ASKED OF THE CARD, NOT OF THE SETTING. These two disagree in
+# exactly the case that matters — armed now, forgotten at the next boot — and a
+# switch that reports its own setting back to itself is how a feature says "on"
+# for four releases with nothing behind it.
+echo no > "$wolstate"; echo magic > "$NM_SETTING"
+check "a disarmed card reads as disarmed even when the profile says magic" "no" \
+      "$(wk --rec | awk -F'\t' '$1=="armed"{print $2}')"
+check "...and the profile is reported separately, not instead" "magic" \
+      "$(wk --rec | awk -F'\t' '$1=="remembered"{print $2}')"
+
+# ── on and off write BOTH places ──────────────────────────
+echo no > "$wolstate"; echo none > "$NM_SETTING"
+wk on >/dev/null 2>&1
+check "wakeable on arms the card now" "yes" "$(cat "$wolstate")"
+check "...and tells NetworkManager to do it again at every activation" "magic" \
+      "$(cat "$NM_SETTING")"
+wk off >/dev/null 2>&1
+check "wakeable off disarms the card"  "no"   "$(cat "$wolstate")"
+check "...and stops NetworkManager re-arming it"  "none" "$(cat "$NM_SETTING")"
+
+# ⛔ THE CARD FIRST, THE PROFILE ONLY IF IT TOOK. A card that cannot do magic
+# packets must not leave a NetworkManager profile behind claiming it can — that
+# profile outlives the machine's memory of the failure.
+echo none > "$NM_SETTING"
+out=$(WOL_SUPPORTED=no wk on 2>&1)
+grep -q 'cannot be woken' <<<"$out" &&
+    ok "a card that cannot do it says so" ||
+    bad "wakeable on was silent about a card with no magic-packet support"
+check "...and wrote nothing to NetworkManager" "none" "$(cat "$NM_SETTING")"
+
+# ⛔ "COULD NOT ASK" IS NOT "NO". With the helper missing — a half-installed
+# package, or a kernel that refused — an answer of "this card cannot be woken"
+# would be a hardware verdict reached from a missing file.
+out=$(SYN_REMOTE_NET_DIR="$net" SYN_REMOTE_WOL_HELPER="$T/not-installed" \
+      SYN_REMOTE_NMCLI="$stub/nmclistub" "$SR" wakeable 2>&1)
+grep -q 'not known' <<<"$out" &&
+    ok "a card that could not be asked is reported as unknown" ||
+    bad "wakeable turned a missing helper into a verdict about the card: $out"
+grep -q 'could not be run' <<<"$out" &&
+    ok "...and says which helper it could not run" ||
+    bad "nothing said why the card could not be asked"
+check "...and the record says unknown too" "unknown" \
+      "$(SYN_REMOTE_NET_DIR="$net" SYN_REMOTE_WOL_HELPER="$T/not-installed" \
+         SYN_REMOTE_NMCLI="$stub/nmclistub" "$SR" wakeable --rec |
+         awk -F'\t' '$1=="armed"{print $2}')"
+
+# ── the packet ────────────────────────────────────────────
+#
+# ⚠ THE REAL FUNCTION, EXTRACTED FROM THE SCRIPT. The python is lifted out of
+# syn-remote.sh verbatim and run against a fake socket module, so this cannot
+# drift from what actually ships — a copy of the packet-building code here
+# would pass forever after the original was changed.
+fake="$T/fakesock"; mkdir -p "$fake"
+cat > "$fake/socket.py" <<'EOF'
+import json, os
+AF_INET = 2; SOCK_DGRAM = 2; SOL_SOCKET = 1; SO_BROADCAST = 6
+class socket:
+    def __init__(self, *a): self.opts = []
+    def setsockopt(self, lvl, opt, val): self.opts.append((lvl, opt, val))
+    def sendto(self, data, addr):
+        with open(os.environ["SENT"], "a") as f:
+            f.write(json.dumps({"len": len(data), "hex": data.hex(),
+                                "to": addr[0], "port": addr[1],
+                                "bcast": (SOL_SOCKET, SO_BROADCAST, 1) in self.opts}) + "\n")
+EOF
+awk '/^magic_packet\(\)/,/^}/' "$SR" | awk '/<<.PY.$/{p=1;next} /^PY$/{p=0} p' > "$T/packet.py"
+[ -s "$T/packet.py" ] && ok "the packet builder was found in the script" \
+                      || bad "could not extract magic_packet's python from syn-remote.sh"
+export SENT="$T/sent.jsonl"; : > "$SENT"
+PYTHONPATH="$fake" python3 "$T/packet.py" "aa:bb:cc:dd:ee:ff" "192.0.2.9" 2>/dev/null
+# 6 bytes of 0xFF and the address sixteen times over: 6 + 96 = 102.
+check "the packet is a magic packet" "102" \
+      "$(awk -F'"len": ' 'NR==1{print $2+0}' "$SENT")"
+check "...six 0xFF and the address sixteen times" \
+      "ffffffffffff$(for i in $(seq 16); do printf 'aabbccddeeff'; done)" \
+      "$(python3 -c 'import json,sys;print(json.loads(open(sys.argv[1]).readline())["hex"])' "$SENT")"
+# ⛔ WITHOUT SO_BROADCAST THE KERNEL REFUSES THE SEND, and it refuses it
+# silently enough that the wrapper would report a packet it never put on
+# the wire.
+check "...sent with SO_BROADCAST set" "true" \
+      "$(python3 -c 'import json,sys;print(str(json.loads(open(sys.argv[1]).readline())["bcast"]).lower())' "$SENT")"
+check "...to the broadcast address and to the host itself" "255.255.255.255 192.0.2.9" \
+      "$(python3 -c '
+import json,sys
+seen=[]
+for l in open(sys.argv[1]):
+    d=json.loads(l)
+    if d["to"] not in seen: seen.append(d["to"])
+print(" ".join(seen))' "$SENT")"
+
+# ── what is saved, and what is refused ────────────────────
+"$SR" add wakeme 192.0.2.50 --mac AA-BB-CC-DD-EE-01 >/dev/null 2>&1
+check "a hardware address is saved with the connection" "AA-BB-CC-DD-EE-01" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="wakeme"{print $7}')"
+# ⛔ AND THE EMPTY COLUMN BEFORE IT IS STILL A COLUMN. `wakeme` was saved with
+# no user name, and tab is an IFS *whitespace* character — so a run of two tabs
+# read as one, the empty user field vanished, and every column after it moved
+# one to the left: the hardware address arrived in the user's place. It is read
+# on a non-whitespace separator for that reason, and this is the case that
+# says so. The same collapse was already giving the TUI the wrong password
+# state for any host saved without a user name.
+check "...and the empty user column before it is still empty" "" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="wakeme"{print $4}')"
+check "...with the columns still in their places" "none" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="wakeme"{print $5}')"
+out=$("$SR" add nope 192.0.2.51 --mac "not-a-mac" 2>&1)
+grep -q 'six pairs of hex' <<<"$out" && ok "...and nonsense in that column is refused" \
+                                     || bad "an invalid hardware address was accepted"
+"$SR" hosts --tsv | grep -q '^nope	' && bad "the refused connection was saved anyway" \
+                                      || ok "...with nothing saved for it"
+
+# ⚠ A hosts file written by an older syn-remote has four columns. It must read
+# back as "no address saved", not as a short record the window drops.
+printf 'old\t192.0.2.60\t5900\tvelle\n' >> "$XDG_CONFIG_HOME/syn-remote/hosts"
+check "a connection saved before there was a mac column still reads" "192.0.2.60" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="old"{print $2}')"
+check "...with an empty address rather than a missing column" "6" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="old"{print NF-1}')"
+
+# ⛔ NOTHING TO SEND TO IS AN ERROR WITH THE FIX IN IT, not a packet into the
+# void addressed to nothing.
+out=$(SYN_REMOTE_WAKE_WAIT=1 "$SR" wake old 2>&1)
+grep -q 'no hardware address' <<<"$out" && ok "waking a machine with no address saved refuses" \
+                                        || bad "wake was silent about having no address to send to"
+grep -q -- '--mac' <<<"$out" && ok "...and says how to give it one" \
+                             || bad "the refusal does not say how to fix it"
+
+# ⛔ A MACHINE THAT IS ANSWERING IS NOT WOKEN. The packet is harmless but the
+# broadcast is not free, and "it says it woke something that was never asleep"
+# is a report nobody can act on.
+python3 -c '
+import socket, sys, time
+s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(1)
+open(sys.argv[1], "w").write(str(s.getsockname()[1]))
+time.sleep(60)' "$T/port" &
+listener=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$T/port" ] && break; sleep 0.2; done
+lport=$(cat "$T/port" 2>/dev/null)
+if [ -n "$lport" ]; then
+    "$SR" add awake "127.0.0.1:$lport" --mac aa:bb:cc:dd:ee:02 >/dev/null 2>&1
+    : > "$SENT"
+    out=$(SENT="$SENT" PYTHONPATH="$fake" "$SR" wake awake 2>&1)
+    grep -q 'already awake' <<<"$out" && ok "a machine that is answering is not sent a packet" \
+                                      || bad "wake fired at a machine that was already awake"
+else
+    bad "could not start a local listener for the already-awake case"
+fi
+kill "$listener" 2>/dev/null
+
+# ⛔ AND THE LIVE MACHINE WAS NEVER TOUCHED. Every case above went through the
+# seams; if any of them fell through to the real tools, this is where it shows.
+[ -s "$NM_LOG" ] && ok "the nmcli stand-in was the one that was called" \
+                 || bad "no call reached the nmcli stand-in — something used the real one"
+grep -q 'connection modify' "$NM_LOG" && ok "...including the write" \
+                                      || bad "wakeable on never wrote a profile at all"
+
 
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi

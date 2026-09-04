@@ -361,6 +361,15 @@ ShellRoot {
     property var hosts: []      // [{name, host, port, user, secret, pinned}]
     property string selected: ""
     property bool   busy: false
+    /*
+     * ⛔ WHAT IS HAPPENING RIGHT NOW, because one of these buttons is no longer
+     * instant. Waking a machine sends a packet nothing answers and then waits
+     * up to a minute for the machine to start answering — and a window that
+     * shows nothing for a minute is a window whose button did not work, which
+     * is the failure this file already refuses to ship twice over.
+     */
+    property string activity: ""
+
     property string problem: ""
 
     readonly property var chosen: {
@@ -382,12 +391,17 @@ ShellRoot {
             const line = raw.replace(/\s+$/, "")
             if (line === "") continue
             const f = line.split("\t")
-            // The header row, and anything that is not five columns. A short
+            // The header row, and anything that is not six columns. A short
             // row is a format change, not a connection, and inventing fields
             // for it would put an empty host in the list that cannot be opened.
+            //
+            // ⚠ mac is READ WITH A FALLBACK and is NOT part of that count. It
+            // is the last column and the newest one, so a `hosts --tsv` from an
+            // older syn-remote is six columns and still perfectly readable —
+            // requiring seven here would empty the list on a mixed install.
             if (f[0] === "name" || f.length < 6) continue
             out.push({ name: f[0], host: f[1], port: f[2], user: f[3],
-                       secret: f[4], pinned: f[5] === "yes" })
+                       secret: f[4], pinned: f[5] === "yes", mac: f[6] || "" })
         }
         root.hosts = out
         if (out.length && !root.chosen) root.selected = out[0].name
@@ -456,11 +470,12 @@ ShellRoot {
         stderr: StdioCollector {
             onStreamFinished: if (this.text) root.problem = String(this.text).trim()
         }
-        onExited: root.reload()
+        onExited: { root.activity = ""; root.reload() }
     }
-    function run(args) {
+    function run(args, doing) {
         actProc.running = false
         root.problem = ""
+        root.activity = doing || ""
         actProc.command = args
         actProc.running = true
     }
@@ -485,7 +500,12 @@ ShellRoot {
      */
     function connectHost(h) {
         if (!h) return
-        if (h.pinned) run(["syn-remote", "connect", h.name])
+        // ⚠ `connect` wakes a machine that is not answering before it opens
+        // anything, so this press can now take a minute on a sleeping host.
+        // Said here rather than left as a still window.
+        if (h.pinned) run(["syn-remote", "connect", h.name],
+                          h.mac ? "Opening " + h.name + " — waking it first if it is asleep…"
+                                : "Opening " + h.name + "…")
         else          run(["syntty", "--hold", "-e", "syn-remote", "connect", h.name])
     }
 
@@ -702,6 +722,24 @@ ShellRoot {
                         onClicked: root.setPassword(root.chosen.name)
                     }
                     Act {
+                        /*
+                         * ⚠ SHOWN EVEN WHEN IT CANNOT BE PRESSED, and saying
+                         * which of the two that is. A button that appears only
+                         * for hosts with a hardware address would leave no
+                         * trace on the ones without — and "why can I not wake
+                         * this one" is precisely the question the label has to
+                         * answer.
+                         */
+                        text: root.chosen && root.chosen.mac
+                              ? "Wake it" : "Cannot wake this one"
+                        enabled: !!(root.chosen && root.chosen.mac)
+                        opacity: enabled ? 1 : 0.45
+                        onClicked: root.run(["syn-remote", "wake", root.chosen.name],
+                                            "Waking " + root.chosen.name
+                                            + " — nothing answers a wake packet,"
+                                            + " so this waits for the machine…")
+                    }
+                    Act {
                         text: "Forget this connection"
                         tint: root.cWarn
                         onClicked: root.run(["syn-remote", "forget", root.chosen.name])
@@ -711,9 +749,11 @@ ShellRoot {
                 // ── anything the command complained about ──
                 Text {
                     width: parent.width
-                    visible: root.problem !== ""
-                    text: root.problem
-                    color: root.cWarn
+                    // A complaint outranks a progress line: if the command has
+                    // already failed, what it was trying to do is history.
+                    visible: root.problem !== "" || root.activity !== ""
+                    text: root.problem !== "" ? root.problem : root.activity
+                    color: root.problem !== "" ? root.cWarn : root.cDim
                     font.family: root.uiFont
                     font.pixelSize: root.ui(11)
                     wrapMode: Text.Wrap
