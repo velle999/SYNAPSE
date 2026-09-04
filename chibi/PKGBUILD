@@ -12,7 +12,32 @@ pkgver=0.1.0
 #   are byte-identical across whisper sizes — so it read as partial corruption
 #   rather than a whole stale model. Nothing about the package changes: the
 #   installed paths are what piper and faster-whisper look for and stay put.
-pkgrel=22
+# 23: A GEAR IN THE WINDOW — your name and your city, without editing Python.
+#   The two settings a person actually changes were only ever settable by hand
+#   in config.local.py, and on a packaged install the obvious copy of that file
+#   is /usr/lib/chibi/app/config.local.py: root-owned, replaced wholesale on
+#   every upgrade, so the obvious place is also the wrong one. The panel writes
+#   the XDG copy, which is both writable and the LAST of the three loaded.
+#
+#   ⚠ EVERY ROW TAKES EFFECT WHILE RUNNING, which is what decided which rows
+#   exist. The name rebuilds the prompts (substitution CONSUMES the {user_name}
+#   placeholder, so setting it afterwards used to rename the person everywhere
+#   except in the prompts Chibi speaks from); the city wakes the weather thread
+#   instead of waiting out its ten-minute interval; the switch is read by that
+#   thread each time round rather than once at startup.
+#
+#   ⛔ THE SAVE MERGES. config.local.py holds an API key, an LLM host and a
+#   dream-sync token, and it is hand-edited — a panel writing its own three
+#   fields over the whole file would delete the rest the first time somebody
+#   changed their city. Values go through repr(), because the file is EXECUTED
+#   and an apostrophe in a name is a syntax error that takes every setting in it
+#   down with it.
+#
+#   Upstream carries tools/check-settings.py for the seam, and all three app
+#   copies stay identical (tools/check-shared.sh) — main.py, config.py and
+#   data_feeds.py are all on the shared list, and 1080x1920-linux is the one
+#   this package ships.
+pkgrel=23
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -26,7 +51,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=759e2d7bd51b37cd4b2453e8f12dbc587fc447b0
+_commit=c381a01af4c25cfd5e4cff4762c25b8c25585fe8
 
 # Runtime deps.
 #
