@@ -42,7 +42,10 @@ pkgver=0.1.0
 #   `lsb-release` package with NO backup array, so pacman puts "Arch Linux" back
 #   on every upgrade of it, silently — hence a hook, not a one-time edit. It is
 #   a dependency of steam and proton-cachyos-slr, so it is on any gaming box.
-pkgrel=30
+# 31: a `remote` row in the Nix profile example, for syn-remote — the ISO
+#   carries it now, so a profile that names every other component and not this
+#   one is a profile that quietly leaves it out.
+pkgrel=31
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -345,6 +345,11 @@ PACKAGES=(
     # missing if it cannot. On the ISO because a live session is exactly where
     # somebody tries "does my hardware do this yet".
     syn-gfn
+    # syn-remote — remote desktop over wayvnc. On the ISO because a live
+    # session is a common way to reach a machine that will not boot, and
+    # because wayvnc and wlopm are ordinary `extra` packages that the image
+    # already knows how to pull.
+    syn-remote
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

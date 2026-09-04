@@ -373,7 +373,12 @@ pkgver=0.1.0
 #   of its label, Back and Next swap. LayoutMirroring does all of it from one
 #   flag — ⛔ attached to an ITEM, since on quickshell's FloatingWindow it logs
 #   "only works with Items and Windows" and does nothing.
-pkgrel=115
+# 116: a Remote access row, for syn-remote. On the ISO, so an install that
+#   never offered it would work on the media and be missing on the machine
+#   installed from it — which is the drift `installer` in preflight exists to
+#   catch. ⚠ TWO LISTS: SEL_COMPONENTS here and the window's own copy in
+#   syn-install-gui.qml, plus the label in all thirteen catalogs.
+pkgrel=116
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

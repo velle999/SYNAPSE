@@ -74,6 +74,7 @@ EXTERNAL=(
     synsh synstudio syn-vault
     # packages, security and gaming — each installs and runs on plain Arch
     synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
+    syn-remote
     # the AI stack, and the package that lets a stranger satisfy it with the
     # distribution's own llama.cpp instead of a tree only an ISO build stages
     synapse-llama-system synapd synnet
@@ -148,6 +149,7 @@ declare -A TOPICS=(
     [synguard]="security ebpf intrusion-detection monitoring"
     [syn-arcade]="gaming game-overlay controller mangohud"
     [syn-gfn]="cloud-gaming geforce-now gaming"
+    [syn-remote]="remote-desktop vnc wayland wlroots wayvnc"
     [synapd]="llm llama-cpp inference-server daemon ai"
     [synnet]="firewall nftables network-security daemon"
     [synapse-llama-system]="llama-cpp ggml meta-package ai"

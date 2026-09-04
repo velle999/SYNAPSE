@@ -217,7 +217,9 @@ pkgver=0.1.0
 #   os_identity_test.sh gains the invariant as a check of its own — comments and
 #   quoted strings stripped, so `Run this once in a terminal: sudo chown …` is
 #   still allowed to say sudo. Run against 57 it names all nineteen.
-pkgrel=58
+# 59: syn-remote joins COMPONENTS. A component in no update list is frozen
+#   on every installed machine with nothing saying so.
+pkgrel=59
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -127,6 +127,9 @@
     synplay  = true;     # syn-play: playlists, shuffle and history over mpv
     synstudio = true;    # the darkroom: RAW develop, masks, graded video
     gfn      = true;     # syn-gfn: GeForce NOW, in a browser you already have
+    remote   = true;     # syn-remote: reach this desktop from another
+                         # machine. Installed off — `syn-remote on` is
+                         # the whole opt-in, and it binds to loopback.
     arsenal  = true;
     chibi    = true;
     vibe     = true;

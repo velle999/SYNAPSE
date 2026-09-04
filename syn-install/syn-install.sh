@@ -1516,6 +1516,7 @@ SEL_COMPONENTS=(
     "comp_synplay|1|1|app|syn-play|Player|playlists + mpv"
     "comp_synstudio|1|1|app|synstudio|Studio|photo + video"
     "comp_gfn|1|1|app|syn-gfn|GeForce NOW|cloud gaming"
+    "comp_remote|1|1|app|syn-remote|Remote access|VNC, opt-in"
     "comp_arsenal|1|1|app|syn-arsenal|Arsenal|BlackArch tools"
     "comp_chibi|1|1|app|chibi|Chibi|voice companion"
     "comp_vibe|1|1|app|vibe|Vibe|AI coding help"

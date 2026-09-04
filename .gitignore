@@ -81,6 +81,7 @@ synapse-llama/src/
 synapse-wallpapers/src/
 vibe/src/
 syn-gfn/src/
+syn-remote/src/
 # Same again for cliamp (bjarneo/cliamp), pinned by tag=v$pkgver. src/ holds the
 # throwaway clone plus the GOPATH the Go build fills in. Neither was ignored
 # when cliamp became a package, so the first build in /var/lib/synapse-src left

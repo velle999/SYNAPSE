@@ -473,6 +473,7 @@ FloatingWindow {
             { key: "comp_synplay",     std: 1, full: 1, min: 0, label: root.t("Player — playlists, shuffle and history, on mpv") },
             { key: "comp_synstudio",   std: 1, full: 1, min: 0, label: root.t("Studio — photo darkroom and video") },
             { key: "comp_gfn",         std: 1, full: 1, min: 0, label: root.t("GeForce NOW — cloud gaming in a browser") },
+            { key: "comp_remote",      std: 1, full: 1, min: 0, label: root.t("Remote desktop — reach this machine from another") },
             { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: root.t("Arsenal — BlackArch browser") },
             { key: "comp_chibi",       std: 1, full: 1, min: 0, label: root.t("Chibi — voice companion") },
             { key: "comp_vibe",        std: 1, full: 1, min: 0, label: root.t("Vibe — AI coding assistant") },

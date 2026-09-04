@@ -1,0 +1,21 @@
+[Unit]
+Description=SynapseOS remote desktop (wayvnc)
+Documentation=man:wayvnc(1)
+# A USER unit, because on an installed system greetd starts synui as the user
+# and the Wayland socket lives in that user's runtime directory. The live
+# image's root-on-tty1 synui.service is the other case; this follows the
+# session either way, because it asks the compositor where its socket is
+# rather than being told at unit-generation time.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/syn-remote run
+Restart=on-failure
+RestartSec=3
+# ⚠ The wrapper backgrounds a watcher and then execs wayvnc, so the main
+# process IS the server and `systemctl --user status` reports on it. The
+# watcher dies with the cgroup.
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

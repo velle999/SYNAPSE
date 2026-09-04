@@ -404,6 +404,19 @@ jobs:
         run: |
           ./syn-gfn/tests/syn_gfn_test.sh
 
+      # syn-remote is thin — wayvnc does the VNC — so what is tested is the part
+      # a wrapper has to get right, and each has a silent failure behind it:
+      # WHERE IT LISTENS (synnet's default-drop input chain accepts every
+      # private-range source, so 0.0.0.0 means the whole LAN and nothing says
+      # so), WHO CAN READ THE PASSWORD (the settings file is replaced through a
+      # temporary on every change, so a chmod at creation does not survive), and
+      # WAKING THE SCREEN (a blanked output cannot be captured at all, so
+      # without it a viewer gets a black rectangle it cannot click out of).
+      # Driven against stubs: no unit is enabled and no port is opened.
+      - name: Remote desktop wrapper (syn-remote)
+        run: |
+          ./syn-remote/tests/syn_remote_test.sh
+
       # Whether MangoHud's Vulkan layer loads in EVERY client in the session.
       # It used to, which segfaulted the live wallpaper, synstudio and
       # synstudio's own test suite on AMD and nothing on NVIDIA — so the

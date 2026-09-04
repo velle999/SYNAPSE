@@ -34,7 +34,7 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        vibe chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-vault syn-clean syn-play
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn)
+       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -474,6 +474,14 @@ build_component synstudio
 # and names what is missing if it cannot, which is the right answer for a
 # service not everybody uses — see its PKGBUILD.
 build_component syn-gfn
+
+# syn-remote — the desktop from somewhere else, over wayvnc. Two files and no
+# compiler, so like syn-gfn it has no ordering constraint.
+#
+# ⚠ IT DEPENDS ON wayvnc, unlike syn-gfn's runtime browser search — wayvnc IS
+# the server here, and a wrapper that installs without the thing that does the
+# work is a package that does not work. See its PKGBUILD.
+build_component syn-remote
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.

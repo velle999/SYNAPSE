@@ -481,6 +481,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
 | **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, per-clip motion and retiming, keyframed grades, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets and a render queue. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
 | **`syn-gfn`** | GeForce NOW, in a browser that can hold the mouse — a launcher rather than a client, because pointer lock, keyboard lock, fullscreen, hardware video decode and WebRTC all belong to a browser engine that is already written and already tested against the service. Runs the first Chromium-family browser on the machine in a profile of its own, with keyboard and pointer lock pre-granted for the site (the permission prompt they replace is raised while the page is fullscreen with the cursor captured, where nobody can see it). No browser in `depends`. See [Gaming](#gaming). |
+| **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the two things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, and holds the machine awake while they are there. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 
 ### Apps
@@ -1977,6 +1978,56 @@ Desktop helpers, each the command-line half of a `synui` panel:
 `synui-wpengine` (Workshop wallpapers) is the one that ships with the
 `linux-wallpaperengine` package rather than with `synui` — both are on the ISO
 as of 0.2.1.
+
+### Reaching this machine from another
+
+`syn-remote` puts this desktop on a VNC viewer somewhere else. It is a wrapper:
+**wayvnc** is the server, and it is the wlroots-native one — it captures through
+`zwlr_screencopy_manager_v1` and drives the seat through
+`zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`. synui
+implements all three and hands them to any native client, so nothing goes
+through a portal and nothing prompts.
+
+```bash
+syn-remote on                # start it now, and at every login
+syn-remote address           # how to connect to it
+syn-remote password          # the password a viewer is asked for
+syn-remote listen lan        # …or put it on the network instead of loopback
+```
+
+**The usual "Wayland cannot do remote desktop" does not apply here**, and it is
+worth saying why, because all three reasons it is true elsewhere are about other
+stacks. GNOME and KDE gate capture behind a portal that asks a human per
+session, which makes unattended access impossible by design.
+`xdg-desktop-portal-wlr` implements ScreenCast but **not** RemoteDesktop — no
+input injection — which is why portal-based tools can watch a wlroots desktop
+and cannot touch it. And nothing exists to connect to before somebody logs in.
+Only the last is true here, and `syn-remote status` says so rather than failing
+with a Wayland error that reads like a bug.
+
+**⛔ A blanked output cannot be captured at all.** Measured, not assumed: once
+synui's idle blank stage has fired, screencopy answers *failed to copy output*
+and a viewer sees nothing. `power_blank_timeout` defaults to 600, so an
+unattended machine would go dark to a viewer ten minutes after the last keypress
+and stay dark, with no frame to click on to get out of it. That is the single
+thing that makes unattended VNC on a Wayland desktop look broken, and it is what
+the wrapper is for: on connect it turns the outputs back on and holds a real
+idle inhibitor until the last viewer leaves.
+
+**⛔ It binds to loopback, and `listen lan` says what it is doing.** synnet's
+base firewall is default-drop on input *and accepts everything from 10/8,
+172.16/12 and 192.168/16* — so a port bound to `0.0.0.0` is not "open but
+firewalled", it is reachable by every device on the network, and there is no
+second door left to unlock. The default is loopback plus an SSH tunnel;
+`syn-remote listen lan` is the deliberate way to change that. Either way the
+connection carries TLS and a password, because `enable_auth` requires a
+certificate, a key and a password together — there is no password-without-TLS,
+which is the right way round for VNC.
+
+Sign-in is a generated 20-character password by default, or your own account
+password through PAM (`syn-remote auth pam`), which brings the same three-try
+lockout as any other login on the machine. Settings ▸ **Remote Desktop** is the
+same thing in a window.
 
 ### Privileged desktop actions
 

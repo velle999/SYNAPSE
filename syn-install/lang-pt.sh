@@ -626,6 +626,7 @@ declare -gA SYN_T=(
   ["Player — playlists, shuffle and history, on mpv"]="Player — listas, aleatório e histórico, sobre o mpv"
   ["Studio — photo darkroom and video"]="Studio — câmara escura e vídeo"
   ["GeForce NOW — cloud gaming in a browser"]="GeForce NOW — jogos na nuvem num navegador"
+  ["Remote desktop — reach this machine from another"]="Ambiente remoto — aceder a esta máquina a partir de outra"
   ["Arsenal — BlackArch browser"]="Arsenal — navegador do BlackArch"
   ["Chibi — voice companion"]="Chibi — companheiro de voz"
   ["Vibe — AI coding assistant"]="Vibe — assistente de programação com IA"
