@@ -152,10 +152,10 @@ static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Rig
 static const char *const ctl_names_dock_style[]   = { "Auto", "Solid", "Glass" };
 static const char *const ctl_names_widget_glass[] = { "Auto", "Off", "On" };
 /* syn_clock_face_t, in its order. ⚠ ctl_format() persists an enum as its option
- * name FOLDED TO LOWER CASE, and config.c parses exactly those four words back —
+ * name FOLDED TO LOWER CASE, and config.c parses exactly those five words back —
  * so renaming one of these renames a config key's legal value. */
 static const char *const ctl_names_clock_face[] =
-    { "Minimal", "Classic", "Roman", "Neon" };
+    { "Minimal", "Classic", "Roman", "Neon", "Monster" };
 /* syn_wp_accent_t, same three positions and the same spellings — a separate
  * array rather than sharing the one above because the two enums are free to
  * grow apart, and a shared table is how a fourth position on one of them

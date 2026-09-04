@@ -306,7 +306,7 @@ QtObject {
         // way to tell why.
         const cf = root.readKey(settingsFile.text(), "widget_clock_face")
                    || root.readKey(synuircFile.text(), "widget_clock_face")
-        root.clockFace = ["minimal", "classic", "roman", "neon"].indexOf(cf) >= 0
+        root.clockFace = ["minimal", "classic", "roman", "neon", "monster"].indexOf(cf) >= 0
                          ? cf : "minimal"
 
         // Is there a bar at all. Same pair and order again. Only the exact

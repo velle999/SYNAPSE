@@ -3333,7 +3333,31 @@ pkgver=0.1.0
 #   checked against SymbolsNerdFontMono with fontTools before being used, which
 #   is the rule Icons.qml states twice — a codepoint the font lacks draws as a
 #   box that no test notices.
-pkgrel=596
+# 597: A FIFTH ANALOG CLOCK FACE — a pink animal holding the dial.
+#   velle asked whether the Vista/7 sidebar gadget could be recreated; the code
+#   is gone and was behind a site that no longer exists.
+#
+#   ⛔ SO IT IS DRAWN HERE, NOT COPIED. The gadget's artwork is somebody's
+#   drawing and it is theirs — the same rule syn-arcade's icon README states at
+#   length about application logos, for the same reason: art somebody else owns
+#   has no business inside a GPL package. This is an original animal in the same
+#   spirit, and every curve of it is arithmetic in AnalogClock.qml.
+#
+#   ⚠ IT IS PINK ON EVERY THEME, deliberately. The other four faces are the
+#   theme's ink because they are chrome; this one is a CHARACTER, and a
+#   character whose colour follows the accent is a different character on every
+#   desktop — the call this project already makes for Tux. ⚠ Which is why the
+#   dial brings its own white face: `ink` is light on a dark theme, and light
+#   ink on the white belly of a pink animal is a clock nobody can read.
+#
+#   ⛔ FIVE LISTS NAME THE FACES — the enum, the panel's option names (which ARE
+#   the config values, folded to lower case by ctl_format), config.c's parser
+#   and BOTH QML validators. A face missing from one of the five is silently
+#   unreachable: the panel offers it, the file records it, and the widget falls
+#   back to `minimal` with nothing said. tests/clock_faces.sh is that check, and
+#   it also asserts the option names are NOT translated — a translated one
+#   writes a word config.c cannot read back.
+pkgrel=597
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

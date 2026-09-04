@@ -94,7 +94,7 @@ WidgetFrame {
     // file must not leave a blank card with no way to tell why.
     readonly property string face: {
         const f = String(Theme.analogClockFace || "")
-        return ["minimal", "classic", "roman", "neon"].indexOf(f) >= 0
+        return ["minimal", "classic", "roman", "neon", "monster"].indexOf(f) >= 0
                ? f : "minimal"
     }
 
@@ -138,9 +138,14 @@ WidgetFrame {
             ctx.reset()
             ctx.clearRect(0, 0, w, h)
 
-            const cx = w / 2, cy = h / 2
+            const cx = w / 2
+            // ⚠ NOT const: the monster face moves the dial down into the
+            // creature's belly once, below, and every mark and hand is
+            // placed through at() so they all follow.
+            let cy = h / 2
             const half = Math.min(w, h) / 2
             const neon = root.face === "neon"
+            const monster = root.face === "monster"
 
             /*
              * ⚠ EVERY STROKE WIDTH BELOW IS AN ABSOLUTE PIXEL COUNT, and the
@@ -192,6 +197,17 @@ WidgetFrame {
                 r = half - Math.max(6, 5 * k + 1)
                 k = r / rBase
             }
+            /*
+             * ⚠ THE MONSTER'S DIAL IS SMALLER THAN ITS BOX, because the dial is
+             * not the whole picture on this face — it is what the creature is
+             * holding. 0.60 leaves the ears their height above it and the paws
+             * theirs below, at every size, because everything else on the face
+             * is a fraction of `half` too.
+             */
+            if (monster) {
+                r = half * 0.60
+                k = r / rBase
+            }
             if (r <= 4) return
             function px(v) { return Math.max(1, v * k) }
 
@@ -203,6 +219,13 @@ WidgetFrame {
              * WidgetFrame corrects it against that backdrop the way it already
              * corrected `ink`, which the neon face never draws in. */
             const accent = root.accentInk
+            /* ⛔ FIXED, ON THE MONSTER, AND ONLY THERE. `ink` is light on a
+             * dark theme, and the monster's dial is a white belly the creature
+             * carries with it — so theme ink there is light on light, which is
+             * a clock nobody can read on half the desktops that have one. Every
+             * other face draws straight onto the wallpaper and wants the
+             * corrected ink; this one brings its own background. */
+            const dialInk = monster ? Qt.rgba(0.16, 0.13, 0.22, 1) : ink
 
             function stroke(a, b, width, colour, alpha, cap) {
                 ctx.beginPath()
@@ -224,8 +247,129 @@ WidgetFrame {
             function hours(n)   { return n * Math.PI / 6 - Math.PI / 2 }
             function minutes(n) { return n * Math.PI / 30 - Math.PI / 2 }
 
+            /* ── The creature ──
+             *
+             * ⛔ DRAWN HERE, NOT COPIED. The thing this is modelled on is a
+             * Windows Vista/7 sidebar gadget somebody drew, and their drawing
+             * is theirs — the same rule syn-arcade's icon set states at length
+             * about application logos, and the same reason: a mark or an
+             * artwork somebody else owns has no business inside a GPL package.
+             * So this is an original animal in the same spirit — a round pink
+             * thing with ears, eyes and paws holding a clock — and every curve
+             * of it is arithmetic in this file.
+             *
+             * ⚠ IT IS PINK ON EVERY THEME, and that is deliberate rather than
+             * an oversight. The other four faces are the theme's ink because
+             * they are chrome; this one is a CHARACTER, and a character whose
+             * colour follows the accent is a different character on every
+             * desktop. Tux is black and white wherever he is drawn, for the
+             * same reason.
+             *
+             * ⚠ WHICH IS WHY THE DIAL IS ITS OWN LIGHT FACE. Ink is light on a
+             * dark theme, and light ink on the white belly of a pink animal is
+             * a clock nobody can read — so the marks and the two hands below
+             * are a fixed dark on this face, and the accent is kept for the
+             * second hand where it lands on white either way.
+             */
+            if (monster) {
+                const bodyR   = half * 0.86
+                const fur     = Qt.rgba(0.98, 0.55, 0.82, 1)     // the coat
+                const furDark = Qt.rgba(0.85, 0.36, 0.66, 1)     // its edge
+                const furLit  = Qt.rgba(1.00, 0.74, 0.90, 1)     // the light on it
+
+                function blob(x, y, rx, ry, fill) {
+                    ctx.beginPath()
+                    ctx.ellipse(x - rx, y - ry, rx * 2, ry * 2)
+                    ctx.fillStyle = fill
+                    ctx.fill()
+                    ctx.lineWidth = px(2)
+                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.9)
+                    ctx.stroke()
+                }
+
+                /* Ears first, so the head is drawn over their roots and they
+                 * come out of it rather than sitting on it. */
+                for (const side of [-1, 1]) {
+                    const ex = cx + side * bodyR * 0.62
+                    const ey = cy - bodyR * 0.72
+                    ctx.beginPath()
+                    ctx.moveTo(ex - bodyR * 0.20, ey + bodyR * 0.34)
+                    ctx.lineTo(ex + side * bodyR * 0.12, ey - bodyR * 0.42)
+                    ctx.lineTo(ex + bodyR * 0.24, ey + bodyR * 0.30)
+                    ctx.closePath()
+                    ctx.fillStyle = Qt.rgba(fur.r, fur.g, fur.b, 1)
+                    ctx.fill()
+                    ctx.lineWidth = px(2)
+                    ctx.lineJoin = "round"
+                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.9)
+                    ctx.stroke()
+                }
+
+                /* Paws, under the body for the same reason. */
+                for (const side of [-1, 1])
+                    blob(cx + side * bodyR * 0.74, cy + bodyR * 0.70,
+                         bodyR * 0.26, bodyR * 0.22,
+                         Qt.rgba(fur.r, fur.g, fur.b, 1))
+
+                /* The body. Wider than tall, so the dial sits in a belly rather
+                 * than in a head. */
+                blob(cx, cy, bodyR, bodyR * 0.94, Qt.rgba(fur.r, fur.g, fur.b, 1))
+
+                /* A highlight along the top left, which is the whole difference
+                 * between a drawing of an animal and a pink circle. */
+                ctx.beginPath()
+                ctx.ellipse(cx - bodyR * 0.72, cy - bodyR * 0.74,
+                            bodyR * 0.62, bodyR * 0.38)
+                ctx.fillStyle = Qt.rgba(furLit.r, furLit.g, furLit.b, 0.55)
+                ctx.fill()
+
+                /* Eyes, above the dial and inside the body. ⚠ Both pupils look
+                 * at twelve rather than straight ahead: a face whose eyes are
+                 * dead centre reads as a doll, and the offset costs one term. */
+                for (const side of [-1, 1]) {
+                    /* ⚠ HIGH ENOUGH TO CLEAR THE BELLY. The dial's rim reaches
+                     * r * 1.10 from a centre pushed 0.06 * half down, and the
+                     * first draft put the eyes at 0.62 — half of each one was
+                     * behind the clock, which reads as a drawing that does not
+                     * fit together rather than as a creature holding something. */
+                    const ex = cx + side * bodyR * 0.46
+                    const ey = cy - bodyR * 0.70
+                    ctx.beginPath()
+                    ctx.ellipse(ex - bodyR * 0.15, ey - bodyR * 0.13,
+                                bodyR * 0.30, bodyR * 0.26)
+                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.96)
+                    ctx.fill()
+                    ctx.lineWidth = px(1.6)
+                    ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.85)
+                    ctx.stroke()
+
+                    ctx.beginPath()
+                    ctx.arc(ex, ey - bodyR * 0.03, bodyR * 0.085, 0, Math.PI * 2)
+                    ctx.fillStyle = Qt.rgba(0.15, 0.08, 0.16, 0.95)
+                    ctx.fill()
+                }
+
+                /* The belly the dial sits on, and its rim. */
+                ctx.beginPath()
+                ctx.arc(cx, cy + half * 0.10, r * 1.06, 0, Math.PI * 2)
+                ctx.fillStyle = Qt.rgba(1, 1, 1, 0.97)
+                ctx.fill()
+                ctx.lineWidth = px(2.5)
+                ctx.strokeStyle = Qt.rgba(furDark.r, furDark.g, furDark.b, 0.8)
+                ctx.stroke()
+            }
+
+            /* ⚠ THE DIAL SITS LOW ON THE MONSTER, in the belly rather than in
+             * the middle of the box — the ears take the top. Every mark and
+             * hand below is placed through at(), so moving the centre once here
+             * moves all of them. */
+            if (monster) cy += half * 0.10
+
             /* ── The bezel ── */
-            if (root.face !== "minimal") {
+            // Not on the monster: the belly's own rim, in the creature's fur
+            // colour, is that face's bezel and a second ring inside it reads as
+            // a mistake.
+            if (root.face !== "minimal" && !monster) {
                 ctx.beginPath()
                 ctx.lineWidth   = px(neon ? 2.5 : 2)
                 ctx.strokeStyle = neon
@@ -303,6 +447,32 @@ WidgetFrame {
                     // balances the VIII opposite it.
                     ctx.fillText(numerals[i], p.x, p.y)
                 }
+            } else if (monster) {
+                /*
+                 * A tick every hour, longer at the quarters, and the 12 written
+                 * out — which is the one numeral a face like this needs, because
+                 * a dial with no numbers at all reads as a decoration and the
+                 * top mark is what tells the eye which way up it is.
+                 *
+                 * ⚠ THE TICKS ARE BLUE, NOT THE ACCENT. They are on the
+                 * creature's own white belly, which never changes colour, so
+                 * there is nothing here for an accent to adapt TO — and a dial
+                 * that recoloured with the theme while the animal holding it
+                 * stayed pink would look like two drawings.
+                 */
+                const tick = Qt.rgba(0.25, 0.47, 0.85, 1)
+                for (let i = 0; i < 12; i++) {
+                    const quarter = i % 3 === 0
+                    if (i === 0) continue        // the 12 is written, not ticked
+                    stroke(at(hours(i), r * (quarter ? 0.68 : 0.76)),
+                           at(hours(i), r * 0.90),
+                           quarter ? 3.5 : 2.5, tick, quarter ? 0.95 : 0.7, "butt")
+                }
+                ctx.font = "700 " + Math.round(r * 0.30) + "px " + Theme.fontFamily
+                ctx.textAlign = "center"
+                ctx.textBaseline = "middle"
+                ctx.fillStyle = Qt.rgba(tick.r, tick.g, tick.b, 0.95)
+                ctx.fillText("12", cx, cy - r * 0.72)
             } else {
                 // neon: a glow ring and a tick at each hour, in the accent.
                 for (let pass = 0; pass < 3; pass++) {
@@ -364,21 +534,38 @@ WidgetFrame {
              * px(rBase * 0.075) is r * 0.075 at every size, so the fractions
              * still mean what they say and the designed face is unchanged.
              */
+            /*
+             * ⚠ THE MONSTER'S TWO HANDS ARE COLOURED, and it is the one face
+             * where they are. The other four draw hands in ink because ink is
+             * what stands out against their marks; here the marks are already
+             * blue on white, so an ink hand would be the third dark thing in a
+             * small circle. Orange and blue is the pair that reads fastest at
+             * this size, and telling the hour hand from the minute hand at a
+             * glance is most of what a dial is for.
+             */
+            const hourInk = monster ? Qt.rgba(0.95, 0.60, 0.12, 1)
+                                    : (neon ? accent : ink)
+            const minInk  = monster ? Qt.rgba(0.25, 0.47, 0.85, 1)
+                                    : (neon ? accent : ink)
             stroke(at(ha + Math.PI, r * 0.12), at(ha, r * 0.52),
-                   rBase * 0.075, neon ? accent : ink, 0.95)
+                   rBase * 0.075, hourInk, 0.95)
             stroke(at(ma + Math.PI, r * 0.14), at(ma, r * minReach),
-                   rBase * 0.048, neon ? accent : ink, 0.95)
+                   rBase * 0.048, minInk, 0.95)
 
+            // Red, on the monster, because that is what a second hand is on a
+            // face like this — and the accent is already spoken for by neither
+            // of the other two hands here.
+            const secInk = monster ? Qt.rgba(0.90, 0.16, 0.28, 1) : accent
             if (root.seconds) {
                 const sa = minutes(root.ss)
                 stroke(at(sa + Math.PI, r * 0.20),
                        at(sa, root.face === "roman" ? r * 0.62 : r * 0.88),
-                       1.8, accent, 0.95)
+                       1.8, secInk, 0.95)
                 // The counterweight: a real second hand has one, and at this
                 // size it is the difference between a hand and a scratch.
                 const tail = at(sa + Math.PI, r * 0.20)
                 ctx.beginPath()
-                ctx.fillStyle = Qt.rgba(accent.r, accent.g, accent.b, 0.95)
+                ctx.fillStyle = Qt.rgba(secInk.r, secInk.g, secInk.b, 0.95)
                 ctx.arc(tail.x, tail.y, px(2.6), 0, Math.PI * 2)
                 ctx.fill()
             }
@@ -386,8 +573,8 @@ WidgetFrame {
             /* ── The pin ── */
             ctx.beginPath()
             ctx.fillStyle = root.seconds
-                ? Qt.rgba(accent.r, accent.g, accent.b, 1)
-                : Qt.rgba(ink.r, ink.g, ink.b, 0.95)
+                ? Qt.rgba(secInk.r, secInk.g, secInk.b, 1)
+                : Qt.rgba(dialInk.r, dialInk.g, dialInk.b, 0.95)
             ctx.arc(cx, cy, px(root.seconds ? 3.4 : 3.0), 0, Math.PI * 2)
             ctx.fill()
             if (!neon) {

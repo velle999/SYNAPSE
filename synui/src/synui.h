@@ -3348,6 +3348,7 @@ typedef enum {
     SYN_CLOCK_FACE_CLASSIC,
     SYN_CLOCK_FACE_ROMAN,
     SYN_CLOCK_FACE_NEON,
+    SYN_CLOCK_FACE_MONSTER,
     SYN_CLOCK_FACE_COUNT,
 } syn_clock_face_t;
 

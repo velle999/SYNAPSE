@@ -1064,6 +1064,14 @@ test('calc', calc_test)
 # depends on. calc_test cannot see any of that.
 test('syncalc', find_program('tests/syncalc.sh'), args : [syn_calc])
 
+# The analog clock's faces, in the five places that list them: the enum, the
+# control panel's option names (which ARE the config values), config.c's parser
+# and both QML validators. A face missing from one of the five is silently
+# unreachable — the panel offers it and the widget falls back to `minimal` with
+# nothing said. Pure text over the sources, so it needs no compositor.
+test('clockfaces', find_program('tests/clock_faces.sh'),
+     args : [meson.current_source_dir()])
+
 # The desktop's accent, on the RGB hardware. ⛔ No real device is touched: the
 # test puts a stub `openrgb` on the path that writes down what it was asked
 # for, because a test that changed the colour of the machine running it is not

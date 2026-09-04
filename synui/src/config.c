@@ -217,7 +217,7 @@
  * quickshell (WidgetFrame.qml). Here so the key has one spelling and one clamp,
  * exactly like bar_shell/bar_edge below:
  *   widget_glass = auto|off|on  (auto follows the theme, like dock_style)
- *   widget_clock_face = minimal|classic|roman|neon
+ *   widget_clock_face = minimal|classic|roman|neon|monster
  *                               (default minimal; the face the analog clock
  *                                WIDGET draws. Not the dock's clock — that is
  *                                dock_clock_analog and has one design)
@@ -583,7 +583,7 @@
  *   cat = on|off
  *   cat_breed = neon|ginger|tuxedo|siamese|calico
  *       Coat and markings only; every breed walks the same.
- *   widget_clock_face = minimal|classic|roman|neon
+ *   widget_clock_face = minimal|classic|roman|neon|monster
  *   theme = prism                (one of the fifteen presets — see
  *                                 syn_theme_names in theme.c. A fresh install
  *                                 is written `prism` by syn-install; synui's
@@ -3264,6 +3264,7 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         else if (strcmp(val, "classic") == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_CLASSIC;
         else if (strcmp(val, "roman")   == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_ROMAN;
         else if (strcmp(val, "neon")    == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_NEON;
+        else if (strcmp(val, "monster") == 0) cfg->widget_clock_face = SYN_CLOCK_FACE_MONSTER;
         else wlr_log(WLR_ERROR, "synui: widget_clock_face: unknown '%s'", val);
     }
     else if (strcmp(key, "widget_glass") == 0) {
