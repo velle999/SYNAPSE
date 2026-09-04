@@ -188,9 +188,15 @@ static void handle_query(work_item_t *w) {
     prompt[w->hdr.payload_len - 1] = '\0';
 
     if (atomic_load(&w->state->model_sleeping)) {
+        /* ⛔ IT DOES NOT SAY "reloading". Nothing reloads a sleeping model on
+         * its own — only SYN_MSG_WAKE does — and there are two senders of
+         * SLEEP now with very different timing: the suspend hook, whose resume
+         * hook wakes it seconds later, and synui's game mode, which holds it
+         * down for the length of a game. Promising a reload that is not
+         * happening reads as a stuck daemon for the whole session. */
         send_error(w->client_fd, w->hdr.request_id,
-                   "AI model was released for suspend and is reloading — "
-                   "try again in a moment");
+                   "AI model is released — it comes back when whatever needed "
+                   "the GPU is finished");
         return;
     }
     if (!w->state->model_loaded && atomic_load(&w->state->model_loading)) {
@@ -353,7 +359,8 @@ static void handle_sleep(work_item_t *w) {
     pthread_rwlock_wrlock(&s->model_rw);
     int had_model = s->model_loaded;
     if (had_model) {
-        syn_log(LOG_INFO, "synapd: releasing model for suspend");
+        /* Not "for suspend": synui's game mode sends this too. */
+        syn_log(LOG_INFO, "synapd: releasing the model");
         inference_destroy(s);
     }
     pthread_rwlock_unlock(&s->model_rw);

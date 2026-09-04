@@ -47,7 +47,9 @@ typedef struct {
     int    layers_resident;  /* how many of them we are holding on the GPU */
 
     /*
-     * A client said demand is high — synui's game mode, over SYN_MSG_DEMAND.
+     * A client said demand is high, over SYN_MSG_DEMAND. ⚠ NOT game mode any
+     * more — that releases the model outright, because shedding a layer moves
+     * it to RAM and the CPU rather than freeing it.
      * ⚠ It does NOT mean "go to CPU". It swaps `floor` for `game_floor` and
      * lets the same arithmetic below decide, so there is ONE policy rather
      * than a watermark path and a special case that can disagree with it.

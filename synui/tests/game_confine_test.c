@@ -64,7 +64,8 @@ void synui_spawn(const char *cmd)  { (void)cmd; }
  * -1 is the "no synapd answered" answer, which is the right one for a test rig
  * with no socket — and it keeps this suite from depending on whether a real
  * synapd happens to be running on the machine building synui. */
-int  ai_notify_demand(int high)    { (void)high; return -1; }
+int  ai_release_model(void)        { return -1; }
+int  ai_resume_model(void)         { return -1; }
 void wlr_output_schedule_frame(struct wlr_output *o) { (void)o; }
 
 /* The rectangle the game is DRAWN in. Stubbed so a test can state a letterbox

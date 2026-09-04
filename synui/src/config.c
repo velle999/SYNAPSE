@@ -360,12 +360,19 @@
  *   game_ai_stop_cmd  = <empty>   (deprecated — see below)
  *   game_ai_start_cmd = <empty>   (deprecated — see below)
  *
- *   ⛔ BOTH DEFAULT TO EMPTY AND NOTHING RUNS THEM UNLESS SET. Game mode tells
- *   synapd the GPU is wanted (SYN_MSG_DEMAND) and synapd re-fits its model to
- *   what is left, rather than the daemon being stopped outright — which used
+ *   ⛔ BOTH DEFAULT TO EMPTY AND NOTHING RUNS THEM UNLESS SET. Game mode asks
+ *   synapd to RELEASE its model (SYN_MSG_SLEEP) and to load it again on the way
+ *   out (SYN_MSG_WAKE), rather than stopping the daemon outright — which used
  *   to take the retrieval embedder down with it for the length of every game.
  *   A box that set either of these keeps the old behaviour; a default one no
  *   longer shells out to sudo at all.
+ *
+ *   ⛔ AND NOT SYN_MSG_DEMAND, which is what 599 sent and 601 took back out.
+ *   That message only raises the VRAM floor the offload policy defends, so the
+ *   daemon SHEDS layers and keeps the model: llama.cpp has no live migration,
+ *   so the weights that leave the card land in system RAM and run on the CPU.
+ *   A game competes for all three. What game mode gives a game is not a
+ *   refactor's decision — ask before changing it.
  *       synapd is a *system* unit, so a plain `systemctl stop` from the session
  *       user gets bounced by polkit ("interactive authentication required") —
  *       and synui_spawn is fire-and-forget, so that failure was invisible: game
@@ -1944,10 +1951,10 @@ static void config_set_defaults(syn_config_t *cfg)
      * ⛔ EMPTY NOW, AND THAT IS THE CHANGE. These used to hold
      * `sudo -n systemctl stop|start synapd.socket synapd.service`, and game
      * mode ran them because synapd was said to have no unload IPC. It has had
-     * one since the suspend hook; game mode sends SYN_MSG_DEMAND instead and
-     * synapd re-fits the model to the VRAM left, so the daemon — and the
-     * retrieval embedder inside it, which was never the GPU problem — stays up
-     * through a game.
+     * one since the suspend hook; game mode sends SYN_MSG_SLEEP instead and
+     * synapd releases the model, so the daemon — and the retrieval embedder
+     * inside it, which was never the GPU problem — stays up through a game
+     * while everything the game competes for goes back.
      *
      * ⚠ KEPT AS SETTINGS RATHER THAN DELETED. A box that WROTE one of these
      * into synuirc chose that behaviour, and silently ignoring a line somebody

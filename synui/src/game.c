@@ -23,23 +23,29 @@
  *
  *   - Tells synapd the GPU is wanted, and tells it again when the game leaves.
  *
- *     ⛔ IT NO LONGER STOPS THE DAEMON. It used to, and the reason written here
- *     was that synapd "has no unload/sleep IPC — synapd.h offers only RELOAD
- *     and SHUTDOWN". That stopped being true when SLEEP was added for the
- *     suspend hook, and this comment outlived the fact by long enough that the
- *     sledgehammer looked like the considered choice.
+ *     ⛔ IT RELEASES THE MODEL. SYN_MSG_SLEEP on the way in, SYN_MSG_WAKE on
+ *     the way out — the same path the suspend hook uses, and since synapd 51 it
+ *     leaves the retrieval embedder alone, so chibi's memory keeps working
+ *     through a game.
  *
- *     The cost of it was never only the chat model. `systemctl stop` takes the
- *     whole daemon, including the retrieval embedder — a separate 274 MB model
- *     that has nothing to do with the GPU pressure — so chibi's memory went
- *     dark for the length of every game. synapd's own source carried three
- *     comments promising that could not happen.
+ *     ⛔ AND IT IS NOT `DEMAND high`, WHICH IS WHAT 599 SHIPPED AND WAS WRONG.
+ *     That message raises the floor the offload policy defends, so synapd sheds
+ *     GPU layers until enough VRAM is free — the right answer when the desktop
+ *     is busy and somebody still wants the assistant, and the wrong one for a
+ *     game. A shed layer is not a freed layer: llama.cpp has no live migration,
+ *     so re-fitting reloads the model at a lower n_gpu_layers and the weights
+ *     that came off the card are resident in SYSTEM RAM, computed on the CPU.
+ *     A game competes for VRAM, RAM and CPU. Freeing the first by moving the
+ *     cost onto the other two is not yielding to it — it is moving the problem
+ *     somewhere it was not measured.
  *
- *     Now it is one message (SYN_MSG_DEMAND, "high"/"normal") and synapd
- *     decides what to do about it: it re-fits the model to the VRAM actually
- *     left and keeps answering, slower, from RAM. What it must NOT be handed
- *     is a layer count — the compositor knows a game started; it does not know
- *     how big the model is or what card this is.
+ *     ⛔ WHAT THIS DOES IS VELLE'S CALL, NOT A REFACTOR'S. 599 changed the
+ *     policy while fixing a real bug next to it (`systemctl stop` took the
+ *     whole daemon, embedder included, so chibi's memory went dark for the
+ *     length of every game — three comments in synapd promised it could not).
+ *     Fixing that did not require re-fitting instead of releasing, and the
+ *     policy change was never asked for. Do not change what game mode gives a
+ *     game without asking first.
  *
  *   - Leaves the synapd poller running, because synapd is still there.
  *
@@ -100,20 +106,17 @@ static void game_publish(syn_server_t *s)
     fprintf(f, "mode=%s\n", s->game.forced > 0 ? "forced-on" :
                             s->game.forced < 0 ? "forced-off" : "auto");
     fprintf(f, "app=%s\n", s->game.app);
-    /* What we did about synapd, so the indicator stops asserting it. The bar
+    /*
+     * What we did about synapd, so the indicator stops asserting it. The bar
      * used to print "synapd suspended (GPU freed)" for any state=on, which is
      * how a stop that got undone by socket activation still read as success.
-     * This is still only what synui *asked for* — synui-game-status checks
-     * whether it held. */
-    /*
-     * ⚠ THREE STATES, AND "yielded" IS THE ONE THE DAEMON CONFIRMED. synapd is
-     * no longer stopped for a game — it is told the GPU is wanted and re-fits
-     * its model to what is left — so the old "suspended" value, and the
-     * indicator's check that synapd had actually gone away, now describe a
-     * mechanism that is not there. A tooltip warning "synapd STILL RUNNING"
-     * would fire on every game and be exactly backwards.
+     *
+     * ⚠ FOUR STATES, AND "released" IS THE ONLY ONE THE DAEMON CONFIRMED.
+     * "asked" means the message went out and nothing answered it, which is a
+     * running synapd holding the card — the distinction the indicator's old
+     * systemd check existed to draw, kept without the subprocess.
      */
-    fprintf(f, "ai=%s\n", s->game.ai_ack ? "yielded" :
+    fprintf(f, "ai=%s\n", s->game.ai_ack ? "released" :
                           s->game.ai_suspended ? "asked" :
                           s->config.game_suspend_ai ? "running" : "untouched");
     fclose(f);
@@ -282,7 +285,7 @@ static void game_enter(syn_server_t *s, syn_view_t *v)
     wlr_log(WLR_INFO, "synui: game: ON (%s)", s->game.app);
 
     if (s->config.game_suspend_ai && !s->game.ai_suspended) {
-        s->game.ai_ack       = (ai_notify_demand(1) == 0);
+        s->game.ai_ack       = (ai_release_model() == 0);
         s->game.ai_suspended = 1;
 
         /*
@@ -379,10 +382,14 @@ static void game_leave(syn_server_t *s)
     wlr_log(WLR_INFO, "synui: game: OFF");
 
     if (s->game.ai_suspended) {
-        ai_notify_demand(0);
+        /* ⛔ NOT OPTIONAL. Nothing reloads a released model on its own — a
+         * query while it is asleep is refused rather than triggering a load —
+         * so without this the assistant stays down until the next resume or a
+         * restart. game_finish sends it for the same reason. */
+        ai_resume_model();
         s->game.ai_suspended = 0;
         s->game.ai_ack       = 0;
-        wlr_log(WLR_INFO, "synui: game: synapd may have the GPU back");
+        wlr_log(WLR_INFO, "synui: game: synapd has the GPU back");
 
         /* Only if this box configured the old command pair — see above. The
          * poller reconnects on its own once synapd is up again (it retries),
@@ -602,7 +609,7 @@ void game_finish(syn_server_t *s)
          * keeps running does not, and synapd would sit at the game floor
          * indefinitely with the game long gone.
          */
-        ai_notify_demand(0);
+        ai_resume_model();
         s->game.ai_suspended = 0;
         wlr_log(WLR_INFO, "synui: game: shutting down mid-game — synapd may "
                           "have the GPU back");

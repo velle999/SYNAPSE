@@ -54,7 +54,8 @@
 #define SYN_MAGIC       0x53594E41u
 #define SYN_PROTO_VER   1
 #define SYN_MSG_QUERY   0x01
-#define SYN_MSG_DEMAND  0x0C
+#define SYN_MSG_SLEEP   0x09
+#define SYN_MSG_WAKE    0x0A
 #define SYN_MSG_RESP    0x80
 #define SYN_MSG_ERROR   0xFF
 
@@ -117,35 +118,47 @@ static int ai_connect_synapd(void)
 }
 
 /*
- * Tell synapd that something else wants the GPU — or that it may have it back.
+ * Hand the GPU to a game, and give it back afterwards.
  *
- * ⛔ THIS REPLACES STOPPING THE DAEMON. Game mode used to run
- * `sudo -n systemctl stop synapd.socket synapd.service`, on the stated grounds
- * that synapd "has no unload/sleep IPC — synapd.h offers only RELOAD and
- * SHUTDOWN". That stopped being true when SLEEP was added for the suspend
- * hook, and the comment outlived the fact. The cost of the sledgehammer was
- * never just the chat model: stopping the unit took the retrieval embedder
- * with it, so chibi's memory went dark for the length of every game.
+ * ⛔ RELEASE, NOT RE-FIT. The version before this sent SYN_MSG_DEMAND "high",
+ * which raises the floor the offload policy defends so synapd sheds GPU layers
+ * until enough VRAM is free. That is the right answer when the desktop is busy
+ * and somebody still wants the assistant. It is the wrong answer for a game,
+ * because a shed layer is not a freed layer: llama.cpp has no live migration,
+ * so re-fitting reloads the model at a lower n_gpu_layers and the weights that
+ * came off the card are now resident in SYSTEM RAM and computed on the CPU.
+ * A game wants all three. Freeing VRAM by moving several GB into RAM and
+ * putting inference on the cores the game is using is not yielding to it.
  *
- * What synapd does with this is ITS decision, not ours — see offload.h. We say
- * "high" and it works out what that means for the layer count, because we know
- * a game started and it knows how big the model is, what card this is and how
- * much VRAM is actually free. A message naming a layer count would put the
- * policy in the compositor.
+ * SYN_MSG_SLEEP releases the model outright — the same path the suspend hook
+ * uses, and since synapd 51 it leaves the retrieval embedder alone, so chibi's
+ * memory keeps working through a game. That was the real defect in the
+ * `systemctl stop synapd.socket synapd.service` this replaced: the sledgehammer
+ * took a 274 MB embedder down with the chat model and left the socket dead.
+ * Releasing keeps everything that was worth keeping and gives back everything a
+ * game actually competes for.
  *
- * ⚠ RUNS ON THE COMPOSITOR THREAD, so the timeouts are 300 ms and every
- * failure is silent-but-logged. A game starting must never be able to stall
- * the desktop on a socket, and synapd being absent — masked, crashed, never
- * installed — is an ordinary state, not an error worth a dialog.
+ * ⚠ Nothing reloads the model by itself while it is asleep — a query in that
+ * window is refused rather than triggering a load — so game_leave MUST send the
+ * WAKE. game_finish sends it too, for a compositor dying mid-game.
+ *
+ * ⚠ RUNS ON THE COMPOSITOR THREAD. SLEEP is synchronous by design (it answers
+ * once the VRAM is really gone, so the suspend hook can wait for it), so this
+ * is the one call here that can take a moment: the write lock waits for an
+ * in-flight generation, and freeing several GB of device buffers is not
+ * instant. The timeout is the trade, stated rather than discovered — 1.5 s
+ * bounds a stall nobody will see inside a game launch, and it is long enough
+ * that the answer is nearly always the true one. A shorter timeout would not
+ * make the release faster; it would only make us report that it did not happen.
  */
-int ai_notify_demand(int high)
+static int synapd_simple(uint8_t type, const char *what)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0) return -1;
 
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
     strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path) - 1);
-    struct timeval tv = { .tv_sec = 0, .tv_usec = 300 * 1000 };
+    struct timeval tv = { .tv_sec = 1, .tv_usec = 500 * 1000 };
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
@@ -153,12 +166,11 @@ int ai_notify_demand(int high)
         return -1;
     }
 
-    const char *arg = high ? "high" : "normal";
     syn_hdr_t hdr = {
         .magic       = SYN_MAGIC,
         .version     = SYN_PROTO_VER,
-        .msg_type    = SYN_MSG_DEMAND,
-        .payload_len = (uint32_t)(strlen(arg) + 1),
+        .msg_type    = type,
+        .payload_len = 0,
         .request_id  = 1,
         .client_pid  = (uint32_t)getpid(),
     };
@@ -167,15 +179,12 @@ int ai_notify_demand(int high)
     hdr.timestamp_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 
     int rc = -1;
-    if (write(fd, &hdr, sizeof(hdr)) == sizeof(hdr) &&
-        write(fd, arg, hdr.payload_len) == (ssize_t)hdr.payload_len) {
+    if (write(fd, &hdr, sizeof(hdr)) == sizeof(hdr)) {
         /*
-         * ⚠ THE REPLY IS READ, NOT ASSUMED. synapd answers this one
-         * immediately — it hands the work to its own watcher rather than
-         * re-fitting inline, precisely so this call cannot block a game
-         * launch — so a read that times out means something is genuinely
-         * wrong, and treating a wedged daemon as success is how "the GPU was
-         * freed" ends up in a log for a machine where nothing happened.
+         * ⚠ THE REPLY IS READ, NOT ASSUMED — this is what the game indicator
+         * reports, and "the GPU was freed" in a tooltip for a machine where
+         * nothing happened is worse than saying nothing. A wedged or absent
+         * daemon reads as "asked", never as success.
          */
         syn_hdr_t rhdr;
         if (recv(fd, &rhdr, sizeof(rhdr), MSG_WAITALL) == sizeof(rhdr) &&
@@ -184,16 +193,25 @@ int ai_notify_demand(int high)
             uint32_t n = rhdr.payload_len < sizeof(buf) ? rhdr.payload_len
                                                         : sizeof(buf) - 1;
             if (n) recv(fd, buf, n, MSG_WAITALL);
-            wlr_log(WLR_INFO, "synui: game: synapd demand=%s — %s", arg, buf);
+            wlr_log(WLR_INFO, "synui: game: synapd %s — %s", what, buf);
             rc = 0;
         }
     }
     close(fd);
     if (rc != 0)
-        wlr_log(WLR_INFO, "synui: game: synapd did not answer the demand hint "
-                          "(not running, or too old) — leaving the GPU as it is");
+        wlr_log(WLR_INFO, "synui: game: synapd did not answer %s "
+                          "(not running, or too old) — leaving the GPU as it is",
+                what);
     return rc;
 }
+
+/* Release the model: all of its VRAM, all of its RAM, and any CPU it would
+ * have used answering during the game. */
+int ai_release_model(void) { return synapd_simple(SYN_MSG_SLEEP, "released the model"); }
+
+/* And load it again. Answers immediately; the load itself is a thread inside
+ * synapd, so a query in the next few seconds says "still loading". */
+int ai_resume_model(void)  { return synapd_simple(SYN_MSG_WAKE, "is loading the model again"); }
 
 /* Called from AI thread only */
 static int ai_thread_synapd_query(int synapd_fd, uint32_t *req_id_ctr,

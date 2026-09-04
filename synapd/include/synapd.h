@@ -94,10 +94,13 @@ typedef enum {
      * cannot drive the model somewhere the policy would not go on its own, and
      * there is one set of rules to reason about rather than two.
      *
-     * synui's game mode is the sender. It used to run
-     * `sudo -n systemctl stop synapd.socket synapd.service`, which took the
-     * embedder down with the chat model and left chibi's memory dark for the
-     * length of a game.
+     * ⚠ NO SENDER IN THE TREE. synui's game mode sent this for two pkgrels and
+     * does not any more: raising the floor makes the daemon SHED layers, and a
+     * shed layer is not a freed one — llama.cpp has no live migration, so the
+     * weights come off the card into system RAM and run on the CPU, which is
+     * three ways for a game to lose. Game mode sends SYN_MSG_SLEEP instead.
+     * This stays as the API for the case it was right for: a desktop under GPU
+     * pressure where somebody still wants the assistant to answer.
      */
     SYN_MSG_DEMAND         = 0x0C, /* "high" | "normal"; replies with what it did */
     SYN_MSG_RESPONSE       = 0x80, /* response flag OR'd with request type */

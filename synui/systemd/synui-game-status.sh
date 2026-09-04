@@ -38,23 +38,27 @@ def ai_line(ai):
     """What actually happened to the AI, from the value synui published.
 
     ⛔ THIS NO LONGER ASKS systemd WHETHER synapd IS STOPPED. It used to, and
-    warned "⚠ synapd STILL RUNNING — the suspend did not hold" when it was:
-    correct while game mode stopped the unit, and exactly backwards now that it
-    does not. synapd stays up through a game and re-fits its model to the VRAM
-    left, so a running synapd IS the success case and that warning would fire
-    every single time.
+    warned "⚠ synapd STILL RUNNING — the suspend did not hold" when it was.
+    The daemon is not stopped for a game any more — it is told to release its
+    model and stays up to keep answering retrieval — so a running synapd is
+    expected and that warning would fire every single time.
 
-    ⚠ "yielded" is set from synapd's own reply, not from synui's intention —
+    ⚠ "released" is set from synapd's own reply, not from synui's intention —
     which is the property the systemd check was there to provide, kept without
     the subprocess. The distinction that mattered is still drawn: "asked"
     means the daemon never answered.
     """
     if ai == "untouched":
         return "synapd left alone (game_suspend_ai = off)"
+    if ai == "released":
+        return "synapd released the model — GPU, RAM and CPU are the game's"
     if ai == "yielded":
-        return "synapd yielded the GPU — still answering, from RAM"
+        # synui 599-600 only asked it to shed GPU layers; the weights it shed
+        # stayed in RAM and ran on the CPU. Kept so an older state file reads
+        # as what it actually meant.
+        return "synapd yielded VRAM only — the model is still in RAM"
     if ai == "asked":
-        return "⚠ synapd did not answer — the GPU was not handed over"
+        return "⚠ synapd did not answer — the model was not released"
     if ai == "suspended":
         # A synui old enough to have stopped the unit outright.
         return "synapd suspended (GPU freed)"

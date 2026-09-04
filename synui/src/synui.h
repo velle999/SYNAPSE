@@ -8219,7 +8219,8 @@ void view_refresh_visibility(syn_server_t *s);
 /* Tell synapd something else wants the GPU (1) or may have it back (0).
  * Runs on the compositor thread with 300 ms timeouts; a synapd that is absent
  * or too old is an ordinary state and answers -1. See ai_interface.c. */
-int  ai_notify_demand(int high);
+int  ai_release_model(void);   /* game mode: SYN_MSG_SLEEP — VRAM, RAM and CPU */
+int  ai_resume_model(void);    /* and SYN_MSG_WAKE on the way out */
 
 int  ai_thread_start(syn_server_t *s);
 void ai_thread_stop(syn_server_t *s);    /* join the thread, close the pipes */

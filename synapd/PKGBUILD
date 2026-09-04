@@ -29,7 +29,19 @@ pkgver=0.1.0
 #   ⚠ INVISIBLE ON ANY BOX THAT HAS EVER PICKED A MODEL BY HAND, because
 #   /var/lib/synapd/model.selected outranks the config — which is why it
 #   survived this long on the machine it was written on.
-pkgrel=51
+# 52: the comments that named synui's game mode as the sender of SYN_MSG_DEMAND
+#   are wrong as of synui 601 — game mode releases the model outright, because
+#   shedding a layer moves it to RAM and the CPU rather than freeing it. DEMAND
+#   stays as the API for what it was right for: a desktop under GPU pressure
+#   where somebody still wants the assistant to answer. It has no sender in the
+#   tree, and says so rather than naming one that is gone.
+#   ⛔ AND THE REFUSAL NO LONGER PROMISES A RELOAD. A query while the model is
+#     asleep said "released for suspend and is reloading"; nothing reloads a
+#     sleeping model except SYN_MSG_WAKE, and game mode holds it down for the
+#     length of a game. Read during a game, that message described a daemon
+#     stuck mid-reload for an hour. Same for the log line, which said "for
+#     suspend" about a release with two very different senders.
+pkgrel=52
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

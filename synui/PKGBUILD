@@ -3393,7 +3393,35 @@ pkgver=0.1.0
 #   reason bar_palette_keys.sh does. No pixel test can reach this: it needs a
 #   wallpaper whose measured ink flips, an empty desktop, and the monitor it
 #   lands on.
-pkgrel=600
+# 601: GAME MODE RELEASES THE AI MODEL AGAIN — 599 stopped doing that and it
+#   should not have. It replaced the daemon stop with SYN_MSG_DEMAND "high",
+#   which only raises the VRAM floor the offload policy defends: synapd sheds
+#   GPU layers and keeps the model.
+#   ⛔ A SHED LAYER IS NOT A FREED LAYER. llama.cpp has no live migration, so a
+#     re-fit reloads at a lower n_gpu_layers and the weights that came off the
+#     card are resident in SYSTEM RAM and computed on the CPU. A game competes
+#     for VRAM, RAM and CPU; 599 measured the first (7300 MiB with synapd up
+#     against 2655 without) and moved the cost onto the other two. Nobody is
+#     querying the assistant during a game.
+#   ⛔ SYN_MSG_SLEEP on the way in, SYN_MSG_WAKE on the way out — the suspend
+#     hook's path, which since synapd 51 leaves the retrieval embedder alone.
+#     That was the real defect in the `systemctl stop synapd.socket
+#     synapd.service` both of these replaced: it took a 274 MB embedder down
+#     with the chat model and killed the socket, so chibi's memory went dark for
+#     the length of every game. Releasing keeps all of that and gives the game
+#     everything it actually competes for.
+#   ⚠ WAKE IS NOT OPTIONAL. Nothing reloads a sleeping model on its own — a
+#     query in that window is refused, not queued behind a load — so game_leave
+#     AND game_finish send it, the latter for a compositor dying mid-game.
+#   ⚠ 1.5 s socket timeout, stated rather than discovered: SLEEP answers only
+#     once the VRAM is really gone (that is what lets the suspend hook wait for
+#     it), and this runs on the compositor thread. A shorter timeout would not
+#     make the release faster, only make us report that it did not happen.
+#   The indicator reads "released" now; a state file from 599/600 still says
+#   "yielded" and is rendered as what it actually meant — VRAM only, model still
+#   in RAM. tests/game_actions.sh pins the policy in four checks, RED-verified
+#   against 600's game.c.
+pkgrel=601
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

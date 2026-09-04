@@ -163,6 +163,27 @@ else
 fi
 
 echo ""
+echo ""
+echo "=== the AI is RELEASED, not asked to make room ==="
+# ⛔ THE POLICY, PINNED, BECAUSE IT WAS CHANGED ONCE WITHOUT BEING ASKED FOR.
+# synui 599 replaced the daemon stop with SYN_MSG_DEMAND "high", which only
+# raises the VRAM floor the offload policy defends: synapd sheds GPU layers and
+# keeps the model. A shed layer is not a freed layer — llama.cpp has no live
+# migration, so a re-fit reloads at a lower n_gpu_layers and the weights that
+# came off the card sit in SYSTEM RAM and compute on the CPU. A game wants all
+# three. Nobody is querying the assistant mid-game; the model goes away.
+check "entering releases the model" 1 \
+      "$(body game_enter "$game" | grep -c 'ai_release_model')"
+check "leaving loads it again"      1 \
+      "$(body game_leave "$game" | grep -c 'ai_resume_model')"
+# ⛔ AND game_finish, because nothing reloads a released model on its own — a
+# query while it sleeps is refused, not queued behind a load. A compositor that
+# died mid-game would leave the box with no assistant until the next reboot.
+check "so does compositor shutdown"  1 \
+      "$(body game_finish "$game" | grep -c 'ai_resume_model')"
+check "and nothing asks it to merely make room" 0 \
+      "$(grep -c 'notify_demand' "$game")"
+
 echo "=== there is ONE definition of \"this is a game\" ==="
 # The detector and the fullscreen placement both have to answer it, and if they
 # answer it separately they will drift: a window sent to the main screen that

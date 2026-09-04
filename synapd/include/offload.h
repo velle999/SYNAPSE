@@ -29,7 +29,7 @@ void offload_stop(synapd_state_t *s);
  * the policy defends; anything else drops it back.
  *
  * ⚠ IT DOES NOT NAME A LAYER COUNT and must not be given the chance to. The
- * caller knows a game started; it does not know how much VRAM the game wants,
+ * caller knows something wants the card; it does not know how much VRAM it wants,
  * how big the model is, or what card this is. Handing it a number would put
  * the policy in a client — and a second client with a different idea would
  * fight the first.
