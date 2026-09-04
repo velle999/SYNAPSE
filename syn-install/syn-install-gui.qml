@@ -45,7 +45,7 @@ import QtQuick.Controls
 FloatingWindow {
     id: root
 
-    title: "Install SynapseOS"
+    title: root.t("Install SynapseOS")
     implicitWidth: 900
     implicitHeight: 640
     // Below this the two-column summary and the disk rows stop fitting, and a
@@ -94,6 +94,113 @@ FloatingWindow {
     }
 
     readonly property string bin: Quickshell.env("SYN_INSTALL_BIN") || "syn-install"
+
+    // ── The window's own words ──────────────────────────────────────────────
+    //
+    // ⛔ NOT qsTr(). quickshell installs no QTranslator and has no way to reach
+    // one, so qsTr() compiles, returns its own argument, and translates nothing
+    // — in every language, forever, while reading in a diff exactly like a
+    // marked string. The bar learned this the expensive way; see
+    // synui/quickshell/I18n.qml.
+    //
+    // ⚠ THE KEY IS THE ENGLISH SENTENCE, exactly as in syn-install.sh's own
+    // catalogs — because they ARE those catalogs. `syn-install --strings`
+    // prints the loaded one as `english<TAB>translation` records; a sentence
+    // with no entry prints the English written here, which is the right
+    // failure and the reason a half-finished language is still a usable window.
+    //
+    // ⚠ THE FILE IS READ BLOCKING, and syn-install-gui.sh writes it before
+    // quickshell starts. Read asynchronously, the window would paint English
+    // and repaint into Japanese a frame later, which is worse than either.
+    property var strings: ({})
+
+    // t(english) — the translation, or the English.
+    //
+    // ⚠ READS root.strings, WHICH IS WHAT MAKES IT A BINDING. Every call site
+    // is inside a property binding, so QML records this property access and
+    // re-evaluates the lot when the map is replaced — which is how picking a
+    // language in the form below re-translates the window in place, with no
+    // reload and no list of things to remember to update.
+    // ⚠ THE LOOKUP HAS ITS OWN NAME, and tf() calls THAT rather than t().
+    // tools/gui-strings.py reads every `root.t(` in this file as a sentence to
+    // be translated, so `root.t(s)` inside tf() would be reported as a marked
+    // string whose argument is a variable — the one failure this scheme has,
+    // raised against the one call site that is not a failure.
+    function lookup(s) {
+        const v = root.strings[s]
+        return v === undefined ? s : v
+    }
+
+    function t(s) { return root.lookup(s) }
+
+    // tf(english, …) — a sentence with something in it. The English is still
+    // the key; `%1`, `%2` … are replaced after the lookup, so a translation may
+    // put them in any order its grammar needs.
+    function tf(s) {
+        let out = root.lookup(s)
+        for (let i = 1; i < arguments.length; i++)
+            out = out.replace("%" + i, arguments[i])
+        return out
+    }
+
+    // The records, parsed once per catalog.
+    //
+    // ⚠ `\n` AND `\t` ARE ESCAPED IN BOTH COLUMNS — a third of these strings
+    // are multi-line and the record separator is a newline. print_strings()
+    // writes them escaped and this is the other half of that convention.
+    function parseStrings(text) {
+        const m = ({})
+        for (const line of text.split("\n")) {
+            if (!line) continue
+            const tab = line.indexOf("\t")
+            if (tab < 0) continue
+            const k = line.slice(0, tab).replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+            const v = line.slice(tab + 1).replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+            if (k && v) m[k] = v
+        }
+        return m
+    }
+
+    FileView {
+        // Absent on every path but the launcher's — a window started by hand,
+        // or an English desktop, where no catalog was dumped. English is what
+        // that means and it is already in the source.
+        path: Quickshell.env("SYN_INSTALL_STRINGS") || ""
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.strings = root.parseStrings(this.text())
+        onLoadFailed: root.strings = ({})
+    }
+
+    /*
+     * …and again when the language is CHANGED in the form.
+     *
+     * The window is the only installer that can draw Japanese, Chinese, Korean,
+     * Arabic or Hindi at all — a Linux VT cannot (512 glyphs, no shaper), which
+     * is why the text installer keeps English prose for those five. So a person
+     * whose language was not the one the image booted in picks it HERE, and the
+     * window has to answer in it; sending them back to reboot with `lang=` to
+     * see their own language would be the whole feature missing.
+     *
+     * ⚠ EMPTY OUTPUT IS A COMPLETE ANSWER — English, or a language with no
+     * catalog — so the map is replaced either way rather than left holding the
+     * previous language's words.
+     */
+    Process {
+        id: stringsProbe
+        command: [root.bin, "--strings", root.aLocale]
+        stdout: StdioCollector {
+            onStreamFinished: root.strings = root.parseStrings(this.text)
+        }
+    }
+    onALocaleChanged: {
+        if (!root.aLocale) return
+        // ⛔ A `running = true` ON AN ALREADY-RUNNING Process IS A SILENT NO-OP
+        // in quickshell — the second language picked in quick succession would
+        // simply never load. Stop first.
+        stringsProbe.running = false
+        stringsProbe.running = true
+    }
     // Where the profile is written. /run is a tmpfs, which is the point: it
     // holds a password until the install reads it and never reaches a disk.
     readonly property string confPath: Quickshell.env("SYN_INSTALL_CONF") || "/run/synapseos/install.conf"
@@ -317,112 +424,112 @@ FloatingWindow {
     // `min` means "a Minimal install keeps it" — the script's `core` group.
     // Nothing in the sw groups is ever min.
     readonly property var packGroups: [
-        { title: "SynapseOS packages",
-          note: "Everything the system is made of. What you cannot drop is what "
+        { title: root.t("SynapseOS packages"),
+          note: root.t("Everything the system is made of. What you cannot drop is what "
               + "something else you kept depends on — those are turned back on "
-              + "and named before anything is installed.",
+              + "and named before anything is installed."),
           rows: [
-            { key: "comp_synui",       std: 1, full: 1, min: 1, label: "SYNAPSE UI — the Wayland desktop" },
-            { key: "comp_synapd",      std: 1, full: 1, min: 1, label: "synapd — the local AI daemon" },
-            { key: "comp_synsh",       std: 1, full: 1, min: 1, label: "synsh — the AI-native shell" },
-            { key: "comp_synguard",    std: 1, full: 1, min: 1, label: "synguard + kernel module" },
-            { key: "comp_synnet",      std: 1, full: 1, min: 1, label: "synnet — network policy" },
-            { key: "comp_synpkg",      std: 1, full: 1, min: 1, label: "Software — the package manager" },
-            { key: "comp_synfiles",    std: 1, full: 1, min: 1, label: "Files — the file manager" },
-            { key: "comp_syntty",      std: 1, full: 1, min: 1, label: "Terminal (synui depends on it)" },
-            { key: "comp_synsettings", std: 1, full: 1, min: 1, label: "Settings" },
-            { key: "comp_syndisks",    std: 1, full: 1, min: 1, label: "Disks" },
-            { key: "comp_synedit",     std: 1, full: 1, min: 1, label: "Editor" },
-            { key: "comp_syncal",      std: 1, full: 1, min: 1, label: "Calendar" },
-            { key: "comp_synvault",    std: 1, full: 1, min: 1, label: "File Vault — a locked folder" },
-            { key: "comp_synclean",    std: 1, full: 1, min: 1, label: "Disk Cleanup — caches, and secure delete" },
-            { key: "comp_synupdate",   std: 1, full: 1, min: 1, label: "syn-update — how fixes arrive" },
-            { key: "comp_syn",         std: 1, full: 1, min: 1, label: "syn — the top-level CLI" },
-            { key: "comp_synmodel",    std: 1, full: 1, min: 1, label: "syn-model — fetch AI models" },
-            { key: "comp_synfirstboot", std: 1, full: 1, min: 1, label: "syn-firstboot" },
-            { key: "comp_synconfine",  std: 1, full: 1, min: 1, label: "syn-confine — the sandbox" },
-            { key: "comp_fetch",       std: 1, full: 1, min: 1, label: "fetch — the About OS readout" },
-            { key: "comp_arcade",      std: 1, full: 1, min: 0, label: "Arcade — overlay, pads, big screen" },
-            { key: "comp_cliamp",      std: 1, full: 1, min: 0, label: "cliamp — the music player" },
-            { key: "comp_synplay",     std: 1, full: 1, min: 0, label: "Player — playlists, shuffle and history, on mpv" },
-            { key: "comp_synstudio",   std: 1, full: 1, min: 0, label: "Studio — photo darkroom and video" },
-            { key: "comp_gfn",         std: 1, full: 1, min: 0, label: "GeForce NOW — cloud gaming in a browser" },
-            { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: "Arsenal — BlackArch browser" },
-            { key: "comp_chibi",       std: 1, full: 1, min: 0, label: "Chibi — voice companion" },
-            { key: "comp_vibe",        std: 1, full: 1, min: 0, label: "Vibe — AI coding assistant" },
-            { key: "comp_wpengine",    std: 1, full: 1, min: 0, label: "Animated wallpapers (~317 MB)" },
-            { key: "comp_nexus",       std: 0, full: 1, min: 0, label: "Nexus Chat (pulls in Firefox)" },
-            { key: "comp_tepris",      std: 0, full: 1, min: 0, label: "TEPRIS (pulls in Firefox)" }
+            { key: "comp_synui",       std: 1, full: 1, min: 1, label: root.t("SYNAPSE UI — the Wayland desktop") },
+            { key: "comp_synapd",      std: 1, full: 1, min: 1, label: root.t("synapd — the local AI daemon") },
+            { key: "comp_synsh",       std: 1, full: 1, min: 1, label: root.t("synsh — the AI-native shell") },
+            { key: "comp_synguard",    std: 1, full: 1, min: 1, label: root.t("synguard + kernel module") },
+            { key: "comp_synnet",      std: 1, full: 1, min: 1, label: root.t("synnet — network policy") },
+            { key: "comp_synpkg",      std: 1, full: 1, min: 1, label: root.t("Software — the package manager") },
+            { key: "comp_synfiles",    std: 1, full: 1, min: 1, label: root.t("Files — the file manager") },
+            { key: "comp_syntty",      std: 1, full: 1, min: 1, label: root.t("Terminal (synui depends on it)") },
+            { key: "comp_synsettings", std: 1, full: 1, min: 1, label: root.t("Settings") },
+            { key: "comp_syndisks",    std: 1, full: 1, min: 1, label: root.t("Disks") },
+            { key: "comp_synedit",     std: 1, full: 1, min: 1, label: root.t("Editor") },
+            { key: "comp_syncal",      std: 1, full: 1, min: 1, label: root.t("Calendar") },
+            { key: "comp_synvault",    std: 1, full: 1, min: 1, label: root.t("File Vault — a locked folder") },
+            { key: "comp_synclean",    std: 1, full: 1, min: 1, label: root.t("Disk Cleanup — caches, and secure delete") },
+            { key: "comp_synupdate",   std: 1, full: 1, min: 1, label: root.t("syn-update — how fixes arrive") },
+            { key: "comp_syn",         std: 1, full: 1, min: 1, label: root.t("syn — the top-level CLI") },
+            { key: "comp_synmodel",    std: 1, full: 1, min: 1, label: root.t("syn-model — fetch AI models") },
+            { key: "comp_synfirstboot", std: 1, full: 1, min: 1, label: root.t("syn-firstboot") },
+            { key: "comp_synconfine",  std: 1, full: 1, min: 1, label: root.t("syn-confine — the sandbox") },
+            { key: "comp_fetch",       std: 1, full: 1, min: 1, label: root.t("fetch — the About OS readout") },
+            { key: "comp_arcade",      std: 1, full: 1, min: 0, label: root.t("Arcade — overlay, pads, big screen") },
+            { key: "comp_cliamp",      std: 1, full: 1, min: 0, label: root.t("cliamp — the music player") },
+            { key: "comp_synplay",     std: 1, full: 1, min: 0, label: root.t("Player — playlists, shuffle and history, on mpv") },
+            { key: "comp_synstudio",   std: 1, full: 1, min: 0, label: root.t("Studio — photo darkroom and video") },
+            { key: "comp_gfn",         std: 1, full: 1, min: 0, label: root.t("GeForce NOW — cloud gaming in a browser") },
+            { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: root.t("Arsenal — BlackArch browser") },
+            { key: "comp_chibi",       std: 1, full: 1, min: 0, label: root.t("Chibi — voice companion") },
+            { key: "comp_vibe",        std: 1, full: 1, min: 0, label: root.t("Vibe — AI coding assistant") },
+            { key: "comp_wpengine",    std: 1, full: 1, min: 0, label: root.t("Animated wallpapers (~317 MB)") },
+            { key: "comp_nexus",       std: 0, full: 1, min: 0, label: root.t("Nexus Chat (pulls in Firefox)") },
+            { key: "comp_tepris",      std: 0, full: 1, min: 0, label: root.t("TEPRIS (pulls in Firefox)") }
           ] },
-        { title: "Web and communication",
-          note: "None of this is ours; every name is in the Arch repositories. "
+        { title: root.t("Web and communication"),
+          note: root.t("None of this is ours; every name is in the Arch repositories. "
               + "Firefox is on by default because an installed SynapseOS used to "
-              + "arrive with no browser at all.",
+              + "arrive with no browser at all."),
           rows: [
-            { key: "sw_firefox",     std: 1, full: 1, min: 0, label: "Firefox" },
-            { key: "sw_chromium",    std: 0, full: 0, min: 0, label: "Chromium" },
-            { key: "sw_vivaldi",     std: 0, full: 0, min: 0, label: "Vivaldi" },
-            { key: "sw_thunderbird", std: 0, full: 1, min: 0, label: "Thunderbird — mail" },
-            { key: "sw_discord",     std: 0, full: 0, min: 0, label: "Discord" },
-            { key: "sw_telegram",    std: 0, full: 0, min: 0, label: "Telegram" },
-            { key: "sw_signal",      std: 0, full: 0, min: 0, label: "Signal" },
-            { key: "sw_keepassxc",   std: 0, full: 1, min: 0, label: "KeePassXC — passwords" },
-            { key: "sw_qbittorrent", std: 0, full: 0, min: 0, label: "qBittorrent" },
-            { key: "sw_syncthing",   std: 0, full: 0, min: 0, label: "Syncthing — file sync" },
+            { key: "sw_firefox",     std: 1, full: 1, min: 0, label: root.t("Firefox") },
+            { key: "sw_chromium",    std: 0, full: 0, min: 0, label: root.t("Chromium") },
+            { key: "sw_vivaldi",     std: 0, full: 0, min: 0, label: root.t("Vivaldi") },
+            { key: "sw_thunderbird", std: 0, full: 1, min: 0, label: root.t("Thunderbird — mail") },
+            { key: "sw_discord",     std: 0, full: 0, min: 0, label: root.t("Discord") },
+            { key: "sw_telegram",    std: 0, full: 0, min: 0, label: root.t("Telegram") },
+            { key: "sw_signal",      std: 0, full: 0, min: 0, label: root.t("Signal") },
+            { key: "sw_keepassxc",   std: 0, full: 1, min: 0, label: root.t("KeePassXC — passwords") },
+            { key: "sw_qbittorrent", std: 0, full: 0, min: 0, label: root.t("qBittorrent") },
+            { key: "sw_syncthing",   std: 0, full: 0, min: 0, label: root.t("Syncthing — file sync") },
             // Flatpak, not pacman — see the `flat` group in syn-install.sh.
-            { key: "sw_localsend",   std: 0, full: 1, min: 0, label: "LocalSend — send to phone (Flatpak)" }
+            { key: "sw_localsend",   std: 0, full: 1, min: 0, label: root.t("LocalSend — send to phone (Flatpak)") }
           ] },
-        { title: "Audio and video", note: "",
+        { title: root.t("Audio and video"), note: "",
           rows: [
-            { key: "sw_vlc",       std: 0, full: 1, min: 0, label: "VLC" },
-            { key: "sw_mpv",       std: 0, full: 1, min: 0, label: "mpv" },
-            { key: "sw_obs",       std: 0, full: 0, min: 0, label: "OBS Studio" },
-            { key: "sw_audacity",  std: 0, full: 0, min: 0, label: "Audacity" },
-            { key: "sw_kdenlive",  std: 0, full: 0, min: 0, label: "Kdenlive" },
-            { key: "sw_handbrake", std: 0, full: 0, min: 0, label: "HandBrake" },
-            { key: "sw_spotify",   std: 0, full: 0, min: 0, label: "Spotify" }
+            { key: "sw_vlc",       std: 0, full: 1, min: 0, label: root.t("VLC") },
+            { key: "sw_mpv",       std: 0, full: 1, min: 0, label: root.t("mpv") },
+            { key: "sw_obs",       std: 0, full: 0, min: 0, label: root.t("OBS Studio") },
+            { key: "sw_audacity",  std: 0, full: 0, min: 0, label: root.t("Audacity") },
+            { key: "sw_kdenlive",  std: 0, full: 0, min: 0, label: root.t("Kdenlive") },
+            { key: "sw_handbrake", std: 0, full: 0, min: 0, label: root.t("HandBrake") },
+            { key: "sw_spotify",   std: 0, full: 0, min: 0, label: root.t("Spotify") }
           ] },
-        { title: "Office and graphics", note: "",
+        { title: root.t("Office and graphics"), note: "",
           rows: [
-            { key: "sw_libreoffice", std: 0, full: 1, min: 0, label: "LibreOffice" },
-            { key: "sw_gimp",        std: 0, full: 1, min: 0, label: "GIMP" },
-            { key: "sw_inkscape",    std: 0, full: 0, min: 0, label: "Inkscape" },
-            { key: "sw_krita",       std: 0, full: 0, min: 0, label: "Krita" },
-            { key: "sw_blender",     std: 0, full: 0, min: 0, label: "Blender" },
-            { key: "sw_calibre",     std: 0, full: 0, min: 0, label: "Calibre" }
+            { key: "sw_libreoffice", std: 0, full: 1, min: 0, label: root.t("LibreOffice") },
+            { key: "sw_gimp",        std: 0, full: 1, min: 0, label: root.t("GIMP") },
+            { key: "sw_inkscape",    std: 0, full: 0, min: 0, label: root.t("Inkscape") },
+            { key: "sw_krita",       std: 0, full: 0, min: 0, label: root.t("Krita") },
+            { key: "sw_blender",     std: 0, full: 0, min: 0, label: root.t("Blender") },
+            { key: "sw_calibre",     std: 0, full: 0, min: 0, label: root.t("Calibre") }
           ] },
-        { title: "Development and admin", note: "",
+        { title: root.t("Development and admin"), note: "",
           rows: [
-            { key: "sw_code",        std: 0, full: 0, min: 0, label: "VS Code (OSS build)" },
-            { key: "sw_neovim",      std: 0, full: 0, min: 0, label: "Neovim" },
-            { key: "sw_gitlfs",      std: 0, full: 0, min: 0, label: "git-lfs" },
-            { key: "sw_docker",      std: 0, full: 0, min: 0, label: "Docker" },
-            { key: "sw_virtmanager", std: 0, full: 0, min: 0, label: "virt-manager" },
-            { key: "sw_gparted",     std: 0, full: 0, min: 0, label: "GParted" },
-            { key: "sw_btop",        std: 0, full: 1, min: 0, label: "btop" },
-            { key: "sw_filezilla",   std: 0, full: 0, min: 0, label: "FileZilla" },
-            { key: "sw_remmina",     std: 0, full: 0, min: 0, label: "Remmina" },
-            { key: "sw_archivers",   std: 0, full: 1, min: 0, label: "7zip + unrar" }
+            { key: "sw_code",        std: 0, full: 0, min: 0, label: root.t("VS Code (OSS build)") },
+            { key: "sw_neovim",      std: 0, full: 0, min: 0, label: root.t("Neovim") },
+            { key: "sw_gitlfs",      std: 0, full: 0, min: 0, label: root.t("git-lfs") },
+            { key: "sw_docker",      std: 0, full: 0, min: 0, label: root.t("Docker") },
+            { key: "sw_virtmanager", std: 0, full: 0, min: 0, label: root.t("virt-manager") },
+            { key: "sw_gparted",     std: 0, full: 0, min: 0, label: root.t("GParted") },
+            { key: "sw_btop",        std: 0, full: 1, min: 0, label: root.t("btop") },
+            { key: "sw_filezilla",   std: 0, full: 0, min: 0, label: root.t("FileZilla") },
+            { key: "sw_remmina",     std: 0, full: 0, min: 0, label: root.t("Remmina") },
+            { key: "sw_archivers",   std: 0, full: 1, min: 0, label: root.t("7zip + unrar") }
           ] },
-        { title: "Games, launchers and helpers",
-          note: "Steam is in the options below rather than here: it is the only "
-              + "one that turns on a second architecture and a third repository.",
+        { title: root.t("Games, launchers and helpers"),
+          note: root.t("Steam is in the options below rather than here: it is the only "
+              + "one that turns on a second architecture and a third repository."),
           rows: [
-            { key: "sw_lutris",       std: 0, full: 0, min: 0, label: "Lutris" },
-            { key: "sw_prism",        std: 0, full: 0, min: 0, label: "Prism — Minecraft" },
-            { key: "sw_retroarch",    std: 0, full: 0, min: 0, label: "RetroArch" },
-            { key: "sw_dolphinemu",   std: 0, full: 0, min: 0, label: "Dolphin — GameCube/Wii" },
-            { key: "sw_ppsspp",       std: 0, full: 0, min: 0, label: "PPSSPP — PSP" },
-            { key: "sw_scummvm",      std: 0, full: 0, min: 0, label: "ScummVM" },
-            { key: "sw_pinball",      std: 0, full: 1, min: 0, label: "Space Cadet Pinball (Flatpak)" },
-            { key: "sw_dosbox",       std: 0, full: 0, min: 0, label: "DOSBox" },
-            { key: "sw_mame",         std: 0, full: 0, min: 0, label: "MAME" },
-            { key: "sw_protontricks", std: 0, full: 0, min: 0, label: "Protontricks" },
-            { key: "sw_winetricks",   std: 0, full: 0, min: 0, label: "Winetricks" },
-            { key: "sw_goverlay",     std: 0, full: 0, min: 0, label: "GOverlay — MangoHud" },
-            { key: "sw_antimicrox",   std: 0, full: 0, min: 0, label: "AntiMicroX — pad remap" },
-            { key: "sw_openrgb",      std: 0, full: 0, min: 0, label: "OpenRGB" },
-            { key: "sw_corectrl",     std: 0, full: 0, min: 0, label: "CoreCtrl" }
+            { key: "sw_lutris",       std: 0, full: 0, min: 0, label: root.t("Lutris") },
+            { key: "sw_prism",        std: 0, full: 0, min: 0, label: root.t("Prism — Minecraft") },
+            { key: "sw_retroarch",    std: 0, full: 0, min: 0, label: root.t("RetroArch") },
+            { key: "sw_dolphinemu",   std: 0, full: 0, min: 0, label: root.t("Dolphin — GameCube/Wii") },
+            { key: "sw_ppsspp",       std: 0, full: 0, min: 0, label: root.t("PPSSPP — PSP") },
+            { key: "sw_scummvm",      std: 0, full: 0, min: 0, label: root.t("ScummVM") },
+            { key: "sw_pinball",      std: 0, full: 1, min: 0, label: root.t("Space Cadet Pinball (Flatpak)") },
+            { key: "sw_dosbox",       std: 0, full: 0, min: 0, label: root.t("DOSBox") },
+            { key: "sw_mame",         std: 0, full: 0, min: 0, label: root.t("MAME") },
+            { key: "sw_protontricks", std: 0, full: 0, min: 0, label: root.t("Protontricks") },
+            { key: "sw_winetricks",   std: 0, full: 0, min: 0, label: root.t("Winetricks") },
+            { key: "sw_goverlay",     std: 0, full: 0, min: 0, label: root.t("GOverlay — MangoHud") },
+            { key: "sw_antimicrox",   std: 0, full: 0, min: 0, label: root.t("AntiMicroX — pad remap") },
+            { key: "sw_openrgb",      std: 0, full: 0, min: 0, label: root.t("OpenRGB") },
+            { key: "sw_corectrl",     std: 0, full: 0, min: 0, label: root.t("CoreCtrl") }
           ] }
     ]
 
@@ -733,12 +840,12 @@ FloatingWindow {
         // that has not finished yet would read as the button being broken on a
         // machine that is perfectly online.
         if (n === 0 && netChecked && !netOk)
-            return "No connection. SynapseOS downloads the base system while it installs, "
-                 + "so this needs a working network before it can start."
+            return root.t("No connection. SynapseOS downloads the base system while it installs, "
+                        + "so this needs a working network before it can start.")
         if (n === 1) {
-            if (!aDisk) return "Choose a disk to install to."
+            if (!aDisk) return root.t("Choose a disk to install to.")
             if (aEncrypt && aLuks.length < 8)
-                return "The encryption passphrase needs at least 8 characters."
+                return root.t("The encryption passphrase needs at least 8 characters.")
         }
         // The Software page can now produce a machine with no desktop and no
         // terminal on it. That is a supported answer — but not one to arrive at
@@ -746,18 +853,18 @@ FloatingWindow {
         // being discovered on the summary.
         if (n === 2 && aPreset === "custom") {
             if (!pickOn("comp_synpkg") && !pickOn("comp_synui"))
-                return "With neither the package manager nor the desktop, this install "
-                     + "has no way to add either one back. Keep at least one."
+                return root.t("With neither the package manager nor the desktop, this install "
+                            + "has no way to add either one back. Keep at least one.")
         }
         if (n === 3) {
             if (!/^[a-z_][a-z0-9_-]*$/.test(aUser))
-                return "A username is lower-case letters, digits, - and _, and cannot start with a digit."
-            if (aPass.length < 1) return "Set a password for the account."
-            if (aPass !== aPass2) return "The two passwords do not match."
+                return root.t("A username is lower-case letters, digits, - and _, and cannot start with a digit.")
+            if (aPass.length < 1) return root.t("Set a password for the account.")
+            if (aPass !== aPass2) return root.t("The two passwords do not match.")
         }
         if (n === 4) {
-            if (!aLocale.trim()) return "A locale is needed, e.g. en_US.UTF-8."
-            if (!aTz.trim()) return "A timezone is needed, e.g. Europe/Lisbon."
+            if (!aLocale.trim()) return root.t("A locale is needed, e.g. en_US.UTF-8.")
+            if (!aTz.trim()) return root.t("A timezone is needed, e.g. Europe/Lisbon.")
         }
         return ""
     }
@@ -907,38 +1014,49 @@ FloatingWindow {
         return out.join(", ")
     }
     function customOpts() {
-        return joinPicked([[aBluetooth, "Bluetooth"], [aPrinting, "printing"], [aWine, "Wine"],
+        // ⚠ THE PRODUCT NAMES ARE NOT MARKED. Bluetooth, Wine, Steam, Nix and
+        // KDE Connect are what they are called in every language; only the two
+        // that are English WORDS are translated.
+        return joinPicked([[aBluetooth, "Bluetooth"], [aPrinting, root.t("printing")], [aWine, "Wine"],
                            [aPhone, "KDE Connect"], [aSteam, "Steam"],
-                           [aBlackarch, "BlackArch repo"], [aNix, "Nix"]])
+                           [aBlackarch, root.tf("%1 repo", "BlackArch")], [aNix, "Nix"]])
     }
 
     // The two-column grid. Custom's three lines are NOT here: they are sentences
     // ("Bluetooth, printing, Wine, KDE Connect, Steam, BlackArch repo, Nix") and
     // a half-width cell elides them, on the one page whose whole job is to be
     // read. They get full-width rows of their own below the grid.
+    //
+    // ⚠ WHOLE SENTENCES, NEVER A CONCATENATED FRAGMENT. `aFs + " on LUKS2"`
+    // would ship those two English words inside every language, and no
+    // translator could reach them — the catalog can only replace a whole key.
+    // tf() takes the value as %1 and lets the translation put it where its
+    // grammar wants it. The VALUES themselves stay as they are: a filesystem
+    // name, a disk node and a locale are what the profile is written with.
     function summaryRows() {
         const R = []
-        R.push(["Disk", aDisk + "  (" + (selectedDisk() ? selectedDisk().size : "?") + ")"])
-        R.push(["Mode", aMode])
-        R.push(["Filesystem", aFs + (aEncrypt ? " on LUKS2" : "")])
-        R.push(["Bootloader", aBoot
-                + (aFs === "btrfs" && aBoot === "limine" && aSnapshots ? " + snapshots" : "")])
-        R.push(["Install", aPreset])
-        R.push(["AI model", aPreset === "minimal" ? "none" : aModel])
-        R.push(["Account", aUser + (aFullname ? "  (" + aFullname + ")" : "")])
-        R.push(["Desktop", aDesktop])
-        R.push(["Locale", aLocale + "   keys " + aKeymap + " / " + aXkb])
-        R.push(["Timezone", aTz])
+        R.push([root.t("Disk"), aDisk + "  (" + (selectedDisk() ? selectedDisk().size : "?") + ")"])
+        R.push([root.t("Mode"), aMode])
+        R.push([root.t("Filesystem"), aEncrypt ? root.tf("%1 on LUKS2", aFs) : aFs])
+        R.push([root.t("Bootloader"), aFs === "btrfs" && aBoot === "limine" && aSnapshots
+                                 ? root.tf("%1 + snapshots", aBoot) : aBoot])
+        R.push([root.t("Install"), aPreset])
+        R.push([root.t("AI model"), aPreset === "minimal" ? root.t("none") : aModel])
+        R.push([root.t("Account"), aUser + (aFullname ? "  (" + aFullname + ")" : "")])
+        R.push([root.t("Desktop"), aDesktop])
+        R.push([root.t("Locale"), root.tf("%1   keys %2 / %3", aLocale, aKeymap, aXkb)])
+        R.push([root.t("Timezone"), aTz])
         return R
     }
 
     function customRows() {
         if (aPreset !== "custom") return []
         const off = customCompDropped()
-        const R = [["SynapseOS", pickedCount("comp_") + " package(s)"
-                                 + (off ? " — WITHOUT " + off : "")],
-                   ["Software", customSoftware() || "none"],
-                   ["Options", customOpts() || "none"]]
+        const R = [[root.t("SynapseOS"), off ? root.tf("%1 package(s) — WITHOUT %2",
+                                            pickedCount("comp_"), off)
+                                       : root.tf("%1 package(s)", pickedCount("comp_"))],
+                   [root.t("Software"), customSoftware() || root.t("none")],
+                   [root.t("Options"), customOpts() || root.t("none")]]
         return R
     }
 
@@ -1086,7 +1204,7 @@ FloatingWindow {
             if (!root.confOk) {
                 root.appendLog("Could not write " + root.confPath)
                 root.running = false; root.finished = true; root.exitCode = 1
-                root.lastLine = "Could not write the install profile."
+                root.lastLine = root.t("Could not write the install profile.")
                 return
             }
             root.appendLog("Profile written to " + root.confPath)
@@ -1114,8 +1232,8 @@ FloatingWindow {
         onExited: {
             root.running = false; root.finished = true
             root.lastLine = root.exitCode === 0
-                ? "Installation complete."
-                : "Installation failed — see the log."
+                ? root.t("Installation complete.")
+                : root.t("Installation failed — see the log.")
             // The profile holds the account password and the LUKS passphrase.
             // /run is a tmpfs so it never reached a disk, but it should not sit
             // readable in the live session either.
@@ -1687,7 +1805,7 @@ FloatingWindow {
                         anchors.margins: 12
                         spacing: 8
                         Text {
-                            text: "No network connection"
+                            text: root.t("No network connection")
                             color: root.cWarn
                             font.pixelSize: 15
                             font.bold: true
@@ -1697,9 +1815,9 @@ FloatingWindow {
                             wrapMode: Text.Wrap
                             color: root.cText
                             font.pixelSize: 13
-                            text: "The base system is downloaded while it installs, so this "
+                            text: root.t("The base system is downloaded while it installs, so this "
                                 + "cannot start offline. Plug in a cable or join a network, "
-                                + "then press Re-check — the answers on these pages are kept."
+                                + "then press Re-check — the answers on these pages are kept.")
                         }
                         Row {
                             spacing: 8
@@ -1709,27 +1827,27 @@ FloatingWindow {
                                 onClicked: root.netProbe()
                             }
                             Btn {
-                                text: "Wi-Fi settings"
+                                text: root.t("Wi-Fi settings")
                                 onClicked: root.netOpenSettings()
                             }
                         }
                     }
                 }
                 Head {
-                    title: "Install SynapseOS" + (root.release ? " " + root.release : "")
-                    blurb: "This asks for a disk, an account and a few preferences, then hands "
-                         + "the answers to the same installer the text version runs. Nothing "
-                         + "is written to any disk until the last page, and that page says "
-                         + "exactly what it is about to do."
+                    title: root.t("Install SynapseOS") + (root.release ? " " + root.release : "")
+                    blurb: root.t("This asks for a disk, an account and a few preferences, then hands "
+                        + "the answers to the same installer the text version runs. Nothing "
+                        + "is written to any disk until the last page, and that page says "
+                        + "exactly what it is about to do.")
                 }
                 Column {
                     spacing: 8
                     Repeater {
                         model: [
-                            "A disk is partitioned and formatted",
-                            "The base system and the SynapseOS packages are installed",
-                            "An account and a desktop are set up",
-                            "A bootloader is written"
+                            root.t("A disk is partitioned and formatted"),
+                            root.t("The base system and the SynapseOS packages are installed"),
+                            root.t("An account and a desktop are set up"),
+                            root.t("A bootloader is written")
                         ]
                         Row {
                             spacing: 8
@@ -1742,8 +1860,8 @@ FloatingWindow {
                     width: parent.width; height: 1; color: root.cLine
                 }
                 Text {
-                    text: "Partitioning an existing layout by hand is the text installer's "
-                        + "ADVANCED mode — quit this and run `syn-install` in a terminal for that."
+                    text: root.t("Partitioning an existing layout by hand is the text installer's "
+                        + "ADVANCED mode — quit this and run `syn-install` in a terminal for that.")
                     color: root.cDim; font.pixelSize: 12
                     width: parent.width; wrapMode: Text.WordWrap
                 }
@@ -1756,8 +1874,8 @@ FloatingWindow {
                 spacing: 14
                 visible: root.page === 1
                 Head {
-                    title: "Where should SynapseOS go?"
-                    blurb: "The installer's own media is listed and cannot be chosen."
+                    title: root.t("Where should SynapseOS go?")
+                    blurb: root.t("The installer's own media is listed and cannot be chosen.")
                 }
                 Column {
                     width: parent.width
@@ -1775,7 +1893,7 @@ FloatingWindow {
                         }
                     }
                     Text {
-                        text: "No disks found."
+                        text: root.t("No disks found.")
                         color: root.cErr; font.pixelSize: 13
                         visible: root.disks.length === 0
                     }
@@ -1784,18 +1902,18 @@ FloatingWindow {
                     spacing: 22
                     Column {
                         spacing: 6
-                        Text { text: "Mode"; color: root.cDim; font.pixelSize: 12 }
+                        Text { text: root.t("Mode"); color: root.cDim; font.pixelSize: 12 }
                         Row {
                             spacing: 6
                             Choice {
-                                width: 190; text: "Erase the disk"
-                                subtext: "every partition and all data"
+                                width: 190; text: root.t("Erase the disk")
+                                subtext: root.t("every partition and all data")
                                 checked: root.aMode === "erase"
                                 onPicked: root.aMode = "erase"
                             }
                             Choice {
-                                width: 190; text: "Install alongside"
-                                subtext: "use free space, UEFI only"
+                                width: 190; text: root.t("Install alongside")
+                                subtext: root.t("use free space, UEFI only")
                                 checked: root.aMode === "alongside"
                                 onPicked: root.aMode = "alongside"
                             }
@@ -1806,7 +1924,7 @@ FloatingWindow {
                     spacing: 22
                     Column {
                         spacing: 6
-                        Text { text: "Filesystem"; color: root.cDim; font.pixelSize: 12 }
+                        Text { text: root.t("Filesystem"); color: root.cDim; font.pixelSize: 12 }
                         Row {
                             spacing: 6
                             Repeater {
@@ -1821,7 +1939,7 @@ FloatingWindow {
                     }
                     Column {
                         spacing: 6
-                        Text { text: "Bootloader"; color: root.cDim; font.pixelSize: 12 }
+                        Text { text: root.t("Bootloader"); color: root.cDim; font.pixelSize: 12 }
                         Row {
                             spacing: 6
                             Repeater {
@@ -1839,25 +1957,25 @@ FloatingWindow {
                     spacing: 18
                     Choice {
                         width: 240
-                        text: "Snapshots"
-                        subtext: "btrfs + limine only"
+                        text: root.t("Snapshots")
+                        subtext: root.t("btrfs + limine only")
                         selectable: root.aFs === "btrfs" && root.aBoot === "limine"
                         checked: root.aSnapshots && selectable
                         onPicked: root.aSnapshots = !root.aSnapshots
                     }
                     Choice {
                         width: 240
-                        text: "Encrypt the disk"
-                        subtext: "LUKS2"
+                        text: root.t("Encrypt the disk")
+                        subtext: root.t("LUKS2")
                         checked: root.aEncrypt
                         onPicked: root.aEncrypt = !root.aEncrypt
                     }
                     Field {
                         width: 240
-                        label: "Passphrase"
+                        label: root.t("Passphrase")
                         secret: true
                         visible: root.aEncrypt
-                        hint: "8 characters or more"
+                        hint: root.t("8 characters or more")
                         onTextChanged: root.aLuks = text
                     }
                 }
@@ -1893,9 +2011,9 @@ FloatingWindow {
                     spacing: 14
 
                     Head {
-                        title: "What should be installed?"
-                        blurb: "The SynapseOS core — the compositor, the daemons and the "
-                             + "applications it is built on — is installed by every choice here."
+                        title: root.t("What should be installed?")
+                        blurb: root.t("The SynapseOS core — the compositor, the daemons and the "
+                            + "applications it is built on — is installed by every choice here.")
                     }
                     Column {
                         width: parent.width
@@ -1905,26 +2023,26 @@ FloatingWindow {
                         // starts from what the preset meant rather than from
                         // whatever was ticked two presets ago.
                         Choice {
-                            width: parent.width; text: "Full"
-                            subtext: "Standard + Steam + Nix + more software"
+                            width: parent.width; text: root.t("Full")
+                            subtext: root.t("Standard + Steam + Nix + more software")
                             checked: root.aPreset === "full"
                             onPicked: { root.aPreset = "full"; root.applyPresetPicks("full") }
                         }
                         Choice {
-                            width: parent.width; text: "Standard"
-                            subtext: "the SynapseOS suite, Firefox, AI model, Bluetooth, printing, Wine, phone"
+                            width: parent.width; text: root.t("Standard")
+                            subtext: root.t("the SynapseOS suite, Firefox, AI model, Bluetooth, printing, Wine, phone")
                             checked: root.aPreset === "standard"
                             onPicked: { root.aPreset = "standard"; root.applyPresetPicks("standard") }
                         }
                         Choice {
-                            width: parent.width; text: "Minimal"
-                            subtext: "core daemons only — no apps, no software, no model"
+                            width: parent.width; text: root.t("Minimal")
+                            subtext: root.t("core daemons only — no apps, no software, no model")
                             checked: root.aPreset === "minimal"
                             onPicked: { root.aPreset = "minimal"; root.applyPresetPicks("minimal") }
                         }
                         Choice {
-                            width: parent.width; text: "Custom"
-                            subtext: "tick every package yourself, ours and the ordinary software"
+                            width: parent.width; text: root.t("Custom")
+                            subtext: root.t("tick every package yourself, ours and the ordinary software")
                             checked: root.aPreset === "custom"
                             onPicked: root.aPreset = "custom"
                         }
@@ -2014,15 +2132,15 @@ FloatingWindow {
                         Rectangle { width: parent.width; height: 1; color: root.cLine }
 
                         Text {
-                            text: "Options"
+                            text: root.t("Options")
                             color: root.cText
                             font.pixelSize: 13
                             font.bold: true
                         }
                         Text {
-                            text: "Not packages: a repository, an architecture or a service. "
+                            text: root.t("Not packages: a repository, an architecture or a service. "
                                 + "Each is a decision with a consequence that does not fit on a "
-                                + "checkbox above."
+                                + "checkbox above.")
                             color: root.cDim
                             font.pixelSize: 11
                             width: parent.width
@@ -2035,7 +2153,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Bluetooth"
+                                    text: root.t("Bluetooth")
                                     checked: root.aBluetooth
                                     onToggled: root.aBluetooth = !root.aBluetooth
                                 }
@@ -2044,7 +2162,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Printing (CUPS)"
+                                    text: root.t("Printing (CUPS)")
                                     checked: root.aPrinting
                                     onToggled: root.aPrinting = !root.aPrinting
                                 }
@@ -2053,7 +2171,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Wine — run Windows .exe/.msi"
+                                    text: root.t("Wine — run Windows .exe/.msi")
                                     checked: root.aWine
                                     onToggled: root.aWine = !root.aWine
                                 }
@@ -2062,7 +2180,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "KDE Connect — pair a phone"
+                                    text: root.t("KDE Connect — pair a phone")
                                     checked: root.aPhone
                                     onToggled: root.aPhone = !root.aPhone
                                 }
@@ -2071,7 +2189,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Steam + game stack + Proton (~3.1 GB)"
+                                    text: root.t("Steam + game stack + Proton (~3.1 GB)")
                                     checked: root.aSteam
                                     onToggled: root.aSteam = !root.aSteam
                                 }
@@ -2080,7 +2198,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "BlackArch repo — ~5000 tools, none installed"
+                                    text: root.t("BlackArch repo — ~5000 tools, none installed")
                                     checked: root.aBlackarch
                                     onToggled: root.aBlackarch = !root.aBlackarch
                                 }
@@ -2089,7 +2207,7 @@ FloatingWindow {
                                 width: Math.floor(parent.width / 2); height: 26
                                 Check {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Nix + Home Manager"
+                                    text: root.t("Nix + Home Manager")
                                     checked: root.aNix
                                     onToggled: root.aNix = !root.aNix
                                 }
@@ -2102,9 +2220,9 @@ FloatingWindow {
                         // SynapseOS package, and without the compositor the
                         // Desktop page below has nothing to offer.
                         Text {
-                            text: "syn-update is off: this machine will have no way to receive "
+                            text: root.t("syn-update is off: this machine will have no way to receive "
                                 + "another SynapseOS package. Fixing that later means installing "
-                                + "it by hand from the ISO, or reinstalling."
+                                + "it by hand from the ISO, or reinstalling.")
                             color: root.cErr
                             font.pixelSize: 11
                             visible: !root.pickOn("comp_synupdate")
@@ -2112,8 +2230,8 @@ FloatingWindow {
                             wrapMode: Text.WordWrap
                         }
                         Text {
-                            text: "synui is off: this will not be a SynapseOS desktop. The Desktop "
-                                + "page offers KDE, GNOME or no GUI."
+                            text: root.t("synui is off: this will not be a SynapseOS desktop. The Desktop "
+                                + "page offers KDE, GNOME or no GUI.")
                             color: root.cWarn
                             font.pixelSize: 11
                             visible: !root.pickOn("comp_synui")
@@ -2125,26 +2243,26 @@ FloatingWindow {
                     Column {
                         spacing: 6
                         visible: root.aPreset !== "minimal"
-                        Text { text: "AI model — downloaded during the install"; color: root.cDim; font.pixelSize: 12 }
+                        Text { text: root.t("AI model — downloaded during the install"); color: root.cDim; font.pixelSize: 12 }
                         Row {
                             spacing: 6
                             Choice {
-                                width: 190; text: "Mistral 7B"; subtext: "~4.1 GB — recommended"
+                                width: 190; text: root.t("Mistral 7B"); subtext: root.t("~4.1 GB — recommended")
                                 checked: root.aModel === "mistral-7b"
                                 onPicked: root.aModel = "mistral-7b"
                             }
                             Choice {
-                                width: 170; text: "Phi-3 Mini"; subtext: "~2.2 GB — weaker"
+                                width: 170; text: root.t("Phi-3 Mini"); subtext: root.t("~2.2 GB — weaker")
                                 checked: root.aModel === "phi3"
                                 onPicked: root.aModel = "phi3"
                             }
                             Choice {
-                                width: 170; text: "Qwen2 0.5B"; subtext: "~0.4 GB — much weaker"
+                                width: 170; text: root.t("Qwen2 0.5B"); subtext: root.t("~0.4 GB — much weaker")
                                 checked: root.aModel === "tiny"
                                 onPicked: root.aModel = "tiny"
                             }
                             Choice {
-                                width: 150; text: "None"; subtext: "AI stays inert"
+                                width: 150; text: root.t("None"); subtext: root.t("AI stays inert")
                                 checked: root.aModel === "none"
                                 onPicked: root.aModel = "none"
                             }
@@ -2153,8 +2271,8 @@ FloatingWindow {
                     Choice {
                         width: 340
                         visible: root.hasNvidia
-                        text: "NVIDIA GPU inference"
-                        subtext: "the CUDA runtime, ~4.7 GiB"
+                        text: root.t("NVIDIA GPU inference")
+                        subtext: root.t("the CUDA runtime, ~4.7 GiB")
                         checked: root.aGpuInference
                         onPicked: root.aGpuInference = !root.aGpuInference
                     }
@@ -2183,34 +2301,34 @@ FloatingWindow {
                 anchors.margins: 24
                 spacing: 14
                 visible: root.page === 3
-                Head { title: "Who is this machine for?" }
+                Head { title: root.t("Who is this machine for?") }
                 Row {
                     spacing: 18
                     Field {
-                        label: "Username"; initial: root.aUser
-                        hint: "lower-case, no spaces"
+                        label: root.t("Username"); initial: root.aUser
+                        hint: root.t("lower-case, no spaces")
                         onTextChanged: root.aUser = text
                     }
                     Field {
-                        label: "Full name (optional)"; initial: root.aFullname
+                        label: root.t("Full name (optional)"); initial: root.aFullname
                         onTextChanged: root.aFullname = text
                     }
                 }
                 Row {
                     spacing: 18
                     Field {
-                        label: "Password"; secret: true
+                        label: root.t("Password"); secret: true
                         onTextChanged: root.aPass = text
                     }
                     Field {
-                        label: "Password again"; secret: true
-                        hint: root.aPass2.length > 0 && root.aPass !== root.aPass2 ? "They do not match" : ""
+                        label: root.t("Password again"); secret: true
+                        hint: root.aPass2.length > 0 && root.aPass !== root.aPass2 ? root.t("They do not match") : ""
                         onTextChanged: root.aPass2 = text
                     }
                 }
                 Column {
                     spacing: 6
-                    Text { text: "Desktop"; color: root.cDim; font.pixelSize: 12 }
+                    Text { text: root.t("Desktop"); color: root.cDim; font.pixelSize: 12 }
                     Row {
                         spacing: 6
                         // Only honest while synui is ticked on the Software
@@ -2219,26 +2337,26 @@ FloatingWindow {
                         // name — better to refuse the click than to let the
                         // install stop twenty minutes later.
                         Choice {
-                            width: 200; text: "SynapseUI"
-                            subtext: root.pickOn("comp_synui") ? "the native compositor"
-                                                               : "synui is not selected"
+                            width: 200; text: root.t("SynapseUI")
+                            subtext: root.pickOn("comp_synui") ? root.t("the native compositor")
+                                                               : root.t("synui is not selected")
                             enabled: root.pickOn("comp_synui")
                             opacity: root.pickOn("comp_synui") ? 1.0 : 0.45
                             checked: root.aDesktop === "synui"
                             onPicked: if (root.pickOn("comp_synui")) { root.aDesktop = "synui"; root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 150; text: "KDE Plasma"
+                            width: 150; text: root.t("KDE Plasma")
                             checked: root.aDesktop === "kde"
                             onPicked: { root.aDesktop = "kde";   root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 130; text: "GNOME"
+                            width: 130; text: root.t("GNOME")
                             checked: root.aDesktop === "gnome"
                             onPicked: { root.aDesktop = "gnome"; root.aDesktopChosen = true }
                         }
                         Choice {
-                            width: 130; text: "None"; subtext: "headless"
+                            width: 130; text: root.t("None"); subtext: root.t("headless")
                             checked: root.aDesktop === "tty"
                             onPicked: { root.aDesktop = "tty";   root.aDesktopChosen = true }
                         }
@@ -2253,57 +2371,57 @@ FloatingWindow {
                 spacing: 14
                 visible: root.page === 4
                 Head {
-                    title: "Language, keyboard and time"
-                    blurb: "Pick a language and the other three follow it. The console keymap "
-                         + "and the desktop layout are separate on purpose — Swedish is "
-                         + "'sv-latin1' to the console and 'se' to the desktop — so they can be "
-                         + "changed on their own afterwards."
+                    title: root.t("Language, keyboard and time")
+                    blurb: root.t("Pick a language and the other three follow it. The console keymap "
+                        + "and the desktop layout are separate on purpose — Swedish is "
+                        + "'sv-latin1' to the console and 'se' to the desktop — so they can be "
+                        + "changed on their own afterwards.")
                 }
                 Row {
                     spacing: 18
                     Selector {
-                        label: "Language"
+                        label: root.t("Language")
                         caption: root.aLangKnown && root.aLangLabel
                                  ? root.aLangLabel + "  —  " + root.aLocale
                                  : root.aLocale
-                        hint: root.aLangKnown ? "sets the keyboard and the fonts too"
-                                              : "typed by hand — fonts cover as much as possible"
+                        hint: root.aLangKnown ? root.t("sets the keyboard and the fonts too")
+                                              : root.t("typed by hand — fonts cover as much as possible")
                         onOpened: root.openPicker(
-                            "language", "Language",
-                            "Sets the locale, both keyboard names and the font pack. "
-                            + "Any locale glibc has can be typed instead.",
+                            "language", root.t("Language"),
+                            root.t("Sets the locale, both keyboard names and the font pack. "
+                                 + "Any locale glibc has can be typed instead."),
                             root.aLocale)
                     }
                     Selector {
-                        label: "Timezone"
+                        label: root.t("Timezone")
                         caption: root.withDescription(root.timezones, root.aTz)
                         onOpened: root.openPicker(
-                            "timezone", "Timezone",
-                            "The common zones first, then every name tzdata ships.",
+                            "timezone", root.t("Timezone"),
+                            root.t("The common zones first, then every name tzdata ships."),
                             root.aTz)
                     }
                 }
                 Row {
                     spacing: 18
                     Selector {
-                        label: "Console keymap"
+                        label: root.t("Console keymap")
                         caption: root.aKeymap
-                        hint: "loadkeys — the text console and the greeter"
+                        hint: root.t("loadkeys — the text console and the greeter")
                         onOpened: root.openPicker(
-                            "keymap", "Console keymap",
-                            "Every keymap this image can load. This one names a file "
-                            + "loadkeys has to find, which is why it is not the same list "
-                            + "as the desktop layout.",
+                            "keymap", root.t("Console keymap"),
+                            root.t("Every keymap this image can load. This one names a file "
+                                 + "loadkeys has to find, which is why it is not the same list "
+                                 + "as the desktop layout."),
                             root.aKeymap)
                     }
                     Selector {
-                        label: "Desktop layout"
+                        label: root.t("Desktop layout")
                         caption: root.withDescription(root.xkbLayouts, root.aXkb)
-                        hint: "XKB — the compositor"
+                        hint: root.t("XKB — the compositor")
                         onOpened: root.openPicker(
-                            "xkb", "Desktop keyboard layout",
-                            "The layouts xkbcommon can compile. 'uk' is a console keymap "
-                            + "and not a layout here — the layout is 'gb'.",
+                            "xkb", root.t("Desktop keyboard layout"),
+                            root.t("The layouts xkbcommon can compile. 'uk' is a console keymap "
+                                 + "and not a layout here — the layout is 'gb'."),
                             root.aXkb)
                     }
                 }
@@ -2316,8 +2434,8 @@ FloatingWindow {
                 spacing: 12
                 visible: root.page === 5
                 Head {
-                    title: "Read this back"
-                    blurb: "Nothing has been written yet. The next button is the one that starts."
+                    title: root.t("Read this back")
+                    blurb: root.t("Nothing has been written yet. The next button is the one that starts.")
                 }
                 Rectangle {
                     width: parent.width
@@ -2329,8 +2447,9 @@ FloatingWindow {
                     Text {
                         anchors.centerIn: parent
                         text: root.aMode === "erase"
-                              ? "EVERY PARTITION ON " + root.aDisk + " WILL BE DELETED"
-                              : "SynapseOS will be installed into the free space on " + root.aDisk
+                              ? root.tf("EVERY PARTITION ON %1 WILL BE DELETED", root.aDisk)
+                              : root.tf("SynapseOS will be installed into the free space on %1",
+                                        root.aDisk)
                         color: root.cText
                         font.pixelSize: 14
                         font.bold: true
@@ -2406,13 +2525,14 @@ FloatingWindow {
                 spacing: 12
                 visible: root.page === 6
                 Head {
-                    title: root.finished ? (root.exitCode === 0 ? "SynapseOS is installed" : "The install stopped")
-                                         : "Installing SynapseOS"
+                    title: root.finished ? (root.exitCode === 0 ? root.t("SynapseOS is installed")
+                                                                : root.t("The install stopped"))
+                                         : root.t("Installing SynapseOS")
                     blurb: root.finished && root.exitCode === 0
-                           ? "Reboot and remove the installation media."
-                           : root.finished ? "The log below is the whole story — the last lines say why."
-                           : "This takes a while: the base system and the packages are downloaded, "
-                           + "and an AI model is gigabytes on its own."
+                           ? root.t("Reboot and remove the installation media.")
+                           : root.finished ? root.t("The log below is the whole story — the last lines say why.")
+                           : root.t("This takes a while: the base system and the packages are downloaded, "
+                                  + "and an AI model is gigabytes on its own.")
                 }
                 Rectangle {
                     width: parent.width
@@ -2497,19 +2617,19 @@ FloatingWindow {
                 spacing: 8
 
                 Btn {
-                    text: "Back"
+                    text: root.t("Back")
                     visible: root.page > 0 && root.page < 6
                     onClicked: root.page--
                 }
                 Btn {
-                    text: "Next"
+                    text: root.t("Next")
                     primary: true
                     visible: root.page < 5
                     canPress: root.pageProblem(root.page) === ""
                     onClicked: root.page++
                 }
                 Btn {
-                    text: "Install"
+                    text: root.t("Install")
                     primary: true
                     visible: root.page === 5
                     // Re-checked here as well as on page 0: the link can drop
@@ -2520,13 +2640,13 @@ FloatingWindow {
                     onClicked: root.startInstall()
                 }
                 Btn {
-                    text: "Reboot"
+                    text: root.t("Reboot")
                     primary: true
                     visible: root.page === 6 && root.finished && root.exitCode === 0
                     onClicked: rebootProc.running = true
                 }
                 Btn {
-                    text: "Close"
+                    text: root.t("Close")
                     visible: root.page === 6 && root.finished
                     onClicked: Qt.quit()
                 }
@@ -2640,7 +2760,7 @@ FloatingWindow {
                             Text {
                                 anchors.fill: parent
                                 verticalAlignment: Text.AlignVCenter
-                                text: "type to filter, or type a name that is not listed"
+                                text: root.t("type to filter, or type a name that is not listed")
                                 color: root.cDim
                                 font.pixelSize: 13
                                 visible: filterInput.text === ""
@@ -2728,8 +2848,8 @@ FloatingWindow {
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
                             text: root.pickOptions.length === 0
-                                  ? "Nothing to list on this image — type the name instead."
-                                  : "Nothing matches — the row below uses what you typed."
+                                  ? root.t("Nothing to list on this image — type the name instead.")
+                                  : root.t("Nothing matches — the row below uses what you typed.")
                             color: root.cDim
                             font.pixelSize: 12
                             visible: root.pickFiltered.length === 0
@@ -2747,7 +2867,7 @@ FloatingWindow {
                         border.color: root.cAccent
                         Text {
                             anchors.centerIn: parent
-                            text: "Use “" + root.pickTyped + "” as typed"
+                            text: root.tf("Use “%1” as typed", root.pickTyped)
                             color: root.cText
                             font.pixelSize: 13
                         }

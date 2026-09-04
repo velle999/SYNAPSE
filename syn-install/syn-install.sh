@@ -108,17 +108,27 @@ console_can_draw() {
     return 0
 }
 
-# syn_lang_load <locale|code> — swap the catalog. Anything unknown, and
-# anything English, leaves the strings as they are written here.
+# syn_lang_load <locale|code> [any-screen] — swap the catalog. Anything
+# unknown, and anything English, leaves the strings as they are written here.
+#
+# ⚠ THE SECOND ARGUMENT IS WHO IS GOING TO DRAW IT. By default this is the
+# terminal running the script, which on a live image is a Linux VT that cannot
+# draw five of the thirteen languages, so the veto below applies. `any-screen`
+# says the caller is not the console — print_strings answers into a PIPE, for a
+# window that shapes text with HarfBuzz — and without it the one installer that
+# CAN show Japanese would have been handed the English rows, which is the 113
+# bug on the other side of the same function.
 syn_lang_load() {
-    local want=${1:-} code
+    local want=${1:-} screen=${2:-console} code
     code=${want%%[_.@-]*}
     code=${code,,}
     [ -n "$code" ] || return 0
     case "$code" in c|posix|en) SYN_LANG=en; SYN_T=(); return 0 ;; esac
     # The screen has a veto, and it is not about the catalog: a language the
     # console cannot draw is one the console must not be sent. See above.
-    if ! console_can_draw "$code"; then SYN_LANG=en; SYN_T=(); return 0; fi
+    if [ "$screen" != any-screen ] && ! console_can_draw "$code"; then
+        SYN_LANG=en; SYN_T=(); return 0
+    fi
     # ⚠ AN UNKNOWN LANGUAGE FALLS BACK TO ENGLISH, IT DOES NOT KEEP THE LAST
     # ONE. This used to return with the previous catalog still loaded, so a
     # second call naming a language we have no file for left the installer
@@ -1077,6 +1087,37 @@ list_locales() {
     done <<<"$LOCALE_ROWS"
 }
 
+# print_strings [locale] — the loaded catalog, one `english<TAB>translation`
+# record per line, for the graphical installer to render with.
+#
+# ⚠ NEWLINES ARE ESCAPED, BOTH COLUMNS. A third of these strings are multi-line
+# (the blurbs are written as they are printed), and a record format whose
+# separator is a newline cannot carry one. `\n` and `\t` go out escaped, and the
+# reader unescapes them — the same convention tools/i18n-fill.py already uses on
+# the TSV it reads, so a string can move between the two by hand.
+#
+# ⚠ ENGLISH PRINTS NOTHING, deliberately: every value would equal its key, and a
+# front end that reads an empty catalog falls back to the English it already has
+# in its own source. Zero records is the answer, not an error.
+#
+# ⛔ AND IT IGNORES console_can_draw(), which is what `any-screen` below is
+# for. That rule is about a Linux VT with 512 glyphs; this is a query answered
+# into a pipe, for a window that shapes text with HarfBuzz and draws every
+# script this desktop ships. Applying it here is the exact bug 113 fixed on the
+# other side of the same function — and it DID apply, silently, for as long as
+# this read the loaded catalog instead of loading its own: TERM is inherited,
+# so on the path this exists for (a live image, TERM=linux) the graphical
+# installer's dump was EMPTY for the five languages only it can draw.
+print_strings() {
+    local want=${1:-} k
+    [ -n "$want" ] || want=$(syn_lang_pick)
+    syn_lang_load "$want" any-screen
+    [ "${#SYN_T[@]}" -gt 0 ] || return 0
+    for k in "${!SYN_T[@]}"; do
+        printf '%s\t%s\n' "${k//$'\n'/\\n}" "${SYN_T[$k]//$'\n'/\\n}"
+    done
+}
+
 # ── The language chosen at boot ────────────────────────────
 #
 # A SynapseOS image used to reach its first question in English and stay there
@@ -1970,6 +2011,21 @@ USAGE
         # install would write language=<its own default> into the profile and
         # silently overrule the boot menu.
         --boot-language)    boot_locale_row | tr '|' '\t'; exit 0 ;;
+        # The catalog itself, as records, for the ONE front end that can draw
+        # every script this desktop ships.
+        #
+        # ⚠ THE GRAPHICAL INSTALLER CANNOT SOURCE A BASH ARRAY, and it must not
+        # try: the values span lines and carry quotes, so a QML parser for them
+        # would be a second implementation of bash's own reader — wrong the
+        # first time a translator wrote something ordinary. The script that
+        # already loads catalogs prints one instead, and the window renders what
+        # it says. Same rule as --list-disks.
+        #
+        # ⚠ ONE CATALOG SET FOR BOTH INSTALLERS, keyed by the English sentence
+        # exactly as syn_lang_load is. A window with catalogs of its own would
+        # be thirteen more files to keep in step with these thirteen, and the
+        # sentences overlap.
+        --strings)          shift; print_strings "${1:-}"; exit 0 ;;
         --list-timezones)   list_timezones; exit 0 ;;
         --list-keymaps)     list_keymaps; exit 0 ;;
         --list-xkb-layouts) list_xkb_layouts; exit 0 ;;

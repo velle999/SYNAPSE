@@ -32,10 +32,25 @@ import sys
 
 
 def load_keys(root):
+    """Every key a catalog may hold — BOTH installers'.
+
+    ⚠ THE WINDOW'S SENTENCES COUNT TOO. One catalog serves syn-install.sh and
+    syn-install-gui.qml, so a filler that knew only the script's would refuse
+    every line of a translation for the graphical installer with "0 matches",
+    which reads as the translation being wrong rather than the tool being
+    half-sighted. i18n-extract.py's main() already joins the two; this uses the
+    same two calls so the lists cannot come apart.
+    """
     spec = root / "tools" / "i18n-extract.py"
     ns = {"__name__": "extract", "__file__": str(spec)}
     exec(compile(spec.read_text(encoding="utf-8"), str(spec), "exec"), ns)
-    return ns["strings"]((root / "syn-install.sh").read_text(encoding="utf-8"))
+    keys = ns["strings"]((root / "syn-install.sh").read_text(encoding="utf-8"))
+    seen = set(keys)
+    for k in ns["gui_keys"](root):
+        if k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return keys
 
 
 def unesc(s):

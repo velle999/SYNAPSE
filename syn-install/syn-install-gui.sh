@@ -56,6 +56,38 @@ fi
 
 [ -r "$QML" ] || { echo "missing $QML" >&2; exit 1; }
 
+# ── The window's own words ────────────────────────────────
+#
+# The catalog is dumped HERE, before quickshell starts, so the window can read
+# it with a blocking FileView and open in the right language rather than
+# repainting into it a frame later. syn-install is the only thing that knows
+# how to load a catalog (they are bash arrays, and a QML parser for them would
+# be a second implementation of bash); it prints records, the window renders
+# them — the same rule as --list-disks.
+#
+# ⚠ EMPTY IS THE ANSWER FOR ENGLISH, and for a language with no catalog. The
+# window reads no records and keeps the English written in its own source,
+# which is exactly right and is why nothing here treats it as a failure.
+#
+# /run because it describes THIS boot and must not outlive it; the installer's
+# own boot-language answer lives beside it.
+# ⚠ THE SAME BINARY THE WINDOW WILL CALL, which out of a checkout is the
+# sibling script rather than anything on PATH — SYN_INSTALL_BIN is how the
+# window is pointed at one, and a launcher that dumped the INSTALLED catalog
+# while the window ran the checkout would be translating one of them.
+BIN=${SYN_INSTALL_BIN:-}
+[ -n "$BIN" ] || BIN="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/syn-install.sh"
+[ -x "$BIN" ] || BIN=syn-install
+
+STRINGS=/run/synapseos/install-gui.strings
+if mkdir -p /run/synapseos 2>/dev/null &&
+   "$BIN" --strings > "$STRINGS".part 2>/dev/null; then
+    mv -f "$STRINGS".part "$STRINGS" 2>/dev/null
+    export SYN_INSTALL_STRINGS="$STRINGS"
+else
+    rm -f "$STRINGS".part 2>/dev/null
+fi
+
 # The window's Wayland app_id. Without it quickshell calls every window
 # "org.quickshell": the generic icon in the dock, and no .desktop the dock can
 # resolve. Overwritten rather than set — an INHERITED QS_APP_ID is the common

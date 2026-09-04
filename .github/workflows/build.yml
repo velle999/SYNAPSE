@@ -362,6 +362,19 @@ jobs:
         run: |
           ./syn-install/tests/livelang_test.sh
 
+      # The installer's thirteen catalogs, and the graphical installer's half of
+      # them. Both halves fail in silence: a catalog whose English drifted from
+      # the script prints the English forever, and the WINDOW has no catalog of
+      # its own at all — it reads `syn-install --strings` through a pipe, so a
+      # broken dump or a broken parse opens a window that looks exactly like a
+      # language nobody has translated yet. The reader's own functions are cut
+      # out of syn-install-gui.qml and run under Qt's qml, never quickshell.
+      - name: Installer translations (catalogs + the GUI's string bridge)
+        run: |
+          ./syn-install/tests/i18n_test.sh
+          ./syn-install/tools/gui-strings.py --check
+          ./syn-install/tests/guilang_test.sh
+
       # syn-crypt aims LUKS operations at a block device. Resolving that wrongly
       # is not cosmetic — luksRemoveKey on the wrong device damages a disk, and
       # resolving to something that does not exist breaks every command that

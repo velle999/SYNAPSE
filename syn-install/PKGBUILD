@@ -294,7 +294,47 @@ pkgver=0.1.0
 #   which draws every script there is — so that would have handed the one window
 #   that CAN show Japanese the English rows: the same bug, arriving from the
 #   other direction. `linux` is the whole of the deny side.
-pkgrel=113
+# 114: THE GRAPHICAL INSTALLER SPEAKS THE OTHER TWELVE NOW. 113 left the window
+#   as the remaining half of "the installer was in English": 2772 lines with no
+#   catalog at all, reading --boot-language to preselect a row and then saying
+#   everything in English — including for Japanese, Chinese, Korean, Arabic and
+#   Hindi, which it is the ONLY installer here that can draw.
+#
+#   ⛔ NOT qsTr(). quickshell installs no QTranslator and cannot reach one, so
+#   qsTr() compiles, returns its argument and translates nothing, forever, while
+#   reading in a diff exactly like a marked string. The bar lost two pkgrels to
+#   that (synui/quickshell/I18n.qml).
+#
+#   So the window has no catalog of its own: `syn-install --strings` prints the
+#   loaded one as `english<TAB>translation` records, syn-install-gui.sh dumps it
+#   to /run before quickshell starts, and the window parses it into the map
+#   root.t() reads. ONE catalog serves both installers, keyed by the English
+#   sentence — a sentence with no entry prints the English written in the .qml,
+#   which is why a half-finished language is still a usable window.
+#   ⚠ AND AGAIN WHEN THE LANGUAGE IS PICKED IN THE FORM, because the person
+#   whose language the image did not boot in is exactly who needs this.
+#   ⚠ SUMMARY ROWS ARE WHOLE SENTENCES with %1 placeholders, never concatenated
+#   fragments: a translation has to be free to reorder them.
+#
+#   All thirteen catalogs filled — 541 entries each, from 369.
+#
+#   ⛔ AND print_strings() DID APPLY console_can_draw() after all, despite the
+#   comment above it saying it did not. It loads through syn_lang_load(), which
+#   vetoes on TERM — and TERM is INHERITED, so on the one path this exists for
+#   (a live image, TERM=linux) the dump came back EMPTY for precisely the five
+#   languages only the window can draw. 113's bug, a third time, from a third
+#   direction. syn_lang_load() takes `any-screen` now and print_strings() passes
+#   it; who is going to draw it is an argument, not a guess about the terminal.
+#
+#   tests/guilang_test.sh drives both ends: the dump (English is zero records on
+#   purpose, the escaping survives a multi-line sentence, every sentence the
+#   window marks is answered by the dump) and the reader — parseStrings/lookup/
+#   t/tf CUT OUT of syn-install-gui.qml and run under Qt's qml, so a renamed
+#   function fails rather than testing a stale copy beside it.
+#   ⛔ SUCCESS IS EXIT 7: `qml` exits ZERO on a file it could not load.
+#   tests/i18n_test.sh and tools/gui-strings.py --check are in CI now too; the
+#   catalogs had never been checked there at all.
+pkgrel=114
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

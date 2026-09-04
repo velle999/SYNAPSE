@@ -202,13 +202,29 @@ of them is how a UK install used to get the console it asked for and a US
 desktop.
 
 **And the installer speaks it too** — every step header, every question, every
-warning and every confirmation, in all fourteen languages. That is 370 strings
+warning and every confirmation, in all fourteen languages. That is 589 strings
 per language, and they are keyed by the English sentence rather than by an id:
 a missing translation prints the English, which is usable, and no screen can
 ever show an identifier. `syn-install/tests/i18n_test.sh` fails on a catalog
 entry that matches nothing in the script, and on a translation whose `printf`
 conversions do not match the English — the one way a translation can corrupt
 output rather than merely be absent.
+
+**Both installers, from one catalog.** The graphical installer has no catalog of
+its own: `syn-install --strings` prints the loaded one as `english<TAB>translation`
+records, and the window renders them — the same arrangement as `--list-disks`,
+where the script knows and the window draws. So a sentence written once is
+translated once and appears in both, and the language picked on the window's own
+Language page re-translates it in place rather than waiting for a reboot.
+
+**What the console cannot draw, it does not pretend to.** A Linux virtual
+terminal holds at most 512 glyphs and does no text shaping, so Japanese,
+Chinese, Korean, Arabic and Hindi cannot be drawn there at all — the text
+installer keeps English prose for those five, and says so in one line. Every
+other part of the choice still applies: the locale, both keyboard halves, the
+fonts and the installed system are the ones that were asked for. The graphical
+installer and the desktop draw all thirteen properly, which is where those five
+languages are read.
 
 What is *not* translated, deliberately: the answer keys. `[Y/n]`, `[y/N]` and
 typing `yes` to confirm a disk wipe stay exactly those letters in every

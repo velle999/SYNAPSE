@@ -95,10 +95,37 @@ def bash_quote(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
 
 
+def gui_keys(root):
+    """The sentences the GRAPHICAL installer marks, from tools/gui-strings.py.
+
+    ⚠ ONE CATALOG SERVES BOTH INSTALLERS, so both files' keys are what a
+    catalog is checked against. Read the script's alone and every string the
+    window added reads as an ORPHAN — the check that exists to find dead
+    translations would condemn the live ones instead.
+
+    ⚠ IMPORTED, NOT REIMPLEMENTED: the folding of concatenated literals is
+    exactly the part that is easy to get subtly wrong, and two copies of it
+    would disagree the first time a sentence was wrapped differently.
+    """
+    spec = root / "tools" / "gui-strings.py"
+    qml = root / "syn-install-gui.qml"
+    if not spec.exists() or not qml.exists():
+        return []
+    ns = {"__name__": "gui_strings", "__file__": str(spec)}
+    exec(compile(spec.read_text(encoding="utf-8"), str(spec), "exec"), ns)
+    keys, _bad = ns["scan"](qml)
+    return keys
+
+
 def main():
     root = pathlib.Path(__file__).resolve().parent.parent
     src = (root / "syn-install.sh").read_text(encoding="utf-8")
     keys = strings(src)
+    seen = set(keys)
+    for k in gui_keys(root):
+        if k not in seen:
+            seen.add(k)
+            keys.append(k)
 
     if "--list" in sys.argv:
         for k in keys:
