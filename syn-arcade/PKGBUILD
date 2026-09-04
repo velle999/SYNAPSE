@@ -1313,7 +1313,25 @@ pkgver=0.1.0
 #   page headed POWER; a settings page headed the same word but reached through
 #   Start ▸ Settings, holding one row about blanking, is two answers to one
 #   word. That group has only ever been about whether the screen may sleep.
-pkgrel=55
+# 56: THE ONE ROW ON THE SYSTEM MENU WITH NOTHING BESIDE IT. Reported from a
+#   screenshot: seven rows carry a glyph and Settings carries a gap, which reads
+#   as a drawing that failed to load rather than as a row that never had one.
+#
+#   ⛔ AND THE THREE LISTS THAT KEEP THE GLYPHS HONEST COULD NOT SEE IT. Every
+#   tile's icon is checked three ways — the name in apps_table(), the file in
+#   data/icons, the entry in meson's install list — and Settings is in none of
+#   them, because it is a PAGE of that menu rather than something `big run` can
+#   run, so apps_table() emits no row for it. A menu row the shell draws itself
+#   is outside every check the tiles have.
+#
+#   The gear goes through icon_file() like everything else and arrives as
+#   SYN_BIG_SETTINGS_ICON — the same arrangement as the dendrite mark in the
+#   header, and for the same reason: the shell is a renderer handed a path that
+#   exists or an empty string, and never has to know where this package
+#   installed itself. ⚠ The suite asserts the row is actually GIVEN it, because
+#   a variable that is set, read into a property and never reaches the row
+#   passes every other check written for it.
+pkgrel=56
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

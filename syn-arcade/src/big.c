@@ -8195,6 +8195,16 @@ static int big_start(const char *output, bool detach)
 	 * value draws no emblem rather than a broken-image box. */
 	setenv("SYN_BIG_LOGO", icon_file("synapse"), 1);
 
+	/* The gear for the System menu's Settings row, resolved here for the
+	 * same reason and by the same call.
+	 *
+	 * ⚠ IT IS NOT A TILE, which is why it does not come through the record
+	 * like every other glyph. Settings is a PAGE of that menu rather than
+	 * something `big run` can run, so apps_table() emits no row for it —
+	 * and the row the shell draws in its place was the only one on a menu
+	 * of eight with an empty icon column beside it. */
+	setenv("SYN_BIG_SETTINGS_ICON", icon_file("settings"), 1);
+
 	/* OVERWRITTEN, not merely set — the inherited-QS_APP_ID accident.
 	 * Every app in this suite hands its whole environment to what it
 	 * spawns, so a big screen started from `syn-arcade gui` would wear the

@@ -5091,6 +5091,31 @@ check "...and the drawing is in the tree" $?
 grep -q "data/icons/synapse.svg" meson.build
 check "...and ships" $?
 
+# ── the Settings gear ───────────────────────────────────────────────────────
+#
+# ⛔ THE SECOND GLYPH THAT IS NOT A TILE, and the checks above it are not
+# enough for it: apps_table() emits no row for Settings — it is a PAGE of the
+# System menu rather than something `big run` can run — so the three lists that
+# have to agree never mention it, and none of them noticed that the only row on
+# a menu of eight with an empty icon column was the one the shell draws itself.
+grep -q 'SYN_BIG_SETTINGS_ICON' "$BIGQML"
+check "the Settings row takes its gear from a path C resolved" $?
+
+grep -q 'setenv("SYN_BIG_SETTINGS_ICON", icon_file("settings"), 1)' src/big.c
+check "...and big.c is what resolves it" $?
+
+[ -f data/icons/settings.svg ]
+check "...and the drawing is in the tree" $?
+
+grep -q "data/icons/settings.svg" meson.build
+check "...and ships" $?
+
+# ⚠ AND THE ROW ACTUALLY CARRIES IT. The three checks above pass on a build
+# where the environment variable is set, read into a property, and never
+# reaches the row — which is the whole of the bug they exist to prevent.
+grep -q 'iconfile: shell.settingsIcon' "$BIGQML"
+check "...and the Settings row is given it" $?
+
 # ⚠ ANCHORED TO THE WORDMARK, not placed in a Row with it. A Row refuses to
 # position a child that anchors itself, so the two would silently overlap at
 # the left margin.

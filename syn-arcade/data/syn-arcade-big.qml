@@ -131,6 +131,11 @@ ShellRoot {
     // machine where the drawing did not ship, and the header then simply has no
     // emblem rather than a broken-image box.
     readonly property string logoFile: Quickshell.env("SYN_BIG_LOGO") || ""
+    // The gear beside Settings. Same arrangement as the mark above: big.c
+    // resolves it, this draws whatever path arrives, and an empty value draws
+    // nothing rather than a broken-image box.
+    readonly property string settingsIcon:
+        Quickshell.env("SYN_BIG_SETTINGS_ICON") || ""
 
     // ── the data ────────────────────────────────────────────────────────────
     //
@@ -1516,7 +1521,8 @@ ShellRoot {
         // where a hand goes without looking; a page opened by mistake on the
         // way to Quit is a page somebody has to find their way back out of.
         out.push({ id: "settings", kind: "page", page: "settings",
-                   name: I18n.tr("Settings"), note: "" })
+                   name: I18n.tr("Settings"), note: "",
+                   iconfile: shell.settingsIcon })
         return out.concat(shell.byShelf("system"))
     }
 
@@ -4439,10 +4445,13 @@ ShellRoot {
                                         // pages arriving as `page` rows put a
                                         // music note beside Shelves, Start menu
                                         // and Power. The music glyph belongs to
-                                        // the music pages; a settings row has
-                                        // no icon and simply leaves the column
-                                        // empty, which the Image below is
-                                        // already built for.
+                                        // the music pages; every other `page`
+                                        // row draws whatever `iconfile` it was
+                                        // given, which for Settings is the gear
+                                        // big.c resolves into
+                                        // SYN_BIG_SETTINGS_ICON, and for the
+                                        // three settings sub-pages is nothing —
+                                        // they are a page where no row has one.
                                         if (k === "music" || k === "source"
                                             || k === "album"
                                             || (k === "page"
