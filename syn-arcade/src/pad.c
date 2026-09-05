@@ -1235,6 +1235,26 @@ int cmd_pads(int argc, char **argv)
 #define NAV_DELAY_MS  380	/* held this long before it starts repeating */
 #define NAV_REPEAT_MS 110	/* then one step this often */
 #define NAV_RESCAN_MS 2000	/* how often a hotplugged pad is noticed */
+/*
+ * ⛔ HOW LONG START IS HELD BEFORE IT MEANS THE KEYBOARD, and why it is a hold
+ * at all.
+ *
+ * While big screen mode is stepped aside, `big nav` keeps reading the pad —
+ * that is what makes Guide the way back from inside a game. It GRABS nothing,
+ * so every button reaches the application as well, and a bare Start used to
+ * open the on-screen keyboard: in GeForce NOW, where Start is the button that
+ * opens the game's own menu, pressing it put a keyboard over the menu somebody
+ * was trying to reach. Reported from the sofa.
+ *
+ * A press is the application's. A HOLD is nobody else's: a game acts on Start
+ * when it goes down, so holding it does what a press does and then, six tenths
+ * of a second later, means this as well.
+ *
+ * ⚠ NOT A CHORD. L3+R3 is already taken by the visualizer and is a real
+ * in-game binding besides; Select+Start is RetroArch's exit hotkey. There is no
+ * two-button combination on a pad that some game does not use.
+ */
+#define NAV_HOLD_MS   600
 
 typedef struct {
 	int  fd;
@@ -1248,6 +1268,8 @@ typedef struct {
 	long long repeat_at;
 	bool l3, r3;		/* the stick clicks, held state */
 	bool chorded;		/* …and whether this hold already spoke */
+	long long hold_at;	/* when a held Start starts meaning `keyboard` */
+	bool held_said;		/* …and whether this hold already said it */
 } navpad_t;
 
 /* ── the television remote ──────────────────────────────────────────────────
@@ -1616,9 +1638,17 @@ int pads_nav_stream(void)
 		 * held. */
 		long long now = now_ms();
 		long long wake = rescan_at;
-		for (int i = 0; i < count; i++)
+		for (int i = 0; i < count; i++) {
 			if (pads[i].repeat_at && pads[i].repeat_at < wake)
 				wake = pads[i].repeat_at;
+			/* ⚠ AND THE HELD START, or the word waits for the next
+			 * event or the next rescan — up to two seconds after
+			 * the hold, which reads as a keyboard that opens by
+			 * itself long after the button was let go. */
+			if (pads[i].hold_at && !pads[i].held_said &&
+			    pads[i].hold_at < wake)
+				wake = pads[i].hold_at;
+		}
 		int timeout = (int)(wake - now);
 		if (timeout < 0) timeout = 0;
 		if (timeout > NAV_RESCAN_MS) timeout = NAV_RESCAN_MS;
@@ -1703,6 +1733,22 @@ int pads_nav_stream(void)
 						 * below acts on the press. */
 						if (nav_chord(p, code, down))
 							break;
+						/* ⚠ START IS BOTH: the press
+						 * still says `menu`, and the
+						 * HOLD says `keyboard` further
+						 * down. See NAV_HOLD_MS. */
+						/* ⚠ value 2 is the kernel's own
+						 * autorepeat — a pad does not send
+						 * it, but anything that did would
+						 * read as a RELEASE here and
+						 * cancel a hold that is still
+						 * being held. */
+						if (code == BTN_START && val != 2) {
+							p->hold_at = down
+								? now + NAV_HOLD_MS
+								: 0;
+							p->held_said = false;
+						}
 						const char *w = nav_button(code);
 						if (w && val == 1)
 							nav_say(w);
@@ -1802,6 +1848,20 @@ int pads_nav_stream(void)
 		} else if (rrelist) {
 			remote_close(remotes, rcount);
 			rcount = remote_open(remotes, NAV_REMOTE_MAX);
+		}
+
+		/* ── a HELD Start ──
+		 *
+		 * Once per hold, and only while the button is still down: this
+		 * is what opens the on-screen keyboard from in front of an
+		 * application, where a bare Start belongs to the application.
+		 */
+		for (int i = 0; i < count; i++) {
+			navpad_t *p = &pads[i];
+			if (p->hold_at && !p->held_said && now >= p->hold_at) {
+				p->held_said = true;
+				nav_say("keyboard");
+			}
 		}
 
 		/* ── repeat ── */

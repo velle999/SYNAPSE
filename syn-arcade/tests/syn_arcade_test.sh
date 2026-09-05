@@ -4942,6 +4942,25 @@ check "it types through the binary rather than spawning wtype per key" $?
 grep -q "stdinEnabled: true" "$BIGQML"
 check "...over a stream, so a fast press cannot be dropped" $?
 
+# ⛔ AND IT OPENS ON A HELD START, NOT A PRESSED ONE.
+#
+# `big nav` keeps reading the pad while the interface is stepped aside — that is
+# how Guide comes back — and it grabs nothing, so every button reaches the
+# application as well. A bare Start opened this keyboard, and in GeForce NOW
+# Start is the button that opens the GAME's menu: one press put a keyboard over
+# the thing somebody was reaching for. A press belongs to the application; a
+# hold does not.
+# ⚠ $T, not $BGH: this section runs a good thousand lines before the QML block
+# that makes $BGH, and an unbound variable under `set -u` ends the suite here
+# with everything after it unrun.
+awk '/if \(!shell.oskOpen\) \{/,/^        \}/' "$BIGQML" > "$T/osk.qml"
+has 'cmd === "keyboard"' "$T/osk.qml" \
+    && ok "the keyboard opens on the held-Start word" \
+    || bad "the on-screen keyboard does not open on the keyboard word"
+has 'cmd === "menu"' "$T/osk.qml" \
+    && bad "a bare Start still opens the keyboard over the application" \
+    || ok "…and a bare Start is left to the application in front"
+
 # ── the controller as a mouse ───────────────────────────────────────────────
 #
 # Bounded in one place: the Process's `running` condition. All three clauses
@@ -6062,6 +6081,59 @@ if command -v python3 >/dev/null 2>&1; then
         || bad "a device with letters on it was read as a remote: $out"
 else
     ok "(skipped the remote fixture: no python3)"
+fi
+
+# ── a tap of Start is the game's, a hold is ours ────────────────────────────
+#
+# The same FIFO fixture, with a PAD in it this time. In GeForce NOW, Start opens
+# the game's own menu — and while big screen mode is stepped aside it was also
+# opening the on-screen keyboard, over the menu somebody was reaching for. The
+# press still says `menu` (which is the Start MENU while the interface is on
+# screen); only a hold says `keyboard`.
+if command -v python3 >/dev/null 2>&1; then
+    PFX="$T/holdpad"
+    mkdir -p "$PFX/sys/event98/device/capabilities" "$PFX/dev"
+    # A gamepad, by the same test udev's input_id makes: a gamepad BUTTON and
+    # the two axes of a stick. BTN_GAMEPAD 304, BTN_START 315, ABS_X/ABS_Y 0/1.
+    rmask 304 315 316 317 > "$PFX/sys/event98/device/capabilities/key"
+    rmask 0 1                > "$PFX/sys/event98/device/capabilities/abs"
+    echo 0                   > "$PFX/sys/event98/device/capabilities/ff"
+    echo "Fixture Pad"       > "$PFX/sys/event98/device/name"
+
+    rm -f "$PFX/dev/event98"; mkfifo "$PFX/dev/event98"
+    ( SYN_ARCADE_SYSFS="$PFX/sys" SYN_ARCADE_DEV="$PFX/dev" \
+      timeout 6 "$SA" big nav > "$PFX/out.txt" 2>/dev/null ) &
+    holdpid=$!
+    sleep 0.7
+    python3 -c '
+import os, struct, sys, time
+fd = -1
+for _ in range(30):
+    try:
+        fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
+        break
+    except OSError:
+        time.sleep(0.1)
+if fd < 0:
+    sys.exit(0)
+def ev(t, c, v): os.write(fd, struct.pack("qqHHi", 0, 0, t, c, v))
+START = 315
+ev(1, START, 1); ev(0, 0, 0); time.sleep(0.2)      # a TAP, well under the hold
+ev(1, START, 0); ev(0, 0, 0); time.sleep(0.6)
+ev(1, START, 1); ev(0, 0, 0); time.sleep(1.0)      # …and a HOLD
+ev(1, START, 0); ev(0, 0, 0); time.sleep(0.5)' "$PFX/dev/event98" 2>/dev/null || true
+    wait $holdpid 2>/dev/null
+    said=$(tr '\n' ' ' < "$PFX/out.txt" | sed 's/ *$//')
+    [ "$said" = "menu menu keyboard" ] \
+        && ok "a tap says menu, a hold says menu then keyboard" \
+        || bad "the pad said: $said"
+    # ⚠ ONCE PER HOLD. A word per poll would open and close the keyboard for as
+    # long as the button was down.
+    [ "$(grep -c '^keyboard$' "$PFX/out.txt")" = 1 ] \
+        && ok "…and the hold says it exactly once" \
+        || bad "a held Start said it $(grep -c '^keyboard$' "$PFX/out.txt") times"
+else
+    ok "(skipped the held-Start fixture: no python3)"
 fi
 
 # ⚠ THE WORDS ARE PREFIXED AND THE SHELL ACTS ON THEM ONLY WHILE IT IS STEPPED

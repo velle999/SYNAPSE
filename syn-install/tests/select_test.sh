@@ -129,6 +129,41 @@ check "Full installs at least as many apps as Standard" yes \
 check "steam is not a checkbox row" no \
       "$(grep -qxF steam <<<"$(tr ' ' '\n' <<<"$full_sw")" && echo yes || echo no)"
 
+# ⚠ mpv IS A STANDARD ROW ON PURPOSE. Big screen mode's disc tile is gated on
+# it (syn-arcade 0.1.0-58): no mpv, no tile, and a machine with a Blu-ray in the
+# drive shows nothing and says nothing about why. Asserted here so a later tidy
+# of the media page cannot quietly take it out again.
+check "Standard installs mpv, which is what the disc tile needs" yes \
+      "$(grep -qw mpv <<<"$std_sw" && echo yes || echo no)"
+
+echo ""
+echo "=== the window's table and this one agree, column for column ==="
+#
+# ⛔ TWO TABLES, ONE ANSWER. The checkbox rows are declared twice — here as
+# `key|std|full|…` and in syn-install-gui.qml as `{ key, std, full, min }` —
+# and config_test.sh already proves the two carry the same KEYS. It says
+# nothing about the DEFAULTS, so a row ticked here and unticked there is a
+# machine that gets different software depending on whether the installer was
+# the text one or the window, with nothing anywhere saying so. That is exactly
+# what flipping mpv's default could have shipped.
+gui="$here/../syn-install-gui.qml"
+if [ -f "$gui" ]; then
+    drift=""
+    for row in "${SEL_COMPONENTS[@]}" "${SEL_SW_WEB[@]}" "${SEL_SW_MEDIA[@]}" \
+               "${SEL_SW_OFFICE[@]}" "${SEL_SW_DEV[@]}" "${SEL_SW_GAMES[@]}"; do
+        IFS='|' read -r k std full _ <<<"$row"
+        gline=$(grep -F "key: \"$k\"" "$gui" | head -1)
+        [ -n "$gline" ] || continue          # config_test.sh owns "is it there"
+        gstd=$(sed -n 's/.*std: *\([0-9]\).*/\1/p' <<<"$gline")
+        gfull=$(sed -n 's/.*full: *\([0-9]\).*/\1/p' <<<"$gline")
+        [ "$std" = "$gstd" ] && [ "$full" = "$gfull" ] ||
+            drift="$drift $k(sh:$std/$full gui:$gstd/$gfull)"
+    done
+    check "every checkbox default is the same in both installers" "" "$drift"
+else
+    echo "  (no syn-install-gui.qml — skipped)"
+fi
+
 echo ""
 echo "=== the dependency rules match the PKGBUILDs ==="
 #

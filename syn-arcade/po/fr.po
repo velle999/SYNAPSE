@@ -205,6 +205,9 @@ msgstr "Bouton Guide activé"
 msgid "Hide in games"
 msgstr "Masquer dans les jeux"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Maintenir Start  ▸  clavier"
+
 msgid "Install shortcuts"
 msgstr "Installer les raccourcis"
 
@@ -476,9 +479,6 @@ msgstr "Passer"
 
 msgid "Something"
 msgstr "Quelque chose"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  clavier"
 
 msgid "Start at login"
 msgstr "Lancer à la connexion"
@@ -1137,7 +1137,9 @@ msgstr "syn-arcade : mpv n'est pas installé — `synpkg install mpv`\n"
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade : un disque chiffré a besoin de %s, qui n'est pas installé — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade : un disque chiffré a besoin de %s, qui n'est pas installé — "
+"`synpkg install %s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade : impossible de démarrer mpv\n"
@@ -1175,7 +1177,9 @@ msgstr "artiste"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade : big transport prend status, play, pause, toggle, next, prev, forward, rewind ou stop (reçu « %s »)\n"
+msgstr ""
+"syn-arcade : big transport prend status, play, pause, toggle, next, prev, "
+"forward, rewind ou stop (reçu « %s »)\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade : rien n'est en lecture\n"
@@ -2887,6 +2891,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade : impossible de créer un pointeur virtuel\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  clavier"
 
 #, c-format
 #~ msgid ""

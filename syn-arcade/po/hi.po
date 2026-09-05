@@ -201,6 +201,9 @@ msgstr "Guide बटन चालू"
 msgid "Hide in games"
 msgstr "गेम में छिपाएँ"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Start दबाए रखें  ▸  कीबोर्ड"
+
 msgid "Install shortcuts"
 msgstr "शॉर्टकट इंस्टॉल करें"
 
@@ -469,9 +472,6 @@ msgstr "छोड़ें"
 
 msgid "Something"
 msgstr "कुछ"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  कीबोर्ड"
 
 msgid "Start at login"
 msgstr "लॉगिन पर शुरू करें"
@@ -1115,7 +1115,9 @@ msgstr "syn-arcade: mpv स्थापित नहीं है — `synpkg in
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade: एन्क्रिप्टेड डिस्क के लिए %s चाहिए, जो स्थापित नहीं है — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade: एन्क्रिप्टेड डिस्क के लिए %s चाहिए, जो स्थापित नहीं है — `synpkg install "
+"%s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade: mpv शुरू नहीं हो सका\n"
@@ -1153,7 +1155,9 @@ msgstr "कलाकार"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport status, play, pause, toggle, next, prev, forward, rewind या stop लेता है ('%s' मिला)\n"
+msgstr ""
+"syn-arcade: big transport status, play, pause, toggle, next, prev, forward, "
+"rewind या stop लेता है ('%s' मिला)\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: कुछ भी नहीं बज रहा\n"
@@ -2808,6 +2812,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: वर्चुअल पॉइंटर नहीं बनाया जा सका\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  कीबोर्ड"
 
 #, c-format
 #~ msgid ""

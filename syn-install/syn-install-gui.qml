@@ -502,7 +502,11 @@ FloatingWindow {
         { title: root.t("Audio and video"), note: "",
           rows: [
             { key: "sw_vlc",       std: 0, full: 1, min: 0, label: root.t("VLC") },
-            { key: "sw_mpv",       std: 0, full: 1, min: 0, label: root.t("mpv") },
+            // ⚠ STANDARD, and it is not about mpv being a nice player: big
+            // screen mode's disc tile is gated on it, so a machine with a
+            // Blu-ray in the drive and no mpv shows nothing at all. See the
+            // same row in syn-install.sh — the two tables must agree.
+            { key: "sw_mpv",       std: 1, full: 1, min: 0, label: root.t("mpv") },
             { key: "sw_obs",       std: 0, full: 0, min: 0, label: root.t("OBS Studio") },
             { key: "sw_audacity",  std: 0, full: 0, min: 0, label: root.t("Audacity") },
             { key: "sw_kdenlive",  std: 0, full: 0, min: 0, label: root.t("Kdenlive") },

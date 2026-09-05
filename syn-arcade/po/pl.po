@@ -205,6 +205,9 @@ msgstr "Przycisk Guide włączony"
 msgid "Hide in games"
 msgstr "Ukryj w grach"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Przytrzymaj Start  ▸  klawiatura"
+
 msgid "Install shortcuts"
 msgstr "Zainstaluj skróty"
 
@@ -475,9 +478,6 @@ msgstr "Pomiń"
 
 msgid "Something"
 msgstr "Coś"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  klawiatura"
 
 msgid "Start at login"
 msgstr "Uruchom po zalogowaniu"
@@ -1141,7 +1141,9 @@ msgstr "syn-arcade: mpv nie jest zainstalowany — `synpkg install mpv`\n"
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade: zaszyfrowana płyta wymaga %s, który nie jest zainstalowany — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade: zaszyfrowana płyta wymaga %s, który nie jest zainstalowany — "
+"`synpkg install %s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade: nie udało się uruchomić mpv\n"
@@ -1158,7 +1160,8 @@ msgstr "syn-arcade: %s nie otworzył się\n"
 
 #, c-format
 msgid "syn-arcade: big disc takes status, play or eject (got '%s')\n"
-msgstr "syn-arcade: big disc przyjmuje status, play albo eject (otrzymano '%s')\n"
+msgstr ""
+"syn-arcade: big disc przyjmuje status, play albo eject (otrzymano '%s')\n"
 
 msgid "nothing is playing"
 msgstr "nic nie jest odtwarzane"
@@ -1179,7 +1182,9 @@ msgstr "wykonawca"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport przyjmuje status, play, pause, toggle, next, prev, forward, rewind albo stop (otrzymano '%s')\n"
+msgstr ""
+"syn-arcade: big transport przyjmuje status, play, pause, toggle, next, prev, "
+"forward, rewind albo stop (otrzymano '%s')\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: nic nie jest odtwarzane\n"
@@ -2890,6 +2895,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: nie udało się utworzyć wirtualnego wskaźnika\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  klawiatura"
 
 #, c-format
 #~ msgid ""

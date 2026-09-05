@@ -1550,7 +1550,13 @@ SEL_SW_WEB=(
 )
 SEL_SW_MEDIA=(
     "sw_vlc|0|1|sw|vlc|VLC|plays anything"
-    "sw_mpv|0|1|sw|mpv|mpv|minimal player"
+    # ⚠ mpv IS IN THE STANDARD PRESET, and the reason is not that it is a good
+    # player. Big screen mode's disc tile is gated on it — no mpv, no tile —
+    # so a Standard machine with a Blu-ray in the drive would show nothing at
+    # all and say nothing about why. ⚠ The same row in syn-install-gui.qml
+    # carries the same two columns; tests/select_test.sh fails when they
+    # disagree.
+    "sw_mpv|1|1|sw|mpv|mpv|minimal player"
     "sw_obs|0|0|sw|obs-studio|OBS Studio|record + stream"
     "sw_audacity|0|0|sw|audacity|Audacity|audio editor"
     "sw_kdenlive|0|0|sw|kdenlive|Kdenlive|video editor"

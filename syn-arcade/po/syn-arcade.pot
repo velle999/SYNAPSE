@@ -185,6 +185,9 @@ msgstr ""
 msgid "Hide in games"
 msgstr ""
 
+msgid "Hold Start  ▸  keyboard"
+msgstr ""
+
 msgid "Install shortcuts"
 msgstr ""
 
@@ -440,9 +443,6 @@ msgid "Skip"
 msgstr ""
 
 msgid "Something"
-msgstr ""
-
-msgid "Start  ▸  keyboard"
 msgstr ""
 
 msgid "Start at login"

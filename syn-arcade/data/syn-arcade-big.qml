@@ -2862,8 +2862,22 @@ ShellRoot {
         if (cmd === "visualizer") { shell.toggleVisualizer(); return }
 
         if (!shell.oskOpen) {
-            // Start opens the keyboard, when there is something to type into.
-            if (cmd === "menu") shell.oskToggle()
+            /*
+             * ⛔ A HELD START, NOT A PRESSED ONE, AND THAT IS THE WHOLE FIX.
+             *
+             * `big nav` keeps reading the pad while the interface is stepped
+             * aside — that is how Guide comes back — and it grabs nothing, so
+             * every button reaches the application too. A bare Start used to
+             * open this keyboard, and in GeForce NOW Start is the button that
+             * opens the GAME's menu: one press put a keyboard over the thing
+             * somebody was reaching for. Reported from the sofa.
+             *
+             * A press belongs to the application. A hold does not — a game
+             * acts on Start going down, so holding it opens the game's menu
+             * and then, six tenths of a second later, this as well. See
+             * NAV_HOLD_MS in pad.c, and the hint pill, which says so.
+             */
+            if (cmd === "keyboard") shell.oskToggle()
             return
         }
 
@@ -2874,7 +2888,11 @@ ShellRoot {
         case "right":      shell.oskMove(0, 1); break
         case "accept":     shell.oskPress(); break
         case "back":       shell.oskOpen = false; break
-        case "menu":       shell.oskToggle(); break
+        // ⚠ CLOSING IT IS STILL A PRESS. Start reaching the game underneath is
+        // harmless here and getting the keyboard off the screen has to be the
+        // easiest thing on it — B does it too.
+        case "menu":
+        case "keyboard":   shell.oskToggle(); break
         case "search":     shell.key("BackSpace"); break   // X
         case "info":       shell.type(" "); break          // Y
         case "page-left":  shell.oskLayout = (shell.oskLayout + 2) % 3; break
@@ -5405,8 +5423,11 @@ ShellRoot {
                         // ⚠ Guide and Start are BUTTONS; the words after the
                         // arrow are what they do.
                         const t = I18n.tr("Guide  ▸  big screen")
+                        // ⚠ "HOLD Start", because a press is the application's
+                        // — see navAway(). The pill is the only place the
+                        // gesture is taught, so it has to say which it is.
                         return keysProc.running
-                            ? t + "      " + I18n.tr("Start  ▸  keyboard") : t
+                            ? t + "      " + I18n.tr("Hold Start  ▸  keyboard") : t
                     }
                 }
             }

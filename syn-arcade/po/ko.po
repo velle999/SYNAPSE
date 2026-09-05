@@ -201,6 +201,9 @@ msgstr "Guide 버튼 켜기"
 msgid "Hide in games"
 msgstr "게임에서 숨기기"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Start 길게  ▸  키보드"
+
 msgid "Install shortcuts"
 msgstr "단축키 설치"
 
@@ -471,9 +474,6 @@ msgstr "건너뛰기"
 
 msgid "Something"
 msgstr "무언가"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  키보드"
 
 msgid "Start at login"
 msgstr "로그인 시 시작"
@@ -1112,7 +1112,9 @@ msgstr "syn-arcade: mpv가 설치되어 있지 않습니다 — `synpkg install 
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade: 암호화된 디스크에는 %s이(가) 필요하지만 설치되어 있지 않습니다 — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade: 암호화된 디스크에는 %s이(가) 필요하지만 설치되어 있지 않습니다 — "
+"`synpkg install %s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade: mpv를 시작할 수 없습니다\n"
@@ -1129,7 +1131,8 @@ msgstr "syn-arcade: %s이(가) 열리지 않았습니다\n"
 
 #, c-format
 msgid "syn-arcade: big disc takes status, play or eject (got '%s')\n"
-msgstr "syn-arcade: big disc는 status, play, eject를 받습니다 ('%s'이(가) 왔습니다)\n"
+msgstr ""
+"syn-arcade: big disc는 status, play, eject를 받습니다 ('%s'이(가) 왔습니다)\n"
 
 msgid "nothing is playing"
 msgstr "재생 중인 것이 없습니다"
@@ -1150,7 +1153,9 @@ msgstr "아티스트"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport는 status, play, pause, toggle, next, prev, forward, rewind, stop을 받습니다 ('%s'이(가) 왔습니다)\n"
+msgstr ""
+"syn-arcade: big transport는 status, play, pause, toggle, next, prev, "
+"forward, rewind, stop을 받습니다 ('%s'이(가) 왔습니다)\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: 재생 중인 것이 없습니다\n"
@@ -2817,6 +2822,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: 가상 포인터를 만들 수 없었습니다\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  키보드"
 
 #, c-format
 #~ msgid ""

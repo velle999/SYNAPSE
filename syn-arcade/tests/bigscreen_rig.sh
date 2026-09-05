@@ -1055,8 +1055,13 @@ say remote:accept 0.7         # → a Return in typed.log
 shot 07r-remote-away
 REMOTE_AFTER=$(wc -l < "$TMP/transport.log" 2>/dev/null || echo 0)
 
-# Start opens the on-screen keyboard.
-say menu 1.0
+# A HELD Start opens the on-screen keyboard — `keyboard` is the word pad.c says
+# after 600ms of it, and a bare `menu` deliberately does nothing here now: a
+# press of Start belongs to the application in front, which in GeForce NOW is
+# the button that opens the game's own menu.
+say menu 0.6                  # …and this one must NOT open it
+shot 08a-osk-not-opened-by-a-press
+say keyboard 1.0
 shot 08-osk
 say right; say right; say right; say right; say right; say right 0.3
 say accept 0.5                                 # a letter from the qwerty row

@@ -378,7 +378,21 @@ pkgver=0.1.0
 #   installed from it — which is the drift `installer` in preflight exists to
 #   catch. ⚠ TWO LISTS: SEL_COMPONENTS here and the window's own copy in
 #   syn-install-gui.qml, plus the label in all thirteen catalogs.
-pkgrel=116
+# 117: mpv IS A STANDARD INSTALL NOW, and it is not a taste in players. Big
+#   screen mode grew a disc tile (syn-arcade 0.1.0-58) that is gated on mpv the
+#   way every other tile is gated on the program behind it — so a Standard
+#   machine with a Blu-ray in the drive drew nothing at all, and said nothing
+#   about why. One column, in two places.
+#
+#   ⛔ TWO TABLES, AND ONLY ONE OF THEM WAS CHECKED. The checkbox rows are
+#   declared here as `key|std|full|…` and again in syn-install-gui.qml as
+#   `{ key, std, full, min }`; config_test.sh proves the two carry the same
+#   KEYS and said nothing about the DEFAULTS. A row ticked in one and not the
+#   other is a machine that gets different software depending on whether the
+#   install was done from the text installer or the window — silently.
+#   tests/select_test.sh compares both columns of every row now, and names the
+#   row and both values when they differ.
+pkgrel=117
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

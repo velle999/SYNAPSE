@@ -1398,7 +1398,30 @@ pkgver=0.1.0
 #   ⚠ SEEK GOES OVER MPRIS EVEN FOR CLIAMP, which every other verb reaches over
 #   its own socket: `cliamp seek` takes an ABSOLUTE position in seconds, so a
 #   fast-forward press would jump the track to 0:30 from wherever it was.
-pkgrel=58
+# 59: THE KEYBOARD STOPPED LANDING ON TOP OF SOMEBODY'S GAME. Reported from the
+#   sofa, in GeForce NOW: pressing Start to reach the game's own menu put the
+#   on-screen keyboard over it instead.
+#
+#   ⛔ THE PAD IS READ INSIDE THE GAME, and that is the whole mechanism. `big
+#   nav` keeps reading while the interface is stepped aside — it is how Guide
+#   comes back — and it GRABS nothing, so every button reaches the application
+#   too. A bare Start opened the keyboard, and Start is the button a game opens
+#   its menu with. Same class as the L3+R3 chord that had to be gated in 33.
+#
+#   A PRESS BELONGS TO THE APPLICATION, A HOLD DOES NOT. Start still says `menu`
+#   on the way down (which is the Start menu while the interface is on screen);
+#   held for 600ms it says `keyboard` as well, exactly once per hold, and that
+#   is what opens the on-screen keyboard now. A game acts on Start going down,
+#   so the game's menu still opens — the keyboard is the deliberate second half.
+#   ⚠ NOT A CHORD: L3+R3 is the visualizer and a real in-game binding besides,
+#   and Select+Start is RetroArch's exit hotkey. There is no two-button
+#   combination on a pad that some game does not use.
+#   ⚠ THE POLL HAS TO WAKE FOR IT. Without the deadline in the timeout the word
+#   waits for the next event or the 2s rescan, which reads as a keyboard that
+#   opens by itself long after the button was let go.
+#   ⚠ The hint pill along the bottom is the only place the gesture is taught, so
+#   it says `Hold Start ▸ keyboard` — one msgid, thirteen catalogs.
+pkgrel=59
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

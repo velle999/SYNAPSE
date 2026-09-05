@@ -205,6 +205,9 @@ msgstr "Guide-knop aan"
 msgid "Hide in games"
 msgstr "Verbergen in spellen"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Start ingedrukt houden  ▸  toetsenbord"
+
 msgid "Install shortcuts"
 msgstr "Sneltoetsen installeren"
 
@@ -476,9 +479,6 @@ msgstr "Overslaan"
 
 msgid "Something"
 msgstr "Iets"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  toetsenbord"
 
 msgid "Start at login"
 msgstr "Starten bij aanmelden"
@@ -1132,7 +1132,9 @@ msgstr "syn-arcade: mpv is niet geïnstalleerd — `synpkg install mpv`\n"
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade: een versleutelde schijf heeft %s nodig, en dat is niet geïnstalleerd — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade: een versleutelde schijf heeft %s nodig, en dat is niet "
+"geïnstalleerd — `synpkg install %s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade: mpv kon niet worden gestart\n"
@@ -1170,7 +1172,9 @@ msgstr "artiest"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport neemt status, play, pause, toggle, next, prev, forward, rewind of stop (kreeg '%s')\n"
+msgstr ""
+"syn-arcade: big transport neemt status, play, pause, toggle, next, prev, "
+"forward, rewind of stop (kreeg '%s')\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: er speelt niets\n"
@@ -2868,6 +2872,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: kon geen virtuele aanwijzer maken\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  toetsenbord"
 
 #, c-format
 #~ msgid ""

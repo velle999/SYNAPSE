@@ -198,6 +198,9 @@ msgstr "Guide 键打开"
 msgid "Hide in games"
 msgstr "在游戏中隐藏"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "长按 Start  ▸  键盘"
+
 msgid "Install shortcuts"
 msgstr "安装快捷键"
 
@@ -465,9 +468,6 @@ msgstr "跳过"
 
 msgid "Something"
 msgstr "某个东西"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  键盘"
 
 msgid "Start at login"
 msgstr "登录时启动"
@@ -1124,7 +1124,9 @@ msgstr "艺术家"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport 接受 status、play、pause、toggle、next、prev、forward、rewind 或 stop（收到的是 '%s'）\n"
+msgstr ""
+"syn-arcade: big transport 接受 status、play、pause、toggle、next、prev、"
+"forward、rewind 或 stop（收到的是 '%s'）\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: 没有在播放任何东西\n"
@@ -2741,6 +2743,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: 无法创建虚拟指针\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  键盘"
 
 #, c-format
 #~ msgid ""

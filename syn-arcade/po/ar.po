@@ -201,6 +201,9 @@ msgstr "‏زر Guide مُفعَّل"
 msgid "Hide in games"
 msgstr "إخفاء داخل الألعاب"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "‏استمر بالضغط على Start  ▸  لوحة المفاتيح"
+
 msgid "Install shortcuts"
 msgstr "تثبيت الاختصارات"
 
@@ -469,9 +472,6 @@ msgstr "تخطٍّ"
 
 msgid "Something"
 msgstr "شيء ما"
-
-msgid "Start  ▸  keyboard"
-msgstr "‏Start  ▸  لوحة المفاتيح"
 
 msgid "Start at login"
 msgstr "ابدأ عند تسجيل الدخول"
@@ -1192,7 +1192,9 @@ msgstr "الفنان"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "‏syn-arcade: يأخذ big transport القيم status وplay وpause وtoggle وnext وprev وforward وrewind أو stop (ورد '%s')\n"
+msgstr ""
+"‏syn-arcade: يأخذ big transport القيم status وplay وpause وtoggle وnext وprev "
+"وforward وrewind أو stop (ورد '%s')\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "‏syn-arcade: لا شيء قيد التشغيل\n"
@@ -2893,6 +2895,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "‏syn-arcade: تعذّر إنشاء مؤشر افتراضي\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "‏Start  ▸  لوحة المفاتيح"
 
 #, c-format
 #~ msgid ""

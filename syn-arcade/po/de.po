@@ -205,6 +205,9 @@ msgstr "Guide-Taste ein"
 msgid "Hide in games"
 msgstr "In Spielen ausblenden"
 
+msgid "Hold Start  ▸  keyboard"
+msgstr "Start halten  ▸  Tastatur"
+
 msgid "Install shortcuts"
 msgstr "Tastenkürzel installieren"
 
@@ -476,9 +479,6 @@ msgstr "Überspringen"
 
 msgid "Something"
 msgstr "Etwas"
-
-msgid "Start  ▸  keyboard"
-msgstr "Start  ▸  Tastatur"
 
 msgid "Start at login"
 msgstr "Beim Anmelden starten"
@@ -1137,7 +1137,9 @@ msgstr "syn-arcade: mpv ist nicht installiert — `synpkg install mpv`\n"
 msgid ""
 "syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
 "install %s`\n"
-msgstr "syn-arcade: eine verschlüsselte Disc braucht %s, was nicht installiert ist — `synpkg install %s`\n"
+msgstr ""
+"syn-arcade: eine verschlüsselte Disc braucht %s, was nicht installiert ist — "
+"`synpkg install %s`\n"
 
 msgid "syn-arcade: could not start mpv\n"
 msgstr "syn-arcade: mpv konnte nicht gestartet werden\n"
@@ -1175,7 +1177,9 @@ msgstr "Interpret"
 msgid ""
 "syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
 "forward, rewind or stop (got '%s')\n"
-msgstr "syn-arcade: big transport nimmt status, play, pause, toggle, next, prev, forward, rewind oder stop (bekam '%s')\n"
+msgstr ""
+"syn-arcade: big transport nimmt status, play, pause, toggle, next, prev, "
+"forward, rewind oder stop (bekam '%s')\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: nichts wird abgespielt\n"
@@ -2882,6 +2886,9 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: konnte keinen virtuellen Zeiger erzeugen\n"
+
+#~ msgid "Start  ▸  keyboard"
+#~ msgstr "Start  ▸  Tastatur"
 
 #, c-format
 #~ msgid ""
