@@ -313,6 +313,111 @@ ShellRoot {
         if (!winProc.running) winProc.running = true
     }
 
+    // ── the disc in the drive ───────────────────────────────────────────────
+    //
+    // The one tile that appears because of something somebody DID to the
+    // machine rather than because of what is installed on it. The list of
+    // tiles is read once at startup, so without this a disc put in while the
+    // television is already on would not show up until big screen mode was
+    // restarted — and putting a disc in and then turning the television on is
+    // the less likely order of the two.
+    //
+    // ⚠ THE APPS LIST IS RE-READ ONLY WHEN THE ANSWER CHANGES. It is what the
+    // shelves are built from, and rebuilding them under somebody's cursor
+    // every five seconds for a machine with no optical drive at all would be a
+    // selection that moves on its own. On such a machine this is a readdir of
+    // /sys/block that finds nothing.
+    property var discRows: []
+    property string discKey: ""
+    property bool discSeen: false
+    readonly property string discNeeds: {
+        for (let i = 0; i < shell.discRows.length; i++)
+            if (shell.discRows[i].playable === "1" && shell.discRows[i].needs)
+                return shell.discRows[i].needs
+        return ""
+    }
+
+    Process {
+        id: discProc
+        command: [shell.bin, "big", "disc", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = shell.parseRecords(this.text)
+                shell.discRows = rows
+                let key = ""
+                for (let i = 0; i < rows.length; i++)
+                    key += rows[i].drive + ":" + rows[i].kind + ":" + rows[i].name + "|"
+                // ⚠ THE FIRST ANSWER IS NOT A CHANGE. The tile list was read
+                // at startup and already has this disc in it; refreshing on
+                // the first tick would rebuild every shelf for nothing.
+                if (!shell.discSeen) {
+                    shell.discSeen = true
+                    shell.discKey = key
+                    return
+                }
+                if (key !== shell.discKey) {
+                    shell.discKey = key
+                    if (!appsProc.running) appsProc.running = true
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        // Stopped while a film is playing: the drive is busy, the answer
+        // cannot change while a disc is being read, and the shelf it feeds is
+        // not on screen.
+        running: !shell.away
+        onTriggered: if (!discProc.running) discProc.running = true
+    }
+
+    /*
+     * Play what is in the drive — the remote's DVD button, and the tile.
+     *
+     * ⚠ THE SAME LAUNCH AS THE TILE'S, deliberately: `big run disc --wait`
+     * steps the television aside, fills the screen and brings it back when mpv
+     * exits. A second path that started the player some other way would be a
+     * second answer to what pressing play on a disc does.
+     */
+    function discPlay() {
+        const t = shell.apps.filter(a => a.id === "disc")
+        if (t.length === 0) {
+            shell.notice = I18n.tr("There is no disc in the drive")
+            noticeTimer.restart()
+            return
+        }
+        if (shell.activeApp && shell.activeApp.id === "disc") {
+            shell.stepAside()
+            return
+        }
+        shell.discNote()
+        shell.launchApp(t[0], ["big", "run", "disc", "--wait"])
+    }
+
+    // ⚠ SAID BEFORE IT FAILS, not after. A commercial disc without its
+    // decrypter gets as far as mpv and then stops with an error nobody on a
+    // sofa can act on; the name of the missing package is the only useful
+    // thing anybody can be told here.
+    function discNote() {
+        if (!shell.discNeeds) return
+        shell.notice = I18n.tr("This disc is encrypted — %1 is needed to play it")
+                             .arg(shell.discNeeds)
+        noticeTimer.restart()
+    }
+
+    Process { id: ejectProc }
+
+    function discEject() {
+        if (ejectProc.running) return
+        ejectProc.command = [shell.bin, "big", "disc", "eject"]
+        ejectProc.running = true
+        shell.notice = I18n.tr("Ejecting")
+        noticeTimer.restart()
+    }
+
     // After a launch, because the window does not exist the moment the
     // launcher returns — the same reason big.c's fullscreen waiter has to wait.
     Timer {
@@ -1118,7 +1223,7 @@ ShellRoot {
     // The middle button is the one it lands on. Somebody who has pressed Down
     // to reach a row of media buttons came to pause something.
     property bool mediaFocus: false
-    property int mediaIndex: 1
+    property int mediaIndex: 2	// Play — the middle of the five
 
     // ⚠ THE MUSIC CAN STOP WHILE THE SELECTION IS DOWN HERE — the track ends,
     // or somebody closes the player from another room. The buttons go with it,
@@ -1126,9 +1231,16 @@ ShellRoot {
     // television where the d-pad does nothing at all.
     onMediaLiveChanged: if (!shell.mediaLive) shell.mediaFocus = false
 
+    // ⛔ THE SAME ORDER AS THE ROW ABOVE, and the clamp is its length. This
+    // list and the Repeater's model are two spellings of one thing; when it
+    // held three and the row drew five, every press landed one button to the
+    // left of the one that lit up.
+    readonly property var mediaActs: ["prev", "rewind", "toggle", "forward", "next"]
+
     function mediaPress() {
-        const acts = ["prev", "toggle", "next"]
-        shell.mediaCmd(acts[Math.max(0, Math.min(2, shell.mediaIndex))])
+        const i = Math.max(0, Math.min(shell.mediaActs.length - 1,
+                                       shell.mediaIndex))
+        shell.mediaCmd(shell.mediaActs[i])
     }
 
     function mediaCmd(verb) {
@@ -1943,7 +2055,7 @@ ShellRoot {
         // any — see mediaFocus. Everything else about the ends is unchanged.
         if (nb >= bs.length && d > 0 && shell.mediaLive) {
             shell.mediaFocus = true
-            shell.mediaIndex = 1
+            shell.mediaIndex = 2
             return
         }
         if (nb < 0 || nb >= bs.length) return   // no wrap: the ends are a landmark
@@ -2061,6 +2173,7 @@ ShellRoot {
             return
         }
 
+        if (it.id === "disc") shell.discNote()
         shell.launchApp(it, ["big", "run", it.id, "--wait"])
     }
 
@@ -2543,6 +2656,26 @@ ShellRoot {
     }
 
     function nav(cmd) {
+        /*
+         * ── the five buttons the compositor cannot deliver ──────────────
+         *
+         * `big nav` reads the television remote as well as the controller now,
+         * and prefixes what it reads. See the header above remote_open() in
+         * pad.c for which buttons those are and why it is only those: OK, ⏭,
+         * ⏮, Guide and Power reach NO application — two of them have no keysym
+         * at all — so while an application is in front they did nothing
+         * whatsoever, on the device this whole interface is for.
+         *
+         * ⛔ AND ONLY WHILE STEPPED ASIDE. On screen this window has keyboard
+         * focus and the SAME press also arrives as a key event below, which is
+         * where it is handled — acting on both would take one press two shelves
+         * back.
+         */
+        if (cmd.startsWith("remote:")) {
+            if (shell.away) shell.navRemote(cmd.substring(7))
+            return
+        }
+
         if (shell.away) { shell.navAway(cmd); return }
 
         // ⚠ BEFORE EVERY GUARD BELOW, and for the same reason Guide is handled
@@ -2575,7 +2708,8 @@ ShellRoot {
         if (shell.menuOpen === false && shell.mediaFocus) {
             switch (cmd) {
             case "left":   shell.mediaIndex = Math.max(0, shell.mediaIndex - 1); break
-            case "right":  shell.mediaIndex = Math.min(2, shell.mediaIndex + 1); break
+            case "right":  shell.mediaIndex = Math.min(shell.mediaActs.length - 1,
+                                                       shell.mediaIndex + 1); break
             case "accept": shell.mediaPress(); break
             // Up and B both go back to the tiles, because both of them mean
             // that everywhere else on this screen.
@@ -2678,6 +2812,39 @@ ShellRoot {
         // back in — that half is `big guard`, which is watching the same
         // button while this is not running.
         case "guide":      shell.stepAside(); break
+        default: break
+        }
+    }
+
+    /*
+     * The remote, with a film or a browser in front.
+     *
+     * ⚠ EACH OF THESE TURNS INTO SOMETHING THE THING IN FRONT UNDERSTANDS —
+     * that is the entire job. OK becomes a Return, which is what a Blu-ray
+     * menu, a browser and a web player all take; skip becomes a transport
+     * press, which for a disc is a CHAPTER (big.c drives mpv over its own
+     * socket for exactly that reason) and for anything else is MPRIS.
+     *
+     * ⚠ THE KEYBOARD FIRST. With the on-screen keyboard up, OK is the key
+     * under the cursor and nothing else — typing a Return into the page behind
+     * it would submit whatever half-typed thing is in the box.
+     */
+    function navRemote(cmd) {
+        if (shell.oskOpen && (cmd === "accept" || cmd === "back")) {
+            shell.navAway(cmd)
+            return
+        }
+
+        switch (cmd) {
+        case "accept": shell.key("Return"); break
+        case "next":   shell.mediaCmd("next"); break
+        case "prev":   shell.mediaCmd("prev"); break
+        // Both ways back, and the reason there are two: Guide is the button
+        // somebody presses to leave what they are watching, and Power is the
+        // one they press when they want the machine to stop — which is a
+        // question this asks rather than an answer it gives.
+        case "guide":  shell.comeBack(); break
+        case "power":  shell.comeBack(); shell.openMenuOn("power"); break
         default: break
         }
     }
@@ -3970,10 +4137,17 @@ ShellRoot {
                         anchors.verticalCenter: parent.verticalCenter
 
                         Repeater {
+                            // ⚠ IN THE ORDER THEY SIT ON A REMOTE — skip back,
+                            // wind back, play, wind on, skip on. Somebody
+                            // looking from the sofa is matching this row
+                            // against the thing in their hand, so a different
+                            // order here is a row that has to be read.
                             model: [
-                                { act: "prev",   can: String(shell.transport.canprev || "1") === "1" },
-                                { act: "toggle", can: true },
-                                { act: "next",   can: String(shell.transport.cannext || "1") === "1" }
+                                { act: "prev",    can: String(shell.transport.canprev || "1") === "1" },
+                                { act: "rewind",  can: String(shell.transport.canseek || "0") === "1" },
+                                { act: "toggle",  can: true },
+                                { act: "forward", can: String(shell.transport.canseek || "0") === "1" },
+                                { act: "next",    can: String(shell.transport.cannext || "1") === "1" }
                             ]
 
                             Rectangle {
@@ -4039,9 +4213,20 @@ ShellRoot {
                                         } else if (mbtn.modelData.act === "next") {
                                             tri(w * 0.06, w * 0.68)
                                             ctx.fillRect(w * 0.74, 0, w * 0.18, h)
-                                        } else {
+                                        } else if (mbtn.modelData.act === "prev") {
                                             tri(w * 0.94, w * 0.32)
                                             ctx.fillRect(w * 0.08, 0, w * 0.18, h)
+                                        // Wind on and wind back: two triangles
+                                        // and no bar, which is the difference
+                                        // between them and the skips above —
+                                        // the bar is the edge a skip stops at,
+                                        // and winding does not stop.
+                                        } else if (mbtn.modelData.act === "forward") {
+                                            tri(w * 0.04, w * 0.5)
+                                            tri(w * 0.5, w * 0.96)
+                                        } else {
+                                            tri(w * 0.96, w * 0.5)
+                                            tri(w * 0.5, w * 0.04)
                                         }
                                     }
                                 }
@@ -4878,6 +5063,15 @@ ShellRoot {
                         case 373: shell.nav("guide");  event.accepted = true; return   // KEY_EPG
                         case 415: shell.mediaCmd("next"); event.accepted = true; return // KEY_NEXT
                         case 420: shell.mediaCmd("prev"); event.accepted = true; return // KEY_PREVIOUS
+                        // KEY_DVD. xkeyboard-config gives it XF86DVD and Qt
+                        // has no Qt::Key for that name either, so it lands
+                        // here with the other three: play what is in the
+                        // drive, which is the button's whole meaning.
+                        case 397: shell.discPlay(); event.accepted = true; return
+                        // KEY_EJECTCD, for the Qt versions that do not name
+                        // XF86Eject either. Where they do, the Qt.Key_Eject
+                        // case below is what runs and this never fires.
+                        case 169: shell.discEject(); event.accepted = true; return
                         // ⚠ KEY_POWER2 IS WHAT AN MCE REMOTE'S POWER BUTTON
                         // SENDS, and xkeyboard-config maps NOTHING to keycode
                         // 364 — not an unnamed keysym, no keysym at all. The
@@ -4962,8 +5156,34 @@ ShellRoot {
                     // buttons did nothing, on the device this interface is
                     // FOR.
                     case Qt.Key_Play:        shell.mediaCmd("toggle"); break
-                    case Qt.Key_AudioForward: shell.mediaCmd("next"); break
-                    case Qt.Key_AudioRewind:  shell.mediaCmd("prev"); break
+                    /*
+                     * ⛔ FAST FORWARD IS NOT SKIP, and it used to be. These
+                     * two sent `next` and `prev` — the buttons either side of
+                     * them on the same remote — so a film could be skipped out
+                     * of and never wound through: the one thing ⏪ and ⏩ are
+                     * for, on the one device that has no other way to do it.
+                     * They seek now, thirty seconds a press (SEEK_STEP in
+                     * big.c), and ⏭ / ⏮ are still the skip.
+                     *
+                     * ⚠ A DISC PLAYER WINDS WHILE THE BUTTON IS HELD and this
+                     * cannot: a remote sends one press with no way to know it
+                     * is still down. One press, one jump, which is what every
+                     * ten-foot interface does instead.
+                     */
+                    case Qt.Key_AudioForward: shell.mediaCmd("forward"); break
+                    case Qt.Key_AudioRewind:  shell.mediaCmd("rewind"); break
+                    /*
+                     * The DVD button, and the Eject button beside it. Both are
+                     * about the disc in the drive, which is the one tile on
+                     * this television that is there because of the hardware
+                     * rather than because of what is installed.
+                     *
+                     * ⚠ Qt HAS NO Key FOR XF86Eject EITHER — it arrives as
+                     * Qt.Key_Eject only on some versions, so the scancode is
+                     * where the DVD button is handled (above) and this is the
+                     * spelling that works where Qt does name it.
+                     */
+                    case Qt.Key_Eject:       shell.discEject(); break
 
                     // ── the buttons a television remote has and a keyboard
                     // does not ──────────────────────────────────────────────

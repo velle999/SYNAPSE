@@ -134,6 +134,9 @@ msgstr "Edytuj"
 msgid "Edit a wrapper"
 msgstr "Edytuj wrapper"
 
+msgid "Ejecting"
+msgstr "Wysuwanie"
+
 msgid ""
 "Everything installed, games first. Its command, folder and icon come across "
 "with it — and if it already runs gamescope, that line is taken apart rather "
@@ -219,6 +222,9 @@ msgstr "Skocz"
 
 msgid "Keep it open"
 msgstr "Zostaw otwarte"
+
+msgid "Keep the screen awake"
+msgstr ""
 
 msgid "Loading %1…"
 msgstr "Wczytywanie %1…"
@@ -335,6 +341,9 @@ msgstr "Nakładka"
 msgid "PLEX ALBUMS"
 msgstr "ALBUMY PLEX"
 
+msgid "POWER"
+msgstr ""
+
 msgid "Paused   ·   A pause   ·   ‹ › track"
 msgstr "Wstrzymane   ·   A pauza   ·   ‹ › utwór"
 
@@ -401,6 +410,18 @@ msgstr "Uruchom w trybie gamemode"
 msgid "Running"
 msgstr "Uruchomione"
 
+msgid "SCREEN"
+msgstr ""
+
+msgid "SETTINGS"
+msgstr ""
+
+msgid "SHELVES"
+msgstr ""
+
+msgid "START MENU"
+msgstr ""
+
 msgid "SYNAPSE"
 msgstr "SYNAPSE"
 
@@ -413,6 +434,9 @@ msgstr "SYSTEM"
 msgid "Save"
 msgstr "Zapisz"
 
+msgid "Screen"
+msgstr ""
+
 msgid "Search"
 msgstr "Szukaj"
 
@@ -424,6 +448,12 @@ msgstr "Wybierz"
 
 msgid "Set up with the controller"
 msgstr "Ustaw za pomocą pada"
+
+msgid "Settings"
+msgstr ""
+
+msgid "Shelves"
+msgstr ""
 
 msgid "Shortcuts"
 msgstr "Skróty"
@@ -451,6 +481,9 @@ msgstr "Start  ▸  klawiatura"
 
 msgid "Start at login"
 msgstr "Uruchom po zalogowaniu"
+
+msgid "Start menu"
+msgstr ""
 
 msgid "Starting %1…"
 msgstr "Uruchamianie %1…"
@@ -495,10 +528,18 @@ msgstr ""
 msgid "The visualizer needs projectM — synpkg install projectm-pulseaudio"
 msgstr "Wizualizacja wymaga projectM — synpkg install projectm-pulseaudio"
 
+msgid "There is no disc in the drive"
+msgstr "W napędzie nie ma płyty"
+
+msgid "This disc is encrypted — %1 is needed to play it"
+msgstr "Ta płyta jest zaszyfrowana — do odtworzenia potrzebne jest %1"
+
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
 "window, with the controller acting as the mouse and keyboard they need."
-msgstr "Kafelki na półce multimediów. Otwierają się w przeglądarce jako własne okno pełnoekranowe, a kontroler pełni rolę myszy i klawiatury, których potrzebują."
+msgstr ""
+"Kafelki na półce multimediów. Otwierają się w przeglądarce jako własne okno "
+"pełnoekranowe, a kontroler pełni rolę myszy i klawiatury, których potrzebują."
 
 msgid "Toggle overlay"
 msgstr "Przełącz nakładkę"
@@ -530,11 +571,39 @@ msgstr "Aplikacje web"
 msgid "What the game renders at"
 msgstr "W czym gra renderuje"
 
+msgid ""
+"What the menu behind Start offers. Desktop and Quit are always on it: they "
+"are the way out of a full-screen surface that owns the keyboard, and a "
+"gamepad has no key combination to fall back on."
+msgstr ""
+
+msgid "What this menu offers"
+msgstr ""
+
 msgid "Where the music comes from"
 msgstr "Skąd pochodzi muzyka"
 
+msgid ""
+"Whether big screen mode holds the desktop's idle timeouts off. It has none "
+"of its own — dim, blank, lock and suspend stay the compositor's. `While "
+"playing` covers the two cases nothing else does: music through cliamp has no "
+"window for the compositor to notice, and a gamepad is not Wayland input, so "
+"a controller-only game reads as an idle machine."
+msgstr ""
+
+msgid "Whether the screen is allowed to sleep"
+msgstr ""
+
 msgid "Which game?"
 msgstr "Która gra?"
+
+msgid ""
+"Which rows big screen mode draws. One switched off is not drawn and cannot "
+"be navigated to; switching it back on gives it its place back."
+msgstr ""
+
+msgid "Which rows the television shows"
+msgstr ""
 
 msgid "Which screen"
 msgstr "Który ekran"
@@ -663,6 +732,11 @@ msgstr ""
 
 msgid "syn-arcade: synui did not answer — is it running?\n"
 msgstr "syn-arcade: synui nie odpowiedział — czy działa?\n"
+
+msgid ""
+"syn-arcade: this synui has no `record` action — screen recording needs a "
+"newer one\n"
+msgstr ""
 
 msgid ""
 "syn-arcade: big run needs a tile id (`syn-arcade big apps` lists them)\n"
@@ -1046,6 +1120,46 @@ msgstr "syn-arcade: żaden odtwarzacz muzyki nie działa\n"
 msgid "syn-arcade: could not start the visualizer stream\n"
 msgstr "syn-arcade: nie udało się uruchomić strumienia wizualizacji\n"
 
+#, c-format
+msgid "syn-arcade: the disc player did not answer %s\n"
+msgstr "syn-arcade: odtwarzacz płyt nie odpowiedział na %s\n"
+
+msgid "no optical drive"
+msgstr "brak napędu optycznego"
+
+msgid "syn-arcade: no disc in the drive\n"
+msgstr "syn-arcade: brak płyty w napędzie\n"
+
+#, c-format
+msgid "syn-arcade: there is nothing to play in %s\n"
+msgstr "syn-arcade: w %s nie ma czego odtwarzać\n"
+
+msgid "syn-arcade: mpv is not installed — `synpkg install mpv`\n"
+msgstr "syn-arcade: mpv nie jest zainstalowany — `synpkg install mpv`\n"
+
+#, c-format
+msgid ""
+"syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
+"install %s`\n"
+msgstr "syn-arcade: zaszyfrowana płyta wymaga %s, który nie jest zainstalowany — `synpkg install %s`\n"
+
+msgid "syn-arcade: could not start mpv\n"
+msgstr "syn-arcade: nie udało się uruchomić mpv\n"
+
+msgid "syn-arcade: no optical drive\n"
+msgstr "syn-arcade: brak napędu optycznego\n"
+
+msgid "syn-arcade: eject is not installed\n"
+msgstr "syn-arcade: eject nie jest zainstalowany\n"
+
+#, c-format
+msgid "syn-arcade: %s would not open\n"
+msgstr "syn-arcade: %s nie otworzył się\n"
+
+#, c-format
+msgid "syn-arcade: big disc takes status, play or eject (got '%s')\n"
+msgstr "syn-arcade: big disc przyjmuje status, play albo eject (otrzymano '%s')\n"
+
 msgid "nothing is playing"
 msgstr "nic nie jest odtwarzane"
 
@@ -1063,22 +1177,28 @@ msgstr "wykonawca"
 
 #, c-format
 msgid ""
-"syn-arcade: big transport takes status, play, pause, toggle, next, prev or "
-"stop (got '%s')\n"
-msgstr ""
-"syn-arcade: big transport przyjmuje status, play, pause, toggle, next, prev "
-"albo stop (otrzymano '%s')\n"
+"syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
+"forward, rewind or stop (got '%s')\n"
+msgstr "syn-arcade: big transport przyjmuje status, play, pause, toggle, next, prev, forward, rewind albo stop (otrzymano '%s')\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: nic nie jest odtwarzane\n"
 
 #, c-format
-msgid "syn-arcade: %s cannot skip %s\n"
-msgstr "syn-arcade: %s nie potrafi pominąć %s\n"
+msgid "syn-arcade: %s has no chapters to skip\n"
+msgstr "syn-arcade: %s nie ma rozdziałów do przewijania\n"
+
+#, c-format
+msgid "syn-arcade: %s cannot seek\n"
+msgstr "syn-arcade: %s nie potrafi przewijać\n"
 
 #, c-format
 msgid "syn-arcade: %s did not answer %s\n"
 msgstr "syn-arcade: %s nie odpowiedział na %s\n"
+
+#, c-format
+msgid "syn-arcade: %s cannot skip %s\n"
+msgstr "syn-arcade: %s nie potrafi pominąć %s\n"
 
 msgid ""
 "syn-arcade: projectM is not installed — synpkg install projectm-pulseaudio\n"
@@ -1235,15 +1355,54 @@ msgstr "  Rysuje         nic — jednolity kolor\n"
 msgid ""
 "syn-arcade: cannot read '%s'. Use `desktop`, `none`, or the path to an "
 "image\n"
-msgstr "syn-arcade: nie można odczytać „%s”. Użyj `desktop`, `none` lub ścieżki do obrazu\n"
+msgstr ""
+"syn-arcade: nie można odczytać „%s”. Użyj `desktop`, `none` lub ścieżki do "
+"obrazu\n"
 
 #, c-format
 msgid "big screen background: %s\n"
 msgstr "Tło trybu dużego ekranu: %s\n"
 
 #, c-format
+msgid ""
+"syn-arcade: could not run %s — the screen cannot be held awake without "
+"synui's idle-inhibit helper\n"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "While playing"
+msgstr ""
+
+msgid "Always"
+msgstr ""
+
+msgid "Sleep, restart and power off"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no choices for '%s'\n"
+msgstr "syn-arcade: brak opcji dla '%s'\n"
+
+#, c-format
+msgid "syn-arcade: no setting called '%s'\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: %s takes %s (not '%s')\n"
+msgstr ""
+
+#, c-format
 msgid "  (no browser installed — these tiles cannot open)\n"
-msgstr "  (brak zainstalowanej przeglądarki — te kafelki nie mogą się otworzyć)\n"
+msgstr ""
+"  (brak zainstalowanej przeglądarki — te kafelki nie mogą się otworzyć)\n"
 
 #, c-format
 msgid "syn-arcade: no web app called '%s'\n"
@@ -1521,6 +1680,12 @@ msgstr "przełącznik nakładki"
 
 msgid "moving the overlay"
 msgstr "przesuwanie nakładki"
+
+#, c-format
+msgid ""
+"%s is already bound in %s — leaving it alone.\n"
+"Big screen mode is still on %s.\n"
+msgstr ""
 
 #, c-format
 msgid ""
@@ -1818,10 +1983,6 @@ msgstr ""
 #, c-format
 msgid "syn-arcade: cannot run /bin/sh: %s\n"
 msgstr "syn-arcade: nie można uruchomić /bin/sh: %s\n"
-
-#, c-format
-msgid "syn-arcade: no choices for '%s'\n"
-msgstr "syn-arcade: brak opcji dla '%s'\n"
 
 msgid "syn-arcade: fit inspect needs a .desktop file\n"
 msgstr "syn-arcade: fit inspect wymaga pliku .desktop\n"
@@ -2729,6 +2890,14 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: nie udało się utworzyć wirtualnego wskaźnika\n"
+
+#, c-format
+#~ msgid ""
+#~ "syn-arcade: big transport takes status, play, pause, toggle, next, prev "
+#~ "or stop (got '%s')\n"
+#~ msgstr ""
+#~ "syn-arcade: big transport przyjmuje status, play, pause, toggle, next, "
+#~ "prev albo stop (otrzymano '%s')\n"
 
 #, fuzzy
 #~ msgid "none"

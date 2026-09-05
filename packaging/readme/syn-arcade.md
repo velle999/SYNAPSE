@@ -37,6 +37,28 @@ syn-arcade pads rumble <pad>       # check the motors
 always a **stale bond** rather than a driver problem — remove the pairing and
 pair it again.
 
+## Big screen mode
+
+A ten-foot interface for a television and a controller — `syn-arcade big start`,
+or `Super`+`F10`. Full documentation is in the
+[wiki](https://github.com/velle999/SYNAPSE/wiki/Big-Screen); two things it does
+that are easy to miss:
+
+```bash
+syn-arcade big disc              # a Blu-ray, DVD or audio CD in the drive
+syn-arcade big disc play         # play it, full screen, through mpv
+syn-arcade big transport forward # thirty seconds on, on whatever is playing
+```
+
+A disc in the drive appears as a tile named after the disc and disappears when
+you take it out — while `mpv` is installed, which on SynapseOS is a choice
+rather than a given. A commercial DVD also needs `libdvdcss` and a Blu-ray needs
+`libaacs`; `big disc` names whichever is missing.
+
+A Media Center remote works as a remote: its buttons drive the interface, and
+the five that reach no application at all — OK, ⏭, ⏮, Guide and Power — keep
+working with a film or a browser in front of it.
+
 ## Requires
 
 `mangohud` for the overlay and `projectm-pulseaudio` for the music

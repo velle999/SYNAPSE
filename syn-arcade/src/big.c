@@ -81,6 +81,7 @@
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>		/* the disc player's own socket — see big_disc */
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -1435,6 +1436,11 @@ static const char *icon_file(const char *name)
 	return "";
 }
 
+/* The disc in the drive, as the words on a tile, or NULL when there is none.
+ * Defined with the rest of the disc code further down — that is where the
+ * reading of udev lives, and this is the only part of it a tile needs. */
+static const char *disc_tile_label(void);
+
 static int apps_table(struct row *rows, int max)
 {
 	int n = 0;
@@ -1504,6 +1510,32 @@ static int apps_table(struct row *rows, int max)
 		else if (music)
 			rows[n++] = (struct row){ "music", "Music", music,
 				"music", "app", "media", true, false, true, false };
+	}
+	/*
+	 * ⚠ THE ONE TILE THAT IS ABOUT THE HARDWARE. Everything else on this
+	 * shelf is a program that is installed or is not; this one is here
+	 * because there is a disc in the drive, it is named after that disc,
+	 * and it goes away when the disc does. FIRST among the media rows,
+	 * because somebody who has just walked to the machine and put a disc
+	 * in it is not looking for the fourth tile along.
+	 *
+	 * `keys` and not `pointer`: a Blu-ray menu is arrows and OK, and the
+	 * remote's OK button is one the compositor cannot deliver to anything
+	 * (see the remote reader in pad.c), so the shell types Return for it —
+	 * which needs `big keys` to be running.
+	 */
+	/* ⚠ AND ONLY WHEN mpv IS INSTALLED, which is this table's rule for every
+	 * other row and matters more here than anywhere else: mpv is unticked
+	 * in the installer's software list, so a stock machine may well have a
+	 * drive, a disc and no player. A tile that steps the television aside
+	 * and comes straight back is worse than no tile — `syn-arcade big disc`
+	 * says what is missing, and the row's `needs` column names it. */
+	if (have("mpv")) {
+		const char *disc = disc_tile_label();
+		if (disc)
+			rows[n++] = (struct row){ "disc", disc,
+				"syn-arcade big disc play", "disc", "app",
+				"media", false, true, true, false };
 	}
 	if (have("kodi"))		/* opens full-screen by itself */
 		rows[n++] = (struct row){ "kodi", "Kodi", "kodi", "kodi", "app",
@@ -6462,6 +6494,7 @@ static bool music_play_last(int *rc)
 /* Declared rather than moved: they belong with the dispatch below, which is
  * the only other thing that parses an argument list. */
 static const char *first_operand(int argc, char **argv);
+static const char *opt_value(int argc, char **argv, const char *name);
 static const char *second_operand(int argc, char **argv);
 static const char *third_operand(int argc, char **argv);
 
@@ -6763,7 +6796,778 @@ struct playing {
 	char title[256];
 	char artist[192];
 	bool can_next, can_prev, can_play, can_pause;
+	/* ⚠ SEEK IS ASKED FOR SEPARATELY, and a player may refuse it while
+	 * answering everything else: a live radio stream has a position
+	 * nobody can move. The fast-forward buttons are drawn on the
+	 * television whatever is playing, so this is what stops them
+	 * pretending. */
+	bool can_seek;
 };
+
+/* ── the disc in the drive ───────────────────────────────────────────────── */
+
+/*
+ * A Blu-ray, a DVD or a CD, played from four metres away.
+ *
+ * Every other tile on the media shelf is a program that is either installed or
+ * not. A disc is not: the tile exists because somebody put something in the
+ * drive a minute ago and it has to be gone again when they take it out — so
+ * this is the one row in apps_table() that asks the HARDWARE every time the
+ * table is built, and the shell watches for a change (`big disc --rec`) so the
+ * tile appears while the television is already on.
+ *
+ * ⚠ ASKED OF UDEV, WHICH ALREADY KNOWS. The kernel sends a change event when
+ * media is inserted and udev's cdrom_id probes the disc then; `udevadm info`
+ * reads that answer back out of the database. Opening the device here to look
+ * for ourselves would SPIN THE DRIVE UP — several seconds of noise, and a
+ * drive that never gets to stop — every time the tile list is built.
+ *
+ * ⛔ AND IT IS `ID_CDROM_MEDIA_BD`, NEVER `ID_CDROM_BD`. The properties without
+ * MEDIA in them describe the DRIVE: every Blu-ray drive on earth reports
+ * ID_CDROM_BD=1 with an empty tray. Matching those would put a Blu-ray tile on
+ * the television of everybody who owns the drive, and pressing it would hand
+ * mpv nothing.
+ */
+
+#define DISC_MAX	4
+
+struct disc {
+	char node[64];		/* /dev/sr0                                  */
+	char kind[16];		/* bluray | dvd | cd | data | blank | none    */
+	char label[96];		/* the volume label, when the disc has one   */
+};
+
+/* Where the optical drives are, and the seam the suite poses one through: a
+ * machine with a drive is not something a test can require, and half the
+ * machines this runs on have none. */
+static const char *sys_block(void)
+{
+	const char *e = getenv("SYN_ARCADE_SYS_BLOCK");
+	return (e && *e) ? e : "/sys/block";
+}
+
+/* The value of one `KEY=VALUE` line of `udevadm info --query=property`. */
+static bool udev_prop(const char *props, const char *key, char *out, size_t n)
+{
+	out[0] = '\0';
+	size_t klen = strlen(key);
+	for (const char *p = props; p && *p; ) {
+		const char *eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		if (!strncmp(p, key, klen) && p[klen] == '=') {
+			size_t vlen = len - klen - 1;
+			if (vlen >= n)
+				vlen = n - 1;
+			memcpy(out, p + klen + 1, vlen);
+			out[vlen] = '\0';
+			return true;
+		}
+		p = eol ? eol + 1 : NULL;
+	}
+	return false;
+}
+
+/*
+ * Is there a property whose name STARTS with `prefix` and whose value is not
+ * zero?
+ *
+ * ⚠ A PREFIX, because udev spells the media type in the name rather than the
+ * value: a rewritable Blu-ray is ID_CDROM_MEDIA_BD_RE=1 and a pressed one is
+ * ID_CDROM_MEDIA_BD=1, and asking about each spelling by name is how the next
+ * kind of disc reads as no disc at all.
+ */
+static bool udev_any(const char *props, const char *prefix)
+{
+	size_t plen = strlen(prefix);
+	for (const char *p = props; p && *p; ) {
+		const char *eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		if (!strncmp(p, prefix, plen)) {
+			const char *eq = memchr(p, '=', len);
+			if (eq && !(eq[1] == '0' && (eq + 2 == p + len)))
+				return true;
+		}
+		p = eol ? eol + 1 : NULL;
+	}
+	return false;
+}
+
+/* What is in this drive, from what udev last probed. */
+static void disc_read(struct disc *d)
+{
+	snprintf(d->kind, sizeof(d->kind), "none");
+	d->label[0] = '\0';
+
+	char *props = run_capture((char *const[]){
+		"udevadm", "info", "--query=property",
+		(char *)"--name", d->node, NULL }, 3);
+	if (!props)
+		return;
+
+	if (udev_any(props, "ID_CDROM_MEDIA=")) {
+		char state[32] = "";
+		udev_prop(props, "ID_CDROM_MEDIA_STATE", state, sizeof(state));
+
+		/* ⚠ A BLANK DISC IS NOT AN EMPTY DRIVE AND NOT A FILM. It is
+		 * media — every "is there a disc" test says yes — and there is
+		 * nothing on it to play. A tile for it would be a tile that
+		 * always fails. */
+		if (!strcmp(state, "blank"))
+			snprintf(d->kind, sizeof(d->kind), "blank");
+		else if (udev_any(props, "ID_CDROM_MEDIA_BD"))
+			snprintf(d->kind, sizeof(d->kind), "bluray");
+		else if (udev_any(props, "ID_CDROM_MEDIA_DVD"))
+			snprintf(d->kind, sizeof(d->kind), "dvd");
+		else if (udev_any(props, "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO"))
+			snprintf(d->kind, sizeof(d->kind), "cd");
+		else
+			snprintf(d->kind, sizeof(d->kind), "data");
+
+		udev_prop(props, "ID_FS_LABEL", d->label, sizeof(d->label));
+	}
+	free(props);
+}
+
+/* Every optical drive on the machine, and what is in it. */
+static int disc_scan(struct disc *out, int max)
+{
+	DIR *dir = opendir(sys_block());
+	if (!dir)
+		return 0;
+
+	int n = 0;
+	struct dirent *e;
+	while (n < max && (e = readdir(dir))) {
+		if (strncmp(e->d_name, "sr", 2) != 0)
+			continue;
+		bool digits = e->d_name[2] != '\0';
+		for (const char *c = e->d_name + 2; *c && digits; c++)
+			if (!isdigit((unsigned char)*c))
+				digits = false;
+		if (!digits)
+			continue;
+
+		struct disc *d = &out[n];
+		memset(d, 0, sizeof(*d));
+		if (snprintf(d->node, sizeof(d->node), "/dev/%s",
+			     e->d_name) >= (int)sizeof(d->node))
+			continue;	/* not a name any drive has */
+		n++;
+		disc_read(d);
+	}
+	closedir(dir);
+	return n;
+}
+
+/* Is this something to press play on? */
+static bool disc_playable(const struct disc *d)
+{
+	return !strcmp(d->kind, "bluray") || !strcmp(d->kind, "dvd") ||
+	       !strcmp(d->kind, "cd");
+}
+
+/* The first drive with something playable in it, or false. */
+static bool disc_pick(struct disc *out)
+{
+	struct disc all[DISC_MAX];
+	int n = disc_scan(all, DISC_MAX);
+	for (int i = 0; i < n; i++)
+		if (disc_playable(&all[i])) {
+			*out = all[i];
+			return true;
+		}
+	return false;
+}
+
+/* What kind of disc this is, in the words on the box. */
+static const char *disc_kind_name(const char *kind)
+{
+	if (!strcmp(kind, "bluray")) return "Blu-ray";
+	if (!strcmp(kind, "dvd"))    return "DVD";
+	if (!strcmp(kind, "cd"))     return "Audio CD";
+	if (!strcmp(kind, "blank"))  return "Blank disc";
+	if (!strcmp(kind, "data"))   return "Data disc";
+	return "No disc";
+}
+
+/*
+ * What the tile says.
+ *
+ * ⚠ THE DISC'S OWN LABEL WHEN IT HAS ONE, because that is what somebody is
+ * looking for: a tile reading THE MATRIX is unmistakable from a sofa in a way
+ * that a fourth tile reading "DVD" beside Plex, Kodi and Music is not. DVD
+ * labels are upper case with underscores for spaces — that is the ISO 9660
+ * character set rather than a choice anybody made — so the underscores come
+ * back out. Nothing else about it is touched.
+ *
+ * ⚠ ONE STATIC BUFFER, and exactly one disc tile is ever drawn. Same rule as
+ * icon_file() above: the row holds the pointer, so a second live call would
+ * rename the first.
+ */
+static const char *disc_tile_name(const struct disc *d)
+{
+	static char name[96];
+
+	if (!d->label[0])
+		return disc_kind_name(d->kind);
+
+	snprintf(name, sizeof(name), "%s", d->label);
+	for (char *p = name; *p; p++)
+		if (*p == '_')
+			*p = ' ';
+	return name;
+}
+
+/*
+ * The decrypter this disc needs and does not have, or "".
+ *
+ * ⚠ ASKED OF THE FILESYSTEM, NOT OF PACMAN. libdvdread and libbluray both
+ * dlopen these by soname at the moment a disc is opened — there is no link-time
+ * dependency to read and no error until playback fails — so the honest question
+ * is whether the file is there to be opened.
+ *
+ * ⚠ AND NEITHER IS INSTALLED BY DEFAULT. Both are ordinary Arch packages and
+ * neither is something this program should install on somebody's behalf; the
+ * row names them, and `synpkg install <name>` is the whole answer.
+ */
+static const char *disc_needs(const struct disc *d)
+{
+	/* ⚠ THE PLAYER FIRST. mpv is an optional package on this distribution
+	 * — the installer's software list has it unticked — so "what is missing
+	 * before this disc plays" is most often mpv itself, and a row that
+	 * asked for libdvdcss on a machine with no player would be sending
+	 * somebody to install the second thing they need. */
+	if (!have("mpv"))
+		return "mpv";
+
+	/* Where those libraries live, and the seam the suite poses both
+	 * answers through: whether this machine happens to have libdvdcss
+	 * installed is not something a test may depend on, and both states are
+	 * worth asserting. */
+	const char *libdir = getenv("SYN_ARCADE_LIBDIR");
+	if (!libdir || !*libdir)
+		libdir = "/usr/lib";
+
+	char path[SYN_PATH];
+	if (!strcmp(d->kind, "dvd")) {
+		snprintf(path, sizeof(path), "%s/libdvdcss.so.2", libdir);
+		return file_exists(path) ? "" : "libdvdcss";
+	}
+	if (!strcmp(d->kind, "bluray")) {
+		snprintf(path, sizeof(path), "%s/libaacs.so.0", libdir);
+		return file_exists(path) ? "" : "libaacs";
+	}
+	return "";
+}
+
+/*
+ * mpv's argv for this disc.
+ *
+ * ⛔ THE DEVICE IS AN OPTION, NOT PART OF THE URL. `dvd://[title][/device]` is
+ * documented and it splits on the first slash, so `dvd:///dev/sr0` hands mpv a
+ * device of `dev/sr0` — a relative path, from whatever directory the shell
+ * happened to be started in. The option spellings differ per kind, which is the
+ * only reason this is a table rather than a string.
+ *
+ * ⚠ --force-window, on every kind. An audio CD has no video, so without it mpv
+ * maps NO WINDOW at all — and the tile press has already stepped the television
+ * aside to make room for one. The result is a desktop, silence from the sofa's
+ * point of view about what is happening, and a Guide press as the only way to
+ * find out.
+ */
+static int disc_argv(const struct disc *d, char *const **out, char *sock,
+		     size_t socklen)
+{
+	static char devopt[128], ipcopt[256];
+	static char *argv[8];
+
+	const char *url;
+	if (!strcmp(d->kind, "bluray")) {
+		url = "bd://";
+		snprintf(devopt, sizeof(devopt), "--bluray-device=%s", d->node);
+	} else if (!strcmp(d->kind, "dvd")) {
+		url = "dvd://";
+		snprintf(devopt, sizeof(devopt), "--dvd-device=%s", d->node);
+	} else if (!strcmp(d->kind, "cd")) {
+		url = "cdda://";
+		snprintf(devopt, sizeof(devopt), "--cdda-device=%s", d->node);
+	} else {
+		return 0;
+	}
+
+	snprintf(ipcopt, sizeof(ipcopt), "--input-ipc-server=%s", sock);
+	(void)socklen;
+
+	int n = 0;
+	argv[n++] = (char *)"mpv";
+	argv[n++] = (char *)"--fullscreen";
+	argv[n++] = (char *)"--force-window=yes";
+	argv[n++] = devopt;
+	argv[n++] = ipcopt;
+	argv[n++] = (char *)url;
+	argv[n] = NULL;
+	*out = argv;
+	return n;
+}
+
+/*
+ * ── driving the disc ─────────────────────────────────────────────────────
+ *
+ * mpv is started with a JSON IPC socket and this talks to it. Three reasons it
+ * is not MPRIS like everything else on the transport:
+ *
+ *   · mpv has no MPRIS of its own. It is a separate package (mpv-mpris) that
+ *     has to be installed AND loaded as a script, so a transport that could
+ *     only reach mpv that way would be a set of buttons that work on some
+ *     machines;
+ *   · SKIP ON A FILM IS A CHAPTER, not a track. MPRIS Next/Previous move
+ *     through a playlist, and a disc is one long title with chapters in it —
+ *     the buttons would step off the end of the film rather than to the next
+ *     scene;
+ *   · the socket is ours. mpv is started here, so there is no question of
+ *     which player answered.
+ *
+ * ⚠ EVENTS ARRIVE ON THE SAME SOCKET, UNASKED. Property changes and file
+ * events are written in between replies, so a reader that takes the next line
+ * as its answer takes a property change instead — reliably, and most often
+ * exactly when something is happening. Every reply here is matched on the
+ * request_id it was sent with. (syn-play's ipc.c learned the same thing about
+ * the same socket.)
+ */
+
+#define DISC_RQ		77	/* our request_id: any constant will do */
+
+static bool disc_sock_path(char *buf, size_t n)
+{
+	const char *run = getenv("XDG_RUNTIME_DIR");
+	if (run && *run)
+		return snprintf(buf, n, "%s/syn-arcade-disc.sock", run) < (int)n;
+	return snprintf(buf, n, "/tmp/syn-arcade-disc-%u.sock",
+			(unsigned)getuid()) < (int)n;
+}
+
+/* A connected socket, or -1 when no disc is playing.
+ *
+ * ⚠ THE CONNECT IS THE TEST, not the file. mpv does not always unlink the
+ * socket — a SIGKILL never does — so a path that exists is not a player. */
+static int disc_connect(void)
+{
+	char path[SYN_PATH];
+	if (!disc_sock_path(path, sizeof(path)))
+		return -1;
+
+	struct sockaddr_un a;
+	if (strlen(path) >= sizeof(a.sun_path))
+		return -1;
+
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return -1;
+
+	memset(&a, 0, sizeof(a));
+	a.sun_family = AF_UNIX;
+	if (snprintf(a.sun_path, sizeof(a.sun_path), "%s", path) >=
+	    (int)sizeof(a.sun_path)) {
+		close(fd);
+		return -1;
+	}
+	if (connect(fd, (struct sockaddr *)&a, sizeof(a)) != 0) {
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+/*
+ * Is this line the reply to the request we just sent?
+ *
+ * ⛔ THE NUMBER IS READ, NOT THE TEXT MATCHED. `"request_id":77` and
+ * `"request_id": 77` are the same JSON and only one of them is a substring of
+ * the other — a reader that greps for the first is matching on the formatting
+ * of whoever wrote the line rather than on what it says, and every reply looks
+ * like an unrelated event the day that changes.
+ */
+static bool disc_is_reply(const char *line)
+{
+	const char *k = strstr(line, "\"request_id\"");
+	if (!k)
+		return false;
+	k = strchr(k, ':');
+	if (!k)
+		return false;
+	k++;
+	while (*k == ' ' || *k == '\t')
+		k++;
+	return strtol(k, NULL, 10) == DISC_RQ;
+}
+
+/*
+ * One command, and the reply to THAT command.
+ *
+ * Returns the malloc'd reply line, or NULL. `fd` stays open — a caller asking
+ * three properties opens one connection, and the request_id match is what makes
+ * that safe.
+ */
+static char *disc_rpc(int fd, const char *json)
+{
+	char line[512];
+	int len = snprintf(line, sizeof(line),
+			   "{\"command\":[%s],\"request_id\":%d}\n", json,
+			   DISC_RQ);
+	if (len <= 0 || len >= (int)sizeof(line))
+		return NULL;
+	if (write(fd, line, (size_t)len) != len)
+		return NULL;
+
+	char buf[4096];
+	size_t used = 0;
+
+	/* Bounded: a player that has stopped answering must not hang a button
+	 * press on the television. */
+	for (int spins = 0; spins < 40; spins++) {
+		struct pollfd p = { .fd = fd, .events = POLLIN };
+		if (poll(&p, 1, 50) <= 0)
+			continue;
+
+		ssize_t got = read(fd, buf + used, sizeof(buf) - used - 1);
+		if (got <= 0)
+			return NULL;
+		used += (size_t)got;
+		buf[used] = '\0';
+
+		char *start = buf;
+		for (char *nl; (nl = strchr(start, '\n')); start = nl + 1) {
+			*nl = '\0';
+			if (disc_is_reply(start))
+				return xstrdup(start);
+		}
+		/* Keep the tail: a reply split across two reads is one line
+		 * that neither read holds. */
+		size_t left = strlen(start);
+		memmove(buf, start, left + 1);
+		used = left;
+		if (used + 1 >= sizeof(buf))
+			return NULL;
+	}
+	return NULL;
+}
+
+/*
+ * The value of one top-level field, as text, quotes removed: `false`, `32`,
+ * `The Matrix`, `success`.
+ *
+ * ⚠ THE KEY IS FOUND, THEN THE VALUE IS READ — the same rule as
+ * disc_is_reply() above and for the same reason. `"error":"success"` is a
+ * substring test that passes on one writer's spacing and fails on another's,
+ * and what it fails as is "the player did not answer", which reads like a
+ * broken button rather than like a parser.
+ */
+static bool disc_field(const char *line, const char *key, char *out, size_t n)
+{
+	out[0] = '\0';
+	if (!line)
+		return false;
+
+	char pat[64];
+	snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char *d = strstr(line, pat);
+	if (!d)
+		return false;
+	d = strchr(d, ':');
+	if (!d)
+		return false;
+	d++;
+	while (*d == ' ' || *d == '\t')
+		d++;
+
+	if (*d == '"') {
+		d++;
+		size_t k = 0;
+		for (; *d && *d != '"' && k + 1 < n; d++) {
+			if (*d == '\\' && d[1])
+				d++;
+			out[k++] = *d;
+		}
+		out[k] = '\0';
+		return k > 0;
+	}
+	size_t k = 0;
+	for (; *d && *d != ',' && *d != '}' && k + 1 < n; d++)
+		out[k++] = *d;
+	out[k] = '\0';
+	return k > 0;
+}
+
+static bool disc_data(const char *reply, char *out, size_t n)
+{
+	return disc_field(reply, "data", out, n);
+}
+
+/* Did mpv say it did the thing? */
+static bool disc_ok(const char *reply)
+{
+	char err[32];
+	return disc_field(reply, "error", err, sizeof(err)) &&
+	       !strcmp(err, "success");
+}
+
+static bool disc_get(int fd, const char *prop, char *out, size_t n)
+{
+	char req[128];
+	snprintf(req, sizeof(req), "\"get_property\",\"%s\"", prop);
+	char *reply = disc_rpc(fd, req);
+	bool ok = disc_data(reply, out, n);
+	free(reply);
+	return ok;
+}
+
+/* Is the disc player up, and what is it doing? Fills the same struct the
+ * MPRIS players do, so the transport ranks all of them together. */
+static bool disc_playing(struct playing *p)
+{
+	int fd = disc_connect();
+	if (fd < 0)
+		return false;
+
+	memset(p, 0, sizeof(*p));
+	snprintf(p->bus, sizeof(p->bus), "disc");
+	snprintf(p->who, sizeof(p->who), "disc");
+	snprintf(p->app, sizeof(p->app), "Disc");
+
+	/* ⚠ THE FIRST PROPERTY IS THE TEST. A socket that connects and then
+	 * answers nothing is a player mid-exit or a file somebody else left
+	 * there — reporting it as "playing" would take the buttons away from
+	 * whatever really is. */
+	char v[64];
+	if (!disc_get(fd, "pause", v, sizeof(v))) {
+		close(fd);
+		return false;
+	}
+	snprintf(p->state, sizeof(p->state), "%s",
+		 !strcmp(v, "true") ? "paused" : "playing");
+	disc_get(fd, "media-title", p->title, sizeof(p->title));
+
+	/* ⚠ CHAPTERS DECIDE WHETHER SKIP IS OFFERED. A film with none is a
+	 * film where both buttons would do nothing, and a button that does
+	 * nothing teaches somebody that the remote is broken. */
+	long chapters = 0;
+	if (disc_get(fd, "chapters", v, sizeof(v)))
+		chapters = strtol(v, NULL, 10);
+	long at = 0;
+	if (disc_get(fd, "chapter", v, sizeof(v)))
+		at = strtol(v, NULL, 10);
+
+	p->can_next  = chapters > 0 && at < chapters - 1;
+	p->can_prev  = chapters > 0;
+	p->can_play  = true;
+	p->can_pause = true;
+	p->can_seek  = true;
+	close(fd);
+	return true;
+}
+
+/* One transport verb, on the disc player. */
+static int disc_transport(const char *verb, int seek_secs)
+{
+	int fd = disc_connect();
+	if (fd < 0)
+		return EX_EMPTY;
+
+	char req[128];
+	if (!strcmp(verb, "toggle"))
+		snprintf(req, sizeof(req), "\"cycle\",\"pause\"");
+	else if (!strcmp(verb, "play"))
+		snprintf(req, sizeof(req), "\"set_property\",\"pause\",false");
+	else if (!strcmp(verb, "pause"))
+		snprintf(req, sizeof(req), "\"set_property\",\"pause\",true");
+	else if (!strcmp(verb, "stop"))
+		snprintf(req, sizeof(req), "\"quit\"");
+	else if (!strcmp(verb, "next"))
+		snprintf(req, sizeof(req), "\"add\",\"chapter\",1");
+	else if (!strcmp(verb, "prev"))
+		snprintf(req, sizeof(req), "\"add\",\"chapter\",-1");
+	else
+		snprintf(req, sizeof(req), "\"seek\",%d", seek_secs);
+
+	char *reply = disc_rpc(fd, req);
+	close(fd);
+
+	/* ⚠ `quit` NEVER ANSWERS, and that is not a failure: mpv exits with the
+	 * reply unwritten. Every other verb is only a success if it said so. */
+	if (!strcmp(verb, "stop")) {
+		free(reply);
+		return EX_OK;
+	}
+	bool ok = disc_ok(reply);
+	free(reply);
+	if (!ok)
+		fprintf(stderr, _("syn-arcade: the disc player did not answer "
+				"%s\n"), verb);
+	return ok ? EX_OK : EX_FAIL;
+}
+
+/*
+ * The tile's name, or NULL.
+ *
+ * ⚠ ASKED ONCE PER PROCESS. apps_table() is walked twice per `big apps` and
+ * this is a fork of udevadm per drive; the answer cannot change inside the few
+ * milliseconds one of these processes lives, and the shell asks again by
+ * running the command again. It is also what keeps disc_tile_name()'s single
+ * static buffer honest — one disc, one name, filled once.
+ */
+static const char *disc_tile_label(void)
+{
+	static bool asked = false;
+	static bool any = false;
+	static struct disc found;
+
+	if (!asked) {
+		asked = true;
+		any = disc_pick(&found);
+	}
+	return any ? disc_tile_name(&found) : NULL;
+}
+
+/* ── the disc, as a command ──────────────────────────────────────────────── */
+
+static int big_disc_status(bool rec)
+{
+	struct disc all[DISC_MAX];
+	int n = disc_scan(all, DISC_MAX);
+
+	if (rec) {
+		rec_row(6, "drive", "kind", "name", "label", "playable",
+			"needs");
+		for (int i = 0; i < n; i++)
+			rec_row(6, all[i].node, all[i].kind,
+				disc_tile_name(&all[i]), all[i].label,
+				disc_playable(&all[i]) ? "1" : "0",
+				disc_needs(&all[i]));
+		return n ? EX_OK : EX_EMPTY;
+	}
+
+	if (!n) {
+		puts(_("no optical drive"));
+		return EX_EMPTY;
+	}
+	for (int i = 0; i < n; i++) {
+		const char *needs = disc_needs(&all[i]);
+		printf("%-10s %-10s %s%s%s\n", all[i].node, all[i].kind,
+		       disc_tile_name(&all[i]),
+		       needs[0] ? "   needs " : "", needs);
+	}
+	return EX_OK;
+}
+
+/*
+ * Play what is in the drive.
+ *
+ * ⛔ exec, NOT spawn. The shell presses this tile with `big run disc --wait`
+ * and waits for the process to end before it comes back on screen — so THIS
+ * process has to become the player. A version that started mpv and returned
+ * put the television back over the film the instant it began.
+ */
+static int big_disc_play(const char *want)
+{
+	struct disc d;
+	if (want && *want) {
+		memset(&d, 0, sizeof(d));
+		snprintf(d.node, sizeof(d.node), "%s", want);
+		disc_read(&d);
+	} else if (!disc_pick(&d)) {
+		fputs(_("syn-arcade: no disc in the drive\n"), stderr);
+		return EX_EMPTY;
+	}
+
+	/* ⚠ THE KIND IS NOT INTERPOLATED INTO THIS SENTENCE. "Data disc" and
+	 * "Blank disc" are words, and a word dropped into a %s slot ships
+	 * English inside all thirteen catalogs — `big disc` prints the kind in
+	 * its own column, which is a record and stays English on purpose. */
+	if (!disc_playable(&d)) {
+		fprintf(stderr, _("syn-arcade: there is nothing to play in "
+				"%s\n"), d.node);
+		return EX_EMPTY;
+	}
+	if (!have("mpv")) {
+		fputs(_("syn-arcade: mpv is not installed — "
+		      "`synpkg install mpv`\n"), stderr);
+		return EX_FAIL;
+	}
+
+	/* Said, not refused. An unencrypted disc plays perfectly without
+	 * either library, and a home-made DVD is exactly the kind somebody
+	 * puts in first — so this is a note on the way past rather than a
+	 * gate. mpv shows its own error on the television when the disc turns
+	 * out to be one of the other kind. */
+	const char *needs = disc_needs(&d);
+	if (needs[0])
+		fprintf(stderr, _("syn-arcade: an encrypted disc needs %s, "
+				"which is not installed — "
+				"`synpkg install %s`\n"), needs, needs);
+
+	char sock[SYN_PATH];
+	if (!disc_sock_path(sock, sizeof(sock)))
+		return EX_FAIL;
+	/* mpv REFUSES to bind over a file that is already there, and the one
+	 * left by a player that was killed is exactly the case where the
+	 * buttons then reach nothing. */
+	unlink(sock);
+
+	char *const *argv;
+	if (!disc_argv(&d, &argv, sock, sizeof(sock)))
+		return EX_FAIL;
+
+	execvp(argv[0], argv);
+	fputs(_("syn-arcade: could not start mpv\n"), stderr);
+	return EX_FAIL;
+}
+
+static int big_disc_eject(const char *want)
+{
+	struct disc d;
+	if (want && *want) {
+		memset(&d, 0, sizeof(d));
+		snprintf(d.node, sizeof(d.node), "%s", want);
+	} else {
+		struct disc all[DISC_MAX];
+		int n = disc_scan(all, DISC_MAX);
+		if (!n) {
+			fputs(_("syn-arcade: no optical drive\n"), stderr);
+			return EX_EMPTY;
+		}
+		d = all[0];
+	}
+
+	if (!have("eject")) {
+		fputs(_("syn-arcade: eject is not installed\n"), stderr);
+		return EX_FAIL;
+	}
+	char *const argv[] = { "eject", d.node, NULL };
+	char *out = run_capture(argv, 10);
+	if (!out) {
+		fprintf(stderr, _("syn-arcade: %s would not open\n"), d.node);
+		return EX_FAIL;
+	}
+	free(out);
+	return EX_OK;
+}
+
+static int big_disc(int argc, char **argv, bool rec)
+{
+	const char *verb = first_operand(argc, argv);
+	const char *drive = opt_value(argc, argv, "--drive");
+
+	if (!verb || !strcmp(verb, "status"))
+		return big_disc_status(rec);
+	if (!strcmp(verb, "play"))
+		return big_disc_play(drive);
+	if (!strcmp(verb, "eject"))
+		return big_disc_eject(drive);
+
+	fprintf(stderr, _("syn-arcade: big disc takes status, play or eject "
+			"(got '%s')\n"), verb);
+	return EX_USAGE;
+}
 
 /*
  * One value out of a D-Bus variant, as `busctl --json=short` prints it:
@@ -6882,9 +7686,13 @@ static bool transport_pick(struct playing *p)
 {
 	char names[PLAYERS_MAX][128];
 	int n = mpris_players(names, PLAYERS_MAX);
-	if (n <= 0)
-		return false;
 
+	/* ⛔ AN EMPTY BUS IS NOT AN EMPTY MACHINE, and this used to return here.
+	 * mpv has no MPRIS name, so a television playing a DVD and nothing else
+	 * — which is the whole case a disc tile exists for — had no players on
+	 * the bus at all, and every media button answered "nothing is playing"
+	 * over the top of a film. The disc is asked about below whatever the
+	 * bus says. */
 	memset(p, 0, sizeof(*p));
 	int best = -1;
 
@@ -6909,6 +7717,7 @@ static bool transport_pick(struct playing *p)
 		c.can_prev  = var_true(props, "CanGoPrevious");
 		c.can_play  = var_true(props, "CanPlay");
 		c.can_pause = var_true(props, "CanPause");
+		c.can_seek  = var_true(props, "CanSeek");
 
 		/* ⚠ SCOPED TO THE METADATA. `xesam:title` is unambiguous, but
 		 * the rest of the reply is another program's and the whole
@@ -6930,6 +7739,27 @@ static bool transport_pick(struct playing *p)
 		if (rank > best) {
 			best = rank;
 			*p = c;
+		}
+	}
+
+	/*
+	 * ⚠ AND THE DISC PLAYER, WHICH IS NOT ON THE BUS AT ALL. mpv has no
+	 * MPRIS without a separate package and a script to load it, so a
+	 * transport that only looked at D-Bus would find nothing while a film
+	 * was on screen — the one case a television remote is most obviously
+	 * for. It is ranked with the rest rather than preferred: a paused film
+	 * behind playing music should not take the buttons away from the
+	 * music.
+	 */
+	{
+		struct playing d;
+		/* ⚠ THE +1 IS CLIAMP'S, FOR THE SAME REASON: on a tie this is
+		 * the player big screen mode started and the one filling the
+		 * screen, so the buttons belong to it rather than to a browser
+		 * tab that also says it is playing. */
+		if (disc_playing(&d) && state_rank(d.state) * 2 + 1 > best) {
+			*p = d;
+			return true;
 		}
 	}
 
@@ -6978,14 +7808,18 @@ static int big_transport_status(bool rec)
 	bool any = transport_pick(&p);
 
 	if (rec) {
-		rec_row(9, "player", "app", "state", "title", "artist",
-			"cannext", "canprev", "canplay", "canpause");
+		/* ⚠ APPENDED, like every column added to a record in this
+		 * package: the shell reads by name and the suite reads some of
+		 * them by number. */
+		rec_row(10, "player", "app", "state", "title", "artist",
+			"cannext", "canprev", "canplay", "canpause", "canseek");
 		if (any)
-			rec_row(9, p.who, p.app, p.state, p.title, p.artist,
+			rec_row(10, p.who, p.app, p.state, p.title, p.artist,
 				p.can_next  ? "1" : "0",
 				p.can_prev  ? "1" : "0",
 				p.can_play  ? "1" : "0",
-				p.can_pause ? "1" : "0");
+				p.can_pause ? "1" : "0",
+				p.can_seek  ? "1" : "0");
 		return any ? EX_OK : EX_EMPTY;
 	}
 
@@ -7012,6 +7846,17 @@ static int big_transport_status(bool rec)
  * left alone — but it is the reason a second press is sometimes needed, and
  * that is worth knowing before somebody reports it as a bug.
  */
+/*
+ * How far the fast-forward and rewind buttons move, in seconds.
+ *
+ * ⚠ A STEP, NOT A SPEED. A disc player winds while the button is held, and a
+ * remote gives an application one event per press with no way to know it is
+ * still down — so this is the shape every ten-foot interface uses instead: one
+ * press, one jump. Thirty seconds is the length of the thing people press it
+ * for, which is an advertisement break or a scene they have already seen.
+ */
+#define SEEK_STEP	30
+
 static int big_transport_cmd(const char *verb)
 {
 	static const struct { const char *verb, *method; } MAP[] = {
@@ -7027,13 +7872,20 @@ static int big_transport_cmd(const char *verb)
 		if (!strcmp(verb, MAP[i].verb))
 			method = MAP[i].method;
 
+	/* ⚠ SEEK IS NOT IN THE TABLE ABOVE, because it is the one verb that
+	 * takes an argument — and the two spellings the remote uses for it are
+	 * verbs of their own so that a button press is one word on a pipe. */
+	int step = 0;
+	if (!strcmp(verb, "forward"))      step =  SEEK_STEP;
+	else if (!strcmp(verb, "rewind"))  step = -SEEK_STEP;
+
 	/* ⚠ THE VERB BEFORE THE PLAYER, the rule big_music already follows: a
 	 * typo is a typo on every machine, and answering it with "nothing is
 	 * playing" sends somebody to look at their music player. */
-	if (!method) {
+	if (!method && !step) {
 		fprintf(stderr, _("syn-arcade: big transport takes status, play, "
-				"pause, toggle, next, prev or stop (got "
-				"'%s')\n"), verb);
+				"pause, toggle, next, prev, forward, rewind or "
+				"stop (got '%s')\n"), verb);
 		return EX_USAGE;
 	}
 
@@ -7041,6 +7893,50 @@ static int big_transport_cmd(const char *verb)
 	if (!transport_pick(&p)) {
 		fputs(_("syn-arcade: nothing is playing\n"), stderr);
 		return EX_EMPTY;
+	}
+
+	/* The disc, over mpv's own socket. Its skip buttons are CHAPTERS —
+	 * see the header above disc_rpc() for why that is the whole reason
+	 * this player is not driven the way the others are. */
+	if (!strcmp(p.who, "disc")) {
+		if ((!strcmp(verb, "next") && !p.can_next) ||
+		    (!strcmp(verb, "prev") && !p.can_prev)) {
+			fprintf(stderr, _("syn-arcade: %s has no chapters to "
+					"skip\n"), p.app);
+			return EX_FAIL;
+		}
+		return disc_transport(verb, step);
+	}
+
+	/*
+	 * ⛔ SEEK GOES OVER MPRIS EVEN FOR CLIAMP, which every other verb
+	 * reaches over its own socket. `cliamp seek` takes an ABSOLUTE
+	 * position in seconds — "seek to", not "seek by" — so spending a
+	 * fast-forward press on it would jump the track to 30 seconds from
+	 * wherever it happened to be. MPRIS's Seek is relative by definition,
+	 * and neither of the two reasons cliamp is driven over its socket (the
+	 * title, and `play` from `stopped`) touches this one.
+	 */
+	if (step) {
+		if (!p.can_seek) {
+			fprintf(stderr, _("syn-arcade: %s cannot seek\n"),
+				p.app);
+			return EX_FAIL;
+		}
+		char us[32];
+		snprintf(us, sizeof(us), "%lld", (long long)step * 1000000LL);
+		char *out = run_capture((char *const[]){
+			"busctl", "--user", "call", p.bus,
+			"/org/mpris/MediaPlayer2",
+			"org.mpris.MediaPlayer2.Player", "Seek", "x", us,
+			NULL }, 3);
+		if (!out) {
+			fprintf(stderr, _("syn-arcade: %s did not answer %s\n"),
+				p.app, "Seek");
+			return EX_FAIL;
+		}
+		free(out);
+		return EX_OK;
 	}
 
 	/* cliamp over its own socket — including the rule that `play` from
@@ -9628,6 +10524,10 @@ int cmd_big(int argc, char **argv)
 	 * different commands and not one. */
 	if (!strcmp(sub, "transport"))
 		return big_transport(rest_c, rest, rec);
+
+	/* What is in the optical drive, and playing it. */
+	if (!strcmp(sub, "disc"))
+		return big_disc(rest_c, rest, rec);
 
 	/* projectM, told which audio to listen to. A tile in the Start menu
 	 * runs this through `big run visualizer --wait`, which is what fills

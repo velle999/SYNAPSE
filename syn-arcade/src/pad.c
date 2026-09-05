@@ -1250,6 +1250,142 @@ typedef struct {
 	bool chorded;		/* …and whether this hold already spoke */
 } navpad_t;
 
+/* ── the television remote ──────────────────────────────────────────────────
+ *
+ * An infrared remote through a receiver, and an HDMI-CEC one, both arrive as
+ * an ordinary input device: rc-core maps the scancodes to KEY_* and the
+ * compositor delivers them to whatever has keyboard focus. So while big screen
+ * mode is ON SCREEN there is nothing to do here — the shell has focus and
+ * handles them as keys, which is what data/syn-arcade-big.qml does.
+ *
+ * ⛔ THE PROBLEM IS THE OTHER HALF OF THE TIME. Press a tile and the interface
+ * steps aside; keyboard focus belongs to the film, the browser or the game, and
+ * five of the remote's buttons then reach NOTHING AT ALL:
+ *
+ *   OK        XKB spells it XF86OK and no application binds it;
+ *   ⏭ / ⏮    KEY_NEXT and KEY_PREVIOUS have NO KEYSYM WHATSOEVER —
+ *             xkeyboard-config maps nothing to those keycodes, so there is not
+ *             even an unnamed symbol for an application to bind;
+ *   Guide     XF86MediaSelectProgramGuide, likewise bound by nothing;
+ *   Power     KEY_POWER2, which has no keysym either.
+ *
+ * They are the buttons somebody on a sofa presses to choose a thing, skip a
+ * chapter and get back — and every one of them was dead the moment a film was
+ * on screen. So this reads them from the device and the shell acts on them
+ * itself, exactly as it already does for the controller.
+ *
+ * ⛔ AND ONLY THOSE FIVE, WHICH IS THE WHOLE RULE. Play, pause, stop, fast
+ * forward and rewind DO have keysyms and DO reach the application — mpv binds
+ * every one of them out of the box — so reading those here as well would act
+ * on them twice: the film would pause and unpause on one press. The line is
+ * not "what a remote sends", it is "what the compositor cannot deliver".
+ *
+ * ⚠ THE WORDS ARE PREFIXED `remote:` and the shell acts on them only while it
+ * is stepped aside. On screen the same button arrives BOTH ways — as a key
+ * event to the window and as a word on this pipe — and one press must not go
+ * back two shelves.
+ *
+ * ⚠ NOTHING IS GRABBED. No EVIOCGRAB: the application keeps receiving whatever
+ * the compositor sends it, and this is a second reader of the same device. That
+ * is also why the five above had to be chosen so carefully.
+ */
+#define NAV_REMOTE_MAX 4
+
+typedef struct {
+	int  fd;
+	char id[32];
+} navremote_t;
+
+static const struct { int code; const char *word; } remote_keys[] = {
+	{ KEY_OK,	"accept" },
+	{ KEY_NEXT,	"next"   },
+	{ KEY_PREVIOUS,	"prev"   },
+	{ KEY_EPG,	"guide"  },
+	{ KEY_POWER2,	"power"  },
+};
+
+static const char *remote_word(int code)
+{
+	for (size_t i = 0; i < sizeof(remote_keys) / sizeof(remote_keys[0]); i++)
+		if (remote_keys[i].code == code)
+			return remote_keys[i].word;
+	return NULL;
+}
+
+/*
+ * Is this a television remote?
+ *
+ * ⚠ ASKED OF THE KEY MASK, not of the name. Receivers are called everything
+ * from "Media Center Ed. eHome Infrared Remote Transceiver" to the name of a
+ * television set, and a CEC one is named after the HDMI adapter.
+ *
+ * ⛔ AND A KEYBOARD MUST NEVER MATCH. Reading one here would mean a key pressed
+ * at the desk arriving as a word on this pipe as well as reaching whatever is
+ * focused — a double action on a machine somebody is using normally. Every
+ * keyboard on earth carries the letters; no remote does.
+ */
+static bool looks_like_remote(const mask_t *key)
+{
+	bool tv = mask_test(key, KEY_OK) || mask_test(key, KEY_EPG) ||
+		  mask_test(key, KEY_NEXT) || mask_test(key, KEY_PREVIOUS);
+	bool letters = mask_test(key, KEY_A) && mask_test(key, KEY_Z);
+	bool pad = mask_test(key, BTN_GAMEPAD) || mask_test(key, BTN_JOYSTICK);
+	return tv && !letters && !pad;
+}
+
+/* Open every remote there is. Returns how many. */
+static int remote_open(navremote_t *out, int max)
+{
+	DIR *d = opendir(sysfs_root());
+	if (!d)
+		return 0;
+
+	int count = 0;
+	struct dirent *e;
+	while (count < max && (e = readdir(d))) {
+		if (event_index(e->d_name) < 0)
+			continue;
+
+		char caps[1024];
+		if (snprintf(caps, sizeof(caps), "%s/%s/device/capabilities/key",
+			     sysfs_root(), e->d_name) >= (int)sizeof(caps))
+			continue;
+
+		mask_t key = {0};
+		mask_load(&key, caps);
+		if (!looks_like_remote(&key))
+			continue;
+
+		char node[1024];
+		if (snprintf(node, sizeof(node), "%s/%s", dev_root(),
+			     e->d_name) >= (int)sizeof(node))
+			continue;
+
+		/* Quiet on failure, for the same reason nav_open() is: a
+		 * device that cannot be opened is one this stream ignores. */
+		int fd = open(node, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+		if (fd < 0)
+			continue;
+
+		out[count].fd = fd;
+		if (snprintf(out[count].id, sizeof(out[count].id), "%s",
+			     e->d_name) >= (int)sizeof(out[count].id)) {
+			close(fd);	/* not a name any event node has */
+			continue;
+		}
+		count++;
+	}
+	closedir(d);
+	return count;
+}
+
+static void remote_close(navremote_t *r, int count)
+{
+	for (int i = 0; i < count; i++)
+		if (r[i].fd >= 0)
+			close(r[i].fd);
+}
+
 /*
  * Where "pushed" starts, per axis, per device.
  *
@@ -1444,6 +1580,11 @@ int pads_nav_stream(void)
 	navpad_t pads[NAV_MAX];
 	int count = nav_open(pads, NAV_MAX);
 
+	/* The remote, read for the five buttons the compositor cannot deliver
+	 * to anything. See the header above remote_open(). */
+	navremote_t remotes[NAV_REMOTE_MAX];
+	int rcount = remote_open(remotes, NAV_REMOTE_MAX);
+
 	/*
 	 * Not an error, and nothing is printed about it. A television session
 	 * starts before anybody picks up a controller, and this stream is the
@@ -1455,11 +1596,18 @@ int pads_nav_stream(void)
 	long long rescan_at = now_ms() + NAV_RESCAN_MS;
 
 	for (;;) {
-		struct pollfd pfd[NAV_MAX];
+		struct pollfd pfd[NAV_MAX + NAV_REMOTE_MAX];
 		for (int i = 0; i < count; i++) {
 			pfd[i].fd = pads[i].fd;
 			pfd[i].events = POLLIN;
 			pfd[i].revents = 0;
+		}
+		/* ⚠ AFTER the pads and never interleaved: everything below
+		 * indexes the first `count` entries as pads. */
+		for (int i = 0; i < rcount; i++) {
+			pfd[count + i].fd = remotes[i].fd;
+			pfd[count + i].events = POLLIN;
+			pfd[count + i].revents = 0;
 		}
 
 		/* The timeout is whichever comes first: the next repeat step or
@@ -1475,7 +1623,7 @@ int pads_nav_stream(void)
 		if (timeout < 0) timeout = 0;
 		if (timeout > NAV_RESCAN_MS) timeout = NAV_RESCAN_MS;
 
-		int r = poll(pfd, (nfds_t)count, timeout);
+		int r = poll(pfd, (nfds_t)(count + rcount), timeout);
 		if (r < 0 && errno != EINTR)
 			break;
 
@@ -1570,6 +1718,36 @@ int pads_nav_stream(void)
 			nav_settle(p, now);
 		}
 
+		/* ── the remote ──
+		 *
+		 * No frames, no repeat, no chords: five buttons, one word per
+		 * press. ⚠ value 1 ONLY — 2 is the kernel's own autorepeat,
+		 * which a held remote button really does produce (unlike a
+		 * pad), and a chapter skipped once per 30ms is a film that
+		 * runs off the end of itself.
+		 */
+		for (int i = 0; i < rcount && r > 0; i++) {
+			if (!(pfd[count + i].revents & POLLIN))
+				continue;
+
+			struct input_event ev[64];
+			ssize_t got = read(remotes[i].fd, ev, sizeof(ev));
+			if (got < (ssize_t)sizeof(ev[0]))
+				continue;
+
+			int n = (int)(got / (ssize_t)sizeof(ev[0]));
+			for (int k = 0; k < n; k++) {
+				if (ev[k].type != EV_KEY || ev[k].value != 1)
+					continue;
+				const char *w = remote_word(ev[k].code);
+				if (!w)
+					continue;
+				char line[64];
+				snprintf(line, sizeof(line), "remote:%s", w);
+				nav_say(line);
+			}
+		}
+
 		/*
 		 * ── hotplug, in both directions ──
 		 *
@@ -1588,6 +1766,15 @@ int pads_nav_stream(void)
 		for (int i = 0; i < count; i++)
 			if (pfd[i].revents & (POLLERR | POLLHUP))
 				relist = true;	/* unplugged mid-session */
+
+		/* The remote is reopened whole on the same tick, and for the
+		 * same reason: a USB receiver replugged into another port is a
+		 * different eventN, and a CEC one appears when the television
+		 * is switched on rather than when this starts. */
+		bool rrelist = false;
+		for (int i = 0; i < rcount; i++)
+			if (pfd[count + i].revents & (POLLERR | POLLHUP))
+				rrelist = true;
 
 		if (relist || now >= rescan_at) {
 			int n = 0;
@@ -1609,7 +1796,12 @@ int pads_nav_stream(void)
 				nav_close(pads, count);
 				count = nav_open(pads, NAV_MAX);
 			}
+			remote_close(remotes, rcount);
+			rcount = remote_open(remotes, NAV_REMOTE_MAX);
 			rescan_at = now + NAV_RESCAN_MS;
+		} else if (rrelist) {
+			remote_close(remotes, rcount);
+			rcount = remote_open(remotes, NAV_REMOTE_MAX);
 		}
 
 		/* ── repeat ── */
@@ -1643,6 +1835,7 @@ int pads_nav_stream(void)
 	}
 
 	nav_close(pads, count);
+	remote_close(remotes, rcount);
 	return EX_OK;
 }
 

@@ -5760,7 +5760,8 @@ has 'dispatch' <(grep -A6 'static int big_record' src/big.c) \
 IEC=/usr/include/linux/input-event-codes.h
 if [ -f "$IEC" ]; then
     for pair in "KEY_OK:360" "KEY_INFO:366" "KEY_EPG:373" \
-                "KEY_NEXT:415" "KEY_PREVIOUS:420" "KEY_POWER2:364"; do
+                "KEY_NEXT:415" "KEY_PREVIOUS:420" "KEY_POWER2:364" \
+                "KEY_DVD:397" "KEY_EJECTCD:169"; do
         name=${pair%%:*}; want=${pair##*:}
         raw=$(awk -v n="$name" '$1=="#define" && $2==n {print $3}' "$IEC" | head -1)
         got=$(printf '%d' "$raw" 2>/dev/null)
@@ -5788,6 +5789,331 @@ if [ -f "$QNS" ]; then
 else
     ok "(skipped the Qt enum check: no qt6 headers installed)"
 fi
+
+# ── the disc in the drive ───────────────────────────────────────────────────
+#
+# ⚠ EVERY BYTE OF THIS IS FIXTURED, and it has to be: the machine this is
+# written on has no optical drive at all, most build machines have none, and
+# the ones that do cannot be asked to have a Blu-ray in them. `udevadm` is
+# stubbed to say what udev would say, /sys/block is a directory of empty
+# folders, and mpv and eject are stubs that write down what they were asked to
+# do rather than doing it — a suite that ran the real `eject` would open the
+# tray of the machine running the build.
+echo
+echo "the disc in the drive"
+
+DFX="$T/disc"
+mkdir -p "$DFX/sys/sr0" "$DFX/bin" "$DFX/lib"
+cat > "$DFX/bin/udevadm" <<'EOF'
+#!/bin/sh
+# What udev last probed about the media. $DISC_PROPS is the fixture.
+case "$*" in
+    */dev/sr0*) printf '%s\n' "$DISC_PROPS" | tr '|' '\n' ;;
+esac
+EOF
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$MPV_LOG"\n'   > "$DFX/bin/mpv"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$EJECT_LOG"\n' > "$DFX/bin/eject"
+chmod +x "$DFX/bin/udevadm" "$DFX/bin/mpv" "$DFX/bin/eject"
+export MPV_LOG="$DFX/mpv.log" EJECT_LOG="$DFX/eject.log" DISC_PROPS=""
+: > "$MPV_LOG"; : > "$EJECT_LOG"
+
+# ⚠ PREPENDED to the real PATH rather than replacing it: `have()` shells out to
+# `command -v`, and a PATH with no /bin is the trap that made an earlier
+# fixture in this file model a state it could not reach.
+disc() { ( PATH="$DFX/bin:$PATH"
+           SYN_ARCADE_SYS_BLOCK="$DFX/sys" SYN_ARCADE_LIBDIR="$DFX/lib"
+           export PATH SYN_ARCADE_SYS_BLOCK SYN_ARCADE_LIBDIR
+           says "$SA" big disc "$@" ) }
+tile() { ( PATH="$DFX/bin:$PATH"
+           SYN_ARCADE_SYS_BLOCK="$DFX/sys" SYN_ARCADE_LIBDIR="$DFX/lib"
+           export PATH SYN_ARCADE_SYS_BLOCK SYN_ARCADE_LIBDIR
+           says "$SA" big apps --rec ) }
+
+# A machine with no optical drive is the common one, and it must answer rather
+# than fail: no drive, no rows, no tile.
+# ⚠ NOT THROUGH says(), which always exits 0 — it is there to capture OUTPUT.
+# An exit code is asked of the binary directly, as every other one here is.
+SYN_ARCADE_SYS_BLOCK="$DFX/none" "$SA" big disc >/dev/null 2>&1
+[ "$?" = 100 ] && ok "a machine with no optical drive says so (100)" \
+               || bad "no drive did not report EX_EMPTY"
+
+DISC_PROPS='ID_CDROM=1|ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_DVD=1|ID_FS_LABEL=THE_LONG_GOOD_FRIDAY|ID_CDROM_MEDIA_STATE=complete'
+[ "$(disc --rec | awk -F'\t' 'NR==2 {print $2}')" = dvd ] \
+    && ok "a DVD reads as a DVD" \
+    || bad "the DVD read as '$(disc --rec | awk -F'\t' 'NR==2 {print $2}')'"
+
+# ⚠ THE DISC'S OWN NAME, with the underscores ISO 9660 forces on it taken back
+# out. A tile reading THE LONG GOOD FRIDAY is what somebody is looking for; a
+# fourth tile reading "DVD" beside Plex, Kodi and Music is not.
+[ "$(disc --rec | awk -F'\t' 'NR==2 {print $3}')" = "THE LONG GOOD FRIDAY" ] \
+    && ok "…and the tile is named after the disc" \
+    || bad "the tile name is '$(disc --rec | awk -F'\t' 'NR==2 {print $3}')'"
+
+tile | awk -F'\t' '$1=="disc"' | has 'media' \
+    && ok "…and it is on the media shelf" \
+    || bad "the disc tile is not on the media shelf"
+
+# ⛔ THE TRAP THIS WHOLE READER IS WRITTEN AROUND. ID_CDROM_BD says the DRIVE
+# can read Blu-ray; every Blu-ray drive on earth reports it with an empty tray.
+# Matching it instead of ID_CDROM_MEDIA_BD puts a Blu-ray tile on the
+# television of everybody who owns the drive.
+DISC_PROPS='ID_CDROM=1|ID_CDROM_BD=1|ID_CDROM_DVD=1|ID_CDROM_MEDIA=0'
+[ "$(disc --rec | awk -F'\t' 'NR==2 {print $2}')" = none ] \
+    && ok "an empty Blu-ray drive is an empty drive, not a Blu-ray" \
+    || bad "ID_CDROM_BD on an EMPTY drive was read as a disc"
+tile | awk -F'\t' '$1=="disc"' | has . \
+    && bad "an empty drive still drew a tile" \
+    || ok "…and it draws no tile"
+
+# A blank disc is media — every "is there a disc" test says yes — and there is
+# nothing on it to play.
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_CD_R=1|ID_CDROM_MEDIA_STATE=blank'
+[ "$(disc --rec | awk -F'\t' 'NR==2 {print $2","$5}')" = "blank,0" ] \
+    && ok "a blank disc is not something to play" \
+    || bad "a blank disc read as '$(disc --rec | awk -F'\t' 'NR==2 {print $2","$5}')'"
+
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_CD=1|ID_CDROM_MEDIA_TRACK_COUNT_AUDIO=12'
+[ "$(disc --rec | awk -F'\t' 'NR==2 {print $2","$3}')" = "cd,Audio CD" ] \
+    && ok "an audio CD is an audio CD" \
+    || bad "the audio CD read as '$(disc --rec | awk -F'\t' 'NR==2 {print $2","$3}')'"
+
+# A data disc has a label and a filesystem and is not a film.
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_DVD=1|ID_FS_LABEL=BACKUPS|ID_CDROM_MEDIA_TRACK_COUNT_DATA=1'
+: # (a data DVD is indistinguishable from a video one without reading it —
+  #  see the note in big.c; it is offered, and mpv says so if it is not a film)
+
+# ── what mpv is asked to do ─────────────────────────────────────────────────
+#
+# ⛔ THE DEVICE IS AN OPTION, NEVER PART OF THE URL. `dvd://[title][/device]`
+# splits on the first slash, so `dvd:///dev/sr0` hands mpv a device of
+# `dev/sr0` — a relative path, from whatever directory the shell was started
+# in, which on the desktop launcher is `/`.
+# ⚠ SPLIT ON `|`, not on a colon: every URL here ENDS in two of them, so a
+# colon-separated field list names the disc kind "//" in the report.
+for pair in "ID_CDROM_MEDIA_DVD=1|--dvd-device=/dev/sr0|dvd://" \
+            "ID_CDROM_MEDIA_BD=1|--bluray-device=/dev/sr0|bd://" \
+            "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO=9|--cdda-device=/dev/sr0|cdda://"; do
+    prop=${pair%%|*}; rest=${pair#*|}; devopt=${rest%%|*}; url=${rest##*|}
+    : > "$MPV_LOG"
+    DISC_PROPS="ID_CDROM_MEDIA=1|$prop"
+    disc play >/dev/null 2>&1
+    line=$(cat "$MPV_LOG")
+    case "$line" in
+        *"$devopt"*"$url"*) ok "$url is played with $devopt" ;;
+        *) bad "$url was started as: $line" ;;
+    esac
+done
+
+# ⚠ --force-window, on every kind. An audio CD has no video, so without it mpv
+# maps no window at all — and the tile press has already stepped the television
+# aside to make room for one.
+has -- '--force-window' <<<"$(cat "$MPV_LOG")" \
+    && ok "…and always with a window to step aside for" \
+    || bad "mpv is started without --force-window"
+
+# The socket the media buttons then drive it over.
+has -- '--input-ipc-server' <<<"$(cat "$MPV_LOG")" \
+    && ok "…and with the socket the transport drives it over" \
+    || bad "mpv is started with no IPC socket"
+
+# ⚠ SAID, NOT REFUSED. An unencrypted disc plays perfectly without either
+# library and a home-made DVD is the kind somebody puts in first.
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_DVD=1'
+disc --rec | awk -F'\t' 'NR==2 {print $6}' | has 'libdvdcss' \
+    && ok "an encrypted DVD names the package it needs" \
+    || bad "the DVD row does not name libdvdcss"
+: > "$DFX/lib/libdvdcss.so.2"
+[ -z "$(disc --rec | awk -F'\t' 'NR==2 {print $6}')" ] \
+    && ok "…and says nothing once it is installed" \
+    || bad "libdvdcss is installed and the row still asks for it"
+rm -f "$DFX/lib/libdvdcss.so.2"
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_BD=1'
+disc --rec | awk -F'\t' 'NR==2 {print $6}' | has 'libaacs' \
+    && ok "a Blu-ray names its own" \
+    || bad "the Blu-ray row does not name libaacs"
+
+# ⛔ AND THE TILE NEEDS A PLAYER. mpv is UNTICKED in the installer's software
+# list, so a stock machine can genuinely have a drive, a disc and nothing to
+# play it with — and this table's rule is that a tile you can press is a tile
+# that works. Posed with a PATH holding the fixture's udevadm and no mpv;
+# `have()` asks the shell's `command -v`, which is a builtin, so a PATH with
+# nothing else in it is a machine with nothing else installed.
+mkdir -p "$DFX/nompv"
+cp "$DFX/bin/udevadm" "$DFX/nompv/udevadm"
+DISC_PROPS='ID_CDROM_MEDIA=1|ID_CDROM_MEDIA_DVD=1|ID_FS_LABEL=A_FILM'
+nomp=$( PATH="$DFX/nompv" SYN_ARCADE_SYS_BLOCK="$DFX/sys" \
+        SYN_ARCADE_LIBDIR="$DFX/lib" DISC_PROPS="$DISC_PROPS" \
+        "$SA" big apps --rec 2>/dev/null | awk -F'\t' '$1=="disc"' )
+[ -z "$nomp" ] \
+    && ok "with no mpv there is no disc tile to press" \
+    || bad "a disc tile was drawn on a machine with no player"
+needs=$( PATH="$DFX/nompv" SYN_ARCADE_SYS_BLOCK="$DFX/sys" \
+         SYN_ARCADE_LIBDIR="$DFX/lib" DISC_PROPS="$DISC_PROPS" \
+         "$SA" big disc --rec 2>/dev/null | awk -F'\t' 'NR==2 {print $6}' )
+[ "$needs" = mpv ] \
+    && ok "…and the row says mpv is what is missing, before any decrypter" \
+    || bad "the row asks for '$needs' on a machine with no player"
+
+: > "$EJECT_LOG"
+disc eject >/dev/null 2>&1
+has '/dev/sr0' <<<"$(cat "$EJECT_LOG")" \
+    && ok "eject opens the drive the disc is in" \
+    || bad "eject was called as: $(cat "$EJECT_LOG")"
+
+says "$SA" --help > "$T/help.txt"
+has 'big disc' "$T/help.txt" \
+    && ok "…and all of it is documented" \
+    || bad "big disc is undocumented"
+
+# ── the remote, while an application is in front ────────────────────────────
+#
+# ⛔ THE PROBLEM THIS SOLVES IS INVISIBLE FROM A DESK. Press a tile and big
+# screen mode steps aside; keyboard focus belongs to the film or the browser,
+# and five of the remote's buttons then reach NOTHING — OK is XF86OK, which no
+# application binds; ⏭ and ⏮ have no keysym at all; Guide and Power likewise.
+# So `big nav` reads them from the device and the shell acts on them itself.
+#
+# ⚠ DRIVEN THROUGH A FIFO, not through uinput. SYN_ARCADE_SYSFS and
+# SYN_ARCADE_DEV are the same seams the pad fixtures use: a directory of
+# capability masks, and a named pipe where the event node would be. Nothing
+# here needs a device, a permission or a compositor.
+echo
+echo "the remote, with an application in front"
+
+RFX="$T/remote"
+mkdir -p "$RFX/sys/event99/device/capabilities" "$RFX/dev"
+
+# The key mask, written the way sysfs writes one: 64-bit hex words, MOST
+# SIGNIFICANT FIRST, so the LAST word holds bits 0..63.
+rmask() {
+    python3 -c '
+import sys
+words = [0] * 8
+for b in (int(x) for x in sys.argv[1:]):
+    words[b // 64] |= 1 << (b % 64)
+print(" ".join("%x" % w for w in reversed(words)))' "$@"
+}
+
+KEY_OK=352 KEY_INFO=358 KEY_POWER2=356 KEY_EPG=365 KEY_NEXT=407 KEY_PREVIOUS=412
+KEY_A=30 KEY_Z=44 KEY_PLAY=207 KEY_UP=103
+
+remote_mask() { rmask "$@" > "$RFX/sys/event99/device/capabilities/key"; }
+remote_say() {
+    # Every argument is an evdev code: press, release, one frame each.
+    #
+    # ⛔ O_NONBLOCK, AND THE FAILURE IS AN ANSWER. Opening a FIFO for writing
+    # BLOCKS UNTIL SOMETHING READS IT — for ever, with no timeout — and the
+    # case this fixture exists to prove is exactly the one where nothing does:
+    # a device that is not a remote is never opened, so this open has to fail
+    # with ENXIO rather than hang the suite. It hung it, once.
+    python3 -c '
+import os, struct, sys, time
+fd = -1
+for _ in range(30):      # …and RETRIED, because the reader may still be starting
+    try:
+        fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
+        break
+    except OSError:
+        time.sleep(0.1)
+if fd < 0:
+    sys.exit(0)          # nothing opened the node, so there is nothing to say
+for code in (int(c) for c in sys.argv[2:]):
+    for value in (1, 0):
+        os.write(fd, struct.pack("qqHHi", 0, 0, 1, code, value))
+        os.write(fd, struct.pack("qqHHi", 0, 0, 0, 0, 0))
+    time.sleep(0.05)
+time.sleep(0.4)' "$RFX/dev/event99" "$@"
+}
+nav_words() {
+    rm -f "$RFX/dev/event99"; mkfifo "$RFX/dev/event99"
+    ( SYN_ARCADE_SYSFS="$RFX/sys" SYN_ARCADE_DEV="$RFX/dev" \
+      timeout 6 "$SA" big nav > "$RFX/out.txt" 2>/dev/null ) &
+    local navpid=$!
+    sleep 0.7
+    remote_say "$@" 2>/dev/null || true
+    wait $navpid 2>/dev/null
+    cat "$RFX/out.txt"
+}
+
+if command -v python3 >/dev/null 2>&1; then
+    remote_mask $KEY_OK $KEY_EPG $KEY_NEXT $KEY_PREVIOUS $KEY_POWER2 $KEY_PLAY $KEY_UP
+    out=$(nav_words $KEY_OK $KEY_NEXT $KEY_PREVIOUS $KEY_EPG $KEY_POWER2)
+    want="remote:accept remote:next remote:prev remote:guide remote:power"
+    [ "$(printf '%s' "$out" | tr '\n' ' ' | sed 's/ *$//')" = "$want" ] \
+        && ok "the five buttons no application can receive arrive as words" \
+        || bad "the remote said: $(printf '%s' "$out" | tr '\n' ' ')"
+
+    # ⛔ AND NOTHING ELSE, WHICH IS THE WHOLE RULE. Play, pause, stop, ⏪ and ⏩
+    # DO reach the application — mpv binds every one of them out of the box —
+    # so reading them here as well would act on one press twice: the film would
+    # pause and unpause on a single button.
+    out=$(nav_words $KEY_PLAY $KEY_UP)
+    [ -z "$out" ] \
+        && ok "…and a key the application can receive is left to it" \
+        || bad "a key with a keysym was also read as a word: $out"
+
+    # ⛔ A KEYBOARD MUST NEVER MATCH. Reading one here would mean every key
+    # pressed at the desk arriving as a word as well as reaching what is
+    # focused — a double action on a machine somebody is using normally.
+    remote_mask $KEY_OK $KEY_NEXT $KEY_A $KEY_Z
+    out=$(nav_words $KEY_OK)
+    [ -z "$out" ] \
+        && ok "a keyboard is not a remote, whatever else is in its key map" \
+        || bad "a device with letters on it was read as a remote: $out"
+else
+    ok "(skipped the remote fixture: no python3)"
+fi
+
+# ⚠ THE WORDS ARE PREFIXED AND THE SHELL ACTS ON THEM ONLY WHILE IT IS STEPPED
+# ASIDE. On screen this window has keyboard focus and the same press ALSO
+# arrives as a key event, which is where it is handled — acting on both would
+# take one press two shelves back.
+grep -q 'if (shell.away) shell.navRemote(cmd.substring(7))' "$BIGQML"
+check "a remote word is acted on only while an application is in front" $?
+grep -q 'function navRemote' "$BIGQML"
+check "…by turning each one into something that application understands" $?
+awk '/function navRemote/,/^    }/' "$BIGQML" > "$BGH/navremote.qml"
+has 'shell.key("Return")' "$BGH/navremote.qml" \
+    && ok "OK becomes a Return, which a menu and a browser both take" \
+    || bad "the remote's OK types nothing"
+has 'mediaCmd("next")' "$BGH/navremote.qml" \
+    && ok "…and skip becomes a transport press" \
+    || bad "the remote's skip does nothing while away"
+has 'comeBack' "$BGH/navremote.qml" \
+    && ok "…and Guide is still the way back" \
+    || bad "the remote cannot get back from an application"
+
+# ── fast forward is not skip ────────────────────────────────────────────────
+#
+# ⛔ These two sent `next` and `prev` — the buttons either side of them on the
+# same remote — so a film could be skipped out of and never wound through,
+# which is the one thing ⏪ and ⏩ are for on the one device with no other way
+# to do it.
+awk '/case Qt.Key_AudioForward:/,/break/' "$BIGQML" > "$BGH/ff.qml"
+has 'mediaCmd("forward")' "$BGH/ff.qml" \
+    && ok "fast forward seeks rather than skipping a track" \
+    || bad "Qt.Key_AudioForward is still a track skip"
+awk '/case Qt.Key_AudioRewind:/,/break/' "$BIGQML" > "$BGH/rw.qml"
+has 'mediaCmd("rewind")' "$BGH/rw.qml" \
+    && ok "…and so does rewind" \
+    || bad "Qt.Key_AudioRewind is still a track skip"
+
+# ⛔ THE ROW AND THE PRESS ARE TWO SPELLINGS OF ONE LIST. When the array held
+# three and the row drew five, every press landed one button to the left of the
+# one that lit up.
+n_model=$(awk '/Repeater \{/,/\]/' "$BIGQML" | grep -c 'act: "')
+# ⚠ COUNT THE QUOTES, not the -F'"' fields: five quoted words make ELEVEN
+# fields, and NF/2 is 5.5 — a number that matches nothing and reads as a fault
+# in the thing being tested rather than in the test.
+n_acts=$(awk '/property var mediaActs/ { print gsub(/"/, "") / 2 }' "$BIGQML")
+[ "${n_model:-0}" = 5 ] && [ "${n_acts:-0}" = 5 ] \
+    && ok "the media row and the presses behind it are the same five" \
+    || bad "the row has $n_model buttons and the press list has $n_acts"
+
+says "$SA" big transport nonsense > "$T/tv.txt" 2>&1
+has 'forward' "$T/tv.txt" \
+    && ok "a bad transport verb lists the ones there are, seek included" \
+    || bad "the transport refusal does not mention forward"
 
 # ── verdict ─────────────────────────────────────────────────────────────────
 

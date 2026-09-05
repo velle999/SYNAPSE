@@ -1331,7 +1331,74 @@ pkgver=0.1.0
 #   installed itself. ⚠ The suite asserts the row is actually GIVEN it, because
 #   a variable that is set, read into a property and never reaches the row
 #   passes every other check written for it.
-pkgrel=57
+# 58: A DISC IN THE DRIVE, AND A REMOTE THAT REACHES WHAT IS PLAYING.
+#   Asked for from the sofa: Blu-ray, DVD and CD playback on the television,
+#   a remote that keeps working once a tile has been pressed, and the transport
+#   buttons — play, pause, skip, wind on and back — doing what they say.
+#
+#   THE DISC IS A TILE, and it is the only tile on the television that is there
+#   because of the HARDWARE as well as what is installed.
+#   ⚠ mpv IS UNTICKED IN THE INSTALLER'S SOFTWARE LIST, so a stock machine can
+#   have a drive, a disc and no player at all — the tile is gated on it like
+#   every other row in that table, and `big disc` names mpv as what is missing
+#   before it names any decrypter. `big disc`
+#   reads what udev already probed, so the drive is never spun up to find out;
+#   the tile is named after the disc (THE LONG GOOD FRIDAY, not "DVD"), it
+#   appears while the television is already on, and it goes when the disc does.
+#
+#   ⛔ ID_CDROM_MEDIA_BD, NEVER ID_CDROM_BD. The properties without MEDIA in
+#   them describe the DRIVE: every Blu-ray drive on earth reports ID_CDROM_BD=1
+#   with an empty tray, so matching those would put a Blu-ray tile on the
+#   television of everybody who owns one and hand mpv an empty drive.
+#
+#   ⛔ THE DEVICE IS AN OPTION, NOT PART OF THE URL. `dvd://[title][/device]`
+#   splits on the first slash, so dvd:///dev/sr0 hands mpv a device of
+#   `dev/sr0` — a relative path, from whatever directory the launcher was
+#   started in, which for the desktop entry is `/`.
+#
+#   ⚠ AND THE PLAYER IS DRIVEN OVER ITS OWN SOCKET, not over MPRIS. mpv has no
+#   MPRIS without a second package and a script to load it, so a transport that
+#   only looked at D-Bus found NOTHING while a film was on screen — which is the
+#   one case a television remote is most obviously for. mpv is started with a
+#   JSON IPC socket instead, which also makes ⏭ and ⏮ skip a CHAPTER rather than
+#   a playlist entry.
+#   ⛔ transport_pick() USED TO RETURN EARLY on an empty bus. A television
+#   playing a DVD and nothing else has no MPRIS names at all, so every media
+#   button answered "nothing is playing" over the top of a film.
+#   ⛔ AND A JSON READER MUST NOT MATCH ON FORMATTING. `"request_id":77` and
+#   `"request_id": 77` are the same JSON; the first draft grepped for the
+#   former, and against a writer that spaces its colons every reply read as an
+#   unrelated event — which surfaces as "the player did not answer", i.e. as a
+#   broken button rather than as a parser.
+#
+#   THE REMOTE REACHES THE APPLICATION NOW. Press a tile and the interface steps
+#   aside; keyboard focus belongs to the film, and five of the remote's buttons
+#   then reached NOTHING — OK (XF86OK, bound by nothing), ⏭ and ⏮ (no keysym
+#   whatsoever), Guide and Power. `big nav` reads those five off the device and
+#   the shell turns each into something the thing in front understands: OK
+#   becomes a Return, skip becomes a transport press, Guide comes back.
+#   ⛔ AND ONLY THOSE FIVE, WHICH IS THE WHOLE RULE. Play, pause, stop, ⏪ and ⏩
+#   DO reach the application — mpv binds every one of them out of the box — so
+#   reading them here as well would act on one press twice: a film that pauses
+#   and unpauses on a single button. The line is not "what a remote sends", it
+#   is "what the compositor cannot deliver".
+#   ⛔ A KEYBOARD MUST NEVER MATCH the remote test, or every key pressed at the
+#   desk arrives as a word as well as reaching what is focused. Every keyboard
+#   carries the letters; no remote does.
+#   ⚠ NOTHING IS GRABBED and nothing is synthesised into the desktop: this is a
+#   second READER of the same device, which is only safe because of the rule
+#   above.
+#
+#   ⛔ FAST FORWARD IS NOT SKIP, and it was. ⏪ and ⏩ sent `next` and `prev` —
+#   the buttons either side of them on the same remote — so a film could be
+#   skipped out of and never wound through. `big transport forward|rewind` is
+#   thirty seconds a press (a remote sends one event with no way to know the
+#   button is still down, so a disc player's wind-while-held cannot be copied),
+#   and the footer draws five buttons in the order they sit on a remote.
+#   ⚠ SEEK GOES OVER MPRIS EVEN FOR CLIAMP, which every other verb reaches over
+#   its own socket: `cliamp seek` takes an ABSOLUTE position in seconds, so a
+#   fast-forward press would jump the track to 0:30 from wherever it was.
+pkgrel=58
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -1407,7 +1474,11 @@ optdepends=('quickshell: the graphical window (syn-arcade gui) AND big screen mo
             'plex-desktop: the Plex tile — a Plex server on the network is found by broadcast either way'
             'jellyfin-media-player: the Jellyfin tile, likewise'
             'sdl2-compat: SDL2 games that read the controller mappings'
-            'sdl3: SDL3 games read the mappings — and `syn-arcade map learn` needs it to WRITE one, because the GUID and the button numbers in a mapping are SDL’s own')
+            'sdl3: SDL3 games read the mappings — and `syn-arcade map learn` needs it to WRITE one, because the GUID and the button numbers in a mapping are SDL’s own'
+            'mpv: the disc tile. A Blu-ray, a DVD or an audio CD in the drive appears on the media shelf, named after the disc, and plays full screen through mpv — which Arch already builds against libdvdnav, libbluray and libcdio, so bd://, dvd:// and cdda:// need nothing else. big screen mode starts it with a JSON IPC socket and drives it over that, which is what makes ⏭ and ⏮ skip a CHAPTER rather than a playlist entry'
+            'libdvdcss: encrypted commercial DVDs. libdvdread dlopens it by soname at the moment a disc is opened, so without it an ordinary rented film stops with an error and a home-made disc plays perfectly — `syn-arcade big disc` names it when it is missing'
+            'libaacs: encrypted commercial Blu-rays, the same way. ⚠ It also needs a key database, which no distribution ships'
+            'util-linux: `syn-arcade big disc eject` runs eject(1). It is part of the base system on any SynapseOS install; named for the machines where it is not')
 
 # ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
 # what makepkg looks for on disk, so a build from this checkout uses the

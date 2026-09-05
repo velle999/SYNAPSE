@@ -144,6 +144,7 @@ install_data(
   'data/icons/greenlight.svg',
   'data/icons/syn-gfn.svg',
   'data/icons/music.svg',
+  'data/icons/disc.svg',
   'data/icons/kodi.svg',
   'data/icons/plex.svg',
   'data/icons/jellyfin.svg',

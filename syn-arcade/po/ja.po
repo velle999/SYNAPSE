@@ -133,6 +133,9 @@ msgstr "編集"
 msgid "Edit a wrapper"
 msgstr "ラッパーを編集"
 
+msgid "Ejecting"
+msgstr "取り出しています"
+
 msgid ""
 "Everything installed, games first. Its command, folder and icon come across "
 "with it — and if it already runs gamescope, that line is taken apart rather "
@@ -216,6 +219,9 @@ msgstr "ジャンプ"
 
 msgid "Keep it open"
 msgstr "開いたままにする"
+
+msgid "Keep the screen awake"
+msgstr ""
 
 msgid "Loading %1…"
 msgstr "%1 を読み込み中…"
@@ -333,6 +339,9 @@ msgstr "オーバーレイ"
 msgid "PLEX ALBUMS"
 msgstr "PLEX のアルバム"
 
+msgid "POWER"
+msgstr ""
+
 msgid "Paused   ·   A pause   ·   ‹ › track"
 msgstr "一時停止中   ·   A で一時停止   ·   ‹ › 曲"
 
@@ -399,6 +408,18 @@ msgstr "gamemode で実行する"
 msgid "Running"
 msgstr "実行中"
 
+msgid "SCREEN"
+msgstr ""
+
+msgid "SETTINGS"
+msgstr ""
+
+msgid "SHELVES"
+msgstr ""
+
+msgid "START MENU"
+msgstr ""
+
 msgid "SYNAPSE"
 msgstr "SYNAPSE"
 
@@ -411,6 +432,9 @@ msgstr "システム"
 msgid "Save"
 msgstr "保存"
 
+msgid "Screen"
+msgstr ""
+
 msgid "Search"
 msgstr "検索"
 
@@ -422,6 +446,12 @@ msgstr "選ぶ"
 
 msgid "Set up with the controller"
 msgstr "コントローラーで設定する"
+
+msgid "Settings"
+msgstr ""
+
+msgid "Shelves"
+msgstr ""
 
 msgid "Shortcuts"
 msgstr "ショートカット"
@@ -449,6 +479,9 @@ msgstr "Start  ▸  キーボード"
 
 msgid "Start at login"
 msgstr "ログイン時に起動"
+
+msgid "Start menu"
+msgstr ""
 
 msgid "Starting %1…"
 msgstr "%1 を起動中…"
@@ -494,10 +527,18 @@ msgid "The visualizer needs projectM — synpkg install projectm-pulseaudio"
 msgstr ""
 "ビジュアライザーには projectM が必要です — synpkg install projectm-pulseaudio"
 
+msgid "There is no disc in the drive"
+msgstr "ドライブにディスクがありません"
+
+msgid "This disc is encrypted — %1 is needed to play it"
+msgstr "このディスクは暗号化されています — 再生には %1 が必要です"
+
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
 "window, with the controller acting as the mouse and keyboard they need."
-msgstr "メディア棚に並ぶタイルです。ブラウザーで専用の全画面ウィンドウとして開き、コントローラーが必要なマウスとキーボードの役目を果たします。"
+msgstr ""
+"メディア棚に並ぶタイルです。ブラウザーで専用の全画面ウィンドウとして開き、コ"
+"ントローラーが必要なマウスとキーボードの役目を果たします。"
 
 msgid "Toggle overlay"
 msgstr "オーバーレイを切り替え"
@@ -529,11 +570,39 @@ msgstr "ウェブアプリ"
 msgid "What the game renders at"
 msgstr "ゲームの描画解像度"
 
+msgid ""
+"What the menu behind Start offers. Desktop and Quit are always on it: they "
+"are the way out of a full-screen surface that owns the keyboard, and a "
+"gamepad has no key combination to fall back on."
+msgstr ""
+
+msgid "What this menu offers"
+msgstr ""
+
 msgid "Where the music comes from"
 msgstr "音楽の出どころ"
 
+msgid ""
+"Whether big screen mode holds the desktop's idle timeouts off. It has none "
+"of its own — dim, blank, lock and suspend stay the compositor's. `While "
+"playing` covers the two cases nothing else does: music through cliamp has no "
+"window for the compositor to notice, and a gamepad is not Wayland input, so "
+"a controller-only game reads as an idle machine."
+msgstr ""
+
+msgid "Whether the screen is allowed to sleep"
+msgstr ""
+
 msgid "Which game?"
 msgstr "どのゲームですか？"
+
+msgid ""
+"Which rows big screen mode draws. One switched off is not drawn and cannot "
+"be navigated to; switching it back on gives it its place back."
+msgstr ""
+
+msgid "Which rows the television shows"
+msgstr ""
 
 msgid "Which screen"
 msgstr "どの画面"
@@ -657,6 +726,11 @@ msgstr ""
 
 msgid "syn-arcade: synui did not answer — is it running?\n"
 msgstr "syn-arcade: synui が応答しません — 動いていますか？\n"
+
+msgid ""
+"syn-arcade: this synui has no `record` action — screen recording needs a "
+"newer one\n"
+msgstr ""
 
 msgid ""
 "syn-arcade: big run needs a tile id (`syn-arcade big apps` lists them)\n"
@@ -1022,6 +1096,46 @@ msgstr "syn-arcade: 音楽プレーヤーは動作していません\n"
 msgid "syn-arcade: could not start the visualizer stream\n"
 msgstr "syn-arcade: ビジュアライザーのストリームを開始できませんでした\n"
 
+#, c-format
+msgid "syn-arcade: the disc player did not answer %s\n"
+msgstr "syn-arcade: ディスクプレーヤーが %s に応答しませんでした\n"
+
+msgid "no optical drive"
+msgstr "光学ドライブがありません"
+
+msgid "syn-arcade: no disc in the drive\n"
+msgstr "syn-arcade: ドライブにディスクがありません\n"
+
+#, c-format
+msgid "syn-arcade: there is nothing to play in %s\n"
+msgstr "syn-arcade: %s には再生できるものがありません\n"
+
+msgid "syn-arcade: mpv is not installed — `synpkg install mpv`\n"
+msgstr "syn-arcade: mpv がインストールされていません — `synpkg install mpv`\n"
+
+#, c-format
+msgid ""
+"syn-arcade: an encrypted disc needs %s, which is not installed — `synpkg "
+"install %s`\n"
+msgstr "syn-arcade: 暗号化されたディスクには %s が必要ですが、インストールされていません — `synpkg install %s`\n"
+
+msgid "syn-arcade: could not start mpv\n"
+msgstr "syn-arcade: mpv を起動できませんでした\n"
+
+msgid "syn-arcade: no optical drive\n"
+msgstr "syn-arcade: 光学ドライブがありません\n"
+
+msgid "syn-arcade: eject is not installed\n"
+msgstr "syn-arcade: eject がインストールされていません\n"
+
+#, c-format
+msgid "syn-arcade: %s would not open\n"
+msgstr "syn-arcade: %s は開きませんでした\n"
+
+#, c-format
+msgid "syn-arcade: big disc takes status, play or eject (got '%s')\n"
+msgstr "syn-arcade: big disc は status、play、eject を取ります ('%s' が渡されました)\n"
+
 msgid "nothing is playing"
 msgstr "何も再生されていません"
 
@@ -1039,22 +1153,28 @@ msgstr "アーティスト"
 
 #, c-format
 msgid ""
-"syn-arcade: big transport takes status, play, pause, toggle, next, prev or "
-"stop (got '%s')\n"
-msgstr ""
-"syn-arcade: big transport は status、play、pause、toggle、next、prev、stop を"
-"取ります ('%s' が渡されました)\n"
+"syn-arcade: big transport takes status, play, pause, toggle, next, prev, "
+"forward, rewind or stop (got '%s')\n"
+msgstr "syn-arcade: big transport は status、play、pause、toggle、next、prev、forward、rewind、stop を取ります ('%s' が渡されました)\n"
 
 msgid "syn-arcade: nothing is playing\n"
 msgstr "syn-arcade: 何も再生されていません\n"
 
 #, c-format
-msgid "syn-arcade: %s cannot skip %s\n"
-msgstr "syn-arcade: %s は %s をスキップできません\n"
+msgid "syn-arcade: %s has no chapters to skip\n"
+msgstr "syn-arcade: %s にはスキップするチャプターがありません\n"
+
+#, c-format
+msgid "syn-arcade: %s cannot seek\n"
+msgstr "syn-arcade: %s は早送り・巻き戻しできません\n"
 
 #, c-format
 msgid "syn-arcade: %s did not answer %s\n"
 msgstr "syn-arcade: %s は %s に応答しませんでした\n"
+
+#, c-format
+msgid "syn-arcade: %s cannot skip %s\n"
+msgstr "syn-arcade: %s は %s をスキップできません\n"
 
 msgid ""
 "syn-arcade: projectM is not installed — synpkg install projectm-pulseaudio\n"
@@ -1206,15 +1326,54 @@ msgstr "  描画           なし — 単色の背景\n"
 msgid ""
 "syn-arcade: cannot read '%s'. Use `desktop`, `none`, or the path to an "
 "image\n"
-msgstr "syn-arcade: '%s' を読み取れません。`desktop`、`none`、または画像のパスを指定してください\n"
+msgstr ""
+"syn-arcade: '%s' を読み取れません。`desktop`、`none`、または画像のパスを指定"
+"してください\n"
 
 #, c-format
 msgid "big screen background: %s\n"
 msgstr "ビッグスクリーンの背景: %s\n"
 
 #, c-format
+msgid ""
+"syn-arcade: could not run %s — the screen cannot be held awake without "
+"synui's idle-inhibit helper\n"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "While playing"
+msgstr ""
+
+msgid "Always"
+msgstr ""
+
+msgid "Sleep, restart and power off"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no choices for '%s'\n"
+msgstr "syn-arcade: '%s' の選択肢はありません\n"
+
+#, c-format
+msgid "syn-arcade: no setting called '%s'\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: %s takes %s (not '%s')\n"
+msgstr ""
+
+#, c-format
 msgid "  (no browser installed — these tiles cannot open)\n"
-msgstr "  (ブラウザーがインストールされていません — これらのタイルは開けません)\n"
+msgstr ""
+"  (ブラウザーがインストールされていません — これらのタイルは開けません)\n"
 
 #, c-format
 msgid "syn-arcade: no web app called '%s'\n"
@@ -1496,6 +1655,12 @@ msgstr "オーバーレイの切り替え"
 
 msgid "moving the overlay"
 msgstr "オーバーレイの移動"
+
+#, c-format
+msgid ""
+"%s is already bound in %s — leaving it alone.\n"
+"Big screen mode is still on %s.\n"
+msgstr ""
 
 #, c-format
 msgid ""
@@ -1795,10 +1960,6 @@ msgstr "syn-arcade: gamescope が入っていません — `synpkg install games
 #, c-format
 msgid "syn-arcade: cannot run /bin/sh: %s\n"
 msgstr "syn-arcade: /bin/sh を実行できません: %s\n"
-
-#, c-format
-msgid "syn-arcade: no choices for '%s'\n"
-msgstr "syn-arcade: '%s' の選択肢はありません\n"
 
 msgid "syn-arcade: fit inspect needs a .desktop file\n"
 msgstr "syn-arcade: fit inspect には .desktop ファイルが必要です\n"
@@ -2677,6 +2838,14 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: 仮想ポインターを作成できませんでした\n"
+
+#, c-format
+#~ msgid ""
+#~ "syn-arcade: big transport takes status, play, pause, toggle, next, prev "
+#~ "or stop (got '%s')\n"
+#~ msgstr ""
+#~ "syn-arcade: big transport は status、play、pause、toggle、next、prev、"
+#~ "stop を取ります ('%s' が渡されました)\n"
 
 #, fuzzy
 #~ msgid "none"

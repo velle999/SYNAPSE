@@ -706,6 +706,16 @@ shot 03-news                 # the third row, on its own
 say down 0.6
 shot 03k-media-buttons       # the footer row, play/pause chosen
 
+# ⚠ FIVE BUTTONS SINCE 0.1.0-58, in the order they sit on a remote: skip back,
+# wind back, PLAY, wind on, skip on. So one `right` from play is the
+# thirty-second seek and two is the track skip — and pressing both here is what
+# proves the row and the list of verbs behind it are still the same five in the
+# same order. When the array held three and the row drew five, every press
+# landed one button to the left of the one that lit up.
+say right 0.4                # onto fast-forward
+say accept 0.7
+shot 03l0-media-seek         # …and `transport forward` in transport.log
+
 say right 0.4                # onto skip-forward
 say accept 0.7
 shot 03l-media-pressed       # …and `transport next` in transport.log
@@ -1024,6 +1034,27 @@ shot 06-apps-shelf
 say accept 1.4
 shot 07-launched
 
+# ── the remote, with an application in front ────────────────────────────────
+#
+# The half of the remote that a grep cannot answer for. Five of its buttons
+# reach no application at all — OK, ⏭, ⏮, Guide and Power — so `big nav` reads
+# them off the device and the shell turns each into something the thing in
+# front understands. Here the FIFO stands in for the device, which is exactly
+# what it stands in for with the pad.
+#
+# ⚠ THE PREFIX IS THE POINT: the same words are ignored while the interface is
+# ON SCREEN, because there the key event carries them and acting twice would
+# take one press two shelves back. This is the away half.
+# ⛔ COUNTED, NOT GREPPED. transport.log already holds a `transport next` from
+# the media-button walk further up, so a plain grep passes with the remote
+# doing nothing at all — verified: it passed against a shell that had never
+# heard of these words.
+REMOTE_BEFORE=$(wc -l < "$TMP/transport.log" 2>/dev/null || echo 0)
+say remote:next 0.7           # → one more `big transport next`
+say remote:accept 0.7         # → a Return in typed.log
+shot 07r-remote-away
+REMOTE_AFTER=$(wc -l < "$TMP/transport.log" 2>/dev/null || echo 0)
+
 # Start opens the on-screen keyboard.
 say menu 1.0
 shot 08-osk
@@ -1049,6 +1080,26 @@ echo "── music transport ──"
 cat "$TMP/music.log" 2>/dev/null || echo "(nothing)"
 echo "── the media buttons ──"
 cat "$TMP/transport.log" 2>/dev/null || echo "(nothing)"
+echo "── the remote, with an application in front ──"
+if [ "${REMOTE_AFTER:-0}" -gt "${REMOTE_BEFORE:-0}" ] &&
+   tail -n 1 "$TMP/transport.log" 2>/dev/null | grep -aq 'next'; then
+    echo "REMOTE: ⏭ reached the transport while stepped aside"
+else
+    echo "REMOTE: ⏭ did NOTHING while stepped aside"
+fi
+# ⚠ AND OK ONLY HAS SOMEWHERE TO TYPE when the application in front declared
+# that it takes a keyboard: `big keys` is started for those and for no others,
+# which is what keeps a game from being typed into. Which tile the walk above
+# lands on depends on what is installed on the machine running this, so this
+# says which case it saw rather than failing on a launcher that never wanted a
+# keyboard in the first place.
+if ! grep -aq 'big keys' "$TMP/calls.log" 2>/dev/null; then
+    echo "REMOTE: the application in front takes no keyboard, so OK had nothing to type into"
+elif grep -aq 'Return' "$TMP/typed.log" 2>/dev/null; then
+    echo "REMOTE: OK became a Return in the application"
+else
+    echo "REMOTE: OK typed NOTHING into the application"
+fi
 echo "── shell errors ──"
 grep -aE "ERROR|WARN|qs:" "$TMP/qs.log" | grep -viE "IPC server|Saving logs" | head -25
 echo "── screenshots ──"
