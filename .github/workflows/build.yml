@@ -352,6 +352,26 @@ jobs:
         run: |
           ./syn-install/tests/layout_test.sh
 
+      # syn-update is how every installed machine gets a fix, so the thing worth
+      # testing is what happens when it CANNOT — a cloning updater makes one
+      # host the single point of failure for updating every box in existence.
+      # The suite drives the fallback with local file:// repositories, so it
+      # touches no network and does not care which host is eventually named.
+      #
+      # ⚠ 77 IS A SKIP, NOT A PASS AND NOT A FAILURE. The script exits 77 where
+      # makepkg/pacman/vercmp are absent, and an unhandled 77 fails the step —
+      # which would read as "the fallback is broken" on any runner that simply
+      # is not Arch.
+      #
+      # ⚠ THE OTHER FOUR syn-update SUITES ARE STILL NOT RUN ANYWHERE. They
+      # predate this and passing them was checked by hand; wiring them up is a
+      # separate job from the one that added this line, and naming that here is
+      # cheaper than rediscovering it.
+      - name: syn-update source fallback (clone + fetch, and the state file)
+        run: |
+          ./syn-update/tests/mirror_failover_test.sh || rc=$?
+          [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
+
       # The language chosen at boot, and the two places it has to reach: the
       # SCREEN (a Linux VT cannot draw CJK, Arabic or Devanagari — 512 glyphs,
       # no shaper — so the text installer keeps English prose there) and the

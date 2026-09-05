@@ -219,7 +219,42 @@ pkgver=0.1.0
 #   still allowed to say sudo. Run against 57 it names all nineteen.
 # 59: syn-remote joins COMPONENTS. A component in no update list is frozen
 #   on every installed machine with nothing saying so.
-pkgrel=59
+# 60: A FAILED CHECK WENT OUT SILENTLY, AND THE SOURCE HAS ONE HOST.
+#   Two things, found together while testing the second.
+#   ⛔ `ping` REPORTED NOTHING WHEN THE NETWORK WAS DOWN. fetch_src ends in
+#     die(), die() exits, and cmd_ping called it as `fetch_src >/dev/null 2>&1`
+#     — so a failed fetch took the whole command down at that line with its
+#     message swallowed by the redirect beside it, and the `ping_write error`
+#     underneath never ran. The bar's update badge therefore kept showing the
+#     last count it had seen, for ever, with nothing anywhere saying the check
+#     had stopped working. That is the exact failure this command's own header
+#     says it exists to prevent, and ping_test.sh asserts it for an unusable
+#     TREE while the far likelier case — no network — went out the quiet way.
+#     Fixed by bounding the exit: `if ! ( fetch_src )`. Safe because fetch_src
+#     returns nothing and its work is on disk.
+#   ⚠ A CLONING UPDATER MAKES ONE HOST A SINGLE POINT OF FAILURE for updating
+#     every SynapseOS machine in existence — not for a package, for the whole
+#     mechanism, security fixes included. setup_src now tries every source
+#     rather than only the first, and fetch_src falls back when origin does not
+#     answer, fetching with an explicit refspec so the mirror writes the SAME
+#     `origin/<ref>` that remote_rev() and checkout_remote() read — neither ever
+#     learns which host answered.
+#   ⛔ THE FALLBACK SKIPS BY THE URL GIT HAS, not by the name "primary". A
+#     machine first set up while the primary was down was cloned FROM a mirror,
+#     so its origin IS the mirror; skipping by name would retry the remote that
+#     just failed and skip the one that works.
+#   ⚠ SYN_UPDATE_MIRRORS IS EMPTY BY DEFAULT, so this changes nothing yet.
+#     Codeberg was the candidate host and asks not to be used as a mirror of a
+#     project hosted elsewhere. The mechanism ships tested so that naming a host
+#     later — a self-hosted Forgejo, a GitLab, a site's own cache — is one line.
+#     ${VAR-} and not ${VAR:-}: an empty value has to stay distinguishable from
+#     an unset one, or switching the fallback off silently picks up a default.
+#   tests/mirror_failover_test.sh is the guard, on local file:// repositories so
+#   it touches no network: clone order, fetch order, the ref it lands on, the
+#   skip-by-URL case, and the state file. RED-verified against 59 — six of its
+#   seven checks fail there, including the silent ping. It runs in CI; the other
+#   four syn-update suites still run nowhere, which predates this.
+pkgrel=60
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

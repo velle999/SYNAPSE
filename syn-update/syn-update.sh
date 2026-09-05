@@ -43,7 +43,41 @@ set -uo pipefail
 VERSION="0.1.0"
 
 REPO_URL="${SYN_UPDATE_REPO:-https://github.com/velle999/SYNAPSE.git}"
+
+# ── WHERE ELSE THE SOURCE MAY BE FOUND ──────────────────────────────────────
+#
+# Everything below rebuilds an installed machine from a clone of the SynapseOS
+# monorepo, which makes ONE host the single point of failure for updating every
+# SynapseOS box in existence: not for a package, not for a component, for the
+# entire mechanism. github.com being unreachable — an outage, a blocked network,
+# a country that filters it, an account problem — means no machine anywhere can
+# take an update, including a security one.
+#
+# ⚠ EMPTY BY DEFAULT, SO THIS CHANGES NOTHING UNTIL A HOST IS NAMED. There is
+# no second host yet: Codeberg was the candidate and asks not to be used as a
+# mirror of a project hosted elsewhere, which is exactly what this would be.
+# The mechanism is here and tested (tests/mirror_failover_test.sh) so that
+# naming one later is this line and nothing else — a self-hosted Forgejo, a
+# GitLab, a site's internal cache. Until then origin is the only source and the
+# behaviour is what it has always been.
+#
+# ⚠ SPACE-SEPARATED, and overridable per machine: a site that already runs an
+# internal mirror sets SYN_UPDATE_MIRRORS and gets the failover with no patch.
+#
+# ⛔ ${VAR-default}, NOT ${VAR:-default}. The empty value has to stay
+# distinguishable from an unset one, or a site that deliberately switches the
+# fallback off silently gets whatever default this line grows later.
+REPO_MIRRORS="${SYN_UPDATE_MIRRORS-}"
 REPO_REF="${SYN_UPDATE_REF:-main}"
+
+# Every place the source can come from, primary first. Unquoted expansion of
+# REPO_MIRRORS on purpose: it is a space-separated list.
+# shellcheck disable=SC2086
+repo_sources() {
+    printf '%s\n' "$REPO_URL"
+    [ -n "$REPO_MIRRORS" ] && printf '%s\n' $REPO_MIRRORS
+    return 0
+}
 
 # One shared tree rather than a clone per user: the packages it produces are
 # installed system-wide, so a per-$HOME copy would mean several multi-GB trees
@@ -834,7 +868,26 @@ setup_src() {
   Run this once in a terminal:  sudo chown $(id -un):$(id -gn) $SRC"
         sudo_safe chown "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
     fi
-    git clone --branch "$REPO_REF" "$REPO_URL" "$SRC" || die "clone failed"
+    # ⚠ EVERY SOURCE IS TRIED, not just the first. A first run that happens to
+    # land during a GitHub outage would otherwise leave the machine with no
+    # source tree at all — and no way to get one, since this is the code that
+    # would have fetched it.
+    #
+    # ⛔ $SRC/.git IS REMOVED BY NAME BETWEEN ATTEMPTS, never by a glob. A failed
+    # clone can leave a partial .git behind, and git refuses to clone into a
+    # directory with anything in it — so without this the second mirror fails
+    # for a reason that has nothing to do with the second mirror. A glob here
+    # would be a `rm -rf` on a path this script does not own.
+    local url cloned=0
+    while read -r url; do
+        [ -n "$url" ] || continue
+        info "first run: cloning $url into $SRC"
+        if git clone --branch "$REPO_REF" "$url" "$SRC"; then cloned=1; break; fi
+        warn "could not clone from $url"
+        rm -rf -- "$SRC/.git"
+    done < <(repo_sources)
+    [ "$cloned" = 1 ] ||
+        die "clone failed from every source: $(repo_sources | tr '\n' ' ')"
     ok "cloned"
 }
 
@@ -844,7 +897,36 @@ remote_rev() { git -C "$SRC" rev-parse "origin/$REPO_REF" 2>/dev/null; }
 
 fetch_src() {
     info "fetching $REPO_REF from origin"
-    git -C "$SRC" fetch --quiet origin "$REPO_REF" || die "git fetch failed (no network?)"
+    if ! git -C "$SRC" fetch --quiet origin "$REPO_REF"; then
+        # ⚠ THE MIRROR WRITES THE REF origin WOULD HAVE WRITTEN, which is the
+        # whole reason this is three lines rather than a remote-swapping dance.
+        # Everything downstream — remote_rev(), checkout_remote() — reads
+        # `origin/$REPO_REF` and must not care which host answered; an explicit
+        # refspec means it never finds out. The leading + is not optional: a
+        # mirror that is momentarily behind would otherwise be refused as a
+        # non-fast-forward and the fallback would fail for looking like it
+        # worked.
+        #
+        # ⛔ origin IS NOT NECESSARILY $REPO_URL. A machine first set up while
+        # the primary was down was cloned FROM a mirror, so ITS origin is the
+        # mirror and $REPO_URL is the fallback. Skipping "the primary" by name
+        # would re-try the very remote that just failed and skip the one that
+        # works. The URL git actually has is the one to skip.
+        local url originurl fetched=0
+        originurl=$(git -C "$SRC" remote get-url origin 2>/dev/null)
+        while read -r url; do
+            [ -n "$url" ] && [ "$url" != "$originurl" ] || continue
+            warn "origin did not answer — trying $url"
+            if git -C "$SRC" fetch --quiet "$url" \
+                   "+refs/heads/$REPO_REF:refs/remotes/origin/$REPO_REF"; then
+                fetched=1
+                ok "fetched from $url"
+                break
+            fi
+        done < <(repo_sources)
+        [ "$fetched" = 1 ] ||
+            die "git fetch failed from every source (no network?): $(repo_sources | tr '\n' ' ')"
+    fi
 
     # A dirty tree means someone edited the update cache by hand. Refuse rather
     # than reset --hard over their work without asking.
@@ -1759,7 +1841,8 @@ cmd_status() {
     [ -d "$SRC/.git" ] || die "no source tree yet — run: syn-update check"
 
     say "source:    $SRC"
-    say "remote:    $REPO_URL ($REPO_REF)"
+    say "remote:    $(git -C "$SRC" remote get-url origin 2>/dev/null || echo "$REPO_URL") ($REPO_REF)"
+    [ -n "$REPO_MIRRORS" ] && say "mirrors:   $REPO_MIRRORS"
     say "revision:  $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null) $(git -C "$SRC" log -1 --format='%s' 2>/dev/null)"
     say ""
     # Three columns, because "not installed" alone never said WHY, and the
@@ -1836,8 +1919,21 @@ cmd_ping() {
     # Everything the report would have said, computed and thrown away except
     # for the counts. Quiet: a timer's stdout is the journal.
     need_tools >/dev/null 2>&1 || { ping_write error "reason=missing tools"; die "missing tools"; }
-    if ! fetch_src >/dev/null 2>&1; then
-        ping_write error "reason=could not reach $REPO_URL"
+    # ⛔ A SUBSHELL, AND THAT IS THE WHOLE POINT OF THE PARENTHESES. fetch_src
+    # ends in die() on a network failure, and die() exits — so called directly
+    # it took the WHOLE ping down at that line, with its message swallowed by
+    # the redirect right next to it. ping_write below never ran. The indicator
+    # therefore went on showing the last count it had seen, for ever, with
+    # nothing anywhere saying the check had stopped working: exactly the
+    # failure this command's own header says it exists to prevent, and the one
+    # ping_test.sh asserts for an unusable TREE while the far likelier case —
+    # no network — went out the silent way. Found by mirror_failover_test.sh.
+    # A subshell bounds that exit to the subshell, so `if !` gets its answer.
+    #
+    # ⚠ SAFE BECAUSE fetch_src RETURNS NOTHING. It touches the git tree, which
+    # is on disk and survives, and sets no variable this side reads.
+    if ! ( fetch_src ) >/dev/null 2>&1; then
+        ping_write error "reason=could not reach $(repo_sources | tr '\n' ' ')"
         die "could not fetch"
     fi
     ping_scan_and_write
