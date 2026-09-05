@@ -3421,7 +3421,37 @@ pkgver=0.1.0
 #   "yielded" and is rendered as what it actually meant — VRAM only, model still
 #   in RAM. tests/game_actions.sh pins the policy in four checks, RED-verified
 #   against 600's game.c.
-pkgrel=601
+# 602: A BAR TOOLTIP OPENED CLIPPED OFF THE RIGHT EDGE OF THE SCREEN, and came
+#   up correctly on the second hover. That second half is the whole diagnosis:
+#   two independent defects met, and either one alone produces it.
+#   ⛔ BarModule.qml centred the popup on `tip.width`. That is the WINDOW's
+#     CONFIGURED width, which always lags its content — unset before the
+#     compositor's first configure and stale after it — so the first show was
+#     placed by a width the popup no longer had. Measured on the rightmost
+#     module: 134px of a 211px tooltip on screen, 77px off the side. rect.y
+#     beside it had always asked implicitHeight, and both bar menus already
+#     asked implicitWidth; this one line was the odd one out.
+#   ⛔ layer.c unconstrained a popup on its INITIAL COMMIT ONLY. When the true
+#     width landed, the binding re-ran and the popup REPOSITIONED —
+#     xdg_popup.reposition installs a fresh positioner and recomputes the
+#     geometry from its rules, discarding what the map-time unconstrain decided.
+#     wlroots fires wlr_xdg_popup.events.reposition for exactly this and synui
+#     listened to neither popup path's copy of it, so every repositioned popup
+#     went precisely where the client asked. The second hover already knew its
+#     width, never repositioned, and so never hit the hole.
+#   Both are fixed. The QML one removes the pointless round-trip (and the jump
+#   that goes with it); the compositor one is the wider fix — it was never about
+#   the bar, and any client that moves a live popup was landing unconstrained,
+#   synui_main.c's toplevel-rooted path included.
+#   ⚠ NOT clamped in QML. The compositor owns unconstraining; a clamp beside it
+#     would be a second owner of one rule, disagreeing at every bar shape.
+#   tests/bar_tooltip_edge.sh is the guard and it hovers TWICE, because a
+#   screenshot cannot tell a clipped tooltip from a correctly slid one — both
+#   end at the last column. The second hover is the known-good placement and the
+#   first must match it. RED-verified against 601: first 1146..1279, second
+#   1069..1279. An earlier draft asserted the right edge instead and passed on
+#   the bug; the note in that file says so.
+pkgrel=602
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

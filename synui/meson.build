@@ -1797,6 +1797,23 @@ test('bar_module_menu', bar_module_menu_t,
      depends : [synui_exe, vpointer_click],
      timeout : 120)
 
+# `bar_tooltip_edge`: a bar tooltip opens ON SCREEN on the FIRST hover. The
+# rightmost module's tooltip was centred on `tip.width` — the window's
+# CONFIGURED width, which always lags its content — so the first show placed it
+# by a stale width and then RE-POSITIONED once the real one landed, and layer.c only
+# ever unconstrained a popup on its initial commit. The repositioned popup went
+# exactly where the client asked: off the right edge, clipped mid-word. Hovering
+# again drew it correctly, which is why it survived so long.
+# ⚠ The assertion is WHERE THE RIGHT EDGE LANDS. A tooltip appeared on the bug
+# too — two thirds of it were off the screen.
+bar_tooltip_edge_t = find_program('tests/bar_tooltip_edge.sh')
+test('bar_tooltip_edge', bar_tooltip_edge_t,
+     args    : [synui_exe.full_path(),
+                meson.current_source_dir() / 'quickshell',
+                vpointer_click.full_path()],
+     depends : [synui_exe, vpointer_click],
+     timeout : 120)
+
 # `menu_uninstall`: right-clicking an application in the START MENU opens a
 # context menu, that menu is at the POINTER, and left-click still launches.
 # ⚠ THREE EARLIER VERSIONS OF THIS RIG PASSED ON AN ABSENT FEATURE, and each

@@ -164,7 +164,26 @@ Rectangle {
 
         anchor {
             window: root.QsWindow.window
-            rect.x: root.mapToItem(null, 0, 0).x + root.width / 2 - tip.width / 2
+            /* implicitWidth, NOT width — the same reason rect.y below asks
+             * for implicitHeight. `width` is the WINDOW's configured width, so
+             * it always lags what the popup is about to draw: unset before the
+             * compositor's first configure, and stale after it. Centring on it
+             * placed the tooltip by a width it no longer had, and a tooltip on
+             * the RIGHTMOST module then hung off the side of the screen —
+             * measured at 134px of a 211px popup, the rest clipped. The true
+             * width would land a moment later, the binding would re-run and the
+             * popup would REPOSITION into the right place, which is why the bug
+             * only ever showed on the FIRST hover and looked fine on the
+             * second. (See tests/bar_tooltip_edge.sh, which hovers twice and
+             * compares.) implicitWidth is the CONTENT's, known the instant the
+             * Text is, so this places correctly at once and never repositions.
+             *
+             * Deliberately NOT clamped to the screen here. The compositor
+             * unconstrains popups (layer.c, layer_popup_unconstrain) and a
+             * clamp on this side would be a second owner of the same rule,
+             * disagreeing with it at every bar shape and screen edge. */
+            rect.x: root.mapToItem(null, 0, 0).x
+                    + root.width / 2 - tip.implicitWidth / 2
             rect.y: BarConfig.popupY(tip.implicitHeight) + 2
         }
 

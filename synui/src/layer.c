@@ -66,6 +66,7 @@ typedef struct syn_layer_popup {
     struct wlr_xdg_popup *popup;
     syn_layer_surface_t  *ls;
     struct wl_listener    commit;
+    struct wl_listener    reposition;
     struct wl_listener    destroy;
     /* In syn_layer_surface::popups, so the walk above can tell a popup subtree
      * from the bar's own buffers. */
@@ -451,6 +452,51 @@ static void layer_popup_glass(syn_layer_popup_t *lp)
     wlr_scene_node_for_each_buffer(&tree->node, layer_blur_buffer, &want);
 }
 
+/* Put the popup inside the output it belongs to, in layer-surface-local
+ * coordinates, so a menu opened at a screen edge flips or slides into view
+ * instead of clipping.
+ *
+ * ⚠ THIS RUNS FROM TWO PLACES AND THAT IS THE POINT. Doing it on the initial
+ * commit alone leaves every LATER placement unconstrained: xdg_popup.reposition
+ * hands wlroots a fresh positioner and recomputes scheduled.geometry from its
+ * rules, throwing away whatever this decided at map time, so the popup goes
+ * exactly where the client asked — off the edge, with nothing to say so.
+ *
+ * The bar's own tooltips are the ones that found it. Their anchor was centred
+ * on the popup window's CONFIGURED width, which lags its content, so the FIRST
+ * show placed them by a stale number and then repositioned once the real width
+ * landed; the second show had it already and never repositioned. That is
+ * precisely the reported symptom — a tooltip on the right-hand modules opened
+ * clipped at the screen edge and came up correctly on the next hover.
+ * BarModule.qml no longer needs that reposition, but any client may, and the
+ * protocol allows it: tests/bar_tooltip_edge.sh covers the pair.
+ */
+static void layer_popup_unconstrain(syn_layer_popup_t *lp)
+{
+    syn_layer_surface_t *ls = lp->ls;
+    struct wlr_box out_box;
+    wlr_output_layout_get_box(ls->server->output_layout,
+                              ls->output->wlr_output, &out_box);
+    struct wlr_box constraint = {
+        .x = out_box.x - ls->scene->tree->node.x,
+        .y = out_box.y - ls->scene->tree->node.y,
+        .width = out_box.width,
+        .height = out_box.height,
+    };
+    wlr_xdg_popup_unconstrain_from_box(lp->popup, &constraint);
+}
+
+/* The client moved a popup that is already mapped. By the time this runs
+ * wlroots has swapped in the new positioner rules and recomputed the geometry
+ * from them, but it does NOT send the configure — both halves are ours. */
+static void layer_popup_reposition(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_layer_popup_t *lp = wl_container_of(listener, lp, reposition);
+    layer_popup_unconstrain(lp);
+    wlr_xdg_surface_schedule_configure(lp->popup->base);
+}
+
 static void layer_popup_commit(struct wl_listener *listener, void *data)
 {
     (void)data;
@@ -465,19 +511,9 @@ static void layer_popup_commit(struct wl_listener *listener, void *data)
     if (!lp->popup->base->initial_commit)
         return;
 
-    /* Constrain to the output (in layer-surface-local coordinates) so a menu
-     * spawned at a screen edge flips/slides into view instead of clipping. */
-    syn_layer_surface_t *ls = lp->ls;
-    struct wlr_box out_box;
-    wlr_output_layout_get_box(ls->server->output_layout,
-                              ls->output->wlr_output, &out_box);
-    struct wlr_box constraint = {
-        .x = out_box.x - ls->scene->tree->node.x,
-        .y = out_box.y - ls->scene->tree->node.y,
-        .width = out_box.width,
-        .height = out_box.height,
-    };
-    wlr_xdg_popup_unconstrain_from_box(lp->popup, &constraint);
+    /* The map-time half of the two-place job layer_popup_unconstrain
+     * documents; layer_popup_reposition is the other. */
+    layer_popup_unconstrain(lp);
 
     /* wlroots 0.19 requires the compositor to answer the initial commit with
      * a configure (see synui_main.c's popup_watch_commit) or the client waits
@@ -492,6 +528,7 @@ static void layer_popup_destroy(struct wl_listener *listener, void *data)
     (void)data;
     syn_layer_popup_t *lp = wl_container_of(listener, lp, destroy);
     wl_list_remove(&lp->commit.link);
+    wl_list_remove(&lp->reposition.link);
     wl_list_remove(&lp->destroy.link);
     wl_list_remove(&lp->link);
     free(lp);
@@ -510,6 +547,8 @@ static void layer_surface_new_popup(struct wl_listener *listener, void *data)
     lp->ls = ls;
     lp->commit.notify = layer_popup_commit;
     wl_signal_add(&popup->base->surface->events.commit, &lp->commit);
+    lp->reposition.notify = layer_popup_reposition;
+    wl_signal_add(&popup->events.reposition, &lp->reposition);
     lp->destroy.notify = layer_popup_destroy;
     wl_signal_add(&popup->events.destroy, &lp->destroy);
     wl_list_insert(&ls->popups, &lp->link);

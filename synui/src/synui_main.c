@@ -1502,6 +1502,7 @@ struct syn_popup_watch {
     struct wlr_xdg_popup *popup;
     syn_server_t *server;
     struct wl_listener commit;
+    struct wl_listener reposition;
     struct wl_listener destroy;
 };
 
@@ -1510,6 +1511,7 @@ static void popup_watch_destroy(struct wl_listener *listener, void *data)
     (void)data;
     struct syn_popup_watch *w = wl_container_of(listener, w, destroy);
     wl_list_remove(&w->commit.link);
+    wl_list_remove(&w->reposition.link);
     wl_list_remove(&w->destroy.link);
     free(w);
 }
@@ -1562,6 +1564,47 @@ static bool popup_root_origin(struct wlr_xdg_popup *popup, int *root_lx, int *ro
     return wlr_scene_node_coords(&root->node, root_lx, root_ly);
 }
 
+/* Tell the popup how much room it has, or it renders at whatever size it asked
+ * for and runs straight off the screen.
+ *
+ * This used to key off w->parent_view, which is only ever set for a popup whose
+ * parent is a toplevel VIEW. A popup parented to another popup — i.e. every
+ * submenu — resolved parent_view to NULL and so was never unconstrained at all.
+ * waybar's "Applications" submenu (69 entries, ~1900px) is the obvious
+ * casualty: GTK only grows scroll arrows when it is told it doesn't fit, so it
+ * just overflowed the output. Same for any nested menu, in any client.
+ * Resolving the chain's root surface handles toplevel- and layer-shell-rooted
+ * popups alike, at any nesting depth.
+ *
+ * ⚠ CALLED ON REPOSITION AS WELL AS ON THE INITIAL COMMIT. xdg_popup.reposition
+ * replaces the positioner and recomputes scheduled.geometry from the new rules,
+ * which discards whatever this decided at map time — so a popup that is moved
+ * after it maps lands exactly where the client asked, off the edge, unless this
+ * runs again. See layer.c's layer_popup_unconstrain, which is the same hole on
+ * the layer-shell side and is where the bar's clipped tooltips came from.
+ */
+static void popup_watch_unconstrain(struct syn_popup_watch *w)
+{
+    int root_lx = 0, root_ly = 0;
+    if (!popup_root_origin(w->popup, &root_lx, &root_ly))
+        return;
+
+    struct wlr_output *output = wlr_output_layout_output_at(
+        w->server->output_layout, root_lx, root_ly);
+    if (!output)
+        return;
+
+    struct wlr_box out_box;
+    wlr_output_layout_get_box(w->server->output_layout, output, &out_box);
+    struct wlr_box constraint = {
+        .x = out_box.x - root_lx,
+        .y = out_box.y - root_ly,
+        .width = out_box.width,
+        .height = out_box.height,
+    };
+    wlr_xdg_popup_unconstrain_from_box(w->popup, &constraint);
+}
+
 /* wlroots 0.19 requires the compositor to answer a popup's initial commit
  * with a configure the same way toplevels do (see xdg_surface_commit) — a
  * client that waits for a real ack, like GTK4's, otherwise hangs unmapped
@@ -1573,35 +1616,18 @@ static void popup_watch_commit(struct wl_listener *listener, void *data)
     if (!w->popup->base->initial_commit)
         return;
 
-    /* Tell the popup how much room it has, or it renders at whatever size it
-     * asked for and runs straight off the screen.
-     *
-     * This used to key off w->parent_view, which is only ever set for a popup
-     * whose parent is a toplevel VIEW. A popup parented to another popup — i.e.
-     * every submenu — resolved parent_view to NULL and so was never unconstrained
-     * at all. waybar's "Applications" submenu (69 entries, ~1900px) is the
-     * obvious casualty: GTK only grows scroll arrows when it is told it doesn't
-     * fit, so it just overflowed the output. Same for any nested menu, in any
-     * client. Resolving the chain's root surface handles toplevel- and
-     * layer-shell-rooted popups alike, at any nesting depth.
-     */
-    int root_lx = 0, root_ly = 0;
-    if (popup_root_origin(w->popup, &root_lx, &root_ly)) {
-        struct wlr_output *output = wlr_output_layout_output_at(
-            w->server->output_layout, root_lx, root_ly);
-        if (output) {
-            struct wlr_box out_box;
-            wlr_output_layout_get_box(w->server->output_layout, output, &out_box);
-            struct wlr_box constraint = {
-                .x = out_box.x - root_lx,
-                .y = out_box.y - root_ly,
-                .width = out_box.width,
-                .height = out_box.height,
-            };
-            wlr_xdg_popup_unconstrain_from_box(w->popup, &constraint);
-        }
-    }
+    popup_watch_unconstrain(w);
+    wlr_xdg_surface_schedule_configure(w->popup->base);
+}
 
+/* The client moved a popup that is already mapped. wlroots has swapped in the
+ * new positioner rules and recomputed the geometry by the time this runs, but
+ * it does not send the configure — both halves are ours. */
+static void popup_watch_reposition(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_popup_watch *w = wl_container_of(listener, w, reposition);
+    popup_watch_unconstrain(w);
     wlr_xdg_surface_schedule_configure(w->popup->base);
 }
 
@@ -1659,6 +1685,8 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     w->server = s;
     w->commit.notify = popup_watch_commit;
     wl_signal_add(&popup->base->surface->events.commit, &w->commit);
+    w->reposition.notify = popup_watch_reposition;
+    wl_signal_add(&popup->events.reposition, &w->reposition);
     /* The popup's own destroy signal, not the surface's: a client may destroy
      * the xdg_popup role object and keep committing on the wl_surface, which
      * would leave popup_watch_commit dereferencing a freed w->popup. Matches
