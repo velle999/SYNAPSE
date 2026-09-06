@@ -488,6 +488,27 @@ float anim_view_opacity(syn_view_t *view)
     }
 
     if (view_is_glass_native(target)) return 1.0f;  /* app draws its own glass */
+
+    /*
+     * …and the apps the user has said are never to be see-through.
+     *
+     * Checked on `target`, not `view`, so an X11 menu belonging to an exempt
+     * window is exempt with it — the same reason the parent hop above exists.
+     *
+     * This is here rather than at the two opacity lookups below because it must
+     * also beat inactive_opacity: mpv is translucent whether or not it holds
+     * focus, and "solid while I am watching, glassy the moment I click away" is
+     * a worse result than either state on its own.
+     */
+    {
+        const char *aid = view_app_id(target);
+        if (aid && *aid) {
+            for (int i = 0; i < s->config.transparency_exclude_count; i++)
+                if (strcasestr(aid, s->config.transparency_exclude[i]))
+                    return 1.0f;
+        }
+    }
+
     /*
      * A fullscreen window covers its whole output, so there is nothing behind it
      * that transparency could usefully reveal — only the wallpaper, a stacked

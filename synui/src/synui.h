@@ -4554,6 +4554,21 @@ typedef struct {
     int   game_leave_grace_ms;
     char  game_exclude[GAME_EXCLUDE_MAX][64];
     int   game_exclude_count;
+    /* Windows the transparency lever does not apply to (anim_view_opacity).
+     *
+     * The master switch and the two opacities are all-or-nothing across the
+     * desktop, and a translucent video is never what anyone wants while a
+     * translucent terminal usually is. Without this the only way to stop mpv
+     * showing the wallpaper through a film is to turn transparency off for
+     * everything — which also releases the bar and the dock, because the glass
+     * sync is watching the same switch.
+     *
+     * Same matching and same replace-not-append rule as game_exclude: a
+     * case-insensitive substring of the app_id, and setting the key REPLACES
+     * the shipped list rather than adding to it, so it can be narrowed as well
+     * as widened. Empty value therefore means "nothing is exempt". */
+    char  transparency_exclude[GAME_EXCLUDE_MAX][64];
+    int   transparency_exclude_count;
     /* Wayland-NATIVE clients that are game wrappers, and so count as games
      * despite not being XWayland. "fullscreen XWayland" cannot see these: a
      * gamescope launched from a Wayland session uses its own Wayland backend

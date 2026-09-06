@@ -541,6 +541,10 @@
  *                                 Off, the two opacities below do nothing)
  *   active_opacity = 0.90        (the focused window)
  *   inactive_opacity = 0.84      (how far the others fade back)
+ *   transparency_exclude = mpv vlc
+ *                                (app_ids the two opacities above skip, matched
+ *                                 case-insensitively as substrings. REPLACES
+ *                                 the shipped list; empty exempts nothing)
  *   foot_alpha = 0.40            (the terminal, which needs its OWN number:
  *                                 foot and syntty draw their own background
  *                                 with the glyphs left opaque, so the same
@@ -1564,6 +1568,13 @@ static void config_set_defaults(syn_config_t *cfg)
     memcpy(cfg->titlebar_grad_focus, cfg->titlebar_color_focus, sizeof(cfg->titlebar_grad_focus));
     memcpy(cfg->chrome_face,         cfg->border_color_norm,    sizeof(cfg->chrome_face));
     cfg->transparency     = 0;
+    /* Video players, because a translucent film is never the wanted effect and
+     * this is the one case that made the feature necessary. Replaced wholesale
+     * by a `transparency_exclude =` line, so it is a default rather than a
+     * floor. */
+    snprintf(cfg->transparency_exclude[0], sizeof(cfg->transparency_exclude[0]), "%s", "mpv");
+    snprintf(cfg->transparency_exclude[1], sizeof(cfg->transparency_exclude[1]), "%s", "vlc");
+    cfg->transparency_exclude_count = 2;
     /* Unset, not 0: every theme but Prism has hand-tuned opacities and a
      * level of 0 would flatten them all to solid. Prism's own default is set
      * where the theme is applied, not here — a default that depended on the
@@ -3357,6 +3368,20 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         snprintf(cfg->game_kmod_quiet_cmd, sizeof(cfg->game_kmod_quiet_cmd), "%s", val);
     else if (strcmp(key, "game_kmod_restore_cmd") == 0)
         snprintf(cfg->game_kmod_restore_cmd, sizeof(cfg->game_kmod_restore_cmd), "%s", val);
+    else if (strcmp(key, "transparency_exclude") == 0) {
+        /* Space-separated app_ids exempt from the transparency lever. Replaces
+         * the shipped list (mpv, vlc) rather than adding to it, so an empty
+         * value is how you make everything translucent again. */
+        char buf[512];
+        snprintf(buf, sizeof(buf), "%s", val);
+        char *save = NULL;
+        cfg->transparency_exclude_count = 0;
+        for (char *tok = strtok_r(buf, " \t", &save);
+             tok && cfg->transparency_exclude_count < GAME_EXCLUDE_MAX;
+             tok = strtok_r(NULL, " \t", &save))
+            snprintf(cfg->transparency_exclude[cfg->transparency_exclude_count++],
+                     sizeof(cfg->transparency_exclude[0]), "%s", tok);
+    }
     else if (strcmp(key, "game_exclude") == 0) {
         /* space-separated app_ids that are NOT games. Replaces the built-in
          * list rather than adding to it, so a user can widen or narrow it. */
