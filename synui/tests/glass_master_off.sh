@@ -131,7 +131,12 @@ Image.new('RGB', (1280, 720), (0, 128, 128)).save('$T/wp.png')" \
 
     # The compositor's own export is the input the bar acts on, so a run whose
     # theme.state does not say what this run is about proves nothing.
-    want="glass_master=$transp"
+    # ⛔ transparency=, NOT glass_master=. There has never been a
+    # glass_master key: `git log -S glass_master -- src/` is empty, so this
+    # check could not pass on any build and the whole test has been dead
+    # since it was written. The master switch this file is named for is
+    # exported by theme.c as `transparency=on|off`.
+    want="transparency=$transp"
     grep -qx "$want" "$CFG/theme.state" \
         || fail "synui did not export $want (theme.state: $(tr '\n' ' ' < "$CFG/theme.state"))"
 

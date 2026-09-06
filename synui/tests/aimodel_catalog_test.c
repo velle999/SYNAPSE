@@ -315,6 +315,49 @@ static void test_refusals(void)
               strlen(tok));
 }
 
+/* ── When the catalogue goes stale ───────────────────────── */
+/*
+ * The list is fetched once and then believed. It used to be believed for the
+ * whole SESSION, and synui is the session: a machine left logged in for a
+ * fortnight went on offering whatever was popular the first time the panel was
+ * opened, and a model released since could not be found without pressing r or
+ * logging out.
+ */
+static void test_cat_staleness(void)
+{
+    syn_aimodel_t am;
+    memset(&am, 0, sizeof(am));
+
+    /* Nothing fetched yet — always ask, whatever the clock says. */
+    am.n_cat = 0; am.cat_at = 0.0;
+    CHECK(aimodel_cat_wants_refresh(&am, 0.0),   "empty catalogue refreshes");
+    CHECK(aimodel_cat_wants_refresh(&am, 1e9),   "empty catalogue refreshes, late");
+
+    /* Landed but never stamped: refresh rather than trust it. */
+    am.n_cat = 5; am.cat_at = 0.0;
+    CHECK(aimodel_cat_wants_refresh(&am, 100.0), "unstamped catalogue refreshes");
+
+    /* Fresh. This is what the one-search-per-session rule was protecting and it
+     * still holds: opening the panel repeatedly in an afternoon is one request. */
+    am.n_cat = 5; am.cat_at = 1000.0;
+    CHECK(!aimodel_cat_wants_refresh(&am, 1000.0), "just fetched does not refetch");
+    CHECK(!aimodel_cat_wants_refresh(&am, 1060.0), "a minute later does not refetch");
+    CHECK(!aimodel_cat_wants_refresh(&am, 1000.0 + AIMODEL_CAT_TTL_SEC - 1.0),
+          "one second inside the TTL does not refetch");
+
+    /* Past it. The comparison is > so exactly the TTL is still fresh; what has
+     * to be true is that a long session is not. */
+    CHECK(aimodel_cat_wants_refresh(&am, 1000.0 + AIMODEL_CAT_TTL_SEC + 1.0),
+          "one second past the TTL refetches");
+    CHECK(aimodel_cat_wants_refresh(&am, 1000.0 + 14.0 * 24 * 60 * 60),
+          "a fortnight-old session refetches — the bug this exists for");
+
+    /* CLOCK_MONOTONIC does not run backwards, but a negative age must never
+     * read as "very stale" and hammer the endpoint if it ever did. */
+    CHECK(!aimodel_cat_wants_refresh(&am, 500.0),
+          "a clock that went backwards does not refetch");
+}
+
 /* ── Truncation ──────────────────────────────────────────── */
 
 /* Every field is a fixed array, and the strings come off the network. A repo
@@ -384,6 +427,7 @@ int main(int argc, char **argv)
     printf("aimodel: reading names\n");        test_names();
     printf("aimodel: refusals\n");             test_refusals();
     printf("aimodel: truncation\n");           test_truncation();
+    printf("aimodel: catalogue staleness\n"); test_cat_staleness();
 
     printf("\n%s\n", fails ? "FAIL" : "PASS");
     return fails ? 1 : 0;

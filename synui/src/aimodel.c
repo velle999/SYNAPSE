@@ -197,6 +197,32 @@ static void aimodel_mark_loaded(syn_server_t *s)
     }
 }
 
+static double aimodel_now(void);
+
+/*
+ * Should the next panel open re-fetch the catalogue?
+ *
+ * A predicate rather than an expression inside aimodel_show() so it can be
+ * tested without standing up a server, a curl handle and a worker thread — the
+ * arithmetic is the whole behaviour, and it is the sort that is wrong by an
+ * inverted comparison and nobody notices for a year.
+ *
+ * `now` is passed in for the same reason: a test that had to wait six hours
+ * would not be written, and one that could not control the clock would only
+ * ever exercise the not-stale branch.
+ *
+ * An empty catalogue always wants one — the usual cause is a network that was
+ * down, and cat_at is stamped even on a failed search so the TTL alone would
+ * sit on the failure for six hours.
+ */
+bool aimodel_cat_wants_refresh(const syn_aimodel_t *am, double now)
+{
+    if (!am) return false;
+    if (am->n_cat == 0) return true;
+    if (am->cat_at <= 0.0) return true;          /* never stamped */
+    return (now - am->cat_at) > (double)AIMODEL_CAT_TTL_SEC;
+}
+
 /* ══ The download catalogue ═══════════════════════════════════════════════
  *
  * Everything below this line is about models that are NOT on the disk yet.
@@ -1065,7 +1091,12 @@ static int aimodel_readable(int fd, uint32_t mask, void *data)
         memcpy(prev, am->cat, sizeof(prev));
 
         memcpy(am->cat, am->fetched, sizeof(*am->cat) * (size_t)n);
-        am->n_cat = n;
+        am->n_cat  = n;
+        /* Stamped even when the search returned nothing: an empty answer is
+         * still an answer, and re-asking every time the panel opened because
+         * the network was down once is the traffic the session rule exists to
+         * avoid. The n_cat == 0 case below still retries, which covers it. */
+        am->cat_at = aimodel_now();
 
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n_prev; j++)
@@ -1735,7 +1766,10 @@ void aimodel_show(syn_server_t *s)
      * that the last attempt could not reach the network, and re-opening the
      * panel after fixing that must not keep showing the failure. The in-flight
      * flag is what stops that becoming a request per keypress. */
-    if (am->n_cat == 0 && !am->searching)
+    /* …and a catalogue older than the TTL is asking for one too. See cat_at in
+     * synui.h: "does not change while a panel is open" was written about a
+     * panel, but this process is the whole session. */
+    if (aimodel_cat_wants_refresh(am, aimodel_now()) && !am->searching)
         aimodel_request_search(s);
 
     /* Drives the debounce and, if one is running, the download's progress. */

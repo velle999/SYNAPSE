@@ -1404,6 +1404,16 @@ typedef struct {
     int  cat_sel;
     int  n_cat;
     syn_aimodel_cat_t cat[AIMODEL_CAT_MAX];
+    /* CLOCK_MONOTONIC seconds at which the catalogue above landed; 0 = never.
+     *
+     * The list is "the most downloaded GGUF repos", and the one-search-per-
+     * session rule was written as "it does not change while a panel is open".
+     * That is true of a panel and false of this process: synui IS the session,
+     * so a machine left logged in for a fortnight kept showing whatever was
+     * popular the first time the panel was opened, and a model released since
+     * could not be found without pressing r or logging out. Aged instead, so
+     * the traffic stays occasional without the list going stale. */
+    double cat_at;
 
     /* The list column scrolls: three installed models and a full page of
      * search results do not fit a panel sized to the screen. Counted in list
@@ -7750,6 +7760,20 @@ void layer_update_occlusion_all(syn_server_t *s);
 
 /* ── view accessors (xdg / xwayland agnostic) ────────────── */
 struct wlr_surface *view_surface(syn_view_t *v);
+/* How long the download catalogue is believed before the next panel open
+ * re-fetches it.
+ *
+ * Six hours: long enough that opening the panel repeatedly in an afternoon is
+ * one request, short enough that a model released this morning is findable by
+ * the evening. Only ever consulted when the panel opens, so an idle session
+ * costs nothing.
+ *
+ * Here rather than in aimodel.c so the test asserts against the real number —
+ * a test carrying its own copy of the constant passes whatever the code does
+ * with it. */
+#define AIMODEL_CAT_TTL_SEC  (6 * 60 * 60)
+
+bool aimodel_cat_wants_refresh(const syn_aimodel_t *am, double now);
 const char *view_app_id(syn_view_t *v);   /* xdg app_id / X11 class */
 const char *view_title(syn_view_t *v);
 pid_t       view_pid(syn_view_t *v);
