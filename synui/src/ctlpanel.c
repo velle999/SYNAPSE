@@ -1859,15 +1859,15 @@ void synui_effects_solid(syn_server_t *s)
      * make them opaque. syn_glass_bar_alpha() is `0.95 - 0.90t` floored at
      * SYN_BAR_ALPHA_FROSTED, so Off hands both strips 0.95 rather than 1.00:
      * the curve was fitted to the bar's historical default at the clear end,
-     * and it carried the last 5% all the way down with it.
+     * and it carried the last 5% all the way down with it. Small, and exactly
+     * the sort of small that has somebody turning every switch off and still
+     * seeing the wallpaper through their dock.
      *
      * ⚠ 0.90, NOT 0.95 — this said `0.95 - 0.95t` until the curve was floored,
      * and the note ~60 lines below was corrected while this one was not. Two
      * comments describing one function, disagreeing about where it bottoms
      * out: the stale one puts the clear end at 0.00 when it is 0.05, which is
-     * the exact confusion the floor was added to remove. Small, and exactly the sort of
-     * small that has somebody turning every switch off and still seeing the
-     * wallpaper through their dock.
+     * the exact confusion the floor was added to remove.
      *
      * Set as rows, so each one pins itself. That is the honest record: solid is
      * an opinion this desktop now holds about those two surfaces, it shows as

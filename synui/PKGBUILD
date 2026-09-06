@@ -3451,7 +3451,7 @@ pkgver=0.1.0
 #   first must match it. RED-verified against 601: first 1146..1279, second
 #   1069..1279. An earlier draft asserted the right edge instead and passed on
 #   the bug; the note in that file says so.
-pkgrel=603
+pkgrel=604
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
