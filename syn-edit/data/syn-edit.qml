@@ -2070,12 +2070,23 @@ FloatingWindow {
             // The engine leaving its command line ends the naming step: either
             // it wrote the file (Return) or the user backed out (Esc). Both
             // mean this dialog is finished.
+            // ⛔ THE PROMPT HAS TO EXIST BEFORE ITS ABSENCE MEANS ANYTHING.
+            // The engine's :w line does not arrive in the frame it was asked
+            // for — the keys go out and the answer is a round trip away. Closing
+            // on an empty cmdline without waiting for it made the dialogue open
+            // and shut in one frame: "the save box just flashes at me". Arm on
+            // the first frame that actually carries a command line, and only
+            // then treat an empty one as finished — a write on Return, or a
+            // cancel on Esc.
+            property bool namePrimed: false
+
             onNamingChanged: if (!browser.naming) browser.visible = false
             Connections {
                 target: root
                 function onStChanged() {
-                    if (browser.naming && (root.st.cmdline || "") === "")
-                        browser.naming = false
+                    if (!browser.naming) return
+                    if ((root.st.cmdline || "") !== "") browser.namePrimed = true
+                    else if (browser.namePrimed)        browser.naming = false
                 }
             }
 
@@ -2123,6 +2134,7 @@ FloatingWindow {
             // not throw the name away.
             function startNaming() {
                 const keep = browser.typedName
+                browser.namePrimed = false
                 browser.naming = true
                 root.promptWrite((browser.dir === "/" ? "" : browser.dir) + "/" + keep)
             }
@@ -2130,6 +2142,7 @@ FloatingWindow {
             // "Save here" is now just "commit what is typed". Kept because a
             // button that says what Return does is worth having.
             function seedWrite(partial) {
+                browser.namePrimed = false
                 browser.naming = true
                 root.promptWrite(partial)
             }

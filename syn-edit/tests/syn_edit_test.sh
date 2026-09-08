@@ -1090,6 +1090,14 @@ if [ -f "$QML" ]; then
 
     # And it must say how to finish. A field with no Return hint is the same
     # dead end one layer along.
+    # ⛔ AND IT MUST NOT CLOSE BEFORE THE PROMPT ARRIVES. The engine's :w line
+    # is a round trip away, so a close-guard that fires on an empty cmdline
+    # without waiting for one shuts the dialogue in the frame it opened —
+    # reported as "the save box just flashes at me".
+    grep -q 'property bool namePrimed' "$QML" \
+        && ok "the dialogue waits for the prompt before it can close" \
+        || bad "no namePrimed guard — the save dialogue will flash open and shut"
+
     grep -q 'Enter to save' "$QML" \
         && ok "the dialogue says how to commit the name" \
         || bad "the save dialogue no longer says Enter saves and Esc cancels"
