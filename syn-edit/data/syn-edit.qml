@@ -2038,6 +2038,42 @@ FloatingWindow {
             // changes is what happens to the thing you pick.
             property string mode: "open"
 
+            // ⛔ THE DIALOG HAD NO WAY TO NAME A FILE. "Save here" hid the
+            // browser and left a `:w /dir/` on the engine's command line at the
+            // very bottom of the window — which is a naming prompt only if you
+            // already know to look there. Reported twice as "no gui save path":
+            // the picker opens, you pick a folder, and there is nowhere to type.
+            //
+            // So the naming step stays HERE, in the dialog, in front of the
+            // person doing it. The text is still the ENGINE's — this renders
+            // root.st.cmdline and sends every key to the engine, exactly as the
+            // status-line command line does. The window still owns no text and
+            // there is still one undo stack; the prompt simply moved to where
+            // it is being used.
+            property bool naming: false
+
+            // The basename being typed, read off the engine's command line by
+            // stripping the ":w " the button seeded it with.
+            readonly property string typedName: {
+                const c = root.st.cmdline || ""
+                if (c.indexOf(":w ") !== 0) return ""
+                const rest = c.substring(3)
+                const slash = rest.lastIndexOf("/")
+                return slash < 0 ? rest : rest.substring(slash + 1)
+            }
+
+            // The engine leaving its command line ends the naming step: either
+            // it wrote the file (Return) or the user backed out (Esc). Both
+            // mean this dialog is finished.
+            onNamingChanged: if (!browser.naming) browser.visible = false
+            Connections {
+                target: root
+                function onStChanged() {
+                    if (browser.naming && (root.st.cmdline || "") === "")
+                        browser.naming = false
+                }
+            }
+
             function show() {
                 // Beside the file being edited, which is where the next one
                 // usually is. A [No Name] buffer has no directory, so home.
@@ -2065,8 +2101,12 @@ FloatingWindow {
             // a whole path is an existing file being written over — and
             // seeding the full `:w /path/to/it` is what makes that an ANSWER
             // rather than a click: it is on screen, and it takes Return.
+            // ⚠ The dialog STAYS UP. Focus goes to the editor so keys reach the
+            // engine's command line, and the dialog renders what is being typed
+            // — so the folder you picked is still on screen while you name the
+            // file in it.
             function seedWrite(partial) {
-                browser.visible = false
+                browser.naming = true
                 editor.forceActiveFocus()
                 root.promptWrite(partial)
             }
@@ -2168,9 +2208,65 @@ FloatingWindow {
                     color: root.cText
                 }
 
+                // ── the name being typed ────────────────────────────────────
+                //
+                // Only while naming, and it is a Text: the characters live in
+                // the engine's command line, not here. The caret is drawn the
+                // same way the status line draws it, so there is one place that
+                // knows what a caret looks like.
+                Row {
+                    width: parent.width
+                    visible: browser.naming
+                    spacing: 6
+
+                    Text {
+                        text: I18n.tr("Name:")
+                        font.family: root.monoFont
+                        font.pixelSize: root.ui(12)
+                        color: root.cDim
+                    }
+
+                    Rectangle {
+                        width: parent.width - Math.round(root.ui(56))
+                        height: Math.round(root.ui(20))
+                        color: root.wash(0.18)
+                        border { width: 1; color: root.cAccent }
+
+                        Text {
+                            id: nameText
+                            anchors { left: parent.left; leftMargin: 4
+                                      verticalCenter: parent.verticalCenter }
+                            text: browser.typedName
+                            font.family: root.monoFont
+                            font.pixelSize: root.ui(12)
+                            color: root.cText
+                        }
+
+                        Rectangle {
+                            x: 4 + nameText.contentWidth
+                            width: Math.max(1, Math.round(root.ui(7)))
+                            height: Math.round(root.ui(14))
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: root.cAccent
+                            opacity: 0.8
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    visible: browser.naming
+                    text: I18n.tr("Enter to save · Esc to cancel")
+                    font.family: root.monoFont
+                    font.pixelSize: root.ui(11)
+                    color: root.cDim
+                }
+
                 Rectangle {
                     width: parent.width
-                    height: browser.height - Math.round(root.ui(96))
+                    visible: !browser.naming
+                    height: browser.naming ? 0
+                                           : browser.height - Math.round(root.ui(96))
                     color: "transparent"
 
                     ListView {
@@ -2240,6 +2336,7 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
+                    visible: !browser.naming
                     ToolButton { label: browser.mode === "save" ? I18n.tr("Save here")
                                                                 : I18n.tr("Open")
                                  tip: browser.mode === "save"
