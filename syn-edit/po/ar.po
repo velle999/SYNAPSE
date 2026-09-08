@@ -68,6 +68,9 @@ msgstr "تجاهل"
 msgid "Documents"
 msgstr "المستندات"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter للحفظ · Esc للإلغاء"
+
 msgid "Find"
 msgstr "بحث"
 
@@ -79,6 +82,9 @@ msgstr "إدراج"
 
 msgid "NORMAL"
 msgstr "عادي"
+
+msgid "Name:"
+msgstr "الاسم:"
 
 msgid "New"
 msgstr "جديد"
@@ -142,9 +148,6 @@ msgstr "حفظ باسم"
 msgid "Save As…"
 msgstr "حفظ باسم…"
 
-msgid "Save here"
-msgstr "الحفظ هنا"
-
 msgid "Save in:"
 msgstr "الحفظ في:"
 
@@ -202,6 +205,9 @@ msgstr "فتح الملف المظلّل"
 msgid "re-read the file"
 msgstr "إعادة قراءة الملف"
 
+msgid "save under the name above"
+msgstr "حفظ بالاسم أعلاه"
+
 msgid "show or hide the list"
 msgstr "إظهار القائمة أو إخفاؤها"
 
@@ -213,9 +219,6 @@ msgstr "اكتب مساراً (:e)"
 
 msgid "version and licence"
 msgstr "الإصدار والرخصة"
-
-msgid "write into this folder — then type a name"
-msgstr "الكتابة في هذا المجلد — ثم اكتب اسماً"
 
 msgid "write it somewhere else"
 msgstr "كتابته في مكان آخر"
@@ -541,3 +544,9 @@ msgstr "«%s» %zu سطرًا --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "أُوقف الماكرو التعاودي"
+
+#~ msgid "Save here"
+#~ msgstr "الحفظ هنا"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "الكتابة في هذا المجلد — ثم اكتب اسماً"

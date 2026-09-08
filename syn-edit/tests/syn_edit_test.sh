@@ -1102,6 +1102,55 @@ if [ -f "$QML" ]; then
         && ok "the dialogue says how to commit the name" \
         || bad "the save dialogue no longer says Enter saves and Esc cancels"
 
+    # ⛔ AND THE GUARD ABOVE WAS NOT ENOUGH. 0.1.0-25 shipped namePrimed, this
+    # grep passed, and the dialogue still flashed open and shut, unusable, and
+    # was reported a second time. The cause was nowhere near the dialogue:
+    #
+    #   promptWrite sends `<Esc>` and `:w <dir>/` as TWO commands. The Esc's
+    #   frame is NORMAL with no command line on it yet, the frame loop's
+    #   "NORMAL is not a resting state" rule answers it with `gui insert`, and
+    #   that arrives AFTER the `:w` and cancels the prompt. The dialogue armed
+    #   on the prompt and closed on the very next frame.
+    #
+    # The engine half of that is a fact worth pinning: an insert cancels a
+    # pending command line. It is correct, it is why the reflex was fatal, and
+    # a change to it would silently unload the fix below.
+    printf 'keys %%3Aw%%20x\ngui insert\nquit\n' | "$E" serve "$T/tab.txt" \
+        | gq '^S	cmdline	$'
+    check "an insert cancels a pending command line" $?
+
+    # So the reflex must not answer a frame the engine has already moved past.
+    # A mode with an unanswered command behind it is the mode the engine WAS
+    # in. This is the whole fix, and it is invisible to every other check here.
+    grep -q 'root.acked === root.sent' "$QML" \
+        && grep -A2 'root.acked === root.sent' "$QML" | grep -q 'guiInsert()' \
+        && ok "the insert reflex waits for the engine to catch up" \
+        || bad "guiInsert is fired on a stale frame again — the save dialogue will flash"
+
+    # ⛔ AND THE BUTTON LABELLED SAVE MUST SAVE. It called seedWrite() with the
+    # FOLDER alone, which threw the typed name away and put `:w <dir>/` back on
+    # the line; Return then wrote to the directory — "Directory not empty",
+    # nothing saved. Typing a name and clicking Save was the one route that
+    # could not work, and it is the obvious one.
+    grep -A8 'I18n.tr("Save")' "$QML" | grep -q 'browser.commit()' \
+        && ok "the dialogue's Save button commits the typed name" \
+        || bad "the Save button re-seeds the prompt again — it drops the name and writes to the folder"
+
+    grep -A4 'function commit' "$QML" | grep -q 'sendKeys("<CR>")' \
+        && ok "commit() sends the Return that writes the file" \
+        || bad "browser.commit no longer commits — Save cannot finish a write"
+
+    # ⛔ AND CANCEL MUST CANCEL. It hid the dialogue without sending <Esc>, so
+    # the abandoned `:w` stayed live on the engine and the next thing typed went
+    # onto the COMMAND LINE instead of the document.
+    grep -A4 'function dismiss' "$QML" | grep -q 'sendKeys("<Esc>")' \
+        && ok "cancelling a save leaves the engine's command line" \
+        || bad "dismiss no longer escapes the prompt — typing after Cancel lands on the command line"
+
+    grep -A2 'I18n.tr("Cancel")' "$QML" | grep -q 'browser.dismiss()' \
+        && ok "the Cancel button routes through dismiss()" \
+        || bad "Cancel only hides the dialogue again — the prompt outlives it"
+
     # Every button and menu entry routes its keys through actKeys, which leaves
     # INSERT mode first. A raw sendKeys on a button is the bug coming back.
     grep -q 'function actKeys' "$QML" \

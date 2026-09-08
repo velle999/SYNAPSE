@@ -197,7 +197,29 @@ pkgver=0.1.0
 #   ⚠ Two counted sentences were assembled from fragments and are one msgid
 #   each now: "%1:%2  of %3" in the status bar, and "%1 of %2 done" in the task
 #   pane — a trn(), because the number of tasks decides the form.
-pkgrel=25
+# 26: THE SAVE DIALOGUE FLASHED OPEN AND SHUT, AND -25 DID NOT FIX IT.
+#   The cause was nowhere near the dialogue. promptWrite() sends `<Esc>` and
+#   `:w <dir>/` as TWO commands; the Esc's frame is NORMAL with no command line
+#   on it yet, and the frame loop's "NORMAL is not a resting state" reflex
+#   answered it with a `gui insert` that arrived AFTER the `:w` and cancelled
+#   the prompt. The dialogue armed on the prompt and closed on the next frame.
+#   -25's namePrimed guard could not have helped — it made the close
+#   deterministic rather than stopping it, and its grep passed the whole time.
+#   ⛔ A MODE WITH AN UNANSWERED COMMAND BEHIND IT IS NOT THE MODE THE ENGINE IS
+#   IN. The reflex now waits for `acked === sent`, the same reasoning hasSel
+#   already does with selHint.
+#   Two more in the same dialogue, both found reading it: the button labelled
+#   Save called seedWrite() with the FOLDER alone, which threw away the name in
+#   the field directly above it and left `:w <dir>/` on the line — Return then
+#   wrote to the directory ("Directory not empty"), so typing a name and
+#   clicking Save was the one route that could not save. And Cancel hid the
+#   dialogue without sending <Esc>, leaving the abandoned `:w` live so the next
+#   thing typed went onto the command line instead of the document.
+#   Save and Return now share commit(); Cancel and Esc share dismiss().
+#   ⚠ The suite's checks here were all greps, which is why -25 shipped green.
+#   The engine half is driven for real now: an insert cancels a pending command
+#   line, which is the fact that made the reflex fatal.
+pkgrel=26
 pkgdesc="SynapseOS text editor: modal in a terminal, modeless in a window, syntax highlighting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

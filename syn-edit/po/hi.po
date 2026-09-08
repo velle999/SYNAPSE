@@ -63,6 +63,9 @@ msgstr "छोड़ दें"
 msgid "Documents"
 msgstr "दस्तावेज़"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "सहेजने के लिए Enter · रद्द करने के लिए Esc"
+
 msgid "Find"
 msgstr "खोजें"
 
@@ -74,6 +77,9 @@ msgstr "इंसर्ट"
 
 msgid "NORMAL"
 msgstr "सामान्य"
+
+msgid "Name:"
+msgstr "नाम:"
 
 msgid "New"
 msgstr "नया"
@@ -137,9 +143,6 @@ msgstr "इस रूप में सहेजें"
 msgid "Save As…"
 msgstr "इस रूप में सहेजें…"
 
-msgid "Save here"
-msgstr "यहाँ सहेजें"
-
 msgid "Save in:"
 msgstr "यहाँ सहेजें:"
 
@@ -197,6 +200,9 @@ msgstr "चिह्नित फ़ाइल खोलें"
 msgid "re-read the file"
 msgstr "फ़ाइल फिर से पढ़ें"
 
+msgid "save under the name above"
+msgstr "ऊपर दिए गए नाम से सहेजें"
+
 msgid "show or hide the list"
 msgstr "सूची दिखाएँ या छिपाएँ"
 
@@ -208,9 +214,6 @@ msgstr "पथ टाइप करें (:e)"
 
 msgid "version and licence"
 msgstr "संस्करण और लाइसेंस"
-
-msgid "write into this folder — then type a name"
-msgstr "इस फ़ोल्डर में लिखें — फिर नाम टाइप करें"
 
 msgid "write it somewhere else"
 msgstr "कहीं और लिखें"
@@ -524,3 +527,9 @@ msgstr "\"%s\" %zu पंक्तियाँ --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "पुनरावर्ती मैक्रो रोका गया"
+
+#~ msgid "Save here"
+#~ msgstr "यहाँ सहेजें"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "इस फ़ोल्डर में लिखें — फिर नाम टाइप करें"

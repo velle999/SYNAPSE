@@ -373,8 +373,25 @@ FloatingWindow {
              * ⚠ Not a loop: `gui insert` always ends in INSERT, so the frame
              * it produces does not ask again. A SELECTION is visual mode and
              * is left alone, and so is the engine's command line — those are
-             * states the user asked to be in. */
-            if ((root.st.mode || "NORMAL") === "NORMAL") root.guiInsert()
+             * states the user asked to be in.
+             *
+             * ⛔ ONLY ON A FRAME THAT IS THE ENGINE'S LAST WORD. Leaving the
+             * command line alone is not something this can read off the frame
+             * in front of it: promptWrite sends `<Esc>` and `:w <dir>/` as two
+             * commands, and the Esc's frame is NORMAL with no command line on
+             * it yet — the `:w` is still in flight. Answering that frame sent
+             * a `gui insert` which arrived AFTER the `:w` and cancelled it, so
+             * the save dialogue armed on the prompt and shut on the very next
+             * frame — it flashed, and could not be used at all.
+             *
+             * A mode with an unanswered command behind it is not the mode the
+             * engine is in, it is the mode it was in — so the rule waits for
+             * the engine to catch up. `acked === sent` is that, and it is the
+             * same reasoning `hasSel` does with selHint above. The 0.1.0-25
+             * namePrimed guard could not have helped: it made the close
+             * deterministic rather than stopping it. */
+            if (root.acked === root.sent
+                && (root.st.mode || "NORMAL") === "NORMAL") root.guiInsert()
         }
     }
 
@@ -2139,12 +2156,48 @@ FloatingWindow {
                 root.promptWrite((browser.dir === "/" ? "" : browser.dir) + "/" + keep)
             }
 
-            // "Save here" is now just "commit what is typed". Kept because a
-            // button that says what Return does is worth having.
+            // Seed the engine's :w line with a WHOLE path — an existing file
+            // being written over. Naming continues from there, so the path is
+            // on screen and still takes Return.
             function seedWrite(partial) {
                 browser.namePrimed = false
                 browser.naming = true
                 root.promptWrite(partial)
+            }
+
+            // Commit what is typed — what Return does, and what the button
+            // labelled Save has to do too.
+            //
+            // ⛔ THE SAVE BUTTON RE-SEEDED THE PROMPT INSTEAD OF COMMITTING IT.
+            // It called seedWrite() with the FOLDER alone, which threw away the
+            // name in the field directly above it and put `:w <dir>/` back on
+            // the line. Return then wrote to the directory — "Directory not
+            // empty", nothing written, buffer still [No Name]. Typing a name
+            // and clicking Save is the obvious way to save a file, and it was
+            // the one way that could not: only Return worked, and nothing on
+            // screen said so.
+            //
+            // With nothing typed there is nothing to commit, so the prompt is
+            // simply re-armed on the current folder rather than the button
+            // doing something destructive to be seen doing something.
+            function commit() {
+                if (browser.typedName !== "") root.sendKeys("<CR>")
+                else                          browser.startNaming()
+            }
+
+            // Back out — what Esc does, and what Cancel has to do too.
+            //
+            // ⛔ CANCEL LEFT THE ENGINE IN COMMAND MODE. It hid the dialogue and
+            // returned focus without sending <Esc>, so the abandoned `:w` line
+            // stayed live: the next thing typed went onto the COMMAND LINE
+            // instead of the document. Cancelling a save quietly ate the next
+            // sentence. Hiding the window that draws a prompt is not the same
+            // as cancelling the prompt.
+            function dismiss() {
+                if (browser.mode === "save") root.sendKeys("<Esc>")
+                browser.naming = false
+                browser.visible = false
+                editor.forceActiveFocus()
             }
 
             function load() {
@@ -2223,10 +2276,7 @@ FloatingWindow {
                 const saving = browser.mode === "save"
 
                 if (event.key === Qt.Key_Escape) {
-                    if (saving) root.sendKeys("<Esc>")
-                    browser.naming = false
-                    browser.visible = false
-                    editor.forceActiveFocus()
+                    browser.dismiss()
                 } else if (event.key === Qt.Key_Down) {
                     browser.sel = Math.min(browser.rows.length - 1, browser.sel + 1)
                 } else if (event.key === Qt.Key_Up) {
@@ -2242,7 +2292,7 @@ FloatingWindow {
                     // A name that has been typed is what Return commits. With
                     // nothing typed it still means "go into the highlighted
                     // thing", which is what Return means in a list.
-                    if (saving && browser.typedName !== "") root.sendKeys("<CR>")
+                    if (saving && browser.typedName !== "") browser.commit()
                     else browser.enter(browser.rows[browser.sel])
                 } else if (saving && event.text && event.text.length === 1
                            && event.text >= " ") {
@@ -2396,11 +2446,10 @@ FloatingWindow {
                     ToolButton { label: browser.mode === "save" ? I18n.tr("Save")
                                                                 : I18n.tr("Open")
                                  tip: browser.mode === "save"
-                                      ? I18n.tr("write into this folder — then type a name")
+                                      ? I18n.tr("save under the name above")
                                       : I18n.tr("open the highlighted file")
                                  onTriggered: browser.mode === "save"
-                                              ? browser.seedWrite(
-                                                    (browser.dir === "/" ? "" : browser.dir) + "/")
+                                              ? browser.commit()
                                               : browser.enter(browser.rows[browser.sel]) }
                     // Only in save mode, and only with a FILE highlighted —
                     // there is nothing to write over otherwise.
@@ -2410,7 +2459,7 @@ FloatingWindow {
                                  tip: I18n.tr("write over the highlighted file")
                                  onTriggered: browser.enter(browser.rows[browser.sel]) }
                     ToolButton { label: I18n.tr("Cancel"); tip: "Esc"
-                                 onTriggered: { browser.visible = false; editor.forceActiveFocus() } }
+                                 onTriggered: browser.dismiss() }
                 }
             }
         }

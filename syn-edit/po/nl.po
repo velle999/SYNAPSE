@@ -63,6 +63,9 @@ msgstr "Weggooien"
 msgid "Documents"
 msgstr "Documenten"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter om op te slaan · Esc om te annuleren"
+
 msgid "Find"
 msgstr "Zoeken"
 
@@ -74,6 +77,9 @@ msgstr "INVOEGEN"
 
 msgid "NORMAL"
 msgstr "NORMAAL"
+
+msgid "Name:"
+msgstr "Naam:"
 
 msgid "New"
 msgstr "Nieuw"
@@ -137,9 +143,6 @@ msgstr "Opslaan als"
 msgid "Save As…"
 msgstr "Opslaan als…"
 
-msgid "Save here"
-msgstr "Hier opslaan"
-
 msgid "Save in:"
 msgstr "Opslaan in:"
 
@@ -197,6 +200,9 @@ msgstr "het gemarkeerde bestand openen"
 msgid "re-read the file"
 msgstr "het bestand opnieuw inlezen"
 
+msgid "save under the name above"
+msgstr "opslaan onder de naam hierboven"
+
 msgid "show or hide the list"
 msgstr "de lijst tonen of verbergen"
 
@@ -208,9 +214,6 @@ msgstr "een pad typen (:e)"
 
 msgid "version and licence"
 msgstr "versie en licentie"
-
-msgid "write into this folder — then type a name"
-msgstr "in deze map schrijven — typ daarna een naam"
 
 msgid "write it somewhere else"
 msgstr "het ergens anders schrijven"
@@ -524,3 +527,9 @@ msgstr "\"%s\" %zu regels --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "recursieve macro gestopt"
+
+#~ msgid "Save here"
+#~ msgstr "Hier opslaan"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "in deze map schrijven — typ daarna een naam"

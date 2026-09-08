@@ -65,6 +65,9 @@ msgstr "Отбросить"
 msgid "Documents"
 msgstr "Документы"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter — сохранить · Esc — отменить"
+
 msgid "Find"
 msgstr "Найти"
 
@@ -76,6 +79,9 @@ msgstr "ВСТАВКА"
 
 msgid "NORMAL"
 msgstr "ОБЫЧНЫЙ"
+
+msgid "Name:"
+msgstr "Имя:"
 
 msgid "New"
 msgstr "Создать"
@@ -139,9 +145,6 @@ msgstr "Сохранить как"
 msgid "Save As…"
 msgstr "Сохранить как…"
 
-msgid "Save here"
-msgstr "Сохранить сюда"
-
 msgid "Save in:"
 msgstr "Сохранить в:"
 
@@ -199,6 +202,9 @@ msgstr "открыть выделенный файл"
 msgid "re-read the file"
 msgstr "перечитать файл"
 
+msgid "save under the name above"
+msgstr "сохранить под именем выше"
+
 msgid "show or hide the list"
 msgstr "показать или скрыть список"
 
@@ -210,9 +216,6 @@ msgstr "ввести путь (:e)"
 
 msgid "version and licence"
 msgstr "версия и лицензия"
-
-msgid "write into this folder — then type a name"
-msgstr "записать в эту папку — затем введите имя"
 
 msgid "write it somewhere else"
 msgstr "записать в другое место"
@@ -529,3 +532,9 @@ msgstr "«%s» строк: %zu --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "рекурсивный макрос остановлен"
+
+#~ msgid "Save here"
+#~ msgstr "Сохранить сюда"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "записать в эту папку — затем введите имя"

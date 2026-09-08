@@ -62,6 +62,9 @@ msgstr "丢弃"
 msgid "Documents"
 msgstr "文档"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter 保存 · Esc 取消"
+
 msgid "Find"
 msgstr "查找"
 
@@ -73,6 +76,9 @@ msgstr "插入"
 
 msgid "NORMAL"
 msgstr "常规"
+
+msgid "Name:"
+msgstr "名称:"
 
 msgid "New"
 msgstr "新建"
@@ -136,9 +142,6 @@ msgstr "另存为"
 msgid "Save As…"
 msgstr "另存为…"
 
-msgid "Save here"
-msgstr "保存到此处"
-
 msgid "Save in:"
 msgstr "保存位置："
 
@@ -196,6 +199,9 @@ msgstr "打开高亮的文件"
 msgid "re-read the file"
 msgstr "重新读取文件"
 
+msgid "save under the name above"
+msgstr "以上方的名称保存"
+
 msgid "show or hide the list"
 msgstr "显示或隐藏列表"
 
@@ -207,9 +213,6 @@ msgstr "输入路径 (:e)"
 
 msgid "version and licence"
 msgstr "版本与许可"
-
-msgid "write into this folder — then type a name"
-msgstr "写入此文件夹 — 然后输入文件名"
 
 msgid "write it somewhere else"
 msgstr "写到别的位置"
@@ -517,3 +520,9 @@ msgstr "“%s” %zu 行 --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "递归宏已停止"
+
+#~ msgid "Save here"
+#~ msgstr "保存到此处"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "写入此文件夹 — 然后输入文件名"

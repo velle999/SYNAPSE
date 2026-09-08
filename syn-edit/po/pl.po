@@ -65,6 +65,9 @@ msgstr "Odrzuć"
 msgid "Documents"
 msgstr "Dokumenty"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter zapisuje · Esc anuluje"
+
 msgid "Find"
 msgstr "Znajdź"
 
@@ -76,6 +79,9 @@ msgstr "WSTAWIANIE"
 
 msgid "NORMAL"
 msgstr "NORMALNY"
+
+msgid "Name:"
+msgstr "Nazwa:"
 
 msgid "New"
 msgstr "Nowy"
@@ -139,9 +145,6 @@ msgstr "Zapisz jako"
 msgid "Save As…"
 msgstr "Zapisz jako…"
 
-msgid "Save here"
-msgstr "Zapisz tutaj"
-
 msgid "Save in:"
 msgstr "Zapisz w:"
 
@@ -199,6 +202,9 @@ msgstr "otwórz podświetlony plik"
 msgid "re-read the file"
 msgstr "odczytaj plik ponownie"
 
+msgid "save under the name above"
+msgstr "zapisz pod nazwą powyżej"
+
 msgid "show or hide the list"
 msgstr "pokaż lub ukryj listę"
 
@@ -210,9 +216,6 @@ msgstr "wpisz ścieżkę (:e)"
 
 msgid "version and licence"
 msgstr "wersja i licencja"
-
-msgid "write into this folder — then type a name"
-msgstr "zapisz w tym katalogu — potem wpisz nazwę"
 
 msgid "write it somewhere else"
 msgstr "zapisz gdzie indziej"
@@ -529,3 +532,9 @@ msgstr "„%s” %zu wierszy --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "zatrzymano rekurencyjne makro"
+
+#~ msgid "Save here"
+#~ msgstr "Zapisz tutaj"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "zapisz w tym katalogu — potem wpisz nazwę"

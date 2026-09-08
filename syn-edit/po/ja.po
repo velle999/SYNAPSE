@@ -62,6 +62,9 @@ msgstr "破棄"
 msgid "Documents"
 msgstr "ドキュメント"
 
+msgid "Enter to save · Esc to cancel"
+msgstr "Enter で保存 · Esc で取り消し"
+
 msgid "Find"
 msgstr "検索"
 
@@ -73,6 +76,9 @@ msgstr "挿入"
 
 msgid "NORMAL"
 msgstr "ノーマル"
+
+msgid "Name:"
+msgstr "名前:"
 
 msgid "New"
 msgstr "新規"
@@ -136,9 +142,6 @@ msgstr "名前を付けて保存"
 msgid "Save As…"
 msgstr "名前を付けて保存…"
 
-msgid "Save here"
-msgstr "ここに保存"
-
 msgid "Save in:"
 msgstr "保存先:"
 
@@ -196,6 +199,9 @@ msgstr "選択中のファイルを開きます"
 msgid "re-read the file"
 msgstr "ファイルを読み直します"
 
+msgid "save under the name above"
+msgstr "上の名前で保存します"
+
 msgid "show or hide the list"
 msgstr "一覧の表示を切り替えます"
 
@@ -207,9 +213,6 @@ msgstr "パスを入力します (:e)"
 
 msgid "version and licence"
 msgstr "バージョンとライセンス"
-
-msgid "write into this folder — then type a name"
-msgstr "このフォルダーに保存します — 続けて名前を入力してください"
 
 msgid "write it somewhere else"
 msgstr "別の場所に保存します"
@@ -520,3 +523,9 @@ msgstr "「%s」%zu 行 --%d%%--"
 
 msgid "recursive macro stopped"
 msgstr "再帰マクロを停止しました"
+
+#~ msgid "Save here"
+#~ msgstr "ここに保存"
+
+#~ msgid "write into this folder — then type a name"
+#~ msgstr "このフォルダーに保存します — 続けて名前を入力してください"

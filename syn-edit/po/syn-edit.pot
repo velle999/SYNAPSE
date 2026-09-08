@@ -193,6 +193,9 @@ msgstr ""
 msgid "re-read the file"
 msgstr ""
 
+msgid "save under the name above"
+msgstr ""
+
 msgid "show or hide the list"
 msgstr ""
 
@@ -203,9 +206,6 @@ msgid "type a path (:e)"
 msgstr ""
 
 msgid "version and licence"
-msgstr ""
-
-msgid "write into this folder — then type a name"
 msgstr ""
 
 msgid "write it somewhere else"
