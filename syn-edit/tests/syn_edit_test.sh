@@ -1063,6 +1063,18 @@ if [ -f "$QML" ]; then
         && ok "the save dialogue has a naming state" \
         || bad "syn-edit.qml lost browser.naming — Save is a folder picker with no name field"
 
+    # ⛔ AND IT IS LIVE WHEN THE DIALOGUE OPENS. The second regression was
+    # fixed once by revealing the field after clicking "Save here" — so what a
+    # person saw on hitting Save was still a folder picker with nowhere to
+    # type, and it was reported again from the same screenshot. A save
+    # dialogue that cannot be typed into ON SIGHT is the bug.
+     grep -A20 'function showSave' "$QML" | grep -q 'startNaming()' \
+        && ok "the name field is live the moment Save opens" \
+        || bad "showSave no longer starts naming — the field is hidden behind a second click"
+    grep -B2 'visible: browser.mode === "save"' "$QML" | grep -q 'Row {' \
+        && ok "the name row shows for the whole of save mode" \
+        || bad "the Name row is gated on a sub-state again — it must show on open"
+
     # "Save here" must ENTER that state rather than dismiss the dialogue.
     grep -A6 'function seedWrite' "$QML" | grep -q 'browser.naming = true' \
         && ok "picking a folder starts naming instead of closing the dialogue" \

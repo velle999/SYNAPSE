@@ -2052,6 +2052,11 @@ FloatingWindow {
             // it is being used.
             property bool naming: false
 
+            // Walking into a folder re-points the pending :w at it. Without
+            // this the name would be typed against whatever folder the dialogue
+            // opened in, and land somewhere the person is no longer looking.
+            onDirChanged: if (browser.naming) browser.startNaming()
+
             // The basename being typed, read off the engine's command line by
             // stripping the ":w " the button seeded it with.
             readonly property string typedName: {
@@ -2094,6 +2099,14 @@ FloatingWindow {
                 browser.visible = true
                 browser.load()
                 browser.forceActiveFocus()
+                // ⛔ THE NAME FIELD IS LIVE THE MOMENT THE DIALOGUE OPENS.
+                // It used to appear only after clicking "Save here", so what a
+                // person actually saw when they hit Save was a folder picker
+                // with nowhere to type — reported as "no way to name a file"
+                // both times this regressed. A save dialogue that cannot be
+                // typed into on sight is the bug, whatever it does on a second
+                // click.
+                browser.startNaming()
             }
 
             // Leave the browser and hand the rest to the engine's command
@@ -2105,9 +2118,19 @@ FloatingWindow {
             // engine's command line, and the dialog renders what is being typed
             // — so the folder you picked is still on screen while you name the
             // file in it.
+            // Open the engine's :w line for the CURRENT folder, keeping whatever
+            // basename has been typed so far — so walking into a subfolder does
+            // not throw the name away.
+            function startNaming() {
+                const keep = browser.typedName
+                browser.naming = true
+                root.promptWrite((browser.dir === "/" ? "" : browser.dir) + "/" + keep)
+            }
+
+            // "Save here" is now just "commit what is typed". Kept because a
+            // button that says what Return does is worth having.
             function seedWrite(partial) {
                 browser.naming = true
-                editor.forceActiveFocus()
                 root.promptWrite(partial)
             }
 
@@ -2177,8 +2200,18 @@ FloatingWindow {
                 }
             }
 
+            // ⛔ IN SAVE MODE THIS DIALOGUE IS A TEXT FIELD AS WELL AS A LIST.
+            // The characters are still the engine's — every printable key is
+            // forwarded to its :w line, exactly as typing at the status line
+            // would be — but they are COLLECTED HERE, because here is where the
+            // person is looking. Arrows still walk the list, so naming and
+            // browsing happen together instead of in two modes.
             Keys.onPressed: (event) => {
+                const saving = browser.mode === "save"
+
                 if (event.key === Qt.Key_Escape) {
+                    if (saving) root.sendKeys("<Esc>")
+                    browser.naming = false
                     browser.visible = false
                     editor.forceActiveFocus()
                 } else if (event.key === Qt.Key_Down) {
@@ -2186,9 +2219,21 @@ FloatingWindow {
                 } else if (event.key === Qt.Key_Up) {
                     browser.sel = Math.max(0, browser.sel - 1)
                 } else if (event.key === Qt.Key_Backspace) {
-                    browser.up()
+                    // ⚠ In save mode Backspace edits the NAME. Going up a
+                    // folder is the "../" row and the Open dialogue's Backspace;
+                    // taking a character back is what Backspace means while
+                    // something is being typed.
+                    if (saving) root.sendKeys("<BS>")
+                    else        browser.up()
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    browser.enter(browser.rows[browser.sel])
+                    // A name that has been typed is what Return commits. With
+                    // nothing typed it still means "go into the highlighted
+                    // thing", which is what Return means in a list.
+                    if (saving && browser.typedName !== "") root.sendKeys("<CR>")
+                    else browser.enter(browser.rows[browser.sel])
+                } else if (saving && event.text && event.text.length === 1
+                           && event.text >= " ") {
+                    root.sendKeys(event.text)
                 } else {
                     return
                 }
@@ -2216,7 +2261,7 @@ FloatingWindow {
                 // knows what a caret looks like.
                 Row {
                     width: parent.width
-                    visible: browser.naming
+                    visible: browser.mode === "save"
                     spacing: 6
 
                     Text {
@@ -2255,7 +2300,7 @@ FloatingWindow {
 
                 Text {
                     width: parent.width
-                    visible: browser.naming
+                    visible: browser.mode === "save"
                     text: I18n.tr("Enter to save · Esc to cancel")
                     font.family: root.monoFont
                     font.pixelSize: root.ui(11)
@@ -2264,9 +2309,8 @@ FloatingWindow {
 
                 Rectangle {
                     width: parent.width
-                    visible: !browser.naming
-                    height: browser.naming ? 0
-                                           : browser.height - Math.round(root.ui(96))
+                    height: browser.height - Math.round(root.ui(
+                                browser.mode === "save" ? 150 : 96))
                     color: "transparent"
 
                     ListView {
@@ -2336,8 +2380,7 @@ FloatingWindow {
 
                 Row {
                     spacing: 8
-                    visible: !browser.naming
-                    ToolButton { label: browser.mode === "save" ? I18n.tr("Save here")
+                    ToolButton { label: browser.mode === "save" ? I18n.tr("Save")
                                                                 : I18n.tr("Open")
                                  tip: browser.mode === "save"
                                       ? I18n.tr("write into this folder — then type a name")
