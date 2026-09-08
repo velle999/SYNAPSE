@@ -1043,6 +1043,45 @@ if [ -f "$QML" ]; then
         && ok "the browser doubles as the Save As folder chooser" \
         || bad "syn-edit.qml lost the Save As browser mode"
 
+    # ── AND THE NAME MUST BE TYPEABLE WHERE THE SAVE IS HAPPENING ───────────
+    #
+    # ⛔ THIS REGRESSED TWICE, and the checks above passed through both of
+    # them. They assert that the FUNCTIONS exist, which stayed true the whole
+    # time the dialogue was unusable: Save opened a folder picker with "Save
+    # here" and "Cancel", picking a folder HID the dialogue, and the naming
+    # prompt appeared as ":w /dir/" on the bottom line of the window — a
+    # prompt only if you already know to look there. Reported both times in
+    # the same words: "no gui save path, there's no way to name a file".
+    #
+    # So the rule is not "the code that names a file exists". The rule is:
+    #
+    #     THE SAVE DIALOGUE ITSELF MUST SHOW THE NAME BEING TYPED.
+    #
+    # Test the surface, not the helper. A function can be present and reachable
+    # and still leave a person staring at a file picker with nowhere to type.
+    grep -q 'property bool naming' "$QML" \
+        && ok "the save dialogue has a naming state" \
+        || bad "syn-edit.qml lost browser.naming — Save is a folder picker with no name field"
+
+    # "Save here" must ENTER that state rather than dismiss the dialogue.
+    grep -A6 'function seedWrite' "$QML" | grep -q 'browser.naming = true' \
+        && ok "picking a folder starts naming instead of closing the dialogue" \
+        || bad "seedWrite no longer keeps the dialogue up — the name prompt goes off-screen again"
+    grep -A6 'function seedWrite' "$QML" | grep -q 'browser.visible = false' \
+        && bad "seedWrite hides the dialogue again — that is the exact regression, twice over" \
+        || ok "seedWrite does not hide the dialogue"
+
+    # The field has to RENDER what the engine is collecting, or it is a label.
+    grep -q 'typedName' "$QML" && grep -q 'text: browser.typedName' "$QML" \
+        && ok "the dialogue renders the name as it is typed" \
+        || bad "the Name field no longer shows st.cmdline — nothing on screen while typing"
+
+    # And it must say how to finish. A field with no Return hint is the same
+    # dead end one layer along.
+    grep -q 'Enter to save' "$QML" \
+        && ok "the dialogue says how to commit the name" \
+        || bad "the save dialogue no longer says Enter saves and Esc cancels"
+
     # Every button and menu entry routes its keys through actKeys, which leaves
     # INSERT mode first. A raw sendKeys on a button is the bug coming back.
     grep -q 'function actKeys' "$QML" \
