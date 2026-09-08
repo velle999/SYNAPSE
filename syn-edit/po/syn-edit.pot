@@ -60,6 +60,9 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+msgid "Enter to save · Esc to cancel"
+msgstr ""
+
 msgid "Find"
 msgstr ""
 
@@ -70,6 +73,9 @@ msgid "INSERT"
 msgstr ""
 
 msgid "NORMAL"
+msgstr ""
+
+msgid "Name:"
 msgstr ""
 
 msgid "New"
@@ -128,9 +134,6 @@ msgid "Save As"
 msgstr ""
 
 msgid "Save As…"
-msgstr ""
-
-msgid "Save here"
 msgstr ""
 
 msgid "Save in:"
