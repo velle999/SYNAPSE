@@ -219,7 +219,43 @@ pkgver=0.1.0
 #   ⚠ The suite's checks here were all greps, which is why -25 shipped green.
 #   The engine half is driven for real now: an insert cancels a pending command
 #   line, which is the fact that made the reflex fatal.
-pkgrel=26
+# 27: THE SAVE DIALOGUE READ AGAIN — FIVE MORE, ALL IN THE NAMING STEP.
+#   ⛔ BACKSPACE ATE THE PATH. <BS> goes to the engine's command line, which
+#   pops the last byte of `:w <dir>/<name>` and has no idea a folder is on it.
+#   Six of them after typing `notes` in /home/velle left `:w /home/velle`: the
+#   Name field read "velle" under a "Save in:" that still said /home/velle, and
+#   Return wrote to the DIRECTORY. One more made it `:w /home/vell` — a file
+#   called `vell` in /home, a folder up from anything on screen — and emptying
+#   the line dropped the engine out of command mode, shutting the dialogue by
+#   itself. It stops at the name now, and with nothing left to take back it
+#   goes UP a folder: the "../" row is a mouse target and the listing never
+#   contains "..", so that was also the only way out of a folder from the
+#   KEYBOARD while saving.
+#   ⛔ AND DELETE WAS A SECOND, UNBOUNDED BACKSPACE. Qt gives Key_Delete the
+#   text "\x7f", and K_BS IS 127 — forwarding raw event.text popped bytes off
+#   the same line with nothing on screen saying why the folder was changing.
+#   Every character goes through keyName() now, the one place that decides what
+#   may reach the engine; <Del> is K_DEL = 0x108 and falls out of cmdline_key's
+#   `k > 0xff` guard, so it does nothing, which is what Delete means with the
+#   caret at the end of what is typed.
+#   ⛔ AND A SUCCESSFUL SAVE LEFT THE WINDOW WITH NO KEYBOARD. Every other way
+#   out of the dialogue pairs the hide with forceActiveFocus(); the ORDINARY
+#   one — Return, file written, prompt gone — hid the item that held active
+#   focus and gave it to nobody, so the caret sat there in INSERT and not one
+#   keystroke reached it until the text was clicked.
+#   ⚠ AND THE TYPED NAME WAS A FRAME BEHIND, for exactly the reason a selection
+#   is. Reading it off the last frame dropped whatever was typed inside the
+#   last round trip when a folder was double-clicked, and made Save RE-SEED the
+#   prompt instead of writing when it was clicked in the same round trip as the
+#   final letter. curName answers with what the window asked for while anything
+#   is in flight — hasSel/selHint again.
+#   ⚠ AND -26's OWN CHECK WAS VACUOUS. serve.c emits an empty command line in
+#   frame 0, before it reads a byte of stdin, so grepping the transcript for
+#   one passed with the `gui insert` taken out of the driven sequence
+#   altogether. It reads the command lines IN ORDER now: empty, the prompt,
+#   empty. The Save button's grep matched all three Save-ish labels the same
+#   way, and names that button's own onTriggered instead.
+pkgrel=27
 pkgdesc="SynapseOS text editor: modal in a terminal, modeless in a window, syntax highlighting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

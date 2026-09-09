@@ -2084,6 +2084,21 @@ FloatingWindow {
                 return slash < 0 ? rest : rest.substring(slash + 1)
             }
 
+            // The name as the window last ASKED for it.
+            //
+            // ⚠ THE TYPED NAME IS A FRAME BEHIND, for exactly the reason a
+            // selection is — see hasSel. The keys go out and the command line
+            // they landed on is a round trip away, so typedName answers with
+            // the name as it was one keystroke ago. Reading it directly meant
+            // typing a name and double-clicking a folder dropped the last
+            // letters, and clicking Save inside the same round trip as the
+            // final letter saw "" and RE-SEEDED the prompt instead of writing.
+            // While something is in flight, what was asked for is the better
+            // answer; when nothing is, the engine's own line is.
+            property string nameHint: ""
+            readonly property string curName: root.sent === root.acked
+                                            ? browser.typedName : browser.nameHint
+
             // The engine leaving its command line ends the naming step: either
             // it wrote the file (Return) or the user backed out (Esc). Both
             // mean this dialog is finished.
@@ -2097,7 +2112,17 @@ FloatingWindow {
             // cancel on Esc.
             property bool namePrimed: false
 
-            onNamingChanged: if (!browser.naming) browser.visible = false
+            // ⛔ AND THE WINDOW HAS TO GET ITS KEYBOARD BACK. Every other way
+            // out of this dialogue hands focus to the editor; the ORDINARY one
+            // — Return, file written, prompt gone — did not. Hiding the item
+            // that holds active focus gives it to nobody, so after a successful
+            // Save As the caret sat there in INSERT and not one keystroke
+            // reached it until the text was clicked. Closing is closing,
+            // however it happened.
+            onNamingChanged: if (!browser.naming) {
+                browser.visible = false
+                editor.forceActiveFocus()
+            }
             Connections {
                 target: root
                 function onStChanged() {
@@ -2142,18 +2167,20 @@ FloatingWindow {
             // a whole path is an existing file being written over — and
             // seeding the full `:w /path/to/it` is what makes that an ANSWER
             // rather than a click: it is on screen, and it takes Return.
-            // ⚠ The dialog STAYS UP. Focus goes to the editor so keys reach the
-            // engine's command line, and the dialog renders what is being typed
-            // — so the folder you picked is still on screen while you name the
-            // file in it.
+            // ⚠ The dialog STAYS UP AND KEEPS FOCUS. It forwards the keys to
+            // the engine's command line itself (see Keys.onPressed) and renders
+            // what is being typed — so the folder you picked is still on screen
+            // while you name the file in it. Focus goes back to the editor when
+            // the dialogue CLOSES, and only then.
             // Open the engine's :w line for the CURRENT folder, keeping whatever
             // basename has been typed so far — so walking into a subfolder does
             // not throw the name away.
             function startNaming() {
-                const keep = browser.typedName
+                const keep = browser.curName
                 browser.namePrimed = false
                 browser.naming = true
                 root.promptWrite((browser.dir === "/" ? "" : browser.dir) + "/" + keep)
+                browser.nameHint = keep
             }
 
             // Seed the engine's :w line with a WHOLE path — an existing file
@@ -2163,6 +2190,8 @@ FloatingWindow {
                 browser.namePrimed = false
                 browser.naming = true
                 root.promptWrite(partial)
+                const slash = partial.lastIndexOf("/")
+                browser.nameHint = slash < 0 ? partial : partial.substring(slash + 1)
             }
 
             // Commit what is typed — what Return does, and what the button
@@ -2181,8 +2210,8 @@ FloatingWindow {
             // simply re-armed on the current folder rather than the button
             // doing something destructive to be seen doing something.
             function commit() {
-                if (browser.typedName !== "") root.sendKeys("<CR>")
-                else                          browser.startNaming()
+                if (browser.curName !== "") root.sendKeys("<CR>")
+                else                        browser.startNaming()
             }
 
             // Back out — what Esc does, and what Cancel has to do too.
@@ -2282,21 +2311,61 @@ FloatingWindow {
                 } else if (event.key === Qt.Key_Up) {
                     browser.sel = Math.max(0, browser.sel - 1)
                 } else if (event.key === Qt.Key_Backspace) {
-                    // ⚠ In save mode Backspace edits the NAME. Going up a
-                    // folder is the "../" row and the Open dialogue's Backspace;
-                    // taking a character back is what Backspace means while
-                    // something is being typed.
-                    if (saving) root.sendKeys("<BS>")
-                    else        browser.up()
+                    // ⚠ In save mode Backspace edits the NAME — and STOPS at
+                    // the name.
+                    //
+                    // ⛔ IT USED TO EAT THE PATH. <BS> goes to the engine's
+                    // command line, which pops the last byte of
+                    // `:w <dir>/<name>` and has no idea a folder is on it. Six
+                    // of them after typing `notes` in /home/velle left
+                    // `:w /home/velle`: the Name field read "velle" under a
+                    // "Save in:" that still said /home/velle, and Return wrote
+                    // to the DIRECTORY — "Directory not empty". One more made
+                    // it `:w /home/vell`, and Return then wrote a file called
+                    // `vell` in /home, a folder up from anything on screen.
+                    // Emptying the line altogether dropped the engine out of
+                    // command mode and shut the dialogue by itself.
+                    //
+                    // With nothing left to take back it means what it means in
+                    // the Open dialogue: go up a folder. That is also the only
+                    // way out of a folder from the KEYBOARD while saving — the
+                    // "../" row is a mouse target, and arrows walk the listing,
+                    // which never contains "..".
+                    if (saving && browser.curName !== "") {
+                        const back = browser.curName.substring(0, browser.curName.length - 1)
+                        root.sendKeys("<BS>")
+                        browser.nameHint = back
+                    } else {
+                        browser.up()
+                    }
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     // A name that has been typed is what Return commits. With
                     // nothing typed it still means "go into the highlighted
                     // thing", which is what Return means in a list.
-                    if (saving && browser.typedName !== "") browser.commit()
+                    if (saving && browser.curName !== "") browser.commit()
                     else browser.enter(browser.rows[browser.sel])
-                } else if (saving && event.text && event.text.length === 1
-                           && event.text >= " ") {
-                    root.sendKeys(event.text)
+                } else if (saving) {
+                    // ⛔ THROUGH keyName(), NOT event.text. keyName() is the
+                    // one place that decides what may reach the engine, and
+                    // going around it made DELETE A SECOND BACKSPACE. Qt gives
+                    // Key_Delete the text "\x7f", forwarded raw that is 127,
+                    // and K_BS IS 127 (syn-edit.h) — so Delete popped a byte
+                    // off the :w line, path and all, past the bound Backspace
+                    // now respects and with nothing on screen saying why the
+                    // folder was changing. Through keyName() it is "<Del>",
+                    // which is K_DEL = 0x108 and falls out of cmdline_key's
+                    // `k > 0xff` guard: nothing happens, which is what Delete
+                    // means with the caret at the end of what is typed.
+                    //
+                    // Anything keyName() answers with a NAME — <Del>, <Tab> —
+                    // is a key rather than a character and has no business in
+                    // a filename. "<lt>" is the one name that IS a character:
+                    // the notation cannot carry "<" literally.
+                    const k = root.keyName(event)
+                    if (k === "" || (k.length > 1 && k !== "<lt>")) return
+                    const typed = browser.curName + (k === "<lt>" ? "<" : k)
+                    root.sendKeys(k)
+                    browser.nameHint = typed
                 } else {
                     return
                 }
@@ -2344,7 +2413,7 @@ FloatingWindow {
                             id: nameText
                             anchors { left: parent.left; leftMargin: 4
                                       verticalCenter: parent.verticalCenter }
-                            text: browser.typedName
+                            text: browser.curName
                             font.family: root.monoFont
                             font.pixelSize: root.ui(12)
                             color: root.cText

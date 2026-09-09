@@ -1084,9 +1084,19 @@ if [ -f "$QML" ]; then
         || ok "seedWrite does not hide the dialogue"
 
     # The field has to RENDER what the engine is collecting, or it is a label.
-    grep -q 'typedName' "$QML" && grep -q 'text: browser.typedName' "$QML" \
+    grep -q 'typedName' "$QML" && grep -q 'text: browser.curName' "$QML" \
         && ok "the dialogue renders the name as it is typed" \
         || bad "the Name field no longer shows st.cmdline — nothing on screen while typing"
+
+    # ⛔ AND IT READS THE NAME A ROUND TRIP EARLY. typedName is parsed off the
+    # LAST FRAME RECEIVED, so it is one keystroke behind — clicking Save in the
+    # same round trip as the final letter saw "" and re-seeded the prompt, and
+    # walking into a folder dropped whatever had not been answered yet. Same
+    # rule as hasSel: in flight, trust what was asked for.
+    grep -q 'readonly property string curName: root.sent === root.acked' "$QML" \
+        && grep -A1 'readonly property string curName' "$QML" | grep -q 'browser.nameHint' \
+        && ok "the name is read from what was typed, not from the last frame" \
+        || bad "curName reads a stale frame again — Save drops the last letters typed"
 
     # And it must say how to finish. A field with no Return hint is the same
     # dead end one layer along.
@@ -1115,9 +1125,18 @@ if [ -f "$QML" ]; then
     # The engine half of that is a fact worth pinning: an insert cancels a
     # pending command line. It is correct, it is why the reflex was fatal, and
     # a change to it would silently unload the fix below.
-    printf 'keys %%3Aw%%20x\ngui insert\nquit\n' | "$E" serve "$T/tab.txt" \
-        | gq '^S	cmdline	$'
-    check "an insert cancels a pending command line" $?
+    #
+    # ⛔ AND THE FRAME HAS TO BE THE LAST ONE. `gq '^S	cmdline	$'` over the
+    # whole transcript matched the STARTUP frame — serve.c emits frame 0, empty
+    # command line and all, before it reads a byte of stdin — so this passed
+    # with the `gui insert` taken out of the sequence entirely. It pinned
+    # nothing for a pkgrel. Read the command lines IN ORDER instead: empty at
+    # rest, the prompt, then empty again because the insert cancelled it.
+    seq=$(printf 'keys %%3Aw%%20x\ngui insert\nquit\n' | "$E" serve "$T/tab.txt" \
+              | awk -F'	' '$1 == "S" && $2 == "cmdline" { printf "[%s]", $3 }')
+    [ "$seq" = "[][%3Aw%20x][]" ] \
+        && ok "an insert cancels a pending command line" \
+        || bad "the command line went $seq — an insert no longer cancels a pending :w"
 
     # So the reflex must not answer a frame the engine has already moved past.
     # A mode with an unanswered command behind it is the mode the engine WAS
@@ -1132,7 +1151,11 @@ if [ -f "$QML" ]; then
     # the line; Return then wrote to the directory — "Directory not empty",
     # nothing saved. Typing a name and clicking Save was the one route that
     # could not work, and it is the obvious one.
-    grep -A8 'I18n.tr("Save")' "$QML" | grep -q 'browser.commit()' \
+    #
+    # ⚠ AND IT HAS TO BE THAT BUTTON. `grep -A8 'I18n.tr("Save")'` matched all
+    # three Save-ish labels and would have passed on a browser.commit() sitting
+    # anywhere near any of them. The button is its own onTriggered line.
+    grep -A1 'onTriggered: browser.mode === "save"' "$QML" | grep -q 'browser.commit()' \
         && ok "the dialogue's Save button commits the typed name" \
         || bad "the Save button re-seeds the prompt again — it drops the name and writes to the folder"
 
@@ -1150,6 +1173,34 @@ if [ -f "$QML" ]; then
     grep -A2 'I18n.tr("Cancel")' "$QML" | grep -q 'browser.dismiss()' \
         && ok "the Cancel button routes through dismiss()" \
         || bad "Cancel only hides the dialogue again — the prompt outlives it"
+
+    # ⛔ AND A SUCCESSFUL SAVE MUST HAND THE KEYBOARD BACK. Every other exit
+    # pairs the hide with forceActiveFocus(); the ordinary one — Return, file
+    # written, prompt gone — hid the focused item and gave focus to nobody, so
+    # the caret was in INSERT and no key reached it until the text was clicked.
+    grep -A3 'onNamingChanged' "$QML" | grep -q 'editor.forceActiveFocus()' \
+        && ok "closing on a finished write returns focus to the editor" \
+        || bad "a successful save leaves the window with no keyboard focus"
+
+    # ⛔ AND BACKSPACE MUST STOP AT THE NAME. <BS> pops the last byte of
+    # `:w <dir>/<name>`, folder and all: enough of them turned /home/velle into
+    # /home/vell and wrote the file a directory up from anything on screen.
+    # With the name empty it goes UP a folder — which is also the only way out
+    # of one from the keyboard while saving, since the listing has no "..".
+    grep -q 'if (saving && browser.curName !== "") {' "$QML" \
+        && sed -n '/if (saving && browser.curName !== "") {/,+5p' "$QML" | grep -q 'browser.up()' \
+        && ok "Backspace edits the name and then goes up a folder" \
+        || bad "Backspace eats the folder off the :w line again — the write lands elsewhere"
+
+    # ⛔ AND EVERY CHARACTER GOES THROUGH keyName(). Forwarding raw event.text
+    # made Delete a second, UNBOUNDED Backspace: Qt gives Key_Delete the text
+    # "\x7f", and K_BS is 127, so it popped bytes off the :w line — folder and
+    # all — while the Name field said nothing about it.
+    grep -q 'const k = root.keyName(event)' "$QML" \
+        && grep -q 'k.length > 1 && k !== "<lt>"' "$QML" \
+        && ! grep -q 'sendKeys(event.text' "$QML" \
+        && ok "the save dialogue filters its keys through keyName()" \
+        || bad "the save dialogue forwards raw event.text again — Delete is a Backspace that eats the path"
 
     # Every button and menu entry routes its keys through actKeys, which leaves
     # INSERT mode first. A raw sendKeys on a button is the bug coming back.
