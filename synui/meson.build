@@ -399,6 +399,8 @@ executable('synui-idle-inhibit',
 synui_datadir = get_option('prefix') / get_option('datadir') / 'synui'
 install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
+install_data('data/saver-logo.png',    install_dir : synui_datadir)
+install_data('data/saver-dvd.png',     install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
 install_data('data/logo-bold.svg',    install_dir : synui_datadir)
 install_data('data/logo-ink.svg',     install_dir : synui_datadir)

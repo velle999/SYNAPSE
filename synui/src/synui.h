@@ -3093,6 +3093,8 @@ typedef enum {
     SYN_SAVER_STARFIELD,      /* flight through starfield; cairo */
     SYN_SAVER_SLIDESHOW,      /* wallpapers, crossfaded */
     SYN_SAVER_MATRIX,         /* the matrix.c kanji rain, full screen */
+    SYN_SAVER_FLOATERS,       /* the Synapse mark drifting on Bezier paths */
+    SYN_SAVER_DVD,            /* the DVD bounce: constant velocity, hard reflect */
     SYN_SAVER_MODE_COUNT,     /* keep last — the Super+Z panel cycles on it */
 } syn_saver_mode_t;
 
@@ -3208,6 +3210,47 @@ typedef struct {
 
 #define SYN_SAVER_STARS 320
 
+/* One drifting logo in SYN_SAVER_FLOATERS.
+ *
+ * ⚠ This is NOT a DVD-style bounce, and guessing that it was would have got it
+ * wrong: xfce4-screensaver's floaters walks a CUBIC BEZIER from one point to
+ * another over `dur` seconds, then picks a fresh path. Nothing reflects off an
+ * edge — a floater that leaves simply gets a path that brings it back. That is
+ * what gives the motion its lazy, non-repeating feel; velocity reflection looks
+ * mechanical by comparison.
+ *
+ * Scale interpolates linearly along the path and opacity is derived from it, so
+ * a floater fades as it recedes without a separate alpha track. */
+typedef struct {
+    double x0, y0;            /* path start, layout px */
+    double c1x, c1y;          /* control point 1 */
+    double c2x, c2y;          /* control point 2 */
+    double x1, y1;            /* path end */
+    double x, y;              /* evaluated position for this frame */
+    double s0, s1, scale;     /* scale at start / end / now, as a multiplier */
+    double angle, spin;       /* radians, and radians per second */
+    double t, dur;            /* seconds elapsed along the path, and its length */
+} syn_floater_t;
+
+/* xfce4-screensaver's own default. Five is enough to never look periodic and
+ * few enough that the whole mode costs one image blit each per frame. */
+#define SYN_SAVER_FLOATERS_N 5
+
+/* SYN_SAVER_DVD — the other one, and deliberately NOT the same maths.
+ *
+ * Where floaters eases along a curve, this is the DVD player idle logo: one
+ * sprite, constant velocity, a hard reflection off each edge, and a new colour
+ * on every bounce. The entire appeal is waiting for it to hit an exact corner,
+ * so the corner count is kept and shown — it is the only reason anyone watches.
+ */
+typedef struct {
+    double x, y;              /* top-left of the sprite, layout px */
+    double dx, dy;            /* px per second; sign flips on reflection */
+    int    colour;            /* index into the bounce palette */
+    int    corners;           /* exact corner hits since the saver came up */
+    double flash;             /* seconds left on the corner-hit flash */
+} syn_dvd_t;
+
 /* Live screensaver state. `active` is the saver being ON SCREEN, which is a
  * different thing from the stage being armed — see saver.c. */
 typedef struct {
@@ -3283,6 +3326,17 @@ typedef struct {
     /* CLOCK: the drift, in layout coordinates, so the glyphs do not sit on the
      * same pixels for hours. Burn-in is not hypothetical on the OLED. */
     double drift_x, drift_y, drift_dx, drift_dy;
+
+    /* FLOATERS: the mark, decoded once when the saver comes up rather than per
+     * frame, and the floaters riding it. One surface is shared by all five —
+     * cairo scales it at paint time, so five floaters cost one decode. */
+    cairo_surface_t *logo;
+    syn_floater_t    floaters[SYN_SAVER_FLOATERS_N];
+
+    /* DVD: its own sprite (a different image from the Synapse mark) and the
+     * one bouncing thing that rides it. */
+    cairo_surface_t *dvd_img;
+    syn_dvd_t        dvd;
 } syn_saver_t;
 
 /* Which screen edge the dock lives on (dock.c). BOTTOM/TOP render a

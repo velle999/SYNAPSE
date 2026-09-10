@@ -1106,7 +1106,8 @@ disarmed beside dim/blank/lock/suspend, and **off by default** — `saver_timeou
 0, which is also what a config predating the feature parses to, so no existing
 install changed behaviour until it was asked to.
 
-- [x] **Five modes** — `blank`, `clock`, `starfield`, `slideshow`, `matrix` —
+- [x] **Seven modes** — `blank`, `clock`, `starfield`, `slideshow`, `matrix`,
+      `floaters`, `dvd` —
       with the vocabulary in `saver_state.c` rather than in the panel, because
       the parser, the panel and `saver.state` all resolve names through it and a
       second copy of either table is a second thing to keep in step. Modes are

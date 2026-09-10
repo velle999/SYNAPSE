@@ -399,6 +399,344 @@ static void saver_step_stars(syn_saver_t *sv, double dt)
     }
 }
 
+/* ── Floaters ────────────────────────────────────────────
+ *
+ * A recreation of xfce4-screensaver's `floaters` saver with the Synapse mark.
+ * The algorithm is theirs, read from savers/floaters.c upstream rather than
+ * guessed at, because the obvious guess is wrong: floaters does NOT bounce off
+ * the screen edges like a DVD logo. Each floater walks a cubic Bezier from one
+ * point to another over a few seconds, then chooses a fresh path. Upstream
+ * picks between three kinds, and the mix is what stops it looking like a loop:
+ *
+ *   BUBBLE UP      — straight up and off the top, and gone.
+ *   COME ON-SCREEN — in from outside the frame to a random interior point.
+ *   WANDER         — a short hop to somewhere nearby.
+ *
+ * Scale interpolates linearly along the path, and opacity is pow(scale, 1/2.2)
+ * of it — upstream's GAMMA — so a small floater is also a faint one and the
+ * depth reads without a second animation track.
+ *
+ * ⚠ ONE DELIBERATE DEPARTURE: upstream sizes floaters in absolute pixels
+ * (FLOATER_MIN_SIZE 16, FLOATER_MAX_SIZE 128). That was written for 1024x768;
+ * on a 4K panel 16px is a speck. Sizes here are a fraction of the SHORT screen
+ * edge, so the mode looks the same on every monitor instead of dissolving on
+ * big ones.
+ */
+
+/* Where a floater may live: upstream lets the canvas run 10% past the visible
+ * bounds so paths can start and end off-screen. */
+#define SAVER_FLOAT_MARGIN 0.10
+
+/* As a fraction of the short screen edge. */
+#define SAVER_FLOAT_MIN_S  0.07
+#define SAVER_FLOAT_MAX_S  0.26
+
+/* Give a floater a fresh path. `first` seeds it anywhere on screen at start-up
+ * instead of marching all five in from the edge at once. */
+static void saver_floater_path(syn_floater_t *f, int w, int h, bool first)
+{
+    double mx = w * SAVER_FLOAT_MARGIN, my = h * SAVER_FLOAT_MARGIN;
+
+    /* Continue from where we are, so paths chain smoothly. */
+    if (first) {
+        f->x = saver_frand() * w;
+        f->y = saver_frand() * h;
+        f->scale = SAVER_FLOAT_MIN_S + saver_frand() * (SAVER_FLOAT_MAX_S - SAVER_FLOAT_MIN_S);
+        f->angle = 0.0;
+    }
+    f->x0 = f->x;
+    f->y0 = f->y;
+    f->s0 = f->scale;
+
+    /* Upstream weights these by how far behind the frame rate it is running;
+     * with no frame-rate feedback here a fixed mix gives the same character.
+     * Wander dominates, so the screen mostly drifts rather than churns. */
+    int roll = rand() % 100;
+
+    if (roll < 12) {
+        /* BUBBLE UP: straight off the top, shrinking as it goes. */
+        f->x1  = f->x0 + (saver_frand() - 0.5) * w * 0.15;
+        f->y1  = -my;
+        f->s1  = SAVER_FLOAT_MIN_S;
+        f->dur = 6.0 + saver_frand() * 5.0;
+    } else if (roll < 30 || f->x0 < -mx || f->x0 > w + mx ||
+                            f->y0 < -my || f->y0 > h + my) {
+        /* COME ON-SCREEN. Also the forced choice when we are outside the
+         * canvas — this is what replaces edge reflection: a floater that left
+         * is not bounced back, it is given a path that returns it. */
+        switch (rand() & 3) {
+        case 0: f->x0 = -mx;      f->y0 = saver_frand() * h; break;
+        case 1: f->x0 = w + mx;   f->y0 = saver_frand() * h; break;
+        case 2: f->x0 = saver_frand() * w; f->y0 = -my;      break;
+        default:f->x0 = saver_frand() * w; f->y0 = h + my;   break;
+        }
+        f->x  = f->x0; f->y = f->y0;
+        f->x1 = w * 0.2 + saver_frand() * w * 0.6;
+        f->y1 = h * 0.2 + saver_frand() * h * 0.6;
+        f->s1 = SAVER_FLOAT_MIN_S + saver_frand() * (SAVER_FLOAT_MAX_S - SAVER_FLOAT_MIN_S);
+        f->dur = 7.0 + saver_frand() * 6.0;
+    } else {
+        /* WANDER: a short hop somewhere near, the common case. */
+        f->x1 = f->x0 + (saver_frand() - 0.5) * w * 0.5;
+        f->y1 = f->y0 + (saver_frand() - 0.5) * h * 0.5;
+        f->s1 = SAVER_FLOAT_MIN_S + saver_frand() * (SAVER_FLOAT_MAX_S - SAVER_FLOAT_MIN_S);
+        f->dur = 5.0 + saver_frand() * 6.0;
+    }
+
+    /* Control points scattered around the straight line. Without the offset a
+     * cubic through collinear points IS a straight line, and the whole reason
+     * for using a curve is lost. */
+    double dx = f->x1 - f->x0, dy = f->y1 - f->y0;
+    double spread = 0.35;
+    f->c1x = f->x0 + dx / 3.0 + (saver_frand() - 0.5) * fabs(dy) * spread + (saver_frand() - 0.5) * w * 0.08;
+    f->c1y = f->y0 + dy / 3.0 + (saver_frand() - 0.5) * fabs(dx) * spread + (saver_frand() - 0.5) * h * 0.08;
+    f->c2x = f->x0 + dx * 2.0 / 3.0 + (saver_frand() - 0.5) * fabs(dy) * spread + (saver_frand() - 0.5) * w * 0.08;
+    f->c2y = f->y0 + dy * 2.0 / 3.0 + (saver_frand() - 0.5) * fabs(dx) * spread + (saver_frand() - 0.5) * h * 0.08;
+
+    /* Rotation, upstream's distribution: 80% none, 15% a slight tilt, 5% a
+     * real turn. Mostly-upright is deliberate — a logo that spins constantly
+     * reads as a toy, and this one is the OS's mark. */
+    int r = rand() % 100;
+    double turns = (r < 80) ? 0.0
+                 : (r < 95) ? (saver_frand() - 0.5) * 0.05 * M_PI
+                            : (saver_frand() - 0.5) * 0.25 * M_PI;
+    f->spin = (f->dur > 0.0) ? turns / f->dur : 0.0;
+
+    f->t = 0.0;
+}
+
+static void saver_step_floaters(syn_saver_t *sv, double dt, int w, int h)
+{
+    if (w <= 0 || h <= 0) return;
+
+    for (int i = 0; i < SYN_SAVER_FLOATERS_N; i++) {
+        syn_floater_t *f = &sv->floaters[i];
+
+        if (f->dur <= 0.0) { saver_floater_path(f, w, h, true); continue; }
+
+        f->t += dt;
+        double u = f->t / f->dur;
+        if (u >= 1.0) { saver_floater_path(f, w, h, false); continue; }
+
+        /* Cubic Bezier. Written out rather than via a helper because this is
+         * the whole of the motion and it is easier to check in one place. */
+        double v  = 1.0 - u;
+        double b0 = v * v * v;
+        double b1 = 3.0 * v * v * u;
+        double b2 = 3.0 * v * u * u;
+        double b3 = u * u * u;
+
+        f->x = b0 * f->x0 + b1 * f->c1x + b2 * f->c2x + b3 * f->x1;
+        f->y = b0 * f->y0 + b1 * f->c1y + b2 * f->c2y + b3 * f->y1;
+
+        f->scale  = f->s0 + (f->s1 - f->s0) * u;
+        f->angle += f->spin * dt;
+    }
+}
+
+static void saver_draw_floaters(syn_server_t *s, cairo_t *cr, int w, int h)
+{
+    syn_saver_t *sv = &s->saver;
+
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    cairo_paint(cr);
+
+    if (!sv->logo) {
+        /* No mark to float. Say so rather than showing black, which is
+         * indistinguishable from the saver having failed entirely. */
+        double acc[3];
+        saver_accent(s, acc);
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL,
+                               CAIRO_FONT_WEIGHT_NORMAL);
+        cairo_set_font_size(cr, 22);
+        cairo_set_source_rgba(cr, acc[0], acc[1], acc[2], 0.85);
+        const char *msg = "saver: logo image missing";
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, msg, &te);
+        cairo_move_to(cr, w / 2.0 - te.width / 2 - te.x_bearing, h / 2.0);
+        cairo_show_text(cr, msg);
+        return;
+    }
+
+    int iw = cairo_image_surface_get_width(sv->logo);
+    int ih = cairo_image_surface_get_height(sv->logo);
+    if (iw <= 0 || ih <= 0) return;
+
+    double shortest = (w < h) ? w : h;
+
+    for (int i = 0; i < SYN_SAVER_FLOATERS_N; i++) {
+        syn_floater_t *f = &sv->floaters[i];
+        if (f->dur <= 0.0) continue;          /* not seeded yet */
+
+        /* Target width as a fraction of the short edge; height follows the
+         * image's own aspect so the mark is never stretched. */
+        double target = shortest * f->scale;
+        double k = target / (double)iw;
+
+        /* Upstream: opacity = pow(scale, 1/GAMMA), GAMMA 2.2. Normalised into
+         * the size range first, so the faintest is the smallest rather than
+         * every floater sitting at nearly full alpha. */
+        double norm = (f->scale - SAVER_FLOAT_MIN_S) /
+                      (SAVER_FLOAT_MAX_S - SAVER_FLOAT_MIN_S);
+        if (norm < 0.0) norm = 0.0;
+        if (norm > 1.0) norm = 1.0;
+        double alpha = 0.35 + 0.65 * pow(norm, 1.0 / 2.2);
+
+        cairo_save(cr);
+        cairo_translate(cr, f->x, f->y);
+        if (f->angle != 0.0) cairo_rotate(cr, f->angle);
+        cairo_scale(cr, k, k);
+        /* Centre the mark on its own position, in IMAGE space — after the
+         * scale, so the offset scales with it. */
+        cairo_set_source_surface(cr, sv->logo, -iw / 2.0, -ih / 2.0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+        cairo_paint_with_alpha(cr, alpha);
+        cairo_restore(cr);
+    }
+}
+
+/* ── DVD bounce ──────────────────────────────────────────
+ *
+ * The idle logo from a DVD player: constant velocity, a hard reflection off
+ * each edge, and a fresh colour on every bounce. Deliberately NOT the floaters
+ * maths — that one eases along a curve and never touches an edge; this one is
+ * all edges, and the difference is the point of having both.
+ *
+ * ⛔ THE ARTWORK IS PURE BLACK ON TRANSPARENT. Painting data/saver-dvd.png
+ * normally onto the saver's black background draws black on black and looks
+ * exactly like the mode is broken. It is used as a MASK — cairo_mask_surface
+ * paints the current source through the image's alpha — which is also what
+ * makes recolouring on each bounce free rather than needing N tinted copies.
+ */
+
+/* Fraction of the screen width the sprite occupies. */
+#define SAVER_DVD_W 0.16
+/* Travel speed as a fraction of the screen width per second. Slow: the whole
+ * appeal is the wait. */
+#define SAVER_DVD_SPEED 0.11
+/* How long the corner-hit flash stays up, seconds. */
+#define SAVER_DVD_FLASH 2.5
+
+/* The bounce palette. Saturated and light enough to read on black; stepped one
+ * entry per bounce so consecutive bounces never repeat a colour. */
+static const double saver_dvd_palette[][3] = {
+    { 0.98, 0.30, 0.36 },   /* red     */
+    { 0.99, 0.68, 0.25 },   /* amber   */
+    { 0.97, 0.93, 0.38 },   /* yellow  */
+    { 0.45, 0.90, 0.50 },   /* green   */
+    { 0.35, 0.82, 0.95 },   /* cyan    */
+    { 0.48, 0.55, 0.98 },   /* blue    */
+    { 0.78, 0.51, 0.96 },   /* violet  */
+    { 0.98, 0.55, 0.82 },   /* pink    */
+};
+#define SAVER_DVD_COLOURS \
+    ((int)(sizeof(saver_dvd_palette) / sizeof(saver_dvd_palette[0])))
+
+/* Sprite size for a given viewport, honouring the image's own aspect. */
+static void saver_dvd_size(syn_saver_t *sv, int w, double *out_w, double *out_h)
+{
+    double sw = w * SAVER_DVD_W, sh = sw * 0.44;   /* fallback aspect */
+    if (sv->dvd_img) {
+        int iw = cairo_image_surface_get_width(sv->dvd_img);
+        int ih = cairo_image_surface_get_height(sv->dvd_img);
+        if (iw > 0 && ih > 0) sh = sw * (double)ih / (double)iw;
+    }
+    *out_w = sw; *out_h = sh;
+}
+
+static void saver_step_dvd(syn_saver_t *sv, double dt, int w, int h)
+{
+    if (w <= 0 || h <= 0) return;
+    syn_dvd_t *d = &sv->dvd;
+
+    double sw, sh;
+    saver_dvd_size(sv, w, &sw, &sh);
+
+    d->x += d->dx * dt;
+    d->y += d->dy * dt;
+    if (d->flash > 0.0) d->flash -= dt;
+
+    /* Reflect, and clamp back inside in the same step. Without the clamp a
+     * sprite that overshoots badly (a long dt after a resume) can end up
+     * outside with its velocity already reversed, flip again next frame, and
+     * sit there vibrating against the edge. */
+    bool bx = false, by = false;
+    if (d->x <= 0.0)          { d->x = 0.0;      d->dx = fabs(d->dx);  bx = true; }
+    else if (d->x + sw >= w)  { d->x = w - sw;   d->dx = -fabs(d->dx); bx = true; }
+    if (d->y <= 0.0)          { d->y = 0.0;      d->dy = fabs(d->dy);  by = true; }
+    else if (d->y + sh >= h)  { d->y = h - sh;   d->dy = -fabs(d->dy); by = true; }
+
+    if (bx || by) d->colour = (d->colour + 1) % SAVER_DVD_COLOURS;
+
+    /* Both axes in the same frame IS the corner hit. This is the entire reason
+     * the mode exists, so it is counted and announced rather than left for
+     * someone to notice. */
+    if (bx && by) {
+        d->corners++;
+        d->flash = SAVER_DVD_FLASH;
+        wlr_log(WLR_INFO, "synui: saver: dvd hit the corner (%d)", d->corners);
+    }
+}
+
+static void saver_draw_dvd(syn_server_t *s, cairo_t *cr, int w, int h)
+{
+    syn_saver_t *sv = &s->saver;
+    syn_dvd_t *d = &sv->dvd;
+
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    cairo_paint(cr);
+
+    if (!sv->dvd_img) {
+        double acc[3];
+        saver_accent(s, acc);
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL,
+                               CAIRO_FONT_WEIGHT_NORMAL);
+        cairo_set_font_size(cr, 22);
+        cairo_set_source_rgba(cr, acc[0], acc[1], acc[2], 0.85);
+        const char *msg = "saver: dvd image missing";
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, msg, &te);
+        cairo_move_to(cr, w / 2.0 - te.width / 2 - te.x_bearing, h / 2.0);
+        cairo_show_text(cr, msg);
+        return;
+    }
+
+    int iw = cairo_image_surface_get_width(sv->dvd_img);
+    int ih = cairo_image_surface_get_height(sv->dvd_img);
+    if (iw <= 0 || ih <= 0) return;
+
+    double sw, sh;
+    saver_dvd_size(sv, w, &sw, &sh);
+
+    const double *c = saver_dvd_palette[d->colour % SAVER_DVD_COLOURS];
+
+    cairo_save(cr);
+    cairo_translate(cr, d->x, d->y);
+    cairo_scale(cr, sw / (double)iw, sh / (double)ih);
+    /* ⛔ mask, not paint — see the note at the top of this section. */
+    cairo_set_source_rgb(cr, c[0], c[1], c[2]);
+    cairo_mask_surface(cr, sv->dvd_img, 0, 0);
+    cairo_restore(cr);
+
+    /* The corner tally, shown only just after a hit. Nobody wants a permanent
+     * counter on a screensaver, but everybody wants to know it happened. */
+    if (d->flash > 0.0 && d->corners > 0) {
+        double a = d->flash / SAVER_DVD_FLASH;
+        if (a > 1.0) a = 1.0;
+        char msg[64];
+        snprintf(msg, sizeof(msg), d->corners == 1 ? "%d corner hit" : "%d corner hits",
+                 d->corners);
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL,
+                               CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 28);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, msg, &te);
+        cairo_set_source_rgba(cr, c[0], c[1], c[2], a);
+        cairo_move_to(cr, w / 2.0 - te.width / 2 - te.x_bearing, h * 0.9);
+        cairo_show_text(cr, msg);
+    }
+}
+
 static void saver_draw_slideshow(syn_server_t *s, cairo_t *cr, int w, int h)
 {
     syn_saver_t *sv = &s->saver;
@@ -514,6 +852,8 @@ static bool saver_needs_paint(syn_server_t *s, syn_saver_mode_t mode, int min_no
 
     switch (mode) {
     case SYN_SAVER_STARFIELD:
+    case SYN_SAVER_FLOATERS:
+    case SYN_SAVER_DVD:
         return true;                       /* every frame, by nature */
     case SYN_SAVER_SLIDESHOW:
         /* Only while a crossfade is actually in flight. */
@@ -569,6 +909,8 @@ static void saver_render(syn_server_t *s)
             case SYN_SAVER_CLOCK:     saver_draw_clock(s, cr, bw, bh); break;
             case SYN_SAVER_STARFIELD: saver_draw_starfield(s, cr, bw, bh); break;
             case SYN_SAVER_SLIDESHOW: saver_draw_slideshow(s, cr, bw, bh); break;
+            case SYN_SAVER_FLOATERS:  saver_draw_floaters(s, cr, bw, bh); break;
+            case SYN_SAVER_DVD:       saver_draw_dvd(s, cr, bw, bh); break;
             default: break;
             }
             cairo_destroy(cr);
@@ -622,6 +964,20 @@ static int saver_frame_cb(void *data)
     case SYN_SAVER_STARFIELD:
         saver_step_stars(sv, dt);
         break;
+    case SYN_SAVER_FLOATERS: {
+        struct wlr_box box = { 0 };
+        if (sv->npane > 0 && sv->pane[0].output)
+            wlr_output_layout_get_box(s->output_layout, sv->pane[0].output, &box);
+        if (box.width > 0) saver_step_floaters(sv, dt, box.width, box.height);
+        break;
+    }
+    case SYN_SAVER_DVD: {
+        struct wlr_box box = { 0 };
+        if (sv->npane > 0 && sv->pane[0].output)
+            wlr_output_layout_get_box(s->output_layout, sv->pane[0].output, &box);
+        if (box.width > 0) saver_step_dvd(sv, dt, box.width, box.height);
+        break;
+    }
     case SYN_SAVER_SLIDESHOW: {
         int iv = s->config.saver_interval;
         if (iv < SAVER_INTERVAL_MIN) iv = SAVER_INTERVAL_MIN;
@@ -703,6 +1059,58 @@ void saver_show(syn_server_t *s)
         if (rand() & 1) sv->drift_dy = -sv->drift_dy;
     }
 
+    if (mode == SYN_SAVER_FLOATERS) {
+        /* Decode once here, not per frame: five floaters share one surface and
+         * cairo scales it at paint time. */
+        if (!sv->logo)
+            sv->logo = wallpaper_decode(SYNUI_DATADIR "/saver-logo.png");
+        if (!sv->logo)
+            wlr_log(WLR_ERROR, "synui: saver: no " SYNUI_DATADIR "/saver-logo.png "
+                               "— the floaters mode will say so on screen");
+
+        struct wlr_box box = { 0 };
+        if (sv->npane > 0 && sv->pane[0].output)
+            wlr_output_layout_get_box(s->output_layout, sv->pane[0].output, &box);
+        /* Seed against a sane size even if the output is not measurable yet;
+         * the first tick re-paths anything that lands outside the canvas. */
+        int fw = box.width  > 0 ? box.width  : 1920;
+        int fh = box.height > 0 ? box.height : 1080;
+        for (int i = 0; i < SYN_SAVER_FLOATERS_N; i++) {
+            memset(&sv->floaters[i], 0, sizeof(sv->floaters[i]));
+            saver_floater_path(&sv->floaters[i], fw, fh, true);
+            /* Stagger the starts so all five do not turn at the same instant. */
+            sv->floaters[i].t = saver_frand() * sv->floaters[i].dur;
+        }
+    }
+
+    if (mode == SYN_SAVER_DVD) {
+        if (!sv->dvd_img)
+            sv->dvd_img = wallpaper_decode(SYNUI_DATADIR "/saver-dvd.png");
+        if (!sv->dvd_img)
+            wlr_log(WLR_ERROR, "synui: saver: no " SYNUI_DATADIR "/saver-dvd.png");
+
+        struct wlr_box box = { 0 };
+        if (sv->npane > 0 && sv->pane[0].output)
+            wlr_output_layout_get_box(s->output_layout, sv->pane[0].output, &box);
+        int dw = box.width  > 0 ? box.width  : 1920;
+        int dh = box.height > 0 ? box.height : 1080;
+
+        double sw, sh;
+        saver_dvd_size(sv, dw, &sw, &sh);
+        memset(&sv->dvd, 0, sizeof(sv->dvd));
+        /* Start somewhere in the middle so the first bounce is a wait, and on
+         * a diagonal that is not exactly 45 degrees — a perfect diagonal on a
+         * 16:9 screen retraces the same path forever and never finds a corner. */
+        sv->dvd.x = (dw - sw) * (0.25 + saver_frand() * 0.5);
+        sv->dvd.y = (dh - sh) * (0.25 + saver_frand() * 0.5);
+        double sp = dw * SAVER_DVD_SPEED;
+        sv->dvd.dx = sp * (0.80 + saver_frand() * 0.35);
+        sv->dvd.dy = sp * (0.52 + saver_frand() * 0.30);
+        if (rand() & 1) sv->dvd.dx = -sv->dvd.dx;
+        if (rand() & 1) sv->dvd.dy = -sv->dvd.dy;
+        sv->dvd.colour = rand() % SAVER_DVD_COLOURS;
+    }
+
     if (mode == SYN_SAVER_SLIDESHOW) {
         saver_build_slides(s);
         if (sv->nslides > 0) {
@@ -757,6 +1165,8 @@ void saver_dismiss(syn_server_t *s, bool by_input)
     sv->npane = 0;
 
     saver_drop_slides(sv);
+    if (sv->logo) { cairo_surface_destroy(sv->logo); sv->logo = NULL; }
+    if (sv->dvd_img) { cairo_surface_destroy(sv->dvd_img); sv->dvd_img = NULL; }
 
     wlr_log(WLR_INFO, "synui: saver: dismissed (%s)",
             by_input ? "input" : "teardown");

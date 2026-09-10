@@ -45,6 +45,8 @@ const char *const syn_saver_mode_names[SYN_SAVER_MODE_COUNT] = {
     [SYN_SAVER_STARFIELD] = "starfield",
     [SYN_SAVER_SLIDESHOW] = "slideshow",
     [SYN_SAVER_MATRIX]    = "matrix",
+    [SYN_SAVER_FLOATERS]  = "floaters",
+    [SYN_SAVER_DVD]       = "dvd",
 };
 
 int saver_mode_from_name(const char *name)

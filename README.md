@@ -1487,9 +1487,13 @@ not exist on Wayland.
 ### Screensaver and lock screen
 
 `Super`+`Z` is the screensaver, and the appearance of the lock and login
-screens, on one panel. Five modes — `blank`, `clock`, `starfield`, `slideshow`
-and `matrix` — and it is **off by default**: with no timeout set, nothing about
-an existing install's idle behaviour changes until you ask it to.
+screens, on one panel. Seven modes — `blank`, `clock`, `starfield`, `slideshow`,
+`matrix`, `floaters` and `dvd` — and it is **off by default**: with no timeout
+set, nothing about an existing install's idle behaviour changes until you ask
+it to.
+
+`floaters` drifts the Synapse mark along curved paths, fading with distance.
+`dvd` is the bounce everyone knows, and it counts the exact corner hits.
 
 `Up`/`Down` moves between rows, `Left`/`Right` changes the value under the
 cursor, `p` previews the current mode straight away rather than making you wait
@@ -1505,7 +1509,7 @@ rather than showing a countdown that cannot run.
 The same settings from `synuirc`:
 
 ```ini
-screensaver          = starfield   # or blank / clock / slideshow / matrix, or off
+screensaver          = starfield   # blank / clock / slideshow / matrix / floaters / dvd, or off
 screensaver_timeout  = 300         # seconds; 0 = never
 screensaver_lock     = on          # lock the session when it is dismissed
 screensaver_dir      = ~/Pictures  # slideshow source (default: the wallpapers)
