@@ -34,7 +34,23 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
-pkgrel=1
+# ── 0.1.0-2: the window could not have opened ───────────────────────────────
+#
+# ⛔ 0.1.0-1 SHIPPED THIRTEEN MESSAGE CATALOGS AND NOTHING THAT COULD READ THEM.
+# meson installed qml/i18n/*.json and never installed data/qml/I18n.qml or its
+# qmldir, so `import "qml"` resolved to nothing, quickshell refused the file,
+# and `syn-scan gui` opened no window at all.
+#
+# Every test was green, because the binary was fine — the CLI, the TUI, the
+# record protocol and the engines were all correct and all still are. It was
+# found by listing the contents of a package built in a clean room from the
+# published release, which is the only step that looks at what actually ships.
+# A green makepkg proves nothing.
+#
+# tests/qml_test.sh is the gate now: every file the window imports has to be
+# named in an install rule, the qmldir has to declare the singleton, and the
+# window has to import the module.
+pkgrel=2
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

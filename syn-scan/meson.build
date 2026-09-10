@@ -26,6 +26,15 @@ syn_scan = executable('syn-scan', ['src/main.c'] + engine,
                       install: true)
 
 install_data('data/syn-scan.qml', install_dir: get_option('datadir') / 'syn-scan')
+
+# ⛔ THE SINGLETON AND ITS qmldir, AS A MODULE DIRECTORY. Without these two the
+# package installs the thirteen generated catalogs and nothing that can read
+# them: `import "qml"` fails, quickshell refuses the file, and the window never
+# opens — while every other test stays green, because the binary is fine. Found
+# in a clean-room build of 0.1.0-1 by listing the package rather than trusting
+# makepkg's exit status.
+install_data('data/qml/I18n.qml', 'data/qml/qmldir',
+             install_dir: get_option('datadir') / 'syn-scan' / 'qml')
 install_data('data/syn-scan.desktop',
              install_dir: get_option('datadir') / 'applications')
 install_data('data/syn-scan.svg',
@@ -35,6 +44,10 @@ install_data('systemd/syn-scan.service', install_dir: get_option('prefix') / 'li
 install_data('systemd/syn-scan.timer',   install_dir: get_option('prefix') / 'lib/systemd/system')
 
 subdir('po')
+
+test('qml', find_program('tests/qml_test.sh'),
+     args: [meson.current_source_dir()],
+     timeout: 120)
 
 test('cli', find_program('tests/scan_test.sh'),
      args: [syn_scan.full_path()],
