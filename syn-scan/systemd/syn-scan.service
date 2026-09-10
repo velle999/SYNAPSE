@@ -1,0 +1,44 @@
+# The scheduled sweep.
+#
+# ⚠ THIS IS NOT WHAT LYNIS LOOKS FOR. MALW-3284 and MALW-3286 want clamd and
+# freshclam RUNNING, and those are ClamAV's own units.
+#
+# ⛔ AND clamd IS OPT-IN ON SynapseOS — 0.95 GB resident for a daemon this scan
+# does not use. So MALW-3284 does not fire by default, and MALW-3286 cannot
+# either: its prerequisite is CLAMD_RUNNING, which makes freshclam's 2 points
+# unreachable however faithfully freshclam runs. That is a decision, not an
+# oversight — see syn-scan.install.
+#
+# The After= below therefore orders against a unit that is usually not in the
+# transaction at all, which is a no-op. It is correct for the machine that DID
+# opt in, and costs nothing on the ones that did not.
+[Unit]
+Description=SynapseOS scheduled malware scan
+Documentation=man:syn-scan(1)
+# Signatures that are a week stale are worth saying out loud, but a scan is
+# still worth running without the network.
+After=clamav-daemon.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/syn-scan scan --system --quiet
+ExecStart=/usr/bin/syn-scan scan --quiet /home /srv /tmp /var/tmp
+
+# ⚠ Nice/IOSchedulingClass are not politeness — this walks every game install
+# on the disk, and a sweep that makes the desktop stutter is a sweep the user
+# disables.
+Nice=15
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+# The scan reads everything and writes only its own state.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/syn-scan
+PrivateTmp=no
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes

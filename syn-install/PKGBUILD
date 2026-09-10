@@ -392,7 +392,11 @@ pkgver=0.1.0
 #   install was done from the text installer or the window — silently.
 #   tests/select_test.sh compares both columns of every row now, and names the
 #   row and both values when they differ.
-pkgrel=117
+# ── 0.1.0-118: the malware scanner is a checkbox like everything else ───────
+#
+# comp_synscan, default on. syn-scan pulls clamav (185 MiB installed); the
+# signature database is not shipped and freshclam fetches it on first boot.
+pkgrel=118
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

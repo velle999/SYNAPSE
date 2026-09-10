@@ -1,0 +1,96 @@
+# syn-scan.install — turn on the things the scanner needs, and say what they cost.
+#
+# ⛔ THE DAEMON IS OPT-IN. DELIBERATELY, AND IT IS A DEFAULT, NOT A TOGGLE.
+#
+# clamd holds the entire signature set in RAM — measured at 0.95 GB resident on
+# a normal desktop. On a machine that games, that is a real amount of memory to
+# take from somebody who asked for a virus scanner and got a resident gigabyte
+# they never agreed to. syn-scan does not need it: it shells to `clamscan`,
+# which loads signatures per run and releases them.
+#
+# So this package enables **freshclam only** (19.7 MB resident, and signatures
+# that are months stale make the on-demand scanner worse than useless), and
+# leaves clamav-daemon.service alone. Opting in is one command, printed below.
+#
+# ⚠ WHAT THAT COSTS, STATED PLAINLY: lynis MALW-3284 (clamd running, no points
+# but the "Active agent" line) does not fire, and **MALW-3286 cannot fire
+# either** — its prerequisite is CLAMD_RUNNING, so freshclam's 2 points are
+# unreachable however faithfully freshclam runs. Measured 2026-09-10: index 67
+# with both daemons, 66 without. The three that do land — HRDN-7230 (3),
+# MALW-3282 (2), MALW-3276 (2) — need no daemon at all.
+#
+# ⛔ AND clamav-clamonacc.service IS MASKED, PERMANENTLY. On-access scanning is
+# a second owner of the open() path synguard's BPF-LSM already owns. See
+# docs/MALWARE-SCANNER-DESIGN.md §6a. Masked rather than left disabled, because
+# "left disabled" is one `systemctl enable` away from a contended hook and
+# nothing would explain why that was a bad idea.
+#
+# ⚠ THE FIRST-RUN TRAP, for whoever does opt in: Arch's clamav ships NO
+# SIGNATURE DATABASE, and clamd refuses to start without one. `systemctl enable
+# --now clamav-daemon` on a fresh install FAILS and sits in `failed`. freshclam
+# has to fetch ~110 MB first. That is why freshclam is started here and the
+# opt-in message says to check it has finished.
+
+_synscan_units() {
+    # freshclam: the updater, and ⛔ NOT clamav-freshclam-once.timer. lynis
+    # MALW-3286 is `pgrep freshclam` — a oneshot that updates and exits is not
+    # running when the audit looks and scores nothing. Both ship in clamav and
+    # the oneshot is the intuitive choice.
+    if systemctl enable --now clamav-freshclam.service >/dev/null 2>&1; then
+        echo ":: enabled clamav-freshclam.service — it is downloading the"
+        echo "   signature database now (~250 MB, a few minutes)."
+    fi
+
+    # ⛔ clamav-daemon.service IS NOT ENABLED HERE. See the header: it is a
+    # 0.95 GB resident daemon that syn-scan does not use, and the default is
+    # off rather than on-with-a-way-out.
+    #
+    # ⚠ Never DISABLES it either. Somebody who opted in on purpose must not
+    # have that undone by an upgrade.
+    if ! systemctl is-enabled clamav-daemon.service >/dev/null 2>&1; then
+        echo ":: clamd is NOT running, on purpose — it would hold the whole"
+        echo "   signature set in RAM (~0.95 GB) and syn-scan does not use it."
+        echo "   Scanning works on demand without it. To opt in anyway, once"
+        echo "   freshclam has finished its first download:"
+        echo "       sudo systemctl enable --now clamav-daemon.service"
+    fi
+
+    # ⛔ The one that must never come on. See the header.
+    systemctl mask clamav-clamonacc.service >/dev/null 2>&1 || true
+
+    if systemctl enable --now syn-scan.timer >/dev/null 2>&1; then
+        echo ":: enabled syn-scan.timer — a weekly sweep, idle-priority,"
+        echo "   Persistent=true so a machine that was asleep still runs it."
+    fi
+}
+
+_synscan_note_engines() {
+    # ⚠ An absent engine is a normal state, not a fault. chkrootkit lives in
+    # [blackarch], which syn-install offers as a choice rather than a
+    # guarantee, so plenty of correct machines have two engines of three.
+    command -v rkhunter   >/dev/null 2>&1 || \
+        echo ":: 'pacman -S rkhunter' adds the rootkit checks (and lynis MALW-3276)."
+    # ⚠ BRACES, NOT A BARE `||` PAIR. `cmd || echo a; echo b` runs the second
+    # echo unconditionally — so a machine that HAS chkrootkit would still be
+    # told how to install it.
+    if ! command -v chkrootkit >/dev/null 2>&1; then
+        echo ":: 'pacman -S chkrootkit' adds a second rootkit opinion — it needs"
+        echo "   [blackarch], which is optional at install time (syn arsenal --enable-repo)."
+    fi
+}
+
+post_install() {
+    _synscan_units
+    _synscan_note_engines
+    echo ":: syn-scan does NOT watch the system in real time — synguard already"
+    echo "   owns that, in the kernel. This scans files sitting on disk, which is"
+    echo "   the half synguard cannot see. 'syn-scan scan ~/Downloads' to try it."
+}
+
+post_upgrade() {
+    _synscan_units
+}
+
+pre_remove() {
+    systemctl disable --now syn-scan.timer >/dev/null 2>&1 || true
+}

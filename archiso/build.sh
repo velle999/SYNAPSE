@@ -292,6 +292,14 @@ PACKAGES=(
     # thing people boot a USB stick to deal with, and the machine they are
     # trying to clean is the one that will not start.
     syn-clean
+    # syn-scan — the malware scanner. On the ISO because syn-install names it,
+    # and a package the installer asks for that the local repo does not carry
+    # fails the install at pacman.
+    #
+    # ⚠ IT PULLS clamav, WHICH IS A HARD DEPENDENCY (185 MiB installed). The
+    # signature database is NOT shipped — freshclam fetches it on first boot —
+    # so the ISO pays the engine and not the ~1 GB of signatures.
+    syn-scan
     syn-play
     # syn-edit — the text editor. Must be ON the ISO for the same reason
     # syn-disks must: syn-install names it in SEL_CORE, and a package the

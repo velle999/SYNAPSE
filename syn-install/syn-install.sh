@@ -1505,6 +1505,7 @@ SEL_COMPONENTS=(
     "comp_syncal|1|1|core|syn-cal|Calendar|calendar + sync"
     "comp_synvault|1|1|core|syn-vault|File Vault|locked folder"
     "comp_synclean|1|1|core|syn-clean|Disk Cleanup|free disk space"
+    "comp_synscan|1|1|core|syn-scan|Malware Scan|scan files at rest"
     "comp_synupdate|1|1|core|syn-update|Updates|receives fixes"
     "comp_syn|1|1|core|syn|syn|top-level CLI"
     "comp_synmodel|1|1|core|syn-model|Models|fetch AI models"

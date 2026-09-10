@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly SynapseOS malware scan
+
+[Timer]
+OnCalendar=weekly
+# ⚠ A desktop is asleep at 3am on a Sunday, which is when a weekly timer would
+# otherwise fire and never run at all.
+Persistent=true
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target

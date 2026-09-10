@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Malware Scan
+Comment=Scan files for malware, and put what turns up aside
+Exec=/usr/bin/syn-scan gui
+Icon=syn-scan
+Terminal=false
+Categories=System;Security;
+Keywords=virus;malware;antivirus;scan;clamav;rootkit;
+StartupNotify=true

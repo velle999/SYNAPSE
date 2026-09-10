@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- syn-scan — a shield being looked at, not a shield that promises. The lens
+     is the point: this program inspects, it does not intercept. -->
+<defs>
+<linearGradient id="s" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#5ac8fa"/>
+<stop offset="1" stop-color="#2b7fd4"/>
+</linearGradient>
+</defs>
+<path d="M24 4 8 10v13c0 10 7 18 16 21 9-3 16-11 16-21V10z" fill="url(#s)"/>
+<path d="M24 4 8 10v13c0 10 7 18 16 21z" fill="#fff" opacity=".12"/>
+<circle cx="21" cy="21" r="7.5" fill="none" stroke="#fff" stroke-width="2.6"/>
+<path d="m26.6 26.6 6.4 6.4" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+</svg>

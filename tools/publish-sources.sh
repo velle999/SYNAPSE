@@ -70,7 +70,7 @@ EXTERNAL=(
     # the desktop
     synui syntty
     # the applications
-    syn-cal syn-clean syn-disks syn-edit synfiles syn-play syn-settings
+    syn-cal syn-clean syn-disks syn-edit synfiles syn-play syn-scan syn-settings
     synsh synstudio syn-vault
     # packages, security and gaming — each installs and runs on plain Arch
     synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
@@ -134,6 +134,7 @@ declare -A TOPICS=(
     [syntty]="terminal terminal-emulator wayland pty freetype"
     [syn-cal]="calendar caldav google-calendar icalendar scheduling"
     [syn-clean]="disk-cleanup cleaner shred secure-delete"
+    [syn-scan]="antivirus malware-scanner clamav rkhunter security"
     [syn-disks]="disk-utility partitioning filesystem smart udisks"
     [syn-edit]="text-editor modal-editor vim-like syntax-highlighting"
     [synfiles]="file-manager file-browser thumbnails gvfs"

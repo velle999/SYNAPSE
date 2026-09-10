@@ -35,7 +35,25 @@ pkgver=0.1.0
 # and go wrong at run time, in ring 0. They are declared once in
 # include/synapse_kmod.h now, inside `#ifdef __KERNEL__` because synapd and the
 # syn tools include that header too.
-pkgrel=27
+# ── 0.1.0-28: the malware-scanner skip comes out of the audit profile ───────
+#
+# config/lynis-custom.prf carried `skip-test=HRDN-7230`, arguing that the
+# in-kernel monitor made a signature scanner duplicated cost. Half of that is
+# still true — synguard owns the real-time path and syn-scan is forbidden from
+# touching it — but the other half was measured and was wrong: synguard's whole
+# rule vocabulary is ACTIVITY (exec/open/write/setuid/ptrace/mount/module) and
+# synapse_probe.c:382 hooks "only opens of sensitive paths", so nothing in it
+# decides on what is inside a file.
+#
+# ⛔ THE SKIP HAD TO GO IN THE SAME CHANGE AS THE SCANNER. Verified with a real
+# run 2026-09-10: with clamav and rkhunter installed, lynis reported
+# malware_scanner_installed=1 and both engines found — and then SKIPPED
+# HRDN-7230, so the test that scores it awarded nothing. A scanner nobody's
+# audit can see is a scanner that may as well not be installed.
+#
+# ⚠ This file is `backup=`, so an installed box keeps its local copy and gets
+# the new one as .pacnew. A machine that never merges it keeps skipping the test.
+pkgrel=28
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

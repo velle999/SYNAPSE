@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
-       syn-vault syn-clean syn-play
+       syn-vault syn-clean syn-play syn-scan
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote)
 for _c in "${ONLY[@]}"; do
@@ -416,6 +416,20 @@ build_component syn-vault
 # composed from that variable, so a test that sets it cannot reach the build
 # user's real home even if a category is wrong.
 build_component syn-clean
+
+# syn-scan — the malware scanner. meson C plus a quickshell window.
+#
+# ⛔ IT IS NOT WHAT LYNIS DETECTS, AND THAT IS BY DESIGN. lynis matches malware
+# scanners by BINARY FILENAME — clamscan, rkhunter, chkrootkit, maldet — so no
+# program called syn-scan passes a MALW test however good it is. Its clamav
+# DEPENDENCY is what moves the audit; this binary is what makes the engines
+# usable. Installing it under one of those names would pass the test with
+# nothing behind it. See docs/MALWARE-SCANNER-DESIGN.md.
+#
+# ⚠ Its suite runs against STUB engines and composes every path from
+# $SYNSCAN_HOME, so it needs no clamav on the build machine and never runs a
+# real rootkit check against it.
+build_component syn-scan
 
 # syn-play — the mpv front end: playlists, shuffle, quick open and history.
 # meson C plus a quickshell window, built from the generic source tarball.

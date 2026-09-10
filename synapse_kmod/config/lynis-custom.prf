@@ -75,12 +75,28 @@ skip-test=USB-1000
 # one. If synguard is ever removed, un-skip this the same day.
 skip-test=ACCT-9628
 
-# Periodic malware scanner (rkhunter/chkrootkit/OSSEC). Same answer: the
-# in-kernel monitor is the SynapseOS approach, and a signature scanner on top
-# of it is duplicated cost for a desktop. Deliberately NOT skipping FINT-4350
-# (file integrity) — `pacman -Qkk` gives us that for free and we should be
-# running it.
-skip-test=HRDN-7230
+# HRDN-7230 (periodic malware scanner) USED TO BE SKIPPED HERE, and the reason
+# it no longer is, is worth keeping rather than deleting.
+#
+# The old argument was: the in-kernel monitor is the SynapseOS approach, and a
+# signature scanner on top of it is duplicated cost for a desktop. Half of that
+# is still true and is now written down properly in
+# docs/MALWARE-SCANNER-DESIGN.md §6a — synguard owns the REAL-TIME path and
+# nothing else may, which is why clamav-clamonacc.service is masked.
+#
+# The other half was wrong, and measuring it is what settled it. synguard's
+# entire rule vocabulary is exec/open/write/setuid/ptrace/mount/module — every
+# one an ACTIVITY — and synapse_probe.c:382 hooks "only opens of sensitive
+# paths". Nothing in it decides on what is INSIDE a file. So a file nobody has
+# touched is invisible to it, and a Windows .exe is data to Linux until Wine
+# runs it, at which point the LSM sees wine opening a file. On a distro that
+# ships a Wine menu, Proton and an arcade front end, that is not a corner case.
+#
+# ⇒ syn-scan fills the half synguard cannot see: userspace, content, files at
+# rest, on a schedule. So this test now measures something real, and it fires.
+#
+# Deliberately still NOT skipping FINT-4350 (file integrity) — `pacman -Qkk`
+# gives us that for free and we should be running it.
 
 # ── Wrong shape for a single-seat desktop ──────────────────────────────────
 

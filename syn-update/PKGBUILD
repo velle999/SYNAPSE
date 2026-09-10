@@ -254,7 +254,12 @@ pkgver=0.1.0
 #   skip-by-URL case, and the state file. RED-verified against 59 — six of its
 #   seven checks fail there, including the silent ping. It runs in CI; the other
 #   four syn-update suites still run nowhere, which predates this.
-pkgrel=60
+# ── 0.1.0-61: syn-scan joins the update set ─────────────────────────────────
+#
+# A component with a PKGBUILD and no line in COMPONENTS is frozen on every
+# installed machine with nothing to say so. syn-scan is the malware scanner;
+# adding it here is what lets an installed box ever receive a fix for it.
+pkgrel=61
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
