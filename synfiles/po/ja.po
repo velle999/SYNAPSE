@@ -28,6 +28,9 @@ msgstr "%1  (フォルダーの中身は未集計)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 個選択"
 
+msgid "%1 connected"
+msgstr "%1 が接続されました"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 件完了"
@@ -571,6 +574,9 @@ msgstr "説明"
 msgid "destroying %1…"
 msgstr "%1 を破棄しています…"
 
+msgid "disc inserted — %1"
+msgstr "ディスクが挿入されました — %1"
+
 msgid "dragging %1…"
 msgstr "%1 をドラッグしています…"
 
@@ -612,9 +618,6 @@ msgstr "権限"
 
 msgid "modified"
 msgstr "更新日時"
-
-msgid "mount %1"
-msgstr "%1 をマウント"
 
 msgid "mounting %1…"
 msgstr "%1 をマウントしています…"
@@ -741,7 +744,9 @@ msgstr "%s の情報を取得できません: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: .desktop ファイルとパスが必要です\n  使い方: synfiles action <ファイル.desktop> <パス>…"
+msgstr ""
+"action: .desktop ファイルとパスが必要です\n"
+"  使い方: synfiles action <ファイル.desktop> <パス>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -783,13 +788,16 @@ msgstr "compress: パスが少なくとも一つ必要です"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: 不明な形式「%s」— zip、tar.gz、tar.xz、tar.zst、7z を試してください"
+msgstr ""
+"compress: 不明な形式「%s」— zip、tar.gz、tar.xz、tar.zst、7z を試してください"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: すべて同じフォルダーにある必要があります\n  そうでないと、書庫に別の場所では意味をなさないパスが入ります"
+msgstr ""
+"compress: すべて同じフォルダーにある必要があります\n"
+"  そうでないと、書庫に別の場所では意味をなさないパスが入ります"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name はパスではなく名前を受け取ります"
@@ -802,7 +810,8 @@ msgid "compress: neither zip nor 7z is installed"
 msgstr "compress: zip も 7z もインストールされていません"
 
 msgid "compress: 7z is not installed — install p7zip"
-msgstr "compress: 7z がインストールされていません — p7zip をインストールしてください"
+msgstr ""
+"compress: 7z がインストールされていません — p7zip をインストールしてください"
 
 msgid "compress: tar is not installed"
 msgstr "compress: tar がインストールされていません"
@@ -841,7 +850,9 @@ msgstr "設定を既定値に戻しました\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: 不明なサブコマンド「%s」— list、get <キー>、set <キー> <値>、reset を試してください"
+msgstr ""
+"config: 不明なサブコマンド「%s」— list、get <キー>、set <キー> <値>、reset を"
+"試してください"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -849,7 +860,8 @@ msgstr "%s を解決できません: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "不明な競合ポリシー「%s」— error、skip、rename、overwrite を試してください"
+msgstr ""
+"不明な競合ポリシー「%s」— error、skip、rename、overwrite を試してください"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -892,7 +904,8 @@ msgstr "rename: パスと新しい名前が必要です"
 
 #, c-format
 msgid "rename: '%s' is a path, not a name — use `synfiles move`"
-msgstr "rename: 「%s」は名前ではなくパスです — `synfiles move` を使ってください"
+msgstr ""
+"rename: 「%s」は名前ではなくパスです — `synfiles move` を使ってください"
 
 #, c-format
 msgid "rename: '%s' is not a usable name"
@@ -920,7 +933,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete はファイルを完全に削除し、元に戻せません。\n  ごみ箱に移すには: synfiles trash <パス>…\n  本当にそうしたい場合は: --force"
+msgstr ""
+"delete はファイルを完全に削除し、元に戻せません。\n"
+"  ごみ箱に移すには: synfiles trash <パス>…\n"
+"  本当にそうしたい場合は: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -965,7 +981,8 @@ msgid "du: need a path"
 msgstr "du: パスが必要です"
 
 msgid "no display — synfiles gui needs a graphical session"
-msgstr "ディスプレイがありません — synfiles gui にはグラフィカルセッションが必要です"
+msgstr ""
+"ディスプレイがありません — synfiles gui にはグラフィカルセッションが必要です"
 
 msgid "quickshell is not installed — synpkg install quickshell"
 msgstr "quickshell がインストールされていません — synpkg install quickshell"
@@ -976,7 +993,9 @@ msgstr "quickshell を起動できませんでした"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: %s に対して avahi-browse が失敗しました (終了 %d) — このマシンでは mDNS の探索が動作していません"
+msgstr ""
+"netscan: %s に対して avahi-browse が失敗しました (終了 %d) — このマシンでは "
+"mDNS の探索が動作していません"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -985,7 +1004,9 @@ msgstr "netscan: 不明なオプション「%s」"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: 機器を見つけるには avahi (mDNS) か smbclient (Windows 共有) をインストールしてください"
+msgstr ""
+"netscan: 機器を見つけるには avahi (mDNS) か smbclient (Windows 共有) をインス"
+"トールしてください"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: URI が必要です (参照: synfiles netscan)"
@@ -995,7 +1016,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: 「%s」は URI ではありません"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio がインストールされていません — ネットワーク共有をマウントするには gvfs をインストールしてください"
+msgstr ""
+"netmount: gio がインストールされていません — ネットワーク共有をマウントするに"
+"は gvfs をインストールしてください"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1060,7 +1083,9 @@ msgstr "places unpin: パスが必要です"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: 不明なサブコマンド「%s」— list、pin <パス>、unpin <パス> を試してください"
+msgstr ""
+"places: 不明なサブコマンド「%s」— list、pin <パス>、unpin <パス> を試してくだ"
+"さい"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1116,7 +1141,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "ごみ箱を空にする操作は取り消せません。\n  何が消えるかを見るには: synfiles trash list\n  本当にそうしたい場合は: --force"
+msgstr ""
+"ごみ箱を空にする操作は取り消せません。\n"
+"  何が消えるかを見るには: synfiles trash list\n"
+"  本当にそうしたい場合は: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore: ごみ箱内の名前が必要です (参照: synfiles trash list)"
@@ -1178,7 +1206,9 @@ msgstr "%s はフォルダーではありません — %s はフォルダーの�
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s はすでにここにあります — 別の場所にコピーするか、`synfiles copy --conflict=rename` を使ってください"
+msgstr ""
+"%s はすでにここにあります — 別の場所にコピーするか、`synfiles copy --"
+"conflict=rename` を使ってください"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1246,7 +1276,8 @@ msgstr "取り消し履歴を消去しました\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: 不明なサブコマンド「%s」— list、clear、または引数なしを試してください"
+msgstr ""
+"undo: 不明なサブコマンド「%s」— list、clear、または引数なしを試してください"
 
 msgid "out of memory"
 msgstr "メモリが足りません"
@@ -1255,7 +1286,9 @@ msgid "HOME is not set"
 msgstr "HOME が設定されていません"
 
 msgid "udisksctl is not installed — install udisks2 to mount from here"
-msgstr "udisksctl がインストールされていません — ここからマウントするには udisks2 をインストールしてください"
+msgstr ""
+"udisksctl がインストールされていません — ここからマウントするには udisks2 を"
+"インストールしてください"
 
 #, c-format
 msgid "%s: expected a device path like /dev/sdc1"
@@ -1267,9 +1300,15 @@ msgstr "mount: デバイスのパスが必要です (参照: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: デバイスのパスが必要です (参照: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: 監視できるものがありません — mountinfo も uevent も inotify も使えません"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: 不明なオプション「%s」"
 
 msgid "no volumes"
 msgstr "ボリュームがありません"
+
+#~ msgid "mount %1"
+#~ msgstr "%1 をマウント"

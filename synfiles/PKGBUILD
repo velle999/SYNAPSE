@@ -203,7 +203,59 @@ pkgver=0.1.0
 #   ⚠ "1 files in 1 folders" — both counters go through one fmtMany() now.
 #   Nine checks in synfiles_test.sh, three of them on `du`'s own two numbers.
 #   377 pass.
-pkgrel=74
+# 75: THE EJECT BUTTON MOVED UNDER THE POINTER, AND THE SIDEBAR ONLY LEARNED
+#   ABOUT A DISK WHEN SOMETHING ELSE ASKED IT TO.
+#   Two faults on the sidebar row, both layout, and reported as one thing:
+#   ⛔ THE BUTTON WAS BEING PULLED OUT FROM UNDER THE POINTER. Qt hands a hover
+#   enter/exit pair to exactly ONE item, the topmost — so arriving at the eject
+#   glyph, which carried its own MouseArea, left the ROW's MouseArea saying the
+#   pointer was elsewhere. The glyph was shown on that read, so it went
+#   invisible at the moment of arrival, hover fell back to the row, and it came
+#   straight back: a flicker under a resting hand, and a press landing in one of
+#   the gaps did nothing at all. Identical to the Open With flyout in 59, and
+#   fixed the same way — a HoverHandler, which reports the whole subtree.
+#   ⚠ AND THE TEXT BESIDE IT REALLY DID SLIDE. The fill percentage picked its
+#   right margin off the same read, 10 normally and 26 while the button showed,
+#   so it and the elided label behind it jumped 16px sideways every time the
+#   pointer crossed the row. The gutter is a fixed width now and the buttons
+#   FADE, because a Row drops an invisible child and a collapsing gutter is the
+#   same bug wearing a different hat.
+#   ⚠ THE BUTTON IS A BOX, NOT A GLYPH. ⏏ becomes ▸ the moment a disk unmounts
+#   and the two characters have different advances, so a Text sized to its own
+#   glyph moved and resized its own hit target between the two states; it is a
+#   20px square with the character centred in it, and it says when it is
+#   pressed. Unpin and eject share one Row and can no longer overlap.
+# ⚠ AND THE LIST IS NO LONGER A SNAPSHOT. `volumes` was read at startup and
+#   after an operation, so a stick plugged in after the window opened was
+#   invisible until something unrelated caused a refresh. `volumes --watch`
+#   blocks and prints a line whenever the list would change.
+#   ⛔ THREE SOURCES, THREE MECHANISMS, AND NONE COVERS THE OTHER TWO. A device
+#   arriving and a disc going in are uevents, read from a netlink socket bound
+#   to udev's multicast group — group 2, not the kernel's group 1, which needs
+#   CAP_NET_ADMIN; a disc is a `change` on the drive, not an `add`, and the
+#   kernel sees it only because it polls removable media. Mounting and
+#   unmounting emit NO uevent at all, and are poll(2) for POLLPRI on
+#   /proc/self/mountinfo — never POLLIN, which is always ready and would spin a
+#   core forever. A gvfs share is neither: every share hangs off ONE fuse mount,
+#   so a second one does not touch the mount table, and appears as a DIRECTORY
+#   under /run/user/<uid>/gvfs, which is inotify's question — plus a watch on
+#   the runtime directory itself, because that directory does not exist until
+#   gvfsd-fuse has started.
+#   ⚠ COALESCED, in the C and again in the window. One stick is five or six
+#   uevents with a mount behind them, and a re-read per event would put six
+#   process spawns behind one plug.
+#   ⛔ AND THE STREAM IS LINE BUFFERED. stdout is fully buffered the moment it
+#   is a pipe rather than a terminal, which is what it is when the window is on
+#   the other end — every event would have sat in libc's buffer waiting for 4KB
+#   of one-word lines. The suite caught it by redirecting to a file.
+#   ⚠ A refresh that arrives while one is already running is REMEMBERED, not
+#   dropped: assigning running = true to a live quickshell Process is a silent
+#   no-op, so a stick plugged in mid-read would have stayed invisible.
+#   An inserted disc, a plugged-in drive and a new share say so on the status
+#   line. Eleven checks in synfiles_test.sh, one of which drives a real pointer
+#   over the button eight ways through tests/side_row_eject_hover.qml — and both
+#   of that rig's negative controls still reproduce the old wiring. 418 pass.
+pkgrel=75
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

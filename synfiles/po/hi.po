@@ -28,6 +28,9 @@ msgstr "%1  (फ़ोल्डर की सामग्री नहीं ग
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 चयनित"
 
+msgid "%1 connected"
+msgstr "%1 कनेक्ट हो गया"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 पूरा"
@@ -589,6 +592,9 @@ msgstr "विवरण"
 msgid "destroying %1…"
 msgstr "%1 नष्ट किया जा रहा है…"
 
+msgid "disc inserted — %1"
+msgstr "डिस्क डाली गई — %1"
+
 msgid "dragging %1…"
 msgstr "%1 खींचा जा रहा है…"
 
@@ -630,9 +636,6 @@ msgstr "अनुमतियाँ"
 
 msgid "modified"
 msgstr "बदला गया"
-
-msgid "mount %1"
-msgstr "%1 माउंट करें"
 
 msgid "mounting %1…"
 msgstr "%1 माउंट हो रहा है…"
@@ -760,7 +763,9 @@ msgstr "%s की जानकारी नहीं मिल सकी: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: एक .desktop फ़ाइल और एक पथ चाहिए\n  उपयोग: synfiles action <फ़ाइल.desktop> <पथ>…"
+msgstr ""
+"action: एक .desktop फ़ाइल और एक पथ चाहिए\n"
+"  उपयोग: synfiles action <फ़ाइल.desktop> <पथ>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -808,7 +813,9 @@ msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: सब कुछ एक ही फ़ोल्डर में होना चाहिए\n  वरना संग्रह में ऐसे पथ आ जाएँगे जिनका कहीं और कोई अर्थ नहीं"
+msgstr ""
+"compress: सब कुछ एक ही फ़ोल्डर में होना चाहिए\n"
+"  वरना संग्रह में ऐसे पथ आ जाएँगे जिनका कहीं और कोई अर्थ नहीं"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name को नाम चाहिए, पथ नहीं"
@@ -860,7 +867,8 @@ msgstr "सेटिंग्स डिफ़ॉल्ट पर लौटा �
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: अज्ञात उपकमांड '%s' — list, get <कुंजी>, set <कुंजी> <मान>, reset आज़माएँ"
+msgstr ""
+"config: अज्ञात उपकमांड '%s' — list, get <कुंजी>, set <कुंजी> <मान>, reset आज़माएँ"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -939,7 +947,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete फ़ाइलों को स्थायी रूप से हटाता है और इसे पूर्ववत नहीं किया जा सकता।\n  उन्हें रद्दी में डालने के लिए: synfiles trash <पथ>…\n  यदि आपका यही अर्थ है: --force"
+msgstr ""
+"delete फ़ाइलों को स्थायी रूप से हटाता है और इसे पूर्ववत नहीं किया जा सकता।\n"
+"  उन्हें रद्दी में डालने के लिए: synfiles trash <पथ>…\n"
+"  यदि आपका यही अर्थ है: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -995,7 +1006,9 @@ msgstr "quickshell आरंभ नहीं किया जा सका"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: %s के लिए avahi-browse विफल रहा (निकास %d) — इस मशीन पर mDNS खोज काम नहीं कर रही"
+msgstr ""
+"netscan: %s के लिए avahi-browse विफल रहा (निकास %d) — इस मशीन पर mDNS खोज काम "
+"नहीं कर रही"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1004,7 +1017,8 @@ msgstr "netscan: अज्ञात विकल्प '%s'"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: उपकरण खोजने के लिए avahi (mDNS) या smbclient (विंडोज़ साझा) संस्थापित करें"
+msgstr ""
+"netscan: उपकरण खोजने के लिए avahi (mDNS) या smbclient (विंडोज़ साझा) संस्थापित करें"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: एक URI चाहिए (देखें: synfiles netscan)"
@@ -1014,7 +1028,8 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: '%s' URI नहीं है"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio संस्थापित नहीं है — नेटवर्क साझा माउंट करने के लिए gvfs संस्थापित करें"
+msgstr ""
+"netmount: gio संस्थापित नहीं है — नेटवर्क साझा माउंट करने के लिए gvfs संस्थापित करें"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1135,7 +1150,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "रद्दी खाली करना स्थायी है और इसे पूर्ववत नहीं किया जा सकता।\n  यह देखने के लिए कि क्या मिट जाएगा: synfiles trash list\n  यदि आपका यही अर्थ है: --force"
+msgstr ""
+"रद्दी खाली करना स्थायी है और इसे पूर्ववत नहीं किया जा सकता।\n"
+"  यह देखने के लिए कि क्या मिट जाएगा: synfiles trash list\n"
+"  यदि आपका यही अर्थ है: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore: रद्दी वाला नाम चाहिए (देखें: synfiles trash list)"
@@ -1197,7 +1215,9 @@ msgstr "%s फ़ोल्डर नहीं है — %s चीज़ों �
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s पहले से यहीं है — इसे कहीं और प्रतिलिपि करें, या `synfiles copy --conflict=rename` का उपयोग करें"
+msgstr ""
+"%s पहले से यहीं है — इसे कहीं और प्रतिलिपि करें, या `synfiles copy --conflict=rename` "
+"का उपयोग करें"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1286,9 +1306,15 @@ msgstr "mount: एक उपकरण पथ चाहिए (देखें: s
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: एक उपकरण पथ चाहिए (देखें: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: निगरानी के लिए कुछ नहीं — न mountinfo, न uevents, न inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: अज्ञात विकल्प '%s'"
 
 msgid "no volumes"
 msgstr "कोई वॉल्यूम नहीं"
+
+#~ msgid "mount %1"
+#~ msgstr "%1 माउंट करें"

@@ -21,10 +21,18 @@
 #include "i18n.h"
 
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
+#include <sys/socket.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+
+#include <linux/netlink.h>
 
 /* ── the mount table ────────────────────────────────────────────────────────
  *
@@ -696,14 +704,291 @@ int cmd_unmount(int argc, char **argv)
 	return volume_mount(argv[0], true);
 }
 
+
+/* ── watching ───────────────────────────────────────────────────────────────
+ *
+ * The list above is a SNAPSHOT, and a file manager that only ever takes one is
+ * a file manager you have to restart after plugging in a stick. This is the
+ * other half: block, wait, and print a line the moment any of the three
+ * sources could have changed. The caller re-runs `volumes` when it sees one.
+ *
+ * ⚠ THREE SOURCES, THREE MECHANISMS, AND NONE OF THEM COVERS THE OTHER TWO.
+ * This is the whole reason it is not one poll on one file:
+ *
+ *   - PLUGGING SOMETHING IN, and INSERTING A DISC, are uevents. They are read
+ *     from a netlink socket bound to the *udev* multicast group (2), which —
+ *     unlike the kernel group (1) — a normal user may join, so this needs no
+ *     privileges and no libudev. A disc arrives as `change` on the sr device
+ *     rather than `add`, because the drive never went anywhere; the kernel
+ *     notices at all only because it polls removable media every
+ *     /sys/module/block/parameters/events_dfl_poll_msecs.
+ *   - MOUNTING AND UNMOUNTING emit NO uevent whatsoever — the device did not
+ *     change, only what is done with it. That is /proc/self/mountinfo, which is
+ *     the one file poll(2) answers with POLLPRI (never POLLIN: it is always
+ *     "readable", so POLLIN would spin at 100% of a core forever).
+ *   - A NETWORK SHARE is neither. gvfs hangs every share off ONE fuse mount, so
+ *     mounting a second one does not touch the mount table either; each share
+ *     appears as a DIRECTORY under /run/user/<uid>/gvfs, and a directory
+ *     appearing is inotify's question. The gvfs directory does not exist until
+ *     gvfsd-fuse has started, so /run/user/<uid> is watched as well and the
+ *     inner watch is added when it shows up.
+ *
+ * Events are COALESCED: udev alone emits five or six for one stick (the disk,
+ * each partition, and a `change` per rescan), and udisks mounting it lands a
+ * mountinfo wakeup on top. Reporting each one would re-run lsblk six times for
+ * a single plug.
+ */
+
+#define WATCH_SETTLE_MS 250
+
+/* The udev netlink message: a "libudev\0" magic header, then NUL-separated
+ * KEY=VALUE properties at an offset it names. Kernel-group messages have no
+ * such header (they start "action@/devices/..."), and are handled by simply
+ * scanning the whole buffer — this only needs to answer "was that a block
+ * device", not to model a device. */
+struct udev_nl_header {
+	char     prefix[8];
+	uint32_t magic;
+	uint32_t header_size;
+	uint32_t properties_off;
+	uint32_t properties_len;
+	uint32_t filter_subsystem_hash;
+	uint32_t filter_devtype_hash;
+	uint32_t filter_tag_bloom_hi;
+	uint32_t filter_tag_bloom_lo;
+};
+
+static int uevent_open(void)
+{
+	int fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+	                NETLINK_KOBJECT_UEVENT);
+	if (fd < 0)
+		return -1;
+
+	/* A big receive buffer on purpose. A coldplug or a `udevadm trigger`
+	 * elsewhere on the system can deliver hundreds of messages faster than
+	 * this loop drains them, and an overflowed netlink socket does not queue —
+	 * it DROPS, which here means missing the one event that mattered. */
+	int rcv = 2 * 1024 * 1024;
+	setsockopt(fd, SOL_SOCKET, SO_RCVBUFFORCE, &rcv, sizeof rcv);
+	setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcv, sizeof rcv);
+
+	struct sockaddr_nl sa;
+	memset(&sa, 0, sizeof sa);
+	sa.nl_family = AF_NETLINK;
+	sa.nl_groups = 2;          /* udev, not kernel: group 1 needs CAP_NET_ADMIN */
+	sa.nl_pid    = 0;          /* let the kernel pick, so two copies can run */
+
+	if (bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+/* Does this message concern a block device? Anything else — a keyboard, a
+ * network interface, a thermal zone — is a wakeup this program has no use for,
+ * and there are a great many of them. */
+static bool uevent_is_block(const char *buf, ssize_t len)
+{
+	static const char want[] = "SUBSYSTEM=block";
+	const char *props = buf;
+	ssize_t     plen  = len;
+
+	if ((size_t)len >= sizeof(struct udev_nl_header)
+	    && !memcmp(buf, "libudev", 8)) {
+		/* memcpy'd, not cast: a datagram lands wherever recv put it and a
+		 * struct read straight off a char buffer is an unaligned access. */
+		struct udev_nl_header h;
+		memcpy(&h, buf, sizeof h);
+		if (h.properties_off > (uint32_t)len)
+			return false;
+		props = buf + h.properties_off;
+		plen  = len - (ssize_t)h.properties_off;
+		if (h.properties_len < (uint32_t)plen)
+			plen = (ssize_t)h.properties_len;
+	}
+
+	/* NUL-separated, so walking entries is what makes this right: a plain
+	 * strstr over the buffer matches "SUBSYSTEM=block" sitting INSIDE another
+	 * property's value, and a DEVPATH is exactly where that happens.
+	 *
+	 * ⚠ Every comparison is bounded by the datagram. This is a socket the
+	 * kernel writes but not the only thing that can ever reach it, and an
+	 * entry with no terminator inside `plen` would otherwise be handed to
+	 * strcmp(), which reads until it finds one somewhere. */
+	for (ssize_t i = 0; i < plen; ) {
+		const char *e = props + i;
+		size_t      n = strnlen(e, (size_t)(plen - i));
+		if (i + (ssize_t)n >= plen)
+			break;                       /* unterminated; nothing follows */
+		if (n == sizeof want - 1 && !memcmp(e, want, sizeof want - 1))
+			return true;
+		i += (ssize_t)n + 1;
+	}
+	return false;
+}
+
+static void watch_report(const char *reason)
+{
+	if (g_out == OUT_REC)
+		rec_row(1, reason);
+	else
+		printf("%s%s%s\n", C_DIM(), reason, C_RESET());
+	fflush(stdout);
+}
+
+int volumes_watch(void)
+{
+	char *rundir = xasprintf("/run/user/%lu", (unsigned long)getuid());
+	char *gvfs   = xasprintf("%s/gvfs", rundir);
+
+	/* O_RDONLY and never read: poll(2) reports POLLPRI on this descriptor
+	 * whenever the mount table changes, which is the entire point of holding
+	 * it open. */
+	int mfd = open("/proc/self/mountinfo", O_RDONLY | O_CLOEXEC);
+	int ufd = uevent_open();
+	int ifd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+	int gwd = -1;
+
+	if (ifd >= 0) {
+		inotify_add_watch(ifd, rundir, IN_CREATE | IN_MOVED_TO | IN_ONLYDIR);
+		gwd = inotify_add_watch(ifd, gvfs,
+		                        IN_CREATE | IN_DELETE | IN_MOVED_TO
+		                        | IN_MOVED_FROM | IN_ONLYDIR);
+	}
+
+	/* ⛔ NOT a warning-and-carry-on. With every source dead this would sit in
+	 * poll() forever looking exactly like a watcher that works, and the GUI
+	 * would wait for events that can never arrive. */
+	if (mfd < 0 && ufd < 0 && ifd < 0) {
+		free(rundir);
+		free(gvfs);
+		die(_("volumes --watch: nothing to watch — no mountinfo, uevents or inotify"));
+	}
+
+	/* ⛔ LINE BUFFERED, OR THE STREAM ARRIVES IN 4KB LUMPS AND NEVER AT ALL.
+	 * stdout is fully buffered the moment it is a pipe rather than a terminal,
+	 * which is exactly what it is when the GUI is on the other end: the header
+	 * below, and every event after it, would sit in libc's buffer waiting for
+	 * 4096 bytes of one-word lines that will not arrive for weeks. Caught by
+	 * the suite, which redirects to a file and found the header missing. */
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
+	if (g_out == OUT_REC)
+		rec_row(1, "event");
+	fflush(stdout);
+
+	char    buf[8192];
+	bool    dirty  = false;
+	const char *why = "changed";
+
+	for (;;) {
+		struct pollfd p[3];
+		int n = 0;
+		int imf = -1, iuf = -1, iif = -1;
+
+		if (mfd >= 0) { imf = n; p[n].fd = mfd; p[n].events = POLLPRI; p[n++].revents = 0; }
+		if (ufd >= 0) { iuf = n; p[n].fd = ufd; p[n].events = POLLIN;  p[n++].revents = 0; }
+		if (ifd >= 0) { iif = n; p[n].fd = ifd; p[n].events = POLLIN;  p[n++].revents = 0; }
+
+		/* Blocking until something happens, then only until the burst has
+		 * settled. That second phase is what turns six uevents into one line. */
+		int r = poll(p, (nfds_t)n, dirty ? WATCH_SETTLE_MS : -1);
+		if (r < 0) {
+			if (errno == EINTR)
+				continue;
+			break;
+		}
+		if (r == 0) {
+			if (dirty) {
+				watch_report(why);
+				dirty = false;
+				why   = "changed";
+			}
+			continue;
+		}
+
+		if (imf >= 0 && (p[imf].revents & (POLLPRI | POLLERR))) {
+			/* Rewound, or the next poll returns immediately forever: the
+			 * kernel re-arms the notification on seek, not on read. */
+			lseek(mfd, 0, SEEK_SET);
+			dirty = true;
+			why   = "mount";
+		}
+
+		if (iuf >= 0 && (p[iuf].revents & POLLIN)) {
+			for (;;) {
+				ssize_t len = recv(ufd, buf, sizeof buf, MSG_DONTWAIT);
+				if (len <= 0) {
+					/* ⚠ ENOBUFS is the socket saying it DROPPED messages,
+					 * which is the one case where "nothing readable" means
+					 * something happened. Re-read rather than stand still —
+					 * the event that overflowed the queue may be the plug. */
+					if (len < 0 && errno == ENOBUFS)
+						dirty = true;
+					break;
+				}
+				if (uevent_is_block(buf, len)) {
+					dirty = true;
+					if (!strcmp(why, "changed"))
+						why = "device";
+				}
+			}
+		}
+
+		if (iif >= 0 && (p[iif].revents & POLLIN)) {
+			for (;;) {
+				ssize_t len = read(ifd, buf, sizeof buf);
+				if (len <= 0)
+					break;
+				for (ssize_t off = 0; off + (ssize_t)sizeof(struct inotify_event) <= len; ) {
+					const struct inotify_event *ev =
+						(const struct inotify_event *)(buf + off);
+
+					/* ⛔ IN_IGNORED FIRST, or gvfsd-fuse restarting costs the
+					 * share watch for the life of the process: the watch dies
+					 * with the directory, `gwd` keeps its dead number, and the
+					 * re-add below — which only fires while gwd is unset —
+					 * never runs again. */
+					if ((ev->mask & IN_IGNORED) && ev->wd == gwd)
+						gwd = -1;
+					else if (gwd < 0 && ev->len && !strcmp(ev->name, "gvfs"))
+						/* gvfsd-fuse starting: the directory the shares live
+						 * in has only now been created. */
+						gwd = inotify_add_watch(ifd, gvfs,
+						                        IN_CREATE | IN_DELETE | IN_MOVED_TO
+						                        | IN_MOVED_FROM | IN_ONLYDIR);
+					else if (ev->wd == gwd)
+						why = "network";
+
+					dirty = true;
+					off += (ssize_t)sizeof *ev + (ssize_t)ev->len;
+				}
+			}
+		}
+	}
+
+	free(rundir);
+	free(gvfs);
+	return 0;
+}
+
 int cmd_volumes(int argc, char **argv)
 {
-	bool net_only = false, blk_only = false;
+	bool net_only = false, blk_only = false, watch = false;
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--network"))     net_only = true;
 		else if (!strcmp(argv[i], "--block"))  blk_only = true;
+		else if (!strcmp(argv[i], "--watch"))  watch = true;
 		else die(_("volumes: unknown option '%s'"), argv[i]);
 	}
+
+	/* --watch never lists. It is a stream of "ask again" and nothing else, so
+	 * a caller can start it once and keep it; printing the list first would
+	 * make the first record indistinguishable from an event. */
+	if (watch)
+		return volumes_watch();
 
 	if (g_out == OUT_REC)
 		rec_row(10, "path", "kind", "title", "icon", "size", "fstype",

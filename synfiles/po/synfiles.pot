@@ -28,6 +28,9 @@ msgstr ""
 msgid "%1  ·  %2 selected"
 msgstr ""
 
+msgid "%1 connected"
+msgstr ""
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] ""
@@ -584,6 +587,9 @@ msgstr ""
 msgid "destroying %1…"
 msgstr ""
 
+msgid "disc inserted — %1"
+msgstr ""
+
 msgid "dragging %1…"
 msgstr ""
 
@@ -624,9 +630,6 @@ msgid "mode"
 msgstr ""
 
 msgid "modified"
-msgstr ""
-
-msgid "mount %1"
 msgstr ""
 
 msgid "mounting %1…"
@@ -1273,6 +1276,9 @@ msgid "mount: need a device path (see: synfiles volumes)"
 msgstr ""
 
 msgid "unmount: need a device path (see: synfiles volumes)"
+msgstr ""
+
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
 msgstr ""
 
 #, c-format

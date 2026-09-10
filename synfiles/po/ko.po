@@ -28,6 +28,9 @@ msgstr "%1  (폴더 내용은 계산하지 않음)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2개 선택됨"
 
+msgid "%1 connected"
+msgstr "%1 연결됨"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1개 완료"
@@ -570,6 +573,9 @@ msgstr "설명"
 msgid "destroying %1…"
 msgstr "%1 파기하는 중…"
 
+msgid "disc inserted — %1"
+msgstr "디스크가 삽입됨 — %1"
+
 msgid "dragging %1…"
 msgstr "%1 끄는 중…"
 
@@ -611,9 +617,6 @@ msgstr "권한"
 
 msgid "modified"
 msgstr "수정한 날짜"
-
-msgid "mount %1"
-msgstr "%1 마운트"
 
 msgid "mounting %1…"
 msgstr "%1 마운트하는 중…"
@@ -739,7 +742,9 @@ msgstr "%s의 정보를 가져올 수 없습니다: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: .desktop 파일과 경로가 필요합니다\n  사용법: synfiles action <파일.desktop> <경로>…"
+msgstr ""
+"action: .desktop 파일과 경로가 필요합니다\n"
+"  사용법: synfiles action <파일.desktop> <경로>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -781,13 +786,17 @@ msgstr "compress: 경로가 최소한 하나 필요합니다"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: 알 수 없는 형식 '%s' — zip, tar.gz, tar.xz, tar.zst, 7z를 시도해 보세요"
+msgstr ""
+"compress: 알 수 없는 형식 '%s' — zip, tar.gz, tar.xz, tar.zst, 7z를 시도해 보"
+"세요"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: 모두 같은 폴더에 있어야 합니다\n  그렇지 않으면 다른 곳에서는 의미가 없는 경로가 압축 파일에 들어갑니다"
+msgstr ""
+"compress: 모두 같은 폴더에 있어야 합니다\n"
+"  그렇지 않으면 다른 곳에서는 의미가 없는 경로가 압축 파일에 들어갑니다"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name은 경로가 아니라 이름을 받습니다"
@@ -839,7 +848,9 @@ msgstr "설정을 기본값으로 되돌렸습니다\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: 알 수 없는 하위 명령 '%s' — list, get <키>, set <키> <값>, reset을 시도해 보세요"
+msgstr ""
+"config: 알 수 없는 하위 명령 '%s' — list, get <키>, set <키> <값>, reset을 시"
+"도해 보세요"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -847,7 +858,8 @@ msgstr "%s을(를) 해석할 수 없습니다: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "알 수 없는 충돌 정책 '%s' — error, skip, rename, overwrite를 시도해 보세요"
+msgstr ""
+"알 수 없는 충돌 정책 '%s' — error, skip, rename, overwrite를 시도해 보세요"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -918,7 +930,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete는 파일을 영구히 지우며 되돌릴 수 없습니다.\n  휴지통으로 옮기려면: synfiles trash <경로>…\n  정말 그러려면: --force"
+msgstr ""
+"delete는 파일을 영구히 지우며 되돌릴 수 없습니다.\n"
+"  휴지통으로 옮기려면: synfiles trash <경로>…\n"
+"  정말 그러려면: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -974,7 +989,9 @@ msgstr "quickshell을 시작할 수 없었습니다"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: %s에 대해 avahi-browse가 실패했습니다 (종료 코드 %d) — 이 컴퓨터에서는 mDNS 검색이 동작하지 않습니다"
+msgstr ""
+"netscan: %s에 대해 avahi-browse가 실패했습니다 (종료 코드 %d) — 이 컴퓨터에서"
+"는 mDNS 검색이 동작하지 않습니다"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -983,7 +1000,8 @@ msgstr "netscan: 알 수 없는 옵션 '%s'"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: 장치를 찾으려면 avahi(mDNS)나 smbclient(윈도우 공유)를 설치하세요"
+msgstr ""
+"netscan: 장치를 찾으려면 avahi(mDNS)나 smbclient(윈도우 공유)를 설치하세요"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: URI가 필요합니다 (참고: synfiles netscan)"
@@ -993,7 +1011,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: '%s'은(는) URI가 아닙니다"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio가 설치되어 있지 않습니다 — 네트워크 공유를 마운트하려면 gvfs를 설치하세요"
+msgstr ""
+"netmount: gio가 설치되어 있지 않습니다 — 네트워크 공유를 마운트하려면 gvfs를 "
+"설치하세요"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1058,7 +1078,9 @@ msgstr "places unpin: 경로가 필요합니다"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: 알 수 없는 하위 명령 '%s' — list, pin <경로>, unpin <경로>를 시도해 보세요"
+msgstr ""
+"places: 알 수 없는 하위 명령 '%s' — list, pin <경로>, unpin <경로>를 시도해 "
+"보세요"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1114,10 +1136,14 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "휴지통 비우기는 영구적이며 되돌릴 수 없습니다.\n  무엇이 사라질지 보려면: synfiles trash list\n  정말 그러려면: --force"
+msgstr ""
+"휴지통 비우기는 영구적이며 되돌릴 수 없습니다.\n"
+"  무엇이 사라질지 보려면: synfiles trash list\n"
+"  정말 그러려면: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
-msgstr "trash restore: 휴지통 안의 이름이 필요합니다 (참고: synfiles trash list)"
+msgstr ""
+"trash restore: 휴지통 안의 이름이 필요합니다 (참고: synfiles trash list)"
 
 #, c-format
 msgid "trash: unknown option '%s'"
@@ -1176,7 +1202,9 @@ msgstr "%s은(는) 폴더가 아닙니다 — %s은(는) 폴더 안에 넣는 �
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s은(는) 이미 여기 있습니다 — 다른 곳에 복사하거나 `synfiles copy --conflict=rename`을 쓰세요"
+msgstr ""
+"%s은(는) 이미 여기 있습니다 — 다른 곳에 복사하거나 `synfiles copy --"
+"conflict=rename`을 쓰세요"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1244,7 +1272,8 @@ msgstr "되돌리기 기록을 지웠습니다\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: 알 수 없는 하위 명령 '%s' — list, clear, 또는 인자 없이 시도해 보세요"
+msgstr ""
+"undo: 알 수 없는 하위 명령 '%s' — list, clear, 또는 인자 없이 시도해 보세요"
 
 msgid "out of memory"
 msgstr "메모리가 부족합니다"
@@ -1253,7 +1282,8 @@ msgid "HOME is not set"
 msgstr "HOME이 설정되어 있지 않습니다"
 
 msgid "udisksctl is not installed — install udisks2 to mount from here"
-msgstr "udisksctl이 설치되어 있지 않습니다 — 여기서 마운트하려면 udisks2를 설치하세요"
+msgstr ""
+"udisksctl이 설치되어 있지 않습니다 — 여기서 마운트하려면 udisks2를 설치하세요"
 
 #, c-format
 msgid "%s: expected a device path like /dev/sdc1"
@@ -1265,9 +1295,15 @@ msgstr "mount: 장치 경로가 필요합니다 (참고: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: 장치 경로가 필요합니다 (참고: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: 감시할 대상이 없음 — mountinfo, uevent, inotify를 모두 쓸 수 없음"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: 알 수 없는 옵션 '%s'"
 
 msgid "no volumes"
 msgstr "볼륨이 없습니다"
+
+#~ msgid "mount %1"
+#~ msgstr "%1 마운트"

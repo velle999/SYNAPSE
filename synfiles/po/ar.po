@@ -29,6 +29,9 @@ msgstr "%1  (لم تُحسب محتويات المجلدات)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 محدد"
 
+msgid "%1 connected"
+msgstr "تم توصيل %1"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "لا شيء مكتمل"
@@ -666,6 +669,9 @@ msgstr "الوصف"
 msgid "destroying %1…"
 msgstr "يجري إتلاف %1…"
 
+msgid "disc inserted — %1"
+msgstr "تم إدخال قرص — %1"
+
 msgid "dragging %1…"
 msgstr "يجري سحب %1…"
 
@@ -707,9 +713,6 @@ msgstr "الأذونات"
 
 msgid "modified"
 msgstr "عُدّل"
-
-msgid "mount %1"
-msgstr "صِل %1"
 
 msgid "mounting %1…"
 msgstr "يجري وصل %1…"
@@ -845,7 +848,9 @@ msgstr "تعذّر جلب معلومات %s: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: يلزم ملف ‎.desktop ومسار\n  الاستخدام: synfiles action <ملف.desktop> <مسار>…"
+msgstr ""
+"action: يلزم ملف ‎.desktop ومسار\n"
+"  الاستخدام: synfiles action <ملف.desktop> <مسار>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -887,13 +892,16 @@ msgstr "compress: يلزم مسار واحد على الأقل"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: صيغة غير معروفة «%s» — جرّب zip أو tar.gz أو tar.xz أو tar.zst أو 7z"
+msgstr ""
+"compress: صيغة غير معروفة «%s» — جرّب zip أو tar.gz أو tar.xz أو tar.zst أو 7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: يجب أن يكون كل شيء في المجلد نفسه\n  وإلا لاحتوى الأرشيف مسارات لا معنى لها في مكان آخر"
+msgstr ""
+"compress: يجب أن يكون كل شيء في المجلد نفسه\n"
+"  وإلا لاحتوى الأرشيف مسارات لا معنى لها في مكان آخر"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: ‏--name يأخذ اسمًا لا مسارًا"
@@ -945,7 +953,9 @@ msgstr "أُعيدت الإعدادات إلى القيم الافتراضية\n
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: أمر فرعي غير معروف «%s» — جرّب list أو get <مفتاح> أو set <مفتاح> <قيمة> أو reset"
+msgstr ""
+"config: أمر فرعي غير معروف «%s» — جرّب list أو get <مفتاح> أو set <مفتاح> "
+"<قيمة> أو reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -1024,7 +1034,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "يحذف delete الملفات نهائيًا ولا يمكن التراجع عنه.\n  لنقلها إلى المهملات: synfiles trash <مسار>…\n  إن كنت تقصد ذلك فعلًا: --force"
+msgstr ""
+"يحذف delete الملفات نهائيًا ولا يمكن التراجع عنه.\n"
+"  لنقلها إلى المهملات: synfiles trash <مسار>…\n"
+"  إن كنت تقصد ذلك فعلًا: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1080,7 +1093,9 @@ msgstr "تعذّر تشغيل quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: أخفق avahi-browse مع %s (خروج %d) — اكتشاف mDNS لا يعمل على هذا الجهاز"
+msgstr ""
+"netscan: أخفق avahi-browse مع %s (خروج %d) — اكتشاف mDNS لا يعمل على هذا "
+"الجهاز"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1089,7 +1104,8 @@ msgstr "netscan: خيار غير معروف «%s»"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: ثبّت avahi‏ (mDNS) أو smbclient (مشاركات ويندوز) لاكتشاف الأجهزة"
+msgstr ""
+"netscan: ثبّت avahi‏ (mDNS) أو smbclient (مشاركات ويندوز) لاكتشاف الأجهزة"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: يلزم URI (انظر: synfiles netscan)"
@@ -1164,7 +1180,8 @@ msgstr "places unpin: يلزم مسار"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: أمر فرعي غير معروف «%s» — جرّب list أو pin <مسار> أو unpin <مسار>"
+msgstr ""
+"places: أمر فرعي غير معروف «%s» — جرّب list أو pin <مسار> أو unpin <مسار>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1220,7 +1237,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "إفراغ المهملات نهائي ولا يمكن التراجع عنه.\n  لمعرفة ما سيختفي: synfiles trash list\n  إن كنت تقصد ذلك فعلًا: --force"
+msgstr ""
+"إفراغ المهملات نهائي ولا يمكن التراجع عنه.\n"
+"  لمعرفة ما سيختفي: synfiles trash list\n"
+"  إن كنت تقصد ذلك فعلًا: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore: يلزم الاسم داخل المهملات (انظر: synfiles trash list)"
@@ -1282,7 +1302,9 @@ msgstr "‏%s ليس مجلدًا — %s يضع الأشياء داخل مجلد
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "‏%s هنا بالفعل — انسخه إلى مكان آخر، أو استخدم `synfiles copy --conflict=rename`"
+msgstr ""
+"‏%s هنا بالفعل — انسخه إلى مكان آخر، أو استخدم `synfiles copy --"
+"conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1371,9 +1393,15 @@ msgstr "mount: يلزم مسار جهاز (انظر: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: يلزم مسار جهاز (انظر: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: لا شيء لمراقبته — لا mountinfo ولا uevents ولا inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: خيار غير معروف «%s»"
 
 msgid "no volumes"
 msgstr "لا وحدات تخزين"
+
+#~ msgid "mount %1"
+#~ msgstr "صِل %1"

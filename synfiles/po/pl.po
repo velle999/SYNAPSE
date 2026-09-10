@@ -29,6 +29,9 @@ msgstr "%1  (zawartość folderów nieliczona)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  zaznaczono %2"
 
+msgid "%1 connected"
+msgstr "Podłączono %1"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 gotowy"
@@ -610,6 +613,9 @@ msgstr "opis"
 msgid "destroying %1…"
 msgstr "niszczenie %1…"
 
+msgid "disc inserted — %1"
+msgstr "Włożono płytę — %1"
+
 msgid "dragging %1…"
 msgstr "przeciąganie %1…"
 
@@ -651,9 +657,6 @@ msgstr "uprawnienia"
 
 msgid "modified"
 msgstr "zmodyfikowano"
-
-msgid "mount %1"
-msgstr "zamontuj %1"
 
 msgid "mounting %1…"
 msgstr "montowanie %1…"
@@ -784,7 +787,9 @@ msgstr "nie można pobrać informacji o %s: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: wymagany jest plik .desktop i ścieżka\n  użycie: synfiles action <plik.desktop> <ścieżka>…"
+msgstr ""
+"action: wymagany jest plik .desktop i ścieżka\n"
+"  użycie: synfiles action <plik.desktop> <ścieżka>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -826,13 +831,16 @@ msgstr "compress: wymagana jest co najmniej jedna ścieżka"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: nieznany format „%s” — spróbuj zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr ""
+"compress: nieznany format „%s” — spróbuj zip, tar.gz, tar.xz, tar.zst, 7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: wszystko musi być w tym samym katalogu\n  inaczej archiwum zawierałoby ścieżki, które gdzie indziej nic nie znaczą"
+msgstr ""
+"compress: wszystko musi być w tym samym katalogu\n"
+"  inaczej archiwum zawierałoby ścieżki, które gdzie indziej nic nie znaczą"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name oczekuje nazwy, nie ścieżki"
@@ -884,7 +892,9 @@ msgstr "ustawienia przywrócone do wartości domyślnych\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: nieznane podpolecenie „%s” — spróbuj list, get <klucz>, set <klucz> <wartość>, reset"
+msgstr ""
+"config: nieznane podpolecenie „%s” — spróbuj list, get <klucz>, set <klucz> "
+"<wartość>, reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -892,7 +902,8 @@ msgstr "nie można rozwiązać %s: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "nieznana zasada konfliktów „%s” — spróbuj error, skip, rename, overwrite"
+msgstr ""
+"nieznana zasada konfliktów „%s” — spróbuj error, skip, rename, overwrite"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -963,7 +974,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete usuwa pliki TRWALE i nie da się tego cofnąć.\n  aby przenieść je do kosza: synfiles trash <ścieżka>…\n  jeśli naprawdę o to chodzi: --force"
+msgstr ""
+"delete usuwa pliki TRWALE i nie da się tego cofnąć.\n"
+"  aby przenieść je do kosza: synfiles trash <ścieżka>…\n"
+"  jeśli naprawdę o to chodzi: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1019,7 +1033,9 @@ msgstr "nie udało się uruchomić quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: avahi-browse zawiodło dla %s (kod %d) — wykrywanie mDNS nie działa na tym komputerze"
+msgstr ""
+"netscan: avahi-browse zawiodło dla %s (kod %d) — wykrywanie mDNS nie działa "
+"na tym komputerze"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1028,7 +1044,9 @@ msgstr "netscan: nieznana opcja „%s”"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: zainstaluj avahi (mDNS) albo smbclient (udziały Windows), aby wykrywać urządzenia"
+msgstr ""
+"netscan: zainstaluj avahi (mDNS) albo smbclient (udziały Windows), aby "
+"wykrywać urządzenia"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: wymagany jest URI (zobacz: synfiles netscan)"
@@ -1038,7 +1056,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: „%s” nie jest URI"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio nie jest zainstalowane — zainstaluj gvfs, aby montować udziały sieciowe"
+msgstr ""
+"netmount: gio nie jest zainstalowane — zainstaluj gvfs, aby montować udziały "
+"sieciowe"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1103,7 +1123,9 @@ msgstr "places unpin: wymagana jest ścieżka"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: nieznane podpolecenie „%s” — spróbuj list, pin <ścieżka>, unpin <ścieżka>"
+msgstr ""
+"places: nieznane podpolecenie „%s” — spróbuj list, pin <ścieżka>, unpin "
+"<ścieżka>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1159,10 +1181,14 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "opróżnienie kosza jest TRWAŁE i nie da się tego cofnąć.\n  aby zobaczyć, co zniknie: synfiles trash list\n  jeśli naprawdę o to chodzi: --force"
+msgstr ""
+"opróżnienie kosza jest TRWAŁE i nie da się tego cofnąć.\n"
+"  aby zobaczyć, co zniknie: synfiles trash list\n"
+"  jeśli naprawdę o to chodzi: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
-msgstr "trash restore: wymagana jest nazwa w koszu (zobacz: synfiles trash list)"
+msgstr ""
+"trash restore: wymagana jest nazwa w koszu (zobacz: synfiles trash list)"
 
 #, c-format
 msgid "trash: unknown option '%s'"
@@ -1170,7 +1196,9 @@ msgstr "trash: nieznana opcja „%s”"
 
 #, c-format
 msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
-msgstr "<nr> otwórz · u wyżej · h katalog domowy · c <ścieżka> przejdź · / <tekst> filtruj"
+msgstr ""
+"<nr> otwórz · u wyżej · h katalog domowy · c <ścieżka> przejdź · / <tekst> "
+"filtruj"
 
 #, c-format
 msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
@@ -1221,7 +1249,9 @@ msgstr "%s nie jest katalogiem — %s umieszcza rzeczy W katalogu"
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s już tu jest — skopiuj to gdzie indziej albo użyj `synfiles copy --conflict=rename`"
+msgstr ""
+"%s już tu jest — skopiuj to gdzie indziej albo użyj `synfiles copy --"
+"conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1289,7 +1319,8 @@ msgstr "historia cofania wyczyszczona\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: nieznane podpolecenie „%s” — spróbuj list, clear albo brak argumentu"
+msgstr ""
+"undo: nieznane podpolecenie „%s” — spróbuj list, clear albo brak argumentu"
 
 msgid "out of memory"
 msgstr "brak pamięci"
@@ -1298,7 +1329,8 @@ msgid "HOME is not set"
 msgstr "HOME nie jest ustawione"
 
 msgid "udisksctl is not installed — install udisks2 to mount from here"
-msgstr "udisksctl nie jest zainstalowany — zainstaluj udisks2, aby montować stąd"
+msgstr ""
+"udisksctl nie jest zainstalowany — zainstaluj udisks2, aby montować stąd"
 
 #, c-format
 msgid "%s: expected a device path like /dev/sdc1"
@@ -1310,9 +1342,15 @@ msgstr "mount: wymagana jest ścieżka urządzenia (zobacz: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: wymagana jest ścieżka urządzenia (zobacz: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: nie ma czego obserwować — brak mountinfo, uevents i inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: nieznana opcja „%s”"
 
 msgid "no volumes"
 msgstr "brak wolumenów"
+
+#~ msgid "mount %1"
+#~ msgstr "zamontuj %1"

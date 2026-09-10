@@ -28,6 +28,9 @@ msgstr "%1  (mapinhoud niet meegeteld)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 geselecteerd"
 
+msgid "%1 connected"
+msgstr "%1 verbonden"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 klaar"
@@ -596,6 +599,9 @@ msgstr "beschrijving"
 msgid "destroying %1…"
 msgstr "%1 vernietigen…"
 
+msgid "disc inserted — %1"
+msgstr "Schijf geplaatst — %1"
+
 msgid "dragging %1…"
 msgstr "%1 slepen…"
 
@@ -637,9 +643,6 @@ msgstr "rechten"
 
 msgid "modified"
 msgstr "gewijzigd"
-
-msgid "mount %1"
-msgstr "%1 aankoppelen"
 
 msgid "mounting %1…"
 msgstr "%1 aankoppelen…"
@@ -768,7 +771,9 @@ msgstr "kan %s niet opvragen: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: een .desktop-bestand en een pad zijn nodig\n  gebruik: synfiles action <bestand.desktop> <pad>…"
+msgstr ""
+"action: een .desktop-bestand en een pad zijn nodig\n"
+"  gebruik: synfiles action <bestand.desktop> <pad>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -810,13 +815,16 @@ msgstr "compress: ten minste één pad is nodig"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: onbekende indeling '%s' — probeer zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr ""
+"compress: onbekende indeling '%s' — probeer zip, tar.gz, tar.xz, tar.zst, 7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: alles moet in dezelfde map staan\n  anders zou het archief paden bevatten die elders nergens op slaan"
+msgstr ""
+"compress: alles moet in dezelfde map staan\n"
+"  anders zou het archief paden bevatten die elders nergens op slaan"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name verwacht een naam, geen pad"
@@ -868,7 +876,9 @@ msgstr "instellingen teruggezet op de standaardwaarden\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: onbekend subcommando '%s' — probeer list, get <sleutel>, set <sleutel> <waarde>, reset"
+msgstr ""
+"config: onbekend subcommando '%s' — probeer list, get <sleutel>, set "
+"<sleutel> <waarde>, reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -947,7 +957,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete verwijdert bestanden DEFINITIEF en kan niet ongedaan worden gemaakt.\n  om ze naar de prullenbak te verplaatsen: synfiles trash <pad>…\n  als u dit echt bedoelt: --force"
+msgstr ""
+"delete verwijdert bestanden DEFINITIEF en kan niet ongedaan worden gemaakt.\n"
+"  om ze naar de prullenbak te verplaatsen: synfiles trash <pad>…\n"
+"  als u dit echt bedoelt: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1003,7 +1016,9 @@ msgstr "kon quickshell niet starten"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: avahi-browse is mislukt voor %s (afsluitcode %d) — mDNS-ontdekking werkt niet op deze machine"
+msgstr ""
+"netscan: avahi-browse is mislukt voor %s (afsluitcode %d) — mDNS-ontdekking "
+"werkt niet op deze machine"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1012,7 +1027,9 @@ msgstr "netscan: onbekende optie '%s'"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: installeer avahi (mDNS) of smbclient (Windows-shares) om apparaten te ontdekken"
+msgstr ""
+"netscan: installeer avahi (mDNS) of smbclient (Windows-shares) om apparaten "
+"te ontdekken"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: een URI is nodig (zie: synfiles netscan)"
@@ -1022,7 +1039,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: '%s' is geen URI"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio is niet geïnstalleerd — installeer gvfs om netwerkshares aan te koppelen"
+msgstr ""
+"netmount: gio is niet geïnstalleerd — installeer gvfs om netwerkshares aan "
+"te koppelen"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1058,7 +1077,8 @@ msgstr "%s is al vastgezet"
 
 #, c-format
 msgid "%s has no </xbel> — refusing to guess where a bookmark goes"
-msgstr "%s heeft geen </xbel> — er wordt niet geraden waar een bladwijzer hoort"
+msgstr ""
+"%s heeft geen </xbel> — er wordt niet geraden waar een bladwijzer hoort"
 
 #, c-format
 msgid "pinned %s\n"
@@ -1087,7 +1107,8 @@ msgstr "places unpin: een pad is nodig"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: onbekend subcommando '%s' — probeer list, pin <pad>, unpin <pad>"
+msgstr ""
+"places: onbekend subcommando '%s' — probeer list, pin <pad>, unpin <pad>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1143,10 +1164,14 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "de prullenbak legen is DEFINITIEF en kan niet ongedaan worden gemaakt.\n  om te zien wat zou verdwijnen: synfiles trash list\n  als u dit echt bedoelt: --force"
+msgstr ""
+"de prullenbak legen is DEFINITIEF en kan niet ongedaan worden gemaakt.\n"
+"  om te zien wat zou verdwijnen: synfiles trash list\n"
+"  als u dit echt bedoelt: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
-msgstr "trash restore: de naam in de prullenbak is nodig (zie: synfiles trash list)"
+msgstr ""
+"trash restore: de naam in de prullenbak is nodig (zie: synfiles trash list)"
 
 #, c-format
 msgid "trash: unknown option '%s'"
@@ -1154,7 +1179,8 @@ msgstr "trash: onbekende optie '%s'"
 
 #, c-format
 msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
-msgstr "<num> openen · u omhoog · h persoonlijke map · c <pad> ga · / <tekst> filter"
+msgstr ""
+"<num> openen · u omhoog · h persoonlijke map · c <pad> ga · / <tekst> filter"
 
 #, c-format
 msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
@@ -1205,7 +1231,9 @@ msgstr "%s is geen map — %s zet dingen IN een map"
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s is hier al — kopieer het ergens anders heen, of gebruik `synfiles copy --conflict=rename`"
+msgstr ""
+"%s is hier al — kopieer het ergens anders heen, of gebruik `synfiles copy --"
+"conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1273,7 +1301,9 @@ msgstr "geschiedenis van ongedaan maken gewist\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: onbekend subcommando '%s' — probeer list, clear, of helemaal geen argument"
+msgstr ""
+"undo: onbekend subcommando '%s' — probeer list, clear, of helemaal geen "
+"argument"
 
 msgid "out of memory"
 msgstr "onvoldoende geheugen"
@@ -1282,7 +1312,9 @@ msgid "HOME is not set"
 msgstr "HOME is niet ingesteld"
 
 msgid "udisksctl is not installed — install udisks2 to mount from here"
-msgstr "udisksctl is niet geïnstalleerd — installeer udisks2 om vanaf hier aan te koppelen"
+msgstr ""
+"udisksctl is niet geïnstalleerd — installeer udisks2 om vanaf hier aan te "
+"koppelen"
 
 #, c-format
 msgid "%s: expected a device path like /dev/sdc1"
@@ -1294,9 +1326,15 @@ msgstr "mount: een apparaatpad is nodig (zie: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: een apparaatpad is nodig (zie: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: niets om te volgen — geen mountinfo, uevents of inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: onbekende optie '%s'"
 
 msgid "no volumes"
 msgstr "geen volumes"
+
+#~ msgid "mount %1"
+#~ msgstr "%1 aankoppelen"

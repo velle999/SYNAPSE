@@ -29,6 +29,9 @@ msgstr "%1  (содержимое папок не учтено)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  выбрано %2"
 
+msgid "%1 connected"
+msgstr "%1 подключён"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 готов"
@@ -610,6 +613,9 @@ msgstr "описание"
 msgid "destroying %1…"
 msgstr "уничтожение %1…"
 
+msgid "disc inserted — %1"
+msgstr "Диск вставлен — %1"
+
 msgid "dragging %1…"
 msgstr "перетаскивание %1…"
 
@@ -651,9 +657,6 @@ msgstr "права"
 
 msgid "modified"
 msgstr "изменён"
-
-msgid "mount %1"
-msgstr "подключить %1"
 
 msgid "mounting %1…"
 msgstr "подключение %1…"
@@ -784,7 +787,9 @@ msgstr "не удалось получить сведения о %s: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: нужны файл .desktop и путь\n  использование: synfiles action <файл.desktop> <путь>…"
+msgstr ""
+"action: нужны файл .desktop и путь\n"
+"  использование: synfiles action <файл.desktop> <путь>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -826,13 +831,17 @@ msgstr "compress: нужен хотя бы один путь"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: неизвестный формат «%s» — попробуйте zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr ""
+"compress: неизвестный формат «%s» — попробуйте zip, tar.gz, tar.xz, tar.zst, "
+"7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: всё должно лежать в одной папке\n  иначе архив содержал бы пути, которые в другом месте ничего не значат"
+msgstr ""
+"compress: всё должно лежать в одной папке\n"
+"  иначе архив содержал бы пути, которые в другом месте ничего не значат"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name требует имя, а не путь"
@@ -884,7 +893,9 @@ msgstr "настройки сброшены к значениям по умол�
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: неизвестная подкоманда «%s» — попробуйте list, get <ключ>, set <ключ> <значение>, reset"
+msgstr ""
+"config: неизвестная подкоманда «%s» — попробуйте list, get <ключ>, set "
+"<ключ> <значение>, reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -892,7 +903,9 @@ msgstr "не удаётся разрешить %s: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "неизвестное правило разрешения конфликтов «%s» — попробуйте error, skip, rename, overwrite"
+msgstr ""
+"неизвестное правило разрешения конфликтов «%s» — попробуйте error, skip, "
+"rename, overwrite"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -963,7 +976,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete удаляет файлы БЕЗВОЗВРАТНО, и это нельзя отменить.\n  чтобы отправить их в корзину: synfiles trash <путь>…\n  если вы действительно этого хотите: --force"
+msgstr ""
+"delete удаляет файлы БЕЗВОЗВРАТНО, и это нельзя отменить.\n"
+"  чтобы отправить их в корзину: synfiles trash <путь>…\n"
+"  если вы действительно этого хотите: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1019,7 +1035,9 @@ msgstr "не удалось запустить quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: avahi-browse завершился ошибкой для %s (код %d) — обнаружение mDNS на этой машине не работает"
+msgstr ""
+"netscan: avahi-browse завершился ошибкой для %s (код %d) — обнаружение mDNS "
+"на этой машине не работает"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1028,7 +1046,9 @@ msgstr "netscan: неизвестный параметр «%s»"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: установите avahi (mDNS) или smbclient (общие ресурсы Windows), чтобы находить устройства"
+msgstr ""
+"netscan: установите avahi (mDNS) или smbclient (общие ресурсы Windows), "
+"чтобы находить устройства"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: нужен URI (см.: synfiles netscan)"
@@ -1038,7 +1058,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: «%s» не является URI"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio не установлен — установите gvfs, чтобы монтировать сетевые ресурсы"
+msgstr ""
+"netmount: gio не установлен — установите gvfs, чтобы монтировать сетевые "
+"ресурсы"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1103,7 +1125,9 @@ msgstr "places unpin: нужен путь"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: неизвестная подкоманда «%s» — попробуйте list, pin <путь>, unpin <путь>"
+msgstr ""
+"places: неизвестная подкоманда «%s» — попробуйте list, pin <путь>, unpin "
+"<путь>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1159,7 +1183,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "очистка корзины БЕЗВОЗВРАТНА, и её нельзя отменить.\n  чтобы посмотреть, что исчезнет: synfiles trash list\n  если вы действительно этого хотите: --force"
+msgstr ""
+"очистка корзины БЕЗВОЗВРАТНА, и её нельзя отменить.\n"
+"  чтобы посмотреть, что исчезнет: synfiles trash list\n"
+"  если вы действительно этого хотите: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore: нужно имя в корзине (см.: synfiles trash list)"
@@ -1170,11 +1197,14 @@ msgstr "trash: неизвестный параметр «%s»"
 
 #, c-format
 msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
-msgstr "<номер> открыть · u вверх · h домой · c <путь> перейти · / <текст> фильтр"
+msgstr ""
+"<номер> открыть · u вверх · h домой · c <путь> перейти · / <текст> фильтр"
 
 #, c-format
 msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
-msgstr "i <номер> сведения · z <номер> размер · t <номер> корзина · e <номер> действия"
+msgstr ""
+"i <номер> сведения · z <номер> размер · t <номер> корзина · e <номер> "
+"действия"
 
 #, c-format
 msgid "m <num> <path> move · y <num> <path> copy"
@@ -1182,7 +1212,9 @@ msgstr "m <номер> <путь> переместить · y <номер> <пу
 
 #, c-format
 msgid "n/p page · a hidden · s sort · r reverse · g gui · q quit"
-msgstr "n/p страница · a скрытые · s сортировка · r обратный порядок · g gui · q выход"
+msgstr ""
+"n/p страница · a скрытые · s сортировка · r обратный порядок · g gui · q "
+"выход"
 
 #, c-format
 msgid "xdg-open is not installed — cannot open %s"
@@ -1221,7 +1253,9 @@ msgstr "%s не является папкой — %s помещает вещи �
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s уже здесь — скопируйте его в другое место или воспользуйтесь `synfiles copy --conflict=rename`"
+msgstr ""
+"%s уже здесь — скопируйте его в другое место или воспользуйтесь `synfiles "
+"copy --conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1289,7 +1323,8 @@ msgstr "история отмен очищена\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: неизвестная подкоманда «%s» — попробуйте list, clear или без аргументов"
+msgstr ""
+"undo: неизвестная подкоманда «%s» — попробуйте list, clear или без аргументов"
 
 msgid "out of memory"
 msgstr "недостаточно памяти"
@@ -1310,9 +1345,15 @@ msgstr "mount: нужен путь к устройству (см.: synfiles volu
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: нужен путь к устройству (см.: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: нечего отслеживать — нет ни mountinfo, ни uevents, ни inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: неизвестный параметр «%s»"
 
 msgid "no volumes"
 msgstr "нет томов"
+
+#~ msgid "mount %1"
+#~ msgstr "подключить %1"

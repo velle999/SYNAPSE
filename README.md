@@ -814,6 +814,17 @@ The right-click menu inherits synui's own service menus — Extract, Crop, Mount
 ISO, Run with Wine, Set as Wallpaper — because both file managers read the same
 `kio/servicemenus` files. Write a helper once and it appears in both.
 
+**The sidebar keeps up on its own.** Plug a stick in, put a disc in a drive, or
+mount something from another program or a terminal, and the devices list changes
+without a refresh. It takes three mechanisms and no one of them covers the other
+two: a device arriving and a disc going into a drive are kernel uevents, read
+off a netlink socket; mounting and unmounting emit no uevent at all and are a
+`poll()` on `/proc/self/mountinfo`; and a network share is neither, because gvfs
+hangs every share off one FUSE mount, so a new one appears as a directory under
+the runtime directory and is watched with inotify. A burst is coalesced, so one
+stick costs one re-read rather than the six its uevents would ask for.
+`synfiles volumes --watch` is the same stream on the command line.
+
 **Resting the pointer** on a file or a folder — in either view — says what it
 is, when it was last changed, how big it is, and where a symlink points. The
 type is its real name, "Tar archive (gzip-compressed)" rather than

@@ -28,6 +28,9 @@ msgstr "%1  (contenido de las carpetas no contado)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 seleccionados"
 
+msgid "%1 connected"
+msgstr "%1 conectado"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 hecho"
@@ -592,6 +595,9 @@ msgstr "descripción"
 msgid "destroying %1…"
 msgstr "destruyendo %1…"
 
+msgid "disc inserted — %1"
+msgstr "Disco insertado — %1"
+
 msgid "dragging %1…"
 msgstr "arrastrando %1…"
 
@@ -633,9 +639,6 @@ msgstr "permisos"
 
 msgid "modified"
 msgstr "modificado"
-
-msgid "mount %1"
-msgstr "montar %1"
 
 msgid "mounting %1…"
 msgstr "montando %1…"
@@ -765,7 +768,9 @@ msgstr "no se puede consultar %s: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: hacen falta un archivo .desktop y una ruta\n  uso: synfiles action <archivo.desktop> <ruta>…"
+msgstr ""
+"action: hacen falta un archivo .desktop y una ruta\n"
+"  uso: synfiles action <archivo.desktop> <ruta>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -807,13 +812,16 @@ msgstr "compress: hace falta al menos una ruta"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: formato «%s» desconocido — pruebe zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr ""
+"compress: formato «%s» desconocido — pruebe zip, tar.gz, tar.xz, tar.zst, 7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: todo debe estar en la misma carpeta\n  de lo contrario el archivo contendría rutas sin sentido en otro sitio"
+msgstr ""
+"compress: todo debe estar en la misma carpeta\n"
+"  de lo contrario el archivo contendría rutas sin sentido en otro sitio"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name espera un nombre, no una ruta"
@@ -865,7 +873,9 @@ msgstr "ajustes restablecidos a los valores por defecto\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: subcomando «%s» desconocido — pruebe list, get <clave>, set <clave> <valor>, reset"
+msgstr ""
+"config: subcomando «%s» desconocido — pruebe list, get <clave>, set <clave> "
+"<valor>, reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -873,7 +883,9 @@ msgstr "no se puede resolver %s: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "política de conflictos «%s» desconocida — pruebe error, skip, rename, overwrite"
+msgstr ""
+"política de conflictos «%s» desconocida — pruebe error, skip, rename, "
+"overwrite"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -944,7 +956,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete borra archivos DEFINITIVAMENTE y no se puede deshacer.\n  para moverlos a la papelera: synfiles trash <ruta>…\n  si de verdad es lo que quiere: --force"
+msgstr ""
+"delete borra archivos DEFINITIVAMENTE y no se puede deshacer.\n"
+"  para moverlos a la papelera: synfiles trash <ruta>…\n"
+"  si de verdad es lo que quiere: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1000,7 +1015,9 @@ msgstr "no se pudo iniciar quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: avahi-browse falló para %s (salida %d) — el descubrimiento mDNS no funciona en esta máquina"
+msgstr ""
+"netscan: avahi-browse falló para %s (salida %d) — el descubrimiento mDNS no "
+"funciona en esta máquina"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1009,7 +1026,9 @@ msgstr "netscan: opción «%s» desconocida"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: instale avahi (mDNS) o smbclient (recursos de Windows) para descubrir dispositivos"
+msgstr ""
+"netscan: instale avahi (mDNS) o smbclient (recursos de Windows) para "
+"descubrir dispositivos"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: hace falta una URI (vea: synfiles netscan)"
@@ -1019,7 +1038,8 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: «%s» no es una URI"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: gio no está instalado — instale gvfs para montar recursos de red"
+msgstr ""
+"netmount: gio no está instalado — instale gvfs para montar recursos de red"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1084,7 +1104,8 @@ msgstr "places unpin: hace falta una ruta"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: subcomando «%s» desconocido — pruebe list, pin <ruta>, unpin <ruta>"
+msgstr ""
+"places: subcomando «%s» desconocido — pruebe list, pin <ruta>, unpin <ruta>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1140,10 +1161,14 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "vaciar la papelera es DEFINITIVO y no se puede deshacer.\n  para ver qué desaparecería: synfiles trash list\n  si de verdad es lo que quiere: --force"
+msgstr ""
+"vaciar la papelera es DEFINITIVO y no se puede deshacer.\n"
+"  para ver qué desaparecería: synfiles trash list\n"
+"  si de verdad es lo que quiere: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
-msgstr "trash restore: hace falta el nombre en la papelera (vea: synfiles trash list)"
+msgstr ""
+"trash restore: hace falta el nombre en la papelera (vea: synfiles trash list)"
 
 #, c-format
 msgid "trash: unknown option '%s'"
@@ -1202,7 +1227,9 @@ msgstr "%s no es una carpeta — %s pone cosas DENTRO de una carpeta"
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s ya está aquí — cópielo a otro sitio, o use `synfiles copy --conflict=rename`"
+msgstr ""
+"%s ya está aquí — cópielo a otro sitio, o use `synfiles copy --"
+"conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1270,7 +1297,8 @@ msgstr "historial de deshacer borrado\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: subcomando «%s» desconocido — pruebe list, clear, o ningún argumento"
+msgstr ""
+"undo: subcomando «%s» desconocido — pruebe list, clear, o ningún argumento"
 
 msgid "out of memory"
 msgstr "sin memoria"
@@ -1291,9 +1319,15 @@ msgstr "mount: hace falta una ruta de dispositivo (vea: synfiles volumes)"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: hace falta una ruta de dispositivo (vea: synfiles volumes)"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: nada que vigilar — sin mountinfo, uevents ni inotify"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes: opción «%s» desconocida"
 
 msgid "no volumes"
 msgstr "sin volúmenes"
+
+#~ msgid "mount %1"
+#~ msgstr "montar %1"

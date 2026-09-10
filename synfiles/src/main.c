@@ -44,7 +44,7 @@ static void usage(FILE *f)
 "  places pin <path> [title]\n"
 "  places unpin <path>\n"
 "  recent [--limit=N] [--existing]\n"
-"  volumes [--block|--network]\n"
+"  volumes [--block|--network] [--watch]\n"
 "  netscan [--hosts]       what is announced on this network — mDNS and\n"
 "                          NetBIOS. Nothing is mounted; the rows are offers\n"
 "  netmount <uri>          mount a discovered share with gvfs and print the\n"

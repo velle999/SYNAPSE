@@ -28,6 +28,9 @@ msgstr "%1  (conteúdo das pastas não contado)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  %2 selecionados"
 
+msgid "%1 connected"
+msgstr "%1 ligado"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 concluído"
@@ -593,6 +596,9 @@ msgstr "descrição"
 msgid "destroying %1…"
 msgstr "destruindo %1…"
 
+msgid "disc inserted — %1"
+msgstr "Disco inserido — %1"
+
 msgid "dragging %1…"
 msgstr "arrastando %1…"
 
@@ -634,9 +640,6 @@ msgstr "permissões"
 
 msgid "modified"
 msgstr "modificado"
-
-msgid "mount %1"
-msgstr "montar %1"
 
 msgid "mounting %1…"
 msgstr "montando %1…"
@@ -765,7 +768,9 @@ msgstr "não é possível obter informação de %s: %s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action: são necessários um ficheiro .desktop e um caminho\n  utilização: synfiles action <ficheiro.desktop> <caminho>…"
+msgstr ""
+"action: são necessários um ficheiro .desktop e um caminho\n"
+"  utilização: synfiles action <ficheiro.desktop> <caminho>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -807,13 +812,16 @@ msgstr "compress: é necessário pelo menos um caminho"
 
 #, c-format
 msgid "compress: unknown format '%s' — try zip, tar.gz, tar.xz, tar.zst, 7z"
-msgstr "compress: formato «%s» desconhecido — tente zip, tar.gz, tar.xz, tar.zst, 7z"
+msgstr ""
+"compress: formato «%s» desconhecido — tente zip, tar.gz, tar.xz, tar.zst, 7z"
 
 msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress: tudo tem de estar na mesma pasta\n  caso contrário o arquivo conteria caminhos sem sentido noutro sítio"
+msgstr ""
+"compress: tudo tem de estar na mesma pasta\n"
+"  caso contrário o arquivo conteria caminhos sem sentido noutro sítio"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress: --name espera um nome, não um caminho"
@@ -865,7 +873,9 @@ msgstr "definições repostas nos valores predefinidos\n"
 msgid ""
 "config: unknown subcommand '%s' — try list, get <key>, set <key> <value>, "
 "reset"
-msgstr "config: subcomando «%s» desconhecido — tente list, get <chave>, set <chave> <valor>, reset"
+msgstr ""
+"config: subcomando «%s» desconhecido — tente list, get <chave>, set <chave> "
+"<valor>, reset"
 
 #, c-format
 msgid "cannot resolve %s: %s"
@@ -873,7 +883,9 @@ msgstr "não é possível resolver %s: %s"
 
 #, c-format
 msgid "unknown conflict policy '%s' — try error, skip, rename, overwrite"
-msgstr "política de conflitos «%s» desconhecida — tente error, skip, rename, overwrite"
+msgstr ""
+"política de conflitos «%s» desconhecida — tente error, skip, rename, "
+"overwrite"
 
 #, c-format
 msgid "%s: unknown option '%s'"
@@ -944,7 +956,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "o delete apaga ficheiros DEFINITIVAMENTE e não pode ser anulado.\n  para os mover para o lixo: synfiles trash <caminho>…\n  se é mesmo o que quer: --force"
+msgstr ""
+"o delete apaga ficheiros DEFINITIVAMENTE e não pode ser anulado.\n"
+"  para os mover para o lixo: synfiles trash <caminho>…\n"
+"  se é mesmo o que quer: --force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -1000,7 +1015,9 @@ msgstr "não foi possível iniciar o quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan: o avahi-browse falhou para %s (saída %d) — a descoberta mDNS não funciona nesta máquina"
+msgstr ""
+"netscan: o avahi-browse falhou para %s (saída %d) — a descoberta mDNS não "
+"funciona nesta máquina"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1009,7 +1026,9 @@ msgstr "netscan: opção «%s» desconhecida"
 msgid ""
 "netscan: install avahi (mDNS) or smbclient (Windows shares) to discover "
 "network places"
-msgstr "netscan: instale o avahi (mDNS) ou o smbclient (partilhas Windows) para descobrir dispositivos"
+msgstr ""
+"netscan: instale o avahi (mDNS) ou o smbclient (partilhas Windows) para "
+"descobrir dispositivos"
 
 msgid "netmount: need a URI (see: synfiles netscan)"
 msgstr "netmount: é necessário um URI (veja: synfiles netscan)"
@@ -1019,7 +1038,9 @@ msgid "netmount: '%s' is not a URI"
 msgstr "netmount: «%s» não é um URI"
 
 msgid "netmount: gio is not installed — install gvfs to mount network shares"
-msgstr "netmount: o gio não está instalado — instale o gvfs para montar partilhas de rede"
+msgstr ""
+"netmount: o gio não está instalado — instale o gvfs para montar partilhas de "
+"rede"
 
 #, c-format
 msgid "netmount: could not mount %s"
@@ -1084,7 +1105,9 @@ msgstr "places unpin: é necessário um caminho"
 
 #, c-format
 msgid "places: unknown subcommand '%s' — try list, pin <path>, unpin <path>"
-msgstr "places: subcomando «%s» desconhecido — tente list, pin <caminho>, unpin <caminho>"
+msgstr ""
+"places: subcomando «%s» desconhecido — tente list, pin <caminho>, unpin "
+"<caminho>"
 
 #, c-format
 msgid "recent: unknown option '%s'"
@@ -1140,7 +1163,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "esvaziar o lixo é DEFINITIVO e não pode ser anulado.\n  para ver o que desapareceria: synfiles trash list\n  se é mesmo o que quer: --force"
+msgstr ""
+"esvaziar o lixo é DEFINITIVO e não pode ser anulado.\n"
+"  para ver o que desapareceria: synfiles trash list\n"
+"  se é mesmo o que quer: --force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore: é necessário o nome no lixo (veja: synfiles trash list)"
@@ -1151,7 +1177,8 @@ msgstr "trash: opção «%s» desconhecida"
 
 #, c-format
 msgid "<num> open · u up · h home · c <path> cd · / <text> filter"
-msgstr "<núm> abrir · u subir · h pasta pessoal · c <caminho> ir · / <texto> filtrar"
+msgstr ""
+"<núm> abrir · u subir · h pasta pessoal · c <caminho> ir · / <texto> filtrar"
 
 #, c-format
 msgid "i <num> info · z <num> size · t <num> trash · e <num> actions"
@@ -1202,7 +1229,9 @@ msgstr "%s não é uma pasta — %s coloca coisas DENTRO de uma pasta"
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s já está aqui — copie-o para outro sítio, ou use `synfiles copy --conflict=rename`"
+msgstr ""
+"%s já está aqui — copie-o para outro sítio, ou use `synfiles copy --"
+"conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1270,7 +1299,8 @@ msgstr "histórico de anulações limpo\n"
 
 #, c-format
 msgid "undo: unknown subcommand '%s' — try list, clear, or no argument"
-msgstr "undo: subcomando «%s» desconhecido — tente list, clear, ou nenhum argumento"
+msgstr ""
+"undo: subcomando «%s» desconhecido — tente list, clear, ou nenhum argumento"
 
 msgid "out of memory"
 msgstr "memória esgotada"
@@ -1279,7 +1309,8 @@ msgid "HOME is not set"
 msgstr "HOME não está definido"
 
 msgid "udisksctl is not installed — install udisks2 to mount from here"
-msgstr "o udisksctl não está instalado — instale o udisks2 para montar a partir daqui"
+msgstr ""
+"o udisksctl não está instalado — instale o udisks2 para montar a partir daqui"
 
 #, c-format
 msgid "%s: expected a device path like /dev/sdc1"
@@ -1289,7 +1320,11 @@ msgid "mount: need a device path (see: synfiles volumes)"
 msgstr "mount: é necessário um caminho de dispositivo (veja: synfiles volumes)"
 
 msgid "unmount: need a device path (see: synfiles volumes)"
-msgstr "unmount: é necessário um caminho de dispositivo (veja: synfiles volumes)"
+msgstr ""
+"unmount: é necessário um caminho de dispositivo (veja: synfiles volumes)"
+
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch: nada para vigiar — sem mountinfo, uevents nem inotify"
 
 #, c-format
 msgid "volumes: unknown option '%s'"
@@ -1297,3 +1332,6 @@ msgstr "volumes: opção «%s» desconhecida"
 
 msgid "no volumes"
 msgstr "sem volumes"
+
+#~ msgid "mount %1"
+#~ msgstr "montar %1"

@@ -28,6 +28,9 @@ msgstr "%1  (未统计文件夹内容)"
 msgid "%1  ·  %2 selected"
 msgstr "%1  ·  已选 %2"
 
+msgid "%1 connected"
+msgstr "已连接 %1"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "完成 %1 项"
@@ -567,6 +570,9 @@ msgstr "描述"
 msgid "destroying %1…"
 msgstr "正在销毁 %1…"
 
+msgid "disc inserted — %1"
+msgstr "已插入光盘 — %1"
+
 msgid "dragging %1…"
 msgstr "正在拖动 %1…"
 
@@ -608,9 +614,6 @@ msgstr "权限"
 
 msgid "modified"
 msgstr "修改时间"
-
-msgid "mount %1"
-msgstr "挂载 %1"
 
 msgid "mounting %1…"
 msgstr "正在挂载 %1…"
@@ -734,7 +737,9 @@ msgstr "无法获取 %s 的信息：%s"
 msgid ""
 "action: need a .desktop file and a path\n"
 "  usage: synfiles action <file.desktop> [action-id] -- <path>..."
-msgstr "action：需要一个 .desktop 文件和一个路径\n  用法：synfiles action <文件.desktop> <路径>…"
+msgstr ""
+"action：需要一个 .desktop 文件和一个路径\n"
+"  用法：synfiles action <文件.desktop> <路径>…"
 
 #, c-format
 msgid "action: '%s' must be a .desktop NAME, not a path"
@@ -782,7 +787,9 @@ msgid ""
 "compress: everything must be in the same folder\n"
 "  otherwise the archive records absolute paths and unpacking it scatters "
 "files"
-msgstr "compress：所有内容必须在同一个文件夹中\n  否则压缩包会包含在别处毫无意义的路径"
+msgstr ""
+"compress：所有内容必须在同一个文件夹中\n"
+"  否则压缩包会包含在别处毫无意义的路径"
 
 msgid "compress: --name takes a name, not a path"
 msgstr "compress：--name 需要一个名称，而不是路径"
@@ -913,7 +920,10 @@ msgid ""
 "delete removes files PERMANENTLY and cannot be undone.\n"
 "  to move them to the trash instead:  synfiles trash <path>\n"
 "  to delete them anyway:              synfiles delete --yes <path>"
-msgstr "delete 会永久删除文件，且无法撤销。\n  若要移入回收站：synfiles trash <路径>…\n  如果你确实要这么做：--force"
+msgstr ""
+"delete 会永久删除文件，且无法撤销。\n"
+"  若要移入回收站：synfiles trash <路径>…\n"
+"  如果你确实要这么做：--force"
 
 #, c-format
 msgid "find: unknown option '%s'"
@@ -969,7 +979,9 @@ msgstr "无法启动 quickshell"
 #, c-format
 msgid ""
 "netscan: avahi-browse failed for %s (exit %d) — mDNS discovery is not working"
-msgstr "netscan：对 %s 执行 avahi-browse 失败（退出码 %d）—— 这台机器上的 mDNS 发现无法工作"
+msgstr ""
+"netscan：对 %s 执行 avahi-browse 失败（退出码 %d）—— 这台机器上的 mDNS 发现无"
+"法工作"
 
 #, c-format
 msgid "netscan: unknown option '%s'"
@@ -1109,7 +1121,10 @@ msgid ""
 "emptying the trash is PERMANENT and cannot be undone.\n"
 "  to see what would go:  synfiles trash list\n"
 "  to empty it anyway:    synfiles trash empty --yes"
-msgstr "清空回收站是永久性的，且无法撤销。\n  若要查看会消失哪些内容：synfiles trash list\n  如果你确实要这么做：--force"
+msgstr ""
+"清空回收站是永久性的，且无法撤销。\n"
+"  若要查看会消失哪些内容：synfiles trash list\n"
+"  如果你确实要这么做：--force"
 
 msgid "trash restore: need the trashed name (see: synfiles trash list)"
 msgstr "trash restore：需要回收站中的名称（参见：synfiles trash list）"
@@ -1171,7 +1186,8 @@ msgstr "%s 不是文件夹 —— %s 是把东西放进文件夹里"
 msgid ""
 "%s is already here — copy it somewhere else, or use `synfiles copy --"
 "conflict=rename` for a duplicate"
-msgstr "%s 已经在这里 —— 请复制到别处，或使用 `synfiles copy --conflict=rename`"
+msgstr ""
+"%s 已经在这里 —— 请复制到别处，或使用 `synfiles copy --conflict=rename`"
 
 #, c-format
 msgid "%s is already in this folder"
@@ -1260,9 +1276,15 @@ msgstr "mount：需要一个设备路径（参见：synfiles volumes）"
 msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount：需要一个设备路径（参见：synfiles volumes）"
 
+msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
+msgstr "volumes --watch：没有可监视的来源 — mountinfo、uevent 和 inotify 均不可用"
+
 #, c-format
 msgid "volumes: unknown option '%s'"
 msgstr "volumes：未知选项“%s”"
 
 msgid "no volumes"
 msgstr "没有卷"
+
+#~ msgid "mount %1"
+#~ msgstr "挂载 %1"

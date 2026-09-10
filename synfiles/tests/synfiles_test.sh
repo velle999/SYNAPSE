@@ -1823,6 +1823,67 @@ over=$("$SYNFILES" --rec volumes |
 [ "$over" = 0 ] && ok "no volume reports more used than it has" \
                || bad "$over volumes report used > total"
 
+# ── volumes --watch ─────────────────────────────────────────────────────────
+#
+# The list above is a SNAPSHOT, which is a file manager you have to restart
+# after plugging something in. --watch is the other half: it blocks and prints
+# a line whenever any of the three sources could have changed — a uevent, the
+# mount table, or a directory appearing under /run/user/<uid>/gvfs.
+#
+# ⚠ WHAT IS TESTED HERE IS THE INOTIFY LEG ONLY, and deliberately: the other
+# two need hardware to arrive or a filesystem to mount, neither of which a
+# build machine can be asked for. The runtime directory it watches for gvfs is
+# a directory this user owns, so a directory appearing in it is an event that
+# can be staged.
+"$SYNFILES" volumes --watch --nonsense >/dev/null 2>&1
+[ $? -ne 0 ] && ok "volumes rejects an unknown option beside --watch" \
+             || bad "volumes --nonsense was accepted"
+
+RUNW="/run/user/$(id -u)"
+if [ -d "$RUNW" ] && [ -w "$RUNW" ]; then
+    wlog="$T/watch.log"
+    "$SYNFILES" --rec volumes --watch > "$wlog" 2>&1 &
+    wpid=$!
+    sleep 1
+
+    [ "$(head -1 "$wlog")" = "event" ] \
+        && ok "volumes --watch opens with its record header" \
+        || bad "volumes --watch printed '$(head -1 "$wlog")' first, not the header"
+
+    # ⛔ --watch MUST NOT LIST. It is a stream of "ask again" and nothing else;
+    # a listing here would make the first record indistinguishable from an
+    # event, and the front-end parses every line as one.
+    printf '%s' "$(cat "$wlog")" | grep -q "$(printf '\t')" \
+        && bad "volumes --watch printed a volume row; it must only report events" \
+        || ok "volumes --watch lists nothing"
+
+    # FIVE directories at once. A single stick is already five or six uevents
+    # plus a mount, and re-running lsblk once per event would put six process
+    # spawns behind one plug — so a burst has to arrive as one line.
+    for i in 1 2 3 4 5; do mkdir -p "$RUNW/synfiles-watch-test.$$.$i"; done
+    sleep 1
+    n1=$(tail -n +2 "$wlog" | wc -l)
+    [ "$n1" -ge 1 ] \
+        && ok "volumes --watch notices a directory appearing in the runtime dir" \
+        || bad "volumes --watch reported nothing for a change under $RUNW"
+    [ "$n1" -le 2 ] \
+        && ok "a burst of five arrives as one event, not five" \
+        || bad "five changes at once produced $n1 events; the settle is not working"
+
+    mkdir -p "$RUNW/synfiles-watch-test.$$.later"
+    sleep 1
+    n2=$(tail -n +2 "$wlog" | wc -l)
+    [ "$n2" -gt "$n1" ] \
+        && ok "a later change is a second event, not swallowed" \
+        || bad "volumes --watch went quiet after the first burst ($n1 -> $n2)"
+
+    kill "$wpid" 2>/dev/null
+    wait "$wpid" 2>/dev/null
+    rmdir "$RUNW"/synfiles-watch-test."$$".* 2>/dev/null
+else
+    echo "  skip  no writable $RUNW, cannot stage a volume change"
+fi
+
 # ── undo ────────────────────────────────────────────────────────────────────
 # Its own journal and its own trash, so nothing here can reach the real ones.
 export SYNFILES_JOURNAL="$T/journal"
@@ -2986,6 +3047,71 @@ if [ -n "$QMLTEST" ] && [ -f "$HOVER_QML" ]; then
     fi
 else
     echo "  skip  Qt 6 qmltestrunner not installed, cannot check flyout hover"
+fi
+
+# ── the sidebar's eject button ──────────────────────────────────────────────
+#
+# Reported as "the eject button kind of moves a bit when you try to push or
+# hover over it". Two faults, both layout, both on SideRow:
+#
+#  1. the glyph was shown on the ROW MouseArea's containsMouse, and hover
+#     reaches exactly ONE item — so arriving at the glyph, whose own MouseArea
+#     took the hover, made the row's read false and the button went invisible
+#     UNDER THE POINTER. It came straight back, and flickered there; a press
+#     that landed in one of the gaps did nothing. Same fault as the Open With
+#     flyout above.
+#  2. the fill percentage picked its right margin off the same read — 10
+#     normally, 26 while the button showed — so it and the label really did
+#     slide 16px sideways whenever the pointer crossed the row.
+#
+# Static checks first, so the shipped file cannot drift away from the replica
+# that tests/side_row_eject_hover.qml drives a real pointer over.
+if [ -f "$QML" ]; then
+    grep -q 'HoverHandler { id: sideHover }' "$QML" \
+        && ok "SideRow asks a HoverHandler whether it is hovered" \
+        || bad "SideRow is back on a hoverEnabled MouseArea — the eject button
+        will go invisible the moment the pointer reaches it"
+
+    # ⚠ COMMENTS STRIPPED FIRST. The note explaining why this is forbidden
+    # names the very thing it forbids, and a grep over the whole file reads its
+    # own warning as the bug.
+    sed -E 's,//.*,,; /^[[:space:]]*\*/d' "$QML" | grep -q 'sideMa.containsMouse' \
+        && bad "something in SideRow reads sideMa.containsMouse again; hover
+        reaches ONE item, so it is false exactly when the pointer is on a button" \
+        || ok "nothing in SideRow gates on the row MouseArea's containsMouse"
+
+    grep -qE '(right|left)Margin:.*containsMouse' "$QML" \
+        && bad "a margin depends on hover again — whatever it positions will
+        slide sideways every time the pointer crosses the row" \
+        || ok "no margin in the window changes with hover"
+
+    # opacity, not visible: a Row DROPS an invisible child, so a button hidden
+    # outright collapses the gutter it was reserving and moves the text beside
+    # it — which is the bug the HoverHandler alone does not fix.
+    grep -q 'opacity: sb.on ? 1 : 0' "$QML" \
+        && ok "the sidebar buttons fade rather than leave the layout" \
+        || bad "SideBtn hides itself instead of fading; the gutter will collapse
+        and the label and percentage will move"
+fi
+
+EJECT_QML="$(dirname "$0")/side_row_eject_hover.qml"
+if [ -n "$QMLTEST" ] && [ -f "$EJECT_QML" ]; then
+    erun="$T/ejectrun"; mkdir -p "$erun"
+    eout=$(XDG_RUNTIME_DIR="$erun" QT_QPA_PLATFORM=offscreen \
+           timeout 60 "$QMLTEST" -input "$EJECT_QML" 2>&1)
+    epass=$(printf '%s' "$eout" | grep -c '^PASS ' || true)
+    if printf '%s' "$eout" | has '^FAIL'; then
+        bad "the eject button does not survive the pointer reaching it"
+        printf '%s\n' "$eout" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
+    elif [ "$epass" -lt 8 ]; then
+        # A Qt 5 runner, or an import error, exits without running anything.
+        bad "the eject hover test did not run ($epass passes)"
+        printf '%s\n' "$eout" | tail -5 | sed 's/^/        /' >&2
+    else
+        ok "the eject button holds still under the pointer ($epass checks)"
+    fi
+else
+    echo "  skip  Qt 6 qmltestrunner not installed, cannot check the eject button"
 fi
 
 # ── video thumbnails ────────────────────────────────────────────────────────

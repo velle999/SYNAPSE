@@ -976,7 +976,7 @@ FloatingWindow {
             // Mounting changes what the Devices list should show, and so does
             // trashing something onto a volume. Cheaper to re-read both than
             // to work out which operations could have moved them.
-            volProc.running = true
+            root.refreshVolumes()
 
             // A netmount only learns WHERE the share landed by asking again:
             // gvfs derives its FUSE directory from the URI and the command does
@@ -2581,7 +2581,9 @@ FloatingWindow {
                 // mounted is the one case where a file manager has something
                 // useful to offer, and hiding it means the only way to reach
                 // the drive is to already know it exists.
+                const before = root.volumes
                 root.volumes = root.parseRecords(this.text)
+                root.noteNewVolumes(before, root.volumes)
 
                 if (root.pendingOpenDev !== "") {
                     const dev = root.pendingOpenDev
@@ -2597,6 +2599,103 @@ FloatingWindow {
                     }
                 }
             }
+        }
+        // ⛔ NO PARAMETERS. quickshell's exited(int, QProcess::ExitStatus) has a
+        // second type QML cannot resolve, and a typed handler silently never
+        // runs — the same trap opProc's handler carries a note about.
+        onExited: {
+            // An event that arrived mid-read. It could not be served then —
+            // assigning running = true to an ALREADY-RUNNING quickshell Process
+            // is a silent no-op — so it was remembered instead, and this is
+            // where it gets its re-read. Without it, plugging a stick in while
+            // the list happened to be refreshing leaves the stick invisible
+            // until something else asks.
+            if (root.volPending) {
+                root.volPending = false
+                volSettle.restart()
+            }
+        }
+    }
+
+    /* ── Noticing a disk without being told ─────────────────────────────────
+     *
+     * The list above is a SNAPSHOT, taken at startup and after an operation.
+     * That is a file manager you have to restart after plugging something in,
+     * and it is what this fixes: `volumes --watch` blocks in the C and prints a
+     * line whenever anything could have changed — a uevent (a stick arriving, a
+     * disc going into a drive), a mount table change (anything mounting or
+     * unmounting, by any means, including from another program), or a directory
+     * appearing under /run/user/<uid>/gvfs (a network share). See volumes.c for
+     * why that is three mechanisms and not one.
+     *
+     * ⚠ A Process, NOT execDetached. A detached child inherits pipes that close
+     * when this window does and dies of SIGPIPE at some unpredictable later
+     * moment; a Process is owned, and goes down with the window.
+     */
+    property bool volPending: false
+
+    Process {
+        id: volWatch
+        command: [root.bin, "--rec", "volumes", "--watch"]
+        running: true
+        stdout: SplitParser {
+            // SplitParser, not StdioCollector: a collector hands its text over
+            // when the stream ENDS, and this stream is meant never to end.
+            //
+            // The line's CONTENT is only ever a reason — "mount", "device",
+            // "network". That a line arrived at all is the whole message.
+            onRead: (line) => {
+                if (line === "" || line === "event") return   // header
+                volSettle.restart()
+            }
+        }
+    }
+
+    // The C already coalesces a burst (one plug is five or six uevents plus a
+    // mount). This is the second, shorter settle on top, for the pair that
+    // arrives a second apart rather than together: the kernel seeing the device,
+    // and udisks finishing the automount.
+    Timer {
+        id: volSettle
+        interval: 200
+        onTriggered: root.refreshVolumes()
+    }
+
+    function refreshVolumes() {
+        if (volProc.running) { root.volPending = true; return }
+        volProc.running = true
+    }
+
+    // Say what turned up. A sidebar row appearing in the corner of the eye is
+    // easy to miss, and "I put the disc in and nothing happened" is the report
+    // this is answering — the drive is not even LISTED until it has a
+    // filesystem to offer, so an inserted disc arrives as a brand new row.
+    //
+    // Appearances only. A disappearance needs no announcement (the thing is in
+    // your hand), and an unmount has usually just been reported by the
+    // operation that did it — speaking again here would overwrite it.
+    function noteNewVolumes(before, after) {
+        // Nothing to compare against on the first read, and every volume on the
+        // machine would be "new".
+        if (!before || before.length === 0) return
+        if (root.busy) return
+
+        const had = {}
+        for (const v of before)
+            had[v.device || v.path] = true
+
+        for (const v of after) {
+            if (had[v.device || v.path]) continue
+            // A hot-plugged internal drive is "connected" as much as a stick
+            // is; only a disc is a different event, and it is the one worth
+            // naming, because the drive is not even LISTED without one.
+            if (v.kind === "optical")
+                root.statusLine = I18n.tr("disc inserted — %1").arg(v.title)
+            else if (v.kind === "removable" || v.kind === "disk")
+                root.statusLine = I18n.tr("%1 connected").arg(v.title)
+            else
+                continue
+            return   // one line, and the first is the one you plugged in
         }
     }
 
@@ -2653,7 +2752,7 @@ FloatingWindow {
         // that should not be inferred from a variable.
         paneA.newTab(root.encodePath(start), "dir")
         placesProc.running = true
-        volProc.running = true
+        root.refreshVolumes()
         root.scanThumbs()
         root.refreshUndo()
         cfgReadProc.running = true
@@ -3105,7 +3204,6 @@ FloatingWindow {
                             // Eject on a mounted volume, mount on one that is
                             // not. Both go through udisks2.
                             trailing: volRow.isMounted ? "\u23cf" : "\u25b8"
-                            trailingHint: volRow.isMounted ? "unmount" : "mount"
                             dropTarget: volRow.isMounted ? volRow.modelData.path : ""
                             usedBytes: parseFloat(volRow.modelData.used || "0")
                             totalBytes: parseFloat(volRow.modelData.total || "0")
@@ -3190,7 +3288,6 @@ FloatingWindow {
                             iconName: netFound.modelData.icon || "folder-network"
                             dim: true
                             trailing: "\u25b8"
-                            trailingHint: I18n.tr("mount %1").arg(root.disp(netFound.modelData.uri))
                             onActivated: root.mountNetwork(netFound.modelData)
                             onTrailingClicked: root.mountNetwork(netFound.modelData)
                         }
@@ -7330,6 +7427,59 @@ FloatingWindow {
         vaultProc.running = true
     }
 
+    /*
+     * One of the little buttons at the right-hand end of a sidebar row — unpin,
+     * mount, eject.
+     *
+     * ⚠ A FIXED BOX WITH THE GLYPH CENTRED IN IT, not a Text sized to its own
+     * glyph. The glyph CHANGES: ⏏ becomes ▸ the moment a disk unmounts, and the
+     * two characters have different advances, so a self-sized Text moved and
+     * resized its own hit target under the pointer at the exact moment somebody
+     * was pressing it. The old target was also only the ink of a 12px character
+     * plus five pixels of slop, which is a thing to aim at rather than a thing
+     * to press.
+     *
+     * It says when it is pressed, too. There was no pressed state at all — an
+     * eject that takes a second to answer looked like a click that missed, and
+     * the natural response to that is to click again.
+     */
+    component SideBtn: Rectangle {
+        id: sb
+        property string glyph: ""
+        // Whether the row is hovered. NOT `visible` — see the Row above: this
+        // fades, so the gutter it occupies never changes width.
+        property bool on: false
+        signal clicked()
+
+        // Present in the layout whenever the row HAS this button, regardless of
+        // hover; that is what reserves the gutter.
+        visible: sb.glyph !== ""
+        width: 20
+        height: 20
+        radius: 4
+        opacity: sb.on ? 1 : 0
+        enabled: sb.on
+        color: sbMa.pressed ? root.wash(0.34)
+             : (sbMa.containsMouse ? root.wash(0.18) : "transparent")
+
+        Text {
+            anchors.centerIn: parent
+            text: sb.glyph
+            color: sbMa.containsMouse ? root.cAccent : root.cDim
+            font { family: root.uiFont; pixelSize: root.ui(12) }
+        }
+
+        MouseArea {
+            id: sbMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            // Left only, deliberately: a right-click falls through to the row,
+            // which is what opens the disk menu. Ejecting is on that menu too.
+            onClicked: sb.clicked()
+        }
+    }
+
     component SideRow: Rectangle {
         id: sideRow
         property string label: ""
@@ -7339,7 +7489,6 @@ FloatingWindow {
         property bool removable: false
         property bool dim: false
         property string trailing: ""       // a glyph shown on hover, "" for none
-        property string trailingHint: ""
         // An encoded path this row accepts drops into, or "" for none. Recent,
         // Trash and About are not places anything can be dropped.
         property string dropTarget: ""
@@ -7361,7 +7510,27 @@ FloatingWindow {
         height: sideRow.hasMeter ? 38 : 28
         color: sideRow.dropHover ? root.wash(0.40)
              : sideRow.active ? root.wash(0.18)
-             : (sideMa.containsMouse ? root.wash(0.08) : "transparent")
+             : (sideRow.hovered ? root.wash(0.08) : "transparent")
+
+        /*
+         * ⚠ A HoverHandler, NOT `sideMa.containsMouse`, AND THAT IS THE WHOLE
+         * EJECT BUG. Qt delivers a hover enter/exit pair to exactly ONE item —
+         * the topmost under the pointer — so the instant the pointer reached
+         * the eject glyph, the glyph's own MouseArea took the hover and the
+         * ROW's MouseArea was `exited`. The buttons below were shown on
+         * `sideMa.containsMouse`, so they vanished from under the cursor;
+         * hover then fell back to the row, and they came straight back. That
+         * loop is what "the eject button moves a bit when you try to push it"
+         * actually was: the button being torn down and rebuilt under the
+         * pointer every frame, and a press that landed in one of the gaps
+         * going nowhere.
+         *
+         * Identical fault, identical fix, as the Open-with flyout in 0.1.0-60
+         * — a HoverHandler reports the whole SUBTREE, which is the question
+         * being asked here. See reference_qml_hover_goes_to_one_item_only.
+         */
+        HoverHandler { id: sideHover }
+        readonly property bool hovered: sideHover.hovered
 
         Image {
             id: sideIcon
@@ -7377,8 +7546,8 @@ FloatingWindow {
             id: sideLabel
             anchors {
                 left: sideIcon.right; leftMargin: 8
-                right: sideRow.hasMeter ? meterPct.left : parent.right
-                rightMargin: 8
+                right: sideRow.hasMeter ? meterPct.left : sideBtns.left
+                rightMargin: 4
                 verticalCenter: sideIcon.verticalCenter
             }
             text: sideRow.label
@@ -7412,12 +7581,19 @@ FloatingWindow {
         // Sits on the LABEL line, left of the trailing glyph. Anchoring it to
         // the meter put it exactly where the eject button is, and the two
         // overlapped whenever a mounted drive was hovered.
+        //
+        // ⚠ ANCHORED TO THE BUTTON GUTTER, WHICH IS A FIXED WIDTH. It used to
+        // pick its own margin off `containsMouse` — 10 normally, 26 while the
+        // eject button was showing — so the percentage, and the elided label
+        // behind it, JUMPED 16px sideways every time the pointer crossed the
+        // row. That was the other half of "it moves a bit": the button was
+        // flickering, and the text beside it really was sliding.
         Text {
             id: meterPct
             visible: sideRow.hasMeter
             anchors {
-                right: parent.right
-                rightMargin: sideRow.trailing !== "" && sideMa.containsMouse ? 26 : 10
+                right: sideBtns.left
+                rightMargin: 4
                 verticalCenter: sideIcon.verticalCenter
             }
             text: Math.round(sideRow.fillRatio * 100) + "%"
@@ -7449,34 +7625,39 @@ FloatingWindow {
             }
         }
 
-        // Unpin, for a place the user added themselves.
-        Text {
-            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-            text: "×"
-            color: unpinMa.containsMouse ? root.cAccent : root.cDim
-            font { family: root.uiFont; pixelSize: root.ui(12) }
-            visible: sideRow.removable && sideMa.containsMouse
-            MouseArea {
-                id: unpinMa
-                anchors { fill: parent; margins: -4 }
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
+        /*
+         * The row's buttons, in a Row so unpin and eject cannot land on top of
+         * each other — they used to be two Texts anchored to the same corner,
+         * which held only because no row has ever had both.
+         *
+         * ⚠ ITS WIDTH DOES NOT DEPEND ON HOVER. A row that can eject reserves
+         * the gutter whether the pointer is there or not, and the buttons FADE
+         * rather than appear, because a Row drops an invisible child and the
+         * gutter collapsing is what moved the text beside it. `on` therefore
+         * drives opacity and enabled, never visible.
+         *
+         * Declared AFTER sideMa: Qt Quick delivers a press to the LAST matching
+         * child first, so a row-wide MouseArea written after these would
+         * swallow every click meant for them.
+         */
+        Row {
+            id: sideBtns
+            anchors {
+                right: parent.right; rightMargin: 6
+                verticalCenter: sideIcon.verticalCenter
+            }
+            spacing: 2
+
+            // Unpin, for a place the user added themselves.
+            SideBtn {
+                glyph: sideRow.removable ? "×" : ""
+                on: sideRow.hovered
                 onClicked: sideRow.removed()
             }
-        }
-
-        // Mount / eject.
-        Text {
-            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-            text: sideRow.trailing
-            color: trailMa.containsMouse ? root.cAccent : root.cDim
-            font { family: root.uiFont; pixelSize: root.ui(12) }
-            visible: sideRow.trailing !== "" && sideMa.containsMouse
-            MouseArea {
-                id: trailMa
-                anchors { fill: parent; margins: -5 }
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
+            // Mount / eject.
+            SideBtn {
+                glyph: sideRow.trailing
+                on: sideRow.hovered
                 onClicked: sideRow.trailingClicked()
             }
         }

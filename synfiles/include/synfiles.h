@@ -200,6 +200,7 @@ int cmd_recent(int argc, char **argv);
 
 /* ── volumes.c ──────────────────────────────────────────────────────────── */
 int cmd_volumes(int argc, char **argv);
+int volumes_watch(void);
 /* Both delegate to udisksctl. Mounting is never reimplemented here: udisks2
  * owns the polkit rules that let a desktop user mount a disk unprivileged. */
 int cmd_mount(int argc, char **argv);
