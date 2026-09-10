@@ -43,6 +43,18 @@ install_data('data/syn-scan.svg',
 install_data('systemd/syn-scan.service', install_dir: get_option('prefix') / 'lib/systemd/system')
 install_data('systemd/syn-scan.timer',   install_dir: get_option('prefix') / 'lib/systemd/system')
 
+# Sandboxes for ClamAV's stock units, which ship with no hardening at all and
+# scored 9.6 UNSAFE apiece — tied for the worst on the system. syn-scan's
+# scriptlet is what enables freshclam, so its posture is ours to set. Drop-ins
+# rather than patched units, so a clamav upgrade cannot silently revert them.
+# Measured offline: 9.6 -> 3.9 (freshclam), 9.6 -> 3.7 (clamd).
+install_data('systemd/clamav-freshclam-hardening.conf',
+  install_dir: get_option('prefix') / 'lib/systemd/system/clamav-freshclam.service.d',
+  rename: '50-synapse-hardening.conf')
+install_data('systemd/clamav-daemon-hardening.conf',
+  install_dir: get_option('prefix') / 'lib/systemd/system/clamav-daemon.service.d',
+  rename: '50-synapse-hardening.conf')
+
 subdir('po')
 
 test('qml', find_program('tests/qml_test.sh'),

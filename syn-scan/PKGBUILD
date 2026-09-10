@@ -34,6 +34,22 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-3: ClamAV's own units were the worst on the system ────────────────
+#
+# Lynis BOOT-5264 scored clamav-freshclam.service and clamav-daemon.service
+# 9.6 UNSAFE each — Arch ships both as a Description and an ExecStart with no
+# hardening whatever. custom.prf leaves BOOT-5264 firing precisely so a
+# regression like this surfaces, and enabling freshclam is what introduced it.
+#
+# Two drop-ins, measured offline: 9.6 -> 3.9 (freshclam), 9.6 -> 3.7 (clamd).
+#
+# ⛔ THEY ARE NOT THE SAME FILE. freshclam talks to the network and writes a
+# database; clamd reads OTHER PEOPLE'S FILES for a living. So clamd gets
+# ProtectHome=read-only rather than true — a scanner that cannot see /home
+# fails by finding nothing rather than by refusing — keeps only AF_UNIX, and
+# must NOT have MemoryDenyWriteExecute: ClamAV's bytecode engine JITs, which is
+# what bytecode.cvd is for.
+#
 # ── 0.1.0-2: the window could not have opened ───────────────────────────────
 #
 # ⛔ 0.1.0-1 SHIPPED THIRTEEN MESSAGE CATALOGS AND NOTHING THAT COULD READ THEM.
@@ -50,7 +66,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=2
+pkgrel=3
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'
