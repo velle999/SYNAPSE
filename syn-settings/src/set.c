@@ -364,6 +364,66 @@ int do_set(int argc, char **argv)
 	    !strcmp(key, "date-format"))
 		return do_set_clock(key, val);
 
+	/* ── Malware scanning ──────────────────────────────────────────────
+	 *
+	 * ⛔ ONE SWITCH, ENABLE AND START, exactly as llama-api below. Two steps is
+	 * how somebody ends up with a timer that is enabled and not running, or
+	 * running now and gone after a reboot — and for the sweep in particular,
+	 * `enable` alone leaves a machine that will scan itself in a week's time
+	 * and has no scan of any kind until then.
+	 *
+	 * ⚠ systemctl DOES ITS OWN POLKIT CHECK, so these stay a settings app
+	 * asking a systemd tool rather than a settings app that ships a way to
+	 * become root. A user who cannot authorise gets the same refusal they would
+	 * get at a terminal.
+	 *
+	 * ⚠ AND THE UNITS ARE NOT OURS TO REIMPLEMENT. syn-scan ships the timer and
+	 * clamav ships the other two; this file knows their names and nothing else
+	 * about them.
+	 */
+	if (!strcmp(key, "malware-scan")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("malware-scan takes on or off");
+		if (!have_cmd("syn-scan"))
+			return refuse("syn-scan is not installed "
+			              "\xc2\xb7 synpkg install syn-scan");
+		char *a[] = { (char *)"systemctl",
+		              (char *)(strcmp(val, "on") ? "disable" : "enable"),
+		              (char *)"--now",
+		              (char *)"syn-scan.timer", NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "signature-updates")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("signature-updates takes on or off");
+		char *a[] = { (char *)"systemctl",
+		              (char *)(strcmp(val, "on") ? "disable" : "enable"),
+		              (char *)"--now",
+		              (char *)"clamav-freshclam.service", NULL };
+		return run_or_show(a);
+	}
+
+	/* ⚠ THE ONE WITH A COST, AND THE ROW IN scan.c IS WHERE IT IS STATED:
+	 * clamd holds the whole signature set resident, measured at 0.95 GB. It is
+	 * off by default on this system for that reason and syn-scan does not need
+	 * it — what it buys is a scan that starts instantly instead of spending
+	 * five or six seconds reloading signatures on every run.
+	 *
+	 * ⛔ AND IT CANNOT START WITHOUT A DATABASE. Arch's clamav ships none, so
+	 * on a machine where freshclam has not finished its first download this
+	 * lands the unit in `failed` — which is systemd's message to relay, not a
+	 * state to hide: the window shows what the unit actually says afterwards. */
+	if (!strcmp(key, "scan-daemon")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("scan-daemon takes on or off");
+		char *a[] = { (char *)"systemctl",
+		              (char *)(strcmp(val, "on") ? "disable" : "enable"),
+		              (char *)"--now",
+		              (char *)"clamav-daemon.service", NULL };
+		return run_or_show(a);
+	}
+
 	/* The loopback port that lets llama.cpp-shaped frontends reach synapd.
 	 *
 	 * ⛔ ONE SWITCH, enable AND start. The generic `unit` verb can do this in
@@ -393,7 +453,8 @@ int do_set(int argc, char **argv)
 	}
 
 	return refuse("unknown key — try keymap, xkb, locale, timezone, ntp, "
-	              "time-format, time-seconds, date-format, wifi, bluetooth "
+	              "time-format, time-seconds, date-format, wifi, bluetooth, "
+	              "malware-scan, signature-updates, scan-daemon "
 	              "or llama-api");
 }
 

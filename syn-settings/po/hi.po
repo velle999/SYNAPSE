@@ -132,6 +132,9 @@ msgstr "%1 को बूट योग्य बनाया जा रहा ह
 msgid "Making %1 the default"
 msgstr "%1 को डिफ़ॉल्ट बनाया जा रहा है"
 
+msgid "Malware Scanning"
+msgstr "मैलवेयर जाँच"
+
 msgid "Network"
 msgstr "नेटवर्क"
 
@@ -307,6 +310,9 @@ msgid ""
 msgstr ""
 "रीडर, कौन-सी उँगलियाँ दर्ज हैं, और एक और दर्ज करना — लॉक स्क्रीन यह तभी दिखाती है जब "
 "कुछ दर्ज हो"
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
+msgstr "निर्धारित सफ़ाई-दौर, उसके पीछे के इंजन, और पिछली बार क्या मिला"
 
 msgid ""
 "the screen reader, the wake word, and the voices this machine can speak and "
@@ -1108,6 +1114,205 @@ msgstr "कोई इस स्क्रीन को देख रहा है
 
 msgid "the server · the switch above is what turns it on"
 msgstr "सर्वर · ऊपर वाला स्विच ही इसे चालू करता है"
+
+msgid "Signature scanner"
+msgstr "हस्ताक्षर स्कैनर"
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr "ClamAV, जो फ़ाइलों के भीतर देखता है · Proton प्रीफ़िक्स में पड़े विंडोज़ पेलोड को यही इंजन ढूँढ़ता है"
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr "इसके बिना फ़ाइल की सामग्री से मिलान करने को कुछ नहीं है · synpkg install clamav"
+
+msgid "Rootkit checks"
+msgstr "रूटकिट जाँच"
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr "rkhunter, जो आपकी फ़ाइलों के बजाय सिस्टम को ही जाँचता है"
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr "वैकल्पिक · synpkg install rkhunter इसे जोड़ देता है, और निर्धारित दौर बिना किसी और सेटिंग के इसे इस्तेमाल कर लेता है"
+
+msgid "Second rootkit opinion"
+msgstr "रूटकिट पर दूसरी राय"
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr "chkrootkit, जो rkhunter जैसी ही चीज़ें खोजता है और उपयोगी रूप से अक्सर उससे असहमत होता है"
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr "वैकल्पिक, और यह [blackarch] में रहता है, जिसे इस मशीन ने इंस्टॉल के समय मना किया हो सकता है · syn arsenal --enable-repo"
+
+msgid "Engines"
+msgstr "इंजन"
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr "syn-scan से यह नहीं पूछा जा सका कि कौन-से इंजन स्थापित हैं"
+
+msgid "needs root"
+msgstr "root चाहिए"
+
+msgid "ready"
+msgstr "तैयार"
+
+msgid "a scanning back end"
+msgstr "एक जाँच इंजन"
+
+msgid "not on this machine"
+msgstr "इस मशीन पर नहीं है"
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr "0700 root के रूप में स्थापित, इसलिए निर्धारित दौर इसे चला सकता है और आपकी अपनी शुरू की गई जाँच नहीं"
+
+msgid "installed"
+msgstr "स्थापित"
+
+msgid "Engine"
+msgstr "इंजन"
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr "समय-सारणी · इस पृष्ठ के ऊपर वाला स्विच ही इसे चालू करता है"
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr "दौर स्वयं · टाइमर इसे शुरू करता है, और यहाँ से शुरू करने पर एक दौर अभी चलता है · दो दौरों के बीच निष्क्रिय रहना ही पूरे हुए दौर का रूप है"
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr "हस्ताक्षर अद्यतनकर्ता · syn-scan इसे स्थापना के समय चालू कर देता है, क्योंकि पुराने हस्ताक्षरों वाला स्कैनर किसी स्कैनर के न होने से भी बुरा है"
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr "clamd · इस सिस्टम पर डिफ़ॉल्ट रूप से बंद · जब तक यह चल रहा है, syn-scan अपनी फ़ाइलें clamdscan को देता है, और ऊपर वाला स्विच बस यही अंतर लाता है"
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr "पहुँच के समय जाँच, जानबूझकर मास्क की गई · synguard पहले ही कर्नेल में हर खुलने पर नज़र रखता है, और उस रास्ते के दो मालिक यानी एक झगड़ता हुआ हुक"
+
+msgid "Malware scanning"
+msgstr "मैलवेयर जाँच"
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr "syn-scan(1) चाहिए · synpkg install syn-scan"
+
+msgid "Scheduled scan"
+msgstr "निर्धारित जाँच"
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr "systemctl उपलब्ध नहीं है, इसलिए समय-सारणी पढ़ी नहीं जा सकती"
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr "syn-scan स्थापित है और syn-scan.timer इस मशीन पर नहीं है"
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr "घर की निर्देशिकाओं और अस्थायी निर्देशिकाओं का साप्ताहिक दौर, निष्क्रिय प्राथमिकता पर · जो मशीन नियत समय पर सो रही थी, वह इसे छोड़ने के बजाय अगली बार चालू होने पर चलाती है"
+
+msgid "Next sweep"
+msgstr "अगला दौर"
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr "systemd शुरुआत को दो घंटों में बाँट देता है ताकि नेटवर्क की हर मशीन एक साथ शुरू न हो"
+
+msgid "Last sweep"
+msgstr "पिछला दौर"
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr "निर्धारित दौर का रिकॉर्ड इस खाते से पढ़ा नहीं जा सकता · sudo syn-scan status"
+
+msgid "never"
+msgstr "कभी नहीं"
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr "अब तक कोई निर्धारित दौर पूरा नहीं हुआ · टाइमर चालू करने के एक सप्ताह के भीतर पहला दौर चलेगा"
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr "टाइमर ने पिछली बार क्या किया · यह घर की निर्देशिकाओं, /srv और अस्थायी निर्देशिकाओं में घूमता है"
+
+msgid "Outstanding findings"
+msgstr "बाकी बचे नतीजे"
+
+msgid "needs a look"
+msgstr "देखना बाकी है"
+
+msgid "clear"
+msgstr "साफ़"
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr "दौर ने इन्हें चिह्नित किया और किसी ने इन्हें देखा नहीं · sudo syn-scan status इनकी सूची देता है, और कुछ भी कभी मिटाया नहीं जाता"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "पिछला दौर बिना कुछ बताए पूरा हुआ"
+
+msgid "Your last scan"
+msgstr "आपकी पिछली जाँच"
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr "आपकी अपनी शुरू की गई जाँच अपना अलग रिकॉर्ड रखती है, root के बजाय आपके खाते के नीचे · syn-scan scan ~/Downloads"
+
+msgid "Your quarantine"
+msgstr "आपका क्वारंटीन"
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr "कुछ भी कभी मिटाया नहीं जाता · syn-scan quarantine list दिखाता है कि क्या अलग रखा गया, और restore फ़ाइल को वहीं लौटा देता है जहाँ से वह आई थी · दौर का अपना क्वारंटीन root का है, इसलिए उसकी सूची sudo से मिलती है"
+
+msgid "Signature updates"
+msgstr "हस्ताक्षर अद्यतन"
+
+msgid "needs clamav, which is what ships the updater"
+msgstr "clamav चाहिए, जो अद्यतनकर्ता देता है"
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr "नए हस्ताक्षर प्रकाशित होते ही freshclam उन्हें ले आता है · इसे बंद करने पर स्कैनर पिछले साल का मैलवेयर ढूँढ़ता रह जाता है, इसीलिए यह डिफ़ॉल्ट रूप से चालू है"
+
+msgid "Keep signatures in memory"
+msgstr "हस्ताक्षर स्मृति में रखें"
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr "clamav चाहिए, जो डीमन देता है"
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
+msgstr "clamd पूरे हस्ताक्षर-संग्रह को लदा हुआ रखता है, जिससे जाँच छह सेकंड दोबारा पढ़ने में लगाने के बजाय तुरंत शुरू होती है · इसमें करीब एक गीगाबाइट स्मृति लगती है, इसीलिए जब तक आप न कहें यह सिस्टम इसे बंद रखता है · हस्ताक्षरों का डाउनलोड पूरा होने से पहले यह शुरू नहीं होगा"
 
 msgid "wifi"
 msgstr "वाई-फ़ाई"

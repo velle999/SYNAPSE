@@ -135,6 +135,9 @@ msgstr "%1 est rendu amorçable"
 msgid "Making %1 the default"
 msgstr "%1 est défini par défaut"
 
+msgid "Malware Scanning"
+msgstr "Analyse antivirus"
+
 msgid "Network"
 msgstr "Réseau"
 
@@ -322,6 +325,9 @@ msgid ""
 msgstr ""
 "le lecteur, quels doigts sont enregistrés, et en enregistrer un autre — "
 "l'écran de verrouillage ne le propose qu'une fois quelque chose enregistré"
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
+msgstr "le balayage planifié, les moteurs qui le font, et ce que le dernier a trouvé"
 
 msgid ""
 "the screen reader, the wake word, and the voices this machine can speak and "
@@ -1171,6 +1177,205 @@ msgstr "quelqu'un regarde cet écran"
 
 msgid "the server · the switch above is what turns it on"
 msgstr "le serveur · c'est l'interrupteur ci-dessus qui l'allume"
+
+msgid "Signature scanner"
+msgstr "Analyseur de signatures"
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr "ClamAV, c'est-à-dire ce qui regarde à l'intérieur des fichiers · c'est le moteur qui trouve une charge Windows posée dans un préfixe Proton"
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr "sans lui, il n'y a rien à quoi comparer le contenu des fichiers · synpkg install clamav"
+
+msgid "Rootkit checks"
+msgstr "Contrôles de rootkits"
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr "rkhunter, qui examine le système lui-même plutôt que vos fichiers"
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr "facultatif · synpkg install rkhunter l'ajoute, et le balayage planifié le reprend sans autre réglage"
+
+msgid "Second rootkit opinion"
+msgstr "Deuxième avis sur les rootkits"
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr "chkrootkit, qui cherche le même genre de chose que rkhunter et le contredit utilement souvent"
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr "facultatif, et il vit dans [blackarch], que cette machine a pu refuser à l'installation · syn arsenal --enable-repo"
+
+msgid "Engines"
+msgstr "Moteurs"
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr "impossible de demander à syn-scan quels moteurs sont installés"
+
+msgid "needs root"
+msgstr "exige root"
+
+msgid "ready"
+msgstr "prêt"
+
+msgid "a scanning back end"
+msgstr "un moteur d'analyse"
+
+msgid "not on this machine"
+msgstr "pas sur cette machine"
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr "installé en 0700 root : le balayage planifié peut l'exécuter, une analyse que vous lancez vous-même non"
+
+msgid "installed"
+msgstr "installé"
+
+msgid "Engine"
+msgstr "Moteur"
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr "la planification · c'est l'interrupteur en haut de cette page qui l'active"
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr "le balayage lui-même · la minuterie le lance, et le démarrer ici en exécute un tout de suite · inactif entre deux passages, c'est à quoi ressemble un balayage terminé"
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr "le service de mise à jour des signatures · syn-scan l'active à l'installation, car un analyseur aux signatures périmées est pire que pas d'analyseur du tout"
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr "clamd · désactivé par défaut sur ce système · tant qu'il tourne, syn-scan confie ses fichiers à clamdscan à la place, et c'est toute la différence qu'apporte l'interrupteur ci-dessus"
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr "analyse à l'accès, masquée volontairement · synguard surveille déjà chaque ouverture dans le noyau, et deux propriétaires de ce chemin font un point d'ancrage disputé"
+
+msgid "Malware scanning"
+msgstr "Analyse antivirus"
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr "nécessite syn-scan(1) · synpkg install syn-scan"
+
+msgid "Scheduled scan"
+msgstr "Analyse planifiée"
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr "systemctl n'est pas disponible, la planification ne peut pas être lue"
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr "syn-scan est installé et syn-scan.timer n'est pas sur cette machine"
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr "un balayage hebdomadaire des dossiers personnels et des dossiers temporaires, en priorité basse · une machine endormie à l'heure prévue le rattrape au démarrage suivant au lieu de le sauter"
+
+msgid "Next sweep"
+msgstr "Prochain balayage"
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr "systemd étale le départ sur deux heures pour que toutes les machines d'un réseau ne commencent pas en même temps"
+
+msgid "Last sweep"
+msgstr "Dernier balayage"
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr "le relevé du balayage planifié n'est pas lisible par ce compte · sudo syn-scan status"
+
+msgid "never"
+msgstr "jamais"
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr "aucun balayage planifié n'est encore terminé · le premier a lieu dans la semaine qui suit l'activation de la minuterie"
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr "ce que la minuterie a fait en dernier · elle parcourt les dossiers personnels, /srv et les dossiers temporaires"
+
+msgid "Outstanding findings"
+msgstr "Trouvailles en attente"
+
+msgid "needs a look"
+msgstr "à examiner"
+
+msgid "clear"
+msgstr "rien à signaler"
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr "le balayage les a signalées et personne ne les a examinées · sudo syn-scan status les énumère, et rien n'est jamais supprimé"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "le dernier balayage s'est terminé sans rien à signaler"
+
+msgid "Your last scan"
+msgstr "Votre dernière analyse"
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr "une analyse que vous lancez vous-même tient son propre relevé, sous votre compte plutôt que sous root · syn-scan scan ~/Downloads"
+
+msgid "Your quarantine"
+msgstr "Votre quarantaine"
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr "rien n'est jamais supprimé · syn-scan quarantine list montre ce qui a été mis de côté, et restore remet un fichier là d'où il venait · la quarantaine du balayage appartient à root, c'est donc sudo qui l'énumère"
+
+msgid "Signature updates"
+msgstr "Mises à jour des signatures"
+
+msgid "needs clamav, which is what ships the updater"
+msgstr "nécessite clamav, qui fournit le service de mise à jour"
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr "freshclam récupère les nouvelles signatures dès leur publication · le désactiver laisse l'analyseur chercher les logiciels malveillants de l'an dernier, et c'est pour cela qu'il est activé par défaut"
+
+msgid "Keep signatures in memory"
+msgstr "Garder les signatures en mémoire"
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr "nécessite clamav, qui fournit le démon"
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
+msgstr "clamd garde tout le jeu de signatures chargé, ce qui fait démarrer une analyse instantanément au lieu de passer six secondes à le relire · cela coûte environ un gigaoctet de mémoire, et c'est pourquoi ce système le laisse désactivé tant que vous ne le demandez pas · il ne démarrera pas avant la fin du téléchargement des signatures"
 
 msgid "wifi"
 msgstr "Wi-Fi"

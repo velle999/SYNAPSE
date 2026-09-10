@@ -32,7 +32,7 @@ static void usage(void)
 "\n"
 "  gui [pane]        open the settings window (display, region, time, network,\n"
 "                    bluetooth, power, apps, kernel, ai, assistant, fprint,\n"
-"                    speech, remote, system)\n"
+"                    speech, remote, scan, system)\n"
 "\n"
 "  --rec display     connectors: kernel state beside what the compositor drives\n"
 "  --rec region      keyboard layout and locale\n"
@@ -43,6 +43,8 @@ static void usage(void)
 "                    machine, and from how far away\n"
 "  --rec speech      the screen reader, the wake word, and the voice this\n"
 "                    box can actually use\n"
+"  --rec scan        the scheduled malware sweep, the engines behind it, and\n"
+"                    what the last one found\n"
 "  --rec ai         the AI backend switch, the units that can restart it,\n"
 "                    and which model is on disk\n"
 "  --rec system      identity, and WHERE configuration actually lives\n"
@@ -63,6 +65,12 @@ static void usage(void)
 "  set ntp on|off            network time          (timedatectl)\n"
 "  set time-format 12|24     how the desktop writes the time\n"
 "  set time-seconds on|off   seconds in the bar clock\n"
+"  set malware-scan on|off   the weekly malware sweep (syn-scan.timer)\n"
+"  set signature-updates on|off\n"
+"                            keep the virus signatures current (freshclam)\n"
+"  set scan-daemon on|off    hold the signature set in memory (clamd) — it\n"
+"                            makes a scan start instantly and costs about a\n"
+"                            gigabyte. Off unless you switch it on.\n"
 "  set llama-api on|off      a llama.cpp-compatible port on 127.0.0.1:8080,\n"
 "                            so frontends written for llama-server or the\n"
 "                            OpenAI API can use the model synapd already\n"
@@ -231,6 +239,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "ai"))        return pane_ai();
 		if (!strcmp(pane, "speech"))    return pane_speech();
 		if (!strcmp(pane, "remote"))    return pane_remote();
+		if (!strcmp(pane, "scan"))      return pane_scan();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
 		if (!strcmp(pane, "assistant")) return pane_assistant();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);

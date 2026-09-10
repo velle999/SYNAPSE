@@ -269,7 +269,57 @@ pkgver=0.1.0
 #   setting: rowSetAction() strips it, or a row that is only an address would
 #   draw as a live control whose Apply button runs `syn-settings address
 #   hidden`. The trap `unavailable:` sprang once already, one column over.
-pkgrel=52
+# 53: A MALWARE SCANNING PANE. syn-scan(1) ships a weekly sweep, three engines
+#   and a quarantine, and every switch on it lived at a prompt: `systemctl
+#   enable --now syn-scan.timer` for the schedule, another for the signature
+#   updates, a third for clamd. This window is where somebody looks for "does
+#   this machine scan itself", and the answer was not in it.
+#
+#   ⚠ IT OWNS NO PART OF THE SCANNING, on the rule the AI, speech and remote
+#   panes already follow. The rows come from `syn-scan status --rec` and
+#   `syn-scan engines --rec`, and the three switches run systemctl against the
+#   units syn-scan ships.
+#
+#   ⛔ THE SWEEP AND YOUR OWN SCANS ARE TWO RECORDS IN TWO PLACES, AND THE PANE
+#   READS BOTH. syn-scan resolves its state directory at runtime —
+#   /var/lib/syn-scan as root, $XDG_DATA_HOME/syn-scan otherwise — so the timer
+#   and a scan somebody types write to different files. This pane runs as the
+#   user: asking once would have reported a machine that has swept every week
+#   since it was installed as never scanned. It asks twice, with $SYNSCAN_HOME
+#   pointed at root's directory for one of them, and puts the variable back
+#   immediately — left set, the very next call (the quarantine count) reads a
+#   0700 directory this account cannot open.
+#
+#   ⛔ AND UNREADABLE IS NOT THE SAME ANSWER AS NEVER. syn-scan prints "never"
+#   for both, because from inside it they look alike: there is no file it can
+#   open. The pane tests the sweep's record for readability first, so a
+#   tightened permission reads as unknown rather than as a machine that has
+#   never been scanned.
+#
+#   ⛔ PRESENT AND RUNNABLE ARE TWO FACTS. Arch ships rkhunter 0700 root:root,
+#   so a normal user cannot execute an engine that is installed and working —
+#   and the sweep, which runs as root, uses it perfectly well. The row reads
+#   "needs root"; "not installed" would send somebody to reinstall a package
+#   they already have.
+#
+#   ⚠ clamav-clamonacc.service IS SHOWN AND HAS NO BUTTON. syn-scan's scriptlet
+#   masks it — on-access scanning is a second owner of the open() path
+#   synguard's BPF-LSM already holds — and a row that offered to undo that
+#   would be a one-click way past a decision no button can explain.
+#
+#   ⚠ THE SUITE TESTS IT THROUGH A STUB, and $SYN_SETTINGS_SCAN_HOME is the
+#   seam that makes that possible: which rows this pane emits depends on which
+#   engines are installed and on whether root has ever swept, and a check that
+#   reads the record reads THIS machine. Same trap the fingerprint rows sprang,
+#   and tests/i18n_test.sh stubs it the same way.
+#
+#   ⚠ AND ONE THAT WAS ALREADY THERE: the drawn-label check reported the
+#   Network pane on any machine with a VPN connected. Interface names are keyed
+#   into the `key` column, every one of them survived the filters by carrying a
+#   digit, and `nordlynx` does not. It reads the kernel's interface list now.
+#
+#   53 new msgids, filled in all thirteen catalogs (424/424 each).
+pkgrel=53
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -298,6 +348,10 @@ optdepends=('quickshell: the settings window (syn-settings gui)'
             # "not installed", which is the honest answer and the one every
             # desktop without a reader gets. Enrolling needs the CLIs.
             'fprintd: the Fingerprint pane — enrol a finger for the lock screen'
+            # The Malware Scanning pane reads syn-scan's records and switches
+            # the units it ships. Without it the pane is one row saying so,
+            # which is the honest answer on a machine that has no scanner.
+            'syn-scan: the Malware Scanning pane'
             'polkit: change settings without dropping to a root shell')
 
 # ── Where the source comes from, here and everywhere else ──────────────────

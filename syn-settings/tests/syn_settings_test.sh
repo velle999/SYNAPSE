@@ -70,7 +70,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region network bluetooth power kernel system apps time ai remote; do
+for pane in display region network bluetooth power kernel system apps time ai remote scan; do
     check_table "$pane"
 done
 
@@ -107,7 +107,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote scan; do
     check_actions "$pane"
 done
 
@@ -1480,7 +1480,7 @@ if [ -f "$QML" ]; then
     # reader and the window are two files, and adding a verb to one of them is
     # exactly the kind of half-change that looks finished and clicks dead.
     verbs=$(
-        for pane in display region network bluetooth power kernel apps time ai; do
+        for pane in display region network bluetooth power kernel apps time ai scan; do
             pout=$("$BIN" --rec "$pane") || continue
             pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
             [ -n "$pcol" ] || continue
@@ -2137,6 +2137,200 @@ for pair in "speech-rate:175" "speech-volume:100" "wake-words:synapse,computer";
     fi
 done
 rm -rf "$tmpcfg"
+
+# ── Malware scanning ────────────────────────────────────────────────────────
+#
+# ⛔ THE SWEEP AND YOUR OWN SCANS ARE TWO RECORDS IN TWO PLACES. syn-scan
+# resolves its state directory at runtime — /var/lib/syn-scan when it runs as
+# root, $XDG_DATA_HOME/syn-scan otherwise — so the weekly timer and a scan
+# somebody types write to different files. A pane that read only the one it can
+# reach as the user reports "never scanned" on a machine that has swept every
+# week since it was installed, which is the exact class of false state this
+# whole app exists to stop.
+#
+# ⚠ AND IT IS TESTED THROUGH A STUB, NOT AGAINST THIS BOX. Which rows this pane
+# emits depends on which engines are installed and whether root has ever swept —
+# the fingerprint labels taught that lesson twice. The stub below answers
+# syn-scan's three records and honours $SYNSCAN_HOME exactly as syn-scan does,
+# so every branch is reachable on any machine.
+SCANDIR=$(mktemp -d)
+mkdir -p "$SCANDIR/bin" "$SCANDIR/sys" "$SCANDIR/empty" "$SCANDIR/locked"
+cat > "$SCANDIR/bin/syn-scan" <<'STUB'
+#!/bin/sh
+# ⛔ The quarantine call must NOT arrive with SYNSCAN_HOME still set: the pane
+# borrows it for one call to read root's record, and left set it would point
+# the count at a directory this account cannot read. Exiting non-zero here is
+# what turns that mistake into a failed assertion instead of a plausible 0.
+case "$1" in
+status)
+    printf '#status\tstate\tfinished\tfindings\n'
+    if [ -n "$SYNSCAN_HOME" ]; then
+        [ -f "$SYNSCAN_HOME/last-scan" ] || { printf 'status\tnever\n'; exit 0; }
+        printf 'status\tran\t1700000000\t3\n'
+    else
+        printf 'status\tran\t1600000000\t0\n'
+    fi ;;
+engines)
+    printf '#engine\tid\tname\tpresent\trunnable\tpath\n'
+    printf 'engine\tclamav\tClamAV\t1\t1\t/usr/bin/clamscan\n'
+    printf 'engine\trkhunter\tRootkit Hunter\t1\t0\t/usr/bin/rkhunter\n'
+    printf 'engine\tchkrootkit\tchkrootkit\t0\t0\t\n' ;;
+quarantine)
+    [ -n "$SYNSCAN_HOME" ] && exit 9
+    printf '#quarantine\tid\torigin\tengine\tdetail\twhen\n'
+    printf 'quarantine\ta1\t/home/u/one.exe\tclamav\tEicar-Test-Signature\t1700000000\n'
+    printf 'quarantine\ta2\t/home/u/two.exe\tclamav\tEicar-Test-Signature\t1700000000\n' ;;
+esac
+STUB
+chmod +x "$SCANDIR/bin/syn-scan"
+: > "$SCANDIR/sys/last-scan"
+
+scanrec() { PATH="$SCANDIR/bin:$PATH" SYN_SETTINGS_SCAN_HOME="$1" "$BIN" --rec scan; }
+scanfield() { awk -F'\t' -v k="$2" -v c="$3" '$2 == k { print $c }' <<<"$1"; }
+
+srec=$(scanrec "$SCANDIR/sys")
+
+# The switch is the timer, and it is the first thing on the pane.
+case $srec in
+    *"Scheduled scan"*) ok "the Malware Scanning pane offers the scheduled sweep" ;;
+    *) bad "no scheduled-scan row" ;;
+esac
+
+# ⛔ TWO SEPARATE RECORDS, AND THE PANE READS BOTH. Same stub, two answers,
+# because the pane asks it twice — once pointed at root's directory and once
+# not. A pane that asked once would show one of these dates under both labels.
+sweep=$(scanfield "$srec" "Last sweep" 3)
+mine=$(scanfield "$srec" "Your last scan" 3)
+case $sweep in
+    2023-11-*) ok "the sweep row reads root's own record" ;;
+    *) bad "the sweep row read [$sweep], not the scheduled sweep's state" ;;
+esac
+case $mine in
+    2020-09-*) ok "…and this account's scans are a separate row" ;;
+    *) bad "the account row read [$mine]" ;;
+esac
+[ "$sweep" != "$mine" ] && ok "…and the two are not the same answer twice" \
+                        || bad "both rows show the same scan"
+
+# What the sweep left outstanding is root's count, not this account's.
+case $(scanfield "$srec" "Outstanding findings" 3) in
+    3) ok "the outstanding count comes from the sweep's record" ;;
+    *) bad "outstanding findings read [$(scanfield "$srec" "Outstanding findings" 3)]" ;;
+esac
+
+# ⛔ AND $SYNSCAN_HOME IS PUT BACK. The stub refuses to list a quarantine while
+# it is still set, so a count of 2 is proof the pane stopped pointing at root's
+# directory the moment it had the sweep's status.
+case $(scanfield "$srec" "Your quarantine" 3) in
+    2) ok "the quarantine count is this account's own" ;;
+    *) bad "the quarantine row read [$(scanfield "$srec" "Your quarantine" 3)] — is SYNSCAN_HOME still set when it runs?" ;;
+esac
+
+# ⛔ PRESENT AND RUNNABLE ARE TWO FACTS. Arch ships rkhunter 0700 root:root, so
+# a normal user cannot execute an engine that is installed and working — and the
+# sweep, which runs as root, uses it perfectly well. Reporting that as "not
+# installed" sends somebody to reinstall a package they already have.
+case $(scanfield "$srec" "Rootkit checks" 3) in
+    "needs root") ok "an engine installed 0700 root reads as needing root" ;;
+    *) bad "the rkhunter row read [$(scanfield "$srec" "Rootkit checks" 3)]" ;;
+esac
+case $(scanfield "$srec" "Signature scanner" 3) in
+    ready) ok "…a runnable engine reads as ready" ;;
+    *) bad "the clamav row read [$(scanfield "$srec" "Signature scanner" 3)]" ;;
+esac
+case $(scanfield "$srec" "Second rootkit opinion" 3) in
+    "not installed") ok "…and an absent one says so" ;;
+    *) bad "the chkrootkit row read [$(scanfield "$srec" "Second rootkit opinion" 3)]" ;;
+esac
+
+# A sweep that has never run is not the same answer as one that cannot be read.
+case $(scanfield "$(scanrec "$SCANDIR/empty")" "Last sweep" 3) in
+    never) ok "no sweep yet reads as never" ;;
+    *) bad "an empty state directory did not read as never" ;;
+esac
+
+# ⛔ AND UNREADABLE IS ITS OWN ANSWER. syn-scan prints "never" for both, because
+# from inside it they look alike — there is no file it can open. "Never scanned"
+# on a machine that scans weekly is the failure this pane exists to prevent.
+: > "$SCANDIR/locked/last-scan"
+chmod 000 "$SCANDIR/locked/last-scan"
+if [ "$(id -u)" = 0 ]; then
+    printf '  skip  running as root, which can read a 000 file\n'
+else
+    case $(scanfield "$(scanrec "$SCANDIR/locked")" "Last sweep" 3) in
+        unknown) ok "a sweep record this account cannot read is not reported as never" ;;
+        *) bad "an unreadable sweep record was reported as [$(scanfield "$(scanrec "$SCANDIR/locked")" "Last sweep" 3)]" ;;
+    esac
+fi
+chmod 644 "$SCANDIR/locked/last-scan"
+
+# ⛔ THE MASKED UNIT IS SHOWN AND NOT OFFERED. clamav-clamonacc is masked by
+# syn-scan's scriptlet on purpose — on-access scanning is a second owner of the
+# open() path synguard's BPF-LSM already holds — so the row states the fact, and
+# a button that unmasked it from here would undo a decision no button can
+# explain.
+if awk -F'\t' '$2 == "clamav-clamonacc.service" && $6 != "-" { exit 1 }' <<<"$srec"; then
+    ok "the masked on-access unit carries no action"
+else
+    bad "the pane offers to enable clamav-clamonacc.service"
+fi
+
+# A unit that is not on the machine gets no button either, and systemd's own
+# "not-found" never reaches the table: it is a value with no colour, no
+# translation and no row style in the window's vocabulary.
+if awk -F'\t' '$1 == "unit" && $3 == "not installed" && $6 != "-" { exit 1 }' <<<"$srec"; then
+    ok "a unit that is not installed is offered no action"
+else
+    bad "an absent unit was offered a button"
+fi
+case $srec in
+    *"not-found"*) bad "the scan pane leaked systemd's raw \"not-found\"" ;;
+    *) ok "no raw systemd sentinel reaches the scan rows" ;;
+esac
+
+# ── and the three switches ──────────────────────────────────────────────────
+#
+# ⛔ ENABLE AND START IN ONE GO, for the reason the llama.cpp port needs it: a
+# timer that is enabled and not running scans nothing until the next reboot, and
+# one started without being enabled scans nothing after it.
+for pair in "malware-scan:syn-scan.timer" \
+            "signature-updates:clamav-freshclam.service" \
+            "scan-daemon:clamav-daemon.service"; do
+    k=${pair%%:*}; u=${pair#*:}
+    out=$(PATH="$SCANDIR/bin:$PATH" "$BIN" --dry-run set "$k" on 2>&1)
+    case $out in
+        *"$u"*) ok "set $k names $u" ;;
+        *) bad "set $k ran [$out]" ;;
+    esac
+    case $out in
+        *"--now"*) ok "…and enables AND starts it" ;;
+        *) bad "set $k on does not pass --now" ;;
+    esac
+    case $(PATH="$SCANDIR/bin:$PATH" "$BIN" --dry-run set "$k" off 2>&1) in
+        *disable*) ok "…and off disables it" ;;
+        *) bad "set $k off does not disable" ;;
+    esac
+    if PATH="$SCANDIR/bin:$PATH" "$BIN" --dry-run set "$k" maybe >/dev/null 2>&1; then
+        bad "set $k maybe was accepted"
+    else
+        ok "…and anything but on or off is refused"
+    fi
+done
+
+# ⛔ AND A MACHINE WITHOUT THE SCANNER SAYS SO IN ONE ROW, rather than drawing a
+# pane of switches for a package that is not there. PATH with nothing on it: the
+# pane must not need syn-scan, systemctl or anything else to answer.
+norec=$(PATH="$SCANDIR/empty" "$BIN" --rec scan)
+case $norec in
+    *unavailable*) ok "no syn-scan is one unavailable row" ;;
+    *) bad "the pane without syn-scan printed [$norec]" ;;
+esac
+if awk -F'\t' 'NR > 1 && $6 != "-" { exit 1 }' <<<"$norec"; then
+    ok "…and it offers no control for a scanner that is not installed"
+else
+    bad "the pane offered a control with no syn-scan on the machine"
+fi
+rm -rf "$SCANDIR"
 
 # ── every pane the binary answers is a pane the window offers ────────────────
 #

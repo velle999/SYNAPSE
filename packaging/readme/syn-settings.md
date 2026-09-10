@@ -15,7 +15,7 @@ syn-settings gui network     # open it on one pane
 ```
 
 Panes: `display`, `region`, `time`, `network`, `bluetooth`, `power`, `apps`,
-`kernel`, `ai`, `assistant`, `fprint`, `speech`, `remote`, `system`.
+`kernel`, `ai`, `assistant`, `fprint`, `speech`, `remote`, `scan`, `system`.
 
 ## Reading the same answers from a script
 
@@ -51,6 +51,30 @@ hides them again. On the command line, `--reveal` does the same:
 syn-settings --rec network --reveal | column -t -s$'\t'
 ```
 
+## Malware scanning
+
+The `scan` pane is the switch for the weekly sweep, and the answer to "has this
+machine been scanned". `syn-scan` owns the engines, the schedule and the
+quarantine; this pane reads its records and runs the units it ships.
+
+```bash
+syn-settings --rec scan | column -t -s$'\t'
+syn-settings set malware-scan on        # the weekly sweep (syn-scan.timer)
+syn-settings set signature-updates on   # freshclam
+syn-settings set scan-daemon on         # clamd — instant scans, about a GB of RAM
+```
+
+⚠ **The sweep and your own scans are two records in two places.** The timer runs
+as root and writes `/var/lib/syn-scan`; a scan you type yourself is recorded
+under your own account. The pane shows both, each named for whose it is.
+
+The engine rows separate *installed* from *runnable*. Arch ships `rkhunter`
+`0700 root`, so the scheduled sweep can run it and a scan you start yourself
+cannot; that row reads *needs root*.
+
+`clamav-clamonacc.service` is listed with no switch. SynapseOS masks it —
+`synguard` already watches every `open()` in the kernel.
+
 The `apps` pane reports which file made each decision, because a deliberate
 choice and a fallback look identical everywhere else — that is the difference
 between "nothing is set" and "something set it and you did not".
@@ -59,6 +83,7 @@ between "nothing is set" and "something set it and you did not".
 
 `systemd` for `localectl`, `timedatectl` and `systemctl`; `networkmanager`
 for the network pane; `bluez-utils` for Bluetooth; `wlr-randr` and `synctl`
-for displays; `synpkg` and `pacman` for kernels; `fprintd` for fingerprints.
+for displays; `synpkg` and `pacman` for kernels; `fprintd` for fingerprints; `syn-scan`
+for the malware pane.
 Each pane says what is missing rather than showing an empty box, and changes
 that need authorisation go through polkit instead of asking for a root shell.

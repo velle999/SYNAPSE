@@ -145,6 +145,35 @@ echo " - #1: left-thumb"
 FPL
     printf '#!/bin/sh\nexit 0\n' > "$fake/fprintd-enroll"
     chmod +x "$fake/fprintd-list" "$fake/fprintd-enroll"
+
+    # ⛔ AND THE SCAN PANE, FOR EXACTLY THE SAME REASON. Which engines it draws
+    # is decided by which of clamav, rkhunter and chkrootkit this machine has,
+    # and whether it draws a sweep at all is decided by whether root has ever
+    # run one — so the labels for the states this box does not happen to be in
+    # would be unreachable here and perfectly reachable on somebody else's. The
+    # stub answers all three of syn-scan's records, one engine in each state.
+    cat > "$fake/syn-scan" <<'SCANSTUB'
+#!/bin/sh
+case "$1" in
+status)
+    printf '#status\tstate\tfinished\tfindings\n'
+    printf 'status\tran\t1700000000\t2\n' ;;
+engines)
+    printf '#engine\tid\tname\tpresent\trunnable\tpath\n'
+    printf 'engine\tclamav\tClamAV\t1\t1\t/usr/bin/clamscan\n'
+    printf 'engine\trkhunter\tRootkit Hunter\t1\t0\t/usr/bin/rkhunter\n'
+    printf 'engine\tchkrootkit\tchkrootkit\t0\t0\t\n' ;;
+quarantine)
+    printf '#quarantine\tid\torigin\tengine\tdetail\twhen\n' ;;
+esac
+SCANSTUB
+    chmod +x "$fake/syn-scan"
+    # The sweep's own state directory, which only root writes: pointed at one
+    # this test owns so the rows below are the same on every machine.
+    mkdir -p "$tmp/scanhome"
+    : > "$tmp/scanhome/last-scan"
+    export SYN_SETTINGS_SCAN_HOME="$tmp/scanhome"
+
     PATH="$fake:$PATH"
 
     # ...and it really is emitting them, or the shadowing silently did nothing
@@ -178,8 +207,20 @@ FPL
     # An empty HOME and XDG_CONFIG_HOME is what a fresh install looks like.
     empty=$tmp/noconfig; mkdir -p "$empty"
 
+    # ⛔ AN INTERFACE NAME IS NOT A WORD, AND MOST OF THEM ONLY LOOK LIKE ONE BY
+    # ACCIDENT. The network pane keys its rows on the device — `enp7s0`, `wlp6s0`
+    # — and every filter below happens to let those through because they carry a
+    # digit. A VPN tunnel does not: NordVPN's interface is `nordlynx`, which is
+    # eight letters and reads to this check exactly like a label somebody forgot
+    # to mark. So the pane was reported as drawing an untranslatable word on any
+    # machine with that VPN connected, and on no other machine at all — the same
+    # "a gate that runs the program reads THIS machine" trap the fingerprint and
+    # accelerator rows above are stubbed for. Read from the kernel rather than
+    # listed here, because the names are whatever this box happens to have.
+    ifaces=" $(ls /sys/class/net 2>/dev/null | tr '\n' ' ')"
+
     for pane in display region time power system network bluetooth kernel \
-                apps ai speech fprint assistant apps@fresh; do
+                apps ai speech fprint assistant scan apps@fresh; do
         case "$pane" in
             apps@fresh) set -- --rec apps ;;
             *)          set -- --rec "$pane" ;;
@@ -201,6 +242,7 @@ FPL
         # lookup can only find a cell that IS a msgid, so a cell COMPOSED at
         # runtime never matches one however its parts are marked; and a command,
         # a unit name or a driver name is not a word anybody translates.
+        case "$ifaces" in *" $v "*) continue ;; esac
         case "$v" in
             # A MASKED ADDRESS, which is not a word and has no translation: the
             # Bluetooth pane's rows are keyed on the address, and the record

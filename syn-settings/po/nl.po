@@ -135,6 +135,9 @@ msgstr "%1 wordt opstartbaar gemaakt"
 msgid "Making %1 the default"
 msgstr "%1 wordt de standaard"
 
+msgid "Malware Scanning"
+msgstr "Malware-scan"
+
 msgid "Network"
 msgstr "Netwerk"
 
@@ -319,6 +322,9 @@ msgid ""
 msgstr ""
 "de lezer, welke vingers geregistreerd zijn, en er nog een registreren — het "
 "vergrendelscherm biedt het pas aan als er al iets is"
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
+msgstr "de geplande ronde, de motoren erachter en wat de laatste heeft gevonden"
 
 msgid ""
 "the screen reader, the wake word, and the voices this machine can speak and "
@@ -1164,6 +1170,205 @@ msgstr "iemand kijkt naar dit scherm"
 
 msgid "the server · the switch above is what turns it on"
 msgstr "de server · de schakelaar hierboven is wat hem aanzet"
+
+msgid "Signature scanner"
+msgstr "Handtekeningenscanner"
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr "ClamAV, dat in bestanden kijkt · het is de motor die een Windows-payload vindt die in een Proton-prefix ligt"
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr "zonder dat is er niets om bestandsinhoud mee te vergelijken · synpkg install clamav"
+
+msgid "Rootkit checks"
+msgstr "Rootkitcontroles"
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr "rkhunter, dat het systeem zelf nakijkt in plaats van uw bestanden"
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr "optioneel · synpkg install rkhunter voegt het toe, en de geplande ronde pakt het op zonder verdere instelling"
+
+msgid "Second rootkit opinion"
+msgstr "Tweede rootkitoordeel"
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr "chkrootkit, dat naar hetzelfde soort dingen zoekt als rkhunter en het nuttig vaak tegenspreekt"
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr "optioneel, en het woont in [blackarch], dat deze machine bij de installatie geweigerd kan hebben · syn arsenal --enable-repo"
+
+msgid "Engines"
+msgstr "Motoren"
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr "syn-scan kon niet gevraagd worden welke motoren geïnstalleerd zijn"
+
+msgid "needs root"
+msgstr "heeft root nodig"
+
+msgid "ready"
+msgstr "klaar"
+
+msgid "a scanning back end"
+msgstr "een scanmotor"
+
+msgid "not on this machine"
+msgstr "niet op deze machine"
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr "geïnstalleerd als 0700 root, dus de geplande ronde kan het uitvoeren en een scan die u zelf start niet"
+
+msgid "installed"
+msgstr "geïnstalleerd"
+
+msgid "Engine"
+msgstr "Motor"
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr "de planning · de schakelaar boven aan deze pagina is wat hem aanzet"
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr "de ronde zelf · de timer start hem, en hem hier starten voert er nu een uit · inactief tussen de rondes is hoe een voltooide ronde eruitziet"
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr "de handtekeningenbijwerker · syn-scan zet die bij installatie aan, want een scanner met verouderde handtekeningen is erger dan geen scanner"
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr "clamd · standaard uit op dit systeem · zolang hij draait geeft syn-scan zijn bestanden aan clamdscan, en dat is het hele verschil dat de schakelaar hierboven oplevert"
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr "scannen bij toegang, met opzet gemaskeerd · synguard bewaakt elke opening al in de kernel, en twee eigenaren van dat pad zijn één betwiste hook"
+
+msgid "Malware scanning"
+msgstr "Malware-scan"
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr "heeft syn-scan(1) nodig · synpkg install syn-scan"
+
+msgid "Scheduled scan"
+msgstr "Geplande scan"
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr "systemctl is niet beschikbaar, dus de planning kan niet gelezen worden"
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr "syn-scan is geïnstalleerd en syn-scan.timer staat niet op deze machine"
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr "een wekelijkse ronde door de persoonlijke mappen en de tijdelijke, op lage prioriteit · een machine die sliep toen hij aan de beurt was, haalt hem bij de volgende start in plaats van hem over te slaan"
+
+msgid "Next sweep"
+msgstr "Volgende ronde"
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr "systemd spreidt de start over twee uur zodat niet elke machine op een netwerk tegelijk begint"
+
+msgid "Last sweep"
+msgstr "Laatste ronde"
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr "het verslag van de geplande ronde is niet leesbaar voor dit account · sudo syn-scan status"
+
+msgid "never"
+msgstr "nooit"
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr "er is nog geen geplande ronde voltooid · de eerste loopt binnen een week nadat de timer is aangezet"
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr "wat de timer het laatst deed · hij loopt door de persoonlijke mappen, /srv en de tijdelijke"
+
+msgid "Outstanding findings"
+msgstr "Openstaande vondsten"
+
+msgid "needs a look"
+msgstr "moet bekeken worden"
+
+msgid "clear"
+msgstr "schoon"
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr "de ronde heeft ze gemeld en niemand heeft ernaar gekeken · sudo syn-scan status somt ze op, en er wordt nooit iets verwijderd"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "de laatste ronde eindigde zonder iets te melden"
+
+msgid "Your last scan"
+msgstr "Uw laatste scan"
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr "een scan die u zelf start houdt zijn eigen verslag bij, onder uw account in plaats van dat van root · syn-scan scan ~/Downloads"
+
+msgid "Your quarantine"
+msgstr "Uw quarantaine"
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr "er wordt nooit iets verwijderd · syn-scan quarantine list toont wat opzij is gezet, en restore zet een bestand terug waar het vandaan kwam · de quarantaine van de ronde is van root, dus sudo somt die op"
+
+msgid "Signature updates"
+msgstr "Handtekeningen bijwerken"
+
+msgid "needs clamav, which is what ships the updater"
+msgstr "heeft clamav nodig, dat de bijwerker meelevert"
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr "freshclam haalt nieuwe handtekeningen op zodra ze verschijnen · dit uitzetten laat de scanner zoeken naar de malware van vorig jaar, en daarom staat het standaard aan"
+
+msgid "Keep signatures in memory"
+msgstr "Handtekeningen in het geheugen houden"
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr "heeft clamav nodig, dat de achtergronddienst meelevert"
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
+msgstr "clamd houdt de hele set handtekeningen geladen, waardoor een scan meteen begint in plaats van zes seconden bezig te zijn met inlezen · het kost ongeveer een gigabyte geheugen, en daarom laat dit systeem het uit tot u erom vraagt · hij start pas als het downloaden van de handtekeningen klaar is"
 
 msgid "wifi"
 msgstr "wifi"

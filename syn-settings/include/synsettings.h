@@ -249,6 +249,14 @@ int pane_ai(void);
 int pane_speech(void);
 int pane_remote(void);
 
+/* ── scan.c ──
+ * Malware scanning: the scheduled sweep, the engines behind it, and what the
+ * last one found. Owns none of it — syn-scan(1) does, and this reads its
+ * records. ⚠ The sweep runs as root and keeps its state in /var/lib/syn-scan,
+ * which is NOT where a scan you type yourself is recorded; the pane shows
+ * both, each named for whose it is. */
+int pane_scan(void);
+
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *
  * Deliberately thin. Everything that needs privilege is handed to a systemd

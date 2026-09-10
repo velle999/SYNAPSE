@@ -276,6 +276,7 @@ FloatingWindow {
         // one, which is the sentence speech.c opens with.
         { id: "speech",    label: I18n.tr("Speech"),   blurb: I18n.tr("the screen reader, the wake word, and the voices this machine can speak and hear with") },
         { id: "remote",    label: I18n.tr("Remote Desktop"), blurb: I18n.tr("whether this desktop can be reached from another machine, and from how far away") },
+        { id: "scan",      label: I18n.tr("Malware Scanning"), blurb: I18n.tr("the scheduled sweep, the engines behind it, and what the last one found") },
         { id: "system",    label: I18n.tr("System"),   blurb: I18n.tr("identity, and which layer each configuration file comes from") }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"

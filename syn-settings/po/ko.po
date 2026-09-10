@@ -132,6 +132,9 @@ msgstr "%1을(를) 부팅 가능하게 만드는 중"
 msgid "Making %1 the default"
 msgstr "%1을(를) 기본값으로 설정하는 중"
 
+msgid "Malware Scanning"
+msgstr "악성코드 검사"
+
 msgid "Network"
 msgstr "네트워크"
 
@@ -306,6 +309,9 @@ msgid ""
 msgstr ""
 "리더, 등록된 손가락, 그리고 추가 등록 — 잠금 화면은 등록된 것이 있어야만 지문"
 "을 제안합니다"
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
+msgstr "예약된 훑기, 그 뒤의 엔진들, 그리고 지난번에 무엇이 나왔는지"
 
 msgid ""
 "the screen reader, the wake word, and the voices this machine can speak and "
@@ -1124,6 +1130,205 @@ msgstr "누군가 이 화면을 보고 있습니다"
 
 msgid "the server · the switch above is what turns it on"
 msgstr "서버 · 위의 스위치가 이것을 켭니다"
+
+msgid "Signature scanner"
+msgstr "시그니처 검사기"
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr "ClamAV, 파일 속을 들여다보는 것이 바로 이것입니다 · Proton 프리픽스에 놓인 윈도우 페이로드를 찾아내는 엔진입니다"
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr "이것이 없으면 파일 내용을 맞춰볼 대상이 없습니다 · synpkg install clamav"
+
+msgid "Rootkit checks"
+msgstr "루트킷 점검"
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr "rkhunter, 사용자의 파일이 아니라 시스템 자체를 점검합니다"
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr "선택 사항 · synpkg install rkhunter 로 추가되며, 예약된 훑기는 다른 설정 없이 이를 사용합니다"
+
+msgid "Second rootkit opinion"
+msgstr "루트킷에 대한 두 번째 의견"
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr "chkrootkit, rkhunter 와 같은 종류를 찾으면서 유용하게도 자주 다른 판단을 내립니다"
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr "선택 사항이며 [blackarch] 에 있습니다. 이 컴퓨터는 설치할 때 그것을 거절했을 수 있습니다 · syn arsenal --enable-repo"
+
+msgid "Engines"
+msgstr "엔진"
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr "어떤 엔진이 설치되어 있는지 syn-scan 에게 물어볼 수 없었습니다"
+
+msgid "needs root"
+msgstr "root 필요"
+
+msgid "ready"
+msgstr "준비됨"
+
+msgid "a scanning back end"
+msgstr "검사 엔진"
+
+msgid "not on this machine"
+msgstr "이 컴퓨터에 없음"
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr "0700 root 로 설치되어 있어 예약된 훑기는 실행할 수 있지만 직접 시작한 검사로는 실행할 수 없습니다"
+
+msgid "installed"
+msgstr "설치됨"
+
+msgid "Engine"
+msgstr "엔진"
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr "일정 · 이 페이지 맨 위의 스위치가 이것을 켭니다"
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr "훑기 자체 · 타이머가 시작하며, 여기서 시작하면 지금 한 번 실행합니다 · 실행 사이에 비활성인 것이 끝난 훑기의 모습입니다"
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr "시그니처 갱신기 · 시그니처가 낡은 검사기는 없느니만 못하므로 syn-scan 이 설치 시에 켭니다"
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr "clamd · 이 시스템에서는 기본적으로 꺼져 있습니다 · 실행 중이면 syn-scan 이 파일을 clamdscan 에 넘기며, 위 스위치가 사는 차이는 그것뿐입니다"
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr "접근 시 검사, 의도적으로 마스크되어 있습니다 · synguard 가 이미 커널에서 모든 열기를 지켜보고 있고, 그 경로의 주인이 둘이면 서로 다투는 훅이 하나 생깁니다"
+
+msgid "Malware scanning"
+msgstr "악성코드 검사"
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr "syn-scan(1) 이 필요합니다 · synpkg install syn-scan"
+
+msgid "Scheduled scan"
+msgstr "예약 검사"
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr "systemctl 을 쓸 수 없어 일정을 읽을 수 없습니다"
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr "syn-scan 은 설치되어 있지만 syn-scan.timer 가 이 컴퓨터에 없습니다"
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr "홈 디렉터리와 임시 디렉터리를 매주 유휴 우선순위로 훑습니다 · 예정된 시각에 잠들어 있던 컴퓨터는 건너뛰지 않고 다음 부팅 때 실행합니다"
+
+msgid "Next sweep"
+msgstr "다음 훑기"
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr "네트워크의 모든 컴퓨터가 동시에 시작하지 않도록 systemd 가 시작 시각을 두 시간에 걸쳐 흩뿌립니다"
+
+msgid "Last sweep"
+msgstr "마지막 훑기"
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr "예약된 훑기의 기록을 이 계정으로는 읽을 수 없습니다 · sudo syn-scan status"
+
+msgid "never"
+msgstr "없음"
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr "아직 완료된 예약 훑기가 없습니다 · 타이머를 켠 뒤 일주일 안에 첫 번째가 실행됩니다"
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr "타이머가 마지막으로 한 일 · 홈 디렉터리와 /srv, 임시 디렉터리를 돌아봅니다"
+
+msgid "Outstanding findings"
+msgstr "확인하지 않은 발견"
+
+msgid "needs a look"
+msgstr "살펴봐야 함"
+
+msgid "clear"
+msgstr "깨끗함"
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr "훑기가 표시해 두었고 아직 아무도 보지 않았습니다 · sudo syn-scan status 로 목록을 볼 수 있으며, 무엇도 삭제되지 않습니다"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "마지막 훑기는 보고할 것 없이 끝났습니다"
+
+msgid "Your last scan"
+msgstr "내 마지막 검사"
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr "직접 시작한 검사는 root 가 아니라 사용자 계정 아래에 자체 기록을 남깁니다 · syn-scan scan ~/Downloads"
+
+msgid "Your quarantine"
+msgstr "내 격리함"
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr "무엇도 삭제되지 않습니다 · syn-scan quarantine list 로 치워둔 것을 볼 수 있고, restore 는 파일을 원래 있던 곳으로 되돌립니다 · 훑기 쪽 격리함은 root 의 것이므로 그쪽은 sudo 로 봅니다"
+
+msgid "Signature updates"
+msgstr "시그니처 갱신"
+
+msgid "needs clamav, which is what ships the updater"
+msgstr "갱신기를 제공하는 clamav 가 필요합니다"
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr "freshclam 은 새 시그니처가 공개되는 대로 받아옵니다 · 이것을 끄면 검사기는 작년의 악성코드만 찾게 되며, 그래서 기본적으로 켜져 있습니다"
+
+msgid "Keep signatures in memory"
+msgstr "시그니처를 메모리에 유지"
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr "데몬을 제공하는 clamav 가 필요합니다"
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
+msgstr "clamd 는 시그니처 전체를 계속 올려두므로 다시 읽는 데 6초를 쓰지 않고 검사가 곧바로 시작됩니다 · 메모리를 약 1기가바이트 쓰기 때문에 요청하기 전까지 이 시스템은 꺼둡니다 · 시그니처 내려받기가 끝나기 전에는 시작되지 않습니다"
 
 msgid "wifi"
 msgstr "Wi-Fi"

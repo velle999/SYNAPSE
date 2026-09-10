@@ -130,6 +130,9 @@ msgstr ""
 msgid "Making %1 the default"
 msgstr ""
 
+msgid "Malware Scanning"
+msgstr ""
+
 msgid "Network"
 msgstr ""
 
@@ -290,6 +293,9 @@ msgstr ""
 msgid ""
 "the reader, which fingers are on file, and enrolling another — the lock "
 "screen offers it only once something is"
+msgstr ""
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
 msgstr ""
 
 msgid ""
@@ -1021,6 +1027,205 @@ msgid "somebody is looking at this screen"
 msgstr ""
 
 msgid "the server · the switch above is what turns it on"
+msgstr ""
+
+msgid "Signature scanner"
+msgstr ""
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr ""
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr ""
+
+msgid "Rootkit checks"
+msgstr ""
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr ""
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr ""
+
+msgid "Second rootkit opinion"
+msgstr ""
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr ""
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr ""
+
+msgid "Engines"
+msgstr ""
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr ""
+
+msgid "needs root"
+msgstr ""
+
+msgid "ready"
+msgstr ""
+
+msgid "a scanning back end"
+msgstr ""
+
+msgid "not on this machine"
+msgstr ""
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr ""
+
+msgid "installed"
+msgstr ""
+
+msgid "Engine"
+msgstr ""
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr ""
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr ""
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr ""
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr ""
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr ""
+
+msgid "Malware scanning"
+msgstr ""
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr ""
+
+msgid "Scheduled scan"
+msgstr ""
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr ""
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr ""
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr ""
+
+msgid "Next sweep"
+msgstr ""
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr ""
+
+msgid "Last sweep"
+msgstr ""
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr ""
+
+msgid "never"
+msgstr ""
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr ""
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr ""
+
+msgid "Outstanding findings"
+msgstr ""
+
+msgid "needs a look"
+msgstr ""
+
+msgid "clear"
+msgstr ""
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr ""
+
+msgid "the last sweep finished with nothing to report"
+msgstr ""
+
+msgid "Your last scan"
+msgstr ""
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr ""
+
+msgid "Your quarantine"
+msgstr ""
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr ""
+
+msgid "Signature updates"
+msgstr ""
+
+msgid "needs clamav, which is what ships the updater"
+msgstr ""
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr ""
+
+msgid "Keep signatures in memory"
+msgstr ""
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr ""
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
 msgstr ""
 
 msgid "wifi"

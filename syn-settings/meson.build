@@ -36,6 +36,7 @@ sources = files(
   'src/ai.c',
   'src/speech.c',
   'src/remote.c',
+  'src/scan.c',
 )
 
 executable('syn-settings', sources,

@@ -131,6 +131,9 @@ msgstr "正在将 %1 设为可引导"
 msgid "Making %1 the default"
 msgstr "正在将 %1 设为默认"
 
+msgid "Malware Scanning"
+msgstr "恶意软件扫描"
+
 msgid "Network"
 msgstr "网络"
 
@@ -303,6 +306,9 @@ msgid ""
 "screen offers it only once something is"
 msgstr ""
 "读取器、已登记的手指，以及再登记一个——锁屏只有在已有登记时才会提供指纹选项"
+
+msgid "the scheduled sweep, the engines behind it, and what the last one found"
+msgstr "计划中的清扫、背后的引擎，以及上一次扫出了什么"
 
 msgid ""
 "the screen reader, the wake word, and the voices this machine can speak and "
@@ -1083,6 +1089,205 @@ msgstr "有人正在看这个屏幕"
 
 msgid "the server · the switch above is what turns it on"
 msgstr "服务器 · 上面的开关负责启动它"
+
+msgid "Signature scanner"
+msgstr "特征码扫描器"
+
+msgid ""
+"ClamAV, which is what looks inside files · it is the engine that finds a "
+"Windows payload sitting in a Proton prefix"
+msgstr "ClamAV，负责查看文件内部的就是它 · 放在 Proton 前缀里的 Windows 载荷正是靠这个引擎找出来的"
+
+msgid ""
+"without it there is nothing to match file contents against · synpkg install "
+"clamav"
+msgstr "没有它就没有东西可以比对文件内容 · synpkg install clamav"
+
+msgid "Rootkit checks"
+msgstr "Rootkit 检查"
+
+msgid "rkhunter, which checks the system itself rather than your files"
+msgstr "rkhunter，检查系统本身而不是你的文件"
+
+msgid ""
+"optional · synpkg install rkhunter adds it, and the scheduled sweep picks it "
+"up with no further setting"
+msgstr "可选 · synpkg install rkhunter 即可加上，计划清扫无需再做任何设置就会用上它"
+
+msgid "Second rootkit opinion"
+msgstr "第二个 rootkit 判断"
+
+msgid ""
+"chkrootkit, which looks for the same class of thing rkhunter does and "
+"disagrees with it usefully often"
+msgstr "chkrootkit，与 rkhunter 找的是同一类东西，而且常常给出有用的不同结论"
+
+msgid ""
+"optional, and it lives in [blackarch], which this machine may have declined "
+"at install time · syn arsenal --enable-repo"
+msgstr "可选，且位于 [blackarch]，这台机器在安装时可能拒绝了它 · syn arsenal --enable-repo"
+
+msgid "Engines"
+msgstr "引擎"
+
+msgid "syn-scan could not be asked which back ends are installed"
+msgstr "无法向 syn-scan 询问已安装哪些引擎"
+
+msgid "needs root"
+msgstr "需要 root"
+
+msgid "ready"
+msgstr "就绪"
+
+msgid "a scanning back end"
+msgstr "一个扫描引擎"
+
+msgid "not on this machine"
+msgstr "这台机器上没有"
+
+msgid ""
+"installed 0700 root, so the scheduled sweep can run it and a scan you start "
+"yourself cannot"
+msgstr "以 0700 root 安装，因此计划清扫可以运行它，而你自己发起的扫描不行"
+
+msgid "installed"
+msgstr "已安装"
+
+msgid "Engine"
+msgstr "引擎"
+
+msgid "the schedule · the switch at the top of this pane is what turns it on"
+msgstr "计划安排 · 本页顶部的开关负责打开它"
+
+msgid ""
+"the sweep itself · the timer starts it, and starting it here runs one now · "
+"inactive between runs is what a finished sweep looks like"
+msgstr "清扫本身 · 由定时器启动，在这里启动则会立刻跑一次 · 两次之间处于非活动状态，正是清扫完成后的样子"
+
+msgid ""
+"the signature updater · syn-scan enables this on install because a scanner "
+"with stale signatures is worse than no scanner"
+msgstr "特征库更新程序 · syn-scan 安装时就打开它，因为特征码过期的扫描器比没有扫描器更糟"
+
+msgid ""
+"clamd · off by default on this system · while it is running syn-scan hands "
+"its files to clamdscan instead, which is the whole difference the switch "
+"above buys"
+msgstr "clamd · 本系统默认关闭 · 只要它在运行，syn-scan 就改把文件交给 clamdscan，上面那个开关买到的就是这点差别"
+
+msgid ""
+"on-access scanning, masked on purpose · synguard already watches every open "
+"in the kernel, and two owners of that path is one contended hook"
+msgstr "访问时扫描，特意屏蔽 · synguard 已经在内核里盯着每一次打开，同一条路径有两个主人就等于一个被抢的钩子"
+
+msgid "Malware scanning"
+msgstr "恶意软件扫描"
+
+msgid "needs syn-scan(1) · synpkg install syn-scan"
+msgstr "需要 syn-scan(1) · synpkg install syn-scan"
+
+msgid "Scheduled scan"
+msgstr "计划扫描"
+
+msgid "systemctl is not available, so the schedule cannot be read"
+msgstr "systemctl 不可用，因此读不到计划安排"
+
+msgid "syn-scan is installed and syn-scan.timer is not on this machine"
+msgstr "syn-scan 已安装，但这台机器上没有 syn-scan.timer"
+
+msgid ""
+"a weekly sweep of the home directories and the temporary ones, at idle "
+"priority · a machine that was asleep when it was due runs it on the next "
+"boot rather than skipping it"
+msgstr "每周以空闲优先级清扫各个主目录和临时目录 · 到点时正在睡眠的机器会在下次开机时补上，而不是跳过"
+
+msgid "Next sweep"
+msgstr "下次清扫"
+
+msgid ""
+"systemd spreads the start over two hours so every machine on a network does "
+"not begin at once"
+msgstr "systemd 会把启动时间摊在两小时内，免得网络上的每台机器同时开始"
+
+msgid "Last sweep"
+msgstr "上次清扫"
+
+msgid ""
+"the scheduled sweep's record is not readable by this account · sudo syn-scan "
+"status"
+msgstr "本账户读不到计划清扫的记录 · sudo syn-scan status"
+
+msgid "never"
+msgstr "从未"
+
+msgid ""
+"no scheduled sweep has finished yet · the first one runs within a week of "
+"the timer being switched on"
+msgstr "尚未完成过任何一次计划清扫 · 打开定时器后的一周内会跑第一次"
+
+msgid ""
+"what the timer last did · it walks the home directories, /srv and the "
+"temporary ones"
+msgstr "定时器上一次做的事 · 它会走遍各个主目录、/srv 和临时目录"
+
+msgid "Outstanding findings"
+msgstr "待查看的发现"
+
+msgid "needs a look"
+msgstr "需要看一下"
+
+msgid "clear"
+msgstr "干净"
+
+msgid ""
+"the sweep flagged these and nothing has looked at them · sudo syn-scan "
+"status lists them, and nothing is ever deleted"
+msgstr "清扫标记了它们，还没有人看过 · sudo syn-scan status 可以列出，而且任何东西都不会被删除"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "上一次清扫结束时没有任何需要报告的内容"
+
+msgid "Your last scan"
+msgstr "你上次的扫描"
+
+msgid ""
+"a scan you start yourself keeps its own record, under your account rather "
+"than root's · syn-scan scan ~/Downloads"
+msgstr "你自己发起的扫描有自己的记录，记在你的账户下而不是 root 的 · syn-scan scan ~/Downloads"
+
+msgid "Your quarantine"
+msgstr "你的隔离区"
+
+msgid ""
+"nothing is ever deleted · syn-scan quarantine list shows what was set aside "
+"and restore puts a file back where it came from · the sweep's own quarantine "
+"belongs to root, so sudo lists that one"
+msgstr "任何东西都不会被删除 · syn-scan quarantine list 会显示被挪开的东西，restore 会把文件放回原处 · 清扫自己的隔离区属于 root，那一份要用 sudo 才能列出"
+
+msgid "Signature updates"
+msgstr "特征库更新"
+
+msgid "needs clamav, which is what ships the updater"
+msgstr "需要 clamav，更新程序由它提供"
+
+msgid ""
+"freshclam fetches new signatures as they are published · switching this off "
+"leaves the scanner looking for last year's malware, and it is on by default "
+"for that reason"
+msgstr "新特征码一发布，freshclam 就会取回来 · 关掉它，扫描器就只会去找去年的恶意软件，所以它默认是开着的"
+
+msgid "Keep signatures in memory"
+msgstr "把特征库留在内存中"
+
+msgid "needs clamav, which is what ships the daemon"
+msgstr "需要 clamav，守护进程由它提供"
+
+msgid ""
+"clamd keeps the whole signature set loaded, which makes a scan start "
+"instantly instead of spending six seconds reading it back · it costs about a "
+"gigabyte of memory, which is why this system leaves it off unless you ask "
+"for it · it will not start until the signature download has finished"
+msgstr "clamd 会把整套特征库一直加载着，于是扫描立刻开始，而不必花六秒重新读一遍 · 这大约要占一 GB 内存，所以在你主动要求之前本系统让它关着 · 特征库下载完成之前它不会启动"
 
 msgid "wifi"
 msgstr "Wi-Fi"
