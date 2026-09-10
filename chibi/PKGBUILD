@@ -52,7 +52,7 @@ pkgver=0.1.0
 #   answer. ⚠ The switch follows the camera, not the reverse: no device, and
 #   the row goes back to Off rather than claiming On over a camera that never
 #   opened.
-pkgrel=24
+pkgrel=25
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -66,7 +66,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=a9979a312cf950870665c2e63ba8fcdb1753be0a
+_commit=5a7b629e6ec7d28c8a4d74dfff6401e3b46795c8
 
 # Runtime deps.
 #
