@@ -373,7 +373,16 @@ watch_clients() {
         exec {inhibit_fd}> >("$IDLE_INHIBIT" 2>/dev/null)
     fi
 
-    wayvncctl --json event-receive --wait --reconnect 2>/dev/null |
+    # ⛔ THE OPTIONS GO BEFORE THE SUBCOMMAND. `-w/--wait` and `-r/--reconnect`
+    # are wayvncctl's GLOBAL options; `event-receive` itself takes only
+    # `--show=` and `-h`. Written the other way round, real wayvncctl answers
+    # `ERROR: Unknown option: "wait"` and exits 1 — so this pipeline ended at
+    # once, the loop below saw EOF, and the watcher was gone seconds after
+    # every start. It had been that way since the first commit: nothing woke
+    # the screen and no inhibitor was ever held, so a viewer connecting to a
+    # blanked desktop got a grey rectangle, and only a fresh login (screen
+    # still on) looked like it worked.
+    wayvncctl --json --wait --reconnect event-receive 2>/dev/null |
     while IFS= read -r line; do
         case "$line" in
             *'"client-connected"'*|*'"client-disconnected"'*) ;;
@@ -403,6 +412,12 @@ watch_clients() {
         fi
         count=$n
     done
+
+    # ⚠ SAY SO WHEN IT ENDS. --reconnect means this should outlive any number
+    # of wayvnc restarts, so reaching here at all is the failure above: the
+    # unit stays green, the server keeps serving, and the only symptom is a
+    # grey screen for somebody who is not at the machine.
+    err "the wayvncctl event stream ended — wake-on-connect is off for this session"
 }
 
 cmd_run() {

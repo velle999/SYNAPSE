@@ -161,13 +161,36 @@ cat > "$stub/wlopm" <<EOF
 #!/bin/sh
 printf 'wlopm %s\n' "\$*" >> "$T/actions.log"
 EOF
+# ⛔ THIS STUB CHECKS ITS ARGUMENTS, and that is the whole point of it. The
+# first version printed these four events however it was called, so the suite
+# passed for every pkgrel while the shipped invocation
+# (`event-receive --wait --reconnect`) was rejected by the real wayvncctl with
+# `ERROR: Unknown option: "wait"` — the global options belong BEFORE the
+# subcommand. A stub that accepts anything tests nothing about the one line
+# that has to be right.
 cat > "$stub/wayvncctl" <<'EOF'
 #!/bin/sh
+cmd=
+for a in "$@"; do
+    if [ -z "$cmd" ]; then
+        case "$a" in
+            -j|--json|-w|--wait|-r|--reconnect|-v|--verbose) continue ;;
+            event-receive) cmd=$a; continue ;;
+        esac
+    else
+        case "$a" in --show=*|-h|--help) continue ;; esac
+    fi
+    printf 'ctl-rejected %s\n' "$*" >> "$SR_CTL_LOG"
+    printf 'ERROR: Unknown option: "%s"\n' "${a##-}" >&2
+    exit 1
+done
+[ -n "$cmd" ] || { printf 'ctl-rejected %s\n' "$*" >> "$SR_CTL_LOG"; exit 1; }
 printf '%s\n' '{"method":"client-connected","params":{"connection_count":1}}'
 printf '%s\n' '{"method":"client-connected","params":{"connection_count":2}}'
 printf '%s\n' '{"method":"client-disconnected","params":{"connection_count":1}}'
 printf '%s\n' '{"method":"client-disconnected","params":{"connection_count":0}}'
 EOF
+export SR_CTL_LOG="$T/actions.log"
 cat > "$stub/fake-inhibit" <<EOF
 #!/bin/sh
 while IFS= read -r -n1 c; do printf 'inhibit %s\n' "\$c" >> "$T/actions.log"; done
@@ -185,6 +208,12 @@ case "$acts" in *"inhibit 1"*) ok "...and holds the machine awake" ;;
                 *) bad "no idle inhibitor was taken: [$acts]" ;; esac
 case "$acts" in *"inhibit 0"*) ok "...and releases it when the last one leaves" ;;
                 *) bad "the inhibitor was never released: [$acts]" ;; esac
+# ⛔ AND THE INVOCATION IS ONE THE REAL TOOL ACCEPTS. Named separately from the
+# three above because it fails the same way as "the compositor was not there"
+# and is a different bug: the options have to precede the subcommand, or
+# wayvncctl exits 1 and the watcher is gone for the rest of the session.
+case "$acts" in *ctl-rejected*) bad "wayvncctl refused the watcher's arguments: [$acts]" ;;
+                *) ok "...and asked wayvncctl for events in a form it accepts" ;; esac
 # ⚠ ONCE, NOT PER CLIENT. Two viewers is one screen: waking and inhibiting
 # again on the second is harmless, but releasing on the FIRST disconnect while
 # somebody is still watching is not.

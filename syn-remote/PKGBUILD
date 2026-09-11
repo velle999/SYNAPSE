@@ -140,7 +140,7 @@ pkgver=0.1.0
 #     to the left. A connection saved with no user name is exactly that record
 #     — the TUI had been showing it the wrong password state for as long as
 #     there has been a TUI. Records are re-separated onto US (0x1f) to read.
-pkgrel=8
+pkgrel=9
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
