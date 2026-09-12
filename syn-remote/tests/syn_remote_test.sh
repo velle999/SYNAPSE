@@ -1082,6 +1082,21 @@ check "auto follows the primary screen synui reports" "DP-2" \
       "$(SYN_REMOTE_SOURCE_ONLY=1 sh -c '. "$0"; preferred_output' "$SR" 2>/dev/null)"
 rm -f "$stub/synctl"
 
+# ⛔ AND THE SCREEN IT MOVES TO HAS TO BE AWAKE. A blanked output cannot be
+# captured at all: wayvnc pauses, the viewer receives NO frames, and gtk-vnc
+# draws a featureless grey rectangle -- which reads as a broken connection
+# rather than a sleeping monitor, and is what made this bug so confusing to
+# diagnose from the far end.
+outputs "$BOTH"; : > "$OLOG"; : > "$T/actions.log"
+(
+    SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+    set_setting output DP-3
+    ensure_output
+) >/dev/null 2>&1
+grep -q 'wlopm --on DP-3' "$T/actions.log" 2>/dev/null \
+    && ok "the screen it serves is woken, not just selected" \
+    || bad "capture moved to a screen that may be asleep: [$(cat "$T/actions.log" 2>/dev/null)]"
+
 # ⛔ AND THE WIRING, NOT JUST THE FUNCTION. Everything above calls ensure_output
 # by hand; none of it would notice if the watcher stopped listening for the
 # event wayvnc raises when it moves capture — which is the whole bug.

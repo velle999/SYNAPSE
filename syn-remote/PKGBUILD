@@ -199,7 +199,17 @@ pkgver=0.1.0
 #     actually on screen, because they disagree exactly when this bug bites.
 #   ⚠ It acts only when the two differ: setting the output raises another
 #     capture-changed, and acting on that too ping-pongs between screens.
-pkgrel=12
+# 13: ...and the screen it serves has to be AWAKE, which 12 did not ensure.
+#   ⛔ A BLANKED OUTPUT CANNOT BE CAPTURED, so the viewer receives no frames at
+#     all -- not a dark desktop, not a wallpaper, nothing -- and gtk-vnc draws a
+#     featureless grey rectangle. That is why this looked like a broken
+#     connection rather than a sleeping monitor, and it is the detail that made
+#     the whole thing hard to read from the far end: connecting to a desktop and
+#     seeing grey says "no picture", when the truth was "the picture you asked
+#     for is switched off". ensure_output now wakes the output it selects.
+#   ⚠ That output, not `--on '*'`: waking every screen in the house because
+#     somebody opened a remote session is a thing people notice at 2am.
+pkgrel=13
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

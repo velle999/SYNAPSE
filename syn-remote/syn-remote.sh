@@ -417,9 +417,25 @@ ensure_output() {
     [ "$cur" = "$want" ] && return 0
     if wayvncctl output-set "$want" >/dev/null 2>&1; then
         err "capture was on ${cur:-nothing} — moved it back to $want"
+        wake_output "$want"
     else
         err "could not move capture to $want"
     fi
+}
+
+# ⛔ AND THE SERVED SCREEN HAS TO BE AWAKE, which is not the same as being the
+# right one. A blanked output cannot be captured: wayvnc logs "Output is now
+# off. Pausing frame capture" and the viewer receives NOTHING -- not a dark
+# desktop, not a wallpaper, no frames at all, which gtk-vnc draws as a
+# featureless grey rectangle. That is far more confusing than a black screen,
+# because it looks like a broken connection rather than a sleeping monitor:
+# velle hit exactly this and reasonably read it as "not my desktop".
+#
+# ⚠ Per output, not `--on '*'`. Waking every screen in the house because
+# somebody connected to one of them is a thing people notice at 2am.
+wake_output() {   # wake_output <name>
+    have wlopm || return 0
+    wlopm --on "$1" >/dev/null 2>&1 || wlopm --on '*' >/dev/null 2>&1 || true
 }
 
 watch_clients() {
