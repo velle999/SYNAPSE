@@ -366,6 +366,62 @@ wait_for_session() {
 # wayvnc crash leaves the session with a running unit and no wake-on-connect
 # for the rest of the login — the exact shape of failure that is invisible
 # until somebody is locked out of a machine they are not standing next to.
+# ── which screen is served ──────────────────────────────────────────────────
+#
+# ⛔ wayvnc CHANGES OUTPUTS BY ITSELF AND NEVER CHANGES BACK. When the captured
+# output disappears -- which on this hardware happens every time DP-3 drops its
+# link across a blank or a resume -- on_output_removed() calls
+# switch_to_prev_output() and carries on with whatever is left. Measured live
+# 2026-09-11: capture moved from the 2560x1440 DP-3 to a portrait HDMI panel and
+# stayed there, so a viewer was watching an empty screen and reported it as
+# "grey". The output coming back changes nothing by itself.
+#
+# ⚠ THE PREFERENCE IS A SETTING, not an accident of which head enumerated first.
+# `auto` asks synui which output is primary, so an unconfigured machine still
+# serves the screen the person actually uses.
+preferred_output() {
+    local v
+    v=$(setting output auto)
+    if [ -n "$v" ] && [ "$v" != auto ]; then printf '%s' "$v"; return 0; fi
+    have synctl || return 1
+    synctl outputs 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(1)
+print(next((o["name"] for o in d if o.get("primary")), ""), end="")
+' 2>/dev/null | grep . || return 1
+}
+
+# ⚠ python3 rather than sed: output-list is ONE line of JSON objects, and a
+# greedy expression across it happily pairs one output's name with another
+# output's "captured": true.
+wayvnc_outputs() {   # wayvnc_outputs -> "<name> <captured>" per line
+    wayvncctl --json output-list 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(1)
+for o in d: print(o.get("name",""), "yes" if o.get("captured") else "no")
+' 2>/dev/null
+}
+
+# ⛔ ONLY WHEN IT DIFFERS, because setting the output raises another
+# capture-changed event -- and acting on that one too is an endless loop
+# between two screens.
+ensure_output() {
+    local want cur outs
+    want=$(preferred_output) || return 0
+    outs=$(wayvnc_outputs) || return 0
+    [ -n "$outs" ] || return 0
+    printf '%s\n' "$outs" | awk -v w="$want" '$1==w {found=1} END {exit !found}' || return 0
+    cur=$(printf '%s\n' "$outs" | awk '$2=="yes" {print $1; exit}')
+    [ "$cur" = "$want" ] && return 0
+    if wayvncctl output-set "$want" >/dev/null 2>&1; then
+        err "capture was on ${cur:-nothing} — moved it back to $want"
+    else
+        err "could not move capture to $want"
+    fi
+}
+
 watch_clients() {
     local count=0
     # Written before the first event, so a reader never has to tell "nobody is
@@ -391,6 +447,12 @@ watch_clients() {
     wayvncctl --json --wait --reconnect event-receive 2>/dev/null |
     while IFS= read -r line; do
         case "$line" in
+            # ⚠ EVERY EVENT THAT CAN LEAVE THE WRONG SCREEN ON DISPLAY. A head
+            # coming back does not restore capture by itself; wayvnc restarting
+            # picks a first output of its own; and capture-changed is wayvnc
+            # having already moved somewhere we did not ask for.
+            *'"output-added"'*|*'"capture-changed"'*|*'"wayvnc-startup"'*)
+                ensure_output; continue ;;
             *'"client-connected"'*|*'"client-disconnected"'*) ;;
             *) continue ;;
         esac
@@ -409,6 +471,10 @@ watch_clients() {
             # an idle machine is nothing — and there is no way to click their
             # way out of it, because there is no frame to click on.
             have wlopm && wlopm --on '*' >/dev/null 2>&1
+            # ⚠ AND THE RIGHT SCREEN, not merely a lit one: a viewer arriving
+            # after a head has flapped would otherwise open on whichever output
+            # wayvnc fell back to while nobody was watching.
+            ensure_output
             [ -n "$inhibit_fd" ] && printf '1' >&"$inhibit_fd" 2>/dev/null
         elif [ "$n" -eq 0 ] && [ "$count" -gt 0 ]; then
             # Released, so the machine goes back to sleeping normally. A remote
@@ -480,6 +546,11 @@ cmd_status() {
         printf 'port\t%s\n'        "$(bind_port)"
         printf 'scope\t%s\n'       "$([ "$(bind_address)" = 127.0.0.1 ] && echo local || echo lan)"
         printf 'auth\t%s\n'        "$([ "$(setting pam off)" = on ] && echo pam || echo password)"
+        # ⚠ BOTH, because they answer different questions: what was asked for,
+        # and what is on screen right now. They disagree exactly when wayvnc has
+        # switched heads under a viewer, which is the failure this row exists for.
+        printf 'output\t%s\n'      "$(setting output auto)"
+        printf 'capturing\t%s\n'   "$(wayvnc_outputs 2>/dev/null | awk '$2=="yes"{print $1; exit}')"
         printf 'session\t%s\n'     "$([ -n "$sock" ] && echo yes || echo no)"
         printf 'wayvnc\t%s\n'      "$(have wayvnc && echo yes || echo no)"
         return 0
@@ -791,6 +862,32 @@ nm_wol_setting() {   # nm_wol_setting <connection>
     have "$NMCLI" || return 1
     "$NMCLI" -t -f 802-3-ethernet.wake-on-lan connection show "$1" 2>/dev/null |
         sed 's/^[^:]*://'
+}
+
+cmd_output() {
+    local v=${1:-}
+    if [ -z "$v" ]; then
+        printf 'serving   %s\n' "$(setting output auto)"
+        printf 'on screen %s\n' "$(wayvnc_outputs 2>/dev/null | awk '$2=="yes"{print $1; exit}')"
+        printf '\nEvery screen this machine has:\n'
+        wayvnc_outputs 2>/dev/null | while read -r n c; do
+            printf '  %-12s %s\n' "$n" "$([ "$c" = yes ] && echo '(being served)')"
+        done
+        printf '\nServe one of them:  %s output <name>\n' "$PROG"
+        printf 'Or follow the primary screen:  %s output auto\n' "$PROG"
+        return 0
+    fi
+    # ⛔ VALIDATED AGAINST THE MACHINE, not just for shape. A name with a typo
+    # in it would be written down, silently match nothing for ever, and leave
+    # the choice to wayvnc -- which is the behaviour this setting exists to stop.
+    if [ "$v" != auto ] && ! wayvnc_outputs 2>/dev/null | awk -v w="$v" '$1==w{f=1} END{exit !f}'; then
+        err "this machine has no screen called '$v'"
+        wayvnc_outputs 2>/dev/null | while read -r n _; do note "  $n"; done
+        return 1
+    fi
+    set_setting output "$v" || die "could not save the setting"
+    ensure_output
+    printf '%s\n' "$([ "$v" = auto ] && echo 'Serving the primary screen.' || echo "Serving $v.")"
 }
 
 cmd_wakeable() {
@@ -1729,6 +1826,7 @@ case "${1:-status}" in
     auth)       shift; cmd_auth "$@" ;;
     names)      shift; cmd_names "$@" ;;
     wakeable)   shift; cmd_wakeable "$@" ;;
+    output)     shift; cmd_output "$@" ;;
     hosts)      shift; cmd_hosts "$@" ;;
     add)        shift; cmd_add "$@" ;;
     forget)     shift; cmd_forget "$@" ;;

@@ -181,7 +181,25 @@ pkgver=0.1.0
 #   across the budget, and SYN_REMOTE_READY_WAIT=0 turns it off entirely.
 #   ⚠ The rule it broke was already written down in this package's own notes
 #     about the TLS work: never test past the prompt, because PAM deny=3.
-pkgrel=11
+# 12: the grey screen was wayvnc SERVING THE WRONG MONITOR, and the two
+#   releases before this fixed real bugs that were not this one.
+#   ⛔ wayvnc CHANGES OUTPUT ON ITS OWN AND NEVER CHANGES BACK. When the served
+#     head disappears -- which on the reference desktop happens every time DP-3
+#     drops its link across a blank or a resume -- on_output_removed() calls
+#     switch_to_prev_output() and carries on with whatever is left. Caught live:
+#     capture had moved from the 2560x1440 DP-3 to a portrait HDMI panel and
+#     stayed there, so the person watching was looking at an empty second
+#     screen and reported it, reasonably, as grey. The head coming back does
+#     nothing by itself.
+#   ✅ The watcher now re-asserts the choice on capture-changed, output-added
+#     and wayvnc-startup, and on the first connection -- so a viewer never
+#     opens onto whatever wayvnc fell back to while nobody was watching.
+#     `syn-remote output <name>` pins a screen; `auto` (the default) follows the
+#     one synui calls primary. `status --rec` reports the setting AND what is
+#     actually on screen, because they disagree exactly when this bug bites.
+#   ⚠ It acts only when the two differ: setting the output raises another
+#     capture-changed, and acting on that too ping-pongs between screens.
+pkgrel=12
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

@@ -176,6 +176,10 @@ for a in "$@"; do
         case "$a" in
             -j|--json|-w|--wait|-r|--reconnect|-v|--verbose) continue ;;
             event-receive) cmd=$a; continue ;;
+            # ⚠ REAL SUBCOMMANDS TOO. watch_clients also asks which output is
+            # being captured; a stub that only knew event-receive reported the
+            # watcher's own arguments as refused.
+            output-list|output-set) cmd=$a; continue ;;
         esac
     else
         case "$a" in --show=*|-h|--help) continue ;; esac
@@ -185,6 +189,10 @@ for a in "$@"; do
     exit 1
 done
 [ -n "$cmd" ] || { printf 'ctl-rejected %s\n' "$*" >> "$SR_CTL_LOG"; exit 1; }
+# An output query in this section has nothing to say: the case under test is
+# the wake path, and an empty list makes ensure_output a no-op.
+[ "$cmd" = output-list ] && { printf '[]\n'; exit 0; }
+[ "$cmd" = output-set ]  && exit 0
 printf '%s\n' '{"method":"client-connected","params":{"connection_count":1}}'
 printf '%s\n' '{"method":"client-connected","params":{"connection_count":2}}'
 printf '%s\n' '{"method":"client-disconnected","params":{"connection_count":1}}'
@@ -1001,6 +1009,107 @@ grep -q 'returned 1' "$PROBE_LOG" && ok "...and says it is not ready rather than
 ) >/dev/null 2>&1
 check "SYN_REMOTE_READY_WAIT=0 probes nothing at all" "0" \
       "$(grep -c '^probe$' "$PROBE_LOG" 2>/dev/null || :)"
+
+# ── 18. the screen that is served ─────────────────────────
+#
+# ⛔ wayvnc MOVES CAPTURE ON ITS OWN when the served output disappears, and it
+# never moves back. Measured on the reference desktop: DP-3 dropped its link,
+# capture landed on a portrait HDMI panel, and the person watching reported a
+# grey screen -- they were looking at an empty second monitor. So the choice has
+# to be re-asserted, and the cases that matter are the ones where it must NOT
+# act: an unknown name, an absent screen, and the event its own fix raises.
+OLOG="$T/outputs.log"; : > "$OLOG"
+export SR_CTL_LOG="$OLOG" SR_OUTPUTS="$T/outputs.json"
+cat > "$stub/wayvncctl" <<'EOF'
+#!/bin/sh
+for a in "$@"; do
+    case "$a" in
+        output-list) cat "$SR_OUTPUTS"; exit 0 ;;
+        output-set)  shift; printf 'set %s\n' "$*" >> "$SR_CTL_LOG"; exit 0 ;;
+    esac
+    [ "$a" = output-set ] || continue
+done
+case "$*" in *output-set*) printf 'set %s\n' "${*##* }" >> "$SR_CTL_LOG" ;; esac
+exit 0
+EOF
+chmod +x "$stub/wayvncctl"
+outputs() { printf '%s' "$1" > "$SR_OUTPUTS"; }
+
+BOTH='[{"name":"DP-3","captured":false},{"name":"HDMI-A-1","captured":true}]'
+RIGHT='[{"name":"DP-3","captured":true},{"name":"HDMI-A-1","captured":false}]'
+GONE='[{"name":"HDMI-A-1","captured":true}]'
+
+outputs "$BOTH"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output DP-3; ensure_output ) >/dev/null 2>&1
+grep -q 'set DP-3' "$OLOG" && ok "capture is put back on the screen that was asked for" \
+                           || bad "capture was left on the wrong screen: [$(cat "$OLOG")]"
+
+# ⛔ THE LOOP. Setting the output raises another capture-changed, and acting on
+# that one too ping-pongs between two screens for ever.
+outputs "$RIGHT"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+[ -s "$OLOG" ] && bad "it moved capture that was already correct — that is the loop" \
+               || ok "...and does nothing when it is already there"
+
+# ⚠ The head this serves is exactly the one that goes away on this hardware.
+outputs "$GONE"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+[ -s "$OLOG" ] && bad "it tried to serve a screen that is not connected" \
+               || ok "a screen that is not there is not chased"
+
+# ...and when it comes back, it is taken again without anybody asking.
+outputs "$BOTH"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+grep -q 'set DP-3' "$OLOG" && ok "...and is taken back the moment it returns" \
+                           || bad "the screen returned and capture stayed put"
+
+# ── the setting itself ─────────────────────────────────────
+outputs "$BOTH"
+out=$(SYN_REMOTE_SOURCE_ONLY=1 sh -c '. "$0"; cmd_output NOPE' "$SR" 2>&1)
+grep -q "no screen called" <<<"$out" && ok "a screen name this machine does not have is refused" \
+                                     || bad "a bogus output name was accepted: [$out]"
+check "...and the setting was not written" "DP-3" \
+      "$(SYN_REMOTE_SOURCE_ONLY=1 sh -c '. "$0"; setting output auto' "$SR")"
+
+# ⚠ auto means "follow the primary screen", which is synui's answer, not ours.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+[ "$1" = outputs ] && printf '%s' '[{"name":"HDMI-A-1","primary":false},{"name":"DP-2","primary":true}]'
+EOF
+chmod +x "$stub/synctl"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
+check "auto follows the primary screen synui reports" "DP-2" \
+      "$(SYN_REMOTE_SOURCE_ONLY=1 sh -c '. "$0"; preferred_output' "$SR" 2>/dev/null)"
+rm -f "$stub/synctl"
+
+# ⛔ AND THE WIRING, NOT JUST THE FUNCTION. Everything above calls ensure_output
+# by hand; none of it would notice if the watcher stopped listening for the
+# event wayvnc raises when it moves capture — which is the whole bug.
+cat > "$stub/wayvncctl" <<'EOF'
+#!/bin/sh
+for a in "$@"; do
+    case "$a" in
+        output-list) cat "$SR_OUTPUTS"; exit 0 ;;
+        output-set)  shift; printf 'set %s\n' "$*" >> "$SR_CTL_LOG"; exit 0 ;;
+        event-receive)
+            printf '%s\n' '{"method":"capture-changed","params":{"output":"HDMI-A-1"}}'
+            exit 0 ;;
+    esac
+done
+exit 0
+EOF
+chmod +x "$stub/wayvncctl"
+outputs "$BOTH"; : > "$OLOG"
+(
+    SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+    set_setting output DP-3
+    STATE="$T/state18"; IDLE_INHIBIT="$stub/fake-inhibit"
+    watch_clients
+) >/dev/null 2>&1
+grep -q 'set DP-3' "$OLOG" \
+    && ok "the watcher acts on wayvnc's own capture-changed event" \
+    || bad "capture moved and nothing put it back: [$(cat "$OLOG")]"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
 
 # ⛔ AND THE LIVE MACHINE WAS NEVER TOUCHED. Every case above went through the
 # seams; if any of them fell through to the real tools, this is where it shows.
