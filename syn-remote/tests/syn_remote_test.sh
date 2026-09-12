@@ -263,6 +263,16 @@ grep -q '^Restart=always$' "$unit" &&
     ok "...and restarts even on a clean exit, so a new login is picked up" ||
     bad "Restart is not 'always'; a clean exit would strand the unit inactive"
 
+# ⛔ AND IT DOES NOT SPEND NINETY SECONDS STOPPING. wayvnc segfaults one second
+# into suspend entry, inside its own teardown; systemd then SIGTERMs the cgroup,
+# one `wayvncctl --wait --reconnect` does not go, and the DEFAULT stop timeout
+# runs in full before anything is killed. Measured on the reference desktop:
+# 03:05:50 crash, 03:07:34 SIGKILL, 03:07:39 back up — 104 seconds with nothing
+# listening on 5900, which is every report of "it will not connect after sleep".
+grep -q '^TimeoutStopSec=' "$unit" &&
+    ok "...and is given a stop timeout, so a crash at suspend costs seconds" ||
+    bad "no TimeoutStopSec: a stuck child holds the unit down for systemd's default 90s"
+
 # ⚠ AND THE WRAPPER WAITS RATHER THAN DYING. `run` used to die the instant
 # $XDG_RUNTIME_DIR/synui-display was missing. Driven here with no compositor
 # and a one-second budget: it must spend that second and then say what it was
@@ -1187,6 +1197,159 @@ attempts=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
 grep -q 'set DP-3' "$OLOG" \
     && ok "...and fixes the served screen without waiting for an event" \
     || bad "the watcher waited for an event that never comes: [$(cat "$OLOG")]"
+
+# ── 20. a NAME is not a SESSION ───────────────────────────
+#
+# ⛔ synui WRITES synui-display AND NEVER TAKES IT BACK. synui_main.c writes the
+# socket name into $XDG_RUNTIME_DIR/synui-display at startup and there is no
+# matching unlink, so between two sessions the file is still there and still
+# says `wayland-0` — and the socket inode is usually still there too, owned by
+# nobody. wait_for_session returned the first non-empty string it read, so
+# wayvnc was handed a dead socket:
+#     ERROR: wayland.c: Failed to connect to WAYLAND_DISPLAY="wayland-0"
+#     ERROR: main.c: Failed to initialise wayland
+# exited 1, and Restart=always brought the unit back five seconds later to do it
+# again. Measured on the reference desktop: 55 of those in ONE boot, a restart
+# every five seconds from 03:03 until the next synui came up at 03:04:58, with
+# nothing listening on 5900 throughout. The wait never waited.
+#
+# ⚠ A STALE SOCKET PASSES EVERY TEST THAT LOOKS AT THE FILE — it exists, it is a
+# socket, it has the right name. So the stale half is built as a real socket
+# inode that nothing is listening on, which is what is actually on disk after a
+# session ends, not a missing file.
+stalesock="$XDG_RUNTIME_DIR/wayland-stale"
+python3 - "$stalesock" <<'STALE'
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.bind(sys.argv[1])          # bound, then dropped WITHOUT unlinking:
+s.close()                    # the inode stays, connect() gets ECONNREFUSED
+STALE
+[ -S "$stalesock" ] \
+    && ok "the stale case is a real socket on disk, as it is after a logout" \
+    || bad "could not build a stale socket — the rest of this section proves nothing"
+
+printf 'wayland-stale\n' > "$XDG_RUNTIME_DIR/synui-display"
+( unset WAYLAND_DISPLAY
+  SYN_REMOTE_SESSION_WAIT=1 "$SR" run >"$T/run20.out" 2>"$T/run20.err" )
+check "a stale display name is not mistaken for a session" 1 \
+      "$(grep -c 'no Wayland session after' "$T/run20.err")"
+check "...after waiting for a real one rather than exiting at once" 1 \
+      "$(grep -c 'waiting up to' "$T/run20.err")"
+# ⛔ AND NO SERVER WAS STARTED TO FIND THAT OUT. This is the whole failure: wayvnc
+# was exec'd against the dead socket and died, once every five seconds.
+check "...and wayvnc was never handed the dead socket" 0 \
+      "$(grep -c 'STUB WAYVNC' "$T/run20.err")"
+
+# ...and the other half, which is what stops this being a check that nothing works:
+# a socket somebody IS listening on has to be accepted.
+livesock="$XDG_RUNTIME_DIR/wayland-live"
+python3 - "$livesock" >/dev/null 2>&1 <<'LIVE' &
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.bind(sys.argv[1]); s.listen(4)
+time.sleep(30)
+LIVE
+livepid=$!
+tries=0
+while [ ! -S "$livesock" ] && [ "$tries" -lt 50 ]; do sleep 0.1; tries=$((tries + 1)); done
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; session_live wayland-live ) \
+    && ok "...and a socket with a listener on it is accepted" \
+    || bad "session_live refused a LIVE socket — syn-remote would never start"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; session_live wayland-stale ) \
+    && bad "session_live accepted the stale socket; this is the 5-second restart loop" \
+    || ok "...and the stale one beside it is still refused"
+kill "$livepid" 2>/dev/null; wait "$livepid" 2>/dev/null
+rm -f "$XDG_RUNTIME_DIR/synui-display" "$stalesock" "$livesock"
+
+# ── 21. being told to stop is not a 90-second wait ────────
+#
+# ⛔ THE WATCHER OUTLIVED THE STOP, AND RESPAWNED INTO IT. Two faults in one
+# shape. A trap does not interrupt a FOREGROUND child — bash holds the signal
+# until the command in front of it returns — so a TERM arriving while the event
+# stream was open did nothing until the stream ended on its own; and when it did
+# end, the pkgrel-14 retry loop opened a NEW wayvncctl rather than noticing it
+# had been told to stop. systemd was left holding a process it had already
+# SIGTERMed and waited out its default ninety seconds:
+#     syn-remote.service: State 'stop-sigterm' timed out. Killing.
+#     syn-remote.service: Killing process 692022 (wayvncctl) with signal SIGKILL
+#
+# ⚠ DRIVEN WITH A STREAM THAT NEVER ENDS, because that is the case that hung: a
+# stub that exits on its own would be stopped by its own exit, not by the trap.
+cat > "$stub/wayvncctl" <<'EOF'
+#!/bin/bash
+case "$*" in
+    *output-list*) printf '[]\n'; exit 0 ;;
+    *output-set*)  exit 0 ;;
+esac
+# The event stream that is still open when the stop arrives.
+# ⚠ bash, NOT sh, and `exec -a`: the marker has to be the stream's OWN argv[0]
+# so the sweep below cannot match this suite instead.
+exec -a "$SR_STREAM_TAG" sleep 120
+EOF
+chmod +x "$stub/wayvncctl"
+
+# ⛔ A TAG UNIQUE TO THIS RUN, not a fixed word. A constant marker matches any
+# stream a PREVIOUS run of this suite leaked, so the sweep below reported "the
+# stream outlived the watcher" against a stray from half an hour earlier while
+# the code under test was behaving perfectly. The suite's own temporary dir is
+# already unique, so it is the tag.
+export SR_STREAM_TAG="SRZZ$(basename "$T")"
+
+# ⚠ argv[0], NOT comm. `exec -a` renames the ARGUMENT VECTOR; /proc/pid/comm
+# still says `sleep`, because comm follows the executable. Reading comm here
+# found nothing and reported the rig as never having started — a green test
+# would have meant the same thing.
+# ⛔ AND NOT `pkill -f`, which matches this suite's own command line and kills
+# the run. The marker is compared as a whole field.
+srzz_pids() { LC_ALL=C ps -eo pid=,args= | awk -v t="$SR_STREAM_TAG" '$2==t{print $1}'; }
+srzz_alive() { [ -n "$(srzz_pids)" ]; }
+
+cat > "$T/watchrig" <<EOF
+#!/usr/bin/env bash
+export PATH="$stub:\$PATH"
+SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+STATE="$T/state21"; IDLE_INHIBIT=
+SYN_REMOTE_WATCH_BACKOFF=0
+watcher_main
+EOF
+chmod +x "$T/watchrig"
+"$T/watchrig" >/dev/null 2>&1 &
+rig=$!
+tries=0
+while ! srzz_alive && [ "$tries" -lt 60 ]; do sleep 0.1; tries=$((tries + 1)); done
+if ! srzz_alive; then
+    bad "the watcher rig never opened an event stream — section 21 proves nothing"
+else
+    ok "the watcher is holding an event stream open"
+    kill -TERM "$rig" 2>/dev/null
+    # ⚠ A BUDGET IN THE LOW SECONDS, and the point is that it is nowhere near
+    # systemd's ninety. Two seconds is ten times the grace the trap itself takes.
+    waited=0
+    while kill -0 "$rig" 2>/dev/null && [ "$waited" -lt 20 ]; do sleep 0.1; waited=$((waited + 1)); done
+    if kill -0 "$rig" 2>/dev/null; then
+        bad "the watcher ignored SIGTERM — this is the 90s stop-sigterm hang"
+        kill -KILL "$rig" 2>/dev/null
+    else
+        ok "...and it stops when it is told to, not when its stream happens to end"
+    fi
+    wait "$rig" 2>/dev/null
+    # ⛔ AND IT TOOK THE STREAM WITH IT. `{ wayvncctl | while read; } &` hands back
+    # the pid of the SUBSHELL; killing that alone reaps the wrapper and leaves
+    # wayvncctl orphaned — which is the process systemd had to SIGKILL.
+    waited=0
+    while srzz_alive && [ "$waited" -lt 20 ]; do sleep 0.1; waited=$((waited + 1)); done
+    if srzz_alive; then
+        bad "the event stream outlived the watcher — systemd is left to SIGKILL it"
+        srzz_pids | while read -r z; do kill -KILL "$z" 2>/dev/null; done
+    else
+        ok "...and the event stream it opened went with it"
+    fi
+fi
+
+# ⚠ AND THIS SECTION TAKES ITS OWN STREAM WITH IT WHATEVER HAPPENED. A leaked
+# `sleep 120` holding the suite's stderr is how the first run of this section
+# hung a pipeline for two minutes with no output at all.
+srzz_pids | while read -r z; do kill -KILL "$z" 2>/dev/null; done
 
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi

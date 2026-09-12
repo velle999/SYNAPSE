@@ -308,6 +308,57 @@ wayland_socket() {
     fi
 }
 
+# ⛔ A NAME IS NOT A SESSION, AND synui NEVER TAKES THE NAME BACK. synui writes
+# $XDG_RUNTIME_DIR/synui-display once at startup and does not unlink it on exit
+# (synui_main.c — the file is written, there is no matching remove), so between
+# two sessions the name is still on disk and still says `wayland-0`. The socket
+# is usually still there too, owned by nobody. wait_for_session used to return
+# the first non-empty string it read, so wayvnc was handed a dead socket, said
+#     ERROR: wayland.c: Failed to connect to WAYLAND_DISPLAY="wayland-0"
+#     ERROR: main.c: Failed to initialise wayland
+# and exited 1 — at which point Restart=always brought the whole unit back five
+# seconds later to do it again. Measured on the reference desktop: 55 of those
+# in one boot, a restart every five seconds from 03:03 until the next synui
+# actually came up at 03:04:58, and nothing listening on 5900 for any of it.
+# That is the shape of "it will not connect": not a refusal, a unit flapping.
+#
+# ⚠ THE SAME STALE-SOCKET LESSON AS THE WATCHER, ONE LAYER DOWN. pkgrel 14 wrote
+# three paragraphs about wayvncctl connecting to the previous session's control
+# socket and applied the fix there only. This is that bug again, on the Wayland
+# socket, and it is why the wait above never did any waiting.
+#
+# ⚠ A CONNECT, NOT A STAT. A stale socket passes every test that looks at the
+# file: it exists, it is a socket, it is the right name. Only connect() can tell
+# a listening compositor from an abandoned inode, and it is the same question
+# wayvnc is about to ask. The connection is closed at once without a handshake;
+# a Wayland compositor accepts and drops clients like that all day.
+#
+# ⚠ AND IT ACCEPTS THE NAME WHEN IT CANNOT CHECK. With no python3 there is no
+# way to ask, and refusing on "I do not know" would turn a missing interpreter
+# into a remote desktop that never starts — strictly worse than the bug.
+session_live() {   # session_live <socket-name-or-path>
+    local sock=$1 path
+    [ -n "$sock" ] || return 1
+    case "$sock" in
+        /*) path=$sock ;;
+        *)  path="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$sock" ;;
+    esac
+    [ -S "$path" ] || return 1
+    have python3 || return 0
+    python3 - "$path" <<'LIVE'
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(2)
+try:
+    s.connect(sys.argv[1])
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+sys.exit(0)
+LIVE
+}
+
 # ⛔ WAIT FOR THE COMPOSITOR, DO NOT DIE ON IT. The user manager reaches
 # default.target BEFORE synui exists. Measured on an installed system: velle's
 # `systemd --user` reached Main User Target at 19:40:50 and had not yet been
@@ -342,14 +393,14 @@ SESSION_WAIT=${SYN_REMOTE_SESSION_WAIT:-90}
 wait_for_session() {
     local sock waited=0
     sock=$(wayland_socket)
-    [ -n "$sock" ] && { printf '%s' "$sock"; return 0; }
+    session_live "$sock" && { printf '%s' "$sock"; return 0; }
 
     err "no desktop session yet — waiting up to ${SESSION_WAIT}s for one"
     while [ "$waited" -lt "$SESSION_WAIT" ]; do
         sleep 1
         waited=$((waited + 1))
         sock=$(wayland_socket)
-        [ -n "$sock" ] && {
+        session_live "$sock" && {
             err "session appeared after ${waited}s"
             printf '%s' "$sock"
             return 0
@@ -483,68 +534,155 @@ watch_clients() {
     # races the backoff -- so the COUNT is a knob, defaulting to no limit.
     local backoff=${SYN_REMOTE_WATCH_BACKOFF:-1}
     local tries=0 limit=${SYN_REMOTE_WATCH_RETRIES:-0}
+    WATCH_STOPPING=${WATCH_STOPPING:-no}
     while :; do
+        # ⛔ ASKED EVERY TIME ROUND, because the retry above is what turns a
+        # stop into a hang: told to stop while the stream is up, this loop used
+        # to open a NEW wayvncctl and wait on it again.
+        [ "$WATCH_STOPPING" = yes ] && return 0
         tries=$((tries + 1))
-    # ⚠ BEFORE waiting for events, not only in response to one. wayvnc picks
-    # its own output at startup and can land on a DARK head (here it chose an
-    # HDMI output that was powered off, while synui reported DP-3 primary), and
-    # no further event ever arrives to correct it.
-    ensure_output
+        # ⚠ BEFORE waiting for events, not only in response to one. wayvnc picks
+        # its own output at startup and can land on a DARK head (here it chose an
+        # HDMI output that was powered off, while synui reported DP-3 primary), and
+        # no further event ever arrives to correct it.
+        ensure_output
 
-    wayvncctl --json --wait --reconnect event-receive 2>/dev/null |
-    while IFS= read -r line; do
-        case "$line" in
-            # ⚠ EVERY EVENT THAT CAN LEAVE THE WRONG SCREEN ON DISPLAY. A head
-            # coming back does not restore capture by itself; wayvnc restarting
-            # picks a first output of its own; and capture-changed is wayvnc
-            # having already moved somewhere we did not ask for.
-            *'"output-added"'*|*'"capture-changed"'*|*'"wayvnc-startup"'*)
-                ensure_output; continue ;;
-            *'"client-connected"'*|*'"client-disconnected"'*) ;;
-            *) continue ;;
-        esac
-        # ⚠ connection_count, NOT a tally kept here. wayvnc reports the number
-        # it actually has, so a missed event or a reconnect cannot leave this
-        # holding an inhibitor for a client that left — which would keep the
-        # screen awake until the next logout.
-        local n
-        n=$(printf '%s' "$line" | sed -n 's/.*"connection_count":\([0-9]*\).*/\1/p')
-        [ -n "$n" ] || continue
-        printf 'connections=%s\n' "$n" > "$STATE" 2>/dev/null
+        # ⛔ BACKGROUNDED AND waited FOR, NOT RUN IN THE FOREGROUND. A trap does
+        # not interrupt a foreground child: bash holds the signal until the
+        # command in front of it returns, so a TERM arriving while the event
+        # stream is open was not acted on until the stream itself ended. `wait`
+        # is interruptible, which is what makes watch_stop take effect at once.
+        { wayvncctl --json --wait --reconnect event-receive 2>/dev/null |
+          while IFS= read -r line; do
+            case "$line" in
+                # ⚠ EVERY EVENT THAT CAN LEAVE THE WRONG SCREEN ON DISPLAY. A head
+                # coming back does not restore capture by itself; wayvnc restarting
+                # picks a first output of its own; and capture-changed is wayvnc
+                # having already moved somewhere we did not ask for.
+                *'"output-added"'*|*'"capture-changed"'*|*'"wayvnc-startup"'*)
+                    ensure_output; continue ;;
+                *'"client-connected"'*|*'"client-disconnected"'*) ;;
+                *) continue ;;
+            esac
+            # ⚠ connection_count, NOT a tally kept here. wayvnc reports the number
+            # it actually has, so a missed event or a reconnect cannot leave this
+            # holding an inhibitor for a client that left — which would keep the
+            # screen awake until the next logout.
+            local n
+            n=$(printf '%s' "$line" | sed -n 's/.*"connection_count":\([0-9]*\).*/\1/p')
+            [ -n "$n" ] || continue
+            printf 'connections=%s\n' "$n" > "$STATE" 2>/dev/null
 
-        if [ "$n" -gt 0 ] && [ "$count" -eq 0 ]; then
-            # ⛔ THE OUTPUT FIRST. A blanked output cannot be captured at all,
-            # so without this the first thing a person sees after connecting to
-            # an idle machine is nothing — and there is no way to click their
-            # way out of it, because there is no frame to click on.
-            have wlopm && wlopm --on '*' >/dev/null 2>&1
-            # ⚠ AND THE RIGHT SCREEN, not merely a lit one: a viewer arriving
-            # after a head has flapped would otherwise open on whichever output
-            # wayvnc fell back to while nobody was watching.
-            ensure_output
-            [ -n "$inhibit_fd" ] && printf '1' >&"$inhibit_fd" 2>/dev/null
-        elif [ "$n" -eq 0 ] && [ "$count" -gt 0 ]; then
-            # Released, so the machine goes back to sleeping normally. A remote
-            # desktop that leaves the screen on for ever after one connection
-            # is a power setting nobody agreed to.
-            [ -n "$inhibit_fd" ] && printf '0' >&"$inhibit_fd" 2>/dev/null
+            if [ "$n" -gt 0 ] && [ "$count" -eq 0 ]; then
+                # ⛔ THE OUTPUT FIRST. A blanked output cannot be captured at all,
+                # so without this the first thing a person sees after connecting to
+                # an idle machine is nothing — and there is no way to click their
+                # way out of it, because there is no frame to click on.
+                have wlopm && wlopm --on '*' >/dev/null 2>&1
+                # ⚠ AND THE RIGHT SCREEN, not merely a lit one: a viewer arriving
+                # after a head has flapped would otherwise open on whichever output
+                # wayvnc fell back to while nobody was watching.
+                ensure_output
+                [ -n "$inhibit_fd" ] && printf '1' >&"$inhibit_fd" 2>/dev/null
+            elif [ "$n" -eq 0 ] && [ "$count" -gt 0 ]; then
+                # Released, so the machine goes back to sleeping normally. A remote
+                # desktop that leaves the screen on for ever after one connection
+                # is a power setting nobody agreed to.
+                [ -n "$inhibit_fd" ] && printf '0' >&"$inhibit_fd" 2>/dev/null
+            fi
+            count=$n
+          done
+        } &
+        WATCH_CHILD_PID=$!
+        wait "$WATCH_CHILD_PID" 2>/dev/null
+        WATCH_CHILD_PID=
+
+        [ "$WATCH_STOPPING" = yes ] && return 0
+
+        # ⚠ SAY SO EVERY TIME IT ENDS. The unit stays green and the server keeps
+        # serving whatever happens here, so this line is the only evidence that
+        # wake-on-connect dropped out — and the retry below means seeing it once is
+        # normal (the stale-socket race at login), while seeing it repeatedly is a
+        # real fault worth reading the rest of the journal for.
+        if [ "$limit" -gt 0 ] && [ "$tries" -ge "$limit" ]; then
+            err "the wayvncctl event stream ended — giving up after $tries tries"
+            return 0
         fi
-        count=$n
+        err "the wayvncctl event stream ended — retrying in ${backoff}s"
+        # ⚠ THE BACKOFF IS waited FOR TOO, for the same reason. A plain `sleep 30`
+        # here is thirty seconds a stop cannot interrupt.
+        if [ "${backoff:-0}" -gt 0 ]; then
+            sleep "$backoff" &
+            WATCH_CHILD_PID=$!
+            wait "$WATCH_CHILD_PID" 2>/dev/null
+            WATCH_CHILD_PID=
+        fi
+        [ "$backoff" -lt 30 ] && backoff=$((backoff * 2))
     done
+}
 
-    # ⚠ SAY SO EVERY TIME IT ENDS. The unit stays green and the server keeps
-    # serving whatever happens here, so this line is the only evidence that
-    # wake-on-connect dropped out — and the retry below means seeing it once is
-    # normal (the stale-socket race at login), while seeing it repeatedly is a
-    # real fault worth reading the rest of the journal for.
-    if [ "$limit" -gt 0 ] && [ "$tries" -ge "$limit" ]; then
-        err "the wayvncctl event stream ended — giving up after $tries tries"
-        return 0
-    fi
-    err "the wayvncctl event stream ended — retrying in ${backoff}s"
-    sleep "$backoff"
-    [ "$backoff" -lt 30 ] && backoff=$((backoff * 2))
-    done
+# ⛔ THE WATCHER HAS TO DIE WHEN THE UNIT IS STOPPED, AND IT DID NOT. Measured on
+# the reference desktop 2026-09-12: wayvnc segfaulted one second into suspend
+# entry (inside its OWN teardown — nvnc_del, upstream neatvnc, see below), so
+# systemd went to restart the unit, sent SIGTERM to the cgroup, and then sat in
+# `stop-sigterm` for the full ninety-second default before killing what was left:
+#     syn-remote.service: Main process exited, code=dumped, status=11/SEGV
+#     syn-remote.service: State 'stop-sigterm' timed out. Killing.
+#     syn-remote.service: Killing process 692022 (wayvncctl) with signal SIGKILL
+# One hundred and four seconds from the crash to the restart, every one of them
+# with nothing listening on 5900 — which is the whole of "it will not connect
+# after sleep". The server itself comes back in about a second once it is let to.
+#
+# ⚠ TERM THEN KILL, not TERM and hope. `wayvncctl --wait --reconnect` is the
+# process systemd had to SIGKILL, so it cannot be assumed to go on a TERM: once
+# the stream is told to end the loop is over either way, and a control-socket
+# client has nothing to flush. (A bare `wayvncctl` against a dead socket DOES
+# exit on TERM — what survived here was one already attached to a wayvnc that
+# then died under it, which is the reconnect path.)
+#
+# ⚠ THE TRAP LIVES HERE AND NOT IN watch_clients, because watch_clients is
+# called directly by the suite in the shell that owns the suite's own
+# `trap … INT TERM EXIT` cleanup — installing one inside it would silently
+# replace that and leak a temporary directory on every interrupted run.
+WATCH_CHILD_PID=
+WATCH_STOPPING=no
+
+# ⛔ THE SUBSHELL IS NOT THE PIPELINE. `{ wayvncctl | while read; } &` gives back
+# the pid of the SUBSHELL, and wayvncctl is a child of that — so killing `$!`
+# alone reaps the wrapper and leaves wayvncctl running with no parent watching
+# it, which is precisely the process systemd was left holding. The descendants
+# have to be walked.
+#
+# ⚠ NOT A PROCESS GROUP. A backgrounded job in a non-interactive shell shares
+# its parent's process group, and this shell's group is the UNIT's — so
+# `kill -- -$$` here would take wayvnc and the server down with the watcher.
+kill_tree() {   # kill_tree <pid> <signal>
+    local p=$1 sig=$2 kid
+    for kid in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$kid" "$sig"; done
+    kill "-$sig" "$p" 2>/dev/null
+    return 0
+}
+
+watch_stop() {
+    WATCH_STOPPING=yes
+    [ -n "$WATCH_CHILD_PID" ] || return 0
+    kill_tree "$WATCH_CHILD_PID" TERM
+    # ⚠ ONE SHORT GRACE, THEN KILL. wayvncctl in its reconnect loop is what
+    # systemd had to SIGKILL after ninety seconds; a stop that waits politely
+    # for it is the bug, and there is nothing on a control socket to flush.
+    sleep 0.2
+    kill_tree "$WATCH_CHILD_PID" KILL
+    # ⚠ AND OFF THE JOB TABLE, or the shell announces it on the way out. A shell
+    # exiting through this trap with a job still listed prints the whole pipeline
+    # back as a "Done …" block — eight lines of the watcher's own source in the
+    # journal, once per stop, saying nothing.
+    disown -a 2>/dev/null || true
+    return 0
+}
+
+watcher_main() {
+    trap watch_stop TERM INT HUP
+    watch_clients
 }
 
 cmd_run() {
@@ -562,7 +700,11 @@ cmd_run() {
     # wayvnc as the main process takes care of the first — a wrapper that
     # stayed in the middle would make `systemctl --user status` report on a
     # shell rather than on the server.
-    watch_clients &
+    # ⚠ watcher_main, NOT watch_clients: the wrapper is what installs the TERM
+    # trap, and it installs it in THIS background subshell rather than in the
+    # caller — which is what lets the suite call watch_clients directly without
+    # having its own cleanup trap replaced.
+    watcher_main &
     exec wayvnc --config="$WAYVNC_CONF"
 }
 

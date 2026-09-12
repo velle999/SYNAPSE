@@ -31,6 +31,17 @@ ExecStart=/usr/bin/syn-remote run
 # nothing else would ever start it again.
 Restart=always
 RestartSec=5
+# ⛔ FIVE SECONDS, NOT NINETY. wayvnc segfaults one second into suspend entry —
+# inside its own teardown (nvnc_del, upstream neatvnc 1.0.1), so it was exiting
+# anyway and the crash costs nothing but a core file. What it DID cost was the
+# restart: systemd sent SIGTERM to the cgroup, one `wayvncctl --wait --reconnect`
+# did not go, and the default ninety-second stop timeout ran in full before
+# anything was killed. Measured on the reference desktop 2026-09-12: 03:05:50
+# crash, 03:07:34 SIGKILL, 03:07:39 back up — one hundred and four seconds with
+# nothing listening on 5900, which is every report of "it will not connect after
+# sleep". Nothing here needs a graceful stop: wayvnc has no state to write and
+# the control socket has nothing to flush, so waiting is pure downtime.
+TimeoutStopSec=5
 # ⚠ The wrapper backgrounds a watcher and then execs wayvnc, so the main
 # process IS the server and `systemctl --user status` reports on it. The
 # watcher dies with the cgroup.
