@@ -971,6 +971,37 @@ case "$acts" in *"viewer "*) ok "...and only then opens the viewer" ;;
 check "the address it learned is saved" "aa:bb:cc:dd:ee:09" \
       "$("$SR" hosts --tsv | awk -F'\t' '$1=="sleeper"{print $7}')"
 
+# ── 17. the readiness probe is BOUNDED ────────────────────
+#
+# ⛔ EVERY PROBE IS A REAL RFB SESSION THAT DOES NOT AUTHENTICATE, and wayvnc
+# authenticates through PAM with deny=3 on this desktop. The first version of
+# this wait polled once a second for 45s, which is a lockout on the machine the
+# person is trying to reach — worse than the grey frame it exists to avoid.
+# So the count is the assertion, not the timing.
+PROBE_LOG="$T/probes.log"; : > "$PROBE_LOG"
+(
+    SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+    rfb_ready() { printf 'probe\n' >> "$PROBE_LOG"; return 1; }
+    wait_for_rfb 10.0.0.9 5900 4
+    printf 'returned %s\n' "$?" >> "$PROBE_LOG"
+) >/dev/null 2>&1
+probes=$(grep -c '^probe$' "$PROBE_LOG" 2>/dev/null || :)
+[ "$probes" -le 2 ] && ok "a desktop that never greets is probed at most twice (got $probes)" \
+                    || bad "the readiness wait probed $probes times — PAM deny=3 makes that a lockout"
+[ "$probes" -ge 1 ] && ok "...and at least once" || bad "it never probed at all"
+grep -q 'returned 1' "$PROBE_LOG" && ok "...and says it is not ready rather than hanging" \
+                                  || bad "wait_for_rfb did not report failure"
+# ⚠ A ZERO BUDGET IS THE ESCAPE HATCH, and it must probe NOTHING: it is what a
+# person reaches for when this wait is in their way.
+: > "$PROBE_LOG"
+(
+    SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+    rfb_ready() { printf 'probe\n' >> "$PROBE_LOG"; return 1; }
+    wait_for_rfb 10.0.0.9 5900 0
+) >/dev/null 2>&1
+check "SYN_REMOTE_READY_WAIT=0 probes nothing at all" "0" \
+      "$(grep -c '^probe$' "$PROBE_LOG" 2>/dev/null || :)"
+
 # ⛔ AND THE LIVE MACHINE WAS NEVER TOUCHED. Every case above went through the
 # seams; if any of them fell through to the real tools, this is where it shows.
 [ -s "$NM_LOG" ] && ok "the nmcli stand-in was the one that was called" \

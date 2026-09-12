@@ -172,7 +172,16 @@ pkgver=0.1.0
 #     it is what makes the server wake its outputs a moment before the viewer
 #     attaches, rather than the viewer being the first to ask a blanked screen
 #     for a frame.
-pkgrel=10
+# 11: ⛔ THE READINESS WAIT IN 10 WAS A LOCKOUT WAITING TO HAPPEN, and it made
+#   connecting from sleep worse rather than better. Every probe is a real RFB
+#   session that ends without authenticating, wayvnc authenticates through PAM,
+#   and this desktop ships deny=3 — so polling once a second for 45 seconds
+#   walks a person into a faillock on the machine they are trying to reach.
+#   The wait is bounded at TWO probes now (SYN_REMOTE_READY_PROBES), spread
+#   across the budget, and SYN_REMOTE_READY_WAIT=0 turns it off entirely.
+#   ⚠ The rule it broke was already written down in this package's own notes
+#     about the TLS work: never test past the prompt, because PAM deny=3.
+pkgrel=11
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

@@ -1295,12 +1295,29 @@ sys.exit(0 if banner.startswith(b"RFB ") else 1)
 RFB
 }
 
+# ⛔ AT MOST TWO PROBES, EVER, AND NEVER A STREAM OF THEM. Each probe is a real
+# RFB session that ends without authenticating, and wayvnc authenticates through
+# PAM — where this desktop ships `deny=3`. A poll loop at one probe a second
+# therefore walks a person straight into a lockout on their own machine, which
+# is far worse than the grey frame it was trying to avoid. Two is under the
+# limit with room to spare, and the second one is what catches a compositor
+# that was still bringing its outputs back.
+#
+# ⚠ It answers "ready or not" and the caller carries on either way — a machine
+# that is answering is worth handing to the viewer even if it has not greeted
+# yet, because the viewer's own error is a better one to end on than ours.
+READY_PROBES=${SYN_REMOTE_READY_PROBES:-2}
+
 wait_for_rfb() {   # wait_for_rfb <host> <port> <seconds>
-    local waited=0
-    while [ "$waited" -lt "$3" ]; do
+    local budget=$3 tries=$READY_PROBES n=0
+    [ "$budget" -gt 0 ] || return 1
+    while [ "$n" -lt "$tries" ]; do
         rfb_ready "$1" "$2" && return 0
-        sleep 1
-        waited=$((waited + 1))
+        n=$((n + 1))
+        [ "$n" -lt "$tries" ] || break
+        # Spread the second probe across the budget rather than retrying at
+        # once: what it is waiting for is a compositor finishing, not a socket.
+        sleep "$(( budget > 1 ? budget / tries : 1 ))"
     done
     return 1
 }
