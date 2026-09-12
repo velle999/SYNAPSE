@@ -59,6 +59,12 @@ DEFAULT_PORT=5900
 # with a spinning disk and a NVIDIA card takes its time coming out of S3, and a
 # wait that gives up first turns a wake that WORKED into an error message.
 WAKE_WAIT=${SYN_REMOTE_WAKE_WAIT:-60}
+# ⛔ A SECOND, DIFFERENT WAIT. WAKE_WAIT is how long a machine has to start
+# ANSWERING; this is how long it then has to offer a DESKTOP. They are not the
+# same moment: a laptop resuming accepts on 5900 as soon as wayvnc is up, while
+# the compositor is still bringing outputs back — connect during that window
+# gets a grey rectangle rather than a screen.
+READY_WAIT=${SYN_REMOTE_READY_WAIT:-45}
 
 err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
 die()  { err "$*"; exit 1; }
@@ -1250,6 +1256,55 @@ wait_for_port() {   # wait_for_port <host> <port> <seconds>
     return 1
 }
 
+# ⚠ ONE PLACE, BECAUSE BOTH VERBS NEED IT. `connect` used to skip waking
+# entirely when the saved record had no hardware address, while `wake` learned
+# one and then woke — so a connection saved without a MAC could be woken or
+# opened but never both in one command, and the way through was to run `wake`
+# first and `connect` after. That is the whole of "it does one or the other".
+host_learn_mac() {   # host_learn_mac <name> <host>  — prints the address it saved
+    local mac
+    mac=$(mac_of_host "$2" 2>/dev/null || true)
+    valid_mac "$mac" || return 1
+    host_set_mac "$1" "$mac"
+    printf '%s' "$mac"
+}
+
+# ⛔ AN OPEN PORT IS NOT A DESKTOP. A machine coming out of suspend accepts TCP
+# on 5900 before wayvnc has a session, an output or a frame to give — so a
+# connect that races the wake hands the viewer a server that is listening and
+# has nothing to draw, which is the grey rectangle. wayvnc greets with
+# "RFB 003.00x" only once it is really serving, so the banner is the readiness
+# signal and the accept is not.
+#
+# ⚠ The probe is a real connection, and that is deliberate: it is what makes
+# the server turn its outputs back on (see watch_clients) a moment before the
+# viewer attaches, rather than the viewer being the first thing to ask a
+# blanked screen for a frame.
+rfb_ready() {   # rfb_ready <host> <port>
+    have python3 || { port_open "$1" "$2"; return; }
+    python3 - "$1" "$2" <<'RFB'
+import socket, sys
+try:
+    s = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=3)
+    s.settimeout(3)
+    banner = s.recv(12)
+    s.close()
+except OSError:
+    sys.exit(1)
+sys.exit(0 if banner.startswith(b"RFB ") else 1)
+RFB
+}
+
+wait_for_rfb() {   # wait_for_rfb <host> <port> <seconds>
+    local waited=0
+    while [ "$waited" -lt "$3" ]; do
+        rfb_ready "$1" "$2" && return 0
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 1
+}
+
 cmd_wake() {
     local name=${1:-}
     valid_name "$name" || die "usage: $PROG wake <name>"
@@ -1260,10 +1315,8 @@ cmd_wake() {
     if [ -z "$mac" ]; then
         # Worth one attempt: a machine that is awake can still be learned from,
         # and then the column is filled in for the next time it is not.
-        mac=$(mac_of_host "$host" 2>/dev/null || true)
-        valid_mac "$mac" || mac=""
+        mac=$(host_learn_mac "$name" "$host" || true)
         if [ -n "$mac" ]; then
-            host_set_mac "$name" "$mac"
             note "Learned its hardware address: $mac"
         else
             err "$name has no hardware address saved, so there is nothing to send a packet to"
@@ -1463,15 +1516,38 @@ cmd_connect() {
     # ⚠ ONLY WHEN THE PORT IS SHUT. A magic packet costs nothing, but sending
     # one to a machine that is already answering is a wake for a machine that is
     # awake — and on a shared network it is a packet somebody has to explain.
-    if [ -n "$mac" ] && [ "$nowake" != yes ] && ! port_open "$host" "$port"; then
-        note "$name is not answering — sending a wake packet."
-        if magic_packet "$mac" "$host" && wait_for_port "$host" "$port" "$WAKE_WAIT"; then
-            note "$name is awake."
+    if [ "$nowake" != yes ] && ! port_open "$host" "$port"; then
+        # ⚠ LEARNED HERE TOO, not only in `wake`. The gate used to be
+        # `[ -n "$mac" ]`, so a connection saved without a hardware address was
+        # never woken by `connect` at all — it had to be woken by hand first.
+        if [ -z "$mac" ]; then
+            mac=$(host_learn_mac "$name" "$host" || true)
+            [ -n "$mac" ] && note "Learned its hardware address: $mac"
+        fi
+        if [ -n "$mac" ]; then
+            note "$name is not answering — sending a wake packet."
+            if magic_packet "$mac" "$host" && wait_for_port "$host" "$port" "$WAKE_WAIT"; then
+                # ⛔ TWO WAITS, NOT ONE. Answering is not ready: the first wait
+                # ends when something accepts on the port, and handing the
+                # viewer to a server whose outputs are still coming back is
+                # exactly the grey screen this is here to avoid.
+                note "$name is answering — waiting for its desktop."
+                if wait_for_rfb "$host" "$port" "$READY_WAIT"; then
+                    note "$name is ready."
+                else
+                    note "$name is answering but offered no desktop in ${READY_WAIT}s — trying anyway."
+                fi
+            else
+                # Not fatal. The viewer's own error is the better one to end on if
+                # the machine was never asleep in the first place, and a person who
+                # asked to connect asked to connect.
+                note "$name did not answer within ${WAKE_WAIT}s — trying anyway."
+            fi
         else
-            # Not fatal. The viewer's own error is the better one to end on if
-            # the machine was never asleep in the first place, and a person who
-            # asked to connect asked to connect.
-            note "$name did not answer within ${WAKE_WAIT}s — trying anyway."
+            # ⚠ SAID, NOT SILENT. This is the case that used to look like
+            # "connect just does not wake": nothing to send a packet to.
+            note "$name is not answering, and it has no hardware address saved."
+            note "Give it one with:  $PROG add $name $host:$port${user:+ $user} --mac <address>"
         fi
         printf '\n' >&2
     fi

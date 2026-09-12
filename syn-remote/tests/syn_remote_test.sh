@@ -918,6 +918,59 @@ else
 fi
 kill "$listener" 2>/dev/null
 
+# ── 16. connect wakes, and then waits for a DESKTOP ───────
+#
+# ⛔ TWO BUGS, ONE SYMPTOM ("it wants to do one or the other"):
+#
+#   - connect's wake was gated on the saved record already having a hardware
+#     address, while `wake` LEARNED one first. So a connection saved without a
+#     MAC could be woken, or opened, but never both — you had to run `wake`,
+#     wait, and then `connect`.
+#   - and connect handed the viewer over as soon as the PORT answered. A
+#     machine coming out of suspend accepts on 5900 before the compositor has
+#     its outputs back, so the viewer drew a grey rectangle.
+#
+# Driven against stubs: a real one needs a sleeping machine at the other end.
+CLOG="$T/connect.log"; : > "$CLOG"
+cat > "$stub/viewer" <<EOF
+#!/bin/sh
+printf 'viewer %s\n' "\$*" >> "$CLOG"
+EOF
+chmod +x "$stub/viewer"
+
+# The record deliberately has NO mac column — that is the case that broke.
+"$SR" add sleeper 10.0.0.9:5900 velle >/dev/null 2>&1
+check "a connection can be saved with no hardware address" "" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="sleeper"{print $7}')"
+
+(
+    SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+    VIEWER="$stub/viewer"
+    PINS="$T/pins"; mkdir -p "$PINS"; : > "$PINS/sleeper.pem"; printf 'pin\n' > "$PINS/sleeper.pem"
+    # asleep: nothing answers until the packet has been sent
+    port_open()    { return 1; }
+    mac_of_host()  { printf 'aa:bb:cc:dd:ee:09'; }
+    magic_packet() { printf 'magic %s\n' "$1" >> "$CLOG"; return 0; }
+    wait_for_port(){ printf 'waited-for-port\n' >> "$CLOG"; return 0; }
+    wait_for_rfb() { printf 'waited-for-desktop\n' >> "$CLOG"; return 0; }
+    secret_get()   { printf 'hunter2'; }
+    cmd_connect sleeper
+) >/dev/null 2>&1
+acts=$(tr '\n' ' ' < "$CLOG")
+
+case "$acts" in *"magic aa:bb:cc:dd:ee:09"*) ok "connect learns the address and wakes a machine saved without one" ;;
+                *) bad "connect did not wake a machine whose record had no MAC: [$acts]" ;; esac
+case "$acts" in *waited-for-port*) ok "...waits for it to answer" ;;
+                *) bad "connect did not wait for the port: [$acts]" ;; esac
+# ⛔ THE ONE THAT WAS MISSING. Answering is not ready.
+case "$acts" in *waited-for-desktop*) ok "...and then waits for a desktop before the viewer sees it" ;;
+                *) bad "connect handed over on an open port alone — the grey screen: [$acts]" ;; esac
+case "$acts" in *"viewer "*) ok "...and only then opens the viewer" ;;
+                *) bad "the viewer was never launched: [$acts]" ;; esac
+# ...and the learned address is REMEMBERED, so the next wake needs no lookup.
+check "the address it learned is saved" "aa:bb:cc:dd:ee:09" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="sleeper"{print $7}')"
+
 # ⛔ AND THE LIVE MACHINE WAS NEVER TOUCHED. Every case above went through the
 # seams; if any of them fell through to the real tools, this is where it shows.
 [ -s "$NM_LOG" ] && ok "the nmcli stand-in was the one that was called" \

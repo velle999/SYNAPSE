@@ -140,7 +140,39 @@ pkgver=0.1.0
 #     to the left. A connection saved with no user name is exactly that record
 #     — the TUI had been showing it the wrong password state for as long as
 #     there has been a TUI. Records are re-separated onto US (0x1f) to read.
-pkgrel=9
+# 9: the wake-on-connect watcher had NEVER RUN, in any release. wayvncctl's
+#   -w/--wait and -r/--reconnect are GLOBAL options, accepted only BEFORE the
+#   subcommand, and the watcher asked for `event-receive --wait --reconnect` —
+#   which real wayvncctl answers with `ERROR: Unknown option: "wait"` and exit
+#   1. The pipeline ended at once, the read loop saw EOF, and watch_clients
+#   returned seconds after every start: the unit held only wayvnc, the state
+#   file stayed at connections=0, and NO idle inhibitor was ever taken. So
+#   nothing turned the outputs back on when somebody connected, and once the
+#   screen had blanked a viewer got a grey rectangle with no frame to click out
+#   of — which reads as "it works if I log out and back in", because a fresh
+#   session has the screen on.
+#   ⛔ THE SUITE PASSED THROUGH ALL OF IT because its wayvncctl stub printed its
+#     events however it was called. A stub that accepts any arguments tests
+#     nothing about the one line that has to be right; it now parses them the
+#     way the real tool does.
+# 10: connect could wake a machine or open it, but not both, and when it did
+#   both it handed over too early.
+#   ⛔ THE WAKE WAS GATED ON THE RECORD ALREADY HAVING A MAC, while `wake`
+#     LEARNED one first. A connection saved without a hardware address was
+#     therefore never woken by `connect` — the way through was `wake`, then
+#     `connect`, by hand, which is what "it wants to do one or the other" was.
+#     The learning is one helper now and both verbs use it.
+#   ⛔ AND AN OPEN PORT IS NOT A DESKTOP. connect waited for 5900 to accept and
+#     launched the viewer, but a machine coming out of suspend accepts before
+#     the compositor has its outputs back — so the viewer arrived at a server
+#     with nothing to draw, which is the same grey rectangle from the other
+#     end. There are two waits now: WAKE_WAIT for it to ANSWER, then READY_WAIT
+#     for wayvnc's "RFB 003.00x" greeting, which it only sends once it is
+#     really serving. ⚠ The readiness probe is a real connection on purpose —
+#     it is what makes the server wake its outputs a moment before the viewer
+#     attaches, rather than the viewer being the first to ask a blanked screen
+#     for a frame.
+pkgrel=10
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
