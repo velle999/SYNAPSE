@@ -206,6 +206,10 @@ EOF
 chmod +x "$stub/wlopm" "$stub/wayvncctl" "$stub/fake-inhibit"
 IDLE_INHIBIT="$stub/fake-inhibit"
 STATE="$T/state"
+# ⚠ BOUNDED. watch_clients retries its event stream for ever in real use
+# (that is the pkgrel-14 fix); a test that calls it must say how many tries
+# it wants or the suite never returns.
+SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
 watch_clients
 sleep 0.5
 acts=$(tr '\n' ' ' < "$T/actions.log" 2>/dev/null)
@@ -1119,6 +1123,7 @@ outputs "$BOTH"; : > "$OLOG"
     SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
     set_setting output DP-3
     STATE="$T/state18"; IDLE_INHIBIT="$stub/fake-inhibit"
+    SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
     watch_clients
 ) >/dev/null 2>&1
 grep -q 'set DP-3' "$OLOG" \
@@ -1133,6 +1138,55 @@ grep -q 'set DP-3' "$OLOG" \
 grep -q 'connection modify' "$NM_LOG" && ok "...including the write" \
                                       || bad "wakeable on never wrote a profile at all"
 
+# ── 19. the watcher outlives its own event stream ─────────
+#
+# ⛔ THE WATCHER DIED ONE SECOND AFTER EVERY LOGIN AND STAYED DEAD. `--reconnect`
+# reconnects across wayvnc restarts but does not save the FIRST attempt: at
+# session start the previous session's control socket is still on disk, so
+# wayvncctl connects to a dead socket and exits. The pipeline ended, the loop
+# saw EOF, watch_clients returned -- and for the rest of that session nothing
+# woke a blanked output and nothing corrected a wrongly-captured one. The unit
+# reported active the whole time; the only symptom was a grey screen, which is
+# why this was "fixed" three times without being fixed.
+# Measured on the reference desktop, one second apart in the journal:
+#   syn-remote[…]: the wayvncctl event stream ended …
+#   syn-remote[…]: Deleting stale control socket path "…/wayvncctl"
+ALOG="$T/attempts.log"; : > "$ALOG"
+export SR_ATTEMPTS="$ALOG"
+cat > "$stub/wayvncctl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    *output-list*)   cat "$SR_OUTPUTS"; exit 0 ;;
+    *output-set*)    printf 'set %s\n' "${*##* }" >> "$SR_CTL_LOG"; exit 0 ;;
+    # the stale-socket failure: refuse the stream, exactly once per call
+    *event-receive*) printf 'attempt\n' >> "$SR_ATTEMPTS"; exit 1 ;;
+esac
+exit 0
+EOF
+chmod +x "$stub/wayvncctl"
+
+outputs "$BOTH"; : > "$OLOG"; : > "$ALOG"
+# ⚠ BOUNDED BY A KNOB, not by killing it. The real loop never returns, and a
+# test that kills one from outside races the backoff -- the first attempt at
+# this test left a runaway doubling 1,2,4,8,16,32s behind and hung the suite.
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+  STATE="$T/state19"; IDLE_INHIBIT="$stub/fake-inhibit"
+  SYN_REMOTE_WATCH_RETRIES=3 SYN_REMOTE_WATCH_BACKOFF=0
+  set_setting output DP-3
+  watch_clients ) >/dev/null 2>&1
+attempts=$(wc -l < "$ALOG" 2>/dev/null || echo 0)
+# ⚠ the COUNT, not the timing: one attempt is the bug, any retry is the fix.
+[ "${attempts:-0}" -ge 2 ] \
+    && ok "the watcher reopens the event stream after it ends ($attempts tries)" \
+    || bad "the watcher gave up after $attempts try — wake-on-connect is dead for the session"
+
+# ⛔ AND IT CORRECTS THE OUTPUT BEFORE ANY EVENT ARRIVES. wayvnc chooses its own
+# output at startup and can land on a DARK head -- on the reference desktop it
+# took a powered-off HDMI panel while synui reported DP-3 primary -- and no
+# further event is ever raised to correct it. Waiting for one is waiting for ever.
+grep -q 'set DP-3' "$OLOG" \
+    && ok "...and fixes the served screen without waiting for an event" \
+    || bad "the watcher waited for an event that never comes: [$(cat "$OLOG")]"
 
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi

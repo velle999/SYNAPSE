@@ -460,6 +460,37 @@ watch_clients() {
     # the screen and no inhibitor was ever held, so a viewer connecting to a
     # blanked desktop got a grey rectangle, and only a fresh login (screen
     # still on) looked like it worked.
+    # ⛔ AND IT HAS TO SURVIVE ITS OWN STREAM DYING. `--reconnect` reconnects
+    # across wayvnc RESTARTS, but it does not save the very first attempt: at
+    # session start the previous session's control socket is still on disk, so
+    # wayvncctl connects to a dead socket, fails, and exits — one second after
+    # the unit goes green, before wayvnc has deleted the stale path. The
+    # journal showed exactly that pair, one second apart:
+    #     syn-remote[…]: the wayvncctl event stream ended …
+    #     syn-remote[…]: Deleting stale control socket path "…/wayvncctl"
+    # The watcher then stayed dead for the whole session, so nothing woke the
+    # output and nothing corrected the captured one — and a viewer connecting
+    # later got the grey rectangle again, on a unit reporting active.
+    #
+    # ⚠ Retry FOREVER, deliberately, the same reasoning as StartLimitIntervalSec=0
+    # in the unit: a remote desktop that gives up is one nobody can use to reach
+    # a machine they are not standing next to.
+    # ⚠ Retrying here is safe — wayvncctl speaks the UNIX control socket, which
+    # does no authentication. Never write a retry loop against port 5900; that
+    # is PAM, and this desktop ships a lockout. See tests/17.
+    # ⚠ Unbounded in real use, boundable for tests. A suite cannot assert
+    # anything about a loop that never returns, and killing one from outside
+    # races the backoff -- so the COUNT is a knob, defaulting to no limit.
+    local backoff=${SYN_REMOTE_WATCH_BACKOFF:-1}
+    local tries=0 limit=${SYN_REMOTE_WATCH_RETRIES:-0}
+    while :; do
+        tries=$((tries + 1))
+    # ⚠ BEFORE waiting for events, not only in response to one. wayvnc picks
+    # its own output at startup and can land on a DARK head (here it chose an
+    # HDMI output that was powered off, while synui reported DP-3 primary), and
+    # no further event ever arrives to correct it.
+    ensure_output
+
     wayvncctl --json --wait --reconnect event-receive 2>/dev/null |
     while IFS= read -r line; do
         case "$line" in
@@ -501,11 +532,19 @@ watch_clients() {
         count=$n
     done
 
-    # ⚠ SAY SO WHEN IT ENDS. --reconnect means this should outlive any number
-    # of wayvnc restarts, so reaching here at all is the failure above: the
-    # unit stays green, the server keeps serving, and the only symptom is a
-    # grey screen for somebody who is not at the machine.
-    err "the wayvncctl event stream ended — wake-on-connect is off for this session"
+    # ⚠ SAY SO EVERY TIME IT ENDS. The unit stays green and the server keeps
+    # serving whatever happens here, so this line is the only evidence that
+    # wake-on-connect dropped out — and the retry below means seeing it once is
+    # normal (the stale-socket race at login), while seeing it repeatedly is a
+    # real fault worth reading the rest of the journal for.
+    if [ "$limit" -gt 0 ] && [ "$tries" -ge "$limit" ]; then
+        err "the wayvncctl event stream ended — giving up after $tries tries"
+        return 0
+    fi
+    err "the wayvncctl event stream ended — retrying in ${backoff}s"
+    sleep "$backoff"
+    [ "$backoff" -lt 30 ] && backoff=$((backoff * 2))
+    done
 }
 
 cmd_run() {

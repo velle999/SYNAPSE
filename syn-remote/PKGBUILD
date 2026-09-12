@@ -209,7 +209,7 @@ pkgver=0.1.0
 #     for is switched off". ensure_output now wakes the output it selects.
 #   ⚠ That output, not `--on '*'`: waking every screen in the house because
 #     somebody opened a remote session is a thing people notice at 2am.
-pkgrel=13
+pkgrel=14
 pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
