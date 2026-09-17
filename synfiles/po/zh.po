@@ -31,6 +31,9 @@ msgstr "%1  ·  已选 %2"
 msgid "%1 connected"
 msgstr "已连接 %1"
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr "无法计算 %1 — 文件无法读取。"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "完成 %1 项"
@@ -68,6 +71,9 @@ msgstr[0] "%1 个项目"
 msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "还剩 %1 分钟"
+
+msgid "%1 mounted"
+msgstr "已挂载 %1"
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -139,6 +145,9 @@ msgstr "关于"
 msgid "About SYNAPSE Files"
 msgstr "关于 SYNAPSE Files"
 
+msgid "Accessed"
+msgstr "访问时间"
+
 msgid "Add to Places"
 msgstr "添加到位置"
 
@@ -151,8 +160,20 @@ msgstr "后退"
 msgid "By name"
 msgstr "按名称"
 
+msgid "Calculate"
+msgstr "计算"
+
+msgid "Calculating %1…"
+msgstr "正在计算 %1…"
+
 msgid "Cancel"
 msgstr "取消"
+
+msgid "Capacity"
+msgstr "容量"
+
+msgid "Checksums"
+msgstr "校验和"
 
 msgid "Close Split View"
 msgstr "关闭分屏"
@@ -174,6 +195,9 @@ msgstr "复制"
 
 msgid "Copy Path"
 msgstr "复制路径"
+
+msgid "Created"
+msgstr "创建时间"
 
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
@@ -208,8 +232,14 @@ msgstr "永久销毁"
 msgid "Details"
 msgstr "详细"
 
+msgid "Device"
+msgstr "设备"
+
 msgid "Devices"
 msgstr "设备"
+
+msgid "Disk"
+msgstr "磁盘"
 
 msgid "Done"
 msgstr "完成"
@@ -233,11 +263,20 @@ msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "回收站中的所有内容都将被永久删除，且无法撤销。"
 
+msgid "Execute"
+msgstr "执行"
+
 msgid "F2"
 msgstr "F2"
 
 msgid "F5"
 msgstr "F5"
+
+msgid "Files"
+msgstr "文件"
+
+msgid "Filesystem"
+msgstr "文件系统"
 
 msgid "Find network shares"
 msgstr "查找网络共享"
@@ -257,6 +296,15 @@ msgstr "格式化…"
 msgid "Forward"
 msgstr "前进"
 
+msgid "Free"
+msgstr "可用"
+
+msgid "General"
+msgstr "常规"
+
+msgid "Group"
+msgstr "组"
+
 msgid "Hidden items are not shown."
 msgstr "未显示隐藏项目。"
 
@@ -275,6 +323,9 @@ msgstr "主目录"
 msgid "Icons"
 msgstr "图标"
 
+msgid "Image file"
+msgstr "镜像文件"
+
 msgid "In contents"
 msgstr "在内容中"
 
@@ -290,14 +341,23 @@ msgstr "左  ·  %1"
 msgid "Links to"
 msgstr "指向"
 
+msgid "Location"
+msgstr "位置"
+
 msgid "Menu"
 msgstr "菜单"
+
+msgid "Mode"
+msgstr "模式"
 
 msgid "Modified"
 msgstr "修改时间"
 
 msgid "Mount"
 msgstr "挂载"
+
+msgid "Mounted on"
+msgstr "挂载点"
 
 msgid "Move to Trash"
 msgstr "移到回收站"
@@ -332,6 +392,14 @@ msgstr "没有匹配项。"
 msgid "Nothing matches that filter."
 msgstr "没有符合该筛选的项目。"
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr "对于文件夹，“读取”可列出其中的内容，“写入”可添加和删除内容，“执行”可打开它。"
+
+msgid "Only %1 can change these."
+msgstr "只有 %1 可以更改这些权限。"
+
 msgid "Open"
 msgstr "打开"
 
@@ -353,6 +421,9 @@ msgstr "在新标签页中打开"
 msgid "Open with"
 msgstr "打开方式"
 
+msgid "Others"
+msgstr "其他人"
+
 msgid "Overwrite"
 msgstr "覆盖"
 
@@ -365,8 +436,19 @@ msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "先覆盖再删除。不进回收站，也无法撤销。"
 
+msgid "Owner"
+msgstr "所有者"
+
 msgid "Paste"
 msgstr "粘贴"
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr "粘贴下载页面上的校验和，即可与此文件核对。对应的算法会自动计算。"
+
+msgid "Permissions"
+msgstr "权限"
 
 msgid "Pin"
 msgstr "固定"
@@ -389,6 +471,9 @@ msgstr "属性"
 msgid "Properties…"
 msgstr "属性…"
 
+msgid "Read"
+msgstr "读取"
+
 msgid "Recent"
 msgstr "最近"
 
@@ -406,6 +491,9 @@ msgstr "从位置中移除"
 
 msgid "Rename…"
 msgstr "重命名…"
+
+msgid "Resolution"
+msgstr "分辨率"
 
 msgid "Restore"
 msgstr "还原"
@@ -455,6 +543,9 @@ msgstr "侧边栏"
 msgid "Size"
 msgstr "大小"
 
+msgid "Size on disk"
+msgstr "占用空间"
+
 msgid "Skip those"
 msgstr "跳过这些"
 
@@ -479,11 +570,19 @@ msgstr "分屏 (F3)"
 msgid "Text"
 msgstr "文本"
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr "这不是 MD5、SHA-1、SHA-256 或 SHA-512 校验和。"
+
 msgid "The trash is empty."
 msgstr "回收站是空的。"
 
 msgid "This folder is empty."
 msgstr "此文件夹是空的。"
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
+msgstr "这是一个链接。它的权限就是所指向文件的权限 — 请在那里更改。"
 
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
@@ -505,6 +604,9 @@ msgstr "卸载"
 msgid "Up one folder"
 msgstr "上一级文件夹"
 
+msgid "Used"
+msgstr "已用"
+
 msgid "Vault"
 msgstr "保险库"
 
@@ -513,6 +615,9 @@ msgstr "视图"
 
 msgid "View options"
 msgstr "视图选项"
+
+msgid "Write"
+msgstr "写入"
 
 msgid "a moment left"
 msgstr "即将完成"
@@ -528,6 +633,9 @@ msgstr "正在计算…"
 
 msgid "cancelling…"
 msgstr "正在取消…"
+
+msgid "capacity"
+msgstr "容量"
 
 msgid "changed"
 msgstr "变更时间"
@@ -558,6 +666,12 @@ msgid "copying %1 item…"
 msgid_plural "copying %1 items…"
 msgstr[0] "正在复制 %1 个项目…"
 
+msgid "could not be read"
+msgstr "无法读取"
+
+msgid "created"
+msgstr "创建时间"
+
 msgid "creating %1"
 msgstr "正在创建 %1"
 
@@ -569,6 +683,9 @@ msgstr "描述"
 
 msgid "destroying %1…"
 msgstr "正在销毁 %1…"
+
+msgid "device"
+msgstr "设备"
 
 msgid "disc inserted — %1"
 msgstr "已插入光盘 — %1"
@@ -582,6 +699,9 @@ msgstr "正在清空回收站…"
 msgid "files"
 msgstr "文件"
 
+msgid "filesystem"
+msgstr "文件系统"
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "筛选这些项目…   (Ctrl+F 搜索)"
 
@@ -591,8 +711,14 @@ msgstr "文件夹"
 msgid "format %1 — asking in Disks"
 msgstr "格式化 %1 — 正在磁盘中询问"
 
+msgid "free"
+msgstr "可用"
+
 msgid "group"
 msgstr "组"
+
+msgid "image file"
+msgstr "镜像文件"
 
 msgid "links"
 msgstr "链接数"
@@ -614,6 +740,9 @@ msgstr "权限"
 
 msgid "modified"
 msgstr "修改时间"
+
+msgid "mounted on"
+msgstr "挂载点"
 
 msgid "mounting %1…"
 msgstr "正在挂载 %1…"
@@ -670,6 +799,9 @@ msgstr "正在读取…"
 msgid "renaming to %1"
 msgstr "正在重命名为 %1"
 
+msgid "resolution"
+msgstr "分辨率"
+
 msgid "restoring %1"
 msgstr "正在还原 %1"
 
@@ -688,6 +820,9 @@ msgstr "已选"
 msgid "size"
 msgstr "大小"
 
+msgid "size on disk"
+msgstr "占用空间"
+
 msgid "target"
 msgstr "目标"
 
@@ -699,6 +834,12 @@ msgstr "正在撤销 %1…"
 
 msgid "unmounting %1…"
 msgstr "正在卸载 %1…"
+
+msgid "used"
+msgstr "已用"
+
+msgid "waiting…"
+msgstr "等待中…"
 
 msgid "working…"
 msgstr "处理中…"
@@ -726,6 +867,14 @@ msgid ""
 msgstr ""
 "⚠ 这是 %1，它把改动写入新块而不是覆盖旧块。文件会消失，但其内容仍可能从磁盘中"
 "恢复。真正能防止这一点的是全盘加密。"
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr "✓ 匹配。文件的 %1 与粘贴的值一致。"
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
+msgstr "✗ 不匹配。文件的 %1 不同 — 它不是该校验和所描述的文件，或者已经损坏。"
 
 msgid "actions: need a path"
 msgstr "actions：需要一个路径"
@@ -902,6 +1051,20 @@ msgstr "rename：“%s”不是可用的名称"
 msgid "cannot rename %s: %s"
 msgstr "无法重命名 %s：%s"
 
+msgid "chmod: need an octal mode and a path"
+msgstr "chmod：需要一个八进制模式和一个路径"
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr "chmod：“%s” 不是像 644 这样的八进制模式"
+
+msgid "a symbolic link has no permissions of its own"
+msgstr "符号链接没有自己的权限"
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr "无法更改 %s 的权限：%s"
+
 msgid "mkdir: need a path"
 msgstr "mkdir：需要一个路径"
 
@@ -960,6 +1123,10 @@ msgstr "无法读取 %s：%s"
 
 msgid "empty"
 msgstr "空"
+
+#, c-format
+msgid "%s (%s bytes)"
+msgstr "%s（%s 字节）"
 
 msgid "info: need a path"
 msgstr "info：需要一个路径"
@@ -1277,7 +1444,8 @@ msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount：需要一个设备路径（参见：synfiles volumes）"
 
 msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
-msgstr "volumes --watch：没有可监视的来源 — mountinfo、uevent 和 inotify 均不可用"
+msgstr ""
+"volumes --watch：没有可监视的来源 — mountinfo、uevent 和 inotify 均不可用"
 
 #, c-format
 msgid "volumes: unknown option '%s'"

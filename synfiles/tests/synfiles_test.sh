@@ -650,6 +650,146 @@ kind=$(printf '%s' "$vols" | awk -F'\t' '$3 == "STICKFIX" {print $2}')
 [ "$kind" = "removable" ] && ok "a hotplug volume is kind=removable" \
                           || bad "STICKFIX came back as kind='$kind'"
 
+# ── a mounted disc image is a place ─────────────────────────────────────────
+#
+# ⛔ AN ISO MOUNTED FROM THE RIGHT-CLICK MENU NEVER REACHED THE SIDEBAR. udisks2
+# maps the file to a loop device and lsblk calls that TYPE="loop" — none of the
+# types admitted — so the image opened a window on its contents and was then
+# unreachable, and uneject-able, from the device list. Same fake-lsblk rig as
+# above, with the three shapes an image really takes: a plain ISO on the loop
+# device itself, a HYBRID ISO whose filesystem is on loop1p1 (loop1 is only its
+# container, exactly like a hybrid stick), and an unlabelled one — plus the live
+# ISO's own squashfs under /run, which must stay hidden.
+B2="$T/fakebin-loop"
+SYSB="$T/sys-block"
+mkdir -p "$B2" "$SYSB/loop2/loop"
+printf '%s\n' "/home/tester/Games/Halo 2 (Ko).iso" > "$SYSB/loop2/loop/backing_file"
+cat > "$B2/lsblk" <<'LB'
+#!/usr/bin/env bash
+cat <<'ROWS'
+NAME="loop0" PATH="/dev/loop0" LABEL="HALO2" SIZE="4.2G" FSTYPE="udf" MOUNTPOINT="/run/media/tester/HALO2" RM="0" TYPE="loop" HOTPLUG="0" UUID="aaaa" PKNAME=""
+NAME="loop1" PATH="/dev/loop1" LABEL="HYBRIDFIX" SIZE="3G" FSTYPE="iso9660" MOUNTPOINT="" RM="0" TYPE="loop" HOTPLUG="0" UUID="bbbb" PKNAME=""
+NAME="loop1p1" PATH="/dev/loop1p1" LABEL="HYBRIDFIX" SIZE="3G" FSTYPE="iso9660" MOUNTPOINT="/run/media/tester/HYBRIDFIX" RM="0" TYPE="part" HOTPLUG="0" UUID="bbbb" PKNAME="loop1"
+NAME="loop2" PATH="/dev/loop2" LABEL="" SIZE="700M" FSTYPE="iso9660" MOUNTPOINT="/home/tester/mnt/iso" RM="0" TYPE="loop" HOTPLUG="0" UUID="cccc" PKNAME=""
+NAME="loop3" PATH="/dev/loop3" LABEL="" SIZE="900M" FSTYPE="squashfs" MOUNTPOINT="/run/archiso/airootfs" RM="0" TYPE="loop" HOTPLUG="0" UUID="" PKNAME=""
+ROWS
+LB
+chmod +x "$B2/lsblk"
+lv=$(PATH="$B2:$PATH" SYNFILES_SYS_BLOCK="$SYSB" SYNFILES_UNIT_DIRS="$T/no-units" \
+     "$SYNFILES" --rec volumes --block)
+
+eq "a mounted ISO on a loop device is listed as an image" "image" \
+   "$(printf '%s' "$lv" | awk -F'\t' '$7 == "/dev/loop0" {print $2}')"
+eq "...with the disc icon" "media-optical" \
+   "$(printf '%s' "$lv" | awk -F'\t' '$7 == "/dev/loop0" {print $4}')"
+eq "a hybrid image lists its partition, once" "1" \
+   "$(printf '%s' "$lv" | awk -F'\t' '$3 == "HYBRIDFIX"' | wc -l | tr -d ' ')"
+eq "...and that row is the partition, not the container" "/dev/loop1p1" \
+   "$(printf '%s' "$lv" | awk -F'\t' '$3 == "HYBRIDFIX" {print $7}')"
+eq "an image with no label is named after its file" "Halo 2 (Ko).iso" \
+   "$(printf '%s' "$lv" | awk -F'\t' '$7 == "/dev/loop2" {print $3}')"
+printf '%s' "$lv" | has 'airootfs' \
+  && bad "the live ISO's own squashfs under /run is listed" \
+  || ok "a loop mounted under /run at large stays hidden"
+
+# ── info: the disk a path is on ─────────────────────────────────────────────
+#
+# "Will this fit" is asked of a properties panel as often as "how big is it",
+# and a file three folders into a drive does not say which drive it is on.
+FSI="$T/fs info"
+mkdir -p "$FSI"
+head -c 5000 /dev/urandom > "$FSI/file"
+# Flushed first: on a filesystem with delayed allocation st_blocks can still be
+# an estimate a moment after the write, and the du comparison below reads it.
+sync "$FSI/file" 2>/dev/null || sync
+fi_rec=$("$SYNFILES" --rec info "$FSI/file")
+fsv() { printf '%s' "$fi_rec" | awk -F'\t' -v k="$1" '$1 == k {print $2}'; }
+
+[ -n "$(fsv fs_mount)" ] && ok "info names the mount a file is on" \
+                        || bad "info has no fs_mount row"
+real_fsi=$(readlink -f "$FSI")
+case "$real_fsi/" in
+    "$(fsv fs_mount)"/*|"$(fsv fs_mount)"*) ok "...and the mount point is a prefix of the file's path" ;;
+    *) bad "fs_mount [$(fsv fs_mount)] does not contain $real_fsi" ;;
+esac
+[ "$(fsv fs_total)" -gt 0 ] 2>/dev/null && ok "info reports the filesystem's capacity" \
+                                        || bad "fs_total is [$(fsv fs_total)]"
+eq "used and free add up to the capacity" "$(fsv fs_total)" \
+   "$(( $(fsv fs_used) + $(fsv fs_free) ))"
+# ⚠ CAPACITY, NOT FREE SPACE, against df. Both come from statvfs, but free
+# space is two separate reads of a number anything else on the machine moves —
+# a parallel build writing to the same /tmp during syn-update would fail this
+# with nothing wrong. The size of the filesystem holds still.
+eq "capacity agrees with df" "$(df -B1 --output=size "$FSI" | tail -1 | tr -d ' ')" \
+   "$(fsv fs_total)"
+eq "size on disk is st_blocks, which is what du counts" \
+   "$(du -B1 "$FSI/file" | cut -f1)" "$(fsv disk)"
+
+# WHICH mount, against a fixture. /mnt/drive8tb on a systemd machine carries
+# TWO rows — the autofs trigger and the real filesystem stacked on it — and a
+# prefix alone ties them. The device number is what settles it; a later row
+# without it must not win, and a mount whose path merely STARTS with the same
+# characters ("fs infox") is a different directory.
+dev=$(stat -c '%Hd:%Ld' "$FSI/file")
+esc=$(printf '%s' "$real_fsi" | sed 's/ /\\040/g')
+cat > "$T/mountinfo" <<MI
+20 1 0:250 / / rw,relatime shared:1 - rootfix /dev/fake-root rw
+21 20 $dev / $esc rw,relatime shared:2 - realfix /dev/fake-real rw
+22 20 $dev / ${esc}x rw,relatime shared:3 - wrongfix /dev/fake-wrong rw
+23 21 0:251 / $esc rw,relatime shared:4 - autofs systemd-1 rw,fd=5
+MI
+ranked=$(SYNFILES_MOUNTINFO="$T/mountinfo" "$SYNFILES" --rec info "$FSI/file")
+eq "the mount whose DEVICE is the file's wins over a later autofs row" "realfix" \
+   "$(printf '%s' "$ranked" | awk -F'\t' '$1 == "fs_type" {print $2}')"
+eq "an escaped space in mountinfo is unescaped before matching" \
+   "$(printf '%s' "$real_fsi" | sed 's/ /%20/g')" \
+   "$(printf '%s' "$ranked" | awk -F'\t' '$1 == "fs_mount" {print $2}')"
+
+# The human form is for reading — "4.9 KiB (5000 bytes)", not a bare integer.
+"$SYNFILES" info "$FSI/file" | has '^size .*(5000 bytes)' \
+  && ok "info's human size says the unit and the exact count" \
+  || bad "info's human size is not readable"
+
+# ── chmod: the Permissions tab ──────────────────────────────────────────────
+PM="$T/perm"
+mkdir -p "$PM"
+: > "$PM/tool"
+chmod 644 "$PM/tool"
+ln -s tool "$PM/link"
+
+r=$("$SYNFILES" --rec chmod 755 "$PM/tool")
+eq "chmod sets an octal mode" "755" "$(stat -c %a "$PM/tool")"
+eq "...and says so in the record" "done" \
+   "$(printf '%s' "$r" | awk -F'\t' 'NR == 2 {print $2}')"
+
+"$SYNFILES" --rec chmod 600 "$PM/link" > "$T/chmod-link.rec" 2>/dev/null
+rc=$?
+eq "chmod refuses a symlink" "1" "$rc"
+eq "...without touching what it points at" "755" "$(stat -c %a "$PM/tool")"
+eq "...and the refusal is a failed record, not silence" "failed" \
+   "$(awk -F'\t' 'NR == 2 {print $2}' "$T/chmod-link.rec")"
+
+for m in u+x 9 77777 -644 ""; do
+    if "$SYNFILES" chmod "$m" "$PM/tool" >/dev/null 2>&1; then
+        bad "chmod accepted [$m] as a mode"
+    else
+        ok "chmod refuses [$m] as a mode"
+    fi
+done
+eq "a refused mode changes nothing" "755" "$(stat -c %a "$PM/tool")"
+
+# ── the record stream carries records and nothing else ──────────────────────
+#
+# ⛔ The translation pass split finish()'s summary into three printf calls and
+# left the `if` guarding the first, so every --rec copy, move and trash ended
+# with a bare "0 done, 0 skipped, 0 failed" — a line with no tab in it, in the
+# desktop's language, in the stream the window parses.
+RS="$T/recstream"
+mkdir -p "$RS/src" "$RS/dst"
+: > "$RS/src/a"
+eq "a --rec copy prints no line that is not a record" "0" \
+   "$("$SYNFILES" --rec copy "$RS/src/a" "$RS/dst" 2>/dev/null | awk -F'\t' 'NF < 2' | wc -l | tr -d ' ')"
+
 # ── peek: what a folder has inside it, for its icon ─────────────────────────
 # One call answers for every subdirectory, so the assertions are about what
 # each subdirectory contributes — and about the bounds, because this runs on
@@ -2548,9 +2688,41 @@ if [ -f "$QML" ]; then
 
     # A walk over a big tree outliving its panel lands its records in whatever
     # folder is asked about next.
-    grep -q 'onShowPropsChanged: if (!root.showProps) root.stopFolderSize()' "$QML" \
+    awk '/onShowPropsChanged: \{/,/^    \}/' "$QML" | has 'root.stopFolderSize()' \
         && ok "closing the panel stops the walk" \
         || bad "the size walk is not stopped when properties closes"
+    awk '/onShowPropsChanged: \{/,/^    \}/' "$QML" | has 'root.stopSums()' \
+        && ok "closing the panel stops a checksum" \
+        || bad "a checksum outlives the properties panel"
+
+    # ⛔ NO SHARED Process BEHIND THE PANEL. quickshell ignores running = true
+    # on a Process still running, and `info` on a spun-down drive takes
+    # seconds, so a shared one dropped the next open in silence. Each run is
+    # its own Process, and each callback checks the generation it began in.
+    grep -qE 'id: (infoProc|sumProc|chmodProc)' "$QML" \
+        && bad "the properties panel is back on a shared Process" \
+        || ok "the properties panel starts a Process per run"
+    [ "$(grep -c 'if (gen !== root.propGen) return' "$QML")" -ge 3 ] \
+        && ok "every panel callback ignores a run from a previous open" \
+        || bad "a properties callback can land in the wrong item's panel"
+
+    # The image kind reaches the sidebar, is ejected, and is not offered Format.
+    awk '/readonly property var removableVolumes:/,/\)$/' "$QML" | has '"image"' \
+        && ok "a mounted image is listed with the removable devices" \
+        || bad "kind=image is not in removableVolumes — mounted ISOs vanish again"
+    grep -q 'v.kind === "removable" && root.haveFormat' "$QML" \
+        && ok "Format… is still offered for removable media only" \
+        || bad "the Format… guard changed — an image could be offered Format"
+
+    # Ejecting the disc you are standing in leaves it first.
+    awk '/function unmountVolume/,/^    \}/' "$QML" | has 'pane.navigate(home' \
+        && ok "ejecting the volume on screen moves the pane out of it" \
+        || bad "eject leaves the pane reading a folder that is gone"
+
+    # The Destroy sheet's colour exists.
+    grep -q 'readonly property color cBad:' "$QML" \
+        && ok "cBad is defined, so the Destroy sheet draws its warning" \
+        || bad "root.cBad is undefined again — the Destroy sheet draws no red"
 
     # ⚠ THE SIBLING MODULE IS COPIED FIRST, FOR BOTH CHECKS BELOW. synfiles.qml
     # does `import "qml"` for the translation singleton, and each check works on
@@ -2971,9 +3143,12 @@ if [ -f "$QML" ]; then
     # say it, and a `grep -q` for the msgid passed while one of them was
     # rewritten — it was matching the other. Two is the number; one is a site
     # that stopped leading with the disk figure.
+    #
+    # ⚠ THREE since 76: the Properties panel says it twice now — the General
+    # tab's Size row and the Details tab's contents row — beside the hover.
     n=$(grep -c '"%1 on disk' "$QML")
-    [ "$n" = 2 ] && ok "both places lead with what the folder costs on disk" \
-                 || bad "the folder size no longer says what it costs on disk ($n of 2)"
+    [ "$n" = 3 ] && ok "all three places lead with what the folder costs on disk" \
+                 || bad "the folder size no longer says what it costs on disk ($n of 3)"
 
     # ⚠ "1 files in 1 folders" is the kind of wrong that makes a careful number
     # look careless.
@@ -2990,8 +3165,8 @@ if [ -f "$QML" ]; then
     # `grep -q` passed with one of them sabotaged because it matched the other.
     for noun in file folder; do
         n=$(grep -c "I18n.trn(\"%1 $noun\", \"%1 ${noun}s\"" "$QML")
-        [ "$n" = 2 ] && ok "both $noun counters pluralise through the catalog" \
-                     || bad "a $noun counter does not go through I18n.trn ($n of 2)"
+        [ "$n" = 3 ] && ok "all three $noun counters pluralise through the catalog" \
+                     || bad "a $noun counter does not go through I18n.trn ($n of 3)"
     done
 fi
 

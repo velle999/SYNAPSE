@@ -14,7 +14,16 @@ synfiles tui ~/Documents     # browse in this terminal
 synfiles list -a --sort=size # entries in a directory
 synfiles info FILE           # everything a properties pane shows
 synfiles du ~/Videos         # recursive size, counting as it walks
+synfiles chmod 755 FILE      # set permissions; never through a symlink
 ```
+
+`info` also names the disk a file is on — where it is mounted, the
+filesystem, the device, and its capacity, used and free space, counted the same
+way as the sidebar's meters. The Properties window shows it on its General tab,
+beside Permissions (a read/write/execute grid that changes the file), Checksums
+(MD5, SHA-1, SHA-256 and SHA-512, calculated when asked; paste one from a
+download page and it says whether the file matches) and Details (every record
+`info` prints).
 
 ## Finding things
 
@@ -43,7 +52,9 @@ synfiles places pin ~/Projects "Projects"
 synfiles places list
 ```
 
-Removable media mount through udisks2 without root. Network places — SMB,
+Removable media mount through udisks2 without root. A disc image mounted from
+the right-click menu appears under Removable Devices, and Eject unmounts it and
+releases the loop device behind it. Network places — SMB,
 SFTP and MTP — come from gvfs when it is installed, and shares announced over
 mDNS or NetBIOS are found with avahi and smbclient.
 

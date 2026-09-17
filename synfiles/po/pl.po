@@ -32,6 +32,9 @@ msgstr "%1  ·  zaznaczono %2"
 msgid "%1 connected"
 msgstr "Podłączono %1"
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr "Nie można obliczyć %1 — nie udało się odczytać pliku."
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 gotowy"
@@ -85,6 +88,9 @@ msgid_plural "%1 min left"
 msgstr[0] "pozostała %1 min"
 msgstr[1] "pozostały %1 min"
 msgstr[2] "pozostało %1 min"
+
+msgid "%1 mounted"
+msgstr "Zamontowano %1"
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -174,6 +180,9 @@ msgstr "O programie"
 msgid "About SYNAPSE Files"
 msgstr "O SYNAPSE Files"
 
+msgid "Accessed"
+msgstr "Ostatni dostęp"
+
 msgid "Add to Places"
 msgstr "Dodaj do miejsc"
 
@@ -186,8 +195,20 @@ msgstr "Wstecz"
 msgid "By name"
 msgstr "Wg nazwy"
 
+msgid "Calculate"
+msgstr "Oblicz"
+
+msgid "Calculating %1…"
+msgstr "Obliczanie %1…"
+
 msgid "Cancel"
 msgstr "Anuluj"
+
+msgid "Capacity"
+msgstr "Pojemność"
+
+msgid "Checksums"
+msgstr "Sumy kontrolne"
 
 msgid "Close Split View"
 msgstr "Zamknij widok dzielony"
@@ -209,6 +230,9 @@ msgstr "Kopiuj"
 
 msgid "Copy Path"
 msgstr "Kopiuj ścieżkę"
+
+msgid "Created"
+msgstr "Utworzono"
 
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
@@ -243,8 +267,14 @@ msgstr "Zniszcz trwale"
 msgid "Details"
 msgstr "Szczegóły"
 
+msgid "Device"
+msgstr "Urządzenie"
+
 msgid "Devices"
 msgstr "Urządzenia"
+
+msgid "Disk"
+msgstr "Dysk"
 
 msgid "Done"
 msgstr "Gotowe"
@@ -268,11 +298,20 @@ msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "Wszystko w koszu zostanie trwale usunięte. Tego nie da się cofnąć."
 
+msgid "Execute"
+msgstr "Wykonywanie"
+
 msgid "F2"
 msgstr "F2"
 
 msgid "F5"
 msgstr "F5"
+
+msgid "Files"
+msgstr "Pliki"
+
+msgid "Filesystem"
+msgstr "System plików"
 
 msgid "Find network shares"
 msgstr "Znajdź zasoby sieciowe"
@@ -292,6 +331,15 @@ msgstr "Formatuj…"
 msgid "Forward"
 msgstr "Dalej"
 
+msgid "Free"
+msgstr "Wolne"
+
+msgid "General"
+msgstr "Ogólne"
+
+msgid "Group"
+msgstr "Grupa"
+
 msgid "Hidden items are not shown."
 msgstr "Ukryte elementy nie są pokazywane."
 
@@ -310,6 +358,9 @@ msgstr "Katalog domowy"
 msgid "Icons"
 msgstr "Ikony"
 
+msgid "Image file"
+msgstr "Plik obrazu"
+
 msgid "In contents"
 msgstr "W zawartości"
 
@@ -325,14 +376,23 @@ msgstr "Lewy  ·  %1"
 msgid "Links to"
 msgstr "Wskazuje na"
 
+msgid "Location"
+msgstr "Położenie"
+
 msgid "Menu"
 msgstr "Menu"
+
+msgid "Mode"
+msgstr "Tryb"
 
 msgid "Modified"
 msgstr "Zmodyfikowano"
 
 msgid "Mount"
 msgstr "Zamontuj"
+
+msgid "Mounted on"
+msgstr "Zamontowano w"
 
 msgid "Move to Trash"
 msgstr "Przenieś do kosza"
@@ -367,6 +427,14 @@ msgstr "Nic nie znaleziono."
 msgid "Nothing matches that filter."
 msgstr "Nic nie pasuje do tego filtra."
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr "W przypadku folderu Odczyt pozwala wyświetlić jego zawartość, Zapis — dodawać i usuwać elementy, a Wykonywanie — go otworzyć."
+
+msgid "Only %1 can change these."
+msgstr "Tylko %1 może je zmienić."
+
 msgid "Open"
 msgstr "Otwórz"
 
@@ -388,6 +456,9 @@ msgstr "Otwórz w nowej karcie"
 msgid "Open with"
 msgstr "Otwórz za pomocą"
 
+msgid "Others"
+msgstr "Pozostali"
+
 msgid "Overwrite"
 msgstr "Nadpisz"
 
@@ -402,8 +473,19 @@ msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "Nadpisane i usunięte. Nie trafia do kosza i nie da się tego cofnąć."
 
+msgid "Owner"
+msgstr "Właściciel"
+
 msgid "Paste"
 msgstr "Wklej"
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr "Wklej sumę kontrolną ze strony pobierania, aby sprawdzić ten plik. Właściwy algorytm zostanie obliczony automatycznie."
+
+msgid "Permissions"
+msgstr "Uprawnienia"
 
 msgid "Pin"
 msgstr "Przypnij"
@@ -426,6 +508,9 @@ msgstr "Właściwości"
 msgid "Properties…"
 msgstr "Właściwości…"
 
+msgid "Read"
+msgstr "Odczyt"
+
 msgid "Recent"
 msgstr "Ostatnie"
 
@@ -443,6 +528,9 @@ msgstr "Usuń z miejsc"
 
 msgid "Rename…"
 msgstr "Zmień nazwę…"
+
+msgid "Resolution"
+msgstr "Rozdzielczość"
 
 msgid "Restore"
 msgstr "Przywróć"
@@ -492,6 +580,9 @@ msgstr "Panel boczny"
 msgid "Size"
 msgstr "Rozmiar"
 
+msgid "Size on disk"
+msgstr "Rozmiar na dysku"
+
 msgid "Skip those"
 msgstr "Pomiń te"
 
@@ -516,11 +607,19 @@ msgstr "Widok dzielony (F3)"
 msgid "Text"
 msgstr "Tekst"
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr "To nie jest suma kontrolna MD5, SHA-1, SHA-256 ani SHA-512."
+
 msgid "The trash is empty."
 msgstr "Kosz jest pusty."
 
 msgid "This folder is empty."
 msgstr "Ten folder jest pusty."
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
+msgstr "To jest dowiązanie. Jego uprawnienia to uprawnienia pliku, na który wskazuje — zmień je tam."
 
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
@@ -544,6 +643,9 @@ msgstr "Odmontuj"
 msgid "Up one folder"
 msgstr "Folder wyżej"
 
+msgid "Used"
+msgstr "Zajęte"
+
 msgid "Vault"
 msgstr "Sejf"
 
@@ -552,6 +654,9 @@ msgstr "Widok"
 
 msgid "View options"
 msgstr "Opcje widoku"
+
+msgid "Write"
+msgstr "Zapis"
 
 msgid "a moment left"
 msgstr "zaraz koniec"
@@ -567,6 +672,9 @@ msgstr "obliczanie…"
 
 msgid "cancelling…"
 msgstr "anulowanie…"
+
+msgid "capacity"
+msgstr "pojemność"
 
 msgid "changed"
 msgstr "zmieniono"
@@ -601,6 +709,12 @@ msgstr[0] "kopiowanie %1 elementu…"
 msgstr[1] "kopiowanie %1 elementów…"
 msgstr[2] "kopiowanie %1 elementów…"
 
+msgid "could not be read"
+msgstr "nie można odczytać"
+
+msgid "created"
+msgstr "utworzono"
+
 msgid "creating %1"
 msgstr "tworzenie %1"
 
@@ -612,6 +726,9 @@ msgstr "opis"
 
 msgid "destroying %1…"
 msgstr "niszczenie %1…"
+
+msgid "device"
+msgstr "urządzenie"
 
 msgid "disc inserted — %1"
 msgstr "Włożono płytę — %1"
@@ -625,6 +742,9 @@ msgstr "opróżnianie kosza…"
 msgid "files"
 msgstr "pliki"
 
+msgid "filesystem"
+msgstr "system plików"
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "filtruj te elementy…   (Ctrl+F szuka)"
 
@@ -634,8 +754,14 @@ msgstr "foldery"
 msgid "format %1 — asking in Disks"
 msgstr "formatowanie %1 — pytanie w Dyskach"
 
+msgid "free"
+msgstr "wolne"
+
 msgid "group"
 msgstr "grupa"
+
+msgid "image file"
+msgstr "plik obrazu"
 
 msgid "links"
 msgstr "dowiązania"
@@ -657,6 +783,9 @@ msgstr "uprawnienia"
 
 msgid "modified"
 msgstr "zmodyfikowano"
+
+msgid "mounted on"
+msgstr "zamontowano w"
 
 msgid "mounting %1…"
 msgstr "montowanie %1…"
@@ -715,6 +844,9 @@ msgstr "odczyt…"
 msgid "renaming to %1"
 msgstr "zmiana nazwy na %1"
 
+msgid "resolution"
+msgstr "rozdzielczość"
+
 msgid "restoring %1"
 msgstr "przywracanie %1"
 
@@ -733,6 +865,9 @@ msgstr "zaznaczono"
 msgid "size"
 msgstr "rozmiar"
 
+msgid "size on disk"
+msgstr "rozmiar na dysku"
+
 msgid "target"
 msgstr "cel"
 
@@ -744,6 +879,12 @@ msgstr "cofanie %1…"
 
 msgid "unmounting %1…"
 msgstr "odmontowywanie %1…"
+
+msgid "used"
+msgstr "zajęte"
+
+msgid "waiting…"
+msgstr "oczekiwanie…"
 
 msgid "working…"
 msgstr "pracuję…"
@@ -776,6 +917,14 @@ msgstr ""
 "⚠ To jest %1 — zapisuje zmiany w nowych blokach zamiast na starych. Plik "
 "zniknie, ale jego zawartość może nadal dać się odzyskać z dysku. Naprawdę "
 "zapobiega temu dopiero szyfrowanie całego dysku."
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr "✓ Zgadza się. Suma %1 pliku jest taka jak wklejona."
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
+msgstr "✗ Nie zgadza się. Suma %1 pliku jest inna — to nie jest plik opisany tą sumą albo jest uszkodzony."
 
 msgid "actions: need a path"
 msgstr "actions: wymagana jest ścieżka"
@@ -956,6 +1105,20 @@ msgstr "rename: „%s” nie jest nazwą, której można użyć"
 msgid "cannot rename %s: %s"
 msgstr "nie można zmienić nazwy %s: %s"
 
+msgid "chmod: need an octal mode and a path"
+msgstr "chmod: wymagane są tryb ósemkowy i ścieżka"
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr "chmod: „%s” nie jest trybem ósemkowym, takim jak 644"
+
+msgid "a symbolic link has no permissions of its own"
+msgstr "dowiązanie symboliczne nie ma własnych uprawnień"
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr "nie można zmienić uprawnień %s: %s"
+
 msgid "mkdir: need a path"
 msgstr "mkdir: wymagana jest ścieżka"
 
@@ -1014,6 +1177,10 @@ msgstr "nie można odczytać %s: %s"
 
 msgid "empty"
 msgstr "puste"
+
+#, c-format
+msgid "%s (%s bytes)"
+msgstr "%s (%s bajtów)"
 
 msgid "info: need a path"
 msgstr "info: wymagana jest ścieżka"
@@ -1343,7 +1510,8 @@ msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: wymagana jest ścieżka urządzenia (zobacz: synfiles volumes)"
 
 msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
-msgstr "volumes --watch: nie ma czego obserwować — brak mountinfo, uevents i inotify"
+msgstr ""
+"volumes --watch: nie ma czego obserwować — brak mountinfo, uevents i inotify"
 
 #, c-format
 msgid "volumes: unknown option '%s'"

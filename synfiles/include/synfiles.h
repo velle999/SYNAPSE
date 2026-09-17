@@ -206,6 +206,18 @@ int volumes_watch(void);
 int cmd_mount(int argc, char **argv);
 int cmd_unmount(int argc, char **argv);
 
+/* The filesystem a path lives on, for the properties pane: where it is
+ * mounted, what it is, what device backs it, and how full it is. Every string
+ * is malloc'd and RAW (the caller encodes); `image` is the disc image behind a
+ * loop device and NULL for anything else. False when no mount claims the path,
+ * with nothing to free. */
+typedef struct {
+	char *mount, *fstype, *device, *image;
+	unsigned long long total, used, avail;
+} sf_fs_t;
+bool sf_fs_of(const char *path, sf_fs_t *out);
+void sf_fs_free(sf_fs_t *fs);
+
 /* ── netscan.c — what is on this network, before anything is mounted ───────
  *
  * volumes.c lists network places that are already PATHS (gvfs has mounted
@@ -262,6 +274,7 @@ bool sf_cancelled(void);
 void sf_rm_progress_tick(const char *name);
 int cmd_move(int argc, char **argv);
 int cmd_rename(int argc, char **argv);
+int cmd_chmod(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
 int cmd_delete(int argc, char **argv);   /* PERMANENT — gated behind --yes */
 

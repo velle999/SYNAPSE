@@ -31,6 +31,9 @@ msgstr ""
 msgid "%1 connected"
 msgstr ""
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr ""
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] ""
@@ -76,6 +79,9 @@ msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "%1 mounted"
+msgstr ""
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -154,6 +160,9 @@ msgstr ""
 msgid "About SYNAPSE Files"
 msgstr ""
 
+msgid "Accessed"
+msgstr ""
+
 msgid "Add to Places"
 msgstr ""
 
@@ -166,7 +175,19 @@ msgstr ""
 msgid "By name"
 msgstr ""
 
+msgid "Calculate"
+msgstr ""
+
+msgid "Calculating %1…"
+msgstr ""
+
 msgid "Cancel"
+msgstr ""
+
+msgid "Capacity"
+msgstr ""
+
+msgid "Checksums"
 msgstr ""
 
 msgid "Close Split View"
@@ -188,6 +209,9 @@ msgid "Copy"
 msgstr ""
 
 msgid "Copy Path"
+msgstr ""
+
+msgid "Created"
 msgstr ""
 
 msgid "Ctrl+A"
@@ -223,7 +247,13 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
+msgid "Device"
+msgstr ""
+
 msgid "Devices"
+msgstr ""
+
+msgid "Disk"
 msgstr ""
 
 msgid "Done"
@@ -248,10 +278,19 @@ msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr ""
 
+msgid "Execute"
+msgstr ""
+
 msgid "F2"
 msgstr ""
 
 msgid "F5"
+msgstr ""
+
+msgid "Files"
+msgstr ""
+
+msgid "Filesystem"
 msgstr ""
 
 msgid "Find network shares"
@@ -272,6 +311,15 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
+msgid "Free"
+msgstr ""
+
+msgid "General"
+msgstr ""
+
+msgid "Group"
+msgstr ""
+
 msgid "Hidden items are not shown."
 msgstr ""
 
@@ -290,6 +338,9 @@ msgstr ""
 msgid "Icons"
 msgstr ""
 
+msgid "Image file"
+msgstr ""
+
 msgid "In contents"
 msgstr ""
 
@@ -305,13 +356,22 @@ msgstr ""
 msgid "Links to"
 msgstr ""
 
+msgid "Location"
+msgstr ""
+
 msgid "Menu"
+msgstr ""
+
+msgid "Mode"
 msgstr ""
 
 msgid "Modified"
 msgstr ""
 
 msgid "Mount"
+msgstr ""
+
+msgid "Mounted on"
 msgstr ""
 
 msgid "Move to Trash"
@@ -347,6 +407,14 @@ msgstr ""
 msgid "Nothing matches that filter."
 msgstr ""
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr ""
+
+msgid "Only %1 can change these."
+msgstr ""
+
 msgid "Open"
 msgstr ""
 
@@ -368,6 +436,9 @@ msgstr ""
 msgid "Open with"
 msgstr ""
 
+msgid "Others"
+msgstr ""
+
 msgid "Overwrite"
 msgstr ""
 
@@ -380,7 +451,18 @@ msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr ""
 
+msgid "Owner"
+msgstr ""
+
 msgid "Paste"
+msgstr ""
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr ""
+
+msgid "Permissions"
 msgstr ""
 
 msgid "Pin"
@@ -404,6 +486,9 @@ msgstr ""
 msgid "Properties…"
 msgstr ""
 
+msgid "Read"
+msgstr ""
+
 msgid "Recent"
 msgstr ""
 
@@ -420,6 +505,9 @@ msgid "Remove from Places"
 msgstr ""
 
 msgid "Rename…"
+msgstr ""
+
+msgid "Resolution"
 msgstr ""
 
 msgid "Restore"
@@ -470,6 +558,9 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
+msgid "Size on disk"
+msgstr ""
+
 msgid "Skip those"
 msgstr ""
 
@@ -494,10 +585,18 @@ msgstr ""
 msgid "Text"
 msgstr ""
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr ""
+
 msgid "The trash is empty."
 msgstr ""
 
 msgid "This folder is empty."
+msgstr ""
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
 msgstr ""
 
 msgid ""
@@ -520,6 +619,9 @@ msgstr ""
 msgid "Up one folder"
 msgstr ""
 
+msgid "Used"
+msgstr ""
+
 msgid "Vault"
 msgstr ""
 
@@ -527,6 +629,9 @@ msgid "View"
 msgstr ""
 
 msgid "View options"
+msgstr ""
+
+msgid "Write"
 msgstr ""
 
 msgid "a moment left"
@@ -542,6 +647,9 @@ msgid "calculating…"
 msgstr ""
 
 msgid "cancelling…"
+msgstr ""
+
+msgid "capacity"
 msgstr ""
 
 msgid "changed"
@@ -575,6 +683,12 @@ msgid_plural "copying %1 items…"
 msgstr[0] ""
 msgstr[1] ""
 
+msgid "could not be read"
+msgstr ""
+
+msgid "created"
+msgstr ""
+
 msgid "creating %1"
 msgstr ""
 
@@ -585,6 +699,9 @@ msgid "description"
 msgstr ""
 
 msgid "destroying %1…"
+msgstr ""
+
+msgid "device"
 msgstr ""
 
 msgid "disc inserted — %1"
@@ -599,6 +716,9 @@ msgstr ""
 msgid "files"
 msgstr ""
 
+msgid "filesystem"
+msgstr ""
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr ""
 
@@ -608,7 +728,13 @@ msgstr ""
 msgid "format %1 — asking in Disks"
 msgstr ""
 
+msgid "free"
+msgstr ""
+
 msgid "group"
+msgstr ""
+
+msgid "image file"
 msgstr ""
 
 msgid "links"
@@ -630,6 +756,9 @@ msgid "mode"
 msgstr ""
 
 msgid "modified"
+msgstr ""
+
+msgid "mounted on"
 msgstr ""
 
 msgid "mounting %1…"
@@ -688,6 +817,9 @@ msgstr ""
 msgid "renaming to %1"
 msgstr ""
 
+msgid "resolution"
+msgstr ""
+
 msgid "restoring %1"
 msgstr ""
 
@@ -706,6 +838,9 @@ msgstr ""
 msgid "size"
 msgstr ""
 
+msgid "size on disk"
+msgstr ""
+
 msgid "target"
 msgstr ""
 
@@ -716,6 +851,12 @@ msgid "undoing %1…"
 msgstr ""
 
 msgid "unmounting %1…"
+msgstr ""
+
+msgid "used"
+msgstr ""
+
+msgid "waiting…"
 msgstr ""
 
 msgid "working…"
@@ -740,6 +881,14 @@ msgid ""
 "⚠ This is %1, which writes changes to new blocks instead of over the old "
 "ones. The file will be gone, but its contents may still be recoverable from "
 "the disk. Full-disk encryption is what actually prevents that."
+msgstr ""
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr ""
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
 msgstr ""
 
 msgid "actions: need a path"
@@ -913,6 +1062,20 @@ msgstr ""
 msgid "cannot rename %s: %s"
 msgstr ""
 
+msgid "chmod: need an octal mode and a path"
+msgstr ""
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr ""
+
+msgid "a symbolic link has no permissions of its own"
+msgstr ""
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr ""
+
 msgid "mkdir: need a path"
 msgstr ""
 
@@ -967,6 +1130,10 @@ msgid "cannot read %s: %s"
 msgstr ""
 
 msgid "empty"
+msgstr ""
+
+#, c-format
+msgid "%s (%s bytes)"
 msgstr ""
 
 msgid "info: need a path"

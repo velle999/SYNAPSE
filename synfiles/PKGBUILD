@@ -255,7 +255,61 @@ pkgver=0.1.0
 #   line. Eleven checks in synfiles_test.sh, one of which drives a real pointer
 #   over the button eight ways through tests/side_row_eject_hover.qml — and both
 #   of that rig's negative controls still reproduce the old wiring. 418 pass.
-pkgrel=75
+# 76: A MOUNTED ISO NEVER REACHED THE SIDEBAR, PROPERTIES COULD NOT SAY HOW MUCH
+#   ROOM WAS LEFT, AND THE PANEL WAS A 460px COLUMN.
+#   ⛔ THE IMAGE WAS A LOOP DEVICE, AND LOOP WAS NOT A TYPE THE LIST ADMITTED.
+#   udisks2 maps an .iso to /dev/loopN and lsblk calls that TYPE="loop"; only
+#   part/rom/crypt/lvm/disk got through. Mounting from the right-click menu
+#   opened a window on the image and left nothing to click to get back to it or
+#   to eject it with. Loops are admitted as kind=image, under Removable Devices,
+#   with Eject and without Format. A HYBRID image is a container the way a
+#   hybrid stick is — loop1p1 is listed, loop1 is not — and a loop under /run
+#   (the live ISO's own squashfs) stays hidden. An unlabelled image is named
+#   after its FILE, from /sys/block/loopN/loop/backing_file.
+#   ⚠ EJECT HANDS THE LOOP BACK. udisks unmounts a filesystem and never detaches
+#   the loop under it, so a loop set up without autoclear stayed bound and the
+#   image sat in the sidebar, dimmed, after an eject. It is deleted afterwards —
+#   ⛔ but ONLY when Autoclear is false and SetupByUID is this user: a delete
+#   racing the kernel's own autoclear detach escalates to loop-delete-others,
+#   an administrator password prompt for a teardown that already happened.
+#   Ejecting the image the pane is showing moves the pane home first; it used
+#   to re-read a vanished folder and put "cannot read" on the status line. A
+#   disc (image or optical) draws no fill meter — it is always 100%, in amber.
+#   ⚠ `info` NAMES THE DISK. fs_mount, fs_type, fs_device, fs_image (the file
+#   behind a loop), fs_total, fs_used and fs_free, counted exactly as the
+#   sidebar meter counts (f_bavail is free), so the two never disagree about a
+#   drive. The mount is the longest prefix of the resolved path, PREFERRING the
+#   row whose device number is the file's: an automount stacks an autofs
+#   trigger and the real filesystem on one path, and by prefix alone they tie.
+#   Also `disk` (st_blocks, size on disk) and `btime` (statx; left out where
+#   the filesystem keeps none, never guessed from ctime).
+#   ⚠ THE PANEL IS TABBED AND SIZED FROM THE WINDOW. General: icon, name, type,
+#   location, size and size on disk, created/modified/accessed in the
+#   desktop's language, and a Disk section with a meter, free, used, capacity,
+#   mount point, filesystem and device. Permissions: owner, group, and a
+#   read/write/execute grid that works, through the new `synfiles chmod
+#   <octal> <path>` — fchmodat with AT_SYMLINK_NOFOLLOW, so a link is refused
+#   in the same call that would have changed its target, and the whole mode is
+#   passed back so setuid/sticky survive a click. Checksums: MD5, SHA-1,
+#   SHA-256, SHA-512 by coreutils, computed only when asked, one at a time;
+#   pasting a digest (a whole SHA256SUMS line will do) computes the matching
+#   one and says whether it matches. Details: every `info` record, as before.
+#   ⛔ A PROCESS PER RUN behind the panel. `info` on a spun-down drive takes
+#   seconds and quickshell ignores running = true on a live Process, so a
+#   shared one silently dropped the next open; every callback also carries the
+#   generation it started in and ignores itself once the panel has moved on.
+#   ⛔ TWO SHIPPED BUGS FOUND ON THE WAY. finish()'s summary was split into
+#   three printf calls by the translation pass (74) with the `if` still guarding
+#   only the first, so every --rec copy, move and trash ended with a bare
+#   "0 done, 0 skipped, 0 failed" in the record stream, in the desktop's
+#   language; the TUI printed "filter:" on every redraw the same way. And
+#   root.cBad had never been defined — the Destroy sheet, the one dialog here
+#   with no undo, drew no red border and an invisible heading.
+#   52 new strings in all thirteen catalogs, 418/418. 452 checks pass, among
+#   them fake-lsblk loop shapes, a mountinfo fixture where a later autofs row
+#   must lose to the device match, df agreeing on free space, and chmod
+#   refusing a symlink and five malformed modes.
+pkgrel=76
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

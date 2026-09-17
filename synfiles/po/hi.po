@@ -31,6 +31,9 @@ msgstr "%1  ·  %2 चयनित"
 msgid "%1 connected"
 msgstr "%1 कनेक्ट हो गया"
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr "%1 की गणना नहीं हो सकी — फ़ाइल पढ़ी नहीं जा सकी।"
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 पूरा"
@@ -76,6 +79,9 @@ msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "%1 मिनट बाकी"
 msgstr[1] "%1 मिनट बाकी"
+
+msgid "%1 mounted"
+msgstr "%1 माउंट हो गया"
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -156,6 +162,9 @@ msgstr "परिचय"
 msgid "About SYNAPSE Files"
 msgstr "SYNAPSE Files के बारे में"
 
+msgid "Accessed"
+msgstr "अंतिम पहुँच"
+
 msgid "Add to Places"
 msgstr "स्थानों में जोड़ें"
 
@@ -168,8 +177,20 @@ msgstr "पीछे"
 msgid "By name"
 msgstr "नाम से"
 
+msgid "Calculate"
+msgstr "गणना करें"
+
+msgid "Calculating %1…"
+msgstr "%1 की गणना हो रही है…"
+
 msgid "Cancel"
 msgstr "रद्द करें"
+
+msgid "Capacity"
+msgstr "क्षमता"
+
+msgid "Checksums"
+msgstr "चेकसम"
 
 msgid "Close Split View"
 msgstr "विभाजित दृश्य बंद करें"
@@ -191,6 +212,9 @@ msgstr "कॉपी करें"
 
 msgid "Copy Path"
 msgstr "पथ कॉपी करें"
+
+msgid "Created"
+msgstr "बनाया गया"
 
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
@@ -225,8 +249,14 @@ msgstr "स्थायी रूप से नष्ट करें"
 msgid "Details"
 msgstr "विवरण"
 
+msgid "Device"
+msgstr "उपकरण"
+
 msgid "Devices"
 msgstr "उपकरण"
+
+msgid "Disk"
+msgstr "डिस्क"
 
 msgid "Done"
 msgstr "हो गया"
@@ -250,11 +280,20 @@ msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "रद्दी की सारी सामग्री स्थायी रूप से हटा दी जाएगी। इसे वापस नहीं लाया जा सकता।"
 
+msgid "Execute"
+msgstr "चलाना"
+
 msgid "F2"
 msgstr "F2"
 
 msgid "F5"
 msgstr "F5"
+
+msgid "Files"
+msgstr "फ़ाइलें"
+
+msgid "Filesystem"
+msgstr "फ़ाइल सिस्टम"
 
 msgid "Find network shares"
 msgstr "नेटवर्क साझेदारियाँ खोजें"
@@ -274,6 +313,15 @@ msgstr "फ़ॉर्मैट करें…"
 msgid "Forward"
 msgstr "आगे"
 
+msgid "Free"
+msgstr "खाली"
+
+msgid "General"
+msgstr "सामान्य"
+
+msgid "Group"
+msgstr "समूह"
+
 msgid "Hidden items are not shown."
 msgstr "छिपी वस्तुएँ नहीं दिखाई जा रहीं।"
 
@@ -292,6 +340,9 @@ msgstr "घर"
 msgid "Icons"
 msgstr "चिह्न"
 
+msgid "Image file"
+msgstr "इमेज फ़ाइल"
+
 msgid "In contents"
 msgstr "सामग्री में"
 
@@ -307,14 +358,23 @@ msgstr "बायाँ  ·  %1"
 msgid "Links to"
 msgstr "यहाँ जोड़ता है"
 
+msgid "Location"
+msgstr "स्थान"
+
 msgid "Menu"
 msgstr "मेन्यू"
+
+msgid "Mode"
+msgstr "मोड"
 
 msgid "Modified"
 msgstr "बदला गया"
 
 msgid "Mount"
 msgstr "माउंट करें"
+
+msgid "Mounted on"
+msgstr "माउंट स्थान"
 
 msgid "Move to Trash"
 msgstr "रद्दी में डालें"
@@ -349,6 +409,14 @@ msgstr "कुछ नहीं मिला।"
 msgid "Nothing matches that filter."
 msgstr "उस छन्नी से कुछ मेल नहीं खाता।"
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr "फ़ोल्डर पर, पढ़ना उसके अंदर की चीज़ें दिखाने देता है, लिखना चीज़ें जोड़ने और हटाने देता है, और चलाना उसे खोलने देता है।"
+
+msgid "Only %1 can change these."
+msgstr "इन्हें केवल %1 बदल सकता है।"
+
 msgid "Open"
 msgstr "खोलें"
 
@@ -370,6 +438,9 @@ msgstr "नए टैब में खोलें"
 msgid "Open with"
 msgstr "इससे खोलें"
 
+msgid "Others"
+msgstr "अन्य"
+
 msgid "Overwrite"
 msgstr "ऊपर लिखें"
 
@@ -384,8 +455,19 @@ msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "ऊपर लिखकर मिटाया गया। यह रद्दी में नहीं जाता और वापस नहीं लाया जा सकता।"
 
+msgid "Owner"
+msgstr "स्वामी"
+
 msgid "Paste"
 msgstr "चिपकाएँ"
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr "इस फ़ाइल को जाँचने के लिए डाउनलोड पेज से चेकसम चिपकाएँ। सही एल्गोरिद्म अपने-आप गणना किया जाता है।"
+
+msgid "Permissions"
+msgstr "अनुमतियाँ"
 
 msgid "Pin"
 msgstr "पिन करें"
@@ -408,6 +490,9 @@ msgstr "गुण"
 msgid "Properties…"
 msgstr "गुण…"
 
+msgid "Read"
+msgstr "पढ़ना"
+
 msgid "Recent"
 msgstr "हाल की"
 
@@ -425,6 +510,9 @@ msgstr "स्थानों से हटाएँ"
 
 msgid "Rename…"
 msgstr "नाम बदलें…"
+
+msgid "Resolution"
+msgstr "रिज़ॉल्यूशन"
 
 msgid "Restore"
 msgstr "पुनर्स्थापित करें"
@@ -474,6 +562,9 @@ msgstr "किनारे की पट्टी"
 msgid "Size"
 msgstr "आकार"
 
+msgid "Size on disk"
+msgstr "डिस्क पर आकार"
+
 msgid "Skip those"
 msgstr "उन्हें छोड़ें"
 
@@ -498,11 +589,19 @@ msgstr "विभाजित दृश्य (F3)"
 msgid "Text"
 msgstr "पाठ"
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr "यह MD5, SHA-1, SHA-256 या SHA-512 चेकसम नहीं है।"
+
 msgid "The trash is empty."
 msgstr "रद्दी खाली है।"
 
 msgid "This folder is empty."
 msgstr "यह फ़ोल्डर खाली है।"
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
+msgstr "यह एक लिंक है। इसकी अनुमतियाँ उस फ़ाइल की हैं जिसकी ओर यह इशारा करता है — उन्हें वहीं बदलें।"
 
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
@@ -525,6 +624,9 @@ msgstr "अनमाउंट करें"
 msgid "Up one folder"
 msgstr "एक फ़ोल्डर ऊपर"
 
+msgid "Used"
+msgstr "उपयोग में"
+
 msgid "Vault"
 msgstr "तिजोरी"
 
@@ -533,6 +635,9 @@ msgstr "दृश्य"
 
 msgid "View options"
 msgstr "दृश्य विकल्प"
+
+msgid "Write"
+msgstr "लिखना"
 
 msgid "a moment left"
 msgstr "बस कुछ ही पल"
@@ -548,6 +653,9 @@ msgstr "गणना हो रही है…"
 
 msgid "cancelling…"
 msgstr "रद्द किया जा रहा है…"
+
+msgid "capacity"
+msgstr "क्षमता"
 
 msgid "changed"
 msgstr "बदला गया"
@@ -580,6 +688,12 @@ msgid_plural "copying %1 items…"
 msgstr[0] "%1 वस्तु कॉपी हो रही है…"
 msgstr[1] "%1 वस्तुएँ कॉपी हो रही हैं…"
 
+msgid "could not be read"
+msgstr "पढ़ा नहीं जा सका"
+
+msgid "created"
+msgstr "बनाया गया"
+
 msgid "creating %1"
 msgstr "%1 बनाया जा रहा है"
 
@@ -591,6 +705,9 @@ msgstr "विवरण"
 
 msgid "destroying %1…"
 msgstr "%1 नष्ट किया जा रहा है…"
+
+msgid "device"
+msgstr "उपकरण"
 
 msgid "disc inserted — %1"
 msgstr "डिस्क डाली गई — %1"
@@ -604,6 +721,9 @@ msgstr "रद्दी खाली की जा रही है…"
 msgid "files"
 msgstr "फ़ाइलें"
 
+msgid "filesystem"
+msgstr "फ़ाइल सिस्टम"
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "इन वस्तुओं को छानें…   (खोजने के लिए Ctrl+F)"
 
@@ -613,8 +733,14 @@ msgstr "फ़ोल्डर"
 msgid "format %1 — asking in Disks"
 msgstr "%1 फ़ॉर्मैट — डिस्क में पूछा जा रहा है"
 
+msgid "free"
+msgstr "खाली"
+
 msgid "group"
 msgstr "समूह"
+
+msgid "image file"
+msgstr "इमेज फ़ाइल"
 
 msgid "links"
 msgstr "कड़ियाँ"
@@ -636,6 +762,9 @@ msgstr "अनुमतियाँ"
 
 msgid "modified"
 msgstr "बदला गया"
+
+msgid "mounted on"
+msgstr "माउंट स्थान"
 
 msgid "mounting %1…"
 msgstr "%1 माउंट हो रहा है…"
@@ -693,6 +822,9 @@ msgstr "पढ़ा जा रहा है…"
 msgid "renaming to %1"
 msgstr "नाम बदलकर %1 किया जा रहा है"
 
+msgid "resolution"
+msgstr "रिज़ॉल्यूशन"
+
 msgid "restoring %1"
 msgstr "%1 पुनर्स्थापित हो रहा है"
 
@@ -711,6 +843,9 @@ msgstr "चयनित"
 msgid "size"
 msgstr "आकार"
 
+msgid "size on disk"
+msgstr "डिस्क पर आकार"
+
 msgid "target"
 msgstr "लक्ष्य"
 
@@ -722,6 +857,12 @@ msgstr "%1 वापस लिया जा रहा है…"
 
 msgid "unmounting %1…"
 msgstr "%1 अनमाउंट हो रहा है…"
+
+msgid "used"
+msgstr "उपयोग में"
+
+msgid "waiting…"
+msgstr "प्रतीक्षा…"
 
 msgid "working…"
 msgstr "काम चल रहा है…"
@@ -752,6 +893,14 @@ msgstr ""
 "⚠ यह %1 है, जो बदलाव पुराने खंडों पर लिखने के बजाय नए खंडों में लिखता है। फ़ाइल चली "
 "जाएगी, पर उसकी सामग्री शायद डिस्क से वापस पाई जा सकती है। इसे सचमुच रोकती है पूरी "
 "डिस्क की एन्क्रिप्शन।"
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr "✓ मेल खाता है। फ़ाइल का %1 वही है जो आपने चिपकाया।"
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
+msgstr "✗ मेल नहीं खाता। फ़ाइल का %1 अलग है — यह वह फ़ाइल नहीं है जिसका वह चेकसम है, या यह ख़राब है।"
 
 msgid "actions: need a path"
 msgstr "actions: एक पथ चाहिए"
@@ -929,6 +1078,20 @@ msgstr "rename: '%s' उपयोग योग्य नाम नहीं ह�
 msgid "cannot rename %s: %s"
 msgstr "%s का नाम नहीं बदला जा सका: %s"
 
+msgid "chmod: need an octal mode and a path"
+msgstr "chmod: एक ऑक्टल मोड और एक पथ चाहिए"
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr "chmod: '%s' 644 जैसा ऑक्टल मोड नहीं है"
+
+msgid "a symbolic link has no permissions of its own"
+msgstr "प्रतीकात्मक लिंक की अपनी कोई अनुमतियाँ नहीं होतीं"
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr "%s की अनुमतियाँ नहीं बदली जा सकीं: %s"
+
 msgid "mkdir: need a path"
 msgstr "mkdir: एक पथ चाहिए"
 
@@ -987,6 +1150,10 @@ msgstr "%s पढ़ा नहीं जा सका: %s"
 
 msgid "empty"
 msgstr "खाली"
+
+#, c-format
+msgid "%s (%s bytes)"
+msgstr "%s (%s बाइट)"
 
 msgid "info: need a path"
 msgstr "info: एक पथ चाहिए"
@@ -1307,7 +1474,8 @@ msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: एक उपकरण पथ चाहिए (देखें: synfiles volumes)"
 
 msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
-msgstr "volumes --watch: निगरानी के लिए कुछ नहीं — न mountinfo, न uevents, न inotify"
+msgstr ""
+"volumes --watch: निगरानी के लिए कुछ नहीं — न mountinfo, न uevents, न inotify"
 
 #, c-format
 msgid "volumes: unknown option '%s'"

@@ -31,6 +31,9 @@ msgstr "%1  ·  %2 geselecteerd"
 msgid "%1 connected"
 msgstr "%1 verbonden"
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr "%1 kon niet worden berekend — het bestand kon niet worden gelezen."
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 klaar"
@@ -76,6 +79,9 @@ msgid "%1 min left"
 msgid_plural "%1 min left"
 msgstr[0] "nog %1 min"
 msgstr[1] "nog %1 min"
+
+msgid "%1 mounted"
+msgstr "%1 aangekoppeld"
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -156,6 +162,9 @@ msgstr "Over"
 msgid "About SYNAPSE Files"
 msgstr "Over SYNAPSE Files"
 
+msgid "Accessed"
+msgstr "Laatst geopend"
+
 msgid "Add to Places"
 msgstr "Aan locaties toevoegen"
 
@@ -168,8 +177,20 @@ msgstr "Terug"
 msgid "By name"
 msgstr "Op naam"
 
+msgid "Calculate"
+msgstr "Berekenen"
+
+msgid "Calculating %1…"
+msgstr "%1 wordt berekend…"
+
 msgid "Cancel"
 msgstr "Annuleren"
+
+msgid "Capacity"
+msgstr "Capaciteit"
+
+msgid "Checksums"
+msgstr "Controlesommen"
 
 msgid "Close Split View"
 msgstr "Gesplitste weergave sluiten"
@@ -191,6 +212,9 @@ msgstr "Kopiëren"
 
 msgid "Copy Path"
 msgstr "Pad kopiëren"
+
+msgid "Created"
+msgstr "Aangemaakt"
 
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
@@ -227,8 +251,14 @@ msgstr "Definitief vernietigen"
 msgid "Details"
 msgstr "Details"
 
+msgid "Device"
+msgstr "Apparaat"
+
 msgid "Devices"
 msgstr "Apparaten"
+
+msgid "Disk"
+msgstr "Schijf"
 
 msgid "Done"
 msgstr "Klaar"
@@ -254,11 +284,20 @@ msgstr ""
 "Alles in de prullenbak wordt definitief verwijderd. Dit kan niet ongedaan "
 "worden gemaakt."
 
+msgid "Execute"
+msgstr "Uitvoeren"
+
 msgid "F2"
 msgstr "F2"
 
 msgid "F5"
 msgstr "F5"
+
+msgid "Files"
+msgstr "Bestanden"
+
+msgid "Filesystem"
+msgstr "Bestandssysteem"
 
 msgid "Find network shares"
 msgstr "Netwerkshares zoeken"
@@ -278,6 +317,15 @@ msgstr "Formatteren…"
 msgid "Forward"
 msgstr "Vooruit"
 
+msgid "Free"
+msgstr "Vrij"
+
+msgid "General"
+msgstr "Algemeen"
+
+msgid "Group"
+msgstr "Groep"
+
 msgid "Hidden items are not shown."
 msgstr "Verborgen items worden niet getoond."
 
@@ -296,6 +344,9 @@ msgstr "Persoonlijke map"
 msgid "Icons"
 msgstr "Pictogrammen"
 
+msgid "Image file"
+msgstr "Imagebestand"
+
 msgid "In contents"
 msgstr "In de inhoud"
 
@@ -311,14 +362,23 @@ msgstr "Links  ·  %1"
 msgid "Links to"
 msgstr "Verwijst naar"
 
+msgid "Location"
+msgstr "Locatie"
+
 msgid "Menu"
 msgstr "Menu"
+
+msgid "Mode"
+msgstr "Modus"
 
 msgid "Modified"
 msgstr "Gewijzigd"
 
 msgid "Mount"
 msgstr "Aankoppelen"
+
+msgid "Mounted on"
+msgstr "Aangekoppeld op"
 
 msgid "Move to Trash"
 msgstr "Naar de prullenbak"
@@ -353,6 +413,14 @@ msgstr "Niets gevonden."
 msgid "Nothing matches that filter."
 msgstr "Niets komt overeen met dat filter."
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr "Bij een map laat Lezen de inhoud zien, laat Schrijven items toevoegen en verwijderen, en laat Uitvoeren de map openen."
+
+msgid "Only %1 can change these."
+msgstr "Alleen %1 kan deze wijzigen."
+
 msgid "Open"
 msgstr "Openen"
 
@@ -374,6 +442,9 @@ msgstr "In nieuw tabblad openen"
 msgid "Open with"
 msgstr "Openen met"
 
+msgid "Others"
+msgstr "Anderen"
+
 msgid "Overwrite"
 msgstr "Overschrijven"
 
@@ -390,8 +461,19 @@ msgstr ""
 "Overschreven en verwijderd. Het gaat niet naar de prullenbak en er is geen "
 "weg terug."
 
+msgid "Owner"
+msgstr "Eigenaar"
+
 msgid "Paste"
 msgstr "Plakken"
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr "Plak een controlesom van een downloadpagina om dit bestand ermee te vergelijken. Het juiste algoritme wordt automatisch berekend."
+
+msgid "Permissions"
+msgstr "Rechten"
 
 msgid "Pin"
 msgstr "Vastzetten"
@@ -414,6 +496,9 @@ msgstr "Eigenschappen"
 msgid "Properties…"
 msgstr "Eigenschappen…"
 
+msgid "Read"
+msgstr "Lezen"
+
 msgid "Recent"
 msgstr "Recent"
 
@@ -431,6 +516,9 @@ msgstr "Uit locaties verwijderen"
 
 msgid "Rename…"
 msgstr "Hernoemen…"
+
+msgid "Resolution"
+msgstr "Resolutie"
 
 msgid "Restore"
 msgstr "Terugzetten"
@@ -480,6 +568,9 @@ msgstr "Zijbalk"
 msgid "Size"
 msgstr "Grootte"
 
+msgid "Size on disk"
+msgstr "Grootte op schijf"
+
 msgid "Skip those"
 msgstr "Die overslaan"
 
@@ -504,11 +595,19 @@ msgstr "Gesplitste weergave (F3)"
 msgid "Text"
 msgstr "Tekst"
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr "Dat is geen MD5-, SHA-1-, SHA-256- of SHA-512-controlesom."
+
 msgid "The trash is empty."
 msgstr "De prullenbak is leeg."
 
 msgid "This folder is empty."
 msgstr "Deze map is leeg."
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
+msgstr "Dit is een koppeling. De rechten zijn die van het bestand waarnaar ze verwijst — wijzig ze daar."
 
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
@@ -532,6 +631,9 @@ msgstr "Afkoppelen"
 msgid "Up one folder"
 msgstr "Eén map omhoog"
 
+msgid "Used"
+msgstr "Gebruikt"
+
 msgid "Vault"
 msgstr "Kluis"
 
@@ -540,6 +642,9 @@ msgstr "Weergave"
 
 msgid "View options"
 msgstr "Weergaveopties"
+
+msgid "Write"
+msgstr "Schrijven"
 
 msgid "a moment left"
 msgstr "nog even"
@@ -555,6 +660,9 @@ msgstr "berekenen…"
 
 msgid "cancelling…"
 msgstr "annuleren…"
+
+msgid "capacity"
+msgstr "capaciteit"
 
 msgid "changed"
 msgstr "gewijzigd"
@@ -587,6 +695,12 @@ msgid_plural "copying %1 items…"
 msgstr[0] "%1 item kopiëren…"
 msgstr[1] "%1 items kopiëren…"
 
+msgid "could not be read"
+msgstr "kon niet worden gelezen"
+
+msgid "created"
+msgstr "aangemaakt"
+
 msgid "creating %1"
 msgstr "%1 aanmaken"
 
@@ -598,6 +712,9 @@ msgstr "beschrijving"
 
 msgid "destroying %1…"
 msgstr "%1 vernietigen…"
+
+msgid "device"
+msgstr "apparaat"
 
 msgid "disc inserted — %1"
 msgstr "Schijf geplaatst — %1"
@@ -611,6 +728,9 @@ msgstr "prullenbak legen…"
 msgid "files"
 msgstr "bestanden"
 
+msgid "filesystem"
+msgstr "bestandssysteem"
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "deze items filteren…   (Ctrl+F om te zoeken)"
 
@@ -620,8 +740,14 @@ msgstr "mappen"
 msgid "format %1 — asking in Disks"
 msgstr "%1 formatteren — vraag in Schijven"
 
+msgid "free"
+msgstr "vrij"
+
 msgid "group"
 msgstr "groep"
+
+msgid "image file"
+msgstr "imagebestand"
 
 msgid "links"
 msgstr "koppelingen"
@@ -643,6 +769,9 @@ msgstr "rechten"
 
 msgid "modified"
 msgstr "gewijzigd"
+
+msgid "mounted on"
+msgstr "aangekoppeld op"
 
 msgid "mounting %1…"
 msgstr "%1 aankoppelen…"
@@ -700,6 +829,9 @@ msgstr "lezen…"
 msgid "renaming to %1"
 msgstr "hernoemen naar %1"
 
+msgid "resolution"
+msgstr "resolutie"
+
 msgid "restoring %1"
 msgstr "%1 terugzetten"
 
@@ -718,6 +850,9 @@ msgstr "geselecteerd"
 msgid "size"
 msgstr "grootte"
 
+msgid "size on disk"
+msgstr "grootte op schijf"
+
 msgid "target"
 msgstr "doel"
 
@@ -729,6 +864,12 @@ msgstr "%1 ongedaan maken…"
 
 msgid "unmounting %1…"
 msgstr "%1 afkoppelen…"
+
+msgid "used"
+msgstr "gebruikt"
+
+msgid "waiting…"
+msgstr "wachten…"
 
 msgid "working…"
 msgstr "bezig…"
@@ -760,6 +901,14 @@ msgstr ""
 "⚠ Dit is %1, dat wijzigingen naar nieuwe blokken schrijft in plaats van over "
 "de oude. Het bestand is dan weg, maar de inhoud is mogelijk nog van de "
 "schijf te herstellen. Alleen volledige schijfversleuteling voorkomt dat echt."
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr "✓ Komt overeen. De %1 van het bestand is de geplakte."
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
+msgstr "✗ Komt niet overeen. De %1 van het bestand is anders — het is niet het bestand dat die controlesom beschrijft, of het is beschadigd."
 
 msgid "actions: need a path"
 msgstr "actions: een pad is nodig"
@@ -939,6 +1088,20 @@ msgstr "rename: '%s' is geen bruikbare naam"
 msgid "cannot rename %s: %s"
 msgstr "kan %s niet hernoemen: %s"
 
+msgid "chmod: need an octal mode and a path"
+msgstr "chmod: een octale modus en een pad zijn nodig"
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr "chmod: '%s' is geen octale modus zoals 644"
+
+msgid "a symbolic link has no permissions of its own"
+msgstr "een symbolische koppeling heeft geen eigen rechten"
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr "kan de rechten van %s niet wijzigen: %s"
+
 msgid "mkdir: need a path"
 msgstr "mkdir: een pad is nodig"
 
@@ -997,6 +1160,10 @@ msgstr "kan %s niet lezen: %s"
 
 msgid "empty"
 msgstr "leeg"
+
+#, c-format
+msgid "%s (%s bytes)"
+msgstr "%s (%s bytes)"
 
 msgid "info: need a path"
 msgstr "info: een pad is nodig"
@@ -1327,7 +1494,8 @@ msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: een apparaatpad is nodig (zie: synfiles volumes)"
 
 msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
-msgstr "volumes --watch: niets om te volgen — geen mountinfo, uevents of inotify"
+msgstr ""
+"volumes --watch: niets om te volgen — geen mountinfo, uevents of inotify"
 
 #, c-format
 msgid "volumes: unknown option '%s'"

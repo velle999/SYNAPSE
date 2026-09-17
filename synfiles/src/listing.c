@@ -402,6 +402,25 @@ static void kv(const char *key, const char *value)
 		printf("%s%-12s%s %s\n", C_DIM(), key, C_RESET(), value);
 }
 
+/* A byte count. The record keeps the bare integer a script can do arithmetic
+ * on; a person reading `synfiles info` — or the TUI's `i`, which is this —
+ * gets "2.1 GiB (2297742065 bytes)", because thirteen digits of free space is
+ * a number nobody reads. */
+static void kv_bytes(const char *key, unsigned long long v)
+{
+	char *n = xasprintf("%llu", v);
+	if (g_out == OUT_REC) {
+		rec_row(2, key, n);
+	} else {
+		char *h = human_size((off_t)v);
+		printf("%s%-12s%s ", C_DIM(), key, C_RESET());
+		printf(_("%s (%s bytes)"), h, n);
+		putchar('\n');
+		free(h);
+	}
+	free(n);
+}
+
 int cmd_info(int argc, char **argv)
 {
 	if (argc < 1)
@@ -448,7 +467,11 @@ int cmd_info(int argc, char **argv)
 	kv("icon", icon_for(mime, is_dir));
 
 	char *n;
-	n = xasprintf("%lld", (long long)tst.st_size);          kv("size", n); free(n);
+	kv_bytes("size", (unsigned long long)tst.st_size);
+	/* What it occupies, which is not what it holds: a sparse VM image, a
+	 * btrfs-compressed file and a 1-byte file on a 4K filesystem all differ.
+	 * st_blocks is in 512-byte units whatever the filesystem's block size. */
+	kv_bytes("disk", (unsigned long long)tst.st_blocks * 512ULL);
 
 	/* How big the picture is — the one question a properties pane is asked
 	 * that stat() cannot answer. Emitted only when the file actually has
@@ -469,6 +492,18 @@ int cmd_info(int argc, char **argv)
 	n = xasprintf("%lld", (long long)tst.st_mtime);         kv("mtime", n); free(n);
 	n = xasprintf("%lld", (long long)tst.st_atime);         kv("atime", n); free(n);
 	n = xasprintf("%lld", (long long)tst.st_ctime);         kv("ctime", n); free(n);
+
+	/* When it was CREATED. stat() has no such field — st_ctime is the last
+	 * inode CHANGE, which a chmod moves — so this is statx's btime, and it is
+	 * left out entirely where the filesystem does not record one (tmpfs on
+	 * older kernels, most FUSE mounts) rather than guessed from ctime. */
+	struct statx sx;
+	if (statx(AT_FDCWD, path, broken ? AT_SYMLINK_NOFOLLOW : 0,
+	          STATX_BTIME, &sx) == 0 && (sx.stx_mask & STATX_BTIME)) {
+		n = xasprintf("%lld", (long long)sx.stx_btime.tv_sec);
+		kv("btime", n);
+		free(n);
+	}
 	n = xasprintf("%lu", (unsigned long)tst.st_nlink);      kv("links", n); free(n);
 
 	struct passwd *pw = getpwuid(tst.st_uid);
@@ -485,6 +520,35 @@ int cmd_info(int argc, char **argv)
 		kv("target", et);
 		free(et);
 		free(t);
+	}
+
+	/* The disk it is on, and how much room that disk has left. "Will this
+	 * fit" is the question a properties pane gets asked about a 2 GB archive
+	 * as often as "how big is it", and without the mount point the sidebar's
+	 * meters cannot answer it — nothing says which of three drives a file
+	 * three folders deep is on. Last, so every row above keeps its place. */
+	sf_fs_t fs;
+	if (sf_fs_of(path, &fs)) {
+		char *e = pct_encode(fs.mount, true);
+		kv("fs_mount", e);
+		free(e);
+		kv("fs_type", fs.fstype);
+		e = pct_encode(fs.device, true);
+		kv("fs_device", e);
+		free(e);
+		if (fs.image) {
+			e = pct_encode(fs.image, true);
+			kv("fs_image", e);
+			free(e);
+		}
+		/* No totals when statvfs could not answer: a row of zeros reads as
+		 * a full disk, which is a worse wrong answer than none. */
+		if (fs.total) {
+			kv_bytes("fs_total", fs.total);
+			kv_bytes("fs_used", fs.used);
+			kv_bytes("fs_free", fs.avail);
+		}
+		sf_fs_free(&fs);
 	}
 
 	return 0;

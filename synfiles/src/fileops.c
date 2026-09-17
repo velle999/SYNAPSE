@@ -668,11 +668,16 @@ static args_t parse_args(int argc, char **argv, const char *verb)
 
 static int finish(tally_t *t)
 {
-	if (g_out == OUT_HUMAN && (t->done || t->skipped || t->failed))
+	/* ⛔ BRACED. The translation pass split one printf into three and left
+	 * the `if` guarding only the first, so every --rec copy, move and trash
+	 * ended with a bare "0 done, 0 skipped, 0 failed" line in the record
+	 * stream — in the desktop's language. */
+	if (g_out == OUT_HUMAN && (t->done || t->skipped || t->failed)) {
 		printf("%s", C_DIM());
 		printf(_("%d done, %d skipped, %d failed"),
 		       t->done, t->skipped, t->failed);
 		printf("%s\n", C_RESET());
+	}
 	return t->failed ? 1 : 0;
 }
 
@@ -1127,6 +1132,65 @@ int cmd_rename(int argc, char **argv)
 	free(target);
 	free(parent);
 	free(src);
+	return rc;
+}
+
+/* ── chmod — the permission checkboxes in Properties ────────────────────────
+ *
+ * An OCTAL mode and nothing else. The GUI knows every bit it is setting,
+ * because it starts from the mode `info` reported and flips one; symbolic
+ * modes ("u+x") would be a second parser for a caller that never needs one.
+ * All twelve bits are taken as given, so a setuid bit the checkboxes do not
+ * draw survives a click on "others may read" — the caller passes it back.
+ *
+ * ⛔ NEVER THROUGH A SYMLINK. fchmodat with AT_SYMLINK_NOFOLLOW refuses a link
+ * (EOPNOTSUPP) instead of changing whatever it points at, and it answers that
+ * in the same call that does the change: no lstat() first, so nothing can be
+ * swapped for a link between the look and the chmod.
+ *
+ * Not journalled. The way back is the same checkbox, and an undo entry that
+ * put back a mode would sit in the Ctrl+Z chip above every later move. */
+int cmd_chmod(int argc, char **argv)
+{
+	if (argc < 2)
+		die(_("chmod: need an octal mode and a path"));
+
+	const char *m = argv[0];
+	char *end = NULL;
+	errno = 0;
+	long mode = strtol(m, &end, 8);
+	if (!*m || *m == '-' || *m == '+' || *end || errno || strlen(m) > 5
+	    || mode < 0 || mode > 07777)
+		die(_("chmod: '%s' is not an octal mode like 644"), m);
+
+	if (g_out == OUT_REC)
+		rec_row(3, "path", "status", "detail");
+
+	int rc = 0;
+	for (int i = 1; i < argc; i++) {
+		const char *path = argv[i];
+		char *oct = xasprintf("%04lo", mode);
+		if (fchmodat(AT_FDCWD, path, (mode_t)mode, AT_SYMLINK_NOFOLLOW) != 0) {
+			const char *why = (errno == EOPNOTSUPP)
+				? _("a symbolic link has no permissions of its own")
+				: strerror(errno);
+			if (g_out == OUT_REC) {
+				char *e = pct_encode(path, true);
+				rec_row(3, e, "failed", why);
+				free(e);
+			} else {
+				warn(_("cannot change permissions of %s: %s"), path, why);
+			}
+			rc = 1;
+		} else if (g_out == OUT_REC) {
+			char *e = pct_encode(path, true);
+			rec_row(3, e, "done", oct);
+			free(e);
+		} else {
+			printf("%s  %s\n", oct, path);
+		}
+		free(oct);
+	}
 	return rc;
 }
 

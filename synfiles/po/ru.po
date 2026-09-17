@@ -32,6 +32,9 @@ msgstr "%1  ·  выбрано %2"
 msgid "%1 connected"
 msgstr "%1 подключён"
 
+msgid "%1 could not be calculated — the file could not be read."
+msgstr "Не удалось вычислить %1 — файл не читается."
+
 msgid "%1 done"
 msgid_plural "%1 done"
 msgstr[0] "%1 готов"
@@ -85,6 +88,9 @@ msgid_plural "%1 min left"
 msgstr[0] "осталась %1 мин"
 msgstr[1] "осталось %1 мин"
 msgstr[2] "осталось %1 мин"
+
+msgid "%1 mounted"
+msgstr "%1 подключён"
 
 msgid "%1 network place found"
 msgid_plural "%1 network places found"
@@ -174,6 +180,9 @@ msgstr "О программе"
 msgid "About SYNAPSE Files"
 msgstr "О SYNAPSE Files"
 
+msgid "Accessed"
+msgstr "Последний доступ"
+
 msgid "Add to Places"
 msgstr "Добавить в места"
 
@@ -186,8 +195,20 @@ msgstr "Назад"
 msgid "By name"
 msgstr "По имени"
 
+msgid "Calculate"
+msgstr "Вычислить"
+
+msgid "Calculating %1…"
+msgstr "Вычисление %1…"
+
 msgid "Cancel"
 msgstr "Отмена"
+
+msgid "Capacity"
+msgstr "Ёмкость"
+
+msgid "Checksums"
+msgstr "Контрольные суммы"
 
 msgid "Close Split View"
 msgstr "Закрыть разделённый вид"
@@ -209,6 +230,9 @@ msgstr "Копировать"
 
 msgid "Copy Path"
 msgstr "Копировать путь"
+
+msgid "Created"
+msgstr "Создан"
 
 msgid "Ctrl+A"
 msgstr "Ctrl+A"
@@ -243,8 +267,14 @@ msgstr "Уничтожить навсегда"
 msgid "Details"
 msgstr "Подробности"
 
+msgid "Device"
+msgstr "Устройство"
+
 msgid "Devices"
 msgstr "Устройства"
+
+msgid "Disk"
+msgstr "Диск"
 
 msgid "Done"
 msgstr "Готово"
@@ -268,11 +298,20 @@ msgid ""
 "Everything in the trash will be removed permanently. This cannot be undone."
 msgstr "Всё в корзине будет удалено навсегда. Это нельзя отменить."
 
+msgid "Execute"
+msgstr "Выполнение"
+
 msgid "F2"
 msgstr "F2"
 
 msgid "F5"
 msgstr "F5"
+
+msgid "Files"
+msgstr "Файлы"
+
+msgid "Filesystem"
+msgstr "Файловая система"
 
 msgid "Find network shares"
 msgstr "Найти сетевые ресурсы"
@@ -292,6 +331,15 @@ msgstr "Форматировать…"
 msgid "Forward"
 msgstr "Вперёд"
 
+msgid "Free"
+msgstr "Свободно"
+
+msgid "General"
+msgstr "Общие"
+
+msgid "Group"
+msgstr "Группа"
+
 msgid "Hidden items are not shown."
 msgstr "Скрытые объекты не показаны."
 
@@ -310,6 +358,9 @@ msgstr "Домашняя папка"
 msgid "Icons"
 msgstr "Значки"
 
+msgid "Image file"
+msgstr "Файл образа"
+
 msgid "In contents"
 msgstr "В содержимом"
 
@@ -325,14 +376,23 @@ msgstr "Слева  ·  %1"
 msgid "Links to"
 msgstr "Ссылается на"
 
+msgid "Location"
+msgstr "Расположение"
+
 msgid "Menu"
 msgstr "Меню"
+
+msgid "Mode"
+msgstr "Режим"
 
 msgid "Modified"
 msgstr "Изменён"
 
 msgid "Mount"
 msgstr "Подключить"
+
+msgid "Mounted on"
+msgstr "Точка подключения"
 
 msgid "Move to Trash"
 msgstr "В корзину"
@@ -367,6 +427,14 @@ msgstr "Ничего не найдено."
 msgid "Nothing matches that filter."
 msgstr "Ничего не подходит под этот фильтр."
 
+msgid ""
+"On a folder, Read lists what is in it, Write adds and removes things, and "
+"Execute lets you open it."
+msgstr "Для папки «Чтение» позволяет просматривать её содержимое, «Запись» — добавлять и удалять элементы, а «Выполнение» — открывать её."
+
+msgid "Only %1 can change these."
+msgstr "Изменить их может только %1."
+
 msgid "Open"
 msgstr "Открыть"
 
@@ -388,6 +456,9 @@ msgstr "Открыть в новой вкладке"
 msgid "Open with"
 msgstr "Открыть с помощью"
 
+msgid "Others"
+msgstr "Остальные"
+
 msgid "Overwrite"
 msgstr "Перезаписать"
 
@@ -402,8 +473,19 @@ msgid ""
 "Overwritten and deleted. It does not go to the Trash and there is no undo."
 msgstr "Перезаписано и удалено. В корзину не попадает, и отменить нельзя."
 
+msgid "Owner"
+msgstr "Владелец"
+
 msgid "Paste"
 msgstr "Вставить"
+
+msgid ""
+"Paste a checksum from a download page to check this file against it. The "
+"right algorithm is calculated automatically."
+msgstr "Вставьте контрольную сумму со страницы загрузки, чтобы проверить этот файл. Нужный алгоритм вычисляется автоматически."
+
+msgid "Permissions"
+msgstr "Права доступа"
 
 msgid "Pin"
 msgstr "Закрепить"
@@ -426,6 +508,9 @@ msgstr "Свойства"
 msgid "Properties…"
 msgstr "Свойства…"
 
+msgid "Read"
+msgstr "Чтение"
+
 msgid "Recent"
 msgstr "Недавние"
 
@@ -443,6 +528,9 @@ msgstr "Убрать из мест"
 
 msgid "Rename…"
 msgstr "Переименовать…"
+
+msgid "Resolution"
+msgstr "Разрешение"
 
 msgid "Restore"
 msgstr "Восстановить"
@@ -492,6 +580,9 @@ msgstr "Боковая панель"
 msgid "Size"
 msgstr "Размер"
 
+msgid "Size on disk"
+msgstr "Размер на диске"
+
 msgid "Skip those"
 msgstr "Пропустить их"
 
@@ -516,11 +607,19 @@ msgstr "Разделённый вид (F3)"
 msgid "Text"
 msgstr "Текст"
 
+msgid "That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum."
+msgstr "Это не контрольная сумма MD5, SHA-1, SHA-256 или SHA-512."
+
 msgid "The trash is empty."
 msgstr "Корзина пуста."
 
 msgid "This folder is empty."
 msgstr "Эта папка пуста."
+
+msgid ""
+"This is a link. Its permissions are those of the file it points to — change "
+"them there."
+msgstr "Это ссылка. Её права — это права файла, на который она указывает; меняйте их там."
 
 msgid ""
 "This is the folder it came from, so replacing would delete the original. "
@@ -544,6 +643,9 @@ msgstr "Отключить"
 msgid "Up one folder"
 msgstr "На папку вверх"
 
+msgid "Used"
+msgstr "Занято"
+
 msgid "Vault"
 msgstr "Хранилище"
 
@@ -552,6 +654,9 @@ msgstr "Вид"
 
 msgid "View options"
 msgstr "Параметры вида"
+
+msgid "Write"
+msgstr "Запись"
 
 msgid "a moment left"
 msgstr "вот-вот"
@@ -567,6 +672,9 @@ msgstr "вычисление…"
 
 msgid "cancelling…"
 msgstr "отмена…"
+
+msgid "capacity"
+msgstr "ёмкость"
 
 msgid "changed"
 msgstr "изменён"
@@ -601,6 +709,12 @@ msgstr[0] "копирование %1 элемента…"
 msgstr[1] "копирование %1 элементов…"
 msgstr[2] "копирование %1 элементов…"
 
+msgid "could not be read"
+msgstr "не удалось прочитать"
+
+msgid "created"
+msgstr "создан"
+
 msgid "creating %1"
 msgstr "создание %1"
 
@@ -612,6 +726,9 @@ msgstr "описание"
 
 msgid "destroying %1…"
 msgstr "уничтожение %1…"
+
+msgid "device"
+msgstr "устройство"
 
 msgid "disc inserted — %1"
 msgstr "Диск вставлен — %1"
@@ -625,6 +742,9 @@ msgstr "очистка корзины…"
 msgid "files"
 msgstr "файлы"
 
+msgid "filesystem"
+msgstr "файловая система"
+
 msgid "filter these items…   (Ctrl+F to search)"
 msgstr "фильтровать эти объекты…   (Ctrl+F — поиск)"
 
@@ -634,8 +754,14 @@ msgstr "папки"
 msgid "format %1 — asking in Disks"
 msgstr "форматирование %1 — запрос в Дисках"
 
+msgid "free"
+msgstr "свободно"
+
 msgid "group"
 msgstr "группа"
+
+msgid "image file"
+msgstr "файл образа"
 
 msgid "links"
 msgstr "ссылки"
@@ -657,6 +783,9 @@ msgstr "права"
 
 msgid "modified"
 msgstr "изменён"
+
+msgid "mounted on"
+msgstr "точка подключения"
 
 msgid "mounting %1…"
 msgstr "подключение %1…"
@@ -715,6 +844,9 @@ msgstr "чтение…"
 msgid "renaming to %1"
 msgstr "переименование в %1"
 
+msgid "resolution"
+msgstr "разрешение"
+
 msgid "restoring %1"
 msgstr "восстановление %1"
 
@@ -733,6 +865,9 @@ msgstr "выбрано"
 msgid "size"
 msgstr "размер"
 
+msgid "size on disk"
+msgstr "размер на диске"
+
 msgid "target"
 msgstr "цель"
 
@@ -744,6 +879,12 @@ msgstr "отмена %1…"
 
 msgid "unmounting %1…"
 msgstr "отключение %1…"
+
+msgid "used"
+msgstr "занято"
+
+msgid "waiting…"
+msgstr "ожидание…"
 
 msgid "working…"
 msgstr "работаю…"
@@ -776,6 +917,14 @@ msgstr ""
 "⚠ Это %1 — она пишет изменения в новые блоки, а не поверх старых. Файл "
 "исчезнет, но его содержимое, возможно, ещё удастся восстановить с диска. По-"
 "настоящему этому мешает только полное шифрование диска."
+
+msgid "✓ Matches. The file's %1 is the one you pasted."
+msgstr "✓ Совпадает. Сумма %1 файла совпадает со вставленной."
+
+msgid ""
+"✗ Does not match. The file's %1 is different — it is not the file that "
+"checksum describes, or it is damaged."
+msgstr "✗ Не совпадает. Сумма %1 файла другая — это не тот файл, который описывает эта сумма, или он повреждён."
 
 msgid "actions: need a path"
 msgstr "actions: нужен путь"
@@ -958,6 +1107,20 @@ msgstr "rename: «%s» не является пригодным именем"
 msgid "cannot rename %s: %s"
 msgstr "не удаётся переименовать %s: %s"
 
+msgid "chmod: need an octal mode and a path"
+msgstr "chmod: нужны восьмеричный режим и путь"
+
+#, c-format
+msgid "chmod: '%s' is not an octal mode like 644"
+msgstr "chmod: «%s» — не восьмеричный режим вроде 644"
+
+msgid "a symbolic link has no permissions of its own"
+msgstr "у символической ссылки нет собственных прав"
+
+#, c-format
+msgid "cannot change permissions of %s: %s"
+msgstr "не удаётся изменить права %s: %s"
+
 msgid "mkdir: need a path"
 msgstr "mkdir: нужен путь"
 
@@ -1016,6 +1179,10 @@ msgstr "не удаётся прочитать %s: %s"
 
 msgid "empty"
 msgstr "пусто"
+
+#, c-format
+msgid "%s (%s bytes)"
+msgstr "%s (%s байт)"
 
 msgid "info: need a path"
 msgstr "info: нужен путь"
@@ -1346,7 +1513,9 @@ msgid "unmount: need a device path (see: synfiles volumes)"
 msgstr "unmount: нужен путь к устройству (см.: synfiles volumes)"
 
 msgid "volumes --watch: nothing to watch — no mountinfo, uevents or inotify"
-msgstr "volumes --watch: нечего отслеживать — нет ни mountinfo, ни uevents, ни inotify"
+msgstr ""
+"volumes --watch: нечего отслеживать — нет ни mountinfo, ни uevents, ни "
+"inotify"
 
 #, c-format
 msgid "volumes: unknown option '%s'"

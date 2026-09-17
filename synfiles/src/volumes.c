@@ -20,6 +20,7 @@
 #include "synfiles.h"
 #include "i18n.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -30,6 +31,7 @@
 #include <sys/inotify.h>
 #include <sys/socket.h>
 #include <sys/statvfs.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 #include <linux/netlink.h>
@@ -283,6 +285,194 @@ static void usage_of(const char *mountpoint, unsigned long long *used,
 	*used = (unsigned long long)(vfs.f_blocks - vfs.f_bavail) * unit;
 }
 
+/* ── disc images ────────────────────────────────────────────────────────────
+ *
+ * A mounted .iso is a LOOP device. udisks2 maps the file to /dev/loopN — and,
+ * for a hybrid image, scans loopNp1, loopNp2 out of it — then mounts that. lsblk
+ * calls the whole device TYPE="loop", which was none of the types the sidebar
+ * admitted, so an image mounted from the right-click menu opened a window on
+ * its contents and never appeared among the devices at all: nothing to click
+ * to get back to it, and nothing to eject it with.
+ */
+
+/* "loop0" for loop0 and for loop0p1; NULL when the name is not a loop device.
+ * malloc'd. */
+static char *loop_parent(const char *name)
+{
+	if (!name || strncmp(name, "loop", 4) || !isdigit((unsigned char)name[4]))
+		return NULL;
+	const char *p = name + 4;
+	while (isdigit((unsigned char)*p))
+		p++;
+	if (*p && !(p[0] == 'p' && isdigit((unsigned char)p[1])))
+		return NULL;
+	return xstrndup(name, (size_t)(p - name));
+}
+
+/* The file a loop device serves, or NULL. sysfs is world-readable, so this
+ * needs no privileges and no D-Bus. `name` is a kernel name ("loop0p1"), not
+ * a path. SYNFILES_SYS_BLOCK stands in for /sys/block in the suite. */
+static char *loop_backing(const char *name)
+{
+	char *parent = loop_parent(name);
+	if (!parent)
+		return NULL;
+	const char *sys = getenv("SYNFILES_SYS_BLOCK");
+	char *p = xasprintf("%s/%s/loop/backing_file",
+	                    (sys && *sys) ? sys : "/sys/block", parent);
+	char *s = slurp(p);
+	free(p);
+	free(parent);
+	if (s) {
+		strip_trailing_newline(s);
+		if (!*s) {
+			free(s);
+			s = NULL;
+		}
+	}
+	return s;
+}
+
+/* ── the filesystem under a path ────────────────────────────────────────────
+ *
+ * For the properties pane's "how much room is left". The sidebar meter answers
+ * that for the drives it lists, but a file three folders into /mnt/drive8tb
+ * does not say which of those it is on — and on a machine with three disks
+ * and a network share that is the half of the question people actually have.
+ *
+ * WHICH MOUNT: the longest mount point that is a prefix of the resolved path,
+ * preferring one whose device number is the file's own. The device test is not
+ * decoration. An automount stacks TWO rows on /mnt/drive8tb — the `autofs`
+ * trigger and the real ntfs3 filesystem on top of it — and with only a prefix
+ * to go on they tie, and the answer would be "autofs on systemd-1". A bind
+ * mount is the other shape the device settles.
+ *
+ * ⚠ statvfs() RUNS FIRST, and that is on purpose. On an automount point that
+ * has not been touched it triggers the mount, which the sidebar goes out of
+ * its way never to do just to draw a meter. Here somebody asked for this
+ * folder's properties, and the size walk that starts with the panel would
+ * mount it a moment later anyway; asking first means the mount table read
+ * below already holds the real filesystem instead of the trigger.
+ */
+bool sf_fs_of(const char *path, sf_fs_t *out)
+{
+	memset(out, 0, sizeof *out);
+
+	char *real = realpath(path, NULL);
+	if (!real) {
+		/* A dangling link. The filesystem that matters is the one the LINK
+		 * sits on, and its directory still resolves. */
+		char *dir = xstrdup(path);
+		char *slash = strrchr(dir, '/');
+		if (slash == dir)
+			dir[1] = '\0';
+		else if (slash)
+			*slash = '\0';
+		else {
+			free(dir);
+			dir = xstrdup(".");
+		}
+		real = realpath(dir, NULL);
+		free(dir);
+		if (!real)
+			return false;
+	}
+
+	struct statvfs vfs;
+	bool have_vfs = statvfs(real, &vfs) == 0;
+
+	struct stat st;
+	if (stat(real, &st) != 0) {
+		free(real);
+		return false;
+	}
+	char want[32];
+	snprintf(want, sizeof want, "%u:%u", major(st.st_dev), minor(st.st_dev));
+
+	const char *mi = getenv("SYNFILES_MOUNTINFO");
+	char *text = slurp((mi && *mi) ? mi : "/proc/self/mountinfo");
+	if (!text) {
+		free(real);
+		return false;
+	}
+
+	/* 36 35 98:0 /mnt1 /mnt/parent rw,noatime master:1 - ext3 /dev/root rw
+	 *  0  1   2    3        4          5          6..   -  type  source
+	 * The optional fields are any number, up to a lone "-". */
+	size_t nlines = 0;
+	char **lines = split(text, '\n', &nlines);
+	const char *b_mount = NULL, *b_type = NULL, *b_src = NULL;
+	size_t b_len = 0;
+	bool b_dev = false;
+
+	for (size_t i = 0; i < nlines; i++) {
+		size_t nf = 0;
+		char **f = split(lines[i], ' ', &nf);
+		size_t dash = 6;
+		while (dash < nf && strcmp(f[dash], "-"))
+			dash++;
+		if (nf < 7 || dash + 2 >= nf) {
+			free(f);
+			continue;
+		}
+
+		unescape_mount(f[4]);
+		unescape_mount(f[dash + 2]);
+		const char *mp = f[4];
+		size_t ml = strlen(mp);
+		bool prefix = !strcmp(mp, "/")
+		              || (!strncmp(real, mp, ml)
+		                  && (real[ml] == '\0' || real[ml] == '/'));
+		if (prefix) {
+			bool dev = !strcmp(f[2], want);
+			/* A device match beats any prefix without one; within the same
+			 * kind the longer prefix wins, and a tie goes to the LATER row,
+			 * which is the one mounted on top. */
+			if (!b_mount || (dev && !b_dev)
+			    || (dev == b_dev && ml >= b_len)) {
+				b_mount = mp;
+				b_type = f[dash + 1];
+				b_src = f[dash + 2];
+				b_len = ml;
+				b_dev = dev;
+			}
+		}
+		free(f);
+	}
+
+	bool found = b_mount != NULL;
+	if (found) {
+		out->mount = xstrdup(b_mount);
+		out->fstype = xstrdup(b_type);
+		out->device = xstrdup(b_src);
+		if (!strncmp(b_src, "/dev/", 5))
+			out->image = loop_backing(sf_basename(b_src));
+		if (have_vfs) {
+			/* Counted exactly as the sidebar meter counts, so the two show
+			 * the same percentage for the same disk: f_bavail is what an
+			 * ordinary user can still write, and root's reserve is "used". */
+			unsigned long long unit = vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize;
+			out->total = (unsigned long long)vfs.f_blocks * unit;
+			out->avail = (unsigned long long)vfs.f_bavail * unit;
+			out->used = out->total - out->avail;
+		}
+	}
+
+	free(lines);
+	free(text);
+	free(real);
+	return found;
+}
+
+void sf_fs_free(sf_fs_t *fs)
+{
+	free(fs->mount);
+	free(fs->fstype);
+	free(fs->device);
+	free(fs->image);
+	memset(fs, 0, sizeof *fs);
+}
+
 /* Value of KEY="..." in one lsblk -P line.
  *
  * The match must start at the line start or after a space AND be followed by
@@ -414,8 +604,12 @@ static int list_block(void)
 		 * formatted, and udisks2 mounts them at /run/media like any other
 		 * volume. Excluding TYPE="disk" outright hid every one of them from
 		 * the sidebar no matter what was mounted. */
+		/* ⚠ A LOOP DEVICE IS A CONTAINER THE SAME WAY. A hybrid ISO mounted
+		 * from a file scans loop0p1 and loop0p2 out of loop0, whose own
+		 * iso9660 signature is the one nobody mounts. */
 		bool container = false;
-		if (type && !strcmp(type, "disk") && name && *name) {
+		if (type && (!strcmp(type, "disk") || !strcmp(type, "loop"))
+		    && name && *name) {
 			char *w = xasprintf("\n%s\n", name);
 			container = strstr(parents, w) != NULL;
 			free(w);
@@ -434,7 +628,8 @@ static int list_block(void)
 		bool usable = type && fstype && *fstype && !swap
 		              && (!strcmp(type, "part") || !strcmp(type, "rom")
 		                  || !strcmp(type, "crypt") || !strcmp(type, "lvm")
-		                  || (!strcmp(type, "disk") && !container));
+		                  || ((!strcmp(type, "disk") || !strcmp(type, "loop"))
+		                      && !container));
 
 		char *path = kv_val(lines[i], "PATH");
 
@@ -470,17 +665,35 @@ static int list_block(void)
 
 			bool removable = (rm && !strcmp(rm, "1")) || (hot && !strcmp(hot, "1"));
 			bool optical = type && !strcmp(type, "rom");
-			const char *kind = optical ? "optical" : removable ? "removable" : "disk";
-			const char *icon = optical ? "media-optical"
-			                 : removable ? "drive-removable-media"
-			                             : "drive-harddisk";
+
+			/* A disc image — the loop device itself, or a partition udisks
+			 * scanned out of one. Its own kind, not "removable": it is
+			 * ejected like a stick, but Format… on a read-only mapping of a
+			 * file is not a thing to offer, and "connected" is the wrong word
+			 * for something that was mounted from a folder. */
+			char *img_parent = loop_parent(name);
+			bool image = img_parent != NULL;
+			free(img_parent);
+			char *backing = image ? loop_backing(name) : NULL;
+			bool disc_fs = fstype && (!strcmp(fstype, "iso9660")
+			                          || !strcmp(fstype, "udf"));
+
+			const char *kind = image ? "image"
+			                 : optical ? "optical"
+			                 : removable ? "removable" : "disk";
+			const char *icon = (optical || (image && disc_fs)) ? "media-optical"
+			                 : (removable || image) ? "drive-removable-media"
+			                                        : "drive-harddisk";
 
 			/* A filesystem label if it has one; otherwise the mount point's
 			 * own name, which is nearly always what the user called the
 			 * drive ("drive8tb"). "sda1" is the last resort, not the first:
 			 * it identifies a device, not a place, and it changes when disks
 			 * are plugged in a different order. */
+			/* An image with no volume label is named after its FILE, which
+			 * is the name somebody just right-clicked. */
 			const char *title = (label && *label) ? label
+			                  : (backing && *backing) ? sf_basename(backing)
 			                  : (mp && *mp) ? sf_basename(mp)
 			                  : (name && *name) ? name : "disk";
 			char *emp = pct_encode(mp ? mp : "", true);
@@ -522,6 +735,7 @@ static int list_block(void)
 			mark_emitted(mp);
 
 			free(su); free(st);
+			free(backing);
 			free(emp); free(label); free(size);
 			free(rm); free(hot);
 		}
@@ -632,6 +846,98 @@ static int list_network(void)
 	return n;
 }
 
+/* After an image's filesystem is unmounted, give its loop device back.
+ *
+ * udisks2 unmounts a filesystem; nothing in it detaches the loop device
+ * underneath. synui-iso-mount sets AUTOCLEAR on the loops it makes, so for
+ * those the kernel drops the mapping on the last close and there is nothing to
+ * do here. A loop set up any other way stays bound, and the sidebar then shows
+ * the image as still there — dimmed, offering to mount it again — after an
+ * eject that was supposed to put it away.
+ *
+ * ⛔ AN AUTOCLEAR LOOP IS LEFT ALONE, and not only because it is unnecessary.
+ * The detach can land a moment after the unmount returns; a loop-delete sent
+ * into that window reaches udisks2 for a device that is no longer one this
+ * user set up, which escalates to loop-delete-others — an administrator
+ * password prompt for a teardown that has in fact already happened. The same
+ * trap synui-iso-mount's unmount branch documents.
+ *
+ * ⛔ AND ONLY THIS USER'S LOOPS. One set up by root (`losetup`) is someone
+ * else's, and deleting it is that same password prompt.
+ *
+ * Best effort throughout: the filesystem IS unmounted either way, which is
+ * what the caller asked for. */
+static void loop_release(const char *device)
+{
+	char *parent = loop_parent(sf_basename(device));
+	if (!parent)
+		return;
+
+	char *backing = loop_backing(parent);
+	if (!backing) {                        /* already detached */
+		free(parent);
+		return;
+	}
+	free(backing);
+
+	/* Another partition of the same image is still mounted. */
+	char *mounts = slurp("/proc/self/mounts");
+	if (mounts) {
+		char *whole = xasprintf("/dev/%s ", parent);
+		char *part = xasprintf("/dev/%sp", parent);
+		bool busy = false;
+		size_t n = 0;
+		char **lines = split(mounts, '\n', &n);
+		for (size_t i = 0; i < n && !busy; i++)
+			busy = !strncmp(lines[i], whole, strlen(whole))
+			       || !strncmp(lines[i], part, strlen(part));
+		free(lines);
+		free(whole);
+		free(part);
+		free(mounts);
+		if (busy) {
+			free(parent);
+			return;
+		}
+	}
+
+	if (!have_cmd("busctl") || !have_cmd("udisksctl")) {
+		free(parent);
+		return;
+	}
+
+	char *obj = xasprintf("/org/freedesktop/UDisks2/block_devices/%s", parent);
+	char *ac_argv[] = { (char *)"busctl", (char *)"get-property",
+	                    (char *)"org.freedesktop.UDisks2", obj,
+	                    (char *)"org.freedesktop.UDisks2.Loop",
+	                    (char *)"Autoclear", NULL };
+	int st = 0;
+	char *ac = run_capture(ac_argv, &st, true);
+	bool autoclear = st != 0 || strncmp(ac, "b false", 7);   /* unsure = leave it */
+	free(ac);
+
+	char *uid_argv[] = { (char *)"busctl", (char *)"get-property",
+	                     (char *)"org.freedesktop.UDisks2", obj,
+	                     (char *)"org.freedesktop.UDisks2.Loop",
+	                     (char *)"SetupByUID", NULL };
+	char *uid = run_capture(uid_argv, &st, true);
+	strip_trailing_newline(uid);
+	char *mine = xasprintf("u %lu", (unsigned long)getuid());
+	bool ours = st == 0 && !strcmp(uid, mine);
+	free(mine);
+	free(uid);
+	free(obj);
+
+	if (!autoclear && ours) {
+		char *dev = xasprintf("/dev/%s", parent);
+		char *del_argv[] = { (char *)"udisksctl", (char *)"loop-delete",
+		                     (char *)"-b", dev, NULL };
+		free(run_capture(del_argv, &st, true));
+		free(dev);
+	}
+	free(parent);
+}
+
 /* ── mounting ───────────────────────────────────────────────────────────────
  *
  * Delegated to udisksctl, never reimplemented. udisks2 owns the polkit rules
@@ -671,6 +977,9 @@ static int volume_mount(const char *device, bool unmount)
 	 * re-run `volumes` to discover where the disk landed. */
 	const char *at = strstr(out, " at ");
 	const char *mp = at ? at + 4 : "";
+
+	if (unmount)
+		loop_release(device);
 
 	if (g_out == OUT_REC) {
 		char *e = pct_encode(device, true);

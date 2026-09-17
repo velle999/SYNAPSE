@@ -25,7 +25,8 @@ static void usage(FILE *f)
 "       -r, --reverse      reverse the sort\n"
 "       --sort=KEY         name (default), size, mtime, type\n"
 "       --no-dirs-first    do not float directories to the top\n"
-"  info <path>             everything a properties pane shows\n"
+"  info <path>             everything a properties pane shows, including the\n"
+"                          filesystem it is on and how much room that has left\n"
 "  du <path>               recursive size; prints a running total as it walks\n"
 "  tui [dir]               browse in the terminal\n"
 "  find [dir] --name=GLOB [--content=TEXT] [--limit=N] [--max-depth=N]\n"
@@ -64,6 +65,7 @@ static void usage(FILE *f)
 "                          which of these names the destination already has,\n"
 "                          asked before a paste so overwrite can be offered\n"
 "  rename <path> <newname>\n"
+"  chmod <octal> <path>... set permissions, e.g. 755; never through a symlink\n"
 "  mkdir <path>...\n"
 "  delete --yes <path>...  PERMANENT, no trash, no undo\n"
 "  compress [--format=F] [--name=N] <path>...\n"
@@ -198,6 +200,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "collisions")) return cmd_collisions(rest_argc, rest);
 	if (!strcmp(cmd, "move"))    return cmd_move(rest_argc, rest);
 	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);
+	if (!strcmp(cmd, "chmod"))   return cmd_chmod(rest_argc, rest);
 	if (!strcmp(cmd, "mkdir"))   return cmd_mkdir(rest_argc, rest);
 	if (!strcmp(cmd, "delete"))  return cmd_delete(rest_argc, rest);
 	if (!strcmp(cmd, "compress")) return cmd_compress(rest_argc, rest);

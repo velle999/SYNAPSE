@@ -955,10 +955,11 @@ int cmd_tui(int argc, char **argv)
 			t.page = pages - 1;
 
 		draw_header(&t, n, pages);
-		if (*filter)
+		if (*filter) {          /* braced: see finish() in fileops.c */
 			printf("  %s", C_WARN());
 			printf(_("filter: %s  (/ alone clears it)"), filter);
 			printf("%s\n", C_RESET());
+		}
 		draw_rows(&t, ents, n, PAGE, -1);
 		draw_help();
 

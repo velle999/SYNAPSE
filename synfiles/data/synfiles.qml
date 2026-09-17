@@ -157,6 +157,10 @@ FloatingWindow {
                                         : themed("accent", 78, 201, 176, 1.0)
     readonly property color cAccent: readable(cAccentRaw, cPanel, 4.5)
     readonly property color cWarn: pick("#e0af68", "#5c3a00")
+    // ⛔ WAS NEVER DEFINED. The Destroy sheet has read root.cBad since it was
+    // written, and an undefined colour draws nothing: the one dialog here with
+    // no undo and no trash had no red border and an invisible heading.
+    readonly property color cBad: pick("#f7768e", "#a3162f")
     // Folders take the theme accent, lightened or darkened only as far as it
     // takes to stay visible against the view background — a pale accent on a
     // pale theme would otherwise draw folder-shaped holes.
@@ -658,7 +662,8 @@ FloatingWindow {
     readonly property var fixedVolumes:
         root.volumes.filter(v => v.kind === "disk")
     readonly property var removableVolumes:
-        root.volumes.filter(v => v.kind === "removable" || v.kind === "optical")
+        root.volumes.filter(v => v.kind === "removable" || v.kind === "optical"
+                                 || v.kind === "image")
     readonly property var networkVolumes:
         root.volumes.filter(v => v.kind === "network")
 
@@ -1474,18 +1479,242 @@ FloatingWindow {
     // ── Properties ──────────────────────────────────────────────────────────
     property bool showProps: false
     property var propRows: []
+    // The same records as a map. The Details tab LISTS them; General and
+    // Permissions ask for particular ones by key, and a linear search per
+    // drawn row would be a search per binding re-evaluation.
+    property var propInfo: ({})
+    // The disk under what is being described — the fs_* records. Separate from
+    // propInfo because a MULTI-selection has no `info` of its own and borrows
+    // its folder's.
+    property var propFs: ({})
+    // What the panel is about: the listing row for one item (its icon comes
+    // from here), the encoded path `info`, chmod and the checksums act on, and
+    // how many things are selected.
+    property var propItem: null
+    property string propPath: ""
+    property int propCount: 0
+    // general | permissions | checksums | details. Reset to general on every
+    // open: arriving on the Checksums tab of a folder, where there is no such
+    // tab, would be arriving on nothing.
+    property string propTab: "general"
 
     // Closing the panel STOPS the walk. A `du` over a big tree runs for
     // seconds after the panel is gone otherwise, and its records would then
-    // land in the next folder's row.
-    onShowPropsChanged: if (!root.showProps) root.stopFolderSize()
+    // land in the next folder's row. The same goes for a checksum, which on a
+    // 40 GB image is minutes of a disk being read for nobody.
+    onShowPropsChanged: {
+        if (root.showProps) return
+        root.propGen++
+        root.stopFolderSize()
+        root.stopSums()
+        root.permError = ""
+        // The paste box is the one thing in the panel that takes keyboard
+        // focus. Closing the panel with it focused would leave the arrow keys
+        // talking to an invisible text field.
+        if (sumInput.activeFocus) root.ap.focusView()
+    }
 
-    Process {
-        id: infoProc
-        stdout: StdioCollector {
-            onStreamFinished: root.propRows = root.parseRecords(this.text)
+    // ⚠ A PROCESS PER RUN, NOT A SHARED ONE, for everything this panel starts.
+    // quickshell ignores `running = true` on a Process that is still running,
+    // silently, and `info` on a drive that has spun down takes seconds to come
+    // back: a shared Process would drop the next open without a word and leave
+    // the panel describing nothing. A per-run Process also cannot deliver a
+    // killed run's exit into its successor — every callback below is handed
+    // the generation it was started in and ignores itself once that is stale.
+    Component {
+        id: runOnce
+        Process {
+            id: once
+            property var done: null
+            stdout: StdioCollector { id: onceOut }
+            stderr: StdioCollector { id: onceErr }
+            // No parameters — see opProc.
+            onExited: {
+                const cb = once.done
+                once.done = null
+                if (cb) cb(onceOut.text, onceErr.text)
+                once.destroy()
+            }
         }
     }
+
+    function spawn(command, done) {
+        const p = runOnce.createObject(root, { command: command })
+        p.done = done
+        p.running = true
+        return p
+    }
+
+    // Bumped by every open and close. A run started under an older number
+    // is about something the panel no longer shows.
+    property int propGen: 0
+
+    function runInfo(pathEnc, fsOnly) {
+        const gen = root.propGen
+        root.spawn([root.bin, "--rec", "info", root.disp(pathEnc)], (out) => {
+            if (gen !== root.propGen) return
+            const rows = root.parseRecords(out)
+            const map = {}
+            for (const r of rows) map[r.key] = r.value
+            if (fsOnly) {
+                root.propFs = map
+                return
+            }
+            root.propRows = rows
+            root.propInfo = map
+            root.propFs = map
+        })
+    }
+
+    function propNum(map, key) {
+        return parseFloat((map && map[key]) || "0") || 0
+    }
+
+    // "2.1 GiB (2,297,742,065 bytes)". The exact count is what a person
+    // compares against a download page; the short one is what they read.
+    function fmtBytesLong(n) {
+        return I18n.tr("%1  (%2 bytes)").arg(root.fmtSize(n, false)).arg(root.fmtCount(n))
+    }
+
+    // A date a PERSON reads, so through the locale — names, digits and order.
+    // ⛔ NOT Qt.formatDateTime: its string overload formats against the C
+    // locale and draws English month names on every desktop. The list view's
+    // ISO stamp is a different case (a column of sortable digits); this is a
+    // sentence.
+    function fmtWhen(epoch) {
+        if (!epoch) return ""
+        const d = new Date(parseInt(epoch) * 1000)
+        return d.toLocaleDateString(Qt.locale(), Locale.LongFormat) + "  "
+             + d.toLocaleTimeString(Qt.locale(), Locale.ShortFormat)
+    }
+
+    // ── Permissions ─────────────────────────────────────────────────────────
+    //
+    // The boxes flip ONE bit of the mode `info` reported and hand the whole
+    // number back to `synfiles chmod`, so a setuid or sticky bit the boxes do
+    // not draw is carried through rather than cleared. The answer is re-read
+    // from `info` afterwards rather than assumed: a chmod on a file you do not
+    // own fails, and a box that stayed ticked would say it had worked.
+    readonly property string me: Quickshell.env("USER") || ""
+    property string permError: ""
+
+    readonly property int propMode: parseInt(root.propInfo.mode || "0", 8) || 0
+    // A link's permissions are its target's, and chmod refuses the link
+    // itself; the owner test is the one the kernel will apply. An unknown
+    // $USER lets the attempt through and the answer speaks for itself.
+    readonly property bool permEditable: root.propInfo.link !== "1"
+        && root.propInfo.owner !== undefined
+        && (root.me === "" || root.propInfo.owner === root.me)
+
+    property bool permBusy: false
+
+    function toggleMode(bit) {
+        if (!root.permEditable || root.permBusy || !root.propPath) return
+        root.permError = ""
+        root.permBusy = true
+        const gen = root.propGen
+        const mode = root.propMode ^ bit
+        root.spawn([root.bin, "--rec", "chmod", ("0000" + mode.toString(8)).slice(-4),
+                    root.disp(root.propPath)], (out, err) => {
+            root.permBusy = false
+            if (gen !== root.propGen) return
+            const bad = root.parseRecords(out).filter(r => r.status === "failed")
+            root.permError = bad.length > 0 ? bad[0].detail : err.trim().split("\n")[0]
+            root.runInfo(root.propPath, false)
+        })
+    }
+
+    // "-rw-r--r--", the spelling ls uses and the one people search for.
+    function modeString(mode, type) {
+        const t = type === "dir" ? "d" : type === "link" ? "l" : "-"
+        const x = (on, special, lo, hi) => special ? (on ? lo : hi) : (on ? "x" : "-")
+        return t
+            + (mode & 0o400 ? "r" : "-") + (mode & 0o200 ? "w" : "-")
+            + x(mode & 0o100, mode & 0o4000, "s", "S")
+            + (mode & 0o040 ? "r" : "-") + (mode & 0o020 ? "w" : "-")
+            + x(mode & 0o010, mode & 0o2000, "s", "S")
+            + (mode & 0o004 ? "r" : "-") + (mode & 0o002 ? "w" : "-")
+            + x(mode & 0o001, mode & 0o1000, "t", "T")
+    }
+
+    // ── Checksums ───────────────────────────────────────────────────────────
+    //
+    // Delegated to coreutils, which is on every machine this runs on and is
+    // the implementation people check a download page's numbers with anyway.
+    // Nothing is computed until asked: a SHA-512 of a 40 GB image is minutes of
+    // disk, and opening Properties to read a date must not start one.
+    //
+    // ⚠ ONE AT A TIME, QUEUED. Four hashes of the same file in parallel is four
+    // readers seeking against each other on a spinning disk — slower than one
+    // after another, and the machine is unusable while it happens.
+    readonly property var sumAlgos: [
+        { id: "md5",    label: "MD5",     tool: "md5sum",    len: 32 },
+        { id: "sha1",   label: "SHA-1",   tool: "sha1sum",   len: 40 },
+        { id: "sha256", label: "SHA-256", tool: "sha256sum", len: 64 },
+        { id: "sha512", label: "SHA-512", tool: "sha512sum", len: 128 }
+    ]
+    property var sums: ({})          // id -> hex digest, or "!" if it failed
+    property var sumQueue: []
+    property string sumRunning: ""   // the id being computed now
+    property string sumExpect: ""    // what was pasted to compare against
+
+    property var sumProcess: null
+
+    function requestSum(id) {
+        if (root.sums[id] !== undefined && root.sums[id] !== "!") return
+        if (root.sumRunning === id || root.sumQueue.indexOf(id) >= 0) return
+        root.sumQueue = root.sumQueue.concat([id])
+        if (root.sumRunning === "") root.nextSum()
+    }
+
+    function nextSum() {
+        if (root.sumQueue.length === 0 || !root.propPath) return
+        const id = root.sumQueue[0]
+        root.sumQueue = root.sumQueue.slice(1)
+        const a = root.sumAlgos.find(x => x.id === id)
+        if (!a) return root.nextSum()
+        root.sumRunning = id
+        const gen = root.propGen
+        // `--` because a file called "-c" is a file, not a flag.
+        root.sumProcess = root.spawn([a.tool, "--", root.disp(root.propPath)], (out) => {
+            if (gen !== root.propGen) return
+            root.sumProcess = null
+            // coreutils puts a backslash in front of the line when the NAME
+            // needed escaping; the digest is the first word either way.
+            let t = out.trim()
+            if (t.charAt(0) === "\\") t = t.substring(1)
+            const hex = t.split(/\s+/)[0] || ""
+            const next = Object.assign({}, root.sums)
+            next[id] = /^[0-9a-f]+$/.test(hex) && hex.length === a.len ? hex : "!"
+            root.sums = next
+            root.sumRunning = ""
+            root.nextSum()
+        })
+    }
+
+    function stopSums() {
+        root.sumQueue = []
+        root.sumRunning = ""
+        if (root.sumProcess) {
+            root.sumProcess.done = null      // its exit destroys it and says nothing
+            root.sumProcess.running = false
+            root.sumProcess = null
+        }
+    }
+
+    // What the pasted text is, once whitespace, a trailing filename (a line
+    // copied whole out of a SHA256SUMS file) and case are out of the way.
+    readonly property string sumExpectHex: {
+        const w = root.sumExpect.trim().split(/\s+/)[0] || ""
+        return /^[0-9a-fA-F]+$/.test(w) ? w.toLowerCase() : ""
+    }
+    // The algorithm a digest of that length belongs to, or null.
+    readonly property var sumExpectAlgo:
+        root.sumAlgos.find(a => a.len === root.sumExpectHex.length) || null
+
+    // Pasting a digest computes the one it can be compared with. Nobody pastes
+    // a SHA-256 and then wants to find and press a second button for it.
+    onSumExpectAlgoChanged: if (root.sumExpectAlgo) root.requestSum(root.sumExpectAlgo.id)
 
     // ── How big a FOLDER is ─────────────────────────────────────────────────
     //
@@ -1589,21 +1818,49 @@ FloatingWindow {
         case "selected": return I18n.tr("selected")
         case "folders":  return I18n.tr("folders")
         case "files":    return I18n.tr("files")
+        case "disk":     return I18n.tr("size on disk")
+        case "btime":    return I18n.tr("created")
+        case "resolution": return I18n.tr("resolution")
+        case "fs_mount":  return I18n.tr("mounted on")
+        case "fs_type":   return I18n.tr("filesystem")
+        case "fs_device": return I18n.tr("device")
+        case "fs_image":  return I18n.tr("image file")
+        case "fs_total":  return I18n.tr("capacity")
+        case "fs_used":   return I18n.tr("used")
+        case "fs_free":   return I18n.tr("free")
         }
         return key
+    }
+
+    // Everything a fresh panel starts without. Shared by both ways in, so
+    // neither can carry the previous item's checksums or error into the next.
+    function resetProps() {
+        root.propGen++
+        root.stopFolderSize()
+        root.stopSums()
+        root.sums = ({})
+        root.sumExpect = ""
+        root.permError = ""
+        root.propRows = []
+        root.propInfo = ({})
+        root.propFs = ({})
+        root.propTab = "general"
     }
 
     function openProperties() {
         const rows = root.selectedRows()
         if (rows.length === 0) return
+        root.resetProps()
+        root.propCount = rows.length
         root.showProps = true
         if (rows.length === 1) {
-            root.propRows = []
-            infoProc.command = [root.bin, "--rec", "info", root.disp(rows[0].full)]
-            infoProc.running = true
-            root.stopFolderSize()
+            root.propItem = rows[0]
+            root.propPath = rows[0].full
+            root.runInfo(rows[0].full, false)
             if (rows[0].type === "dir") root.startFolderSize(rows[0].full)
         } else {
+            root.propItem = null
+            root.propPath = ""
             // No point running `info` N times to show one number. A
             // multi-selection answers a different question anyway: how much is
             // this, not what is it.
@@ -1624,6 +1881,10 @@ FloatingWindow {
                                                 .arg(root.fmtSize(total, false))
                                           : root.fmtSize(total, false) }
             ]
+            // Where they are is still worth knowing — "will a copy of these
+            // fit" is the question a selection's size is asked for — so the
+            // disk comes from the folder the first of them is in.
+            root.runInfo(root.parentEnc(rows[0].full), true)
         }
     }
 
@@ -1633,11 +1894,13 @@ FloatingWindow {
     // nothing here that can drift away from the row version above.
     function openFolderProperties() {
         if (!root.tab || root.tab.view !== "dir") return
+        root.resetProps()
+        root.propCount = 1
+        root.propItem = { type: "dir", full: root.tab.path,
+                          name: root.baseEnc(root.tab.path) }
+        root.propPath = root.tab.path
         root.showProps = true
-        root.propRows = []
-        infoProc.command = [root.bin, "--rec", "info", root.disp(root.tab.path)]
-        infoProc.running = true
-        root.stopFolderSize()
+        root.runInfo(root.tab.path, false)
         root.startFolderSize(root.tab.path)
     }
 
@@ -2459,6 +2722,19 @@ FloatingWindow {
     }
     function unmountVolume(vol) {
         if (!vol.device) return
+        // Out of it first, in both panes. Ejecting the disc you are looking
+        // at otherwise ends with the pane re-reading a folder that no longer
+        // exists and the status line saying "cannot read" — about a thing that
+        // was just asked to go away. Home, because it is always there.
+        if (vol.path) {
+            const home = root.encodePath(root.homeDir)
+            for (const pane of [paneA, paneB]) {
+                const t = pane.tab
+                if (t && t.view === "dir"
+                    && (t.path === vol.path || t.path.indexOf(vol.path + "/") === 0))
+                    pane.navigate(home, "dir")
+            }
+        }
         root.runOp(["unmount", vol.device], I18n.tr("unmounting %1…").arg(vol.title))
     }
 
@@ -2691,6 +2967,10 @@ FloatingWindow {
             // naming, because the drive is not even LISTED without one.
             if (v.kind === "optical")
                 root.statusLine = I18n.tr("disc inserted — %1").arg(v.title)
+            // A mounted image arrives from a right-click, not a socket, and
+            // "connected" is the wrong word for a file.
+            else if (v.kind === "image")
+                root.statusLine = I18n.tr("%1 mounted").arg(v.title)
             else if (v.kind === "removable" || v.kind === "disk")
                 root.statusLine = I18n.tr("%1 connected").arg(v.title)
             else
@@ -3237,8 +3517,14 @@ FloatingWindow {
                             active: root.tab && root.tab.view === "dir"
                                     && remRow.isMounted
                                     && root.tab.path === remRow.modelData.path
-                            usedBytes: parseFloat(remRow.modelData.used || "0")
-                            totalBytes: parseFloat(remRow.modelData.total || "0")
+                            // ⚠ NO METER ON A DISC. An ISO or a DVD is a
+                            // read-only filesystem written to exactly its own
+                            // size, so it is always 100% — drawn amber, as
+                            // though a disc were a drive about to fill up.
+                            readonly property bool disc: remRow.modelData.kind === "image"
+                                                         || remRow.modelData.kind === "optical"
+                            usedBytes: remRow.disc ? 0 : parseFloat(remRow.modelData.used || "0")
+                            totalBytes: remRow.disc ? 0 : parseFloat(remRow.modelData.total || "0")
                             trailing: remRow.isMounted ? "\u23cf" : "\u25b8"
                             onActivated: {
                                 if (remRow.isMounted) root.navigate(remRow.modelData.path, "dir")
@@ -3637,7 +3923,8 @@ FloatingWindow {
                                              on: !mounted && v.device !== "" })
                                 // Ejecting an automount would fight systemd,
                                 // which remounts it on the next access.
-                                items.push({ label: v.kind === "removable" ? I18n.tr("Eject") : I18n.tr("Unmount"),
+                                items.push({ label: (v.kind === "removable" || v.kind === "image")
+                                                    ? I18n.tr("Eject") : I18n.tr("Unmount"),
                                              act: "unmount",
                                              on: mounted && v.device !== ""
                                                  && v.fstype !== "autofs" })
@@ -3732,17 +4019,64 @@ FloatingWindow {
             }
 
             // ── Properties ──────────────────────────────────────────────────
+            //
             // A panel over `synfiles info`, so what it can show and what the
-            // CLI can show are the same list by construction.
+            // CLI can show are the same list by construction — the Details tab
+            // IS that list. General and Permissions draw the same records for
+            // reading, and Checksums asks coreutils.
+            //
+            // ⚠ SIZED FROM THE WINDOW, NOT FROM ITS CONTENT. It was a fixed
+            // 460px column with a 96px label gutter that grew only downwards:
+            // paths wrapped every few words and there was nowhere to put a disk
+            // meter or a SHA-512. The height is fixed as well, so moving between
+            // tabs does not make the box jump under the pointer.
             Rectangle {
+                id: propPanel
                 anchors.centerIn: parent
-                width: 460
-                height: Math.min(parent.height - 60, propCol.implicitHeight + 56)
+                width: Math.min(parent.width - 32, root.ui(820))
+                height: Math.min(parent.height - 32, root.ui(640))
                 radius: 6
                 color: root.cPanel
                 border { width: 1; color: root.wash(0.35) }
                 visible: root.showProps
                 z: 130
+
+                // The label gutter, measured off the longest label any tab
+                // draws. A constant is right in one language at one text scale;
+                // "Größe auf dem Datenträger" is not "Size on disk". Capped, so
+                // one long translation cannot squeeze the values into a sliver.
+                readonly property real labelW:
+                    Math.min(width * 0.32, Math.max(root.ui(70), propProbe.implicitWidth))
+
+                // Clicks that miss every control stop HERE. Without it a click
+                // on the panel's own padding reached the file view underneath
+                // and changed the selection the panel was describing.
+                MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+
+                // opacity, not visible: an invisible Column lays out nothing
+                // and would measure zero.
+                Column {
+                    id: propProbe
+                    opacity: 0
+                    enabled: false
+                    Repeater {
+                        model: [I18n.tr("Location"), I18n.tr("Links to"), I18n.tr("Size"),
+                                I18n.tr("Size on disk"), I18n.tr("Contents"),
+                                I18n.tr("Resolution"), I18n.tr("Created"),
+                                I18n.tr("Modified"), I18n.tr("Accessed"), I18n.tr("Free"),
+                                I18n.tr("Used"), I18n.tr("Capacity"), I18n.tr("Mounted on"),
+                                I18n.tr("Filesystem"), I18n.tr("Device"),
+                                I18n.tr("Image file"), I18n.tr("Owner"), I18n.tr("Group"),
+                                I18n.tr("Others"), I18n.tr("Mode"), I18n.tr("Folders"),
+                                I18n.tr("Files"), "SHA-512"]
+                               .concat(root.propRows.map(r => root.propLabel(r.key)))
+                        delegate: Text {
+                            required property var modelData
+                            text: modelData
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
+                        }
+                    }
+                }
 
                 Text {
                     id: propTitle
@@ -3765,132 +4099,699 @@ FloatingWindow {
                     }
                 }
 
+                // ── Tabs ────────────────────────────────────────────────────
+                // One item only. A selection of forty files has no single
+                // owner, mode or checksum, so it gets the one page that means
+                // something for many: how much, and on what disk.
+                Row {
+                    id: propTabs
+                    anchors {
+                        top: propTitle.bottom; topMargin: 10
+                        left: parent.left; right: parent.right
+                        leftMargin: 16; rightMargin: 16
+                    }
+                    visible: root.propCount === 1
+                    height: visible ? root.ui(30) : 0
+
+                    readonly property var tabs: {
+                        const t = [{ id: "general",     label: I18n.tr("General") },
+                                   { id: "permissions", label: I18n.tr("Permissions") }]
+                        // A checksum is of a file's bytes. A folder has none,
+                        // and a tab that could only say so is not a tab.
+                        if (root.propInfo.type === "file")
+                            t.push({ id: "checksums", label: I18n.tr("Checksums") })
+                        t.push({ id: "details", label: I18n.tr("Details") })
+                        return t
+                    }
+
+                    Repeater {
+                        model: propTabs.tabs
+                        delegate: Rectangle {
+                            id: propTabBtn
+                            required property var modelData
+                            readonly property bool current: root.propTab === propTabBtn.modelData.id
+                            width: propTabs.width / propTabs.tabs.length
+                            height: propTabs.height
+                            color: propTabMa.containsMouse && !propTabBtn.current
+                                   ? root.wash(0.08) : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                width: parent.width - 8
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                                text: propTabBtn.modelData.label
+                                color: propTabBtn.current ? root.cAccent : root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(12)
+                                       bold: propTabBtn.current }
+                            }
+                            Rectangle {
+                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                                height: propTabBtn.current ? 2 : 1
+                                color: propTabBtn.current ? root.cAccent : root.wash(0.2)
+                            }
+                            MouseArea {
+                                id: propTabMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.propTab = propTabBtn.modelData.id
+                                    propFlick.contentY = 0
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Flickable {
                     id: propFlick
                     anchors {
-                        top: propTitle.bottom; topMargin: 10
+                        top: propTabs.visible ? propTabs.bottom : propTitle.bottom
+                        topMargin: 14
                         left: parent.left; right: parent.right; bottom: parent.bottom
                         leftMargin: 16; rightMargin: 16; bottomMargin: 14
                     }
-                    contentHeight: propCol.implicitHeight
+                    contentHeight: propBody.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
                     clip: true
 
                     Column {
-                        id: propCol
-                        width: parent.width
-                        spacing: 4
+                        id: propBody
+                        // The scrollbar's gutter, so a long page's values do
+                        // not run under the handle.
+                        width: propFlick.width - 14
+                        spacing: 0
 
-                        Repeater {
-                            model: root.propRows
-                            delegate: Row {
-                                id: propRow
-                                required property var modelData
-                                width: propCol.width
-                                spacing: 10
+                        // ── General ─────────────────────────────────────────
+                        Column {
+                            width: parent.width
+                            spacing: 7
+                            visible: root.propCount !== 1 || root.propTab === "general"
 
-                                Text {
-                                    width: 96
-                                    // ⛔ THE LABEL, NOT THE KEY — see propLabel().
-                                    text: root.propLabel(propRow.modelData.key)
-                                    color: root.cDim
-                                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                                }
-                                Text {
-                                    width: propCol.width - 106
-                                    // Paths and names arrive encoded like every
-                                    // other record; decode for reading only.
-                                    text: {
-                                        const k = propRow.modelData.key
-                                        const v = propRow.modelData.value
-                                        if (k === "path" || k === "name"
-                                            || k === "target" || k === "desc")
-                                            return root.disp(v)
-                                        if (k === "size") {
-                                            // For a DIRECTORY this is the size
-                                            // of the directory entry, not of
-                                            // what is in it — the number that
-                                            // read "890 B" for a tree holding
-                                            // an ISO. Say which it is; the
-                                            // contents row below is the other.
-                                            const t = root.propValue("type")
-                                            // ⚠ Two whole sentences rather than
-                                            // one with a clause spliced in.
-                                            return t === "dir"
-                                                ? I18n.tr("%1  (%2 bytes, the folder entry itself)")
-                                                      .arg(root.fmtSize(parseInt(v || "0"), false)).arg(v)
-                                                : I18n.tr("%1  (%2 bytes)")
-                                                      .arg(root.fmtSize(parseInt(v || "0"), false)).arg(v)
-                                        }
-                                        if (k === "mtime" || k === "atime" || k === "ctime")
-                                            return root.fmtTime(parseInt(v || "0"))
-                                        // C emits one token a script can split;
-                                        // the × belongs to the reader, not to
-                                        // the record.
-                                        if (k === "resolution")
-                                            return v.replace("x", " × ")
-                                        return v
+                            Item {
+                                width: parent.width
+                                height: root.ui(56)
+
+                                Item {
+                                    id: propIconSlot
+                                    width: root.ui(48)
+                                    height: width
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    readonly property bool single: root.propCount === 1
+                                                                   && root.propItem !== null
+                                    readonly property bool isDir: propIconSlot.single
+                                                                  && root.propItem.type === "dir"
+
+                                    FolderIcon {
+                                        anchors.fill: parent
+                                        visible: propIconSlot.isDir
                                     }
-                                    color: root.cText
-                                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                                    wrapMode: Text.WrapAnywhere
+                                    Image {
+                                        id: propIconImg
+                                        anchors.fill: parent
+                                        visible: propIconSlot.single && !propIconSlot.isDir
+                                        source: visible ? root.previewFor(root.propItem) : ""
+                                        sourceSize { width: 96; height: 96 }
+                                        fillMode: Image.PreserveAspectFit
+                                        asynchronous: true
+                                    }
+                                    // Many things, or one whose icon did not
+                                    // resolve — the drawn page, as everywhere
+                                    // else in this window.
+                                    FileIcon {
+                                        anchors.fill: parent
+                                        visible: !propIconSlot.single
+                                                 || (propIconImg.visible
+                                                     && (propIconImg.status === Image.Null
+                                                         || propIconImg.status === Image.Error))
+                                        ext: propIconSlot.single ? root.extOf(root.propItem) : ""
+                                    }
+                                }
+
+                                Column {
+                                    anchors {
+                                        left: propIconSlot.right; leftMargin: 14
+                                        right: parent.right
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    spacing: 3
+
+                                    Text {
+                                        width: parent.width
+                                        elide: Text.ElideMiddle
+                                        text: root.propCount !== 1
+                                              ? I18n.trn("%1 items", "%1 items", root.propCount)
+                                                    .arg(root.propCount)
+                                              : root.propItem
+                                                ? root.disp(root.baseEnc(root.propItem.full)) : ""
+                                        color: root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
+                                    }
+                                    Text {
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        visible: text !== ""
+                                        text: {
+                                            const i = root.propInfo
+                                            if (root.propCount !== 1 || i.type === undefined) return ""
+                                            if (i.type === "broken")
+                                                return I18n.tr("missing — the file it points at is gone")
+                                            if (i.desc) return root.disp(i.desc)
+                                            return i.type === "dir" ? I18n.tr("Folder") : (i.mime || "")
+                                        }
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    }
+                                }
+                            }
+
+                            Rectangle { width: parent.width; height: 1; color: root.wash(0.2) }
+                            Item { width: 1; height: 2 }
+
+                            Repeater {
+                                model: {
+                                    const i = root.propInfo
+                                    const out = []
+                                    if (root.propCount !== 1) {
+                                        out.push({ k: I18n.tr("Folders"), v: root.propValue("folders") })
+                                        out.push({ k: I18n.tr("Files"),   v: root.propValue("files") })
+                                        out.push({ k: I18n.tr("Size"),    v: root.propValue("size") })
+                                        return out
+                                    }
+                                    if (i.path === undefined) return out
+                                    out.push({ k: I18n.tr("Location"),
+                                               v: root.disp(root.parentEnc(i.path)) })
+                                    if (i.link === "1")
+                                        out.push({ k: I18n.tr("Links to"), v: root.disp(i.target) })
+                                    // ⛔ A FOLDER'S SIZE IS THE WALK, never
+                                    // st_size — see the hover panel, which
+                                    // words it the same way.
+                                    if (i.type === "dir") {
+                                        const t = root.duTotal
+                                        out.push({ k: I18n.tr("Size"),
+                                                   v: t === null ? (root.duRunning ? I18n.tr("measuring…") : "")
+                                                    : I18n.tr("%1 on disk").arg(root.fmtSize(t.disk, false))
+                                                      + (t.done ? "" : " …") })
+                                        if (t !== null)
+                                            out.push({ k: I18n.tr("Contents"),
+                                                       v: I18n.tr("%1 in %2, %3")
+                                                              .arg(root.fmtSize(t.bytes, false))
+                                                              .arg(I18n.trn("%1 file", "%1 files", t.files)
+                                                                       .arg(root.fmtCount(t.files)))
+                                                              .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
+                                                                       .arg(root.fmtCount(t.dirs))) })
+                                    } else if (i.type !== "broken") {
+                                        out.push({ k: I18n.tr("Size"),
+                                                   v: root.fmtBytesLong(root.propNum(i, "size")) })
+                                        if (i.disk !== undefined)
+                                            out.push({ k: I18n.tr("Size on disk"),
+                                                       v: root.fmtBytesLong(root.propNum(i, "disk")) })
+                                    }
+                                    if (i.resolution)
+                                        out.push({ k: I18n.tr("Resolution"),
+                                                   v: i.resolution.replace("x", " × ") })
+                                    if (i.btime)
+                                        out.push({ k: I18n.tr("Created"), v: root.fmtWhen(i.btime) })
+                                    out.push({ k: I18n.tr("Modified"), v: root.fmtWhen(i.mtime) })
+                                    out.push({ k: I18n.tr("Accessed"), v: root.fmtWhen(i.atime) })
+                                    return out.filter(e => e.v !== "")
+                                }
+                                delegate: PropLine {
+                                    required property var modelData
+                                    labelWidth: propPanel.labelW
+                                    label: modelData.k
+                                    value: modelData.v
+                                }
+                            }
+
+                            // ── The disk it is on ───────────────────────────
+                            //
+                            // The same arithmetic as the sidebar meter —
+                            // f_bavail is free, root's reserve counts as used —
+                            // so the two never show different percentages for
+                            // the same drive.
+                            Column {
+                                id: propDisk
+                                width: parent.width
+                                spacing: 7
+                                visible: root.propFs.fs_mount !== undefined
+
+                                readonly property real total: root.propNum(root.propFs, "fs_total")
+                                readonly property real used: root.propNum(root.propFs, "fs_used")
+                                readonly property real avail: root.propNum(root.propFs, "fs_free")
+                                readonly property real ratio: propDisk.total > 0
+                                                              ? Math.min(1, propDisk.used / propDisk.total) : 0
+                                // A read-only disc filesystem is full by
+                                // construction; amber there warns about
+                                // nothing. See the sidebar's disc rows.
+                                readonly property bool disc: ["iso9660", "udf", "squashfs", "erofs"]
+                                                             .indexOf(root.propFs.fs_type || "") >= 0
+                                readonly property bool tight: propDisk.ratio >= 0.9 && !propDisk.disc
+
+                                Item { width: 1; height: 8 }
+                                Text {
+                                    text: I18n.tr("Disk")
+                                    color: root.cAccent
+                                    font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                                }
+                                Rectangle { width: parent.width; height: 1; color: root.wash(0.2) }
+                                Item { width: 1; height: 2 }
+
+                                Item {
+                                    width: parent.width
+                                    height: root.ui(14)
+                                    visible: propDisk.total > 0
+
+                                    Rectangle {
+                                        id: propMeter
+                                        anchors {
+                                            left: parent.left; leftMargin: propPanel.labelW + 12
+                                            right: propPct.left; rightMargin: 10
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        height: root.ui(10)
+                                        radius: height / 2
+                                        color: root.wash(0.14)
+
+                                        Rectangle {
+                                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                                            width: Math.max(parent.height, parent.width * propDisk.ratio)
+                                            radius: height / 2
+                                            color: propDisk.tight ? root.cWarn : root.cAccent
+                                        }
+                                    }
+                                    Text {
+                                        id: propPct
+                                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                                        text: Math.round(propDisk.ratio * 100) + "%"
+                                        color: propDisk.tight ? root.cWarn : root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                                    }
+                                }
+
+                                PropLine {
+                                    visible: propDisk.total > 0
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Free")
+                                    value: root.fmtBytesLong(propDisk.avail)
+                                    valueColor: propDisk.tight ? root.cWarn : root.cText
+                                }
+                                PropLine {
+                                    visible: propDisk.total > 0
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Used")
+                                    value: root.fmtBytesLong(propDisk.used)
+                                }
+                                PropLine {
+                                    visible: propDisk.total > 0
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Capacity")
+                                    value: root.fmtBytesLong(propDisk.total)
+                                }
+                                PropLine {
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Mounted on")
+                                    value: root.disp(root.propFs.fs_mount || "")
+                                }
+                                PropLine {
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Filesystem")
+                                    value: root.propFs.fs_type || ""
+                                }
+                                PropLine {
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Device")
+                                    value: root.disp(root.propFs.fs_device || "")
+                                }
+                                // A mounted disc image says which FILE it is.
+                                PropLine {
+                                    visible: (root.propFs.fs_image || "") !== ""
+                                    labelWidth: propPanel.labelW
+                                    label: I18n.tr("Image file")
+                                    value: root.disp(root.propFs.fs_image || "")
                                 }
                             }
                         }
 
-                        // ── What the folder actually holds ─────────────────
-                        //
-                        // Outside the Repeater because it is not an `info`
-                        // record: it arrives later, from a walk that is still
-                        // running, and it updates while you watch it. A row
-                        // that changes cannot come from a model that was read
-                        // once.
-                        Row {
-                            width: propCol.width
-                            spacing: 10
-                            visible: root.duRunning || root.duTotal !== null
+                        // ── Permissions ─────────────────────────────────────
+                        Column {
+                            id: permPage
+                            width: parent.width
+                            spacing: 7
+                            visible: root.propCount === 1 && root.propTab === "permissions"
 
+                            readonly property real colW: root.ui(84)
+
+                            PropLine {
+                                labelWidth: propPanel.labelW
+                                label: I18n.tr("Owner")
+                                value: root.propInfo.owner || ""
+                            }
+                            PropLine {
+                                labelWidth: propPanel.labelW
+                                label: I18n.tr("Group")
+                                value: root.propInfo.group || ""
+                            }
+                            Item { width: 1; height: 6 }
+
+                            Row {
+                                Item { width: propPanel.labelW + 12; height: 1 }
+                                Repeater {
+                                    model: [I18n.tr("Read"), I18n.tr("Write"), I18n.tr("Execute")]
+                                    delegate: Text {
+                                        required property var modelData
+                                        width: permPage.colW
+                                        horizontalAlignment: Text.AlignHCenter
+                                        elide: Text.ElideRight
+                                        text: modelData
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    }
+                                }
+                            }
+
+                            // Owner, group, others — each three bits, and the
+                            // shift is where in the mode those three live.
+                            Repeater {
+                                model: [{ label: I18n.tr("Owner"),  shift: 6 },
+                                        { label: I18n.tr("Group"),  shift: 3 },
+                                        { label: I18n.tr("Others"), shift: 0 }]
+                                delegate: Row {
+                                    id: permRow
+                                    required property var modelData
+
+                                    Text {
+                                        width: propPanel.labelW
+                                        height: root.ui(28)
+                                        verticalAlignment: Text.AlignVCenter
+                                        horizontalAlignment: Text.AlignRight
+                                        text: permRow.modelData.label
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    }
+                                    Item { width: 12; height: 1 }
+                                    Repeater {
+                                        model: [4, 2, 1]
+                                        delegate: Item {
+                                            id: permCell
+                                            required property var modelData
+                                            readonly property int bit: permCell.modelData << permRow.modelData.shift
+                                            width: permPage.colW
+                                            height: root.ui(28)
+                                            PermBox {
+                                                anchors.centerIn: parent
+                                                checked: (root.propMode & permCell.bit) !== 0
+                                                enabled: root.permEditable && !root.permBusy
+                                                onToggled: root.toggleMode(permCell.bit)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item { width: 1; height: 4 }
+                            PropLine {
+                                labelWidth: propPanel.labelW
+                                label: I18n.tr("Mode")
+                                mono: true
+                                value: root.propInfo.mode === undefined ? ""
+                                     : ("0000" + root.propMode.toString(8)).slice(-4) + "   "
+                                       + root.modeString(root.propMode, root.propInfo.type)
+                            }
+
+                            // Why the boxes are greyed, when they are. A box
+                            // that does nothing and says nothing reads as a
+                            // broken box.
                             Text {
-                                width: 96
-                                text: I18n.tr("contents")
+                                x: propPanel.labelW + 12
+                                width: parent.width - x
+                                wrapMode: Text.WordWrap
+                                visible: text !== ""
+                                text: {
+                                    const i = root.propInfo
+                                    if (i.link === "1")
+                                        return I18n.tr("This is a link. Its permissions are those of the file it points to — change them there.")
+                                    if (!root.permEditable && i.owner)
+                                        return I18n.tr("Only %1 can change these.").arg(i.owner)
+                                    if (i.type === "dir")
+                                        return I18n.tr("On a folder, Read lists what is in it, Write adds and removes things, and Execute lets you open it.")
+                                    return ""
+                                }
                                 color: root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
                             Text {
-                                width: propCol.width - 106
-                                text: {
-                                    if (root.duTotal === null) return I18n.tr("calculating…")
-                                    const t = root.duTotal
-                                    // The running total is shown as it climbs,
-                                    // with a trailing … so a number that is
-                                    // still growing is never mistaken for the
-                                    // answer.
-                                    // ⚠ THE DISK FIGURE IS THE ONE THAT COSTS
-                                    // YOU SOMETHING. A tree of small files
-                                    // takes far more room than it contains,
-                                    // and that difference is a reason people
-                                    // open this dialog; showing only the
-                                    // apparent size answered the wrong
-                                    // question by a factor of six on a
-                                    // source tree.
-                                    return I18n.tr("%1 on disk  (%2 in %3, %4)")
-                                             .arg(root.fmtSize(t.disk, false))
-                                             .arg(root.fmtSize(t.bytes, false))
-                                             .arg(I18n.trn("%1 file", "%1 files", t.files)
-                                                      .arg(root.fmtCount(t.files)))
-                                             .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
-                                                      .arg(root.fmtCount(t.dirs)))
-                                         + (t.done ? "" : " …")
-                                }
-                                color: root.cText
+                                x: propPanel.labelW + 12
+                                width: parent.width - x
+                                wrapMode: Text.WordWrap
+                                visible: root.permError !== ""
+                                text: root.permError
+                                color: root.cWarn
                                 font { family: root.uiFont; pixelSize: root.ui(11) }
-                                wrapMode: Text.WrapAnywhere
+                            }
+                        }
+
+                        // ── Checksums ───────────────────────────────────────
+                        Column {
+                            width: parent.width
+                            spacing: 9
+                            visible: root.propCount === 1 && root.propTab === "checksums"
+
+                            Text {
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                text: I18n.tr("Paste a checksum from a download page to check this file against it. The right algorithm is calculated automatically.")
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+
+                            Rectangle {
+                                width: parent.width
+                                height: root.ui(30)
+                                radius: 3
+                                color: root.cBg
+                                border { width: 1; color: sumInput.activeFocus ? root.cAccent : root.wash(0.35) }
+
+                                TextInput {
+                                    id: sumInput
+                                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    color: root.cText
+                                    selectByMouse: true
+                                    clip: true
+                                    font { family: "monospace"; pixelSize: root.ui(12) }
+                                    text: root.sumExpect
+                                    onTextEdited: root.sumExpect = text
+                                    Keys.onEscapePressed: root.showProps = false
+                                }
+                            }
+
+                            Text {
+                                id: sumVerdict
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                visible: root.sumExpect.trim() !== ""
+                                readonly property var algo: root.sumExpectAlgo
+                                readonly property string got: sumVerdict.algo
+                                                              ? (root.sums[sumVerdict.algo.id] || "") : ""
+                                readonly property bool same: sumVerdict.got !== ""
+                                                             && sumVerdict.got === root.sumExpectHex
+                                text: !sumVerdict.algo
+                                      ? I18n.tr("That is not an MD5, SHA-1, SHA-256 or SHA-512 checksum.")
+                                    : sumVerdict.got === ""
+                                      ? I18n.tr("Calculating %1…").arg(sumVerdict.algo.label)
+                                    : sumVerdict.got === "!"
+                                      ? I18n.tr("%1 could not be calculated — the file could not be read.").arg(sumVerdict.algo.label)
+                                    : sumVerdict.same
+                                      ? I18n.tr("✓ Matches. The file's %1 is the one you pasted.").arg(sumVerdict.algo.label)
+                                      : I18n.tr("✗ Does not match. The file's %1 is different — it is not the file that checksum describes, or it is damaged.").arg(sumVerdict.algo.label)
+                                color: sumVerdict.same ? root.cAccent
+                                     : (sumVerdict.algo && sumVerdict.got !== "") || !sumVerdict.algo
+                                       ? root.cWarn : root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                            }
+
+                            Item { width: 1; height: 4 }
+
+                            Repeater {
+                                model: root.sumAlgos
+                                delegate: Item {
+                                    id: sumRow
+                                    required property var modelData
+                                    readonly property string val: root.sums[sumRow.modelData.id] || ""
+                                    readonly property bool ready: sumRow.val !== "" && sumRow.val !== "!"
+                                    readonly property bool busy: root.sumRunning === sumRow.modelData.id
+                                                                 || root.sumQueue.indexOf(sumRow.modelData.id) >= 0
+                                    width: parent.width
+                                    height: Math.max(sumVal.implicitHeight, sumBtn.height)
+
+                                    Text {
+                                        id: sumLabel
+                                        width: propPanel.labelW
+                                        height: sumBtn.height
+                                        verticalAlignment: Text.AlignVCenter
+                                        horizontalAlignment: Text.AlignRight
+                                        text: sumRow.modelData.label
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    }
+                                    Text {
+                                        id: sumVal
+                                        anchors {
+                                            left: sumLabel.right; leftMargin: 12
+                                            right: sumBtn.left; rightMargin: 10
+                                        }
+                                        topPadding: Math.max(0, (sumBtn.height - root.ui(12) * 1.3) / 2)
+                                        wrapMode: Text.WrapAnywhere
+                                        text: sumRow.val === "!" ? I18n.tr("could not be read")
+                                            : sumRow.ready ? sumRow.val
+                                            : root.sumRunning === sumRow.modelData.id ? I18n.tr("calculating…")
+                                            : sumRow.busy ? I18n.tr("waiting…") : ""
+                                        color: sumRow.ready && sumRow.val === root.sumExpectHex ? root.cAccent
+                                             : sumRow.ready ? root.cText : root.cDim
+                                        font { family: sumRow.ready ? "monospace" : root.uiFont
+                                               pixelSize: root.ui(12) }
+                                    }
+                                    // The button is its own label: Calculate
+                                    // until there is a number, Copy after.
+                                    ToggleChip {
+                                        id: sumBtn
+                                        anchors.right: parent.right
+                                        visible: !sumRow.busy
+                                        label: sumRow.ready ? I18n.tr("Copy") : I18n.tr("Calculate")
+                                        onToggled: {
+                                            if (sumRow.ready) root.copyToClipboard(sumRow.val)
+                                            else root.requestSum(sumRow.modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Details ─────────────────────────────────────────
+                        // Every record `synfiles info` printed, in its order.
+                        Column {
+                            id: propCol
+                            width: parent.width
+                            spacing: 5
+                            visible: root.propCount === 1 && root.propTab === "details"
+
+                            Repeater {
+                                model: root.propRows
+                                delegate: Row {
+                                    id: propRow
+                                    required property var modelData
+                                    width: propCol.width
+                                    spacing: 12
+
+                                    Text {
+                                        width: propPanel.labelW
+                                        horizontalAlignment: Text.AlignRight
+                                        // ⛔ THE LABEL, NOT THE KEY — see propLabel().
+                                        text: root.propLabel(propRow.modelData.key)
+                                        color: root.cDim
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    }
+                                    Text {
+                                        width: propCol.width - propPanel.labelW - 12
+                                        // Paths and names arrive encoded like every
+                                        // other record; decode for reading only.
+                                        text: {
+                                            const k = propRow.modelData.key
+                                            const v = propRow.modelData.value
+                                            if (k === "path" || k === "name" || k === "target"
+                                                || k === "desc" || k === "fs_mount"
+                                                || k === "fs_device" || k === "fs_image")
+                                                return root.disp(v)
+                                            if (k === "size") {
+                                                // For a DIRECTORY this is the size
+                                                // of the directory entry, not of
+                                                // what is in it — the number that
+                                                // read "890 B" for a tree holding
+                                                // an ISO. Say which it is; the
+                                                // contents row below is the other.
+                                                const t = root.propValue("type")
+                                                // ⚠ Two whole sentences rather than
+                                                // one with a clause spliced in.
+                                                return t === "dir"
+                                                    ? I18n.tr("%1  (%2 bytes, the folder entry itself)")
+                                                          .arg(root.fmtSize(parseInt(v || "0"), false)).arg(v)
+                                                    : root.fmtBytesLong(parseFloat(v || "0"))
+                                            }
+                                            if (k === "disk" || k === "fs_total"
+                                                || k === "fs_used" || k === "fs_free")
+                                                return root.fmtBytesLong(parseFloat(v || "0"))
+                                            if (k === "mtime" || k === "atime" || k === "ctime"
+                                                || k === "btime")
+                                                return root.fmtWhen(v)
+                                            if (k === "mode")
+                                                return v + "   " + root.modeString(parseInt(v, 8) || 0,
+                                                                                   root.propValue("type"))
+                                            // C emits one token a script can split;
+                                            // the × belongs to the reader, not to
+                                            // the record.
+                                            if (k === "resolution")
+                                                return v.replace("x", " × ")
+                                            return v
+                                        }
+                                        color: root.cText
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                                        wrapMode: Text.WrapAnywhere
+                                    }
+                                }
+                            }
+
+                            // ── What the folder actually holds ─────────────
+                            //
+                            // Outside the Repeater because it is not an `info`
+                            // record: it arrives later, from a walk that is
+                            // still running, and it updates while you watch
+                            // it. A row that changes cannot come from a model
+                            // that was read once.
+                            Row {
+                                width: propCol.width
+                                spacing: 12
+                                visible: root.duRunning || root.duTotal !== null
+
+                                Text {
+                                    width: propPanel.labelW
+                                    horizontalAlignment: Text.AlignRight
+                                    text: I18n.tr("contents")
+                                    color: root.cDim
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
+                                }
+                                Text {
+                                    width: propCol.width - propPanel.labelW - 12
+                                    text: {
+                                        if (root.duTotal === null) return I18n.tr("calculating…")
+                                        const t = root.duTotal
+                                        // ⚠ THE DISK FIGURE LEADS — it is the
+                                        // one that costs you something. A tree
+                                        // of small files takes far more room
+                                        // than it contains. The trailing …
+                                        // marks a total that is still climbing.
+                                        return I18n.tr("%1 on disk  (%2 in %3, %4)")
+                                                 .arg(root.fmtSize(t.disk, false))
+                                                 .arg(root.fmtSize(t.bytes, false))
+                                                 .arg(I18n.trn("%1 file", "%1 files", t.files)
+                                                          .arg(root.fmtCount(t.files)))
+                                                 .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
+                                                          .arg(root.fmtCount(t.dirs)))
+                                             + (t.done ? "" : " …")
+                                    }
+                                    color: root.cText
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
+                                    wrapMode: Text.WrapAnywhere
+                                }
                             }
                         }
                     }
                 }
 
                 // A view that scrolls says so. VScroll hides itself when
-                // everything fits, so a short menu draws no furniture.
+                // everything fits, so a short page draws no furniture.
                 VScroll {
                     flick: propFlick
                     anchors {
@@ -5267,6 +6168,13 @@ FloatingWindow {
 
         // mode: "select" (plain), "extend" (Shift), "move" (Ctrl — the cursor
         // travels and the selection stays where it was).
+        // Back to the file view, for a dialog that took the keyboard and has
+        // closed — typing has to reach the rows again, not a hidden field.
+        function focusView() {
+            if (root.gridView) fileGrid.forceActiveFocus()
+            else fileList.forceActiveFocus()
+        }
+
         function focusIndex(i, mode) {
             const rows = pane.shownRows
             if (rows.length === 0) return
@@ -7684,6 +8592,71 @@ FloatingWindow {
     // Hand-rolled like every other control here: QtQuick.Controls has one, and
     // importing Controls for a single widget brings a style that matches
     // nothing else in this window.
+    // One label and its value, for the Properties panel. The label sits in a
+    // right-aligned gutter the panel measures, so values line up down a page
+    // however long any one label is in the language being read.
+    component PropLine: Item {
+        id: pl
+        property string label: ""
+        property string value: ""
+        property real labelWidth: 100
+        property bool mono: false
+        property color valueColor: root.cText
+
+        width: parent ? parent.width : 0
+        height: Math.max(plLabel.implicitHeight, plValue.implicitHeight)
+
+        Text {
+            id: plLabel
+            width: pl.labelWidth
+            horizontalAlignment: Text.AlignRight
+            wrapMode: Text.WordWrap
+            text: pl.label
+            color: root.cDim
+            font { family: root.uiFont; pixelSize: root.ui(12) }
+        }
+        Text {
+            id: plValue
+            anchors { left: plLabel.right; leftMargin: 12; right: parent.right }
+            // Word boundaries first, anywhere when a path has none left.
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            text: pl.value
+            color: pl.valueColor
+            font { family: pl.mono ? "monospace" : root.uiFont; pixelSize: root.ui(12) }
+        }
+    }
+
+    // A permission bit. Disabled rather than hidden when it cannot be changed:
+    // what the permissions ARE is worth reading even where you may not set them.
+    component PermBox: Rectangle {
+        id: pb
+        property bool checked: false
+        signal toggled()
+
+        width: root.ui(18)
+        height: width
+        radius: 3
+        color: pb.checked ? root.wash(0.25)
+                          : (pbMa.containsMouse ? root.wash(0.10) : "transparent")
+        border { width: 1; color: pb.checked ? root.cAccent : root.cDim }
+        opacity: pb.enabled ? 1.0 : 0.45
+
+        Text {
+            anchors.centerIn: parent
+            visible: pb.checked
+            text: "✓"
+            color: root.cAccent
+            font { pixelSize: root.ui(13); bold: true }
+        }
+        MouseArea {
+            id: pbMa
+            anchors { fill: parent; margins: -5 }
+            hoverEnabled: true
+            cursorShape: pb.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: pb.toggled()
+        }
+    }
+
     component VScroll: Item {
         id: vs
         required property Flickable flick
