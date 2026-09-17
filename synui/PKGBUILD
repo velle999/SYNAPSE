@@ -3482,7 +3482,23 @@ pkgver=0.1.0
 #     and no LAN host answered as it when this was written; a headless synui has
 #     no input devices and uinput would reach the live seat. The first real
 #     four-finger swipe is the remaining check.
-pkgrel=608
+# 609: A DIALOG ON A FLOATING DESKTOP WAS NEVER PLACED. A Windows installer
+#   under Wine (Inno Setup's "Select Setup Language") appeared in the dock with
+#   no window: `synctl clients` had it at 0,0 sized 0x0, and 0,0 is dead space
+#   on a multi-monitor layout whose monitors do not cover the origin.
+#   layout_float_place hands a window with nothing remembered to
+#   layout_float_arrange and returns, testing only !hand_placed. The arranger
+#   also skips dialogs, so a dialog went to the one placer that refuses it and
+#   the centring below the hand-off never ran. xw_map floats every transient or
+#   modal X11 window, so that was every Wine dialog, and an xdg toplevel with a
+#   parent took the same path.
+#   The hand-off now asks float_arrangeable() itself instead of a partial copy
+#   of it; whatever the arranger refuses is centred as on any other desktop.
+#   tests/x11_dialog_float.sh maps a 400x300 X11 dialog transient for a window
+#   that never maps (Inno's hidden TApplication owner), on a tiling desktop and
+#   then a floating one with windows.conf empty. On 608 the floating open reads
+#   0,0 0x0 and fails; with the fix both read 438,195 404x330.
+pkgrel=609
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

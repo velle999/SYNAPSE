@@ -580,6 +580,20 @@ if x11.found()
        args    : [synui_exe.full_path(), x11_or_move_test.full_path()],
        depends : [synui_exe, x11_or_move_test],
        timeout : 120)
+
+  # A transient X11 dialog whose owner never maps (Wine's installers), opened
+  # on a floating desktop with nothing remembered. Reads synctl, not pixels.
+  x11_dialog_test = executable('x11_dialog_test',
+    'tests/x11_dialog_test.c',
+    dependencies : [x11],
+    build_by_default : true)
+
+  x11_dialog_float = find_program('tests/x11_dialog_float.sh')
+  test('x11_dialog_float', x11_dialog_float,
+       args    : [synui_exe.full_path(), x11_dialog_test.full_path(),
+                  synctl_exe.full_path()],
+       depends : [synui_exe, x11_dialog_test, synctl_exe],
+       timeout : 120)
 endif
 
 # security-context client bindings, for the test below. Client-side this time:

@@ -2333,6 +2333,8 @@ int layout_reclaim(syn_server_t *s, syn_workspace_t *ws)
 }
 
 /* ── Floating placement ──────────────────────────────────── */
+static bool float_arrangeable(syn_view_t *v, syn_output_t *o);
+
 /*
  * Give a newly-floating window a sane geometry: prefer the client's own
  * preferred size, clamp it to the output, and centre it. Called when a
@@ -2356,9 +2358,19 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
      * fullscreen) that reach a floating desktop without one.
      *
      * A hand_placed window never gets here — layout_restore_geometry set the
-     * flag on its way to returning true. */
+     * flag on its way to returning true.
+     *
+     * ⚠ Hand over only what the arranger will TAKE, and ask its own predicate
+     * rather than a copy of it. This used to test !hand_placed alone, and the
+     * arranger also skips dialogs — so a dialog was handed to the one placer
+     * that refuses it, returned from here unplaced, and kept the 0,0 0x0 it was
+     * calloc'd with. xw_map floats every transient or modal X11 window, so
+     * that was every Wine dialog: an Inno Setup installer's "Select Setup
+     * Language" mapped on a floating desktop as a taskbar entry drawn in the
+     * dead space at the layout origin (velle, 2026-09-17). Anything the
+     * arranger refuses falls through to the centring below. */
     if (view->workspace && view->workspace->layout == LAYOUT_FLOATING &&
-        !view->hand_placed) {
+        float_arrangeable(view, view->output)) {
         layout_apply(s, view->workspace);
         return;
     }
