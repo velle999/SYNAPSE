@@ -318,6 +318,9 @@ void overview_show(syn_server_t *s)
     s->overview.visible  = 1;
     s->overview.alt_held = 0;   /* set by overview_alt_step, and only by it */
     synui_render_overview(s);
+    /* tests/ws_step.sh counts these: nothing else says from outside whether
+     * mission control is up, and `overview open` twice must show it once. */
+    wlr_log(WLR_DEBUG, "synui: overview shown");
 }
 
 void overview_hide(syn_server_t *s)
@@ -325,6 +328,7 @@ void overview_hide(syn_server_t *s)
     s->overview.visible  = 0;
     s->overview.alt_held = 0;
     synui_render_overview(s);
+    wlr_log(WLR_DEBUG, "synui: overview hidden");
     ctlpanel_child_closed(s, "overview");
 }
 

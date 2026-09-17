@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 05:26-0500\n"
+"POT-Creation-Date: 2026-09-17 12:10-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -18,28 +18,28 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#: src/ai_interface.c:251
+#: src/ai_interface.c:349
 msgid "synapd query failed — reconnecting"
 msgstr "запрос к synapd не удался — переподключение"
 
-#: src/ai_interface.c:407
+#: src/ai_interface.c:505
 msgid "no focused window — ask anything"
 msgstr "нет активного окна — спрашивайте что угодно"
 
-#: src/ai_interface.c:416
+#: src/ai_interface.c:514
 msgid "(unknown)"
 msgstr "(неизвестно)"
 
-#: src/ai_interface.c:417
+#: src/ai_interface.c:515
 msgid "(untitled)"
 msgstr "(без названия)"
 
-#: src/ai_interface.c:421
+#: src/ai_interface.c:519
 #, c-format
 msgid "about: %s"
 msgstr "о: %s"
 
-#: src/bt.c:129 src/ctlpanel.c:1153
+#: src/bt.c:129 src/ctlpanel.c:1161
 msgid "Audio"
 msgstr "Звук"
 
@@ -87,7 +87,7 @@ msgstr "Модем"
 msgid "Player"
 msgstr "Плеер"
 
-#: src/bt.c:141 src/ctlpanel.c:1189
+#: src/bt.c:141 src/ctlpanel.c:1197
 msgid "Network"
 msgstr "Сеть"
 
@@ -111,7 +111,7 @@ msgstr "Экран"
 msgid "(unknown device)"
 msgstr "(неизвестное устройство)"
 
-#: src/bt.c:451 src/render.c:4502
+#: src/bt.c:451 src/render.c:4541
 msgid "failed"
 msgstr "ошибка"
 
@@ -219,7 +219,7 @@ msgstr ""
 msgid "Auto"
 msgstr "Автоматически"
 
-#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+#: src/ctlpanel.c:436 src/ctlpanel.c:2966
 msgid "Off"
 msgstr "Выключено"
 
@@ -723,7 +723,7 @@ msgstr ""
 "«Окно»: тащите за заголовок, щёлкайте где угодно. «Закрывать щелчком»: "
 "закрывается при щелчке рядом. Esc закрывает всегда"
 
-#: src/ctlpanel.c:736 src/ctlpanel.c:2734
+#: src/ctlpanel.c:736 src/ctlpanel.c:2748
 msgid "Control panel"
 msgstr "Панель управления"
 
@@ -731,7 +731,7 @@ msgstr "Панель управления"
 msgid "How this panel itself behaves"
 msgstr "Как ведёт себя сама эта панель"
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
+#: src/ctlpanel.c:740 src/ctlpanel.c:1284 src/ctlpanel.c:2804
 msgid "Task manager"
 msgstr "Диспетчер задач"
 
@@ -921,7 +921,7 @@ msgstr ""
 msgid "Date & time"
 msgstr "Дата и время"
 
-#: src/ctlpanel.c:898 src/render.c:8224
+#: src/ctlpanel.c:898 src/render.c:8263
 msgid "Clock"
 msgstr "Часы"
 
@@ -977,7 +977,7 @@ msgstr ""
 "Какой циферблат рисует ВИДЖЕТ аналоговых часов — тот, что на рабочем столе, "
 "из «Виджетов». У аналоговых часов дока рисунок один"
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2763
 msgid "Start menu"
 msgstr "Меню «Пуск»"
 
@@ -1157,64 +1157,74 @@ msgstr ""
 "Успокаивает дрожащий или шумный указатель, усредняя его путь. Стоит "
 "небольшой задержки; 0 — выключено. Игр, читающих сырое движение, не касается"
 
-#: src/ctlpanel.c:1090
+#: src/ctlpanel.c:1094
+msgid "Touchpad gestures"
+msgstr "Жесты тачпада"
+
+#: src/ctlpanel.c:1096
+msgid ""
+"Four fingers left or right changes desktop; up and down open and close the "
+"overview. Off gives every swipe to apps"
+msgstr "Четыре пальца влево или вправо переключают рабочий стол; вверх и вниз открывают и закрывают обзор. Выключено — все жесты достаются приложениям"
+
+#: src/ctlpanel.c:1098
 msgid "Cursor size"
 msgstr "Размер курсора"
 
-#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
+#: src/ctlpanel.c:1103 src/ctlpanel.c:2793
 msgid "Display settings"
 msgstr "Настройки экрана"
 
-#: src/ctlpanel.c:1096 src/ctlpanel.c:1103
+#: src/ctlpanel.c:1104 src/ctlpanel.c:1111
 msgid "Screens"
 msgstr "Экраны"
 
-#: src/ctlpanel.c:1104
+#: src/ctlpanel.c:1112
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
 msgstr ""
 "«Расширить», «Дублировать» или встроенный выключен (крышка закрыта). Также m "
 "в Super+D"
 
-#: src/ctlpanel.c:1114
+#: src/ctlpanel.c:1122
 msgid "Scale everything"
 msgstr "Масштабировать всё"
 
-#: src/ctlpanel.c:1115
+#: src/ctlpanel.c:1123
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
 msgstr ""
 "Каждый экран, каждую программу, курсор. Super+Ctrl+= / -, Super+Ctrl+0 "
 "сбрасывает"
 
-#: src/ctlpanel.c:1124
+#: src/ctlpanel.c:1132
 msgid "Monitor settings"
 msgstr "Настройки монитора"
 
-#: src/ctlpanel.c:1125
+#: src/ctlpanel.c:1133
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr "Разъёмы, EDID и режимы, которые предлагает оборудование (syn-settings)"
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
+#: src/ctlpanel.c:1135 src/ctlpanel.c:1136 src/ctlpanel.c:2757
 msgid "Night light"
 msgstr "Ночной свет"
 
-#: src/ctlpanel.c:1129
+#: src/ctlpanel.c:1137
 msgid "Colour temperature"
 msgstr "Цветовая температура"
 
-#: src/ctlpanel.c:1133
+#: src/ctlpanel.c:1141
 msgid "6500K is daylight — the identity ramp. Lower is warmer"
 msgstr "6500K — дневной свет, нейтральная кривая. Ниже — теплее"
 
-#: src/ctlpanel.c:1141
+#: src/ctlpanel.c:1149
 msgid "Do Not Disturb"
 msgstr "Не беспокоить"
 
-#: src/ctlpanel.c:1142
+#: src/ctlpanel.c:1150
 msgid "Notifications"
 msgstr "Уведомления"
 
-#: src/ctlpanel.c:1143
+#: src/ctlpanel.c:1151
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
@@ -1222,926 +1232,926 @@ msgstr ""
 "Super+Shift+M откуда угодно. Прячет всплывающие уведомления и глушит звук; "
 "важные предупреждения всё равно проходят"
 
-#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5416
+#: src/ctlpanel.c:1153 src/ctlpanel.c:2800 src/render.c:5455
 msgid "Event sounds"
 msgstr "Звуки событий"
 
-#: src/ctlpanel.c:1152
+#: src/ctlpanel.c:1160
 msgid "Screen audio"
 msgstr "Звук на экран"
 
-#: src/ctlpanel.c:1156
+#: src/ctlpanel.c:1164
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr ""
 "Переводит звук на телевизор или монитор, когда вы его подключаете. «Авто» — "
 "для ноутбуков"
 
-#: src/ctlpanel.c:1157
+#: src/ctlpanel.c:1165
 msgid "Equalizer"
 msgstr "Эквалайзер"
 
-#: src/ctlpanel.c:1158
+#: src/ctlpanel.c:1166
 msgid "10-band system equalizer. Adds an output device while it is on"
 msgstr ""
 "Системный 10-полосный эквалайзер. Пока включён, добавляет устройство вывода"
 
-#: src/ctlpanel.c:1173
+#: src/ctlpanel.c:1181
 msgid "Screen reader"
 msgstr "Экранный диктор"
 
-#: src/ctlpanel.c:1174
+#: src/ctlpanel.c:1182
 msgid "Speech"
 msgstr "Речь"
 
-#: src/ctlpanel.c:1175
+#: src/ctlpanel.c:1183
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
 msgstr ""
 "Читает активное окно по мере перехода фокуса. Super+Shift+U переключает"
 
-#: src/ctlpanel.c:1176
+#: src/ctlpanel.c:1184
 msgid "Answer to its name"
 msgstr "Отзываться на имя"
 
-#: src/ctlpanel.c:1178
+#: src/ctlpanel.c:1186
 msgid "Listen for \"Synapse\" and answer out loud. Holds the microphone open"
 msgstr "Слушает «Synapse» и отвечает вслух. Держит микрофон открытым"
 
-#: src/ctlpanel.c:1180
+#: src/ctlpanel.c:1188
 msgid "Record audio"
 msgstr "Записывать звук"
 
-#: src/ctlpanel.c:1181
+#: src/ctlpanel.c:1189
 msgid "Recording"
 msgstr "Запись"
 
-#: src/ctlpanel.c:1182
+#: src/ctlpanel.c:1190
 msgid "Record for editing"
 msgstr "Записывать для монтажа"
 
-#: src/ctlpanel.c:1183
+#: src/ctlpanel.c:1191
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr ""
 "DNxHR .mov, который видеоредакторы читают напрямую. Примерно 1,1 ГБ в минуту"
 
-#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
+#: src/ctlpanel.c:1196 src/ctlpanel.c:2806
 msgid "Network / Wi-Fi"
 msgstr "Сеть / Wi-Fi"
 
-#: src/ctlpanel.c:1190
+#: src/ctlpanel.c:1198
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
-#: src/ctlpanel.c:1192 src/ctlpanel.c:1193
+#: src/ctlpanel.c:1200 src/ctlpanel.c:1201
 msgid "Printers"
 msgstr "Принтеры"
 
-#: src/ctlpanel.c:1199
+#: src/ctlpanel.c:1207
 msgid "Find printers"
 msgstr "Найти принтеры"
 
-#: src/ctlpanel.c:1201
+#: src/ctlpanel.c:1209
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr ""
 "Добавляет каждый сетевой принтер, который ещё не настроен, без драйверов"
 
-#: src/ctlpanel.c:1204 src/power.c:111
+#: src/ctlpanel.c:1212 src/power.c:111
 msgid "Power saving"
 msgstr "Энергосбережение"
 
-#: src/ctlpanel.c:1205 src/render.c:8226
+#: src/ctlpanel.c:1213 src/render.c:8265
 msgid "Power"
 msgstr "Питание"
 
-#: src/ctlpanel.c:1206
+#: src/ctlpanel.c:1214
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "Время простоя до затемнения, гашения, блокировки и сна"
 
-#: src/ctlpanel.c:1207 src/saver.c:837
+#: src/ctlpanel.c:1215 src/saver.c:1247
 msgid "Screensaver"
 msgstr "Хранитель экрана"
 
-#: src/ctlpanel.c:1208
+#: src/ctlpanel.c:1216
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr "Что экран показывает в простое и как выглядит экран блокировки"
 
-#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
+#: src/ctlpanel.c:1217 src/ctlpanel.c:2808
 msgid "Lock screen"
 msgstr "Экран блокировки"
 
-#: src/ctlpanel.c:1213
+#: src/ctlpanel.c:1221
 msgid "Unlock with fingerprint"
 msgstr "Разблокировка по отпечатку"
 
-#: src/ctlpanel.c:1222
+#: src/ctlpanel.c:1230
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr ""
 "Установите fprintd, выполните fprintd-enroll; пароль тоже работает всегда"
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
+#: src/ctlpanel.c:1238 src/ctlpanel.c:1239 src/ctlpanel.c:2807
 msgid "Game mode"
 msgstr "Игровой режим"
 
-#: src/ctlpanel.c:1232
+#: src/ctlpanel.c:1240
 msgid "Enter cycles auto / always on / always off — same as Super+G"
 msgstr ""
 "Enter перебирает «автоматически / всегда включён / всегда выключен» — как "
 "Super+G"
 
-#: src/ctlpanel.c:1233
+#: src/ctlpanel.c:1241
 msgid "Detect games"
 msgstr "Определять игры"
 
-#: src/ctlpanel.c:1235
+#: src/ctlpanel.c:1243
 msgid "Treat a fullscreen game window as a game unless it is excluded"
 msgstr "Считает полноэкранное окно игры игрой, если оно не исключено"
 
-#: src/ctlpanel.c:1236
+#: src/ctlpanel.c:1244
 msgid "Open games on"
 msgstr "Открывать игры на"
 
-#: src/ctlpanel.c:1239
+#: src/ctlpanel.c:1247
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
 msgstr ""
 "«Основной» — экран, помеченный PRIMARY в Super+D; «Спрашивать» слушается игры"
 
-#: src/ctlpanel.c:1240
+#: src/ctlpanel.c:1248
 msgid "Stop the AI while gaming"
 msgstr "Останавливать ИИ во время игры"
 
-#: src/ctlpanel.c:1242
+#: src/ctlpanel.c:1250
 msgid "Hold off idle while gaming"
 msgstr "Откладывать простой во время игры"
 
-#: src/ctlpanel.c:1244
+#: src/ctlpanel.c:1252
 msgid "A gamepad is not input as far as the idle timer is concerned"
 msgstr "Для счётчика простоя геймпад не считается вводом"
 
-#: src/ctlpanel.c:1248
+#: src/ctlpanel.c:1256
 msgid "Drop screen effects while gaming"
 msgstr "Отключать экранные эффекты во время игры"
 
-#: src/ctlpanel.c:1250
+#: src/ctlpanel.c:1258
 msgid "The biggest win: lets the game draw straight to the display"
 msgstr "Наибольший выигрыш: позволяет игре рисовать прямо на экран"
 
-#: src/ctlpanel.c:1251
+#: src/ctlpanel.c:1259
 msgid "Pause the wallpaper while gaming"
 msgstr "Останавливать обои во время игры"
 
-#: src/ctlpanel.c:1253
+#: src/ctlpanel.c:1261
 msgid "Animated wallpapers keep rendering behind a fullscreen game"
 msgstr "Живые обои продолжают рисоваться за полноэкранной игрой"
 
-#: src/ctlpanel.c:1254
+#: src/ctlpanel.c:1262
 msgid "Stop the bar while gaming"
 msgstr "Останавливать панель во время игры"
 
-#: src/ctlpanel.c:1256
+#: src/ctlpanel.c:1264
 msgid "Frees memory, but the bar takes a moment to come back"
 msgstr "Освобождает память, но панель возвращается не мгновенно"
 
-#: src/ctlpanel.c:1257
+#: src/ctlpanel.c:1265
 msgid "Keep the mouse on the game's screen"
 msgstr "Удерживать мышь на экране игры"
 
-#: src/ctlpanel.c:1259
+#: src/ctlpanel.c:1267
 msgid "Games rarely ask for it themselves; Alt-Tab still frees it"
 msgstr "Игры редко просят об этом сами; Alt-Tab всё равно её отпускает"
 
-#: src/ctlpanel.c:1260
+#: src/ctlpanel.c:1268
 msgid "Quiet the kernel monitor while gaming"
 msgstr "Приглушать наблюдение за ядром во время игры"
 
-#: src/ctlpanel.c:1262
+#: src/ctlpanel.c:1270
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr ""
 "Экономит совсем немного, и вместе с ним останавливается наблюдение за "
 "безопасностью"
 
-#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
+#: src/ctlpanel.c:1273 src/ctlpanel.c:3226
 msgid "AI backend"
 msgstr "Движок ИИ"
 
-#: src/ctlpanel.c:1266
+#: src/ctlpanel.c:1274
 msgid "AI"
 msgstr "ИИ"
 
-#: src/ctlpanel.c:1267
+#: src/ctlpanel.c:1275
 msgid "Which device synapd runs inference on"
 msgstr "На каком устройстве synapd выполняет вычисления"
 
-#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
+#: src/ctlpanel.c:1276 src/ctlpanel.c:2805
 msgid "AI model"
 msgstr "Модель ИИ"
 
-#: src/ctlpanel.c:1269
+#: src/ctlpanel.c:1277
 msgid "AI window placement"
 msgstr "Размещение окон средствами ИИ"
 
-#: src/ctlpanel.c:1271
+#: src/ctlpanel.c:1279
 msgid "Let the AI layout decide where a new window goes"
 msgstr "Позволяет расположению от ИИ решать, куда попадёт новое окно"
 
-#: src/ctlpanel.c:1272
+#: src/ctlpanel.c:1280
 msgid "AI context in borders"
 msgstr "Контекст ИИ в рамках"
 
-#: src/ctlpanel.c:1274
+#: src/ctlpanel.c:1282
 msgid "Tint a window's border when the AI is holding context for it"
 msgstr "Подсвечивает рамку окна, пока ИИ держит для него контекст"
 
-#: src/ctlpanel.c:1277
+#: src/ctlpanel.c:1285
 msgid "Tools"
 msgstr "Инструменты"
 
-#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
+#: src/ctlpanel.c:1286 src/ctlpanel.c:2760
 msgid "Clipboard history"
 msgstr "История буфера обмена"
 
-#: src/ctlpanel.c:1279
+#: src/ctlpanel.c:1287
 msgid "News"
 msgstr "Новости"
 
-#: src/ctlpanel.c:1280
+#: src/ctlpanel.c:1288
 msgid "News refresh"
 msgstr "Обновление новостей"
 
-#: src/ctlpanel.c:1283
+#: src/ctlpanel.c:1291
 msgid "How often a feed may be re-fetched at most"
 msgstr "Как часто источник разрешено загружать заново, самое частое"
 
-#: src/ctlpanel.c:1295
+#: src/ctlpanel.c:1303
 msgid "System settings"
 msgstr "Настройки системы"
 
-#: src/ctlpanel.c:1296
+#: src/ctlpanel.c:1304
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr "Часы, язык, ядро, программы по умолчанию — на что настроена СИСТЕМА"
 
-#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
+#: src/ctlpanel.c:1306 src/ctlpanel.c:2752
 msgid "About OS"
 msgstr "О системе"
 
-#: src/ctlpanel.c:1299
+#: src/ctlpanel.c:1307
 msgid "About"
 msgstr "О программе"
 
-#: src/ctlpanel.c:1300
+#: src/ctlpanel.c:1308
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr "Знак, машина и то, на что настроен этот рабочий стол сейчас"
 
-#: src/ctlpanel.c:1398
+#: src/ctlpanel.c:1406
 msgid "device default"
 msgstr "По умолчанию для устройства"
 
-#: src/ctlpanel.c:1896
+#: src/ctlpanel.c:1910
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
 msgstr "Стекло выключено · панель, док и виджеты плотные · окна непрозрачные"
 
-#: src/ctlpanel.c:1952
+#: src/ctlpanel.c:1966
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
 msgstr "Стекло полностью · панель и док прозрачные · цвет с обоев"
 
-#: src/ctlpanel.c:2293
+#: src/ctlpanel.c:2307
 #, c-format
 msgid "RGB lights: off"
 msgstr "Подсветка RGB: выключена"
 
-#: src/ctlpanel.c:2294
+#: src/ctlpanel.c:2308
 #, c-format
 msgid "RGB lights: following the accent"
 msgstr "Подсветка RGB: следует акцентному цвету"
 
-#: src/ctlpanel.c:2355
+#: src/ctlpanel.c:2369
 #, c-format
 msgid "Screen reader: off"
 msgstr "Экранный диктор: выключен"
 
-#: src/ctlpanel.c:2355
+#: src/ctlpanel.c:2369
 #, c-format
 msgid "Screen reader: on"
 msgstr "Экранный диктор: включён"
 
-#: src/ctlpanel.c:2367
+#: src/ctlpanel.c:2381
 #, c-format
 msgid "No longer listening · the microphone is closed"
 msgstr "Больше не слушает · микрофон закрыт"
 
-#: src/ctlpanel.c:2368
+#: src/ctlpanel.c:2382
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
 msgstr "Ожидает слова «Synapse» · микрофон открыт"
 
-#: src/ctlpanel.c:2406
+#: src/ctlpanel.c:2420
 #, c-format
 msgid "always on"
 msgstr "всегда включён"
 
-#: src/ctlpanel.c:2407
+#: src/ctlpanel.c:2421
 #, c-format
 msgid "always off"
 msgstr "всегда выключен"
 
-#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#: src/ctlpanel.c:2422 src/ctlpanel.c:2572
 #, c-format
 msgid "auto (%s)"
 msgstr "автоматически (%s)"
 
-#: src/ctlpanel.c:2521
+#: src/ctlpanel.c:2535
 #, c-format
 msgid "on — %d missed"
 msgstr "включено — пропущено %d"
 
-#: src/ctlpanel.c:2529
+#: src/ctlpanel.c:2543
 msgid "desktop sound"
 msgstr "звук рабочего стола"
 
-#: src/ctlpanel.c:2537
+#: src/ctlpanel.c:2551
 msgid "DNxHR ~1.1 GB/min"
 msgstr "DNxHR ~1,1 ГБ/мин"
 
-#: src/ctlpanel.c:2537
+#: src/ctlpanel.c:2551
 msgid "off (H.264 mp4)"
 msgstr "выключено (H.264 mp4)"
 
-#: src/ctlpanel.c:2559
+#: src/ctlpanel.c:2573
 msgid "on · laptop"
 msgstr "включено · ноутбук"
 
-#: src/ctlpanel.c:2559
+#: src/ctlpanel.c:2573
 msgid "off · desktop"
 msgstr "выключено · настольный ПК"
 
-#: src/ctlpanel.c:2570
+#: src/ctlpanel.c:2584
 #, c-format
 msgid "Built-in off"
 msgstr "Встроенный экран выключен"
 
-#: src/ctlpanel.c:2729
+#: src/ctlpanel.c:2743
 msgid "Terminal"
 msgstr "Терминал"
 
-#: src/ctlpanel.c:2730
+#: src/ctlpanel.c:2744
 msgid "AI command bar"
 msgstr "Командная строка ИИ"
 
-#: src/ctlpanel.c:2731
+#: src/ctlpanel.c:2745
 msgid "Ask the AI about the window"
 msgstr "Спросить ИИ об этом окне"
 
-#: src/ctlpanel.c:2732
+#: src/ctlpanel.c:2746
 msgid "Neural overlay"
 msgstr "Нейронный слой"
 
-#: src/ctlpanel.c:2733
+#: src/ctlpanel.c:2747
 msgid "Welcome menu"
 msgstr "Меню приветствия"
 
-#: src/ctlpanel.c:2735
+#: src/ctlpanel.c:2749
 msgid "Keyboard shortcuts (this list)"
 msgstr "Сочетания клавиш (этот список)"
 
-#: src/ctlpanel.c:2739
+#: src/ctlpanel.c:2753
 msgid "System settings (syn-settings)"
 msgstr "Системные настройки (syn-settings)"
 
-#: src/ctlpanel.c:2740
+#: src/ctlpanel.c:2754
 msgid "Find and add network printers"
 msgstr "Найти и добавить сетевые принтеры"
 
-#: src/ctlpanel.c:2741
+#: src/ctlpanel.c:2755
 msgid "Mission control (all windows)"
 msgstr "Обзор (все окна)"
 
-#: src/ctlpanel.c:2742
+#: src/ctlpanel.c:2756
 msgid "Rebind a shortcut"
 msgstr "Переназначить сочетание"
 
-#: src/ctlpanel.c:2744
+#: src/ctlpanel.c:2758
 msgid "Do Not Disturb (mute notifications)"
 msgstr "Не беспокоить (отключить уведомления)"
 
-#: src/ctlpanel.c:2745
+#: src/ctlpanel.c:2759
 msgid "Record screen"
 msgstr "Записать экран"
 
-#: src/ctlpanel.c:2747
+#: src/ctlpanel.c:2761
 msgid "Brightness up"
 msgstr "Ярче"
 
-#: src/ctlpanel.c:2748
+#: src/ctlpanel.c:2762
 msgid "Brightness down"
 msgstr "Темнее"
 
-#: src/ctlpanel.c:2750
+#: src/ctlpanel.c:2764
 msgid "Start button: text/logo"
 msgstr "Кнопка «Пуск»: текст или логотип"
 
-#: src/ctlpanel.c:2751
+#: src/ctlpanel.c:2765
 msgid "Close window"
 msgstr "Закрыть окно"
 
-#: src/ctlpanel.c:2752
+#: src/ctlpanel.c:2766
 msgid "Quit synui"
 msgstr "Выйти из synui"
 
-#: src/ctlpanel.c:2753
+#: src/ctlpanel.c:2767
 msgid "Cycle layout"
 msgstr "Сменить раскладку окон"
 
-#: src/ctlpanel.c:2754
+#: src/ctlpanel.c:2768
 msgid "Tile this desktop"
 msgstr "Разложить плиткой на этом столе"
 
-#: src/ctlpanel.c:2755
+#: src/ctlpanel.c:2769
 msgid "Cascade this desktop (overlapping piles)"
 msgstr "Разложить каскадом на этом столе (стопки внахлёст)"
 
-#: src/ctlpanel.c:2756
+#: src/ctlpanel.c:2770
 msgid "Arrange floating windows"
 msgstr "Упорядочить плавающие окна"
 
-#: src/ctlpanel.c:2757
+#: src/ctlpanel.c:2771
 msgid "Shrink master area"
 msgstr "Уменьшить главную область"
 
-#: src/ctlpanel.c:2758
+#: src/ctlpanel.c:2772
 msgid "Grow master area"
 msgstr "Увеличить главную область"
 
-#: src/ctlpanel.c:2759
+#: src/ctlpanel.c:2773
 msgid "niri: pull window into the left column"
 msgstr "niri: перенести окно в левый столбец"
 
-#: src/ctlpanel.c:2760
+#: src/ctlpanel.c:2774
 msgid "niri: push window out to its own column"
 msgstr "niri: вынести окно в отдельный столбец"
 
-#: src/ctlpanel.c:2761
+#: src/ctlpanel.c:2775
 msgid "Focus next window"
 msgstr "Перейти к следующему окну"
 
-#: src/ctlpanel.c:2762
+#: src/ctlpanel.c:2776
 msgid "Focus previous window"
 msgstr "Перейти к предыдущему окну"
 
-#: src/ctlpanel.c:2763
+#: src/ctlpanel.c:2777
 msgid "Switch window (Alt+Tab)"
 msgstr "Переключить окно (Alt+Tab)"
 
-#: src/ctlpanel.c:2764
+#: src/ctlpanel.c:2778
 msgid "Switch window, backwards"
 msgstr "Переключить окно назад"
 
-#: src/ctlpanel.c:2765
+#: src/ctlpanel.c:2779
 msgid "Move window down the stack"
 msgstr "Опустить окно в стопке"
 
-#: src/ctlpanel.c:2766
+#: src/ctlpanel.c:2780
 msgid "Move window up the stack"
 msgstr "Поднять окно в стопке"
 
-#: src/ctlpanel.c:2767
+#: src/ctlpanel.c:2781
 msgid "Move window left (or earlier in the layout)"
 msgstr "Сдвинуть окно влево (или раньше в раскладке)"
 
-#: src/ctlpanel.c:2768
+#: src/ctlpanel.c:2782
 msgid "Move window right (or later in the layout)"
 msgstr "Сдвинуть окно вправо (или позже в раскладке)"
 
-#: src/ctlpanel.c:2769
+#: src/ctlpanel.c:2783
 msgid "Move window up (or earlier in the layout)"
 msgstr "Сдвинуть окно вверх (или раньше в раскладке)"
 
-#: src/ctlpanel.c:2770
+#: src/ctlpanel.c:2784
 msgid "Move window down (or later in the layout)"
 msgstr "Сдвинуть окно вниз (или позже в раскладке)"
 
-#: src/ctlpanel.c:2771
+#: src/ctlpanel.c:2785
 msgid "Float window"
 msgstr "Сделать окно плавающим"
 
-#: src/ctlpanel.c:2772
+#: src/ctlpanel.c:2786
 msgid "Fullscreen window"
 msgstr "Окно на весь экран"
 
-#: src/ctlpanel.c:2773
+#: src/ctlpanel.c:2787
 msgid "Maximize window"
 msgstr "Развернуть окно"
 
-#: src/ctlpanel.c:2774
+#: src/ctlpanel.c:2788
 msgid "Fill screen height (or put it back)"
 msgstr "Занять высоту экрана (или вернуть)"
 
-#: src/ctlpanel.c:2775
+#: src/ctlpanel.c:2789
 msgid "Fill screen width (or put it back)"
 msgstr "Занять ширину экрана (или вернуть)"
 
-#: src/ctlpanel.c:2776
+#: src/ctlpanel.c:2790
 msgid "Minimize window"
 msgstr "Свернуть окно"
 
-#: src/ctlpanel.c:2777
+#: src/ctlpanel.c:2791
 msgid "Restore minimized window"
 msgstr "Восстановить свёрнутое окно"
 
-#: src/ctlpanel.c:2778
+#: src/ctlpanel.c:2792
 msgid "Titlebars on/off"
 msgstr "Заголовки окон вкл./выкл."
 
-#: src/ctlpanel.c:2780
+#: src/ctlpanel.c:2794
 msgid "Screens: extend / duplicate / built-in off"
 msgstr "Экраны: расширить / дублировать / встроенный выключить"
 
-#: src/ctlpanel.c:2781
+#: src/ctlpanel.c:2795
 msgid "Scale the whole desktop (accessibility)"
 msgstr "Масштабировать весь рабочий стол (доступность)"
 
-#: src/ctlpanel.c:2782
+#: src/ctlpanel.c:2796
 msgid "Wallpaper picker"
 msgstr "Выбор обоев"
 
-#: src/ctlpanel.c:2783
+#: src/ctlpanel.c:2797
 msgid "Reload wallpaper / config"
 msgstr "Перезагрузить обои и настройки"
 
-#: src/ctlpanel.c:2784
+#: src/ctlpanel.c:2798
 msgid "Visual effects (CRT + window)"
 msgstr "Визуальные эффекты (CRT и окна)"
 
-#: src/ctlpanel.c:2785
+#: src/ctlpanel.c:2799
 msgid "Desktop widget manager"
 msgstr "Управление виджетами рабочего стола"
 
-#: src/ctlpanel.c:2787
+#: src/ctlpanel.c:2801
 msgid "CRT effects on/off"
 msgstr "Эффекты CRT вкл./выкл."
 
-#: src/ctlpanel.c:2788
+#: src/ctlpanel.c:2802
 msgid "Power saving panel"
 msgstr "Панель энергосбережения"
 
-#: src/ctlpanel.c:2789
+#: src/ctlpanel.c:2803
 msgid "Screensaver + lock screen"
 msgstr "Заставка и экран блокировки"
 
-#: src/ctlpanel.c:2795
+#: src/ctlpanel.c:2809
 msgid "AI backend (GPU/CPU/off)"
 msgstr "Движок ИИ (ГП/ЦП/выкл.)"
 
-#: src/ctlpanel.c:2796
+#: src/ctlpanel.c:2810
 msgid "Move window to next output"
 msgstr "Перенести окно на следующий экран"
 
-#: src/ctlpanel.c:2837
+#: src/ctlpanel.c:2851
 msgid "Start menu (application page)"
 msgstr "Меню «Пуск» (страница приложений)"
 
-#: src/ctlpanel.c:2838
+#: src/ctlpanel.c:2852
 msgid "Start menu (rofi)"
 msgstr "Меню «Пуск» (rofi)"
 
-#: src/ctlpanel.c:2840
+#: src/ctlpanel.c:2854
 msgid "Start menu (bar menu)"
 msgstr "Меню «Пуск» (меню панели)"
 
-#: src/ctlpanel.c:2848
+#: src/ctlpanel.c:2862
 msgid "Move window to previous output"
 msgstr "Перенести окно на предыдущий экран"
 
-#: src/ctlpanel.c:2878
+#: src/ctlpanel.c:2892
 msgid "Enter"
 msgstr "Enter"
 
-#: src/ctlpanel.c:2879
+#: src/ctlpanel.c:2893
 msgid "KP Enter"
 msgstr "Enter (цифр. блок)"
 
-#: src/ctlpanel.c:2880
+#: src/ctlpanel.c:2894
 msgid "Space"
 msgstr "Пробел"
 
-#: src/ctlpanel.c:2881
+#: src/ctlpanel.c:2895
 msgid "Esc"
 msgstr "Esc"
 
-#: src/ctlpanel.c:2882
+#: src/ctlpanel.c:2896
 msgid "Del"
 msgstr "Del"
 
-#: src/ctlpanel.c:2883
+#: src/ctlpanel.c:2897
 msgid "Backspace"
 msgstr "Backspace"
 
-#: src/ctlpanel.c:2884
+#: src/ctlpanel.c:2898
 msgid "Tab"
 msgstr "Tab"
 
-#: src/ctlpanel.c:2948
+#: src/ctlpanel.c:2962
 msgid "Super"
 msgstr "Super"
 
-#: src/ctlpanel.c:2949
+#: src/ctlpanel.c:2963
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: src/ctlpanel.c:2950
+#: src/ctlpanel.c:2964
 msgid "Alt"
 msgstr "Alt"
 
-#: src/ctlpanel.c:2951
+#: src/ctlpanel.c:2965
 msgid "Shift"
 msgstr "Shift"
 
-#: src/ctlpanel.c:3047
+#: src/ctlpanel.c:3061
 #, c-format
 msgid "Switch to workspace"
 msgstr "Перейти на рабочее место"
 
-#: src/ctlpanel.c:3053
+#: src/ctlpanel.c:3067
 #, c-format
 msgid "Move window to workspace"
 msgstr "Перенести окно на рабочее место"
 
-#: src/ctlpanel.c:3141
+#: src/ctlpanel.c:3155
 #, c-format
 msgid "loading · the AI pauses until it is up"
 msgstr "загрузка · ИИ приостановлен, пока не будет готов"
 
-#: src/ctlpanel.c:3231
+#: src/ctlpanel.c:3245
 #, c-format
 msgid "%s: still %s · switch did not land"
 msgstr "%s: по-прежнему %s · переключение не сработало"
 
-#: src/ctlpanel.c:3631
+#: src/ctlpanel.c:3645
 msgid "position"
 msgstr "положение"
 
-#: src/ctlpanel.c:3637
+#: src/ctlpanel.c:3651
 msgid "turn the cell on first"
 msgstr "сначала включите этот пункт"
 
-#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
-#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#: src/ctlpanel.c:3652 src/ctlpanel.c:3875 src/ctlpanel.c:3896
+#: src/ctlpanel.c:3922 src/ctlpanel.c:3942
 #, c-format
 msgid "dock is off"
 msgstr "док выключен"
 
-#: src/ctlpanel.c:3754
+#: src/ctlpanel.c:3768
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
 msgstr "нет отрисовщика GLES · эффекты здесь недоступны"
 
-#: src/ctlpanel.c:3765
+#: src/ctlpanel.c:3779
 msgid "CRT effects on"
 msgstr "Эффекты CRT включены"
 
-#: src/ctlpanel.c:3766
+#: src/ctlpanel.c:3780
 msgid "CRT effects off"
 msgstr "Эффекты CRT выключены"
 
-#: src/ctlpanel.c:3777
+#: src/ctlpanel.c:3791
 #, c-format
 msgid "game mode: always on"
 msgstr "игровой режим: всегда включён"
 
-#: src/ctlpanel.c:3778
+#: src/ctlpanel.c:3792
 #, c-format
 msgid "game mode: always off"
 msgstr "игровой режим: всегда выключен"
 
-#: src/ctlpanel.c:3779
+#: src/ctlpanel.c:3793
 #, c-format
 msgid "game mode: auto · a game is running"
 msgstr "игровой режим: автоматический · игра запущена"
 
-#: src/ctlpanel.c:3780
+#: src/ctlpanel.c:3794
 #, c-format
 msgid "game mode: auto · no game running"
 msgstr "игровой режим: автоматический · игр не запущено"
 
-#: src/ctlpanel.c:3836
+#: src/ctlpanel.c:3850
 msgid "bar on"
 msgstr "панель включена"
 
-#: src/ctlpanel.c:3836
+#: src/ctlpanel.c:3850
 msgid "bar off"
 msgstr "панель выключена"
 
-#: src/ctlpanel.c:3852
+#: src/ctlpanel.c:3866
 msgid "dock on"
 msgstr "док включён"
 
-#: src/ctlpanel.c:3852
+#: src/ctlpanel.c:3866
 msgid "dock off"
 msgstr "док выключен"
 
-#: src/ctlpanel.c:3870
+#: src/ctlpanel.c:3884
 msgid "dock auto-hide on"
 msgstr "автоскрытие дока включено"
 
-#: src/ctlpanel.c:3871
+#: src/ctlpanel.c:3885
 msgid "dock auto-hide off"
 msgstr "автоскрытие дока выключено"
 
-#: src/ctlpanel.c:3890
+#: src/ctlpanel.c:3904
 #, c-format
 msgid "an auto-hiding dock is always on top"
 msgstr "автоматически скрываемый док всегда сверху"
 
-#: src/ctlpanel.c:3899
+#: src/ctlpanel.c:3913
 msgid "dock above windows"
 msgstr "док поверх окон"
 
-#: src/ctlpanel.c:3900
+#: src/ctlpanel.c:3914
 msgid "dock below windows"
 msgstr "док под окнами"
 
-#: src/ctlpanel.c:3907
+#: src/ctlpanel.c:3921
 #, c-format
 msgid "the dock clock is off"
 msgstr "часы дока выключены"
 
-#: src/ctlpanel.c:3917
+#: src/ctlpanel.c:3931
 #, c-format
 msgid "dock clock %s"
 msgstr "часы дока %s"
 
-#: src/ctlpanel.c:3936
+#: src/ctlpanel.c:3950
 msgid "magnify"
 msgstr "увеличение"
 
-#: src/ctlpanel.c:3938
+#: src/ctlpanel.c:3952
 msgid "clock"
 msgstr "часы"
 
-#: src/ctlpanel.c:3940
+#: src/ctlpanel.c:3954
 msgid "all-apps button"
 msgstr "кнопка «Все приложения»"
 
-#: src/ctlpanel.c:3942
+#: src/ctlpanel.c:3956
 msgid "power button"
 msgstr "кнопка питания"
 
-#: src/ctlpanel.c:3949
+#: src/ctlpanel.c:3963
 #, c-format
 msgid "dock %s %s"
 msgstr "док %s %s"
 
-#: src/ctlpanel.c:3949
+#: src/ctlpanel.c:3963
 msgid "on"
 msgstr "включено"
 
-#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4313 src/render.c:5417
-#: src/render.c:5433 src/render.c:6234
+#: src/ctlpanel.c:3963 src/render.c:1276 src/render.c:4352 src/render.c:5456
+#: src/render.c:5472 src/render.c:6273
 #, c-format
 msgid "off"
 msgstr "выключено"
 
-#: src/ctlpanel.c:3962
+#: src/ctlpanel.c:3976
 #, c-format
 msgid "the bar is off"
 msgstr "панель выключена"
 
-#: src/ctlpanel.c:3973
+#: src/ctlpanel.c:3987
 msgid "bar auto-hide on for every monitor"
 msgstr "автоскрытие панели включено на всех экранах"
 
-#: src/ctlpanel.c:3974
+#: src/ctlpanel.c:3988
 msgid "bar auto-hide off for every monitor"
 msgstr "автоскрытие панели выключено на всех экранах"
 
-#: src/ctlpanel.c:3988
+#: src/ctlpanel.c:4002
 #, c-format
 msgid "notifications are silenced"
 msgstr "уведомления отключены"
 
-#: src/ctlpanel.c:3989
+#: src/ctlpanel.c:4003
 #, c-format
 msgid "notifications are back on"
 msgstr "уведомления снова включены"
 
-#: src/ctlpanel.c:4001
+#: src/ctlpanel.c:4015
 #, c-format
 msgid "recordings capture desktop sound"
 msgstr "записи захватывают звук рабочего стола"
 
-#: src/ctlpanel.c:4002
+#: src/ctlpanel.c:4016
 #, c-format
 msgid "recordings are silent"
 msgstr "записи без звука"
 
-#: src/ctlpanel.c:4013
+#: src/ctlpanel.c:4027
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
 msgstr "записи открываются в видеоредакторе · ~1,1 ГБ/мин"
 
-#: src/ctlpanel.c:4014
+#: src/ctlpanel.c:4028
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
 msgstr "записи в H.264 mp4 · небольшие, отправить можно куда угодно"
 
-#: src/ctlpanel.c:4024
+#: src/ctlpanel.c:4038
 msgid "titlebars off"
 msgstr "заголовки окон выключены"
 
-#: src/ctlpanel.c:4025
+#: src/ctlpanel.c:4039
 msgid "titlebars on"
 msgstr "заголовки окон включены"
 
-#: src/ctlpanel.c:4034
+#: src/ctlpanel.c:4048
 #, c-format
 msgid "start button: %s"
 msgstr "кнопка «Пуск»: %s"
 
-#: src/ctlpanel.c:4045
+#: src/ctlpanel.c:4059
 #, c-format
 msgid "transparency on · %d%%"
 msgstr "прозрачность включена · %d%%"
 
-#: src/ctlpanel.c:4045
+#: src/ctlpanel.c:4059
 #, c-format
 msgid "transparency off"
 msgstr "прозрачность выключена"
 
-#: src/ctlpanel.c:4054
+#: src/ctlpanel.c:4068
 msgid "night light on"
 msgstr "ночной свет включён"
 
-#: src/ctlpanel.c:4055
+#: src/ctlpanel.c:4069
 msgid "night light off"
 msgstr "ночной свет выключен"
 
-#: src/ctlpanel.c:4071
+#: src/ctlpanel.c:4085
 #, c-format
 msgid "switching AI backend …"
 msgstr "переключение движка ИИ …"
 
-#: src/ctlpanel.c:4213
+#: src/ctlpanel.c:4227
 #, c-format
 msgid "transparency %d%%"
 msgstr "прозрачность %d%%"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 #, c-format
 msgid "%s is at its %s"
 msgstr "%s — %s"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 msgid "minimum"
 msgstr "минимум"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 msgid "maximum"
 msgstr "максимум"
 
-#: src/ctlpanel.c:4274
+#: src/ctlpanel.c:4288
 #, c-format
 msgid "%s: %d %s · applies when you stop"
 msgstr "%s: %d %s · применится, когда вы остановитесь"
 
-#: src/ctlpanel.c:4309
+#: src/ctlpanel.c:4323
 #, c-format
 msgid "%s: %s · default"
 msgstr "%s: %s · по умолчанию"
 
-#: src/ctlpanel.c:4350
+#: src/ctlpanel.c:4364
 msgid "no models in /var/lib/synapd/models"
 msgstr "нет моделей в /var/lib/synapd/models"
 
-#: src/ctlpanel.c:4360
+#: src/ctlpanel.c:4374
 #, c-format
 msgid "loads when you stop · Esc cancels"
 msgstr "загрузится, когда вы остановитесь · Esc отменяет"
 
-#: src/ctlpanel.c:4629
+#: src/ctlpanel.c:4643
 #, c-format
 msgid "Rebind cancelled"
 msgstr "Переназначение отменено"
 
-#: src/ctlpanel.c:4698
+#: src/ctlpanel.c:4712
 #, c-format
 msgid "nothing to reset on this row"
 msgstr "в этой строке нечего сбрасывать"
 
-#: src/ctlpanel.c:4703
+#: src/ctlpanel.c:4717
 #, c-format
 msgid "%s reset to %s"
 msgstr "%s сброшено на %s"
 
-#: src/ctlpanel.c:4706
+#: src/ctlpanel.c:4720
 #, c-format
 msgid "%s is already at its default"
 msgstr "%s уже имеет значение по умолчанию"
 
-#: src/ctlpanel.c:4732
+#: src/ctlpanel.c:4746
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
 msgstr "Переназначение находится в разделе «Сочетания клавиш»"
 
-#: src/ctlpanel.c:4744
+#: src/ctlpanel.c:4758
 #, c-format
 msgid "The tap is set from the Shortcuts category"
 msgstr "Одиночное нажатие настраивается в разделе «Сочетания клавиш»"
@@ -2202,7 +2212,7 @@ msgstr "Упорядочить по дате"
 msgid "Task Manager"
 msgstr "Диспетчер задач"
 
-#: src/deskmenu.c:92 src/render.c:8257
+#: src/deskmenu.c:92 src/render.c:8296
 msgid "Open"
 msgstr "Открыть"
 
@@ -2444,7 +2454,7 @@ msgstr[2] "+%d строк"
 msgid "NEURAL OVERLAY"
 msgstr "НЕЙРОННЫЙ СЛОЙ"
 
-#: src/render.c:979 src/render.c:5227
+#: src/render.c:979 src/render.c:5266
 msgid "loaded"
 msgstr "загружена"
 
@@ -2584,121 +2594,124 @@ msgstr "Предпросмотр недоступен"
 msgid "No preview"
 msgstr "Нет предпросмотра"
 
-#: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
+#: src/render.c:1726
+msgid ""
+"Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/"
+"Esc close"
 msgstr ""
-"Вверх/Вниз предпросмотр · Tab экран · m масштаб · r обновить · w wallhaven · Enter/Esc закрыть"
+"Вверх/Вниз предпросмотр · Tab экран · m масштаб · r обновить · w wallhaven · "
+"Enter/Esc закрыть"
 
-#: src/render.c:1748
+#: src/render.c:1787
 msgid "POWER SAVING"
 msgstr "ЭНЕРГОСБЕРЕЖЕНИЕ"
 
-#: src/render.c:1760
+#: src/render.c:1799
 #, c-format
 msgid "no lid switch"
 msgstr "нет датчика крышки"
 
-#: src/render.c:1763
+#: src/render.c:1802
 msgid "closed"
 msgstr "закрыта"
 
-#: src/render.c:1763
+#: src/render.c:1802
 msgid "open"
 msgstr "открыта"
 
-#: src/render.c:1779
+#: src/render.c:1818
 msgid "idle inhibited (media playing) · timers held"
 msgstr "простой заблокирован (идёт воспроизведение) · таймеры остановлены"
 
-#: src/render.c:1783
+#: src/render.c:1822
 msgid "disabled · no stage will fire"
 msgstr "отключено · ни один этап не сработает"
 
-#: src/render.c:1830
+#: src/render.c:1869
 msgid "Up/Down select · Left/Right adjust · Space toggle"
 msgstr "Вверх/Вниз выбрать · Влево/Вправо изменить · Пробел переключить"
 
-#: src/render.c:1832 src/render.c:1955
+#: src/render.c:1871 src/render.c:1994
 msgid "s save (unsaved changes) · Esc close"
 msgstr "s сохранить (есть несохранённые изменения) · Esc закрыть"
 
-#: src/render.c:1833 src/render.c:1956
+#: src/render.c:1872 src/render.c:1995
 msgid "s save · Esc close"
 msgstr "s сохранить · Esc закрыть"
 
-#: src/render.c:1888
+#: src/render.c:1927
 msgid "SCREENSAVER"
 msgstr "ЗАСТАВКА"
 
-#: src/render.c:1898
+#: src/render.c:1937
 msgid "idle inhibited (media playing) · saver held"
 msgstr "простой заблокирован (идёт воспроизведение) · заставка остановлена"
 
-#: src/render.c:1905
+#: src/render.c:1944
 msgid "power saving is off (Super+P) · saver disabled"
 msgstr "энергосбережение выключено (Super+P) · заставка отключена"
 
-#: src/render.c:1909
+#: src/render.c:1948
 msgid "no timeout set · p previews the current mode"
 msgstr "время ожидания не задано · p показывает текущий режим"
 
-#: src/render.c:1953
+#: src/render.c:1992
 msgid "Up/Down select · Left/Right adjust · p preview"
 msgstr "Вверх/Вниз выбрать · Влево/Вправо изменить · p предпросмотр"
 
-#: src/render.c:2074
+#: src/render.c:2113
 msgid "CURSOR THEME"
 msgstr "ТЕМА КУРСОРА"
 
-#: src/render.c:2104
+#: src/render.c:2143
 msgid "No cursor themes installed."
 msgstr "Темы курсора не установлены."
 
-#: src/render.c:2108
+#: src/render.c:2147
 msgid "synui-cursor install <archive>   then press r"
 msgstr "synui-cursor install <архив>   затем нажмите r"
 
-#: src/render.c:2166
+#: src/render.c:2205
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
 msgstr ""
 "Вверх/Вниз предпросмотр · -/+ размер · r обновить · Enter применить · Esc "
 "отмена"
 
-#: src/render.c:2237
+#: src/render.c:2276
 msgid "UI FONT"
 msgstr "ШРИФТ ИНТЕРФЕЙСА"
 
-#: src/render.c:2267
+#: src/render.c:2306
 msgid "No font families found."
 msgstr "Семейства шрифтов не найдены."
 
-#: src/render.c:2335
+#: src/render.c:2374
 msgid "Handgloves 0123"
 msgstr "Съешь ещё этих булок 0123"
 
-#: src/render.c:2383
+#: src/render.c:2422
 msgid "Not monospaced · kitty and foot may not render correctly in it"
 msgstr "Не моноширинный · kitty и foot могут отображаться в нём неверно"
 
-#: src/render.c:2390
+#: src/render.c:2429
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
 msgstr ""
 "Вверх/Вниз предпросмотр · d по умолчанию · r обновить · Enter применить · "
 "Esc отмена"
 
-#: src/render.c:2522
+#: src/render.c:2561
 msgid "Type to search"
 msgstr "Введите для поиска"
 
-#: src/render.c:2533
+#: src/render.c:2572
 msgid "No applications match"
 msgstr "Нет подходящих приложений"
 
-#: src/render.c:2534
+#: src/render.c:2573
 msgid "No applications found"
 msgstr "Приложения не найдены"
 
-#: src/render.c:2629
+#: src/render.c:2668
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
@@ -2709,77 +2722,77 @@ msgstr[1] ""
 msgstr[2] ""
 "%d приложений · введите для поиска · Enter открывает · Esc закрывает"
 
-#: src/render.c:2697
+#: src/render.c:2736
 msgid "Uninstall…"
 msgstr "Удалить…"
 
-#: src/render.c:2784
+#: src/render.c:2823
 msgid "EMOJI"
 msgstr "ЭМОДЗИ"
 
-#: src/render.c:2806
+#: src/render.c:2845
 msgid "type to search"
 msgstr "введите для поиска"
 
-#: src/render.c:2865
+#: src/render.c:2904
 msgid "No emoji match that search."
 msgstr "Ни одно эмодзи не подходит под этот запрос."
 
-#: src/render.c:2866
+#: src/render.c:2905
 msgid "Nothing here yet."
 msgstr "Здесь пока пусто."
 
-#: src/render.c:2928
+#: src/render.c:2967
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
 msgstr ""
 "Введите для поиска · Щелчок или Tab категория · Enter вставить · Esc "
 "очистить/закрыть"
 
-#: src/render.c:3073
+#: src/render.c:3112
 msgid "CALCULATOR"
 msgstr "КАЛЬКУЛЯТОР"
 
-#: src/render.c:3113
+#: src/render.c:3152
 msgid "Anything you work out is kept here."
 msgstr "Всё, что вы посчитаете, останется здесь."
 
-#: src/render.c:3155
+#: src/render.c:3194
 msgid "type an expression"
 msgstr "введите выражение"
 
-#: src/render.c:3260
+#: src/render.c:3299
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
 msgstr "Enter вычисляет · Ctrl+C копирует · Ctrl+V вставляет"
 
-#: src/render.c:3262
+#: src/render.c:3301
 msgid "Up/Down recall the tape · Esc clears, then closes"
 msgstr "Вверх/Вниз возвращают историю · Esc очищает, затем закрывает"
 
-#: src/render.c:3331
+#: src/render.c:3370
 msgid "EQUALIZER"
 msgstr "ЭКВАЛАЙЗЕР"
 
-#: src/render.c:3340
+#: src/render.c:3379
 msgid "output routed through the equalizer sink"
 msgstr "вывод идёт через эквалайзер"
 
-#: src/render.c:3341
+#: src/render.c:3380
 msgid "off — audio goes straight to your device"
 msgstr "выключено — звук идёт прямо на ваше устройство"
 
-#: src/render.c:3417
+#: src/render.c:3456
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
 msgstr "Вверх/Вниз строка · Влево/Вправо изменить · r ровно · Esc закрыть"
 
-#: src/render.c:3487
+#: src/render.c:3526
 msgid "CROP — RECENT IMAGES"
 msgstr "ОБРЕЗКА — НЕДАВНИЕ ИЗОБРАЖЕНИЯ"
 
-#: src/render.c:3488
+#: src/render.c:3527
 msgid "IMAGES — RECENT"
 msgstr "ИЗОБРАЖЕНИЯ — НЕДАВНИЕ"
 
-#: src/render.c:3493
+#: src/render.c:3532
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
@@ -2787,39 +2800,39 @@ msgstr[0] "%d изображение"
 msgstr[1] "%d изображения"
 msgstr[2] "%d изображений"
 
-#: src/render.c:3512
+#: src/render.c:3551
 msgid "No images in Pictures, Wallpapers or Downloads."
 msgstr "Нет изображений в папках «Изображения», «Обои» и «Загрузки»."
 
-#: src/render.c:3516
+#: src/render.c:3555
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
 msgstr ""
 "Нажмите r, чтобы обновить, или откройте файл напрямую: synctl dispatch view "
 "<путь>"
 
-#: src/render.c:3573
+#: src/render.c:3612
 msgid "Enter crop · v view · r rescan · Esc close"
 msgstr "Enter обрезать · v просмотр · r обновить · Esc закрыть"
 
-#: src/render.c:3574
+#: src/render.c:3613
 msgid "Enter view · c crop · r rescan · Esc close"
 msgstr "Enter просмотр · c обрезать · r обновить · Esc закрыть"
 
-#: src/render.c:3684
+#: src/render.c:3723
 msgid "VIEW"
 msgstr "ПРОСМОТР"
 
-#: src/render.c:3821
+#: src/render.c:3860
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
 msgstr ""
 "Перетаскивание двигает · стрелки прокручивают · Shift × 4 · n / p следующее "
 "и предыдущее"
 
-#: src/render.c:3823
+#: src/render.c:3862
 msgid "← → next and previous · drag or scroll to zoom in"
 msgstr "← → следующее и предыдущее · перетащите или прокрутите для увеличения"
 
-#: src/render.c:3828
+#: src/render.c:3867
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
@@ -2828,19 +2841,19 @@ msgstr ""
 "Колесо увеличивает · + − масштаб · 0 вписать · 1 реальный размер · c "
 "обрезать · r обновить · Esc или × %s"
 
-#: src/render.c:3831 src/render.c:4024
+#: src/render.c:3870 src/render.c:4063
 msgid "back to the list"
 msgstr "назад к списку"
 
-#: src/render.c:3831
+#: src/render.c:3870
 msgid "close"
 msgstr "закрыть"
 
-#: src/render.c:3981
+#: src/render.c:4020
 msgid "CROP"
 msgstr "ОБРЕЗКА"
 
-#: src/render.c:4014
+#: src/render.c:4053
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
@@ -2848,7 +2861,7 @@ msgstr ""
 "Перетащите для выделения · перетащите угол, чтобы его поправить · Tab "
 "выбирает угол, который двигают стрелки"
 
-#: src/render.c:4022
+#: src/render.c:4061
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
@@ -2857,246 +2870,246 @@ msgstr ""
 "Стрелки меняют размер · Ctrl+стрелки двигают · Shift × 25 · a всё · Enter "
 "сохраняет копию · Esc %s"
 
-#: src/render.c:4024
+#: src/render.c:4063
 msgid "cancel"
 msgstr "отмена"
 
-#: src/render.c:4123
+#: src/render.c:4162
 msgid "WINDOW EFFECTS"
 msgstr "ЭФФЕКТЫ ОКОН"
 
-#: src/render.c:4123
+#: src/render.c:4162
 msgid "CRT FILTERS"
 msgstr "ФИЛЬТРЫ CRT"
 
-#: src/render.c:4130
+#: src/render.c:4169
 msgid "Tab → CRT filters"
 msgstr "Tab → фильтры CRT"
 
-#: src/render.c:4131
+#: src/render.c:4170
 msgid "Tab → window effects"
 msgstr "Tab → эффекты окон"
 
-#: src/render.c:4147
+#: src/render.c:4186
 msgid "no GLES renderer · filters unavailable on this display"
 msgstr "нет отрисовщика GLES · фильтры недоступны на этом экране"
 
-#: src/render.c:4151
+#: src/render.c:4190
 msgid "filters off · Space to turn them on"
 msgstr "фильтры выключены · Пробел включает их"
 
-#: src/render.c:4214
+#: src/render.c:4253
 msgid "Up/Down select · Left/Right adjust · Space on/off"
 msgstr "Вверх/Вниз выбрать · Влево/Вправо изменить · Пробел вкл./выкл."
 
-#: src/render.c:4216
+#: src/render.c:4255
 msgid "s save (unsaved changes) · Tab page · Esc close"
 msgstr ""
 "s сохранить (есть несохранённые изменения) · Tab страница · Esc закрыть"
 
-#: src/render.c:4217
+#: src/render.c:4256
 msgid "s save · Tab page · Esc close"
 msgstr "s сохранить · Tab страница · Esc закрыть"
 
-#: src/render.c:4275
+#: src/render.c:4314
 msgid "DESKTOP WIDGETS"
 msgstr "ВИДЖЕТЫ РАБОЧЕГО СТОЛА"
 
-#: src/render.c:4280
+#: src/render.c:4319
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
 msgstr "каждый сам по себе · тащите за уголок · Пробел это всё или ничего"
 
-#: src/render.c:4326
+#: src/render.c:4365
 msgid "needs cava"
 msgstr "требуется cava"
 
-#: src/render.c:4340
+#: src/render.c:4379
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
 msgstr "Вверх/Вниз выбрать · Enter переключить · Влево/Вправо выкл./вкл."
 
-#: src/render.c:4342
+#: src/render.c:4381
 msgid "Space all on/off · R reset positions · Esc close"
 msgstr "Пробел все вкл./выкл. · R сбросить положения · Esc закрыть"
 
-#: src/render.c:4501
+#: src/render.c:4540
 msgid "done"
 msgstr "готово"
 
-#: src/render.c:4503
+#: src/render.c:4542
 msgid "starting"
 msgstr "запуск"
 
-#: src/render.c:4604
+#: src/render.c:4643
 msgid "Cannot read the model directory."
 msgstr "Не удаётся прочитать каталог моделей."
 
-#: src/render.c:4605
+#: src/render.c:4644
 msgid "No models installed."
 msgstr "Модели не установлены."
 
-#: src/render.c:4613
+#: src/render.c:4652
 msgid "A model may still be loaded · see the message below."
 msgstr "Модель, возможно, всё ещё загружена · см. сообщение ниже."
 
-#: src/render.c:4614
+#: src/render.c:4653
 msgid "Pick one from AVAILABLE below and press Enter."
 msgstr "Выберите одну из ДОСТУПНЫХ ниже и нажмите Enter."
 
-#: src/render.c:4682
+#: src/render.c:4721
 msgid "Size"
 msgstr "Размер"
 
-#: src/render.c:4683 src/render.c:4839
+#: src/render.c:4722 src/render.c:4878
 msgid "Params"
 msgstr "Параметры"
 
-#: src/render.c:4684
+#: src/render.c:4723
 msgid "Quant"
 msgstr "Квант."
 
-#: src/render.c:4685
+#: src/render.c:4724
 msgid "Context"
 msgstr "Контекст"
 
-#: src/render.c:4686
+#: src/render.c:4725
 msgid "Arch"
 msgstr "Арх."
 
-#: src/render.c:4709
+#: src/render.c:4748
 msgid "no chat template · synapd will guess the turn format"
 msgstr "нет шаблона чата · synapd угадает формат реплик"
 
-#: src/render.c:4714
+#: src/render.c:4753
 msgid "unreadable header"
 msgstr "нечитаемый заголовок"
 
-#: src/render.c:4737 src/render.c:4873
+#: src/render.c:4776 src/render.c:4912
 msgid "ABOUT"
 msgstr "О ПРОГРАММЕ"
 
-#: src/render.c:4749 src/render.c:4880
+#: src/render.c:4788 src/render.c:4919
 msgid "Good at"
 msgstr "Хорошо умеет"
 
-#: src/render.c:4750
+#: src/render.c:4789
 msgid "Speaks"
 msgstr "Говорит"
 
-#: src/render.c:4751 src/render.c:4842
+#: src/render.c:4790 src/render.c:4881
 msgid "License"
 msgstr "Лицензия"
 
-#: src/render.c:4752 src/render.c:4881
+#: src/render.c:4791 src/render.c:4920
 msgid "Based on"
 msgstr "Основана на"
 
-#: src/render.c:4800
+#: src/render.c:4839
 msgid "this is the model synapd is running"
 msgstr "это модель, которую запустил synapd"
 
-#: src/render.c:4804
+#: src/render.c:4843
 msgid "[ Enter: load this model ]"
 msgstr "[ Enter: загрузить эту модель ]"
 
-#: src/render.c:4840
+#: src/render.c:4879
 msgid "Download"
 msgstr "Загрузка"
 
-#: src/render.c:4841
+#: src/render.c:4880
 msgid "Quality"
 msgstr "Качество"
 
-#: src/render.c:4843
+#: src/render.c:4882
 msgid "Pulls"
 msgstr "Загрузок"
 
-#: src/render.c:4924
+#: src/render.c:4963
 msgid "QUANTISATION"
 msgstr "КВАНТОВАНИЕ"
 
-#: src/render.c:4930
+#: src/render.c:4969
 msgid "reading the repository …"
 msgstr "чтение репозитория …"
 
-#: src/render.c:4935
+#: src/render.c:4974
 msgid "could not read the repository"
 msgstr "не удалось прочитать репозиторий"
 
-#: src/render.c:4940
+#: src/render.c:4979
 msgid "no single-file GGUF here"
 msgstr "здесь нет однофайлового GGUF"
 
-#: src/render.c:4989 src/render.c:5843
+#: src/render.c:5028 src/render.c:5882
 #, c-format
 msgid "+%d more"
 msgstr "+%d ещё"
 
-#: src/render.c:4997
+#: src/render.c:5036
 msgid "[ Enter: download ]"
 msgstr "[ Enter: скачать ]"
 
-#: src/render.c:5074
+#: src/render.c:5113
 msgid "AI MODEL"
 msgstr "МОДЕЛЬ ИИ"
 
-#: src/render.c:5085
+#: src/render.c:5124
 msgid "Loaded"
 msgstr "Загружена"
 
-#: src/render.c:5086
+#: src/render.c:5125
 msgid "synapd not responding"
 msgstr "synapd не отвечает"
 
-#: src/render.c:5089
+#: src/render.c:5128
 msgid "Format"
 msgstr "Формат"
 
-#: src/render.c:5091
+#: src/render.c:5130
 msgid "Profile"
 msgstr "Профиль"
 
-#: src/render.c:5110
+#: src/render.c:5149
 msgid "legacy"
 msgstr "устаревший"
 
-#: src/render.c:5114
+#: src/render.c:5153
 msgid "GGUF declares no chat template"
 msgstr "GGUF не объявляет шаблон чата"
 
-#: src/render.c:5119
+#: src/render.c:5158
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
 msgstr "темп. %.2f  ·  top_p %.2f  ·  top_k %d"
 
-#: src/render.c:5127
+#: src/render.c:5166
 msgid "Sampling"
 msgstr "Сэмплирование"
 
-#: src/render.c:5157
+#: src/render.c:5196
 msgid "search huggingface"
 msgstr "искать в Hugging Face"
 
-#: src/render.c:5172
+#: src/render.c:5211
 msgid "INSTALLED"
 msgstr "УСТАНОВЛЕНО"
 
-#: src/render.c:5172
+#: src/render.c:5211
 msgid "INSTALLED · none"
 msgstr "УСТАНОВЛЕНО · ничего"
 
-#: src/render.c:5217
+#: src/render.c:5256
 msgid "delete?"
 msgstr "удалить?"
 
-#: src/render.c:5223
+#: src/render.c:5262
 msgid "loading …"
 msgstr "загрузка …"
 
-#: src/render.c:5283
+#: src/render.c:5322
 msgid "type to search · Enter search · Esc cancel"
 msgstr "введите для поиска · Enter ищет · Esc отмена"
 
-#: src/render.c:5285
+#: src/render.c:5324
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
@@ -3104,256 +3117,256 @@ msgstr ""
 "Вверх/Вниз выбрать · Влево/Вправо квантование · Enter скачать · / поиск · "
 "Esc закрыть"
 
-#: src/render.c:5291
+#: src/render.c:5330
 msgid "Delete again to confirm · Esc cancels · any move cancels"
 msgstr ""
 "Удалите ещё раз для подтверждения · Esc отменяет · любое движение отменяет"
 
-#: src/render.c:5294
+#: src/render.c:5333
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
 msgstr ""
 "Вверх/Вниз выбрать · Enter загрузить · Del удалить · / поиск · R обновить · "
 "Esc закрыть"
 
-#: src/render.c:5298
+#: src/render.c:5337
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
 msgstr ""
 "загрузки идут как системная служба — закрытие этой панели ни одну не отменяет"
 
-#: src/render.c:5301
+#: src/render.c:5340
 msgid "switching reloads the model — the AI pauses while it loads"
 msgstr ""
 "переключение перезагружает модель — ИИ приостанавливается на время загрузки"
 
-#: src/render.c:5362
+#: src/render.c:5401
 msgid "EVENT SOUNDS"
 msgstr "ЗВУКИ СОБЫТИЙ"
 
-#: src/render.c:5371
+#: src/render.c:5410
 msgid "silent · Space turns event sounds on"
 msgstr "тихо · Пробел включает звуки событий"
 
-#: src/render.c:5375
+#: src/render.c:5414
 msgid "t plays the selected sound without enabling it"
 msgstr "t проигрывает выбранный звук, не включая его"
 
-#: src/render.c:5420
+#: src/render.c:5459
 msgid "Volume"
 msgstr "Громкость"
 
-#: src/render.c:5423
+#: src/render.c:5462
 msgid "Sound theme"
 msgstr "Звуковая тема"
 
-#: src/render.c:5427
+#: src/render.c:5466
 #, c-format
 msgid "%s — not a sound theme"
 msgstr "%s — не звуковая тема"
 
-#: src/render.c:5484
+#: src/render.c:5523
 msgid "not in this theme"
 msgstr "нет в этой теме"
 
-#: src/render.c:5498
+#: src/render.c:5537
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
 msgstr ""
 "Вверх/Вниз выбрать · Enter переключить · Влево/Вправо выкл./вкл. · [ ] "
 "выбрать звук"
 
-#: src/render.c:5500
+#: src/render.c:5539
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
 msgstr ""
 "t проиграть · Пробел все звуки вкл./выкл. · Esc закрыть · подробнее: synui-"
 "sound --help"
 
-#: src/render.c:5555
+#: src/render.c:5594
 msgid "DATE & TIME"
 msgstr "ДАТА И ВРЕМЯ"
 
-#: src/render.c:5568
+#: src/render.c:5607
 #, c-format
 msgid "system zone · %s"
 msgstr "системный пояс · %s"
 
-#: src/render.c:5601
+#: src/render.c:5640
 msgid "WORLD CLOCK"
 msgstr "МИРОВОЕ ВРЕМЯ"
 
-#: src/render.c:5626
+#: src/render.c:5665
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
 msgstr "Вверх/Вниз выбрать · Пробел переключить · c календарь · Esc закрыть"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "January"
 msgstr "январь"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "February"
 msgstr "февраль"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "March"
 msgstr "март"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "April"
 msgstr "апрель"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "May"
 msgstr "май"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "June"
 msgstr "июнь"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "July"
 msgstr "июль"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "August"
 msgstr "август"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "September"
 msgstr "сентябрь"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "October"
 msgstr "октябрь"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "November"
 msgstr "ноябрь"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "December"
 msgstr "декабрь"
 
-#: src/render.c:5818
+#: src/render.c:5857
 msgid "loading…"
 msgstr "загрузка…"
 
-#: src/render.c:5828
+#: src/render.c:5867
 msgid "nothing on"
 msgstr "ничего не включено"
 
-#: src/render.c:5833
+#: src/render.c:5872
 #, c-format
 msgid "all day  %s"
 msgstr "весь день  %s"
 
-#: src/render.c:5855
+#: src/render.c:5894
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
 msgstr "←→ день · PgUp/PgDn месяц · t сегодня · Esc"
 
-#: src/render.c:5944
+#: src/render.c:5983
 msgid "CONTROL PANEL"
 msgstr "ПАНЕЛЬ УПРАВЛЕНИЯ"
 
-#: src/render.c:5963
+#: src/render.c:6002
 msgid "Search"
 msgstr "Поиск"
 
-#: src/render.c:5990
+#: src/render.c:6029
 msgid "CATEGORIES"
 msgstr "КАТЕГОРИИ"
 
-#: src/render.c:5995 src/render.c:6481
+#: src/render.c:6034 src/render.c:6520
 msgid "FIND  "
 msgstr "НАЙТИ  "
 
-#: src/render.c:6002 src/render.c:6428
+#: src/render.c:6041 src/render.c:6467
 msgid "KEYBOARD SHORTCUTS"
 msgstr "СОЧЕТАНИЯ КЛАВИШ"
 
-#: src/render.c:6003
+#: src/render.c:6042
 msgid "SETTINGS"
 msgstr "НАСТРОЙКИ"
 
-#: src/render.c:6078
+#: src/render.c:6117
 msgid "Press a key…"
 msgstr "Нажмите клавишу…"
 
-#: src/render.c:6098 src/render.c:6274 src/render.c:6569
+#: src/render.c:6137 src/render.c:6313 src/render.c:6608
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
 msgstr "%d–%d из %d · PgUp/PgDn"
 
-#: src/render.c:6235
+#: src/render.c:6274
 msgid "none"
 msgstr "нет"
 
-#: src/render.c:6284
+#: src/render.c:6323
 msgid "No setting matches that."
 msgstr "Нет подходящих настроек."
 
-#: src/render.c:6319
+#: src/render.c:6358
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
 msgstr "Введите для фильтра · Вверх/Вниз выбрать · Del сбросить · Esc назад"
 
-#: src/render.c:6321
+#: src/render.c:6360
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
 msgstr ""
 "Вверх/Вниз категория · Enter или Вправо открывает · / найти · Esc закрыть"
 
-#: src/render.c:6327
+#: src/render.c:6366
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
 msgstr "Нажмите Super, Ctrl, Alt или Shift · Del чтобы убрать · Esc отменяет"
 
-#: src/render.c:6328
+#: src/render.c:6367
 msgid "Press the new key for this shortcut · Esc cancels"
 msgstr "Нажмите новую клавишу для этого сочетания · Esc отменяет"
 
-#: src/render.c:6330
+#: src/render.c:6369
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
 msgstr ""
 "F2 переназначить · F3 переносит на одиночное нажатие · Ctrl+Shift+R сбросить "
 "всё · Esc назад"
 
-#: src/render.c:6337
+#: src/render.c:6376
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
 msgstr ""
 "Влево/Вправо изменить · Del по умолчанию · / найти · Tab столбец · Esc назад"
 
-#: src/render.c:6344
+#: src/render.c:6383
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
 msgstr "Влево/Вправо переключить · Enter подробности · Tab столбец · Esc назад"
 
-#: src/render.c:6346
+#: src/render.c:6385
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
 msgstr "Вверх/Вниз выбрать · Enter выполнить · / найти · Влево или Esc назад"
 
-#: src/render.c:6468
+#: src/render.c:6507
 msgid "PRESS THE NEW KEY  "
 msgstr "НАЖМИТЕ НОВУЮ КЛАВИШУ  "
 
-#: src/render.c:6475
+#: src/render.c:6514
 #, c-format
 msgid "for %s  ·  Esc cancels"
 msgstr "для %s  ·  Esc отменяет"
 
-#: src/render.c:6494
+#: src/render.c:6533
 msgid "_  a key, what it does, an app, or a command"
 msgstr "_  клавиша, что она делает, приложение или команда"
 
-#: src/render.c:6550
+#: src/render.c:6589
 msgid "No shortcut matches that."
 msgstr "Нет подходящих сочетаний."
 
-#: src/render.c:6587
+#: src/render.c:6626
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
 msgstr "Нажмите Super, Ctrl, Alt или Shift · Del чтобы убрать · Esc отменяет"
 
-#: src/render.c:6589
+#: src/render.c:6628
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
 msgstr "Нажмите любое сочетание с Super, Ctrl или Alt · Esc отменяет"
 
-#: src/render.c:6605
+#: src/render.c:6644
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
@@ -3361,175 +3374,175 @@ msgstr ""
 "Фильтр · Enter выполняет · F2 назначает клавишу · Del освобождает её · F3 "
 "одиночное нажатие · Ctrl+Shift+R сбрасывает"
 
-#: src/render.c:6625
+#: src/render.c:6664
 msgid "The neon night-drive default · apps dark"
 msgstr "Неоновая ночная поездка по умолчанию · приложения тёмные"
 
-#: src/render.c:6626
+#: src/render.c:6665
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
 msgstr "Плоская современная тёмная · приложения + Dolphin + Firefox тёмные"
 
-#: src/render.c:6627
+#: src/render.c:6666
 msgid "Luna blue, gradient captions · apps beige"
 msgstr "Синева Luna, градиентные заголовки · приложения бежевые"
 
-#: src/render.c:6628
+#: src/render.c:6667
 msgid "Silver 3D bevels, navy titles · apps grey"
 msgstr "Серебристые объёмные грани, тёмно-синие заголовки · приложения серые"
 
-#: src/render.c:6629
+#: src/render.c:6668
 msgid "Mocha · mauve on soft black · glassy"
 msgstr "Мокко · лиловый на мягком чёрном · стеклянная"
 
-#: src/render.c:6630
+#: src/render.c:6669
 msgid "Retro warm · orange on brown · glassy"
 msgstr "Тёплое ретро · оранжевый на коричневом · стеклянная"
 
-#: src/render.c:6631
+#: src/render.c:6670
 msgid "Storm · blue + purple on navy · glassy"
 msgstr "Шторм · синий и фиолетовый на тёмно-синем · стеклянная"
 
-#: src/render.c:6632
+#: src/render.c:6671
 msgid "Arctic · frost blue on slate · glassy"
 msgstr "Арктика · морозный синий на сланцевом · стеклянная"
 
-#: src/render.c:6633
+#: src/render.c:6672
 msgid "Purple + pink on charcoal · glassy"
 msgstr "Фиолетовый и розовый на угольном · стеклянная"
 
-#: src/render.c:6634
+#: src/render.c:6673
 msgid "Pastel pink, hot-pink titles · apps light"
 msgstr "Пастельно-розовая, ярко-розовые заголовки · приложения светлые"
 
-#: src/render.c:6635
+#: src/render.c:6674
 msgid "Liquid glass · rounded, translucent · apps light"
 msgstr "Жидкое стекло · скруглённое, полупрозрачное · приложения светлые"
 
-#: src/render.c:6636
+#: src/render.c:6675
 msgid "Pinstripes + traffic lights · apps light grey"
 msgstr "Тонкие полоски и светофор · приложения светло-серые"
 
-#: src/render.c:6637
+#: src/render.c:6676
 msgid "Racing stripes, square boxes · apps grey"
 msgstr "Гоночные полосы, квадратные рамки · приложения серые"
 
-#: src/render.c:6643
+#: src/render.c:6682
 msgid "House glass · accent off the wallpaper · apps dark"
 msgstr "Домашнее стекло · акцент с обоев · приложения тёмные"
 
-#: src/render.c:6644
+#: src/render.c:6683
 msgid "The same glass in daylight · apps + Files light"
 msgstr "То же стекло при дневном свете · приложения и «Файлы» светлые"
 
-#: src/render.c:6715
+#: src/render.c:6754
 msgid "THEME MANAGER"
 msgstr "МЕНЕДЖЕР ТЕМ"
 
-#: src/render.c:6820
+#: src/render.c:6859
 #, c-format
 msgid "Transparency  %d%%"
 msgstr "Прозрачность  %d%%"
 
-#: src/render.c:6822
+#: src/render.c:6861
 #, c-format
 msgid "Transparency  off"
 msgstr "Прозрачность  выключена"
 
-#: src/render.c:6852
+#: src/render.c:6891
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
 msgstr ""
 "Вверх/Вниз тема · ←/→ непрозрачность · T прозрачность · Enter применить · Esc"
 
-#: src/render.c:6919
+#: src/render.c:6958
 msgid "CLIPBOARD"
 msgstr "БУФЕР ОБМЕНА"
 
-#: src/render.c:6936
+#: src/render.c:6975
 msgid "Nothing copied yet"
 msgstr "Пока ничего не скопировано"
 
-#: src/render.c:6982
+#: src/render.c:7021
 msgid "Enter copy · Del clear all · Esc close"
 msgstr "Enter копировать · Del очистить всё · Esc закрыть"
 
-#: src/render.c:7323
+#: src/render.c:7362
 msgid "connected"
 msgstr "подключено"
 
-#: src/render.c:7324
+#: src/render.c:7363
 msgid "paired"
 msgstr "сопряжено"
 
-#: src/render.c:7384
+#: src/render.c:7423
 msgid "BLUETOOTH"
 msgstr "BLUETOOTH"
 
-#: src/render.c:7397
+#: src/render.c:7436
 msgid "No Bluetooth adapter found"
 msgstr "Адаптер Bluetooth не найден"
 
-#: src/render.c:7402
+#: src/render.c:7441
 msgid "Radio on"
 msgstr "Радио включено"
 
-#: src/render.c:7402
+#: src/render.c:7441
 msgid "Radio off"
 msgstr "Радио выключено"
 
-#: src/render.c:7407
+#: src/render.c:7446
 msgid "· scanning…"
 msgstr "· поиск…"
 
-#: src/render.c:7417
+#: src/render.c:7456
 msgid "A device"
 msgstr "Устройство"
 
-#: src/render.c:7425
+#: src/render.c:7464
 #, c-format
 msgid "Passkey %06u · does it match the device?"
 msgstr "Код %06u · совпадает ли он с устройством?"
 
-#: src/render.c:7428
+#: src/render.c:7467
 #, c-format
 msgid "wants to connect%s"
 msgstr "хочет подключиться%s"
 
-#: src/render.c:7431
+#: src/render.c:7470
 #, c-format
 msgid "Type %06u on the device, then Enter"
 msgstr "Введите %06u на устройстве, затем Enter"
 
-#: src/render.c:7434
+#: src/render.c:7473
 #, c-format
 msgid "Enter PIN %s on the device"
 msgstr "Введите PIN %s на устройстве"
 
-#: src/render.c:7442
+#: src/render.c:7481
 msgid "Any key to dismiss"
 msgstr "Любая клавиша закрывает"
 
-#: src/render.c:7443
+#: src/render.c:7482
 msgid "y accept · n reject"
 msgstr "y принять · n отклонить"
 
-#: src/render.c:7456
+#: src/render.c:7495
 msgid "Radio is off · press o"
 msgstr "Радио выключено · нажмите o"
 
-#: src/render.c:7461
+#: src/render.c:7500
 #, c-format
 msgid "%d hidden · press a to show"
 msgstr "%d скрыто · нажмите a, чтобы показать"
 
-#: src/render.c:7464
+#: src/render.c:7503
 msgid "No devices · press s to scan"
 msgstr "Нет устройств · нажмите s для поиска"
 
-#: src/render.c:7501
+#: src/render.c:7540
 msgid "trusted"
 msgstr "доверенное"
 
-#: src/render.c:7534
+#: src/render.c:7573
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
@@ -3537,60 +3550,60 @@ msgstr ""
 "Enter подключить · p сопрячь · t доверять · r забыть · s поиск · o радио · a "
 "меньше · Esc"
 
-#: src/render.c:7536
+#: src/render.c:7575
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
 msgstr ""
 "Enter подключить · p сопрячь · t доверять · r забыть · s поиск · o радио · a "
 "все · Esc"
 
-#: src/render.c:7696
+#: src/render.c:7735
 msgid "TASK MANAGER"
 msgstr "ДИСПЕТЧЕР ЗАДАЧ"
 
-#: src/render.c:7702
+#: src/render.c:7741
 #, c-format
 msgid "%d procs · sort: %s%s"
 msgstr "%d проц. · сортировка: %s%s"
 
-#: src/render.c:7713
+#: src/render.c:7752
 #, c-format
 msgid "%.0f%%  (%ld cores)"
 msgstr "%.0f%%  (%ld ядер)"
 
-#: src/render.c:7715
+#: src/render.c:7754
 msgid "CPU"
 msgstr "ЦП"
 
-#: src/render.c:7726
+#: src/render.c:7765
 msgid "RAM"
 msgstr "ОЗУ"
 
-#: src/render.c:7729 src/render.c:7737
+#: src/render.c:7768 src/render.c:7776
 msgid "GPU"
 msgstr "ГП"
 
-#: src/render.c:7729
+#: src/render.c:7768
 msgid "no GPU telemetry available"
 msgstr "телеметрия ГП недоступна"
 
-#: src/render.c:7754 src/render.c:7773
+#: src/render.c:7793 src/render.c:7812
 msgid "VRAM"
 msgstr "ВИДЕОПАМЯТЬ"
 
-#: src/render.c:7768
+#: src/render.c:7807
 msgid "PID"
 msgstr "PID"
 
-#: src/render.c:7770
+#: src/render.c:7809
 msgid "NAME"
 msgstr "ИМЯ"
 
-#: src/render.c:7772
+#: src/render.c:7811
 msgid "MEM"
 msgstr "ПАМЯТЬ"
 
-#: src/render.c:7881
+#: src/render.c:7920
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
@@ -3598,52 +3611,52 @@ msgstr ""
 "j/k перемещение · правый щелчок по строке · c/m/g/p сортировка · u мои · x "
 "завершить · X убить · Esc закрыть"
 
-#: src/render.c:8047
+#: src/render.c:8086
 msgid "NEWS"
 msgstr "НОВОСТИ"
 
-#: src/render.c:8055
+#: src/render.c:8094
 msgid "all sources"
 msgstr "все источники"
 
-#: src/render.c:8056
+#: src/render.c:8095
 msgid "by time"
 msgstr "по времени"
 
-#: src/render.c:8056
+#: src/render.c:8095
 msgid "by source"
 msgstr "по источнику"
 
-#: src/render.c:8059
+#: src/render.c:8098
 msgid "never fetched"
 msgstr "ни разу не загружались"
 
-#: src/render.c:8086
+#: src/render.c:8125
 #, c-format
 msgid "filter: /%s"
 msgstr "фильтр: /%s"
 
-#: src/render.c:8099
+#: src/render.c:8138
 msgid "fetching feeds…"
 msgstr "загрузка лент…"
 
-#: src/render.c:8100
+#: src/render.c:8139
 msgid "nothing matches this filter"
 msgstr "ничего не подходит под этот фильтр"
 
-#: src/render.c:8101
+#: src/render.c:8140
 msgid "no feeds answered — check the network, then press r"
 msgstr "ни одна лента не ответила — проверьте сеть и нажмите r"
 
-#: src/render.c:8102
+#: src/render.c:8141
 msgid "no items yet — press r to fetch"
 msgstr "записей пока нет — нажмите r для загрузки"
 
-#: src/render.c:8188
+#: src/render.c:8227
 msgid "type to filter · Enter keep · Esc clear"
 msgstr "введите для фильтра · Enter оставить · Esc очистить"
 
-#: src/render.c:8189
+#: src/render.c:8228
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
@@ -3652,129 +3665,129 @@ msgstr ""
 "Tab источник · / поиск · s сортировка · m прочитано · r обновить · Esc "
 "закрыть"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Bottom"
 msgstr "Снизу"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Top"
 msgstr "Сверху"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Left"
 msgstr "Слева"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Right"
 msgstr "Справа"
 
-#: src/render.c:8225
+#: src/render.c:8264
 msgid "Apps"
 msgstr "Приложения"
 
-#: src/render.c:8228
+#: src/render.c:8267
 #, c-format
 msgid "Dock Edge: %s"
 msgstr "Край дока: %s"
 
-#: src/render.c:8242
+#: src/render.c:8281
 #, c-format
 msgid "%s At: %s"
 msgstr "%s: %s"
 
-#: src/render.c:8254
+#: src/render.c:8293
 msgid "Pin to Dock"
 msgstr "Закрепить в доке"
 
-#: src/render.c:8256
+#: src/render.c:8295
 msgid "Unpin from Dock"
 msgstr "Открепить от дока"
 
-#: src/render.c:8258
+#: src/render.c:8297
 msgid "New Window"
 msgstr "Новое окно"
 
-#: src/render.c:8259
+#: src/render.c:8298
 msgid "Close Window"
 msgstr "Закрыть окно"
 
-#: src/render.c:8260
+#: src/render.c:8299
 msgid "Quit All Windows"
 msgstr "Закрыть все окна"
 
-#: src/render.c:8264
+#: src/render.c:8303
 msgid "Auto-hide Dock"
 msgstr "Скрывать док автоматически"
 
-#: src/render.c:8265
+#: src/render.c:8304
 msgid "Dock Above Windows"
 msgstr "Док поверх окон"
 
-#: src/render.c:8266
+#: src/render.c:8305
 msgid "Magnify Icons"
 msgstr "Увеличивать значки"
 
-#: src/render.c:8267
+#: src/render.c:8306
 msgid "Show Clock"
 msgstr "Показывать часы"
 
-#: src/render.c:8268
+#: src/render.c:8307
 msgid "Analog Clock Face"
 msgstr "Аналоговый циферблат"
 
-#: src/render.c:8269
+#: src/render.c:8308
 msgid "Show All Apps Button"
 msgstr "Показывать кнопку «Все приложения»"
 
-#: src/render.c:8270
+#: src/render.c:8309
 msgid "Show Power Button"
 msgstr "Показывать кнопку питания"
 
-#: src/render.c:8271
+#: src/render.c:8310
 msgid "Dock Settings…"
 msgstr "Настройки дока…"
 
-#: src/render.c:8275
+#: src/render.c:8314
 msgid "Lock Screen"
 msgstr "Заблокировать экран"
 
-#: src/render.c:8276
+#: src/render.c:8315
 msgid "Log Out"
 msgstr "Выйти из сеанса"
 
-#: src/render.c:8277
+#: src/render.c:8316
 msgid "Suspend"
 msgstr "Спящий режим"
 
-#: src/render.c:8278
+#: src/render.c:8317
 msgid "Restart"
 msgstr "Перезагрузить"
 
-#: src/render.c:8279
+#: src/render.c:8318
 msgid "Shut Down"
 msgstr "Выключить"
 
-#: src/render.c:8902
+#: src/render.c:8941
 msgid "minimized"
 msgstr "свёрнуто"
 
-#: src/render.c:8902 src/render.c:9396 src/render.c:9399
+#: src/render.c:8941 src/render.c:9435 src/render.c:9438
 msgid "MIN"
 msgstr "СВЁРН."
 
-#: src/render.c:9007
+#: src/render.c:9046
 msgid "WINDOWS"
 msgstr "ОКНА"
 
-#: src/render.c:9164
+#: src/render.c:9203
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab следующее · Alt+Shift+Tab назад"
 
-#: src/render.c:9281
+#: src/render.c:9320
 msgid "MISSION CONTROL"
 msgstr "ОБЗОР"
 
-#: src/render.c:9286
+#: src/render.c:9325
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
@@ -3782,11 +3795,11 @@ msgstr[0] "Рабочий стол %d · %d окно"
 msgstr[1] "Рабочий стол %d · %d окна"
 msgstr[2] "Рабочий стол %d · %d окон"
 
-#: src/render.c:9423
+#: src/render.c:9462
 msgid "Nothing open on this desktop."
 msgstr "На этом рабочем столе ничего не открыто."
 
-#: src/render.c:9478
+#: src/render.c:9517
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
@@ -3794,55 +3807,55 @@ msgstr ""
 "Стрелки или щелчок выбирают окно · Enter открывает его · Del закрывает его · "
 "1–9 переключают рабочий стол · Esc закрыть"
 
-#: src/saver.c:411
+#: src/saver.c:749
 msgid "No wallpapers found for the slideshow"
 msgstr "Обои для слайд-шоу не найдены"
 
-#: src/saver.c:838
+#: src/saver.c:1248
 msgid "Show after"
 msgstr "Показать через"
 
-#: src/saver.c:839
+#: src/saver.c:1249
 msgid "Lock on wake"
 msgstr "Блокировать при пробуждении"
 
-#: src/saver.c:840
+#: src/saver.c:1250
 msgid "Slide interval"
 msgstr "Смена слайдов"
 
-#: src/saver.c:841
+#: src/saver.c:1251
 msgid "Lock background"
 msgstr "Фон экрана блокировки"
 
-#: src/saver.c:842
+#: src/saver.c:1252
 msgid "Lock image"
 msgstr "Изображение экрана блокировки"
 
-#: src/saver.c:843
+#: src/saver.c:1253
 msgid "Lock dim"
 msgstr "Затемнять экран блокировки"
 
-#: src/saver.c:844
+#: src/saver.c:1254
 msgid "Lock blur"
 msgstr "Размытие экрана блокировки"
 
-#: src/saver.c:845
+#: src/saver.c:1255
 msgid "Lock colours"
 msgstr "Цвета экрана блокировки"
 
-#: src/saver.c:846
+#: src/saver.c:1256
 msgid "Now playing"
 msgstr "Сейчас играет"
 
-#: src/saver.c:847 src/widgets.c:70
+#: src/saver.c:1257 src/widgets.c:70
 msgid "Weather"
 msgstr "Погода"
 
-#: src/saver.c:848
+#: src/saver.c:1258
 msgid "Temperature in"
 msgstr "Температура в"
 
-#: src/saver.c:849
+#: src/saver.c:1259
 msgid "Keyboard layout"
 msgstr "Раскладка клавиатуры"
 
@@ -3946,15 +3959,15 @@ msgstr "Аналоговые часы"
 msgid "Music player"
 msgstr "Музыкальный проигрыватель"
 
-#: src/wppick.c:843
+#: src/wppick.c:927
 msgid "preset"
 msgstr "пресет"
 
-#: src/wppick.c:846
+#: src/wppick.c:930
 msgid "preset (base missing)"
 msgstr "пресет (нет основы)"
 
-#: src/wppick.c:850
+#: src/wppick.c:934
 msgid "asset (not a wallpaper)"
 msgstr "ресурс (не обои)"
 

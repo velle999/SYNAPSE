@@ -1828,8 +1828,18 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * for their task view: that is layout_cycle here, and silently moving
          * a shortcut somebody has in their fingers to make room for a new
          * feature is exactly the kind of change that should be asked about
-         * rather than shipped. Both are one F2 away in the palette. */
-        overview_toggle(s);
+         * rather than shipped. Both are one F2 away in the palette.
+         *
+         * `open` and `close` are for the swipes: up shows it and down puts it
+         * away, and a second swipe up must not shut what the first one opened.
+         * Bare stays a toggle, which is what every key bound to it expects. */
+        if (arg && strcmp(arg, "open") == 0) {
+            if (!s->overview.visible) overview_show(s);
+        } else if (arg && strcmp(arg, "close") == 0) {
+            if (s->overview.visible) overview_hide(s);
+        } else {
+            overview_toggle(s);
+        }
     } else if (strcmp(action, "theme") == 0) {
         /* Bare (Super+T, the control panel row) opens the picker. With an
          * argument it applies one outright — either a preset token ("dark") or
@@ -1948,9 +1958,16 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "start_menu") == 0) {
         synui_start_menu_open(s);
     } else if (strcmp(action, "ws") == 0) {
-        int n = atoi(arg);
-        if (n >= 1 && n <= WORKSPACE_MAX)
-            workspace_switch(s, n - 1);
+        /* next/prev are what a sideways swipe runs (gesture.c). */
+        if (arg && strcmp(arg, "next") == 0) {
+            workspace_step(s, +1);
+        } else if (arg && strcmp(arg, "prev") == 0) {
+            workspace_step(s, -1);
+        } else {
+            int n = arg ? atoi(arg) : 0;
+            if (n >= 1 && n <= WORKSPACE_MAX)
+                workspace_switch(s, n - 1);
+        }
     } else if (strcmp(action, "movews") == 0) {
         int n = atoi(arg);
         if (n >= 1 && n <= WORKSPACE_MAX && s->focused_view)
@@ -4433,12 +4450,46 @@ static void server_tablet_button(struct wl_listener *listener, void *data)
     wlr_seat_pointer_notify_frame(s->seat);
 }
 
-/* ── Touchpad gestures (pointer-gestures-v1 relay) ───────── */
+/* ── Touchpad gestures ───────────────────────────────────── */
+/*
+ * A gesture is either synui's or the app's, decided at begin and kept for its
+ * whole life (gesture.c says why). What synui does not take is relayed over
+ * pointer-gestures-v1 exactly as before there were gesture binds.
+ *
+ * Not taken, and so left to the app: anything on the lock screen (a swipe must
+ * not switch the desktop behind it), anything that only wakes the screensaver,
+ * and anything during a window move or resize — a desktop switch in the middle
+ * of a drag the compositor itself is running.
+ */
+static bool gesture_may_claim(syn_server_t *s)
+{
+    return !s->locked && !saver_active(s) &&
+           s->cursor_mode == SYNUI_CURSOR_PASSTHROUGH;
+}
+
+/* Run the bind a finished gesture landed on. Copied out first: an action can
+ * reload the config (wallpaper_reload re-reads synuirc), which rewrites the
+ * table `g` points into. The lock is asked again because it can have come up
+ * between the fingers landing and lifting. */
+static void gesture_run(syn_server_t *s, const syn_gesture_bind_t *g)
+{
+    if (!g || s->locked) return;
+    char action[SYN_BIND_ACTION_LEN], arg[SYN_BIND_ARG_LEN], spec[32];
+    snprintf(action, sizeof(action), "%s", g->action);
+    snprintf(arg, sizeof(arg), "%s", g->arg);
+    syn_gesture_format_spec(g->kind, g->fingers, g->dir, spec, sizeof(spec));
+    wlr_log(WLR_DEBUG, "synui: gesture %s -> %s %s", spec, action, arg);
+    synui_binding_execute(s, action, arg);
+}
+
 static void server_swipe_begin(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, swipe_begin);
     struct wlr_pointer_swipe_begin_event *event = data;
     notify_activity(s);
+    if (gesture_begin(&s->gesture, &s->config, SYN_GESTURE_SWIPE,
+                      event->fingers, gesture_may_claim(s)))
+        return;
     wlr_pointer_gestures_v1_send_swipe_begin(s->pointer_gestures, s->seat,
                                              event->time_msec, event->fingers);
 }
@@ -4447,6 +4498,9 @@ static void server_swipe_update(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, swipe_update);
     struct wlr_pointer_swipe_update_event *event = data;
+    if (gesture_update(&s->gesture, SYN_GESTURE_SWIPE,
+                       event->dx, event->dy, 1.0))
+        return;
     wlr_pointer_gestures_v1_send_swipe_update(s->pointer_gestures, s->seat,
                                               event->time_msec,
                                               event->dx, event->dy);
@@ -4456,6 +4510,12 @@ static void server_swipe_end(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, swipe_end);
     struct wlr_pointer_swipe_end_event *event = data;
+    const syn_gesture_bind_t *g;
+    if (gesture_end(&s->gesture, &s->config, SYN_GESTURE_SWIPE,
+                    event->cancelled, &g)) {
+        gesture_run(s, g);
+        return;
+    }
     wlr_pointer_gestures_v1_send_swipe_end(s->pointer_gestures, s->seat,
                                            event->time_msec, event->cancelled);
 }
@@ -4465,6 +4525,9 @@ static void server_pinch_begin(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, pinch_begin);
     struct wlr_pointer_pinch_begin_event *event = data;
     notify_activity(s);
+    if (gesture_begin(&s->gesture, &s->config, SYN_GESTURE_PINCH,
+                      event->fingers, gesture_may_claim(s)))
+        return;
     wlr_pointer_gestures_v1_send_pinch_begin(s->pointer_gestures, s->seat,
                                              event->time_msec, event->fingers);
 }
@@ -4473,6 +4536,9 @@ static void server_pinch_update(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, pinch_update);
     struct wlr_pointer_pinch_update_event *event = data;
+    if (gesture_update(&s->gesture, SYN_GESTURE_PINCH,
+                       event->dx, event->dy, event->scale))
+        return;
     wlr_pointer_gestures_v1_send_pinch_update(s->pointer_gestures, s->seat,
                                               event->time_msec,
                                               event->dx, event->dy,
@@ -4483,6 +4549,12 @@ static void server_pinch_end(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, pinch_end);
     struct wlr_pointer_pinch_end_event *event = data;
+    const syn_gesture_bind_t *g;
+    if (gesture_end(&s->gesture, &s->config, SYN_GESTURE_PINCH,
+                    event->cancelled, &g)) {
+        gesture_run(s, g);
+        return;
+    }
     wlr_pointer_gestures_v1_send_pinch_end(s->pointer_gestures, s->seat,
                                            event->time_msec, event->cancelled);
 }

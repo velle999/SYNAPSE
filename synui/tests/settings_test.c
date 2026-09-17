@@ -589,6 +589,100 @@ static void test_obsolete_key_leaves_settings_state(void)
     printf("  obsolete key dropped ... ok\n");
 }
 
+/*
+ * Touchpad gestures: the seeded four, and the synuirc lines that change them.
+ * gesture_test drives the recognizer against a hand-built copy of this table;
+ * this is what says the copy and config.c's seed are the same four.
+ */
+static const syn_gesture_bind_t *gesture_of(const syn_config_t *c, int kind,
+                                            int fingers, int dir)
+{
+    for (int i = 0; i < c->gesture_count; i++) {
+        const syn_gesture_bind_t *g = &c->gesture_binds[i];
+        if (g->kind == kind && g->fingers == fingers && g->dir == dir) return g;
+    }
+    return NULL;
+}
+
+static int gesture_holds(const syn_gesture_bind_t *g, const char *action,
+                         const char *arg)
+{
+    return g && strcmp(g->action, action) == 0 && strcmp(g->arg, arg) == 0;
+}
+
+static void test_gestures(void)
+{
+    syn_config_t c;
+
+    write_synuirc("");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.gestures == 1);
+    assert(c.gesture_count == 4);
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_LEFT),  "ws", "next"));
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_RIGHT), "ws", "prev"));
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_UP),    "overview", "open"));
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_DOWN),  "overview", "close"));
+    /* Three fingers stay the apps'. */
+    for (int d = 0; d < SYN_GESTURE_DIR_COUNT; d++)
+        assert(!gesture_of(&c, SYN_GESTURE_SWIPE, 3, d));
+
+    /* A rebind replaces by spec; a new spec appends; the arg keeps its spaces;
+     * case is not significant in the spec, as it is not in a chord. */
+    write_synuirc("gesture = swipe:4:left ws prev\n"
+                  "gesture = SWIPE:3:Up spawn foot -e htop\n"
+                  "gesture = pinch:2:in overview\n"
+                  "ungesture = swipe:4:down\n"
+                  "gestures = off\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.gestures == 0);
+    assert(c.gesture_count == 5);
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_LEFT), "ws", "prev"));
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_SWIPE, 3, SYN_GESTURE_UP),   "spawn", "foot -e htop"));
+    assert(gesture_holds(gesture_of(&c, SYN_GESTURE_PINCH, 2, SYN_GESTURE_IN),   "overview", ""));
+    assert(!gesture_of(&c, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_DOWN));
+
+    /* Lines that can never fire are refused, not stored: a two-finger swipe is
+     * a scroll, a swipe cannot go `in`, a pinch cannot go `left`. And a line
+     * with no action adds nothing. */
+    write_synuirc("gesture = swipe:2:left ws next\n"
+                  "gesture = swipe:4:in ws next\n"
+                  "gesture = pinch:4:left ws next\n"
+                  "gesture = swipe:6:left ws next\n"
+                  "gesture = swipe:4 ws next\n"
+                  "gesture = swipe:4:left:x ws next\n"
+                  "gesture = swipe:four:left ws next\n"
+                  "gesture = swipe:5:left\n"
+                  "ungesture = swipe:9:left\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.gesture_count == 4);
+    assert(!gesture_of(&c, SYN_GESTURE_SWIPE, 5, SYN_GESTURE_LEFT));
+
+    /* The spec prints back as it parses. */
+    int kind, fingers, dir;
+    char spec[32];
+    assert(syn_gesture_parse_spec("pinch:3:out", &kind, &fingers, &dir));
+    syn_gesture_format_spec(kind, fingers, dir, spec, sizeof(spec));
+    assert(strcmp(spec, "pinch:3:out") == 0);
+
+    /* The control panel writes the switch to settings.state as on/off; it
+     * has to come back through the same parser. */
+    write_synuirc("");
+    settings_state_set("gestures", "off");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.gestures == 0);
+    settings_state_set("gestures", "on");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.gestures == 1);
+    settings_state_clear("gestures");
+
+    printf("  gestures ............ ok\n");
+}
+
 int main(void)
 {
     rig_init();
@@ -605,6 +699,7 @@ int main(void)
     test_launcher_pair_is_just_binds();
     test_niri_column_keys_are_niris();
     test_obsolete_key_leaves_settings_state();
+    test_gestures();
 
     rig_cleanup();
     printf("settings_test: all ok\n");

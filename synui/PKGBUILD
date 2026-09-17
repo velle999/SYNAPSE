@@ -3451,7 +3451,38 @@ pkgver=0.1.0
 #   first must match it. RED-verified against 601: first 1146..1279, second
 #   1069..1279. An earlier draft asserted the right edge instead and passed on
 #   the bug; the note in that file says so.
-pkgrel=607
+# 608: TOUCHPAD GESTURES. Four fingers left/right change desktop, up/down open
+#   and close mission control. Before this every gesture was relayed to the app
+#   under the pointer and synui acted on none of them.
+#   Each one is a bind — `gesture = swipe:4:left ws next`, any bind action,
+#   `pinch:<n>:in|out` too, `ungesture =` to drop a default — with one switch
+#   over the table (`gestures = on|off`, Control panel ▸ Input ▸ Touchpad
+#   gestures) and `synctl gestures` to print it.
+#   ⛔ A GESTURE IS SYNUI'S OR THE APP'S FROM ITS BEGIN, WHOLE. The direction is
+#     unknown when swipe_begin arrives, so a bound `swipe:4:left` claims every
+#     four-finger swipe; a client that got a begin and never its end would be
+#     left holding a gesture that does not finish. Two and three fingers, and
+#     any pinch, still reach apps untouched.
+#   ⚠ THE DIRECTION RULE IS SWAY'S, NOT A NUMBER TUNED HERE. The axis that moved
+#     further wins, with no distance threshold of synui's own — libinput does
+#     not report a swipe that has not moved. Pinch uses sway's ±10% scale.
+#   ⚠ Not claimed on the lock screen, over the screensaver, or during a
+#     move/resize; the lock is asked again at release.
+#   The action runs when the fingers lift; the desktop does not track them.
+#   `ws next|prev` stop at desktops 1 and 9 and step the FOCUSED monitor under
+#   per-monitor desktops. `overview open|close` do not toggle, so a second
+#   swipe up cannot shut what the first opened; bare `overview` still toggles.
+#   tests/gesture_test.c drives hand-written begin/update/end streams through
+#   gesture.c and asserts the claim of every event, not only the bind that comes
+#   out; ten mutations of gesture.c (flipped axes, ignored cancel, ignored lock
+#   gate, finger count, pinch scale multiplied) each fail it. tests/ws_step.sh
+#   runs the actions in a headless synui, one and two monitors, and fails on 607
+#   at the first `ws next`. settings_test covers the parser and the seeded four.
+#   ⚠ NO SWIPE HAS BEEN MADE ON A TOUCHPAD YET. thinkpad.local did not resolve
+#     and no LAN host answered as it when this was written; a headless synui has
+#     no input devices and uinput would reach the live seat. The first real
+#     four-finger swipe is the remaining check.
+pkgrel=608
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

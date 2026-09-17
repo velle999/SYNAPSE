@@ -1941,6 +1941,7 @@ typedef enum {
     CTL_ROW_ACCEL_SPEED,
     CTL_ROW_ACCEL_PROFILE,
     CTL_ROW_POINTER_SMOOTHING,
+    CTL_ROW_GESTURES,
     CTL_ROW_CURSOR_SIZE,
 
     CTL_ROW_NIGHTLIGHT_TEMP,
@@ -3023,6 +3024,57 @@ typedef struct {
     char         action[SYN_BIND_ACTION_LEN];
     char         arg[SYN_BIND_ARG_LEN];
 } syn_bind_t;
+
+/* ── Touchpad gestures (table-driven; syntax in config.c) ──
+ *   gesture = swipe:4:left ws next
+ * A gesture is a bind whose "chord" is a kind, a finger count and a direction.
+ * libinput has already decided it IS a four-finger swipe by the time wlroots
+ * reports one; the direction is the only thing synui decides, and gesture.c is
+ * where it does. The spellings below are the synuirc vocabulary. */
+typedef enum {
+    SYN_GESTURE_SWIPE = 0,
+    SYN_GESTURE_PINCH,
+    SYN_GESTURE_KIND_COUNT,
+} syn_gesture_kind_t;
+
+typedef enum {
+    SYN_GESTURE_LEFT = 0,
+    SYN_GESTURE_RIGHT,
+    SYN_GESTURE_UP,
+    SYN_GESTURE_DOWN,
+    SYN_GESTURE_IN,         /* pinch: fingers drawn together */
+    SYN_GESTURE_OUT,        /* pinch: fingers spread apart */
+    SYN_GESTURE_DIR_COUNT,
+} syn_gesture_dir_t;
+#define SYN_GESTURE_DIR_NONE (-1)
+
+/* libinput reports a swipe from three fingers (two is scrolling) and a pinch
+ * from two. Five is the most a touchpad can tell apart. */
+#define SYN_GESTURE_FINGERS_MAX 5
+#define SYN_GESTURES_MAX        32
+
+typedef struct {
+    int  kind;              /* syn_gesture_kind_t */
+    int  fingers;
+    int  dir;               /* syn_gesture_dir_t */
+    char action[SYN_BIND_ACTION_LEN];
+    char arg[SYN_BIND_ARG_LEN];
+} syn_gesture_bind_t;
+
+extern const char *const syn_gesture_kind_names[SYN_GESTURE_KIND_COUNT];
+extern const char *const syn_gesture_dir_names[SYN_GESTURE_DIR_COUNT];
+
+/* One gesture in flight, and whether synui took it. `active` is the claim: a
+ * gesture synui did not claim went to the client under the pointer from its
+ * begin, so its update and end must follow it there. Zeroed = nothing claimed,
+ * which is what a calloc'd server starts as. */
+typedef struct {
+    bool   active;
+    int    kind;            /* syn_gesture_kind_t */
+    int    fingers;
+    double dx, dy;          /* summed swipe/pinch centre motion */
+    double scale;           /* pinch: absolute, 1.0 at begin */
+} syn_gesture_tracker_t;
 
 /* ── Configuration ───────────────────────────────────────── */
 #define SYN_AUTOSTART_MAX 8
@@ -4700,6 +4752,13 @@ typedef struct {
 
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
+
+    /* Touchpad gestures. `gestures` is the one switch over the whole table
+     * (default 1): off hands every gesture to the app under the pointer, which
+     * is what synui did before it had any. */
+    int                gestures;
+    syn_gesture_bind_t gesture_binds[SYN_GESTURES_MAX];
+    int                gesture_count;
 } syn_config_t;
 
 /* Retro chrome is SQUARE. scenefx's rounded corners are the house look and stay
@@ -6654,6 +6713,7 @@ struct syn_server {
     struct wlr_pointer_constraint_v1       *active_constraint;  /* on the pointer-focused surface */
     struct wl_event_source                 *pointer_rebase_idle; /* coalesced pointer_rebase() */
     struct wlr_pointer_gestures_v1         *pointer_gestures;
+    syn_gesture_tracker_t                   gesture;   /* gesture.c */
     int                                     touch_devices;
 
     /* Phase H: ecosystem protocols. */
@@ -8297,6 +8357,9 @@ void workspace_switch(syn_server_t *s, int index);
 /* The same switch, aimed at one monitor. The primitive workspace_switch() is
  * built from; also what the per-monitor pager needs. NULL `o` = focused. */
 void workspace_switch_on(syn_server_t *s, syn_output_t *o, int index);
+/* One desktop along from the one on screen (+1 / -1): `ws next` and `ws prev`.
+ * Stops at desktop 1 and desktop 9 rather than wrapping. */
+void workspace_step(syn_server_t *s, int delta);
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index);
 /* Re-tile every desktop that is on screen. Under SHARED that is the one
  * `layout_apply(s, server_active_workspace(s))` always meant; under PER_OUTPUT
@@ -8386,6 +8449,32 @@ void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
                      const char *action, const char *arg);
 bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym);
 bool config_unbind(syn_config_t *cfg, const char *combo);
+
+/* Touchpad gestures. "swipe:4:left" to its three numbers and back; the parse
+ * refuses a finger count the kind cannot have (a two-finger swipe is a scroll,
+ * and libinput never reports one). set replaces whatever held that spec, the
+ * way config_bind_set replaces a chord. */
+bool syn_gesture_parse_spec(const char *spec, int *kind, int *fingers, int *dir);
+void syn_gesture_format_spec(int kind, int fingers, int dir, char *out, size_t n);
+void config_gesture_set(syn_config_t *cfg, int kind, int fingers, int dir,
+                        const char *action, const char *arg);
+bool config_ungesture(syn_config_t *cfg, const char *spec);
+
+/* gesture.c — the claim and the direction, with no compositor in them.
+ *
+ * begin: take the gesture (true) when `may_claim` and something in the table
+ *   wants this kind and finger count — the direction is not known yet, so a
+ *   four-finger swipe is taken whole even if only `left` is bound. false = it
+ *   belongs to the client; forward it, and its update and end with it.
+ * update / end: true = synui's, do not forward. end's *out is the bind to run,
+ *   or NULL for a cancelled gesture or a direction nothing is bound to. */
+bool gesture_begin(syn_gesture_tracker_t *t, const syn_config_t *cfg,
+                   int kind, uint32_t fingers, bool may_claim);
+bool gesture_update(syn_gesture_tracker_t *t, int kind,
+                    double dx, double dy, double scale);
+bool gesture_end(syn_gesture_tracker_t *t, const syn_config_t *cfg,
+                 int kind, bool cancelled, const syn_gesture_bind_t **out);
+int  gesture_direction(int kind, double dx, double dy, double scale);
 
 /* Resolve <config dir>/<name> into buf, where the config dir is
  * $XDG_CONFIG_HOME/synui (preferred) or ~/.config/synui. Every file synui

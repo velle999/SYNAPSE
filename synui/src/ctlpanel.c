@@ -1087,6 +1087,14 @@ static const struct ctl_item ctl_items[] = {
       .help = N_("Steadies a shaky or noisy pointer by averaging its path. "
               "Costs a little lag; 0 is off. Games reading raw motion are "
               "unaffected") },
+    /* The one switch over the whole `gesture =` table. The table itself stays
+     * a synuirc matter, like the bind table's text form; this row is here so
+     * that a swipe firing when it should not can be stopped without a text
+     * editor. Read at the start of every gesture, so nothing to apply. */
+    { CTL_ROW_GESTURES,     CTL_CAT_INPUT, CTL_KIND_TOGGLE, N_("Touchpad gestures"), NULL,
+      .key = "gestures", .off = CFG(gestures), .vtype = CTL_VAL_BOOL,
+      .help = N_("Four fingers left or right changes desktop; up and down "
+              "open and close the overview. Off gives every swipe to apps") },
     { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Cursor size"), NULL,
       .key = "cursor_size", .off = CFG(cursor_size), .vtype = CTL_VAL_INT,
       .vmin = 8, .vmax = 256, .vstep = 4, .unit = "px", .apply = CTL_APPLY_CURSOR },

@@ -622,6 +622,19 @@ record_edit = off
 # Unset options leave the device at its default.
 # tap            = on          # touchpad tap-to-click
 # natural_scroll = on
+#
+# gestures = on                # off gives every touchpad gesture to apps
+#   Touchpad gestures, as binds: `gesture = <kind>:<fingers>:<direction>`
+#   followed by any action a `bind =` line takes. swipe takes 3-5 fingers and
+#   left|right|up|down; pinch takes 2-5 and in|out. These four are on by
+#   default:
+# gesture = swipe:4:left  ws next          # desktop to the right
+# gesture = swipe:4:right ws prev          # desktop to the left
+# gesture = swipe:4:up    overview open
+# gesture = swipe:4:down  overview close
+#   `ungesture = swipe:4:up` removes one. Binding any direction of a finger
+#   count takes every swipe of that count away from apps; the action runs when
+#   the fingers lift. `synctl gestures` prints the table as synui holds it.
 # left_handed    = on
 # accel_speed    = 0.0         # -1.0 (slow) .. 1.0 (fast)
 #

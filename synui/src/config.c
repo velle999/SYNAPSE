@@ -47,7 +47,7 @@
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * expand_v_toggle, expand_h_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
- * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
+ * ws <1-9|next|prev>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
  * cursor, cursor_reload,
  * filters, effects_toggle, power, lock, game, taskmgr, network, news, keys.
  * A bind with the same combo as a default replaces it.
@@ -437,6 +437,21 @@
  *   natural_scroll = on|off      (unset follows libinput's device default)
  *   left_handed = on|off         (swaps the buttons; unset is the default)
  *   tap = on|off                 (tap-to-click on a touchpad)
+ *   gestures = on|off            (default on; off hands every touchpad
+ *                                 gesture to the app under the pointer)
+ *   gesture = <kind>:<fingers>:<direction> <action> [arg]
+ *       A touchpad gesture as a bind — any action a `bind =` line takes.
+ *       kind swipe (3-5 fingers; left|right|up|down) or pinch (2-5 fingers;
+ *       in|out). The defaults:
+ *         gesture = swipe:4:left  ws next         (desktop to the right)
+ *         gesture = swipe:4:right ws prev
+ *         gesture = swipe:4:up    overview open
+ *         gesture = swipe:4:down  overview close
+ *       Binding any direction takes EVERY gesture of that kind and finger
+ *       count away from apps; unbound finger counts still reach them.
+ *       The action runs when the fingers lift. `ws next`/`ws prev` stop at
+ *       desktops 1 and 9 rather than wrapping.
+ *   ungesture = swipe:4:up       (remove a default, as unbind does for keys)
  *   focus_mode = click|sloppy|strict
  *       Click: only a click focuses. Sloppy and Strict both follow the pointer;
  *       over the DESKTOP, Strict drops focus and Sloppy keeps the last window.
@@ -1398,6 +1413,151 @@ static void seed_default_binds(syn_config_t *cfg)
     }
 }
 
+/* ── Touchpad gestures ───────────────────────────────────────
+ * `gesture = <kind>:<fingers>:<direction> <action> [arg]`. The words are a
+ * FORMAT, same as the enum tables above: renaming one turns a config line
+ * into an unknown word. Indexed by syn_gesture_kind_t / syn_gesture_dir_t. */
+const char *const syn_gesture_kind_names[SYN_GESTURE_KIND_COUNT] = {
+    "swipe", "pinch",
+};
+const char *const syn_gesture_dir_names[SYN_GESTURE_DIR_COUNT] = {
+    "left", "right", "up", "down", "in", "out",
+};
+
+bool syn_gesture_parse_spec(const char *spec, int *kind_out, int *fingers_out,
+                            int *dir_out)
+{
+    char buf[64];
+    if (!spec || strlen(spec) >= sizeof(buf)) return false;
+    snprintf(buf, sizeof(buf), "%s", spec);
+
+    char *save = NULL;
+    char *k = strtok_r(buf, ":", &save);
+    char *f = strtok_r(NULL, ":", &save);
+    char *d = strtok_r(NULL, ":", &save);
+    if (!k || !f || !d || strtok_r(NULL, ":", &save)) return false;
+
+    int kind = -1;
+    for (int i = 0; i < SYN_GESTURE_KIND_COUNT; i++)
+        if (strcasecmp(k, syn_gesture_kind_names[i]) == 0) kind = i;
+    if (kind < 0) return false;
+
+    char *end;
+    long fingers = strtol(f, &end, 10);
+    if (*end || end == f) return false;
+    /* Two fingers moving together is a SCROLL, and libinput never reports it
+     * as a swipe — a `swipe:2` bind would be a line that can never fire. */
+    int min = (kind == SYN_GESTURE_SWIPE) ? 3 : 2;
+    if (fingers < min || fingers > SYN_GESTURE_FINGERS_MAX) return false;
+
+    int dir = SYN_GESTURE_DIR_NONE;
+    for (int i = 0; i < SYN_GESTURE_DIR_COUNT; i++)
+        if (strcasecmp(d, syn_gesture_dir_names[i]) == 0) dir = i;
+    /* A direction the kind cannot produce is refused for the same reason:
+     * gesture_direction() never answers `in` for a swipe. */
+    bool pinch_dir = dir == SYN_GESTURE_IN || dir == SYN_GESTURE_OUT;
+    if (dir == SYN_GESTURE_DIR_NONE || pinch_dir != (kind == SYN_GESTURE_PINCH))
+        return false;
+
+    *kind_out = kind;
+    *fingers_out = (int)fingers;
+    *dir_out = dir;
+    return true;
+}
+
+void syn_gesture_format_spec(int kind, int fingers, int dir, char *out, size_t n)
+{
+    if (kind < 0 || kind >= SYN_GESTURE_KIND_COUNT ||
+        dir  < 0 || dir  >= SYN_GESTURE_DIR_COUNT) {
+        snprintf(out, n, "?");
+        return;
+    }
+    snprintf(out, n, "%s:%d:%s", syn_gesture_kind_names[kind], fingers,
+             syn_gesture_dir_names[dir]);
+}
+
+void config_gesture_set(syn_config_t *cfg, int kind, int fingers, int dir,
+                        const char *action, const char *arg)
+{
+    syn_gesture_bind_t *g = NULL;
+    for (int i = 0; i < cfg->gesture_count; i++) {
+        syn_gesture_bind_t *c = &cfg->gesture_binds[i];
+        if (c->kind == kind && c->fingers == fingers && c->dir == dir) {
+            g = c;
+            break;
+        }
+    }
+    if (!g) {
+        if (cfg->gesture_count >= SYN_GESTURES_MAX) {
+            wlr_log(WLR_ERROR, "synui: gesture table full (%d)", SYN_GESTURES_MAX);
+            return;
+        }
+        g = &cfg->gesture_binds[cfg->gesture_count++];
+    }
+    g->kind    = kind;
+    g->fingers = fingers;
+    g->dir     = dir;
+    snprintf(g->action, sizeof(g->action), "%s", action);
+    snprintf(g->arg, sizeof(g->arg), "%s", arg ? arg : "");
+}
+
+bool config_ungesture(syn_config_t *cfg, const char *spec)
+{
+    int kind, fingers, dir;
+    if (!syn_gesture_parse_spec(spec, &kind, &fingers, &dir)) return false;
+    for (int i = 0; i < cfg->gesture_count; i++) {
+        syn_gesture_bind_t *g = &cfg->gesture_binds[i];
+        if (g->kind != kind || g->fingers != fingers || g->dir != dir) continue;
+        memmove(g, g + 1, (size_t)(cfg->gesture_count - i - 1) * sizeof(*g));
+        cfg->gesture_count--;
+        return true;
+    }
+    return false;
+}
+
+/* `gesture = <spec> <action> [arg]`, split the way `bind =` splits. */
+static void config_gesture(syn_config_t *cfg, char *val)
+{
+    char *sp = val;
+    while (*sp && !isspace((unsigned char)*sp)) sp++;
+    if (*sp) { *sp++ = '\0'; while (isspace((unsigned char)*sp)) sp++; }
+
+    int kind, fingers, dir;
+    if (!syn_gesture_parse_spec(val, &kind, &fingers, &dir)) {
+        wlr_log(WLR_ERROR, "synui: gesture '%s': expected swipe:<3-5>:"
+                "left|right|up|down or pinch:<2-5>:in|out", val);
+        return;
+    }
+
+    char action[SYN_BIND_ACTION_LEN] = {0};
+    const char *a = sp;
+    while (*sp && !isspace((unsigned char)*sp)) sp++;
+    size_t alen = (size_t)(sp - a);
+    if (alen == 0 || alen >= sizeof(action)) {
+        wlr_log(WLR_ERROR, "synui: gesture %s: bad or missing action", val);
+        return;
+    }
+    memcpy(action, a, alen);
+    while (isspace((unsigned char)*sp)) sp++;
+
+    config_gesture_set(cfg, kind, fingers, dir, action, sp);
+}
+
+/* Four fingers, because three is what apps and libinput's own three-finger
+ * drag already use, and a desktop switch that fires when somebody meant to drag
+ * a window is worse than one that needs the extra finger. Left means the
+ * fingers moved left: the desktop to the RIGHT slides in, the way it does on
+ * GNOME, KDE and macOS. Up opens mission control and down closes it — explicit
+ * open/close rather than a toggle, so a second upward swipe cannot shut the
+ * overview it has just been asked to show. */
+static void seed_default_gestures(syn_config_t *cfg)
+{
+    config_gesture_set(cfg, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_LEFT,  "ws", "next");
+    config_gesture_set(cfg, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_RIGHT, "ws", "prev");
+    config_gesture_set(cfg, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_UP,    "overview", "open");
+    config_gesture_set(cfg, SYN_GESTURE_SWIPE, 4, SYN_GESTURE_DOWN,  "overview", "close");
+}
+
 /* ── Config-dir paths ────────────────────────────────────── */
 
 /* The single resolver for everything under synui's config dir: synuirc,
@@ -2042,6 +2202,10 @@ static void config_set_defaults(syn_config_t *cfg)
 
     cfg->bind_count = 0;
     seed_default_binds(cfg);
+
+    cfg->gestures      = 1;
+    cfg->gesture_count = 0;
+    seed_default_gestures(cfg);
 }
 
 /*
@@ -3048,6 +3212,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->notif_dnd = strcmp(val, "on") == 0;
     else if (strcmp(key, "numlock") == 0)
         cfg->numlock = strcmp(val, "on") == 0;
+    else if (strcmp(key, "gestures") == 0)
+        cfg->gestures = strcmp(val, "on") == 0;
     else if (strcmp(key, "record_audio") == 0)
         cfg->record_audio = strcmp(val, "on") == 0;
     else if (strcmp(key, "record_edit") == 0)
@@ -3443,5 +3609,16 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     else if (strcmp(key, "unbind") == 0) {
         if (!config_unbind(cfg, val))
             wlr_log(WLR_ERROR, "synui: unbind '%s': not bound", val);
+    }
+    else if (strcmp(key, "gesture") == 0)
+        config_gesture(cfg, val);
+    /* The same pair as bind/unbind: the four defaults are seeded before any
+     * file is read, so this is how one of them is removed rather than moved. */
+    else if (strcmp(key, "ungesture") == 0) {
+        int kind, fingers, dir;
+        if (!syn_gesture_parse_spec(val, &kind, &fingers, &dir))
+            wlr_log(WLR_ERROR, "synui: ungesture '%s': not a gesture", val);
+        else if (!config_ungesture(cfg, val))
+            wlr_log(WLR_ERROR, "synui: ungesture '%s': not bound", val);
     }
 }

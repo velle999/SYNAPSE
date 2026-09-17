@@ -232,6 +232,7 @@ synui_exe = executable('synui',
   sources : [
     'src/synui_main.c',
     'src/input.c',
+    'src/gesture.c',
     'src/spawntoggle.c',
     'src/hit.c',
     'src/constraints.c',
@@ -837,6 +838,19 @@ hit_test = executable('hit_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('hit', hit_test)
+
+# Touchpad gestures, with no touchpad. libinput decides a swipe has four
+# fingers; gesture.c decides whether synui takes it and which way it went, and
+# that is all arithmetic over a stream of begin/update/end — so the stream is
+# written by hand here. What this cannot show is the feel of a real pad: the
+# direction rule is sway's for that reason, not a threshold tuned in a test.
+gesture_test = executable('gesture_test',
+  ['tests/gesture_test.c', 'src/gesture.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, libm],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('gesture', gesture_test)
 
 # Which titlebar button sits where, per chrome style — the painter in deco.c and
 # the hit test beside it read one set of functions in synui.h, and this is what
@@ -2618,6 +2632,15 @@ test('dnd', dnd_sh,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],
      depends : [synui_exe, synctl_exe],
      timeout : 120)
+
+# What the touchpad gestures RUN: ws next/prev stop at the ends, overview
+# open/close are idempotent, `synctl gestures` lists the table. The swipe itself
+# cannot reach a headless synui; gesture_test covers the half before this.
+ws_step = find_program('tests/ws_step.sh')
+test('ws_step', ws_step,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 60)
 
 overview_sh = find_program('tests/overview.sh')
 test('overview', overview_sh,

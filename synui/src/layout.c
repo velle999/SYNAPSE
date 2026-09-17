@@ -2058,6 +2058,24 @@ void workspace_switch_on(syn_server_t *s, syn_output_t *o, int index)
     ws_switch_core(s, o ? o : server_focused_output(s), index);
 }
 
+/* One desktop along. Counted from the monitor the switch will act on — under
+ * PER_OUTPUT that is the focused one, whose desktop need not be the desk-wide
+ * active_workspace — so "next" is always next to what the user is looking at.
+ *
+ * It stops at the ends rather than wrapping: a sideways swipe from desktop 9
+ * that lands on desktop 1 has moved eight desktops in one gesture, in the
+ * opposite direction from the fingers. */
+void workspace_step(syn_server_t *s, int delta)
+{
+    syn_output_t *o = s->config.workspace_mode == SYN_WS_MODE_PER_OUTPUT
+                          ? server_focused_output(s) : NULL;
+    int from = o ? output_workspace_index(s, o) : s->active_workspace;
+    int to = from + delta;
+    if (from < 0 || from >= WORKSPACE_MAX || to < 0 || to >= WORKSPACE_MAX)
+        return;
+    ws_switch_core(s, o, to);
+}
+
 /*
  * Re-tile every desktop that is on screen. Under SHARED that is one workspace
  * and this is what `layout_apply(s, server_active_workspace(s))` always meant;

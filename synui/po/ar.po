@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 05:26-0500\n"
+"POT-Creation-Date: 2026-09-17 12:10-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -18,28 +18,28 @@ msgstr ""
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
 "&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 
-#: src/ai_interface.c:251
+#: src/ai_interface.c:349
 msgid "synapd query failed — reconnecting"
 msgstr "فشل الاستعلام من synapd — جارٍ إعادة الاتصال"
 
-#: src/ai_interface.c:407
+#: src/ai_interface.c:505
 msgid "no focused window — ask anything"
 msgstr "لا نافذة مركّزة — اسأل ما شئت"
 
-#: src/ai_interface.c:416
+#: src/ai_interface.c:514
 msgid "(unknown)"
 msgstr "(غير معروف)"
 
-#: src/ai_interface.c:417
+#: src/ai_interface.c:515
 msgid "(untitled)"
 msgstr "(بلا عنوان)"
 
-#: src/ai_interface.c:421
+#: src/ai_interface.c:519
 #, c-format
 msgid "about: %s"
 msgstr "بخصوص: %s"
 
-#: src/bt.c:129 src/ctlpanel.c:1153
+#: src/bt.c:129 src/ctlpanel.c:1161
 msgid "Audio"
 msgstr "الصوت"
 
@@ -87,7 +87,7 @@ msgstr "مودم"
 msgid "Player"
 msgstr "مشغّل"
 
-#: src/bt.c:141 src/ctlpanel.c:1189
+#: src/bt.c:141 src/ctlpanel.c:1197
 msgid "Network"
 msgstr "الشبكة"
 
@@ -111,7 +111,7 @@ msgstr "شاشة"
 msgid "(unknown device)"
 msgstr "(جهاز غير معروف)"
 
-#: src/bt.c:451 src/render.c:4502
+#: src/bt.c:451 src/render.c:4541
 msgid "failed"
 msgstr "فشل"
 
@@ -216,7 +216,7 @@ msgstr "عتامة النافذة النشطة. اليسار/اليمين يضب
 msgid "Auto"
 msgstr "تلقائي"
 
-#: src/ctlpanel.c:436 src/ctlpanel.c:2952
+#: src/ctlpanel.c:436 src/ctlpanel.c:2966
 msgid "Off"
 msgstr "مُعطَّل"
 
@@ -696,7 +696,7 @@ msgstr ""
 "«نافذة»: اسحبها من رأسها وانقر في غيره بحرية. «إغلاق بالنقر خارجها»: تُغلق "
 "حين تنقر بجوارها. وEsc يغلق دائمًا"
 
-#: src/ctlpanel.c:736 src/ctlpanel.c:2734
+#: src/ctlpanel.c:736 src/ctlpanel.c:2748
 msgid "Control panel"
 msgstr "لوحة التحكم"
 
@@ -704,7 +704,7 @@ msgstr "لوحة التحكم"
 msgid "How this panel itself behaves"
 msgstr "كيف تتصرف هذه اللوحة نفسها"
 
-#: src/ctlpanel.c:740 src/ctlpanel.c:1276 src/ctlpanel.c:2790
+#: src/ctlpanel.c:740 src/ctlpanel.c:1284 src/ctlpanel.c:2804
 msgid "Task manager"
 msgstr "مدير المهام"
 
@@ -890,7 +890,7 @@ msgstr ""
 msgid "Date & time"
 msgstr "التاريخ والوقت"
 
-#: src/ctlpanel.c:898 src/render.c:8224
+#: src/ctlpanel.c:898 src/render.c:8263
 msgid "Clock"
 msgstr "الساعة"
 
@@ -946,7 +946,7 @@ msgstr ""
 "أي ميناء ترسمه ودجة الساعة العقربية — تلك التي على سطح المكتب، من «الودجات». "
 "أما ساعة الرصيف العقربية فلها تصميم واحد"
 
-#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2749
+#: src/ctlpanel.c:934 src/ctlpanel.c:935 src/ctlpanel.c:2763
 msgid "Start menu"
 msgstr "قائمة ابدأ"
 
@@ -1122,62 +1122,72 @@ msgstr ""
 "يهدّئ مؤشرًا مرتجفًا أو مشوَّشًا بحساب متوسط مساره. يكلّف تأخيرًا يسيرًا، و0 يوقفه. "
 "ولا يتأثر به ما يقرأ الحركة الخام من الألعاب"
 
-#: src/ctlpanel.c:1090
+#: src/ctlpanel.c:1094
+msgid "Touchpad gestures"
+msgstr "إيماءات لوحة اللمس"
+
+#: src/ctlpanel.c:1096
+msgid ""
+"Four fingers left or right changes desktop; up and down open and close the "
+"overview. Off gives every swipe to apps"
+msgstr "أربعة أصابع يسارًا أو يمينًا تبدّل سطح المكتب؛ وأعلى وأسفل تفتح العرض الشامل وتغلقه. الإيقاف يترك كل سحبة للتطبيقات"
+
+#: src/ctlpanel.c:1098
 msgid "Cursor size"
 msgstr "حجم المؤشر"
 
-#: src/ctlpanel.c:1095 src/ctlpanel.c:2779
+#: src/ctlpanel.c:1103 src/ctlpanel.c:2793
 msgid "Display settings"
 msgstr "إعدادات العرض"
 
-#: src/ctlpanel.c:1096 src/ctlpanel.c:1103
+#: src/ctlpanel.c:1104 src/ctlpanel.c:1111
 msgid "Screens"
 msgstr "الشاشات"
 
-#: src/ctlpanel.c:1104
+#: src/ctlpanel.c:1112
 msgid "Extend, Duplicate, or built-in off (closed lid). Also m in Super+D"
 msgstr ""
 "توسيع، أو تكرار، أو إطفاء الشاشة الداخلية (بإغلاق الغطاء). وأيضًا m داخل "
 "Super+D"
 
-#: src/ctlpanel.c:1114
+#: src/ctlpanel.c:1122
 msgid "Scale everything"
 msgstr "تكبير كل شيء"
 
-#: src/ctlpanel.c:1115
+#: src/ctlpanel.c:1123
 msgid ""
 "Every screen, every app, the cursor. Super+Ctrl+= / - , Super+Ctrl+0 resets"
 msgstr "كل شاشة وكل تطبيق والمؤشر. Super+Ctrl+= / - ، وSuper+Ctrl+0 يعيد الضبط"
 
-#: src/ctlpanel.c:1124
+#: src/ctlpanel.c:1132
 msgid "Monitor settings"
 msgstr "إعدادات الشاشة"
 
-#: src/ctlpanel.c:1125
+#: src/ctlpanel.c:1133
 msgid "Connectors, EDID and the modes the hardware offers (syn-settings)"
 msgstr "الموصّلات وEDID والأوضاع التي يتيحها العتاد (syn-settings)"
 
-#: src/ctlpanel.c:1127 src/ctlpanel.c:1128 src/ctlpanel.c:2743
+#: src/ctlpanel.c:1135 src/ctlpanel.c:1136 src/ctlpanel.c:2757
 msgid "Night light"
 msgstr "الإضاءة الليلية"
 
-#: src/ctlpanel.c:1129
+#: src/ctlpanel.c:1137
 msgid "Colour temperature"
 msgstr "درجة حرارة اللون"
 
-#: src/ctlpanel.c:1133
+#: src/ctlpanel.c:1141
 msgid "6500K is daylight — the identity ramp. Lower is warmer"
 msgstr "6500K هو ضوء النهار — المنحنى المحايد. وكلما قلّت كان أدفأ"
 
-#: src/ctlpanel.c:1141
+#: src/ctlpanel.c:1149
 msgid "Do Not Disturb"
 msgstr "عدم الإزعاج"
 
-#: src/ctlpanel.c:1142
+#: src/ctlpanel.c:1150
 msgid "Notifications"
 msgstr "الإشعارات"
 
-#: src/ctlpanel.c:1143
+#: src/ctlpanel.c:1151
 msgid ""
 "Super+Shift+M anywhere. Hides toasts and mutes the chime; critical alerts "
 "still come through"
@@ -1185,915 +1195,915 @@ msgstr ""
 "‏Super+Shift+M من أي مكان. يخفي الإشعارات المنبثقة ويكتم الرنّة؛ أما التنبيهات "
 "الحرجة فتصل رغم ذلك"
 
-#: src/ctlpanel.c:1145 src/ctlpanel.c:2786 src/render.c:5416
+#: src/ctlpanel.c:1153 src/ctlpanel.c:2800 src/render.c:5455
 msgid "Event sounds"
 msgstr "أصوات الأحداث"
 
-#: src/ctlpanel.c:1152
+#: src/ctlpanel.c:1160
 msgid "Screen audio"
 msgstr "الصوت إلى الشاشة"
 
-#: src/ctlpanel.c:1156
+#: src/ctlpanel.c:1164
 msgid "Move sound to a TV or monitor when you plug it in. Auto = laptops"
 msgstr "ينقل الصوت إلى تلفاز أو شاشة حين توصلها. «تلقائي» = الحواسيب المحمولة"
 
-#: src/ctlpanel.c:1157
+#: src/ctlpanel.c:1165
 msgid "Equalizer"
 msgstr "المعادل"
 
-#: src/ctlpanel.c:1158
+#: src/ctlpanel.c:1166
 msgid "10-band system equalizer. Adds an output device while it is on"
 msgstr "معادل نظام بعشرة نطاقات. يضيف جهاز إخراج ما دام مشغَّلًا"
 
-#: src/ctlpanel.c:1173
+#: src/ctlpanel.c:1181
 msgid "Screen reader"
 msgstr "قارئ الشاشة"
 
-#: src/ctlpanel.c:1174
+#: src/ctlpanel.c:1182
 msgid "Speech"
 msgstr "النطق"
 
-#: src/ctlpanel.c:1175
+#: src/ctlpanel.c:1183
 msgid "Speak the focused window as focus moves. Super+Shift+U toggles it"
 msgstr "يقرأ النافذة النشطة كلما انتقل التركيز. Super+Shift+U يبدّله"
 
-#: src/ctlpanel.c:1176
+#: src/ctlpanel.c:1184
 msgid "Answer to its name"
 msgstr "الإجابة عند النداء باسمه"
 
-#: src/ctlpanel.c:1178
+#: src/ctlpanel.c:1186
 msgid "Listen for \"Synapse\" and answer out loud. Holds the microphone open"
 msgstr "يستمع لكلمة «Synapse» ويجيب بصوت مسموع. ويُبقي الميكروفون مفتوحًا"
 
-#: src/ctlpanel.c:1180
+#: src/ctlpanel.c:1188
 msgid "Record audio"
 msgstr "تسجيل الصوت"
 
-#: src/ctlpanel.c:1181
+#: src/ctlpanel.c:1189
 msgid "Recording"
 msgstr "التسجيل"
 
-#: src/ctlpanel.c:1182
+#: src/ctlpanel.c:1190
 msgid "Record for editing"
 msgstr "التسجيل للمونتاج"
 
-#: src/ctlpanel.c:1183
+#: src/ctlpanel.c:1191
 msgid "DNxHR .mov that video editors read directly. About 1.1 GB/min"
 msgstr ""
 "ملف DNxHR بصيغة ‎.mov تقرأه برامج المونتاج مباشرة. نحو 1.1 غيغابايت في الدقيقة"
 
-#: src/ctlpanel.c:1188 src/ctlpanel.c:2792
+#: src/ctlpanel.c:1196 src/ctlpanel.c:2806
 msgid "Network / Wi-Fi"
 msgstr "الشبكة / واي-فاي"
 
-#: src/ctlpanel.c:1190
+#: src/ctlpanel.c:1198
 msgid "Bluetooth"
 msgstr "بلوتوث"
 
-#: src/ctlpanel.c:1192 src/ctlpanel.c:1193
+#: src/ctlpanel.c:1200 src/ctlpanel.c:1201
 msgid "Printers"
 msgstr "الطابعات"
 
-#: src/ctlpanel.c:1199
+#: src/ctlpanel.c:1207
 msgid "Find printers"
 msgstr "البحث عن طابعات"
 
-#: src/ctlpanel.c:1201
+#: src/ctlpanel.c:1209
 msgid "Add every network printer that is not set up yet, driverless"
 msgstr "يضيف كل طابعة شبكية لم تُعدّ بعد، دون تعريفات"
 
-#: src/ctlpanel.c:1204 src/power.c:111
+#: src/ctlpanel.c:1212 src/power.c:111
 msgid "Power saving"
 msgstr "توفير الطاقة"
 
-#: src/ctlpanel.c:1205 src/render.c:8226
+#: src/ctlpanel.c:1213 src/render.c:8265
 msgid "Power"
 msgstr "الطاقة"
 
-#: src/ctlpanel.c:1206
+#: src/ctlpanel.c:1214
 msgid "Idle timeouts for dim, blank, lock and suspend"
 msgstr "مُهَل الخمول للتعتيم والإطفاء والقفل والتعليق"
 
-#: src/ctlpanel.c:1207 src/saver.c:837
+#: src/ctlpanel.c:1215 src/saver.c:1247
 msgid "Screensaver"
 msgstr "حافظة الشاشة"
 
-#: src/ctlpanel.c:1208
+#: src/ctlpanel.c:1216
 msgid "What the screen shows when idle, and how the lock screen looks"
 msgstr "ما تعرضه الشاشة عند الخمول، وكيف تبدو شاشة القفل"
 
-#: src/ctlpanel.c:1209 src/ctlpanel.c:2794
+#: src/ctlpanel.c:1217 src/ctlpanel.c:2808
 msgid "Lock screen"
 msgstr "شاشة القفل"
 
-#: src/ctlpanel.c:1213
+#: src/ctlpanel.c:1221
 msgid "Unlock with fingerprint"
 msgstr "الفتح ببصمة الإصبع"
 
-#: src/ctlpanel.c:1222
+#: src/ctlpanel.c:1230
 msgid "Install fprintd, run fprintd-enroll; your password always works too"
 msgstr "ثبّت fprintd ونفّذ fprintd-enroll؛ وكلمة سرك تعمل دائمًا كذلك"
 
-#: src/ctlpanel.c:1230 src/ctlpanel.c:1231 src/ctlpanel.c:2793
+#: src/ctlpanel.c:1238 src/ctlpanel.c:1239 src/ctlpanel.c:2807
 msgid "Game mode"
 msgstr "وضع الألعاب"
 
-#: src/ctlpanel.c:1232
+#: src/ctlpanel.c:1240
 msgid "Enter cycles auto / always on / always off — same as Super+G"
 msgstr "‏Enter يتنقّل بين تلقائي / مشغَّل دائمًا / مطفأ دائمًا — مثل Super+G"
 
-#: src/ctlpanel.c:1233
+#: src/ctlpanel.c:1241
 msgid "Detect games"
 msgstr "اكتشاف الألعاب"
 
-#: src/ctlpanel.c:1235
+#: src/ctlpanel.c:1243
 msgid "Treat a fullscreen game window as a game unless it is excluded"
 msgstr "يعامل نافذة لعبة بملء الشاشة كلعبة، ما لم تكن مستثناة"
 
-#: src/ctlpanel.c:1236
+#: src/ctlpanel.c:1244
 msgid "Open games on"
 msgstr "افتح الألعاب على"
 
-#: src/ctlpanel.c:1239
+#: src/ctlpanel.c:1247
 msgid "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game"
 msgstr "«الرئيسة» = الشاشة المعلَّمة PRIMARY في Super+D؛ و«اسأل» يطيع اللعبة"
 
-#: src/ctlpanel.c:1240
+#: src/ctlpanel.c:1248
 msgid "Stop the AI while gaming"
 msgstr "أوقف الذكاء الاصطناعي أثناء اللعب"
 
-#: src/ctlpanel.c:1242
+#: src/ctlpanel.c:1250
 msgid "Hold off idle while gaming"
 msgstr "أجّل الخمول أثناء اللعب"
 
-#: src/ctlpanel.c:1244
+#: src/ctlpanel.c:1252
 msgid "A gamepad is not input as far as the idle timer is concerned"
 msgstr "لا يُحسب ذراع التحكم إدخالًا في حساب مؤقّت الخمول"
 
-#: src/ctlpanel.c:1248
+#: src/ctlpanel.c:1256
 msgid "Drop screen effects while gaming"
 msgstr "أطفئ مؤثرات الشاشة أثناء اللعب"
 
-#: src/ctlpanel.c:1250
+#: src/ctlpanel.c:1258
 msgid "The biggest win: lets the game draw straight to the display"
 msgstr "أكبر مكسب: يتيح للعبة أن ترسم مباشرة على الشاشة"
 
-#: src/ctlpanel.c:1251
+#: src/ctlpanel.c:1259
 msgid "Pause the wallpaper while gaming"
 msgstr "أوقف الخلفية أثناء اللعب"
 
-#: src/ctlpanel.c:1253
+#: src/ctlpanel.c:1261
 msgid "Animated wallpapers keep rendering behind a fullscreen game"
 msgstr "تستمر الخلفيات المتحركة في الرسم خلف لعبة بملء الشاشة"
 
-#: src/ctlpanel.c:1254
+#: src/ctlpanel.c:1262
 msgid "Stop the bar while gaming"
 msgstr "أوقف الشريط أثناء اللعب"
 
-#: src/ctlpanel.c:1256
+#: src/ctlpanel.c:1264
 msgid "Frees memory, but the bar takes a moment to come back"
 msgstr "يحرّر ذاكرة، لكن الشريط يتأخر لحظة في العودة"
 
-#: src/ctlpanel.c:1257
+#: src/ctlpanel.c:1265
 msgid "Keep the mouse on the game's screen"
 msgstr "أبقِ الفأرة على شاشة اللعبة"
 
-#: src/ctlpanel.c:1259
+#: src/ctlpanel.c:1267
 msgid "Games rarely ask for it themselves; Alt-Tab still frees it"
 msgstr "نادرًا ما تطلب الألعاب ذلك بنفسها؛ وAlt-Tab يحرّرها على أي حال"
 
-#: src/ctlpanel.c:1260
+#: src/ctlpanel.c:1268
 msgid "Quiet the kernel monitor while gaming"
 msgstr "أسكِت مراقبة النواة أثناء اللعب"
 
-#: src/ctlpanel.c:1262
+#: src/ctlpanel.c:1270
 msgid "Saves very little, and security monitoring pauses with it"
 msgstr "التوفير ضئيل جدًا، ومراقبة الأمان تتوقف معه"
 
-#: src/ctlpanel.c:1265 src/ctlpanel.c:3212
+#: src/ctlpanel.c:1273 src/ctlpanel.c:3226
 msgid "AI backend"
 msgstr "محرّك الذكاء الاصطناعي"
 
-#: src/ctlpanel.c:1266
+#: src/ctlpanel.c:1274
 msgid "AI"
 msgstr "الذكاء الاصطناعي"
 
-#: src/ctlpanel.c:1267
+#: src/ctlpanel.c:1275
 msgid "Which device synapd runs inference on"
 msgstr "على أي جهاز ينفّذ synapd الاستدلال"
 
-#: src/ctlpanel.c:1268 src/ctlpanel.c:2791
+#: src/ctlpanel.c:1276 src/ctlpanel.c:2805
 msgid "AI model"
 msgstr "نموذج الذكاء الاصطناعي"
 
-#: src/ctlpanel.c:1269
+#: src/ctlpanel.c:1277
 msgid "AI window placement"
 msgstr "توضيع النوافذ بالذكاء الاصطناعي"
 
-#: src/ctlpanel.c:1271
+#: src/ctlpanel.c:1279
 msgid "Let the AI layout decide where a new window goes"
 msgstr "يدع تخطيط الذكاء الاصطناعي يقرر أين تذهب النافذة الجديدة"
 
-#: src/ctlpanel.c:1272
+#: src/ctlpanel.c:1280
 msgid "AI context in borders"
 msgstr "سياق الذكاء الاصطناعي في الحواف"
 
-#: src/ctlpanel.c:1274
+#: src/ctlpanel.c:1282
 msgid "Tint a window's border when the AI is holding context for it"
 msgstr "يلوّن حافة النافذة ما دام الذكاء الاصطناعي يحتفظ بسياق لها"
 
-#: src/ctlpanel.c:1277
+#: src/ctlpanel.c:1285
 msgid "Tools"
 msgstr "الأدوات"
 
-#: src/ctlpanel.c:1278 src/ctlpanel.c:2746
+#: src/ctlpanel.c:1286 src/ctlpanel.c:2760
 msgid "Clipboard history"
 msgstr "سجل الحافظة"
 
-#: src/ctlpanel.c:1279
+#: src/ctlpanel.c:1287
 msgid "News"
 msgstr "الأخبار"
 
-#: src/ctlpanel.c:1280
+#: src/ctlpanel.c:1288
 msgid "News refresh"
 msgstr "تحديث الأخبار"
 
-#: src/ctlpanel.c:1283
+#: src/ctlpanel.c:1291
 msgid "How often a feed may be re-fetched at most"
 msgstr "كم مرة على الأكثر يجوز إعادة جلب المصدر"
 
-#: src/ctlpanel.c:1295
+#: src/ctlpanel.c:1303
 msgid "System settings"
 msgstr "إعدادات النظام"
 
-#: src/ctlpanel.c:1296
+#: src/ctlpanel.c:1304
 msgid "Clock, locale, kernel, default apps — what the SYSTEM is set to"
 msgstr "الساعة واللغة والنواة والتطبيقات الافتراضية — أي ما ضُبط عليه النظام"
 
-#: src/ctlpanel.c:1298 src/ctlpanel.c:2738
+#: src/ctlpanel.c:1306 src/ctlpanel.c:2752
 msgid "About OS"
 msgstr "عن النظام"
 
-#: src/ctlpanel.c:1299
+#: src/ctlpanel.c:1307
 msgid "About"
 msgstr "عن"
 
-#: src/ctlpanel.c:1300
+#: src/ctlpanel.c:1308
 msgid "The mark, the machine, and what this desktop is currently set to"
 msgstr "العلامة، والجهاز، وما ضُبط عليه سطح المكتب هذا الآن"
 
-#: src/ctlpanel.c:1398
+#: src/ctlpanel.c:1406
 msgid "device default"
 msgstr "افتراضي الجهاز"
 
-#: src/ctlpanel.c:1896
+#: src/ctlpanel.c:1910
 #, c-format
 msgid "glass off · bar, dock and widgets solid · windows opaque"
 msgstr "الزجاج مُعطَّل · الشريط والرصيف والودجات معتمة · والنوافذ معتمة"
 
-#: src/ctlpanel.c:1952
+#: src/ctlpanel.c:1966
 #, c-format
 msgid "glass full · bar and dock clear · ink off the wallpaper"
 msgstr "الزجاج كامل · الشريط والرصيف شفافان · واللون مأخوذ من الخلفية"
 
-#: src/ctlpanel.c:2293
+#: src/ctlpanel.c:2307
 #, c-format
 msgid "RGB lights: off"
 msgstr "إضاءة RGB: مُعطَّلة"
 
-#: src/ctlpanel.c:2294
+#: src/ctlpanel.c:2308
 #, c-format
 msgid "RGB lights: following the accent"
 msgstr "إضاءة RGB: تتبع اللون المميز"
 
-#: src/ctlpanel.c:2355
+#: src/ctlpanel.c:2369
 #, c-format
 msgid "Screen reader: off"
 msgstr "قارئ الشاشة: مُعطَّل"
 
-#: src/ctlpanel.c:2355
+#: src/ctlpanel.c:2369
 #, c-format
 msgid "Screen reader: on"
 msgstr "قارئ الشاشة: مُفعَّل"
 
-#: src/ctlpanel.c:2367
+#: src/ctlpanel.c:2381
 #, c-format
 msgid "No longer listening · the microphone is closed"
 msgstr "لم يعد يستمع · الميكروفون مغلق"
 
-#: src/ctlpanel.c:2368
+#: src/ctlpanel.c:2382
 #, c-format
 msgid "Listening for \"Synapse\" · the microphone is open"
 msgstr "ينتظر كلمة «Synapse» · الميكروفون مفتوح"
 
-#: src/ctlpanel.c:2406
+#: src/ctlpanel.c:2420
 #, c-format
 msgid "always on"
 msgstr "مُفعَّل دائمًا"
 
-#: src/ctlpanel.c:2407
+#: src/ctlpanel.c:2421
 #, c-format
 msgid "always off"
 msgstr "مُعطَّل دائمًا"
 
-#: src/ctlpanel.c:2408 src/ctlpanel.c:2558
+#: src/ctlpanel.c:2422 src/ctlpanel.c:2572
 #, c-format
 msgid "auto (%s)"
 msgstr "تلقائي (%s)"
 
-#: src/ctlpanel.c:2521
+#: src/ctlpanel.c:2535
 #, c-format
 msgid "on — %d missed"
 msgstr "مُفعَّل — %d فائتة"
 
-#: src/ctlpanel.c:2529
+#: src/ctlpanel.c:2543
 msgid "desktop sound"
 msgstr "صوت سطح المكتب"
 
-#: src/ctlpanel.c:2537
+#: src/ctlpanel.c:2551
 msgid "DNxHR ~1.1 GB/min"
 msgstr "DNxHR ‏~1.1 غ.بايت/دقيقة"
 
-#: src/ctlpanel.c:2537
+#: src/ctlpanel.c:2551
 msgid "off (H.264 mp4)"
 msgstr "مُعطَّل (H.264 mp4)"
 
-#: src/ctlpanel.c:2559
+#: src/ctlpanel.c:2573
 msgid "on · laptop"
 msgstr "مُفعَّل · حاسوب محمول"
 
-#: src/ctlpanel.c:2559
+#: src/ctlpanel.c:2573
 msgid "off · desktop"
 msgstr "مُعطَّل · حاسوب مكتبي"
 
-#: src/ctlpanel.c:2570
+#: src/ctlpanel.c:2584
 #, c-format
 msgid "Built-in off"
 msgstr "الشاشة الداخلية مطفأة"
 
-#: src/ctlpanel.c:2729
+#: src/ctlpanel.c:2743
 msgid "Terminal"
 msgstr "الطرفية"
 
-#: src/ctlpanel.c:2730
+#: src/ctlpanel.c:2744
 msgid "AI command bar"
 msgstr "شريط أوامر الذكاء الاصطناعي"
 
-#: src/ctlpanel.c:2731
+#: src/ctlpanel.c:2745
 msgid "Ask the AI about the window"
 msgstr "اسأل الذكاء الاصطناعي عن هذه النافذة"
 
-#: src/ctlpanel.c:2732
+#: src/ctlpanel.c:2746
 msgid "Neural overlay"
 msgstr "الطبقة العصبية"
 
-#: src/ctlpanel.c:2733
+#: src/ctlpanel.c:2747
 msgid "Welcome menu"
 msgstr "قائمة الترحيب"
 
-#: src/ctlpanel.c:2735
+#: src/ctlpanel.c:2749
 msgid "Keyboard shortcuts (this list)"
 msgstr "اختصارات لوحة المفاتيح (هذه القائمة)"
 
-#: src/ctlpanel.c:2739
+#: src/ctlpanel.c:2753
 msgid "System settings (syn-settings)"
 msgstr "إعدادات النظام (syn-settings)"
 
-#: src/ctlpanel.c:2740
+#: src/ctlpanel.c:2754
 msgid "Find and add network printers"
 msgstr "البحث عن طابعات الشبكة وإضافتها"
 
-#: src/ctlpanel.c:2741
+#: src/ctlpanel.c:2755
 msgid "Mission control (all windows)"
 msgstr "نظرة عامة (كل النوافذ)"
 
-#: src/ctlpanel.c:2742
+#: src/ctlpanel.c:2756
 msgid "Rebind a shortcut"
 msgstr "إعادة تعيين اختصار"
 
-#: src/ctlpanel.c:2744
+#: src/ctlpanel.c:2758
 msgid "Do Not Disturb (mute notifications)"
 msgstr "عدم الإزعاج (كتم الإشعارات)"
 
-#: src/ctlpanel.c:2745
+#: src/ctlpanel.c:2759
 msgid "Record screen"
 msgstr "تسجيل الشاشة"
 
-#: src/ctlpanel.c:2747
+#: src/ctlpanel.c:2761
 msgid "Brightness up"
 msgstr "زيادة السطوع"
 
-#: src/ctlpanel.c:2748
+#: src/ctlpanel.c:2762
 msgid "Brightness down"
 msgstr "خفض السطوع"
 
-#: src/ctlpanel.c:2750
+#: src/ctlpanel.c:2764
 msgid "Start button: text/logo"
 msgstr "زر البدء: نص أو شعار"
 
-#: src/ctlpanel.c:2751
+#: src/ctlpanel.c:2765
 msgid "Close window"
 msgstr "إغلاق النافذة"
 
-#: src/ctlpanel.c:2752
+#: src/ctlpanel.c:2766
 msgid "Quit synui"
 msgstr "إنهاء synui"
 
-#: src/ctlpanel.c:2753
+#: src/ctlpanel.c:2767
 msgid "Cycle layout"
 msgstr "تبديل التخطيط"
 
-#: src/ctlpanel.c:2754
+#: src/ctlpanel.c:2768
 msgid "Tile this desktop"
 msgstr "ترتيب هذا السطح بلاطًا"
 
-#: src/ctlpanel.c:2755
+#: src/ctlpanel.c:2769
 msgid "Cascade this desktop (overlapping piles)"
 msgstr "ترتيب هذا السطح متتابعًا (أكوام متداخلة)"
 
-#: src/ctlpanel.c:2756
+#: src/ctlpanel.c:2770
 msgid "Arrange floating windows"
 msgstr "ترتيب النوافذ الطافية"
 
-#: src/ctlpanel.c:2757
+#: src/ctlpanel.c:2771
 msgid "Shrink master area"
 msgstr "تصغير المنطقة الرئيسية"
 
-#: src/ctlpanel.c:2758
+#: src/ctlpanel.c:2772
 msgid "Grow master area"
 msgstr "توسيع المنطقة الرئيسية"
 
-#: src/ctlpanel.c:2759
+#: src/ctlpanel.c:2773
 msgid "niri: pull window into the left column"
 msgstr "niri: سحب النافذة إلى العمود الأيسر"
 
-#: src/ctlpanel.c:2760
+#: src/ctlpanel.c:2774
 msgid "niri: push window out to its own column"
 msgstr "niri: دفع النافذة إلى عمود خاص بها"
 
-#: src/ctlpanel.c:2761
+#: src/ctlpanel.c:2775
 msgid "Focus next window"
 msgstr "التركيز على النافذة التالية"
 
-#: src/ctlpanel.c:2762
+#: src/ctlpanel.c:2776
 msgid "Focus previous window"
 msgstr "التركيز على النافذة السابقة"
 
-#: src/ctlpanel.c:2763
+#: src/ctlpanel.c:2777
 msgid "Switch window (Alt+Tab)"
 msgstr "تبديل النافذة (Alt+Tab)"
 
-#: src/ctlpanel.c:2764
+#: src/ctlpanel.c:2778
 msgid "Switch window, backwards"
 msgstr "تبديل النافذة للخلف"
 
-#: src/ctlpanel.c:2765
+#: src/ctlpanel.c:2779
 msgid "Move window down the stack"
 msgstr "إنزال النافذة في الكومة"
 
-#: src/ctlpanel.c:2766
+#: src/ctlpanel.c:2780
 msgid "Move window up the stack"
 msgstr "رفع النافذة في الكومة"
 
-#: src/ctlpanel.c:2767
+#: src/ctlpanel.c:2781
 msgid "Move window left (or earlier in the layout)"
 msgstr "نقل النافذة يسارًا (أو قبلها في التخطيط)"
 
-#: src/ctlpanel.c:2768
+#: src/ctlpanel.c:2782
 msgid "Move window right (or later in the layout)"
 msgstr "نقل النافذة يمينًا (أو بعدها في التخطيط)"
 
-#: src/ctlpanel.c:2769
+#: src/ctlpanel.c:2783
 msgid "Move window up (or earlier in the layout)"
 msgstr "نقل النافذة لأعلى (أو قبلها في التخطيط)"
 
-#: src/ctlpanel.c:2770
+#: src/ctlpanel.c:2784
 msgid "Move window down (or later in the layout)"
 msgstr "نقل النافذة لأسفل (أو بعدها في التخطيط)"
 
-#: src/ctlpanel.c:2771
+#: src/ctlpanel.c:2785
 msgid "Float window"
 msgstr "جعل النافذة طافية"
 
-#: src/ctlpanel.c:2772
+#: src/ctlpanel.c:2786
 msgid "Fullscreen window"
 msgstr "النافذة بملء الشاشة"
 
-#: src/ctlpanel.c:2773
+#: src/ctlpanel.c:2787
 msgid "Maximize window"
 msgstr "تكبير النافذة"
 
-#: src/ctlpanel.c:2774
+#: src/ctlpanel.c:2788
 msgid "Fill screen height (or put it back)"
 msgstr "ملء ارتفاع الشاشة (أو الإرجاع)"
 
-#: src/ctlpanel.c:2775
+#: src/ctlpanel.c:2789
 msgid "Fill screen width (or put it back)"
 msgstr "ملء عرض الشاشة (أو الإرجاع)"
 
-#: src/ctlpanel.c:2776
+#: src/ctlpanel.c:2790
 msgid "Minimize window"
 msgstr "تصغير النافذة"
 
-#: src/ctlpanel.c:2777
+#: src/ctlpanel.c:2791
 msgid "Restore minimized window"
 msgstr "استعادة النافذة المصغَّرة"
 
-#: src/ctlpanel.c:2778
+#: src/ctlpanel.c:2792
 msgid "Titlebars on/off"
 msgstr "أشرطة العنوان تفعيلًا وتعطيلًا"
 
-#: src/ctlpanel.c:2780
+#: src/ctlpanel.c:2794
 msgid "Screens: extend / duplicate / built-in off"
 msgstr "الشاشات: توسيع / استنساخ / إطفاء الداخلية"
 
-#: src/ctlpanel.c:2781
+#: src/ctlpanel.c:2795
 msgid "Scale the whole desktop (accessibility)"
 msgstr "تحجيم سطح المكتب كله (إمكانية الوصول)"
 
-#: src/ctlpanel.c:2782
+#: src/ctlpanel.c:2796
 msgid "Wallpaper picker"
 msgstr "منتقي خلفية الشاشة"
 
-#: src/ctlpanel.c:2783
+#: src/ctlpanel.c:2797
 msgid "Reload wallpaper / config"
 msgstr "إعادة تحميل الخلفية والإعدادات"
 
-#: src/ctlpanel.c:2784
+#: src/ctlpanel.c:2798
 msgid "Visual effects (CRT + window)"
 msgstr "المؤثرات البصرية (CRT والنوافذ)"
 
-#: src/ctlpanel.c:2785
+#: src/ctlpanel.c:2799
 msgid "Desktop widget manager"
 msgstr "مدير ودجات سطح المكتب"
 
-#: src/ctlpanel.c:2787
+#: src/ctlpanel.c:2801
 msgid "CRT effects on/off"
 msgstr "مؤثرات CRT تفعيلًا وتعطيلًا"
 
-#: src/ctlpanel.c:2788
+#: src/ctlpanel.c:2802
 msgid "Power saving panel"
 msgstr "لوحة توفير الطاقة"
 
-#: src/ctlpanel.c:2789
+#: src/ctlpanel.c:2803
 msgid "Screensaver + lock screen"
 msgstr "حافظة الشاشة وشاشة القفل"
 
-#: src/ctlpanel.c:2795
+#: src/ctlpanel.c:2809
 msgid "AI backend (GPU/CPU/off)"
 msgstr "محرك الذكاء الاصطناعي (معالج رسوميات/معالج/معطَّل)"
 
-#: src/ctlpanel.c:2796
+#: src/ctlpanel.c:2810
 msgid "Move window to next output"
 msgstr "نقل النافذة إلى الشاشة التالية"
 
-#: src/ctlpanel.c:2837
+#: src/ctlpanel.c:2851
 msgid "Start menu (application page)"
 msgstr "قائمة البدء (صفحة التطبيقات)"
 
-#: src/ctlpanel.c:2838
+#: src/ctlpanel.c:2852
 msgid "Start menu (rofi)"
 msgstr "قائمة البدء (rofi)"
 
-#: src/ctlpanel.c:2840
+#: src/ctlpanel.c:2854
 msgid "Start menu (bar menu)"
 msgstr "قائمة البدء (قائمة الشريط)"
 
-#: src/ctlpanel.c:2848
+#: src/ctlpanel.c:2862
 msgid "Move window to previous output"
 msgstr "نقل النافذة إلى الشاشة السابقة"
 
-#: src/ctlpanel.c:2878
+#: src/ctlpanel.c:2892
 msgid "Enter"
 msgstr "Enter"
 
-#: src/ctlpanel.c:2879
+#: src/ctlpanel.c:2893
 msgid "KP Enter"
 msgstr "Enter (لوحة الأرقام)"
 
-#: src/ctlpanel.c:2880
+#: src/ctlpanel.c:2894
 msgid "Space"
 msgstr "المسافة"
 
-#: src/ctlpanel.c:2881
+#: src/ctlpanel.c:2895
 msgid "Esc"
 msgstr "Esc"
 
-#: src/ctlpanel.c:2882
+#: src/ctlpanel.c:2896
 msgid "Del"
 msgstr "Del"
 
-#: src/ctlpanel.c:2883
+#: src/ctlpanel.c:2897
 msgid "Backspace"
 msgstr "Backspace"
 
-#: src/ctlpanel.c:2884
+#: src/ctlpanel.c:2898
 msgid "Tab"
 msgstr "Tab"
 
-#: src/ctlpanel.c:2948
+#: src/ctlpanel.c:2962
 msgid "Super"
 msgstr "Super"
 
-#: src/ctlpanel.c:2949
+#: src/ctlpanel.c:2963
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: src/ctlpanel.c:2950
+#: src/ctlpanel.c:2964
 msgid "Alt"
 msgstr "Alt"
 
-#: src/ctlpanel.c:2951
+#: src/ctlpanel.c:2965
 msgid "Shift"
 msgstr "Shift"
 
-#: src/ctlpanel.c:3047
+#: src/ctlpanel.c:3061
 #, c-format
 msgid "Switch to workspace"
 msgstr "الانتقال إلى مساحة العمل"
 
-#: src/ctlpanel.c:3053
+#: src/ctlpanel.c:3067
 #, c-format
 msgid "Move window to workspace"
 msgstr "نقل النافذة إلى مساحة العمل"
 
-#: src/ctlpanel.c:3141
+#: src/ctlpanel.c:3155
 #, c-format
 msgid "loading · the AI pauses until it is up"
 msgstr "جارٍ التحميل · يتوقف الذكاء الاصطناعي حتى يجهز"
 
-#: src/ctlpanel.c:3231
+#: src/ctlpanel.c:3245
 #, c-format
 msgid "%s: still %s · switch did not land"
 msgstr "%s: ما زال %s · لم يُطبَّق التبديل"
 
-#: src/ctlpanel.c:3631
+#: src/ctlpanel.c:3645
 msgid "position"
 msgstr "الموضع"
 
-#: src/ctlpanel.c:3637
+#: src/ctlpanel.c:3651
 msgid "turn the cell on first"
 msgstr "فعّل الخانة أولًا"
 
-#: src/ctlpanel.c:3638 src/ctlpanel.c:3861 src/ctlpanel.c:3882
-#: src/ctlpanel.c:3908 src/ctlpanel.c:3928
+#: src/ctlpanel.c:3652 src/ctlpanel.c:3875 src/ctlpanel.c:3896
+#: src/ctlpanel.c:3922 src/ctlpanel.c:3942
 #, c-format
 msgid "dock is off"
 msgstr "الرصيف مُعطَّل"
 
-#: src/ctlpanel.c:3754
+#: src/ctlpanel.c:3768
 #, c-format
 msgid "no GLES renderer · effects unavailable here"
 msgstr "لا يوجد مُصيِّر GLES · المؤثرات غير متاحة هنا"
 
-#: src/ctlpanel.c:3765
+#: src/ctlpanel.c:3779
 msgid "CRT effects on"
 msgstr "مؤثرات CRT مُفعَّلة"
 
-#: src/ctlpanel.c:3766
+#: src/ctlpanel.c:3780
 msgid "CRT effects off"
 msgstr "مؤثرات CRT مُعطَّلة"
 
-#: src/ctlpanel.c:3777
+#: src/ctlpanel.c:3791
 #, c-format
 msgid "game mode: always on"
 msgstr "وضع الألعاب: مُفعَّل دائمًا"
 
-#: src/ctlpanel.c:3778
+#: src/ctlpanel.c:3792
 #, c-format
 msgid "game mode: always off"
 msgstr "وضع الألعاب: مُعطَّل دائمًا"
 
-#: src/ctlpanel.c:3779
+#: src/ctlpanel.c:3793
 #, c-format
 msgid "game mode: auto · a game is running"
 msgstr "وضع الألعاب: تلقائي · توجد لعبة قيد التشغيل"
 
-#: src/ctlpanel.c:3780
+#: src/ctlpanel.c:3794
 #, c-format
 msgid "game mode: auto · no game running"
 msgstr "وضع الألعاب: تلقائي · لا توجد لعبة قيد التشغيل"
 
-#: src/ctlpanel.c:3836
+#: src/ctlpanel.c:3850
 msgid "bar on"
 msgstr "الشريط مُفعَّل"
 
-#: src/ctlpanel.c:3836
+#: src/ctlpanel.c:3850
 msgid "bar off"
 msgstr "الشريط مُعطَّل"
 
-#: src/ctlpanel.c:3852
+#: src/ctlpanel.c:3866
 msgid "dock on"
 msgstr "الرصيف مُفعَّل"
 
-#: src/ctlpanel.c:3852
+#: src/ctlpanel.c:3866
 msgid "dock off"
 msgstr "الرصيف مُعطَّل"
 
-#: src/ctlpanel.c:3870
+#: src/ctlpanel.c:3884
 msgid "dock auto-hide on"
 msgstr "إخفاء الرصيف تلقائيًا مُفعَّل"
 
-#: src/ctlpanel.c:3871
+#: src/ctlpanel.c:3885
 msgid "dock auto-hide off"
 msgstr "إخفاء الرصيف تلقائيًا مُعطَّل"
 
-#: src/ctlpanel.c:3890
+#: src/ctlpanel.c:3904
 #, c-format
 msgid "an auto-hiding dock is always on top"
 msgstr "الرصيف الذي يختفي تلقائيًا يبقى دائمًا فوق النوافذ"
 
-#: src/ctlpanel.c:3899
+#: src/ctlpanel.c:3913
 msgid "dock above windows"
 msgstr "الرصيف فوق النوافذ"
 
-#: src/ctlpanel.c:3900
+#: src/ctlpanel.c:3914
 msgid "dock below windows"
 msgstr "الرصيف تحت النوافذ"
 
-#: src/ctlpanel.c:3907
+#: src/ctlpanel.c:3921
 #, c-format
 msgid "the dock clock is off"
 msgstr "ساعة الرصيف مُعطَّلة"
 
-#: src/ctlpanel.c:3917
+#: src/ctlpanel.c:3931
 #, c-format
 msgid "dock clock %s"
 msgstr "ساعة الرصيف %s"
 
-#: src/ctlpanel.c:3936
+#: src/ctlpanel.c:3950
 msgid "magnify"
 msgstr "التكبير"
 
-#: src/ctlpanel.c:3938
+#: src/ctlpanel.c:3952
 msgid "clock"
 msgstr "الساعة"
 
-#: src/ctlpanel.c:3940
+#: src/ctlpanel.c:3954
 msgid "all-apps button"
 msgstr "زر «كل التطبيقات»"
 
-#: src/ctlpanel.c:3942
+#: src/ctlpanel.c:3956
 msgid "power button"
 msgstr "زر الطاقة"
 
-#: src/ctlpanel.c:3949
+#: src/ctlpanel.c:3963
 #, c-format
 msgid "dock %s %s"
 msgstr "الرصيف %s %s"
 
-#: src/ctlpanel.c:3949
+#: src/ctlpanel.c:3963
 msgid "on"
 msgstr "مُفعَّل"
 
-#: src/ctlpanel.c:3949 src/render.c:1276 src/render.c:4313 src/render.c:5417
-#: src/render.c:5433 src/render.c:6234
+#: src/ctlpanel.c:3963 src/render.c:1276 src/render.c:4352 src/render.c:5456
+#: src/render.c:5472 src/render.c:6273
 #, c-format
 msgid "off"
 msgstr "مُعطَّل"
 
-#: src/ctlpanel.c:3962
+#: src/ctlpanel.c:3976
 #, c-format
 msgid "the bar is off"
 msgstr "الشريط مُعطَّل"
 
-#: src/ctlpanel.c:3973
+#: src/ctlpanel.c:3987
 msgid "bar auto-hide on for every monitor"
 msgstr "إخفاء الشريط تلقائيًا مُفعَّل على كل الشاشات"
 
-#: src/ctlpanel.c:3974
+#: src/ctlpanel.c:3988
 msgid "bar auto-hide off for every monitor"
 msgstr "إخفاء الشريط تلقائيًا مُعطَّل على كل الشاشات"
 
-#: src/ctlpanel.c:3988
+#: src/ctlpanel.c:4002
 #, c-format
 msgid "notifications are silenced"
 msgstr "الإشعارات مكتومة"
 
-#: src/ctlpanel.c:3989
+#: src/ctlpanel.c:4003
 #, c-format
 msgid "notifications are back on"
 msgstr "عادت الإشعارات"
 
-#: src/ctlpanel.c:4001
+#: src/ctlpanel.c:4015
 #, c-format
 msgid "recordings capture desktop sound"
 msgstr "التسجيلات تلتقط صوت سطح المكتب"
 
-#: src/ctlpanel.c:4002
+#: src/ctlpanel.c:4016
 #, c-format
 msgid "recordings are silent"
 msgstr "التسجيلات صامتة"
 
-#: src/ctlpanel.c:4013
+#: src/ctlpanel.c:4027
 #, c-format
 msgid "recordings open in a video editor · ~1.1 GB/min"
 msgstr "تُفتح التسجيلات في محرر فيديو · ~1.1 غ.بايت/دقيقة"
 
-#: src/ctlpanel.c:4014
+#: src/ctlpanel.c:4028
 #, c-format
 msgid "recordings are H.264 mp4 · small, share anywhere"
 msgstr "التسجيلات بصيغة H.264 mp4 · صغيرة وتُشارَك في أي مكان"
 
-#: src/ctlpanel.c:4024
+#: src/ctlpanel.c:4038
 msgid "titlebars off"
 msgstr "أشرطة العنوان مُعطَّلة"
 
-#: src/ctlpanel.c:4025
+#: src/ctlpanel.c:4039
 msgid "titlebars on"
 msgstr "أشرطة العنوان مُفعَّلة"
 
-#: src/ctlpanel.c:4034
+#: src/ctlpanel.c:4048
 #, c-format
 msgid "start button: %s"
 msgstr "زر البدء: %s"
 
-#: src/ctlpanel.c:4045
+#: src/ctlpanel.c:4059
 #, c-format
 msgid "transparency on · %d%%"
 msgstr "الشفافية مُفعَّلة · %d%%"
 
-#: src/ctlpanel.c:4045
+#: src/ctlpanel.c:4059
 #, c-format
 msgid "transparency off"
 msgstr "الشفافية مُعطَّلة"
 
-#: src/ctlpanel.c:4054
+#: src/ctlpanel.c:4068
 msgid "night light on"
 msgstr "الإضاءة الليلية مُفعَّلة"
 
-#: src/ctlpanel.c:4055
+#: src/ctlpanel.c:4069
 msgid "night light off"
 msgstr "الإضاءة الليلية مُعطَّلة"
 
-#: src/ctlpanel.c:4071
+#: src/ctlpanel.c:4085
 #, c-format
 msgid "switching AI backend …"
 msgstr "جارٍ تبديل محرك الذكاء الاصطناعي …"
 
-#: src/ctlpanel.c:4213
+#: src/ctlpanel.c:4227
 #, c-format
 msgid "transparency %d%%"
 msgstr "الشفافية %d%%"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 #, c-format
 msgid "%s is at its %s"
 msgstr "%s عند %s"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 msgid "minimum"
 msgstr "الأدنى"
 
-#: src/ctlpanel.c:4263 src/ctlpanel.c:4301
+#: src/ctlpanel.c:4277 src/ctlpanel.c:4315
 msgid "maximum"
 msgstr "الأقصى"
 
-#: src/ctlpanel.c:4274
+#: src/ctlpanel.c:4288
 #, c-format
 msgid "%s: %d %s · applies when you stop"
 msgstr "%s: %d %s · يُطبَّق عندما تتوقف"
 
-#: src/ctlpanel.c:4309
+#: src/ctlpanel.c:4323
 #, c-format
 msgid "%s: %s · default"
 msgstr "%s: %s · الافتراضي"
 
-#: src/ctlpanel.c:4350
+#: src/ctlpanel.c:4364
 msgid "no models in /var/lib/synapd/models"
 msgstr "لا توجد نماذج في ‎/var/lib/synapd/models"
 
-#: src/ctlpanel.c:4360
+#: src/ctlpanel.c:4374
 #, c-format
 msgid "loads when you stop · Esc cancels"
 msgstr "يُحمَّل عندما تتوقف · Esc يلغي"
 
-#: src/ctlpanel.c:4629
+#: src/ctlpanel.c:4643
 #, c-format
 msgid "Rebind cancelled"
 msgstr "أُلغيت إعادة التعيين"
 
-#: src/ctlpanel.c:4698
+#: src/ctlpanel.c:4712
 #, c-format
 msgid "nothing to reset on this row"
 msgstr "لا شيء لإعادة ضبطه في هذا الصف"
 
-#: src/ctlpanel.c:4703
+#: src/ctlpanel.c:4717
 #, c-format
 msgid "%s reset to %s"
 msgstr "أُعيد ضبط %s إلى %s"
 
-#: src/ctlpanel.c:4706
+#: src/ctlpanel.c:4720
 #, c-format
 msgid "%s is already at its default"
 msgstr "%s عند قيمته الافتراضية أصلًا"
 
-#: src/ctlpanel.c:4732
+#: src/ctlpanel.c:4746
 #, c-format
 msgid "Rebinding lives in the Shortcuts category"
 msgstr "إعادة التعيين موجودة في فئة «الاختصارات»"
 
-#: src/ctlpanel.c:4744
+#: src/ctlpanel.c:4758
 #, c-format
 msgid "The tap is set from the Shortcuts category"
 msgstr "تُضبط النقرة من فئة «الاختصارات»"
@@ -2154,7 +2164,7 @@ msgstr "الترتيب حسب التاريخ"
 msgid "Task Manager"
 msgstr "مدير المهام"
 
-#: src/deskmenu.c:92 src/render.c:8257
+#: src/deskmenu.c:92 src/render.c:8296
 msgid "Open"
 msgstr "فتح"
 
@@ -2406,7 +2416,7 @@ msgstr[5] "+%d سطر"
 msgid "NEURAL OVERLAY"
 msgstr "الطبقة العصبية"
 
-#: src/render.c:979 src/render.c:5227
+#: src/render.c:979 src/render.c:5266
 msgid "loaded"
 msgstr "مُحمَّل"
 
@@ -2544,120 +2554,123 @@ msgstr "المعاينة غير متاحة"
 msgid "No preview"
 msgstr "لا توجد معاينة"
 
-#: src/render.c:1688
-msgid "Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/Esc close"
+#: src/render.c:1726
+msgid ""
+"Up/Down preview · Tab monitor · m scaling · r rescan · w wallhaven · Enter/"
+"Esc close"
 msgstr ""
-"أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · w wallhaven · Enter/Esc للإغلاق"
+"أعلى/أسفل للمعاينة · Tab للشاشة · m للتحجيم · r لإعادة الفحص · w wallhaven · "
+"Enter/Esc للإغلاق"
 
-#: src/render.c:1748
+#: src/render.c:1787
 msgid "POWER SAVING"
 msgstr "توفير الطاقة"
 
-#: src/render.c:1760
+#: src/render.c:1799
 #, c-format
 msgid "no lid switch"
 msgstr "لا يوجد مفتاح للغطاء"
 
-#: src/render.c:1763
+#: src/render.c:1802
 msgid "closed"
 msgstr "مغلق"
 
-#: src/render.c:1763
+#: src/render.c:1802
 msgid "open"
 msgstr "مفتوح"
 
-#: src/render.c:1779
+#: src/render.c:1818
 msgid "idle inhibited (media playing) · timers held"
 msgstr "الخمول موقوف (تشغيل وسائط) · المؤقتات متوقفة"
 
-#: src/render.c:1783
+#: src/render.c:1822
 msgid "disabled · no stage will fire"
 msgstr "مُعطَّل · لن تُشغَّل أي مرحلة"
 
-#: src/render.c:1830
+#: src/render.c:1869
 msgid "Up/Down select · Left/Right adjust · Space toggle"
 msgstr "أعلى/أسفل للاختيار · يسار/يمين للضبط · المسافة للتبديل"
 
-#: src/render.c:1832 src/render.c:1955
+#: src/render.c:1871 src/render.c:1994
 msgid "s save (unsaved changes) · Esc close"
 msgstr "‏s للحفظ (توجد تغييرات غير محفوظة) · Esc للإغلاق"
 
-#: src/render.c:1833 src/render.c:1956
+#: src/render.c:1872 src/render.c:1995
 msgid "s save · Esc close"
 msgstr "‏s للحفظ · Esc للإغلاق"
 
-#: src/render.c:1888
+#: src/render.c:1927
 msgid "SCREENSAVER"
 msgstr "حافظة الشاشة"
 
-#: src/render.c:1898
+#: src/render.c:1937
 msgid "idle inhibited (media playing) · saver held"
 msgstr "الخمول موقوف (تشغيل وسائط) · الحافظة متوقفة"
 
-#: src/render.c:1905
+#: src/render.c:1944
 msgid "power saving is off (Super+P) · saver disabled"
 msgstr "توفير الطاقة مُعطَّل (Super+P) · الحافظة مُعطَّلة"
 
-#: src/render.c:1909
+#: src/render.c:1948
 msgid "no timeout set · p previews the current mode"
 msgstr "لم تُضبط مهلة · الزر p يعاين الوضع الحالي"
 
-#: src/render.c:1953
+#: src/render.c:1992
 msgid "Up/Down select · Left/Right adjust · p preview"
 msgstr "أعلى/أسفل للاختيار · يسار/يمين للضبط · p للمعاينة"
 
-#: src/render.c:2074
+#: src/render.c:2113
 msgid "CURSOR THEME"
 msgstr "سمة المؤشر"
 
-#: src/render.c:2104
+#: src/render.c:2143
 msgid "No cursor themes installed."
 msgstr "لا توجد سمات مؤشر مثبَّتة."
 
-#: src/render.c:2108
+#: src/render.c:2147
 msgid "synui-cursor install <archive>   then press r"
 msgstr "‏synui-cursor install <أرشيف>   ثم اضغط r"
 
-#: src/render.c:2166
+#: src/render.c:2205
 msgid "Up/Down preview · -/+ size · r rescan · Enter apply · Esc cancel"
 msgstr ""
 "أعلى/أسفل للمعاينة · -/+ للحجم · r لإعادة الفحص · Enter للتطبيق · Esc للإلغاء"
 
-#: src/render.c:2237
+#: src/render.c:2276
 msgid "UI FONT"
 msgstr "خط الواجهة"
 
-#: src/render.c:2267
+#: src/render.c:2306
 msgid "No font families found."
 msgstr "لم يُعثر على أي عائلة خطوط."
 
-#: src/render.c:2335
+#: src/render.c:2374
 msgid "Handgloves 0123"
 msgstr "نص حكيم له سر ٠١٢٣"
 
-#: src/render.c:2383
+#: src/render.c:2422
 msgid "Not monospaced · kitty and foot may not render correctly in it"
 msgstr "ليس ثابت العرض · قد لا يظهر kitty وfoot بشكل صحيح به"
 
-#: src/render.c:2390
+#: src/render.c:2429
 msgid "Up/Down preview · d default · r rescan · Enter apply · Esc cancel"
 msgstr ""
 "أعلى/أسفل للمعاينة · d للافتراضي · r لإعادة الفحص · Enter للتطبيق · Esc "
 "للإلغاء"
 
-#: src/render.c:2522
+#: src/render.c:2561
 msgid "Type to search"
 msgstr "اكتب للبحث"
 
-#: src/render.c:2533
+#: src/render.c:2572
 msgid "No applications match"
 msgstr "لا توجد تطبيقات مطابقة"
 
-#: src/render.c:2534
+#: src/render.c:2573
 msgid "No applications found"
 msgstr "لم يُعثر على أي تطبيق"
 
-#: src/render.c:2629
+#: src/render.c:2668
 #, c-format
 msgid "%d application · type to search · Enter opens · Esc closes"
 msgid_plural "%d applications · type to search · Enter opens · Esc closes"
@@ -2668,75 +2681,75 @@ msgstr[3] "%d تطبيقات · اكتب للبحث · Enter يفتح · Esc ي�
 msgstr[4] "%d تطبيقًا · اكتب للبحث · Enter يفتح · Esc يغلق"
 msgstr[5] "%d تطبيق · اكتب للبحث · Enter يفتح · Esc يغلق"
 
-#: src/render.c:2697
+#: src/render.c:2736
 msgid "Uninstall…"
 msgstr "إلغاء التثبيت…"
 
-#: src/render.c:2784
+#: src/render.c:2823
 msgid "EMOJI"
 msgstr "الرموز التعبيرية"
 
-#: src/render.c:2806
+#: src/render.c:2845
 msgid "type to search"
 msgstr "اكتب للبحث"
 
-#: src/render.c:2865
+#: src/render.c:2904
 msgid "No emoji match that search."
 msgstr "لا توجد رموز تعبيرية تطابق هذا البحث."
 
-#: src/render.c:2866
+#: src/render.c:2905
 msgid "Nothing here yet."
 msgstr "لا يوجد شيء هنا بعد."
 
-#: src/render.c:2928
+#: src/render.c:2967
 msgid "Type to search · Click or Tab category · Enter insert · Esc clear/close"
 msgstr "اكتب للبحث · نقر أو Tab للفئة · Enter للإدراج · Esc للمسح أو الإغلاق"
 
-#: src/render.c:3073
+#: src/render.c:3112
 msgid "CALCULATOR"
 msgstr "الآلة الحاسبة"
 
-#: src/render.c:3113
+#: src/render.c:3152
 msgid "Anything you work out is kept here."
 msgstr "كل ما تحسبه يبقى هنا."
 
-#: src/render.c:3155
+#: src/render.c:3194
 msgid "type an expression"
 msgstr "اكتب تعبيرًا حسابيًا"
 
-#: src/render.c:3260
+#: src/render.c:3299
 msgid "Enter works it out · Ctrl+C copies · Ctrl+V pastes"
 msgstr "‏Enter يحسب · Ctrl+C ينسخ · Ctrl+V يلصق"
 
-#: src/render.c:3262
+#: src/render.c:3301
 msgid "Up/Down recall the tape · Esc clears, then closes"
 msgstr "أعلى/أسفل يستعيدان السجل · Esc يمسح ثم يغلق"
 
-#: src/render.c:3331
+#: src/render.c:3370
 msgid "EQUALIZER"
 msgstr "المُعادِل"
 
-#: src/render.c:3340
+#: src/render.c:3379
 msgid "output routed through the equalizer sink"
 msgstr "الإخراج يمر عبر المُعادِل"
 
-#: src/render.c:3341
+#: src/render.c:3380
 msgid "off — audio goes straight to your device"
 msgstr "مُعطَّل — يذهب الصوت مباشرةً إلى جهازك"
 
-#: src/render.c:3417
+#: src/render.c:3456
 msgid "Up/Down row · Left/Right adjust · r flat · Esc close"
 msgstr "أعلى/أسفل للصف · يسار/يمين للضبط · r للتسطيح · Esc للإغلاق"
 
-#: src/render.c:3487
+#: src/render.c:3526
 msgid "CROP — RECENT IMAGES"
 msgstr "قص — الصور الأخيرة"
 
-#: src/render.c:3488
+#: src/render.c:3527
 msgid "IMAGES — RECENT"
 msgstr "الصور — الأحدث"
 
-#: src/render.c:3493
+#: src/render.c:3532
 #, c-format
 msgid "%d image"
 msgid_plural "%d images"
@@ -2747,35 +2760,35 @@ msgstr[3] "%d صور"
 msgstr[4] "%d صورة"
 msgstr[5] "%d صورة"
 
-#: src/render.c:3512
+#: src/render.c:3551
 msgid "No images in Pictures, Wallpapers or Downloads."
 msgstr "لا توجد صور في مجلدات الصور أو الخلفيات أو التنزيلات."
 
-#: src/render.c:3516
+#: src/render.c:3555
 msgid "Press r to rescan, or open a file directly: synctl dispatch view <path>"
 msgstr "اضغط r لإعادة الفحص، أو افتح ملفًا مباشرةً: synctl dispatch view <مسار>"
 
-#: src/render.c:3573
+#: src/render.c:3612
 msgid "Enter crop · v view · r rescan · Esc close"
 msgstr "‏Enter للقص · v للعرض · r لإعادة الفحص · Esc للإغلاق"
 
-#: src/render.c:3574
+#: src/render.c:3613
 msgid "Enter view · c crop · r rescan · Esc close"
 msgstr "‏Enter للعرض · c للقص · r لإعادة الفحص · Esc للإغلاق"
 
-#: src/render.c:3684
+#: src/render.c:3723
 msgid "VIEW"
 msgstr "عرض"
 
-#: src/render.c:3821
+#: src/render.c:3860
 msgid "Drag to move · arrows pan · Shift × 4 · n / p next and previous"
 msgstr "اسحب للتحريك · الأسهم تُزيح · Shift ×‏ 4 · n / p للتالي والسابق"
 
-#: src/render.c:3823
+#: src/render.c:3862
 msgid "← → next and previous · drag or scroll to zoom in"
 msgstr "← → للتالي والسابق · اسحب أو مرِّر للتكبير"
 
-#: src/render.c:3828
+#: src/render.c:3867
 #, c-format
 msgid ""
 "Scroll zooms · + − zoom · 0 fit · 1 actual size · c crop · r rescan · Esc or "
@@ -2784,26 +2797,26 @@ msgstr ""
 "التمرير يكبّر · + − للتكبير · 0 للملاءمة · 1 للحجم الأصلي · c للقص · r لإعادة "
 "الفحص · Esc أو × %s"
 
-#: src/render.c:3831 src/render.c:4024
+#: src/render.c:3870 src/render.c:4063
 msgid "back to the list"
 msgstr "العودة إلى القائمة"
 
-#: src/render.c:3831
+#: src/render.c:3870
 msgid "close"
 msgstr "إغلاق"
 
-#: src/render.c:3981
+#: src/render.c:4020
 msgid "CROP"
 msgstr "قص"
 
-#: src/render.c:4014
+#: src/render.c:4053
 msgid ""
 "Drag to select · drag a corner to adjust it · Tab picks the corner the "
 "arrows move"
 msgstr ""
 "اسحب للتحديد · اسحب زاوية لضبطها · Tab يختار الزاوية التي تحركها الأسهم"
 
-#: src/render.c:4022
+#: src/render.c:4061
 #, c-format
 msgid ""
 "Arrows resize · Ctrl+Arrows move · Shift × 25 · a all · Enter save a copy · "
@@ -2812,245 +2825,245 @@ msgstr ""
 "الأسهم تغيّر الحجم · Ctrl+الأسهم تحرّك · Shift ×‏ 25 · a للكل · Enter يحفظ نسخة "
 "· Esc %s"
 
-#: src/render.c:4024
+#: src/render.c:4063
 msgid "cancel"
 msgstr "إلغاء"
 
-#: src/render.c:4123
+#: src/render.c:4162
 msgid "WINDOW EFFECTS"
 msgstr "مؤثرات النوافذ"
 
-#: src/render.c:4123
+#: src/render.c:4162
 msgid "CRT FILTERS"
 msgstr "مرشحات CRT"
 
-#: src/render.c:4130
+#: src/render.c:4169
 msgid "Tab → CRT filters"
 msgstr "‏Tab ← مرشحات CRT"
 
-#: src/render.c:4131
+#: src/render.c:4170
 msgid "Tab → window effects"
 msgstr "‏Tab ← مؤثرات النوافذ"
 
-#: src/render.c:4147
+#: src/render.c:4186
 msgid "no GLES renderer · filters unavailable on this display"
 msgstr "لا يوجد مُصيِّر GLES · المرشحات غير متاحة على هذه الشاشة"
 
-#: src/render.c:4151
+#: src/render.c:4190
 msgid "filters off · Space to turn them on"
 msgstr "المرشحات مُعطَّلة · المسافة تشغّلها"
 
-#: src/render.c:4214
+#: src/render.c:4253
 msgid "Up/Down select · Left/Right adjust · Space on/off"
 msgstr "أعلى/أسفل للاختيار · يسار/يمين للضبط · المسافة للتشغيل والإيقاف"
 
-#: src/render.c:4216
+#: src/render.c:4255
 msgid "s save (unsaved changes) · Tab page · Esc close"
 msgstr "‏s للحفظ (توجد تغييرات غير محفوظة) · Tab للصفحة · Esc للإغلاق"
 
-#: src/render.c:4217
+#: src/render.c:4256
 msgid "s save · Tab page · Esc close"
 msgstr "‏s للحفظ · Tab للصفحة · Esc للإغلاق"
 
-#: src/render.c:4275
+#: src/render.c:4314
 msgid "DESKTOP WIDGETS"
 msgstr "ودجات سطح المكتب"
 
-#: src/render.c:4280
+#: src/render.c:4319
 msgid "each one on its own · drag by the grip · Space is all-or-nothing"
 msgstr "كل واحدة على حدة · اسحبها من المقبض · المسافة إما الكل أو لا شيء"
 
-#: src/render.c:4326
+#: src/render.c:4365
 msgid "needs cava"
 msgstr "يتطلب cava"
 
-#: src/render.c:4340
+#: src/render.c:4379
 msgid "Up/Down select · Enter toggle · Left/Right off/on"
 msgstr "أعلى/أسفل للاختيار · Enter للتبديل · يسار/يمين للإيقاف والتشغيل"
 
-#: src/render.c:4342
+#: src/render.c:4381
 msgid "Space all on/off · R reset positions · Esc close"
 msgstr "المسافة لتشغيل الكل أو إيقافه · R لإعادة ضبط المواضع · Esc للإغلاق"
 
-#: src/render.c:4501
+#: src/render.c:4540
 msgid "done"
 msgstr "تم"
 
-#: src/render.c:4503
+#: src/render.c:4542
 msgid "starting"
 msgstr "يبدأ"
 
-#: src/render.c:4604
+#: src/render.c:4643
 msgid "Cannot read the model directory."
 msgstr "تعذّرت قراءة مجلد النماذج."
 
-#: src/render.c:4605
+#: src/render.c:4644
 msgid "No models installed."
 msgstr "لا توجد نماذج مثبَّتة."
 
-#: src/render.c:4613
+#: src/render.c:4652
 msgid "A model may still be loaded · see the message below."
 msgstr "قد يكون هناك نموذج محمَّل بعد · انظر الرسالة أدناه."
 
-#: src/render.c:4614
+#: src/render.c:4653
 msgid "Pick one from AVAILABLE below and press Enter."
 msgstr "اختر واحدًا من «المتاحة» أدناه واضغط Enter."
 
-#: src/render.c:4682
+#: src/render.c:4721
 msgid "Size"
 msgstr "الحجم"
 
-#: src/render.c:4683 src/render.c:4839
+#: src/render.c:4722 src/render.c:4878
 msgid "Params"
 msgstr "المعاملات"
 
-#: src/render.c:4684
+#: src/render.c:4723
 msgid "Quant"
 msgstr "التكميم"
 
-#: src/render.c:4685
+#: src/render.c:4724
 msgid "Context"
 msgstr "السياق"
 
-#: src/render.c:4686
+#: src/render.c:4725
 msgid "Arch"
 msgstr "البنية"
 
-#: src/render.c:4709
+#: src/render.c:4748
 msgid "no chat template · synapd will guess the turn format"
 msgstr "لا يوجد قالب محادثة · سيخمّن synapd صيغة الأدوار"
 
-#: src/render.c:4714
+#: src/render.c:4753
 msgid "unreadable header"
 msgstr "ترويسة غير مقروءة"
 
-#: src/render.c:4737 src/render.c:4873
+#: src/render.c:4776 src/render.c:4912
 msgid "ABOUT"
 msgstr "حول"
 
-#: src/render.c:4749 src/render.c:4880
+#: src/render.c:4788 src/render.c:4919
 msgid "Good at"
 msgstr "يُجيد"
 
-#: src/render.c:4750
+#: src/render.c:4789
 msgid "Speaks"
 msgstr "يتحدث"
 
-#: src/render.c:4751 src/render.c:4842
+#: src/render.c:4790 src/render.c:4881
 msgid "License"
 msgstr "الترخيص"
 
-#: src/render.c:4752 src/render.c:4881
+#: src/render.c:4791 src/render.c:4920
 msgid "Based on"
 msgstr "مبني على"
 
-#: src/render.c:4800
+#: src/render.c:4839
 msgid "this is the model synapd is running"
 msgstr "هذا هو النموذج الذي يشغّله synapd"
 
-#: src/render.c:4804
+#: src/render.c:4843
 msgid "[ Enter: load this model ]"
 msgstr "[ Enter: حمّل هذا النموذج ]"
 
-#: src/render.c:4840
+#: src/render.c:4879
 msgid "Download"
 msgstr "التنزيل"
 
-#: src/render.c:4841
+#: src/render.c:4880
 msgid "Quality"
 msgstr "الجودة"
 
-#: src/render.c:4843
+#: src/render.c:4882
 msgid "Pulls"
 msgstr "مرات التنزيل"
 
-#: src/render.c:4924
+#: src/render.c:4963
 msgid "QUANTISATION"
 msgstr "التكميم"
 
-#: src/render.c:4930
+#: src/render.c:4969
 msgid "reading the repository …"
 msgstr "جارٍ قراءة المستودع …"
 
-#: src/render.c:4935
+#: src/render.c:4974
 msgid "could not read the repository"
 msgstr "تعذّرت قراءة المستودع"
 
-#: src/render.c:4940
+#: src/render.c:4979
 msgid "no single-file GGUF here"
 msgstr "لا يوجد هنا ملف GGUF مفرد"
 
-#: src/render.c:4989 src/render.c:5843
+#: src/render.c:5028 src/render.c:5882
 #, c-format
 msgid "+%d more"
 msgstr "+%d أخرى"
 
-#: src/render.c:4997
+#: src/render.c:5036
 msgid "[ Enter: download ]"
 msgstr "[ Enter: نزّل ]"
 
-#: src/render.c:5074
+#: src/render.c:5113
 msgid "AI MODEL"
 msgstr "نموذج الذكاء الاصطناعي"
 
-#: src/render.c:5085
+#: src/render.c:5124
 msgid "Loaded"
 msgstr "مُحمَّل"
 
-#: src/render.c:5086
+#: src/render.c:5125
 msgid "synapd not responding"
 msgstr "‏synapd لا يستجيب"
 
-#: src/render.c:5089
+#: src/render.c:5128
 msgid "Format"
 msgstr "الصيغة"
 
-#: src/render.c:5091
+#: src/render.c:5130
 msgid "Profile"
 msgstr "الملف التعريفي"
 
-#: src/render.c:5110
+#: src/render.c:5149
 msgid "legacy"
 msgstr "قديم"
 
-#: src/render.c:5114
+#: src/render.c:5153
 msgid "GGUF declares no chat template"
 msgstr "لا يعلن ملف GGUF عن أي قالب محادثة"
 
-#: src/render.c:5119
+#: src/render.c:5158
 #, c-format
 msgid "temp %.2f  ·  top_p %.2f  ·  top_k %d"
 msgstr "الحرارة %.2f  ·  top_p %.2f  ·  top_k %d"
 
-#: src/render.c:5127
+#: src/render.c:5166
 msgid "Sampling"
 msgstr "المعاينة العشوائية"
 
-#: src/render.c:5157
+#: src/render.c:5196
 msgid "search huggingface"
 msgstr "ابحث في Hugging Face"
 
-#: src/render.c:5172
+#: src/render.c:5211
 msgid "INSTALLED"
 msgstr "المثبَّتة"
 
-#: src/render.c:5172
+#: src/render.c:5211
 msgid "INSTALLED · none"
 msgstr "المثبَّتة · لا شيء"
 
-#: src/render.c:5217
+#: src/render.c:5256
 msgid "delete?"
 msgstr "أتريد الحذف؟"
 
-#: src/render.c:5223
+#: src/render.c:5262
 msgid "loading …"
 msgstr "جارٍ التحميل …"
 
-#: src/render.c:5283
+#: src/render.c:5322
 msgid "type to search · Enter search · Esc cancel"
 msgstr "اكتب للبحث · Enter يبحث · Esc للإلغاء"
 
-#: src/render.c:5285
+#: src/render.c:5324
 msgid ""
 "Up/Down select · Left/Right quantisation · Enter download · / search · Esc "
 "close"
@@ -3058,251 +3071,251 @@ msgstr ""
 "أعلى/أسفل للاختيار · يسار/يمين للتكميم · Enter للتنزيل · / للبحث · Esc "
 "للإغلاق"
 
-#: src/render.c:5291
+#: src/render.c:5330
 msgid "Delete again to confirm · Esc cancels · any move cancels"
 msgstr "احذف مرة أخرى للتأكيد · Esc يلغي · وأي حركة تلغي"
 
-#: src/render.c:5294
+#: src/render.c:5333
 msgid ""
 "Up/Down select · Enter load · Del delete · / search · R rescan · Esc close"
 msgstr ""
 "أعلى/أسفل للاختيار · Enter للتحميل · Del للحذف · / للبحث · R لإعادة الفحص · "
 "Esc للإغلاق"
 
-#: src/render.c:5298
+#: src/render.c:5337
 msgid ""
 "downloads run as a system service — closing this panel does not cancel one"
 msgstr "تعمل التنزيلات كخدمة نظام — وإغلاق هذه اللوحة لا يلغي أيًّا منها"
 
-#: src/render.c:5301
+#: src/render.c:5340
 msgid "switching reloads the model — the AI pauses while it loads"
 msgstr "التبديل يعيد تحميل النموذج — ويتوقف الذكاء الاصطناعي أثناء التحميل"
 
-#: src/render.c:5362
+#: src/render.c:5401
 msgid "EVENT SOUNDS"
 msgstr "أصوات الأحداث"
 
-#: src/render.c:5371
+#: src/render.c:5410
 msgid "silent · Space turns event sounds on"
 msgstr "صامت · المسافة تشغّل أصوات الأحداث"
 
-#: src/render.c:5375
+#: src/render.c:5414
 msgid "t plays the selected sound without enabling it"
 msgstr "الزر t يشغّل الصوت المحدد دون تفعيله"
 
-#: src/render.c:5420
+#: src/render.c:5459
 msgid "Volume"
 msgstr "مستوى الصوت"
 
-#: src/render.c:5423
+#: src/render.c:5462
 msgid "Sound theme"
 msgstr "سمة الأصوات"
 
-#: src/render.c:5427
+#: src/render.c:5466
 #, c-format
 msgid "%s — not a sound theme"
 msgstr "%s — ليست سمة أصوات"
 
-#: src/render.c:5484
+#: src/render.c:5523
 msgid "not in this theme"
 msgstr "غير موجود في هذه السمة"
 
-#: src/render.c:5498
+#: src/render.c:5537
 msgid "Up/Down select · Enter toggle · Left/Right off/on · [ ] pick sound"
 msgstr ""
 "أعلى/أسفل للاختيار · Enter للتبديل · يسار/يمين للإيقاف والتشغيل · [ ] "
 "لاختيار الصوت"
 
-#: src/render.c:5500
+#: src/render.c:5539
 msgid "t play · Space all sounds on/off · Esc close · more: synui-sound --help"
 msgstr ""
 "‏t للتشغيل · المسافة لكل الأصوات تشغيلًا وإيقافًا · Esc للإغلاق · للمزيد: synui-"
 "sound --help"
 
-#: src/render.c:5555
+#: src/render.c:5594
 msgid "DATE & TIME"
 msgstr "التاريخ والوقت"
 
-#: src/render.c:5568
+#: src/render.c:5607
 #, c-format
 msgid "system zone · %s"
 msgstr "المنطقة الزمنية للنظام · %s"
 
-#: src/render.c:5601
+#: src/render.c:5640
 msgid "WORLD CLOCK"
 msgstr "الساعة العالمية"
 
-#: src/render.c:5626
+#: src/render.c:5665
 msgid "Up/Down select · Space toggle · c calendar · Esc close"
 msgstr "أعلى/أسفل للاختيار · المسافة للتبديل · c للتقويم · Esc للإغلاق"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "January"
 msgstr "يناير"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "February"
 msgstr "فبراير"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "March"
 msgstr "مارس"
 
-#: src/render.c:5694
+#: src/render.c:5733
 msgid "April"
 msgstr "أبريل"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "May"
 msgstr "مايو"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "June"
 msgstr "يونيو"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "July"
 msgstr "يوليو"
 
-#: src/render.c:5695
+#: src/render.c:5734
 msgid "August"
 msgstr "أغسطس"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "September"
 msgstr "سبتمبر"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "October"
 msgstr "أكتوبر"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "November"
 msgstr "نوفمبر"
 
-#: src/render.c:5696
+#: src/render.c:5735
 msgid "December"
 msgstr "ديسمبر"
 
-#: src/render.c:5818
+#: src/render.c:5857
 msgid "loading…"
 msgstr "جارٍ التحميل…"
 
-#: src/render.c:5828
+#: src/render.c:5867
 msgid "nothing on"
 msgstr "لا شيء يعمل"
 
-#: src/render.c:5833
+#: src/render.c:5872
 #, c-format
 msgid "all day  %s"
 msgstr "طوال اليوم  %s"
 
-#: src/render.c:5855
+#: src/render.c:5894
 msgid "←→ day · PgUp/PgDn month · t today · Esc"
 msgstr "←→ لليوم · PgUp/PgDn للشهر · t لليوم الحالي · Esc"
 
-#: src/render.c:5944
+#: src/render.c:5983
 msgid "CONTROL PANEL"
 msgstr "لوحة التحكم"
 
-#: src/render.c:5963
+#: src/render.c:6002
 msgid "Search"
 msgstr "بحث"
 
-#: src/render.c:5990
+#: src/render.c:6029
 msgid "CATEGORIES"
 msgstr "الفئات"
 
-#: src/render.c:5995 src/render.c:6481
+#: src/render.c:6034 src/render.c:6520
 msgid "FIND  "
 msgstr "ابحث  "
 
-#: src/render.c:6002 src/render.c:6428
+#: src/render.c:6041 src/render.c:6467
 msgid "KEYBOARD SHORTCUTS"
 msgstr "اختصارات لوحة المفاتيح"
 
-#: src/render.c:6003
+#: src/render.c:6042
 msgid "SETTINGS"
 msgstr "الإعدادات"
 
-#: src/render.c:6078
+#: src/render.c:6117
 msgid "Press a key…"
 msgstr "اضغط مفتاحًا…"
 
-#: src/render.c:6098 src/render.c:6274 src/render.c:6569
+#: src/render.c:6137 src/render.c:6313 src/render.c:6608
 #, c-format
 msgid "%d–%d of %d · PgUp/PgDn"
 msgstr "%d–%d من %d · PgUp/PgDn"
 
-#: src/render.c:6235
+#: src/render.c:6274
 msgid "none"
 msgstr "لا شيء"
 
-#: src/render.c:6284
+#: src/render.c:6323
 msgid "No setting matches that."
 msgstr "لا يوجد إعداد يطابق ذلك."
 
-#: src/render.c:6319
+#: src/render.c:6358
 msgid "Type to filter · Up/Down select · Del reset · Esc back"
 msgstr "اكتب للتصفية · أعلى/أسفل للاختيار · Del لإعادة الضبط · Esc للرجوع"
 
-#: src/render.c:6321
+#: src/render.c:6360
 msgid "Up/Down category · Enter or Right opens · / find · Esc close"
 msgstr "أعلى/أسفل للفئة · Enter أو اليمين يفتح · / للبحث · Esc للإغلاق"
 
-#: src/render.c:6327
+#: src/render.c:6366
 msgid "Tap Super, Ctrl, Alt or Shift · Del for no tap · Esc cancels"
 msgstr "انقر Super أو Ctrl أو Alt أو Shift · Del لعدم التعيين · Esc يلغي"
 
-#: src/render.c:6328
+#: src/render.c:6367
 msgid "Press the new key for this shortcut · Esc cancels"
 msgstr "اضغط المفتاح الجديد لهذا الاختصار · Esc يلغي"
 
-#: src/render.c:6330
+#: src/render.c:6369
 msgid ""
 "F2 rebind · F3 moves it onto the tap · Ctrl+Shift+R reset all · Esc back"
 msgstr ""
 "‏F2 لإعادة التعيين · F3 ينقله إلى النقرة · Ctrl+Shift+R لإعادة ضبط الكل · Esc "
 "للرجوع"
 
-#: src/render.c:6337
+#: src/render.c:6376
 msgid "Left/Right adjust · Del default · / find · Tab column · Esc back"
 msgstr "يسار/يمين للضبط · Del للافتراضي · / للبحث · Tab للعمود · Esc للرجوع"
 
-#: src/render.c:6344
+#: src/render.c:6383
 msgid "Left/Right switch · Enter details · Tab column · Esc back"
 msgstr "يسار/يمين للتبديل · Enter للتفاصيل · Tab للعمود · Esc للرجوع"
 
-#: src/render.c:6346
+#: src/render.c:6385
 msgid "Up/Down select · Enter activate · / find · Left or Esc back"
 msgstr "أعلى/أسفل للاختيار · Enter للتشغيل · / للبحث · اليسار أو Esc للرجوع"
 
-#: src/render.c:6468
+#: src/render.c:6507
 msgid "PRESS THE NEW KEY  "
 msgstr "اضغط المفتاح الجديد  "
 
-#: src/render.c:6475
+#: src/render.c:6514
 #, c-format
 msgid "for %s  ·  Esc cancels"
 msgstr "لـ %s  ·  Esc يلغي"
 
-#: src/render.c:6494
+#: src/render.c:6533
 msgid "_  a key, what it does, an app, or a command"
 msgstr "_  مفتاح أو وظيفته أو تطبيق أو أمر"
 
-#: src/render.c:6550
+#: src/render.c:6589
 msgid "No shortcut matches that."
 msgstr "لا يوجد اختصار يطابق ذلك."
 
-#: src/render.c:6587
+#: src/render.c:6626
 msgid "Tap Super, Ctrl, Alt or Shift · Del for none · Esc cancels"
 msgstr "انقر Super أو Ctrl أو Alt أو Shift · Del لعدم التعيين · Esc يلغي"
 
-#: src/render.c:6589
+#: src/render.c:6628
 msgid "Press any chord with Super, Ctrl or Alt · Esc cancels"
 msgstr "اضغط أي تركيبة مع Super أو Ctrl أو Alt · Esc يلغي"
 
-#: src/render.c:6605
+#: src/render.c:6644
 msgid ""
 "Filter · Enter runs · F2 sets a key · Del frees it · F3 tap · Ctrl+Shift+R "
 "resets"
@@ -3310,174 +3323,174 @@ msgstr ""
 "تصفية · Enter يشغّل · F2 يعيّن مفتاحًا · Del يحرّره · F3 للنقرة · Ctrl+Shift+R "
 "يعيد الضبط"
 
-#: src/render.c:6625
+#: src/render.c:6664
 msgid "The neon night-drive default · apps dark"
 msgstr "الافتراضية: قيادة ليلية بالنيون · التطبيقات داكنة"
 
-#: src/render.c:6626
+#: src/render.c:6665
 msgid "Flat modern dark · apps + Dolphin + Firefox dark"
 msgstr "داكنة مسطحة عصرية · التطبيقات وDolphin وFirefox داكنة"
 
-#: src/render.c:6627
+#: src/render.c:6666
 msgid "Luna blue, gradient captions · apps beige"
 msgstr "أزرق Luna وعناوين متدرجة · التطبيقات بيج"
 
-#: src/render.c:6628
+#: src/render.c:6667
 msgid "Silver 3D bevels, navy titles · apps grey"
 msgstr "حواف فضية بارزة وعناوين كحلية · التطبيقات رمادية"
 
-#: src/render.c:6629
+#: src/render.c:6668
 msgid "Mocha · mauve on soft black · glassy"
 msgstr "موكا · بنفسجي فاتح على أسود ناعم · زجاجية"
 
-#: src/render.c:6630
+#: src/render.c:6669
 msgid "Retro warm · orange on brown · glassy"
 msgstr "كلاسيكية دافئة · برتقالي على بني · زجاجية"
 
-#: src/render.c:6631
+#: src/render.c:6670
 msgid "Storm · blue + purple on navy · glassy"
 msgstr "عاصفة · أزرق وبنفسجي على كحلي · زجاجية"
 
-#: src/render.c:6632
+#: src/render.c:6671
 msgid "Arctic · frost blue on slate · glassy"
 msgstr "قطبية · أزرق صقيعي على أردوازي · زجاجية"
 
-#: src/render.c:6633
+#: src/render.c:6672
 msgid "Purple + pink on charcoal · glassy"
 msgstr "بنفسجي ووردي على فحمي · زجاجية"
 
-#: src/render.c:6634
+#: src/render.c:6673
 msgid "Pastel pink, hot-pink titles · apps light"
 msgstr "وردي باستيل وعناوين وردية زاهية · التطبيقات فاتحة"
 
-#: src/render.c:6635
+#: src/render.c:6674
 msgid "Liquid glass · rounded, translucent · apps light"
 msgstr "زجاج سائل · دائري وشبه شفاف · التطبيقات فاتحة"
 
-#: src/render.c:6636
+#: src/render.c:6675
 msgid "Pinstripes + traffic lights · apps light grey"
 msgstr "خطوط رفيعة وأزرار ملونة · التطبيقات رمادية فاتحة"
 
-#: src/render.c:6637
+#: src/render.c:6676
 msgid "Racing stripes, square boxes · apps grey"
 msgstr "خطوط سباق وصناديق مربعة · التطبيقات رمادية"
 
-#: src/render.c:6643
+#: src/render.c:6682
 msgid "House glass · accent off the wallpaper · apps dark"
 msgstr "زجاج البيت · لون مميز مأخوذ من الخلفية · التطبيقات داكنة"
 
-#: src/render.c:6644
+#: src/render.c:6683
 msgid "The same glass in daylight · apps + Files light"
 msgstr "الزجاج نفسه في ضوء النهار · التطبيقات و«الملفات» فاتحة"
 
-#: src/render.c:6715
+#: src/render.c:6754
 msgid "THEME MANAGER"
 msgstr "مدير السمات"
 
-#: src/render.c:6820
+#: src/render.c:6859
 #, c-format
 msgid "Transparency  %d%%"
 msgstr "الشفافية  %d%%"
 
-#: src/render.c:6822
+#: src/render.c:6861
 #, c-format
 msgid "Transparency  off"
 msgstr "الشفافية  مُعطَّلة"
 
-#: src/render.c:6852
+#: src/render.c:6891
 msgid "Up/Down theme · ←/→ opacity · T transparency · Enter apply · Esc"
 msgstr "أعلى/أسفل للسمة · ←/→ للعتامة · T للشفافية · Enter للتطبيق · Esc"
 
-#: src/render.c:6919
+#: src/render.c:6958
 msgid "CLIPBOARD"
 msgstr "الحافظة"
 
-#: src/render.c:6936
+#: src/render.c:6975
 msgid "Nothing copied yet"
 msgstr "لم يُنسخ شيء بعد"
 
-#: src/render.c:6982
+#: src/render.c:7021
 msgid "Enter copy · Del clear all · Esc close"
 msgstr "‏Enter للنسخ · Del لمسح الكل · Esc للإغلاق"
 
-#: src/render.c:7323
+#: src/render.c:7362
 msgid "connected"
 msgstr "متصل"
 
-#: src/render.c:7324
+#: src/render.c:7363
 msgid "paired"
 msgstr "مقترن"
 
-#: src/render.c:7384
+#: src/render.c:7423
 msgid "BLUETOOTH"
 msgstr "البلوتوث"
 
-#: src/render.c:7397
+#: src/render.c:7436
 msgid "No Bluetooth adapter found"
 msgstr "لم يُعثر على محوّل بلوتوث"
 
-#: src/render.c:7402
+#: src/render.c:7441
 msgid "Radio on"
 msgstr "اللاسلكي مُفعَّل"
 
-#: src/render.c:7402
+#: src/render.c:7441
 msgid "Radio off"
 msgstr "اللاسلكي مُعطَّل"
 
-#: src/render.c:7407
+#: src/render.c:7446
 msgid "· scanning…"
 msgstr "· جارٍ البحث…"
 
-#: src/render.c:7417
+#: src/render.c:7456
 msgid "A device"
 msgstr "جهاز ما"
 
-#: src/render.c:7425
+#: src/render.c:7464
 #, c-format
 msgid "Passkey %06u · does it match the device?"
 msgstr "رمز الاقتران %06u · هل يطابق ما يظهر على الجهاز؟"
 
-#: src/render.c:7428
+#: src/render.c:7467
 #, c-format
 msgid "wants to connect%s"
 msgstr "يريد الاتصال%s"
 
-#: src/render.c:7431
+#: src/render.c:7470
 #, c-format
 msgid "Type %06u on the device, then Enter"
 msgstr "اكتب %06u على الجهاز ثم اضغط Enter"
 
-#: src/render.c:7434
+#: src/render.c:7473
 #, c-format
 msgid "Enter PIN %s on the device"
 msgstr "أدخل رمز PIN ‏%s على الجهاز"
 
-#: src/render.c:7442
+#: src/render.c:7481
 msgid "Any key to dismiss"
 msgstr "أي مفتاح للإغلاق"
 
-#: src/render.c:7443
+#: src/render.c:7482
 msgid "y accept · n reject"
 msgstr "‏y للقبول · n للرفض"
 
-#: src/render.c:7456
+#: src/render.c:7495
 msgid "Radio is off · press o"
 msgstr "اللاسلكي مُعطَّل · اضغط o"
 
-#: src/render.c:7461
+#: src/render.c:7500
 #, c-format
 msgid "%d hidden · press a to show"
 msgstr "%d مخفية · اضغط a لإظهارها"
 
-#: src/render.c:7464
+#: src/render.c:7503
 msgid "No devices · press s to scan"
 msgstr "لا توجد أجهزة · اضغط s للبحث"
 
-#: src/render.c:7501
+#: src/render.c:7540
 msgid "trusted"
 msgstr "موثوق"
 
-#: src/render.c:7534
+#: src/render.c:7573
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a fewer · "
 "Esc"
@@ -3485,60 +3498,60 @@ msgstr ""
 "‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a "
 "لعرض أقل · Esc"
 
-#: src/render.c:7536
+#: src/render.c:7575
 msgid ""
 "Enter connect · p pair · t trust · r forget · s scan · o radio · a all · Esc"
 msgstr ""
 "‏Enter للاتصال · p للاقتران · t للتوثيق · r للنسيان · s للبحث · o للاسلكي · a "
 "للكل · Esc"
 
-#: src/render.c:7696
+#: src/render.c:7735
 msgid "TASK MANAGER"
 msgstr "مدير المهام"
 
-#: src/render.c:7702
+#: src/render.c:7741
 #, c-format
 msgid "%d procs · sort: %s%s"
 msgstr "%d عملية · الترتيب: %s%s"
 
-#: src/render.c:7713
+#: src/render.c:7752
 #, c-format
 msgid "%.0f%%  (%ld cores)"
 msgstr "%.0f%%  (%ld نواة)"
 
-#: src/render.c:7715
+#: src/render.c:7754
 msgid "CPU"
 msgstr "المعالج"
 
-#: src/render.c:7726
+#: src/render.c:7765
 msgid "RAM"
 msgstr "الذاكرة"
 
-#: src/render.c:7729 src/render.c:7737
+#: src/render.c:7768 src/render.c:7776
 msgid "GPU"
 msgstr "معالج الرسوميات"
 
-#: src/render.c:7729
+#: src/render.c:7768
 msgid "no GPU telemetry available"
 msgstr "لا تتوفر قياسات لمعالج الرسوميات"
 
-#: src/render.c:7754 src/render.c:7773
+#: src/render.c:7793 src/render.c:7812
 msgid "VRAM"
 msgstr "ذاكرة الرسوميات"
 
-#: src/render.c:7768
+#: src/render.c:7807
 msgid "PID"
 msgstr "المعرّف"
 
-#: src/render.c:7770
+#: src/render.c:7809
 msgid "NAME"
 msgstr "الاسم"
 
-#: src/render.c:7772
+#: src/render.c:7811
 msgid "MEM"
 msgstr "الذاكرة"
 
-#: src/render.c:7881
+#: src/render.c:7920
 msgid ""
 "j/k move · right-click a row · c/m/g/p sort · u mine · x term · X kill · Esc "
 "close"
@@ -3546,52 +3559,52 @@ msgstr ""
 "‏j/k للتنقل · نقر يمين على صف · c/m/g/p للترتيب · u لعملياتي · x للإنهاء · X "
 "للقتل · Esc للإغلاق"
 
-#: src/render.c:8047
+#: src/render.c:8086
 msgid "NEWS"
 msgstr "الأخبار"
 
-#: src/render.c:8055
+#: src/render.c:8094
 msgid "all sources"
 msgstr "كل المصادر"
 
-#: src/render.c:8056
+#: src/render.c:8095
 msgid "by time"
 msgstr "حسب الوقت"
 
-#: src/render.c:8056
+#: src/render.c:8095
 msgid "by source"
 msgstr "حسب المصدر"
 
-#: src/render.c:8059
+#: src/render.c:8098
 msgid "never fetched"
 msgstr "لم تُجلب قط"
 
-#: src/render.c:8086
+#: src/render.c:8125
 #, c-format
 msgid "filter: /%s"
 msgstr "تصفية: /%s"
 
-#: src/render.c:8099
+#: src/render.c:8138
 msgid "fetching feeds…"
 msgstr "جارٍ جلب التلقيمات…"
 
-#: src/render.c:8100
+#: src/render.c:8139
 msgid "nothing matches this filter"
 msgstr "لا شيء يطابق هذه التصفية"
 
-#: src/render.c:8101
+#: src/render.c:8140
 msgid "no feeds answered — check the network, then press r"
 msgstr "لم تستجب أي تلقيمة — تحقق من الشبكة ثم اضغط r"
 
-#: src/render.c:8102
+#: src/render.c:8141
 msgid "no items yet — press r to fetch"
 msgstr "لا توجد عناصر بعد — اضغط r للجلب"
 
-#: src/render.c:8188
+#: src/render.c:8227
 msgid "type to filter · Enter keep · Esc clear"
 msgstr "اكتب للتصفية · Enter للإبقاء · Esc للمسح"
 
-#: src/render.c:8189
+#: src/render.c:8228
 msgid ""
 "j/k move · Enter open · o background · c comments · y copy · Tab source · / "
 "search · s sort · m read · r refresh · Esc close"
@@ -3599,129 +3612,129 @@ msgstr ""
 "‏j/k للتنقل · Enter للفتح · o في الخلفية · c للتعليقات · y للنسخ · Tab للمصدر "
 "· / للبحث · s للترتيب · m كمقروء · r للتحديث · Esc للإغلاق"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Bottom"
 msgstr "أسفل"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Top"
 msgstr "أعلى"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Left"
 msgstr "يسار"
 
-#: src/render.c:8215
+#: src/render.c:8254
 msgid "Right"
 msgstr "يمين"
 
-#: src/render.c:8225
+#: src/render.c:8264
 msgid "Apps"
 msgstr "التطبيقات"
 
-#: src/render.c:8228
+#: src/render.c:8267
 #, c-format
 msgid "Dock Edge: %s"
 msgstr "حافة الرصيف: %s"
 
-#: src/render.c:8242
+#: src/render.c:8281
 #, c-format
 msgid "%s At: %s"
 msgstr "%s عند: %s"
 
-#: src/render.c:8254
+#: src/render.c:8293
 msgid "Pin to Dock"
 msgstr "تثبيت في الرصيف"
 
-#: src/render.c:8256
+#: src/render.c:8295
 msgid "Unpin from Dock"
 msgstr "إزالة من الرصيف"
 
-#: src/render.c:8258
+#: src/render.c:8297
 msgid "New Window"
 msgstr "نافذة جديدة"
 
-#: src/render.c:8259
+#: src/render.c:8298
 msgid "Close Window"
 msgstr "إغلاق النافذة"
 
-#: src/render.c:8260
+#: src/render.c:8299
 msgid "Quit All Windows"
 msgstr "إغلاق كل النوافذ"
 
-#: src/render.c:8264
+#: src/render.c:8303
 msgid "Auto-hide Dock"
 msgstr "إخفاء الرصيف تلقائيًا"
 
-#: src/render.c:8265
+#: src/render.c:8304
 msgid "Dock Above Windows"
 msgstr "الرصيف فوق النوافذ"
 
-#: src/render.c:8266
+#: src/render.c:8305
 msgid "Magnify Icons"
 msgstr "تكبير الأيقونات"
 
-#: src/render.c:8267
+#: src/render.c:8306
 msgid "Show Clock"
 msgstr "إظهار الساعة"
 
-#: src/render.c:8268
+#: src/render.c:8307
 msgid "Analog Clock Face"
 msgstr "قرص ساعة عقارب"
 
-#: src/render.c:8269
+#: src/render.c:8308
 msgid "Show All Apps Button"
 msgstr "إظهار زر «كل التطبيقات»"
 
-#: src/render.c:8270
+#: src/render.c:8309
 msgid "Show Power Button"
 msgstr "إظهار زر الطاقة"
 
-#: src/render.c:8271
+#: src/render.c:8310
 msgid "Dock Settings…"
 msgstr "إعدادات الرصيف…"
 
-#: src/render.c:8275
+#: src/render.c:8314
 msgid "Lock Screen"
 msgstr "قفل الشاشة"
 
-#: src/render.c:8276
+#: src/render.c:8315
 msgid "Log Out"
 msgstr "تسجيل الخروج"
 
-#: src/render.c:8277
+#: src/render.c:8316
 msgid "Suspend"
 msgstr "تعليق"
 
-#: src/render.c:8278
+#: src/render.c:8317
 msgid "Restart"
 msgstr "إعادة التشغيل"
 
-#: src/render.c:8279
+#: src/render.c:8318
 msgid "Shut Down"
 msgstr "إيقاف التشغيل"
 
-#: src/render.c:8902
+#: src/render.c:8941
 msgid "minimized"
 msgstr "مصغَّرة"
 
-#: src/render.c:8902 src/render.c:9396 src/render.c:9399
+#: src/render.c:8941 src/render.c:9435 src/render.c:9438
 msgid "MIN"
 msgstr "مصغَّر"
 
-#: src/render.c:9007
+#: src/render.c:9046
 msgid "WINDOWS"
 msgstr "النوافذ"
 
-#: src/render.c:9164
+#: src/render.c:9203
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "‏Alt+Tab للتالية · Alt+Shift+Tab للسابقة"
 
-#: src/render.c:9281
+#: src/render.c:9320
 msgid "MISSION CONTROL"
 msgstr "نظرة عامة"
 
-#: src/render.c:9286
+#: src/render.c:9325
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
@@ -3732,11 +3745,11 @@ msgstr[3] "سطح المكتب %d · %d نوافذ"
 msgstr[4] "سطح المكتب %d · %d نافذة"
 msgstr[5] "سطح المكتب %d · %d نافذة"
 
-#: src/render.c:9423
+#: src/render.c:9462
 msgid "Nothing open on this desktop."
 msgstr "لا شيء مفتوح على سطح المكتب هذا."
 
-#: src/render.c:9478
+#: src/render.c:9517
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"
@@ -3744,55 +3757,55 @@ msgstr ""
 "الأسهم أو النقر تختار نافذة · Enter يفتحها · Del يغلقها · 1–9 تبدّل سطح "
 "المكتب · Esc للإغلاق"
 
-#: src/saver.c:411
+#: src/saver.c:749
 msgid "No wallpapers found for the slideshow"
 msgstr "لم يُعثر على خلفيات لعرض الشرائح"
 
-#: src/saver.c:838
+#: src/saver.c:1248
 msgid "Show after"
 msgstr "الإظهار بعد"
 
-#: src/saver.c:839
+#: src/saver.c:1249
 msgid "Lock on wake"
 msgstr "القفل عند الاستيقاظ"
 
-#: src/saver.c:840
+#: src/saver.c:1250
 msgid "Slide interval"
 msgstr "الفاصل بين الشرائح"
 
-#: src/saver.c:841
+#: src/saver.c:1251
 msgid "Lock background"
 msgstr "خلفية شاشة القفل"
 
-#: src/saver.c:842
+#: src/saver.c:1252
 msgid "Lock image"
 msgstr "صورة شاشة القفل"
 
-#: src/saver.c:843
+#: src/saver.c:1253
 msgid "Lock dim"
 msgstr "تعتيم شاشة القفل"
 
-#: src/saver.c:844
+#: src/saver.c:1254
 msgid "Lock blur"
 msgstr "ضبابية شاشة القفل"
 
-#: src/saver.c:845
+#: src/saver.c:1255
 msgid "Lock colours"
 msgstr "ألوان شاشة القفل"
 
-#: src/saver.c:846
+#: src/saver.c:1256
 msgid "Now playing"
 msgstr "يُشغَّل الآن"
 
-#: src/saver.c:847 src/widgets.c:70
+#: src/saver.c:1257 src/widgets.c:70
 msgid "Weather"
 msgstr "الطقس"
 
-#: src/saver.c:848
+#: src/saver.c:1258
 msgid "Temperature in"
 msgstr "وحدة الحرارة"
 
-#: src/saver.c:849
+#: src/saver.c:1259
 msgid "Keyboard layout"
 msgstr "تخطيط لوحة المفاتيح"
 
@@ -3896,15 +3909,15 @@ msgstr "ساعة عقارب"
 msgid "Music player"
 msgstr "مشغّل الموسيقى"
 
-#: src/wppick.c:843
+#: src/wppick.c:927
 msgid "preset"
 msgstr "إعداد مسبق"
 
-#: src/wppick.c:846
+#: src/wppick.c:930
 msgid "preset (base missing)"
 msgstr "إعداد مسبق (الأساس مفقود)"
 
-#: src/wppick.c:850
+#: src/wppick.c:934
 msgid "asset (not a wallpaper)"
 msgstr "مورد (ليس خلفية)"
 

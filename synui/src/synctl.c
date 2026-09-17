@@ -41,6 +41,8 @@ int main(int argc, char **argv)
             "                         and bound, and game mode's own confine\n"
             "  binds | keys           the bind table, each chord as a keyboard\n"
             "                         says it (\"Super+Shift+C\")\n"
+            "  gestures               the touchpad gesture table, and whether\n"
+            "                         gestures are switched on\n"
             "  layout [next|prev|<name>]  the keyboard layouts, and which one\n"
             "                         is typing — the lock screen's chip as a verb\n"
             "  weather [on|off|refresh]   the reading the lock screen, the bar\n"

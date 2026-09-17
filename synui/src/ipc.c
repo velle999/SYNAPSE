@@ -518,6 +518,29 @@ static void cmd_binds(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]\n");
 }
 
+/* `synctl gestures` — the touchpad gesture table, in synuirc's own spelling
+ * ("swipe:4:left"), with the master switch beside it: a list of four binds
+ * that are all switched off would otherwise read as four working gestures. */
+static void cmd_gestures(syn_server_t *s, ipc_buf_t *b)
+{
+    bprintf(b, "{\"enabled\":%s,\"gestures\":[",
+            s->config.gestures ? "true" : "false");
+    for (int i = 0; i < s->config.gesture_count; i++) {
+        const syn_gesture_bind_t *g = &s->config.gesture_binds[i];
+        char spec[32];
+        syn_gesture_format_spec(g->kind, g->fingers, g->dir, spec, sizeof(spec));
+        if (i) bputs(b, ",");
+        bputs(b, "{\"gesture\":");
+        bjson_str(b, spec);
+        bputs(b, ",\"action\":");
+        bjson_str(b, g->action);
+        bputs(b, ",\"arg\":");
+        bjson_str(b, g->arg);
+        bputs(b, "}");
+    }
+    bputs(b, "]}\n");
+}
+
 /* `synctl hdr` — what the hardware will actually accept.
  *
  * ⛔ NOTHING IS COMMITTED. hdrprobe_report() asks with wlr_output_test_state(),
@@ -739,6 +762,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         cmd_binds(s, out);
         return;
     }
+    if (strcmp(line, "gestures") == 0) {
+        cmd_gestures(s, out);
+        return;
+    }
     if (strcmp(line, "scene") == 0) {
         cmd_scene(s, out);
         return;
@@ -881,7 +908,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
                    "\"activeworkspace\",\"activewindow\",\"cursor\",\"pointer\","
-                   "\"recent\",\"binds\",\"version\","
+                   "\"recent\",\"binds\",\"gestures\",\"version\","
                    "\"layout [next|prev|<name>]\","
                    "\"weather [on|off|refresh]\","
                    "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");

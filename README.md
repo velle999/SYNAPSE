@@ -637,6 +637,18 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
+On a touchpad, four fingers change desktop and open mission control:
+
+| Gesture | Action |
+|---|---|
+| Four fingers left / right | Next / previous desktop (stops at 1 and 9) |
+| Four fingers up / down | Open / close mission control |
+
+Two- and three-finger gestures still go to the app under the pointer. Rebind
+them with `gesture = swipe:4:left <action>` lines in `synuirc` (any bind action;
+`pinch:<fingers>:in|out` too), and turn them all off with Control panel ▸ Input ▸
+*Touchpad gestures*.
+
 `Super`+`Space` and `Super`+`=` are ordinary binds like everything else: swap
 them with two `bind =` lines, or move either one live with `F2` in the `Super`+`/`
 palette. (There used to be a `super_space = launcher|cmdbar` setting and a
