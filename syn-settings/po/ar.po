@@ -1692,3 +1692,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "‏/etc/pam.d/sudo ليس المكدس المتوقَّع، لذا يُترك كما هو — أضف pam_fprintd.so بصفة sufficient فوق auth include الخاص به"
+
+msgid "Startup"
+msgstr "بدء التشغيل"
+
+msgid "removing %1…"
+msgstr "جارٍ إزالة %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "ما يعمل عند تسجيل الدخول — قائمة synui الخاصة، وخدماتك في الخلفية، ومدخلات التشغيل التلقائي التي لا يشغّلها هذا السطح أبدًا"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "الإعداد الافتراضي المدمج في synui — لا يوجد synuirc بعد؛ وإضافة برنامج هنا تُبقي عليه"
+
+msgid "synui starts this when you log in"
+msgstr "يبدأ synui هذا عند تسجيل الدخول"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "مُطفأ — محفوظ ليمكن تشغيله مجددًا"
+
+msgid "Add a program"
+msgstr "إضافة برنامج"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "يبدأ synui عند تسجيل الدخول 32 برنامجًا على الأكثر — أطفئ واحدًا لتضيف غيره"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "أمر يشغّله synui عند تسجيل الدخول، كما تكتبه في الطرفية — يبدأ من تسجيل دخولك التالي"
+
+msgid "background services"
+msgstr "خدمات الخلفية"
+
+msgid "unavailable"
+msgstr "غير متاح"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "لا يوجد في هذه الجلسة مدير خدمات للمستخدم يمكن سؤاله"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "مدخل تشغيل تلقائي لا يشغّله synui أبدًا — شغّله لينسخ أمره إلى قائمة synui"

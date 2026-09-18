@@ -3077,7 +3077,11 @@ typedef struct {
 } syn_gesture_tracker_t;
 
 /* ── Configuration ───────────────────────────────────────── */
-#define SYN_AUTOSTART_MAX 8
+/* 32, from 8: an ordinary session already names five (bar, polkit agent,
+ * wallpaper engine, KDE Connect, a game guard), and syn-settings' Startup pane
+ * adds to this list. syn-settings refuses past the same number — keep the two
+ * in step (syn-settings/src/startup.c, STARTUP_MAX). */
+#define SYN_AUTOSTART_MAX 32
 
 /* Install prefix for bundled assets (wallpaper.png, kanji_atlas.png).
  * Normally injected by meson (-DSYNUI_DATADIR); fall back to the default. */

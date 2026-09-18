@@ -1778,3 +1778,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo ist nicht der erwartete Stapel und bleibt daher unverändert — tragen Sie pam_fprintd.so als sufficient über dem auth include ein"
+
+msgid "Startup"
+msgstr "Autostart"
+
+msgid "removing %1…"
+msgstr "%1 wird entfernt…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "was beim Anmelden startet — synuis eigene Liste, Ihre Hintergrunddienste und Autostart-Einträge, die dieser Desktop nie ausführt"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synuis eingebaute Vorgabe — es gibt noch keine synuirc; ein hier hinzugefügtes Programm behält sie bei"
+
+msgid "synui starts this when you log in"
+msgstr "synui startet dies bei der Anmeldung"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "ausgeschaltet — bleibt erhalten, damit es wieder eingeschaltet werden kann"
+
+msgid "Add a program"
+msgstr "Programm hinzufügen"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui startet bei der Anmeldung höchstens 32 Programme — schalten Sie eines aus, um ein weiteres hinzuzufügen"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "ein Befehl, den synui bei der Anmeldung ausführt, so wie Sie ihn im Terminal eingeben würden — er startet ab der nächsten Anmeldung"
+
+msgid "background services"
+msgstr "Hintergrunddienste"
+
+msgid "unavailable"
+msgstr "nicht verfügbar"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "in dieser Sitzung gibt es keinen Benutzer-Dienstmanager, den man fragen könnte"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "ein Autostart-Eintrag, den synui nie ausführt — einschalten, um seinen Befehl in synuis Liste zu übernehmen"

@@ -241,6 +241,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "remote"))    return pane_remote();
 		if (!strcmp(pane, "scan"))      return pane_scan();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
+		if (!strcmp(pane, "startup"))   return pane_startup();
 		if (!strcmp(pane, "assistant")) return pane_assistant();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;

@@ -1692,3 +1692,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo अपेक्षित स्टैक नहीं है, इसलिए उसे छुआ नहीं गया — उसके auth include के ऊपर pam_fprintd.so को sufficient के रूप में जोड़ें"
+
+msgid "Startup"
+msgstr "स्टार्टअप"
+
+msgid "removing %1…"
+msgstr "%1 हटाया जा रहा है…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "लॉग इन करने पर क्या चलता है — synui की अपनी सूची, आपकी पृष्ठभूमि सेवाएँ, और वे ऑटोस्टार्ट प्रविष्टियाँ जिन्हें यह डेस्कटॉप कभी नहीं चलाता"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synui का अंतर्निहित डिफ़ॉल्ट — अभी कोई synuirc नहीं है; यहाँ प्रोग्राम जोड़ने पर यह बना रहता है"
+
+msgid "synui starts this when you log in"
+msgstr "लॉग इन करने पर synui इसे शुरू करता है"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "बंद — रखा गया है ताकि फिर से चालू किया जा सके"
+
+msgid "Add a program"
+msgstr "प्रोग्राम जोड़ें"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui लॉग इन पर अधिकतम 32 प्रोग्राम शुरू करता है — एक और जोड़ने के लिए किसी एक को बंद करें"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "लॉग इन पर synui द्वारा चलाया जाने वाला कमांड, जैसे आप उसे टर्मिनल में लिखते — यह अगले लॉग इन से शुरू होता है"
+
+msgid "background services"
+msgstr "पृष्ठभूमि सेवाएँ"
+
+msgid "unavailable"
+msgstr "उपलब्ध नहीं"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "इस सत्र में पूछने के लिए कोई उपयोगकर्ता सेवा प्रबंधक नहीं है"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "एक ऑटोस्टार्ट प्रविष्टि जिसे synui कभी नहीं चलाता — इसका कमांड synui की सूची में कॉपी करने के लिए इसे चालू करें"

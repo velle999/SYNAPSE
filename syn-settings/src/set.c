@@ -118,6 +118,17 @@ int do_set(int argc, char **argv)
 	if (!strcmp(key, "wake-words"))
 		return set_wake_words(val);
 
+	/* ⛔ BEFORE sane_value() TOO, for the same reason as wake-words: a login
+	 * command has spaces in it, and it reaches no exec here — startup.c writes
+	 * it into synuirc after its own checks, which are synui's rules for that
+	 * line (length, one line, no ` #`). Every other value its keys take is
+	 * on/off/remove, checked against that list; a unit name arrives in the KEY
+	 * and is checked by name before it reaches systemctl. */
+	{
+		int rc = startup_set(key, val);
+		if (rc >= 0) return rc;
+	}
+
 	if (!sane_value(val))
 		return refuse("value rejected: letters, digits, . _ - / + only, "
 		              "and it may not begin with '-'");

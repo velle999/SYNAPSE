@@ -94,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -107,7 +107,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote scan; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote scan startup; do
     check_actions "$pane"
 done
 
@@ -1454,6 +1454,137 @@ refuses "enroll with no finger is refused"              2 enroll ""
 refuses "forget refuses a single finger, which it cannot do" 2 \
         forget right-index-finger
 
+# ── Startup ─────────────────────────────────────────────────────────────────
+#
+# The writer edits a hand-written synuirc, so every write runs against a copy
+# in a temp config home: other keys, comments and blank lines must come back
+# byte for byte. XDG_CONFIG_DIRS and the system synuirc are pointed into the
+# same sandbox. User units are only ever driven with --dry-run — a real
+# `systemctl --user enable` here would switch the tester's own services.
+stc=$(mktemp -d)
+mkdir -p "$stc/cfg/synui" "$stc/cfg/autostart" "$stc/xdg/autostart"
+cat > "$stc/cfg/synui/synuirc" <<'RC'
+# a comment that mentions autostart = not-a-line
+terminal = syntty
+
+autostart = synui-bar
+border_color_focus = #ff296d
+autostart = /usr/bin/true --flag   # synui cuts here
+RC
+cp "$stc/cfg/synui/synuirc" "$stc/orig"
+S() { XDG_CONFIG_HOME="$stc/cfg" XDG_CONFIG_DIRS="$stc/xdg" XDG_CURRENT_DESKTOP=SynapseOS \
+      SYN_SETTINGS_SYSTEM_SYNUIRC="$stc/no-such-file" "$BIN" "$@"; }
+tok() { S --rec startup | awk -F'\t' -v k="$1" '$2 == k { print $6 }' \
+        | tr ' ' '\n' | sed -n 's/^toggle://p'; }
+
+rows=$(S --rec startup | awk -F'\t' '$1 == "autostart" { print $2 "=" $3 }' | tr '\n' ' ')
+[ "$rows" = "synui-bar=on /usr/bin/true --flag=on " ] \
+    && ok "startup: reads synui's list the way synui does (comments skipped, ' #' cuts)" \
+    || bad "startup: autostart rows were '$rows'"
+
+S set autostart-add "foo --bar" >/dev/null 2>&1
+# ⚠ diff exits 1 when the files differ — the case being asserted — and under
+# pipefail that fails any pipeline it starts. Captured first for that reason.
+dd=$(diff "$stc/orig" "$stc/cfg/synui/synuirc" || true)
+grep -qx '> autostart = foo --bar' <<<"$dd" \
+    && [ "$(grep -c '^[<>]' <<<"$dd")" = 1 ] \
+    && ok "startup: add appends one line and touches nothing else" \
+    || bad "startup: add changed more than one line"
+t=$(tok "foo --bar")
+[ "$t" = "autostart/foo%20--bar" ] && ok "startup: the command travels percent-encoded" \
+    || bad "startup: the token was '$t'"
+S set "$t" off >/dev/null 2>&1
+grep -qx '#off: autostart = foo --bar' "$stc/cfg/synui/synuirc" \
+    && [ "$(S --rec startup | awk -F'\t' '$2 == "foo --bar" { print $3 }')" = off ] \
+    && ok "startup: off comments the line out and reads back as off" \
+    || bad "startup: off did not leave a #off: line"
+S set "$t" on >/dev/null 2>&1
+grep -qx 'autostart = foo --bar' "$stc/cfg/synui/synuirc" \
+    && ok "startup: on puts the same line back" || bad "startup: on did not restore it"
+S set "$t" remove >/dev/null 2>&1
+cmp -s "$stc/orig" "$stc/cfg/synui/synuirc" \
+    && ok "startup: remove gives back the original file byte for byte" \
+    || bad "startup: remove left the file different"
+
+refuses_s() { local d=$1 rc=0; shift; S "$@" >/dev/null 2>&1 || rc=$?
+              [ "$rc" = 2 ] && ok "$d" || bad "$d (exit $rc)"; }
+refuses_s "startup: a ' #' in a command is refused — synui would cut it"  set autostart-add "prog #x"
+refuses_s "startup: a command past 127 bytes is refused"                 set autostart-add "$(printf 'x%.0s' $(seq 128))"
+refuses_s "startup: a command with a leading space is refused"           set autostart-add " prog"
+refuses_s "startup: an empty command is refused"                         set autostart-add ""
+refuses_s "startup: switching off a command that is not there is refused" set autostart/nope off
+cmp -s "$stc/orig" "$stc/cfg/synui/synuirc" && ok "startup: ...and no refusal wrote anything" \
+    || bad "startup: a refused write changed the file"
+
+# The cap is synui's: 32 running lines, and the 33rd would never start.
+{ for i in $(seq 32); do echo "autostart = prog$i"; done; } > "$stc/cfg/synui/synuirc"
+refuses_s "startup: a 33rd running program is refused" set autostart-add prog33
+S --rec startup | awk -F'\t' '$1 == "add" { print $6 }' | grep -qx -- '-' \
+    && ok "startup: ...and the add row says the list is full instead of offering a box" \
+    || bad "startup: the add row still offers a box with 32 running"
+S set autostart/prog1 off >/dev/null 2>&1; S set autostart-add prog33 >/dev/null 2>&1
+grep -qx 'autostart = prog33' "$stc/cfg/synui/synuirc" \
+    && ok "startup: switching one off makes room" || bad "startup: room was not made"
+
+# No synuirc at all: synui runs `autostart = syntty`, and a first write keeps it.
+rm -f "$stc/cfg/synui/synuirc"
+S --rec startup | awk -F'\t' '$1 == "autostart" { print $2 $6 }' | grep -qx 'syntty-' \
+    && ok "startup: with no synuirc the built-in default is shown, and not switchable" \
+    || bad "startup: the built-in default row is missing or switchable"
+S set autostart-add foo >/dev/null 2>&1
+[ "$(grep -c '^autostart = ' "$stc/cfg/synui/synuirc")" = 2 ] \
+    && grep -qx 'autostart = syntty' "$stc/cfg/synui/synuirc" \
+    && ok "startup: a first write keeps the default synui was already running" \
+    || bad "startup: a first write dropped syntty"
+
+# No user file, but a system one: that is what synui reads, and where a first
+# write starts from.
+rm -f "$stc/cfg/synui/synuirc"
+printf 'autostart = sysbar\ntheme = prism\n' > "$stc/sys"
+SYS() { XDG_CONFIG_HOME="$stc/cfg" XDG_CONFIG_DIRS="$stc/xdg" SYN_SETTINGS_SYSTEM_SYNUIRC="$stc/sys" "$BIN" "$@"; }
+SYS set autostart-add foo >/dev/null 2>&1
+grep -qx 'autostart = sysbar' "$stc/cfg/synui/synuirc" && grep -qx 'theme = prism' "$stc/cfg/synui/synuirc" \
+    && grep -qx 'autostart = foo' "$stc/cfg/synui/synuirc" && [ "$(cat "$stc/sys")" = "$(printf 'autostart = sysbar\ntheme = prism')" ] \
+    && ok "startup: a first write starts from /etc/synui/synuirc and leaves it untouched" \
+    || bad "startup: the system synuirc was not the starting point, or was changed"
+
+# XDG autostart: the spec's own rules decide what a session would start.
+cp "$stc/orig" "$stc/cfg/synui/synuirc"
+mk() { printf '[Desktop Entry]\nType=Application\nName=%s\nExec=%s\n%s\n' "$2" "$3" "${4:-}" > "$1"; }
+mk "$stc/cfg/autostart/mine.desktop"        Mine   "/usr/bin/env %U"
+mk "$stc/xdg/autostart/kdeonly.desktop"     KdeOnly "/usr/bin/env" "OnlyShowIn=KDE;"
+mk "$stc/xdg/autostart/hidden.desktop"      Hidden "/usr/bin/env" "Hidden=true"
+mk "$stc/xdg/autostart/gone.desktop"        Gone   "/nonexistent/prog --x"
+mk "$stc/xdg/autostart/xdg-user-dirs.desktop" Dirs "/usr/bin/env"
+mk "$stc/xdg/autostart/sys.desktop"         Sys    "/usr/bin/env"
+mk "$stc/cfg/autostart/sys.desktop"         Sys    "/usr/bin/env" "Hidden=true"
+x=$(S --rec startup | awk -F'\t' '$1 == "xdg" { print $2 }' | tr '\n' ' ')
+[ "$x" = "Mine " ] \
+    && ok "startup: XDG entries filtered by Hidden, OnlyShowIn, a missing program, plumbing and a user override" \
+    || bad "startup: XDG rows were '$x'"
+S set "$(tok Mine)" on >/dev/null 2>&1
+grep -qx 'autostart = /usr/bin/env' "$stc/cfg/synui/synuirc" \
+    && ok "startup: switching an XDG entry on copies its command, field codes stripped" \
+    || bad "startup: the XDG entry's command did not reach synuirc"
+[ -z "$(S --rec startup | awk -F'\t' '$1 == "xdg"')" ] \
+    && ok "startup: ...and it is then a synui row, not an XDG one" \
+    || bad "startup: an adopted XDG entry is still listed as never running"
+
+# User units: dry-run only.
+out=$("$BIN" --dry-run set user-unit/syncthing.service on 2>&1)
+[ "$out" = "would run: systemctl --user enable --now syncthing.service" ] \
+    && ok "startup: a service is enabled and started together" \
+    || bad "startup: user-unit on would run '$out'"
+out=$("$BIN" --dry-run set user-unit/syncthing.service off 2>&1)
+[ "$out" = "would run: systemctl --user disable --now syncthing.service" ] \
+    && ok "startup: ...and disabled and stopped together" \
+    || bad "startup: user-unit off would run '$out'"
+refuses "startup: session plumbing is not switchable" 2 --dry-run set user-unit/pipewire.service off
+refuses "startup: a template unit is refused"         2 --dry-run set user-unit/foo@.service on
+refuses "startup: a unit name with a slash is refused" 2 --dry-run set user-unit/../x.service on
+refuses "startup: a service takes only on or off"     2 --dry-run set user-unit/syncthing.service maybe
+rm -rf "$stc"
+
 # ── fingerprint for sudo ────────────────────────────────────────────────────
 #
 # data/sudo-fprint.sh edits sudo's PAM stack as root on every machine that
@@ -1584,7 +1715,7 @@ if [ -f "$QML" ]; then
     # reader and the window are two files, and adding a verb to one of them is
     # exactly the kind of half-change that looks finished and clicks dead.
     verbs=$(
-        for pane in display region network bluetooth power kernel apps time ai scan; do
+        for pane in display region network bluetooth power kernel apps time ai scan startup; do
             pout=$("$BIN" --rec "$pane") || continue
             pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
             [ -n "$pcol" ] || continue

@@ -369,7 +369,7 @@ static int current_default(const char *mime, char *id, size_t idcap,
 
 /* ── the terminal, which lives somewhere else entirely ──────────────────── */
 
-static void synuirc_path(char *out, size_t cap)
+void synuirc_path(char *out, size_t cap)
 {
 	char b[PATH_CAP - 32];
 	config_home(b, sizeof b);

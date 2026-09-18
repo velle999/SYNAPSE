@@ -966,6 +966,23 @@ present but runnable only as root — which is how Arch ships `rkhunter`.
 timer runs as root and writes `/var/lib/syn-scan`, while your own scans are
 recorded under your account. The pane shows both, each named for whose it is.
 
+The **Startup** pane is what runs when you log in, and there are three lists
+because three different things start programs:
+
+- **synui's own list** — the `autostart =` lines in `synuirc`. Switch a line
+  off and it stays in the file as `#off: autostart = …`, so switching it back
+  on means no retyping; **Remove** takes it out, and the box at the end adds
+  one. synui starts at most 32, and the pane says so rather than writing a line
+  that would never run.
+- **Background services** — your systemd user units, such as Syncthing or the
+  remote desktop. The switch enables and starts, or disables and stops, in one
+  go. PipeWire, the portals and D-Bus are not listed: they are the session
+  itself.
+- **Autostart entries this desktop never runs.** Packages that want to start at
+  login usually drop a file in `~/.config/autostart` or `/etc/xdg/autostart`.
+  A synui session does not read those, so they do nothing here. The pane lists
+  them, and switching one on copies its command into synui's list.
+
 The **System** pane names the machine. Every SynapseOS install answers to
 `synapse`, so the moment there are two of them on one network Avahi renames one
 `synapse-2.local` — with no say in which, and no promise the suffix survives a
@@ -2020,7 +2037,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `provides` (what to install to get a program of that name, best match first), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab] [--search T]` opens the window, on that tab, already searching |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`, `ping` (the background check behind the bar's update indicator). Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
-| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, ai, assistant, fprint, speech, remote, scan, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
+| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, startup, kernel, ai, assistant, fprint, speech, remote, scan, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `synstudio` | The darkroom and edit suite — `probe`, `keys`, `get`/`set`/`reset` a photograph's sidecar, `mask`, `look`, `lut`, `render`, `match`, `histogram`, `scope`, and the `timeline …` family for video. `synstudio gui [file]` opens the window; `kind FILE` says what a file is, asked of ffmpeg rather than the extension |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |

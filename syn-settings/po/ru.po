@@ -1752,3 +1752,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo — не тот стек, который ожидается, поэтому он не изменяется — добавьте pam_fprintd.so как sufficient над его auth include"
+
+msgid "Startup"
+msgstr "Автозапуск"
+
+msgid "removing %1…"
+msgstr "удаление %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "что запускается при входе — собственный список synui, ваши фоновые службы и записи автозапуска, которые этот рабочий стол никогда не запускает"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "встроенное значение synui по умолчанию — synuirc ещё нет; добавление программы здесь его сохранит"
+
+msgid "synui starts this when you log in"
+msgstr "synui запускает это при входе"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "выключено — сохранено, чтобы можно было включить снова"
+
+msgid "Add a program"
+msgstr "Добавить программу"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui запускает при входе не больше 32 программ — выключите одну, чтобы добавить другую"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "команда, которую synui выполнит при входе, в том виде, как вы набрали бы её в терминале, — она сработает со следующего входа"
+
+msgid "background services"
+msgstr "фоновые службы"
+
+msgid "unavailable"
+msgstr "недоступно"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "в этом сеансе нет пользовательского менеджера служб, которого можно спросить"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "запись автозапуска, которую synui никогда не запускает, — включите её, чтобы скопировать команду в список synui"

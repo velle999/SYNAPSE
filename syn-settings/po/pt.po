@@ -1764,3 +1764,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo não é a pilha esperada, por isso fica como está — acrescente pam_fprintd.so como sufficient acima do seu auth include"
+
+msgid "Startup"
+msgstr "Arranque"
+
+msgid "removing %1…"
+msgstr "a remover %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "o que corre ao iniciar sessão — a lista do próprio synui, os seus serviços em segundo plano e as entradas de arranque automático que este ambiente nunca executa"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "a predefinição interna do synui — ainda não há synuirc; adicionar um programa aqui mantém-na"
+
+msgid "synui starts this when you log in"
+msgstr "o synui inicia isto quando inicia sessão"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "desligado — mantido para poder ser ligado de novo"
+
+msgid "Add a program"
+msgstr "Adicionar um programa"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "o synui inicia no máximo 32 programas ao iniciar sessão — desligue um para adicionar outro"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "um comando que o synui executa ao iniciar sessão, tal como o escreveria num terminal — começa no próximo início de sessão"
+
+msgid "background services"
+msgstr "serviços em segundo plano"
+
+msgid "unavailable"
+msgstr "indisponível"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "não há um gestor de serviços do utilizador a quem perguntar nesta sessão"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "uma entrada de arranque automático que o synui nunca executa — ligue-a para copiar o comando para a lista do synui"

@@ -1741,3 +1741,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo が想定した構成ではないため、変更しません — auth include の上に pam_fprintd.so を sufficient として追加してください"
+
+msgid "Startup"
+msgstr "スタートアップ"
+
+msgid "removing %1…"
+msgstr "%1 を削除しています…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "ログイン時に起動するもの — synui 自身のリスト、バックグラウンドサービス、そしてこのデスクトップが実行しない自動起動エントリ"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synui の組み込みの既定値 — まだ synuirc がありません。ここでプログラムを追加しても維持されます"
+
+msgid "synui starts this when you log in"
+msgstr "ログイン時に synui がこれを起動します"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "オフ — 再びオンにできるよう残してあります"
+
+msgid "Add a program"
+msgstr "プログラムを追加"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui がログイン時に起動するのは 32 個までです — 追加するには 1 つオフにしてください"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "ログイン時に synui が実行するコマンド。ターミナルで入力する形で書きます — 次回のログインから起動します"
+
+msgid "background services"
+msgstr "バックグラウンドサービス"
+
+msgid "unavailable"
+msgstr "利用できません"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "このセッションには問い合わせるユーザーサービスマネージャーがありません"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "synui が実行しない自動起動エントリ — オンにするとそのコマンドを synui のリストにコピーします"

@@ -1766,3 +1766,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo is niet de verwachte stack en blijft dus ongemoeid — zet pam_fprintd.so als sufficient boven de auth include"
+
+msgid "Startup"
+msgstr "Opstarten"
+
+msgid "removing %1…"
+msgstr "%1 verwijderen…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "wat er start als u zich aanmeldt — synui's eigen lijst, uw achtergronddiensten en autostart-items die deze desktop nooit uitvoert"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synui's ingebouwde standaard — er is nog geen synuirc; een programma hier toevoegen behoudt die"
+
+msgid "synui starts this when you log in"
+msgstr "synui start dit als u zich aanmeldt"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "uitgezet — bewaard zodat het weer aangezet kan worden"
+
+msgid "Add a program"
+msgstr "Programma toevoegen"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui start bij het aanmelden hoogstens 32 programma's — zet er een uit om een ander toe te voegen"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "een opdracht die synui bij het aanmelden uitvoert, zoals u die in een terminal zou typen — hij start vanaf uw volgende aanmelding"
+
+msgid "background services"
+msgstr "achtergronddiensten"
+
+msgid "unavailable"
+msgstr "niet beschikbaar"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "er is in deze sessie geen gebruikersdienstbeheerder om het te vragen"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "een autostart-item dat synui nooit uitvoert — zet het aan om de opdracht naar synui's lijst te kopiëren"

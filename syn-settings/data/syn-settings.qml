@@ -264,6 +264,7 @@ FloatingWindow {
         { id: "bluetooth", label: I18n.tr("Bluetooth"), blurb: I18n.tr("the adapter, both kinds of radio block, and what is paired") },
         { id: "power",     label: I18n.tr("Power & Sleep"), blurb: I18n.tr("the units a working suspend depends on, and what the last one did") },
         { id: "apps",      label: I18n.tr("Default Apps"), blurb: I18n.tr("what opens each kind of file — and whether anybody actually chose it") },
+        { id: "startup",   label: I18n.tr("Startup"),  blurb: I18n.tr("what runs when you log in — synui's own list, your background services, and autostart entries this desktop never runs") },
         { id: "kernel",    label: I18n.tr("Kernel"),   blurb: I18n.tr("every kernel on offer, which are installed, and which one you booted") },
         { id: "ai",        label: I18n.tr("AI"),       blurb: I18n.tr("the backend switch, the units that can restart it behind your back, and which model is on disk") },
         { id: "assistant", label: I18n.tr("Assistant"), blurb: I18n.tr("which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key") },
@@ -498,7 +499,11 @@ FloatingWindow {
         }
         root.selRow = i
         root.selAction = a
-        root.selKey = r[0]
+        // The row's NAME: the `key` column where the pane has one. Column 0 is
+        // the row's KIND on those panes, so the strip said "finger" over every
+        // fingerprint row and "autostart" over every login item.
+        const ki = root.cols.indexOf("key")
+        root.selKey = ki >= 0 && ki < r.length ? r[ki] : r[0]
         // Column 1 is the value on every pane whose rows are actionable: the
         // panes with a "kind" first column put the name in 1 and the value in
         // 2. Read it by header name rather than by position so a column added
@@ -1343,7 +1348,8 @@ FloatingWindow {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 width: Math.min(implicitWidth, 200)
                 elide: Text.ElideRight
-                text: root.selKey
+                // i18n-dynamic: the key column, marked N_() in src/*.c — a name that is data (a command, a unit) is not a msgid and stays as it is
+                text: I18n.tr(root.selKey)
                 color: root.cText
                 font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
             }
@@ -1386,7 +1392,7 @@ FloatingWindow {
                 SettingsButton {
                     id: applyBtn
                     visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice",
-                              "enroll", "forget", "secret"]
+                              "enroll", "forget", "secret", "drop"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -1397,7 +1403,11 @@ FloatingWindow {
                     }
                     onGo: {
                         const v = root.actionVerb(root.selAction)
-                        const arg = root.actionArg(root.selAction)
+                        // ⚠ THIS VERB'S ARGUMENT, not everything after the
+                        // first colon. A Startup row is "toggle:X drop:X", and
+                        // actionArg() of the whole cell switched a thing
+                        // called "X drop:X".
+                        const arg = root.actionArgFor(root.selAction, v)
                         if (v === "set")
                             root.runWrite(["set", arg, editField.text],
                                           I18n.tr("setting %1…").arg(arg))
@@ -1428,6 +1438,16 @@ FloatingWindow {
                                         I18n.tr("rest your finger on the reader…"),
                                         I18n.tr("lift and rest it again each time it asks; "
                                                 + "several passes are needed"))
+                }
+
+                // A login item taken out of synui's list altogether, where
+                // the switch beside it only comments it out. Its own verb so
+                // the row can offer both.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "drop")
+                    label: I18n.tr("Remove")
+                    onGo: root.runWrite(["set", root.actionArgFor(root.selAction, "drop"), "remove"],
+                                        I18n.tr("removing %1…").arg(root.selKey))
                 }
 
                 // ⚠ ALL OF THEM. fprintd removes a user's prints together —

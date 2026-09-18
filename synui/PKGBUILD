@@ -3553,7 +3553,15 @@ pkgver=0.1.0
 #   it is, whether the backend is committed to it being on, and whether the
 #   display panel has taken it out of the desk. ⚠ `lit` is the one anything
 #   capturing this desktop reads before it believes a black picture.
-pkgrel=610
+# 611: THE NINTH AUTOSTART LINE NEVER STARTED, AND NOTHING SAID SO. synui kept
+#   eight `autostart =` lines and dropped the rest in silence: a line past the
+#   cap fell through the `&&` into the key chain below it and vanished. An
+#   ordinary session already names five. The cap is 32 now, a line past it is
+#   logged ("autostart list full (32) — '…' will not run"), and so is a line cut
+#   at 127 bytes. syn-settings' new Startup pane refuses to write past either.
+#   Verified by starting this build headless with 34 lines that each touch a
+#   marker: 32 markers, two log lines.
+pkgrel=611
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

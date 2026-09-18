@@ -1776,3 +1776,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo non è lo stack atteso, quindi viene lasciato com'è — aggiungi pam_fprintd.so come sufficient sopra il suo auth include"
+
+msgid "Startup"
+msgstr "Avvio"
+
+msgid "removing %1…"
+msgstr "rimozione di %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "cosa parte quando accedi — la lista di synui, i tuoi servizi in background e le voci di avvio automatico che questo desktop non esegue mai"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "il valore predefinito integrato di synui — non c'è ancora un synuirc; aggiungere un programma qui lo mantiene"
+
+msgid "synui starts this when you log in"
+msgstr "synui lo avvia quando accedi"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "disattivato — mantenuto per poterlo riattivare"
+
+msgid "Add a program"
+msgstr "Aggiungi un programma"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui avvia al massimo 32 programmi all'accesso — disattivane uno per aggiungerne un altro"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "un comando che synui esegue all'accesso, come lo scriveresti in un terminale — parte dal prossimo accesso"
+
+msgid "background services"
+msgstr "servizi in background"
+
+msgid "unavailable"
+msgstr "non disponibile"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "in questa sessione non c'è un gestore dei servizi utente a cui chiedere"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "una voce di avvio automatico che synui non esegue mai — attivala per copiarne il comando nella lista di synui"

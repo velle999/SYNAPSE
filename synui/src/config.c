@@ -2567,8 +2567,22 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
         }
     }
-    else if (strcmp(key, "autostart") == 0 && cfg->autostart_count < SYN_AUTOSTART_MAX)
-        strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
+    /* ⚠ A LINE PAST THE CAP IS SAID, not dropped in silence. It used to fall
+     * through the `&&` into the chain below and vanish — the ninth program in
+     * the list simply never started, and nothing anywhere said so. syn-settings'
+     * Startup pane refuses to add past SYN_AUTOSTART_MAX; a hand-edited file
+     * gets this line in the log instead. */
+    else if (strcmp(key, "autostart") == 0) {
+        if (cfg->autostart_count >= SYN_AUTOSTART_MAX)
+            wlr_log(WLR_ERROR, "synui: autostart list full (%d) — '%s' will not run",
+                    SYN_AUTOSTART_MAX, val);
+        else {
+            if (strlen(val) > 127)
+                wlr_log(WLR_ERROR, "synui: autostart line longer than 127 bytes, "
+                        "cut short: '%s'", val);
+            strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
+        }
+    }
     else if (strcmp(key, "border_width") == 0) {
         cfg->border_width = atoi(val);
         if (cfg->border_width < 0)  cfg->border_width = 0;

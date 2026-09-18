@@ -358,7 +358,33 @@ pkgver=0.1.0
 #   not what was asked. 19 new checks drive the script against a copy of the
 #   stock stack, every state included. Seven new strings, all thirteen
 #   catalogs, 449/449.
-pkgrel=55
+# 56: A STARTUP PANE — what runs when you log in, and changing it.
+#   Three lists, because three different things start programs at login and
+#   only one of them is synui. synui's own `autostart =` lines: switched off by
+#   rewriting the line as `#off: autostart = …` (a comment to synui, "off" to
+#   this pane, so switching it back on means no retyping), removed, or added
+#   from a text box. User services that are, or could be, enabled at login
+#   (Syncthing, the remote desktop, KDE Connect's daemon): `systemctl --user
+#   enable|disable --now`. Session plumbing — PipeWire, portals, D-Bus — is
+#   left out. And XDG autostart entries, which ⛔ a synui session never runs:
+#   they are listed with that said, and switching one on copies its command
+#   (field codes stripped) into synui's list, which is the only way it runs.
+#   The spec's own rules decide which entries count — Hidden, OnlyShowIn,
+#   NotShowIn, TryExec, a user entry overriding a system one of the same
+#   name — and the section is not drawn under GNOME or KDE, where they do run.
+#   The synuirc writer keeps every other line byte for byte, starts a first
+#   file from /etc/synui/synuirc or synui's own `autostart = syntty` default
+#   (a file naming any autostart replaces synui's defaults), and refuses what
+#   synui would not run as written: past 32 running lines, past 127 bytes,
+#   ` #` (synui's inline comment), more than one line.
+#   The editor strip names the row: it showed column 0, which on every pane
+#   with a `kind` column is the kind — "finger" over each fingerprint row.
+#   The Apply button takes its own verb's argument, not everything after the
+#   first colon, so a row can offer a switch and a Remove together.
+#   Driven in the real window headless: switching a line on, copying an XDG
+#   entry in, and removing a line each changed exactly that line. 34 new
+#   checks. Thirteen new strings in all thirteen catalogs, 462/462.
+pkgrel=56
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

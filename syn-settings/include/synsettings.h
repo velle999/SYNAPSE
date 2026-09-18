@@ -238,6 +238,16 @@ int cmd_enroll(const char *finger);
 int cmd_forget(const char *what);
 /* `set sudo-fingerprint on|off` — through pkexec, to data/sudo-fprint.sh. */
 int fprint_set_sudo(const char *val);
+
+/* The synuirc synui reads for this user — $XDG_CONFIG_HOME/synui/synuirc.
+ * One resolver, shared by the terminal knob (apps.c) and Startup. */
+void synuirc_path(char *out, size_t cap);
+
+/* Startup: synui's autostart list, user units, and XDG entries synui never
+ * runs. startup_set() answers `set autostart-add|autostart/…|user-unit/…|xdg/…`
+ * and returns -1 for a key that is not one of those. */
+int pane_startup(void);
+int startup_set(const char *key, const char *val);
 int pane_kernel(void);
 
 /* Which application opens what, and — the part that matters — which layer

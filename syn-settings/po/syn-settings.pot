@@ -174,6 +174,9 @@ msgstr ""
 msgid "Speech"
 msgstr ""
 
+msgid "Startup"
+msgstr ""
+
 msgid "System"
 msgstr ""
 
@@ -253,6 +256,9 @@ msgstr ""
 msgid "refused (exit %1) — polkit may have declined"
 msgstr ""
 
+msgid "removing %1…"
+msgstr ""
+
 msgid "removing every fingerprint…"
 msgstr ""
 
@@ -312,6 +318,11 @@ msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
+msgstr ""
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
 msgstr ""
 
 msgid ""
@@ -1382,6 +1393,43 @@ msgid ""
 msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
+msgstr ""
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+
+msgid "synui starts this when you log in"
+msgstr ""
+
+msgid "switched off — kept so it can be switched back on"
+msgstr ""
+
+msgid "Add a program"
+msgstr ""
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+
+msgid "background services"
+msgstr ""
+
+msgid "unavailable"
+msgstr ""
+
+msgid "there is no user service manager in this session to ask"
+msgstr ""
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
 msgstr ""
 
 msgid "kernel hardening baseline"

@@ -1769,3 +1769,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo no es la pila que se espera, así que se deja como está — añada pam_fprintd.so como sufficient encima de su auth include"
+
+msgid "Startup"
+msgstr "Inicio"
+
+msgid "removing %1…"
+msgstr "quitando %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "lo que se ejecuta al iniciar sesión — la lista propia de synui, sus servicios en segundo plano y las entradas de inicio automático que este escritorio nunca ejecuta"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "el valor predeterminado integrado de synui — aún no hay synuirc; añadir un programa aquí lo conserva"
+
+msgid "synui starts this when you log in"
+msgstr "synui inicia esto al iniciar sesión"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "desactivado — se conserva para poder volver a activarlo"
+
+msgid "Add a program"
+msgstr "Añadir un programa"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui inicia como máximo 32 programas al iniciar sesión — desactive uno para añadir otro"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "una orden que synui ejecuta al iniciar sesión, tal como la escribiría en una terminal — empieza en su próximo inicio de sesión"
+
+msgid "background services"
+msgstr "servicios en segundo plano"
+
+msgid "unavailable"
+msgstr "no disponible"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "no hay un gestor de servicios de usuario al que preguntar en esta sesión"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "una entrada de inicio automático que synui nunca ejecuta — actívela para copiar su orden a la lista de synui"

@@ -1749,3 +1749,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo nie jest oczekiwanym stosem, więc zostaje bez zmian — dodaj pam_fprintd.so jako sufficient nad jego auth include"
+
+msgid "Startup"
+msgstr "Autostart"
+
+msgid "removing %1…"
+msgstr "usuwanie %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "co uruchamia się po zalogowaniu — własna lista synui, twoje usługi w tle i wpisy autostartu, których to środowisko nigdy nie uruchamia"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "wbudowana wartość domyślna synui — nie ma jeszcze synuirc; dodanie tu programu ją zachowa"
+
+msgid "synui starts this when you log in"
+msgstr "synui uruchamia to po zalogowaniu"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "wyłączone — zachowane, by można je było włączyć ponownie"
+
+msgid "Add a program"
+msgstr "Dodaj program"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui uruchamia po zalogowaniu najwyżej 32 programy — wyłącz jeden, aby dodać kolejny"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "polecenie, które synui wykona po zalogowaniu, tak jak wpisałbyś je w terminalu — zadziała od następnego logowania"
+
+msgid "background services"
+msgstr "usługi w tle"
+
+msgid "unavailable"
+msgstr "niedostępne"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "w tej sesji nie ma menedżera usług użytkownika, którego można zapytać"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "wpis autostartu, którego synui nigdy nie uruchamia — włącz go, aby skopiować jego polecenie na listę synui"

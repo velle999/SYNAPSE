@@ -1785,3 +1785,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo n'est pas la pile attendue, il est donc laissé tel quel — ajoutez pam_fprintd.so en sufficient au-dessus de son auth include"
+
+msgid "Startup"
+msgstr "Démarrage"
+
+msgid "removing %1…"
+msgstr "suppression de %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "ce qui se lance à l'ouverture de session — la liste de synui, vos services d'arrière-plan et les entrées de démarrage automatique que ce bureau n'exécute jamais"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "la valeur par défaut intégrée de synui — il n'y a pas encore de synuirc ; ajouter un programme ici la conserve"
+
+msgid "synui starts this when you log in"
+msgstr "synui lance ceci à l'ouverture de session"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "désactivé — conservé pour pouvoir être réactivé"
+
+msgid "Add a program"
+msgstr "Ajouter un programme"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui lance au plus 32 programmes à l'ouverture de session — désactivez-en un pour en ajouter un autre"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "une commande que synui exécute à l'ouverture de session, telle que vous la taperiez dans un terminal — elle démarre à votre prochaine session"
+
+msgid "background services"
+msgstr "services d'arrière-plan"
+
+msgid "unavailable"
+msgstr "indisponible"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "il n'y a pas de gestionnaire de services utilisateur à interroger dans cette session"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "une entrée de démarrage automatique que synui n'exécute jamais — activez-la pour copier sa commande dans la liste de synui"

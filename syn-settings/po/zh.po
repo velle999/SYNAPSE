@@ -1653,3 +1653,51 @@ msgid ""
 "/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
 "pam_fprintd.so as sufficient above its auth include"
 msgstr "/etc/pam.d/sudo 不是预期的结构，因此保持不变 — 请在其 auth include 之上以 sufficient 添加 pam_fprintd.so"
+
+msgid "Startup"
+msgstr "启动项"
+
+msgid "removing %1…"
+msgstr "正在移除 %1…"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr "登录时运行的内容 — synui 自己的列表、你的后台服务，以及此桌面从不运行的自动启动项"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synui 的内置默认值 — 还没有 synuirc；在此添加程序会保留它"
+
+msgid "synui starts this when you log in"
+msgstr "登录时由 synui 启动"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "已关闭 — 保留下来以便重新打开"
+
+msgid "Add a program"
+msgstr "添加程序"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui 登录时最多启动 32 个程序 — 关闭一个才能再添加"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "登录时由 synui 运行的命令，写法与在终端中输入相同 — 从下次登录开始生效"
+
+msgid "background services"
+msgstr "后台服务"
+
+msgid "unavailable"
+msgstr "不可用"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "此会话中没有可查询的用户服务管理器"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "synui 从不运行的自动启动项 — 打开后会把它的命令复制到 synui 的列表中"
