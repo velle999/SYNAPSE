@@ -251,6 +251,7 @@ synui_exe = executable('synui',
     'src/deskdrag.c',
     'src/geom_persist.c',
     'src/output_persist.c',
+    'src/vdisplay.c',
     'src/dispcfg.c',
   'src/hdrprobe.c',
   'src/hdr.c',
@@ -1914,6 +1915,18 @@ test('weather_surfaces', weather_surfaces_t,
 # headless outputs, because "every screen" and "the focused screen" are
 # indistinguishable with one. Also holds the refusal that stops a scale from
 # hiding the very panels used to undo it.
+# A screen with no monitor behind it: `synctl virtual add` grows a head on the
+# running compositor, which is what `syn-remote stream` serves to Moonlight.
+# Two sessions, because the idle blank stage cannot be asked to fire and a
+# compositor configured to blank in one second blanks itself under every other
+# phase. The lockout phase is the one that matters: removing a soloed display
+# must not leave a machine with every screen off.
+vdisplay_t = find_program('tests/vdisplay.sh')
+test('vdisplay', vdisplay_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 180)
+
 display_scale_t = find_program('tests/display_scale.sh')
 test('display_scale', display_scale_t,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],

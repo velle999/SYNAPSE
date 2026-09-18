@@ -54,7 +54,7 @@ msgstr[0] "%1 项新增"
 msgid "%1 oz"
 msgstr "%1 盎司"
 
-#: modules/RemoteDesktop.qml:77
+#: modules/RemoteDesktop.qml:89
 msgid "%1 person is looking at this screen"
 msgid_plural "%1 people are looking at this screen"
 msgstr[0] "%1 人正在看这个屏幕"
@@ -298,7 +298,7 @@ msgstr "点击打开蓝牙面板 · 中键点击切换无线开关"
 msgid "Click play/pause · scroll to change track"
 msgstr "点击播放／暂停 · 滚动切换曲目"
 
-#: modules/RemoteDesktop.qml:89
+#: modules/RemoteDesktop.qml:108
 msgid "Click to disconnect them"
 msgstr "点击断开他们"
 
@@ -374,7 +374,7 @@ msgstr ""
 "已断开\n"
 "点击选择网络"
 
-#: modules/RemoteDesktop.qml:71
+#: modules/RemoteDesktop.qml:83
 msgid "Disconnecting…"
 msgstr "正在断开…"
 
@@ -402,7 +402,7 @@ msgstr "完成"
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "拖动、贴边或最大化会让窗口脱离布局。"
 
-#: modules/RemoteDesktop.qml:63
+#: modules/RemoteDesktop.qml:75
 msgid "ENDING"
 msgstr "结束中"
 
@@ -707,7 +707,7 @@ msgstr "电源"
 msgid "Power Saving"
 msgstr "省电"
 
-#: modules/RemoteDesktop.qml:86
+#: modules/RemoteDesktop.qml:102
 msgid "Reachable from the whole network, on port %1"
 msgstr "整个网络都能连上，端口 %1"
 
@@ -783,7 +783,7 @@ msgstr "登录"
 msgid "Software Manager"
 msgstr "软件管理器"
 
-#: modules/RemoteDesktop.qml:80
+#: modules/RemoteDesktop.qml:92
 msgid "Somebody is looking at this screen"
 msgstr "经 SSH 隧道，端口 %1"
 
@@ -818,6 +818,10 @@ msgstr "同样，直接切到层叠。"
 #: welcome/pages.js:154
 msgid "Straight to tiling, from any layout, taking stray windows back."
 msgstr "从任何布局回到平铺，连跑掉的窗口一起收回。"
+
+#: modules/RemoteDesktop.qml:107
+msgid "Streamed to Moonlight, on port %1"
+msgstr "正串流到 Moonlight，端口 %1"
 
 #: welcome/pages.js:111
 msgid ""
@@ -922,7 +926,7 @@ msgstr ""
 "想再看这份指南，随时按 Super+Escape；而 Super+/ 的快捷键面板是第二页的加长"
 "版。"
 
-#: modules/RemoteDesktop.qml:88
+#: modules/RemoteDesktop.qml:104
 msgid "Through an SSH tunnel, on port %1"
 msgstr "有人正在看这个屏幕"
 

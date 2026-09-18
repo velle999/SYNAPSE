@@ -58,7 +58,7 @@ msgstr[1] "%1 nuevos"
 msgid "%1 oz"
 msgstr "%1 oz"
 
-#: modules/RemoteDesktop.qml:77
+#: modules/RemoteDesktop.qml:89
 msgid "%1 person is looking at this screen"
 msgid_plural "%1 people are looking at this screen"
 msgstr[0] "%1 persona está mirando esta pantalla"
@@ -310,7 +310,7 @@ msgstr "Haz clic para el panel de Bluetooth · el clic central conmuta la radio"
 msgid "Click play/pause · scroll to change track"
 msgstr "Haz clic para reproducir/pausar · desplaza para cambiar de pista"
 
-#: modules/RemoteDesktop.qml:89
+#: modules/RemoteDesktop.qml:108
 msgid "Click to disconnect them"
 msgstr "Pulsa para desconectarlas"
 
@@ -388,7 +388,7 @@ msgstr ""
 "Desconectado\n"
 "Haz clic para elegir una red"
 
-#: modules/RemoteDesktop.qml:71
+#: modules/RemoteDesktop.qml:83
 msgid "Disconnecting…"
 msgstr "Desconectando…"
 
@@ -416,7 +416,7 @@ msgstr "Listo"
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "Arrastrar, encajar o maximizar una ventana la saca de la disposición."
 
-#: modules/RemoteDesktop.qml:63
+#: modules/RemoteDesktop.qml:75
 msgid "ENDING"
 msgstr "FIN"
 
@@ -722,7 +722,7 @@ msgstr "Energía"
 msgid "Power Saving"
 msgstr "Ahorro de energía"
 
-#: modules/RemoteDesktop.qml:86
+#: modules/RemoteDesktop.qml:102
 msgid "Reachable from the whole network, on port %1"
 msgstr "Accesible desde toda la red, en el puerto %1"
 
@@ -798,7 +798,7 @@ msgstr "Iniciar sesión"
 msgid "Software Manager"
 msgstr "Gestor de software"
 
-#: modules/RemoteDesktop.qml:80
+#: modules/RemoteDesktop.qml:92
 msgid "Somebody is looking at this screen"
 msgstr "Por un túnel SSH, en el puerto %1"
 
@@ -836,6 +836,10 @@ msgstr "Directo a cascada, del mismo modo."
 msgid "Straight to tiling, from any layout, taking stray windows back."
 msgstr ""
 "Al mosaico desde cualquier disposición, recogiendo las ventanas sueltas."
+
+#: modules/RemoteDesktop.qml:107
+msgid "Streamed to Moonlight, on port %1"
+msgstr "Transmitido a Moonlight, en el puerto %1"
 
 #: welcome/pages.js:111
 msgid ""
@@ -946,7 +950,7 @@ msgstr ""
 "Esta guía está en Super+Escape siempre que la quieras de vuelta, y la paleta "
 "de atajos en Super+/ es la versión larga de la página dos."
 
-#: modules/RemoteDesktop.qml:88
+#: modules/RemoteDesktop.qml:104
 msgid "Through an SSH tunnel, on port %1"
 msgstr "Alguien está mirando esta pantalla"
 

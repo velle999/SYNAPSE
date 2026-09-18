@@ -3498,7 +3498,62 @@ pkgver=0.1.0
 #   that never maps (Inno's hidden TApplication owner), on a tiling desktop and
 #   then a floating one with windows.conf empty. On 608 the floating open reads
 #   0,0 0x0 and fails; with the fix both read 438,195 404x330.
-pkgrel=609
+# 610: VIRTUAL DISPLAYS — a screen with no monitor behind it. `synctl virtual
+#   add 1920x1080@120` grows a wlroots headless output on the running
+#   compositor: a real output in every way the rest of synui cares about (it is
+#   in s->outputs, it takes a desktop, the bar and dock and wallpaper come up on
+#   it, windows move to it) that nothing scans out. `syn-remote stream` serves
+#   one to Moonlight, so a remote session gets its own resolution and refresh
+#   instead of a copy of whatever monitor is plugged in.
+#   ⛔ THE HEADLESS BACKEND IS ADDED BEFORE THE MULTI BACKEND STARTS, in every
+#     session, whether or not one is ever asked for. wlroots wants a backend
+#     added before the multi-backend it joins is started, and synui's starts in
+#     synui_run(); doing it later means adding to a running multi and relying on
+#     it to start the newcomer. An empty headless backend costs nothing.
+#   ⛔ "VIRTUAL" IS A FLAG WE STAMP, NEVER wlr_output_is_headless(). Under
+#     WLR_BACKENDS=headless the whole session is headless, so asking the backend
+#     makes every output in a nested synui or a test rig answer yes — and
+#     `virtual remove all` would then destroy the screen synui is running on.
+#     The flag is set inside vdisplay_add()'s call, because
+#     wlr_headless_add_output() raises new_output SYNCHRONOUSLY and
+#     output_persist_apply() asks the question twenty lines later.
+#   ⛔ THE IDLE BLANK STAGE SKIPS ONE. A blanked output cannot be captured at
+#     all — screencopy answers "failed to copy output" — so a head that blanks
+#     itself ten minutes in is a remote session that goes grey with nobody at
+#     the machine to move a mouse. Every reason to blank is about a panel in a
+#     room; a headless output has none of them.
+#   ⛔ AND outputs.conf NEVER LEARNS ONE. The names are recycled every session
+#     (HEADLESS-1 is whichever was made first), so a saved entry would apply
+#     last session's mode over this call's request and drop the caller's
+#     geometry with nothing saying so.
+#   `synctl virtual solo <name>` is the headless-only half: one screen lit, every
+#   other one DPMS off, so a machine worked on from elsewhere is not also
+#   showing that session to the room. It is off, not disabled — disabling leaves
+#   the layout and the far end sees every window jump one screen left.
+#   ⛔ SOLO CANNOT REACH A STATE WITH NO WAY BACK. The name is checked against
+#     s->outputs on every pass, so a solo naming something unplugged blanks
+#     NOTHING; the output going away clears it; and an output that is not here
+#     is refused rather than accepted. tests/vdisplay.sh drives all three.
+#   ⛔ FOUND ON THE WAY: power_apply_blank() RE-LIT DETACHED OUTPUTS. It
+#     recomputes "should this be lit" from the blank flags alone, and
+#     dispcfg_detach() takes a screen off the desk by committing it disabled and
+#     setting o->detached — so the next un-blank lit a screen the user had
+#     removed from the arrangement, out of the layout, showing a stale frame
+#     nothing repaints. Pre-existing; it fires more often now that solo
+#     re-applies, so it is fixed here rather than left.
+#   AND THE BAR'S PILL COUNTS A STREAM AS SOMEBODY WATCHING. syn-remote 16's
+#   `status --rec` answers `connections` for both servers and a `route` row
+#   saying which; RemoteDesktop.qml reads it, because `scope` and `port`
+#   describe the VNC listener alone — a streaming host binds every interface
+#   whatever they say, so a pill drawn from scope would tell somebody being
+#   streamed they are reachable through an SSH tunnel. The click ends whichever
+#   server is carrying somebody, and both when both are. One new bar string,
+#   filled in all thirteen catalogs (295/295 each).
+#   `synctl outputs` gained `virtual`, `lit` and `detached`: what kind of screen
+#   it is, whether the backend is committed to it being on, and whether the
+#   display panel has taken it out of the desk. ⚠ `lit` is the one anything
+#   capturing this desktop reads before it believes a black picture.
+pkgrel=610
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

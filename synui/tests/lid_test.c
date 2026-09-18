@@ -45,6 +45,20 @@ void saver_show(syn_server_t *s)              { (void)s; }
 void saver_dismiss(syn_server_t *s, bool by_input) { (void)s; (void)by_input; }
 bool saver_active(syn_server_t *s)            { (void)s; return false; }
 
+/* Virtual displays (vdisplay.c). power_apply_blank() asks three questions about
+ * them — is this output one, is solo naming one, is solo pointing at anything
+ * that is still here — and the answer in this test is always no: a lid ladder
+ * with no virtual display in it is what every phase below is about, and the
+ * cases where the answers are yes belong to tests/vdisplay.sh, which drives a
+ * real compositor. Stubbed rather than linked for the reason in this file's
+ * header: power.c links alone here. */
+bool vdisplay_is(syn_output_t *o)                     { (void)o; return false; }
+bool vdisplay_solo_live(syn_server_t *s)              { (void)s; return false; }
+bool vdisplay_solo_is(syn_server_t *s, struct wlr_output *o)
+{
+    (void)s; (void)o; return false;
+}
+
 /* ── The compositor, stubbed ─────────────────────────────── */
 
 static int spawned_suspend, locked, rendered;

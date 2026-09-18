@@ -58,7 +58,7 @@ msgstr[1] "%1 नए"
 msgid "%1 oz"
 msgstr "%1 औंस"
 
-#: modules/RemoteDesktop.qml:77
+#: modules/RemoteDesktop.qml:89
 msgid "%1 person is looking at this screen"
 msgid_plural "%1 people are looking at this screen"
 msgstr[0] "%1 व्यक्ति यह स्क्रीन देख रहा है"
@@ -305,7 +305,7 @@ msgstr "ब्लूटूथ पैनल के लिए क्लिक क�
 msgid "Click play/pause · scroll to change track"
 msgstr "चलाने/रोकने के लिए क्लिक करें · ट्रैक बदलने के लिए स्क्रॉल करें"
 
-#: modules/RemoteDesktop.qml:89
+#: modules/RemoteDesktop.qml:108
 msgid "Click to disconnect them"
 msgstr "उन्हें हटाने के लिए क्लिक करें"
 
@@ -382,7 +382,7 @@ msgstr ""
 "असंबद्ध\n"
 "नेटवर्क चुनने के लिए क्लिक करें"
 
-#: modules/RemoteDesktop.qml:71
+#: modules/RemoteDesktop.qml:83
 msgid "Disconnecting…"
 msgstr "हटाया जा रहा है…"
 
@@ -410,7 +410,7 @@ msgstr "हो गया"
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "खींचने, चिपकाने या बड़ा करने से खिड़की विन्यास से बाहर हो जाती है।"
 
-#: modules/RemoteDesktop.qml:63
+#: modules/RemoteDesktop.qml:75
 msgid "ENDING"
 msgstr "बंद हो रहा है"
 
@@ -715,7 +715,7 @@ msgstr "बिजली"
 msgid "Power Saving"
 msgstr "बिजली की बचत"
 
-#: modules/RemoteDesktop.qml:86
+#: modules/RemoteDesktop.qml:102
 msgid "Reachable from the whole network, on port %1"
 msgstr "पूरे नेटवर्क से पहुँच योग्य, पोर्ट %1"
 
@@ -791,7 +791,7 @@ msgstr "साइन इन करें"
 msgid "Software Manager"
 msgstr "सॉफ़्टवेयर प्रबंधक"
 
-#: modules/RemoteDesktop.qml:80
+#: modules/RemoteDesktop.qml:92
 msgid "Somebody is looking at this screen"
 msgstr "SSH सुरंग के ज़रिए, पोर्ट %1"
 
@@ -826,6 +826,10 @@ msgstr "उसी तरह, सीधे सोपान पर।"
 #: welcome/pages.js:154
 msgid "Straight to tiling, from any layout, taking stray windows back."
 msgstr "किसी भी विन्यास से सीधे टाइलिंग पर, भटकी खिड़कियों समेत।"
+
+#: modules/RemoteDesktop.qml:107
+msgid "Streamed to Moonlight, on port %1"
+msgstr "Moonlight पर स्ट्रीम हो रहा है, पोर्ट %1"
 
 #: welcome/pages.js:111
 msgid ""
@@ -930,7 +934,7 @@ msgstr ""
 "यह मार्गदर्शिका जब चाहें Super+Escape पर मिल जाएगी — और Super+/ की शॉर्टकट सूची "
 "दूसरे पन्ने का लंबा रूप है।"
 
-#: modules/RemoteDesktop.qml:88
+#: modules/RemoteDesktop.qml:104
 msgid "Through an SSH tunnel, on port %1"
 msgstr "कोई यह स्क्रीन देख रहा है"
 

@@ -833,6 +833,13 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * exists. See power_release_dead_head(). */
     power_release_dead_head(output);
 
+    /* ⛔ AND IF IT WAS THE SOLO OUTPUT, SOLO GOES WITH IT — before the unlink
+     * below, because that is what the name is checked against. Leaving it set
+     * would hand the next virtual display that lands on the same HEADLESS-n a
+     * solo nobody asked for, and the room's screens would go dark on their
+     * own. The re-light happens after the unlink; see the call below. */
+    vdisplay_output_gone(server, output);
+
     /* Close any layer surfaces (panels/bars) anchored to this output. */
     layer_output_destroy(output);
     effects_output_destroy(output);
@@ -909,6 +916,11 @@ static void output_destroy(struct wl_listener *listener, void *data)
 
     free(output);
 
+    /* The set of outputs that should be lit has changed — either solo was just
+     * dropped above, or a screen that solo was blanking on behalf of has gone.
+     * Recomputed rather than toggled, the way every other caller does it. */
+    power_reapply_blank(server);
+
     /* Re-home the compositor UI onto a surviving output. */
     if (!server->shutting_down && !wl_list_empty(&server->outputs)) {
         if (server->overlay.visible)
@@ -948,6 +960,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->server = server;
     wlr_output->data = output;
     wl_list_init(&output->layer_surfaces);
+
+    /* ⚠ FIRST, before anything below asks. wlr_headless_add_output() raises
+     * new_output synchronously, so this function is running inside
+     * vdisplay_add() when a virtual display is being made — and this is the
+     * only moment at which "was this one asked for" is knowable. It decides
+     * what output_persist_apply() does twenty lines down. */
+    vdisplay_stamp_new(server, output);
 
     /* A monitor plugged in mid-session joins the desk showing what the rest of
      * it is showing — not desktop 1, which under per-monitor desktops would
@@ -2559,6 +2578,13 @@ int synui_init(syn_server_t *s)
 
 int synui_run(syn_server_t *s)
 {
+    /* ⛔ BEFORE THE BACKEND STARTS. The headless backend that virtual displays
+     * are made on is added to the session's multi-backend here, with no outputs
+     * on it — wlroots wants a backend added before the multi-backend it joins
+     * is started, and this is the last moment that is true. A session that
+     * never asks for a virtual display pays a backend with nothing in it. */
+    vdisplay_setup(s);
+
     if (!wlr_backend_start(s->backend)) {
         fprintf(stderr, "synui: wlr_backend_start() failed — check DRM/KMS access and kernel logs\n");
         wlr_log(WLR_ERROR, "synui: failed to start backend");

@@ -6104,6 +6104,18 @@ struct syn_output {
      * moved with Shift+arrows in the display panel. */
     int                      grid_x, grid_y;
 
+    /* This output is a virtual display — one vdisplay.c made, not merely one
+     * with no cable.
+     *
+     * ⛔ NOT wlr_output_is_headless(). Under WLR_BACKENDS=headless the whole
+     * session is headless, so asking the backend makes every output in a
+     * nested synui or a test rig answer yes — and `virtual remove all` would
+     * then destroy the screen that synui is running on. The question this flag
+     * answers is "did somebody ask for this one", which is the question every
+     * caller actually has: it decides what the idle blank stage skips, what
+     * outputs.conf refuses to remember, and what `syn-remote stream` serves. */
+    int                      virt;
+
     /*
      * Which virtual desktop this monitor is showing.
      *
@@ -6552,6 +6564,19 @@ struct syn_server {
     struct wlr_session         *session;
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
+    /* Virtual displays (vdisplay.c): the headless backend every session has
+     * whether or not it ever grows a head, and the name of the output `solo`
+     * is keeping lit. ⚠ solo is a NAME rather than a pointer because the
+     * output it names may go away — see vdisplay_solo_live(). */
+    struct {
+        struct wlr_backend     *backend;
+        char                    solo[64];
+        /* Set only across the wlr_headless_add_output() call inside
+         * vdisplay_add(), which fires new_output synchronously. It is how
+         * server_new_output() knows this output was ASKED for rather than
+         * merely headless. */
+        int                     claiming;
+    } vdisp;
     struct syn_effects         *effects;   /* GLES post-process (effects.c); NULL = unavailable */
     struct syn_cube_gl         *cube_gl;   /* cube.c programs + EGL ctx; NULL until first turn */
     struct wlr_compositor      *compositor;
@@ -7922,6 +7947,48 @@ void output_mgmt_update(syn_server_t *s);        /* push current config to clien
  * broadcast the new config to management clients. */
 void output_layout_changed(syn_server_t *s);
 
+/* ── vdisplay.c ──────────────────────────────────────────── */
+/* Create the headless backend and add it to the session's multi-backend.
+ * ⛔ CALLED BEFORE wlr_backend_start(): a backend is added to a multi-backend
+ * before that multi-backend is started. No outputs are made here. */
+void vdisplay_setup(syn_server_t *s);
+/* Whether this session can make one at all — false under a backend that is not
+ * a multi-backend (a nested synui), which is a fact about the session rather
+ * than a failure. */
+bool vdisplay_available(syn_server_t *s);
+/* Add one. refresh is mHz (0 = the backend's default); scale 0 means 1.0.
+ * On failure returns NULL and points *err at a sentence fit to print. */
+struct wlr_output *vdisplay_add(syn_server_t *s, int w, int h, int refresh_mhz,
+                                double scale, const char **err);
+/* Resize one that is already up — what puts the head at the size a Moonlight
+ * client asked for. Refuses a real monitor: that belongs to the display panel.
+ * refresh is mHz (0 = the backend's default). */
+bool vdisplay_mode(syn_server_t *s, const char *name, int w, int h,
+                   int refresh_mhz, const char **err);
+/* Remove one by name, or every one of them with NULL / "all". Returns how many
+ * went. */
+int  vdisplay_remove(syn_server_t *s, const char *name);
+/* Is this output a virtual display — one vdisplay_add() made? Asked by power.c
+ * (never blank one) and by output_persist.c (never remember one). ⚠ Reads the
+ * flag, never the backend: see syn_output::virt. */
+bool vdisplay_is(syn_output_t *o);
+/* Stamp a brand-new output with that flag. Called from server_new_output(),
+ * which runs synchronously inside wlr_headless_add_output() — so this is the
+ * only moment at which the answer is known before anything asks it. */
+void vdisplay_stamp_new(syn_server_t *s, syn_output_t *o);
+int  vdisplay_count(syn_server_t *s);
+/* Keep one output lit and DPMS every other one off, or "off"/NULL to stop.
+ * The output must exist now — see the block in vdisplay.c. */
+bool vdisplay_solo_set(syn_server_t *s, const char *name, const char **err);
+const char *vdisplay_solo(syn_server_t *s);
+bool vdisplay_solo_is(syn_server_t *s, struct wlr_output *o);
+/* Solo is set AND names an output that is present. power.c asks this, not the
+ * field: a solo pointing at something unplugged must blank nothing. */
+bool vdisplay_solo_live(syn_server_t *s);
+/* An output is being destroyed: drop solo if it was the one. Called from
+ * output_destroy() while the output is still in s->outputs. */
+void vdisplay_output_gone(syn_server_t *s, syn_output_t *o);
+
 /* ── output_persist.c ────────────────────────────────────── */
 /* Restore this connector's saved mode/transform/scale/position (from
  * ~/.config/synui/outputs.conf) if one exists. Returns the layout entry on
@@ -8696,6 +8763,10 @@ void power_notify_activity(syn_server_t *s);
 /* Un-dim and un-blank on resume, then re-arm. NOT power_notify_activity():
  * that clears power.locked, which after a sleep-lock is still true. */
 void power_wake_display(syn_server_t *s);
+/* Re-commit every output to the state the blank flags and solo say it should
+ * be in, without changing any of them. For vdisplay.c: turning solo on or off
+ * changes which outputs should be lit and nothing else. */
+void power_reapply_blank(syn_server_t *s);
 /* Called from output_destroy() while the wlr_output is still live: if the head
  * is losing its sink with a CRTC still bound, commit it disabled so the panel
  * is free to re-enumerate. The sweep in power.c cannot do this — the output has

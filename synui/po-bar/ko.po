@@ -54,7 +54,7 @@ msgstr[0] "새로 %1개"
 msgid "%1 oz"
 msgstr "%1 oz"
 
-#: modules/RemoteDesktop.qml:77
+#: modules/RemoteDesktop.qml:89
 msgid "%1 person is looking at this screen"
 msgid_plural "%1 people are looking at this screen"
 msgstr[0] "%1 명이 이 화면을 보고 있습니다"
@@ -301,7 +301,7 @@ msgstr "클릭하면 블루투스 패널 · 가운데 클릭은 무선을 전환
 msgid "Click play/pause · scroll to change track"
 msgstr "클릭하면 재생／일시정지 · 스크롤하면 트랙 변경"
 
-#: modules/RemoteDesktop.qml:89
+#: modules/RemoteDesktop.qml:108
 msgid "Click to disconnect them"
 msgstr "클릭하면 연결을 끊습니다"
 
@@ -377,7 +377,7 @@ msgstr ""
 "연결 끊김\n"
 "클릭하여 네트워크 선택"
 
-#: modules/RemoteDesktop.qml:71
+#: modules/RemoteDesktop.qml:83
 msgid "Disconnecting…"
 msgstr "연결을 끊는 중…"
 
@@ -405,7 +405,7 @@ msgstr "완료"
 msgid "Dragging, snapping or maximizing a window takes it out of the layout."
 msgstr "창을 끌거나 붙이거나 최대화하면 배치에서 빠집니다."
 
-#: modules/RemoteDesktop.qml:63
+#: modules/RemoteDesktop.qml:75
 msgid "ENDING"
 msgstr "종료 중"
 
@@ -710,7 +710,7 @@ msgstr "전원"
 msgid "Power Saving"
 msgstr "절전"
 
-#: modules/RemoteDesktop.qml:86
+#: modules/RemoteDesktop.qml:102
 msgid "Reachable from the whole network, on port %1"
 msgstr "네트워크 전체에서 접속 가능, 포트 %1"
 
@@ -786,7 +786,7 @@ msgstr "로그인"
 msgid "Software Manager"
 msgstr "소프트웨어 관리자"
 
-#: modules/RemoteDesktop.qml:80
+#: modules/RemoteDesktop.qml:92
 msgid "Somebody is looking at this screen"
 msgstr "SSH 터널을 통해, 포트 %1"
 
@@ -821,6 +821,10 @@ msgstr "같은 방식으로 곧장 계단식으로."
 #: welcome/pages.js:154
 msgid "Straight to tiling, from any layout, taking stray windows back."
 msgstr "어떤 배치에서든 바둑판식으로. 빠져나간 창도 함께 되돌립니다."
+
+#: modules/RemoteDesktop.qml:107
+msgid "Streamed to Moonlight, on port %1"
+msgstr "Moonlight으로 스트리밍 중, 포트 %1"
 
 #: welcome/pages.js:111
 msgid ""
@@ -925,7 +929,7 @@ msgstr ""
 "이 안내는 언제든 Super+Escape로 다시 볼 수 있고, Super+/의 단축키 목록은 두 "
 "번째 쪽의 자세한 판입니다."
 
-#: modules/RemoteDesktop.qml:88
+#: modules/RemoteDesktop.qml:104
 msgid "Through an SSH tunnel, on port %1"
 msgstr "누군가 이 화면을 보고 있습니다"
 

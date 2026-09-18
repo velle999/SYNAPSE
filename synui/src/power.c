@@ -348,10 +348,40 @@ bool power_on_ac(void)
  * undo and the screen stayed black. */
 static void power_apply_blank(syn_server_t *s)
 {
+    /* ⚠ ASKED ONCE, NOT PER OUTPUT — and asked as a QUESTION rather than read
+     * off the field. A solo naming an output that is not here blanks nothing;
+     * see the block at the top of vdisplay.c for why that matters more than it
+     * looks. */
+    bool solo = vdisplay_solo_live(s);
+
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
-        bool off = s->power.blanked ||
+        /* ⛔ THE IDLE STAGE SKIPS A VIRTUAL DISPLAY. Blanking is about a panel
+         * nobody is looking at — the backlight, the burn-in, the room at 2am —
+         * and a headless output has none of those. What it does have is a
+         * remote session on the other end of it, and a blanked output cannot be
+         * captured at all: screencopy answers "failed to copy output" and the
+         * far end gets a grey rectangle with no frame to click out of. The lid
+         * never applies either (a virtual display is not the built-in panel),
+         * so only solo can turn one off. */
+        bool virt = vdisplay_is(o);
+        bool off = (s->power.blanked && !virt) ||
                    (s->power.lid_blanked && output_is_internal(o->wlr_output));
+
+        /* Solo: exactly one output is lit, every other one is off — including a
+         * virtual display, when what was soloed is a real screen. */
+        if (solo && !vdisplay_solo_is(s, o->wlr_output)) off = true;
+
+        /* ⛔ A DETACHED OUTPUT STAYS DARK, whatever the flags say. The display
+         * panel removes a screen from the desk by committing it disabled AND
+         * setting o->detached (dispcfg_detach) — but this loop recomputes
+         * "should it be lit" from the blank flags alone, so the next un-blank
+         * would light a screen the user had taken out of the arrangement. It is
+         * out of the layout, so what it lights up is a stale frame nothing ever
+         * repaints: dispcfg_detach's own comment is about exactly that, and
+         * switching it off there was undone from here. Only dispcfg_attach
+         * clears the flag, so this cannot strand one. */
+        if (o->detached) off = true;
 
         /* Never drive a head whose sink has gone.
          *
@@ -460,6 +490,14 @@ static void power_set_lid_blank(syn_server_t *s, bool off)
     s->power.lid_blanked = off;
     power_apply_blank(s);
     wlr_log(WLR_INFO, "synui: power: built-in panel %s (lid)", off ? "off" : "on");
+}
+
+/* Re-commit every output to what the flags and solo now say, changing none of
+ * them. vdisplay.c calls it when solo moves: solo changes which outputs should
+ * be lit, and this is the one function that decides that. */
+void power_reapply_blank(syn_server_t *s)
+{
+    power_apply_blank(s);
 }
 
 /* ── Stage timers ────────────────────────────────────────── */

@@ -664,9 +664,173 @@ static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
          * (or a bar) reading it could not tell a second monitor that moved from
          * one that did not. */
         bprintf(b, ",\"workspace\":%d", output_workspace_index(s, o) + 1);
+        /* A virtual display is an output like any other here on purpose — it
+         * takes a workspace, it holds windows, it has a position. This flag is
+         * the one thing that separates it, and `syn-remote stream` reads it to
+         * tell the head it made from the monitors on the desk. */
+        bprintf(b, ",\"virtual\":%s", vdisplay_is(o) ? "true" : "false");
+        /* Two different ways for a screen to be dark, and they are not the same
+         * question. `lit` is the power state the backend is committed to — the
+         * idle blank stage, wlr-output-power-management, solo. `detached` is
+         * the display panel having taken this screen out of the arrangement,
+         * which leaves it in s->outputs and out of the layout. ⛔ A capture of a
+         * screen that is not lit comes back empty, so anything streaming this
+         * desktop reads `lit` before it believes a black picture. */
+        bprintf(b, ",\"lit\":%s", o->wlr_output->enabled ? "true" : "false");
+        bprintf(b, ",\"detached\":%s", o->detached ? "true" : "false");
         bputs(b, "}");
     }
     bputs(b, "]\n");
+}
+
+/* ── `synctl virtual` — displays with no monitor behind them ──
+ *
+ * The compositor half of `syn-remote stream`: a head at the size the remote
+ * client asked for, made on demand and taken away again. See vdisplay.c for
+ * what one is and what the rest of synui had to learn about it.
+ *
+ * ⚠ ONE SEAM, like hdr above. These call the same vdisplay_*() the rest of the
+ * compositor does rather than reaching into the backend themselves, so there is
+ * no second path that can drift from the first.
+ */
+static void vdisp_err(ipc_buf_t *b, const char *err, const char *detail)
+{
+    bputs(b, "{\"error\":");
+    bjson_str(b, err);
+    if (detail) { bputs(b, ",\"detail\":"); bjson_str(b, detail); }
+    bputs(b, "}\n");
+}
+
+static void cmd_virtual(syn_server_t *s, ipc_buf_t *b)
+{
+    bprintf(b, "{\"available\":%s,\"solo\":",
+            vdisplay_available(s) ? "true" : "false");
+    const char *solo = vdisplay_solo(s);
+    if (solo) bjson_str(b, solo); else bputs(b, "null");
+    bputs(b, ",\"displays\":[");
+
+    int first = 1;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!vdisplay_is(o)) continue;
+        if (!first) bputs(b, ",");
+        first = 0;
+        bputs(b, "{\"name\":");
+        bjson_str(b, o->wlr_output->name);
+        bprintf(b, ",\"size\":[%d,%d],\"refresh\":%d,\"scale\":%.2f}",
+                o->wlr_output->width, o->wlr_output->height,
+                o->wlr_output->refresh, (double)o->wlr_output->scale);
+    }
+    bputs(b, "]}\n");
+}
+
+/* "<W>x<H>[@<Hz>]" — the way a mode is written everywhere else on this desktop.
+ * Hz may carry decimals (59.94); it is stored in mHz, which is how wlroots
+ * counts refresh. Returns 0 on anything it does not fully understand: a
+ * half-parsed mode is a size nobody asked for. */
+static int parse_mode(const char *sp, int *w, int *h, int *mhz)
+{
+    char *end = NULL;
+    long ww = strtol(sp, &end, 10);
+    if (end == sp || (*end != 'x' && *end != 'X')) return 0;
+    const char *p2 = end + 1;
+    long hh = strtol(p2, &end, 10);
+    if (end == p2) return 0;
+
+    double hz = 0.0;
+    if (*end == '@') {
+        const char *p3 = end + 1;
+        hz = strtod(p3, &end);
+        if (end == p3) return 0;
+    }
+    if (*end != '\0' && *end != ' ') return 0;
+    if (ww <= 0 || hh <= 0 || hz < 0.0) return 0;
+
+    *w = (int)ww;
+    *h = (int)hh;
+    *mhz = (int)(hz * 1000.0 + 0.5);
+    return 1;
+}
+
+static void cmd_virtual_set(syn_server_t *s, ipc_buf_t *b, const char *arg)
+{
+    char verb[32] = "", rest[128] = "";
+    int n = sscanf(arg, "%31s %127[^\n]", verb, rest);
+    if (n < 1) { vdisp_err(b, "virtual takes add, mode, remove or solo", NULL); return; }
+
+    if (strcmp(verb, "add") == 0) {
+        int w = 1920, h = 1080, mhz = 0;
+        double scale = 1.0;
+        char mode[64] = "";
+        char scalestr[32] = "";
+        int got = sscanf(rest, "%63s %31s", mode, scalestr);
+        if (got >= 1 && !parse_mode(mode, &w, &h, &mhz)) {
+            vdisp_err(b, "a virtual display is asked for as WIDTHxHEIGHT[@HZ]", mode);
+            return;
+        }
+        if (got >= 2) {
+            char *end = NULL;
+            scale = strtod(scalestr, &end);
+            if (end == scalestr || (*end && *end != ' ')) {
+                vdisp_err(b, "that is not a scale", scalestr);
+                return;
+            }
+        }
+
+        const char *err = NULL;
+        struct wlr_output *wlr = vdisplay_add(s, w, h, mhz, scale, &err);
+        if (!wlr) { vdisp_err(b, err ? err : "could not add a virtual display", NULL); return; }
+
+        bputs(b, "{\"ok\":true,\"name\":");
+        bjson_str(b, wlr->name);
+        bprintf(b, ",\"size\":[%d,%d],\"refresh\":%d,\"scale\":%.2f}\n",
+                wlr->width, wlr->height, wlr->refresh, (double)wlr->scale);
+        return;
+    }
+
+    if (strcmp(verb, "mode") == 0) {
+        char name[64] = "", mode[64] = "";
+        if (sscanf(rest, "%63s %63s", name, mode) != 2) {
+            vdisp_err(b, "virtual mode takes an output and WIDTHxHEIGHT[@HZ]", NULL);
+            return;
+        }
+        int w = 0, h = 0, mhz = 0;
+        if (!parse_mode(mode, &w, &h, &mhz)) {
+            vdisp_err(b, "a mode is WIDTHxHEIGHT[@HZ]", mode);
+            return;
+        }
+        const char *err = NULL;
+        if (!vdisplay_mode(s, name, w, h, mhz, &err)) {
+            vdisp_err(b, err ? err : "that mode was refused", name);
+            return;
+        }
+        bprintf(b, "{\"ok\":true,\"name\":\"%s\",\"size\":[%d,%d],\"refresh\":%d}\n",
+                name, w, h, mhz);
+        return;
+    }
+
+    if (strcmp(verb, "remove") == 0) {
+        const char *name = rest[0] ? rest : "all";
+        int removed = vdisplay_remove(s, name);
+        if (!removed) { vdisp_err(b, "no virtual display by that name", rest[0] ? rest : NULL); return; }
+        bprintf(b, "{\"ok\":true,\"removed\":%d}\n", removed);
+        return;
+    }
+
+    if (strcmp(verb, "solo") == 0) {
+        const char *err = NULL;
+        if (!vdisplay_solo_set(s, rest[0] ? rest : "off", &err)) {
+            vdisp_err(b, err ? err : "solo was refused", rest[0] ? rest : NULL);
+            return;
+        }
+        const char *solo = vdisplay_solo(s);
+        bputs(b, "{\"ok\":true,\"solo\":");
+        if (solo) bjson_str(b, solo); else bputs(b, "null");
+        bputs(b, "}\n");
+        return;
+    }
+
+    vdisp_err(b, "virtual takes add, mode, remove or solo", verb);
 }
 
 /* ── Command dispatch ────────────────────────────────────── */
@@ -756,6 +920,16 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         const char *arg = line + 4;
         while (*arg == ' ') arg++;
         cmd_hdr_set(s, out, arg);
+        return;
+    }
+    if (strcmp(line, "virtual") == 0 || strcmp(line, "vdisplay") == 0) {
+        cmd_virtual(s, out);
+        return;
+    }
+    if (strncmp(line, "virtual ", 8) == 0 || strncmp(line, "vdisplay ", 9) == 0) {
+        const char *arg = strchr(line, ' ') + 1;
+        while (*arg == ' ') arg++;
+        cmd_virtual_set(s, out, arg);
         return;
     }
     if (strcmp(line, "binds") == 0 || strcmp(line, "keys") == 0) {
@@ -909,6 +1083,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
                    "\"activeworkspace\",\"activewindow\",\"cursor\",\"pointer\","
                    "\"recent\",\"binds\",\"gestures\",\"version\","
+                   "\"virtual [add <WxH[@Hz]> [scale]|mode <name> <WxH[@Hz]>|remove <name>|solo <name>|off]\","
                    "\"layout [next|prev|<name>]\","
                    "\"weather [on|off|refresh]\","
                    "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");

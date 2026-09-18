@@ -7,6 +7,11 @@ import ".."
  * Somebody is looking at this screen — the indicator for syn-remote(1), and the
  * button that ends it.
  *
+ * ⚠ BY ANY ROUTE. `syn-remote status --rec` counts VNC viewers and Moonlight
+ * streams in one number, because being watched is being watched — and `route`
+ * is what decides which sentence the tooltip draws and which server the click
+ * stops.
+ *
  * Why it exists: a remote desktop is the one thing on this machine that can be
  * running with no window, no sound and no trace on screen. `syn-remote on`
  * survives a reboot by design — that is the point of it — so a session started
@@ -38,6 +43,13 @@ BarModule {
     property int    viewers: 0
     property string scope: ""        // "local" | "lan" — never translated
     property string port: ""
+    // Which way in they came: "vnc" | "stream" | "both" | "none", never
+    // translated. ⛔ IT IS NOT DERIVABLE FROM `scope`, which describes the VNC
+    // listener alone — a streaming host binds every interface whatever that
+    // says, so a tooltip drawn from scope would tell somebody being streamed
+    // that they are reachable through an SSH tunnel.
+    property string route: ""
+    property string streamPort: ""
 
     // A disconnect is in flight. Stopping the unit is quick, but the poll is
     // two seconds behind it, and a pill that stayed up afterwards would read as
@@ -82,10 +94,17 @@ BarModule {
         // sentences below are the drawn form, and they say the thing that
         // actually matters — a LAN-bound server is reachable by every device on
         // the network, because synnet accepts private-range traffic by design.
-        if (root.scope === "lan")
-            t += "\n" + I18n.tr("Reachable from the whole network, on port %1").arg(root.port)
-        else if (root.scope === "local")
-            t += "\n" + I18n.tr("Through an SSH tunnel, on port %1").arg(root.port)
+        // ⚠ THE VNC LINE ONLY WHEN SOMEBODY IS ON VNC. `scope` and `port` are
+        // that server's, and drawing them for a stream would name the wrong
+        // port and the wrong reachability.
+        if (root.route !== "stream") {
+            if (root.scope === "lan")
+                t += "\n" + I18n.tr("Reachable from the whole network, on port %1").arg(root.port)
+            else if (root.scope === "local")
+                t += "\n" + I18n.tr("Through an SSH tunnel, on port %1").arg(root.port)
+        }
+        if (root.route === "stream" || root.route === "both")
+            t += "\n" + I18n.tr("Streamed to Moonlight, on port %1").arg(root.streamPort)
         t += "\n" + I18n.tr("Click to disconnect them")
         return t
     }
@@ -108,10 +127,29 @@ BarModule {
         command: ["syn-remote", "stop"]
     }
 
+    // ⛔ A SECOND PROCESS, because there are two servers and `syn-remote stop`
+    // ends one of them. A stream left running under a pill that had just been
+    // pressed is a disconnect button that did nothing — the failure this whole
+    // module exists to avoid, one layer along.
+    Process {
+        id: stopStreamProc
+        command: ["syn-remote", "stream", "stop"]
+    }
+
     onClicked: {
         if (root.stopping) return
         root.stopping = true
-        stopProc.running = true
+        // ⚠ WHICHEVER IS CARRYING SOMEBODY, and both when both are. ⚠ running
+        // is dropped to false first: quickshell answers `running = true` on an
+        // already-running Process with a silent no-op.
+        if (root.route !== "stream") {
+            stopProc.running = false
+            stopProc.running = true
+        }
+        if (root.route === "stream" || root.route === "both") {
+            stopStreamProc.running = false
+            stopStreamProc.running = true
+        }
         stopFailsafe.restart()
         poll.running = true
     }
@@ -131,7 +169,7 @@ BarModule {
                 // ⚠ BY FIELD NAME, never by line number. That record grows a
                 // row on the end when it grows one, and every value in it is a
                 // short word that would look plausible in the wrong place.
-                let n = 0, sc = "", p = ""
+                let n = 0, sc = "", p = "", rt = "", sp = ""
                 for (const line of String(this.text).split("\n")) {
                     const tab = line.indexOf("\t")
                     if (tab < 0) continue
@@ -139,10 +177,14 @@ BarModule {
                     if (k === "connections") n = parseInt(v) || 0
                     else if (k === "scope") sc = v
                     else if (k === "port") p = v
+                    else if (k === "route") rt = v
+                    else if (k === "stream_port") sp = v
                 }
                 root.viewers = n
                 root.scope = sc
                 root.port = p
+                root.route = rt
+                root.streamPort = sp
                 if (n === 0) {
                     root.stopping = false
                     stopFailsafe.stop()

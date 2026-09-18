@@ -164,6 +164,14 @@ static void table_load(void)
 struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
                                                        syn_output_t *output)
 {
+    /* ⛔ A VIRTUAL DISPLAY IS NOT REMEMBERED, in either direction. Whoever asks
+     * for one states its size and refresh in the same call; a saved HEADLESS-1
+     * entry would apply last session's mode over this request and the caller's
+     * geometry would be dropped with nothing saying so. The names are recycled
+     * (HEADLESS-1 is whichever one was made first, every session), so the entry
+     * would not even be describing the same screen. */
+    if (vdisplay_is(output)) return NULL;
+
     table_load();
     persist_entry_t *e = table_find(output->wlr_output->name);
     if (!e) return NULL;
@@ -244,6 +252,10 @@ void output_persist_save(syn_server_t *s)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         struct wlr_output *wo = o->wlr_output;
+        /* The other half of the rule in output_persist_apply(): a virtual
+         * display is never read back, so writing it would only fill the file
+         * with HEADLESS-n entries that outlive the thing they describe. */
+        if (vdisplay_is(o)) continue;
         persist_entry_t *e = table_find(wo->name);
         if (!e) {
             if (table_count >= OUTPUT_PERSIST_MAX) continue;
