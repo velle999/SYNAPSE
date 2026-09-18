@@ -481,7 +481,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
 | **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, per-clip motion and retiming, keyframed grades, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets and a render queue. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
 | **`syn-gfn`** | GeForce NOW, in a browser that can hold the mouse — a launcher rather than a client, because pointer lock, keyboard lock, fullscreen, hardware video decode and WebRTC all belong to a browser engine that is already written and already tested against the service. Runs the first Chromium-family browser on the machine in a profile of its own, with keyboard and pointer lock pre-granted for the site (the permission prompt they replace is raised while the page is fullscreen with the cursor captured, where nobody can see it). No browser in `depends`. See [Gaming](#gaming). |
-| **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, holds the machine awake while they are there, and — because **a machine that is asleep answers nothing at all** — arms the wired card for a magic packet (`syn-remote wakeable on`) so a suspended machine can be woken over the network. Going the other way, it saves and opens somebody else's desktop (`add`/`trust`/`connect`), waking it first when it is not answering. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
+| **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, holds the machine awake while they are there, and — because **a machine that is asleep answers nothing at all** — arms the wired card for a magic packet (`syn-remote wakeable on`) so a suspended machine can be woken over the network. It also streams the desktop to **Moonlight** through sunshine (`syn-remote stream on`), which is video rather than rectangles of pixels — and by default on a **display of its own**, a headless output synui grows on demand and sizes to whatever the connecting client asks for. Going the other way, it saves and opens somebody else's desktop (`add`/`trust`/`connect`), VNC or stream, waking it first when it is not answering. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 | **`syn-scan`** | **The malware scanner.** Scans files at rest — a folder, a download, a game mod — with ClamAV, plus rootkit checks from `rkhunter` and `chkrootkit` when those are installed. It looks inside archives, which is where a Windows executable usually arrives on a machine that plays games: `synguard` watches what the system *does*, in the kernel, and never opens a file to see what is in it. Every engine's output comes back in one format, and anything flagged is **moved to quarantine, never deleted** — `syn-scan quarantine restore <id>` puts a file back at its original path with its original permissions. A weekly timer sweeps at idle priority, and **Settings ▸ Malware Scanning** is where that timer, the signature updates and the engines behind them are switched and read. `syn-scan scan ~/Downloads`, `syn-scan --tui`, `syn-scan gui`. ClamAV's `clamd` daemon is **off by default** — it holds the whole signature set in memory (~1 GB) and scanning does not need it; turn it on from Settings ▸ Malware Scanning, or with `systemctl enable --now clamav-daemon`, and `syn-scan` will use it — which takes a repeat scan from about six seconds to instant. |
 
@@ -2079,6 +2079,49 @@ password through PAM (`syn-remote auth pam`), which brings the same three-try
 lockout as any other login on the machine. Settings ▸ **Remote Desktop** is the
 same thing in a window.
 
+#### Streaming it instead
+
+VNC sends rectangles of pixels. A stream sends an encoded video frame, so the
+GPU does the work and a desktop at 1440p120 is smooth where VNC is a slideshow.
+The server is **sunshine** and the client is **Moonlight**, on anything from a
+phone to a TV box.
+
+```bash
+syn-remote stream on         # start it now, and at every login
+syn-remote stream pair 1234  # accept the PIN a Moonlight client is showing
+syn-remote stream status     # what it is serving, and to how many
+```
+
+It captures the same way VNC does — sunshine's Wayland grabber binds
+`zwlr_export_dmabuf_manager_v1` and `xdg_output`, both of which synui exports —
+so there is no portal and nothing to allow. The generated config pins
+`capture = wlr`: left to autodetection sunshine prefers X11, and on a desktop
+running XWayland that means a stream of XWayland windows and nothing else.
+
+**⛔ A streaming host is on the network.** sunshine binds every interface and
+announces itself over mDNS; there is no loopback-only mode, unlike the VNC
+default above. Pairing is what stands in the way, and it is per client.
+
+**By default the stream gets a display of its own.** `synctl virtual add` grows
+a headless output on the running compositor — a real screen in every way except
+the cable, with its own desktop, its own windows and its own resolution — and
+the stream serves that instead of a copy of whatever monitor is plugged in. When
+a client connects, the head is resized to exactly what that client asked for,
+frame rate included, and it goes away when streaming is switched off.
+
+```bash
+syn-remote stream display virtual        # a display of its own (the default)
+syn-remote stream display auto           # …or the screen that is on this desk
+syn-remote stream mode 2560x1440@120     # what the display starts at
+syn-remote stream solo on                # turn this machine's own screens off
+                                         # while somebody is streaming
+```
+
+The idle blank stage never touches a virtual display: a blanked output cannot be
+captured, and nobody is sitting in front of this one. `syn-remote stream tune
+latency off` gives the encoder back its quality presets; on by default it asks
+NVENC for its fastest preset and turns two-pass off.
+
 **⛔ And a machine that is asleep answers nothing at all.** The screen wake above
 is for a screen that has gone dark on a machine still running; a *suspended* one
 has no server, no port and nothing listening, so there is nothing to connect to
@@ -2116,6 +2159,9 @@ is half a tool, so `syn-remote` also saves and opens somebody else's:
 syn-remote add desk 192.168.1.20 velle   # a machine to reach
 syn-remote trust desk                    # check its certificate, once
 syn-remote connect desk                  # open it — waking it first if it is asleep
+syn-remote add tv 192.168.1.30 --stream  # a Moonlight host, on sunshine's port
+syn-remote trust tv                      # pair with it: it shows a PIN, the
+                                         # other machine accepts it
 syn-remote gui | tui                     # the same list, in a window or a terminal
 ```
 
