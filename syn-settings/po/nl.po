@@ -1737,3 +1737,32 @@ msgstr "Uit  (de daemon maskeren)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "Bluetooth"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "sudo in een terminal vraagt eerst om een vinger; het wachtwoord werkt nog steeds als u wacht of geen vinger overeenkomt"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo vraagt alleen om het wachtwoord; zet aan om eerst een vinger te accepteren"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "aangezet, maar nog niet in de PAM-stack van sudo — de volgende start past het toe, of zet het hier aan"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "er staat een met de hand geschreven pam_fprintd-regel in /etc/pam.d/sudo; deze schakelaar laat die met rust"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd is niet geïnstalleerd, dus sudo kan niet om een vinger vragen"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo is niet de verwachte stack en blijft dus ongemoeid — zet pam_fprintd.so als sufficient boven de auth include"

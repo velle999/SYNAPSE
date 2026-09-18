@@ -1,0 +1,26 @@
+[Unit]
+# Sync sudo's auth stack to /etc/syn-settings/sudo-fingerprint.off.
+#
+# ⛔ THIS IS WHAT MAKES THE SWITCH A SETTING rather than something that happens
+# during a package upgrade: the flag created by hand, or fprintd installed after
+# syn-settings was, both take effect at the next boot with nothing else to run.
+#
+# ⚠ ENABLED BY THE PACKAGE, through the multi-user.target.wants symlink it
+# ships, so nothing has to run `systemctl enable` — a scriptlet cannot do that
+# on a machine that is not booted.
+Description=Sync the sudo fingerprint switch into sudo's PAM stack
+ConditionPathExists=/etc/pam.d/sudo
+DefaultDependencies=no
+After=local-fs.target
+RequiresMountsFor=/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/syn-settings/sudo-fprint apply
+# Nothing here is fatal to booting. A sudo with the wrong fingerprint state
+# still asks for a password; a boot that failed over it would not.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

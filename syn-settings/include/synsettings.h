@@ -236,6 +236,8 @@ int assistant_set_backend(const char *id);
 int assistant_key(const char *provider);
 int cmd_enroll(const char *finger);
 int cmd_forget(const char *what);
+/* `set sudo-fingerprint on|off` — through pkexec, to data/sudo-fprint.sh. */
+int fprint_set_sudo(const char *val);
 int pane_kernel(void);
 
 /* Which application opens what, and — the part that matters — which layer

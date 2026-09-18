@@ -1723,3 +1723,32 @@ msgstr "Выкл  (замаскировать демон)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "Bluetooth"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "sudo в терминале сначала просит палец; пароль по-прежнему работает, если подождать или палец не совпадёт"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo спрашивает только пароль; включите, чтобы сначала принимать палец"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "включено, но ещё не в стеке PAM для sudo — это применит следующая загрузка, или включите здесь"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "в /etc/pam.d/sudo есть вручную написанная строка pam_fprintd; этот переключатель её не трогает"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd не установлен, поэтому sudo не может попросить палец"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo — не тот стек, который ожидается, поэтому он не изменяется — добавьте pam_fprintd.so как sufficient над его auth include"

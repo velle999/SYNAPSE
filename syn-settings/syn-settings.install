@@ -1,0 +1,25 @@
+# syn-settings.install — pacman scriptlet.
+#
+# ⛔ ONE IMPLEMENTATION, AND IT IS NOT THIS FILE. What sudo's PAM stack should
+# say lives in /usr/lib/syn-settings/sudo-fprint, which a boot oneshot and the
+# settings window's switch also run. This only calls it, so an upgrade brings the
+# stack into line without waiting for the next boot.
+#
+# SynapseOS Project — GPL-2.0-or-later
+
+_syn_sudo_fprint=/usr/lib/syn-settings/sudo-fprint
+
+post_install() {
+    # Absent on a partial install; nothing here is worth failing an upgrade for.
+    [ -x "$_syn_sudo_fprint" ] && "$_syn_sudo_fprint" apply || true
+}
+
+post_upgrade() {
+    post_install
+}
+
+# The script goes with the package, so the line it added has to go first — or
+# sudo keeps a pam_fprintd line nothing will ever take out again.
+pre_remove() {
+    [ -x "$_syn_sudo_fprint" ] && "$_syn_sudo_fprint" purge || true
+}

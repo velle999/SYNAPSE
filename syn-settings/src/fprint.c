@@ -30,6 +30,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #define _GNU_SOURCE
+#include "config.h"
 #include "synsettings.h"
 #include "i18n.h"
 
@@ -105,6 +106,80 @@ static bool enrolled(const char *listing, const char *token)
 	return strstr(listing, token) != NULL;
 }
 
+static int refuse(const char *msg)
+{
+	fprintf(stderr, "syn-settings: %s\n", msg);
+	return 2;
+}
+
+/* ── sudo ───────────────────────────────────────────────────────────────── */
+
+/*
+ * The script that owns /etc/pam.d/sudo's fingerprint line. It answers `status`
+ * without root — the stack is 0644 and the flag is a file — so the row reads
+ * the same judgement the switch will act on, not a second copy of it here.
+ */
+static const char *sudo_fprint_bin(void)
+{
+	return env_or("SYN_SUDO_FPRINT_BIN", SYNSETTINGS_LIBDIR "/sudo-fprint");
+}
+
+/*
+ * ⚠ THE VALUE IS WHAT sudo WILL DO, not what was asked. `on` means our line is
+ * in sudo's stack now. A switch that read the flag would say "on" through the
+ * window between asking and the next boot, and on a machine whose stack this
+ * refuses to touch, forever.
+ */
+static void fprint_sudo_row(void)
+{
+	const char *bin = sudo_fprint_bin();
+	if (access(bin, X_OK) != 0) return;
+
+	char out[128] = "";
+	char *argv[] = { (char *)bin, (char *)"status", NULL };
+	if (run_capture_quiet(argv, out, sizeof out) != 0) return;
+	out[strcspn(out, "\n")] = '\0';
+
+	if (!strcmp(out, "on"))
+		rec_row("sudo\t%s\t%s\tok\t%s\ttoggle:sudo-fingerprint",
+		        N_("sudo"), N_("on"),
+		        N_("sudo in a terminal asks for a finger first; the password still works if you wait or no finger matches"));
+	else if (!strcmp(out, "off"))
+		rec_row("sudo\t%s\t%s\t-\t%s\ttoggle:sudo-fingerprint",
+		        N_("sudo"), N_("off"),
+		        N_("sudo asks for the password only; turn on to accept a finger first"));
+	else if (!strcmp(out, "pending"))
+		rec_row("sudo\t%s\t%s\twarn\t%s\ttoggle:sudo-fingerprint",
+		        N_("sudo"), N_("off"),
+		        N_("switched on but not in sudo's PAM stack yet — the next boot applies it, or turn it on here"));
+	else if (!strcmp(out, "stuck:foreign-line"))
+		rec_row("sudo\t%s\t%s\t-\t%s\t-",
+		        N_("sudo"), N_("on"),
+		        N_("a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves it alone"));
+	else if (!strcmp(out, "stuck:no-module"))
+		rec_row("sudo\t%s\t%s\twarn\t%s\t-",
+		        N_("sudo"), N_("off"),
+		        N_("pam_fprintd is not installed, so sudo cannot ask for a finger"));
+	else if (!strcmp(out, "stuck:unexpected-stack"))
+		rec_row("sudo\t%s\t%s\twarn\t%s\t-",
+		        N_("sudo"), N_("off"),
+		        N_("/etc/pam.d/sudo is not the stack this expects, so it is left alone — add pam_fprintd.so as sufficient above its auth include"));
+}
+
+int fprint_set_sudo(const char *val)
+{
+	if (strcmp(val, "on") && strcmp(val, "off"))
+		return refuse("sudo-fingerprint takes on or off");
+	const char *bin = sudo_fprint_bin();
+	if (access(bin, X_OK) != 0)
+		return refuse("the sudo fingerprint script is missing — reinstall syn-settings");
+	/* pkexec, as the boot pane and the firewall do: it is sudo's own PAM
+	 * stack, so the bar is an administrator's password. No polkit policy of
+	 * ours ships, which makes that pkexec's default. */
+	char *a[] = { (char *)"pkexec", (char *)bin, (char *)val, NULL };
+	return run_or_show(a);
+}
+
 int pane_fprint(void)
 {
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
@@ -141,6 +216,8 @@ int pane_fprint(void)
 	rec_row("device\t%s\t%s\tok\t%s\t-",
 	        N_("reader"), N_("present"),
 	        N_("fprintd can see a reader; enrol a finger below and the lock screen will offer it"));
+
+	fprint_sudo_row();
 
 	int have = 0;
 	for (int i = 0; i < NFINGERS; i++)

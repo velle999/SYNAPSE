@@ -1624,3 +1624,32 @@ msgstr "关闭  (屏蔽守护进程)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "蓝牙"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "终端里的 sudo 会先要求手指；等待或没有手指匹配时，密码依然可用"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo 只要求密码；打开后会先接受手指"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "已打开，但尚未写入 sudo 的 PAM 栈 — 下次启动时生效，也可以在这里打开"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "/etc/pam.d/sudo 中有一行手写的 pam_fprintd；此开关不会动它"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "未安装 pam_fprintd，因此 sudo 无法要求手指"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo 不是预期的结构，因此保持不变 — 请在其 auth include 之上以 sufficient 添加 pam_fprintd.so"

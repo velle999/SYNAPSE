@@ -10,6 +10,8 @@ project('syn-settings', 'c',
 
 conf = configuration_data()
 conf.set_quoted('SYNSETTINGS_VERSION', meson.project_version())
+conf.set_quoted('SYNSETTINGS_LIBDIR',
+                get_option('prefix') / 'lib' / 'syn-settings')
 conf.set_quoted('SYNSETTINGS_DATADIR',
                 get_option('prefix') / get_option('datadir') / 'syn-settings')
 configure_file(output: 'config.h', configuration: conf)
@@ -65,6 +67,23 @@ install_data('data/syn-settings.svg',
 
 install_data('data/syn-settings.desktop',
              install_dir: get_option('datadir') / 'applications')
+
+# ── Fingerprint for sudo ────────────────────────────────────────────────────
+# One script owns what /etc/pam.d/sudo should say (see data/sudo-fprint.sh);
+# the pacman scriptlet, this oneshot at boot, and the Fingerprint pane's switch
+# all call it. /usr/lib, not libexecdir: pkexec and the unit name it by path, and
+# the path is the contract.
+libdir_syn = get_option('prefix') / 'lib' / 'syn-settings'
+install_data('data/sudo-fprint.sh', rename: 'sudo-fprint',
+             install_dir: libdir_syn, install_mode: 'rwxr-xr-x')
+unitdir = get_option('prefix') / 'lib' / 'systemd' / 'system'
+install_data('data/syn-settings-sudo-fprint.service', install_dir: unitdir)
+# ⚠ Enabled by shipping the link: nothing can run `systemctl enable` from a
+# package on a machine that is not booted, and a switch that also needed that
+# would be a switch that does nothing after a hand-edited flag.
+install_symlink('syn-settings-sudo-fprint.service',
+                pointing_to: '../syn-settings-sudo-fprint.service',
+                install_dir: unitdir / 'multi-user.target.wants')
 
 # meson's default test timeout is THIRTY SECONDS, and this suite spends 21 of
 # them on a fast native box — 130 checks, most of which fork the binary, and a

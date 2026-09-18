@@ -340,7 +340,25 @@ pkgver=0.1.0
 #     rather than inside it — the rule kept by moving the token, not by
 #     widening the rule.
 #   18 new msgids, filled in all thirteen catalogs (442/442 each).
-pkgrel=54
+# 55: SUDO TAKES A FINGERPRINT.
+#   The Fingerprint pane has a `sudo` switch, on by default: with a finger
+#   enrolled, sudo in a terminal asks for it before the password, and falls
+#   through to the password when no finger matches or none comes in ten
+#   seconds. pam_fprintd skips remote sessions (it asks sd_session_is_remote),
+#   so sudo over ssh goes straight to the password, and sudo -n never reaches
+#   PAM. Without a reader or an enrolled finger nothing changes.
+#   ⛔ ONE SCRIPT OWNS THE LINE: /usr/lib/syn-settings/sudo-fprint puts
+#   `auth sufficient pam_fprintd.so timeout=10` above sudo's system-auth include
+#   or takes it out, to match /etc/syn-settings/sudo-fingerprint.off. The
+#   scriptlet runs it on install and upgrade (purge on removal), a oneshot runs
+#   it at boot, and the switch runs it through pkexec. A pam_fprintd line
+#   somebody wrote by hand is never touched, and a stack that is not the stock
+#   shape is left alone and reported.
+#   The row shows what sudo WILL do — whether the line is in the stack now —
+#   not what was asked. 19 new checks drive the script against a copy of the
+#   stock stack, every state included. Seven new strings, all thirteen
+#   catalogs, 449/449.
+pkgrel=55
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -355,6 +373,9 @@ license=('GPL-2.0-or-later')
 # owns it, and each pane degrades to "not installed" rather than failing, so
 # this still works over SSH and on the ISO.
 depends=('glibc' 'wlr-randr')
+# Runs /usr/lib/syn-settings/sudo-fprint on install and upgrade, and takes its
+# line back out of /etc/pam.d/sudo on removal. The logic is in that script.
+install=syn-settings.install
 makedepends=('meson' 'ninja' 'gcc')
 
 optdepends=('quickshell: the settings window (syn-settings gui)'

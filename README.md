@@ -1102,6 +1102,25 @@ greetd owns authentication and asks one question at a time.
 So turn it on once you know the reader works — `syn-settings` ▸ Fingerprint, or
 lock the screen and try it there.
 
+**In `sudo` it is on.** Once a finger is enrolled, `sudo` in a terminal asks
+for it before the password (`Place your finger on the fingerprint reader`). If
+no finger matches, or none is offered for ten seconds, the password prompt
+appears as it always did. Over SSH the reader is skipped, and `sudo -n` never
+waits for it. On a machine without a reader, or with nothing enrolled, `sudo`
+behaves exactly as before.
+
+Turn it off in `syn-settings` ▸ Fingerprint ▸ **sudo**, or:
+
+```
+sudo mkdir -p /etc/syn-settings && sudo touch /etc/syn-settings/sudo-fingerprint.off
+sudo /usr/lib/syn-settings/sudo-fprint
+```
+
+That takes the `pam_fprintd` line back out of `/etc/pam.d/sudo`; deleting the
+file and running the same command puts it back, and a oneshot runs it at every
+boot. A `pam_fprintd` line you wrote into `/etc/pam.d/sudo` yourself is left
+alone.
+
 ### The look it ships with
 
 A fresh install boots into **SYNAPSE Prism**, and Prism has no colour of its

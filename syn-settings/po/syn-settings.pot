@@ -611,6 +611,41 @@ msgstr ""
 msgid "Left little"
 msgstr ""
 
+msgid "sudo"
+msgstr ""
+
+msgid "on"
+msgstr ""
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr ""
+
+msgid "off"
+msgstr ""
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr ""
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr ""
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr ""
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr ""
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+
 msgid "fprintd"
 msgstr ""
 
@@ -1303,9 +1338,6 @@ msgstr ""
 msgid "listening"
 msgstr ""
 
-msgid "off"
-msgstr ""
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1460,9 +1492,6 @@ msgid "the bar, the lock screen and the desktop clock"
 msgstr ""
 
 msgid "time-seconds"
-msgstr ""
-
-msgid "on"
 msgstr ""
 
 msgid "seconds in the bar clock"

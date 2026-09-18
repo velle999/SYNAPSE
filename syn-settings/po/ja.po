@@ -1712,3 +1712,32 @@ msgstr "オフ  (デーモンをマスクする)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "Bluetooth"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "ターミナルの sudo はまず指を求めます。待つか指が一致しなければ、パスワードも使えます"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo はパスワードだけを求めます。オンにすると先に指を受け付けます"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "オンにしましたが、まだ sudo の PAM スタックに入っていません — 次回の起動で適用されます。ここでオンにすることもできます"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "/etc/pam.d/sudo に手書きの pam_fprintd 行があります。このスイッチはそれに触れません"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd がインストールされていないため、sudo は指を求められません"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo が想定した構成ではないため、変更しません — auth include の上に pam_fprintd.so を sufficient として追加してください"

@@ -1720,3 +1720,32 @@ msgstr "Wyłączone  (zamaskuj demona)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "Bluetooth"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "sudo w terminalu najpierw prosi o palec; hasło nadal działa, jeśli poczekasz lub żaden palec nie pasuje"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo prosi tylko o hasło; włącz, aby najpierw przyjmować palec"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "włączone, ale jeszcze nie w stosie PAM sudo — zastosuje to następny rozruch albo włącz tutaj"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "w /etc/pam.d/sudo jest ręcznie dopisana linia pam_fprintd; ten przełącznik jej nie rusza"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd nie jest zainstalowany, więc sudo nie może poprosić o palec"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo nie jest oczekiwanym stosem, więc zostaje bez zmian — dodaj pam_fprintd.so jako sufficient nad jego auth include"

@@ -371,6 +371,11 @@ int do_set(int argc, char **argv)
 	 * no polkit policy of our own ships — so pkexec demands admin
 	 * authentication, which is the right bar for the one setting in this app
 	 * that makes the machine less safe. */
+	/* Fingerprint for sudo — sudo's own PAM stack, so fprint.c hands it to
+	 * the one script that owns that line, under pkexec. */
+	if (!strcmp(key, "sudo-fingerprint"))
+		return fprint_set_sudo(val);
+
 	if (!strcmp(key, "firewall")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("firewall takes on or off");

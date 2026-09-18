@@ -1749,3 +1749,32 @@ msgstr "Aus  (den Dienst maskieren)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "Bluetooth"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "sudo im Terminal fragt zuerst nach einem Finger; das Passwort funktioniert weiterhin, wenn Sie warten oder kein Finger passt"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo fragt nur nach dem Passwort; einschalten, um zuerst einen Finger anzunehmen"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "eingeschaltet, aber noch nicht in sudos PAM-Stapel — der nächste Start übernimmt es, oder hier einschalten"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "in /etc/pam.d/sudo steht eine von Hand geschriebene pam_fprintd-Zeile; dieser Schalter lässt sie in Ruhe"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd ist nicht installiert, daher kann sudo nicht nach einem Finger fragen"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo ist nicht der erwartete Stapel und bleibt daher unverändert — tragen Sie pam_fprintd.so als sufficient über dem auth include ein"

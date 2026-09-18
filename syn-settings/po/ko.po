@@ -1683,3 +1683,32 @@ msgstr "끔  (데몬 마스크)"
 #, fuzzy
 #~ msgid "bluetooth.service"
 #~ msgstr "블루투스"
+
+msgid "sudo"
+msgstr "sudo"
+
+msgid ""
+"sudo in a terminal asks for a finger first; the password still works if you "
+"wait or no finger matches"
+msgstr "터미널의 sudo가 먼저 손가락을 요청합니다. 기다리거나 일치하는 손가락이 없으면 비밀번호도 사용할 수 있습니다"
+
+msgid "sudo asks for the password only; turn on to accept a finger first"
+msgstr "sudo가 비밀번호만 요청합니다. 켜면 손가락을 먼저 받습니다"
+
+msgid ""
+"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
+"turn it on here"
+msgstr "켰지만 아직 sudo의 PAM 스택에 없습니다 — 다음 부팅 때 적용되며, 여기서 켤 수도 있습니다"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "/etc/pam.d/sudo에 직접 작성한 pam_fprintd 줄이 있습니다. 이 스위치는 건드리지 않습니다"
+
+msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgstr "pam_fprintd가 설치되어 있지 않아 sudo가 손가락을 요청할 수 없습니다"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr "/etc/pam.d/sudo가 예상한 구성이 아니므로 그대로 둡니다 — auth include 위에 pam_fprintd.so를 sufficient로 추가하세요"

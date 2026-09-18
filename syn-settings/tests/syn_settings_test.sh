@@ -1454,6 +1454,110 @@ refuses "enroll with no finger is refused"              2 enroll ""
 refuses "forget refuses a single finger, which it cannot do" 2 \
         forget right-index-finger
 
+# ── fingerprint for sudo ────────────────────────────────────────────────────
+#
+# data/sudo-fprint.sh edits sudo's PAM stack as root on every machine that
+# installs this package, so every path is driven here against a COPY of the
+# stock Arch stack in a temp directory. SYN_FPRINT_MODULE is pointed at a file
+# this suite creates or does not — never at /usr/lib/security, which would make
+# the no-module case pass here and fail on every machine that has fprintd.
+SF="$(dirname "$0")/../data/sudo-fprint.sh"
+if [ -f "$SF" ]; then
+    sft=$(mktemp -d)
+    stock() {
+        printf '%s\n' '#%PAM-1.0' \
+            'auth		include		system-auth' \
+            'account		include		system-auth' \
+            'session		include		system-auth' \
+            'session		optional	pam_systemd.so class=none' > "$sft/sudo"
+    }
+    : > "$sft/pam_fprintd.so"
+    sf() { SYN_SUDO_PAM="$sft/sudo" SYN_SUDO_FPRINT_OFF="$sft/etc/off" \
+           SYN_FPRINT_MODULE="${SFMOD:-$sft/pam_fprintd.so}" SYN_SUDO_FPRINT_QUIET=1 \
+           sh "$SF" "$@"; }
+    LINE='auth       sufficient   pam_fprintd.so timeout=10'
+
+    stock; cp "$sft/sudo" "$sft/orig"
+    [ "$(sf status)" = pending ] && ok "sudo-fprint: an untouched stack reads as pending" \
+        || bad "sudo-fprint: status of an untouched stack was '$(sf status)'"
+    sf apply
+    [ "$(grep -cF "$LINE" "$sft/sudo")" = 1 ] \
+        && ok "sudo-fprint: on by default — the line goes in, once" \
+        || bad "sudo-fprint: apply did not add exactly one line"
+    # ABOVE the include: PAM runs auth lines in order, and one after the
+    # password prompt would only be reached once the password had failed.
+    awk -v l="$LINE" '$0 == l { f = NR } /^auth[[:space:]]+include/ && !i { i = NR }
+        END { exit !(f && i && f < i) }' "$sft/sudo" \
+        && ok "sudo-fprint: the finger is asked before the password" \
+        || bad "sudo-fprint: the line is not above auth include system-auth"
+    cp "$sft/sudo" "$sft/once"; sf apply
+    cmp -s "$sft/sudo" "$sft/once" && ok "sudo-fprint: apply twice changes nothing" \
+        || bad "sudo-fprint: a second apply rewrote the stack"
+    [ "$(stat -c %a "$sft/sudo")" = 644 ] && ok "sudo-fprint: the stack stays 0644" \
+        || bad "sudo-fprint: the stack is $(stat -c %a "$sft/sudo") after a write"
+    [ "$(sf status)" = on ] && ok "sudo-fprint: status says on" \
+        || bad "sudo-fprint: status after apply was '$(sf status)'"
+
+    sf off
+    [ -e "$sft/etc/off" ] && cmp -s "$sft/sudo" "$sft/orig" \
+        && ok "sudo-fprint: off writes the flag and restores the stack byte for byte" \
+        || bad "sudo-fprint: off did not give back the original stack"
+    [ "$(sf status)" = off ] && ok "sudo-fprint: status says off" \
+        || bad "sudo-fprint: status after off was '$(sf status)'"
+    sf apply
+    cmp -s "$sft/sudo" "$sft/orig" && ok "sudo-fprint: a boot with the flag set leaves it off" \
+        || bad "sudo-fprint: apply with the off flag put the line back"
+    sf on
+    [ ! -e "$sft/etc/off" ] && grep -qF "$LINE" "$sft/sudo" \
+        && ok "sudo-fprint: on removes the flag and puts the line back" \
+        || bad "sudo-fprint: on did not turn it back on"
+
+    # An older line of ours, with another timeout, is brought up to date.
+    stock; sed -i "2i auth sufficient pam_fprintd.so timeout=30" "$sft/sudo"; sf apply
+    grep -qF "$LINE" "$sft/sudo" && ! grep -q 'timeout=30' "$sft/sudo" \
+        && ok "sudo-fprint: an older line of ours is rewritten, not duplicated" \
+        || bad "sudo-fprint: an older line of ours was not updated"
+
+    # ⛔ Somebody else's line is theirs — neither on nor off may touch it.
+    stock; sed -i "2i auth sufficient pam_fprintd.so max-tries=2" "$sft/sudo"
+    cp "$sft/sudo" "$sft/theirs"
+    sf apply; sf off; rm -f "$sft/etc/off"
+    cmp -s "$sft/sudo" "$sft/theirs" \
+        && ok "sudo-fprint: a hand-written pam_fprintd line survives apply and off" \
+        || bad "sudo-fprint: a hand-written line was changed"
+    [ "$(sf status)" = stuck:foreign-line ] && ok "sudo-fprint: ...and status names it" \
+        || bad "sudo-fprint: status for a foreign line was '$(sf status)'"
+
+    # A stack that is not the expected shape is left alone.
+    printf '%s\n' '#%PAM-1.0' 'auth required pam_unix.so' > "$sft/sudo"
+    cp "$sft/sudo" "$sft/odd"; sf apply
+    cmp -s "$sft/sudo" "$sft/odd" && [ "$(sf status)" = stuck:unexpected-stack ] \
+        && ok "sudo-fprint: an unexpected stack is left alone and reported" \
+        || bad "sudo-fprint: an unexpected stack was touched or misreported"
+
+    # No module: no line — a line PAM cannot load complains on every sudo.
+    stock; SFMOD="$sft/nope" sf apply
+    cmp -s "$sft/sudo" "$sft/orig" && [ "$(SFMOD="$sft/nope" sf status)" = stuck:no-module ] \
+        && ok "sudo-fprint: without pam_fprintd nothing is added, and status says why" \
+        || bad "sudo-fprint: a line was added with no module, or status missed it"
+
+    # purge ignores the flag — it is what package removal runs.
+    stock; sf apply; sf purge
+    cmp -s "$sft/sudo" "$sft/orig" && ok "sudo-fprint: purge takes ours out with the switch on" \
+        || bad "sudo-fprint: purge left our line in"
+
+    rm -f "$sft/sudo"; sf apply
+    [ ! -e "$sft/sudo" ] && ok "sudo-fprint: no sudo stack, nothing created" \
+        || bad "sudo-fprint: created a sudo stack where there was none"
+    rm -rf "$sft"
+
+    grep -q 'sudo-fingerprint' src/set.c 2>/dev/null \
+        || grep -q 'sudo-fingerprint' "$(dirname "$0")/../src/set.c" \
+        && ok "set sudo-fingerprint is wired" \
+        || bad "set.c does not answer sudo-fingerprint — the switch is a dead button"
+fi
+refuses "set sudo-fingerprint refuses anything but on/off" 2 set sudo-fingerprint maybe
+
 QML="$(dirname "$0")/../data/syn-settings.qml"
 if [ -f "$QML" ]; then
     grep -q 'config/synui/font.state' "$QML" \
