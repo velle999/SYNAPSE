@@ -319,7 +319,28 @@ pkgver=0.1.0
 #   digit, and `nordlynx` does not. It reads the kernel's interface list now.
 #
 #   53 new msgids, filled in all thirteen catalogs (424/424 each).
-pkgrel=53
+# 54: THE REMOTE PANE GREW ITS SECOND HALF. syn-remote 16 streams this desktop
+#   to Moonlight as well as serving it over VNC, and the two are separate
+#   servers — either can be running without the other — so this is a second
+#   switch on the page rather than a mode of the first: one switch with a mode
+#   in it would turn something off nobody asked it to.
+#   ⛔ THE ROW SAYS IT IS ON THE NETWORK. "Reachable from" above it describes
+#     the VNC listener alone; a streaming host binds every interface and
+#     announces itself over mDNS whatever that row says, so the detail beside
+#     the switch is where that gets said.
+#   ⚠ "Stream shows" draws the SETTING and the head that actually exists side by
+#     side. They differ exactly when synui could not make a virtual display,
+#     which is the case that otherwise looks like nothing happened.
+#   ⛔ AND `sunshine` IS ASKED OF THE STREAM RECORD, not the main one. Asked of
+#     the wrong record it comes back empty — which is neither "yes" nor "no" —
+#     and the pane drew streaming settings on a machine that cannot stream at
+#     all. Caught by running it here before it shipped.
+#   ⚠ A four-letter token in a rec_row cell reads to the unmarked-prose gate
+#     exactly like a drawn English word, so `auto` is compared BEFORE the call
+#     rather than inside it — the rule kept by moving the token, not by
+#     widening the rule.
+#   18 new msgids, filled in all thirteen catalogs (442/442 each).
+pkgrel=54
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

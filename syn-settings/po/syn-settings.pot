@@ -1026,7 +1026,62 @@ msgstr ""
 msgid "somebody is looking at this screen"
 msgstr ""
 
+msgid "Streaming (Moonlight)"
+msgstr ""
+
+msgid ""
+"Video rather than pixels · smooth enough for games and full-screen video, "
+"and reachable by any Moonlight client on this network"
+msgstr ""
+
+msgid "Streaming server"
+msgstr ""
+
+msgid "sunshine is not installed, so nothing can be streamed"
+msgstr ""
+
+msgid "Stream shows"
+msgstr ""
+
+msgid "the main screen"
+msgstr ""
+
+msgid "a display of its own"
+msgstr ""
+
+msgid "Whoever connects sees this desk as it is, at its resolution"
+msgstr ""
+
+msgid ""
+"synui grows a screen with no monitor behind it, sized to whatever the "
+"connecting client asks for"
+msgstr ""
+
+msgid "Blank this machine while streaming"
+msgstr ""
+
+msgid ""
+"The screens in this room go dark while somebody is connected, and come back "
+"when they leave"
+msgstr ""
+
+msgid "Stream port"
+msgstr ""
+
+msgid ""
+"what a Moonlight client is pointed at · its settings page is one port above"
+msgstr ""
+
+msgid "Streaming now"
+msgstr ""
+
+msgid "somebody is streaming this machine"
+msgstr ""
+
 msgid "the server · the switch above is what turns it on"
+msgstr ""
+
+msgid "the streaming server · the second switch above turns it on"
 msgstr ""
 
 msgid "Signature scanner"
@@ -1432,6 +1487,12 @@ msgid "synui-clock returned nothing"
 msgstr ""
 
 msgid "synui-clock not installed — not a synui session"
+msgstr ""
+
+msgid "A display of its own  (its resolution follows the client)"
+msgstr ""
+
+msgid "The main screen  (what is on this desk, as it is)"
 msgstr ""
 
 msgid "This machine only  (reach it over an SSH tunnel)"

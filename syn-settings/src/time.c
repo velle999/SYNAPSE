@@ -410,6 +410,32 @@ int do_choices(int argc, char **argv)
 	 * beside each is, and is the only part anybody reads. Both lists are two
 	 * items and always will be, so they are rendered here rather than asked
 	 * for — the same call date-format's comment makes in reverse. */
+	/* Which screen a stream shows. Two items, for the same reason the two
+	 * lists below are rendered here: `virtual` and `auto` are syn-remote's
+	 * words, the sentences are the person's. A screen chosen BY NAME is a third
+	 * case and stays at the prompt — a list of connector names is a list nobody
+	 * can read, and the window would have to keep it current. */
+	if (!strcmp(key, "remote-stream-display")) {
+		char cur[64] = "";
+		if (have_cmd("syn-remote")) {
+			char *a[] = { (char *)"syn-remote", (char *)"stream",
+			              (char *)"display", NULL };
+			run_capture_quiet(a, cur, sizeof cur);
+			cur[strcspn(cur, "\n")] = '\0';
+			tsv_clean(cur);
+		}
+		/* Compared before the call, for the reason remote.c gives where it
+		 * reads the same token. */
+		const int is_auto = !strcmp(cur, "auto");
+		rec_row("virtual\t%s\t%s",
+		        N_("A display of its own  (its resolution follows the client)"),
+		        is_auto ? "-" : "current");
+		rec_row("auto\t%s\t%s",
+		        N_("The main screen  (what is on this desk, as it is)"),
+		        is_auto ? "current" : "-");
+		return 0;
+	}
+
 	if (!strcmp(key, "remote-scope") || !strcmp(key, "remote-auth")) {
 		char cur[32] = "";
 		if (have_cmd("syn-remote")) {

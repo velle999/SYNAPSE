@@ -267,6 +267,46 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
+	/*
+	 * ⛔ THE OTHER WAY IN, AND IT IS NOT THE SAME SWITCH. `remote-desktop` is
+	 * VNC on loopback by default; this one is a video stream that binds every
+	 * interface and announces itself over mDNS, because there is no
+	 * loopback-only streaming host. Two switches because they are two servers
+	 * and either can be on without the other — one switch with a mode would be
+	 * a switch that turns something off nobody asked it to.
+	 */
+	if (!strcmp(key, "remote-stream")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("remote-stream takes on or off");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed "
+			              "\xc2\xb7 synpkg install syn-remote");
+		char *a[] = { (char *)"syn-remote", (char *)"stream", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "remote-stream-display")) {
+		/* syn-remote's own words again: `virtual` is a head with no cable
+		 * behind it, `auto` is whichever screen synui calls primary. */
+		if (strcmp(val, "virtual") && strcmp(val, "auto"))
+			return refuse("remote-stream-display takes virtual or auto");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed");
+		char *a[] = { (char *)"syn-remote", (char *)"stream",
+		              (char *)"display", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
+	if (!strcmp(key, "remote-stream-solo")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("remote-stream-solo takes on or off");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed");
+		char *a[] = { (char *)"syn-remote", (char *)"stream",
+		              (char *)"solo", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "remote-scope")) {
 		/* ⛔ THE VALUES ARE syn-remote's OWN WORDS, not the row's. The row
 		 * draws "this machine only" and "the network" because that is what a

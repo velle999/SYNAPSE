@@ -54,6 +54,37 @@ static void remote_field(const char *want, char *out, size_t cap)
 	}
 }
 
+/* The same question of `syn-remote stream status --rec`.
+ *
+ * ⚠ A SECOND FUNCTION RATHER THAN A PARAMETER, because they are two records
+ * with two lifetimes: one describes this desktop's VNC server and one describes
+ * a streaming host that may not be installed. Sharing a buffer between them is
+ * how a pane ends up drawing a row from whichever ran last. */
+static void stream_field(const char *want, char *out, size_t cap)
+{
+	out[0] = '\0';
+	if (!have_cmd("syn-remote"))
+		return;
+
+	char rec[4096] = "";
+	char *a[] = { (char *)"syn-remote", (char *)"stream",
+	              (char *)"status", (char *)"--rec", NULL };
+	if (run_capture_quiet(a, rec, sizeof rec) != 0)
+		return;
+
+	for (char *line = strtok(rec, "\n"); line; line = strtok(NULL, "\n")) {
+		char *tab = strchr(line, '\t');
+		if (!tab)
+			continue;
+		*tab = '\0';
+		if (strcmp(line, want) == 0) {
+			snprintf(out, cap, "%s", tab + 1);
+			tsv_clean(out);
+			return;
+		}
+	}
+}
+
 int pane_remote(void)
 {
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
@@ -67,6 +98,11 @@ int pane_remote(void)
 
 	char running[32], atlogin[32], scope[32], conns[32], auth[32];
 	char port[32], session[32], wayvnc[32];
+	/* The streaming half. Same record, asked for by name like everything
+	 * above — `syn-remote status --rec` grew these rows when it grew the
+	 * server behind them. */
+	char st_run[32], st_login[32], st_conn[32], st_port[32];
+	char st_disp[64], st_serving[64], st_solo[32], sunshine[32];
 	remote_field("running",     running, sizeof running);
 	remote_field("atlogin",     atlogin, sizeof atlogin);
 	remote_field("scope",       scope,   sizeof scope);
@@ -75,6 +111,22 @@ int pane_remote(void)
 	remote_field("port",        port,    sizeof port);
 	remote_field("session",     session, sizeof session);
 	remote_field("wayvnc",      wayvnc,  sizeof wayvnc);
+	remote_field("streaming",          st_run,     sizeof st_run);
+	remote_field("stream_connections", st_conn,    sizeof st_conn);
+	remote_field("stream_port",        st_port,    sizeof st_port);
+	/* ⚠ These two are on the stream's OWN record, not the main one: they are
+	 * settings of a server rather than facts about this desktop, and putting
+	 * them in `status --rec` would have made that record answer for two
+	 * different things. */
+	stream_field("atlogin", st_login,   sizeof st_login);
+	stream_field("display", st_disp,    sizeof st_disp);
+	stream_field("serving", st_serving, sizeof st_serving);
+	stream_field("solo",    st_solo,    sizeof st_solo);
+	/* ⚠ OFF THE STREAM RECORD. `sunshine` is a row of `stream status
+	 * --rec` and not of the main one — asked for on the wrong record it
+	 * comes back empty, which is neither "yes" nor "no" and drew the
+	 * settings rows on a machine that cannot stream at all. */
+	stream_field("sunshine", sunshine,  sizeof sunshine);
 
 	/* ── The switch ───────────────────────────────────────────────────── */
 	/*
@@ -138,6 +190,65 @@ int pane_remote(void)
 		        N_("Connected now"), conns,
 		        N_("somebody is looking at this screen"));
 
+	/* ── Streaming ────────────────────────────────────────────────────── */
+	/*
+	 * ⛔ A SECOND SWITCH, AND THE ROW SAYS WHY IT IS NOT THE SAME ONE. This is
+	 * an encoded video stream rather than rectangles of pixels, which is what
+	 * makes a desktop usable at 1440p120 from another room — and it is on the
+	 * network the moment it is on. sunshine binds every interface and announces
+	 * itself over mDNS; there is no loopback-only streaming host, so the
+	 * "Reachable from" row above does not apply to it and the detail says so
+	 * here instead.
+	 */
+	rec_row("switch\t%s\t%s\t%s\t%s\ttoggle:remote-stream",
+	        N_("Streaming (Moonlight)"),
+	        !strcmp(st_login, "yes") ? "on" : "off",
+	        !strcmp(st_run, "yes") ? N_("running") : N_("stopped"),
+	        N_("Video rather than pixels \xc2\xb7 smooth enough for games and full-screen video, and reachable by any Moonlight client on this network"));
+
+	if (!strcmp(sunshine, "no")) {
+		rec_row("switch\t%s\tunavailable\t-\t%s\t-",
+		        N_("Streaming server"),
+		        N_("sunshine is not installed, so nothing can be streamed"));
+	} else {
+		/* ⛔ WHAT IT SHOWS IS THE SETTING PEOPLE COME HERE FOR. A display of
+		 * its own is a screen this desk does not have, at whatever resolution
+		 * the client asked for; the main screen is what is in the room. */
+		/* ⚠ THE COMPARISON HAPPENS BEFORE THE CALL, not inside it. Every
+		 * string literal in a rec_row argument is checked for unmarked prose,
+		 * and a four-letter token like this one is indistinguishable from a
+		 * drawn English word to that check — which is the right rule, kept by
+		 * moving the token rather than by widening the rule. */
+		const int shows_main = !strcmp(st_disp, "auto");
+		rec_row("choice\t%s\t%s\t%s\t%s\tchoice:remote-stream-display",
+		        N_("Stream shows"),
+		        shows_main ? N_("the main screen")
+		                   : N_("a display of its own"),
+		        /* ⚠ The head that actually exists, beside the setting that
+		         * asked for it. They differ exactly when synui could not make
+		         * one, which is the case that otherwise looks like nothing
+		         * happened. */
+		        st_serving[0] ? st_serving : "-",
+		        shows_main
+		            ? N_("Whoever connects sees this desk as it is, at its resolution")
+		            : N_("synui grows a screen with no monitor behind it, sized to whatever the connecting client asks for"));
+
+		rec_row("switch\t%s\t%s\t-\t%s\ttoggle:remote-stream-solo",
+		        N_("Blank this machine while streaming"),
+		        !strcmp(st_solo, "on") ? "on" : "off",
+		        N_("The screens in this room go dark while somebody is connected, and come back when they leave"));
+
+		const char *shown_stream_port = st_port[0] ? st_port : "47989";
+		rec_row("value\t%s\t%s\t-\t%s\t-",
+		        N_("Stream port"), shown_stream_port,
+		        N_("what a Moonlight client is pointed at \xc2\xb7 its settings page is one port above"));
+
+		if (st_conn[0] && strcmp(st_conn, "0") != 0)
+			rec_row("value\t%s\t%s\t-\t%s\t-",
+			        N_("Streaming now"), st_conn,
+			        N_("somebody is streaming this machine"));
+	}
+
 	/* ── And the unit behind the switch ───────────────────────────────── */
 	/*
 	 * ⛔ A SWITCH AND THE THING IT SWITCHES ARE TWO SEPARATE FACTS. syn-speak
@@ -161,6 +272,24 @@ int pane_remote(void)
 		rec_row("unit\t%s\t%s\t%s\t%s\t-",
 		        "syn-remote.service", shown_en, shown_act,
 		        N_("the server \xc2\xb7 the switch above is what turns it on"));
+
+		/* The streaming unit gets its own row for the reason the comment above
+		 * gives: a switch and the thing it switches are two facts, and there
+		 * are two switches on this page now. */
+		char sen[64] = "", sact[64] = "";
+		char *se[] = { (char *)"systemctl", (char *)"--user",
+		               (char *)"is-enabled", (char *)"syn-remote-stream.service", NULL };
+		char *sa[] = { (char *)"systemctl", (char *)"--user",
+		               (char *)"is-active",  (char *)"syn-remote-stream.service", NULL };
+		run_capture_quiet(se, sen, sizeof sen);
+		run_capture_quiet(sa, sact, sizeof sact);
+		sen[strcspn(sen, "\n")] = '\0';   tsv_clean(sen);
+		sact[strcspn(sact, "\n")] = '\0'; tsv_clean(sact);
+		const char *shown_sen  = sen[0]  ? sen  : "not installed";
+		const char *shown_sact = sact[0] ? sact : "-";
+		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		        "syn-remote-stream.service", shown_sen, shown_sact,
+		        N_("the streaming server \xc2\xb7 the second switch above turns it on"));
 	}
 
 	return 0;
