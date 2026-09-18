@@ -606,6 +606,7 @@ declare -gA SYN_T=(
   ["Calendar"]="日历"
   ["File Vault — a locked folder"]="文件保险箱 — 一个上锁的文件夹"
   ["Disk Cleanup — caches, and secure delete"]="磁盘清理 — 缓存与安全删除"
+  ["Malware Scan — a weekly ClamAV sweep"]="恶意软件扫描 — 每周一次 ClamAV 检查"
   ["syn-update — how fixes arrive"]="syn-update — 修复如何送达"
   ["syn — the top-level CLI"]="syn — 顶层命令行"
   ["syn-model — fetch AI models"]="syn-model — 获取 AI 模型"

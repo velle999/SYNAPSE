@@ -48,7 +48,10 @@ pkgver=0.1.0
 # 32: `syn net open` / `syn net close`, following synnet 12. ⛔ These are NOT
 #   `allow`/`block`: allow is an UNBLOCK, and until synnet grew these verbs
 #   nothing could let a source outside the private ranges reach a port at all.
-pkgrel=32
+# 33: a `synscan` row in the Nix profile example. syn-install 118 made the
+#   malware scanner a checkbox and the example never learned it, so a profile
+#   written from the example could not say whether it wanted one.
+pkgrel=33
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

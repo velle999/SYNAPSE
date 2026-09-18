@@ -417,7 +417,20 @@ pkgver=0.1.0
 # reports what the stack reads afterwards. The stack gains one thing it did not
 # have: `authtok_err=die` on pam_unix, so a password prompt nobody answered is
 # not a failed login. faillock_test asserts it and runs against the synui script.
-pkgrel=120
+# ── 0.1.0-121: the malware scanner checkbox, registered everywhere ─────────
+#
+# 118 added comp_synscan to the text installer's table and nowhere else, and
+# three checks had failed since:
+#   · ⛔ the WINDOW never answered it. multi_select() blocks on `read -r` as soon
+#     as one row on a page is unanswered, so a graphical install would have
+#     stopped dead on the Components page, on a terminal hidden behind the
+#     window. It has its row now — same defaults (1/1, and ticked for Minimal,
+#     which takes every core row) — with its label in all thirteen languages.
+#   · the Nix profile example did not document it (syn 33).
+#   · its description, "scan files at rest", was 18 characters in a 15-column
+#     cell and printed cut off mid-word; it reads "malware scanner" now.
+# All thirteen suites pass.
+pkgrel=121
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

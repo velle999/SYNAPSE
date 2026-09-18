@@ -616,6 +616,7 @@ declare -gA SYN_T=(
   ["Calendar"]="Kalendarz"
   ["File Vault — a locked folder"]="Sejf — zamknięty katalog"
   ["Disk Cleanup — caches, and secure delete"]="Czyszczenie dysku — pamięci podręczne i bezpieczne usuwanie"
+  ["Malware Scan — a weekly ClamAV sweep"]="Skanowanie w poszukiwaniu złośliwego oprogramowania — co tydzień przez ClamAV"
   ["syn-update — how fixes arrive"]="syn-update — tędy przychodzą poprawki"
   ["syn — the top-level CLI"]="syn — główna linia poleceń"
   ["syn-model — fetch AI models"]="syn-model — pobieranie modeli SI"

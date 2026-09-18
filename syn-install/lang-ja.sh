@@ -615,6 +615,7 @@ declare -gA SYN_T=(
   ["Calendar"]="カレンダー"
   ["File Vault — a locked folder"]="ファイル金庫 — 施錠されたフォルダー"
   ["Disk Cleanup — caches, and secure delete"]="ディスククリーンアップ — キャッシュと安全な削除"
+  ["Malware Scan — a weekly ClamAV sweep"]="マルウェアスキャン — 毎週の ClamAV 検査"
   ["syn-update — how fixes arrive"]="syn-update — 修正が届く仕組み"
   ["syn — the top-level CLI"]="syn — 最上位のコマンドライン"
   ["syn-model — fetch AI models"]="syn-model — AI モデルの取得"
