@@ -3071,7 +3071,14 @@ FloatingWindow {
                          ? row.label : row.name)
     }
 
+    // Double-click in the list or the grid, and Enter, all land here.
+    //
+    // ⛔ A TRASH ROW OPENS NOTHING. Its `full` is where the file USED to be,
+    // not where it is: opening it handed xdg-open a path that is empty, or
+    // that now holds a different file with the same name. Restore is the
+    // button and the menu entry; activating a trashed row does nothing.
     function activate(row) {
+        if (row.trashName) return
         if (row.type === "dir") root.navigate(row.full, "dir")
         else if (!row.missing)  root.openFile(row.full)
     }

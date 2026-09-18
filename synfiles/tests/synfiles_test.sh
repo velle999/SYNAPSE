@@ -3307,6 +3307,23 @@ if [ -f "$QML" ]; then
         && ok "the row stays lit with the pointer on Restore" \
         || bad "the row highlight reads rowMa alone; hover reaches ONE item, so
         the row goes dark the moment the pointer reaches the button"
+
+    # Double-click, the grid's double-click and Enter all reach activate(). A
+    # Trash row's `full` is where the file USED to be, so opening it handed
+    # xdg-open an empty path, or a different file that now has that name.
+    awk '/function activate\(row\) \{/ {getline; print; exit}' "$QML" \
+        | grep -qF 'if (row.trashName) return' \
+        && ok "activating a Trash row does nothing" \
+        || bad "activate() no longer returns first for a Trash row — a double-click
+        there opens whatever is at the file's OLD path"
+
+    # ⚠ AND ONLY TRASH ROWS CARRY trashName, or the guard above makes some
+    # other view's files silently unopenable.
+    n=$(grep -cF 'trashName: r.name' "$QML")
+    m=$(grep -cE '^[[:space:]]*trashName:' "$QML")
+    [ "$n" = 1 ] && [ "$m" = 1 ] \
+        && ok "only the Trash listing sets trashName" \
+        || bad "trashName is set in $m place(s), expected only the Trash listing"
 fi
 
 RESTORE_QML="$(dirname "$0")/trash_restore_click.qml"

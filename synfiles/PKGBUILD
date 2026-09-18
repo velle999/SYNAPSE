@@ -347,7 +347,16 @@ pkgver=0.1.0
 #   tests/trash_restore_click.qml drives a real pointer over a replica row,
 #   with the shipped wiring kept as a negative control that must still fail;
 #   two greps tie the replica to synfiles.qml.
-pkgrel=79
+# 80: DOUBLE-CLICKING A TRASHED FILE OPENED WHATEVER WAS AT ITS OLD PATH.
+#   A Trash row's path is where the file USED to be. Double-click (list or
+#   grid) and Enter all opened that path, so xdg-open got a path with nothing
+#   there, or a different file that now has the same name, and the status line
+#   said "opening" either way. Activating a Trash row now does nothing; Restore
+#   is the button and the right-click entry. Seen on the real window first:
+#   a double-click in the rig said "opening …" before, and only selects now.
+#   Two new checks: activate() returns first for a Trash row, and only the
+#   Trash listing sets the trashName the guard keys on.
+pkgrel=80
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
