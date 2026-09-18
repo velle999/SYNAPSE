@@ -332,7 +332,22 @@ pkgver=0.1.0
 #   actually showing, not off "Contents" as the assumed longest: "Ursprünglicher
 #   Ort" at 175% ran a long path out of the panel's right edge.
 #   One new string, in all thirteen catalogs, 420/420.
-pkgrel=78
+# 79: THE RESTORE BUTTON NEVER RESTORED ANYTHING.
+#   It was drawn from the first release and never took a click: the row's
+#   MouseArea fills the row, is declared after the button, and Qt offers a
+#   press to the topmost item first — so a click on Restore selected the row.
+#   Hover went the same way, which is why the button never lit up. It sits
+#   above the row now (the rename editor's fix, for the rename editor's
+#   fault), and the row reads the button's hover too: hover reaches ONE item,
+#   so arriving at the button would otherwise turn the row's highlight off.
+#   Right-click ▸ Restore always worked and is unchanged.
+#   Reproduced first on the real window in a nested headless synui with a
+#   virtual pointer: one click, the row selected, 5 files still in the trash;
+#   after the fix, one click and the file is back in its folder.
+#   tests/trash_restore_click.qml drives a real pointer over a replica row,
+#   with the shipped wiring kept as a negative control that must still fail;
+#   two greps tie the replica to synfiles.qml.
+pkgrel=79
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

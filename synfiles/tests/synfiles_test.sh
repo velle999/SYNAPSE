@@ -3289,6 +3289,46 @@ else
     echo "  skip  Qt 6 qmltestrunner not installed, cannot check the eject button"
 fi
 
+# ── the Trash's Restore button ──────────────────────────────────────────────
+#
+# Reported as "the restore column looks like a button but doesn't click". The
+# row's MouseArea fills the row and is declared after the button, so it was the
+# topmost item and took every click: the row was selected, nothing restored,
+# from 0.1.0-1 to 78. tests/trash_restore_click.qml drives a real pointer over
+# a replica; these greps are what keep the replica and the real row in step.
+if [ -f "$QML" ]; then
+    awk '/id: restoreBtn$/ {n = 4} n && /^[[:space:]]*z: [1-9]/ {found = 1} n {n--}
+         END {exit !found}' "$QML" \
+        && ok "the Restore button sits above the row's MouseArea" \
+        || bad "restoreBtn has no z above the row again — rowMa will take every
+        click and Restore will select the row instead of restoring it"
+
+    grep -q 'rowMa.containsMouse || restoreMa.containsMouse' "$QML" \
+        && ok "the row stays lit with the pointer on Restore" \
+        || bad "the row highlight reads rowMa alone; hover reaches ONE item, so
+        the row goes dark the moment the pointer reaches the button"
+fi
+
+RESTORE_QML="$(dirname "$0")/trash_restore_click.qml"
+if [ -n "$QMLTEST" ] && [ -f "$RESTORE_QML" ]; then
+    rrun="$T/restorerun"; mkdir -p "$rrun"
+    rout=$(XDG_RUNTIME_DIR="$rrun" QT_QPA_PLATFORM=offscreen \
+           timeout 60 "$QMLTEST" -input "$RESTORE_QML" 2>&1)
+    rpass=$(printf '%s' "$rout" | grep -c '^PASS ' || true)
+    if printf '%s' "$rout" | has '^FAIL'; then
+        bad "a click on Restore does not reach Restore"
+        printf '%s\n' "$rout" | grep -A2 '^FAIL' | sed 's/^/        /' >&2
+    elif [ "$rpass" -lt 7 ]; then
+        # A Qt 5 runner, or an import error, exits without running anything.
+        bad "the Restore click test did not run ($rpass passes)"
+        printf '%s\n' "$rout" | tail -5 | sed 's/^/        /' >&2
+    else
+        ok "a click on Restore restores, and the row keeps its own clicks ($rpass checks)"
+    fi
+else
+    echo "  skip  Qt 6 qmltestrunner not installed, cannot check the Restore button"
+fi
+
 # ── video thumbnails ────────────────────────────────────────────────────────
 #
 # ⛔ THE HASH IS A CONTRACT WITH EVERY OTHER FILE MANAGER, and with this

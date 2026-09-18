@@ -6972,9 +6972,12 @@ FloatingWindow {
                 width: ListView.view.width
                 height: pane.rowH
                 radius: 3
+                // restoreMa too: the button sits above rowMa, and hover goes
+                // to ONE item, so reaching the button EXITS the row.
                 color: fileRow.dropHover ? root.wash(0.40)
                      : fileRow.isSelected ? root.wash(0.22)
-                     : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
+                     : (rowMa.containsMouse || restoreMa.containsMouse
+                        ? root.wash(0.10) : "transparent")
                 // The keyboard cursor, drawn only when it says something the
                 // highlight does not: with one row selected they are the same
                 // row, and a ring around it is noise.
@@ -7119,8 +7122,15 @@ FloatingWindow {
                 // listing, not something re-derived from the path, because
                 // a second notes.txt is stored as notes.txt.2.
                 // Sized by its label — see restoreBtnW.
+                //
+                // ⛔ z, OR IT IS A PICTURE OF A BUTTON. rowMa is declared below
+                // and fills the row, and input goes to the topmost item first,
+                // so from 0.1.0-1 to 78 every click on Restore selected the
+                // row and nothing was restored. Same fault the rename editor
+                // above fixes the same way.
                 Rectangle {
                     id: restoreBtn
+                    z: 5
                     anchors { right: parent.right; rightMargin: root.restoreColRight; verticalCenter: parent.verticalCenter }
                     width: root.restoreBtnW
                     height: Math.max(22, restoreLabel.implicitHeight + 6)
