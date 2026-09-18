@@ -54,9 +54,9 @@ lives on the machine.
 The desktop is `synui`, a wlroots compositor written for this system rather than
 adapted to it — one that knows the AI daemon exists.
 
-> **Status: beta.** Version 0.3.x. A real, actively developed system — the
-> author daily-drives it, and it is ready for you to do the same. It still
-> moves fast, so expect the occasional rough edge.
+> **Status: 1.0.** A real, actively developed system — the author
+> daily-drives it, and it is ready for you to do the same. It is a rolling
+> release: an installed machine keeps taking updates through `syn-update`.
 
 ---
 
