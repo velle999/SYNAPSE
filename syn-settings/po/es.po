@@ -1924,3 +1924,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "otra cuenta con sus propios archivos y escritorio — en la pantalla de inicio de sesión, Tab pasa al campo del nombre"
+
+msgid "administrator prompts"
+msgstr "solicitudes de administrador"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "sudo en una terminal, y la ventana de contraseña que abren la configuración y las actualizaciones, piden primero un dedo; la contraseña sigue funcionando si espera o si ningún dedo coincide"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo y la ventana de contraseña de administrador solo piden la contraseña; actívelo para aceptar primero un dedo"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "activado, pero aún no en todas las solicitudes de administrador — el próximo arranque lo aplica, o actívelo aquí"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd no está instalado, así que ninguna solicitud de administrador puede pedir un dedo"

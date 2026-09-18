@@ -1847,3 +1847,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "अपनी फ़ाइलों और डेस्कटॉप वाला एक और खाता — लॉगिन स्क्रीन पर Tab नाम वाले खाने पर ले जाता है"
+
+msgid "administrator prompts"
+msgstr "व्यवस्थापक पुष्टि"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "टर्मिनल में sudo, और सेटिंग्स व सॉफ़्टवेयर अपडेट जो पासवर्ड बॉक्स खोलते हैं, पहले उँगली माँगते हैं; इंतज़ार करने पर या कोई उँगली न मिलने पर पासवर्ड भी चलता है"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo और व्यवस्थापक पासवर्ड बॉक्स केवल पासवर्ड माँगते हैं; पहले उँगली स्वीकार करने के लिए चालू करें"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "चालू है, पर अभी हर व्यवस्थापक पुष्टि में नहीं — अगला बूट इसे लागू करेगा, या इसे यहीं चालू करें"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए कोई भी व्यवस्थापक पुष्टि उँगली नहीं माँग सकती"

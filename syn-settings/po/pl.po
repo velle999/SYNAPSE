@@ -1904,3 +1904,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "kolejne konto z własnymi plikami i pulpitem — na ekranie logowania Tab przechodzi do pola nazwy"
+
+msgid "administrator prompts"
+msgstr "pytania administratora"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "sudo w terminalu oraz okno hasła otwierane przez ustawienia i aktualizacje najpierw proszą o palec; hasło nadal działa, jeśli poczekasz lub żaden palec nie pasuje"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo i okno hasła administratora proszą tylko o hasło; włącz, aby najpierw przyjmować palec"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "włączone, ale jeszcze nie we wszystkich pytaniach administratora — zastosuje to następny rozruch albo włącz tutaj"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd nie jest zainstalowany, więc żadne pytanie administratora nie może poprosić o palec"

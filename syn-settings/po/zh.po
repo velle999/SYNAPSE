@@ -1808,3 +1808,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "另一个拥有自己文件和桌面的账户 — 在登录界面按 Tab 可切换到用户名栏"
+
+msgid "administrator prompts"
+msgstr "管理员验证"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "终端里的 sudo，以及设置和软件更新弹出的密码框，会先要求手指；等待或没有手指匹配时，密码依然可用"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo 和管理员密码框只要求密码；打开后会先接受手指"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "已打开，但尚未应用到所有管理员验证 — 下次启动时生效，也可以在这里打开"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "未安装 pam_fprintd，因此任何管理员验证都无法要求手指"

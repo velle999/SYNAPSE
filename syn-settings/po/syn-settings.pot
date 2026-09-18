@@ -681,26 +681,29 @@ msgstr ""
 msgid "Left little"
 msgstr ""
 
-msgid "sudo"
+msgid "administrator prompts"
 msgstr ""
 
 msgid "on"
 msgstr ""
 
 msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
 msgstr ""
 
 msgid "off"
 msgstr ""
 
-msgid "sudo asks for the password only; turn on to accept a finger first"
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
 msgstr ""
 
 msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
 msgstr ""
 
 msgid ""
@@ -708,7 +711,8 @@ msgid ""
 "it alone"
 msgstr ""
 
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr ""
 
 msgid ""

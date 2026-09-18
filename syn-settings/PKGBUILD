@@ -420,7 +420,22 @@ pkgver=0.1.0
 #   syn-update there. The check now runs in a config home of its own, and a
 #   second one plants a layout and expects it carried. Run on the ThinkPad
 #   against its own build before shipping: all tests pass.
-pkgrel=58
+# 59: THE PASSWORD BOX TAKES A FINGER TOO. `synpkg upgrade` — command line
+#   and window alike — authenticates through pkexec, which is polkit, and
+#   polkit's box asked for a password with no finger in sight: 55 covered
+#   /etc/pam.d/sudo and nothing else. The switch is "administrator prompts" now
+#   and covers both.
+#   ⚠ polkit KEEPS ITS STACK IN /usr/lib/pam.d, and PAM prefers /etc/pam.d, so
+#   sudo-fprint GENERATES /etc/pam.d/polkit-1 — polkit's own file plus the line,
+#   marked on its second line — regenerates it on every apply so a polkit
+#   upgrade comes through, and deletes it to switch off. An /etc/pam.d/polkit-1
+#   somebody wrote is edited in place like sudo's, or left alone.
+#   ⚠ polkit 127 authenticates in a sandboxed system service, so the box cannot
+#   tell a pkexec over ssh from a local one; that waits its ten seconds.
+#   And without pam_fprintd installed our lines now come OUT rather than name a
+#   module PAM cannot load. 12 new checks; the whole suite was also run on the
+#   ThinkPad before shipping. Five strings, all thirteen catalogs, 500/500.
+pkgrel=59
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

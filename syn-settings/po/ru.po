@@ -1907,3 +1907,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "ещё одна учётная запись со своими файлами и рабочим столом — на экране входа Tab переходит к полю имени"
+
+msgid "administrator prompts"
+msgstr "запросы администратора"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "sudo в терминале и окно пароля, которое открывают настройки и обновления, сначала просят палец; пароль по-прежнему работает, если подождать или палец не совпадёт"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo и окно пароля администратора спрашивают только пароль; включите, чтобы сначала принимать палец"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "включено, но ещё не во всех запросах администратора — это применит следующая загрузка, или включите здесь"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd не установлен, поэтому ни один запрос администратора не может попросить палец"

@@ -1921,3 +1921,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "nog een account met eigen bestanden en bureaublad — in het aanmeldscherm gaat Tab naar het naamveld"
+
+msgid "administrator prompts"
+msgstr "beheerdersvragen"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "sudo in een terminal, en het wachtwoordvenster dat instellingen en software-updates openen, vragen eerst om een vinger; het wachtwoord werkt nog steeds als u wacht of geen vinger overeenkomt"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo en het beheerderswachtwoordvenster vragen alleen om het wachtwoord; zet aan om eerst een vinger te accepteren"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "aangezet, maar nog niet in elke beheerdersvraag — de volgende start past het toe, of zet het hier aan"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd is niet geïnstalleerd, dus geen enkele beheerdersvraag kan om een vinger vragen"

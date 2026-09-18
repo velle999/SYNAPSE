@@ -1931,3 +1931,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "un altro account con file e desktop propri — nella schermata di accesso, Tab passa al campo del nome"
+
+msgid "administrator prompts"
+msgstr "richieste di amministratore"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "sudo in un terminale, e la finestra della password che aprono le impostazioni e gli aggiornamenti, chiedono prima un dito; la password funziona comunque se aspetti o se nessun dito corrisponde"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo e la finestra della password di amministratore chiedono solo la password; attivalo per accettare prima un dito"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "attivato ma non ancora in tutte le richieste di amministratore — il prossimo avvio lo applica, oppure attivalo qui"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd non è installato, quindi nessuna richiesta di amministratore può chiedere un dito"

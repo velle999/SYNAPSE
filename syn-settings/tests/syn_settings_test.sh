@@ -1716,7 +1716,10 @@ if [ -f "$SF" ]; then
             'session		optional	pam_systemd.so class=none' > "$sft/sudo"
     }
     : > "$sft/pam_fprintd.so"
+    # ⛔ polkit's paths too, or the script reaches for the REAL
+    # /etc/pam.d/polkit-1 and /usr/lib/pam.d/polkit-1.
     sf() { SYN_SUDO_PAM="$sft/sudo" SYN_SUDO_FPRINT_OFF="$sft/etc/off" \
+           SYN_POLKIT_PAM="$sft/polkit-1" SYN_POLKIT_VENDOR="$sft/vendor-polkit-1" \
            SYN_FPRINT_MODULE="${SFMOD:-$sft/pam_fprintd.so}" SYN_SUDO_FPRINT_QUIET=1 \
            sh "$SF" "$@"; }
     LINE='auth       sufficient   pam_fprintd.so timeout=10'
@@ -1793,6 +1796,58 @@ if [ -f "$SF" ]; then
     rm -f "$sft/sudo"; sf apply
     [ ! -e "$sft/sudo" ] && ok "sudo-fprint: no sudo stack, nothing created" \
         || bad "sudo-fprint: created a sudo stack where there was none"
+
+    # ── polkit: the box synpkg and the settings window open ─────────────────
+    # polkit ships its stack in /usr/lib/pam.d only, so ours is GENERATED into
+    # /etc/pam.d, which PAM prefers — and deleted again to switch off.
+    vendor() { printf '%s\n' '#%PAM-1.0' '' 'auth       include      system-auth' \
+        'account    include      system-auth' 'password   include      system-auth' \
+        'session    include      system-auth' > "$sft/vendor-polkit-1"; }
+    stock; vendor; rm -f "$sft/polkit-1" "$sft/etc/off"
+    [ "$(sf status)" = pending ] && ok "polkit: sudo alone is not on — status waits for both" \
+        || bad "polkit: status before apply was '$(sf status)'"
+    sf apply
+    [ "$(sed -n 2p "$sft/polkit-1")" = "# syn-settings: generated from /usr/lib/pam.d/polkit-1 with a fingerprint line" ] \
+        && ok "polkit: /etc/pam.d/polkit-1 is generated, and says so on its second line" \
+        || bad "polkit: no generated polkit-1, or no marker"
+    awk -v l="$LINE" '$0 == l { f = NR } /^auth[[:space:]]+include/ && !i { i = NR }
+        END { exit !(f && i && f < i) }' "$sft/polkit-1" \
+        && ok "polkit: …the finger is asked before the password" \
+        || bad "polkit: the line is not above the auth include"
+    miss=0; while IFS= read -r l; do case "$l" in ''|'#'*) continue ;; esac
+        grep -qxF "$l" "$sft/polkit-1" || miss=1; done < "$sft/vendor-polkit-1"
+    [ "$miss" = 0 ] && ok "polkit: …every line of polkit's own file is in it" \
+        || bad "polkit: the generated file lost a line of polkit's"
+    [ "$(stat -c %a "$sft/polkit-1")" = 644 ] && [ "$(sf status)" = on ] \
+        && ok "polkit: …0644, and status is on with both" || bad "polkit: mode or status wrong after apply"
+    cp "$sft/polkit-1" "$sft/pk-once"; sf apply
+    cmp -s "$sft/polkit-1" "$sft/pk-once" && ok "polkit: apply twice changes nothing" \
+        || bad "polkit: a second apply rewrote it"
+    printf 'session    optional     pam_keyinit.so revoke\n' >> "$sft/vendor-polkit-1"; sf apply
+    grep -qx 'session    optional     pam_keyinit.so revoke' "$sft/polkit-1" \
+        && ok "polkit: a polkit upgrade that changes its file comes through" \
+        || bad "polkit: a vendor change was not regenerated in"
+    sf off
+    [ ! -e "$sft/polkit-1" ] && ! grep -q pam_fprintd "$sft/sudo" \
+        && ok "polkit: off deletes the generated file — PAM falls back to polkit's own" \
+        || bad "polkit: off left the generated file or the sudo line"
+    sf on; rm -f "$sft/vendor-polkit-1"; sf apply
+    [ ! -e "$sft/polkit-1" ] && ok "polkit: polkit gone, the generated file goes with it" \
+        || bad "polkit: a generated file outlived polkit's own"
+    # An /etc/pam.d/polkit-1 somebody wrote is theirs: edited like sudo's.
+    vendor; printf '%s\n' '#%PAM-1.0' '# mine' 'auth       include      system-auth' \
+        'account    include      system-auth' > "$sft/polkit-1"
+    cp "$sft/polkit-1" "$sft/pk-mine"; sf apply
+    grep -qx '# mine' "$sft/polkit-1" && grep -qF "$LINE" "$sft/polkit-1" \
+        && ok "polkit: an admin's own polkit-1 gets the line in place, not replaced" \
+        || bad "polkit: an admin's own polkit-1 was replaced or not edited"
+    sf off
+    cmp -s "$sft/polkit-1" "$sft/pk-mine" && ok "polkit: …and off gives it back byte for byte" \
+        || bad "polkit: off did not restore an admin's own polkit-1"
+    sf on; sf apply; SFMOD="$sft/nope" sf apply
+    ! grep -q pam_fprintd "$sft/sudo" && ! grep -qF "$LINE" "$sft/polkit-1" \
+        && ok "fprintd uninstalled: both lines come out rather than name a missing module" \
+        || bad "a line naming a missing pam_fprintd was left in"
     rm -rf "$sft"
 
     grep -q 'sudo-fingerprint' src/set.c 2>/dev/null \

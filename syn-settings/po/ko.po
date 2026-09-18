@@ -1867,3 +1867,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "자신만의 파일과 데스크톱을 가진 다른 계정 — 로그인 화면에서 Tab을 누르면 이름 칸으로 이동합니다"
+
+msgid "administrator prompts"
+msgstr "관리자 확인"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "터미널의 sudo와, 설정과 소프트웨어 업데이트가 여는 비밀번호 창이 먼저 손가락을 요청합니다. 기다리거나 일치하는 손가락이 없으면 비밀번호도 사용할 수 있습니다"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo와 관리자 비밀번호 창이 비밀번호만 요청합니다. 켜면 손가락을 먼저 받습니다"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "켰지만 아직 모든 관리자 확인에 적용되지 않았습니다 — 다음 부팅 때 적용되며, 여기서 켤 수도 있습니다"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd가 설치되어 있지 않아 어떤 관리자 확인도 손가락을 요청할 수 없습니다"

@@ -1847,3 +1847,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "حساب آخر بملفاته وسطح مكتبه — في شاشة تسجيل الدخول ينقل Tab إلى حقل الاسم"
+
+msgid "administrator prompts"
+msgstr "طلبات المدير"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "يطلب sudo في الطرفية، ومربع كلمة المرور الذي تفتحه الإعدادات وتحديثات البرامج، إصبعًا أولًا؛ وتبقى كلمة المرور صالحة إن انتظرت أو لم يتطابق أي إصبع"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "يطلب sudo ومربع كلمة مرور المدير كلمة المرور فقط؛ شغّله ليقبل إصبعًا أولًا"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "مُشغَّل لكنه ليس في كل طلبات المدير بعد — يطبّقه الإقلاع التالي، أو شغّله هنا"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع أي طلب للمدير أن يطلب إصبعًا"

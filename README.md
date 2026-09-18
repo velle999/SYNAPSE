@@ -1136,24 +1136,28 @@ greetd owns authentication and asks one question at a time.
 So turn it on once you know the reader works — `syn-settings` ▸ Fingerprint, or
 lock the screen and try it there.
 
-**In `sudo` it is on.** Once a finger is enrolled, `sudo` in a terminal asks
-for it before the password (`Place your finger on the fingerprint reader`). If
-no finger matches, or none is offered for ten seconds, the password prompt
-appears as it always did. Over SSH the reader is skipped, and `sudo -n` never
-waits for it. On a machine without a reader, or with nothing enrolled, `sudo`
-behaves exactly as before.
+**At administrator prompts it is on** — `sudo` in a terminal, and the password
+box that the settings window, `synpkg` and software updates open. Once a finger
+is enrolled, both ask for it before the password (`Place your finger on the
+fingerprint reader`). If no finger matches, or none is offered for ten seconds,
+the password is asked for as it always was. `sudo` over SSH skips the reader and
+`sudo -n` never waits for it; the password box cannot tell an SSH session from
+a local one, so a `pkexec` over SSH waits its ten seconds first. On a machine
+without a reader, or with nothing enrolled, nothing changes.
 
-Turn it off in `syn-settings` ▸ Fingerprint ▸ **sudo**, or:
+Turn it off in `syn-settings` ▸ Fingerprint ▸ **administrator prompts**, or:
 
 ```
 sudo mkdir -p /etc/syn-settings && sudo touch /etc/syn-settings/sudo-fingerprint.off
 sudo /usr/lib/syn-settings/sudo-fprint
 ```
 
-That takes the `pam_fprintd` line back out of `/etc/pam.d/sudo`; deleting the
-file and running the same command puts it back, and a oneshot runs it at every
-boot. A `pam_fprintd` line you wrote into `/etc/pam.d/sudo` yourself is left
-alone.
+That takes the `pam_fprintd` line back out of `/etc/pam.d/sudo` and deletes
+`/etc/pam.d/polkit-1` — which it generated from polkit's own
+`/usr/lib/pam.d/polkit-1`, so PAM goes back to that. Deleting the flag and
+running the same command puts both back, and a oneshot runs it at every boot. A
+`pam_fprintd` line you wrote yourself, or an `/etc/pam.d/polkit-1` of your own,
+is edited around rather than replaced.
 
 ### The look it ships with
 

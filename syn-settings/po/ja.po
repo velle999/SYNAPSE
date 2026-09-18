@@ -1896,3 +1896,26 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "独自のファイルとデスクトップを持つ別のアカウント — ログイン画面では Tab で名前欄に移ります"
+
+msgid "administrator prompts"
+msgstr "管理者の確認"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr "ターミナルの sudo と、設定やソフトウェア更新が開くパスワード画面は、まず指を求めます。待つか指が一致しなければ、パスワードも使えます"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo と管理者のパスワード画面はパスワードだけを求めます。オンにすると先に指を受け付けます"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "オンにしましたが、まだすべての管理者の確認には入っていません — 次回の起動で適用されます。ここでオンにすることもできます"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd がインストールされていないため、どの管理者の確認も指を求められません"

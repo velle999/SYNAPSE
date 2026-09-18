@@ -142,27 +142,27 @@ static void fprint_sudo_row(void)
 
 	if (!strcmp(out, "on"))
 		rec_row("sudo\t%s\t%s\tok\t%s\ttoggle:sudo-fingerprint",
-		        N_("sudo"), N_("on"),
-		        N_("sudo in a terminal asks for a finger first; the password still works if you wait or no finger matches"));
+		        N_("administrator prompts"), N_("on"),
+		        N_("sudo in a terminal, and the password box that settings and software updates open, ask for a finger first; the password still works if you wait or no finger matches"));
 	else if (!strcmp(out, "off"))
 		rec_row("sudo\t%s\t%s\t-\t%s\ttoggle:sudo-fingerprint",
-		        N_("sudo"), N_("off"),
-		        N_("sudo asks for the password only; turn on to accept a finger first"));
+		        N_("administrator prompts"), N_("off"),
+		        N_("sudo and the administrator password box ask for the password only; turn on to accept a finger first"));
 	else if (!strcmp(out, "pending"))
 		rec_row("sudo\t%s\t%s\twarn\t%s\ttoggle:sudo-fingerprint",
-		        N_("sudo"), N_("off"),
-		        N_("switched on but not in sudo's PAM stack yet — the next boot applies it, or turn it on here"));
+		        N_("administrator prompts"), N_("off"),
+		        N_("switched on but not in every administrator prompt yet — the next boot applies it, or turn it on here"));
 	else if (!strcmp(out, "stuck:foreign-line"))
 		rec_row("sudo\t%s\t%s\t-\t%s\t-",
-		        N_("sudo"), N_("on"),
+		        N_("administrator prompts"), N_("on"),
 		        N_("a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves it alone"));
 	else if (!strcmp(out, "stuck:no-module"))
 		rec_row("sudo\t%s\t%s\twarn\t%s\t-",
-		        N_("sudo"), N_("off"),
-		        N_("pam_fprintd is not installed, so sudo cannot ask for a finger"));
+		        N_("administrator prompts"), N_("off"),
+		        N_("pam_fprintd is not installed, so no administrator prompt can ask for a finger"));
 	else if (!strcmp(out, "stuck:unexpected-stack"))
 		rec_row("sudo\t%s\t%s\twarn\t%s\t-",
-		        N_("sudo"), N_("off"),
+		        N_("administrator prompts"), N_("off"),
 		        N_("/etc/pam.d/sudo is not the stack this expects, so it is left alone — add pam_fprintd.so as sufficient above its auth include"));
 }
 
