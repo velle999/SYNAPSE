@@ -726,10 +726,23 @@ connections() {
 }
 
 cmd_status() {
-    local active enabled n sock
+    local active enabled n vnc_n stream_n sock stream_active route
     active=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
     enabled=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
-    n=$(connections); n=${n:-0}
+    stream_active=$(systemctl --user is-active "$STREAM_UNIT" 2>/dev/null || true)
+    # ⛔ TWO SERVERS, ONE QUESTION. `connections` is how many people are looking
+    # at this screen BY ANY ROUTE, because that is what it is read for: the
+    # bar's pill is the only thing on the desktop that says somebody is
+    # watching, and a stream is every bit as much somebody watching as a VNC
+    # viewer is. The split is below it for anything that needs to know which.
+    vnc_n=$(connections); vnc_n=${vnc_n:-0}
+    stream_n=$(stream_connections); stream_n=${stream_n:-0}
+    n=$((vnc_n + stream_n))
+    if   [ "$vnc_n" -gt 0 ] && [ "$stream_n" -gt 0 ]; then route=both
+    elif [ "$stream_n" -gt 0 ];                       then route=stream
+    elif [ "$vnc_n" -gt 0 ];                          then route=vnc
+    else                                                   route=none
+    fi
     sock=$(wayland_socket)
 
     if [ "${1:-}" = "--rec" ]; then
@@ -739,6 +752,19 @@ cmd_status() {
         printf 'running\t%s\n'     "$([ "$active" = active ] && echo yes || echo no)"
         printf 'atlogin\t%s\n'     "$([ "$enabled" = enabled ] && echo yes || echo no)"
         printf 'connections\t%s\n' "$n"
+        # ⚠ APPENDED, never inserted. The window and the bar read this record by
+        # field NAME, but a row added in the middle still moves every line a
+        # reader counted on — and each value here is a short word that would
+        # look plausible in the wrong place.
+        printf 'vnc_connections\t%s\n'    "$vnc_n"
+        printf 'stream_connections\t%s\n' "$stream_n"
+        # ⛔ WHICH ROUTE, because `scope` and `port` below describe the VNC
+        # listener alone. A streaming host is on the network whatever those
+        # say — sunshine has no loopback-only mode — so a reader drawing a
+        # sentence from scope for a stream would draw the wrong one.
+        printf 'route\t%s\n'              "$route"
+        printf 'streaming\t%s\n'          "$([ "$stream_active" = active ] && echo yes || echo no)"
+        printf 'stream_port\t%s\n'        "$(stream_port)"
         printf 'address\t%s\n'     "$(bind_address)"
         printf 'port\t%s\n'        "$(bind_port)"
         printf 'scope\t%s\n'       "$([ "$(bind_address)" = 127.0.0.1 ] && echo local || echo lan)"
@@ -758,8 +784,16 @@ cmd_status() {
     note "At login      $([ "$enabled" = enabled ] && echo 'yes' || echo 'no')"
     note "Listening on  $(bind_address):$(bind_port)$([ "$(bind_address)" = 127.0.0.1 ] && echo '   (this machine only)' || echo '   (reachable from the LAN)')"
     note "Sign in with  $([ "$(setting pam off)" = on ] && echo 'your account password (PAM)' || echo "syn-remote password")"
-    [ "$n" -gt 0 ] && note "Connected     $n"
+    [ "$vnc_n" -gt 0 ] && note "Connected     $vnc_n"
     note "Waking it     $PROG wakeable"
+    # The other way in, said here because this is the command people run to ask
+    # what this machine is doing — and a stream nobody mentioned is the same
+    # surprise this package's own indicator exists to prevent.
+    if [ "$stream_active" = active ]; then
+        note ""
+        note "Streaming     running on port $(stream_port)$([ "$stream_n" -gt 0 ] && printf ', %s connected' "$stream_n")"
+        note "              $PROG stream status"
+    fi
     have wayvnc || note "⚠ wayvnc is not installed — nothing can serve."
     [ -n "$sock" ] || note "⚠ No desktop session yet. Nothing exists to share until somebody logs in."
     return 0
@@ -1249,16 +1283,25 @@ hosts_init() {
     chmod 600 "$HOSTS" 2>/dev/null
 }
 
-# One record, by name. Prints `host<TAB>port<TAB>user<TAB>mac` or nothing.
+# One record, by name. Prints `host<TAB>port<TAB>user<TAB>mac<TAB>kind` or
+# nothing.
 #
-# ⚠ FOUR FIELDS EVEN FOR A RECORD SAVED WITH THREE. awk prints an absent field
-# as empty, so a hosts file written before there was a MAC column reads back
-# with an empty one rather than short — and every caller can split into four
-# variables without asking how old the file is.
+# ⚠ FIVE FIELDS EVEN FOR A RECORD SAVED WITH THREE. awk prints an absent field
+# as empty, so a hosts file written before there was a MAC column — or before
+# there was a KIND one — reads back with them empty rather than short, and every
+# caller can split into five variables without asking how old the file is.
+#
+# ⚠ AN EMPTY kind IS `vnc`, which is what every record written before streaming
+# existed is. Callers ask host_kind() rather than testing the field, so that
+# default lives in exactly one place.
 host_record() {
     [ -r "$HOSTS" ] || return 1
-    awk -F'\t' -v n="$1" '$1==n {print $2 "\t" $3 "\t" $4 "\t" $5; found=1; exit}
+    awk -F'\t' -v n="$1" '$1==n {print $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6; found=1; exit}
                           END {exit !found}' "$HOSTS"
+}
+
+host_kind() {   # host_kind <kind-field> -> vnc|stream
+    case "${1:-}" in stream) printf 'stream' ;; *) printf 'vnc' ;; esac
 }
 
 # ── The magic packet ──────────────────────────────────────
@@ -1431,13 +1474,13 @@ cmd_hosts() {
         # these columns by position, and a column added in the middle would
         # silently shift every one after it — a saved password reading as a
         # port number, in a build where nothing failed.
-        printf 'name\thost\tport\tuser\tsecret\tpinned\tmac\n'
-        while IFS="$SEP" read -r n h p u m; do
+        printf 'name\thost\tport\tuser\tsecret\tpinned\tmac\tkind\n'
+        while IFS="$SEP" read -r n h p u m k; do
             [ -n "$n" ] || continue
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" \
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$h" "$p" "$u" \
                    "$(secret_where "$n")" \
                    "$([ -s "$(pin_path "$n")" ] && echo yes || echo no)" \
-                   "$m"
+                   "$m" "$(host_kind "$k")"
         done < <(tr '\t' "$SEP" < "$HOSTS")
         return 0
     fi
@@ -1448,16 +1491,26 @@ cmd_hosts() {
         return 0
     fi
     printf 'Saved connections\n'
-    while IFS="$SEP" read -r n h p u m; do
+    while IFS="$SEP" read -r n h p u m k; do
         [ -n "$n" ] || continue
-        local where; where=$(secret_where "$n")
+        local where kind; where=$(secret_where "$n"); kind=$(host_kind "$k")
         note "$(printf '%-16s %s:%s%s  [%s%s]' "$n" "$h" "$p" \
                  "$([ -n "$u" ] && printf ' as %s' "$u")" \
-                 "$(case $where in
-                        keyring) echo 'password in the keyring' ;;
-                        file)    echo 'password in a file on disk' ;;
-                        *)       echo 'no password saved' ;;
-                    esac)" \
+                 "$(if [ "$kind" = stream ]; then
+                        # ⚠ NO PAIRING STATE CLAIMED. Whether Moonlight is
+                        # paired with a host is Moonlight's own record, kept in
+                        # its config and forgettable from the host's web
+                        # interface — a flag written here would be a second
+                        # answer to a question we are not the owner of, and it
+                        # would go stale the first time either end forgot.
+                        echo 'stream'
+                    else
+                        case $where in
+                            keyring) echo 'password in the keyring' ;;
+                            file)    echo 'password in a file on disk' ;;
+                            *)       echo 'no password saved' ;;
+                        esac
+                    fi)" \
                  "$([ -n "$m" ] && printf ', can be woken')")"
     done < <(tr '\t' "$SEP" < "$HOSTS")
 }
@@ -1465,10 +1518,14 @@ cmd_hosts() {
 cmd_add() {
     # --mac is pulled out first so it can be written anywhere in the line, and
     # the positional arguments keep the shape they have always had.
-    local args=() mac=""
+    local args=() mac="" kind=vnc
     while [ $# -gt 0 ]; do
         case "$1" in
             --mac) mac=${2:-}; shift 2 || true ;;
+            # A machine running SynapseOS streaming, or any other Sunshine /
+            # GameStream host — Moonlight opens it, not the VNC viewer.
+            --stream) kind=stream; shift ;;
+            --vnc)    kind=vnc;    shift ;;
             *)     args+=("$1"); shift ;;
         esac
     done
@@ -1476,13 +1533,18 @@ cmd_add() {
 
     local name=${1:-} target=${2:-} user=${3:-}
     valid_name "$name" || die "a name is letters, digits, dot, dash or underscore"
-    [ -n "$target" ] || die "usage: $PROG add <name> <host>[:port] [user] [--mac <address>]"
+    [ -n "$target" ] || die "usage: $PROG add <name> <host>[:port] [user] [--mac <address>] [--stream]"
     [ -z "$mac" ] || valid_mac "$mac" || die "a hardware address is six pairs of hex, like bc:fc:e7:e8:fd:e3"
 
     local host port
+    # ⚠ THE DEFAULT PORT FOLLOWS THE KIND. 5900 is VNC's; a streaming host is
+    # reached on sunshine's base port, and a stream saved at 5900 fails with a
+    # connection error that says nothing about the real mistake.
+    local defport=$DEFAULT_PORT
+    [ "$kind" = stream ] && defport=$DEFAULT_STREAM_PORT
     case "$target" in
         *:*) host=${target%:*}; port=${target##*:} ;;
-        *)   host=$target;      port=$DEFAULT_PORT ;;
+        *)   host=$target;      port=$defport ;;
     esac
     [ -n "$host" ] || die "no host in '$target'"
     case "$port" in *[!0-9]*|"") die "a port is a number" ;; esac
@@ -1506,14 +1568,22 @@ cmd_add() {
     hosts_init
     local tmp="$HOSTS.new"
     { grep -v "^$name	" "$HOSTS" 2>/dev/null || true
-      printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$host" "$port" "$user" "$mac"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$host" "$port" "$user" "$mac" "$kind"
     } > "$tmp" || die "could not write $HOSTS"
     chmod 600 "$tmp" 2>/dev/null
     mv -f "$tmp" "$HOSTS"
 
-    printf 'Saved %s as %s:%s.\n' "$name" "$host" "$port"
-    note "Remember its password:  $PROG saved $name set"
-    note "Open it:                $PROG connect $name"
+    printf 'Saved %s as %s:%s%s.\n' "$name" "$host" "$port" \
+        "$([ "$kind" = stream ] && printf ' — a streaming host')"
+    if [ "$kind" = stream ]; then
+        # Pairing, not a password: a Moonlight client is trusted by the host
+        # once and then remembered, and there is nothing here to type in later.
+        note "Pair with it:           $PROG trust $name"
+        note "Open it:                $PROG connect $name"
+    else
+        note "Remember its password:  $PROG saved $name set"
+        note "Open it:                $PROG connect $name"
+    fi
     if [ -n "$mac" ]; then
         note "Wake it when asleep:    $PROG wake $name$([ "$learned" = yes ] && printf '   (%s, read off the network)' "$mac")"
     else
@@ -1703,7 +1773,16 @@ cmd_forget() {
 cmd_saved() {
     local name=${1:-} action=${2:-}
     valid_name "$name" || die "usage: $PROG saved <name> [set|clear]"
-    host_record "$name" >/dev/null || die "no saved connection called '$name'"
+    local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
+
+    # ⚠ SAID, NOT SILENTLY ACCEPTED. A streaming host has no password to
+    # remember — Moonlight is paired with it once and carries that itself — so
+    # saving one here would be storing a secret that nothing will ever send.
+    local kind; kind=$(host_kind "$(printf '%s' "$rec" | cut -f5)")
+    if [ "$kind" = stream ] && [ "${action:-}" != "" ] && [ "$action" != status ]; then
+        err "$name is a streaming host — it is paired, not signed in to"
+        die "pair it with:  $PROG trust $name"
+    fi
 
     case "$action" in
         set)
@@ -1753,8 +1832,27 @@ cmd_trust() {
     local name=${1:-} renew=${2:-}
     valid_name "$name" || die "usage: $PROG trust <name> [--renew]"
     local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
-    local host port user mac
-    IFS="$SEP" read -r host port user mac <<< "${rec//$'\t'/$SEP}"
+    local host port user mac kind
+    IFS="$SEP" read -r host port user mac kind <<< "${rec//$'\t'/$SEP}"
+    kind=$(host_kind "$kind")
+
+    # ⛔ A STREAM IS TRUSTED THE OTHER WAY ROUND. There is no certificate to
+    # fetch and pin: Moonlight shows a four-digit PIN and the HOST accepts it,
+    # so the checking happens over there — `syn-remote stream pair <PIN>` on the
+    # machine being reached, or its web interface. This end only has to start
+    # the conversation and print what it is showing.
+    #
+    # ⚠ AND IT RUNS IN THE FOREGROUND. moonlight prints the PIN and then waits
+    # for the host to accept it; backgrounding it would hide the one number the
+    # person needs.
+    if [ "$kind" = stream ]; then
+        have moonlight || die "moonlight is not installed"
+        printf 'Pairing with %s.\n\n' "$name"
+        note "Moonlight shows a PIN below. On $host, accept it with:"
+        note "  syn-remote stream pair <PIN>"
+        printf '\n'
+        exec moonlight pair "$host"
+    fi
 
     hosts_init
     mkdir -p "$PINS" && chmod 700 "$PINS" 2>/dev/null
@@ -1815,10 +1913,15 @@ cmd_connect() {
     local name=${1:-}
     valid_name "$name" || die "usage: $PROG connect <name> [--no-wake]"
     local rec; rec=$(host_record "$name") || die "no saved connection called '$name'"
-    local host port user mac
-    IFS="$SEP" read -r host port user mac <<< "${rec//$'\t'/$SEP}"
+    local host port user mac kind
+    IFS="$SEP" read -r host port user mac kind <<< "${rec//$'\t'/$SEP}"
+    kind=$(host_kind "$kind")
 
-    [ -x "$VIEWER" ] || die "the viewer is missing: $VIEWER"
+    if [ "$kind" = stream ]; then
+        have moonlight || die "moonlight is not installed — nothing here can open a stream"
+    else
+        [ -x "$VIEWER" ] || die "the viewer is missing: $VIEWER"
+    fi
 
     # ⛔ ASKED BEFORE THE CERTIFICATE CHECK, because trusting a machine talks to
     # it: a sleeping host would fail the pin check with a connection error, and
@@ -1842,11 +1945,22 @@ cmd_connect() {
                 # ends when something accepts on the port, and handing the
                 # viewer to a server whose outputs are still coming back is
                 # exactly the grey screen this is here to avoid.
-                note "$name is answering — waiting for its desktop."
-                if wait_for_rfb "$host" "$port" "$READY_WAIT"; then
-                    note "$name is ready."
+                # ⛔ THE SECOND WAIT IS VNC'S ALONE. It watches for wayvnc's
+                # "RFB 003.00x" greeting, which a streaming host does not speak
+                # — and every probe is an unauthenticated session against a
+                # server whose PAM stack has deny=3 on it, which is why that
+                # wait is bounded even where it applies. Moonlight does its own
+                # reachability check and says so; there is nothing useful to
+                # add here for a stream.
+                if [ "$kind" = stream ]; then
+                    note "$name is answering."
                 else
-                    note "$name is answering but offered no desktop in ${READY_WAIT}s — trying anyway."
+                    note "$name is answering — waiting for its desktop."
+                    if wait_for_rfb "$host" "$port" "$READY_WAIT"; then
+                        note "$name is ready."
+                    else
+                        note "$name is answering but offered no desktop in ${READY_WAIT}s — trying anyway."
+                    fi
                 fi
             else
                 # Not fatal. The viewer's own error is the better one to end on if
@@ -1861,6 +1975,18 @@ cmd_connect() {
             note "Give it one with:  $PROG add $name $host:$port${user:+ $user} --mac <address>"
         fi
         printf '\n' >&2
+    fi
+
+    # A stream is opened by Moonlight, which has its own remembered pairing with
+    # the host and needs nothing from this end: no certificate to pin, no
+    # password to spend. Everything above this line — the wake, the wait, the
+    # saved address — is the same for both, which is the reason `connect` is one
+    # verb and not two.
+    if [ "$kind" = stream ]; then
+        # ⚠ "Desktop" is the app sunshine ships in its default list and the one
+        # `syn-remote stream` serves. Moonlight exits with an error naming the
+        # apps it did find if a host has been given a different set.
+        exec moonlight stream "$host" "Desktop"
     fi
 
     # ⛔ NO PIN, NO CONNECTION — and it must say so rather than let the viewer
@@ -1896,6 +2022,610 @@ cmd_connect() {
         ${user:+--user "$user"}
 }
 
+# ── Streaming: sunshine, and Moonlight at the other end ───
+#
+# The second way to reach this desktop, and the one to use when the picture has
+# to move: VNC sends rectangles of pixels, a stream sends an encoded video
+# frame. On this machine that is the GPU's encoder rather than the CPU, which is
+# the whole difference — 1440p at 120Hz is an ordinary stream and would be a
+# slideshow over VNC.
+#
+# ⛔ IT CAPTURES THE SAME WAY wayvnc DOES, WHICH IS WHY IT NEEDS NO PORTAL.
+# sunshine's Wayland grabber wants zwlr_export_dmabuf_manager_v1 and
+# xdg_output; synui exports both (synui_main.c), so there is nothing to prompt
+# and nothing to allow. `capture = wlr` is written into the config for exactly
+# that reason — see write_sunshine_config, where getting it wrong is a stream of
+# XWayland and nothing else.
+#
+# ⛔ AND IT IS ON THE NETWORK. There is no loopback-only streaming host: sunshine
+# binds every interface and announces itself over mDNS, because a game stream
+# nobody can reach is not a thing anybody wants. That is the opposite of this
+# package's VNC default, and `stream status` says so in as many words.
+#
+# ⚠ WHAT IT SERVES IS USUALLY NOT A MONITOR. `stream display virtual` — the
+# default — asks synui for a head with no cable behind it, and the stream gets
+# its own resolution and refresh instead of a copy of whatever is on the desk.
+# The head is made when the server starts and taken away when it stops; it is
+# RESIZED, never replaced, when a client connects, because destroying an output
+# re-homes every window that was on it.
+
+STREAM_UNIT=syn-remote-stream.service
+SUNSHINE_CONF="$CONF_DIR/sunshine.conf"
+# ⚠ ITS OWN FILE, AND ITS OWN STATE. A state file describes THIS session and
+# must not outlive it, the same rule $STATE follows — and the two servers get
+# one each rather than sharing, because a count with two writers is a count
+# nobody can trust.
+STREAM_STATE="${XDG_RUNTIME_DIR:-/tmp}/syn-remote-stream.state"
+# sunshine's BASE port. The web interface is this + 1 and the rest of the ports
+# are offsets from it; Moonlight is given this one.
+DEFAULT_STREAM_PORT=47989
+# What the head comes up at before anybody has asked for anything.
+DEFAULT_STREAM_MODE=1920x1080@60
+
+stream_port() { setting stream_port "$DEFAULT_STREAM_PORT"; }
+
+# ── The state file ────────────────────────────────────────
+#
+# Written by `stream run` before sunshine is exec'd and updated by the prep
+# commands sunshine runs as a stream starts and ends. One key per line, same
+# shape as the settings file.
+stream_state_get() {   # stream_state_get <key>
+    sed -n "s/^$1=//p" "$STREAM_STATE" 2>/dev/null | tail -1
+}
+
+stream_state_set() {   # stream_state_set <key> <value>
+    local tmp="$STREAM_STATE.new"
+    { grep -v "^$1=" "$STREAM_STATE" 2>/dev/null || true
+      printf '%s=%s\n' "$1" "$2"
+    } > "$tmp" 2>/dev/null || return 0
+    mv -f "$tmp" "$STREAM_STATE" 2>/dev/null || true
+}
+
+# ⛔ ZERO UNLESS THE SERVER IS ACTUALLY RUNNING, for the reason connections()
+# has the same guard: the bar draws a pill from this, and a state file that
+# outlived the thing that wrote it would leave that pill saying somebody is
+# watching this screen over a server that is not there.
+stream_connections() {
+    systemctl --user is-active "$STREAM_UNIT" >/dev/null 2>&1 || { printf '0'; return; }
+    local n; n=$(stream_state_get connections)
+    printf '%s' "${n:-0}"
+}
+
+# ── The idle inhibitor, held across two processes ─────────
+#
+# The VNC watcher holds synui's inhibitor as a coprocess for as long as it runs.
+# Nothing here runs for that long: sunshine calls one command when a stream
+# starts and another when it ends, so the inhibitor has to outlive the process
+# that took it.
+#
+# ⚠ setsid, SO SUNSHINE REAPING ITS PREP COMMAND'S CHILDREN DOES NOT TAKE IT —
+# and the unit's KillMode=control-group still does, which is what should happen
+# when streaming is switched off. The helper exits on EOF, so the pipe is held
+# open by a sleep rather than closed after the '1'.
+inhibit_hold() {
+    [ -x "$IDLE_INHIBIT" ] || return 0
+    [ -n "$(stream_state_get inhibitor)" ] && return 0   # already holding one
+    setsid sh -c '{ printf 1; sleep infinity; } | exec "$1"' sh "$IDLE_INHIBIT" \
+        >/dev/null 2>&1 &
+    stream_state_set inhibitor "$!"
+}
+
+inhibit_release() {
+    local pid; pid=$(stream_state_get inhibitor)
+    [ -n "$pid" ] || return 0
+    # ⚠ THE GROUP, not the process. setsid made it a group leader, and the
+    # sleep holding the pipe open is a different process from the sh that
+    # started it — killing only the leader leaves the helper alive on a pipe
+    # nobody will ever close.
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    stream_state_set inhibitor ""
+}
+
+# ── Which screen the stream serves ────────────────────────
+
+# The mode a virtual display is created at, before any client has said what it
+# wants. Validated here rather than at the compositor, so a typo is answered by
+# the thing that was typed at.
+valid_mode() {   # valid_mode <WxH[@Hz]>
+    case "${1:-}" in
+        [0-9]*x[0-9]*@[0-9]*|[0-9]*x[0-9]*) ;;
+        *) return 1 ;;
+    esac
+    local wh=${1%@*} hz=${1#*@}
+    case "${wh%x*}" in ""|*[!0-9]*) return 1 ;; esac
+    case "${wh#*x}" in ""|*[!0-9]*) return 1 ;; esac
+    case "$1" in *@*) case "$hz" in ""|*[!0-9.]*) return 1 ;; esac ;; esac
+    return 0
+}
+
+# Every output synui has, one name per line.
+synui_outputs() {
+    have synctl || return 1
+    synctl outputs 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(1)
+for o in d: print(o.get("name",""))
+' 2>/dev/null
+}
+
+# Make (or find) the screen this stream serves, and print its name.
+#
+# ⚠ THE FALLBACK IS LOUD. A synui too old to make a virtual display, or a
+# session that cannot (a nested one), still streams — it streams the primary
+# monitor — but which of those happened decides whether the desk has grown a
+# phantom screen, so it is said rather than discovered later.
+stream_prepare_display() {
+    local want; want=$(setting stream_display virtual)
+
+    if [ "$want" = virtual ]; then
+        local mode; mode=$(setting stream_mode "$DEFAULT_STREAM_MODE")
+        valid_mode "$mode" || mode=$DEFAULT_STREAM_MODE
+        local out
+        out=$(synctl virtual add "$mode" 2>/dev/null |
+              python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(1)
+print(d.get("name","") if d.get("ok") else "", end="")' 2>/dev/null)
+        if [ -n "$out" ]; then
+            stream_state_set vdisplay "$out"
+            printf '%s' "$out"
+            return 0
+        fi
+        err "synui would not make a virtual display — streaming the primary screen instead"
+        want=auto
+    fi
+
+    local out
+    if [ "$want" = auto ]; then
+        out=$(preferred_output) || out=""
+    else
+        out=$want
+        # ⛔ CHECKED AGAINST THE SCREENS THAT EXIST. sunshine matches output_name
+        # against the names it enumerates and simply finds nothing if it is
+        # wrong — "Couldn't find monitor" in its log and a stream that never
+        # starts, from a setting that looked fine.
+        if synui_outputs | grep -qx "$out"; then :; else
+            err "no screen called '$out' — streaming whatever synui calls primary"
+            out=$(preferred_output) || out=""
+        fi
+    fi
+    printf '%s' "$out"
+}
+
+# ── The generated sunshine config ─────────────────────────
+#
+# ⚠ OURS, AND NEVER HAND-EDITED. It is written from these settings at every
+# start, so an edit made in it is an edit that disappears — which is why it
+# lives in syn-remote's own directory rather than on top of a sunshine.conf
+# somebody may already have written for themselves.
+write_sunshine_config() {   # write_sunshine_config <output-name>
+    local out=$1
+    mkdir -p "$CONF_DIR" || return 1
+    chmod 700 "$CONF_DIR" 2>/dev/null
+
+    local latency; latency=$(setting stream_latency on)
+    local encoder; encoder=$(setting stream_encoder auto)
+
+    {
+        printf '# Generated by syn-remote at every start — edits are overwritten.\n'
+        printf '# Change these through: syn-remote stream …\n\n'
+        printf 'sunshine_name = %s\n' "$(setting stream_name "$(uname -n)")"
+        printf 'port = %s\n' "$(stream_port)"
+
+        # ⛔ wlr, AND NEVER LEFT TO AUTODETECTION. sunshine prefers X11 when
+        # DISPLAY is set, and synui runs XWayland — so autodetection lands on
+        # X11 and says so in its own log: "Wayland detected, yet sunshine will
+        # use X11 for screencasting, screencasting will only work on XWayland
+        # applications". The stream comes up, connects, and shows a desktop
+        # with no Wayland window on it. kms is the other candidate and wants
+        # CAP_SYS_ADMIN on the binary, which this package does not set — and it
+        # captures a CRTC, so it could not see a virtual display at all.
+        printf 'capture = wlr\n'
+        [ "$encoder" = auto ] || printf 'encoder = %s\n' "$encoder"
+        [ -n "$out" ] && printf 'output_name = %s\n' "$out"
+
+        # ⚠ The web interface, which is where pairing is accepted. `lan` is
+        # sunshine's own default and is what `syn-remote stream pair` talks to
+        # over loopback.
+        printf 'origin_web_ui_allowed = lan\n'
+        # ⛔ OFF. UPnP asks the router to forward these ports from the internet,
+        # and a machine that opens a port in the household firewall because
+        # somebody switched on a game stream is not a machine anybody asked for.
+        printf 'upnp = off\n'
+        printf 'min_log_level = warning\n'
+        printf 'log_path = %s\n' "${XDG_RUNTIME_DIR:-/tmp}/sunshine.log"
+        printf 'credentials_file = %s\n' "$CONF_DIR/sunshine-creds.json"
+        printf 'file_state = %s\n' "$CONF_DIR/sunshine-state.json"
+
+        if [ "$latency" = on ]; then
+            # P1 is NVENC's fastest preset and two-pass is the one knob that
+            # costs a whole frame of latency for quality nobody watching a
+            # desktop is looking for.
+            printf 'nvenc_preset = 1\n'
+            printf 'nvenc_twopass = disabled\n'
+        fi
+
+        # ⛔ THE HOOK EVERYTHING ELSE HANGS OFF. sunshine runs `do` before a
+        # stream starts and `undo` when it ends, with the client's width,
+        # height and frame rate in the environment — so this is where the head
+        # is resized to what the far end asked for, where the screen is woken,
+        # and where the machine starts being held awake.
+        printf 'global_prep_cmd = [{"do":"/usr/bin/syn-remote stream prep","undo":"/usr/bin/syn-remote stream unprep"}]\n'
+    } > "$SUNSHINE_CONF" || return 1
+    chmod 600 "$SUNSHINE_CONF" 2>/dev/null
+}
+
+# ── The web interface's own login ─────────────────────────
+#
+# sunshine will not serve anything until a username and password exist for its
+# web interface: without them the first request is redirected to a page asking
+# somebody to invent some, and pairing cannot happen until they have. Making
+# them here is what lets `stream on` be one command.
+stream_ensure_creds() {
+    local user pass
+    user=$(setting stream_user synapse)
+    pass=$(setting stream_password "")
+    if [ -n "$pass" ] && [ -s "$CONF_DIR/sunshine-creds.json" ]; then return 0; fi
+
+    if [ -z "$pass" ]; then
+        pass=$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 20)
+        [ -n "$pass" ] || pass=$(date +%s%N | sha256sum | head -c 20)
+        set_setting stream_password "$pass" || return 1
+        set_setting stream_user "$user"
+    fi
+
+    # ⚠ THROUGH sunshine ITSELF. The credentials file holds a salted hash, not
+    # the password, and sunshine is the only thing that knows how it is made.
+    sunshine "$SUNSHINE_CONF" --creds "$user" "$pass" >/dev/null 2>&1 ||
+        err "sunshine would not take the web interface credentials"
+}
+
+# ── Running it ────────────────────────────────────────────
+
+cmd_stream_run() {
+    have sunshine || die "sunshine is not installed"
+    local sock
+    sock=$(wait_for_session) ||
+        die "no Wayland session after ${SESSION_WAIT}s — nothing to stream yet"
+    export WAYLAND_DISPLAY="$sock"
+
+    # ⚠ FRESH EVERY START. The previous session's head is gone with the
+    # compositor that held it, and its name in here would send sunshine looking
+    # for a screen that no longer exists.
+    printf 'connections=0\n' > "$STREAM_STATE" 2>/dev/null
+
+    local out; out=$(stream_prepare_display)
+    stream_state_set display "$out"
+    write_sunshine_config "$out" || die "could not write $SUNSHINE_CONF"
+    stream_ensure_creds
+
+    [ -n "$out" ] && err "streaming $out on port $(stream_port)"
+    exec sunshine "$SUNSHINE_CONF"
+}
+
+# ⛔ EVERY PATH THROUGH THESE TWO ENDS IN exit 0, WHATEVER HAPPENED. sunshine
+# treats a failing `do` command as a reason to refuse the stream, so a machine
+# with no synctl on it — or a compositor that said no to a resize — would answer
+# a connection with nothing at all rather than with a slightly wrong picture.
+# Everything below is an improvement to a stream that is going to happen anyway.
+cmd_stream_prep() {
+    local vd; vd=$(stream_state_get vdisplay)
+    local out; out=$(stream_state_get display)
+
+    # The size the client asked for. sunshine puts it in the environment of this
+    # command and nowhere else, which is what makes a virtual display worth
+    # having: the head becomes exactly what the far end is going to draw.
+    if [ -n "$vd" ] && [ -n "${SUNSHINE_CLIENT_WIDTH:-}" ] &&
+       [ -n "${SUNSHINE_CLIENT_HEIGHT:-}" ]; then
+        local mode="${SUNSHINE_CLIENT_WIDTH}x${SUNSHINE_CLIENT_HEIGHT}"
+        # ⚠ The frame rate matters as much as the size. A headless output's
+        # refresh IS the rate its frame timer runs at, so a 120Hz client on a
+        # 60Hz head is capped at 60 by the compositor before sunshine sees a
+        # frame.
+        [ -n "${SUNSHINE_CLIENT_FPS:-}" ] && mode="$mode@${SUNSHINE_CLIENT_FPS}"
+        if valid_mode "$mode" && have synctl; then
+            synctl virtual mode "$vd" "$mode" >/dev/null 2>&1 ||
+                err "synui would not put $vd at $mode — streaming it as it is"
+        fi
+    fi
+
+    # ⛔ A BLANKED OUTPUT CANNOT BE CAPTURED. It cannot happen to a virtual
+    # display (synui's idle stage skips those) and it is the ordinary case for a
+    # monitor nobody has touched in ten minutes, which is exactly the machine
+    # somebody is connecting to from somewhere else.
+    [ -n "$out" ] && wake_output "$out"
+
+    # The room's own screens, off, while somebody works on this machine from
+    # elsewhere. Only ever on request.
+    if [ "$(setting stream_solo off)" = on ] && [ -n "$out" ] && have synctl; then
+        synctl virtual solo "$out" >/dev/null 2>&1 ||
+            err "synui would not solo $out"
+    fi
+
+    inhibit_hold
+    stream_state_set connections 1
+    return 0
+}
+
+cmd_stream_unprep() {
+    # ⚠ THE HEAD STAYS. Taking the virtual display away at the end of every
+    # stream would re-home its windows onto another screen each time somebody
+    # disconnects, and make the next connection arrive at a desk that has been
+    # rearranged. It goes when the server does — see `stream cleanup`.
+    if [ "$(setting stream_solo off)" = on ] && have synctl; then
+        synctl virtual solo off >/dev/null 2>&1 || true
+    fi
+    inhibit_release
+    stream_state_set connections 0
+    return 0
+}
+
+# ExecStopPost: the unit is going down, whatever took it down.
+#
+# ⚠ HERE RATHER THAN IN A TRAP, because a trap is only run by a process that
+# gets to run. systemd runs this after the main process has gone however it
+# went — cleanly, killed, or crashed — which is the only way the head does not
+# outlive the server that made it.
+cmd_stream_cleanup() {
+    local vd; vd=$(stream_state_get vdisplay)
+    inhibit_release
+    if have synctl; then
+        synctl virtual solo off >/dev/null 2>&1 || true
+        [ -n "$vd" ] && synctl virtual remove "$vd" >/dev/null 2>&1
+    fi
+    rm -f "$STREAM_STATE"
+    return 0
+}
+
+# ── Switching it on ───────────────────────────────────────
+
+cmd_stream_on() {
+    have sunshine || die "sunshine is not installed"
+    systemctl --user enable --now "$STREAM_UNIT" >/dev/null 2>&1 ||
+        die "could not enable $STREAM_UNIT"
+    printf 'Streaming is on.\n'
+    note "This machine is reachable by Moonlight on port $(stream_port)."
+    note "Pair a client:  it shows a PIN, then here:  $PROG stream pair <PIN>"
+}
+
+cmd_stream_off() {
+    systemctl --user disable --now "$STREAM_UNIT" >/dev/null 2>&1
+    rm -f "$STREAM_STATE"
+    printf 'Streaming is off.\n'
+}
+
+cmd_stream_start() { systemctl --user start "$STREAM_UNIT" || die "could not start $STREAM_UNIT"; }
+cmd_stream_stop()  { systemctl --user stop  "$STREAM_UNIT"; }
+
+# ── What it is doing ──────────────────────────────────────
+
+cmd_stream_status() {
+    local active enabled n
+    active=$(systemctl --user is-active "$STREAM_UNIT" 2>/dev/null || true)
+    enabled=$(systemctl --user is-enabled "$STREAM_UNIT" 2>/dev/null || true)
+    n=$(stream_connections); n=${n:-0}
+
+    if [ "${1:-}" = "--rec" ]; then
+        printf 'field\tvalue\n'
+        printf 'running\t%s\n'     "$([ "$active" = active ] && echo yes || echo no)"
+        printf 'atlogin\t%s\n'     "$([ "$enabled" = enabled ] && echo yes || echo no)"
+        printf 'connections\t%s\n' "$n"
+        printf 'port\t%s\n'        "$(stream_port)"
+        printf 'display\t%s\n'     "$(setting stream_display virtual)"
+        # ⚠ BOTH, because they answer different questions: what was asked for,
+        # and what is on screen right now. `serving` is empty until the server
+        # has actually chosen one, which is the difference between "virtual" as
+        # a wish and a head that exists.
+        printf 'serving\t%s\n'     "$(stream_state_get display)"
+        printf 'vdisplay\t%s\n'    "$(stream_state_get vdisplay)"
+        printf 'mode\t%s\n'        "$(setting stream_mode "$DEFAULT_STREAM_MODE")"
+        printf 'solo\t%s\n'        "$(setting stream_solo off)"
+        printf 'encoder\t%s\n'     "$(setting stream_encoder auto)"
+        printf 'latency\t%s\n'     "$(setting stream_latency on)"
+        printf 'sunshine\t%s\n'    "$(have sunshine && echo yes || echo no)"
+        return 0
+    fi
+
+    printf '%s\n' "SynapseOS streaming (Moonlight)"
+    note "Server        $([ "$active" = active ] && echo 'running' || echo 'stopped')"
+    note "At login      $([ "$enabled" = enabled ] && echo 'yes' || echo 'no')"
+    note "Port          $(stream_port)   (reachable from the whole network)"
+    local serving; serving=$(stream_state_get display)
+    local vd;      vd=$(stream_state_get vdisplay)
+    if [ -n "$vd" ]; then
+        note "Showing       $vd — a virtual display, $(setting stream_mode "$DEFAULT_STREAM_MODE") until a client asks for something else"
+    elif [ -n "$serving" ]; then
+        note "Showing       $serving"
+    else
+        note "Showing       $(setting stream_display virtual)   (not running, so nothing is chosen yet)"
+    fi
+    note "Other screens $([ "$(setting stream_solo off)" = on ] && echo 'off while somebody is streaming' || echo 'left alone')"
+    note "Encoder       $(setting stream_encoder auto)$([ "$(setting stream_latency on)" = on ] && echo ', tuned for latency')"
+    note "Connections   $n"
+    if ! have sunshine; then
+        note ""
+        note "sunshine is not installed, so nothing can be streamed."
+    fi
+}
+
+# ── The settings ──────────────────────────────────────────
+
+cmd_stream_display() {
+    local v=${1:-}
+    if [ -z "$v" ]; then
+        printf '%s\n' "$(setting stream_display virtual)"
+        return 0
+    fi
+    case "$v" in
+        virtual|auto) ;;
+        *) synui_outputs | grep -qx "$v" ||
+               err "no screen called '$v' right now — saving it anyway" ;;
+    esac
+    set_setting stream_display "$v" || die "could not save that"
+    printf 'The stream will show %s.\n' \
+        "$(case $v in
+               virtual) echo 'a virtual display of its own' ;;
+               auto)    echo 'whichever screen synui calls primary' ;;
+               *)       echo "$v" ;;
+           esac)"
+    note "Restart it to take effect:  $PROG stream stop && $PROG stream start"
+}
+
+cmd_stream_mode() {
+    local v=${1:-}
+    if [ -z "$v" ]; then
+        printf '%s\n' "$(setting stream_mode "$DEFAULT_STREAM_MODE")"
+        return 0
+    fi
+    valid_mode "$v" || die "a mode is WIDTHxHEIGHT[@HZ], like 2560x1440@120"
+    set_setting stream_mode "$v" || die "could not save that"
+    printf 'The virtual display starts at %s.\n' "$v"
+    # ⚠ SAID EVERY TIME, because it is the thing that makes this setting look
+    # broken: a client that asks for a size gets that size, and this one is only
+    # what the head sits at in between.
+    note "A connecting client's own resolution replaces this for as long as it is there."
+}
+
+cmd_stream_solo() {
+    local v=${1:-}
+    if [ -z "$v" ]; then
+        printf '%s\n' "$(setting stream_solo off)"
+        return 0
+    fi
+    case "$v" in on|off) ;; *) die "usage: $PROG stream solo on|off" ;; esac
+    set_setting stream_solo "$v" || die "could not save that"
+    if [ "$v" = on ]; then
+        printf 'This machine'"'"'s own screens go dark while somebody is streaming.\n'
+        note "They come back the moment the stream ends, and if the stream never ends"
+        note "they come back when streaming is switched off."
+    else
+        printf 'This machine'"'"'s own screens stay on while somebody is streaming.\n'
+    fi
+}
+
+cmd_stream_tune() {
+    local what=${1:-} v=${2:-}
+    case "$what" in
+        "")
+            note "encoder   $(setting stream_encoder auto)"
+            note "latency   $(setting stream_latency on)"
+            return 0 ;;
+        encoder)
+            [ -n "$v" ] || { printf '%s\n' "$(setting stream_encoder auto)"; return 0; }
+            case "$v" in
+                auto|nvenc|vaapi|quicksync|software) ;;
+                *) die "an encoder is auto, nvenc, vaapi, quicksync or software" ;;
+            esac
+            set_setting stream_encoder "$v" || die "could not save that"
+            printf 'Encoding with %s.\n' "$v" ;;
+        latency)
+            [ -n "$v" ] || { printf '%s\n' "$(setting stream_latency on)"; return 0; }
+            case "$v" in on|off) ;; *) die "usage: $PROG stream tune latency on|off" ;; esac
+            set_setting stream_latency "$v" || die "could not save that"
+            printf 'Latency tuning is %s.\n' "$v" ;;
+        *) die "usage: $PROG stream tune [encoder|latency] [value]" ;;
+    esac
+    note "Restart it to take effect:  $PROG stream stop && $PROG stream start"
+}
+
+# ── Pairing ───────────────────────────────────────────────
+#
+# A Moonlight client that has never seen this machine shows a four-digit PIN and
+# waits; the machine has to accept it. sunshine's own way of doing that is its
+# web interface, which means finding a browser, trusting a self-signed
+# certificate and typing a password — on the machine you are trying to reach
+# from somewhere else. This is the same request, made over loopback.
+#
+# ⚠ python3 rather than curl: python3 is already a dependency (it is the
+# certificate fetcher) and curl is not.
+cmd_stream_pair() {
+    local pin=${1:-}
+    case "$pin" in
+        ""|*[!0-9]*) die "usage: $PROG stream pair <PIN>   — the four digits Moonlight is showing" ;;
+    esac
+    systemctl --user is-active "$STREAM_UNIT" >/dev/null 2>&1 ||
+        die "streaming is not running — start it first:  $PROG stream start"
+
+    local user pass port
+    user=$(setting stream_user synapse)
+    pass=$(setting stream_password "")
+    [ -n "$pass" ] || die "no web interface password yet — start it once:  $PROG stream start"
+    port=$(( $(stream_port) + 1 ))
+
+    # ⛔ VERIFICATION OFF, AND ONLY BECAUSE THIS IS LOOPBACK. sunshine's web
+    # certificate is self-signed and nothing has pinned it; what stops this
+    # being a hole is the address, which is this machine talking to itself.
+    python3 - "$user" "$pass" "$port" "$pin" <<'PY'
+import base64, json, ssl, sys, urllib.request
+
+user, pw, port, pin = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+
+body = json.dumps({"pin": pin, "name": "syn-remote"}).encode()
+req = urllib.request.Request(f"https://127.0.0.1:{port}/api/pin", data=body,
+                             method="POST")
+req.add_header("Content-Type", "application/json")
+req.add_header("Authorization", "Basic " +
+               base64.b64encode(f"{user}:{pw}".encode()).decode())
+try:
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        answer = json.loads(r.read().decode() or "{}")
+except Exception as e:
+    print(f"syn-remote: sunshine would not take the PIN: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# ⚠ ANSWERED HONESTLY. sunshine returns 200 with {"status":"false"} for a PIN
+# that was wrong or that nobody was waiting on — an exit status alone would
+# call that a success.
+if str(answer.get("status", "")).lower() == "true":
+    print("Paired.")
+else:
+    print("syn-remote: that PIN was not accepted — it expires, so ask Moonlight "
+          "for a new one", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
+cmd_stream_web() {
+    local port; port=$(( $(stream_port) + 1 ))
+    local url="https://127.0.0.1:$port/"
+    printf '%s\n' "$url"
+    note "User      $(setting stream_user synapse)"
+    note "Password  $(setting stream_password '(not set yet — start streaming once)')"
+    # ⚠ NOT OPENED BY ITSELF. This prints a password, and a browser launched
+    # from a command that prints a password is one that may be on a screen
+    # somebody else is watching — which, on this machine, is the entire point of
+    # the package.
+    have xdg-open && note "" && note "Open it:  xdg-open '$url'"
+}
+
+cmd_stream() {
+    local sub=${1:-status}; shift 2>/dev/null || true
+    case "$sub" in
+        run)      cmd_stream_run "$@" ;;
+        prep)     cmd_stream_prep "$@" ;;
+        unprep)   cmd_stream_unprep "$@" ;;
+        cleanup)  cmd_stream_cleanup "$@" ;;
+        on)       cmd_stream_on "$@" ;;
+        off)      cmd_stream_off "$@" ;;
+        start)    cmd_stream_start "$@" ;;
+        stop)     cmd_stream_stop "$@" ;;
+        status)   cmd_stream_status "$@" ;;
+        display)  cmd_stream_display "$@" ;;
+        mode)     cmd_stream_mode "$@" ;;
+        solo)     cmd_stream_solo "$@" ;;
+        tune)     cmd_stream_tune "$@" ;;
+        pair)     cmd_stream_pair "$@" ;;
+        web)      cmd_stream_web "$@" ;;
+        *)        err "unknown: $PROG stream $sub"
+                  note "try: on, off, start, stop, status, display, mode, solo, tune, pair, web"
+                  return 1 ;;
+    esac
+}
+
 # ── The other two faces ───────────────────────────────────
 
 cmd_gui() {
@@ -1907,13 +2637,28 @@ cmd_gui() {
 # --tsv the window does, so the two cannot disagree about what is saved.
 cmd_tui() {
     hosts_init
-    local names=() rows=() n h p u sec sel=0
-    while IFS="$SEP" read -r n h p u sec; do
+    local names=() kinds=() rows=() n h p u sec pinned mac k sel=0
+    # ⛔ EVERY COLUMN NAMED, INCLUDING THE ONES NOTHING HERE DRAWS. bash's read
+    # puts the REST of the line in its last variable, separators and all — so
+    # reading five variables out of an eight-column record left `sec` holding
+    # "keyring<US>yes<US>bc:…", which matches neither `keyring` nor `file` and
+    # fell through to "[no password]" for EVERY connection, whatever its
+    # password state. It had been doing that since the `pinned` and `mac`
+    # columns were appended: the record grew, the reader did not, and nothing
+    # failed.
+    while IFS="$SEP" read -r n h p u sec pinned mac k; do
         [ "$n" = name ] && continue
         [ -n "$n" ] || continue
         names+=("$n")
+        kinds+=("$(host_kind "$k")")
         rows+=("$(printf '%-16s %s:%s  %s' "$n" "$h" "$p" \
-                  "$(case $sec in keyring) echo '[keyring]';; file) echo '[on disk]';; *) echo '[no password]';; esac)")")
+                  "$(if [ "$(host_kind "$k")" = stream ]; then echo '[stream]'
+                     else case $sec in
+                              keyring) echo '[keyring]' ;;
+                              file)    echo '[on disk]' ;;
+                              *)       echo '[no password]' ;;
+                          esac
+                     fi)")")
     done < <(cmd_hosts --tsv | tr '\t' "$SEP")
 
     [ ${#names[@]} -gt 0 ] || { printf 'No saved connections. Add one:  %s add <name> <host>\n' "$PROG"; return 0; }
@@ -1927,7 +2672,11 @@ cmd_tui() {
             if [ "$i" -eq "$sel" ]; then printf '  \033[7m%s\033[0m\n' "${rows[$i]}"
             else                          printf '  %s\n' "${rows[$i]}"; fi
         done
-        printf '\n  ↑/↓ choose   Enter connect   w wake   p password   d forget   q quit\n'
+        # ⚠ ONE KEY, TWO MEANINGS, AND IT SAYS WHICH. A streaming host has no
+        # password to set — it is paired — so the row that is selected decides
+        # what `p` is called as well as what it does.
+        printf '\n  ↑/↓ choose   Enter connect   w wake   p %s   d forget   q quit\n' \
+               "$([ "${kinds[$sel]}" = stream ] && echo 'pair' || echo 'password')"
 
         IFS= read -rsn1 key || break
         case "$key" in
@@ -1944,7 +2693,16 @@ cmd_tui() {
             j) sel=$(( (sel + 1) % ${#names[@]} )) ;;
             "") printf '\033[H\033[2J'; cmd_connect "${names[$sel]}"; return $? ;;
             w) printf '\n'; cmd_wake "${names[$sel]}"; printf '\n  [any key]'; IFS= read -rsn1 ;;
-            p) printf '\n'; cmd_saved "${names[$sel]}" set; printf '\n  [any key]'; IFS= read -rsn1 ;;
+            p) printf '\n'
+               if [ "${kinds[$sel]}" = stream ]; then
+                   # ⚠ A SUBSHELL, because cmd_trust execs moonlight for a
+                   # stream — without one, pairing would replace the TUI and
+                   # never come back to the list.
+                   ( cmd_trust "${names[$sel]}" )
+               else
+                   cmd_saved "${names[$sel]}" set
+               fi
+               printf '\n  [any key]'; IFS= read -rsn1 ;;
             d) printf '\n'; cmd_forget "${names[$sel]}"; return 0 ;;
             q) return 0 ;;
         esac
@@ -1970,12 +2728,40 @@ syn-remote — the desktop, from somewhere else
   syn-remote wakeable [on|off] whether a magic packet may wake this machine
                                while it is asleep, and what its address is
 
+Streaming this desktop (sunshine, for Moonlight):
+
+  syn-remote stream on | off   start it now and at every login, or stop
+  syn-remote stream start | stop | status
+  syn-remote stream display virtual|auto|<screen>
+                               a display of its own (default), whichever screen
+                               is primary, or one by name
+  syn-remote stream mode <WxH[@Hz]>
+                               what that display starts at — a client's own
+                               resolution replaces it while it is connected
+  syn-remote stream solo on|off   turn this machine's own screens off while
+                               somebody is streaming
+  syn-remote stream tune [encoder|latency] [value]
+  syn-remote stream pair <PIN> accept the PIN a Moonlight client is showing
+  syn-remote stream web        the address, user and password of sunshine's own
+                               settings page
+
+Video, not rectangles of pixels: the GPU encodes the frame, so a desktop at
+1440p120 is an ordinary stream where VNC would be a slideshow. It captures the
+same way VNC does — no portal, nothing to allow.
+
+⚠ A streaming host is on the network. sunshine binds every interface and
+announces itself; there is no loopback-only mode, which is the opposite of the
+VNC default above.
+
 Reaching somebody else's desktop:
 
   syn-remote hosts [--tsv]     the connections you have saved
-  syn-remote add <name> <host>[:port] [user] [--mac <address>]
+  syn-remote add <name> <host>[:port] [user] [--mac <address>] [--stream]
                                its hardware address is read off the network if
-                               it is reachable now — it is what `wake` sends to
+                               it is reachable now — it is what `wake` sends to.
+                               --stream saves it as a Moonlight host, which
+                               `connect` opens with Moonlight and `trust` pairs
+                               with rather than pinning a certificate
   syn-remote connect <name>    open it — waking it first if it is asleep
   syn-remote wake <name>       just wake it, without opening anything
   syn-remote saved <name> [set|clear]   the password it is opened with
@@ -2032,6 +2818,7 @@ case "${1:-status}" in
     wake)       shift; cmd_wake "$@" ;;
     trust)      shift; cmd_trust "$@" ;;
     fingerprint) shift; cmd_fingerprint "$@" ;;
+    stream)     shift; cmd_stream "$@" ;;
     gui)        shift; cmd_gui "$@" ;;
     tui)        shift; cmd_tui "$@" ;;
     -h|--help|help) usage ;;

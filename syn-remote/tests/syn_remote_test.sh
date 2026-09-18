@@ -39,10 +39,20 @@ mkdir -p "$XDG_RUNTIME_DIR"
 # ⚠ NO systemctl, NO wayvnc, NO wlopm on PATH unless a case puts one there.
 # This suite must not enable a unit or open a port on the machine running it.
 stub="$T/bin"; mkdir -p "$stub"
+# ⚠ IT ANSWERS PER UNIT, because one of the two servers has to be able to be
+# running while the other is not — that is the whole of `route` in the status
+# record, and a stub that called everything dead could not tell the two apart.
+# SR_TEST_STREAM_ACTIVE is how a case says the streaming unit is up.
 cat > "$stub/systemctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$SR_TEST_LOG"
-case "$*" in *is-active*) exit 3 ;; *is-enabled*) echo disabled; exit 1 ;; esac
+case "$*" in
+    *is-active*syn-remote-stream*)
+        [ "${SR_TEST_STREAM_ACTIVE:-no}" = yes ] && { echo active; exit 0; }
+        echo inactive; exit 3 ;;
+    *is-active*)  exit 3 ;;
+    *is-enabled*) echo disabled; exit 1 ;;
+esac
 exit 0
 EOF
 chmod +x "$stub/systemctl"
@@ -319,10 +329,12 @@ check "a host with no port gets 5900"  "5900"         "$("$SR" hosts --tsv | awk
 
 # The header row is why an empty list can be told from a broken command.
 #
-# ⛔ PINNED IN FULL, AND mac IS LAST. The window and the TUI index these columns
-# by position, so a column inserted anywhere but the end shifts every one after
-# it — a saved password read as a port number, in a build where nothing failed.
-check "the record names its columns" "name	host	port	user	secret	pinned	mac" \
+# ⛔ PINNED IN FULL, AND EVERY NEW COLUMN IS ON THE END. The window and the TUI
+# index these columns by position, so a column inserted anywhere but the end
+# shifts every one after it — a saved password read as a port number, in a build
+# where nothing failed. `mac` went on the end when it arrived and `kind` went
+# after it when streaming did.
+check "the record names its columns" "name	host	port	user	secret	pinned	mac	kind" \
       "$("$SR" hosts --tsv | head -1)"
 
 # ⛔ A NAME IS A KEY IN THREE FILES. A tab would split a record and a newline
@@ -907,7 +919,7 @@ grep -q 'six pairs of hex' <<<"$out" && ok "...and nonsense in that column is re
 printf 'old\t192.0.2.60\t5900\tvelle\n' >> "$XDG_CONFIG_HOME/syn-remote/hosts"
 check "a connection saved before there was a mac column still reads" "192.0.2.60" \
       "$("$SR" hosts --tsv | awk -F'\t' '$1=="old"{print $2}')"
-check "...with an empty address rather than a missing column" "6" \
+check "...with an empty address rather than a missing column" "7" \
       "$("$SR" hosts --tsv | awk -F'\t' '$1=="old"{print NF-1}')"
 
 # ⛔ NOTHING TO SEND TO IS AN ERROR WITH THE FIX IN IT, not a packet into the
@@ -1350,6 +1362,269 @@ fi
 # `sleep 120` holding the suite's stderr is how the first run of this section
 # hung a pipeline for two minutes with no output at all.
 srzz_pids | while read -r z; do kill -KILL "$z" 2>/dev/null; done
+
+
+# ── 22. streaming: the config sunshine is actually given ──
+#
+# ⛔ THE ONE LINE THAT DECIDES WHETHER ANY OF THIS WORKS IS `capture`. sunshine
+# prefers X11 when DISPLAY is set and synui runs XWayland, so left to
+# autodetection it picks X11 and says so in its own log — "screencasting will
+# only work on XWayland applications". The stream then comes up, connects, and
+# shows a desktop with no Wayland window on it, which is every window.
+"$SR" stream display virtual >/dev/null 2>&1
+write_sunshine_config HEADLESS-1
+sun="$XDG_CONFIG_HOME/syn-remote/sunshine.conf"
+check "sunshine's config is written 0600" "600" "$(stat -c '%a' "$sun" 2>/dev/null)"
+check "capture is pinned to the wlroots grabber" "capture = wlr" \
+      "$(grep '^capture' "$sun")"
+check "...and it is told which screen" "output_name = HEADLESS-1" \
+      "$(grep '^output_name' "$sun")"
+# ⛔ UPnP OFF. It asks the router to forward these ports from the internet, and
+# a machine that opens a hole in the household firewall because somebody
+# switched on a game stream is not a machine anybody asked for.
+check "UPnP is off" "upnp = off" "$(grep '^upnp' "$sun")"
+grep -q '^global_prep_cmd = .*syn-remote stream prep' "$sun" &&
+    ok "the prep hook is installed — it is what resizes the head and holds the machine awake" ||
+    bad "no global_prep_cmd; a stream would never resize the display or take an inhibitor"
+grep -q '^global_prep_cmd = .*"undo":"[^"]*stream unprep"' "$sun" &&
+    ok "...and the undo half, which is what releases it again" ||
+    bad "the prep hook has no undo; the inhibitor would be held for ever"
+
+# The latency knobs are a setting, and the setting is honoured both ways.
+set_setting stream_latency off
+write_sunshine_config HEADLESS-1
+grep -q '^nvenc_preset' "$sun" && bad "latency off still wrote the NVENC preset" \
+                               || ok "latency off leaves the encoder alone"
+set_setting stream_latency on
+write_sunshine_config HEADLESS-1
+check "latency on asks NVENC for its fastest preset" "nvenc_preset = 1" \
+      "$(grep '^nvenc_preset' "$sun")"
+check "...and turns two-pass off, which costs a whole frame" "nvenc_twopass = disabled" \
+      "$(grep '^nvenc_twopass' "$sun")"
+
+# ── 23. the settings, and what they refuse ────────────────
+out=$("$SR" stream mode 1920x1080@60 2>&1)
+check "a mode is saved" "1920x1080@60" "$("$SR" stream mode 2>/dev/null)"
+out=$("$SR" stream mode nonsense 2>&1)
+grep -q 'WIDTHxHEIGHT' <<<"$out" && ok "...and nonsense in it is refused" \
+                                 || bad "a bad mode was accepted"
+check "...leaving the saved one alone" "1920x1080@60" "$("$SR" stream mode 2>/dev/null)"
+
+out=$("$SR" stream tune encoder banana 2>&1)
+grep -q 'auto, nvenc' <<<"$out" && ok "an encoder nothing can use is refused" \
+                                || bad "any string was accepted as an encoder"
+"$SR" stream tune encoder vaapi >/dev/null 2>&1
+check "...and a real one is kept" "vaapi" "$("$SR" stream tune encoder 2>/dev/null)"
+"$SR" stream tune encoder auto >/dev/null 2>&1
+
+# ⛔ THE RECORD NAMES ITS ROWS, and syn-settings reads them by name. `serving`
+# and `display` are two different questions — what was asked for, and what the
+# server actually chose — and they disagree exactly when synui could not make a
+# virtual display, which is the case that otherwise looks like nothing happened.
+for k in running atlogin connections port display serving vdisplay mode solo encoder latency sunshine; do
+    "$SR" stream status --rec | awk -F'\t' -v k="$k" '$1==k{found=1} END{exit !found}' &&
+        ok "the stream record carries $k" || bad "the stream record has no $k row"
+done
+
+# ── 24. which screen a stream serves ──────────────────────
+#
+# ⚠ A synctl STAND-IN, because the real one needs a compositor. It answers the
+# way synui does and records what it was asked, so the assertions are about the
+# call syn-remote makes rather than about the answer it happens to get.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SR_SYNCTL_LOG"
+case "$*" in
+    "virtual add"*) echo '{"ok":true,"name":"HEADLESS-1","size":[1920,1080],"refresh":60000,"scale":1.00}' ;;
+    "virtual mode"*) echo '{"ok":true}' ;;
+    "virtual solo"*) echo '{"ok":true,"solo":"HEADLESS-1"}' ;;
+    "virtual remove"*) echo '{"ok":true,"removed":1}' ;;
+    outputs) echo '[{"name":"DP-3","primary":true,"virtual":false},{"name":"HDMI-A-1","primary":false,"virtual":false}]' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$stub/synctl"
+export SR_SYNCTL_LOG="$T/synctl.log"
+
+: > "$SR_SYNCTL_LOG"
+rm -f "$STREAM_STATE"
+"$SR" stream display virtual >/dev/null 2>&1
+out=$(stream_prepare_display)
+check "the head synui made is what the stream serves" "HEADLESS-1" "$out"
+check "...and it is remembered, so cleanup can take it away again" "HEADLESS-1" \
+      "$(stream_state_get vdisplay)"
+grep -q '^virtual add 1920x1080@60' "$SR_SYNCTL_LOG" &&
+    ok "...asked for at the saved mode" || bad "the virtual display was not asked for at the saved mode"
+
+# ⛔ AND A synui THAT CANNOT MAKE ONE STILL STREAMS. A nested session, or one
+# older than virtual displays, has to fall back to a real screen — loudly,
+# because whether the desk grew a phantom monitor is not something to discover
+# later.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    "virtual add"*) echo '{"error":"this synui cannot make a virtual display"}' ;;
+    outputs) echo '[{"name":"DP-3","primary":true,"virtual":false}]' ;;
+    *) exit 1 ;;
+esac
+EOF
+rm -f "$STREAM_STATE"
+out=$(stream_prepare_display 2>"$T/prep.err")
+check "a synui that cannot make one falls back to the primary screen" "DP-3" "$out"
+grep -q 'virtual display' "$T/prep.err" &&
+    ok "...and says which of the two happened" || bad "the fallback was silent"
+[ -z "$(stream_state_get vdisplay)" ] &&
+    ok "...and claims no head it did not make" \
+    || bad "a head was recorded that synui refused to make"
+
+# A screen named by hand that this machine does not have is caught here rather
+# than by sunshine, which answers "Couldn't find monitor" in its own log and
+# never starts a stream.
+set_setting stream_display NOSUCH-9
+out=$(stream_prepare_display 2>"$T/prep.err")
+check "a screen this machine does not have falls back too" "DP-3" "$out"
+grep -q "NOSUCH-9" "$T/prep.err" && ok "...naming the one that was missing" \
+                                 || bad "the missing screen was not named"
+set_setting stream_display virtual
+
+# ── 25. what happens when somebody connects ───────────────
+#
+# ⛔ EVERY PATH THROUGH prep ENDS IN exit 0. sunshine treats a failing `do`
+# command as a reason to REFUSE the stream, so a machine with no synctl on it
+# would answer a connection with nothing at all rather than with a slightly
+# wrong picture. Every improvement prep makes is optional; the stream is not.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SR_SYNCTL_LOG"
+case "$*" in
+    "virtual add"*) echo '{"ok":true,"name":"HEADLESS-1"}' ;;
+    "virtual mode"*|"virtual solo"*|"virtual remove"*) echo '{"ok":true}' ;;
+    outputs) echo '[{"name":"DP-3","primary":true,"virtual":false}]' ;;
+    *) exit 1 ;;
+esac
+EOF
+cat > "$stub/wlopm" <<'EOF'
+#!/bin/sh
+printf 'wlopm %s\n' "$*" >> "$SR_SYNCTL_LOG"
+EOF
+chmod +x "$stub/wlopm"
+
+: > "$SR_SYNCTL_LOG"
+rm -f "$STREAM_STATE"
+stream_prepare_display >/dev/null
+stream_state_set display HEADLESS-1
+SUNSHINE_CLIENT_WIDTH=2560 SUNSHINE_CLIENT_HEIGHT=1440 SUNSHINE_CLIENT_FPS=120 \
+    cmd_stream_prep >/dev/null 2>&1
+check "prep answers 0 so sunshine never refuses a stream over it" "0" "$?"
+grep -q '^virtual mode HEADLESS-1 2560x1440@120' "$SR_SYNCTL_LOG" &&
+    ok "the head is resized to what the client asked for" ||
+    bad "the client's resolution never reached synui: $(cat "$SR_SYNCTL_LOG")"
+# ⛔ THE FRAME RATE IS NOT COSMETIC. A headless output's refresh IS the rate its
+# frame timer runs at, so a 120Hz client on a 60Hz head is capped by the
+# compositor before sunshine ever sees a frame.
+grep -q '@120' "$SR_SYNCTL_LOG" && ok "...including its frame rate" \
+                                || bad "the client's fps was dropped"
+grep -q '^wlopm --on HEADLESS-1' "$SR_SYNCTL_LOG" &&
+    ok "the screen it serves is woken — a blanked output cannot be captured at all" ||
+    bad "nothing woke the served screen"
+check "and somebody is recorded as watching" "1" "$(stream_state_get connections)"
+
+# ⚠ THE PILL ON THE BAR IS DRAWN FROM THE TOTAL, not from either server. A
+# stream is every bit as much somebody watching as a VNC viewer is, and the bar
+# reads one number.
+check "the main record counts a stream as somebody watching" "1" \
+      "$(SR_TEST_STREAM_ACTIVE=yes "$SR" status --rec | awk -F'\t' '$1=="connections"{print $2}')"
+check "...and says which way in it was" "stream" \
+      "$(SR_TEST_STREAM_ACTIVE=yes "$SR" status --rec | awk -F'\t' '$1=="route"{print $2}')"
+check "...with the VNC half still zero" "0" \
+      "$(SR_TEST_STREAM_ACTIVE=yes "$SR" status --rec | awk -F'\t' '$1=="vnc_connections"{print $2}')"
+
+# ⛔ AND ZERO THE MOMENT THE SERVER IS NOT THERE, whatever the state file still
+# says. The bar draws a pill from this number, and a pill claiming somebody is
+# watching over a server that is not running is worse than no pill at all — the
+# failure synui's Recording.qml has a paragraph about avoiding. The state file
+# below still reads connections=1; the unit is dead, so the answer is 0.
+check "a count from a server that is not running reads zero" "0" \
+      "$("$SR" stream status --rec | awk -F'\t' '$1=="connections"{print $2}')"
+check "...and the main record does not inherit it either" "0" \
+      "$("$SR" status --rec | awk -F'\t' '$1=="connections"{print $2}')"
+
+cmd_stream_unprep >/dev/null 2>&1
+check "unprep answers 0 as well" "0" "$?"
+check "...and nobody is watching afterwards" "0" "$(stream_state_get connections)"
+# ⛔ THE HEAD STAYS BETWEEN CONNECTIONS. Taking it away at the end of every
+# stream would re-home its windows onto another screen each time somebody
+# disconnects, and hand the next connection a rearranged desk.
+check "...but the head it made is still there" "HEADLESS-1" "$(stream_state_get vdisplay)"
+
+: > "$SR_SYNCTL_LOG"
+cmd_stream_cleanup >/dev/null 2>&1
+grep -q '^virtual remove HEADLESS-1' "$SR_SYNCTL_LOG" &&
+    ok "cleanup takes the head away — nothing else can, once sunshine is exec'd" ||
+    bad "the virtual display outlived the server that made it"
+grep -q '^virtual solo off' "$SR_SYNCTL_LOG" &&
+    ok "...and lights this machine's own screens again" ||
+    bad "solo was left on after the server stopped"
+[ -e "$STREAM_STATE" ] && bad "the state file outlived the server" \
+                       || ok "...and the state file is gone with it"
+
+# ⛔ AND prep SURVIVES HAVING NOTHING TO WORK WITH. This is the machine with no
+# synctl, no wlopm and no compositor — the stream still has to happen.
+mv "$stub/synctl" "$T/synctl.hidden"; mv "$stub/wlopm" "$T/wlopm.hidden"
+rm -f "$STREAM_STATE"
+SUNSHINE_CLIENT_WIDTH=1280 SUNSHINE_CLIENT_HEIGHT=720 cmd_stream_prep >/dev/null 2>&1
+check "prep with no compositor tooling at all still answers 0" "0" "$?"
+cmd_stream_unprep >/dev/null 2>&1; check "...and so does unprep" "0" "$?"
+cmd_stream_cleanup >/dev/null 2>&1; check "...and so does cleanup" "0" "$?"
+mv "$T/synctl.hidden" "$stub/synctl"; mv "$T/wlopm.hidden" "$stub/wlopm"
+
+# ── 26. a saved host that is a stream ─────────────────────
+"$SR" add lounge 192.0.2.80 --stream >/dev/null 2>&1
+check "a stream host gets sunshine's port, not VNC's" "47989" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="lounge"{print $3}')"
+check "...and is marked as one" "stream" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="lounge"{print $8}')"
+# ⚠ EVERYTHING SAVED BEFORE STREAMING EXISTED IS A VNC CONNECTION, and the
+# absent column is what says so — not a missing record the window drops.
+check "a connection saved before there was a kind column is a VNC one" "vnc" \
+      "$("$SR" hosts --tsv | awk -F'\t' '$1=="old"{print $8}')"
+
+# A password is not a thing a streaming host has: Moonlight is paired with it
+# once and carries that itself, so saving one would store a secret nothing can
+# ever send.
+out=$("$SR" saved lounge set 2>&1)
+grep -q 'paired' <<<"$out" && ok "a password on a stream host is refused, with the fix in it" \
+                           || bad "a password was accepted for a streaming host"
+
+# ⛔ AND connect HANDS IT TO MOONLIGHT. The VNC viewer cannot speak to a
+# streaming host at all, and the certificate check in front of it has nothing to
+# check — pairing happened at the other end.
+cat > "$stub/moonlight" <<'EOF'
+#!/bin/sh
+printf 'moonlight %s\n' "$*" >> "$SR_SYNCTL_LOG"
+EOF
+chmod +x "$stub/moonlight"
+: > "$SR_SYNCTL_LOG"
+SYN_REMOTE_WAKE_WAIT=1 "$SR" connect lounge --no-wake >/dev/null 2>&1
+grep -q '^moonlight stream 192.0.2.80 Desktop' "$SR_SYNCTL_LOG" &&
+    ok "connect opens a stream host with moonlight" ||
+    bad "a streaming host was not handed to moonlight: $(cat "$SR_SYNCTL_LOG")"
+: > "$SR_SYNCTL_LOG"
+"$SR" trust lounge >/dev/null 2>&1
+grep -q '^moonlight pair 192.0.2.80' "$SR_SYNCTL_LOG" &&
+    ok "...and trust pairs with it rather than pinning a certificate" ||
+    bad "trust tried to fetch a certificate from a streaming host"
+
+# ── 27. the unit, and the head that must not outlive it ───
+unit="$here/../syn-remote-stream.service"
+grep -q '^ExecStopPost=/usr/bin/syn-remote stream cleanup' "$unit" &&
+    ok "the unit takes the virtual display away when it stops" ||
+    bad "no ExecStopPost; a phantom screen would outlive the server on every stop"
+grep -q '^StartLimitIntervalSec=0' "$unit" &&
+    ok "...and has no start limit, because it starts before the compositor exists" ||
+    bad "the stream unit can burn its retries in the session race and give up for the login"
+check "...and restarts always, not on-failure" "Restart=always" \
+      "$(grep '^Restart=' "$unit")"
 
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi

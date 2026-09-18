@@ -1,0 +1,48 @@
+[Unit]
+Description=SynapseOS streaming host (sunshine, for Moonlight)
+Documentation=https://docs.lizardbyte.dev/projects/sunshine
+# A USER unit, for the same reason syn-remote.service is one: greetd starts
+# synui as the user, the Wayland socket lives in that user's runtime directory,
+# and sunshine's Wayland capture is a client of that socket. It also needs the
+# session's /dev/uinput access, which logind grants the ACTIVE seat's user and
+# nobody else — a system unit would have neither.
+
+# ⛔ NO START LIMIT, and the reason is written up at length in
+# syn-remote.service: this unit is STARTED BEFORE THE COMPOSITOR EXISTS. The
+# user manager reaches default.target while greetd is still bringing up the
+# session, so the first few seconds are a race it is expected to lose, and
+# systemd's default of five starts in ten seconds burns every retry inside that
+# race and then gives up for the whole login. `stream run` waits for the session
+# rather than dying, and this makes sure nothing stops it being asked to.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/syn-remote stream run
+
+# ⛔ THE HEAD HAS TO GO WHEN THE SERVER DOES, HOWEVER THE SERVER WENT. `stream
+# run` asks synui for a virtual display and sunshine is then exec'd in its
+# place, so there is no process left holding a trap — and a compositor left with
+# a phantom screen on the desk after streaming was switched off is a monitor
+# nobody can unplug. ExecStopPost runs on a clean exit, a crash and a SIGKILL
+# alike, which is the only place this can be done from.
+ExecStopPost=/usr/bin/syn-remote stream cleanup
+
+# ⚠ always, NOT on-failure, exactly as the VNC unit: when a session ends
+# sunshine loses its Wayland connection and can exit CLEANLY, and on-failure
+# would leave the unit inactive across the next login with nothing to start it
+# again. The user manager outlives the session and default.target is never
+# reached twice.
+Restart=always
+RestartSec=5
+
+# sunshine has nothing to flush and no state to write on the way out — its
+# pairing file is written when a client pairs, not at exit — so a long stop
+# timeout is time with nothing listening and no picture, on a machine somebody
+# is trying to reach.
+TimeoutStopSec=10
+
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

@@ -209,8 +209,71 @@ pkgver=0.1.0
 #     for is switched off". ensure_output now wakes the output it selects.
 #   ⚠ That output, not `--on '*'`: waking every screen in the house because
 #     somebody opened a remote session is a thing people notice at 2am.
-pkgrel=15
-pkgdesc="Remote desktop for SynapseOS — wayvnc, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
+# 16: STREAMING, and a screen with no monitor behind it. `syn-remote stream on`
+#   serves this desktop to Moonlight through sunshine: the GPU encodes the frame
+#   instead of the wire carrying rectangles of pixels, which is the difference
+#   between 1440p120 being ordinary and being a slideshow.
+#   ⛔ IT NEEDS NO PORTAL EITHER, for the same reason wayvnc does not. sunshine's
+#     Wayland grabber wants zwlr_export_dmabuf_manager_v1 and xdg_output; synui
+#     exports both (synui_main.c), so there is nothing to allow and nothing to
+#     prompt. The other two capture paths are both wrong here: kms wants
+#     CAP_SYS_ADMIN on the binary (which this package does not set) and captures
+#     a CRTC, so it cannot see a virtual display at all.
+#   ⛔ SO `capture = wlr` IS WRITTEN INTO THE CONFIG AND NEVER LEFT TO
+#     AUTODETECTION. sunshine prefers X11 when DISPLAY is set, and synui runs
+#     XWayland — so autodetection lands on X11 and says so in its own log:
+#     "Wayland detected, yet sunshine will use X11 for screencasting,
+#     screencasting will only work on XWayland applications". The stream then
+#     comes up, connects, and shows a desktop with no Wayland window on it,
+#     which on this desktop is every window.
+#   ⛔ AND IT IS ON THE NETWORK THE MOMENT IT IS ON. sunshine binds every
+#     interface and announces itself over mDNS; there is no loopback-only
+#     streaming host, which is the opposite of this package's VNC default and is
+#     said in `stream status`, in the usage text and on the settings page rather
+#     than left to be discovered.
+#   `stream display virtual` (the default) asks synui for a head with no cable
+#   behind it — synui 610's `synctl virtual` — so a remote session gets its own
+#   resolution and refresh instead of a copy of whatever is on the desk.
+#   ⛔ THE HEAD IS RESIZED, NEVER REPLACED. sunshine runs a global_prep_cmd
+#     before each stream with the client's width, height and fps in the
+#     environment, and `stream prep` turns that into one `synctl virtual mode`.
+#     A display per connection cannot work: its NAME is what sunshine.conf pins
+#     as output_name, wlroots hands out HEADLESS-1, -2, -3 in turn, and
+#     destroying a head RE-HOMES every window that was on it onto another
+#     screen. So it lives for the life of the unit.
+#   ⛔ AND EVERY PATH THROUGH prep/unprep ENDS IN exit 0. sunshine treats a
+#     failing `do` command as a reason to REFUSE the stream, so a machine with
+#     no synctl on it would answer a connection with nothing at all rather than
+#     with a slightly wrong picture. Everything prep does is an improvement to a
+#     stream that is going to happen anyway.
+#   ⛔ THE HEAD CANNOT OUTLIVE THE SERVER, and only systemd can see to that.
+#     `stream run` execs sunshine in its own place, so no process is left
+#     holding a trap — ExecStopPost runs on a clean exit, a crash and a SIGKILL
+#     alike, and a compositor left with a phantom screen after streaming was
+#     switched off is a monitor nobody can unplug.
+#   `stream solo on` turns this machine's own screens off while somebody is
+#   connected. `stream pair <PIN>` accepts a Moonlight client over loopback
+#   rather than sending somebody to a browser, a self-signed certificate and a
+#   password on the machine they are trying to reach FROM somewhere else.
+#   ⚠ `status --rec` grew `route`, `streaming`, `stream_port` and the
+#     vnc/stream split, and `connections` is now the TOTAL — the bar's pill is
+#     the only thing on this desktop that says somebody is watching, and a
+#     stream is every bit as much somebody watching as a viewer is. Rows were
+#     APPENDED, never inserted.
+#   ⚠ A saved connection grew a `kind` column, on the end for the same reason.
+#     An absent one is `vnc`, which is what every record written before this is.
+#     `add --stream` saves one, `connect` opens it with Moonlight, and `trust`
+#     PAIRS with it rather than pinning a certificate — the checking happens at
+#     the other end, so there is nothing here to pin.
+#   ⛔ FOUND ON THE WAY, IN THE TUI: bash's `read` puts the REST of the line in
+#     its last variable, separators and all, so reading five variables out of a
+#     seven-column record left `secret` holding "keyring<US>yes<US>bc:…" — which
+#     matches neither `keyring` nor `file` and fell through to "[no password]"
+#     for EVERY connection, whatever its password state. It had been doing that
+#     since the `pinned` and `mac` columns were appended: the record grew, the
+#     reader did not, and nothing failed.
+pkgrel=16
+pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -233,7 +296,14 @@ license=('GPL-2.0-or-later')
 # are all in the clear first — so `openssl s_client`, which speaks TLS from the
 # first byte, cannot reach the certificate at all. Trust-on-first-use needs
 # something that can do the preamble; that is syn-remote-getcert.
-depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python')
+# ⛔ sunshine AND moonlight-qt ARE REAL DEPENDENCIES, by the same rule wayvnc and
+# gtk-vnc are above: `syn-remote stream` is a mode this package offers, and a
+# package that offers a mode and then says "install the thing that does the
+# work" is a package that does not work. sunshine is the streaming server;
+# moonlight-qt is what `connect` opens a streaming host with, and no other
+# client can be handed a saved host without somebody typing it in.
+depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python'
+         'sunshine' 'moonlight-qt')
 # ⚠ synui ships /usr/lib/synui/synui-idle-inhibit, which is what holds the
 # machine awake. Optional rather than required so this still installs on a
 # SynapseOS built without the compositor — the screen is still woken, it just
@@ -242,6 +312,7 @@ depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python')
 # half it is. Without it `wakeable on` still arms the card — it just cannot ask
 # anything to do it again after a reboot, and says so at the time.
 optdepends=('networkmanager: remember the wake setting across reboots'
+            'synui>=0.1.0-610: a virtual display for a stream to serve'
             'polkit: arm the card without being root'
             'synui: hold the machine awake while somebody is connected'
             'openssh: reach a loopback-bound server from another machine'
@@ -282,6 +353,13 @@ package() {
     install -Dm644 syn-remote.service \
         "$pkgdir/usr/lib/systemd/user/syn-remote.service"
 
+    # ⚠ A SECOND UNIT, NOT A MODE OF THE FIRST. The two servers are independent
+    # — either can be running without the other, and they capture, authenticate
+    # and listen in entirely different ways — so one unit with a switch in it
+    # would be a unit that stops something nobody asked it to stop.
+    install -Dm644 syn-remote-stream.service \
+        "$pkgdir/usr/lib/systemd/user/syn-remote-stream.service"
+
     install -Dm755 syn-remote-gui.sh "$pkgdir/usr/bin/syn-remote-gui"
     install -Dm644 shell.qml "$pkgdir/usr/share/syn-remote/shell.qml"
     install -Dm644 syn-remote.desktop \
@@ -303,8 +381,10 @@ package() {
     install -Dm644 org.synapseos.syn-remote.policy \
         "$pkgdir/usr/share/polkit-1/actions/org.synapseos.syn-remote.policy"
 
-    # ⛔ NOT ENABLED HERE, and not by a scriptlet either. A package that
-    # installs a remote desktop and switches it on is a package that opens a
-    # machine somebody did not ask to open. `syn-remote on` is the whole
-    # opt-in, and it is one command.
+    # ⛔ NEITHER UNIT IS ENABLED HERE, and not by a scriptlet either. A package
+    # that installs a remote desktop and switches it on is a package that opens
+    # a machine somebody did not ask to open — and the streaming one is the
+    # louder half, because it binds every interface and announces itself over
+    # mDNS. `syn-remote on` and `syn-remote stream on` are the whole opt-in, and
+    # each is one command.
 }

@@ -400,8 +400,14 @@ ShellRoot {
             // older syn-remote is six columns and still perfectly readable —
             // requiring seven here would empty the list on a mixed install.
             if (f[0] === "name" || f.length < 6) continue
+            // ⚠ kind IS READ WITH A FALLBACK, exactly like mac above and for
+            // the same reason: it is the newest column, and a `hosts --tsv`
+            // from an older syn-remote simply does not have it. Everything
+            // saved before streaming existed is a VNC connection, which is
+            // what an absent column means.
             out.push({ name: f[0], host: f[1], port: f[2], user: f[3],
-                       secret: f[4], pinned: f[5] === "yes", mac: f[6] || "" })
+                       secret: f[4], pinned: f[5] === "yes", mac: f[6] || "",
+                       kind: f[7] === "stream" ? "stream" : "vnc" })
         }
         root.hosts = out
         if (out.length && !root.chosen) root.selected = out[0].name
@@ -413,6 +419,30 @@ ShellRoot {
         if (s === "keyring") return "Password remembered in the keyring"
         if (s === "file")    return "Password remembered in a file on disk"
         return "No password remembered — it will ask"
+    }
+
+    /*
+     * The whole second line of a row, because a streaming host answers none of
+     * the questions a VNC one does. It has no password to remember and no
+     * certificate to pin — Moonlight is paired with the host once and carries
+     * that itself — so a row drawn from those two columns would say "no
+     * password remembered" and "certificate not checked yet" about a connection
+     * that is working perfectly.
+     *
+     * ⚠ AND IT CLAIMS NO PAIRING STATE. Whether Moonlight is paired with a host
+     * is Moonlight's own record, forgettable from the host's own settings page;
+     * a flag drawn here would be a second answer to a question this window does
+     * not own.
+     */
+    function rowWords(h) {
+        if (h.kind === "stream")
+            return "Moonlight stream" + (h.mac ? "   ·   can be woken" : "")
+        return root.secretWords(h.secret) + "   ·   " + root.pinWords(h)
+    }
+
+    function rowWarns(h) {
+        if (h.kind === "stream") return false
+        return !h.pinned || h.secret === "none"
     }
 
     /*
@@ -432,6 +462,17 @@ ShellRoot {
     // fingerprint and waits for a yes, and that is a question for a person at a
     // terminal, not something a window should answer on their behalf.
     function trustServer(name) {
+        run(["syntty", "--hold", "-e", "syn-remote", "trust", name])
+    }
+
+    /*
+     * ⚠ syntty TOO, AND FOR THE OPPOSITE REASON. `trust` on a streaming host
+     * runs `moonlight pair`, which PRINTS a four-digit PIN and waits for the
+     * other machine to accept it. There is nothing to answer here — but the
+     * number has to be readable, and a process whose output this window throws
+     * away would leave somebody with nothing to type at the far end.
+     */
+    function pairServer(name) {
         run(["syntty", "--hold", "-e", "syn-remote", "trust", name])
     }
 
@@ -500,6 +541,17 @@ ShellRoot {
      */
     function connectHost(h) {
         if (!h) return
+        // ⚠ A STREAM OPENS DIRECTLY, ALWAYS. The terminal below exists for the
+        // certificate question, and a streaming host has no certificate to ask
+        // about — pairing happened once, at the other end. Sending it through
+        // syntty would put a terminal in front of every Moonlight session for
+        // no question.
+        if (h.kind === "stream") {
+            run(["syn-remote", "connect", h.name],
+                h.mac ? "Opening " + h.name + " — waking it first if it is asleep…"
+                      : "Opening " + h.name + "…")
+            return
+        }
         // ⚠ `connect` wakes a machine that is not answering before it opens
         // anything, so this press can now take a minute on a sleeping host.
         // Said here rather than left as a still window.
@@ -621,10 +673,8 @@ ShellRoot {
                                 Text {
                                     text: modelData.host + ":" + modelData.port
                                         + (modelData.user ? "   as " + modelData.user : "")
-                                        + "   ·   " + root.secretWords(modelData.secret)
-                                        + "   ·   " + root.pinWords(modelData)
-                                    color: !modelData.pinned || modelData.secret === "none"
-                                           ? root.cWarn : root.cDim
+                                        + "   ·   " + root.rowWords(modelData)
+                                    color: root.rowWarns(modelData) ? root.cWarn : root.cDim
                                     font.family: root.uiFont
                                     font.pixelSize: root.ui(11)
                                     elide: Text.ElideRight
@@ -688,6 +738,24 @@ ShellRoot {
                             fName.text = ""; fHost.text = ""; fUser.text = ""
                         }
                     }
+                    /*
+                     * ⚠ A SECOND BUTTON RATHER THAN A CHECKBOX BESIDE THE
+                     * FIRST. The two make different connections — a different
+                     * default port, a different viewer, a different way of
+                     * being trusted — and each button says which one it makes.
+                     * A tick box would leave the Add button meaning whichever
+                     * of the two the box last happened to be in.
+                     */
+                    Act {
+                        text: "Add a Moonlight host"
+                        enabled: fName.text.trim() !== "" && fHost.text.trim() !== ""
+                        opacity: enabled ? 1 : 0.45
+                        onClicked: {
+                            root.run(["syn-remote", "add", fName.text.trim(),
+                                      fHost.text.trim(), "--stream"])
+                            fName.text = ""; fHost.text = ""; fUser.text = ""
+                        }
+                    }
                 }
 
                 // ── what you can do with the chosen one ────
@@ -705,20 +773,43 @@ ShellRoot {
                         onClicked: root.connectHost(root.chosen)
                     }
                     Act {
-                        // The label names which of the two this press does, for
-                        // the same reason the password button does.
-                        text: root.chosen && root.chosen.pinned
-                              ? "Re-check the certificate" : "Check the certificate"
-                        tint: root.chosen && !root.chosen.pinned ? root.cWarn : root.cText
-                        onClicked: root.trustServer(root.chosen.name)
+                        /*
+                         * Three labels on one button, because there are three
+                         * different things it does — and which one depends on
+                         * the row, not on a setting. A streaming host is PAIRED
+                         * (Moonlight shows a PIN, the other machine accepts
+                         * it); a VNC one has a certificate to check, and then
+                         * to re-check.
+                         */
+                        text: !root.chosen ? "Check the certificate"
+                              : root.chosen.kind === "stream" ? "Pair with it"
+                              : root.chosen.pinned ? "Re-check the certificate"
+                                                   : "Check the certificate"
+                        tint: root.chosen && root.chosen.kind !== "stream"
+                              && !root.chosen.pinned ? root.cWarn : root.cText
+                        onClicked: root.chosen.kind === "stream"
+                                   ? root.pairServer(root.chosen.name)
+                                   : root.trustServer(root.chosen.name)
                     }
                     Act {
-                        // The label changes because the ACTION changes: there is
-                        // a difference between storing a password and replacing
-                        // one, and a row that says "Password…" either way hides
-                        // which of the two is about to happen.
-                        text: root.chosen && root.chosen.secret !== "none"
-                              ? "Replace the password" : "Remember a password"
+                        /*
+                         * The label changes because the ACTION changes: there is
+                         * a difference between storing a password and replacing
+                         * one, and a row that says "Password…" either way hides
+                         * which of the two is about to happen.
+                         *
+                         * ⚠ SHOWN AND UNPRESSABLE on a streaming host, the way
+                         * the wake button is on a machine with no hardware
+                         * address: a button that vanished would leave "where
+                         * did the password go" with nothing to answer it, and
+                         * the label is the answer.
+                         */
+                        text: !root.chosen ? "Remember a password"
+                              : root.chosen.kind === "stream" ? "Paired, not signed in to"
+                              : root.chosen.secret !== "none" ? "Replace the password"
+                                                              : "Remember a password"
+                        enabled: !!(root.chosen && root.chosen.kind !== "stream")
+                        opacity: enabled ? 1 : 0.45
                         onClicked: root.setPassword(root.chosen.name)
                     }
                     Act {
