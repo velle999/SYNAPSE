@@ -31,6 +31,19 @@ export SYN_INSTALL_SOURCE_ONLY=1
 # shellcheck source=/dev/null
 . "$here/../syn-install.sh"
 
+# The logic is synui's script now (see pam_faillock_configure). From the synui
+# tree beside this checkout, or the installed copy; neither means nothing here
+# can be checked, which is said rather than failed.
+if [ -z "${SYN_PAM_FAILLOCK_SCRIPT:-}" ]; then
+    for _c in "$here/../../synui/systemd/synui-pam-faillock.sh" /usr/lib/synui/synui-pam-faillock; do
+        [ -r "$_c" ] && { export SYN_PAM_FAILLOCK_SCRIPT=$_c; break; }
+    done
+fi
+if [ -z "${SYN_PAM_FAILLOCK_SCRIPT:-}" ]; then
+    echo "  skip  synui's synui-pam-faillock is neither beside this checkout nor installed"
+    exit 0
+fi
+
 TMP=$(mktemp -d /tmp/faillock.XXXXXX)
 trap 'rm -rf "$TMP"' INT TERM EXIT
 
@@ -96,8 +109,11 @@ check "…authfail is untouched" "1" \
     "$(grep -cE '^auth[[:space:]]+\[default=die\][[:space:]]+pam_faillock\.so[[:space:]]+authfail' "$a")"
 check "…authsucc is still required" "1" \
     "$(grep -cE '^auth[[:space:]]+required[[:space:]]+pam_faillock\.so[[:space:]]+authsucc' "$a")"
-check "…pam_unix is untouched" "1" \
-    "$(grep -cE '^auth[[:space:]]+\[success=1 default=bad\][[:space:]]+pam_unix\.so' "$a")"
+# ⛔ pam_unix IS changed now, by one word: an unanswered prompt (PAM_AUTHTOK_ERR)
+# ends the stack before authfail can count it. Its success jump is load-bearing
+# — without success=1 a correct password would fall into authfail.
+check "…pam_unix gets authtok_err=die and keeps success=1" "1" \
+    "$(grep -cE '^auth[[:space:]]+\[success=1 authtok_err=die default=bad\][[:space:]]+pam_unix\.so' "$a")"
 
 check "…the thresholds are written" "1" "$(grep -c '^deny = 5$' "$c")"
 check "…unlock_time is stated" "1" "$(grep -c '^unlock_time = 600$' "$c")"

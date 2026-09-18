@@ -3571,7 +3571,35 @@ pkgver=0.1.0
 #   keeps no copy of its own. Checked for real: syn-settings' Users pane made an
 #   account inside a user namespace over a copy of /etc, and its home had this
 #   file, owned by it, with the layout line appended.
-pkgrel=612
+# 613: AN IDLE LOGIN SCREEN LOCKED THE ACCOUNT, AND THEN sudo REFUSED THE RIGHT
+#   PASSWORD. With the login fingerprint on, the greeter keeps the reader armed:
+#   every time pam_fprintd times out (10 s) PAM moves on to the password prompt
+#   and the greeter hangs up to arm the reader again. pam_unix reports that
+#   unanswered prompt as PAM_AUTHTOK_ERR and pambase's `[success=1 default=bad]`
+#   hands it to `pam_faillock authfail` as a failed login. On velle's ThinkPad:
+#   three in thirty seconds, "account temporarily locked"; the finger still let
+#   them in (it sits above the stack), and then an update's sudo rejected a
+#   correct password — each attempt, with pambase's `required` preauth, pushing
+#   the unlock time forward again.
+#   ⛔ THE FIX IS ONE WORD: `authtok_err=die` on pam_unix's line, which ends the
+#   stack before authfail can count a prompt that produced no password. A wrong
+#   password is still counted. The same class locked the account twice in August
+#   through a sudo with no terminal; that is fixed by the same word.
+#   ⚠ NOT conv_err=die — it reads right and does nothing; pam_unix returns
+#   AUTHTOK_ERR, not CONV_ERR. Measured against real Linux-PAM.
+#   /usr/lib/synui/synui-pam-faillock does it, touching only pambase's own
+#   lines, and also brings the `requisite` preauth and the 5/900/600 thresholds
+#   that syn-install has written since 0.1.0-98 — which reached fresh installs
+#   only. Run by this scriptlet on install and upgrade and by a oneshot before
+#   greetd at every boot; syn-install now calls it instead of keeping a sed.
+#   And the greeter re-arms the reader while idle only when the stack says an
+#   unanswered prompt is free; where it cannot tell, the reader gets its first
+#   window and the screen then waits for a password.
+#   tests/pam_faillock.sh: the script on fixtures, then real pam_authenticate()
+#   in a user namespace against the file it produced, pambase's stock stack
+#   beside it as the control — six hung-up prompts, no failures; five wrong
+#   passwords, five, and the lock then holds without being pushed forward.
+pkgrel=613
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -3930,6 +3958,17 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synui-login-fprint.service"
     install -Dm644 systemd/greetd.service.d/synui-login-fprint.conf \
         "$pkgdir/usr/lib/systemd/system/greetd.service.d/synui-login-fprint.conf"
+
+    # An unanswered password prompt is not a failed login: authtok_err=die on
+    # pambase's pam_unix line, plus the faillock thresholds syn-install has
+    # written since 0.1.0-98 — which until now reached fresh installs only. One
+    # script; the scriptlet, a oneshot before greetd, and syn-install all run it.
+    install -Dm755 systemd/synui-pam-faillock.sh \
+        "$pkgdir/usr/lib/synui/synui-pam-faillock"
+    install -Dm644 systemd/synui-pam-faillock.service \
+        "$pkgdir/usr/lib/systemd/system/synui-pam-faillock.service"
+    install -Dm644 systemd/greetd.service.d/synui-pam-faillock.conf \
+        "$pkgdir/usr/lib/systemd/system/greetd.service.d/synui-pam-faillock.conf"
     install -Dm644 config/synui.desktop \
         "$pkgdir/usr/share/wayland-sessions/synui.desktop"
 

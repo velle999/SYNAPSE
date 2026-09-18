@@ -409,7 +409,15 @@ pkgver=0.1.0
 # directory is made either way, because the xkb and KDE Connect lines append
 # into it. layout_test reads the skel file now (from the synui tree, or from
 # /etc/skel installed) and checks the heredoc stays gone.
-pkgrel=119
+# ── 0.1.0-120: the faillock stack has one owner, and it is synui's ─────────
+#
+# pam_faillock_configure() kept a sed of its own, and what it wrote reached
+# fresh installs only. synui 613 ships /usr/lib/synui/synui-pam-faillock and runs
+# it on every machine; this now calls that script with the target's paths and
+# reports what the stack reads afterwards. The stack gains one thing it did not
+# have: `authtok_err=die` on pam_unix, so a password prompt nobody answered is
+# not a failed login. faillock_test asserts it and runs against the synui script.
+pkgrel=120
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

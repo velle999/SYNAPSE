@@ -1764,6 +1764,10 @@ test('greeter_bg', greeter_bg_t,
 # into.
 greeter_fp_t = find_program('tests/greeter_fprint.sh')
 test('greeter_fprint', greeter_fp_t, timeout : 60)
+# An unanswered password prompt is not a failed login: the faillock script on
+# fixtures, then real Linux-PAM in a user namespace (skipped where there is none).
+pam_faillock_t = find_program('tests/pam_faillock.sh')
+test('pam_faillock', pam_faillock_t, timeout : 120)
 
 # ⛔ The LOCK's reader, which is a different helper and a different fault. The
 # verdict letter is the whole retry policy and it was wrong inside a switch

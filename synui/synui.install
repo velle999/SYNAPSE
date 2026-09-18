@@ -53,10 +53,21 @@ _synui_fprint_in_greeter() {
     "$_synui_login_fprint" || true
 }
 
+# An unanswered password prompt is not a failed login — see the script. Run on
+# every install and upgrade so an existing machine gets it with the update that
+# carries it, not at some later boot.
+_synui_pam_faillock=/usr/lib/synui/synui-pam-faillock
+_synui_faillock() {
+    [ -x "$_synui_pam_faillock" ] || return 0
+    "$_synui_pam_faillock" || true
+}
+
 post_install() {
     _synui_fprint_in_greeter
+    _synui_faillock
 }
 
 post_upgrade() {
     _synui_fprint_in_greeter
+    _synui_faillock
 }

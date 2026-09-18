@@ -1909,56 +1909,40 @@ pam_faillock_configure() {  # pam_faillock_configure <system-auth> <faillock.con
     _pfc_conf=$2
     [ -f "$_pfc_auth" ] && [ -f "$_pfc_conf" ] || return 1
 
-    # ⚠ pam_faillock counts a failed PAM CONVERSATION as a wrong password, not
-    # only a wrong password. Anything that runs sudo with no controlling tty
-    # and no askpass — a task runner, a CI shell, an editor's agent — cannot
-    # prompt at all, so pam_unix logs "auth could not identify password" and a
-    # failure is recorded against the user who never typed anything. Three of
-    # those and the account is locked.
+    # ⛔ ONE IMPLEMENTATION, AND IT IS synui's. This was a sed of its own until
+    # 2026-09-18, and what it wrote reached fresh installs only — an existing
+    # machine never got `requisite` or the thresholds, and velle's ThinkPad was
+    # locked out by exactly that. synui now ships the logic as
+    # /usr/lib/synui/synui-pam-faillock and runs it from its scriptlet and at
+    # every boot; this calls the same script with the target's paths.
     #
-    # ⚠ And the lock is on the ACCOUNT, not on sudo. greetd and synui-lock both
-    # reach this same stack (see synui's /etc/pam.d/synui-lock, which includes
-    # login deliberately), so what the user actually meets is a LOGIN SCREEN
-    # REJECTING A CORRECT PASSWORD, with nothing on it to say why.
+    # What it does, in short (the reasons are in the script):
+    #   · pam_unix gets `authtok_err=die` — a password prompt that was never
+    #     answered (a sudo with no terminal, the greeter re-arming the reader,
+    #     Ctrl+C) stops being counted as a failed login. A wrong password is
+    #     still counted.
+    #   · preauth `required` → `requisite`, so retrying a locked account does not
+    #     push the unlock time forward.
+    #   · deny/fail_interval/unlock_time written out as 5/900/600.
     #
-    # pambase ships this line as `required`, which does not short-circuit: an
-    # attempt against an ALREADY-locked account still falls through to
-    # pam_unix and then to `[default=die] pam_faillock authfail`, which
-    # appends a NEW failure record carrying a fresh timestamp. Every retry
-    # pushes unlock_time forward, so the lockout never ages out and only a
-    # reboot ends it — the tallies live on tmpfs under /run/faillock. A user
-    # who keeps trying keeps themselves locked out, which is precisely what a
-    # locked-out user does.
-    #
-    # `requisite` aborts the stack the moment preauth reports the lock, so
-    # nothing further is recorded and the window genuinely expires. pambase's
-    # own comment directly beneath the line names requisite as the supported
-    # alternative; the visible trade is that a locked account is TOLD it is
-    # locked instead of being asked for a password that cannot work.
-    sed -i -E \
-        's/^(auth[[:space:]]+)required([[:space:]]+pam_faillock\.so[[:space:]]+preauth[[:space:]]*)$/\1requisite\2/' \
-        "$_pfc_auth"
-
-    # The thresholds, written out rather than left to the compiled defaults, so
-    # the numbers are readable on the machine they govern. deny was effectively
-    # 3 — three typos at the lock screen took the seat — and 5 still stops
-    # guessing. Appended only once: a second run must not stack another block.
-    if ! grep -qE '^[[:space:]]*deny[[:space:]]*=' "$_pfc_conf"; then
-        cat >> "$_pfc_conf" << 'SYN_FAILLOCK'
-
-# ── SynapseOS ───────────────────────────────────────────────────────────────
-# unlock_time is the one that matters, and it was always 600. It only ever
-# behaved as "until the next reboot" because system-auth's preauth line was
-# `required` and every retry rewrote the tally; that line is `requisite` now
-# and this expires on its own. The tally files stay under /run/faillock —
-# tmpfs — so a reboot still clears them, which is why rebooting "fixed" it.
-deny = 5
-fail_interval = 900
-unlock_time = 600
-SYN_FAILLOCK
+    # The live ISO runs synui, so its copy is always here; the target's is the
+    # fallback. SYN_PAM_FAILLOCK_SCRIPT is for tests/faillock_test.sh.
+    _pfc_script=${SYN_PAM_FAILLOCK_SCRIPT:-}
+    if [ -z "$_pfc_script" ]; then
+        for _pfc_c in /usr/lib/synui/synui-pam-faillock \
+                      "${_pfc_auth%/etc/pam.d/system-auth}/usr/lib/synui/synui-pam-faillock"; do
+            [ -x "$_pfc_c" ] && { _pfc_script=$_pfc_c; break; }
+        done
     fi
+    [ -n "$_pfc_script" ] && [ -r "$_pfc_script" ] || return 1
 
+    SYNUI_SYSTEM_AUTH="$_pfc_auth" SYNUI_FAILLOCK_CONF="$_pfc_conf" \
+        SYNUI_FAILLOCK_QUIET=1 sh "$_pfc_script" || return 1
+
+    # Report what the stack READS afterwards, not whether the script ran: a
+    # stack that is not pambase's is left alone, and that has to show here.
     grep -qE '^auth[[:space:]]+requisite[[:space:]]+pam_faillock\.so[[:space:]]+preauth' "$_pfc_auth" \
+        && grep -qE '^auth[[:space:]]+\[[^]]*authtok_err=die[^]]*\][[:space:]]+pam_unix\.so' "$_pfc_auth" \
         && grep -qE '^[[:space:]]*deny[[:space:]]*=' "$_pfc_conf"
 }
 

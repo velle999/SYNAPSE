@@ -250,6 +250,54 @@ static void greeter_send_response(syn_server_t *s, const char *text)
     explicit_bzero(esc, sizeof(esc));
 }
 
+
+/*
+ * Whether hanging up on a parked password prompt is free.
+ *
+ * ⛔ IT WAS NOT, AND THAT LOCKED velle's ACCOUNT FROM AN IDLE LOGIN SCREEN. The
+ * idle re-arm below ends a conversation that PAM has moved on to the password
+ * prompt. pam_unix reports an unanswered prompt as PAM_AUTHTOK_ERR, and
+ * pambase's `[success=1 default=bad]` passes that on to `pam_faillock authfail`
+ * as a failed login — one every pam_fprintd timeout, ten seconds apart. On the
+ * ThinkPad, 2026-09-18: three in thirty seconds, "account temporarily locked";
+ * the finger still worked (it sits above the stack), and then sudo rejected a
+ * correct password for the whole of the update.
+ *
+ * synui-pam-faillock puts `authtok_err=die` on that line, which ends the stack
+ * before authfail can count it. Where the line says so, re-arming costs nothing;
+ * where it does not — a stack somebody wrote by hand, which the script leaves
+ * alone — the reader gets its first window and then the screen waits for a
+ * password, rather than locking the account out from under the person walking
+ * up to it. A stack with no pam_faillock at all counts nothing either.
+ *
+ * Read once: the stack does not change underneath a login screen.
+ */
+static int greeter_abandon_is_free(void)
+{
+    static int cached = -1;
+    if (cached >= 0) return cached;
+
+    const char *path = getenv("SYNUI_SYSTEM_AUTH");
+    FILE *f = fopen(path && *path ? path : "/etc/pam.d/system-auth", "r");
+    if (!f) { cached = 0; return cached; }
+
+    int faillock = 0, unix_dies = 0;
+    char line[512];
+    while (fgets(line, sizeof line, f)) {
+        const char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "auth", 4) != 0) continue;
+        if (strstr(p, "pam_faillock.so")) faillock = 1;
+        if (strstr(p, "pam_unix.so") && strstr(p, "authtok_err=die")) unix_dies = 1;
+    }
+    fclose(f);
+    cached = unix_dies || !faillock;
+    wlr_log(WLR_INFO, "synui greeter: re-arming the reader %s",
+            cached ? "is free (an unanswered prompt is not a failed login)"
+                   : "would count as a failed login — the reader gets one window");
+    return cached;
+}
+
 /*
  * Answer one greetd auth_message.
  *
@@ -312,7 +360,8 @@ static void greeter_answer_auth(syn_server_t *s, const char *json)
              * password would throw the characters away mid-word. Somebody who
              * has started typing has chosen the password path. */
             if (s->greetd.saw_fp_prompt && s->nlock.pw_len == 0 &&
-                s->greetd.rearms < GREETER_MAX_REARMS) {
+                s->greetd.rearms < GREETER_MAX_REARMS &&
+                greeter_abandon_is_free()) {
                 greeter_ipc_close(s);
                 greeter_arm(s);
                 return;
