@@ -1826,3 +1826,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "ein Autostart-Eintrag, den synui nie ausführt — einschalten, um seinen Befehl in synuis Liste zu übernehmen"
+
+msgid "Administrator"
+msgstr "Administrator"
+
+msgid "Click again to remove %1"
+msgstr "Zum Entfernen von %1 erneut klicken"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Erneut klicken — auch die Dateien von %1 werden gelöscht"
+
+msgid "Create account"
+msgstr "Konto erstellen"
+
+msgid "Make administrator"
+msgstr "Zum Administrator machen"
+
+msgid "Make standard"
+msgstr "Zum Standardkonto machen"
+
+msgid "Remove with files"
+msgstr "Mit Dateien entfernen"
+
+msgid "Remove, keep files"
+msgstr "Entfernen, Dateien behalten"
+
+msgid "Set password"
+msgstr "Passwort festlegen"
+
+msgid "Users"
+msgstr "Benutzer"
+
+msgid "account name, e.g. alex"
+msgstr "Kontoname, z. B. alex"
+
+msgid "again"
+msgstr "noch einmal"
+
+msgid "creating %1…"
+msgstr "%1 wird erstellt…"
+
+msgid "making %1 a standard account…"
+msgstr "%1 wird zum Standardkonto…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 wird zum Administrator…"
+
+msgid "password"
+msgstr "Passwort"
+
+msgid "setting the password for %1…"
+msgstr "Passwort für %1 wird festgelegt…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "die Konten auf diesem Rechner — eines hinzufügen, sein Passwort, ob es den Rechner verwalten darf, seine Fingerabdrücke und es entfernen"
+
+msgid "the two passwords differ"
+msgstr "die beiden Passwörter unterscheiden sich"
+
+msgid "administrator"
+msgstr "Administrator"
+
+msgid "standard"
+msgstr "Standard"
+
+msgid "this is you — the account this window runs as"
+msgstr "das sind Sie — das Konto, unter dem dieses Fenster läuft"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "der einzige Administrator — machen Sie zuerst ein anderes Konto zum Administrator, bevor dieses zum Standardkonto werden kann"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "ein Administrator: darf sudo verwenden und das System ändern"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "ein Standardkonto: darf weder sudo verwenden noch das System ändern"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "neues Passwort zweimal eingeben — das alte wird nicht abgefragt, so kann ein Administrator ein vergessenes zurücksetzen"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "einen Finger wählen, dann ihn jedes Mal, wenn es verlangt wird, anheben und wieder auf den Leser legen"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "alle gespeicherten Fingerabdrücke dieses Kontos vergessen"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "gerade angemeldet — es muss sich erst abmelden, bevor es entfernt werden kann"
+
+msgid "the only administrator cannot be removed"
+msgstr "der einzige Administrator kann nicht entfernt werden"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "entfernt das Konto; seine Dateien in /home können mitgehen oder bleiben"
+
+msgid "Add a user"
+msgstr "Benutzer hinzufügen"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "ein weiteres Konto mit eigenen Dateien und eigenem Desktop — am Anmeldebildschirm wechselt Tab ins Namensfeld"

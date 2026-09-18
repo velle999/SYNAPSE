@@ -1817,3 +1817,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "una entrada de inicio automático que synui nunca ejecuta — actívela para copiar su orden a la lista de synui"
+
+msgid "Administrator"
+msgstr "Administrador"
+
+msgid "Click again to remove %1"
+msgstr "Haga clic otra vez para quitar %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Haga clic otra vez — también se borran los archivos de %1"
+
+msgid "Create account"
+msgstr "Crear cuenta"
+
+msgid "Make administrator"
+msgstr "Hacer administrador"
+
+msgid "Make standard"
+msgstr "Hacer estándar"
+
+msgid "Remove with files"
+msgstr "Quitar con archivos"
+
+msgid "Remove, keep files"
+msgstr "Quitar, conservar archivos"
+
+msgid "Set password"
+msgstr "Establecer contraseña"
+
+msgid "Users"
+msgstr "Usuarios"
+
+msgid "account name, e.g. alex"
+msgstr "nombre de cuenta, p. ej. alex"
+
+msgid "again"
+msgstr "otra vez"
+
+msgid "creating %1…"
+msgstr "creando %1…"
+
+msgid "making %1 a standard account…"
+msgstr "haciendo de %1 una cuenta estándar…"
+
+msgid "making %1 an administrator…"
+msgstr "haciendo administrador a %1…"
+
+msgid "password"
+msgstr "contraseña"
+
+msgid "setting the password for %1…"
+msgstr "estableciendo la contraseña de %1…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "las cuentas de esta máquina — añadir una, su contraseña, si puede administrar la máquina, sus huellas y quitarla"
+
+msgid "the two passwords differ"
+msgstr "las dos contraseñas no coinciden"
+
+msgid "administrator"
+msgstr "administrador"
+
+msgid "standard"
+msgstr "estándar"
+
+msgid "this is you — the account this window runs as"
+msgstr "es usted — la cuenta con la que se ejecuta esta ventana"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "el único administrador — haga administrador a otro antes de que este pueda pasar a estándar"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "un administrador: puede usar sudo y cambiar el sistema"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "una cuenta estándar: no puede usar sudo ni cambiar el sistema"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "escriba dos veces una contraseña nueva — no se pide la anterior, así un administrador puede restablecer una olvidada"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "elija un dedo y luego levántelo y apóyelo en el lector cada vez que lo pida"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "olvidar todas las huellas guardadas de esta cuenta"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "con sesión iniciada ahora — tiene que cerrar sesión antes de poder quitarla"
+
+msgid "the only administrator cannot be removed"
+msgstr "no se puede quitar al único administrador"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "quita la cuenta; sus archivos en /home pueden irse con ella o quedarse"
+
+msgid "Add a user"
+msgstr "Añadir un usuario"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "otra cuenta con sus propios archivos y escritorio — en la pantalla de inicio de sesión, Tab pasa al campo del nombre"

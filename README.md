@@ -983,6 +983,22 @@ because three different things start programs:
   A synui session does not read those, so they do nothing here. The pane lists
   them, and switching one on copies its command into synui's list.
 
+The **Users** pane is the accounts on this machine. **Add a user** takes a
+name, a password typed twice, and whether the account is an **administrator**
+— which here means the `wheel` group, the one `sudo` and polkit both read. Each
+account then has its own rows: make it an administrator or a standard account,
+reset its password (the old one is not asked for, so a forgotten one can be
+replaced), enrol or forget its fingerprints when there is a reader, and remove
+it, keeping its files in `/home` or taking them too — that one needs a second
+click. It will not remove or demote the account you are using, take away the
+last administrator, or remove an account that is signed in. Every change asks
+for an administrator's password through polkit.
+
+A new account starts on the same desktop as the first one: `useradd` copies
+`/etc/skel`, and synui ships the house `synuirc` there. At the login screen,
+**Tab** moves from the password to the name, so the second person types their
+account name there.
+
 The **System** pane names the machine. Every SynapseOS install answers to
 `synapse`, so the moment there are two of them on one network Avahi renames one
 `synapse-2.local` — with no say in which, and no promise the suffix survives a
@@ -1083,7 +1099,8 @@ fprintd-list "$USER"       # confirm the print is there
 
 `fprintd-enroll -f right-index-finger` picks a specific finger; run it once per
 finger you want. Enroll as the user you log in as — prints are stored per
-account, and one enrolled as root will never unlock your session.
+account, and one enrolled as root will never unlock your session. `syn-settings`
+▸ Users enrols a finger for any account on the machine, as an administrator.
 
 Then lock with `Super`+`L`: a row under the clock relays the reader's own
 prompts ("Place your finger on the reader"). If it says nothing at all, the
@@ -2037,7 +2054,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synpkg` | The package manager — `search` (`--all` asks every source at once and labels each result), `provides` (what to install to get a program of that name, best match first), `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab] [--search T]` opens the window, on that tab, already searching |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`, `ping` (the background check behind the bar's update indicator). Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
-| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, startup, kernel, ai, assistant, fprint, speech, remote, scan, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
+| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, startup, kernel, ai, assistant, users, fprint, speech, remote, scan, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/hostname/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `synstudio` | The darkroom and edit suite — `probe`, `keys`, `get`/`set`/`reset` a photograph's sidecar, `mask`, `look`, `lut`, `render`, `match`, `histogram`, `scope`, and the `timeline …` family for video. `synstudio gui [file]` opens the window; `kind FILE` says what a file is, asked of ffmpeg rather than the extension |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |

@@ -268,6 +268,7 @@ FloatingWindow {
         { id: "kernel",    label: I18n.tr("Kernel"),   blurb: I18n.tr("every kernel on offer, which are installed, and which one you booted") },
         { id: "ai",        label: I18n.tr("AI"),       blurb: I18n.tr("the backend switch, the units that can restart it behind your back, and which model is on disk") },
         { id: "assistant", label: I18n.tr("Assistant"), blurb: I18n.tr("which service the assistant sends your messages to — the model on this machine, or a cloud account and its API key") },
+        { id: "users",     label: I18n.tr("Users"),    blurb: I18n.tr("the accounts on this machine — adding one, its password, whether it can administer the machine, its fingerprints, and removing it") },
         { id: "fprint",    label: I18n.tr("Fingerprint"), blurb: I18n.tr("the reader, which fingers are on file, and enrolling another — the lock screen offers it only once something is") },
         // ⛔ speech WAS MISSING FROM THIS LIST. The pane existed in C, `usage()`
         // named it and `set` had handlers for every row on it — and the window
@@ -522,6 +523,13 @@ FloatingWindow {
          */
         editField.text = root.actionHas(a, "secret") ? "" : root.selValue
 
+        // The Users strip starts clean on every row: no password left typed
+        // in, no Remove left armed from the account above it.
+        pwField1.text = ""
+        pwField2.text = ""
+        root.newAdmin = false
+        root.armedRemove = ""
+
         root.appList = []
         if (root.actionHas(a, "app")) {
             appsProc.command = [root.bin, "apps", root.actionArgFor(a, "app")]
@@ -714,6 +722,33 @@ FloatingWindow {
     // starts with nothing of the previous one's secret on it.
     function clearSecret() { writeProc.environment = ({}) }
 
+    // ── Users ───────────────────────────────────────────────────────────────
+    //
+    // ⛔ THE PASSWORD GOES THROUGH runSecretWrite(), NEVER INTO args. The
+    // binary reads it from the environment and pipes it into the root half's
+    // stdin; argv is readable by every account on the machine.
+    property bool newAdmin: false       // Add a user: an administrator?
+    property string armedRemove: ""     // "keep" / "files": the second click removes
+    readonly property bool pwMatched: pwField1.text !== "" && pwField1.text === pwField2.text
+
+    function submitPassword() {
+        if (!root.pwMatched) return
+        const a = root.selAction
+        if (root.actionHas(a, "adduser")) {
+            const name = editField.text.trim()
+            if (name === "") return
+            root.runSecretWrite(["user", "add", name].concat(root.newAdmin ? ["--admin"] : []),
+                                pwField1.text, I18n.tr("creating %1…").arg(name))
+            editField.text = ""
+        } else if (root.actionHas(a, "password")) {
+            const u = root.actionArgFor(a, "password")
+            root.runSecretWrite(["user", "password", u], pwField1.text,
+                                I18n.tr("setting the password for %1…").arg(u))
+        }
+        pwField1.text = ""
+        pwField2.text = ""
+    }
+
     // ── Changing boot configuration ─────────────────────────────────────────
     //
     // This is the one action in the app that can leave a machine that does not
@@ -800,12 +835,15 @@ FloatingWindow {
         // would otherwise be dimmed and unclickable at exactly its moment.
         property bool ignoreBusy: false
         readonly property bool busy: root.applying && !btn.ignoreBusy
+        // false until the button has what it needs — Create account before
+        // both password boxes agree. Dimmed and unclickable, like busy.
+        property bool ready: true
         signal go()
         width: btnText.implicitWidth + 22
         height: 26
         radius: 4
-        color: btnMa.containsMouse && !btn.busy ? root.wash(0.22) : root.wash(0.10)
-        opacity: btn.busy ? 0.5 : 1.0
+        color: btnMa.containsMouse && !btn.busy && btn.ready ? root.wash(0.22) : root.wash(0.10)
+        opacity: btn.busy || !btn.ready ? 0.5 : 1.0
 
         Text {
             id: btnText
@@ -818,7 +856,7 @@ FloatingWindow {
             id: btnMa
             anchors.fill: parent
             hoverEnabled: true
-            enabled: !btn.busy
+            enabled: !btn.busy && btn.ready
             cursorShape: Qt.PointingHandCursor
             onClicked: btn.go()
         }
@@ -1362,6 +1400,7 @@ FloatingWindow {
                 width: 220; height: 26; radius: 4
                 visible: root.actionHas(root.selAction, "set")
                       || root.actionHas(root.selAction, "secret")
+                      || root.actionHas(root.selAction, "adduser")
                 color: root.cBg
                 border { width: 1; color: editField.activeFocus ? root.cAccent : root.wash(0.25) }
                 clip: true
@@ -1378,7 +1417,16 @@ FloatingWindow {
                     color: root.cText
                     font { family: root.uiFont; pixelSize: root.ui(12) }
                     selectByMouse: true
-                    onAccepted: applyBtn.go()
+                    onAccepted: root.actionHas(root.selAction, "adduser")
+                                ? pwField1.forceActiveFocus() : applyBtn.go()
+                }
+                Text {
+                    anchors { fill: parent; leftMargin: 8 }
+                    verticalAlignment: Text.AlignVCenter
+                    visible: editField.text === "" && root.actionHas(root.selAction, "adduser")
+                    text: I18n.tr("account name, e.g. alex")
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
             }
 
@@ -1387,12 +1435,139 @@ FloatingWindow {
                           leftMargin: 12; verticalCenter: parent.verticalCenter }
                 spacing: 8
 
+                // ── Users: a password, typed twice ──────────────────────────
+                // Twice because nothing on this machine will ever show it back:
+                // a typo here is an account nobody can sign in to.
+                Rectangle {
+                    visible: root.actionHas(root.selAction, "password")
+                          || root.actionHas(root.selAction, "adduser")
+                    width: 150; height: 26; radius: 4
+                    color: root.cBg
+                    border { width: 1; color: pwField1.activeFocus ? root.cAccent : root.wash(0.25) }
+                    clip: true
+                    TextInput {
+                        id: pwField1
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        echoMode: TextInput.Password
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                        onAccepted: pwField2.forceActiveFocus()
+                    }
+                    Text {
+                        anchors { fill: parent; leftMargin: 8 }
+                        verticalAlignment: Text.AlignVCenter
+                        visible: pwField1.text === ""
+                        text: I18n.tr("password")
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                }
+                Rectangle {
+                    visible: root.actionHas(root.selAction, "password")
+                          || root.actionHas(root.selAction, "adduser")
+                    width: 150; height: 26; radius: 4
+                    color: root.cBg
+                    border { width: 1; color: pwField2.activeFocus ? root.cAccent : root.wash(0.25) }
+                    clip: true
+                    TextInput {
+                        id: pwField2
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        echoMode: TextInput.Password
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                        onAccepted: root.submitPassword()
+                    }
+                    Text {
+                        anchors { fill: parent; leftMargin: 8 }
+                        verticalAlignment: Text.AlignVCenter
+                        visible: pwField2.text === ""
+                        text: I18n.tr("again")
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                }
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "adduser")
+                    label: I18n.tr("Administrator") + (root.newAdmin ? " ✓" : "")
+                    onGo: root.newAdmin = !root.newAdmin
+                }
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "password")
+                          || root.actionHas(root.selAction, "adduser")
+                    ready: root.pwMatched && (!root.actionHas(root.selAction, "adduser")
+                                              || editField.text.trim() !== "")
+                    label: root.actionHas(root.selAction, "adduser") ? I18n.tr("Create account")
+                                                                     : I18n.tr("Set password")
+                    onGo: root.submitPassword()
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: (root.actionHas(root.selAction, "password")
+                              || root.actionHas(root.selAction, "adduser"))
+                             && pwField2.text !== "" && pwField1.text !== pwField2.text
+                    text: I18n.tr("the two passwords differ")
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                }
+
+                // An account's role. The C offers neither for you, nor to take
+                // the last administrator away — those rows carry no verb.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "promote")
+                    label: I18n.tr("Make administrator")
+                    onGo: root.runWrite(["user", "promote", root.actionArgFor(root.selAction, "promote")],
+                                        I18n.tr("making %1 an administrator…").arg(root.selKey))
+                }
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "demote")
+                    label: I18n.tr("Make standard")
+                    onGo: root.runWrite(["user", "demote", root.actionArgFor(root.selAction, "demote")],
+                                        I18n.tr("making %1 a standard account…").arg(root.selKey))
+                }
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "fforget")
+                    label: I18n.tr("Forget all fingerprints")
+                    onGo: root.runWrite(["user", "forget-prints", root.actionArgFor(root.selAction, "fforget")],
+                                        I18n.tr("removing every fingerprint…"))
+                }
+
+                // ⚠ TWO CLICKS. Removing an account is the one thing in this
+                // pane with no way back, and with files it takes a home folder
+                // with it. The first click only changes the label.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "deluser")
+                    label: root.armedRemove === "keep"
+                           ? I18n.tr("Click again to remove %1").arg(root.selKey)
+                           : I18n.tr("Remove, keep files")
+                    onGo: {
+                        if (root.armedRemove !== "keep") { root.armedRemove = "keep"; return }
+                        root.armedRemove = ""
+                        root.runWrite(["user", "remove", root.actionArgFor(root.selAction, "deluser")],
+                                      I18n.tr("removing %1…").arg(root.selKey))
+                    }
+                }
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "deluser")
+                    label: root.armedRemove === "files"
+                           ? I18n.tr("Click again — %1's files are deleted too").arg(root.selKey)
+                           : I18n.tr("Remove with files")
+                    onGo: {
+                        if (root.armedRemove !== "files") { root.armedRemove = "files"; return }
+                        root.armedRemove = ""
+                        root.runWrite(["user", "remove", root.actionArgFor(root.selAction, "deluser"), "--files"],
+                                      I18n.tr("removing %1…").arg(root.selKey))
+                    }
+                }
+
                 // set / toggle / probe all collapse to one button; only a unit
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
                     visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice",
-                              "enroll", "forget", "secret", "drop"]
+                              "enroll", "forget", "secret", "drop", "password", "promote",
+                              "demote", "fforget", "deluser", "adduser"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)

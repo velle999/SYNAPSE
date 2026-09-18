@@ -1740,3 +1740,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "एक ऑटोस्टार्ट प्रविष्टि जिसे synui कभी नहीं चलाता — इसका कमांड synui की सूची में कॉपी करने के लिए इसे चालू करें"
+
+msgid "Administrator"
+msgstr "व्यवस्थापक"
+
+msgid "Click again to remove %1"
+msgstr "%1 को हटाने के लिए फिर क्लिक करें"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "फिर क्लिक करें — %1 की फ़ाइलें भी मिट जाएँगी"
+
+msgid "Create account"
+msgstr "खाता बनाएँ"
+
+msgid "Make administrator"
+msgstr "व्यवस्थापक बनाएँ"
+
+msgid "Make standard"
+msgstr "मानक बनाएँ"
+
+msgid "Remove with files"
+msgstr "फ़ाइलों सहित हटाएँ"
+
+msgid "Remove, keep files"
+msgstr "हटाएँ, फ़ाइलें रखें"
+
+msgid "Set password"
+msgstr "पासवर्ड सेट करें"
+
+msgid "Users"
+msgstr "उपयोगकर्ता"
+
+msgid "account name, e.g. alex"
+msgstr "खाते का नाम, जैसे alex"
+
+msgid "again"
+msgstr "फिर से"
+
+msgid "creating %1…"
+msgstr "%1 बनाया जा रहा है…"
+
+msgid "making %1 a standard account…"
+msgstr "%1 को मानक खाता बनाया जा रहा है…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 को व्यवस्थापक बनाया जा रहा है…"
+
+msgid "password"
+msgstr "पासवर्ड"
+
+msgid "setting the password for %1…"
+msgstr "%1 का पासवर्ड सेट किया जा रहा है…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "इस मशीन के खाते — नया जोड़ना, उसका पासवर्ड, क्या वह मशीन का प्रबंधन कर सकता है, उसके फ़िंगरप्रिंट, और उसे हटाना"
+
+msgid "the two passwords differ"
+msgstr "दोनों पासवर्ड अलग हैं"
+
+msgid "administrator"
+msgstr "व्यवस्थापक"
+
+msgid "standard"
+msgstr "मानक"
+
+msgid "this is you — the account this window runs as"
+msgstr "यह आप हैं — वह खाता जिससे यह विंडो चल रही है"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "एकमात्र व्यवस्थापक — इसे मानक बनाने से पहले किसी दूसरे खाते को व्यवस्थापक बनाएँ"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "व्यवस्थापक: sudo इस्तेमाल कर सकता है और सिस्टम बदल सकता है"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "मानक खाता: न sudo इस्तेमाल कर सकता है, न सिस्टम बदल सकता है"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "नया पासवर्ड दो बार लिखें — पुराना नहीं पूछा जाता, इसलिए व्यवस्थापक भूला हुआ पासवर्ड रीसेट कर सकता है"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "एक उँगली चुनें, फिर हर बार कहे जाने पर उसे रीडर से उठाकर दोबारा रखें"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "इस खाते के सभी दर्ज फ़िंगरप्रिंट भूल जाएँ"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "अभी साइन इन है — हटाने से पहले इसे साइन आउट करना होगा"
+
+msgid "the only administrator cannot be removed"
+msgstr "एकमात्र व्यवस्थापक को हटाया नहीं जा सकता"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "खाता हटाता है; /home में इसकी फ़ाइलें साथ जा सकती हैं या रह सकती हैं"
+
+msgid "Add a user"
+msgstr "उपयोगकर्ता जोड़ें"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "अपनी फ़ाइलों और डेस्कटॉप वाला एक और खाता — लॉगिन स्क्रीन पर Tab नाम वाले खाने पर ले जाता है"

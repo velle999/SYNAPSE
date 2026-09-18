@@ -91,6 +91,14 @@ static void usage(void)
 "  enroll <finger>           enrol a fingerprint (fprintd's token, e.g.\n"
 "                            right-index-finger); asks for several swipes\n"
 "  forget all                remove every fingerprint for this account\n"
+"  user add <name> [--admin] a new account; the password is read from\n"
+"                            SYN_SETTINGS_SECRET or stdin, never argv\n"
+"  user password <name>      set an account's password (same way in)\n"
+"  user promote|demote <name>  make it an administrator (wheel), or not\n"
+"  user remove <name> [--files]  remove it, and its home with --files\n"
+"  user enroll <name> <finger>   enrol a fingerprint for that account\n"
+"  user forget-prints <name>     remove every fingerprint for it\n"
+"                            Each asks for an administrator through pkexec.\n"
 "  boot <kernel> [--loader <name>] --confirm\n"
 "                            make an installed kernel BOOTABLE: grub-mkconfig,\n"
 "                            kernel-install, or limine-mkinitcpio-hook,\n"
@@ -207,6 +215,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
 	if (!strcmp(cmd, "enroll")) return cmd_enroll(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "forget")) return cmd_forget(rest_argc > 0 ? rest[0] : NULL);
+	if (!strcmp(cmd, "user"))   return do_user(rest_argc, rest);
 	/* The key comes in SYN_SETTINGS_SECRET, never in argv — see assistant.c. */
 	if (!strcmp(cmd, "assistant-key"))
 		return assistant_key(rest_argc > 0 ? rest[0] : NULL);
@@ -242,6 +251,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "scan"))      return pane_scan();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
 		if (!strcmp(pane, "startup"))   return pane_startup();
+		if (!strcmp(pane, "users"))     return pane_users();
 		if (!strcmp(pane, "assistant")) return pane_assistant();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;

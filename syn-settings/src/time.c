@@ -405,6 +405,11 @@ int do_choices(int argc, char **argv)
 	if (!strcmp(key, "assistant-backend"))
 		return assistant_choices();
 
+	/* The ten fingers, for an account's picker in the Users pane. fprint.c
+	 * owns the list and its tokens. */
+	if (!strncmp(key, "finger/", 7))
+		return fprint_finger_choices();
+
 	/* ⛔ THE ID IS syn-remote's WORD AND THE LABEL IS THE PERSON'S. `local` and
 	 * `lan` are what the tool takes and are never translated; the sentence
 	 * beside each is, and is the only part anybody reads. Both lists are two

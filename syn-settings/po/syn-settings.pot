@@ -27,6 +27,9 @@ msgstr[1] ""
 msgid "AI"
 msgstr ""
 
+msgid "Administrator"
+msgstr ""
+
 msgid "Apply"
 msgstr ""
 
@@ -53,6 +56,12 @@ msgstr ""
 msgid "Change boot configuration?"
 msgstr ""
 
+msgid "Click again to remove %1"
+msgstr ""
+
+msgid "Click again — %1's files are deleted too"
+msgstr ""
+
 msgid "Close"
 msgstr ""
 
@@ -60,6 +69,9 @@ msgid "Config"
 msgstr ""
 
 msgid "Connect"
+msgstr ""
+
+msgid "Create account"
 msgstr ""
 
 msgid "Date & Time"
@@ -112,6 +124,9 @@ msgid ""
 "you seeing how it went."
 msgstr ""
 
+msgid "Make administrator"
+msgstr ""
+
 msgid "Make bootable"
 msgstr ""
 
@@ -122,6 +137,9 @@ msgid "Make default"
 msgstr ""
 
 msgid "Make default…"
+msgstr ""
+
+msgid "Make standard"
 msgstr ""
 
 msgid "Making %1 bootable"
@@ -159,6 +177,12 @@ msgstr ""
 msgid "Remove key"
 msgstr ""
 
+msgid "Remove with files"
+msgstr ""
+
+msgid "Remove, keep files"
+msgstr ""
+
 msgid "Removing %1"
 msgstr ""
 
@@ -169,6 +193,9 @@ msgid "SYNAPSE Settings"
 msgstr ""
 
 msgid "Save key"
+msgstr ""
+
+msgid "Set password"
 msgstr ""
 
 msgid "Speech"
@@ -201,6 +228,9 @@ msgstr ""
 msgid "Turn on"
 msgstr ""
 
+msgid "Users"
+msgstr ""
+
 msgid "You may be asked to authenticate."
 msgstr ""
 
@@ -210,8 +240,14 @@ msgid ""
 "working."
 msgstr ""
 
+msgid "account name, e.g. alex"
+msgstr ""
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
+msgstr ""
+
+msgid "again"
 msgstr ""
 
 msgid "connecting %1…"
@@ -221,6 +257,9 @@ msgid "connectors as the kernel sees them, beside what the compositor drives"
 msgstr ""
 
 msgid "could not work out what to run"
+msgstr ""
+
+msgid "creating %1…"
 msgstr ""
 
 msgid "disconnecting %1…"
@@ -235,6 +274,12 @@ msgstr ""
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr ""
 
+msgid "making %1 a standard account…"
+msgstr ""
+
+msgid "making %1 an administrator…"
+msgstr ""
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr ""
 
@@ -245,6 +290,9 @@ msgid "nothing offered this setting a list of choices"
 msgstr ""
 
 msgid "nothing reported"
+msgstr ""
+
+msgid "password"
 msgstr ""
 
 msgid "re-probing %1…"
@@ -274,6 +322,9 @@ msgstr ""
 msgid "setting %1…"
 msgstr ""
 
+msgid "setting the password for %1…"
+msgstr ""
+
 msgid "storing the %1 key…"
 msgstr ""
 
@@ -281,6 +332,11 @@ msgid "switching %1…"
 msgstr ""
 
 msgid "synui only — %1 is the session running"
+msgstr ""
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
 msgstr ""
 
 msgid "the adapter, both kinds of radio block, and what is paired"
@@ -312,6 +368,9 @@ msgstr ""
 msgid ""
 "the system clock — and how the desktop writes it: 12- or 24-hour, and which "
 "date order"
+msgstr ""
+
+msgid "the two passwords differ"
 msgstr ""
 
 msgid "the units a working suspend depends on, and what the last one did"
@@ -1603,4 +1662,52 @@ msgid "CPU  (no GPU offload)"
 msgstr ""
 
 msgid "Off  (mask the daemon)"
+msgstr ""
+
+msgid "administrator"
+msgstr ""
+
+msgid "standard"
+msgstr ""
+
+msgid "this is you — the account this window runs as"
+msgstr ""
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr ""
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr ""
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr ""
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr ""
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr ""
+
+msgid "forget every fingerprint on file for this account"
+msgstr ""
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr ""
+
+msgid "the only administrator cannot be removed"
+msgstr ""
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr ""
+
+msgid "Add a user"
+msgstr ""
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
 msgstr ""

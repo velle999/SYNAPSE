@@ -28,6 +28,7 @@ sources = files(
   'src/bluetooth.c',
   'src/fprint.c',
   'src/startup.c',
+  'src/users.c',
   'src/assistant.c',
   'src/probe.c',
   'src/kernel.c',

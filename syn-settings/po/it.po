@@ -1824,3 +1824,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "una voce di avvio automatico che synui non esegue mai — attivala per copiarne il comando nella lista di synui"
+
+msgid "Administrator"
+msgstr "Amministratore"
+
+msgid "Click again to remove %1"
+msgstr "Fai clic di nuovo per rimuovere %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Fai clic di nuovo — vengono eliminati anche i file di %1"
+
+msgid "Create account"
+msgstr "Crea account"
+
+msgid "Make administrator"
+msgstr "Rendi amministratore"
+
+msgid "Make standard"
+msgstr "Rendi standard"
+
+msgid "Remove with files"
+msgstr "Rimuovi con i file"
+
+msgid "Remove, keep files"
+msgstr "Rimuovi, tieni i file"
+
+msgid "Set password"
+msgstr "Imposta password"
+
+msgid "Users"
+msgstr "Utenti"
+
+msgid "account name, e.g. alex"
+msgstr "nome dell'account, es. alex"
+
+msgid "again"
+msgstr "di nuovo"
+
+msgid "creating %1…"
+msgstr "creazione di %1…"
+
+msgid "making %1 a standard account…"
+msgstr "%1 diventa un account standard…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 diventa amministratore…"
+
+msgid "password"
+msgstr "password"
+
+msgid "setting the password for %1…"
+msgstr "impostazione della password di %1…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "gli account di questa macchina — aggiungerne uno, la sua password, se può amministrare la macchina, le sue impronte e rimuoverlo"
+
+msgid "the two passwords differ"
+msgstr "le due password sono diverse"
+
+msgid "administrator"
+msgstr "amministratore"
+
+msgid "standard"
+msgstr "standard"
+
+msgid "this is you — the account this window runs as"
+msgstr "sei tu — l'account con cui gira questa finestra"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "l'unico amministratore — nominane un altro prima che questo possa diventare standard"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "un amministratore: può usare sudo e modificare il sistema"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "un account standard: non può usare sudo né modificare il sistema"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "scrivi due volte una nuova password — quella vecchia non viene chiesta, così un amministratore può reimpostarne una dimenticata"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "scegli un dito, poi sollevalo e appoggialo sul lettore ogni volta che lo chiede"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "dimentica tutte le impronte registrate per questo account"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "connesso in questo momento — deve disconnettersi prima di poter essere rimosso"
+
+msgid "the only administrator cannot be removed"
+msgstr "l'unico amministratore non può essere rimosso"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "rimuove l'account; i suoi file in /home possono andarsene con lui o restare"
+
+msgid "Add a user"
+msgstr "Aggiungi un utente"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "un altro account con file e desktop propri — nella schermata di accesso, Tab passa al campo del nome"

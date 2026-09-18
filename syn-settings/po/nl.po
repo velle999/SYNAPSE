@@ -1814,3 +1814,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "een autostart-item dat synui nooit uitvoert — zet het aan om de opdracht naar synui's lijst te kopiëren"
+
+msgid "Administrator"
+msgstr "Beheerder"
+
+msgid "Click again to remove %1"
+msgstr "Klik nogmaals om %1 te verwijderen"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Klik nogmaals — de bestanden van %1 worden ook verwijderd"
+
+msgid "Create account"
+msgstr "Account aanmaken"
+
+msgid "Make administrator"
+msgstr "Beheerder maken"
+
+msgid "Make standard"
+msgstr "Standaard maken"
+
+msgid "Remove with files"
+msgstr "Verwijderen met bestanden"
+
+msgid "Remove, keep files"
+msgstr "Verwijderen, bestanden houden"
+
+msgid "Set password"
+msgstr "Wachtwoord instellen"
+
+msgid "Users"
+msgstr "Gebruikers"
+
+msgid "account name, e.g. alex"
+msgstr "accountnaam, bijv. alex"
+
+msgid "again"
+msgstr "nogmaals"
+
+msgid "creating %1…"
+msgstr "%1 aanmaken…"
+
+msgid "making %1 a standard account…"
+msgstr "%1 wordt een standaardaccount…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 wordt beheerder…"
+
+msgid "password"
+msgstr "wachtwoord"
+
+msgid "setting the password for %1…"
+msgstr "wachtwoord van %1 instellen…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "de accounts op deze machine — er een toevoegen, het wachtwoord, of het de machine mag beheren, de vingerafdrukken en verwijderen"
+
+msgid "the two passwords differ"
+msgstr "de twee wachtwoorden verschillen"
+
+msgid "administrator"
+msgstr "beheerder"
+
+msgid "standard"
+msgstr "standaard"
+
+msgid "this is you — the account this window runs as"
+msgstr "dit bent u — het account waaronder dit venster draait"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "de enige beheerder — maak eerst een ander account beheerder voordat dit standaard kan worden"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "een beheerder: kan sudo gebruiken en het systeem wijzigen"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "een standaardaccount: kan geen sudo gebruiken en het systeem niet wijzigen"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "typ twee keer een nieuw wachtwoord — het oude wordt niet gevraagd, zodat een beheerder een vergeten wachtwoord kan herstellen"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "kies een vinger, til hem daarna op en leg hem op de lezer telkens als die erom vraagt"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "alle vastgelegde vingerafdrukken van dit account vergeten"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "nu aangemeld — het moet zich eerst afmelden voordat het verwijderd kan worden"
+
+msgid "the only administrator cannot be removed"
+msgstr "de enige beheerder kan niet worden verwijderd"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "verwijdert het account; de bestanden in /home kunnen meegaan of blijven"
+
+msgid "Add a user"
+msgstr "Gebruiker toevoegen"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "nog een account met eigen bestanden en bureaublad — in het aanmeldscherm gaat Tab naar het naamveld"

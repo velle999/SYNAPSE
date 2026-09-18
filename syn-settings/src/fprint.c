@@ -336,3 +336,26 @@ int cmd_forget(const char *what)
 	char *argv[] = { (char *)"fprintd-delete", (char *)u, NULL };
 	return run_progress(argv) == 0 ? 0 : 1;
 }
+
+/* ── for the Users pane ─────────────────────────────────────────────────── */
+
+bool fprint_known_finger(const char *token) { return known_finger(token); }
+
+/* `choices finger/<user>`: the ten fingers, token and label. Nothing is
+ * ticked — another account's prints are not readable without root, and a
+ * tick on only the rows this account can see would read as the whole truth. */
+int fprint_finger_choices(void)
+{
+	for (int i = 0; i < NFINGERS; i++)
+		rec_row("%s\t%s\t-", FINGERS[i].token, FINGERS[i].label);
+	return 0;
+}
+
+/* A reader fprintd can see — the condition for offering a finger at all. */
+bool fprint_reader_present(void)
+{
+	if (!have_cmd("fprintd-enroll")) return false;
+	char listing[4096];
+	return list_output(listing, sizeof listing)
+	    && strstr(listing, "found 0 devices") == NULL;
+}

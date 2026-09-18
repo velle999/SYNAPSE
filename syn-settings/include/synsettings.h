@@ -7,6 +7,7 @@
 #define SYNSETTINGS_H
 
 #include <dirent.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 /* ── The record protocol ────────────────────────────────────────────────────
@@ -238,6 +239,18 @@ int cmd_enroll(const char *finger);
 int cmd_forget(const char *what);
 /* `set sudo-fingerprint on|off` — through pkexec, to data/sudo-fprint.sh. */
 int fprint_set_sudo(const char *val);
+/* For the Users pane: the finger allowlist, the ten as `choices`, and whether
+ * a reader is there to enrol on. */
+bool fprint_known_finger(const char *token);
+int fprint_finger_choices(void);
+bool fprint_reader_present(void);
+
+/* Users: the accounts, and changing them. `syn-settings user <op> …` re-runs
+ * itself under pkexec for everything that needs root; users_set() answers
+ * `set finger/<user> <finger>` and returns -1 for any other key. */
+int pane_users(void);
+int do_user(int argc, char **argv);
+int users_set(const char *key, const char *val);
 
 /* The synuirc synui reads for this user — $XDG_CONFIG_HOME/synui/synuirc.
  * One resolver, shared by the terminal knob (apps.c) and Startup. */

@@ -396,7 +396,20 @@ pkgver=0.1.0
 #
 # comp_synscan, default on. syn-scan pulls clamav (185 MiB installed); the
 # signature database is not shipped and freshclam fetches it on first boot.
-pkgrel=118
+# ── 0.1.0-119: the first account's synuirc comes from /etc/skel ─────────────
+#
+# The house synuirc was a heredoc in syn-install.sh, written into the FIRST
+# account's home and nowhere else — so every account made afterwards (in
+# syn-settings' new Users pane, or with useradd by hand) logged into synui's
+# bare compiled-in defaults: a terminal, no bar, no polkit agent. synui now
+# ships that file as /etc/skel/.config/synui/synuirc, `useradd -m` copies it,
+# and this installer keeps no copy of its own. A missing file (a synui built
+# before it shipped one) is warned about and replaced by the three lines a
+# working desktop needs, and only where synui is installed at all; the
+# directory is made either way, because the xkb and KDE Connect lines append
+# into it. layout_test reads the skel file now (from the synui tree, or from
+# /etc/skel installed) and checks the heredoc stays gone.
+pkgrel=119
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

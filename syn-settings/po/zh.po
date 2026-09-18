@@ -1701,3 +1701,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "synui 从不运行的自动启动项 — 打开后会把它的命令复制到 synui 的列表中"
+
+msgid "Administrator"
+msgstr "管理员"
+
+msgid "Click again to remove %1"
+msgstr "再次点击以移除 %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "再次点击 — %1 的文件也会被删除"
+
+msgid "Create account"
+msgstr "创建账户"
+
+msgid "Make administrator"
+msgstr "设为管理员"
+
+msgid "Make standard"
+msgstr "设为标准"
+
+msgid "Remove with files"
+msgstr "连同文件移除"
+
+msgid "Remove, keep files"
+msgstr "移除，保留文件"
+
+msgid "Set password"
+msgstr "设置密码"
+
+msgid "Users"
+msgstr "用户"
+
+msgid "account name, e.g. alex"
+msgstr "账户名，例如 alex"
+
+msgid "again"
+msgstr "再输一次"
+
+msgid "creating %1…"
+msgstr "正在创建 %1…"
+
+msgid "making %1 a standard account…"
+msgstr "正在将 %1 设为标准账户…"
+
+msgid "making %1 an administrator…"
+msgstr "正在将 %1 设为管理员…"
+
+msgid "password"
+msgstr "密码"
+
+msgid "setting the password for %1…"
+msgstr "正在设置 %1 的密码…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "这台机器上的账户 — 添加账户、密码、是否能管理这台机器、指纹，以及移除"
+
+msgid "the two passwords differ"
+msgstr "两次输入的密码不一致"
+
+msgid "administrator"
+msgstr "管理员"
+
+msgid "standard"
+msgstr "标准"
+
+msgid "this is you — the account this window runs as"
+msgstr "这是你 — 运行此窗口的账户"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "唯一的管理员 — 先把另一个账户设为管理员，才能把这个设为标准"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "管理员：可以使用 sudo 并更改系统"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "标准账户：不能使用 sudo，也不能更改系统"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "输入两次新密码 — 不需要旧密码，因此管理员可以重置忘记的密码"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "选一根手指，然后在每次提示时抬起并重新放到读取器上"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "忘记此账户已录入的所有指纹"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "当前已登录 — 必须先注销才能移除"
+
+msgid "the only administrator cannot be removed"
+msgstr "不能移除唯一的管理员"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "移除账户；它在 /home 中的文件可以一并删除，也可以保留"
+
+msgid "Add a user"
+msgstr "添加用户"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "另一个拥有自己文件和桌面的账户 — 在登录界面按 Tab 可切换到用户名栏"

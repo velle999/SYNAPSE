@@ -44,9 +44,9 @@ autostart = kdeconnect-indicator
 autostart = syn-install-gui --if-requested
 
 # ── Theme ─────────────────────────────────────────────────
-# SYNAPSE Prism, which is what a fresh install boots into: syn-install writes
-# `theme = prism` into the new user's synuirc (syn-install.sh, the SYNUIRC
-# heredoc). Without this line the live session did NOT match — synui's compiled
+# SYNAPSE Prism, which is what a fresh install boots into: every new account's
+# synuirc says `theme = prism` (synui/config/skel/synuirc, installed as
+# /etc/skel/.config/synui/synuirc). Without this line the live session did NOT match — synui's compiled
 # default is SYN_THEME_SYNAPSE (config.c), so the ISO booted into the neon
 # theme and the desktop someone tries before installing was not the desktop
 # they got afterwards.
@@ -62,15 +62,15 @@ theme = prism
 
 # ── The rest of the house look, and it has to be spelt out HERE ──────────────
 #
-# ⚠ EVERY LINE BELOW IS ALSO IN syn-install.sh's SYNUIRC HEREDOC, AND THE TWO
-# HAVE TO SAY THE SAME THING. This file is the live session's whole config; that
-# heredoc is a fresh install's. A desktop somebody tries before installing that
+# ⚠ EVERY LINE BELOW IS ALSO IN synui/config/skel/synuirc, AND THE TWO HAVE TO
+# SAY THE SAME THING. This file is the live session's whole config; that one is
+# what every installed account starts from. A desktop somebody tries before installing that
 # does not look like the desktop they get afterwards is the same failure the
 # `theme = prism` line above exists to fix — it was the neon theme on the ISO
 # and Prism on disk for a whole release. Change one of these files and change
 # the other, or the ISO drifts back.
 #
-# The rationale for each number is written out once, in the installer's heredoc,
+# The rationale for each number is written out once, in the skel synuirc,
 # and deliberately not copied here — two copies of an argument drift the way two
 # copies of a config do. What follows is the summary.
 
@@ -130,7 +130,7 @@ dock_radius = 64
 # when somebody PICKS a theme. The live session names a theme in this file and
 # has never picked one, so theme.state does not exist and `auto` leaves the
 # widgets with nothing to follow — solid cards on a glass desktop. Same reason,
-# same answer, as the installer's heredoc.
+# same answer, as the skel synuirc every account starts from.
 widget_glass = on
 
 # Window appearance

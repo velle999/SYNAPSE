@@ -387,6 +387,13 @@ int do_set(int argc, char **argv)
 	if (!strcmp(key, "sudo-fingerprint"))
 		return fprint_set_sudo(val);
 
+	/* An account's finger picker (Users) — the finger is a token from the
+	 * allowlist, checked again where it is used. */
+	{
+		int rc = users_set(key, val);
+		if (rc >= 0) return rc;
+	}
+
 	if (!strcmp(key, "firewall")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("firewall takes on or off");

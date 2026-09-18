@@ -1800,3 +1800,110 @@ msgid ""
 "an autostart entry synui never runs — switch it on to copy its command into "
 "synui's list"
 msgstr "запись автозапуска, которую synui никогда не запускает, — включите её, чтобы скопировать команду в список synui"
+
+msgid "Administrator"
+msgstr "Администратор"
+
+msgid "Click again to remove %1"
+msgstr "Нажмите ещё раз, чтобы удалить %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Нажмите ещё раз — файлы %1 тоже будут удалены"
+
+msgid "Create account"
+msgstr "Создать учётную запись"
+
+msgid "Make administrator"
+msgstr "Сделать администратором"
+
+msgid "Make standard"
+msgstr "Сделать обычной"
+
+msgid "Remove with files"
+msgstr "Удалить вместе с файлами"
+
+msgid "Remove, keep files"
+msgstr "Удалить, сохранить файлы"
+
+msgid "Set password"
+msgstr "Задать пароль"
+
+msgid "Users"
+msgstr "Пользователи"
+
+msgid "account name, e.g. alex"
+msgstr "имя учётной записи, например alex"
+
+msgid "again"
+msgstr "ещё раз"
+
+msgid "creating %1…"
+msgstr "создание %1…"
+
+msgid "making %1 a standard account…"
+msgstr "%1 становится обычной учётной записью…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 становится администратором…"
+
+msgid "password"
+msgstr "пароль"
+
+msgid "setting the password for %1…"
+msgstr "задаётся пароль для %1…"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "учётные записи на этой машине — добавление, пароль, право администрировать машину, отпечатки пальцев и удаление"
+
+msgid "the two passwords differ"
+msgstr "пароли не совпадают"
+
+msgid "administrator"
+msgstr "администратор"
+
+msgid "standard"
+msgstr "обычная"
+
+msgid "this is you — the account this window runs as"
+msgstr "это вы — учётная запись, от имени которой работает это окно"
+
+msgid ""
+"the only administrator — make another one before this one can be made "
+"standard"
+msgstr "единственный администратор — сначала сделайте администратором другую запись, прежде чем эта станет обычной"
+
+msgid "an administrator: it can use sudo and change the system"
+msgstr "администратор: может пользоваться sudo и менять систему"
+
+msgid "a standard account: it cannot use sudo or change the system"
+msgstr "обычная учётная запись: не может пользоваться sudo и менять систему"
+
+msgid ""
+"type a new password twice — the old one is not asked for, so an "
+"administrator can reset a forgotten one"
+msgstr "введите новый пароль дважды — старый не спрашивается, так администратор может сбросить забытый"
+
+msgid "pick a finger, then lift and rest it on the reader each time it asks"
+msgstr "выберите палец, затем поднимайте и прикладывайте его к сканеру каждый раз, когда он попросит"
+
+msgid "forget every fingerprint on file for this account"
+msgstr "забыть все сохранённые отпечатки этой учётной записи"
+
+msgid "signed in right now — it has to sign out before it can be removed"
+msgstr "сейчас в системе — перед удалением нужно выйти"
+
+msgid "the only administrator cannot be removed"
+msgstr "единственного администратора удалить нельзя"
+
+msgid "removes the account; its files in /home can go with it or stay"
+msgstr "удаляет учётную запись; её файлы в /home можно удалить вместе с ней или оставить"
+
+msgid "Add a user"
+msgstr "Добавить пользователя"
+
+msgid ""
+"another account with its own files and desktop — at the login screen, Tab "
+"moves to the name field"
+msgstr "ещё одна учётная запись со своими файлами и рабочим столом — на экране входа Tab переходит к полю имени"

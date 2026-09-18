@@ -5293,8 +5293,8 @@ static inline bool theme_is_glass(const syn_config_t *cfg)
  *
  * ⚠ IT IS THE SAME NUMBER syn-install WRITES, AND IT HAS TO STAY THAT WAY. The
  * two are one decision written twice, because one of them has to survive a
- * synuirc that predates the key: syn-install.sh's SYNUIRC heredoc names the
- * house level outright for a fresh install, and this is what the SAME desktop
+ * synuirc that predates the key: the skel synuirc (config/skel/synuirc, which
+ * every new account starts from) names the house level outright, and this is what the SAME desktop
  * is handed when it is reached by picking Prism in the theme manager instead.
  * Move one without the other and the two Prisms stop matching each other.
  *

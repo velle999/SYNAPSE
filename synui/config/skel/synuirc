@@ -1,0 +1,240 @@
+terminal = syntty
+# SYNAPSE Prism — the house theme, and what a fresh install boots into.
+#
+# ⚠ WRITTEN HERE RATHER THAN COMPILED IN, and that is the whole point. synui's
+# built-in default is still `synapse`, so an EXISTING machine that never picked
+# a theme keeps the desktop it has: changing the compiled default would restyle
+# every one of them on the next upgrade, silently, which is not something an
+# update is allowed to do. A fresh install has no desktop to preserve.
+#
+# Prism is glass, and it takes its accent off the wallpaper — live, on every
+# wallpaper change. A greyscale wallpaper has no colour to give and the theme's
+# own cyan stands; the journal says which is happening.
+theme = prism
+# ── Glass: AUTO, and auto is now the house look ──────────────────────────────
+#
+# One slider for how much of the desktop you see through: 0 solid, 100 as clear
+# as it goes, `auto` to let the theme answer. It drives the windows, synui's own
+# panels, the terminal, the bar and the dock together, each with the number that
+# surface needs (syn_glass_* in synui.h).
+#
+# ⚠ THIS SAID `glass_level = 100` FOR ONE RELEASE, AND THAT WAS A WORKAROUND FOR
+# A BUG RATHER THAN A DECISION. `auto` was not auto: a glass theme's panels fell
+# through to a tuned LADDER (a multiplier on each panel's designed alpha) where
+# an explicit level returned an absolute, and the DOCK had no way to ask its
+# theme at all and simply kept its compiled 0.72. So a Prism desktop left on
+# `auto` came up with a see-through bar, see-through windows and a solid slab of
+# a dock — three quarters of a design — and writing 100 down was the only way to
+# get the look the theme was drawn for.
+#
+# Both halves are fixed in synui 467: syn_glass_resolve()'s auto arm returns the
+# curve at SYN_GLASS_PANEL_DEFAULT, which is the same call the explicit arm
+# makes, and theme_dock_alpha() gives the dock the question the bar has always
+# had. `auto` and `glass_level = 100` now produce the same desktop on Prism,
+# measured.
+#
+# So the number comes out, and with it the whole reason it was a problem: an
+# explicit level survives a theme switch, so a user who later picked Gruvbox or
+# Win95 was handed Prism's glass instead of the opacities that theme was tuned
+# with. On `auto` every theme gets its own answer, for ever, with nothing to
+# undo.
+glass_level = auto
+
+# On, which is also the compiled default. With the sync on, a level set later
+# reaches every surface at once; on `auto` there is nothing to sync and this is
+# simply the state to come back to.
+glass_sync = on
+
+# ── The two strips, for QUICKSHELL and for no other reason ───────────────────
+#
+# ⚠ NOT a glass level in disguise, and not a number this has to spell out. The
+# bar and the desktop widgets are a separate process (quickshell, BarConfig.qml)
+# and read these keys out of theme.state, then settings.state, then this file.
+#
+# A fresh install has neither of the first two, and theme.state is still only
+# written when somebody PICKS a theme from the manager — so on a box that has
+# only ever been told `theme = prism` there is none. What changed is that an
+# ABSENT key no longer means "quickshell's own compiled default" (0.85 bar,
+# 0.72 widgets, beside a dock the compositor draws at 0.05 in-process — one
+# desktop, two amounts of glass). theme.c now hands synui-apply-theme both
+# theme_bar_alpha() and theme_dock_alpha(), which writes them into theme.json
+# on every login whether or not theme.state exists, and Theme.qml falls back to
+# THAT before its own compiled numbers. So `auto` really is auto now, on the
+# very first login.
+#
+# Leave these on `auto`. A number here reads as a CHOICE in the control panel
+# — Bar opacity would show its figure instead of "Follow the theme" — for a
+# row nobody has actually touched.
+bar_opacity  = auto
+dock_opacity = auto
+
+# ── Transparency: on ─────────────────────────────────────────────────────────
+#
+# The master switch for see-through WINDOWS, which is a different question from
+# the chrome above — `glass_level` is the panels, the bar and the dock; this is
+# the application windows themselves. Off by default in synui, because turning
+# every window on an existing desktop translucent is not something an upgrade
+# may do. A fresh install has no desktop to preserve and Prism is built on it.
+#
+# ⚠ AND NO NUMBER WITH IT, WHICH IS THE POINT OF BEING ON `auto`. Both Prisms
+# carry 0.90/0.84 in their own preset (theme.c) and that is what a window draws
+# at with no level set. The release before this one had to write `active_opacity
+# = 0.90` AND pin it, because at level 100 the slider drove windows to
+# 1.00 - 0.38 = 0.62 — the floor of that curve, and not a number anybody chose.
+# With the level gone the theme's own pair stands, and the pin with it.
+transparency = on
+
+# Menus and panels ink themselves off the WINDOW behind them rather than the
+# wallpaper it covers. Already synui's compiled default; written here because a
+# desktop this see-through is the one where it shows, and a fresh install should
+# be able to read what it was given out of this file.
+scene_ink = on
+
+# ⚠ `on` AND NOT `auto`, WHICH IS A REAL DIFFERENCE HERE. Auto means "the two
+# Prisms and nothing else" — the same answer on this desktop — so the only thing
+# the explicit word changes is what happens after a theme switch: the accent
+# keeps coming off the wallpaper on whatever theme is picked next. That is the
+# ask. Appearance ▸ Wallpaper accent ▸ Auto puts it back to Prism-only.
+wallpaper_accent = on
+
+# The dock's body: `auto` is glass on a glass theme and solid elsewhere. It is
+# already synui's compiled default and is written here to be visible rather than
+# to change anything — a fresh install that wants to know what it was given
+# should be able to read it in this file.
+dock_style = auto
+
+# A capsule. The row caps at 64 and the DRAW caps it again at half the dock's
+# thickness (32 at the stock dock_height of 64), so this is "as round as it
+# goes" rather than a literal 64px arc — which is the shape a dock floating on
+# the wallpaper at 0.05 wants. Anything less reads as a rectangle that has had
+# its corners filed.
+dock_radius = 64
+
+# ⚠ WIDGET GLASS IS `on` AND NOT `auto`, AND THIS IS THE ONE THAT NEEDS SAYING.
+#
+# `auto` means "follow the theme", and the desktop widgets cannot ask what the
+# theme is. They are quickshell, and they read theme.state — a file
+# synui-apply-theme writes when somebody PICKS a theme, and which deliberately
+# refuses to create itself otherwise (creating it would hand theme.state
+# precedence over settings.state's opacity keys on a desktop that never asked
+# for that).
+#
+# A fresh install names `theme = prism` in this file and has never picked a
+# theme, so theme.state does not exist. The compositor resolves its own chrome
+# and the dock in-process and looks right; the widgets have nothing to read and
+# come up solid on a glass desktop. `on` is the explicit answer for exactly that
+# case, and it is what synui's own theme.c names as the answer.
+#
+# Set it back to `auto` after picking any theme from the manager and it will
+# follow along like everything else.
+widget_glass = on
+
+# The bar as a floating capsule rather than a strip welded to the screen edge:
+# rounded-ends curves the two corners facing the desktop, floating-pill also
+# lifts it off the edge and insets it from both sides so it closes into a pill
+# with wallpaper all the way round it. That is the shape a 0.05 bar wants — a
+# full-width strip at that alpha reads as a smudge along the top of the screen,
+# because there is no edge anywhere to say where the surface stops.
+#
+# ⚠ IT IS A NO-OP WITH THE CORNERS OFF. The shape is what the bar does with
+# `corner_radius` (12 by default, which is on) — set that to 0, or pick a retro
+# chrome that squares everything, and all three shapes draw the same bar. It is
+# "what shape when rounded", not a second switch.
+bar_shape = floating-pill
+# greetd launches synui after login.
+# The bar is just the bar. The start menu it used to carry is synui's own
+# panel (Super tap), which scans the installed .desktop files itself when it
+# opens — so there is no generator to run before the bar starts. synui-bar
+# starts quickshell against the QML tree synui packages to
+# /usr/share/synui/quickshell.
+autostart = synui-bar
+# A synsh terminal used to be autostarted here, and the live ISO used to do the
+# same through synui-foot.service. The live session dropped it — it is a desktop
+# now, not a shell with a compositor around it — and an installed system has even
+# less reason to open one: Super+Return is the terminal, and the start menu has
+# it too. Uncomment to get a shell on every login.
+# autostart = kitty synsh
+# Any GUI app that needs root goes through polkit, and pkexec refuses to
+# prompt on a terminal it doesn't have — without an authentication agent
+# registered for the session it fails instantly and, launched from a menu,
+# silently (gparted, for one). This is the agent that shows the dialog.
+autostart = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
+border_width    = 2
+gap             = 8
+master_factor   = 0.60
+
+# The floating desktop's own tiler: windows you have not placed yourself are
+# arranged into a grid that deliberately does NOT fill the screen. float_inset
+# is the percentage of the screen kept clear at each edge and float_gap the
+# space between the tiles, so the wallpaper shows through — that is the point
+# of the layout, not a gap in it. Separate from `gap` above, which wants to be
+# a hairline. Super+Shift+G re-arranges after you have dragged things about.
+float_inset     = 8
+float_gap       = 24
+
+# St. Louis at night — Daniel Schwen's Gateway Arch photograph over the
+# Mississippi, which synui ships to /usr/share/backgrounds. Drawn by the
+# compositor itself (wallpaper.c), so nothing has to be autostarted to paint the
+# desktop — a swaybg here would only cover it. Super+W picks a different one and
+# records the choice in wallpaper.state, which from then on overrides this line.
+# `wallpaper = default` is the SYNAPSE mark in /usr/share/synui; `none` gives a
+# flat colour.
+#
+# ⚠ THE COLOUR CUT, NOT THE NOIR ONE, AND THAT IS THE WHOLE REASON TO NAME A
+# PHOTOGRAPH HERE. Prism has no accent of its own worth the name: it measures
+# the wallpaper (palette.c) and wears what it finds, live, on every wallpaper
+# change. A greyscale picture has no hue to give, so the noir cut — a real
+# wallpaper this desktop ships, and the same photograph — would boot a fresh
+# install onto the theme's FALLBACK cyan and hide the one thing that makes Prism
+# Prism. The colour cut has the arch lit sodium-orange over a blue river, so the
+# first thing a new desktop does is take a colour off its own wallpaper.
+#
+# `fill` crops to the screen rather than letterboxing it: the file is 3000x1929,
+# so `fit` would band a 16:9 monitor top and bottom.
+wallpaper       = /usr/share/backgrounds/commons-st-louis-night.jpg
+wallpaper_mode  = fill
+
+# "night drive" palette — matches kitty.conf/foot.ini and waybar style.css
+border_color_norm  = #2a2a40
+border_color_focus = #ff296d
+border_color_ai    = #05d9e8
+border_color_warn  = #ff3524
+
+# CRT post-process (GPU only; VMs fall back to the plain look).
+# OFF: a new desktop should look like a desktop, and scanlines over
+# everything is a taste, not a default. Set `effects = on` here — or turn it
+# on live in the Super+E filters panel, which saves to filters.state — and
+# the strengths below take effect. Glitch fires on window close and,
+# sustained, while synguard holds any window in ALERT/DENY.
+effects           = off
+# effect_scanline   = 0.35
+# effect_curvature  = 0.25
+# effect_aberration = 0.40
+# effect_glitch     = 0.60
+
+# ── Lock screen (Super+L) ──────────────────────────────────
+# Offer the fingerprint reader beside the password. Both ways in are live at
+# once, so you can type your password over a reader that is still waiting, and
+# whichever answers first unlocks.
+#
+# On costs a machine WITHOUT a reader nothing: the helper is told there is no
+# device, the lock stops asking and draws nothing. So this is not a "do I have
+# one" switch — that is detected — it is for turning a working reader OFF.
+#
+# Needs the fprintd package (an optdepend) and at least one ENROLLED finger.
+# Run the enroll as yourself, not root — prints are stored per account:
+#   sudo pacman -S fprintd
+#   fprintd-enroll        # swipe until it says enroll-completed
+#   fprintd-list "$USER"  # confirm it took
+# Your password always works regardless — five rejected swipes retire the
+# reader for that lock rather than locking you out.
+lock_fingerprint = on
+
+ai_layout       = on
+ai_ctx_decor    = on
+start_overlay   = off
+workspace_1_intent = main workspace
+workspace_2_intent = web browsing and research
+workspace_3_intent = writing code and running tests
+workspace_4_intent = terminal and system administration
+workspace_5_intent = media and entertainment

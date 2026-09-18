@@ -94,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*|password:*|promote:*|demote:*|fforget:*|deluser:*|adduser:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -107,7 +107,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote scan startup; do
+for pane in display region network bluetooth power kernel apps time ai speech fprint assistant remote scan startup users; do
     check_actions "$pane"
 done
 
@@ -375,7 +375,9 @@ fi
 # newline from beginning to end — becomes one record per update rather than
 # one enormous record at the end.
 stubdir=$(mktemp -d)
-trap 'rm -rf "$stubdir"' EXIT
+# ⚠ An EXIT trap REPLACES the one before it. Each of these carries $SBOX too,
+# or the apps sandbox from the top of the file was left in /tmp on every run.
+trap 'rm -rf "$stubdir" "$SBOX"' EXIT
 cat > "$stubdir/synpkg" <<'STUB'
 #!/bin/sh
 printf ':: synchronising package databases\n' >&2
@@ -407,7 +409,7 @@ else
     bad "an ANSI escape survived into a progress record"
 fi
 rm -rf "$stubdir"
-trap - EXIT
+trap 'rm -rf "$SBOX"' EXIT
 
 # An Arch kernel must NOT drag the CachyOS repo onto the machine.
 if "$BIN" --dry-run pkg install linux-zen | grep -q 'cachyos'; then
@@ -518,7 +520,7 @@ fi
 # here would have caught that, because there is no systemd-boot here to run it
 # against. SYN_SETTINGS_BOOT_ROOT exists so the suite can pose all three.
 bootfx=$(mktemp -d)
-trap 'rm -rf "$bootfx"' EXIT
+trap 'rm -rf "$bootfx" "$SBOX"' EXIT
 
 mkdir -p "$bootfx/limine/boot" \
          "$bootfx/limbls/boot" \
@@ -1585,6 +1587,104 @@ refuses "startup: a unit name with a slash is refused" 2 --dry-run set user-unit
 refuses "startup: a service takes only on or off"     2 --dry-run set user-unit/syncthing.service maybe
 rm -rf "$stc"
 
+# ── Users ───────────────────────────────────────────────────────────────────
+#
+# The asking half is checked here directly; the ROOT half is run for real — the
+# actual useradd, chpasswd (through PAM), gpasswd and userdel — inside a user
+# namespace, against copies. /etc is an overlay whose upper layer holds copies
+# of the account files (and a fake shadow), /home is a temp directory, and
+# nothing reaches the machine running this. Where there is no user namespace
+# with subordinate ids (a build chroot), that half says so and is skipped.
+out=$(echo pw | "$BIN" --dry-run user add alex 2>&1)
+case "$out" in
+    "would run: pkexec "*" user add alex --as-root"*"(the password on its stdin)")
+        ok "users: add asks pkexec, with the password on stdin" ;;
+    *) bad "users: add would run '$out'" ;;
+esac
+case "$out" in *pw*) bad "users: the password reached the command line" ;;
+                 *) ok "users: ...and the password is nowhere in argv" ;; esac
+refuses "users: an upper-case name is refused"       2 --dry-run user add Alex
+refuses "users: root is never touched"               2 --dry-run user add root
+refuses "users: a name with a slash is refused"      2 --dry-run user add ../x
+refuses "users: add without a password is refused"   2 --dry-run user add alex </dev/null
+refuses "users: an unknown finger is refused"        2 --dry-run user enroll "$(id -un)" pinky
+refuses "users: an unknown operation is refused"     2 --dry-run user frobnicate "$(id -un)"
+refuses "users: removing yourself is refused"        2 --dry-run user remove "$(id -un)"
+refuses "users: demoting yourself is refused"        2 --dry-run user demote "$(id -un)"
+
+if unshare --map-root-user --map-auto --mount --fork true 2>/dev/null \
+   && command -v useradd >/dev/null && command -v chpasswd >/dev/null; then
+    ns=$(mktemp -d)
+    mkdir -p "$ns/up/skel/.config/synui" "$ns/work" "$ns/home"
+    cp /etc/passwd /etc/subuid /etc/subgid "$ns/up/"
+    # wheel emptied: the suite decides who administers, not the tester's box.
+    sed 's/^\(wheel:[^:]*:[^:]*:\).*/\1/' /etc/group > "$ns/up/group"
+    getent passwd | awk -F: '{print $1":*:20000:0:99999:7:::"}' > "$ns/up/shadow"
+    getent group  | awk -F: '{print $1":!::"}' > "$ns/up/gshadow"
+    chmod 600 "$ns/up/shadow" "$ns/up/gshadow"
+    # The root-owned lock and backups on the real /etc cannot be written
+    # through the overlay from here, so the upper layer has its own.
+    : > "$ns/up/.pwd.lock"; chmod 600 "$ns/up/.pwd.lock"
+    for f in passwd group shadow gshadow subuid subgid; do cp -p "$ns/up/$f" "$ns/up/$f-"; done
+    skel="$(dirname "$0")/../../synui/config/skel/synuirc"
+    if [ -r "$skel" ]; then cp "$skel" "$ns/up/skel/.config/synui/synuirc"
+    else printf 'terminal = syntty\nautostart = synui-bar\n' > "$ns/up/skel/.config/synui/synuirc"; fi
+    cp "$BIN" "$ns/bin"
+    cat > "$ns/inner.sh" <<'NS'
+set -u
+ns=$1; B=$ns/bin
+mount -t overlay overlay -o lowerdir=/etc,upperdir=$ns/up,workdir=$ns/work /etc || { echo "  FAIL users: overlay"; exit 0; }
+mount --bind "$ns/home" /home || { echo "  FAIL users: home"; exit 0; }
+t() { if eval "$2"; then echo "  ok   users(root): $1"; else echo "  FAIL users(root): $1"; fi; }
+pane() { "$B" --rec users | awk -F'\t' -v k="$1" -v u="$2" '$1 == k && $2 == u { print $3 "|" $6 }'; }
+
+printf 'pw one\n' | "$B" user add ann --admin --xkb de --as-root >/dev/null 2>&1
+t "add makes the account, in wheel, with the house synuirc and the layout" \
+  'id -nG ann | tr " " "\n" | grep -qx wheel && [ -s /home/ann/.config/synui/synuirc ] && tail -1 /home/ann/.config/synui/synuirc | grep -qx "xkb_layout = de"'
+t "...its home belongs to it" '[ "$(stat -c %U /home/ann/.config/synui/synuirc)" = ann ]'
+t "...and the password is a real hash in shadow" 'awk -F: "\$1==\"ann\"{exit !(\$2 ~ /^\\\$/)}" /etc/shadow'
+printf 'pw two\n' | "$B" user add ben --as-root >/dev/null 2>&1
+t "a standard account is not in wheel" 'id ben >/dev/null 2>&1 && ! id -nG ben | tr " " "\n" | grep -qx wheel'
+printf 'x\n' | "$B" user add ben --as-root >/dev/null 2>&1; t "a second ben is refused" '[ "$(grep -c "^ben:" /etc/passwd)" = 1 ]'
+printf '\n' | "$B" user add cat --as-root >/dev/null 2>&1; t "no password, no account" '! id cat >/dev/null 2>&1'
+
+t "the only administrator offers no demote"   '[ "$(pane account ann)" = "administrator|-" ]'
+t "...and cannot be removed from the pane"   '[ "$(pane remove ann)" = "-|-" ]'
+"$B" user demote ann --as-root >/dev/null 2>&1; t "...nor demoted by hand"  'id -nG ann | tr " " "\n" | grep -qx wheel'
+"$B" user remove ann --as-root >/dev/null 2>&1; t "...nor removed by hand"  'id ann >/dev/null 2>&1'
+t "a standard account offers promote and remove" '[ "$(pane account ben)" = "standard|promote:ben" ] && [ "$(pane remove ben)" = "-|deluser:ben" ]'
+
+"$B" user promote ben --as-root >/dev/null 2>&1
+t "promote puts it in wheel" 'id -nG ben | tr " " "\n" | grep -qx wheel'
+t "...and with two administrators, either can be demoted" '[ "$(pane account ann)" = "administrator|demote:ann" ]'
+PKEXEC_UID=$(id -u ben) "$B" user demote ben --as-root >/dev/null 2>&1
+t "the account that asked cannot demote itself" 'id -nG ben | tr " " "\n" | grep -qx wheel'
+"$B" user demote ben --as-root >/dev/null 2>&1; t "demote takes it out of wheel" '! id -nG ben | tr " " "\n" | grep -qx wheel'
+
+h1=$(awk -F: '$1=="ben"{print $2}' /etc/shadow); printf 'pw three\n' | "$B" user password ben --as-root >/dev/null 2>&1
+h2=$(awk -F: '$1=="ben"{print $2}' /etc/shadow); t "password changes the hash" '[ -n "$h2" ] && [ "$h1" != "$h2" ]'
+
+PKEXEC_UID=$(id -u ben) "$B" user remove ben --as-root >/dev/null 2>&1
+t "the account that asked cannot remove itself" 'id ben >/dev/null 2>&1'
+"$B" user remove ben --as-root >/dev/null 2>&1; t "remove keeps the files by default" '! id ben >/dev/null 2>&1 && [ -d /home/ben ]'
+printf 'pw\n' | "$B" user add dee --as-root >/dev/null 2>&1; "$B" user remove dee --files --as-root >/dev/null 2>&1
+t "remove --files takes the home with it" '! id dee >/dev/null 2>&1 && [ ! -e /home/dee ]'
+# ⚠ HERE, NOT OUTSIDE: the homes belong to the namespace's uids, which are
+# subordinate ids outside it — the tester cannot delete them, and `rm -rf` on
+# the temp directory failed and killed the suite under set -e.
+rm -rf /home/* 2>/dev/null || true
+NS
+    nsout=$(unshare --map-root-user --map-auto --mount --fork -- bash "$ns/inner.sh" "$ns" 2>&1)
+    printf '%s\n' "$nsout" | grep -E '^  (ok|FAIL) '
+    n=$(printf '%s\n' "$nsout" | grep -c '^  FAIL ' || true)
+    fails=$((fails + n))
+    [ "$(printf '%s\n' "$nsout" | grep -c '^  ok ' || true)" -ge 18 ] \
+        || bad "users: the namespace run did not complete ($nsout)"
+    unshare --map-root-user --map-auto --fork -- rm -rf "$ns" 2>/dev/null || rm -rf "$ns" 2>/dev/null || true
+else
+    skip "users: no user namespace with subordinate ids here — the root half is not exercised"
+fi
+
 # ── fingerprint for sudo ────────────────────────────────────────────────────
 #
 # data/sudo-fprint.sh edits sudo's PAM stack as root on every machine that
@@ -1715,7 +1815,7 @@ if [ -f "$QML" ]; then
     # reader and the window are two files, and adding a verb to one of them is
     # exactly the kind of half-change that looks finished and clicks dead.
     verbs=$(
-        for pane in display region network bluetooth power kernel apps time ai scan startup; do
+        for pane in display region network bluetooth power kernel apps time ai scan startup users; do
             pout=$("$BIN" --rec "$pane") || continue
             pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
             [ -n "$pcol" ] || continue

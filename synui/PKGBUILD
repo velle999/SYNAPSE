@@ -3561,7 +3561,17 @@ pkgver=0.1.0
 #   at 127 bytes. syn-settings' new Startup pane refuses to write past either.
 #   Verified by starting this build headless with 34 lines that each touch a
 #   marker: 32 markers, two log lines.
-pkgrel=611
+# 612: A NEW ACCOUNT GETS THE HOUSE DESKTOP. `useradd -m` copies /etc/skel, and
+#   synui with no synuirc runs its compiled-in defaults — a terminal, no bar, no
+#   polkit agent. The house synuirc lived only in a syn-install heredoc written
+#   into the FIRST account's home, so every account after it came up bare.
+#   config/skel/synuirc is that file, byte for byte, installed as
+#   /etc/skel/.config/synui/synuirc (in backup=, so an admin's edit to what new
+#   accounts get survives upgrades); syn-install takes it from there now and
+#   keeps no copy of its own. Checked for real: syn-settings' Users pane made an
+#   account inside a user namespace over a copy of /etc, and its home had this
+#   file, owned by it, with the layout line appended.
+pkgrel=612
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -3806,7 +3816,10 @@ optdepends=(# Network printers: cups does the discovery (its own dnssd backend) 
             'fprintd: unlock the lock screen AND log in with a fingerprint,\n            and enrol one in syn-settings ▸ Fingerprint')
 # /etc/MangoHud.conf is meant to be tuned in place — keep a user's edits across
 # upgrades instead of overwriting them.
-backup=('etc/MangoHud.conf' 'etc/synapseos/mangohud.conf')
+# The skel synuirc is in backup= for the same reason as any /etc file: an admin
+# who edits what new accounts get keeps that edit across upgrades.
+backup=('etc/MangoHud.conf' 'etc/synapseos/mangohud.conf'
+        'etc/skel/.config/synui/synuirc')
 
 # Puts pam_fprintd into greetd's auth stack, so a fingerprint works at the
 # LOGIN screen and not only at the lock. See synui.install for why that has to
@@ -3947,6 +3960,16 @@ package() {
     # config/xdg-terminal-exec.
     install -Dm755 config/xdg-terminal-exec \
         "$pkgdir/usr/bin/xdg-terminal-exec"
+
+    # ⛔ WHAT A NEW ACCOUNT'S DESKTOP IS. `useradd -m` copies /etc/skel, and
+    # synui with no synuirc runs its compiled-in defaults: a terminal, no bar,
+    # no polkit agent, no wallpaper. syn-install wrote the house synuirc into
+    # the FIRST account's home and nothing else did, so every account after it
+    # — made in syn-settings' Users pane or by hand — logged into a bare
+    # desktop. This is that same file, and syn-install now takes it from here
+    # instead of from a heredoc of its own: one copy, two ways in.
+    install -Dm644 config/skel/synuirc \
+        "$pkgdir/etc/skel/.config/synui/synuirc"
 
     # PAM service for the native lock's auth helper (synui-lock-auth). Without
     # it pam_start("synui-lock") fails and the screen can never be unlocked.

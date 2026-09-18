@@ -384,7 +384,36 @@ pkgver=0.1.0
 #   Driven in the real window headless: switching a line on, copying an XDG
 #   entry in, and removing a line each changed exactly that line. 34 new
 #   checks. Thirteen new strings in all thirteen catalogs, 462/462.
-pkgrel=56
+# 57: A USERS PANE — the accounts on this machine, and changing them.
+#   Each account: whether it administers the machine (the `wheel` group, which
+#   is what sudo and polkit both read here), a password reset typed twice, a
+#   finger picker and a forget for its fingerprints when there is a reader, and
+#   removal — keeping its files or taking them — behind a second click. And an
+#   Add a user row: name, password twice, Administrator.
+#   ⛔ THE WINDOW RUNS AS YOU AND THE WORK NEEDS ROOT, so `syn-settings user
+#   <op>` checks what it was given and re-runs itself under pkexec with
+#   --as-root, and the root half checks all of it again — it is a process
+#   anybody can start with any arguments. The password never touches argv: the
+#   window hands it over in the environment, pkexec wipes that, so the asking
+#   half pipes it into the root half's stdin and the root half into chpasswd,
+#   then reads /etc/shadow back to prove it landed. A new account whose password
+#   did not land is removed again rather than left locked.
+#   Refused however it is authorised: removing or demoting the account that
+#   asked, demoting or removing the last administrator, removing an account that
+#   is signed in (logind's STATE=active/online), touching root or anything
+#   outside the login range. A new account gets the groups syn-install gives the
+#   first one, where this machine has them, and the keyboard layout of the
+#   person making it appended to the synuirc /etc/skel gave it.
+#   ⛔ RUN FOR REAL IN THE SUITE: the root half's actual useradd, chpasswd (through
+#   PAM), gpasswd and userdel run inside a user namespace over an overlay of /etc
+#   and a temp /home — 19 checks, skipped where there are no subordinate ids.
+#   The window's side was driven headless, typing included: Create sends the
+#   password in the environment and never in argv, mismatched boxes send
+#   nothing, and Remove only arms on the first click.
+#   Also: the suite's apps sandbox was left in /tmp on every run — each EXIT
+#   trap replaced the one before it. 33 new strings in all thirteen catalogs,
+#   495/495.
+pkgrel=57
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

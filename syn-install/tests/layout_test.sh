@@ -795,11 +795,17 @@ while IFS= read -r row; do
     check "row '${row%%|*}' has 5 columns" "5" "$(awk -F'|' '{print NF}' <<<"$row")"
 done <<<"$locale_rows"
 
-# The synuirc heredoc the installer writes, and one key out of it. Read from the
-# script's text rather than by running the installer, for the same reason
-# in_code() exists: this file partitions disks.
+# The synuirc a new account starts from, and one key out of it.
+#
+# ⛔ IT IS synui's FILE NOW, NOT A HEREDOC IN THIS SCRIPT. synui ships it as
+# /etc/skel/.config/synui/synuirc and `useradd -m` copies it — into the first
+# account the installer makes and every account made after it. It used to be a
+# heredoc here, which only the FIRST account ever got. Read from the synui tree
+# beside this checkout, or from /etc/skel where this suite runs installed.
+skel_synuirc=$here/../../synui/config/skel/synuirc
+[ -r "$skel_synuirc" ] || skel_synuirc=/etc/skel/.config/synui/synuirc
 synuirc_body() {
-    sed -n "/<< *'SYNUIRC'/,/^SYNUIRC\$/p" "$here/../syn-install.sh"
+    cat "$skel_synuirc" 2>/dev/null
 }
 in_synuirc() {
     synuirc_body | sed -n "s/^$1 *= *\(.*\)$/\1/p" | head -1
@@ -842,63 +848,75 @@ check "the keymap is no longer fed straight to xkb" "no" \
 # same desktop on Prism — measured, not asserted. The number comes out again,
 # and this time because it is genuinely redundant rather than because the cost
 # was being dodged.
-check "a fresh install leaves glass_level on auto" "auto" "$(in_synuirc 'glass_level')"
-check "…and never writes a number, which would pin it off the theme" "no" \
-    "$(grep -qE '^glass_level *= *[0-9]' <<<"$(synuirc_body)" && echo yes || echo no)"
-check "…with the sync on, so a level set later reaches every surface" "on" \
-    "$(in_synuirc 'glass_sync')"
+# The installer takes the file from skel and keeps no copy of its own.
+check "the installer carries no synuirc heredoc of its own" "no" \
+    "$(in_code "<< 'SYNUIRC'")"
+check "…the first account is made with useradd -m, which copies /etc/skel" "yes" \
+    "$(in_code 'arch-chroot /mnt useradd -m ')"
+check "…and a missing skel synuirc is said, not silently replaced" "yes" \
+    "$(in_code 'synui did not provide /etc/skel/.config/synui/synuirc')"
 
-# ⚠ NO active_opacity AND NO PIN, and their absence is load-bearing. At level
-# 100 the slider drove windows to 1.00 - 0.38 = 0.62 — the floor of that curve,
-# and not a number anybody chose — so the release before this one had to write
-# 0.90 down and PIN it off the slider. With no level set there is nothing to
-# drive them and both Prisms' own preset pair (0.90/0.84, theme.c) stands. A pin
-# in a fresh install's synuirc is a row the user never touched claiming to be
-# one they did.
-check "no window opacity is written down" "" "$(in_synuirc 'active_opacity')"
-check "…and nothing is pinned off the slider" "no" \
-    "$(grep -qE '^glass_pinned' <<<"$(synuirc_body)" && echo yes || echo no)"
+if [ -r "$skel_synuirc" ]; then
+    check "a fresh install leaves glass_level on auto" "auto" "$(in_synuirc 'glass_level')"
+    check "…and never writes a number, which would pin it off the theme" "no" \
+        "$(grep -qE '^glass_level *= *[0-9]' <<<"$(synuirc_body)" && echo yes || echo no)"
+    check "…with the sync on, so a level set later reaches every surface" "on" \
+        "$(in_synuirc 'glass_sync')"
 
-# ⚠ THESE TWO ARE FOR QUICKSHELL, NOT THE GLASS LEVEL IN DISGUISE — and they
-# used to have to spell out a number (0.05) rather than say `auto`, because
-# the bar and the desktop widgets are a separate process that reads them out
-# of theme.state, then settings.state, then synuirc, and a fresh install has
-# neither of the first two. That is fixed at the source now: theme.c hands
-# synui-apply-theme theme_bar_alpha() AND theme_dock_alpha(), which land in
-# theme.json's barAlpha/dockAlpha on every login whether or not theme.state
-# exists, and Theme.qml falls back to THOSE before its own compiled numbers.
-# `auto` genuinely is auto on the very first login now, and a number here
-# would read as a CHOICE in the control panel for a row nobody has touched.
-check "the bar's alpha follows the theme"  "auto" "$(in_synuirc 'bar_opacity')"
-check "the dock's alpha follows the theme" "auto" "$(in_synuirc 'dock_opacity')"
+    # ⚠ NO active_opacity AND NO PIN, and their absence is load-bearing. At level
+    # 100 the slider drove windows to 1.00 - 0.38 = 0.62 — the floor of that curve,
+    # and not a number anybody chose — so the release before this one had to write
+    # 0.90 down and PIN it off the slider. With no level set there is nothing to
+    # drive them and both Prisms' own preset pair (0.90/0.84, theme.c) stands. A pin
+    # in a fresh install's synuirc is a row the user never touched claiming to be
+    # one they did.
+    check "no window opacity is written down" "" "$(in_synuirc 'active_opacity')"
+    check "…and nothing is pinned off the slider" "no" \
+        "$(grep -qE '^glass_pinned' <<<"$(synuirc_body)" && echo yes || echo no)"
 
-check "transparency is on" "on" "$(in_synuirc 'transparency')"
+    # ⚠ THESE TWO ARE FOR QUICKSHELL, NOT THE GLASS LEVEL IN DISGUISE — and they
+    # used to have to spell out a number (0.05) rather than say `auto`, because
+    # the bar and the desktop widgets are a separate process that reads them out
+    # of theme.state, then settings.state, then synuirc, and a fresh install has
+    # neither of the first two. That is fixed at the source now: theme.c hands
+    # synui-apply-theme theme_bar_alpha() AND theme_dock_alpha(), which land in
+    # theme.json's barAlpha/dockAlpha on every login whether or not theme.state
+    # exists, and Theme.qml falls back to THOSE before its own compiled numbers.
+    # `auto` genuinely is auto on the very first login now, and a number here
+    # would read as a CHOICE in the control panel for a row nobody has touched.
+    check "the bar's alpha follows the theme"  "auto" "$(in_synuirc 'bar_opacity')"
+    check "the dock's alpha follows the theme" "auto" "$(in_synuirc 'dock_opacity')"
 
-check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
-check "the dock corners are a capsule"   "64"   "$(in_synuirc 'dock_radius')"
-check "the bar is a floating pill"       "floating-pill" "$(in_synuirc 'bar_shape')"
-check "menus ink off the window behind them" "on" "$(in_synuirc 'scene_ink')"
-check "the accent comes off the wallpaper"   "on" "$(in_synuirc 'wallpaper_accent')"
+    check "transparency is on" "on" "$(in_synuirc 'transparency')"
 
-# ⚠ `on`, NOT `auto`, and the asymmetry is the point. The widgets are
-# quickshell and read theme.state — a file synui-apply-theme writes when
-# somebody PICKS a theme and which refuses to create itself otherwise. A fresh
-# install names a theme in synuirc and has never picked one, so theme.state
-# does not exist and `auto` leaves the widgets with nothing to follow: solid
-# widgets on a glass desktop. synui's own theme.c names `widget_glass = on` as
-# the answer for exactly this case.
-check "widget glass is explicitly on, because the widgets cannot ask" "on" \
-    "$(in_synuirc 'widget_glass')"
+    check "the dock style follows the theme" "auto" "$(in_synuirc 'dock_style')"
+    check "the dock corners are a capsule"   "64"   "$(in_synuirc 'dock_radius')"
+    check "the bar is a floating pill"       "floating-pill" "$(in_synuirc 'bar_shape')"
+    check "menus ink off the window behind them" "on" "$(in_synuirc 'scene_ink')"
+    check "the accent comes off the wallpaper"   "on" "$(in_synuirc 'wallpaper_accent')"
 
-# The wallpaper Prism takes its accent off. The COLOUR cut and not the noir one:
-# the theme measures the picture, a greyscale picture has no hue to give, and a
-# fresh install would boot onto the fallback cyan with the one feature that
-# makes Prism Prism doing nothing.
-check "the shipped wallpaper is the colour St. Louis" \
-    "/usr/share/backgrounds/commons-st-louis-night.jpg" "$(in_synuirc 'wallpaper')"
-check "…and it is not the greyscale cut" "no" \
-    "$(grep -qE '^wallpaper *=.*noir' <<<"$(synuirc_body)" && echo yes || echo no)"
-check "…scaled to fill" "fill" "$(in_synuirc 'wallpaper_mode')"
+    # ⚠ `on`, NOT `auto`, and the asymmetry is the point. The widgets are
+    # quickshell and read theme.state — a file synui-apply-theme writes when
+    # somebody PICKS a theme and which refuses to create itself otherwise. A fresh
+    # install names a theme in synuirc and has never picked one, so theme.state
+    # does not exist and `auto` leaves the widgets with nothing to follow: solid
+    # widgets on a glass desktop. synui's own theme.c names `widget_glass = on` as
+    # the answer for exactly this case.
+    check "widget glass is explicitly on, because the widgets cannot ask" "on" \
+        "$(in_synuirc 'widget_glass')"
+
+    # The wallpaper Prism takes its accent off. The COLOUR cut and not the noir one:
+    # the theme measures the picture, a greyscale picture has no hue to give, and a
+    # fresh install would boot onto the fallback cyan with the one feature that
+    # makes Prism Prism doing nothing.
+    check "the shipped wallpaper is the colour St. Louis" \
+        "/usr/share/backgrounds/commons-st-louis-night.jpg" "$(in_synuirc 'wallpaper')"
+    check "…and it is not the greyscale cut" "no" \
+        "$(grep -qE '^wallpaper *=.*noir' <<<"$(synuirc_body)" && echo yes || echo no)"
+    check "…scaled to fill" "fill" "$(in_synuirc 'wallpaper_mode')"
+else
+    printf '  skip  the skel synuirc is not beside this checkout or in /etc/skel\n'
+fi
 
 # The wallpaper's accent on the lights: the state file AND the user unit that
 # watches palette.state. `syn-rgb on` does both and cannot be run from a chroot,
@@ -919,7 +937,7 @@ check "…and syn-rgb.path is enabled with it"  "yes" \
 # Skipped rather than failed when the ISO profile is not beside us: this suite
 # also runs from an installed syn-install, where archiso/ is not shipped.
 iso_synuirc=$here/../../archiso/airootfs/etc/synui/synuirc
-if [ -r "$iso_synuirc" ]; then
+if [ -r "$iso_synuirc" ] && [ -r "$skel_synuirc" ]; then
     in_iso() { sed -n "s/^$1 *= *\(.*\)$/\1/p" "$iso_synuirc" | head -1; }
     for k in theme glass_level glass_sync bar_opacity dock_opacity \
              transparency active_opacity glass_pinned scene_ink \
