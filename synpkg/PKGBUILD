@@ -279,7 +279,21 @@ pkgver=0.1.0
 #   ⚠ AND THE FileDialog ASSERTION FAILED ON A CORRECT FILE. It grepped for the
 #   word, and the comment explaining why there is no FileDialog contains it. It
 #   matches a USE now — an import or an element.
-pkgrel=54
+# 55: the software list's icons are JPEG XL now, and Qt could not read them.
+#   archlinux-appstream-data 20260910 ships every cached icon as `.jxl` — 3,843
+#   of them, not one `.png` — so the window's `find … -name '*_*.png'` matched
+#   nothing and every package that is not installed went back to its monogram,
+#   silently. It scans for both now. And finding them is half of it: stock Qt
+#   has no JPEG XL reader and answers "Unsupported image format". kimageformats
+#   ships kimg_jxl, which loads only with libjxl present — measured here, the
+#   same icon is null without the pair and 128x128 with it — so both are hard
+#   dependencies, beside the catalogue they exist to read.
+#
+#   Caught by the suite, which failed the 1.0.0 ISO build: it counts the
+#   catalogue's icons and the curated packages they name, and both came back 0.
+#   It accepts either format now, and the drift check asks that a QML reading
+#   .jxl ships the decoder with it.
+pkgrel=55
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -296,7 +310,10 @@ license=('GPL-2.0-or-later')
 # software centre whose list is a column of letters on a fresh install is the
 # bug this fixes, and "install this other package and it gets better" is not an
 # answer a person can be expected to find.
-depends=('glibc' 'pacman' 'curl' 'archlinux-appstream-data')
+# kimageformats + libjxl: that catalogue's icons are JPEG XL, and Qt reads them
+# only through kimageformats' kimg_jxl plugin, which loads only with libjxl —
+# see pkgrel 55.
+depends=('glibc' 'pacman' 'curl' 'archlinux-appstream-data' 'kimageformats' 'libjxl')
 
 makedepends=('meson' 'ninja' 'gcc')
 

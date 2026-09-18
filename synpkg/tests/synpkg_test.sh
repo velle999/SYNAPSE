@@ -1643,10 +1643,18 @@ elif grep -q "archlinux-appstream-data" "$PKGB"; then
 else
     ok "no swcatalog in the QML and no dependency on it"
 fi
+# A QML that reads the catalogue's .jxl icons draws nothing without a decoder:
+# stock Qt has none, kimageformats' kimg_jxl is one, and it loads only with
+# libjxl. Same working-tree guard as above.
+if [ -r "$PKGB" ] && grep -q "\.jxl" "$QML"; then
+    grep -qE "depends=\(.*'kimageformats'.*'libjxl'" "$PKGB"
+    check "the QML reads .jxl icons and the PKGBUILD depends on kimageformats and libjxl" $?
+fi
 
 # The naming contract the map is built on: a cached AppStream icon is
-# `<pkgname>_<iconname>.png` under `<origin>/<size>/`, which is what makes the
-# package name readable out of the file name with no XML.
+# `<pkgname>_<iconname>.<png|jxl>` under `<origin>/<size>/`, which is what makes
+# the package name readable out of the file name with no XML. Arch's catalogue
+# went from .png to .jxl in 20260910; this counted .png alone and reported 0.
 # Overridable so this can be exercised against an extracted catalogue without
 # 23MB installed on the machine running the suite.
 ICONS=${SYNPKG_SWCATALOG:-/usr/share/swcatalog/icons}
@@ -1654,15 +1662,15 @@ if [ -d "$ICONS" ]; then
     # ⚠ COUNTED, NOT `| grep -q`. This suite runs under `set -o pipefail`: grep
     # -q exits on the first match, find takes SIGPIPE and the pipeline reports
     # 141 — a FAILURE on a match. Same trap as the row-count tests above.
-    n=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f -name '*_*.png' 2>/dev/null | wc -l)
+    n=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f \( -name '*_*.png' -o -name '*_*.jxl' \) 2>/dev/null | wc -l)
     [ "$n" -gt 100 ] \
-        && ok "the AppStream catalogue is laid out as <origin>/<size>/<pkg>_<icon>.png ($n icons)" \
-        || bad "the AppStream catalogue has $n icons at <origin>/<size>/<pkg>_<icon>.png"
+        && ok "the AppStream catalogue is laid out as <origin>/<size>/<pkg>_<icon>.<png|jxl> ($n icons)" \
+        || bad "the AppStream catalogue has $n icons at <origin>/<size>/<pkg>_<icon>.<png|jxl>"
 
     # And that the split actually names packages the curated list recommends —
     # a layout that parses into keys nothing matches is the failure that looks
     # like success.
-    hits=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f -name '*_*.png' -printf '%f\n' 2>/dev/null |
+    hits=$(find "$ICONS" -mindepth 3 -maxdepth 3 -type f \( -name '*_*.png' -o -name '*_*.jxl' \) -printf '%f\n' 2>/dev/null |
            sed 's/_.*//' | sort -u |
            comm -12 - <(awk -F'\t' '!/^[[:space:]]*(#|$)/ {print $2}' "$SYNPKG_CURATED" | sort -u) |
            wc -l)

@@ -646,8 +646,19 @@ FloatingWindow {
      * scan per window, not one per row.
      *
      * ⚠ THE PACKAGE NAME IS IN THE FILE NAME, so this needs no XML and no
-     * parser. A cached AppStream icon is `<pkgname>_<iconname>.png` under
-     * `<origin>/<size>/`, which is exactly the two facts a lookup needs. The
+     * parser. A cached AppStream icon is `<pkgname>_<iconname>.<ext>` under
+     * `<origin>/<size>/`, which is exactly the two facts a lookup needs.
+     *
+     * ⛔ AND THE EXTENSION IS NOT ALWAYS png. archlinux-appstream-data
+     * 20260910 ships every icon as JPEG XL (`firefox_firefox.jxl`), and a scan
+     * for `*.png` found none of them — every row went back to its monogram
+     * with nothing failing. Qt decodes .jxl only through kimageformats'
+     * kimg_jxl plugin, which loads only with libjxl installed; stock Qt answers
+     * "Unsupported image format". Both are hard dependencies for that reason
+     * (pkgrel 55). A .png at the same size still wins, since it needs no
+     * plugin — appstreamcli's own refresh under /var/cache may carry either.
+     *
+     * The
      * split is at the FIRST underscore — that is the convention, and of the
      * 1,205 icons Arch ships today one file (`jack_mixer_jack_mixer.png`) has a
      * package name containing one, so `jack` is the single key here that could
@@ -682,7 +693,7 @@ FloatingWindow {
          * own refresh writes to /var/cache. Whichever exists is scanned. */
         command: ["sh", "-c",
             "find /usr/share/swcatalog/icons /var/cache/swcatalog/icons " +
-            "-mindepth 3 -maxdepth 3 -type f -name '*_*.png' " +
+            "-mindepth 3 -maxdepth 3 -type f \\( -name '*_*.png' -o -name '*_*.jxl' \\) " +
             "-printf '%h\t%f\t%p\n' 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
@@ -698,7 +709,9 @@ FloatingWindow {
                     const cut = f[1].indexOf("_")
                     if (cut <= 0) continue
                     const pkg = f[1].slice(0, cut).toLowerCase()
-                    const r = rank[f[0].slice(f[0].lastIndexOf("/") + 1)] || 0
+                    /* Size first; a png beats a jxl only at the same size. */
+                    const r = (rank[f[0].slice(f[0].lastIndexOf("/") + 1)] || 0) * 2
+                              + (f[1].endsWith(".png") ? 1 : 0)
                     if (best[pkg] === undefined || r > best[pkg].r)
                         best[pkg] = { r: r, path: "file://" + f[2] }
                 }
