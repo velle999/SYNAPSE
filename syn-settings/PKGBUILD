@@ -413,7 +413,14 @@ pkgver=0.1.0
 #   Also: the suite's apps sandbox was left in /tmp on every run — each EXIT
 #   trap replaced the one before it. 33 new strings in all thirteen catalogs,
 #   495/495.
-pkgrel=57
+# 58: THE SUITE FAILED velle's THINKPAD BUILD — a test that read the tester's
+#   own config. `user add` carries the asker's xkb_layout to the new account,
+#   and the check asserted the exact command with none: green on a box whose
+#   synuirc names no layout, red on the ThinkPad's (`us`), which stopped
+#   syn-update there. The check now runs in a config home of its own, and a
+#   second one plants a layout and expects it carried. Run on the ThinkPad
+#   against its own build before shipping: all tests pass.
+pkgrel=58
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

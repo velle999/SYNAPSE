@@ -1595,12 +1595,25 @@ rm -rf "$stc"
 # of the account files (and a fake shadow), /home is a temp directory, and
 # nothing reaches the machine running this. Where there is no user namespace
 # with subordinate ids (a build chroot), that half says so and is skipped.
-out=$(echo pw | "$BIN" --dry-run user add alex 2>&1)
+# ⛔ IN A CONFIG HOME OF ITS OWN. `user add` carries the asker's keyboard layout
+# (xkb_layout in THEIR synuirc) to the new account, so run against the tester's
+# real config this asserted whatever layout the tester happens to have: it
+# passed on a box with no xkb_layout and failed velle's ThinkPad build, which
+# has `us`. Both cases are posed here instead.
+ucfg=$(mktemp -d)
+out=$(echo pw | XDG_CONFIG_HOME="$ucfg" "$BIN" --dry-run user add alex 2>&1)
 case "$out" in
     "would run: pkexec "*" user add alex --as-root"*"(the password on its stdin)")
         ok "users: add asks pkexec, with the password on stdin" ;;
     *) bad "users: add would run '$out'" ;;
 esac
+mkdir -p "$ucfg/synui"; printf 'xkb_layout = de\n' > "$ucfg/synui/synuirc"
+out=$(echo pw | XDG_CONFIG_HOME="$ucfg" "$BIN" --dry-run user add alex 2>&1)
+case "$out" in
+    *" user add alex --xkb de --as-root"*) ok "users: ...and hands the asker's keyboard layout to the new account" ;;
+    *) bad "users: the layout was not carried: '$out'" ;;
+esac
+rm -rf "$ucfg"
 case "$out" in *pw*) bad "users: the password reached the command line" ;;
                  *) ok "users: ...and the password is nowhere in argv" ;; esac
 refuses "users: an upper-case name is refused"       2 --dry-run user add Alex
