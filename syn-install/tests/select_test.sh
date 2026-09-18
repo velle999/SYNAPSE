@@ -124,8 +124,8 @@ check "Full installs more software than Standard" yes \
       "$([ "$(wc -w <<<"$full_sw")" -gt "$(wc -w <<<"$std_sw")" ] && echo yes || echo no)"
 check "Full installs at least as many apps as Standard" yes \
       "$([ "$(wc -w <<<"$full_app")" -ge "$(wc -w <<<"$std_app")" ] && echo yes || echo no)"
-# Steam is the one thing that must NOT be on these pages: it turns on multilib
-# and [cachyos], which is want_steam's job and has a whole block of its own.
+# Steam is the one thing that must NOT be on these pages: it turns on multilib,
+# which is want_steam's job and has a whole block of its own.
 check "steam is not a checkbox row" no \
       "$(grep -qxF steam <<<"$(tr ' ' '\n' <<<"$full_sw")" && echo yes || echo no)"
 

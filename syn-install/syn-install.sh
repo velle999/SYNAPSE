@@ -3220,7 +3220,7 @@ while :; do
             ask_opt WANT_PRINTING   1 "Printing (CUPS) — a driver the OS cannot ship: 'syn printer <vendor>'"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
-            ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) + CachyOS Proton — enables [multilib] and [cachyos] (~3.1 GB)"
+            ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) + CachyOS Proton — enables [multilib] (~3.1 GB)"
             ask_opt WANT_BLACKARCH  1 "BlackArch security repo — ~5000 tools browsable in SYNAPSE Arsenal"
             ask_opt WANT_NIX        0 "Nix + Home Manager — a declarative user environment beside pacman ('syn nix')"
 
@@ -3342,7 +3342,7 @@ while :; do
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
-    echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope + CachyOS Proton, enables multilib and [cachyos])' || echo no)"
+    echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope + CachyOS Proton, enables multilib)' || echo no)"
     echo "    BlackArch: $([ "$WANT_BLACKARCH" = 1 ] && echo 'yes (repo + keyring only, no tools installed)' || echo no)"
     echo "    Nix      : $([ "$WANT_NIX" = 1 ] && echo 'yes (nix + Home Manager config, nothing built until "syn nix apply")' || echo no)"
     echo ""
@@ -3420,6 +3420,185 @@ if [ "$WANT_STEAM" = 1 ]; then
         warn "Could not enable [multilib]; Steam will be skipped."
         WANT_STEAM=0
     fi
+fi
+
+# ── [cachyos], on every install ───────────────────────────
+#
+# syn-remote streams this desktop through sunshine, and sunshine is in no Arch
+# repository — only CachyOS's. So the repository is enabled here, on EVERY
+# install, and BEFORE the SynapseOS transaction below. That transaction is a
+# single one: a dependency it cannot resolve loses every package in it, and the
+# retry after it can only name the casualty. Until 0.1.0-122 this ran for Steam
+# alone, and after that transaction, so syn-remote failed on every install from
+# the ISO — Steam or not. CachyOS Proton (the Steam block) is the other thing
+# that comes from here.
+#
+# It is a THIRD-PARTY REPOSITORY on the installed system. Two rules keep that
+# from turning SynapseOS into CachyOS, and both matter:
+#
+#  1. The generic [cachyos] repo only, appended LAST. CachyOS's own
+#     cachyos-repo.sh inserts [cachyos-v3]/[cachyos-core-v3]/
+#     [cachyos-extra-v3] ABOVE [core] and installs their build of pacman
+#     itself — which re-sources the whole system from CachyOS. pacman takes
+#     the FIRST repo in the file carrying a package name, so appending at the
+#     end means only names that exist nowhere else — sunshine,
+#     proton-cachyos-* — ever come from here. core/extra and [synapseos] keep
+#     every package they share with it.
+#  2. The signing key is PINNED by fingerprint and checked in the keyring
+#     FILE, before anything imports it. Same reasoning as the BlackArch
+#     block below: a substituted keyring is the actual risk, and the
+#     fingerprint is what catches it. Fetching the keyring over TLS is not
+#     on its own a reason to trust what is inside it.
+#
+# Non-fatal: a failure warns and the install carries on. What needed the repo
+# is then reported missing by the retry below, and `synpkg cachyos enable-repo`
+# adds it later the same way this does.
+say "  Adding the [cachyos] repository..."
+
+# The CachyOS master key (uid "CachyOS <admin@cachyos.org>").
+CACHY_FPR="882DCFE48E2051D48E2562ABF3B607488DB35A47"
+CACHY_MIRROR="https://mirror.cachyos.org/repo/x86_64/cachyos"
+cachy_ok=0
+
+# Filenames carry the version, and mirrors keep only the current one — a
+# pinned URL is a 404 waiting for the next keyring bump. Ask the repo's own
+# database for the current name instead; the pinned pair upstream's script
+# uses is the fallback for when the database itself cannot be read.
+#
+# ⚠ bsdtar, NOT `tar -tzf`. `cachyos.db` is ZSTANDARD-compressed, and GNU
+# tar refuses it from a pipe ("Archive is compressed. Use --zstd option"),
+# so the lookup failed every single time and this function ALWAYS returned
+# the pinned fallback — silently, because a failed lookup is indistinguish-
+# able from a lookup that agrees with the pin. It only looked like it worked
+# because upstream has not rolled either package since March 2024. Measured
+# on a real install 2026-08-14, which came out with exactly
+# cachyos-keyring-20240331-1 and cachyos-mirrorlist-27-1.
+#
+# `--zstd` would work today and break the day upstream switches back;
+# bsdtar detects the compression itself and is already here (libarchive is
+# a pacman dependency, so it is on every ISO and every target).
+cachy_pkg_url() {
+    local name=$1 fallback=$2 dir
+    dir=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 60 \
+              "$CACHY_MIRROR/cachyos.db" 2>/dev/null \
+          | bsdtar -tf - 2>/dev/null | grep -m1 "^${name}-[0-9]") || true
+    # The listing carries both "<pkg>-<ver>/" and "<pkg>-<ver>/desc"; take
+    # the directory component either way rather than trusting which came
+    # first out of the tar.
+    dir=${dir%%/*}
+    if [ -n "$dir" ]; then
+        printf '%s/%s-any.pkg.tar.zst\n' "$CACHY_MIRROR" "$dir"
+    else
+        printf '%s/%s\n' "$CACHY_MIRROR" "$fallback"
+    fi
+}
+
+if grep -q '^\[cachyos\]' /mnt/etc/pacman.conf; then
+    cachy_ok=1          # already enabled (a re-run); nothing to add
+else
+    say "  Fetching the CachyOS keyring and mirrorlist..."
+    cachy_keyring=$(cachy_pkg_url cachyos-keyring cachyos-keyring-20240331-1-any.pkg.tar.zst)
+    cachy_mirrors=$(cachy_pkg_url cachyos-mirrorlist cachyos-mirrorlist-27-1-any.pkg.tar.zst)
+
+    # ── TRUST THE KEY BEFORE FETCHING WHAT IT SIGNS ──────────────────────
+    #
+    # THE BOOTSTRAP IS A CHICKEN AND EGG, AND THIS BLOCK USED TO GET IT
+    # BACKWARDS. cachyos-keyring is itself SIGNED by the CachyOS master key
+    # (the .sig is on the mirror), `pacman -U` on a URL is governed by
+    # RemoteFileSigLevel, and that defaults to Required. So on a target
+    # whose trustdb has never seen this key, the -U below is refused for
+    # unknown trust — every time, on every install. The old order ran the
+    # -U FIRST and only trusted the key afterwards, so it could never have
+    # succeeded on a fresh machine, and CachyOS Proton has never once been
+    # installed by this installer.
+    #
+    # Proven, not deduced: on the 2026-08-14 T14 install the -U logged
+    # `[PACMAN] Running` at 23:43:06 and installed nothing, and the byte-
+    # identical command an hour later — after `synpkg cachyos enable-repo`
+    # had recv+lsigned the key — installed both packages.
+    #
+    # --recv-keys takes the FULL fingerprint, so this is still a pin: gpg
+    # matches the whole thing, and a keyserver that offers a different key
+    # cannot satisfy it. lsign-key then trusts THAT key and nothing else;
+    # --populate below still imports the rest of the keyring, which is why
+    # the check on the delivered file stays.
+    say "  Trusting the CachyOS master key..."
+    arch-chroot /mnt pacman-key --recv-keys "$CACHY_FPR" \
+        --keyserver keyserver.ubuntu.com >/dev/null 2>&1 || true
+    # Verify rather than believe the exit status: --recv-keys can report
+    # success and leave no key behind (same reason synpkg's helper checks).
+    if arch-chroot /mnt pacman-key --list-keys "$CACHY_FPR" >/dev/null 2>&1; then
+        arch-chroot /mnt pacman-key --lsign-key "$CACHY_FPR" >/dev/null 2>&1 || true
+    else
+        warn "Could not fetch the CachyOS master key from keyserver.ubuntu.com.
+  The signed keyring cannot be installed without it, so [cachyos] is not
+  added. Add it later with:  synpkg cachyos enable-repo"
+    fi
+
+    # -U on a URL, because these two packages are the thing that makes the
+    # repo usable — they cannot come FROM the repo.
+    #
+    # Its output is KEPT, not sent to /dev/null. This is the step most
+    # likely to fail (two URLs, one network) and the warning at the bottom
+    # of this block can only say "the repository could not be enabled" —
+    # which names no cause at all, on the one machine where the cause was
+    # visible for a moment.
+    cachy_log=$(mktemp)
+    if arch-chroot /mnt pacman -U --noconfirm --needed \
+            "$cachy_keyring" "$cachy_mirrors" >"$cachy_log" 2>&1; then
+        # Read the fingerprints out of the keyring without importing them.
+        # --show-keys parses the file and touches no keyring of ours, so a
+        # keyring signed by somebody else never reaches pacman's trustdb.
+        if gpg --with-colons --show-keys \
+               /mnt/usr/share/pacman/keyrings/cachyos.gpg 2>/dev/null \
+           | grep -q "^fpr:::::::::${CACHY_FPR}:"; then
+            say "  Master key pinned as expected — trusting it..."
+            arch-chroot /mnt pacman-key --populate cachyos >/dev/null 2>&1 || true
+
+            # Appended, so it lands after [core], [extra], [multilib] and
+            # [synapseos]. See rule 1 above — the ORDER is the safety.
+            # Saved first so the block below can take it back out if the
+            # repo turns out not to sync.
+            cp -a /mnt/etc/pacman.conf /mnt/etc/pacman.conf.precachy
+            cat >> /mnt/etc/pacman.conf << 'CACHYEOF'
+
+# CachyOS — deliberately LAST, so it can only supply packages no other
+# repository has (sunshine, proton-cachyos-*). Do not move it above
+# [core]/[extra].
+[cachyos]
+Include = /etc/pacman.d/cachyos-mirrorlist
+CACHYEOF
+
+            # Usable, not merely present: a configured repo that lists
+            # nothing is exactly the failure this check exists for.
+            arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+            cachy_count=$(arch-chroot /mnt pacman -Sl cachyos 2>/dev/null | wc -l)
+            if [ "${cachy_count:-0}" -gt 0 ]; then
+                cachy_ok=1
+                tf '  [cachyos] enabled (%s packages available)\n' "$cachy_count"
+            else
+                # TAKE THE SECTION BACK OUT. A repo pacman cannot sync is
+                # not a dormant extra — pacman aborts the WHOLE -Syu when
+                # any one database fails, so leaving this behind converts a
+                # skipped Proton into a machine that can take no upgrades at
+                # all (the failure BlackArch has caused here twice). Restore
+                # the file we saved before appending; synpkg's own
+                # enable-repo helper rolls back the same way.
+                warn "[cachyos] was added but lists no packages — removing it
+  again so it cannot block a later upgrade."
+                mv -f /mnt/etc/pacman.conf.precachy /mnt/etc/pacman.conf
+            fi
+        else
+            warn "The CachyOS keyring does not carry the expected master key.
+  Refusing to trust it — the repository was NOT added."
+            arch-chroot /mnt pacman -Rdd --noconfirm \
+                cachyos-keyring cachyos-mirrorlist >/dev/null 2>&1 || true
+        fi
+    else
+        warn "Could not install the CachyOS keyring and mirrorlist:
+$(sed 's/^/    /' "$cachy_log" | tail -5)"
+    fi
+    rm -f "$cachy_log" /mnt/etc/pacman.conf.precachy
 fi
 
 # synapse-llama carries libllama/libggml and is pulled in automatically as a
@@ -3939,170 +4118,16 @@ if [ "$WANT_STEAM" = 1 ]; then
     # driving Proton without Steam. Wrong default here (Steam's own games run in
     # the container), and one pacman command away for anyone who wants it.
     #
-    # This means adding a THIRD-PARTY REPOSITORY to the installed system. Two
-    # rules keep that from turning SynapseOS into CachyOS, and both matter:
-    #
-    #  1. The generic [cachyos] repo only, appended LAST. CachyOS's own
-    #     cachyos-repo.sh inserts [cachyos-v3]/[cachyos-core-v3]/
-    #     [cachyos-extra-v3] ABOVE [core] and installs their build of pacman
-    #     itself — which re-sources the whole system from CachyOS. pacman takes
-    #     the FIRST repo in the file carrying a package name, so appending at the
-    #     end means only names that exist nowhere else — proton-cachyos-* — ever
-    #     come from here. core/extra keep every package they share.
-    #  2. The signing key is PINNED by fingerprint and checked in the keyring
-    #     FILE, before anything imports it. Same reasoning as the BlackArch
-    #     block below: a substituted keyring is the actual risk, and the
-    #     fingerprint is what catches it. Fetching the keyring over TLS is not
-    #     on its own a reason to trust what is inside it.
+    # Proton comes from [cachyos], which every install enables — see
+    # "[cachyos], on every install" in step 4b. Whether it got there is read off
+    # pacman.conf rather than remembered, so a re-run answers the same way.
     #
     # Non-fatal throughout, like the rest of this section: Steam without CachyOS
     # Proton is a working Steam, and Valve's own Proton is still there.
     step "Installing CachyOS Proton"
 
-    # The CachyOS master key (uid "CachyOS <admin@cachyos.org>").
-    CACHY_FPR="882DCFE48E2051D48E2562ABF3B607488DB35A47"
-    CACHY_MIRROR="https://mirror.cachyos.org/repo/x86_64/cachyos"
     cachy_ok=0
-
-    # Filenames carry the version, and mirrors keep only the current one — a
-    # pinned URL is a 404 waiting for the next keyring bump. Ask the repo's own
-    # database for the current name instead; the pinned pair upstream's script
-    # uses is the fallback for when the database itself cannot be read.
-    #
-    # ⚠ bsdtar, NOT `tar -tzf`. `cachyos.db` is ZSTANDARD-compressed, and GNU
-    # tar refuses it from a pipe ("Archive is compressed. Use --zstd option"),
-    # so the lookup failed every single time and this function ALWAYS returned
-    # the pinned fallback — silently, because a failed lookup is indistinguish-
-    # able from a lookup that agrees with the pin. It only looked like it worked
-    # because upstream has not rolled either package since March 2024. Measured
-    # on a real install 2026-08-14, which came out with exactly
-    # cachyos-keyring-20240331-1 and cachyos-mirrorlist-27-1.
-    #
-    # `--zstd` would work today and break the day upstream switches back;
-    # bsdtar detects the compression itself and is already here (libarchive is
-    # a pacman dependency, so it is on every ISO and every target).
-    cachy_pkg_url() {
-        local name=$1 fallback=$2 dir
-        dir=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 60 \
-                  "$CACHY_MIRROR/cachyos.db" 2>/dev/null \
-              | bsdtar -tf - 2>/dev/null | grep -m1 "^${name}-[0-9]") || true
-        # The listing carries both "<pkg>-<ver>/" and "<pkg>-<ver>/desc"; take
-        # the directory component either way rather than trusting which came
-        # first out of the tar.
-        dir=${dir%%/*}
-        if [ -n "$dir" ]; then
-            printf '%s/%s-any.pkg.tar.zst\n' "$CACHY_MIRROR" "$dir"
-        else
-            printf '%s/%s\n' "$CACHY_MIRROR" "$fallback"
-        fi
-    }
-
-    if grep -q '^\[cachyos\]' /mnt/etc/pacman.conf; then
-        cachy_ok=1          # already enabled (a re-run); nothing to add
-    else
-        say "  Fetching the CachyOS keyring and mirrorlist..."
-        cachy_keyring=$(cachy_pkg_url cachyos-keyring cachyos-keyring-20240331-1-any.pkg.tar.zst)
-        cachy_mirrors=$(cachy_pkg_url cachyos-mirrorlist cachyos-mirrorlist-27-1-any.pkg.tar.zst)
-
-        # ── TRUST THE KEY BEFORE FETCHING WHAT IT SIGNS ──────────────────────
-        #
-        # THE BOOTSTRAP IS A CHICKEN AND EGG, AND THIS BLOCK USED TO GET IT
-        # BACKWARDS. cachyos-keyring is itself SIGNED by the CachyOS master key
-        # (the .sig is on the mirror), `pacman -U` on a URL is governed by
-        # RemoteFileSigLevel, and that defaults to Required. So on a target
-        # whose trustdb has never seen this key, the -U below is refused for
-        # unknown trust — every time, on every install. The old order ran the
-        # -U FIRST and only trusted the key afterwards, so it could never have
-        # succeeded on a fresh machine, and CachyOS Proton has never once been
-        # installed by this installer.
-        #
-        # Proven, not deduced: on the 2026-08-14 T14 install the -U logged
-        # `[PACMAN] Running` at 23:43:06 and installed nothing, and the byte-
-        # identical command an hour later — after `synpkg cachyos enable-repo`
-        # had recv+lsigned the key — installed both packages.
-        #
-        # --recv-keys takes the FULL fingerprint, so this is still a pin: gpg
-        # matches the whole thing, and a keyserver that offers a different key
-        # cannot satisfy it. lsign-key then trusts THAT key and nothing else;
-        # --populate below still imports the rest of the keyring, which is why
-        # the check on the delivered file stays.
-        say "  Trusting the CachyOS master key..."
-        arch-chroot /mnt pacman-key --recv-keys "$CACHY_FPR" \
-            --keyserver keyserver.ubuntu.com >/dev/null 2>&1 || true
-        # Verify rather than believe the exit status: --recv-keys can report
-        # success and leave no key behind (same reason synpkg's helper checks).
-        if arch-chroot /mnt pacman-key --list-keys "$CACHY_FPR" >/dev/null 2>&1; then
-            arch-chroot /mnt pacman-key --lsign-key "$CACHY_FPR" >/dev/null 2>&1 || true
-        else
-            warn "Could not fetch the CachyOS master key from keyserver.ubuntu.com.
-  The signed keyring cannot be installed without it, so CachyOS Proton is
-  skipped. Add it later with:  synpkg cachyos enable-repo"
-        fi
-
-        # -U on a URL, because these two packages are the thing that makes the
-        # repo usable — they cannot come FROM the repo.
-        #
-        # Its output is KEPT, not sent to /dev/null. This is the step most
-        # likely to fail (two URLs, one network) and the warning at the bottom
-        # of this block can only say "the repository could not be enabled" —
-        # which names no cause at all, on the one machine where the cause was
-        # visible for a moment.
-        cachy_log=$(mktemp)
-        if arch-chroot /mnt pacman -U --noconfirm --needed \
-                "$cachy_keyring" "$cachy_mirrors" >"$cachy_log" 2>&1; then
-            # Read the fingerprints out of the keyring without importing them.
-            # --show-keys parses the file and touches no keyring of ours, so a
-            # keyring signed by somebody else never reaches pacman's trustdb.
-            if gpg --with-colons --show-keys \
-                   /mnt/usr/share/pacman/keyrings/cachyos.gpg 2>/dev/null \
-               | grep -q "^fpr:::::::::${CACHY_FPR}:"; then
-                say "  Master key pinned as expected — trusting it..."
-                arch-chroot /mnt pacman-key --populate cachyos >/dev/null 2>&1 || true
-
-                # Appended, so it lands after [core], [extra], [multilib] and
-                # [synapseos]. See rule 1 above — the ORDER is the safety.
-                # Saved first so the block below can take it back out if the
-                # repo turns out not to sync.
-                cp -a /mnt/etc/pacman.conf /mnt/etc/pacman.conf.precachy
-                cat >> /mnt/etc/pacman.conf << 'CACHYEOF'
-
-# CachyOS — deliberately LAST, so it can only supply packages no other
-# repository has (proton-cachyos-*). Do not move it above [core]/[extra].
-[cachyos]
-Include = /etc/pacman.d/cachyos-mirrorlist
-CACHYEOF
-
-                # Usable, not merely present: a configured repo that lists
-                # nothing is exactly the failure this check exists for.
-                arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
-                cachy_count=$(arch-chroot /mnt pacman -Sl cachyos 2>/dev/null | wc -l)
-                if [ "${cachy_count:-0}" -gt 0 ]; then
-                    cachy_ok=1
-                    tf '  [cachyos] enabled (%s packages available)\n' "$cachy_count"
-                else
-                    # TAKE THE SECTION BACK OUT. A repo pacman cannot sync is
-                    # not a dormant extra — pacman aborts the WHOLE -Syu when
-                    # any one database fails, so leaving this behind converts a
-                    # skipped Proton into a machine that can take no upgrades at
-                    # all (the failure BlackArch has caused here twice). Restore
-                    # the file we saved before appending; synpkg's own
-                    # enable-repo helper rolls back the same way.
-                    warn "[cachyos] was added but lists no packages — removing it
-  again so it cannot block a later upgrade."
-                    mv -f /mnt/etc/pacman.conf.precachy /mnt/etc/pacman.conf
-                fi
-            else
-                warn "The CachyOS keyring does not carry the expected master key.
-  Refusing to trust it — the repository was NOT added."
-                arch-chroot /mnt pacman -Rdd --noconfirm \
-                    cachyos-keyring cachyos-mirrorlist >/dev/null 2>&1 || true
-            fi
-        else
-            warn "Could not install the CachyOS keyring and mirrorlist:
-$(sed 's/^/    /' "$cachy_log" | tail -5)"
-        fi
-        rm -f "$cachy_log" /mnt/etc/pacman.conf.precachy
-    fi
+    grep -q '^\[cachyos\]' /mnt/etc/pacman.conf && cachy_ok=1
 
     if [ "$cachy_ok" = 1 ]; then
         say "  Installing proton-cachyos-slr (~340 MB download)..."

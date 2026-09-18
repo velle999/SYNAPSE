@@ -429,6 +429,23 @@ if [[ "$SIGN" == "true" ]]; then
      Fix the key, or build unsigned on purpose with --no-sign."
 fi
 
+# ── [cachyos] must be trusted by THIS host's pacman ───────────
+#
+# syn-remote depends on sunshine, which only [cachyos] carries, so the
+# build-time pacman.conf below lists that repository and mkarchiso's pacstrap
+# resolves from it. pacstrap runs with -G and checks signatures against the
+# HOST's keyring (/etc/pacman.d/gnupg), so a host that has never trusted the
+# CachyOS master key refuses sunshine "unknown trust" deep inside mkarchiso,
+# long after the packages have been built. It is the same key syn-install pins.
+CACHY_FPR="882DCFE48E2051D48E2562ABF3B607488DB35A47"
+if ! gpg --homedir /etc/pacman.d/gnupg --with-colons --list-keys "$CACHY_FPR" 2>/dev/null \
+        | grep -q '^pub:[fu]:'; then
+    err "this host's pacman does not trust the CachyOS master key, and the ISO needs
+     [cachyos] (sunshine, for syn-remote). Trust it once, then re-run:
+       pacman-key --recv-keys ${CACHY_FPR} --keyserver keyserver.ubuntu.com
+       pacman-key --lsign-key ${CACHY_FPR}"
+fi
+
 # ── Packages that must never be INSTALLED on the live ISO ─────
 #
 # Being in the local repo and being in packages.x86_64 are different things —
@@ -1326,6 +1343,12 @@ Include = /etc/pacman.d/mirrorlist
 [synapseos]
 SigLevel = Optional TrustAll
 Server = file://${LOCAL_REPO}
+
+# CachyOS — LAST, so it can only supply names no repository above carries
+# (sunshine). The same rule syn-install follows on an installed system.
+[cachyos]
+Server = https://cdn77.cachyos.org/repo/\$arch/\$repo
+Server = https://mirror.cachyos.org/repo/\$arch/\$repo
 PACMANEOF
 ok "pacman.conf written (build-time paths)"
 

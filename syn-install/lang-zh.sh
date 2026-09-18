@@ -264,12 +264,13 @@ declare -gA SYN_T=(
   'synui-game-run --gamescope' 用不了。以后安装:
   sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
   ["Installing CachyOS Proton"]="正在安装 CachyOS Proton"
+  ["  Adding the [cachyos] repository..."]="  正在添加 [cachyos] 仓库..."
   ["  Fetching the CachyOS keyring and mirrorlist..."]="  正在获取 CachyOS 的密钥环和镜像列表..."
   ["  Trusting the CachyOS master key..."]="  正在信任 CachyOS 的主密钥..."
   ["Could not fetch the CachyOS master key from keyserver.ubuntu.com.
-  The signed keyring cannot be installed without it, so CachyOS Proton is
-  skipped. Add it later with:  synpkg cachyos enable-repo"]="无法从 keyserver.ubuntu.com 获取 CachyOS 的主密钥。
-  没有它就装不了已签名的密钥环，因此跳过 CachyOS Proton。
+  The signed keyring cannot be installed without it, so [cachyos] is not
+  added. Add it later with:  synpkg cachyos enable-repo"]="无法从 keyserver.ubuntu.com 获取 CachyOS 的主密钥。
+  没有它就装不了已签名的密钥环，因此不添加 [cachyos]。
   以后添加:  synpkg cachyos enable-repo"
   ["  Master key pinned as expected — trusting it..."]="  主密钥与预期一致 — 正在信任它..."
   ["[cachyos] was added but lists no packages — removing it

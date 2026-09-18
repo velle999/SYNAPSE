@@ -430,7 +430,20 @@ pkgver=0.1.0
 #   · its description, "scan files at rest", was 18 characters in a 15-column
 #     cell and printed cut off mid-word; it reads "malware scanner" now.
 # All thirteen suites pass.
-pkgrel=121
+# ── 0.1.0-122: [cachyos] on every install, before the SynapseOS packages ─────
+#
+# syn-remote 16 depends on sunshine, which only [cachyos] carries — and this
+# installer added [cachyos] for Steam alone, AFTER the SynapseOS transaction.
+# So syn-remote failed on every install from the ISO, Steam or not: the one
+# transaction lost every package in it to sunshine, and the per-package retry
+# then installed the rest and reported syn-remote missing. The repository block
+# is unchanged apart from where it runs and for whom — generic [cachyos] only,
+# appended LAST, master key pinned by fingerprint, rolled back if it syncs
+# nothing — and the Steam block now just reads pacman.conf for it. One warning
+# reworded ("…so [cachyos] is not added"), re-keyed in all thirteen catalogs,
+# and one new line ("Adding the [cachyos] repository…") translated in all
+# thirteen.
+pkgrel=122
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -270,13 +270,14 @@ declare -gA SYN_T=(
   나중에 설치하려면:
   sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
   ["Installing CachyOS Proton"]="CachyOS Proton 설치 중"
+  ["  Adding the [cachyos] repository..."]="  [cachyos] 저장소를 추가하는 중..."
   ["  Fetching the CachyOS keyring and mirrorlist..."]="  CachyOS 의 키링과 미러 목록을 받는 중..."
   ["  Trusting the CachyOS master key..."]="  CachyOS 마스터 키를 신뢰하는 중..."
   ["Could not fetch the CachyOS master key from keyserver.ubuntu.com.
-  The signed keyring cannot be installed without it, so CachyOS Proton is
-  skipped. Add it later with:  synpkg cachyos enable-repo"]="keyserver.ubuntu.com 에서 CachyOS 마스터 키를 받지 못했습니다.
-  그것이 없으면 서명된 키링을 설치할 수 없어 CachyOS Proton 은
-  건너뜁니다. 나중에 추가하려면:  synpkg cachyos enable-repo"
+  The signed keyring cannot be installed without it, so [cachyos] is not
+  added. Add it later with:  synpkg cachyos enable-repo"]="keyserver.ubuntu.com 에서 CachyOS 마스터 키를 받지 못했습니다.
+  그것이 없으면 서명된 키링을 설치할 수 없어 [cachyos] 은
+  추가하지 않습니다. 나중에 추가하려면:  synpkg cachyos enable-repo"
   ["  Master key pinned as expected — trusting it..."]="  마스터 키가 예상과 같습니다 — 신뢰합니다..."
   ["[cachyos] was added but lists no packages — removing it
   again so it cannot block a later upgrade."]="[cachyos] 가 추가되었지만 패키지가 하나도 없습니다 — 나중의

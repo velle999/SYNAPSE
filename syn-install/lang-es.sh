@@ -271,13 +271,14 @@ declare -gA SYN_T=(
   no. Instálelo luego con:
   sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
   ["Installing CachyOS Proton"]="Instalando CachyOS Proton"
+  ["  Adding the [cachyos] repository..."]="  Añadiendo el repositorio [cachyos]..."
   ["  Fetching the CachyOS keyring and mirrorlist..."]="  Obteniendo el llavero y la lista de réplicas de CachyOS..."
   ["  Trusting the CachyOS master key..."]="  Confiando en la clave maestra de CachyOS..."
   ["Could not fetch the CachyOS master key from keyserver.ubuntu.com.
-  The signed keyring cannot be installed without it, so CachyOS Proton is
-  skipped. Add it later with:  synpkg cachyos enable-repo"]="No se pudo obtener la clave maestra de CachyOS desde keyserver.ubuntu.com.
-  Sin ella no se puede instalar el llavero firmado, así que se omite CachyOS
-  Proton. Añádalo luego con:  synpkg cachyos enable-repo"
+  The signed keyring cannot be installed without it, so [cachyos] is not
+  added. Add it later with:  synpkg cachyos enable-repo"]="No se pudo obtener la clave maestra de CachyOS desde keyserver.ubuntu.com.
+  Sin ella no se puede instalar el llavero firmado, así que no se añade
+  [cachyos]. Añádalo luego con:  synpkg cachyos enable-repo"
   ["  Master key pinned as expected — trusting it..."]="  Clave maestra tal como se esperaba — se confía en ella..."
   ["[cachyos] was added but lists no packages — removing it
   again so it cannot block a later upgrade."]="[cachyos] se añadió pero no lista ningún paquete — se quita de nuevo

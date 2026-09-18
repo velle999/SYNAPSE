@@ -2014,8 +2014,10 @@ Steam Linux Runtime as Valve's own Proton. It installs into
 *Properties → Compatibility* with nothing to copy into `~/.steam`. Valve's Proton
 stays installed and stays the default; this is an option, not a replacement.
 
-That option also adds CachyOS's `[cachyos]` repository, **appended last** in
-`/etc/pacman.conf` so it can only supply packages no other repository carries.
+It comes from CachyOS's `[cachyos]` repository, which the installer adds on
+every install — it also carries sunshine, for `syn-remote stream`. It is
+**appended last** in `/etc/pacman.conf` so it can only supply packages no other
+repository carries.
 SynapseOS is Arch: `core` and `extra` keep every package they share, and nothing
 else on the system starts coming from CachyOS. (Their own `cachyos-repo.sh` does
 the opposite — it inserts the v3/v4 repos *above* `core` and swaps in their
