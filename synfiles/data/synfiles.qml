@@ -323,6 +323,17 @@ FloatingWindow {
         return String(iso).replace("T", " ").slice(0, 16)
     }
 
+    // The folder a trashed file came from, which is where Restore puts it.
+    // Home is written as ~: every path in a narrow column would otherwise
+    // start with the same /home/<user>/ and elide away the part that differs.
+    function origDir(pathEnc) {
+        const d = root.disp(root.parentEnc(pathEnc))
+        const h = root.homeDir
+        if (h && h !== "/" && (d === h || d.indexOf(h + "/") === 0))
+            return "~" + d.substring(h.length)
+        return d
+    }
+
     // ── List columns ────────────────────────────────────────────────────────
     //
     // Measured, never fixed pixels: the text-size slider goes to 175%, and at
@@ -339,6 +350,19 @@ FloatingWindow {
     // 190 is where Size always sat; it only moves when the date needs it to.
     readonly property real sizeColRight: Math.max(190, 20 + root.whenColW + 40)
     readonly property real restoreColRight: 20 + root.whenColW + 24
+    // Restore is sized by its label: "Wiederherstellen" is 16 characters and
+    // a fixed 66px box held 7. Measured here, not per row, because the
+    // Original location column is placed from it and so is its heading.
+    TextMetrics {
+        id: restoreMetrics
+        font { family: root.uiFont; pixelSize: root.ui(10) }
+        text: I18n.tr("Restore")
+    }
+    readonly property real restoreBtnW: Math.max(66, Math.ceil(restoreMetrics.advanceWidth) + 16)
+    readonly property real locColRight: root.restoreColRight + root.restoreBtnW + 16
+    // A share of the list, capped: past ~420px a path is no easier to read,
+    // and every pixel it takes comes out of the name.
+    function locColW(listW) { return Math.round(Math.min(420, listW * 0.3)) }
 
     // ── What a thing IS, when the pointer rests on it ───────────────────────
     //
@@ -5645,6 +5669,57 @@ FloatingWindow {
                 anchors { left: parent.left; top: parent.top; margins: 10 }
                 spacing: 3
 
+                // The label column's width: the widest label IN THIS PANEL.
+                // Measured, because root.ui() is a scale and a constant is
+                // right at one of them — and not off one word assumed to be
+                // the longest, because which word that is depends on the
+                // language and on which lines this row has.
+                readonly property real labelW: Math.ceil(tipCol.lines.reduce(
+                    (w, e) => Math.max(w, tipFM.advanceWidth(e.k)), 0))
+
+                property var lines: {
+                    const r = root.tipRow
+                    if (!r) return []
+                    // A Trash row has no size or date of its own — the
+                    // listing fills in 0 for both. What it has is where it
+                    // came from, in full here where there is room, and
+                    // when it went.
+                    if (r.trashName)
+                        return [{ k: I18n.tr("Original location"),
+                                  v: root.disp(root.parentEnc(r.full)) },
+                                { k: I18n.tr("Deleted"), v: root.fmtDeleted(r.deleted) }]
+                               .filter(e => e.v !== "")
+                    const out = [{ k: I18n.tr("Type"), v: root.tipType(r) },
+                                 { k: I18n.tr("Modified"), v: root.fmtTime(r.mtime) }]
+                    // ⛔ A FOLDER'S SIZE IS A WALK, NOT A stat. st_size for
+                    // a directory is the size of the directory ENTRY —
+                    // "890 B" for a tree holding an ISO. What is worth
+                    // showing is what it COSTS, so the disk figure leads
+                    // and the apparent one follows it: a tree of small
+                    // files takes far more room than it contains, and that
+                    // difference is the whole reason to ask.
+                    if (r.type === "dir") {
+                        const t = root.tipDu
+                        out.push({ k: I18n.tr("Size"),
+                                   v: t === null ? I18n.tr("measuring…")
+                            : I18n.tr("%1 on disk").arg(root.fmtSize(t.disk, false))
+                              + (t.done ? "" : " …") })
+                        if (t !== null)
+                            out.push({ k: I18n.tr("Contents"),
+                                       v: I18n.tr("%1 in %2, %3")
+                                              .arg(root.fmtSize(t.bytes, false))
+                                              .arg(I18n.trn("%1 file", "%1 files", t.files)
+                                                       .arg(root.fmtCount(t.files)))
+                                              .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
+                                                       .arg(root.fmtCount(t.dirs))) })
+                    } else {
+                        out.push({ k: I18n.tr("Size"), v: root.fmtSize(r.size, false) })
+                    }
+                    if (r.link === "1" && r.target && r.target !== "")
+                        out.push({ k: I18n.tr("Links to"), v: root.disp(r.target) })
+                    return out.filter(e => e.v !== "")
+                    }
+
                 Text {
                     width: Math.min(implicitWidth, root.width - 60)
                     elide: Text.ElideMiddle
@@ -5657,52 +5732,26 @@ FloatingWindow {
                 }
 
                 Repeater {
-                    model: {
-                        const r = root.tipRow
-                        if (!r) return []
-                        const out = [{ k: I18n.tr("Type"), v: root.tipType(r) },
-                                     { k: I18n.tr("Modified"), v: root.fmtTime(r.mtime) }]
-                        // ⛔ A FOLDER'S SIZE IS A WALK, NOT A stat. st_size for
-                        // a directory is the size of the directory ENTRY —
-                        // "890 B" for a tree holding an ISO. What is worth
-                        // showing is what it COSTS, so the disk figure leads
-                        // and the apparent one follows it: a tree of small
-                        // files takes far more room than it contains, and that
-                        // difference is the whole reason to ask.
-                        if (r.type === "dir") {
-                            const t = root.tipDu
-                            out.push({ k: I18n.tr("Size"),
-                                       v: t === null ? I18n.tr("measuring…")
-                                : I18n.tr("%1 on disk").arg(root.fmtSize(t.disk, false))
-                                  + (t.done ? "" : " …") })
-                            if (t !== null)
-                                out.push({ k: I18n.tr("Contents"),
-                                           v: I18n.tr("%1 in %2, %3")
-                                                  .arg(root.fmtSize(t.bytes, false))
-                                                  .arg(I18n.trn("%1 file", "%1 files", t.files)
-                                                           .arg(root.fmtCount(t.files)))
-                                                  .arg(I18n.trn("%1 folder", "%1 folders", t.dirs)
-                                                           .arg(root.fmtCount(t.dirs))) })
-                        } else {
-                            out.push({ k: I18n.tr("Size"), v: root.fmtSize(r.size, false) })
-                        }
-                        if (r.link === "1" && r.target && r.target !== "")
-                            out.push({ k: I18n.tr("Links to"), v: root.disp(r.target) })
-                        return out.filter(e => e.v !== "")
-                    }
+                    model: tipCol.lines
                     delegate: Row {
                         id: tipLine
                         required property var modelData
                         spacing: 6
                         Text {
-                            width: tipLabelW.width
+                            width: tipCol.labelW
                             horizontalAlignment: Text.AlignRight
                             text: tipLine.modelData.k
                             color: root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
+                        // What is left of the widest panel the window allows
+                        // (root.width - 16, less 20 of padding) once the label
+                        // and the spacing have theirs. A constant here assumed
+                        // a short label, and "Ursprünglicher Ort" at 175% ran
+                        // a long path out of the panel's right edge.
                         Text {
-                            width: Math.min(implicitWidth, root.width - 120)
+                            width: Math.min(implicitWidth,
+                                            root.width - 16 - 20 - tipCol.labelW - tipLine.spacing)
                             elide: Text.ElideMiddle
                             text: tipLine.modelData.v
                             color: root.cText
@@ -5712,17 +5761,11 @@ FloatingWindow {
                 }
             }
 
-            // The label column's width, measured once off the longest label
-            // rather than by letting each Row size its own — otherwise the
-            // values do not line up and the panel reads as three unrelated
-            // sentences.
-            Text {
-                id: tipLabelW
-                visible: false
-                // The longest label there is. Measured rather than guessed,
-                // because root.ui() is a SCALE and a constant can only ever be
-                // right at one of them.
-                text: I18n.tr("Contents")
+            // One width for every label rather than each Row sizing its own —
+            // otherwise the values do not line up and the panel reads as
+            // three unrelated sentences. See tipCol.labelW.
+            FontMetrics {
+                id: tipFM
                 font { family: root.uiFont; pixelSize: root.ui(11) }
             }
         }
@@ -6868,6 +6911,14 @@ FloatingWindow {
             // The Trash lists no sizes — its rows carry none — so it names no
             // Size column, and its date is when the file was deleted.
             Text {
+                anchors { right: parent.right; rightMargin: root.locColRight }
+                width: root.locColW(parent.width)
+                visible: !!(pane.tab && pane.tab.view === "trash")
+                text: I18n.tr("Original location")
+                elide: Text.ElideRight
+                color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+            }
+            Text {
                 anchors { right: parent.right; rightMargin: root.sizeColRight }
                 visible: !(pane.tab && pane.tab.view === "trash")
                 text: I18n.tr("Size"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
@@ -6996,11 +7047,11 @@ FloatingWindow {
                 }
 
                 Text {
-                    // In the Trash the column left of the date is Restore, not
-                    // Size, and a long name has to stop short of the button.
+                    // In the Trash the columns right of the name are Original
+                    // location, Restore and Deleted — there is no Size.
                     anchors {
                         left: rowIcon.right; leftMargin: 10
-                        right: fileRow.inTrash ? restoreBtn.left : sizeText.left
+                        right: fileRow.inTrash ? locText.left : sizeText.left
                         rightMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
@@ -7027,7 +7078,7 @@ FloatingWindow {
                 Rectangle {
                     anchors {
                         left: rowIcon.right; leftMargin: 8
-                        right: fileRow.inTrash ? restoreBtn.left : sizeText.left
+                        right: fileRow.inTrash ? locText.left : sizeText.left
                         rightMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
@@ -7067,13 +7118,11 @@ FloatingWindow {
                 // passes the trashName back verbatim — the handle from the
                 // listing, not something re-derived from the path, because
                 // a second notes.txt is stored as notes.txt.2.
-                //
-                // Sized by its label: "Wiederherstellen" is 16 characters and
-                // the fixed 66px box held 7.
+                // Sized by its label — see restoreBtnW.
                 Rectangle {
                     id: restoreBtn
                     anchors { right: parent.right; rightMargin: root.restoreColRight; verticalCenter: parent.verticalCenter }
-                    width: Math.max(66, restoreLabel.implicitWidth + 16)
+                    width: root.restoreBtnW
                     height: Math.max(22, restoreLabel.implicitHeight + 6)
                     radius: 3
                     visible: fileRow.inTrash && !fileRow.modelData.missing
@@ -7093,6 +7142,19 @@ FloatingWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.restoreFromTrash(fileRow.modelData)
                     }
+                }
+
+                // Where Restore puts it back. Elided in the MIDDLE, so both
+                // ends survive: which tree it is under, and the folder itself.
+                Text {
+                    id: locText
+                    anchors { right: parent.right; rightMargin: root.locColRight; verticalCenter: parent.verticalCenter }
+                    width: root.locColW(fileRow.width)
+                    visible: fileRow.inTrash
+                    text: fileRow.inTrash ? root.origDir(fileRow.modelData.full) : ""
+                    elide: Text.ElideMiddle
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
 
                 // A Trash row's size is the 0 the listing fills in, not a

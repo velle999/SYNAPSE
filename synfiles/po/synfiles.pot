@@ -439,6 +439,9 @@ msgstr ""
 msgid "Open with"
 msgstr ""
 
+msgid "Original location"
+msgstr ""
+
 msgid "Others"
 msgstr ""
 

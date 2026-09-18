@@ -444,6 +444,9 @@ msgstr "Abrir em uma nova aba"
 msgid "Open with"
 msgstr "Abrir com"
 
+msgid "Original location"
+msgstr "Local original"
+
 msgid "Others"
 msgstr "Outros"
 

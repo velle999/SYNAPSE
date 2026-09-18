@@ -445,6 +445,9 @@ msgstr "In nieuw tabblad openen"
 msgid "Open with"
 msgstr "Openen met"
 
+msgid "Original location"
+msgstr "Oorspronkelijke locatie"
+
 msgid "Others"
 msgstr "Anderen"
 

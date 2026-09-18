@@ -321,7 +321,18 @@ pkgver=0.1.0
 #   box never held in German ("Wiederherstellen"). The columns are placed from
 #   the date's measured width. At 100% nothing moves outside the Trash.
 #   One new string, "Deleted", in all thirteen catalogs, 419/419.
-pkgrel=77
+# 78: THE TRASH SAYS WHERE EACH FILE CAME FROM.
+#   An Original location column between the name and Restore: the folder the
+#   file will go back to, with home written as ~ and a long path elided in the
+#   middle so both ends survive. It is the Path from the .trashinfo the row
+#   already carried; nothing new is read.
+#   The hover panel on a Trash row said "Size 0 B" — the listing's placeholder
+#   again — and nothing else useful. It now shows the full original folder and
+#   the deletion date. Its label column is measured off the labels it is
+#   actually showing, not off "Contents" as the assumed longest: "Ursprünglicher
+#   Ort" at 175% ran a long path out of the panel's right edge.
+#   One new string, in all thirteen catalogs, 420/420.
+pkgrel=78
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -510,6 +510,9 @@ msgstr "افتح في لسان جديد"
 msgid "Open with"
 msgstr "افتح باستخدام"
 
+msgid "Original location"
+msgstr "الموقع الأصلي"
+
 msgid "Others"
 msgstr "الآخرون"
 

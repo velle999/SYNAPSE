@@ -459,6 +459,9 @@ msgstr "Открыть в новой вкладке"
 msgid "Open with"
 msgstr "Открыть с помощью"
 
+msgid "Original location"
+msgstr "Исходное расположение"
+
 msgid "Others"
 msgstr "Остальные"
 

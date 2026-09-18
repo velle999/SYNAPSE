@@ -459,6 +459,9 @@ msgstr "Otwórz w nowej karcie"
 msgid "Open with"
 msgstr "Otwórz za pomocą"
 
+msgid "Original location"
+msgstr "Pierwotne położenie"
+
 msgid "Others"
 msgstr "Pozostali"
 

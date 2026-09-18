@@ -424,6 +424,9 @@ msgstr "在新标签页中打开"
 msgid "Open with"
 msgstr "打开方式"
 
+msgid "Original location"
+msgstr "原始位置"
+
 msgid "Others"
 msgstr "其他人"
 

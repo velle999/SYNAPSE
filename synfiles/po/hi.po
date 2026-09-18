@@ -441,6 +441,9 @@ msgstr "नए टैब में खोलें"
 msgid "Open with"
 msgstr "इससे खोलें"
 
+msgid "Original location"
+msgstr "मूल स्थान"
+
 msgid "Others"
 msgstr "अन्य"
 

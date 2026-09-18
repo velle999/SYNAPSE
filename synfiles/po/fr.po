@@ -443,6 +443,9 @@ msgstr "Ouvrir dans un nouvel onglet"
 msgid "Open with"
 msgstr "Ouvrir avec"
 
+msgid "Original location"
+msgstr "Emplacement d'origine"
+
 msgid "Others"
 msgstr "Autres"
 
