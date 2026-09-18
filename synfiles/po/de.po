@@ -231,6 +231,9 @@ msgstr "Ausschneiden"
 msgid "Del"
 msgstr "Entf"
 
+msgid "Deleted"
+msgstr "Gelöscht"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Gelöschte Dateien. Wiederherstellen legt eine zurück, wo sie herkam."
 

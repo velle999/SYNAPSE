@@ -232,6 +232,9 @@ msgstr "Recortar"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "Eliminado"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Arquivos excluídos. Restaurar devolve um para onde estava."
 

@@ -309,7 +309,19 @@ pkgver=0.1.0
 #   them fake-lsblk loop shapes, a mountinfo fixture where a later autofs row
 #   must lose to the device match, df agreeing on free space, and chmod
 #   refusing a symlink and five malformed modes.
-pkgrel=76
+# 77: THE TRASH DREW ITS COLUMNS ON TOP OF EACH OTHER.
+#   Every row put the Restore button over a "0 B" and ran the deletion date
+#   under the button's right edge. Three causes: the Trash has no sizes, so
+#   each row carried a placeholder 0 that was drawn anyway; the date was the
+#   raw .trashinfo stamp (2026-09-18T13:41:34), three characters wider than the
+#   column; and every column sat at a fixed pixel offset, which the text-size
+#   slider outgrows — at 175% the date ran into Size in ordinary folders too.
+#   The Trash now draws no size, shows its date in the Modified column's form
+#   under a Deleted heading, and sizes Restore to its label, which the 66px
+#   box never held in German ("Wiederherstellen"). The columns are placed from
+#   the date's measured width. At 100% nothing moves outside the Trash.
+#   One new string, "Deleted", in all thirteen catalogs, 419/419.
+pkgrel=77
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

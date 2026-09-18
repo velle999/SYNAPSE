@@ -300,6 +300,9 @@ msgstr "قص"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "حُذف"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "ملفات محذوفة. الاستعادة تعيد الملف إلى مكانه الأصلي."
 

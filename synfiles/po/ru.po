@@ -249,6 +249,9 @@ msgstr "Вырезать"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "Удалён"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Удалённые файлы. Восстановление возвращает файл туда, откуда он был."
 

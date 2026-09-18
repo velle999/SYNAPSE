@@ -313,6 +313,33 @@ FloatingWindow {
         return Qt.formatDateTime(d, "yyyy-MM-dd hh:mm")
     }
 
+    // The Trash's own date, the spec's `YYYY-MM-DDThh:mm:ss` in LOCAL time
+    // with no zone, reshaped into fmtTime()'s form. By hand, not through Date:
+    // a zoneless string is local time to one engine and UTC to another, and
+    // the digits wanted are already there. Drawn raw it was three characters
+    // wider than the column and ran under the Restore button.
+    function fmtDeleted(iso) {
+        if (!iso) return ""
+        return String(iso).replace("T", " ").slice(0, 16)
+    }
+
+    // ── List columns ────────────────────────────────────────────────────────
+    //
+    // Measured, never fixed pixels: the text-size slider goes to 175%, and at
+    // that size a date is ~185px wide — wider than the whole gap a hard-coded
+    // offset left it, so it drew over the Size column. Everything to the left
+    // of the date is placed from this width. The header row uses the same
+    // numbers, or a heading drifts off the column it names.
+    TextMetrics {
+        id: whenMetrics
+        font { family: root.uiFont; pixelSize: root.ui(11) }
+        text: "0000-00-00 00:00"
+    }
+    readonly property real whenColW: Math.ceil(whenMetrics.advanceWidth)
+    // 190 is where Size always sat; it only moves when the date needs it to.
+    readonly property real sizeColRight: Math.max(190, 20 + root.whenColW + 40)
+    readonly property real restoreColRight: 20 + root.whenColW + 24
+
     // ── What a thing IS, when the pointer rests on it ───────────────────────
     //
     // The grid shows an icon and an elided name and nothing else: the type,
@@ -6838,13 +6865,18 @@ FloatingWindow {
                 anchors { left: parent.left; leftMargin: 40 }
                 text: I18n.tr("Name"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
+            // The Trash lists no sizes — its rows carry none — so it names no
+            // Size column, and its date is when the file was deleted.
             Text {
-                anchors { right: parent.right; rightMargin: 190 }
+                anchors { right: parent.right; rightMargin: root.sizeColRight }
+                visible: !(pane.tab && pane.tab.view === "trash")
                 text: I18n.tr("Size"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
             Text {
                 anchors { right: parent.right; rightMargin: 20 }
-                text: I18n.tr("Modified"); color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+                text: pane.tab && pane.tab.view === "trash" ? I18n.tr("Deleted")
+                                                            : I18n.tr("Modified")
+                color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
 
@@ -6884,6 +6916,7 @@ FloatingWindow {
                 required property var modelData
                 readonly property bool isSelected: pane.isSelected(fileRow.modelData.name)
                 readonly property bool isRenaming: fileRow.modelData.name === pane.renaming
+                readonly property bool inTrash: !!(pane.tab && pane.tab.view === "trash")
                 property bool dropHover: false
                 width: ListView.view.width
                 height: pane.rowH
@@ -6963,9 +6996,12 @@ FloatingWindow {
                 }
 
                 Text {
+                    // In the Trash the column left of the date is Restore, not
+                    // Size, and a long name has to stop short of the button.
                     anchors {
                         left: rowIcon.right; leftMargin: 10
-                        right: sizeText.left; rightMargin: 10
+                        right: fileRow.inTrash ? restoreBtn.left : sizeText.left
+                        rightMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
                     visible: !fileRow.isRenaming
@@ -6991,7 +7027,8 @@ FloatingWindow {
                 Rectangle {
                     anchors {
                         left: rowIcon.right; leftMargin: 8
-                        right: sizeText.left; rightMargin: 10
+                        right: fileRow.inTrash ? restoreBtn.left : sizeText.left
+                        rightMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
                     height: 24
@@ -7026,26 +7063,24 @@ FloatingWindow {
                     }
                 }
 
-                Text {
-                    anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
-                    text: fileRow.modelData.deleted || ""
-                    color: root.cDim
-                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                    visible: pane.tab && pane.tab.view === "trash"
-                }
-
                 // Restore is offered only where it means something, and it
                 // passes the trashName back verbatim — the handle from the
                 // listing, not something re-derived from the path, because
                 // a second notes.txt is stored as notes.txt.2.
+                //
+                // Sized by its label: "Wiederherstellen" is 16 characters and
+                // the fixed 66px box held 7.
                 Rectangle {
-                    anchors { right: parent.right; rightMargin: 150; verticalCenter: parent.verticalCenter }
-                    width: 66; height: 22; radius: 3
-                    visible: pane.tab && pane.tab.view === "trash"
-                             && !fileRow.modelData.missing
+                    id: restoreBtn
+                    anchors { right: parent.right; rightMargin: root.restoreColRight; verticalCenter: parent.verticalCenter }
+                    width: Math.max(66, restoreLabel.implicitWidth + 16)
+                    height: Math.max(22, restoreLabel.implicitHeight + 6)
+                    radius: 3
+                    visible: fileRow.inTrash && !fileRow.modelData.missing
                     color: restoreMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
                     border { width: 1; color: root.cAccent }
                     Text {
+                        id: restoreLabel
                         anchors.centerIn: parent
                         text: I18n.tr("Restore")
                         color: root.cAccent
@@ -7060,16 +7095,22 @@ FloatingWindow {
                     }
                 }
 
+                // A Trash row's size is the 0 the listing fills in, not a
+                // size: drawn, it said "0 B" on every file, under the button.
                 Text {
                     id: sizeText
-                    anchors { right: parent.right; rightMargin: 190; verticalCenter: parent.verticalCenter }
+                    anchors { right: parent.right; rightMargin: root.sizeColRight; verticalCenter: parent.verticalCenter }
+                    visible: !fileRow.inTrash
                     text: root.fmtSize(fileRow.modelData.size, fileRow.modelData.type === "dir")
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
+                // ONE date column. The Trash's deletion date used to be a
+                // second Text at the same spot, drawn over this one.
                 Text {
                     anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
-                    text: root.fmtTime(fileRow.modelData.mtime)
+                    text: fileRow.inTrash ? root.fmtDeleted(fileRow.modelData.deleted)
+                                          : root.fmtTime(fileRow.modelData.mtime)
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }

@@ -231,6 +231,9 @@ msgstr "काटें"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "हटाया गया"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "मिटाई गई फ़ाइलें। पुनर्स्थापित करने पर फ़ाइल वहीं लौट जाती है जहाँ से आई थी।"
 

@@ -231,6 +231,9 @@ msgstr "Knippen"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "Verwijderd"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr ""
 "Verwijderde bestanden. Terugzetten plaatst er één terug waar hij vandaan "

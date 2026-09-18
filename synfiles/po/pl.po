@@ -249,6 +249,9 @@ msgstr "Wytnij"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "Usunięto"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "Usunięte pliki. Przywrócenie odkłada plik tam, skąd pochodził."
 

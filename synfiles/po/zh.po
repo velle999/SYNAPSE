@@ -214,6 +214,9 @@ msgstr "剪切"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "删除时间"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "已删除的文件。还原会把文件放回原处。"
 

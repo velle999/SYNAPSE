@@ -229,6 +229,9 @@ msgstr ""
 msgid "Del"
 msgstr ""
 
+msgid "Deleted"
+msgstr ""
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr ""
 

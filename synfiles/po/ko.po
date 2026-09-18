@@ -214,6 +214,9 @@ msgstr "잘라내기"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "삭제한 날짜"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "삭제된 파일. 복원하면 원래 있던 곳으로 되돌립니다."
 

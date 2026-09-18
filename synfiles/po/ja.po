@@ -214,6 +214,9 @@ msgstr "切り取り"
 msgid "Del"
 msgstr "Del"
 
+msgid "Deleted"
+msgstr "削除日時"
+
 msgid "Deleted files. Restoring puts one back where it came from."
 msgstr "削除したファイル。復元すると元あった場所へ戻ります。"
 
