@@ -1563,7 +1563,7 @@ step "Build complete"
 echo
 echo -e "${C_BRAND}"
 echo "  ╭───────────────────────────────────────────╮"
-echo "  │  SynapseOS ${SYNAPSEOS_VERSION} — Build complete        │"
+echo "  │  SynapseOS ${ISO_VERSION} — Build complete        │"
 echo "  ╰───────────────────────────────────────────╯"
 echo -e "${C_RESET}"
 echo -e "  ISO:    ${C_BOLD}${ISO_FILE}${C_RESET}"
@@ -1592,11 +1592,11 @@ echo
 # line that cost those two releases.
 echo -e "  ${C_BRAND}2. Write to USB${C_RESET} ${C_DIM}(reads the stick back and verifies it — this erases /dev/sdX):${C_RESET}"
 echo -e "  ${C_DIM}lsblk                                              # find the DISK, not a partition${C_RESET}"
-echo -e "  ${C_DIM}sudo ./archiso/write-usb.sh /dev/sdX ${SYNAPSEOS_VERSION}${C_RESET}"
+echo -e "  ${C_DIM}sudo ./archiso/write-usb.sh /dev/sdX ${ISO_VERSION}${C_RESET}"
 echo
 echo -e "  ${C_BRAND}3. Publish the GitHub release:${C_RESET}"
-echo -e "  ${C_DIM}\$EDITOR archiso/release-notes/${SYNAPSEOS_VERSION}.md              # optional, but it is the page${C_RESET}"
-echo -e "  ${C_DIM}./archiso/publish-release.sh ${SYNAPSEOS_VERSION}${C_RESET}"
+echo -e "  ${C_DIM}\$EDITOR archiso/release-notes/${ISO_VERSION}.md              # optional, but it is the page${C_RESET}"
+echo -e "  ${C_DIM}./archiso/publish-release.sh ${ISO_VERSION}${C_RESET}"
 echo -e "  ${C_DIM}   splits the ISO into 1900 MiB parts (GitHub caps assets at 2 GiB),${C_RESET}"
 echo -e "  ${C_DIM}   uploads them with the checksums and the .asc, as YOUR user (gh's token).${C_RESET}"
 echo
