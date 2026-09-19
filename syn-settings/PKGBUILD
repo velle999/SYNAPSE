@@ -463,7 +463,12 @@ pkgver=0.1.0
 #   bare systemctl stop would leave on the page. 10 checks, and the check that
 #   every emitted verb has a button now reads Remote and Speech too. Two strings
 #   replace one, all thirteen catalogs, 507/507.
-pkgrel=61
+# 62: 61 NEVER BUILT. Its speech.c rows compared against "not installed" INSIDE
+#   the rec_row call, and the i18n check reads every literal there as drawn
+#   English — so `meson test` failed in check() and syn-update stopped. The
+#   comparison moved above the call, the way remote.c's already was. The smoke
+#   suite had been run on its own; the i18n test is the other half of check().
+pkgrel=62
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
