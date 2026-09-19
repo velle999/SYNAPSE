@@ -308,6 +308,21 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
+	/* ⚠ A PIN, NOT A SETTING — `set` is simply the verb this binary takes
+	 * input through. syn-remote does the talking to sunshine and reports a
+	 * wrong or expired PIN as a failure, which run_or_show passes on. Checked
+	 * for shape here too, so a stray keystroke never reaches another tool. */
+	if (!strcmp(key, "remote-stream-pair")) {
+		size_t n = strlen(val);
+		if (n < 4 || n > 8 || strspn(val, "0123456789") != n)
+			return refuse("remote-stream-pair takes the digits Moonlight shows");
+		if (!have_cmd("syn-remote"))
+			return refuse("syn-remote is not installed");
+		char *a[] = { (char *)"syn-remote", (char *)"stream",
+		              (char *)"pair", (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "remote-stream-solo")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("remote-stream-solo takes on or off");

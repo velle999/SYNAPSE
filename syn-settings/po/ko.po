@@ -1890,3 +1890,21 @@ msgstr "켰지만 아직 모든 관리자 확인에 적용되지 않았습니다
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd가 설치되어 있지 않아 어떤 관리자 확인도 손가락을 요청할 수 없습니다"
+
+msgid "Pair"
+msgstr "페어링"
+
+msgid "pairing…"
+msgstr "페어링 중…"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight가 표시하는 PIN"
+
+msgid "Pair a Moonlight client"
+msgstr "Moonlight 클라이언트 페어링"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "Moonlight가 이 컴퓨터를 추가할 때 표시하는 네 자리 숫자를 입력 · 기기마다 한 번"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "먼저 스트리밍을 켜세요 · PIN은 실행 중인 서버로 전달됩니다"

@@ -1930,3 +1930,21 @@ msgstr "включено, но ещё не во всех запросах адм
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd не установлен, поэтому ни один запрос администратора не может попросить палец"
+
+msgid "Pair"
+msgstr "Сопрячь"
+
+msgid "pairing…"
+msgstr "сопряжение…"
+
+msgid "the PIN Moonlight shows"
+msgstr "PIN-код, который показывает Moonlight"
+
+msgid "Pair a Moonlight client"
+msgstr "Сопрячь клиент Moonlight"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "введите четыре цифры, которые Moonlight показывает при добавлении этой машины · один раз для каждого устройства"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "сначала включите трансляцию · PIN-код передаётся работающему серверу"

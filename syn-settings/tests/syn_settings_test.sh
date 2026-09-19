@@ -2765,6 +2765,44 @@ if [ -r "$qml" ] && [ -r "$main" ]; then
                      || bad "the window offers panes the binary does not answer:$orphan"
 fi
 
+# ── pairing a Moonlight client ─────────────────────────────────────────────
+#
+# The PIN is typed into this window and handed to another program, so what
+# matters is what reaches that program: the digits, as `stream pair <PIN>`, and
+# nothing that is not digits. A stand-in syn-remote writes down its arguments.
+echo "== Remote Desktop: pairing"
+pairbin=$(mktemp -d); pairlog="$pairbin/args"
+cat > "$pairbin/syn-remote" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> "$pairlog"
+[ "\$3" = 0000 ] && { echo "syn-remote: that PIN was not accepted" >&2; exit 1; }
+echo Paired.
+EOF
+chmod +x "$pairbin/syn-remote"
+for badpin in 12ab 123 '1234;id' ''; do
+    PATH="$pairbin:$PATH" "$BIN" set remote-stream-pair "$badpin" >/dev/null 2>&1 \
+        && bad "a PIN of [$badpin] was accepted"
+done
+[ -s "$pairlog" ] && bad "a malformed PIN reached syn-remote: [$(cat "$pairlog")]" \
+                  || ok "a malformed PIN is refused before anything else runs"
+PATH="$pairbin:$PATH" "$BIN" set remote-stream-pair 4368 >/dev/null 2>&1 \
+    && grep -qx 'stream pair 4368' "$pairlog" \
+    && ok "the digits reach syn-remote as \`stream pair <PIN>\`" \
+    || bad "pairing did not run syn-remote stream pair: [$(cat "$pairlog" 2>/dev/null)]"
+PATH="$pairbin:$PATH" "$BIN" set remote-stream-pair 0000 >/dev/null 2>&1 \
+    && bad "a PIN syn-remote refused was reported as paired" \
+    || ok "...and a PIN it refuses is a failure, not a success"
+rm -rf "$pairbin"
+# The window and the binary name the same key: the row's action in remote.c,
+# and the key the window turns into a Pair button and a hint.
+qml="$(dirname "$0")/../data/syn-settings.qml"
+if [ -r "$qml" ]; then
+    grep -q 'set:remote-stream-pair' "$(dirname "$0")/../src/remote.c" \
+        && [ "$(grep -c '"remote-stream-pair"' "$qml")" -ge 3 ] \
+        && ok "the pairing row and the window's Pair button name the same key" \
+        || bad "remote.c's pairing action and the window's Pair button disagree"
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"
     exit 1

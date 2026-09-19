@@ -1870,3 +1870,21 @@ msgstr "مُشغَّل لكنه ليس في كل طلبات المدير بعد 
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع أي طلب للمدير أن يطلب إصبعًا"
+
+msgid "Pair"
+msgstr "إقران"
+
+msgid "pairing…"
+msgstr "جارٍ الإقران…"
+
+msgid "the PIN Moonlight shows"
+msgstr "الرمز الذي يعرضه Moonlight"
+
+msgid "Pair a Moonlight client"
+msgstr "إقران عميل Moonlight"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "اكتب الأرقام الأربعة التي يعرضها Moonlight عند إضافة هذا الجهاز · مرة واحدة لكل جهاز"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "شغّل البث أولًا · يُرسَل الرمز إلى الخادم العامل"

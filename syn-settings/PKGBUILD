@@ -435,7 +435,20 @@ pkgver=0.1.0
 #   And without pam_fprintd installed our lines now come OUT rather than name a
 #   module PAM cannot load. 12 new checks; the whole suite was also run on the
 #   ThinkPad before shipping. Five strings, all thirteen catalogs, 500/500.
-pkgrel=59
+# 60: PAIRING A MOONLIGHT CLIENT IS A ROW, not a command. Moonlight shows a PIN
+#   on the CLIENT and waits for the machine being streamed to enter it, and the
+#   only ways in were `syn-remote stream pair` at a prompt or sunshine's own web
+#   page, whose password this window never shows. Remote Desktop ▸ "Pair a
+#   Moonlight client" takes the digits and the button says Pair; the empty
+#   field says where the PIN is. It is `set remote-stream-pair <PIN>`, which
+#   checks the shape (4-8 digits, so nothing else reaches another program) and
+#   runs `syn-remote stream pair`, whose refusal of a wrong or expired PIN comes
+#   through as a failure. While streaming is off the row says to turn it on
+#   first: the PIN goes to the running server's local API.
+#   Four checks, through a stand-in syn-remote. Six strings, all thirteen
+#   catalogs, 506/506 — appended rather than msgmerged, which re-sorts every
+#   catalog and buries six lines in three thousand.
+pkgrel=60
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

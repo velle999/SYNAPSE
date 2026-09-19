@@ -2151,6 +2151,9 @@ syn-remote stream pair 1234  # accept the PIN a Moonlight client is showing
 syn-remote stream status     # what it is serving, and to how many
 ```
 
+Settings ▸ Remote Desktop has the same switch, and a **Pair a Moonlight
+client** row that takes the PIN.
+
 It captures the same way VNC does — sunshine's Wayland grabber binds
 `zwlr_export_dmabuf_manager_v1` and `xdg_output`, both of which synui exports —
 so there is no portal and nothing to allow. The generated config pins

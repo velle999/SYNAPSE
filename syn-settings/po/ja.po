@@ -1919,3 +1919,21 @@ msgstr "オンにしましたが、まだすべての管理者の確認には入
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd がインストールされていないため、どの管理者の確認も指を求められません"
+
+msgid "Pair"
+msgstr "ペアリング"
+
+msgid "pairing…"
+msgstr "ペアリング中…"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight に表示された PIN"
+
+msgid "Pair a Moonlight client"
+msgstr "Moonlight クライアントをペアリング"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "Moonlight がこのマシンを追加するときに表示する 4 桁を入力 · 端末ごとに 1 回"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "先にストリーミングをオンにする · PIN は動作中のサーバーに送られます"

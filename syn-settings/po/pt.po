@@ -1942,3 +1942,21 @@ msgstr "ligado, mas ainda não em todos os pedidos de administrador — o próxi
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "o pam_fprintd não está instalado, por isso nenhum pedido de administrador pode pedir um dedo"
+
+msgid "Pair"
+msgstr "Emparelhar"
+
+msgid "pairing…"
+msgstr "a emparelhar…"
+
+msgid "the PIN Moonlight shows"
+msgstr "o PIN que o Moonlight mostra"
+
+msgid "Pair a Moonlight client"
+msgstr "Emparelhar um cliente Moonlight"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "escreva os quatro dígitos que o Moonlight mostra ao adicionar esta máquina · uma vez por dispositivo"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "ligue primeiro a transmissão · o PIN vai para o servidor em execução"

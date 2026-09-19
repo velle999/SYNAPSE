@@ -1870,3 +1870,21 @@ msgstr "चालू है, पर अभी हर व्यवस्थाप
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए कोई भी व्यवस्थापक पुष्टि उँगली नहीं माँग सकती"
+
+msgid "Pair"
+msgstr "पेयर करें"
+
+msgid "pairing…"
+msgstr "पेयर किया जा रहा है…"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight जो PIN दिखाता है"
+
+msgid "Pair a Moonlight client"
+msgstr "Moonlight क्लायंट पेयर करें"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "Moonlight इस मशीन को जोड़ते समय जो चार अंक दिखाता है, वे लिखें · हर डिवाइस के लिए एक बार"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "पहले स्ट्रीमिंग चालू करें · PIN चल रहे सर्वर को जाता है"

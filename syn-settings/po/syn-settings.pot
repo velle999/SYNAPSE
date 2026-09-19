@@ -154,6 +154,9 @@ msgstr ""
 msgid "Network"
 msgstr ""
 
+msgid "Pair"
+msgstr ""
+
 msgid "Power & Sleep"
 msgstr ""
 
@@ -292,6 +295,9 @@ msgstr ""
 msgid "nothing reported"
 msgstr ""
 
+msgid "pairing…"
+msgstr ""
+
 msgid "password"
 msgstr ""
 
@@ -332,6 +338,9 @@ msgid "switching %1…"
 msgstr ""
 
 msgid "synui only — %1 is the session running"
+msgstr ""
+
+msgid "the PIN Moonlight shows"
 msgstr ""
 
 msgid ""
@@ -1179,6 +1188,17 @@ msgstr ""
 
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
+msgstr ""
+
+msgid "Pair a Moonlight client"
+msgstr ""
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+
+msgid "turn streaming on first · the PIN goes to the running server"
 msgstr ""
 
 msgid "Streaming now"

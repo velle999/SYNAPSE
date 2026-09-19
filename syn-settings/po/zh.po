@@ -1831,3 +1831,21 @@ msgstr "已打开，但尚未应用到所有管理员验证 — 下次启动时�
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "未安装 pam_fprintd，因此任何管理员验证都无法要求手指"
+
+msgid "Pair"
+msgstr "配对"
+
+msgid "pairing…"
+msgstr "正在配对…"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight 显示的 PIN"
+
+msgid "Pair a Moonlight client"
+msgstr "配对 Moonlight 客户端"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "输入 Moonlight 添加这台机器时显示的四位数字 · 每台设备一次"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "先打开串流 · PIN 会发给正在运行的服务器"

@@ -243,6 +243,22 @@ int pane_remote(void)
 		        N_("Stream port"), shown_stream_port,
 		        N_("what a Moonlight client is pointed at \xc2\xb7 its settings page is one port above"));
 
+		/* ⛔ PAIRING IS TYPED HERE, ON THE MACHINE BEING STREAMED. Moonlight
+		 * shows a PIN on the CLIENT and waits for this end to enter it, and
+		 * the only other place to do that was `syn-remote stream pair` at a
+		 * prompt — or sunshine's own web page, which wants a password this
+		 * window never shows. The value is empty so the editor opens blank.
+		 * ⚠ Only while the server runs: the PIN goes to sunshine's local
+		 * API, and with nothing listening there is nothing to take it. */
+		if (!strcmp(st_run, "yes"))
+			rec_row("add\t%s\t\t-\t%s\tset:remote-stream-pair",
+			        N_("Pair a Moonlight client"),
+			        N_("type the four digits Moonlight shows when it adds this machine \xc2\xb7 once per device"));
+		else
+			rec_row("add\t%s\t\t-\t%s\t-",
+			        N_("Pair a Moonlight client"),
+			        N_("turn streaming on first \xc2\xb7 the PIN goes to the running server"));
+
 		if (st_conn[0] && strcmp(st_conn, "0") != 0)
 			rec_row("value\t%s\t%s\t-\t%s\t-",
 			        N_("Streaming now"), st_conn,

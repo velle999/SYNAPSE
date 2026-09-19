@@ -1944,3 +1944,21 @@ msgstr "aangezet, maar nog niet in elke beheerdersvraag — de volgende start pa
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd is niet geïnstalleerd, dus geen enkele beheerdersvraag kan om een vinger vragen"
+
+msgid "Pair"
+msgstr "Koppelen"
+
+msgid "pairing…"
+msgstr "koppelen…"
+
+msgid "the PIN Moonlight shows"
+msgstr "de pincode die Moonlight toont"
+
+msgid "Pair a Moonlight client"
+msgstr "Een Moonlight-client koppelen"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "typ de vier cijfers die Moonlight toont wanneer het deze machine toevoegt · één keer per apparaat"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "zet streamen eerst aan · de pincode gaat naar de draaiende server"

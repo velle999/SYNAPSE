@@ -1927,3 +1927,21 @@ msgstr "włączone, ale jeszcze nie we wszystkich pytaniach administratora — z
 msgid ""
 "pam_fprintd is not installed, so no administrator prompt can ask for a finger"
 msgstr "pam_fprintd nie jest zainstalowany, więc żadne pytanie administratora nie może poprosić o palec"
+
+msgid "Pair"
+msgstr "Sparuj"
+
+msgid "pairing…"
+msgstr "parowanie…"
+
+msgid "the PIN Moonlight shows"
+msgstr "PIN wyświetlany przez Moonlight"
+
+msgid "Pair a Moonlight client"
+msgstr "Sparuj klienta Moonlight"
+
+msgid "type the four digits Moonlight shows when it adds this machine · once per device"
+msgstr "wpisz cztery cyfry, które Moonlight pokazuje przy dodawaniu tej maszyny · raz na urządzenie"
+
+msgid "turn streaming on first · the PIN goes to the running server"
+msgstr "najpierw włącz transmisję · PIN trafia do działającego serwera"

@@ -1428,6 +1428,17 @@ FloatingWindow {
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
+                // Pairing: the PIN is on the OTHER machine's screen, so the
+                // field says where to look rather than starting blank.
+                Text {
+                    anchors { fill: parent; leftMargin: 8 }
+                    verticalAlignment: Text.AlignVCenter
+                    visible: editField.text === ""
+                             && root.actionArgFor(root.selAction, "set") === "remote-stream-pair"
+                    text: I18n.tr("the PIN Moonlight shows")
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                }
             }
 
             Row {
@@ -1574,6 +1585,10 @@ FloatingWindow {
                         if (v === "toggle") return root.isOn(root.selValue) ? I18n.tr("Turn off")
                                                              : I18n.tr("Turn on")
                         if (v === "probe")  return I18n.tr("Re-probe")
+                        // A button says what it does: this one pairs a device.
+                        if (v === "set" && root.actionArgFor(root.selAction, "set")
+                                           === "remote-stream-pair")
+                            return I18n.tr("Pair")
                         return I18n.tr("Apply")
                     }
                     onGo: {
@@ -1583,7 +1598,11 @@ FloatingWindow {
                         // actionArg() of the whole cell switched a thing
                         // called "X drop:X".
                         const arg = root.actionArgFor(root.selAction, v)
-                        if (v === "set")
+                        if (v === "set" && arg === "remote-stream-pair") {
+                            root.runWrite(["set", arg, editField.text.trim()],
+                                          I18n.tr("pairing…"))
+                            editField.text = ""
+                        } else if (v === "set")
                             root.runWrite(["set", arg, editField.text],
                                           I18n.tr("setting %1…").arg(arg))
                         else if (v === "toggle")
