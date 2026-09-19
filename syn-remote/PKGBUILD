@@ -272,7 +272,33 @@ pkgver=0.1.0
 #     for EVERY connection, whatever its password state. It had been doing that
 #     since the `pinned` and `mac` columns were appended: the record grew, the
 #     reader did not, and nothing failed.
-pkgrel=16
+# 17: THE GREY SCREEN WAS wayvnc BEING MOVED, and 12's fix was what moved it.
+#   ⛔ wayvnc 0.10.1 CANNOT BE SWITCHED TO A SCREEN IT DID NOT START ON. Its VNC
+#     display stays bound to the image source it started with; `output-set`
+#     moves the capture and not the display, so a viewer gets the OLD screen's
+#     size, its last frame, and then nothing — gtk-vnc's grey rectangle — while
+#     `output-list` reports the new screen as captured. Measured on a private
+#     loopback wayvnc with a raw-encoding probe, no PAM involved: started on
+#     DP-3 and moved to DP-2, a stale 2560x1440 frame and no update in five
+#     seconds; moved BACK to DP-3, live frames at once; a fresh instance started
+#     on either, frames in 0.05s. Upstream fixed it on 2026-09-17 (960c7124,
+#     "Point VNC display to correct image source on switch"); no release has it.
+#   ⛔ AND SINCE synui 610 THIS HAPPENED AT EVERY LOGIN. streaming's virtual
+#     display exists before wayvnc starts, wayvnc took it as its first output,
+#     and ensure_output moved capture to DP-3 — so every connection that session
+#     was grey, with `capturing DP-3` in the status the whole time. 09-13 had
+#     the same shape without the virtual display: wayvnc started on HDMI-A-1
+#     and was moved twice.
+#   `run` now starts wayvnc ON the preferred screen (`--output=`, only when
+#   synui has that screen — wayvnc exits on a name it cannot find) and records
+#   which. ensure_output switches only back to that screen, which is the case a
+#   head flapping away and returning needs; anything else restarts wayvnc and
+#   the unit starts it on the right one — and only when the restart could land
+#   there, or it would restart every five seconds for ever.
+#   Six checks, all red against 16. The suite's wayvncctl stand-in had modelled
+#   output-set as a success that changed what was captured, which is exactly
+#   what wayvnc reports and not what it does.
+pkgrel=17
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"

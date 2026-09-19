@@ -1052,6 +1052,7 @@ for a in "$@"; do
     case "$a" in
         output-list) cat "$SR_OUTPUTS"; exit 0 ;;
         output-set)  shift; printf 'set %s\n' "$*" >> "$SR_CTL_LOG"; exit 0 ;;
+        wayvnc-exit) printf 'exit\n' >> "$SR_CTL_LOG"; exit 0 ;;
     esac
     [ "$a" = output-set ] || continue
 done
@@ -1060,6 +1061,11 @@ exit 0
 EOF
 chmod +x "$stub/wayvncctl"
 outputs() { printf '%s' "$1" > "$SR_OUTPUTS"; }
+# The screen `run` started wayvnc on. wayvnc 0.10.1 can only be switched BACK to
+# it, so every case below says which screen that was.
+BOUND_F="$XDG_RUNTIME_DIR/syn-remote.bound"
+bound() { mkdir -p "$XDG_RUNTIME_DIR"; printf '%s\n' "$1" > "$BOUND_F"; }
+bound DP-3
 
 BOTH='[{"name":"DP-3","captured":false},{"name":"HDMI-A-1","captured":true}]'
 RIGHT='[{"name":"DP-3","captured":true},{"name":"HDMI-A-1","captured":false}]'
@@ -1088,6 +1094,45 @@ outputs "$BOTH"; : > "$OLOG"
 ( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
 grep -q 'set DP-3' "$OLOG" && ok "...and is taken back the moment it returns" \
                            || bad "the screen returned and capture stayed put"
+
+# ⛔ AND NEVER BY output-set TO A SCREEN wayvnc DID NOT START ON. wayvnc 0.10.1
+# moves the capture and leaves its VNC display bound to the old source, so the
+# viewer gets the old screen's size, its last frame, and then nothing — the grey
+# screen of 2026-09-18, with capture reporting DP-3 throughout. Measured on a
+# private instance before this was written; upstream 960c7124 fixes it, and no
+# release has it. The way there is a fresh wayvnc, started on the screen.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+[ "$1" = outputs ] && printf '%s' '[{"name":"DP-3","primary":true},{"name":"HDMI-A-1","primary":false}]'
+EOF
+chmod +x "$stub/synctl"
+bound HDMI-A-1; outputs "$BOTH"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+grep -q '^exit$' "$OLOG" && ok "a screen wayvnc did not start on is reached by restarting it" \
+                         || bad "wayvnc was not restarted: [$(cat "$OLOG")]"
+grep -q 'set DP-3' "$OLOG" && bad "...and it was switched there, which is the grey screen" \
+                           || ok "...never by output-set, which wayvnc 0.10.1 cannot honour"
+bound ""; outputs "$BOTH"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+grep -q '^exit$' "$OLOG" && ok "...including when it started on no screen of our choosing" \
+                         || bad "an unrecorded start was switched, not restarted: [$(cat "$OLOG")]"
+# ⚠ AND NOT FOR EVER. A restart that cannot land on the screen (nothing to
+# confirm it with) would come back on the same wrong one every five seconds.
+# ⚠ A synctl that cannot answer, NOT a missing one: removing the stand-in leaves
+# the real /usr/bin/synctl on PATH, which asks the LIVE compositor and passes or
+# fails depending on the machine running the suite.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+chmod +x "$stub/synctl"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output DP-3 ) >/dev/null 2>&1
+bound HDMI-A-1; outputs "$BOTH"; : > "$OLOG"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; ensure_output ) >/dev/null 2>&1
+[ -s "$OLOG" ] && bad "it restarted wayvnc with no way to start it on the screen: [$(cat "$OLOG")]" \
+               || ok "...and not when the restart could not land on it — no restart loop"
+rm -f "$stub/synctl"
+bound DP-3
 
 # ── the setting itself ─────────────────────────────────────
 outputs "$BOTH"
@@ -1272,6 +1317,72 @@ while [ ! -S "$livesock" ] && [ "$tries" -lt 50 ]; do sleep 0.1; tries=$((tries 
     || ok "...and the stale one beside it is still refused"
 kill "$livepid" 2>/dev/null; wait "$livepid" 2>/dev/null
 rm -f "$XDG_RUNTIME_DIR/synui-display" "$stalesock" "$livesock"
+
+# ── 20b. wayvnc is STARTED on the screen, not moved to it ──
+#
+# ⛔ wayvnc 0.10.1 cannot be moved to a screen it did not start on (see 18), so
+# `run` names the screen on its command line and records it for ensure_output.
+# Driven with a real listening socket and a wayvnc stand-in that only writes
+# down what it was handed — nothing here serves anything.
+python3 - "$livesock" >/dev/null 2>&1 <<'LIVE' &
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.bind(sys.argv[1]); s.listen(4)
+time.sleep(30)
+LIVE
+livepid=$!
+tries=0
+while [ ! -S "$livesock" ] && [ "$tries" -lt 50 ]; do sleep 0.1; tries=$((tries + 1)); done
+printf 'wayland-live\n' > "$XDG_RUNTIME_DIR/synui-display"
+cat > "$stub/wayvnc" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" > "$T/wayvnc-args"
+exit 0
+EOF
+chmod +x "$stub/wayvnc"
+cat > "$stub/wayvncctl" <<'EOF'
+#!/bin/sh
+case "$*" in *output-list*) printf '[]\n' ;; *event-receive*) exit 1 ;; esac
+exit 0
+EOF
+chmod +x "$stub/wayvncctl"
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+[ "$1" = outputs ] && printf '%s' '[{"name":"HEADLESS-1","primary":false},{"name":"DP-3","primary":true}]'
+EOF
+chmod +x "$stub/synctl"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
+rm -f "$T/wayvnc-args" "$BOUND_F"
+( unset WAYLAND_DISPLAY
+  export SYN_REMOTE_SESSION_WAIT=2 SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
+  SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+  # ⚠ sourced, so the inhibitor can be the stand-in: `"$SR" run` would start
+  # the REAL synui-idle-inhibit, whose path is fixed, against this fake socket.
+  IDLE_INHIBIT="$stub/fake-inhibit"
+  cmd_run >"$T/run20b.out" 2>"$T/run20b.err" )
+grep -q -- '--output=DP-3' "$T/wayvnc-args" 2>/dev/null \
+    && ok "run starts wayvnc on the primary screen, not the first one it is told about" \
+    || bad "wayvnc was started without --output=DP-3: [$(cat "$T/wayvnc-args" 2>/dev/null)]"
+check "...and records it as the screen it can be switched back to" "DP-3" \
+      "$(cat "$BOUND_F" 2>/dev/null)"
+# ...and a screen synui does not have is never named, since wayvnc exits on one.
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output DP-9 ) >/dev/null 2>&1
+rm -f "$T/wayvnc-args"
+( unset WAYLAND_DISPLAY
+  export SYN_REMOTE_SESSION_WAIT=2 SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
+  SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
+  # ⚠ sourced, so the inhibitor can be the stand-in: `"$SR" run` would start
+  # the REAL synui-idle-inhibit, whose path is fixed, against this fake socket.
+  IDLE_INHIBIT="$stub/fake-inhibit"
+  cmd_run >"$T/run20b.out" 2>"$T/run20b.err" )
+grep -q -- '--output' "$T/wayvnc-args" 2>/dev/null \
+    && bad "run named a screen synui does not have: [$(cat "$T/wayvnc-args")]" \
+    || ok "...and names no screen that is not there"
+check "...and records that it chose none" "" "$(cat "$BOUND_F" 2>/dev/null)"
+( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
+rm -f "$stub/synctl"
+kill "$livepid" 2>/dev/null; wait "$livepid" 2>/dev/null
+rm -f "$XDG_RUNTIME_DIR/synui-display" "$livesock"
 
 # ── 21. being told to stop is not a 90-second wait ────────
 #

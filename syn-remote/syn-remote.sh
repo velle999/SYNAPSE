@@ -53,6 +53,9 @@ IDLE_INHIBIT=/usr/lib/synui/synui-idle-inhibit
 # The one file anything else reads to know somebody is watching. In the runtime
 # dir because it describes THIS session and must not outlive it.
 STATE="${XDG_RUNTIME_DIR:-/tmp}/syn-remote.state"
+# The screen wayvnc was STARTED on, written by `run` each time it starts one —
+# the only screen wayvnc 0.10.1 can be switched BACK to. See ensure_output().
+BOUND="${XDG_RUNTIME_DIR:-/tmp}/syn-remote.bound"
 
 DEFAULT_PORT=5900
 # How long `wake` and `connect` wait for a machine to start answering. A desktop
@@ -443,6 +446,22 @@ print(next((o["name"] for o in d if o.get("primary")), ""), end="")
 ' 2>/dev/null | grep . || return 1
 }
 
+# The preferred screen, but only if synui has it right now — the name handed to
+# `wayvnc --output`, where one that does not exist is not ignored: wayvnc exits,
+# and Restart=always would bring it back to exit again every five seconds.
+startup_output() {
+    local want
+    want=$(preferred_output) || return 1
+    have synctl || return 1
+    synctl outputs 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(1)
+sys.exit(0 if any(o.get("name") == sys.argv[1] for o in d) else 1)
+' "$want" 2>/dev/null || return 1
+    printf '%s' "$want"
+}
+
 # ⚠ python3 rather than sed: output-list is ONE line of JSON objects, and a
 # greedy expression across it happily pairs one output's name with another
 # output's "captured": true.
@@ -458,20 +477,53 @@ for o in d: print(o.get("name",""), "yes" if o.get("captured") else "no")
 # ⛔ ONLY WHEN IT DIFFERS, because setting the output raises another
 # capture-changed event -- and acting on that one too is an endless loop
 # between two screens.
+#
+# ⛔ AND wayvnc 0.10.1 CANNOT BE MOVED TO A SCREEN IT DID NOT START ON. Its VNC
+# display stays bound to the image source it was started with, and
+# switch_to_output() moves the CAPTURE without moving the display — so after
+# `output-set` to any other screen the server keeps reporting the old size,
+# resends the old screen's last frame, and delivers nothing from the new one.
+# gtk-vnc draws that as the grey rectangle. Upstream fixed it on 2026-09-17
+# (wayvnc 960c7124, "Point VNC display to correct image source on switch");
+# no release carries it yet. Measured against a private loopback instance:
+#     started on DP-3 → output-set DP-2 → stale 2560x1440 frame, then nothing
+#     started on DP-3 → DP-2 → back to DP-3 → live frames again
+# This is what the grey screen on 2026-09-18 was: since synui 610 a virtual
+# display exists at login, wayvnc started on it, and the correction below moved
+# capture to DP-3 — which it could not really do. Every connection after that
+# was grey, with capture reporting DP-3 the whole time.
+#
+# So `run` starts wayvnc ON the preferred screen, and a switch is only ever
+# asked for back to that screen (which is what a head flapping away and back
+# needs). Any other screen means a fresh wayvnc: exit, and the unit's
+# Restart=always starts one on it.
 ensure_output() {
-    local want cur outs
+    local want cur outs bound
     want=$(preferred_output) || return 0
     outs=$(wayvnc_outputs) || return 0
     [ -n "$outs" ] || return 0
     printf '%s\n' "$outs" | awk -v w="$want" '$1==w {found=1} END {exit !found}' || return 0
     cur=$(printf '%s\n' "$outs" | awk '$2=="yes" {print $1; exit}')
     [ "$cur" = "$want" ] && return 0
-    if wayvncctl output-set "$want" >/dev/null 2>&1; then
-        err "capture was on ${cur:-nothing} — moved it back to $want"
-        wake_output "$want"
-    else
-        err "could not move capture to $want"
+    bound=$(cat "$BOUND" 2>/dev/null)
+    if [ -n "$bound" ] && [ "$bound" = "$want" ]; then
+        if wayvncctl output-set "$want" >/dev/null 2>&1; then
+            err "capture was on ${cur:-nothing} — moved it back to $want"
+            wake_output "$want"
+        else
+            err "could not move capture to $want"
+        fi
+        return 0
     fi
+    # ⚠ ONLY IF THE RESTART WOULD LAND ON IT. A wayvnc that cannot be started
+    # on $want (no synctl to confirm the screen) would come back on the same
+    # wrong screen, and this would restart it every five seconds for ever.
+    if [ "$(startup_output 2>/dev/null)" != "$want" ]; then
+        err "capture is on ${cur:-nothing}, not $want, and wayvnc cannot be restarted on $want"
+        return 0
+    fi
+    err "capture is on ${cur:-nothing}, not $want — restarting wayvnc on $want"
+    wayvncctl wayvnc-exit >/dev/null 2>&1 || err "could not restart wayvnc"
 }
 
 # ⛔ AND THE SERVED SCREEN HAS TO BE AWAKE, which is not the same as being the
@@ -704,8 +756,14 @@ cmd_run() {
     # trap, and it installs it in THIS background subshell rather than in the
     # caller — which is what lets the suite call watch_clients directly without
     # having its own cleanup trap replaced.
+    # ⛔ STARTED ON THE RIGHT SCREEN, because it cannot be moved there later —
+    # see ensure_output(). Left to itself wayvnc takes the first output it is
+    # told about, which since synui 610 is the virtual display.
+    local start
+    start=$(startup_output) || start=
+    printf '%s\n' "$start" > "$BOUND" 2>/dev/null
     watcher_main &
-    exec wayvnc --config="$WAYVNC_CONF"
+    exec wayvnc --config="$WAYVNC_CONF" ${start:+"--output=$start"}
 }
 
 # ── Status ────────────────────────────────────────────────
