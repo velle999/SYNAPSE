@@ -259,7 +259,13 @@ pkgver=0.1.0
 # A component with a PKGBUILD and no line in COMPONENTS is frozen on every
 # installed machine with nothing to say so. syn-scan is the malware scanner;
 # adding it here is what lets an installed box ever receive a fix for it.
-pkgrel=61
+# ── 0.1.0-62: synapse-voice joins the update set ────────────────────────────
+#
+# The speech engine left chibi's package for its own, so dictation and the
+# screen reader no longer need the companion app. Listed before chibi, which
+# depends on it. An older syn-update that asks for chibi alone still gets it:
+# build-all.sh pulls a missing in-repo dependency into the build.
+pkgrel=62
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

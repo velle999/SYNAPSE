@@ -630,6 +630,7 @@ declare -gA SYN_T=(
   ["GeForce NOW — cloud gaming in a browser"]="GeForce NOW — cloudgamen in een browser"
   ["Remote desktop — reach this machine from another"]="Extern bureaublad — deze machine vanaf een andere bereiken"
   ["Arsenal — BlackArch browser"]="Arsenal — door BlackArch bladeren"
+  ["Speech engine — dictation and voice (~900 MB)"]="Spraakengine — dicteren en voorlezen (~900 MB)"
   ["Chibi — voice companion"]="Chibi — spraakmaatje"
   ["Vibe — AI coding assistant"]="Vibe — AI-programmeerassistent"
   ["Animated wallpapers (~317 MB)"]="Bewegende achtergronden (~317 MB)"

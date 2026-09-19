@@ -1,0 +1,261 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# synapse-voice — the speech engine the desktop and chibi share: hearing
+# (faster-whisper, behind chibi's recorder and its silence detection) and
+# speaking (piper), with both models, so a freshly installed machine can dictate
+# and read aloud with no network.
+#
+# ⛔ ONE SOURCE, ONE COPY. The engine is chibi-llm's voice_input.py and
+# voice_output.py, taken from a pinned commit of that repository. It is not
+# rewritten here: chibi-llm is where those files are maintained for the Pi and
+# Windows builds as well, and a second copy in this repository would be a second
+# place the same lessons (the empty onboard jack, a mic sitting at a DC offset,
+# whisper hallucinating "thanks for watching") had to be learned again.
+#
+# What changes is who owns the INSTALLED copy. Until this package, dictation
+# (Super+Shift+V), the assistant's voice and the screen reader's piper voice all
+# imported chibi's app directory, so removing the companion app took three
+# accessibility features with it and dictation said "synpkg install chibi".
+# vibe and chibi both use /usr/lib/synapse-voice now.
+pkgname=synapse-voice
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS speech engine — dictation (faster-whisper) and voice (piper), with offline models, shared by the desktop and chibi"
+arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime) are arch-specific
+url="https://github.com/velle999/chibi-llm"
+# GPL-2.0-or-later is the engine's own code (chibi-llm); MIT and Apache-2.0 are
+# the vendored Python deps in /usr/lib/synapse-voice/pydeps, which keep their own
+# licence files under <pkg>.dist-info/licenses/ (pip preserves them).
+license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
+
+# Pinned upstream commit — the one voice_input.py and voice_output.py come from.
+# Move it when the engine changes upstream, and bump pkgrel with it.
+_commit=6e4bd658aec30a665342a8b34b2723b713768854
+
+# pipewire-alsa is NOT optional: it ships the file that points ALSA's `default`
+# PCM at PipeWire, and without it capture and playback die on a machine whose
+# card 0 is an HDMI-only GPU (see chibi's PKGBUILD, where this was learned).
+depends=(
+    'python'
+    'pipewire'
+    'pipewire-audio'
+    'pipewire-alsa'
+    'pipewire-pulse'
+    'wireplumber'
+    'alsa-utils'          # arecord / aplay — the capture and playback path
+    'sox'                 # voice_output's pitch and tempo shaping
+    'espeak-ng'           # last-resort voice when piper cannot run
+)
+makedepends=('git' 'python-pip')
+
+# Vendored with `pip --target`, never a venv: a venv bakes its build-time path
+# into pyvenv.cfg. numpy is here as well as in chibi's own pydeps; chibi puts its
+# own first on the path, so one numpy is loaded per process.
+#
+# openwakeword is deliberately NOT vendored: chibi's oww_enabled is False by
+# default, and it drags in a tflite runtime for a feature nothing turns on.
+_pydeps=(
+    'numpy'
+    'faster-whisper'          # hearing
+    'piper-tts'               # speaking
+)
+
+# Voice model (Piper). voice_output.py searches /usr/share/piper-voices.
+_voice=en_GB-cori-medium
+_piperrev=v1.0.0
+
+# STT model (faster-whisper small), pinned to an upstream HF revision.
+# Shipping it is what lets a freshly imaged machine hear you with NO network:
+# faster-whisper given a bare model name downloads from HuggingFace on first
+# run, so without this the ISO would boot up deaf.
+#
+# ⚠ small, NOT tiny, since chibi 0.1.0-16. tiny is 75MB and it shows: dictation came
+# back as "You're going to hear a bunch of phrases you're talking, watching in
+# phrase here" for a clearly spoken sentence. small is ~461MB and is the point
+# where a dictated line is usable without rereading it. int8 on CPU, so it
+# stays reasonable on a machine with no GPU time to spare.
+#
+# The tokenizer and vocabulary are byte-identical across whisper sizes — only
+# model.bin and config.json actually change — which is why two of the four
+# checksums below did not move.
+_whisperrev=536b0662742c02347bc0e980a01041f333bce120
+_hf=https://huggingface.co
+
+# ⛔ THE REVISION IS IN THE LOCAL NAME, AND THAT IS NOT DECORATION.
+#
+# makepkg decides whether to download by whether a file of that name is already
+# in SRCDEST — it prints "-> Found <name>" and skips — and only THEN validates
+# the checksum. So a pinned revision that moves leaves the previous download
+# sitting under the identical name, and every build from then on stops at
+#
+#     whisper-model.bin ... FAILED
+#
+# which reads as "upstream changed the file" or "somebody typed the checksum
+# wrong". It is neither: the checksum is right and the file on disk is old.
+#
+# It happened in chibi's package, which carried these models first:
+# `_whisperrev` moved from the tiny model to small at chibi pkgrel 16, and the box that had downloaded tiny in August failed every build
+# afterwards while a clean machine built perfectly — the worst shape a build
+# failure can have, because the machine that can reproduce it is the one that
+# cannot see why. Two of the four passed, which made it look like partial
+# corruption rather than a whole stale model: the tokenizer and vocabulary are
+# byte-identical across whisper sizes.
+#
+# With the revision in the name a moved pin asks for a file that is not there,
+# so it is fetched. The stale one is simply never looked at again.
+source=(
+    "git+$url.git#commit=$_commit"
+    "piper-$_piperrev-$_voice.onnx::$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx"
+    "piper-$_piperrev-$_voice.onnx.json::$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx.json"
+    "whisper-${_whisperrev:0:12}-model.bin::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/model.bin"
+    "whisper-${_whisperrev:0:12}-config.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/config.json"
+    "whisper-${_whisperrev:0:12}-tokenizer.json::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/tokenizer.json"
+    "whisper-${_whisperrev:0:12}-vocabulary.txt::$_hf/Systran/faster-whisper-small/resolve/$_whisperrev/vocabulary.txt"
+)
+sha256sums=(
+    'SKIP'
+    '1899f98e5fb8310154f3c2973f4b8a929ba7245e722b3d3a85680b833d95f10d'
+    'e262c16d7f192f69d4edd6b4ef8a5915379e67495fcc402f1ab15eeb33da3d36'
+    '3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671'
+    'b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828'
+    'fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab'
+    '34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913'
+)
+
+# Walks the declared `depends` closure with plain pacman (no pacman-contrib /
+# pactree makedepend) and reports every soname a vendored extension needs that
+# neither pydeps itself nor that closure provides. See the call site.
+#
+# ⛔ EVERY pacman CALL WHOSE OUTPUT IS PARSED RUNS UNDER LC_ALL=C. `pacman -Qi`
+# prints its FIELD NAMES through gettext, so on a Japanese install the line
+# reads `依存パッケージ : …` and `/^Depends On/` matches nothing. The walk then
+# never leaves the sixteen directly declared packages, libstdc++ and zlib —
+# which are reached transitively, through gcc-libs — never enter `provided`,
+# and the check reports thirty vendored extensions as missing a dependency.
+#
+# That is not a hypothetical: it is what a Japanese VM did on 2026-09-01, and
+# it failed the build with thirty "add 'libstdc++' to depends" lines that were
+# all wrong. pacman translates "Depends On" in ten of the thirteen languages
+# SynapseOS ships, so the same build breaks in German, French, Spanish,
+# Portuguese, Italian, Dutch, Polish, Russian, Japanese, Korean and Hindi. It
+# passes in English, Chinese and Arabic only because those three msgstrs are
+# empty and fall back.
+#
+# ⚠ NOT `LANG=C`. LC_ALL is the one that cannot be overridden by a more
+# specific LC_MESSAGES already in the build environment.
+_check_vendored_sonames() {
+    local pydir="$1"
+    local -A provided=() seen=()
+    local queue=("${depends[@]}") p real f d soname sofile owner rc=0
+    local edges=0
+
+    while read -r f; do
+        [[ -n $f ]] && provided["$f"]=1
+    done < <(find "$pydir" -name '*.so*' -printf '%f\n')
+
+    while ((${#queue[@]})); do
+        p="${queue[0]%%[<>=]*}"; queue=("${queue[@]:1}")
+        [[ -z $p ]] && continue
+        # `sdl2` and friends are virtuals; ask pacman what really provides them.
+        real="$(pacman -Qq "$p" 2>/dev/null)" || real=""
+        if [[ -z $real ]]; then
+            warning "dep '$p' is not installed on the build host — its libraries can't be checked"
+            continue
+        fi
+        [[ -n ${seen[$real]:-} ]] && continue
+        seen["$real"]=1
+        while read -r f; do
+            f="${f%/}"; [[ -n ${f##*/} ]] && provided["${f##*/}"]=1
+        done < <(pacman -Qlq "$real" 2>/dev/null | grep '\.so')
+        while read -r d; do
+            [[ -n $d && $d != None ]] && { queue+=("$d"); edges=$((edges + 1)); }
+        done < <(LC_ALL=C pacman -Qi "$real" 2>/dev/null |
+                 awk '/^Depends On/{sub(/^[^:]*: /,""); print}' | tr ' ' '\n')
+    done
+
+    # ⛔ A CHECK THAT FAILS FOR THE WRONG REASON IS WORSE THAN NO CHECK, and
+    # this one's wrong reason is silent: a truncated closure looks exactly like
+    # a package that really is missing a dependency, and says so thirty times.
+    # Sixteen real packages cannot have zero dependencies between them, so zero
+    # edges means the parse above matched nothing — not that the closure is a
+    # flat list. Name that, rather than blaming the vendored wheels for it.
+    if ((edges == 0)); then
+        error "the 'pacman -Qi' dependency parse matched nothing — the soname check cannot run"
+        error "  (LC_ALL is '${LC_ALL:-unset}', LANG is '${LANG:-unset}'; pacman translates its field names)"
+        return 1
+    fi
+
+    while read -r soname sofile; do
+        [[ -n ${provided[$soname]:-} ]] && continue
+        owner="$(pacman -Qoq "/usr/lib/$soname" 2>/dev/null)" || owner=""
+        error "vendored ${sofile##*/} needs $soname, which no declared dependency provides — add '${owner:-the owning package}' to depends"
+        rc=1
+    done < <(find "$pydir" \( -name '*.so' -o -name '*.so.*' \) -print0 |
+             xargs -0 -r -n1 sh -c 'objdump -p "$1" 2>/dev/null |
+                 awk -v F="$1" "/NEEDED/{print \$2\" \"F}"' _ | sort -u)
+
+    return $rc
+}
+
+build() {
+    # Vendored wheels are built against the ABI of the python this runs under.
+    # package() records the version, so a consumer on a newer python can say
+    # "rebuild synapse-voice" instead of failing on an import deep inside.
+    _pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    msg2 "Vendoring python deps for python $_pyver"
+
+    # ⚠ --no-warn-conflicts silences pip's report about the SYSTEM
+    # site-packages, which this --target install is not touching (see chibi's
+    # PKGBUILD). A dependency pip cannot resolve here is still a hard error.
+    pip install \
+        --target="$srcdir/pydeps" \
+        --no-cache-dir \
+        --no-compile \
+        --no-warn-conflicts \
+        --upgrade \
+        "${_pydeps[@]}"
+}
+
+package() {
+    _pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    local lib="$pkgdir/usr/lib/synapse-voice"
+
+    # ── The engine ───────────────────────────────────────────────────────
+    # 1080x1920-linux is the copy chibi's package ships; tools/check-shared.sh
+    # upstream keeps the three copies identical.
+    install -Dm644 "$srcdir/chibi-llm/1080x1920-linux/voice_input.py" \
+        "$lib/engine/voice_input.py"
+    install -Dm644 "$srcdir/chibi-llm/1080x1920-linux/voice_output.py" \
+        "$lib/engine/voice_output.py"
+    python -m compileall -q "$lib/engine" || true
+
+    # Read by vibe and by chibi's launcher before anything is imported.
+    printf '%s\n' "$_pyver" > "$lib/python-version"
+    chmod 644 "$lib/python-version"
+
+    # ── Vendored python deps ─────────────────────────────────────────────
+    cp -a "$srcdir/pydeps" "$lib/pydeps"
+    python -m compileall -q "$lib/pydeps" || true
+    _check_vendored_sonames "$lib/pydeps" || return 1
+
+    # ── Models ───────────────────────────────────────────────────────────
+    # ⚠ The SOURCE names carry the revision; the INSTALLED names must not.
+    # These are the paths piper and faster-whisper look for, unchanged from
+    # when chibi installed them, so nothing that reads them has to move.
+    install -Dm644 "$srcdir/piper-$_piperrev-$_voice.onnx" \
+        "$pkgdir/usr/share/piper-voices/$_voice.onnx"
+    install -Dm644 "$srcdir/piper-$_piperrev-$_voice.onnx.json" \
+        "$pkgdir/usr/share/piper-voices/$_voice.onnx.json"
+
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-model.bin" \
+        "$pkgdir/usr/share/faster-whisper/small/model.bin"
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-config.json" \
+        "$pkgdir/usr/share/faster-whisper/small/config.json"
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-tokenizer.json" \
+        "$pkgdir/usr/share/faster-whisper/small/tokenizer.json"
+    install -Dm644 "$srcdir/whisper-${_whisperrev:0:12}-vocabulary.txt" \
+        "$pkgdir/usr/share/faster-whisper/small/vocabulary.txt"
+
+    install -Dm644 "$srcdir/chibi-llm/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

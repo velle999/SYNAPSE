@@ -1465,7 +1465,7 @@ config_report_unused() {
 #
 # What stays forced is only what pacman would force anyway — synui depends on
 # syntty, synnet and vibe depend on synapd, vibe depends on syn-confine,
-# syn-firstboot depends on syn-model. sel_resolve_deps() turns those back on
+# chibi depends on synapse-voice, syn-firstboot depends on syn-model. sel_resolve_deps() turns those back on
 # and SAYS SO, because a checkbox that silently un-ticks itself is worse than
 # one that was never offered.
 #
@@ -1519,6 +1519,7 @@ SEL_COMPONENTS=(
     "comp_gfn|1|1|app|syn-gfn|GeForce NOW|cloud gaming"
     "comp_remote|1|1|app|syn-remote|Remote access|VNC, opt-in"
     "comp_arsenal|1|1|app|syn-arsenal|Arsenal|BlackArch tools"
+    "comp_voice|1|1|app|synapse-voice|Speech engine|dictation+voice"
     "comp_chibi|1|1|app|chibi|Chibi|voice companion"
     "comp_vibe|1|1|app|vibe|Vibe|AI coding help"
     "comp_wpengine|1|1|app|linux-wallpaperengine synapse-wallpapers|Wallpapers|animated, 317MB"
@@ -1747,6 +1748,7 @@ sel_resolve_deps() {
                 comp_synapd:comp_synnet \
                 comp_synapd:comp_vibe \
                 comp_synconfine:comp_vibe \
+                comp_voice:comp_chibi \
                 comp_synmodel:comp_synfirstboot; do
         need=${pair%%:*}; by=${pair#*:}
         if sel_on "$by" && ! sel_on "$need"; then

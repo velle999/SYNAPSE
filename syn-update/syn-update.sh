@@ -100,7 +100,7 @@ SRC_GIT=""
 # OS — the exact dead end this tool exists to remove.
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
-            nexus-chat tepris vibe chibi samsung-m2020 syn-arsenal synpkg synfiles
+            nexus-chat tepris vibe synapse-voice chibi samsung-m2020 syn-arsenal synpkg synfiles
             syn-settings syn-disks syn-cal syn-vault syn-clean syn-play syn-edit syntty syn-confine
             syn-scan
             limine-mkinitcpio-hook fetch synapse-wallpapers syn-arcade cliamp
@@ -1380,7 +1380,10 @@ component_deps() {
     local pk="$SRC/$c/PKGBUILD" dep out=""
     [ -f "$pk" ] || return 0
     # depends=( may span lines, so take the whole array and flatten it.
-    for dep in $(awk '/^depends=\(/,/\)/' "$pk" 2>/dev/null | tr -d "'\"" | tr '(),=' '    '); do
+    # ⚠ COMMENTS OFF FIRST. The range ends at the first `)`, and chibi's list
+    # has "(no Ollama needed)" in a comment on its synapd line — everything
+    # after it, synguard and synapse-voice included, was never read.
+    for dep in $(sed 's/#.*//' "$pk" 2>/dev/null | awk '/^depends=\(/,/\)/' | tr -d "'\"" | tr '(),=' '    '); do
         [ "$dep" = "depends" ] && continue
         [ "$dep" = "$c" ] && continue
         case " ${COMPONENTS[*]} " in *" $dep "*) out="$out $dep" ;; esac
@@ -2148,9 +2151,10 @@ each component's makedepends. Components with a large prebuilt payload
 (synapse-llama, linux-wallpaperengine) are not updated this way and move with an
 ISO upgrade instead; syn-update lists them rather than skipping quietly.
 
-chibi is updated here despite its payload. Its first build fetches about half a
-gigabyte of voice and speech models, kept in the component directory afterwards,
-so the cost falls once per checkout rather than once per update.
+synapse-voice is updated here despite its payload. Its first build needs about
+half a gigabyte of voice and speech models, kept in the component directory
+afterwards, so the cost falls once per checkout rather than once per update; a
+machine that built chibi before 27 already has them and they are reused.
 HELP
 }
 

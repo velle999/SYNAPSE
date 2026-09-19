@@ -51,7 +51,10 @@ pkgver=0.1.0
 # 33: a `synscan` row in the Nix profile example. syn-install 118 made the
 #   malware scanner a checkbox and the example never learned it, so a profile
 #   written from the example could not say whether it wanted one.
-pkgrel=33
+# 34: a `voice` row in the Nix profile example, for synapse-voice — the speech
+#   engine that left chibi's package in chibi 27, and its own checkbox from
+#   syn-install 123.
+pkgrel=34
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

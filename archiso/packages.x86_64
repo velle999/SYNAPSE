@@ -80,6 +80,7 @@ syn-update
 synapse_kmod
 nexus-chat
 tepris
+synapse-voice
 chibi
 vibe
 # SYNAPSE Arsenal — the BlackArch category browser (GUI + TUI over one backend).

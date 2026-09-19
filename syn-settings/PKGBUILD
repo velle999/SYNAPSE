@@ -468,7 +468,12 @@ pkgver=0.1.0
 #   English — so `meson test` failed in check() and syn-update stopped. The
 #   comparison moved above the call, the way remote.c's already was. The smoke
 #   suite had been run on its own; the i18n test is the other half of check().
-pkgrel=62
+# 63: THE VOICE AND DICTATION ROWS NAME synapse-voice, not chibi. The speech
+#   engine moved to its own package so the desktop's dictation and screen reader
+#   no longer need the companion app; "piper is chibi's" would send somebody to
+#   install the wrong thing. Two strings, swapped in place in all thirteen
+#   catalogs, 507/507.
+pkgrel=63
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

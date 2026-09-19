@@ -1522,14 +1522,14 @@ msgstr "nécessite vibe(1) · synpkg install vibe"
 msgid "Voice"
 msgstr "Voix"
 
-msgid "piper is chibi's; espeak-ng is the fallback"
-msgstr "piper vient de chibi ; espeak-ng est le repli"
+msgid "piper, from synapse-voice; espeak-ng is the fallback"
+msgstr "piper vient de synapse-voice ; espeak-ng est le repli"
 
 msgid "Dictation"
 msgstr "Dictée"
 
-msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
-msgstr "faster-whisper, de chibi. Super+Maj+V tape ce qu'il entend"
+msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
+msgstr "faster-whisper, de synapse-voice. Super+Maj+V tape ce qu'il entend"
 
 msgid "Speech rate"
 msgstr "Débit de parole"

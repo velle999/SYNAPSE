@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
+       vibe synapse-voice chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-vault syn-clean syn-play syn-scan
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
        synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote)
@@ -63,6 +63,7 @@ done
 # an installed one already satisfies makepkg.
 LOCAL_DEPS=(
     "vibe syn-confine"     # vibe's bash tool refuses to run without the sandbox
+    "chibi synapse-voice"  # chibi's ears and voice moved there in chibi 27
 )
 if [ ${#ONLY[@]} -gt 0 ]; then
     for _d in "${LOCAL_DEPS[@]}"; do
@@ -290,13 +291,32 @@ build_script_pkg syn-firstboot
 # commit from each app's own git repo, so these need network at build time.
 build_script_pkg nexus-chat
 build_script_pkg tepris
-# chibi is the same shape — a pinned commit from its own repo — with one extra
-# cost: its PKGBUILD also fetches the piper voice and the faster-whisper model,
+# synapse-voice is the same shape — a pinned commit of chibi-llm — with one
+# extra cost: its PKGBUILD fetches the piper voice and the faster-whisper model,
 # roughly half a gigabyte the first time. makepkg keeps them in the component
-# directory afterwards, so it is a one-off per checkout and not per build. That
-# download is why this was left out of the updater at first; it is in now
-# because the source behind it changes, and a component frozen forever is the
-# bug syn-update exists to fix.
+# directory afterwards, so it is a one-off per checkout and not per build.
+#
+# ⚠ SEEDED FROM chibi/ FIRST. chibi carried these same files, under the same
+# revision-bearing names, until chibi 27, so every machine that ever built
+# chibi already has them on disk one directory over. Linking them in saves
+# every existing install from fetching the same half gigabyte again the day
+# the models changed packages. makepkg still checks every checksum, so a
+# stale or damaged copy fails exactly as a bad download would.
+#
+# BEFORE chibi, which depends on it and would otherwise ask pacman for a
+# package no repository has yet.
+seed_voice_models() {
+    local f
+    for f in "$BASE"/chibi/whisper-*-* "$BASE"/chibi/piper-*.onnx "$BASE"/chibi/piper-*.onnx.json; do
+        [ -f "$f" ] || continue
+        [ -e "$BASE/synapse-voice/${f##*/}" ] && continue
+        ln "$f" "$BASE/synapse-voice/" 2>/dev/null || cp "$f" "$BASE/synapse-voice/"
+    done
+}
+want synapse-voice && seed_voice_models
+build_script_pkg synapse-voice
+# chibi: a pinned commit of the same repo. Its app only, since 27 — the voice
+# and its models are synapse-voice's.
 build_script_pkg chibi
 
 # fetch — areofyl/fetch, which is "About OS". Same shape as the two above: a

@@ -189,7 +189,7 @@ for pair in $rules; do
     check "$by -> $need: both are rows in the table" yes \
           "$([ -n "$need_pkg" ] && [ -n "$by_pkg" ] && echo yes || echo no)"
     check "$by_pkg really depends on $need_pkg" yes \
-          "$(sed -n '/^depends=/,/)/p' "$base/$by_pkg/PKGBUILD" |
+          "$(sed 's/#.*//' "$base/$by_pkg/PKGBUILD" | sed -n '/^depends=/,/)/p' |
              grep -q "'$need_pkg'" && echo yes || echo no)"
 done
 

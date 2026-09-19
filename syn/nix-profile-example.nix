@@ -132,6 +132,10 @@
                          # machine. Installed off — `syn-remote on` is
                          # the whole opt-in, and it binds to loopback.
     arsenal  = true;
+    voice    = true;     # synapse-voice: dictation (Super+Shift+V) and the
+                         #   piper voice, with offline models (~900 MB).
+                         #   chibi needs it; the screen reader falls back
+                         #   to espeak-ng without it.
     chibi    = true;
     vibe     = true;
     wpengine = true;     # the SynapseOS animated wallpapers + their renderer

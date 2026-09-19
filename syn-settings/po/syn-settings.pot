@@ -1448,13 +1448,13 @@ msgstr ""
 msgid "Voice"
 msgstr ""
 
-msgid "piper is chibi's; espeak-ng is the fallback"
+msgid "piper, from synapse-voice; espeak-ng is the fallback"
 msgstr ""
 
 msgid "Dictation"
 msgstr ""
 
-msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
+msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
 msgstr ""
 
 msgid "Speech rate"

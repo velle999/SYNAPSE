@@ -628,6 +628,7 @@ declare -gA SYN_T=(
   ["GeForce NOW — cloud gaming in a browser"]="GeForce NOW — 브라우저에서 하는 클라우드 게임"
   ["Remote desktop — reach this machine from another"]="원격 데스크톱 — 다른 컴퓨터에서 이 컴퓨터에 접속"
   ["Arsenal — BlackArch browser"]="Arsenal — BlackArch 둘러보기"
+  ["Speech engine — dictation and voice (~900 MB)"]="음성 엔진 — 받아쓰기와 음성 (~900 MB)"
   ["Chibi — voice companion"]="Chibi — 음성 동반자"
   ["Vibe — AI coding assistant"]="Vibe — AI 코딩 도우미"
   ["Animated wallpapers (~317 MB)"]="움직이는 배경화면 (~317 MB)"

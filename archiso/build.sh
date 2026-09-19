@@ -232,6 +232,10 @@ PACKAGES=(
     syn-update
     nexus-chat
     tepris
+    # synapse-voice BEFORE chibi, which depends on it (same rule as syn-confine
+    # and vibe below). It carries the speech models, ~900 MB installed, which
+    # chibi carried until 27 — so the ISO does not grow by it.
+    synapse-voice
     chibi
     # syn-confine BEFORE vibe, which DEPENDS on it — this array is built in
     # order and makepkg resolves dependencies from the local repo as it goes,

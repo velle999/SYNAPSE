@@ -1,24 +1,27 @@
 """
-voice.py — the assistant speaks and listens, using the stack already on the box.
+voice.py — the assistant speaks and listens, using the engine already on the box.
 
-⛔ THIS IMPLEMENTS NEITHER HALF. chibi already ships a working voice stack —
-piper for speech, faster-whisper for hearing, both vendored with their models —
-and it contains a year of things that are only learned by using it: that
+⛔ THIS IMPLEMENTS NEITHER HALF. synapse-voice ships the speech engine — chibi's
+recorder and voice (piper for speech, faster-whisper for hearing), vendored with
+their models — and it carries a year of things only learned by using it: that
 libportaudio hard-links libjack and merely initialising it can segfault the
-process, that whisper-tiny hallucinates "thanks for watching" at room noise, how
-to find an ALSA capture device on a box whose card 0 cannot record. A second
-implementation here would be a second set of those lessons, learned again.
+process, that whisper hallucinates "thanks for watching" at room noise, how to
+find a capture device on a box whose card 0 cannot record, a laptop mic that
+sits at a DC offset. A second implementation here would be a second set of
+those lessons, learned again.
 
-So this imports chibi's and wraps it. One voice stack on the machine, two
-programs using it. Where chibi is not installed, speech falls back to espeak-ng
+So this imports synapse-voice's engine and wraps it. One engine on the machine,
+used by dictation, the screen reader, the assistant and chibi. It used to be
+chibi's app directory, which made three accessibility features depend on the
+companion app. Where the engine is not installed, speech falls back to espeak-ng
 and hearing says what is missing rather than pretending.
 
-⚠ CHIBI'S MODULES PRINT TO STDOUT — "[TTS] Found piper Python module" and
+⚠ THE ENGINE'S MODULES PRINT TO STDOUT — "[TTS] Found piper Python module" and
 friends — and vibe's stdout IS the chat window's protocol pipe. A stray line
 there is not a cosmetic problem: the window parses every line as a TSV record,
 so one banner is a malformed record and the tag it starts with decides what the
-window does with it. Every call into chibi below is made with stdout redirected
-to stderr for that reason.
+window does with it. Every call into the engine below is made with stdout
+redirected to stderr for that reason.
 
 SynapseOS Project
 SPDX-License-Identifier: GPL-2.0-or-later
@@ -32,24 +35,44 @@ import sys
 import threading
 import time
 
-_CHIBI_APP = "/usr/lib/chibi/app"
-_CHIBI_DEPS = "/usr/lib/chibi/pydeps"
+_VOICE = "/usr/lib/synapse-voice"
+_ENGINE = _VOICE + "/engine"
+_ENGINE_DEPS = _VOICE + "/pydeps"
 _STT_MODEL = "/usr/share/faster-whisper/small"
 
 
 @contextlib.contextmanager
 def _quiet():
-    """chibi's modules talk. Send it to stderr, where it belongs."""
+    """The engine's modules talk. Send it to stderr, where it belongs."""
     with contextlib.redirect_stdout(sys.stderr):
         yield
 
 
-def chibi_available() -> bool:
-    return os.path.isdir(_CHIBI_APP) and os.path.isdir(_CHIBI_DEPS)
+def _engine_python() -> str:
+    """The python minor version synapse-voice was built for, or ""."""
+    try:
+        with open(_VOICE + "/python-version") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
-def _add_chibi_path():
-    for p in (_CHIBI_DEPS, _CHIBI_APP):
+def _python_matches() -> bool:
+    """Its vendored wheels load only under the python they were built for.
+
+    After a python upgrade they fail on import, deep inside, as something that
+    reads like a broken package. Asked first so why_deaf() can say which.
+    """
+    return _engine_python() == "%d.%d" % sys.version_info[:2]
+
+
+def engine_available() -> bool:
+    return (os.path.isdir(_ENGINE) and os.path.isdir(_ENGINE_DEPS)
+            and _python_matches())
+
+
+def _add_engine_path():
+    for p in (_ENGINE_DEPS, _ENGINE):
         if p not in sys.path:
             sys.path.insert(0, p)
 
@@ -58,46 +81,6 @@ def _add_chibi_path():
 # it — a countdown that disagreed with the recorder would be worse than none —
 # and a number spelled twice is a number that drifts.
 LISTEN_SECONDS = 12.0
-
-
-def _mic_device() -> str:
-    """The capture device an OLD chibi should use, or "" to leave its pick alone.
-
-    ⚠ COMPATIBILITY ONLY. A chibi that resolves this itself is never sent here
-    — see the probe in _stt(). This exists so that dictation is not silently
-    broken on a box whose chibi predates the fix.
-
-    ⛔ chibi ADDRESSES THE FIRST ALSA CARD BY NAME, WHICH IS NOT THE MICROPHONE.
-    Its _resolve_alsa_device() takes the first `card N:` out of `arecord -l` —
-    right for the headless Pi it was written for, where the bare `default`
-    device is often absent and there is only one capture card. On a desktop the
-    first card is the onboard analogue codec with nothing plugged into it, and
-    the USB microphone is card 3. Dictation recorded an empty jack and reported
-    "heard nothing" every time, while every other app's level meter moved:
-
-        plughw:CARD=Generic     peak 153/32768   rms 36    (noise floor)
-        plughw:CARD=Microphone  peak 925/32768   rms 196   (the real mic)
-
-    ⚠ THE ANSWER IS NOT TO NAME THE RIGHT CARD. That pins today's hardware into
-    the config and breaks the next time something is plugged in. ALSA's
-    `pipewire` PCM follows the DEFAULT SOURCE, so this tracks whatever the
-    desktop is actually set to, including a mic swapped mid-session.
-
-    Never overrides a CHIBI_MIC_DEVICE that is already set: it is chibi's
-    documented escape hatch, and somebody who used it meant it.
-    """
-    if os.environ.get("CHIBI_MIC_DEVICE"):
-        return ""
-    try:
-        out = subprocess.run(["arecord", "-L"], capture_output=True,
-                             text=True, timeout=5).stdout
-    except Exception:
-        return ""
-    # Column 0 is a PCM name; the descriptions under each are indented, so an
-    # lstrip here would match the word inside one of those and name a device
-    # that does not exist.
-    return "pipewire" if any(l.rstrip() == "pipewire"
-                             for l in out.splitlines()) else ""
 
 
 class Voice:
@@ -110,8 +93,8 @@ class Voice:
     """
 
     def __init__(self):
-        self._out = None            # chibi VoiceOutput, or None
-        self._in = None             # chibi VoiceInput, or None
+        self._out = None            # the engine's VoiceOutput, or None
+        self._in = None             # the engine's VoiceInput, or None
         self._out_tried = False
         self._in_tried = False
         self._espeak_pid = None
@@ -122,9 +105,9 @@ class Voice:
         if self._out_tried:
             return self._out
         self._out_tried = True
-        if chibi_available():
+        if engine_available():
             try:
-                _add_chibi_path()
+                _add_engine_path()
                 with _quiet():
                     from voice_output import VoiceOutput
                     self._out = VoiceOutput()
@@ -177,8 +160,8 @@ class Voice:
     def wait(self, timeout: float = 120.0) -> None:
         """Block until what was queued has actually been said.
 
-        ⛔ speak() IS NON-BLOCKING AND THE WORKER IS A DAEMON THREAD. chibi's
-        VoiceOutput takes an utterance onto a queue and synthesises it on a
+        ⛔ speak() IS NON-BLOCKING AND THE WORKER IS A DAEMON THREAD. The
+        engine's VoiceOutput takes an utterance onto a queue and synthesises it on a
         background thread — right for a window that runs for hours, fatal for a
         one-shot CLI, because the interpreter kills a daemon thread on the way
         out. `vibe voice say` enqueued, returned "piper" and exited in
@@ -203,7 +186,7 @@ class Voice:
             while out.busy and time.monotonic() < deadline:
                 time.sleep(0.05)
         except Exception:
-            # `busy` reaches into chibi's object; a speech tool that raised on
+            # `busy` reaches into the engine's object; a speech tool that raised on
             # the way out would be worse than one that stops waiting.
             pass
 
@@ -212,33 +195,25 @@ class Voice:
         if self._in_tried:
             return self._in
         self._in_tried = True
-        if not chibi_available():
+        if not engine_available():
             return None
         try:
-            _add_chibi_path()
+            _add_engine_path()
             with _quiet():
                 import voice_input as _vi
-                # ⛔ ONE OWNER OF "WHICH MICROPHONE", AND IT IS CHIBI. Every
-                # chibi that has _has_alsa_pcm resolves the capture device
-                # correctly on its own, so setting CHIBI_MIC_DEVICE here as
-                # well would be a second copy of the same policy — and, being
-                # an environment variable, one that silently OUTRANKS chibi's
-                # the day the two disagree. Older copies take the first ALSA
-                # card, which on a desktop is the onboard jack with nothing in
-                # it, so the override below is for those alone and retires
-                # itself as soon as chibi is updated. chibi is an optdepend
-                # with no version to constrain, which is why this is a probe of
-                # the installed code rather than an assumption about it.
-                if not hasattr(_vi, "_has_alsa_pcm"):
-                    dev = _mic_device()
-                    if dev:
-                        os.environ["CHIBI_MIC_DEVICE"] = dev
+                # The engine picks the microphone itself (ALSA's `pipewire`
+                # PCM, which follows the desktop's default source). vibe used to
+                # set CHIBI_MIC_DEVICE for chibi copies older than that fix;
+                # synapse-voice is built from a commit after it, so there is no
+                # older copy left to correct, and a second owner of "which
+                # microphone" would only outrank the engine the day they
+                # disagreed.
                 VoiceInput = _vi.VoiceInput
                 # ⚠ THE MODEL DIRECTORY, NOT THE MODEL NAME. A bare name sends
                 # faster-whisper to HuggingFace on first use — ~461MB for the
                 # `small` this now points at — so a box with no network comes
                 # up deaf, and the failure is a stall rather than a message.
-                # chibi packages the converted model at that path.
+                # synapse-voice packages the converted model at that path.
                 self._in = VoiceInput(model_dir=_STT_MODEL if
                                       os.path.isdir(_STT_MODEL) else "")
         except Exception:
@@ -259,12 +234,15 @@ class Voice:
 
     def why_deaf(self) -> str:
         """One sentence naming what is missing, for a box that cannot listen."""
-        if not chibi_available():
-            return ("dictation needs chibi's speech engine — "
-                    "synpkg install chibi")
+        if not (os.path.isdir(_ENGINE) and os.path.isdir(_ENGINE_DEPS)):
+            return ("dictation needs the speech engine — "
+                    "synpkg install synapse-voice")
+        if not _python_matches():
+            return ("the speech engine was built for python %s — "
+                    "rebuild synapse-voice" % (_engine_python() or "unknown"))
         if not os.path.isdir(_STT_MODEL):
             return (f"the speech model is missing ({_STT_MODEL}) — "
-                    "reinstall chibi")
+                    "reinstall synapse-voice")
         return "the speech engine would not start (see the log)"
 
     def listen(self, seconds: float = LISTEN_SECONDS) -> tuple[str, str]:
@@ -272,7 +250,7 @@ class Voice:
 
         Returns (text, error). Exactly one of them is set.
 
-        ⚠ BOUNDED. chibi's recorder ends a capture on silence, but a room with
+        ⚠ BOUNDED. The engine's recorder ends a capture on silence, but a room with
         a fan in it can hold the threshold open — and a dictation that never
         returns is indistinguishable from one that failed.
         """
@@ -303,18 +281,18 @@ class Voice:
     # ── what this box can do ────────────────────────────────────────────
     def status(self) -> dict:
         return {
-            "speak": ("piper" if (chibi_available() and self._tts_possible())
+            "speak": ("piper" if (engine_available() and self._tts_possible())
                       else ("espeak-ng" if shutil.which("espeak-ng") else "no")),
-            "listen": "faster-whisper" if (chibi_available()
+            "listen": "faster-whisper" if (engine_available()
                                            and os.path.isdir(_STT_MODEL)) else "no",
-            "chibi": "yes" if chibi_available() else "no",
+            "engine": "yes" if engine_available() else "no",
         }
 
     def _tts_possible(self) -> bool:
         # Asked without LOADING it: status is called to draw a button, and
         # loading piper to answer whether piper is there would cost the second
         # this is trying to report on.
-        return os.path.exists(os.path.join(_CHIBI_APP, "voice_output.py"))
+        return os.path.exists(os.path.join(_ENGINE, "voice_output.py"))
 
 
 _shared = None

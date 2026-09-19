@@ -476,6 +476,7 @@ FloatingWindow {
             { key: "comp_gfn",         std: 1, full: 1, min: 0, label: root.t("GeForce NOW — cloud gaming in a browser") },
             { key: "comp_remote",      std: 1, full: 1, min: 0, label: root.t("Remote desktop — reach this machine from another") },
             { key: "comp_arsenal",     std: 1, full: 1, min: 0, label: root.t("Arsenal — BlackArch browser") },
+            { key: "comp_voice",       std: 1, full: 1, min: 0, label: root.t("Speech engine — dictation and voice (~900 MB)") },
             { key: "comp_chibi",       std: 1, full: 1, min: 0, label: root.t("Chibi — voice companion") },
             { key: "comp_vibe",        std: 1, full: 1, min: 0, label: root.t("Vibe — AI coding assistant") },
             { key: "comp_wpengine",    std: 1, full: 1, min: 0, label: root.t("Animated wallpapers (~317 MB)") },
@@ -599,6 +600,7 @@ FloatingWindow {
         ["comp_synapd",     "comp_synnet"],
         ["comp_synapd",     "comp_vibe"],
         ["comp_synconfine", "comp_vibe"],
+        ["comp_voice",      "comp_chibi"],
         ["comp_synmodel",   "comp_synfirstboot"]
     ]
     function forcedOn(key) {

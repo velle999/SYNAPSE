@@ -1463,14 +1463,14 @@ msgstr "vibe(1)이 필요합니다 · synpkg install vibe"
 msgid "Voice"
 msgstr "목소리"
 
-msgid "piper is chibi's; espeak-ng is the fallback"
-msgstr "piper는 chibi의 것이고, espeak-ng는 대비책입니다"
+msgid "piper, from synapse-voice; espeak-ng is the fallback"
+msgstr "piper는 synapse-voice의 것이고, espeak-ng는 대비책입니다"
 
 msgid "Dictation"
 msgstr "받아쓰기"
 
-msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
-msgstr "chibi의 faster-whisper. Super+Shift+V가 들은 것을 입력합니다"
+msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
+msgstr "synapse-voice의 faster-whisper. Super+Shift+V가 들은 것을 입력합니다"
 
 msgid "Speech rate"
 msgstr "말하기 속도"

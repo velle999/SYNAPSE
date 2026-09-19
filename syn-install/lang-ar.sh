@@ -626,6 +626,7 @@ declare -gA SYN_T=(
   ["GeForce NOW — cloud gaming in a browser"]="‏GeForce NOW — ألعاب سحابية داخل المتصفح"
   ["Remote desktop — reach this machine from another"]="سطح المكتب البعيد — الوصول إلى هذا الجهاز من جهاز آخر"
   ["Arsenal — BlackArch browser"]="‏Arsenal — تصفّح BlackArch"
+  ["Speech engine — dictation and voice (~900 MB)"]="محرك الكلام — الإملاء والصوت (~900 م.ب)"
   ["Chibi — voice companion"]="‏Chibi — رفيق صوتي"
   ["Vibe — AI coding assistant"]="‏Vibe — مساعد برمجة بالذكاء الاصطناعي"
   ["Animated wallpapers (~317 MB)"]="خلفيات متحركة (~317 م.ب)"

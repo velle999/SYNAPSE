@@ -103,6 +103,7 @@ declare -A NOT_EXTERNAL=(
     [scenefx]="retired fork, kept only for the scene TUs its PKGBUILD documents"
     [scenefx0.5]="already self-sufficient — its source=() fetches from wlrfx/scenefx upstream"
     [chibi]="builds from its own upstream repository already"
+    [synapse-voice]="the same: a pinned commit of chibi-llm, plus model downloads"
     [tepris]="the same"
     [nexus-chat]="the same"
     [cliamp]="the same"

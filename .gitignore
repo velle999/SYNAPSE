@@ -211,6 +211,19 @@ archiso/out/*.asc
 /chibi/*.onnx
 /chibi/*.onnx.json
 
+# synapse-voice took over those models (and chibi-llm's engine files) in chibi
+# 27. Same shape, same reason: syn-update refuses to fetch into a tree with
+# anything untracked in it, so these have to be ignored BEFORE its first build,
+# not after the first "refusing to overwrite local changes".
+/synapse-voice/src/
+/synapse-voice/chibi-llm/
+/synapse-voice/whisper-*model.bin
+/synapse-voice/whisper-*config.json
+/synapse-voice/whisper-*tokenizer.json
+/synapse-voice/whisper-*vocabulary.txt
+/synapse-voice/*.onnx
+/synapse-voice/*.onnx.json
+
 # The two GraalVM packages. Both clone their upstream into the package root and
 # unpack a ~300 MB GraalVM tarball beside it, so a single build leaves several
 # hundred MB and 700+ files in `git status` — the same problem chibi had, and

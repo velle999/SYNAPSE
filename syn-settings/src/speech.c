@@ -175,10 +175,10 @@ int pane_speech(void)
 	char speak_eng[64], listen_eng[64];
 	voice_caps(speak_eng, sizeof speak_eng, listen_eng, sizeof listen_eng);
 	rec_row("engine\t%s\t%s\t-\t%s\t-",
-	        N_("Voice"), speak_eng, N_("piper is chibi's; espeak-ng is the fallback"));
+	        N_("Voice"), speak_eng, N_("piper, from synapse-voice; espeak-ng is the fallback"));
 	rec_row("engine\t%s\t%s\t-\t%s\t-",
 	        N_("Dictation"), listen_eng,
-	        N_("faster-whisper, from chibi. Super+Shift+V types what it hears"));
+	        N_("faster-whisper, from synapse-voice. Super+Shift+V types what it hears"));
 
 	/* ── Tuning ───────────────────────────────────────────────────────── */
 	char rate[32] = "", vol[32] = "", words[128] = "";

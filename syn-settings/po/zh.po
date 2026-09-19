@@ -1406,14 +1406,14 @@ msgstr "需要 vibe(1) · synpkg install vibe"
 msgid "Voice"
 msgstr "语音"
 
-msgid "piper is chibi's; espeak-ng is the fallback"
-msgstr "piper 来自 chibi；espeak-ng 是备选"
+msgid "piper, from synapse-voice; espeak-ng is the fallback"
+msgstr "piper 来自 synapse-voice；espeak-ng 是备选"
 
 msgid "Dictation"
 msgstr "听写"
 
-msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
-msgstr "来自 chibi 的 faster-whisper。Super+Shift+V 会键入它听到的内容"
+msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
+msgstr "来自 synapse-voice 的 faster-whisper。Super+Shift+V 会键入它听到的内容"
 
 msgid "Speech rate"
 msgstr "语速"

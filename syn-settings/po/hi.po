@@ -1443,14 +1443,14 @@ msgstr "vibe(1) चाहिए · synpkg install vibe"
 msgid "Voice"
 msgstr "आवाज़"
 
-msgid "piper is chibi's; espeak-ng is the fallback"
-msgstr "piper chibi का है; espeak-ng विकल्प है"
+msgid "piper, from synapse-voice; espeak-ng is the fallback"
+msgstr "piper synapse-voice का है; espeak-ng विकल्प है"
 
 msgid "Dictation"
 msgstr "श्रुतलेख"
 
-msgid "faster-whisper, from chibi. Super+Shift+V types what it hears"
-msgstr "chibi का faster-whisper। Super+Shift+V जो सुनता है वह टाइप करता है"
+msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
+msgstr "synapse-voice का faster-whisper। Super+Shift+V जो सुनता है वह टाइप करता है"
 
 msgid "Speech rate"
 msgstr "बोलने की गति"

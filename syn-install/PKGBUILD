@@ -443,7 +443,19 @@ pkgver=0.1.0
 # reworded ("…so [cachyos] is not added"), re-keyed in all thirteen catalogs,
 # and one new line ("Adding the [cachyos] repository…") translated in all
 # thirteen.
-pkgrel=122
+# ── 0.1.0-123: the speech engine is its own checkbox ──────────────────────────
+#
+# Dictation (Super+Shift+V), the assistant's voice and the screen reader's piper
+# voice lived inside chibi's package, so unticking the companion app took all
+# three with it. They are synapse-voice now: "Speech engine" on both installers,
+# ticked under Standard and Full like chibi, cleared by Minimal (the screen
+# reader still speaks there, through espeak-ng). chibi depends on it, so ticking
+# chibi ticks it back on in the script and in the window alike. One label,
+# translated in all thirteen. ⚠ tests/select_test.sh read a PKGBUILD's depends=
+# up to the first `)` — including one inside a comment — and chibi's list has
+# "(no Ollama needed)" on its synapd line, so every name after it was invisible
+# to it. Comments are stripped first now.
+pkgrel=123
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

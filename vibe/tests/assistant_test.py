@@ -557,7 +557,7 @@ finally:
 
 # ── 6. the voice, and the pipe it must not write into ───────────────────────
 #
-# ⛔ THE TRAP THIS SECTION EXISTS FOR: chibi's voice modules print to stdout
+# ⛔ THE TRAP THIS SECTION EXISTS FOR: the engine's voice modules print to stdout
 # ("[TTS] Found piper Python module"), and vibe serve's stdout IS the window's
 # protocol pipe. One banner is not a cosmetic problem — the window parses every
 # line as a TSV record, and the tag a banner happens to start with decides what
@@ -566,7 +566,7 @@ from vibe import voice as voicemod
 
 vstat = voicemod.shared().status()
 check("the voice reports what this box can do without loading it",
-      set(vstat) == {"speak", "listen", "chibi"}, str(vstat))
+      set(vstat) == {"speak", "listen", "engine"}, str(vstat))
 check("…and every answer is a word, not a crash",
       all(isinstance(x, str) and x for x in vstat.values()), str(vstat))
 
@@ -582,13 +582,13 @@ else:
     check("a box that CAN hear still has an answer for why it might not",
           bool(voicemod.shared().why_deaf()))
 
-# The guard itself: anything chibi prints must land on stderr.
+# The guard itself: anything the engine prints must land on stderr.
 import contextlib
 buf_out, buf_err = io.StringIO(), io.StringIO()
 with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
     with voicemod._quiet():
-        print("a banner chibi would print")
-check("chibi's chatter is redirected off stdout", buf_out.getvalue() == "",
+        print("a banner the engine would print")
+check("the engine's chatter is redirected off stdout", buf_out.getvalue() == "",
       repr(buf_out.getvalue()))
 check("…and onto stderr, where it is still readable",
       "banner" in buf_err.getvalue())

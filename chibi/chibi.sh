@@ -12,6 +12,9 @@ set -euo pipefail
 APP_DIR=/usr/lib/chibi/app
 PYDEPS=/usr/lib/chibi/pydeps
 BUILD_PYVER=@PYVER@
+# Hearing and speaking are synapse-voice's: the engine the desktop's dictation
+# and screen reader use too.
+VOICE=/usr/lib/synapse-voice
 
 # This box runs no notification daemon, so when the launcher is started from the
 # dock or the waybar menu a terminal is the only way a failure is visible at all.
@@ -54,8 +57,8 @@ die() {
 
 [ -d "$APP_DIR" ] || die "app directory not found: $APP_DIR (reinstall the chibi package)"
 
-# The vendored wheels (ctranslate2, onnxruntime, opencv) are compiled against
-# the ABI of the python chibi was built with. After a python minor-version
+# The vendored wheels (opencv, pygame) are compiled against the ABI of the
+# python chibi was built with. After a python minor-version
 # upgrade they are simply invisible, and Chibi would otherwise start up silently
 # stripped of voice — the exact "she runs but can't hear or speak" failure this
 # package exists to prevent. Fail loudly instead.
@@ -63,8 +66,17 @@ pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_in
 if [ "$pyver" != "$BUILD_PYVER" ]; then
     die "python $pyver but chibi's bundled deps were built for python $BUILD_PYVER — rebuild the chibi package"
 fi
+# The same question of the speech engine, which is built separately and can be
+# on a different python from chibi after a partial update.
+[ -d "$VOICE/engine" ] || die "the speech engine is missing: $VOICE (synpkg install synapse-voice)"
+voice_pyver="$(cat "$VOICE/python-version" 2>/dev/null || true)"
+if [ "$pyver" != "$voice_pyver" ]; then
+    die "python $pyver but synapse-voice was built for python ${voice_pyver:-unknown} — rebuild the synapse-voice package"
+fi
 
-export PYTHONPATH="$PYDEPS${PYTHONPATH:+:$PYTHONPATH}"
+# ⚠ ORDER MATTERS: chibi's pydeps first, so the numpy loaded is chibi's; the
+# engine's pydeps then supply faster-whisper and piper against it.
+export PYTHONPATH="$PYDEPS:$VOICE/engine:$VOICE/pydeps${PYTHONPATH:+:$PYTHONPATH}"
 # The app dir is read-only; don't let python try (and fail) to write .pyc.
 # The package precompiled them already.
 export PYTHONDONTWRITEBYTECODE=1
