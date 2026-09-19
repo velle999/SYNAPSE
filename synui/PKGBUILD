@@ -3693,7 +3693,15 @@ pkgver=0.1.0
 #   has no headless equivalent. Against the previous synui, 22 of its 41 checks
 #   fail. Full suite: 172 pass, synrgbburst flaked once under parallel load and
 #   passed three times alone.
-pkgrel=616
+# 617: …AND DUPLICATE TAKES ITS WINDOWS BACK TOO. 616 put the reclaim on the
+#   grid-packing path, and dispcfg_rechain() returns before it for Duplicate —
+#   there is no grid to pack, that is what makes the screens show the same
+#   thing — so a desk going from "Built-in off" straight to Duplicate left the
+#   built-in panel's windows on the external. Both of rechain's exits call
+#   dispcfg_reclaim_windows() now, which is also the only place the sweep can
+#   go: the boxes are measured against an origin a re-attached output does not
+#   have until rechain has placed it.
+pkgrel=617
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

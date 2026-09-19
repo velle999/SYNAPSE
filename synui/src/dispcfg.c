@@ -385,6 +385,30 @@ static void dispcfg_apply_mode(syn_server_t *s)
     }
 }
 
+/*
+ * Every screen that is in the layout takes back the windows it was carrying
+ * when it left it — a monitor re-attached by leaving "Built-in off", the same
+ * way a monitor coming out of standby takes back the ones output_destroy()
+ * rescued (output_exile.c).
+ *
+ * Called from both of dispcfg_rechain()'s exits, and from neither
+ * dispcfg_attach() nor dispcfg_apply_mode(): the boxes are measured against the
+ * output's origin, and a re-attached output only has one once rechain has
+ * placed it. ⚠ Duplicate is one of those exits — it returns early, and a desk
+ * going from "Built-in off" straight to Duplicate would otherwise leave the
+ * windows on the screen they were moved to.
+ *
+ * A no-op for a screen nothing was ever displaced from, which is every screen
+ * on every ordinary reflow.
+ */
+static void dispcfg_reclaim_windows(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (!o->detached)
+            output_exile_return(s, o);
+}
+
 /* Re-flow every output's pixel position from its logical grid cell (using
  * transform-aware effective sizes), then run the shared post-apply reflow.
  *
@@ -427,6 +451,7 @@ static void dispcfg_rechain(syn_server_t *s)
             wlr_output_layout_add(s->output_layout,
                                   d->order[i]->wlr_output, 0, 0);
         }
+        dispcfg_reclaim_windows(s);
         output_layout_changed(s);
         return;
     }
@@ -503,17 +528,7 @@ static void dispcfg_rechain(syn_server_t *s)
         used[r][c] += ow[i];
     }
 
-    /* Every screen that is in the layout takes back the windows it was carrying
-     * when it left it — a monitor re-attached by leaving "Built-in off", the
-     * same way a monitor coming out of standby takes back the ones
-     * output_destroy() rescued. Here rather than in dispcfg_attach() because
-     * the boxes are measured against the output's origin, and an output only
-     * has one once the loop above has placed it. A no-op for a screen nothing
-     * was ever displaced from, which is the usual case. */
-    syn_output_t *back;
-    wl_list_for_each(back, &s->outputs, link)
-        if (!back->detached)
-            output_exile_return(s, back);
+    dispcfg_reclaim_windows(s);
 
     output_layout_changed(s);   /* re-renders the panel too */
 }
