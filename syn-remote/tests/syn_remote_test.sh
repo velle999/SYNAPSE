@@ -1610,6 +1610,7 @@ printf '%s\n' "$*" >> "$SR_SYNCTL_LOG"
 case "$*" in
     "virtual add"*) echo '{"ok":true,"name":"HEADLESS-1"}' ;;
     "virtual mode"*|"virtual solo"*|"virtual remove"*) echo '{"ok":true}' ;;
+    "input map"*|"input unmap"*) echo '{"ok":true}' ;;
     outputs) echo '[{"name":"DP-3","primary":true,"virtual":false}]' ;;
     *) exit 1 ;;
 esac
@@ -1639,6 +1640,17 @@ grep -q '^wlopm --on HEADLESS-1' "$SR_SYNCTL_LOG" &&
     ok "the screen it serves is woken — a blanked output cannot be captured at all" ||
     bad "nothing woke the served screen"
 check "and somebody is recorded as watching" "1" "$(stream_state_get connections)"
+# ⛔ THE CLIENT'S MOUSE IS PINNED TO THE SCREEN IT IS WATCHING. A relative mouse
+# moves the one shared cursor from wherever it is, and without this that is on
+# the screens in the room, not on the virtual display the stream shows.
+grep -qx 'input map HEADLESS-1 Mouse passthrough' "$SR_SYNCTL_LOG" &&
+    ok "sunshine's mouse is pinned to the virtual display the stream serves" ||
+    bad "the client's mouse was left free to wander the room's screens: $(cat "$SR_SYNCTL_LOG")"
+grep -q 'input map .*absolute' "$SR_SYNCTL_LOG" &&
+    bad "the absolute device was pinned too, squeezing sunshine's coordinates into one screen" ||
+    ok "...and only the relative one"
+check "...and the pin is recorded, so only it is undone" "Mouse passthrough" \
+      "$(stream_state_get pinned)"
 
 # ⚠ THE PILL ON THE BAR IS DRAWN FROM THE TOTAL, not from either server. A
 # stream is every bit as much somebody watching as a VNC viewer is, and the bar
@@ -1660,9 +1672,18 @@ check "a count from a server that is not running reads zero" "0" \
 check "...and the main record does not inherit it either" "0" \
       "$("$SR" status --rec | awk -F'\t' '$1=="connections"{print $2}')"
 
+: > "$SR_SYNCTL_LOG"
 cmd_stream_unprep >/dev/null 2>&1
 check "unprep answers 0 as well" "0" "$?"
 check "...and nobody is watching afterwards" "0" "$(stream_state_get connections)"
+grep -qx 'input unmap Mouse passthrough' "$SR_SYNCTL_LOG" &&
+    ok "...and the client's mouse is let go" ||
+    bad "the mouse stayed pinned after the stream ended: $(cat "$SR_SYNCTL_LOG")"
+: > "$SR_SYNCTL_LOG"
+cmd_stream_unprep >/dev/null 2>&1
+grep -q '^input' "$SR_SYNCTL_LOG" &&
+    bad "a second unprep asked synui to unpin a mouse nobody had pinned" ||
+    ok "...once — with no pin recorded, synui is not asked anything"
 # ⛔ THE HEAD STAYS BETWEEN CONNECTIONS. Taking it away at the end of every
 # stream would re-home its windows onto another screen each time somebody
 # disconnects, and hand the next connection a rearranged desk.
@@ -1678,6 +1699,46 @@ grep -q '^virtual solo off' "$SR_SYNCTL_LOG" &&
     bad "solo was left on after the server stopped"
 [ -e "$STREAM_STATE" ] && bad "the state file outlived the server" \
                        || ok "...and the state file is gone with it"
+
+# ⚠ A synui TOO OLD TO PIN STILL STREAMS, and says why the mouse is loose.
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SR_SYNCTL_LOG"
+case "$*" in
+    "input"*) echo '{"error":"unknown command; try: help"}' ;;
+    "virtual mode"*|"virtual solo"*) echo '{"ok":true}' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$stub/synctl"
+: > "$SR_SYNCTL_LOG"
+stream_state_set vdisplay HEADLESS-1; stream_state_set display HEADLESS-1
+stream_state_set pinned ""
+cmd_stream_prep >/dev/null 2>"$T/prep-old.err"
+check "prep with a synui that cannot pin still answers 0" "0" "$?"
+grep -q 'synui 614' "$T/prep-old.err" && ok "...and says what it needs" \
+                                      || bad "the unpinned mouse was silent: $(cat "$T/prep-old.err")"
+check "...and records no pin it did not make" "" "$(stream_state_get pinned)"
+# ...and a stream of the main screen has nothing to pin the mouse to.
+: > "$SR_SYNCTL_LOG"
+stream_state_set vdisplay ""; stream_state_set display DP-3
+cmd_stream_prep >/dev/null 2>&1
+grep -q '^input map' "$SR_SYNCTL_LOG" &&
+    bad "a stream of the main screen pinned the mouse to it" ||
+    ok "a stream of the main screen leaves the mouse alone"
+cmd_stream_unprep >/dev/null 2>&1
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SR_SYNCTL_LOG"
+case "$*" in
+    "virtual add"*) echo '{"ok":true,"name":"HEADLESS-1"}' ;;
+    "virtual mode"*|"virtual solo"*|"virtual remove"*) echo '{"ok":true}' ;;
+    "input map"*|"input unmap"*) echo '{"ok":true}' ;;
+    outputs) echo '[{"name":"DP-3","primary":true,"virtual":false}]' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$stub/synctl"
 
 # ⛔ AND prep SURVIVES HAVING NOTHING TO WORK WITH. This is the machine with no
 # synctl, no wlopm and no compositor — the stream still has to happen.

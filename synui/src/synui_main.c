@@ -840,6 +840,11 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * own. The re-light happens after the unlink; see the call below. */
     vdisplay_output_gone(server, output);
 
+    /* ⛔ Every pointer pinned to this output lets go of it NOW: wlr_cursor keeps
+     * the raw wlr_output pointer and never clears it, and absolute motion from a
+     * pinned device dereferences it. See input_output_gone(). */
+    input_output_gone(server, output->wlr_output);
+
     /* Close any layer surfaces (panels/bars) anchored to this output. */
     layer_output_destroy(output);
     effects_output_destroy(output);
@@ -1089,6 +1094,10 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wlr_log(WLR_INFO, "synui: new output %s %dx%d — showing workspace %d",
             wlr_output->name, wlr_output->width, wlr_output->height,
             output_workspace_index(server, output) + 1);
+
+    /* A pointer pinned by name to a screen that was not here — a stream's
+     * virtual display coming back as the same HEADLESS-n — is pinned again. */
+    input_maps_reapply(server);
 
     /* Seed the usable area (full box; no layer surfaces yet), then lay the
      * visible desktop out across every output (this one included) and re-home

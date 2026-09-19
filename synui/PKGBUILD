@@ -3599,7 +3599,31 @@ pkgver=0.1.0
 #   in a user namespace against the file it produced, pambase's stock stack
 #   beside it as the control — six hung-up prompts, no failures; five wrong
 #   passwords, five, and the lock then holds without being pushed forward.
-pkgrel=613
+# 614: A STREAM'S MOUSE STAYS ON THE SCREEN THE STREAM SHOWS. sunshine hands a
+#   Moonlight client's mouse to the seat as an ordinary uinput device ("Mouse
+#   passthrough"), and a relative mouse moves the one shared cursor from wherever
+#   it already is — so the person streaming drove a cursor on the screens in the
+#   room, and the virtual display they were watching showed none.
+#   `synctl input map <output> <device>` pins every pointer of that name to one
+#   output (wlr_cursor_map_input_to_output, which clamps its relative motion
+#   because process_pointer_motion passes the device to wlr_cursor_move), keeps
+#   the rule for devices that appear later, and re-pins when the output comes
+#   back; `synctl input unmap <device>` and `synctl input` to list. syn-remote 18
+#   pins sunshine's relative mouse from `stream prep`.
+#   ⛔ wlroots NEVER UNPINS BY ITSELF: the cursor device keeps a raw wlr_output
+#   pointer, and absolute motion dereferences it. So synui records every pin
+#   (syn_input_dev_t::mapped) and drops it in output_destroy — which also covers
+#   the virtual pointer syn-arcade pins to a television that can be unplugged.
+#   tests/input_pin.sh: the same motion with and without the pin (the control),
+#   a rule made before its device exists, and the pin released while the same
+#   device is still moving across the removal. That last check asserts the
+#   unpin itself, because the freed read happens inside libwlroots, which is not
+#   built with ASAN — measured: with the unpin removed it ran clean under ASAN,
+#   and it fails this check. vpointer_click grew `absloop` for it.
+#   Also: tests/panel_pointer_test.c had not linked since 610 — power.c began
+#   asking vdisplay_*() and only lid_test.c got the stubs — and meson builds
+#   every test before running any, so the whole suite could not run. 170 pass.
+pkgrel=614
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

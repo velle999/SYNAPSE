@@ -6552,6 +6552,12 @@ typedef struct syn_input_dev {
     /* Switch devices only (the laptop lid). Its list link is initialised for
      * every device so destroy can remove it without knowing the type. */
     struct wl_listener       toggle;
+    /* The output wlr_cursor has this device pinned to, or NULL. OUR copy, and
+     * it has to be: wlroots keeps a raw wlr_output pointer per cursor device,
+     * never clears it when that output is destroyed, and dereferences it on
+     * absolute motion — so output_destroy unpins from this first. See
+     * input_output_gone(). */
+    struct wlr_output       *mapped;
 } syn_input_dev_t;
 
 /* ── Server (compositor state) ───────────────────────────── */
@@ -6977,6 +6983,12 @@ struct syn_server {
     struct wl_list  input_devs;  /* syn_input_dev_t::link — non-keyboard
                                     devices, so a config reload can reapply
                                     libinput options */
+    /* `synctl input map <output> <device name>` — pointer devices pinned to
+     * one output, by NAME, so a device that appears later is pinned on
+     * arrival. syn-remote pins sunshine's "Mouse passthrough" to the virtual
+     * display a stream serves. See input_map_set(). */
+    struct { char dev[128]; char out[64]; } input_maps[8];
+    int             n_input_maps;
 
     /* Workspaces are virtual desktops spanning every monitor. Exactly one is
      * shown at a time, on all outputs at once — active_workspace is the whole
@@ -8191,6 +8203,12 @@ int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);
 void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput */
+/* Pin every pointer device called `dev` to output `out` (NULL unpins and drops
+ * the rule). Returns how many present devices it touched, -1 if the rule table
+ * is full or a name is too long. */
+int  input_map_set(syn_server_t *s, const char *dev, const char *out);
+void input_maps_reapply(syn_server_t *s);     /* an output (re)appeared */
+void input_output_gone(syn_server_t *s, struct wlr_output *out);
 void pointer_update_focus(syn_server_t *s, uint32_t time_msec);
 /* Re-derive pointer focus after a scene change with a stationary cursor (a
  * surface mapping or unmapping). Without it a client gets no wl_pointer.enter

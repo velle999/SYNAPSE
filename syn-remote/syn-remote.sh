@@ -2108,6 +2108,9 @@ cmd_connect() {
 # re-homes every window that was on it.
 
 STREAM_UNIT=syn-remote-stream.service
+# The device sunshine (inputtino) creates for a client's RELATIVE mouse. Its
+# name is the only handle on it: to the compositor it is a mouse like any other.
+SUNSHINE_MOUSE="Mouse passthrough"
 SUNSHINE_CONF="$CONF_DIR/sunshine.conf"
 # ⚠ ITS OWN FILE, AND ITS OWN STATE. A state file describes THIS session and
 # must not outlive it, the same rule $STATE follows — and the two servers get
@@ -2127,6 +2130,15 @@ stream_port() { setting stream_port "$DEFAULT_STREAM_PORT"; }
 # Written by `stream run` before sunshine is exec'd and updated by the prep
 # commands sunshine runs as a stream starts and ends. One key per line, same
 # shape as the settings file.
+# Let go of the mouse prep pinned, and only that: nothing is asked of synui
+# unless the state file says prep made the pin.
+stream_unpin() {
+    [ -n "$(stream_state_get pinned)" ] || return 0
+    have synctl && synctl input unmap "$SUNSHINE_MOUSE" >/dev/null 2>&1
+    stream_state_set pinned ""
+    return 0
+}
+
 stream_state_get() {   # stream_state_get <key>
     sed -n "s/^$1=//p" "$STREAM_STATE" 2>/dev/null | tail -1
 }
@@ -2394,6 +2406,25 @@ cmd_stream_prep() {
     # somebody is connecting to from somewhere else.
     [ -n "$out" ] && wake_output "$out"
 
+    # ⛔ THE CLIENT'S MOUSE GOES WHERE THE CLIENT IS LOOKING. sunshine hands
+    # Moonlight's mouse to the seat as an ordinary device, and a relative mouse
+    # moves the one shared cursor from wherever it already is — on the screens
+    # in the room — so the person streaming moved a cursor they could not see
+    # and the virtual display showed none. synui (614) pins a device by name to
+    # one output and keeps the rule for a device that has not appeared yet,
+    # which is the case here: sunshine makes its devices as the client connects.
+    # ⚠ The relative device only. "Mouse passthrough (absolute)" already
+    # addresses the whole desktop in sunshine's own coordinates.
+    # ⚠ Recorded, so unprep and cleanup undo only a pin this made — a synctl
+    # answering them without one would be talking to some other session.
+    if [ -n "$vd" ] && have synctl; then
+        if synctl input map "$vd" "$SUNSHINE_MOUSE" 2>/dev/null | grep -q '"ok":true'; then
+            stream_state_set pinned "$SUNSHINE_MOUSE"
+        else
+            err "synui would not keep the client's mouse on $vd — it needs synui 614 or newer"
+        fi
+    fi
+
     # The room's own screens, off, while somebody works on this machine from
     # elsewhere. Only ever on request.
     if [ "$(setting stream_solo off)" = on ] && [ -n "$out" ] && have synctl; then
@@ -2414,6 +2445,7 @@ cmd_stream_unprep() {
     if [ "$(setting stream_solo off)" = on ] && have synctl; then
         synctl virtual solo off >/dev/null 2>&1 || true
     fi
+    stream_unpin
     inhibit_release
     stream_state_set connections 0
     return 0
@@ -2428,6 +2460,7 @@ cmd_stream_unprep() {
 cmd_stream_cleanup() {
     local vd; vd=$(stream_state_get vdisplay)
     inhibit_release
+    stream_unpin
     if have synctl; then
         synctl virtual solo off >/dev/null 2>&1 || true
         [ -n "$vd" ] && synctl virtual remove "$vd" >/dev/null 2>&1

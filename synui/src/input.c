@@ -4607,6 +4607,114 @@ static syn_input_dev_t *input_dev_track(syn_server_t *s,
     return id;
 }
 
+/* ── Pinning a pointer to one output (`synctl input map`) ──────────────
+ *
+ * ⛔ WHY IT EXISTS. sunshine hands a Moonlight client's mouse to this seat as
+ * an ordinary uinput device, "Mouse passthrough", and a relative mouse moves the
+ * ONE shared cursor from wherever it already is — on the screens in the room,
+ * not the virtual display the stream is showing. So the person streaming moved
+ * a cursor they could not see, on monitors they were not looking at.
+ * wlr_cursor_map_input_to_output() clamps that device's motion into one
+ * output's box (process_pointer_motion passes the device to wlr_cursor_move),
+ * and its first move lands the cursor there.
+ *
+ * ⚠ BY EXACT NAME, because sunshine creates its devices when a client
+ * CONNECTS, after syn-remote's `stream prep` has asked for the pin; a rule is
+ * kept and applied to a matching device on arrival. syn-remote pins the
+ * relative device alone: "Mouse passthrough (absolute)" already addresses the
+ * whole desktop in sunshine's own coordinates, and pinning it would squeeze
+ * that space into one screen.
+ *
+ * ⛔ AND wlroots NEVER UNPINS BY ITSELF. The cursor device keeps a raw
+ * wlr_output pointer and nothing clears it when that output is destroyed.
+ * ABSOLUTE motion dereferences it (handle_pointer_motion_absolute reads
+ * output->transform), so a device that outlives its screen reads freed memory
+ * on its next move — syn-arcade's pointer pinned to a television that is
+ * unplugged, for one. Relative motion only compares it, where the harm is a
+ * later output allocated at the same address inheriting the pin.
+ * syn_input_dev_t::mapped is our copy of the pin, and input_output_gone()
+ * drops it from output_destroy. */
+static void input_dev_pin(syn_server_t *s, syn_input_dev_t *id,
+                          struct wlr_output *out)
+{
+    wlr_cursor_map_input_to_output(s->cursor, id->dev, out);
+    id->mapped = out;
+}
+
+static bool input_dev_pinnable(const syn_input_dev_t *id)
+{
+    return id->dev->type == WLR_INPUT_DEVICE_POINTER && id->dev->name;
+}
+
+static void input_map_apply(syn_server_t *s, syn_input_dev_t *id)
+{
+    if (!input_dev_pinnable(id)) return;
+    for (int i = 0; i < s->n_input_maps; i++) {
+        if (strcmp(s->input_maps[i].dev, id->dev->name) != 0) continue;
+        syn_output_t *o;
+        wl_list_for_each(o, &s->outputs, link)
+            if (strcmp(o->wlr_output->name, s->input_maps[i].out) == 0) {
+                input_dev_pin(s, id, o->wlr_output);
+                return;
+            }
+        /* The rule names a screen that is not here (yet): loose until it is. */
+        if (id->mapped) input_dev_pin(s, id, NULL);
+        return;
+    }
+}
+
+int input_map_set(syn_server_t *s, const char *dev, const char *out)
+{
+    if (!dev || !*dev || strlen(dev) >= sizeof(s->input_maps[0].dev)) return -1;
+    if (out && (!*out || strlen(out) >= sizeof(s->input_maps[0].out))) return -1;
+
+    int i = 0;
+    while (i < s->n_input_maps && strcmp(s->input_maps[i].dev, dev) != 0) i++;
+
+    int touched = 0;
+    syn_input_dev_t *id;
+    if (!out) {
+        if (i == s->n_input_maps) return 0;
+        s->input_maps[i] = s->input_maps[--s->n_input_maps];
+        /* Only the devices this rule pinned — a pin made some other way (a
+         * virtual pointer's suggested output) is not ours to undo. */
+        wl_list_for_each(id, &s->input_devs, link)
+            if (input_dev_pinnable(id) && strcmp(id->dev->name, dev) == 0) {
+                input_dev_pin(s, id, NULL);
+                touched++;
+            }
+        return touched;
+    }
+
+    if (i == s->n_input_maps) {
+        if (s->n_input_maps == (int)(sizeof(s->input_maps) / sizeof(s->input_maps[0])))
+            return -1;
+        s->n_input_maps++;
+    }
+    snprintf(s->input_maps[i].dev, sizeof(s->input_maps[i].dev), "%s", dev);
+    snprintf(s->input_maps[i].out, sizeof(s->input_maps[i].out), "%s", out);
+    wl_list_for_each(id, &s->input_devs, link)
+        if (input_dev_pinnable(id) && strcmp(id->dev->name, dev) == 0) {
+            input_map_apply(s, id);
+            touched++;
+        }
+    return touched;
+}
+
+void input_maps_reapply(syn_server_t *s)
+{
+    if (s->n_input_maps == 0) return;
+    syn_input_dev_t *id;
+    wl_list_for_each(id, &s->input_devs, link) input_map_apply(s, id);
+}
+
+void input_output_gone(syn_server_t *s, struct wlr_output *out)
+{
+    syn_input_dev_t *id;
+    wl_list_for_each(id, &s->input_devs, link)
+        if (id->mapped == out) input_dev_pin(s, id, NULL);
+}
+
 /* A switch flipped. libinput reports the lid as WLR_SWITCH_TYPE_LID with state
  * ON meaning *closed* — the switch is "lid switch closed", not "lid open" —
  * which is the one thing here worth getting the wrong way round. */
@@ -4678,11 +4786,18 @@ static void server_new_virtual_pointer(struct wl_listener *listener, void *data)
      * config is a no-op for a device libinput never made — it checks — and is
      * called anyway so this path cannot drift from the real one. */
     input_apply_libinput_config(s, dev);
-    input_dev_track(s, dev);
+    syn_input_dev_t *id = input_dev_track(s, dev);
     wlr_cursor_attach_input_device(s->cursor, dev);
 
-    if (ev->suggested_output)
+    /* ⚠ Recorded, not just made — see input_output_gone(): the television this
+     * points at can be unplugged while the pointer lives on. */
+    if (ev->suggested_output) {
         wlr_cursor_map_input_to_output(s->cursor, dev, ev->suggested_output);
+        if (id) id->mapped = ev->suggested_output;
+    }
+    /* A pin rule by name wins over the client's suggestion — the same rule the
+     * backend's devices get in server_new_input(). */
+    if (id) input_map_apply(s, id);
 
     seat_update_capabilities(s);
     wlr_log(WLR_INFO, "synui: input: virtual pointer attached");
@@ -4710,11 +4825,14 @@ static void server_new_input(struct wl_listener *listener, void *data)
         s->touch_devices++;
         /* fallthrough */
     case WLR_INPUT_DEVICE_POINTER:
-    case WLR_INPUT_DEVICE_TABLET:
+    case WLR_INPUT_DEVICE_TABLET: {
         input_apply_libinput_config(s, dev);
-        input_dev_track(s, dev);
+        syn_input_dev_t *id = input_dev_track(s, dev);
         wlr_cursor_attach_input_device(s->cursor, dev);
+        /* After the attach: wlr_cursor can only pin a device it holds. */
+        if (id) input_map_apply(s, id);
         break;
+    }
     case WLR_INPUT_DEVICE_SWITCH:
         server_new_switch(s, dev);
         break;

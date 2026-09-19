@@ -30,6 +30,14 @@
  *                                            promoted to a drag by MOTION, so a
  *                                            single jump to the far end is a
  *                                            different code path from a drag.
+ *        vpointer_click X Y absloop N GAP_MS
+ *                                          — N ABSOLUTE motions to (X,Y), GAP_MS
+ *                                            apart, from ONE device. For a test
+ *                                            that changes the outputs while the
+ *                                            same pointer keeps moving: absolute
+ *                                            motion is the path on which wlroots
+ *                                            dereferences a device's pinned
+ *                                            output (input_pin.sh).
  *        vpointer_click X Y rel DX DY N [GAP_MS]
  *                                          — put the cursor at (X,Y) with one
  *                                            absolute motion, then send N
@@ -157,6 +165,9 @@ int main(int argc, char **argv)
     bool moveonly = argc > 3 && !strcmp(argv[3], "move");
     bool scroll = argc > 4 && !strcmp(argv[3], "scroll");
     bool rel   = argc > 6 && !strcmp(argv[3], "rel");
+    bool absloop = argc > 5 && !strcmp(argv[3], "absloop");
+    int  abs_n   = absloop ? atoi(argv[4]) : 0;
+    int  abs_gap_ms = absloop ? atoi(argv[5]) : 0;
     /* Deltas are SIGNED — they go on the wire as wl_fixed_t, not as the
      * unsigned coordinates NEG_CHECK guards, so moving left is legal here. */
     double rel_dx = rel ? atof(argv[4]) : 0.0;
@@ -172,6 +183,7 @@ int main(int argc, char **argv)
     int clicks = 2;
     if (moveonly)          clicks = 0;
     else if (rel)          clicks = 0;
+    else if (absloop)      clicks = 0;
     else if (scroll)       clicks = 0;
     else if (right)        clicks = argc > 4 ? atoi(argv[4]) : 1;
     else if (drag)         clicks = 0;
@@ -185,7 +197,7 @@ int main(int argc, char **argv)
      * about the feature under test rather than about its own invocation.
      * Refuse it here instead: this is a test tool, and a test tool that does
      * nothing quietly is worse than one that will not run. */
-    if (argc > 3 && !drag && !right && !moveonly && !scroll && !rel &&
+    if (argc > 3 && !drag && !right && !moveonly && !scroll && !rel && !absloop &&
         clicks == 0 && strcmp(argv[3], "0") != 0) {
         fprintf(stderr, "vpointer_click: '%s' is not a count or a known word.\n"
                         "There is no `left` — the left button is the default:\n"
@@ -261,6 +273,24 @@ int main(int argc, char **argv)
             nanosleep(&(struct timespec){
                 0, (long)rel_settle_ms * 1000 * 1000 }, NULL);
         wl_display_roundtrip(dpy);
+    }
+
+    if (absloop) {
+        for (int i = 0; i < abs_n; i++) {
+            zwlr_virtual_pointer_v1_motion_absolute(ptr, now_ms(),
+                                                    (uint32_t)px, (uint32_t)py,
+                                                    (uint32_t)out_w, (uint32_t)out_h);
+            zwlr_virtual_pointer_v1_frame(ptr);
+            /* A roundtrip that fails is the compositor gone — say so, since
+             * that is the thing a test using this mode is watching for. */
+            if (wl_display_roundtrip(dpy) < 0) {
+                fprintf(stderr, "vpointer_click: compositor went away\n");
+                return 1;
+            }
+            if (abs_gap_ms > 0)
+                nanosleep(&(struct timespec){
+                    0, (long)abs_gap_ms * 1000 * 1000 }, NULL);
+        }
     }
 
     if (drag) {

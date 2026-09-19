@@ -2169,7 +2169,9 @@ a headless output on the running compositor — a real screen in every way excep
 the cable, with its own desktop, its own windows and its own resolution — and
 the stream serves that instead of a copy of whatever monitor is plugged in. When
 a client connects, the head is resized to exactly what that client asked for,
-frame rate included, and it goes away when streaming is switched off.
+frame rate included, and it goes away when streaming is switched off. The
+client's mouse is kept on that display, so it does not wander onto the screens
+in the room.
 
 ```bash
 syn-remote stream display virtual        # a display of its own (the default)

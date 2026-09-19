@@ -61,6 +61,16 @@ void logind_lid_update(syn_server_t *s)   { (void)s; }
 void saver_show(syn_server_t *s)              { (void)s; }
 void saver_dismiss(syn_server_t *s, bool by_input) { (void)s; (void)by_input; }
 bool saver_active(syn_server_t *s)            { (void)s; return false; }
+/* power_apply_blank() asks which heads are virtual displays and which one is
+ * soloed (synui 610). lid_test.c grew these then; this file, whose stubs are
+ * lid_test's, did not, and stopped linking — which took the whole `meson test`
+ * run down with it, since meson builds every test before it runs any. */
+bool vdisplay_is(syn_output_t *o)                     { (void)o; return false; }
+bool vdisplay_solo_live(syn_server_t *s)              { (void)s; return false; }
+bool vdisplay_solo_is(syn_server_t *s, struct wlr_output *o)
+{
+    (void)s; (void)o; return false;
+}
 void ctlpanel_child_closed(syn_server_t *s, const char *action)
 {
     (void)s; (void)action;

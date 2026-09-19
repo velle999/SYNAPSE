@@ -1931,6 +1931,18 @@ test('vdisplay', vdisplay_t,
      depends : [synui_exe, synctl_exe],
      timeout : 180)
 
+# `synctl input map`: a Moonlight client's mouse arrives as an ordinary device,
+# and pinned to the virtual display a stream serves it cannot wander onto the
+# screens in the room. The same motion with and without the pin, a rule made
+# before its device exists, and the pin let go when its screen is removed under
+# a device that is still moving — wlroots never clears it, and dereferences it.
+input_pin_t = find_program('tests/input_pin.sh')
+test('input_pin', input_pin_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                vpointer_click.full_path()],
+     depends : [synui_exe, synctl_exe, vpointer_click],
+     timeout : 120)
+
 display_scale_t = find_program('tests/display_scale.sh')
 test('display_scale', display_scale_t,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],

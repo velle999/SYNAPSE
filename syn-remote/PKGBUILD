@@ -298,7 +298,15 @@ pkgver=0.1.0
 #   Six checks, all red against 16. The suite's wayvncctl stand-in had modelled
 #   output-set as a success that changed what was captured, which is exactly
 #   what wayvnc reports and not what it does.
-pkgrel=17
+# 18: THE CLIENT'S MOUSE IS PINNED TO THE SCREEN IT IS WATCHING. `stream prep`
+#   asks synui (614) to keep sunshine's relative "Mouse passthrough" on the
+#   virtual display, so a Moonlight client no longer drives the cursor across the
+#   screens in the room while its own view shows none. The pin is recorded in the
+#   stream state and undone by unprep and cleanup only when this made it, so a
+#   synctl answering some other session is never asked to unpin anything. A synui
+#   too old to pin still streams, and says what it needs. The absolute device is
+#   left alone: it already addresses the whole desktop in sunshine's coordinates.
+pkgrel=18
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -338,7 +346,7 @@ depends=('bash' 'wayvnc' 'wlopm' 'openssl' 'systemd' 'gtk-vnc' 'gtk3' 'python'
 # half it is. Without it `wakeable on` still arms the card — it just cannot ask
 # anything to do it again after a reboot, and says so at the time.
 optdepends=('networkmanager: remember the wake setting across reboots'
-            'synui>=0.1.0-610: a virtual display for a stream to serve'
+            'synui>=0.1.0-614: a virtual display for a stream to serve, with the connecting mouse kept on it'
             'polkit: arm the card without being root'
             'synui: hold the machine awake while somebody is connected'
             'openssh: reach a loopback-bound server from another machine'

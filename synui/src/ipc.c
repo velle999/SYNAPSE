@@ -932,6 +932,69 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         cmd_virtual_set(s, out, arg);
         return;
     }
+    /*
+     * Pointer devices pinned to one output — see input_map_set().
+     *
+     *   synctl input                          — the rules, and what they pin
+     *   synctl input map <output> <device>    — pin every <device> to <output>
+     *   synctl input unmap <device>           — let it go
+     *
+     * The device name is the REST OF THE LINE, since sunshine's has a space in
+     * it ("Mouse passthrough"). syn-remote's `stream prep` is the caller.
+     */
+    if (strcmp(line, "input") == 0) {
+        bputs(out, "{\"maps\":[");
+        for (int i = 0; i < s->n_input_maps; i++) {
+            bputs(out, i ? ",{\"device\":" : "{\"device\":");
+            bjson_str(out, s->input_maps[i].dev);
+            bputs(out, ",\"output\":");
+            bjson_str(out, s->input_maps[i].out);
+            int pinned = 0;
+            syn_input_dev_t *id;
+            wl_list_for_each(id, &s->input_devs, link)
+                if (id->mapped && id->dev->name &&
+                    strcmp(id->dev->name, s->input_maps[i].dev) == 0) pinned++;
+            bprintf(out, ",\"pinned\":%d}", pinned);
+        }
+        bputs(out, "]}\n");
+        return;
+    }
+    if (strncmp(line, "input map ", 10) == 0) {
+        const char *arg = line + 10;
+        while (*arg == ' ') arg++;
+        const char *sp = strchr(arg, ' ');
+        char outname[64];
+        if (!sp || (size_t)(sp - arg) >= sizeof(outname)) {
+            bputs(out, "{\"error\":\"usage: input map <output> <device name>\"}\n");
+            return;
+        }
+        memcpy(outname, arg, (size_t)(sp - arg));
+        outname[sp - arg] = '\0';
+        const char *dev = sp;
+        while (*dev == ' ') dev++;
+        int n = input_map_set(s, dev, outname);
+        if (n < 0) {
+            bputs(out, "{\"error\":\"cannot pin that device\",\"device\":");
+            bjson_str(out, dev);
+            bputs(out, "}\n");
+            return;
+        }
+        bputs(out, "{\"ok\":true,\"device\":");
+        bjson_str(out, dev);
+        bputs(out, ",\"output\":");
+        bjson_str(out, outname);
+        bprintf(out, ",\"devices\":%d}\n", n);
+        return;
+    }
+    if (strncmp(line, "input unmap ", 12) == 0) {
+        const char *dev = line + 12;
+        while (*dev == ' ') dev++;
+        int n = input_map_set(s, dev, NULL);
+        bputs(out, "{\"ok\":true,\"device\":");
+        bjson_str(out, dev);
+        bprintf(out, ",\"devices\":%d}\n", n < 0 ? 0 : n);
+        return;
+    }
     if (strcmp(line, "binds") == 0 || strcmp(line, "keys") == 0) {
         cmd_binds(s, out);
         return;
