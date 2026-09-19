@@ -8,10 +8,13 @@
 #include "i18n.h"
 #include "config.h"
 
+#include <errno.h>
 #include <locale.h>
+#include <pwd.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 out_mode_t g_out = OUT_HUMAN;
 
@@ -126,9 +129,56 @@ char *pct_encode(const char *s)
 /* ⚠ SYNCLEAN_HOME EXISTS FOR THE TESTS AND FOR NOTHING ELSE. A suite that
  * cleaned the caches of whoever ran it would be a suite nobody could run
  * twice — and one bad path in this program deletes a home directory. */
+/*
+ * ⛔ UNDER sudo, $HOME IS root's, AND THE USER'S FILES ARE SOMEWHERE ELSE.
+ * sudo's env_reset initialises HOME from the TARGET user's passwd entry, so
+ * `sudo syn-clean clean --all` composed /root/.local/share/Trash and reported
+ * freeing caches belonging to a user who was never asked about — while the
+ * trash it was typed for sat there untouched. And sudo is the NORMAL way to
+ * run this program, not a corner: three of its ten categories cannot be done
+ * without it, and the scan tells the user so on every one of them.
+ *
+ * SUDO_UID names who asked. PKEXEC_UID is the same fact from the other
+ * escalation path, for the day the window grows one.
+ *
+ * ⚠ SYNCLEAN_HOME STILL WINS, and it has to. It is the seam both suites use to
+ * keep a program that deletes directory trees away from the real home; a suite
+ * that ran as root would otherwise be pointed straight back at it.
+ */
+static const struct passwd *target_pw(void)
+{
+	if (geteuid() != 0) return NULL;
+
+	const char *s = getenv("SUDO_UID");
+	if (!s || !*s) s = getenv("PKEXEC_UID");
+	if (!s || !*s) return NULL;
+
+	char *end = NULL;
+	errno = 0;
+	unsigned long v = strtoul(s, &end, 10);
+	/* ⚠ uid 0 is not "the user who asked" — it is root running root, which is
+	 * what $HOME already says. And a value that does not fit a uid_t is a
+	 * variable somebody else set, not sudo. */
+	if (errno != 0 || !end || *end != '\0' || v == 0 ||
+	    (unsigned long)(uid_t)v != v)
+		return NULL;
+
+	return getpwuid((uid_t)v);
+}
+
+uid_t syn_target_uid(void)
+{
+	const struct passwd *pw = target_pw();
+	return pw ? pw->pw_uid : getuid();
+}
+
 char *home_path(const char *rel)
 {
 	const char *h = getenv("SYNCLEAN_HOME");
+	if (!h || !*h) {
+		const struct passwd *pw = target_pw();
+		if (pw && pw->pw_dir && *pw->pw_dir) h = pw->pw_dir;
+	}
 	if (!h || !*h) h = getenv("HOME");
 	if (!h || !*h) die("no HOME set");
 	if (!rel || !*rel) return xstrdup(h);

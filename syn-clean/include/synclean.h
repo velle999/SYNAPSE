@@ -37,10 +37,17 @@
  *
  * ── What it will not touch ───────────────────────────────────────────────────
  *
- * ⛔ NOTHING OUTSIDE $HOME IS EVER REMOVED WITHOUT root_ok BEING ASKED FOR, and
- * the categories that need root say so rather than half-working. A cleaner that
- * silently skips what it listed is a cleaner that reports freeing space it did
- * not free.
+ * ⛔ A CLEANER THAT SILENTLY SKIPS WHAT IT LISTED IS A CLEANER THAT REPORTS
+ * FREEING SPACE IT DID NOT FREE. Three categories live outside $HOME and need
+ * root: they say so on every row, `clean` does them once the process actually
+ * HAS root — geteuid(), not a flag — and when it does not, it names the command
+ * that would. The bottom line of a scan says how much of the total that is.
+ *
+ * ⚠ AND WHAT WENT IS COUNTED, NOT WHAT WAS FOUND. Every byte in a "Freed"
+ * line came off a successful unlink; a tree that refused is reported as
+ * refused. The two halves of that sentence were both wrong at once in
+ * 0.1.0-4, and between them they told somebody 44 GB had been freed while
+ * every byte of it was still on the disk.
  *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -74,11 +81,23 @@ char *pct_encode(const char *s);
 char *home_path(const char *rel);          /* $SYNCLEAN_HOME or $HOME + rel */
 
 /*
+ * ⛔ WHOSE FILES THESE ARE, WHICH UNDER sudo IS NOT WHO IS RUNNING. getuid() is
+ * 0 under sudo and the answer this program needs is the user who typed it —
+ * see target_pw() in util.c. Everything that asks "is this mine" asks here.
+ */
+uid_t syn_target_uid(void);
+
+/*
  * ⛔ AND $SYNCLEAN_TMPDIRS FOR THE TWO ROOTS home_path() CANNOT REACH.
  * The `tmp` category sweeps /tmp and /var/tmp, which are not under $HOME and
  * so were outside the guarantee the rest of this program's paths give. A suite
  * that ran `clean --all` swept the real ones. Colon-separated; the default is
  * "/tmp:/var/tmp". See tmp_sweep() in scan.c.
+ *
+ * ⛔ AND $SYNCLEAN_PKGCACHE, FOR THE SAME REASON, now that root categories are
+ * actually done rather than refused: /var/cache/pacman/pkg is emptied by a
+ * `clean pkgcache` that has root, and a suite reaching the real one would take
+ * the package cache of the machine running it. See roots_for() in scan.c.
  */
 void  human_size(unsigned long long b, char *out, size_t n);
 
@@ -88,6 +107,10 @@ typedef struct {
 	const char *id;         /* stable, what the CLI and the GUI both name */
 	const char *label;
 	const char *what;       /* one line, for a person */
+	/* ⚠ NEEDS ROOT, NOT "IMPOSSIBLE". This is a fact about the files, and the
+	 * check that reads it asks geteuid() alongside — a row that refused on the
+	 * flag alone told somebody running as root to go and use sudo, which is
+	 * what they had already done. */
 	bool        needs_root;
 	/* ⚠ THE PROGRAMS THAT MUST NOT BE RUNNING, as a space-separated list.
 	 * Cookie and cache databases are sqlite; removing one under a live browser
@@ -97,6 +120,11 @@ typedef struct {
 	 * check has to name every browser whose files it would take. */
 	const char *conflicts;
 	bool        loses_logins;
+	/* ⛔ REMOVES SOFTWARE, SO `--all` NEVER TAKES IT. Every other category
+	 * deletes files that come back on their own — a cache refills, a thumbnail
+	 * is redrawn. This one uninstalls packages, which is a thing somebody has
+	 * to choose by name, the same reason cookies sit out of the sweep. */
+	bool        uninstalls;
 } category_t;
 
 extern const category_t g_categories[];
@@ -106,6 +134,9 @@ const category_t *category_find(const char *id);
 
 /* The conflicting process that is running, or NULL. Caller must not free. */
 const char *category_blocked_by(const category_t *c);
+
+/* Says which command gets this category done, for a caller that skipped it. */
+void category_warn_needs_root(const category_t *c);
 
 /* Bytes this category would free, and how many files. Never removes. */
 int category_measure(const category_t *c, unsigned long long *bytes,

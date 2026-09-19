@@ -49,7 +49,9 @@ msgstr "Non è spuntato nulla."
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "Sovrascrivere un file o una cartella e cancellarlo. Non si torna indietro e non finisce nel cestino."
+msgstr ""
+"Sovrascrivere un file o una cartella e cancellarlo. Non si torna indietro e "
+"non finisce nel cestino."
 
 msgid "Overwrite and delete it"
 msgstr "Sovrascrivi ed elimina"
@@ -61,20 +63,28 @@ msgid "Remove %1"
 msgstr "Rimuovi %1"
 
 msgid "Snapshots in /.snapshots also hold copies this cannot reach. "
-msgstr "Anche gli snapshot in /.snapshots conservano copie che questo non può raggiungere. "
+msgstr ""
+"Anche gli snapshot in /.snapshots conservano copie che questo non può "
+"raggiungere. "
 
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "Il file sarà sparito; il suo contenuto potrebbe ancora essere recuperabile dal disco grezzo. Ciò che lo impedisce davvero è la cifratura dell'intero disco."
+msgstr ""
+"Il file sarà sparito; il suo contenuto potrebbe ancora essere recuperabile "
+"dal disco grezzo. Ciò che lo impedisce davvero è la cifratura dell'intero "
+"disco."
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "Questo è %1, che è copy-on-write: sovrascrivere scrive blocchi nuovi e lascia i vecchi. "
+msgstr ""
+"Questo è %1, che è copy-on-write: sovrascrivere scrive blocchi nuovi e "
+"lascia i vecchi. "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
-msgstr "Spunta cosa rimuovere. Non se ne va nulla finché non premi il pulsante."
+msgstr ""
+"Spunta cosa rimuovere. Non se ne va nulla finché non premi il pulsante."
 
 msgid "some of that could not be removed"
 msgstr "parte di ciò non è stato possibile rimuoverla"
@@ -83,7 +93,8 @@ msgid "that could not be destroyed"
 msgstr "non è stato possibile distruggerlo"
 
 msgid "nothing to ask on a pipe — pass --yes if you mean it"
-msgstr "su una pipe non c'è nessuno a cui chiedere — passa --yes se fai sul serio"
+msgstr ""
+"su una pipe non c'è nessuno a cui chiedere — passa --yes se fai sul serio"
 
 #, c-format
 msgid "  %-14s %10s  %6llu  %s  (needs root)\n"
@@ -97,7 +108,20 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  Si potrebbero liberare %s.\n"
+msgstr ""
+"\n"
+"  Si potrebbero liberare %s.\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  %s di questi richiede sudo.\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+"Pulire ogni cache, miniatura e file cestinato, la cache dei pacchetti e il "
+"journal?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "Pulire ogni cache, miniatura e file cestinato?"
@@ -124,13 +148,16 @@ msgid "%s is copy-on-write: overwriting does NOT replace the old blocks."
 msgstr "%s è copy-on-write: sovrascrivere NON sostituisce i blocchi vecchi."
 
 msgid "  and /.snapshots holds read-only copies this cannot reach."
-msgstr "  e /.snapshots conserva copie in sola lettura che questo non può raggiungere."
+msgstr ""
+"  e /.snapshots conserva copie in sola lettura che questo non può "
+"raggiungere."
 
 msgid "  The file will be gone. Recovering its contents from the raw disk"
 msgstr "  Il file sarà sparito. Recuperarne il contenuto dal disco grezzo"
 
 msgid "  may still be possible. Full-disk encryption is the real answer."
-msgstr "  può restare possibile. La vera risposta è la cifratura dell'intero disco."
+msgstr ""
+"  può restare possibile. La vera risposta è la cifratura dell'intero disco."
 
 #, c-format
 msgid "Destroy %d item? This cannot be undone."
@@ -234,9 +261,43 @@ msgstr "il journal, ridotto all'ultima settimana"
 msgid "out of memory"
 msgstr "memoria esaurita"
 
+msgid "journalctl could not be run — the journal was left alone"
+msgstr ""
+"non è stato possibile eseguire journalctl — il journal è rimasto intatto"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr ""
+"non è stato possibile eseguire pacman — nessun pacchetto è stato rimosso"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "Verrebbe rimosso %llu pacchetto orfano.\n"
+msgstr[1] "Verrebbero rimossi %llu pacchetti orfani.\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr ""
+"pacman non è riuscito a rimuoverli — il database dei pacchetti potrebbe "
+"essere in uso"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "Rimosso %llu pacchetto orfano.\n"
+msgstr[1] "Rimossi %llu pacchetti orfani.\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"Alcuni file non sono stati rimossi — appartengono a un altro utente. Riprova "
+"con sudo."
+
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"
-msgstr "%s è in esecuzione — chiudilo prima, altrimenti è il suo profilo a essere pulito"
+msgstr ""
+"%s è in esecuzione — chiudilo prima, altrimenti è il suo profilo a essere "
+"pulito"
 
 #, c-format
 msgid "'%s' needs root: run `syn-clean clean %s` with sudo"

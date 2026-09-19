@@ -66,7 +66,8 @@ msgstr "/.snapshots 中的快照也保存着这里无法触及的副本。 "
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "文件会消失，但其内容仍可能从原始磁盘上恢复。真正能防止这一点的是全盘加密。"
+msgstr ""
+"文件会消失，但其内容仍可能从原始磁盘上恢复。真正能防止这一点的是全盘加密。"
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
@@ -97,7 +98,18 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  可以释放 %s。\n"
+msgstr ""
+"\n"
+"  可以释放 %s。\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  其中 %s 需要 sudo。\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr "清理所有缓存、缩略图、回收站里的文件、软件包缓存和系统日志吗?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "清理所有缓存、缩略图和回收站里的文件吗?"
@@ -233,6 +245,32 @@ msgstr "journal，裁剪到最近一周"
 
 msgid "out of memory"
 msgstr "内存不足"
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr "无法运行 journalctl — 日志未作改动"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "无法运行 pacman — 没有移除任何软件包"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "将移除 %llu 个孤立软件包。\n"
+msgstr[1] "将移除 %llu 个孤立软件包。\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr "pacman 无法移除它们 — 软件包数据库可能正被占用"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "已移除 %llu 个孤立软件包。\n"
+msgstr[1] "已移除 %llu 个孤立软件包。\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr "有些文件无法移除 — 它们属于其他用户。请用 sudo 重试。"
 
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"

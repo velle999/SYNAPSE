@@ -21,6 +21,68 @@
 # decisions in this code regardless, with the cost of N spawns on top.
 pkgname=syn-clean
 pkgver=0.1.0
+# ── 0.1.0-5: the 44 GB it offered, it could not free ────────────────────────
+#
+# ⛔ THE BUG, IN ONE LINE: `needs_root` was read as "this can never be done".
+#
+# category_clean() refused every root category on the flag alone — nothing in
+# the program ever called geteuid() — so `sudo syn-clean clean pkgcache`
+# answered "needs root: run `syn-clean clean pkgcache` with sudo" to somebody
+# who had just done exactly that. All three of them were unreachable by any
+# command line that existed. `clean --all` excluded them for the same reason,
+# and the scan went on adding their bytes to the total at the bottom: a real
+# machine read 44.4 GB, of which 27.3 GB was the package cache and the journal
+# and no command would release a byte of it.
+#
+# ⛔ AND THE OTHER HALF: THE WALK COUNTED WHAT IT SAW, NOT WHAT WENT. Bytes
+# were added before unlinkat() was attempted, so a tree the user cannot write
+# reported "Freed 13.1 GB" with every byte still on the disk — 13 GB of
+# root-owned rootfs trees sitting in a trash folder, and nothing but the exit
+# status saying otherwise. Counted after the unlink now, and a refusal says so.
+#
+# ⚠ AND UNDER sudo IT WAS CLEANING root's FILES. home_path() took $HOME, which
+# sudo's env_reset sets from the TARGET user's passwd entry — so the per-user
+# rows composed /root/... while the trash the command was typed for sat
+# untouched. SUDO_UID (or PKEXEC_UID) names who asked; SYNCLEAN_HOME still wins,
+# because it is what keeps the suites away from a real home.
+#
+# ── what the root rows actually do now ───────────────────────────────────────
+#
+# ⛔ `journal` IS A TRIM, NOT A WALK. The generic tree walk would have taken the
+# file journald is writing to and then rmdir()'d /var/log/journal itself, which
+# leaves a machine with no persistent logging at all. `journalctl
+# --vacuum-time=7d` does it, and the ROW MEASURES THE SAME QUESTION: archived
+# files ('@' in the name) older than a week, not the whole directory. The old
+# measurement offered 726 MB where a week's vacuum frees a fraction of it.
+#
+# ⛔ `orphans` UNINSTALLS, so `--all` never includes it — named by hand or not
+# at all, the rule cookies already followed (`uninstalls` in the table). The
+# clean was a no-op before: roots_for() has no entry for this id, so it walked
+# an empty list and printed "Freed 0 B" over packages that were still
+# installed. `pacman -Rns --noconfirm` now, every name checked before it
+# reaches a shell, and `--dry-run` says how many would go.
+#
+# ⚠ AND THE DIRECTORY SURVIVES BEING EMPTIED. /var/cache/pacman/pkg is pacman's
+# and ~/.local/share/Trash/files is where the desktop puts the next deleted
+# file; a cleaner that rmdir()s either has broken whatever looks next.
+#
+# ⛔ THE RESTORE RECORDS GO ONLY IF THE FILES WENT. Trash/info holds one
+# .trashinfo per item — the original path, which is the whole of what "restore"
+# means — and it was emptied even when Trash/files refused. That left the space
+# still used AND nothing restorable, silently.
+#
+# ── the seam, because the suite now runs commands that would bite ────────────
+#
+# $SYNCLEAN_PKGCACHE joins SYNCLEAN_HOME and SYNCLEAN_TMPDIRS: once a root
+# `clean pkgcache` actually empties a directory, a suite reaching the real one
+# takes the package cache of the machine running it. clean_test.sh asserts the
+# root half inside `unshare -r` — geteuid() == 0 without being able to harm
+# anything outside the fixture — and REFUSES TO RUN AS root at all, loudly,
+# because `clean --all` with root is now a command that cleans the machine.
+#
+# 8 new strings in all thirteen languages.
+pkgrel=5
+
 # ── 0.1.0-4: thirteen languages, and a suite that was deleting your /tmp ─────
 #
 # ⛔ FIRST, THE BUG, because it is the reason to take this release.
@@ -75,7 +137,6 @@ pkgver=0.1.0
 # not — and a rewrap that put a quote in the middle of that phrase reported the
 # sentence gone while it was sitting right there. The constraint is stated at
 # the sentence itself now.
-pkgrel=4
 pkgdesc="Free disk space, and destroy files you mean to destroy — caches, thumbnails, trash, secure delete"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -90,7 +151,7 @@ depends=('glibc')
 makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
 
 optdepends=('quickshell: the graphical window (syn-clean gui)'
-            'pacman: counting orphaned packages'
+            'pacman: counting orphaned packages, and removing them with root'
             'synfiles: Destroy Permanently in the file manager right-click menu')
 
 # ── Where the source comes from, here and everywhere else ──────────────────

@@ -49,7 +49,9 @@ msgstr "कुछ भी चयनित नहीं।"
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "किसी फ़ाइल या फ़ोल्डर को अधिलेखित करके मिटाएँ। इसे पलटा नहीं जा सकता और यह ट्रैश में नहीं जाता।"
+msgstr ""
+"किसी फ़ाइल या फ़ोल्डर को अधिलेखित करके मिटाएँ। इसे पलटा नहीं जा सकता और यह ट्रैश में नहीं "
+"जाता।"
 
 msgid "Overwrite and delete it"
 msgstr "अधिलेखित करके मिटाएँ"
@@ -66,12 +68,15 @@ msgstr "/.snapshots में स्नैपशॉट भी ऐसी प्�
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "फ़ाइल चली जाएगी; उसकी सामग्री कच्ची डिस्क से अब भी वापस पाई जा सकती है। इसे वास्तव में रोकने वाली चीज़ पूर्ण-डिस्क एन्क्रिप्शन है।"
+msgstr ""
+"फ़ाइल चली जाएगी; उसकी सामग्री कच्ची डिस्क से अब भी वापस पाई जा सकती है। इसे वास्तव में "
+"रोकने वाली चीज़ पूर्ण-डिस्क एन्क्रिप्शन है।"
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "यह %1 है, जो copy-on-write है: अधिलेखन नए ब्लॉक लिखता है और पुराने वहीं छोड़ देता है। "
+msgstr ""
+"यह %1 है, जो copy-on-write है: अधिलेखन नए ब्लॉक लिखता है और पुराने वहीं छोड़ देता है। "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
 msgstr "जो हटाना है उस पर निशान लगाएँ। बटन दबाने तक कुछ नहीं जाएगा।"
@@ -97,7 +102,18 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  %s खाली किया जा सकता है।\n"
+msgstr ""
+"\n"
+"  %s खाली किया जा सकता है।\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  उसमें से %s के लिए sudo चाहिए।\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr "हर कैश, थंबनेल और ट्रैश की फ़ाइल, पैकेज कैश और जर्नल साफ़ करें?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "हर कैश, थंबनेल और ट्रैश की फ़ाइल साफ़ करें?"
@@ -233,6 +249,33 @@ msgstr "जर्नल, पिछले सप्ताह तक सीमि�
 
 msgid "out of memory"
 msgstr "स्मृति समाप्त"
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr "journalctl नहीं चलाया जा सका — जर्नल अछूता रहा"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "pacman नहीं चलाया जा सका — कोई पैकेज नहीं हटाया गया"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "%llu अनाथ पैकेज हटाया जाएगा।\n"
+msgstr[1] "%llu अनाथ पैकेज हटाए जाएँगे।\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr "pacman उन्हें हटा नहीं सका — पैकेज डेटाबेस उपयोग में हो सकता है"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "%llu अनाथ पैकेज हटाया गया।\n"
+msgstr[1] "%llu अनाथ पैकेज हटाए गए।\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"कुछ फ़ाइलें हटाई नहीं जा सकीं — वे किसी दूसरे उपयोक्ता की हैं। sudo से फिर कोशिश करें।"
 
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"

@@ -50,7 +50,9 @@ msgstr "Ничего не отмечено."
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "Перезаписать файл или папку и удалить. Отменить нельзя, и в корзину это не попадает."
+msgstr ""
+"Перезаписать файл или папку и удалить. Отменить нельзя, и в корзину это не "
+"попадает."
 
 msgid "Overwrite and delete it"
 msgstr "Перезаписать и удалить"
@@ -67,12 +69,16 @@ msgstr "Снимки в /.snapshots тоже хранят копии, до ко�
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "Файла не станет; его содержимое, возможно, ещё удастся восстановить с сырого диска. По-настоящему это предотвращает только полнодисковое шифрование."
+msgstr ""
+"Файла не станет; его содержимое, возможно, ещё удастся восстановить с сырого "
+"диска. По-настоящему это предотвращает только полнодисковое шифрование."
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "Это %1, файловая система copy-on-write: перезапись пишет новые блоки и оставляет старые. "
+msgstr ""
+"Это %1, файловая система copy-on-write: перезапись пишет новые блоки и "
+"оставляет старые. "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
 msgstr "Отметьте, что убрать. Ничего не исчезнет, пока вы не нажмёте кнопку."
@@ -98,7 +104,18 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  Можно освободить %s.\n"
+msgstr ""
+"\n"
+"  Можно освободить %s.\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  %s из них требует sudo.\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr "Очистить все кэши, миниатюры и файлы в корзине, кэш пакетов и журнал?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "Очистить все кэши, миниатюры и файлы в корзине?"
@@ -126,13 +143,15 @@ msgid "%s is copy-on-write: overwriting does NOT replace the old blocks."
 msgstr "%s — это copy-on-write: перезапись НЕ заменяет старые блоки."
 
 msgid "  and /.snapshots holds read-only copies this cannot reach."
-msgstr "  и в /.snapshots лежат копии только для чтения, до которых это не доберётся."
+msgstr ""
+"  и в /.snapshots лежат копии только для чтения, до которых это не доберётся."
 
 msgid "  The file will be gone. Recovering its contents from the raw disk"
 msgstr "  Файла не станет. Восстановить его содержимое с сырого диска"
 
 msgid "  may still be possible. Full-disk encryption is the real answer."
-msgstr "  всё ещё может быть возможно. Настоящий ответ — полнодисковое шифрование."
+msgstr ""
+"  всё ещё может быть возможно. Настоящий ответ — полнодисковое шифрование."
 
 #, c-format
 msgid "Destroy %d item? This cannot be undone."
@@ -238,6 +257,36 @@ msgstr "журнал, урезанный до последней недели"
 
 msgid "out of memory"
 msgstr "недостаточно памяти"
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr "не удалось запустить journalctl — журнал остался нетронутым"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "не удалось запустить pacman — пакеты не были удалены"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "Был бы удалён %llu осиротевший пакет.\n"
+msgstr[1] "Было бы удалено %llu осиротевших пакета.\n"
+msgstr[2] "Было бы удалено %llu осиротевших пакетов.\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr "pacman не смог их удалить — база пакетов может быть занята"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "Удалён %llu осиротевший пакет.\n"
+msgstr[1] "Удалено %llu осиротевших пакета.\n"
+msgstr[2] "Удалено %llu осиротевших пакетов.\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"Некоторые файлы не удалось удалить — они принадлежат другому пользователю. "
+"Повторите через sudo."
 
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"

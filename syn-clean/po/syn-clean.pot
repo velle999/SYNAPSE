@@ -99,6 +99,15 @@ msgid ""
 "  %s could be freed.\n"
 msgstr ""
 
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr ""
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr ""
 
@@ -232,6 +241,32 @@ msgid "the journal, trimmed to the last week"
 msgstr ""
 
 msgid "out of memory"
+msgstr ""
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr ""
+
+msgid "pacman could not be run — no packages were removed"
+msgstr ""
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr ""
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
 msgstr ""
 
 #, c-format

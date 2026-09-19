@@ -49,7 +49,9 @@ msgstr "Er is niets aangevinkt."
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "Een bestand of map overschrijven en verwijderen. Er is geen weg terug en het gaat niet naar de prullenbak."
+msgstr ""
+"Een bestand of map overschrijven en verwijderen. Er is geen weg terug en het "
+"gaat niet naar de prullenbak."
 
 msgid "Overwrite and delete it"
 msgstr "Overschrijven en verwijderen"
@@ -61,17 +63,22 @@ msgid "Remove %1"
 msgstr "%1 verwijderen"
 
 msgid "Snapshots in /.snapshots also hold copies this cannot reach. "
-msgstr "Momentopnamen in /.snapshots bewaren ook kopieën waar dit niet bij kan. "
+msgstr ""
+"Momentopnamen in /.snapshots bewaren ook kopieën waar dit niet bij kan. "
 
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "Het bestand is weg; de inhoud is mogelijk nog van de ruwe schijf te herstellen. Wat dat echt voorkomt is volledige schijfversleuteling."
+msgstr ""
+"Het bestand is weg; de inhoud is mogelijk nog van de ruwe schijf te "
+"herstellen. Wat dat echt voorkomt is volledige schijfversleuteling."
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "Dit is %1, dat copy-on-write is: overschrijven schrijft nieuwe blokken en laat de oude staan. "
+msgstr ""
+"Dit is %1, dat copy-on-write is: overschrijven schrijft nieuwe blokken en "
+"laat de oude staan. "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
 msgstr "Vink aan wat weg moet. Er gaat niets weg voordat u op de knop drukt."
@@ -97,7 +104,20 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  %s zou vrijgemaakt kunnen worden.\n"
+msgstr ""
+"\n"
+"  %s zou vrijgemaakt kunnen worden.\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  %s daarvan heeft sudo nodig.\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+"Elke cache, miniatuur en weggegooid bestand, de pakketcache en het logboek "
+"opruimen?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "Elke cache, miniatuur en weggegooid bestand opruimen?"
@@ -130,7 +150,9 @@ msgid "  The file will be gone. Recovering its contents from the raw disk"
 msgstr "  Het bestand is weg. De inhoud terughalen van de ruwe schijf"
 
 msgid "  may still be possible. Full-disk encryption is the real answer."
-msgstr "  kan nog steeds mogelijk zijn. Het echte antwoord is volledige schijfversleuteling."
+msgstr ""
+"  kan nog steeds mogelijk zijn. Het echte antwoord is volledige "
+"schijfversleuteling."
 
 #, c-format
 msgid "Destroy %d item? This cannot be undone."
@@ -145,8 +167,10 @@ msgstr "Zou %s overschrijven en verwijderen.\n"
 #, c-format
 msgid "Deleted %s, overwritten %d time — see the warning above.\n"
 msgid_plural "Deleted %s, overwritten %d times — see the warning above.\n"
-msgstr[0] "%s verwijderd, %d keer overschreven — zie de waarschuwing hierboven.\n"
-msgstr[1] "%s verwijderd, %d keer overschreven — zie de waarschuwing hierboven.\n"
+msgstr[0] ""
+"%s verwijderd, %d keer overschreven — zie de waarschuwing hierboven.\n"
+msgstr[1] ""
+"%s verwijderd, %d keer overschreven — zie de waarschuwing hierboven.\n"
 
 #, c-format
 msgid "Overwritten %d time and deleted: %s.\n"
@@ -234,9 +258,40 @@ msgstr "het journaal, teruggebracht tot de laatste week"
 msgid "out of memory"
 msgstr "geheugen op"
 
+msgid "journalctl could not be run — the journal was left alone"
+msgstr ""
+"journalctl kon niet worden uitgevoerd — het logboek is ongemoeid gelaten"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "pacman kon niet worden uitgevoerd — er zijn geen pakketten verwijderd"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "%llu verweesd pakket zou worden verwijderd.\n"
+msgstr[1] "%llu verweesde pakketten zouden worden verwijderd.\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr ""
+"pacman kon ze niet verwijderen — de pakketdatabase is mogelijk in gebruik"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "%llu verweesd pakket verwijderd.\n"
+msgstr[1] "%llu verweesde pakketten verwijderd.\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"Sommige bestanden konden niet worden verwijderd — ze zijn van een andere "
+"gebruiker. Probeer het opnieuw met sudo."
+
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"
-msgstr "%s draait — sluit het eerst, anders is het zijn profiel dat opgeruimd wordt"
+msgstr ""
+"%s draait — sluit het eerst, anders is het zijn profiel dat opgeruimd wordt"
 
 #, c-format
 msgid "'%s' needs root: run `syn-clean clean %s` with sudo"

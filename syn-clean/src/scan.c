@@ -13,9 +13,11 @@
 #include "synclean.h"
 #include "i18n.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -43,30 +45,32 @@
  */
 const category_t g_categories[] = {
 	{ "thumbnails", N_("Thumbnails"), N_("image previews, rebuilt on demand"),
-	  false, NULL, false },
+	  false, NULL, false, false },
 	{ "usercache", N_("Application cache"), N_("~/.cache, minus the rows below"),
-	  false, NULL, false },
+	  false, NULL, false, false },
 	{ "trash", N_("Trash"), N_("files you already deleted"),
-	  false, NULL, false },
+	  false, NULL, false, false },
 	{ "crash", N_("Crash reports"), N_("core dumps and crash logs"),
-	  false, NULL, false },
+	  false, NULL, false, false },
 	{ "browsercache", N_("Browser cache"),
 	  N_("pages and images, re-downloaded as needed"),
-	  false, "firefox chromium vivaldi-bin chrome brave", false },
+	  false, "firefox chromium vivaldi-bin chrome brave", false, false },
 	/* ⚠ SIGNS YOU OUT EVERYWHERE. Not grouped with the caches for that reason:
 	 * a cache is invisible when it goes, and this is the one category whose
 	 * effect the user will notice on every site they use. */
 	{ "cookies", N_("Cookies"), N_("SIGNS YOU OUT of every site"),
-	  false, "firefox chromium vivaldi-bin chrome brave", true },
+	  false, "firefox chromium vivaldi-bin chrome brave", true, false },
 	{ "tmp", N_("Temporary files"), N_("your own leftovers in /tmp and /var/tmp"),
-	  false, NULL, false },
+	  false, NULL, false, false },
+	/* ⛔ THE ONE THAT UNINSTALLS. Named by hand or not at all — see `uninstalls`
+	 * in synclean.h. Everything else here grows back. */
 	{ "orphans", N_("Orphaned packages"),
 	  N_("installed as dependencies, needed by nothing"),
-	  true, NULL, false },
+	  true, NULL, false, true },
 	{ "pkgcache", N_("Package cache"), N_("downloaded packages already installed"),
-	  true, NULL, false },
+	  true, NULL, false, false },
 	{ "journal", N_("System logs"), N_("the journal, trimmed to the last week"),
-	  true, NULL, false },
+	  true, NULL, false, false },
 };
 const size_t g_ncategories = sizeof g_categories / sizeof g_categories[0];
 
@@ -162,8 +166,18 @@ static bool cache_owned_elsewhere(const char *name)
  */
 typedef struct {
 	unsigned long long bytes, files;
+	/* ⛔ WHAT REFUSED TO GO. Counted so the caller can say so: a clean that
+	 * hits EACCES on every file still walked every one of them, and a summary
+	 * built from what it SAW rather than what it removed is the program
+	 * telling somebody it freed 13 GB that is still on the disk. */
+	unsigned long long failed;
 	dev_t dev;
 	bool  remove;
+	/* ⚠ THE DIRECTORY ITSELF STAYS. /var/cache/pacman/pkg is pacman's to have,
+	 * and ~/.local/share/Trash/files is where the desktop puts the next thing
+	 * somebody deletes; emptying either is the job, removing it is a surprise
+	 * for whatever goes looking next. */
+	bool  keep_root;
 } walk_t;
 
 /*
@@ -205,10 +219,30 @@ static int walk_dir(int dfd, walk_t *w, int depth)
 			/* st_blocks is what the file COSTS, which is the number somebody
 			 * looking to free space cares about; st_size counts holes in a
 			 * sparse file that were never on the disk. */
-			w->bytes += (unsigned long long)st.st_blocks * 512ULL;
+			unsigned long long cost = (unsigned long long)st.st_blocks * 512ULL;
+
+			/*
+			 * ⛔ COUNTED ONLY ONCE IT IS ACTUALLY GONE. The count used to be
+			 * added before the unlink was attempted, so a tree this user
+			 * cannot write — root-owned directories sitting in their own
+			 * trash, which is what a rootfs build leaves behind — was reported
+			 * as "Freed 13.1 GB" with every byte of it still on the disk. The
+			 * exit status said 1 and nothing else did.
+			 *
+			 * ⚠ MEASURING STILL COUNTS EVERYTHING. `scan` and --dry-run answer
+			 * "what is there", which is a different question from "what went",
+			 * and a scan that hid the files it doubts it can remove would be
+			 * the same lie pointing the other way.
+			 */
+			if (w->remove && !g_dry) {
+				if (unlinkat(dirfd(d), e->d_name, 0) != 0) {
+					w->failed++;
+					rc = -1;
+					continue;
+				}
+			}
+			w->bytes += cost;
 			w->files++;
-			if (w->remove && !g_dry && unlinkat(dirfd(d), e->d_name, 0) != 0)
-				rc = -1;
 		}
 	}
 	closedir(d);
@@ -235,14 +269,20 @@ static int tree(const char *path, walk_t *w, bool remove)
 		if (pfd < 0) { free(dup); return 0; }
 
 		struct stat st;
+		int rc1 = 0;
 		if (fstatat(pfd, base, &st, AT_SYMLINK_NOFOLLOW) == 0) {
-			w->bytes += (unsigned long long)st.st_blocks * 512ULL;
-			w->files++;
-			if (remove && !g_dry) unlinkat(pfd, base, 0);
+			unsigned long long cost = (unsigned long long)st.st_blocks * 512ULL;
+			bool gone = true;
+			if (remove && !g_dry && unlinkat(pfd, base, 0) != 0) {
+				w->failed++;
+				rc1 = -1;
+				gone = false;
+			}
+			if (gone) { w->bytes += cost; w->files++; }
 		}
 		close(pfd);
 		free(dup);
-		return 0;                                  /* absent is not a failure */
+		return rc1;                                /* absent is not a failure */
 	}
 
 	struct stat st;
@@ -252,7 +292,7 @@ static int tree(const char *path, walk_t *w, bool remove)
 	int rc = walk_dir(fd, w, 0);
 	/* toctou-ok: the tree under this root is gone by now; rmdir on the root
 	 * itself is the last act and nothing reopens the name after it. */
-	if (remove && !g_dry) rmdir(path);
+	if (remove && !g_dry && !w->keep_root) rmdir(path);
 	return rc;
 }
 
@@ -270,7 +310,13 @@ static char **roots_for(const category_t *c, int *n)
 	} else if (!strcmp(c->id, "usercache")) {
 		v[i++] = home_path(".cache");
 	} else if (!strcmp(c->id, "pkgcache")) {
-		v[i++] = xstrdup("/var/cache/pacman/pkg");
+		/* ⛔ SEAMED LIKE SYNCLEAN_HOME, AND NOW IT HAS TO BE. This root is
+		 * emptied once the process has root, so a suite that reached the real
+		 * one would take the package cache of the machine running it — the
+		 * same way the `tmp` category swept the real /tmp before
+		 * SYNCLEAN_TMPDIRS existed. */
+		const char *pc = getenv("SYNCLEAN_PKGCACHE");
+		v[i++] = xstrdup(pc && *pc ? pc : "/var/cache/pacman/pkg");
 	} else if (!strcmp(c->id, "journal")) {
 		v[i++] = xstrdup("/var/log/journal");
 	} else if (!strcmp(c->id, "trash")) {
@@ -338,7 +384,7 @@ static void cookies_each(void (*fn)(const char *, void *), void *ctx)
 	}
 }
 
-struct cookie_acc { unsigned long long bytes, files; bool remove; };
+struct cookie_acc { unsigned long long bytes, files, failed; bool remove; };
 
 static void cookie_one(const char *path, void *ctx)
 {
@@ -351,12 +397,16 @@ static void cookie_one(const char *path, void *ctx)
 	if (fd < 0) return;
 	struct stat st;
 	if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) { close(fd); return; }
-	a->bytes += (unsigned long long)st.st_blocks * 512ULL;
-	a->files++;
+	unsigned long long cost = (unsigned long long)st.st_blocks * 512ULL;
 	close(fd);
+
 	/* toctou-ok: the size above came from the descriptor, not from this name;
-	 * the unlink is the last thing that touches it. */
-	if (a->remove && !g_dry) unlink(path);
+	 * the unlink is the last thing that touches it.
+	 * ⛔ AND COUNTED ONLY IF IT WENT — the same rule as walk_dir(). A jar that
+	 * refused is not space that was freed. */
+	if (a->remove && !g_dry && unlink(path) != 0) { a->failed++; return; }
+	a->bytes += cost;
+	a->files++;
 }
 
 /* ── /tmp, but only what is ours ────────────────────────────────────────── */
@@ -399,7 +449,9 @@ static int tmp_sweep(unsigned long long *bytes, unsigned long long *files, bool 
 			dirs[n++] = t;
 		dirs[n] = NULL;
 	}
-	uid_t me = getuid();
+	/* ⚠ THE USER'S, NOT root's. Under sudo getuid() is 0, and this swept
+	 * root's leftovers while leaving the ones it was typed for. */
+	uid_t me = syn_target_uid();
 	time_t now = time(NULL);
 	for (const char **dp = dirs; *dp; dp++) {
 		DIR *d = opendir(*dp);
@@ -424,6 +476,213 @@ static int tmp_sweep(unsigned long long *bytes, unsigned long long *files, bool 
 	return 0;
 }
 
+/* ── The two that are not a directory to empty ──────────────────────────── */
+
+/*
+ * ⛔ THE JOURNAL IS TRIMMED, NEVER WALKED AWAY.
+ *
+ * This row says "the journal, trimmed to the last week", and the generic tree
+ * walk would have made that sentence false twice over: it removes the file
+ * journald is CURRENTLY WRITING TO, and then rmdir()s /var/log/journal itself —
+ * and a machine with no /var/log/journal has no persistent logging at all. It
+ * falls back to /run, silently, until somebody notices the boots are gone.
+ *
+ * So journald does it: `journalctl --vacuum-time` is the supported way and it
+ * knows which files it may take. This code's job is the NUMBER either side of
+ * it.
+ *
+ * ⚠ AND THE MEASUREMENT HAS TO ASK THE SAME QUESTION AS THE CLEAN. Walking the
+ * whole directory reported 726 MB on a machine where a week's vacuum would
+ * free a fraction of that, because most of it is the active journal — a row
+ * offering space that no command it could run would ever release.
+ */
+#define JOURNAL_KEEP_DAYS 7
+
+/*
+ * ⛔ ARCHIVED FILES ONLY, WHICH IS WHAT THE '@' MEANS. journald names the file
+ * it is writing `system.journal` and a rotated one `system@<seq>-<time>.journal`.
+ * A vacuum never takes the former, so counting it is counting space that is not
+ * on offer.
+ */
+static int journal_measure(unsigned long long *bytes, unsigned long long *files)
+{
+	*bytes = 0; *files = 0;
+
+	int fd = open("/var/log/journal",
+	              O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0) return 0;
+	DIR *d = fdopendir(fd);
+	if (!d) { close(fd); return 0; }
+
+	time_t cut = time(NULL) - (time_t)JOURNAL_KEEP_DAYS * 86400;
+	struct dirent *e;
+	while ((e = readdir(d))) {
+		if (e->d_name[0] == '.') continue;
+		/* One directory per machine-id, and a machine may have several. */
+		int md = openat(dirfd(d), e->d_name,
+		                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		if (md < 0) continue;
+		DIR *m = fdopendir(md);
+		if (!m) { close(md); continue; }
+
+		struct dirent *f;
+		while ((f = readdir(m))) {
+			if (!strchr(f->d_name, '@')) continue;
+			const char *dot = strrchr(f->d_name, '.');
+			if (!dot || strcmp(dot, ".journal") != 0) continue;
+
+			struct stat st;
+			if (fstatat(dirfd(m), f->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0)
+				continue;
+			if (!S_ISREG(st.st_mode)) continue;
+			if (st.st_mtime >= cut) continue;
+
+			*bytes += (unsigned long long)st.st_blocks * 512ULL;
+			(*files)++;
+		}
+		closedir(m);
+	}
+	closedir(d);
+	return 0;
+}
+
+static int journal_clean(unsigned long long *bytes, unsigned long long *files)
+{
+	unsigned long long b0 = 0, f0 = 0;
+	journal_measure(&b0, &f0);
+
+	if (g_dry) { *bytes = b0; *files = f0; return 0; }
+
+	/* ⚠ THE SAME NUMBER OF DAYS THE MEASUREMENT USED. Two spellings of one
+	 * fact is a row that offers what the command does not take. */
+	char cmd[128];
+	snprintf(cmd, sizeof cmd,
+	         "LC_ALL=C journalctl --vacuum-time=%dd 2>&1", JOURNAL_KEEP_DAYS);
+
+	*bytes = 0; *files = 0;
+	FILE *p = popen(cmd, "r");
+	if (!p) {
+		warn("%s", _("journalctl could not be run — the journal was left alone"));
+		return 1;
+	}
+	char line[512];
+	while (fgets(line, sizeof line, p)) { /* journald narrates; the sizes below
+	                                       * are what this program reports. */ }
+	int st = pclose(p);
+
+	/* ⛔ THE DIFFERENCE, NOT THE ESTIMATE. What journald actually took is the
+	 * only honest answer, and it is one more measurement away. */
+	unsigned long long b1 = 0, f1 = 0;
+	journal_measure(&b1, &f1);
+	*bytes = b0 > b1 ? b0 - b1 : 0;
+	*files = f0 > f1 ? f0 - f1 : 0;
+
+	if (st != 0) {
+		warn("%s", _("journalctl could not be run — the journal was left alone"));
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * ⛔ AND THE ORPHANS ARE UNINSTALLED, WHICH IS pacman's WORK.
+ *
+ * The row counted them and the clean did nothing at all: roots_for() has no
+ * entry for this id, so `clean orphans` walked an empty list and printed
+ * "Freed 0 B" over eight packages that were still installed.
+ *
+ * ⚠ BYTES STAY 0 HERE, deliberately, and the count is what the row is for. The
+ * size of an installed package is a query per package to pacman; the number of
+ * things nothing needs is the fact somebody is acting on.
+ */
+static bool pkgname_ok(const char *n)
+{
+	if (!*n) return false;
+	for (const char *c = n; *c; c++)
+		if (!isalnum((unsigned char)*c) && !strchr("@._+-", *c)) return false;
+	return true;
+}
+
+static int orphans_clean(unsigned long long *bytes, unsigned long long *files)
+{
+	*bytes = 0; *files = 0;
+
+	FILE *p = popen("LC_ALL=C pacman -Qtdq 2>/dev/null", "r");
+	if (!p) {
+		warn("%s", _("pacman could not be run — no packages were removed"));
+		return 1;
+	}
+
+	/* ⛔ EVERY NAME IS CHECKED BEFORE IT REACHES A SHELL. These come from
+	 * pacman and so are not an attacker's to choose today — but they are
+	 * strings from another program on their way into a command line, and the
+	 * cost of being sure is one loop. A name that fails means this program has
+	 * misread the output, which is a reason to stop rather than to guess. */
+	char list[8192] = "";
+	size_t used = 0;
+	unsigned long long n = 0;
+	bool bad = false;
+	char line[256];
+	while (fgets(line, sizeof line, p)) {
+		line[strcspn(line, "\n")] = '\0';
+		if (!*line) continue;
+		if (!pkgname_ok(line)) { bad = true; break; }
+		int w = snprintf(list + used, sizeof list - used, " %s", line);
+		if (w < 0 || (size_t)w >= sizeof list - used) { bad = true; break; }
+		used += (size_t)w;
+		n++;
+	}
+	pclose(p);
+
+	/* ⚠ AND A NAME THAT FAILED THAT CHECK IS pacman NOT RUN, which is exactly
+	 * what the message below says. There is no second sentence for it because
+	 * there is no second outcome: nothing was removed either way. */
+	if (bad) {
+		warn("%s", _("pacman could not be run — no packages were removed"));
+		return 1;
+	}
+	if (n == 0) return 0;
+
+	*files = n;
+	if (g_dry) {
+		/* ⛔ AND THE DRY RUN SAYS WHAT IT WOULD DO. This row's bytes are 0 by
+		 * design, so "Would free 0 B" is the whole of what the caller can
+		 * print — which, in front of somebody checking what `clean orphans`
+		 * is about to uninstall, reads as "nothing". */
+		if (g_out != OUT_REC)
+			printf(P_("Would remove %llu orphaned package.\n",
+			          "Would remove %llu orphaned packages.\n", n), n);
+		return 0;
+	}
+
+	/* ⚠ --noconfirm BECAUSE THIS PROGRAM ALREADY ASKED. cmd_clean puts the
+	 * question in front of the user before anything gets here, and a second
+	 * prompt from pacman would be one nothing is reading — the stream is a
+	 * pipe. */
+	char cmd[8600];
+	snprintf(cmd, sizeof cmd, "LC_ALL=C pacman -Rns --noconfirm%s 2>&1", list);
+	FILE *r = popen(cmd, "r");
+	if (!r) {
+		warn("%s", _("pacman could not be run — no packages were removed"));
+		*files = 0;
+		return 1;
+	}
+	while (fgets(line, sizeof line, r)) { /* pacman narrates its own removal */ }
+	if (pclose(r) != 0) {
+		warn("%s", _("pacman could not remove them — the package database may be in use"));
+		*files = 0;
+		return 1;
+	}
+
+	/* ⚠ NOT A `Freed %s` LINE. This category frees packages, not bytes, and
+	 * the caller's total is in bytes — so the thing that happened is said
+	 * here. ⛔ Never on the record stream, which carries values, not prose. */
+	if (g_out != OUT_REC)
+		printf(P_("Removed %llu orphaned package.\n",
+		          "Removed %llu orphaned packages.\n", n), n);
+	return 0;
+}
+
 /* ── measure / clean ────────────────────────────────────────────────────── */
 
 static int do_category(const category_t *c, unsigned long long *bytes,
@@ -434,9 +693,12 @@ static int do_category(const category_t *c, unsigned long long *bytes,
 	if (!strcmp(c->id, "tmp")) return tmp_sweep(bytes, files, remove);
 
 	if (!strcmp(c->id, "cookies")) {
-		struct cookie_acc a = { 0, 0, remove };
+		struct cookie_acc a = { 0, 0, 0, remove };
 		cookies_each(cookie_one, &a);
 		*bytes = a.bytes; *files = a.files;
+		if (a.failed > 0 && remove && !g_dry)
+			warn("%s", _("Some files could not be removed — they belong to "
+			             "another user. Try again with sudo."));
 		return 0;
 	}
 
@@ -450,7 +712,9 @@ static int do_category(const category_t *c, unsigned long long *bytes,
 	 * nothing depends on is a question about the dependency graph, and a
 	 * directory size is not an answer to it. */
 	if (!strcmp(c->id, "orphans")) {
-		FILE *p = popen("pacman -Qtdq 2>/dev/null", "r");
+		if (remove) return orphans_clean(bytes, files);
+
+		FILE *p = popen("LC_ALL=C pacman -Qtdq 2>/dev/null", "r");
 		if (!p) return 0;
 		char line[256];
 		while (fgets(line, sizeof line, p)) if (line[0] != '\n') (*files)++;
@@ -463,11 +727,38 @@ static int do_category(const category_t *c, unsigned long long *bytes,
 		return 0;
 	}
 
+	/* ⛔ AND THE JOURNAL IS NOT A DIRECTORY TO EMPTY EITHER — see the comment
+	 * over journal_measure(). Both halves ask the same question so the row and
+	 * the command agree about what is on offer. */
+	if (!strcmp(c->id, "journal"))
+		return remove ? journal_clean(bytes, files)
+		              : journal_measure(bytes, files);
+
 	int n = 0;
 	char **v = roots_for(c, &n);
 	int rc = 0;
+	unsigned long long refused = 0;
 	for (int i = 0; i < n; i++) {
 		walk_t w = { 0 };
+
+		/* ⚠ EMPTIED, NOT REMOVED. pacman owns its cache directory and the
+		 * desktop owns ~/.local/share/Trash/files; both are where the next
+		 * thing lands, and a cleaner that takes the directory has broken
+		 * whatever goes looking for it. */
+		w.keep_root = !strcmp(c->id, "pkgcache") || !strcmp(c->id, "trash");
+
+		/*
+		 * ⛔ THE RESTORE RECORDS GO ONLY IF THE FILES WENT. Trash/info holds
+		 * one .trashinfo per item — the original path, which is the whole of
+		 * what "restore" means — and it is the second root here. A clean that
+		 * emptied it while Trash/files refused (root-owned trees land there
+		 * from a rootfs build) left the space still used AND nothing
+		 * restorable: the worst of both, and silent.
+		 */
+		if (!strcmp(c->id, "trash") && i == 1 && remove && !g_dry && rc != 0) {
+			free(v[i]);
+			continue;
+		}
 		/* usercache owns ~/.cache but thumbnails is its own row, so a scan that
 		 * counted both would report the same bytes twice and a clean that
 		 * removed both would be fine but the NUMBER would have been a lie. */
@@ -481,7 +772,10 @@ static int do_category(const category_t *c, unsigned long long *bytes,
 					char *sub = xasprintf("%s/%s", v[i], e->d_name);
 					walk_t sw = { 0 };
 					if (tree(sub, &sw, remove) != 0) rc = -1;
+					/* ⚠ AND ITS REFUSALS, or a cache subdirectory this user
+					 * cannot write is the one place the count goes quiet. */
 					w.bytes += sw.bytes; w.files += sw.files;
+					w.failed += sw.failed;
 					free(sub);
 				}
 				closedir(d);
@@ -490,9 +784,20 @@ static int do_category(const category_t *c, unsigned long long *bytes,
 			rc = -1;
 		}
 		*bytes += w.bytes; *files += w.files;
+		refused += w.failed;
 		free(v[i]);
 	}
 	free(v);
+
+	/*
+	 * ⛔ AND IT SAYS SO. The bytes above are now what actually went, so a run
+	 * that removed nothing reports nothing — but "Freed 0 B" on its own is a
+	 * program that looks broken rather than one that was refused. The two
+	 * things a person can do about it are in the sentence.
+	 */
+	if (refused > 0 && remove && !g_dry)
+		warn("%s", _("Some files could not be removed — they belong to another "
+		             "user. Try again with sudo."));
 	return rc;
 }
 
@@ -513,10 +818,26 @@ int category_clean(const category_t *c, unsigned long long *freed)
 		*freed = 0;
 		return 1;
 	}
-	if (c->needs_root) {
-		warn(_("'%s' needs root: run `syn-clean clean %s` with sudo"), c->id, c->id);
+	/*
+	 * ⛔ ROOT IS A QUESTION ABOUT THIS PROCESS, NOT A PROPERTY OF THE ROW.
+	 *
+	 * This read the flag alone, and nothing in the program ever asked
+	 * geteuid() — so `sudo syn-clean clean pkgcache` answered "needs root: run
+	 * it with sudo" to somebody who had just done that. All three root
+	 * categories were unreachable by any command line, while the scan went on
+	 * offering their 27 GB in the total at the bottom. `clean --all` skipped
+	 * them too, which is how it came to say it had freed 44 GB and freed none
+	 * of it.
+	 */
+	if (c->needs_root && geteuid() != 0) {
+		category_warn_needs_root(c);
 		*freed = 0;
 		return 1;
 	}
 	return do_category(c, freed, &files, true);
+}
+
+void category_warn_needs_root(const category_t *c)
+{
+	warn(_("'%s' needs root: run `syn-clean clean %s` with sudo"), c->id, c->id);
 }

@@ -23,7 +23,8 @@ static void usage(FILE *f)
 "\n"
 "  syn-clean scan [what...]       what there is, and how big\n"
 "  syn-clean clean <what...>      remove it\n"
-"  syn-clean clean --all          every category that does not need root\n"
+"  syn-clean clean --all          the caches, thumbnails, trash and /tmp\n"
+"  sudo syn-clean clean --all     …and the package cache and the journal\n"
 "  syn-clean shred <path...>      overwrite and delete, files or folders\n"
 "  syn-clean gui                  the window\n"
 "  syn-clean list                 the category names\n"
@@ -65,6 +66,14 @@ static bool confirm(const char *what)
 int cmd_scan(int nsel, char **sel)
 {
 	unsigned long long total = 0;
+	/*
+	 * ⛔ AND HOW MUCH OF THE TOTAL THIS PROCESS COULD NOT TAKE. The bottom line
+	 * is the number somebody acts on — 44.4 GB, of which 27 GB was the package
+	 * cache and the journal and no command this user could type would release
+	 * a byte of it. The rows each said "(needs root)"; the total did not, and
+	 * the total is what gets read.
+	 */
+	unsigned long long needs_sudo = 0;
 	rec_header("id\tlabel\twhat\tbytes\tfiles\troot\tlogins");
 
 	for (size_t i = 0; i < g_ncategories; i++) {
@@ -78,6 +87,7 @@ int cmd_scan(int nsel, char **sel)
 		unsigned long long b = 0, n = 0;
 		category_measure(c, &b, &n);
 		total += b;
+		if (c->needs_root && geteuid() != 0) needs_sudo += b;
 
 		if (g_out == OUT_REC) {
 			char *id = pct_encode(c->id), *la = pct_encode(c->label),
@@ -104,6 +114,14 @@ int cmd_scan(int nsel, char **sel)
 		char h[32];
 		human_size(total, h, sizeof h);
 		printf(_("\n  %s could be freed.\n"), h);
+		/* ⛔ A WHOLE SENTENCE OF ITS OWN, not a clause spliced onto the line
+		 * above: the two numbers are two facts, and a fragment appended to a
+		 * translated sentence is a fragment no language can place. */
+		if (needs_sudo > 0) {
+			char r[32];
+			human_size(needs_sudo, r, sizeof r);
+			printf(_("  %s of that needs sudo.\n"), r);
+		}
 	}
 	return 0;
 }
@@ -118,8 +136,18 @@ int cmd_clean(int nsel, char **sel)
 	 * they use, which is not a side effect of tidying up — it is the sort of
 	 * thing somebody must choose by name. A sweep that included it would be a
 	 * cleaner people learn not to run. */
+	/* ⚠ ASKED ABOUT WHAT IT WILL ACTUALLY TAKE. Run with root, `--all` reaches
+	 * the package cache and the journal as well, and a question that named
+	 * only the caches would be consent for something smaller than what
+	 * follows. */
+	bool as_root = geteuid() == 0;
+
 	if (all) {
-		if (!confirm(_("Clean every cache, thumbnail and trashed file?")))
+		const char *q = as_root
+		    ? _("Clean every cache, thumbnail and trashed file, the package "
+		        "cache and the journal?")
+		    : _("Clean every cache, thumbnail and trashed file?");
+		if (!confirm(q))
 			return 1;
 	} else if (nsel > 0) {
 		/* ⛔ AND A NAMED CATEGORY ASKS TOO. Naming one says which files, not
@@ -143,7 +171,23 @@ int cmd_clean(int nsel, char **sel)
 		const category_t *c = &g_categories[i];
 		bool want = false;
 		if (all) {
-			want = !c->needs_root && !c->loses_logins;
+			/*
+			 * ⛔ AND WITH ROOT IT DOES THE ROOT ROWS. `--all` excluded them on
+			 * the flag, so `sudo syn-clean clean --all` — the command the scan
+			 * itself tells people to run — swept the caches and left every
+			 * byte that needed the sudo they had just typed.
+			 *
+			 * ⚠ `uninstalls` STILL SITS OUT, root or not. Removing packages is
+			 * not tidying up; it is chosen by name, the same as cookies.
+			 */
+			want = (!c->needs_root || as_root) &&
+			       !c->loses_logins && !c->uninstalls;
+
+			/* ⛔ AND A SKIPPED ROW SAYS WHICH COMMAND DOES IT. Silence here is
+			 * what made a sweep that freed a third of the total look like one
+			 * that freed all of it. */
+			if (c->needs_root && !as_root && !c->uninstalls)
+				category_warn_needs_root(c);
 		} else {
 			for (int j = 0; j < nsel; j++)
 				if (!strcmp(sel[j], c->id)) want = true;

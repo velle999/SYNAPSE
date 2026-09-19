@@ -49,7 +49,9 @@ msgstr "何も選択されていません。"
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "ファイルやフォルダーを上書きしてから削除します。取り消しはできず、ゴミ箱にも入りません。"
+msgstr ""
+"ファイルやフォルダーを上書きしてから削除します。取り消しはできず、ゴミ箱にも"
+"入りません。"
 
 msgid "Overwrite and delete it"
 msgstr "上書きして削除"
@@ -61,20 +63,26 @@ msgid "Remove %1"
 msgstr "%1 を削除"
 
 msgid "Snapshots in /.snapshots also hold copies this cannot reach. "
-msgstr "/.snapshots のスナップショットにも、これでは届かない複製が残っています。 "
+msgstr ""
+"/.snapshots のスナップショットにも、これでは届かない複製が残っています。 "
 
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "ファイルはなくなりますが、その中身は生のディスクからまだ復元できるかもしれません。それを本当に防ぐのはディスク全体の暗号化です。"
+msgstr ""
+"ファイルはなくなりますが、その中身は生のディスクからまだ復元できるかもしれま"
+"せん。それを本当に防ぐのはディスク全体の暗号化です。"
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "これは %1 で、コピーオンライトです。上書きは新しいブロックを書き、古いブロックはそのまま残ります。 "
+msgstr ""
+"これは %1 で、コピーオンライトです。上書きは新しいブロックを書き、古いブロッ"
+"クはそのまま残ります。 "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
-msgstr "消したいものにチェックを入れてください。ボタンを押すまで何も消えません。"
+msgstr ""
+"消したいものにチェックを入れてください。ボタンを押すまで何も消えません。"
 
 msgid "some of that could not be removed"
 msgstr "その一部は削除できませんでした"
@@ -97,7 +105,20 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  %s を解放できます。\n"
+msgstr ""
+"\n"
+"  %s を解放できます。\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  そのうち %s には sudo が必要です。\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+"キャッシュ、サムネイル、ゴミ箱のファイル、パッケージキャッシュ、ジャーナルを"
+"すべて消しますか?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "キャッシュ、サムネイル、ゴミ箱のファイルをすべて消しますか?"
@@ -120,10 +141,12 @@ msgstr "shred にはパスが必要です"
 
 #, c-format
 msgid "%s is copy-on-write: overwriting does NOT replace the old blocks."
-msgstr "%s はコピーオンライトです。上書きしても古いブロックは置き換わりません。"
+msgstr ""
+"%s はコピーオンライトです。上書きしても古いブロックは置き換わりません。"
 
 msgid "  and /.snapshots holds read-only copies this cannot reach."
-msgstr "  さらに /.snapshots には、これでは届かない読み取り専用の複製があります。"
+msgstr ""
+"  さらに /.snapshots には、これでは届かない読み取り専用の複製があります。"
 
 msgid "  The file will be gone. Recovering its contents from the raw disk"
 msgstr "  ファイルはなくなります。生のディスクから中身を取り戻すことは"
@@ -151,7 +174,8 @@ msgid_plural "Overwritten %d times and deleted: %s.\n"
 msgstr[0] "%d 回上書きして削除しました: %s。\n"
 
 msgid "no display — syn-clean gui needs a graphical session"
-msgstr "ディスプレイがありません — syn-clean gui にはグラフィカルセッションが必要です"
+msgstr ""
+"ディスプレイがありません — syn-clean gui にはグラフィカルセッションが必要です"
 
 msgid "quickshell is not installed — synpkg install quickshell"
 msgstr "quickshell がインストールされていません — synpkg install quickshell"
@@ -230,13 +254,43 @@ msgstr "ジャーナルを直近 1 週間分に切り詰めます"
 msgid "out of memory"
 msgstr "メモリが足りません"
 
+msgid "journalctl could not be run — the journal was left alone"
+msgstr "journalctl を実行できませんでした — ジャーナルはそのままです"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "pacman を実行できませんでした — パッケージは削除されていません"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "孤立パッケージを %llu 個削除します。\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr ""
+"pacman が削除できませんでした — パッケージデータベースが使用中かもしれません"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "孤立パッケージを %llu 個削除しました。\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"一部のファイルを削除できませんでした — 別のユーザーのものです。sudo でやり直"
+"してください。"
+
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"
-msgstr "%s が動いています — 先に閉じてください。さもないと掃除されるのはそのプロファイルです"
+msgstr ""
+"%s が動いています — 先に閉じてください。さもないと掃除されるのはそのプロファ"
+"イルです"
 
 #, c-format
 msgid "'%s' needs root: run `syn-clean clean %s` with sudo"
-msgstr "'%s' には root が必要です: `syn-clean clean %s` を sudo で実行してください"
+msgstr ""
+"'%s' には root が必要です: `syn-clean clean %s` を sudo で実行してください"
 
 #, c-format
 msgid "%s is on another filesystem — left alone"

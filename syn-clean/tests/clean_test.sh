@@ -24,6 +24,22 @@ unset LANGUAGE
 S=${1:-./build/syn-clean}
 [ -x "$S" ] || { echo "not executable: $S" >&2; exit 1; }
 
+# ⛔ NEVER AS root, AND THAT IS NOT CAUTION EITHER.
+#
+# Since 0.1.0-5 the root categories are DONE rather than refused — `clean --all`
+# with root empties /var/cache/pacman/pkg and vacuums the journal — and this
+# suite runs `clean --all`. As root that is the package cache and the system
+# log of whoever typed `meson test`, which is the same bug SYNCLEAN_TMPDIRS was
+# added for, one directory over.
+#
+# ⚠ Loudly, not as a skip. makepkg refuses to run as root at all, so the build
+# never lands here; anyone who does is running it by hand and needs to know why
+# it stopped rather than to see a green suite that asserted nothing.
+if [ "$(id -u)" = 0 ]; then
+    echo "clean_test.sh: refusing to run as root — it would clean this machine" >&2
+    exit 1
+fi
+
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 export SYNCLEAN_HOME="$T/home"
@@ -145,6 +161,151 @@ else
     [ ! -f "$SYNCLEAN_HOME/.mozilla/firefox/abc.default/cookies.sqlite" ]
     chk "cookies go when asked for by name" $?
     ok "…no browser was running, so nothing had to be blocked"
+fi
+
+# ── ⛔ WHAT WENT, NOT WHAT WAS FOUND ────────────────────────────────────────
+#
+# The count used to be added before the unlink was attempted, so a tree this
+# user cannot write was reported as freed with every byte of it still on the
+# disk: 13.1 GB of root-owned rootfs trees sitting in a trash folder, "Freed
+# 13.1 GB", and nothing but the exit status saying otherwise.
+#
+# A directory with no write permission is the same refusal as somebody else's
+# files, reachable without root.
+mkdir -p "$SYNCLEAN_HOME/.local/share/Trash/files/locked"
+mk "$SYNCLEAN_HOME/.local/share/Trash/files/locked/stuck" 30000
+mk "$SYNCLEAN_HOME/.local/share/Trash/files/loose"        10000
+mkdir -p "$SYNCLEAN_HOME/.local/share/Trash/info"
+: > "$SYNCLEAN_HOME/.local/share/Trash/info/loose.trashinfo"
+chmod 0500 "$SYNCLEAN_HOME/.local/share/Trash/files/locked"
+
+out=$("$S" --yes clean trash 2>&1)
+chmod 0700 "$SYNCLEAN_HOME/.local/share/Trash/files/locked"
+[ -f "$SYNCLEAN_HOME/.local/share/Trash/files/locked/stuck" ]
+chk "a file that refuses to go stays" $?
+grep -qE "Freed (0 B|1[0-9]\.[0-9] KB)" <<<"$out"
+chk "…and is not counted as freed" $?
+grep -qi "could not be removed" <<<"$out"
+chk "…and the refusal is said out loud" $?
+
+# ⛔ AND THE RESTORE RECORDS OUTLIVE IT. Trash/info holds one .trashinfo per
+# item — the original path, which is the whole of what "restore" means. Emptying
+# it while Trash/files refused leaves the space still used AND nothing
+# restorable, which is how a real trash folder came to hold 13 GB that no
+# longer belonged to anything.
+[ -f "$SYNCLEAN_HOME/.local/share/Trash/info/loose.trashinfo" ]
+chk "…and the restore records are kept when the files would not go" $?
+
+# ⚠ AND THE TRASH IS EMPTIED, NOT REMOVED. The desktop puts the next deleted
+# file straight into this directory.
+[ -d "$SYNCLEAN_HOME/.local/share/Trash/files" ]
+chk "the trash directory itself survives being emptied" $?
+
+rm -rf "$SYNCLEAN_HOME/.local/share/Trash"
+
+# ── ⛔ THE ROOT ROWS ARE A QUESTION ABOUT THE PROCESS ───────────────────────
+#
+# `needs_root` was read as "this can never be done": `sudo syn-clean clean
+# pkgcache` answered "needs root: run it with sudo" to somebody who had. All
+# three root categories were unreachable by any command line while the scan
+# offered their bytes in the total at the bottom.
+out=$("$S" --yes clean pkgcache 2>&1)
+grep -qi "needs root" <<<"$out"
+chk "without root, a root category says which command does it" $?
+
+out=$("$S" --yes --dry-run clean --all 2>&1)
+grep -q "pkgcache" <<<"$out"
+chk "…and --all names the rows it skipped rather than going quiet" $?
+
+# ⛔ AND THE TOTAL SAYS HOW MUCH OF ITSELF IS OUT OF REACH. 44.4 GB could be
+# freed, of which 27 GB needed a sudo the line never mentioned.
+root_bytes=$("$S" --rec scan 2>/dev/null |
+             awk -F'\t' '$6=="1" {s+=$4} END{print s+0}')
+if [ "$root_bytes" -gt 0 ]; then
+    "$S" scan 2>/dev/null | grep -qi "needs sudo"
+    chk "the scan total says how much of it needs sudo" $?
+else
+    printf '  skip  no root-owned bytes on this machine to report\n'
+fi
+
+# ── ⛔ AND WITH ROOT IT DOES THEM ───────────────────────────────────────────
+#
+# ⚠ In a user namespace, which is geteuid() == 0 without being able to harm
+# anything outside this fixture. $SYNCLEAN_PKGCACHE is the seam that keeps the
+# real /var/cache/pacman/pkg out of reach — the same shape as SYNCLEAN_HOME,
+# and added for the same reason the moment this category stopped refusing.
+if unshare -r true 2>/dev/null; then
+    mkdir -p "$T/pkgcache"
+    mk "$T/pkgcache/some-1.0-1-x86_64.pkg.tar.zst" 50000
+    out=$(unshare -r env SYNCLEAN_PKGCACHE="$T/pkgcache" \
+              SYNCLEAN_HOME="$SYNCLEAN_HOME" SYNCLEAN_TMPDIRS="$SYNCLEAN_TMPDIRS" \
+              LC_ALL=C.UTF-8 "$S" --yes clean pkgcache 2>&1)
+    grep -qi "needs root" <<<"$out"
+    [ $? != 0 ]
+    chk "⛔ as root the package cache is not refused" $?
+    [ ! -f "$T/pkgcache/some-1.0-1-x86_64.pkg.tar.zst" ]
+    chk "…and the packages actually go" $?
+    # ⚠ pacman owns this directory; emptying it is the job, removing it is a
+    # surprise for the next download.
+    [ -d "$T/pkgcache" ]
+    chk "…while the cache directory itself stays" $?
+else
+    printf '  skip  no unprivileged user namespaces (the root half is unasserted)\n'
+fi
+
+# ── ⛔ ORPHANS ARE UNINSTALLED, AND THAT IS NOT A SWEEP ─────────────────────
+#
+# The row counted them and the clean did nothing at all — roots_for() has no
+# entry for this id, so `clean orphans` walked an empty list and printed
+# "Freed 0 B" over packages that were still installed.
+#
+# ⚠ AGAINST A FAKE pacman ON PATH. The real one would uninstall software from
+# the machine running the suite, and what is being asserted is this program's
+# half: that it asks, that it reports, and that a failure is not reported as
+# success. Prepending PATH substitutes a binary; it cannot hide one, which is
+# why nothing below tests the absent case.
+mkdir -p "$T/bin"
+cat > "$T/bin/pacman" <<'FAKE'
+#!/bin/sh
+case "$*" in
+    *-Qtdq*) printf 'libfoo\nlibbar\n' ;;
+    *-Rns*)  exit "${FAKE_PACMAN_RC:-0}" ;;
+esac
+FAKE
+chmod +x "$T/bin/pacman"
+
+n=$(PATH="$T/bin:$PATH" "$S" --rec scan orphans 2>/dev/null |
+    awk -F'\t' '$1=="orphans"{print $5}')
+same "the orphan row counts what pacman lists" "2" "$n"
+
+# ⚠ AND THE REST OF IT NEEDS root, because this category does. Same namespace
+# as above: geteuid() == 0, and a fake pacman so nothing real is uninstalled.
+if unshare -r true 2>/dev/null; then
+    ns() { unshare -r env PATH="$T/bin:$PATH" SYNCLEAN_HOME="$SYNCLEAN_HOME" \
+               SYNCLEAN_TMPDIRS="$SYNCLEAN_TMPDIRS" SYNCLEAN_PKGCACHE="$T/pkgcache" \
+               LC_ALL=C.UTF-8 "$@"; }
+
+    out=$(ns "$S" --yes --dry-run clean orphans 2>&1)
+    grep -qi "would remove 2" <<<"$out"
+    chk "a dry run says how many it would uninstall" $?
+
+    out=$(ns "$S" --yes clean orphans 2>&1)
+    grep -qi "removed 2" <<<"$out"
+    chk "clean orphans says what it uninstalled" $?
+
+    out=$(ns env FAKE_PACMAN_RC=1 "$S" --yes clean orphans 2>&1)
+    grep -qi "could not remove" <<<"$out"
+    chk "⛔ a pacman that failed is not reported as a removal" $?
+
+    # ⛔ AND `--all` NEVER TAKES IT, root or not. Every other category deletes
+    # files that come back on their own; this one uninstalls software, which is
+    # chosen by name for the same reason cookies are.
+    out=$(ns "$S" --yes --dry-run clean --all 2>&1)
+    grep -qi "orphan" <<<"$out"
+    [ $? != 0 ]
+    chk "--all does NOT uninstall packages, even with root" $?
+else
+    printf '  skip  no unprivileged user namespaces (the orphan half is unasserted)\n'
 fi
 
 # ── shred ───────────────────────────────────────────────────────────────────

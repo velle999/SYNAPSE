@@ -49,7 +49,8 @@ msgstr "لم يُحدَّد شيء."
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "الكتابة فوق ملف أو مجلد ثم حذفه. لا تراجع عن ذلك، ولا يذهب إلى المهملات."
+msgstr ""
+"الكتابة فوق ملف أو مجلد ثم حذفه. لا تراجع عن ذلك، ولا يذهب إلى المهملات."
 
 msgid "Overwrite and delete it"
 msgstr "اكتب فوقه واحذفه"
@@ -66,12 +67,16 @@ msgstr "كما تحتفظ لقطات /.snapshots بنسخ لا يصل إليها
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "سيختفي الملف؛ لكن محتواه قد يظل قابلاً للاسترجاع من القرص الخام. والذي يمنع ذلك فعلاً هو تعمية القرص بالكامل."
+msgstr ""
+"سيختفي الملف؛ لكن محتواه قد يظل قابلاً للاسترجاع من القرص الخام. والذي يمنع "
+"ذلك فعلاً هو تعمية القرص بالكامل."
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "هذا %1، وهو نظام نسخ-عند-الكتابة: فالكتابة فوقه تكتب كتلاً جديدة وتترك القديمة. "
+msgstr ""
+"هذا %1، وهو نظام نسخ-عند-الكتابة: فالكتابة فوقه تكتب كتلاً جديدة وتترك "
+"القديمة. "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
 msgstr "أشِّر على ما تريد إزالته. لا يذهب شيء قبل أن تضغط الزر."
@@ -97,7 +102,19 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  يمكن تحرير %s.\n"
+msgstr ""
+"\n"
+"  يمكن تحرير %s.\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  يحتاج %s من ذلك إلى sudo.\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+"أننظّف كل ذاكرة مؤقتة ومصغّرة وملف في المهملات، وذاكرة الحزم المؤقتة والسجل؟"
 
 msgid "Clean every cache, thumbnail and trashed file?"
 msgstr "أننظّف كل ذاكرة مؤقتة ومصغّرة وملف في المهملات؟"
@@ -233,6 +250,32 @@ msgstr "السجل، مقتصراً على الأسبوع الأخير"
 
 msgid "out of memory"
 msgstr "نفدت الذاكرة"
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr "تعذّر تشغيل journalctl — بقي السجل كما هو"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr "تعذّر تشغيل pacman — لم تُزل أي حزمة"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "ستُزال %llu حزمة يتيمة.\n"
+msgstr[1] "ستُزال %llu حزم يتيمة.\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr "تعذّر على pacman إزالتها — قد تكون قاعدة بيانات الحزم قيد الاستخدام"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "أُزيلت %llu حزمة يتيمة.\n"
+msgstr[1] "أُزيلت %llu حزم يتيمة.\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr "تعذّرت إزالة بعض الملفات — إنها لمستخدم آخر. أعد المحاولة بـ sudo."
 
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"

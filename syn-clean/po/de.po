@@ -49,7 +49,9 @@ msgstr "Nichts ist angehakt."
 msgid ""
 "Overwrite a file or folder and delete it. There is no undo and it does not "
 "go to the Trash."
-msgstr "Eine Datei oder einen Ordner überschreiben und löschen. Es gibt kein Zurück, und es landet nicht im Papierkorb."
+msgstr ""
+"Eine Datei oder einen Ordner überschreiben und löschen. Es gibt kein Zurück, "
+"und es landet nicht im Papierkorb."
 
 msgid "Overwrite and delete it"
 msgstr "Überschreiben und löschen"
@@ -61,20 +63,28 @@ msgid "Remove %1"
 msgstr "%1 entfernen"
 
 msgid "Snapshots in /.snapshots also hold copies this cannot reach. "
-msgstr "Snapshots in /.snapshots halten ebenfalls Kopien, die dies nicht erreicht. "
+msgstr ""
+"Snapshots in /.snapshots halten ebenfalls Kopien, die dies nicht erreicht. "
 
 msgid ""
 "The file will be gone; its contents may still be recoverable from the raw "
 "disk. Full-disk encryption is what actually prevents that."
-msgstr "Die Datei wird weg sein; ihr Inhalt lässt sich möglicherweise noch von der rohen Platte wiederherstellen. Was das wirklich verhindert, ist Festplattenverschlüsselung."
+msgstr ""
+"Die Datei wird weg sein; ihr Inhalt lässt sich möglicherweise noch von der "
+"rohen Platte wiederherstellen. Was das wirklich verhindert, ist "
+"Festplattenverschlüsselung."
 
 msgid ""
 "This is %1, which is copy-on-write: overwriting writes new blocks and leaves "
 "the old ones. "
-msgstr "Dies ist %1, ein Copy-on-Write-Dateisystem: Überschreiben schreibt neue Blöcke und lässt die alten liegen. "
+msgstr ""
+"Dies ist %1, ein Copy-on-Write-Dateisystem: Überschreiben schreibt neue "
+"Blöcke und lässt die alten liegen. "
 
 msgid "Tick what to remove. Nothing goes until you press the button."
-msgstr "Hake an, was weg soll. Nichts verschwindet, bevor du die Schaltfläche drückst."
+msgstr ""
+"Hake an, was weg soll. Nichts verschwindet, bevor du die Schaltfläche "
+"drückst."
 
 msgid "some of that could not be removed"
 msgstr "ein Teil davon konnte nicht entfernt werden"
@@ -83,7 +93,9 @@ msgid "that could not be destroyed"
 msgstr "das konnte nicht vernichtet werden"
 
 msgid "nothing to ask on a pipe — pass --yes if you mean it"
-msgstr "auf einer Pipe gibt es niemanden zu fragen — gib --yes an, wenn du es ernst meinst"
+msgstr ""
+"auf einer Pipe gibt es niemanden zu fragen — gib --yes an, wenn du es ernst "
+"meinst"
 
 #, c-format
 msgid "  %-14s %10s  %6llu  %s  (needs root)\n"
@@ -97,10 +109,24 @@ msgstr "  %-14s %10s  %6llu  %s\n"
 msgid ""
 "\n"
 "  %s could be freed.\n"
-msgstr "\n  %s könnten freigegeben werden.\n"
+msgstr ""
+"\n"
+"  %s könnten freigegeben werden.\n"
+
+#, c-format
+msgid "  %s of that needs sudo.\n"
+msgstr "  %s davon braucht sudo.\n"
+
+msgid ""
+"Clean every cache, thumbnail and trashed file, the package cache and the "
+"journal?"
+msgstr ""
+"Jeden Cache, jedes Vorschaubild und jede weggeworfene Datei, den Paket-Cache "
+"und das Journal bereinigen?"
 
 msgid "Clean every cache, thumbnail and trashed file?"
-msgstr "Jeden Cache, jedes Vorschaubild und jede weggeworfene Datei bereinigen?"
+msgstr ""
+"Jeden Cache, jedes Vorschaubild und jede weggeworfene Datei bereinigen?"
 
 #, c-format
 msgid "Remove %d category of files?"
@@ -124,13 +150,16 @@ msgid "%s is copy-on-write: overwriting does NOT replace the old blocks."
 msgstr "%s ist Copy-on-Write: Überschreiben ersetzt die alten Blöcke NICHT."
 
 msgid "  and /.snapshots holds read-only copies this cannot reach."
-msgstr "  und /.snapshots hält schreibgeschützte Kopien, die dies nicht erreicht."
+msgstr ""
+"  und /.snapshots hält schreibgeschützte Kopien, die dies nicht erreicht."
 
 msgid "  The file will be gone. Recovering its contents from the raw disk"
 msgstr "  Die Datei wird weg sein. Ihren Inhalt von der rohen Platte zu bergen"
 
 msgid "  may still be possible. Full-disk encryption is the real answer."
-msgstr "  kann weiterhin möglich sein. Die echte Antwort ist Festplattenverschlüsselung."
+msgstr ""
+"  kann weiterhin möglich sein. Die echte Antwort ist "
+"Festplattenverschlüsselung."
 
 #, c-format
 msgid "Destroy %d item? This cannot be undone."
@@ -233,6 +262,38 @@ msgstr "das Journal, auf die letzte Woche gekürzt"
 
 msgid "out of memory"
 msgstr "Speicher erschöpft"
+
+msgid "journalctl could not be run — the journal was left alone"
+msgstr ""
+"journalctl konnte nicht ausgeführt werden — das Journal blieb unberührt"
+
+msgid "pacman could not be run — no packages were removed"
+msgstr ""
+"pacman konnte nicht ausgeführt werden — es wurden keine Pakete entfernt"
+
+#, c-format
+msgid "Would remove %llu orphaned package.\n"
+msgid_plural "Would remove %llu orphaned packages.\n"
+msgstr[0] "%llu verwaistes Paket würde entfernt.\n"
+msgstr[1] "%llu verwaiste Pakete würden entfernt.\n"
+
+msgid "pacman could not remove them — the package database may be in use"
+msgstr ""
+"pacman konnte sie nicht entfernen — die Paketdatenbank ist möglicherweise in "
+"Benutzung"
+
+#, c-format
+msgid "Removed %llu orphaned package.\n"
+msgid_plural "Removed %llu orphaned packages.\n"
+msgstr[0] "%llu verwaistes Paket entfernt.\n"
+msgstr[1] "%llu verwaiste Pakete entfernt.\n"
+
+msgid ""
+"Some files could not be removed — they belong to another user. Try again "
+"with sudo."
+msgstr ""
+"Manche Dateien konnten nicht entfernt werden — sie gehören einem anderen "
+"Benutzer. Versuche es erneut mit sudo."
 
 #, c-format
 msgid "%s is running — close it first, or its profile is what gets cleaned"
