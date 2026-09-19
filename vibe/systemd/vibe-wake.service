@@ -10,17 +10,23 @@ Documentation=man:vibe(1)
 # indicator is a file this writes under the session's config directory.
 PartOf=graphical-session.target
 After=graphical-session.target
+# ⚠ Restarted, but not forever. A microphone that cannot be opened — unplugged,
+# taken by something else — should be reported once and left alone, not retried
+# into the journal every ten seconds for the rest of the session.
+#
+# ⛔ THESE TWO ARE [Unit] KEYS. They sat under [Service], where systemd rejects
+# StartLimitIntervalSec with "Unknown key" on every daemon-reload and uses the
+# default 10s window instead. With RestartSec=10, three starts can never land
+# inside ten seconds, so the limit never tripped, and the "not forever"
+# above was retrying forever.
+StartLimitBurst=3
+StartLimitIntervalSec=120
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/vibe wake run
-# ⚠ Restarted, but not forever. A microphone that cannot be opened — unplugged,
-# taken by something else — should be reported once and left alone, not retried
-# into the journal every second for the rest of the session.
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=3
-StartLimitIntervalSec=120
 
 [Install]
 WantedBy=graphical-session.target
