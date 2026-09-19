@@ -2797,6 +2797,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->cursor_frame.link);
     wl_list_remove(&s->request_cursor.link);
     wl_list_remove(&s->request_set_selection.link);
+    wl_list_remove(&s->kbd_focus_change.link);
     wl_list_remove(&s->new_constraint.link);
     wl_list_remove(&s->touch_down.link);
     wl_list_remove(&s->touch_up.link);

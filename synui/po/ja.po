@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -1135,7 +1135,9 @@ msgstr "タッチパッドのジェスチャー"
 msgid ""
 "Four fingers left or right changes desktop; up and down open and close the "
 "overview. Off gives every swipe to apps"
-msgstr "4 本指で左右にスワイプするとデスクトップを切り替え、上下でミッションコントロールを開閉します。オフにするとすべてのスワイプがアプリに渡ります"
+msgstr ""
+"4 本指で左右にスワイプするとデスクトップを切り替え、上下でミッションコント"
+"ロールを開閉します。オフにするとすべてのスワイプがアプリに渡ります"
 
 #: src/ctlpanel.c:1098
 msgid "Cursor size"
@@ -3640,96 +3642,100 @@ msgid "New Window"
 msgstr "新しいウィンドウ"
 
 #: src/render.c:8298
+msgid "Move Window Here"
+msgstr "ウィンドウをここへ移動"
+
+#: src/render.c:8299
 msgid "Close Window"
 msgstr "ウィンドウを閉じる"
 
-#: src/render.c:8299
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr "すべてのウィンドウを閉じる"
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr "ドックを自動的に隠す"
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr "ドックをウィンドウの手前に"
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr "アイコンを拡大"
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr "時計を表示"
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr "アナログ文字盤"
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr "「すべてのアプリ」ボタンを表示"
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr "電源ボタンを表示"
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr "ドックの設定…"
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr "画面をロック"
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr "ログアウト"
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr "スリープ"
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr "再起動"
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr "シャットダウン"
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr "最小化中"
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr "最小"
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr "ウィンドウ"
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab 次へ · Alt+Shift+Tab 前へ"
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr "ウィンドウ一覧"
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "デスクトップ %d · ウィンドウ %d 個"
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr "このデスクトップには何も開いていません。"
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

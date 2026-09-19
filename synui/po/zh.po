@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -3575,96 +3575,100 @@ msgid "New Window"
 msgstr "新建窗口"
 
 #: src/render.c:8298
+msgid "Move Window Here"
+msgstr "将窗口移到这里"
+
+#: src/render.c:8299
 msgid "Close Window"
 msgstr "关闭窗口"
 
-#: src/render.c:8299
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr "关闭全部窗口"
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr "自动隐藏程序坞"
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr "程序坞置于窗口之上"
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr "放大图标"
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr "显示时钟"
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr "指针式表盘"
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr "显示「全部应用」按钮"
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr "显示电源按钮"
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr "程序坞设置…"
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr "锁定屏幕"
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr "注销"
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr "睡眠"
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr "重启"
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr "关机"
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr "已最小化"
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr "最小"
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr "窗口"
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab 下一个 · Alt+Shift+Tab 上一个"
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr "窗口总览"
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "桌面 %d · %d 个窗口"
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr "此桌面上没有打开任何窗口。"
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

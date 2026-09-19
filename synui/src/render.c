@@ -8295,6 +8295,7 @@ static const char *dockact_label(syn_server_t *s, syn_dockact_t a)
     case SYN_DOCKACT_UNPIN:  return _("Unpin from Dock");
     case SYN_DOCKACT_OPEN:   return _("Open");
     case SYN_DOCKACT_NEWWIN:   return _("New Window");
+    case SYN_DOCKACT_MOVEHERE: return _("Move Window Here");
     case SYN_DOCKACT_CLOSEWIN: return _("Close Window");
     case SYN_DOCKACT_QUIT:     return _("Quit All Windows");
     /* Named for what they DO, not for the flag they set — "Dock above windows"

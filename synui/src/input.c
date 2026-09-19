@@ -66,6 +66,7 @@
 #include <wlr/types/wlr_switch.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 
 #include "synui.h"
 #include "effects.h"
@@ -1110,6 +1111,67 @@ static bool panel_verb(syn_server_t *s, const char *arg, bool show)
 }
 
 /* Execute a bind action (see config.c for the names and defaults). */
+/* Carry a window to another monitor: its desktop stays, the monitor changes.
+ * The body of the `move_output` bind, and the dock's "Move Window Here" — one
+ * implementation, because the ways this has gone wrong (below) are properties
+ * of the window, not of how it was asked for. */
+void view_move_to_output(syn_server_t *s, syn_view_t *v, syn_output_t *next)
+{
+    if (!v || !v->mapped || !next) return;
+    syn_output_t *cur = v->output ? v->output : server_focused_output(s);
+    if (!cur || cur == next) return;
+
+    struct wlr_box from, to;
+    output_box_of(s, cur,  &from);
+    output_box_of(s, next, &to);
+
+    /* ⛔ `v->floating` IS THE WINDOW'S FLAG, NOT THE DESKTOP'S, and that is
+     * the difference between this key working and looking dead.
+     *
+     * On a FLOATING desktop no window is marked floating — the desktop is —
+     * so a window there took the branch below that places nothing and left
+     * the rest to layout_apply. But LAYOUT_FLOATING's pass is
+     * layout_float_arrange, which deliberately steps over every window the
+     * user has ever dragged or resized (hand_placed). So view_set_output
+     * moved the RECORD and left the pixels exactly where they were: the key
+     * did nothing visible, and pressing it again only walked the window's
+     * idea of which monitor it was on round the ring, out of step with what
+     * was on screen.
+     *
+     * Anything no layout is going to place has to be carried across here. */
+    bool placed_by_layout = !v->floating && v->workspace &&
+                            (v->workspace->layout != LAYOUT_FLOATING ||
+                             !v->hand_placed);
+
+    view_set_output(s, v, next);
+
+    if (v->fullscreen) {
+        v->x = to.x;      v->y = to.y;
+        v->w = to.width;  v->h = to.height;
+        if (v->is_xwayland)
+            wlr_xwayland_surface_configure(v->xsurface, to.x, to.y,
+                                           to.width, to.height);
+        else
+            wlr_xdg_toplevel_set_size(v->xdg_surface->toplevel,
+                                      to.width, to.height);
+        wlr_scene_node_set_position(view_node(v), to.x, to.y);
+        wlr_scene_node_raise_to_top(view_node(v));
+    } else if (!placed_by_layout) {
+        /* Keep the same on-screen position relative to the monitor. */
+        int nx = v->x + (to.x - from.x);
+        int ny = v->y + (to.y - from.y);
+        if (nx + v->w > to.x + to.width)  nx = to.x + to.width  - v->w;
+        if (ny + v->h > to.y + to.height) ny = to.y + to.height - v->h;
+        if (nx < to.x) nx = to.x;
+        if (ny < to.y) ny = to.y;
+        view_resize(v, nx, ny, v->w, v->h);
+        wlr_scene_node_raise_to_top(view_node(v));
+    }
+    /* workspace_move_view keeps focus (the target workspace is visible on
+     * the new monitor); re-assert activation so the client repaints. */
+    focus_view(s, v, view_surface(v));
+}
+
 bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     syn_workspace_t *ws = server_active_workspace(s);
@@ -1990,55 +2052,7 @@ bool synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         syn_output_t *next = wl_container_of(node, next, link);
         if (!next || next == cur) return true;                  /* only one monitor */
 
-        struct wlr_box from, to;
-        output_box_of(s, cur,  &from);
-        output_box_of(s, next, &to);
-
-        /* ⛔ `v->floating` IS THE WINDOW'S FLAG, NOT THE DESKTOP'S, and that is
-         * the difference between this key working and looking dead.
-         *
-         * On a FLOATING desktop no window is marked floating — the desktop is —
-         * so a window there took the branch below that places nothing and left
-         * the rest to layout_apply. But LAYOUT_FLOATING's pass is
-         * layout_float_arrange, which deliberately steps over every window the
-         * user has ever dragged or resized (hand_placed). So view_set_output
-         * moved the RECORD and left the pixels exactly where they were: the key
-         * did nothing visible, and pressing it again only walked the window's
-         * idea of which monitor it was on round the ring, out of step with what
-         * was on screen.
-         *
-         * Anything no layout is going to place has to be carried across here. */
-        bool placed_by_layout = !v->floating && v->workspace &&
-                                (v->workspace->layout != LAYOUT_FLOATING ||
-                                 !v->hand_placed);
-
-        view_set_output(s, v, next);
-
-        if (v->fullscreen) {
-            v->x = to.x;      v->y = to.y;
-            v->w = to.width;  v->h = to.height;
-            if (v->is_xwayland)
-                wlr_xwayland_surface_configure(v->xsurface, to.x, to.y,
-                                               to.width, to.height);
-            else
-                wlr_xdg_toplevel_set_size(v->xdg_surface->toplevel,
-                                          to.width, to.height);
-            wlr_scene_node_set_position(view_node(v), to.x, to.y);
-            wlr_scene_node_raise_to_top(view_node(v));
-        } else if (!placed_by_layout) {
-            /* Keep the same on-screen position relative to the monitor. */
-            int nx = v->x + (to.x - from.x);
-            int ny = v->y + (to.y - from.y);
-            if (nx + v->w > to.x + to.width)  nx = to.x + to.width  - v->w;
-            if (ny + v->h > to.y + to.height) ny = to.y + to.height - v->h;
-            if (nx < to.x) nx = to.x;
-            if (ny < to.y) ny = to.y;
-            view_resize(v, nx, ny, v->w, v->h);
-            wlr_scene_node_raise_to_top(view_node(v));
-        }
-        /* workspace_move_view keeps focus (the target workspace is visible on
-         * the new monitor); re-assert activation so the client repaints. */
-        focus_view(s, v, view_surface(v));
+        view_move_to_output(s, v, next);
     } else {
         wlr_log(WLR_ERROR, "synui: unknown bind action '%s'", action);
         return false;
@@ -2135,6 +2149,76 @@ static bool bind_dispatch(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         }
     }
     return false;
+}
+
+/* ── Keyboard shortcuts inhibit (keyboard-shortcuts-inhibit-v1) ─────────
+ *
+ * A window that is standing in for another machine — Moonlight streaming a
+ * desktop, the VNC viewer — needs the keys this compositor would otherwise eat
+ * as binds. Without this, Super+O pressed in a Moonlight window on the ThinkPad
+ * moved the MOONLIGHT WINDOW between the ThinkPad's screens, and the desktop
+ * at the other end never saw a key. The client asks (Moonlight in fullscreen by
+ * default, gtk-vnc for its keyboard grab); synui grants it while that surface
+ * has keyboard focus and takes it back when focus leaves.
+ *
+ * ⛔ WHAT STAYS synui's WHATEVER IS ASKED: VT switching and the lock screen are
+ * handled above handle_keybinding and are never gated here, so an inhibiting
+ * window cannot trap anybody. Clicking another window moves focus, which ends
+ * the inhibition; Moonlight releases its own on Ctrl+Alt+Shift+Z.
+ *
+ * wlroots keeps the inhibitors in the manager's own list, so there is no
+ * bookkeeping here beyond switching each one on and off as focus moves. */
+static void kbd_inhibit_refresh(syn_server_t *s)
+{
+    if (!s->kbd_inhibit_mgr) return;
+    struct wlr_surface *focus = s->seat->keyboard_state.focused_surface;
+    struct wlr_keyboard_shortcuts_inhibitor_v1 *inh;
+    wl_list_for_each(inh, &s->kbd_inhibit_mgr->inhibitors, link) {
+        bool want = inh->seat == s->seat && inh->surface == focus;
+        if (want && !inh->active)
+            wlr_keyboard_shortcuts_inhibitor_v1_activate(inh);
+        else if (!want && inh->active)
+            wlr_keyboard_shortcuts_inhibitor_v1_deactivate(inh);
+    }
+}
+
+static bool kbd_shortcuts_inhibited(syn_server_t *s)
+{
+    if (!s->kbd_inhibit_mgr) return false;
+    struct wlr_surface *focus = s->seat->keyboard_state.focused_surface;
+    if (!focus) return false;
+    struct wlr_keyboard_shortcuts_inhibitor_v1 *inh;
+    wl_list_for_each(inh, &s->kbd_inhibit_mgr->inhibitors, link)
+        if (inh->active && inh->seat == s->seat && inh->surface == focus)
+            return true;
+    return false;
+}
+
+static void server_new_kbd_inhibitor(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, new_kbd_inhibitor);
+    (void)data;
+    /* Granted at once if the asking surface already has focus — the usual case:
+     * Moonlight asks as it goes fullscreen, with the keyboard already on it. */
+    kbd_inhibit_refresh(s);
+}
+
+static void server_kbd_focus_change(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, kbd_focus_change);
+    (void)data;
+    kbd_inhibit_refresh(s);
+}
+
+/* Same shutdown rule as the other managers: wlroots asserts nobody is still
+ * subscribed when the display tears the manager down. */
+static void server_kbd_inhibit_mgr_destroy(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, kbd_inhibit_mgr_destroy);
+    (void)data;
+    wl_list_remove(&s->new_kbd_inhibitor.link);
+    wl_list_remove(&s->kbd_inhibit_mgr_destroy.link);
+    s->kbd_inhibit_mgr = NULL;
 }
 
 static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
@@ -2379,7 +2463,11 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         uint32_t others = (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL |
                            WLR_MODIFIER_ALT  | WLR_MODIFIER_SHIFT) & ~tap_mod;
         s->tap_armed = is_tap_key && !(modifiers & others) &&
-                       !s->keys.capturing && !s->ctlpanel.sc_capturing;
+                       !s->keys.capturing && !s->ctlpanel.sc_capturing &&
+                       /* A tapped Super belongs to the window that asked for
+                        * the keys, or the start menu opens on this machine
+                        * every time Super is tapped at the other one. */
+                       !kbd_shortcuts_inhibited(s);
     } else if (is_tap_key && s->tap_armed) {
         s->tap_armed = 0;
         if (s->config.tap_action[0])
@@ -2588,7 +2676,10 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
          * keyboard the ordinary way. See the welcome-guide block further down. */
     }
 
-    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    /* ⚠ Not while the focused window has asked for the keys — see
+     * kbd_shortcuts_inhibited(). They go to it, below, like any other key. */
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+        !kbd_shortcuts_inhibited(s)) {
         for (int i = 0; i < nsyms; i++) {
             if (handle_keybinding(s, syms[i], modifiers)) {
                 handled = true;
@@ -5041,4 +5132,16 @@ void input_setup(syn_server_t *s)
     s->vptr_mgr_destroy.notify = server_vptr_mgr_destroy;
     wl_signal_add(&s->virtual_pointer_mgr->events.destroy,
                  &s->vptr_mgr_destroy);
+
+    /* keyboard-shortcuts-inhibit-v1 — see kbd_shortcuts_inhibited(). NOT in
+     * privileged_globals[]: a sandboxed Moonlight needs it as much as a native
+     * one, and what it grants is keys the focused window would be given anyway
+     * minus synui's binds — never a key meant for another window. */
+    s->kbd_inhibit_mgr = wlr_keyboard_shortcuts_inhibit_v1_create(s->display);
+    s->new_kbd_inhibitor.notify = server_new_kbd_inhibitor;
+    wl_signal_add(&s->kbd_inhibit_mgr->events.new_inhibitor, &s->new_kbd_inhibitor);
+    s->kbd_inhibit_mgr_destroy.notify = server_kbd_inhibit_mgr_destroy;
+    wl_signal_add(&s->kbd_inhibit_mgr->events.destroy, &s->kbd_inhibit_mgr_destroy);
+    s->kbd_focus_change.notify = server_kbd_focus_change;
+    wl_signal_add(&s->seat->keyboard_state.events.focus_change, &s->kbd_focus_change);
 }

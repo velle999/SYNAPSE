@@ -217,9 +217,19 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
 { (void)app_id; return &the_icon; }
 unsigned icon_generation(void) { return 1; }
 
-const char *view_app_id(syn_view_t *v) { (void)v; return NULL; }
+/* One window can be given an app id — the one phase 6b puts on another screen —
+ * and every other view keeps answering NULL, as the rest of this file expects. */
+static syn_view_t *named_view;
+static const char *named_app;
+const char *view_app_id(syn_view_t *v) { return v && v == named_view ? named_app : NULL; }
 struct wlr_surface *view_surface(syn_view_t *v) { (void)v; return NULL; }
 void view_close(syn_view_t *v) { (void)v; }
+/* What Move Window Here asked for — the move itself is input.c's, tested there
+ * through the bind it shares. */
+static syn_view_t   *moved_view;
+static syn_output_t *moved_to;
+void view_move_to_output(syn_server_t *s, syn_view_t *v, syn_output_t *o)
+{ (void)s; moved_view = v; moved_to = o; }
 void view_apply_minimized(syn_server_t *s, syn_view_t *v, int on)
 { (void)s; (void)v; (void)on; }
 void focus_view(syn_server_t *s, syn_view_t *v, struct wlr_surface *surf)
@@ -440,6 +450,9 @@ int main(void)
     server.dock_drag.icon = DOCK_DRAG_BAR;
 
     fake_wlr_output.data = &output;
+    /* Named, as every real output is: "here" for Move Window Here is found by
+     * the name of the screen under the click. */
+    fake_wlr_output.name = (char *)"HERE-1";
     output.wlr_output = &fake_wlr_output;
     output.server = &server;
     output.dock.tree = &fake_tree;
@@ -634,6 +647,66 @@ int main(void)
           "…and both of them below the dock's own settings");
     dockmenu_close(&server);
     server.dock_entries[0].running = 0;
+
+    /* ── 6b. Move Window Here ──────────────────────────────────────────────
+     * The way a window reaches the screen being looked at without a key — the
+     * dock on a stream's virtual display is on the screen the client watches.
+     * Offered only when one of the app's windows is on ANOTHER screen, and
+     * clicking it asks for exactly that window to come to this one. */
+    {
+        static syn_output_t other;
+        static struct wlr_output other_wlr;
+        static syn_view_t win;
+        memset(&other, 0, sizeof(other));
+        memset(&other_wlr, 0, sizeof(other_wlr));
+        memset(&win, 0, sizeof(win));
+        other_wlr.name = (char *)"ELSEWHERE-2";
+        other_wlr.data = &other;
+        other.wlr_output = &other_wlr;
+        other.server = &server;
+        wl_list_insert(server.outputs.prev, &other.link);
+        win.mapped = true;
+        win.output = &other;
+        wl_list_insert(&server.workspaces[0].windows, &win.link);
+        named_view = &win;
+        named_app = server.dock_entries[0].app_id;
+        server.dock_entries[0].running = 1;
+
+        dockmenu_open(&server, &server.dock_entries[0], 400, OUT_H - 20);
+        check(menu_has(SYN_DOCKACT_MOVEHERE),
+              "an app with a window on another screen is offered Move Window Here");
+        check(menu_at(SYN_DOCKACT_MOVEHERE) < menu_at(SYN_DOCKACT_CLOSEWIN),
+              "…above the rows that close it");
+
+        /* Clicked the way a pointer does: walk down the menu until the row is
+         * the hovered one, then press there. */
+        moved_view = NULL; moved_to = NULL;
+        int want = menu_at(SYN_DOCKACT_MOVEHERE);
+        bool clicked = false;
+        double px = server.dockmenu.x + 10;
+        for (int py = server.dockmenu.y; py < server.dockmenu.y + server.dockmenu.h; py++) {
+            dockmenu_motion(&server, px, py);
+            if (server.dockmenu.selected == want) {
+                dockmenu_click(&server, px, py);
+                clicked = true;
+                break;
+            }
+        }
+        check(clicked, "…and the row can be clicked");
+        check(moved_view == &win && moved_to == &output,
+              "…which brings that window to the screen whose dock was clicked");
+
+        win.output = &output;
+        dockmenu_open(&server, &server.dock_entries[0], 400, OUT_H - 20);
+        check(!menu_has(SYN_DOCKACT_MOVEHERE),
+              "…and is not offered once every window is already here");
+        dockmenu_close(&server);
+
+        server.dock_entries[0].running = 0;
+        named_view = NULL; named_app = NULL;
+        wl_list_remove(&win.link);
+        wl_list_remove(&other.link);
+    }
 
     /* On the BAR BODY there is no app block — so there is ONE rule (the one
      * above the dock's placement rows) rather than two, and nothing after

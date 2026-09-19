@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -1166,7 +1166,10 @@ msgstr "Gestos do touchpad"
 msgid ""
 "Four fingers left or right changes desktop; up and down open and close the "
 "overview. Off gives every swipe to apps"
-msgstr "Quatro dedos para a esquerda ou para a direita mudam de área de trabalho; para cima e para baixo abrem e fecham a visão geral. Desligado deixa cada deslize para as aplicações"
+msgstr ""
+"Quatro dedos para a esquerda ou para a direita mudam de área de trabalho; "
+"para cima e para baixo abrem e fecham a visão geral. Desligado deixa cada "
+"deslize para as aplicações"
 
 #: src/ctlpanel.c:1098
 msgid "Cursor size"
@@ -3696,97 +3699,101 @@ msgid "New Window"
 msgstr "Nova janela"
 
 #: src/render.c:8298
+msgid "Move Window Here"
+msgstr "Mover a janela para aqui"
+
+#: src/render.c:8299
 msgid "Close Window"
 msgstr "Fechar janela"
 
-#: src/render.c:8299
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr "Sair de todas as janelas"
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr "Ocultar o dock automaticamente"
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr "Dock por cima das janelas"
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr "Ampliar os ícones"
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr "Mostrar o relógio"
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr "Mostrador analógico"
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr "Mostrar o botão Todas as aplicações"
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr "Mostrar o botão de energia"
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr "Definições do dock…"
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr "Bloquear o ecrã"
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr "Terminar sessão"
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr "Suspender"
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr "Reiniciar"
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr "Encerrar"
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr "minimizada"
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr "MIN"
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr "JANELAS"
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab seguinte · Alt+Shift+Tab anterior"
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr "VISTA GERAL"
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "Área de trabalho %d · %d janela"
 msgstr[1] "Área de trabalho %d · %d janelas"
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr "Nada aberto nesta área de trabalho."
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

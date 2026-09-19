@@ -3593,6 +3593,9 @@ typedef enum {
     SYN_DOCKACT_UNPIN,     /* remove it from the pinned set */
     SYN_DOCKACT_OPEN,      /* launch (.desktop Exec) — not currently running */
     SYN_DOCKACT_NEWWIN,    /* launch another instance — already running */
+    SYN_DOCKACT_MOVEHERE,  /* bring one of its windows to the monitor this dock
+                            * is on — dockmenu.output; offered only when one is
+                            * somewhere else */
     SYN_DOCKACT_CLOSEWIN,  /* close one window of this app_id — the focused one */
     SYN_DOCKACT_QUIT,      /* close every mapped window of this app_id */
     /* The dock's own settings, the bar's right-click menu's answer to the
@@ -6778,6 +6781,13 @@ struct syn_server {
     struct wlr_virtual_pointer_manager_v1   *virtual_pointer_mgr;
     struct wl_listener new_virtual_pointer;
     struct wl_listener vptr_mgr_destroy;
+    /* keyboard-shortcuts-inhibit-v1: the focused window may ask for the keys
+     * synui would otherwise take as binds — Moonlight fullscreen, a VNC
+     * viewer's keyboard grab. See kbd_shortcuts_inhibited() in input.c. */
+    struct wlr_keyboard_shortcuts_inhibit_manager_v1 *kbd_inhibit_mgr;
+    struct wl_listener new_kbd_inhibitor;
+    struct wl_listener kbd_inhibit_mgr_destroy;
+    struct wl_listener kbd_focus_change;
 
     /* dock.c: shared entry model (pinned + running apps), rendered into
      * every output's own syn_output::dock tree. */
@@ -6872,6 +6882,10 @@ struct syn_server {
          * which is a real state, not a missing one: the settings half of the
          * menu is offered either way and the app half only when this is set. */
         char app_id[128];                 /* snapshot (entries rebuild live) */
+        /* The monitor whose dock was right-clicked, by name — "here" for Move
+         * Window Here. A name, not a pointer: a screen can go away while the
+         * menu is up (a stream's virtual display, with its client). */
+        char output[64];
         syn_dockact_t actions[SYN_DOCKMENU_MAX];
         int  action_count;
         int  selected;                    /* hovered item, -1 = none */
@@ -8207,6 +8221,9 @@ void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput *
  * the rule). Returns how many present devices it touched, -1 if the rule table
  * is full or a name is too long. */
 int  input_map_set(syn_server_t *s, const char *dev, const char *out);
+/* Carry a window to another monitor (the `move_output` bind, the dock's Move
+ * Window Here). No-op for an unmapped window or its own monitor. */
+void view_move_to_output(syn_server_t *s, syn_view_t *v, syn_output_t *next);
 void input_maps_reapply(syn_server_t *s);     /* an output (re)appeared */
 void input_output_gone(syn_server_t *s, struct wlr_output *out);
 void pointer_update_focus(syn_server_t *s, uint32_t time_msec);

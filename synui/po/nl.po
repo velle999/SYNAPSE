@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -1181,7 +1181,9 @@ msgstr "Touchpadgebaren"
 msgid ""
 "Four fingers left or right changes desktop; up and down open and close the "
 "overview. Off gives every swipe to apps"
-msgstr "Vier vingers naar links of rechts wisselen van bureaublad; omhoog en omlaag openen en sluiten het overzicht. Uit geeft elke veeg aan de apps"
+msgstr ""
+"Vier vingers naar links of rechts wisselen van bureaublad; omhoog en omlaag "
+"openen en sluiten het overzicht. Uit geeft elke veeg aan de apps"
 
 #: src/ctlpanel.c:1098
 msgid "Cursor size"
@@ -3715,97 +3717,101 @@ msgid "New Window"
 msgstr "Nieuw venster"
 
 #: src/render.c:8298
+msgid "Move Window Here"
+msgstr "Venster hierheen verplaatsen"
+
+#: src/render.c:8299
 msgid "Close Window"
 msgstr "Venster sluiten"
 
-#: src/render.c:8299
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr "Alle vensters sluiten"
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr "Dock automatisch verbergen"
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr "Dock boven vensters"
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr "Pictogrammen vergroten"
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr "Klok tonen"
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr "Analoge wijzerplaat"
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr "Knop Alle toepassingen tonen"
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr "Aan-uitknop tonen"
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr "Dockinstellingen…"
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr "Scherm vergrendelen"
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr "Afmelden"
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr "Slaapstand"
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr "Opnieuw opstarten"
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr "Afsluiten"
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr "geminimaliseerd"
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr "MIN"
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr "VENSTERS"
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "Alt+Tab volgende · Alt+Shift+Tab terug"
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr "OVERZICHT"
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] "Bureaublad %d · %d venster"
 msgstr[1] "Bureaublad %d · %d vensters"
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr "Niets open op dit bureaublad."
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

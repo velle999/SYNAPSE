@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3536,97 +3536,101 @@ msgid "New Window"
 msgstr ""
 
 #: src/render.c:8298
-msgid "Close Window"
+msgid "Move Window Here"
 msgstr ""
 
 #: src/render.c:8299
+msgid "Close Window"
+msgstr ""
+
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr ""
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr ""
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr ""
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr ""
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr ""
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr ""
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr ""
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr ""
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr ""
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr ""
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr ""
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr ""
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr ""
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr ""
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr ""
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr ""
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr ""
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr ""
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr ""
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr ""
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

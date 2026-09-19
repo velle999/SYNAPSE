@@ -544,7 +544,8 @@ the icons swell under the pointer, whether it hides, and whether it is a capsule
 or a strip. It can carry a **clock** (digital, or an analog dial for a vertical
 dock, where a measured time cannot fit), an **apps button** that opens the
 application page, and a **power button** — each of which you drag to whichever
-cell you want it in.
+cell you want it in. Right-clicking an application's icon offers **Move Window
+Here** when that application has a window on another screen.
 
 **Two shells ship**, and `bar_shell` in synuirc (or Control panel ▸ Desktop ▸
 *Bar shell*) picks between them:
@@ -2171,7 +2172,11 @@ the stream serves that instead of a copy of whatever monitor is plugged in. When
 a client connects, the head is resized to exactly what that client asked for,
 frame rate included, and it goes away when streaming is switched off. The
 client's mouse is kept on that display, so it does not wander onto the screens
-in the room.
+in the room. Applications still open where they always do; right-click one's
+icon in the dock on the virtual display and choose **Move Window Here**. With
+Moonlight fullscreen on another SynapseOS machine, synui's shortcuts (`Super`+`O`
+and the rest) reach the streamed desktop rather than the machine you are sitting
+at.
 
 ```bash
 syn-remote stream display virtual        # a display of its own (the default)

@@ -3694,10 +3694,47 @@ static void dockmenu_place(syn_server_t *s, double lx, double ly)
 }
 
 /* `e` NULL means the click landed on the bar body rather than on an icon. */
+/* One of app_id's windows to bring to `here`: the focused one if it is this
+ * app's and elsewhere, else the first mapped one that is not already there.
+ * NULL when every window of the app is on `here` — which is also the test for
+ * whether Move Window Here is offered at all. Same preference as Close Window. */
+static syn_view_t *dockmenu_window_elsewhere(syn_server_t *s, const char *app_id,
+                                             const syn_output_t *here)
+{
+    if (!here || !app_id[0]) return NULL;
+    syn_view_t *f = s->focused_view;
+    if (f && f->mapped && f->output != here) {
+        const char *aid = view_app_id(f);
+        if (aid && strcmp(aid, app_id) == 0) return f;
+    }
+    for (int wi = 0; wi < WORKSPACE_MAX; wi++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[wi].windows, link) {
+            if (!v->mapped || v->output == here) continue;
+            const char *aid = view_app_id(v);
+            if (aid && strcmp(aid, app_id) == 0) return v;
+        }
+    }
+    return NULL;
+}
+
+static syn_output_t *dockmenu_output_named(syn_server_t *s, const char *name)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (strcmp(o->wlr_output->name, name) == 0) return o;
+    return NULL;
+}
+
 void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
 {
     snprintf(s->dockmenu.app_id, sizeof(s->dockmenu.app_id), "%s",
              e ? e->app_id : "");
+    /* "Here" is the monitor under the click — every monitor has its own dock. */
+    struct wlr_output *wo_here =
+        wlr_output_layout_output_at(s->output_layout, lx, ly);
+    snprintf(s->dockmenu.output, sizeof(s->dockmenu.output), "%s",
+             wo_here ? wo_here->name : "");
 
     int n = 0;
     s->dockmenu.actions[n++] = SYN_DOCKACT_AUTOHIDE;
@@ -3764,6 +3801,17 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
         if (ic->exec[0])
             s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
                                                   : SYN_DOCKACT_OPEN;
+        /* ⛔ THE WAY A WINDOW REACHES THE SCREEN YOU ARE LOOKING AT, with no
+         * key to press. Streaming to Moonlight, apps open where they always do
+         * — on the screens in the room — and Super+O from the client moved the
+         * Moonlight window on the machine it runs on instead. The dock on the
+         * virtual display is on the screen being watched, so "here" is exactly
+         * where the window is wanted. Offered only when a window of this app is
+         * somewhere else: on every icon it would be a row that does nothing. */
+        if (e->running &&
+            dockmenu_window_elsewhere(s, e->app_id,
+                dockmenu_output_named(s, s->dockmenu.output)))
+            s->dockmenu.actions[n++] = SYN_DOCKACT_MOVEHERE;
         /* Close-one before quit-all: closing a single window is the common
          * intent, and Quit All Windows is the last row in the menu — the one
          * you have to travel furthest DOWN the list to reach, past everything
@@ -3864,6 +3912,8 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
     syn_dockact_t act = s->dockmenu.actions[idx];
     char app_id[128];
     snprintf(app_id, sizeof(app_id), "%s", s->dockmenu.app_id);
+    char here_name[64];
+    snprintf(here_name, sizeof(here_name), "%s", s->dockmenu.output);
     dockmenu_close(s);
 
     switch (act) {
@@ -3875,6 +3925,14 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
     case SYN_DOCKACT_NEWWIN: {
         const syn_icon_entry_t *ic = icon_lookup(app_id);
         if (ic->exec[0]) synui_spawn(ic->exec);
+        break;
+    }
+    case SYN_DOCKACT_MOVEHERE: {
+        /* Re-resolved from the names, not from pointers taken when the menu
+         * opened: the window or the screen may have gone while it was up. */
+        syn_output_t *here = dockmenu_output_named(s, here_name);
+        syn_view_t *v = dockmenu_window_elsewhere(s, app_id, here);
+        if (v) view_move_to_output(s, v, here);
         break;
     }
     case SYN_DOCKACT_CLOSEWIN: {

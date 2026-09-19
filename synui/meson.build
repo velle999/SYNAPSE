@@ -1474,6 +1474,37 @@ stubborn_client = executable('stubborn_client',
   dependencies : [wayland_client],
   build_by_default : false)
 
+# A window that asks for the keys synui would take as binds
+# (keyboard-shortcuts-inhibit-v1) — what Moonlight does in fullscreen and
+# gtk-vnc does for its keyboard grab. The server half comes with wlroots; the
+# client half is generated here from wayland-protocols.
+kbd_inhibit_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml')
+kbd_inhibit_client_h = custom_target('keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h',
+  output  : 'keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h',
+  input   : kbd_inhibit_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+kbd_inhibit_c = custom_target('keyboard-shortcuts-inhibit-unstable-v1-protocol.c',
+  output  : 'keyboard-shortcuts-inhibit-unstable-v1-protocol.c',
+  input   : kbd_inhibit_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+inhibit_client = executable('inhibit_client',
+  ['tests/inhibit_client.c', xdg_shell_client_h, xdg_shell_c,
+   kbd_inhibit_client_h, kbd_inhibit_c],
+  dependencies : [wayland_client],
+  build_by_default : false)
+
+# Super+key pressed in a window that asked for the keys reaches the window and
+# not synui's bind table — with the same key in a window that did not ask as
+# the control, and the grant withdrawn when focus leaves.
+shortcuts_inhibit_t = find_program('tests/shortcuts_inhibit.sh')
+test('shortcuts_inhibit', shortcuts_inhibit_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                inhibit_client.full_path()],
+     depends : [synui_exe, synctl_exe, inhibit_client],
+     timeout : 120)
+
 # The other half of the bar's backdrop, and the half bar_backdrop.sh cannot
 # reach: what is under the bar when it is not the wallpaper. Needs a real client
 # with real pixels, because the measurement it pins is a GPU readback of one —

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-17 12:10-0500\n"
+"POT-Creation-Date: 2026-09-18 20:54-0500\n"
 "PO-Revision-Date: 2026-09-01 10:47-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -1130,7 +1130,9 @@ msgstr "إيماءات لوحة اللمس"
 msgid ""
 "Four fingers left or right changes desktop; up and down open and close the "
 "overview. Off gives every swipe to apps"
-msgstr "أربعة أصابع يسارًا أو يمينًا تبدّل سطح المكتب؛ وأعلى وأسفل تفتح العرض الشامل وتغلقه. الإيقاف يترك كل سحبة للتطبيقات"
+msgstr ""
+"أربعة أصابع يسارًا أو يمينًا تبدّل سطح المكتب؛ وأعلى وأسفل تفتح العرض الشامل "
+"وتغلقه. الإيقاف يترك كل سحبة للتطبيقات"
 
 #: src/ctlpanel.c:1098
 msgid "Cursor size"
@@ -3655,86 +3657,90 @@ msgid "New Window"
 msgstr "نافذة جديدة"
 
 #: src/render.c:8298
+msgid "Move Window Here"
+msgstr "نقل النافذة إلى هنا"
+
+#: src/render.c:8299
 msgid "Close Window"
 msgstr "إغلاق النافذة"
 
-#: src/render.c:8299
+#: src/render.c:8300
 msgid "Quit All Windows"
 msgstr "إغلاق كل النوافذ"
 
-#: src/render.c:8303
+#: src/render.c:8304
 msgid "Auto-hide Dock"
 msgstr "إخفاء الرصيف تلقائيًا"
 
-#: src/render.c:8304
+#: src/render.c:8305
 msgid "Dock Above Windows"
 msgstr "الرصيف فوق النوافذ"
 
-#: src/render.c:8305
+#: src/render.c:8306
 msgid "Magnify Icons"
 msgstr "تكبير الأيقونات"
 
-#: src/render.c:8306
+#: src/render.c:8307
 msgid "Show Clock"
 msgstr "إظهار الساعة"
 
-#: src/render.c:8307
+#: src/render.c:8308
 msgid "Analog Clock Face"
 msgstr "قرص ساعة عقارب"
 
-#: src/render.c:8308
+#: src/render.c:8309
 msgid "Show All Apps Button"
 msgstr "إظهار زر «كل التطبيقات»"
 
-#: src/render.c:8309
+#: src/render.c:8310
 msgid "Show Power Button"
 msgstr "إظهار زر الطاقة"
 
-#: src/render.c:8310
+#: src/render.c:8311
 msgid "Dock Settings…"
 msgstr "إعدادات الرصيف…"
 
-#: src/render.c:8314
+#: src/render.c:8315
 msgid "Lock Screen"
 msgstr "قفل الشاشة"
 
-#: src/render.c:8315
+#: src/render.c:8316
 msgid "Log Out"
 msgstr "تسجيل الخروج"
 
-#: src/render.c:8316
+#: src/render.c:8317
 msgid "Suspend"
 msgstr "تعليق"
 
-#: src/render.c:8317
+#: src/render.c:8318
 msgid "Restart"
 msgstr "إعادة التشغيل"
 
-#: src/render.c:8318
+#: src/render.c:8319
 msgid "Shut Down"
 msgstr "إيقاف التشغيل"
 
-#: src/render.c:8941
+#: src/render.c:8942
 msgid "minimized"
 msgstr "مصغَّرة"
 
-#: src/render.c:8941 src/render.c:9435 src/render.c:9438
+#: src/render.c:8942 src/render.c:9436 src/render.c:9439
 msgid "MIN"
 msgstr "مصغَّر"
 
-#: src/render.c:9046
+#: src/render.c:9047
 msgid "WINDOWS"
 msgstr "النوافذ"
 
-#: src/render.c:9203
+#: src/render.c:9204
 msgid "Alt+Tab next · Alt+Shift+Tab back"
 msgstr "‏Alt+Tab للتالية · Alt+Shift+Tab للسابقة"
 
-#: src/render.c:9320
+#: src/render.c:9321
 msgid "MISSION CONTROL"
 msgstr "نظرة عامة"
 
-#: src/render.c:9325
+#: src/render.c:9326
 #, c-format
 msgid "Desktop %d · %d window"
 msgid_plural "Desktop %d · %d windows"
@@ -3745,11 +3751,11 @@ msgstr[3] "سطح المكتب %d · %d نوافذ"
 msgstr[4] "سطح المكتب %d · %d نافذة"
 msgstr[5] "سطح المكتب %d · %d نافذة"
 
-#: src/render.c:9462
+#: src/render.c:9463
 msgid "Nothing open on this desktop."
 msgstr "لا شيء مفتوح على سطح المكتب هذا."
 
-#: src/render.c:9517
+#: src/render.c:9518
 msgid ""
 "Arrows or click pick a window · Enter opens it · Del closes it · 1–9 switch "
 "desktop · Esc close"

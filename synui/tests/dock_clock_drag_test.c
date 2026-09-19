@@ -126,6 +126,8 @@ unsigned icon_generation(void) { return 1; }
 const char *view_app_id(syn_view_t *v) { (void)v; return NULL; }
 struct wlr_surface *view_surface(syn_view_t *v) { (void)v; return NULL; }
 void view_close(syn_view_t *v) { (void)v; }
+void view_move_to_output(syn_server_t *s, syn_view_t *v, syn_output_t *o)
+{ (void)s; (void)v; (void)o; }
 void view_apply_minimized(syn_server_t *s, syn_view_t *v, int on)
 { (void)s; (void)v; (void)on; }
 void focus_view(syn_server_t *s, syn_view_t *v, struct wlr_surface *surf)

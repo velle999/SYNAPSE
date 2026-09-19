@@ -3623,7 +3623,38 @@ pkgver=0.1.0
 #   Also: tests/panel_pointer_test.c had not linked since 610 — power.c began
 #   asking vdisplay_*() and only lid_test.c got the stubs — and meson builds
 #   every test before running any, so the whole suite could not run. 170 pass.
-pkgrel=614
+# 615: A STREAMED DESKTOP YOU CAN ACTUALLY WORK ON — its windows, and its keys.
+#   Streaming to Moonlight, applications open where they always do (a screen in
+#   the room), and the one key that moves a window, Super+O, never arrived: the
+#   ThinkPad's own synui took it as ITS bind and moved the Moonlight window
+#   between the ThinkPad's screens.
+#   ⛔ keyboard-shortcuts-inhibit-v1, which synui did not implement at all. A
+#     window asks for the keys synui would take as binds (Moonlight fullscreen,
+#     gtk-vnc for its keyboard grab); synui grants it while that surface has the
+#     keyboard and withdraws it when focus leaves (the seat's focus_change).
+#     Gated: handle_keybinding and the Super tap. NOT gated: VT switching and the
+#     lock screen, which are handled before either — nothing can trap anybody.
+#     Not privileged: a sandboxed Moonlight needs it too, and it grants only the
+#     keys the focused window would get anyway, minus synui's binds.
+#   ⛔ The dock's right-click menu offers Move Window Here when the application
+#     has a window on another screen, and brings it to the screen whose dock was
+#     clicked — on a stream's virtual display, the screen being watched. The
+#     move is `move_output`'s, lifted into view_move_to_output() so the bind and
+#     the dock share every fix that code has had (floating desktops, fullscreen).
+#   tests/shortcuts_inhibit.sh: a window that did not ask (the control — Super+Y
+#   runs the bind), one that did (granted; the key reaches it and the bind does
+#   not run), and focus moving away (withdrawn; the bind is synui's again).
+#   Against the previous synui it fails at the grant. Written first to look for
+#   evdev 21 and so never matched: wtype numbers its keys from 1, and the
+#   control's "never saw it" was vacuous until presses were counted instead.
+#   dock_options_test: Move Window Here offered only for a window elsewhere,
+#   above the rows that close it, and clicked as a pointer would — walking the
+#   menu to the row — it asks for that window on that screen.
+#   "Move Window Here" in all thirteen catalogs; msgmerge had filled each with a
+#   fuzzy "move window to workspace", which would never have shown but was wrong.
+#   Full suite: 171 pass, 1 skipped; edge_expand failed once under four-way
+#   parallel load and passed on four reruns, the full suite's included.
+pkgrel=615
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
