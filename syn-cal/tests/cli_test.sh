@@ -307,40 +307,49 @@ check "and back to Sunday" $?
 check "the human grid is a week wide, headed by weekday" $?
 
 # ── making an event, which is the point of the thing ────────────────────────
+#
+# ⛔ ON A FIXED DAY IN THE PAST, never one near today. The agenda fixture above
+# is anchored to TODAY and its daily rule lands on the three days after it, so
+# these checks, which count every event on their day, sat on 2026-09-21 until
+# the week that date came round: from 18 to 21 September 2026 a "Standup"
+# instance shared the day, every count read 2, and the ISO build died in
+# syn-cal's check(). A date behind the clock can never be reached by a fixture
+# that only looks forward. 9-10 March 2021 has no DST change in the US or the
+# EU, which the two-hour length check below depends on.
 
 # ⚠ --in, BECAUSE TWO CALENDARS ARE ON HERE. With one it is inferred; with
 # several, guessing would put an appointment on a calendar nobody named.
-"$S" new "Untargeted" --at "2026-09-21 13:15" >/dev/null 2>&1
+"$S" new "Untargeted" --at "2021-03-09 13:15" >/dev/null 2>&1
 [ $? -ne 0 ]
 check "a new event refuses to guess between two calendars" $?
 
-"$S" new "Lunch, then dentist" --at "2026-09-21 13:15" --for 45m --remind 15m \
+"$S" new "Lunch, then dentist" --at "2021-03-09 13:15" --for 45m --remind 15m \
      --where "Clinic; room 2" --in work/Home >/dev/null
 check "a new event can be made" $?
 
-[ "$("$S" --rec agenda --from=2026-09-21 --days=1 | tail -n +2 | wc -l)" = 1 ]
+[ "$("$S" --rec agenda --from=2021-03-09 --days=1 | tail -n +2 | wc -l)" = 1 ]
 check "…and it is there when the calendar is read" $?
 
-"$S" --rec agenda --from=2026-09-21 --days=1 | grep -q "Lunch%2C%20then%20dentist"
+"$S" --rec agenda --from=2021-03-09 --days=1 | grep -q "Lunch%2C%20then%20dentist"
 check "…with the comma in its name intact, not truncated at it" $?
 
-"$S" --rec agenda --from=2026-09-21 --days=1 | grep -q "Clinic%3B%20room%202"
+"$S" --rec agenda --from=2021-03-09 --days=1 | grep -q "Clinic%3B%20room%202"
 check "…and the semicolon in its location" $?
 
 grep -q "TRIGGER:-PT15M" "$SYNCAL_HOME/work/Home/"*.ics
 check "…and a reminder that fires before it, not after" $?
 
-EV=$("$S" --rec agenda --from=2026-09-21 --days=1 | tail -1 | cut -f9 \
+EV=$("$S" --rec agenda --from=2021-03-09 --days=1 | tail -1 | cut -f9 \
      | python3 -c 'import sys,urllib.parse;print(urllib.parse.unquote(sys.stdin.read().strip()))')
 
 # ⛔ AN EDIT THAT DOES NOT MENTION THE TIME MUST NOT MOVE IT. Recovering the
 # start through the recurrence expander silently returned nothing and wrote the
 # event at 1970 — an appointment that simply stops appearing.
 "$S" edit "$EV" --title "Dentist" >/dev/null
-[ "$("$S" --rec agenda --from=2026-09-21 --days=1 | tail -n +2 | wc -l)" = 1 ]
+[ "$("$S" --rec agenda --from=2021-03-09 --days=1 | tail -n +2 | wc -l)" = 1 ]
 check "renaming an event leaves it on its day" $?
 
-"$S" --rec agenda --from=2026-09-21 --days=1 | grep -q "Dentist"
+"$S" --rec agenda --from=2021-03-09 --days=1 | grep -q "Dentist"
 check "…under its new name" $?
 
 # ⛔ AND THE ESCAPES MUST NOT COMPOUND. ics_prop hands back the raw property, so
@@ -356,22 +365,22 @@ check "…and three edits leave the location exactly as typed" $?
 grep -q "TRIGGER:-PT15M" "$SYNCAL_HOME/work/Home/"*.ics
 check "…and keep a reminder the edit never mentioned" $?
 
-"$S" edit "$EV" --at "2026-09-21 09:00" --for 2h >/dev/null
-"$S" --rec agenda --from=2026-09-21 --days=1 | tail -1 | cut -f1,2 \
+"$S" edit "$EV" --at "2021-03-09 09:00" --for 2h >/dev/null
+"$S" --rec agenda --from=2021-03-09 --days=1 | tail -1 | cut -f1,2 \
   | awk '{ if ($2 - $1 == 7200) exit 0; else exit 1 }'
 check "moving an event sets its length too" $?
 
 # ⛔ AN ALL-DAY EVENT LANDS ON ITS OWN DATE. libical resolves a VALUE=DATE to
 # midnight UTC and every view here formats in local time, so west of the
 # meridian a birthday drew on the day before — in all three views at once.
-"$S" new "Birthday" --at 2026-09-22 --in work/Home >/dev/null
-[ "$("$S" --rec agenda --from=2026-09-22 --days=1 | tail -n +2 | grep -c Birthday)" = 1 ]
+"$S" new "Birthday" --at 2021-03-10 --in work/Home >/dev/null
+[ "$("$S" --rec agenda --from=2021-03-10 --days=1 | tail -n +2 | grep -c Birthday)" = 1 ]
 check "an all-day event is on the day it was given" $?
 
-[ "$("$S" --rec agenda --from=2026-09-21 --days=1 | tail -n +2 | grep -c Birthday)" = 0 ]
+[ "$("$S" --rec agenda --from=2021-03-09 --days=1 | tail -n +2 | grep -c Birthday)" = 0 ]
 check "…and not on the day before it" $?
 
-grep -q "DTSTART;VALUE=DATE:20260922" "$SYNCAL_HOME/work/Home/"*.ics
+grep -q "DTSTART;VALUE=DATE:20210310" "$SYNCAL_HOME/work/Home/"*.ics
 check "…written as a date rather than an instant" $?
 
 "$S" new "No when" --in work/Home >/dev/null 2>&1
@@ -383,7 +392,7 @@ check "an event with no time is refused" $?
 check "…and so is a date nothing can read" $?
 
 "$S" delete "$EV" >/dev/null
-[ "$("$S" --rec agenda --from=2026-09-21 --days=1 | tail -n +2 | wc -l)" = 0 ]
+[ "$("$S" --rec agenda --from=2021-03-09 --days=1 | tail -n +2 | wc -l)" = 0 ]
 check "an event can be deleted" $?
 
 "$S" delete "no-such-event@x" >/dev/null 2>&1
@@ -399,7 +408,7 @@ check "…and deleting one that is not there fails rather than claiming success"
 # ⚠ CAPTURED, NOT PIPED: the refusal exits non-zero, and under `set -o pipefail`
 # that becomes the pipeline's status, so a pipe into grep tests the exit code
 # rather than the words.
-amb=$("$S" new "Ambiguous" --at "2026-09-21 10:00" 2>&1 || true)
+amb=$("$S" new "Ambiguous" --at "2021-03-09 10:00" 2>&1 || true)
 grep -q -- "--in <account>/<calendar>" <<<"$amb"
 check "a new event with two calendars on says how to choose, both ways" $?
 
@@ -412,7 +421,7 @@ check "a default calendar can be set" $?
 [ "$("$S" --rec default | tail -1)" = "work	Home" ]
 check "…and read back" $?
 
-"$S" new "Now unambiguous" --at "2026-09-21 10:00" >/dev/null 2>&1
+"$S" new "Now unambiguous" --at "2021-03-09 10:00" >/dev/null 2>&1
 check "…so a new event no longer needs telling" $?
 
 # ⛔ AND THE OTHER SETTING SURVIVES. The first settings.conf writer rewrote the

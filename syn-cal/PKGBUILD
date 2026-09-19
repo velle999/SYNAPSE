@@ -65,7 +65,14 @@ pkgver=0.1.0
 #   and had to move with it. Each was shown to fail on a deliberate break
 #   first — the rewrite of a pinned assertion is exactly where a false green
 #   comes from.
-pkgrel=28
+# 29: THE CLI SUITE FAILED FROM 18 TO 21 SEPTEMBER 2026, and stopped the 1.0.0
+#   ISO build. Its event checks count every event on their day and sat on
+#   2026-09-21, while the agenda fixture is anchored to today with a daily rule
+#   on the three days after it, so that week a "Standup" shared the day and every
+#   count read 2. They run on 9-10 March 2021 now: behind the clock, where a
+#   fixture that only looks forward can never reach, and clear of DST in the US
+#   and the EU. 92/92 across UTC-10 to UTC+14; all fourteen suites pass.
+pkgrel=29
 pkgdesc="SynapseOS calendar and schedule planner: CalDAV, Google and Microsoft, synced both ways"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
