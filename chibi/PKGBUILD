@@ -52,7 +52,17 @@ pkgver=0.1.0
 #   answer. ⚠ The switch follows the camera, not the reverse: no device, and
 #   the row goes back to Off rather than claiming On over a camera that never
 #   opened.
-pkgrel=25
+# 26: DICTATION HEARD NOTHING ON THE THINKPAD, whose microphone "tested fine".
+#   Its AMD digital mic idles at about +6900 of 32768 — a DC offset, inaudible,
+#   so every level meter and playback test looks healthy. The silence check
+#   measures mean |amplitude| against 500, so every chunk read as speech, no
+#   capture ever ended on silence, and `vibe voice type` ran out its 12 seconds
+#   with "heard nothing". _read_chunk() now removes a running DC estimate, so the
+#   silence check, the wake-word engine and Whisper all see centred audio. Tested
+#   on the ThinkPad's real room noise with a sentence mixed in: the old code
+#   never ended the capture, the new one ended 1.5s after the speech and
+#   transcribed it word for word. A USB mic with no offset is unchanged.
+pkgrel=26
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -66,7 +76,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=5a7b629e6ec7d28c8a4d74dfff6401e3b46795c8
+_commit=6e4bd658aec30a665342a8b34b2723b713768854
 
 # Runtime deps.
 #
