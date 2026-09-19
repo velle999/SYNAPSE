@@ -177,15 +177,12 @@ static void dispcfg_detach(syn_server_t *s, syn_output_t *o)
         return;
     }
 
-    int moved = 0;
-    for (int i = 0; i < WORKSPACE_MAX; i++) {
-        syn_view_t *v;
-        wl_list_for_each(v, &s->workspaces[i].windows, link) {
-            if (v->output != o) continue;
-            v->output = home;
-            moved++;
-        }
-    }
+    /* The same sweep output_destroy() does, through the same helper — so a
+     * window remembers this screen and comes back to it when the mode is
+     * changed back, exactly as it does when a monitor returns from standby.
+     * Before the layout removal below, which is what the saved boxes are
+     * measured against. See output_exile.c. */
+    int moved = output_exile_take(s, o, home);
     if (s->ai_layout_output == o) s->ai_layout_output = NULL;
     /* NULL means "ask the cursor", so an open panel re-homes by itself. */
     if (s->ui_output == o) s->ui_output = NULL;
@@ -505,6 +502,18 @@ static void dispcfg_rechain(syn_server_t *s)
                               col_x[c] + centre + used[r][c], row_y[r]);
         used[r][c] += ow[i];
     }
+
+    /* Every screen that is in the layout takes back the windows it was carrying
+     * when it left it — a monitor re-attached by leaving "Built-in off", the
+     * same way a monitor coming out of standby takes back the ones
+     * output_destroy() rescued. Here rather than in dispcfg_attach() because
+     * the boxes are measured against the output's origin, and an output only
+     * has one once the loop above has placed it. A no-op for a screen nothing
+     * was ever displaced from, which is the usual case. */
+    syn_output_t *back;
+    wl_list_for_each(back, &s->outputs, link)
+        if (!back->detached)
+            output_exile_return(s, back);
 
     output_layout_changed(s);   /* re-renders the panel too */
 }

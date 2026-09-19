@@ -887,21 +887,14 @@ static void output_destroy(struct wl_listener *listener, void *data)
         syn_output_t *home = wl_list_empty(&server->outputs)
                                  ? NULL
                                  : wl_container_of(server->outputs.next, home, link);
-        int moved = 0;
-        for (int i = 0; i < WORKSPACE_MAX; i++) {
-            syn_view_t *v;
-            wl_list_for_each(v, &server->workspaces[i].windows, link) {
-                if (v->output != output) continue;
-                v->output = home;      /* NULL only when the last monitor goes */
-                moved++;
-            }
-        }
+        /* ⚠ AND EACH ONE REMEMBERS WHICH SCREEN IT CAME OFF. A monitor in
+         * standby drops its link and is destroyed, so this runs on every wake
+         * — and until output_exile.c existed, the windows simply stayed on
+         * whichever screen caught them. output_exile_return() puts them back
+         * when the connector re-appears, two seconds later. */
+        output_exile_take(server, output, home);
         if (server->ai_layout_output == output)
             server->ai_layout_output = NULL;
-        if (moved)
-            wlr_log(WLR_INFO, "synui: %d window(s) re-homed from %s onto %s",
-                    moved, output->wlr_output->name,
-                    home ? home->wlr_output->name : "(no output left)");
         /* This screen's desktop is no longer being shown by anyone, so the
          * visible set has shrunk — and the windows just re-homed onto `home`
          * are only on screen if `home` happens to be showing their desktop.
@@ -1103,6 +1096,16 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * visible desktop out across every output (this one included) and re-home
      * all UI. */
     layer_arrange_output(output);
+
+    /* ⚠ AND IF THIS CONNECTOR HAS BEEN HERE BEFORE, its windows come back.
+     * This is the wake half of the standby cycle: the panel dropped its link,
+     * output_destroy() rescued the windows onto a screen that still existed,
+     * and here is the same connector again two seconds later. After
+     * output_persist_apply() put the output back at its saved position and
+     * after the usable area above, because those two are what the returning
+     * boxes are measured against. See output_exile.c. */
+    output_exile_return(server, output);
+
     wallpaper_output_created(output);
     dock_output_created(output);
     /* The icon grid needs an output to be sized against — at startup there is

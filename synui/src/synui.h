@@ -5914,6 +5914,21 @@ struct syn_view {
      * back to the laptop screen. Reported by velle, 2026-08-25. */
     struct wlr_box fs_geo;
 
+    /* The monitor this window was RESCUED FROM, and the box it had there.
+     *
+     * A screen going to standby drops its link and takes its wlr_output with
+     * it, so output_destroy() has to move its windows somewhere that exists —
+     * and the screen is back two seconds later. exile_from is the connector
+     * name to go back to ("" = this window was never displaced), exile_geo the
+     * box it had there, RELATIVE to that output's origin so a monitor that
+     * comes back somewhere else in the desk still hands the window the right
+     * place on itself. Written by output_exile_take(), spent by
+     * output_exile_return(), and dropped the moment the user moves the window
+     * themselves. See output_exile.c — the first home wins, and there is no
+     * expiry. */
+    char           exile_from[64];
+    struct wlr_box exile_geo;
+
     /* deco.c: which AXES a double-click on a border has expanded to fill the
      * usable box — SYN_EXPAND_V, SYN_EXPAND_H, or both. 0 is an ordinary
      * window.
@@ -8476,6 +8491,26 @@ void layout_apply_visible(syn_server_t *s);
  * showing — for the changes that move the answer without going through a
  * switch: a monitor unplugged, workspace_mode flipped. */
 void view_refresh_visibility(syn_server_t *s);
+/* Put a free window back at `saved` (absolute layout coordinates): on the
+ * monitor that box's centre lands on, clamped to fit a screen that exists now.
+ * Shared by leaving fullscreen, the remembered-geometry path, and a window
+ * coming back to a monitor that went to standby under it. */
+void view_place_saved_box(syn_server_t *s, syn_view_t *view,
+                          struct wlr_box saved);
+
+/* ── output_exile.c ──────────────────────────────────────── */
+/* A monitor is going away: move its windows onto `home` (NULL when it was the
+ * last screen) and remember which connector each one came off, so it can go
+ * back when that connector returns — which, for a screen in standby, is two
+ * seconds later. Returns how many moved; both sweeps that displace windows
+ * (output_destroy, dispcfg_detach) go through it. */
+int  output_exile_take(syn_server_t *s, syn_output_t *going, syn_output_t *home);
+/* …and the other half: `back` has just re-appeared, so every window rescued
+ * off that connector comes home, to the box it had there. Returns how many. */
+int  output_exile_return(syn_server_t *s, syn_output_t *back);
+/* Drop the record: the user has moved this window themselves, so a monitor
+ * re-appearing later must not overrule them. */
+void view_exile_forget(syn_view_t *view);
 
 /* ── ai_interface.c ──────────────────────────────────────── */
 /* Tell synapd something else wants the GPU (1) or may have it back (0).

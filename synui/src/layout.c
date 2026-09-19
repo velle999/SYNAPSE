@@ -1642,18 +1642,19 @@ static syn_output_t *output_at_box_centre(syn_server_t *s, struct wlr_box b)
  * Put a free window back at `saved`: on the monitor that box's centre lands
  * on, clamped to fit a screen that exists NOW.
  *
- * Shared by the remembered-geometry path (layout_restore_geometry) and by
- * leaving fullscreen, which are the same question asked twice — this window
- * had a box on a particular screen, put it back — and were answered
- * differently until the second one started borrowing the first one's answer
- * and moving windows between monitors with it.
+ * Shared by the remembered-geometry path (layout_restore_geometry), by
+ * leaving fullscreen, and by a window coming back to the monitor that went to
+ * standby under it (output_exile_return) — the same question asked three
+ * times — this window had a box on a particular screen, put it back — and it
+ * was answered differently until the others started borrowing the first one's
+ * answer and moving windows between monitors with it.
  *
  * The clamp is not belt and braces: a box saved on a wider desk, or on a
  * monitor since unplugged, would otherwise put the window somewhere it can
  * never be reached.
  */
-static void view_place_saved_box(syn_server_t *s, syn_view_t *view,
-                                 struct wlr_box saved)
+void view_place_saved_box(syn_server_t *s, syn_view_t *view,
+                          struct wlr_box saved)
 {
     syn_output_t *o = output_at_box_centre(s, saved);
     if (o) view->output = o;
@@ -2148,6 +2149,10 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
 {
     if (!view || !o || view->output == o) return;
     view->output = o;
+    /* The user has just said where this window lives, which overrules any
+     * screen it was rescued off earlier — otherwise a monitor coming back from
+     * standby would undo the move. See output_exile.c. */
+    view_exile_forget(view);
     layout_apply(s, view->workspace);
 }
 

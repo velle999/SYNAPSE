@@ -3654,7 +3654,46 @@ pkgver=0.1.0
 #   fuzzy "move window to workspace", which would never have shown but was wrong.
 #   Full suite: 171 pass, 1 skipped; edge_expand failed once under four-way
 #   parallel load and passed on four reruns, the full suite's included.
-pkgrel=615
+# 616: A WINDOW GOES BACK TO THE MONITOR IT WAS RESCUED FROM. Leave the screens
+#   to stand by with windows open and the windows are on another screen when
+#   they wake — on this desk, always DP-2. It is not a wake-up bug: a monitor in
+#   standby drops its DP link, wlroots destroys the wlr_output, and
+#   output_destroy() has to sweep its windows onto a screen that still exists
+#   (a view->output into a freed output is a crash; a box outside the layout is
+#   a window nobody can reach). The connector re-enumerates two seconds later
+#   and nothing brought them back. Straight out of the journal, an ordinary
+#   wake: `2 window(s) re-homed from DP-3 onto DP-2`, then `new output DP-3`
+#   two seconds after it.
+#   output_exile.c is the other half. The sweep records the CONNECTOR NAME each
+#   window came off and its box RELATIVE to that output's origin (a pointer
+#   cannot be kept — the output is freed — and an absolute box would land on the
+#   neighbour if the screen came back somewhere else in the desk); the connector
+#   re-appearing gives every one of them back, to the box it had, clamped to the
+#   screen as it is now. A tiled, maximized or expanded window gets the screen
+#   only, because layout_apply owns its geometry; a fullscreen one takes the
+#   whole of whatever mode the panel came back in.
+#   ⚠ THE FIRST HOME WINS. Screens go one after another — the same journal has
+#   HDMI-A-1 onto DP-3 and then DP-3 onto nothing at all — and a record
+#   overwritten by the second hop would send the window back to a screen it was
+#   only passing through.
+#   ⚠ AN EXPLICIT MOVE FORGETS. Super+O, a drag into a snap zone, the dock's
+#   Move Window Here: all of them land in view_set_output(), which drops the
+#   record, so a monitor re-appearing an hour later cannot undo where the user
+#   put the window. There is no expiry otherwise — a standby is minutes or
+#   hours and neither changes where a window belongs.
+#   dispcfg's detach/attach pair (Built-in off) goes through the same two calls,
+#   since its comment already said its sweep and output_destroy's must not
+#   disagree.
+#   tests/output_exile_test.c: the round trip, a monitor returning at a new
+#   origin, the cascade, tiled/maximized/fullscreen, an explicit move, and
+#   windows nobody displaced. Driven directly, because the event cannot be
+#   staged — wlroots numbers headless outputs from a counter that only goes up
+#   (measured: a virtual display removed as HEADLESS-2 comes back as
+#   HEADLESS-3), so the one thing the fix keys on, DP-3 returning as DP-3,
+#   has no headless equivalent. Against the previous synui, 22 of its 41 checks
+#   fail. Full suite: 172 pass, synrgbburst flaked once under parallel load and
+#   passed three times alone.
+pkgrel=616
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

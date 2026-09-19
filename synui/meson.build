@@ -251,6 +251,7 @@ synui_exe = executable('synui',
     'src/deskdrag.c',
     'src/geom_persist.c',
     'src/output_persist.c',
+    'src/output_exile.c',
     'src/vdisplay.c',
     'src/dispcfg.c',
   'src/hdrprobe.c',
@@ -1289,6 +1290,19 @@ test('iconhue', iconhue_test)
 # config.c is NOT linked — the bind table is seeded by hand, so "the palette
 # lists whatever is in the table" is a real assertion rather than a restatement
 # of the defaults.
+# A window goes back to the monitor it was rescued from. output_exile.c links
+# alone against stubs, because the event cannot be staged: wlroots numbers
+# headless outputs from a counter that only goes up, so a virtual display
+# removed as HEADLESS-2 comes back as HEADLESS-3 and the one thing the fix keys
+# on — DP-3 returning as DP-3 — is not reproducible headless. See the file.
+output_exile_test = executable('output_exile_test',
+  ['tests/output_exile_test.c', 'src/output_exile.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('output_exile', output_exile_test)
+
 # The mission-control grid. Links overview.c alone — the layout is pure
 # arithmetic over an output box, and it is what both the renderer and the hit
 # test read, so "what you click is what you see" rests entirely on it.
