@@ -216,15 +216,19 @@ int pane_speech(void)
 	if (have_cmd("systemctl")) {
 		char en[64] = "", act[64] = "";
 
+		/* Start, stop and restart on a unit that exists; enabling is the
+		 * switch's job — see do_unit(). */
 		user_unit_state("syn-speak.service", en, sizeof en, act, sizeof act);
-		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 		        "syn-speak.service", en, act,
-		        N_("the announcer \xc2\xb7 the Screen reader switch above is what turns it on. \"not installed\" with the switch on means synui is older than 0.1.0-564 and nothing will be announced"));
+		        N_("the announcer \xc2\xb7 the Screen reader switch above is what turns it on. \"not installed\" with the switch on means synui is older than 0.1.0-564 and nothing will be announced"),
+		        strcmp(en, "not installed") ? "userunit:syn-speak.service" : "-");
 
 		user_unit_state("vibe-wake.service", en, sizeof en, act, sizeof act);
-		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 		        "vibe-wake.service", en, act,
-		        N_("the listener. Shipped disabled \xc2\xb7 the switch above is what turns it on"));
+		        N_("the listener. Shipped disabled \xc2\xb7 the switch above is what turns it on"),
+		        strcmp(en, "not installed") ? "userunit:vibe-wake.service" : "-");
 	}
 
 	return 0;

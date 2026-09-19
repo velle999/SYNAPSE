@@ -569,20 +569,59 @@ int do_device(int argc, char **argv)
 	return run_or_show(a);
 }
 
+/* A SESSION service: `unit --user <start|stop|restart> <name>`.
+ *
+ * ⛔ NO enable/disable HERE. Every user unit this window lists sits under the
+ * switch that turns it on, and that switch runs its owner's own command —
+ * `syn-remote stream on` also writes config, `off` also clears state. A second
+ * Enable on the unit row would be a way round all of that which reads the same.
+ *
+ * ⚠ syn-remote's two servers stop THROUGH syn-remote. `syn-remote stop` also
+ * deletes the file its connection count lives in, and a bare systemctl stop
+ * leaves "Connected now: 1" on this page for a server that is not running.
+ * Restart goes to systemd: `run` writes the count afresh as it starts. */
+static int do_user_unit(const char *act, const char *unit)
+{
+	if (strcmp(act, "restart") && have_cmd("syn-remote")) {
+		if (!strcmp(unit, "syn-remote.service")) {
+			char *a[] = { (char *)"syn-remote", (char *)act, NULL };
+			return run_or_show(a);
+		}
+		if (!strcmp(unit, "syn-remote-stream.service")) {
+			char *a[] = { (char *)"syn-remote", (char *)"stream",
+			              (char *)act, NULL };
+			return run_or_show(a);
+		}
+	}
+	char *a[] = { (char *)"systemctl", (char *)"--user", (char *)act,
+	              (char *)unit, NULL };
+	return run_or_show(a);
+}
+
 int do_unit(int argc, char **argv)
 {
+	int user = 0;
+	if (argc > 0 && !strcmp(argv[0], "--user")) { user = 1; argc--; argv++; }
+
 	if (argc < 2) return refuse("unit needs an action and a unit name");
 
 	const char *act = argv[0];
 	const char *unit = argv[1];
 
-	if (strcmp(act, "enable") && strcmp(act, "disable") &&
-	    strcmp(act, "start")  && strcmp(act, "stop") &&
-	    strcmp(act, "restart"))
+	if (user) {
+		if (strcmp(act, "start") && strcmp(act, "stop") &&
+		    strcmp(act, "restart"))
+			return refuse("a session service takes start, stop or restart "
+			              "\xc2\xb7 its switch is what enables it");
+	} else if (strcmp(act, "enable") && strcmp(act, "disable") &&
+	           strcmp(act, "start")  && strcmp(act, "stop") &&
+	           strcmp(act, "restart"))
 		return refuse("action must be enable, disable, start, stop or restart");
 
 	if (!sane_value(unit) || !strchr(unit, '.'))
 		return refuse("that does not look like a unit name");
+
+	if (user) return do_user_unit(act, unit);
 
 	/* --no-block is deliberately NOT passed. A settings pane that reports
 	 * success the instant it asked, rather than when the unit actually came

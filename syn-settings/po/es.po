@@ -1963,5 +1963,8 @@ msgstr "Emparejar un cliente Moonlight"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "escriba los cuatro dígitos que muestra Moonlight al añadir este equipo · una vez por dispositivo"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "active primero la transmisión · el PIN va al servidor en marcha"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "el servidor de transmisión se ha detenido · Activar lo vuelve a iniciar y luego Moonlight puede pedir un PIN"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "la transmisión está desactivada · Activar la inicia y luego Moonlight puede pedir un PIN"

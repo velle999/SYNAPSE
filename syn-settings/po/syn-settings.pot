@@ -1198,7 +1198,12 @@ msgid ""
 "device"
 msgstr ""
 
-msgid "turn streaming on first · the PIN goes to the running server"
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
 msgstr ""
 
 msgid "Streaming now"

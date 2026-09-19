@@ -94,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*|password:*|promote:*|demote:*|fforget:*|deluser:*|adduser:*) ;;
+                set:*|toggle:*|unit:*|userunit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*|password:*|promote:*|demote:*|fforget:*|deluser:*|adduser:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -1883,7 +1883,7 @@ if [ -f "$QML" ]; then
     # reader and the window are two files, and adding a verb to one of them is
     # exactly the kind of half-change that looks finished and clicks dead.
     verbs=$(
-        for pane in display region network bluetooth power kernel apps time ai scan startup users; do
+        for pane in display region network bluetooth power kernel apps time ai scan startup users remote speech; do
             pout=$("$BIN" --rec "$pane") || continue
             pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
             [ -n "$pcol" ] || continue
@@ -2801,6 +2801,64 @@ if [ -r "$qml" ]; then
         && [ "$(grep -c '"remote-stream-pair"' "$qml")" -ge 3 ] \
         && ok "the pairing row and the window's Pair button name the same key" \
         || bad "remote.c's pairing action and the window's Pair button disagree"
+fi
+
+# ── a stopped streaming server, and the session services under a switch ────
+#
+# The Pair row said "turn streaming on first" and did nothing when clicked,
+# beside a switch already reading On: the switch is "at every login", the server
+# had stopped under it, and nothing on the page could start it again. The unit
+# rows below it were facts with no action either. A stand-in syn-remote answers
+# the two status records and writes down anything else it is asked to do.
+echo "== Remote Desktop: a stopped server, and its unit rows"
+stbin=$(mktemp -d); stlog="$stbin/args"
+cat > "$stbin/syn-remote" <<STUB
+#!/bin/sh
+case "\$*" in
+    "status --rec")        printf 'streaming\t%s\n' "\${ST_RUN:-no}" ;;
+    "stream status --rec") printf 'atlogin\t%s\nsunshine\tyes\n' "\${ST_LOGIN:-yes}" ;;
+    *)                     printf '%s\n' "\$*" >> "$stlog" ;;
+esac
+STUB
+chmod +x "$stbin/syn-remote"
+pair_action() {
+    PATH="$stbin:$PATH" "$BIN" --rec remote \
+        | awk -F'\t' '$2 == "Pair a Moonlight client" { print $6 }'
+}
+[ "$(ST_RUN=yes pair_action)" = "set:remote-stream-pair" ] \
+    && ok "with the server running, the Pair row takes a PIN" \
+    || bad "running server: Pair row action is [$(ST_RUN=yes pair_action)]"
+[ "$(ST_RUN=no ST_LOGIN=yes pair_action)" = "toggle:remote-stream" ] \
+    && ok "with the switch On and the server stopped, the Pair row starts it" \
+    || bad "stopped under an On switch: Pair row action is [$(ST_RUN=no ST_LOGIN=yes pair_action)]"
+[ "$(ST_RUN=no ST_LOGIN=no pair_action)" = "toggle:remote-stream" ] \
+    && ok "with streaming off, the Pair row turns it on" \
+    || bad "streaming off: Pair row action is [$(ST_RUN=no ST_LOGIN=no pair_action)]"
+
+refuses "unit --user will not enable — the switch does" 2 --dry-run unit --user enable syn-remote-stream.service
+refuses "unit --user will not disable either"             2 --dry-run unit --user disable vibe-wake.service
+refuses "unit --user refuses what is not a unit name"     2 --dry-run unit --user start 'x;id'
+# ⛔ --dry-run on every one of these. Without it a stand-in PATH missed would
+# be the real systemctl, stopping the live server of whoever runs the suite.
+out=$(PATH="$stbin:$PATH" "$BIN" --dry-run unit --user stop syn-remote.service 2>&1)
+out2=$(PATH="$stbin:$PATH" "$BIN" --dry-run unit --user start syn-remote-stream.service 2>&1)
+[ "$out" = "would run: syn-remote stop" ] && [ "$out2" = "would run: syn-remote stream start" ] \
+    && ok "syn-remote's servers start and stop through syn-remote, which also clears its count" \
+    || bad "syn-remote's unit rows bypassed it: [$out] [$out2]"
+out=$("$BIN" --dry-run unit --user restart syn-remote.service 2>&1)
+[ "$out" = "would run: systemctl --user restart syn-remote.service" ] \
+    && ok "restart goes to the USER manager" \
+    || bad "unit --user restart ran: [$out]"
+out=$("$BIN" --dry-run unit --user start vibe-wake.service 2>&1)
+[ "$out" = "would run: systemctl --user start vibe-wake.service" ] \
+    && ok "any other session service goes to the user manager" \
+    || bad "unit --user start vibe-wake ran: [$out]"
+rm -rf "$stbin"
+if [ -r "$qml" ]; then
+    grep -q '"unit", "--user", modelData' "$qml" \
+        && grep -qE '"unit", *"userunit"' "$qml" \
+        && ok "the window has the session-service buttons and keeps them out of Apply" \
+        || bad "the QML's userunit buttons or its Apply exclusion is missing"
 fi
 
 if [ "$fails" -gt 0 ]; then

@@ -1847,5 +1847,8 @@ msgstr "配对 Moonlight 客户端"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "输入 Moonlight 添加这台机器时显示的四位数字 · 每台设备一次"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "先打开串流 · PIN 会发给正在运行的服务器"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "串流服务器已停止 · “开启”会重新启动它，之后 Moonlight 才能请求 PIN"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "串流已关闭 · “开启”会启动它，之后 Moonlight 才能请求 PIN"

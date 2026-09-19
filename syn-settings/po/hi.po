@@ -1886,5 +1886,8 @@ msgstr "Moonlight क्लायंट पेयर करें"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "Moonlight इस मशीन को जोड़ते समय जो चार अंक दिखाता है, वे लिखें · हर डिवाइस के लिए एक बार"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "पहले स्ट्रीमिंग चालू करें · PIN चल रहे सर्वर को जाता है"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "स्ट्रीमिंग सर्वर रुक गया है · “चालू करें” इसे फिर से शुरू करता है, फिर Moonlight PIN माँग सकता है"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "स्ट्रीमिंग बंद है · “चालू करें” इसे शुरू करता है, फिर Moonlight PIN माँग सकता है"

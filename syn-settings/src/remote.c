@@ -249,15 +249,29 @@ int pane_remote(void)
 		 * prompt — or sunshine's own web page, which wants a password this
 		 * window never shows. The value is empty so the editor opens blank.
 		 * ⚠ Only while the server runs: the PIN goes to sunshine's local
-		 * API, and with nothing listening there is nothing to take it. */
+		 * API, and with nothing listening there is nothing to take it.
+		 *
+		 * ⛔ AND WHILE IT DOES NOT, THE ROW STARTS IT rather than saying
+		 * so. It said "turn streaming on first" and did nothing when
+		 * clicked — beside a switch already reading On, because the switch
+		 * is "at every login" and the server had stopped under it. There
+		 * was no control anywhere on the page that started it again. Its
+		 * action is the switch's own, `stream on`, which enables and starts
+		 * alike and is harmless to repeat. Starting on Pair instead would
+		 * not do: Moonlight asks the RUNNING server before it shows a PIN,
+		 * so there is no PIN to type until this has happened. */
 		if (!strcmp(st_run, "yes"))
 			rec_row("add\t%s\t\t-\t%s\tset:remote-stream-pair",
 			        N_("Pair a Moonlight client"),
 			        N_("type the four digits Moonlight shows when it adds this machine \xc2\xb7 once per device"));
-		else
-			rec_row("add\t%s\t\t-\t%s\t-",
+		else if (!strcmp(st_login, "yes"))
+			rec_row("add\t%s\t\t-\t%s\ttoggle:remote-stream",
 			        N_("Pair a Moonlight client"),
-			        N_("turn streaming on first \xc2\xb7 the PIN goes to the running server"));
+			        N_("the streaming server has stopped \xc2\xb7 Turn on starts it again, then Moonlight can ask for a PIN"));
+		else
+			rec_row("add\t%s\t\t-\t%s\ttoggle:remote-stream",
+			        N_("Pair a Moonlight client"),
+			        N_("streaming is off \xc2\xb7 Turn on starts it, then Moonlight can ask for a PIN"));
 
 		if (st_conn[0] && strcmp(st_conn, "0") != 0)
 			rec_row("value\t%s\t%s\t-\t%s\t-",
@@ -285,9 +299,14 @@ int pane_remote(void)
 		 * token and the window translates it at the draw site. */
 		const char *shown_en  = en[0]  ? en  : "not installed";
 		const char *shown_act = act[0] ? act : "-";
-		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		/* ⚠ Start, stop and restart, and only on a unit that EXISTS —
+		 * the same rule as power.c's rows. Enabling is the switch's job;
+		 * see do_unit(). */
+		const int have_vnc = en[0] && strcmp(en, "not-found") != 0;
+		rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 		        "syn-remote.service", shown_en, shown_act,
-		        N_("the server \xc2\xb7 the switch above is what turns it on"));
+		        N_("the server \xc2\xb7 the switch above is what turns it on"),
+		        have_vnc ? "userunit:syn-remote.service" : "-");
 
 		/* The streaming unit gets its own row for the reason the comment above
 		 * gives: a switch and the thing it switches are two facts, and there
@@ -303,9 +322,11 @@ int pane_remote(void)
 		sact[strcspn(sact, "\n")] = '\0'; tsv_clean(sact);
 		const char *shown_sen  = sen[0]  ? sen  : "not installed";
 		const char *shown_sact = sact[0] ? sact : "-";
-		rec_row("unit\t%s\t%s\t%s\t%s\t-",
+		const int have_stream = sen[0] && strcmp(sen, "not-found") != 0;
+		rec_row("unit\t%s\t%s\t%s\t%s\t%s",
 		        "syn-remote-stream.service", shown_sen, shown_sact,
-		        N_("the streaming server \xc2\xb7 the second switch above turns it on"));
+		        N_("the streaming server \xc2\xb7 the second switch above turns it on"),
+		        have_stream ? "userunit:syn-remote-stream.service" : "-");
 	}
 
 	return 0;

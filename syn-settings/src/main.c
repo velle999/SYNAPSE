@@ -80,6 +80,8 @@ static void usage(void)
 "  set app <role> <app>      default application for a role — the app is a\n"
 "                            .desktop NAME, or a command for `terminal`\n"
 "  unit <action> <name>      enable|disable|start|stop|restart (systemctl)\n"
+"  unit --user <action> <name>   start|stop|restart a session service —\n"
+"                            its switch in the pane is what enables it\n"
 "  device connect|disconnect <if>   bring an interface up or down (nmcli)\n"
 "  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
 "  modes <connector>         list the modes that output can take\n"

@@ -1960,5 +1960,8 @@ msgstr "Een Moonlight-client koppelen"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "typ de vier cijfers die Moonlight toont wanneer het deze machine toevoegt · één keer per apparaat"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "zet streamen eerst aan · de pincode gaat naar de draaiende server"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "de streamserver is gestopt · Inschakelen start hem opnieuw, daarna kan Moonlight om een pincode vragen"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "streamen staat uit · Inschakelen start het, daarna kan Moonlight om een pincode vragen"

@@ -1886,5 +1886,8 @@ msgstr "إقران عميل Moonlight"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "اكتب الأرقام الأربعة التي يعرضها Moonlight عند إضافة هذا الجهاز · مرة واحدة لكل جهاز"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "شغّل البث أولًا · يُرسَل الرمز إلى الخادم العامل"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "توقف خادوم البث · «تشغيل» يعيد تشغيله، ثم يستطيع Moonlight طلب رمز"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "البث مُطفأ · «تشغيل» يبدؤه، ثم يستطيع Moonlight طلب رمز"

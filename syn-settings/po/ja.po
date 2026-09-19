@@ -1935,5 +1935,8 @@ msgstr "Moonlight クライアントをペアリング"
 msgid "type the four digits Moonlight shows when it adds this machine · once per device"
 msgstr "Moonlight がこのマシンを追加するときに表示する 4 桁を入力 · 端末ごとに 1 回"
 
-msgid "turn streaming on first · the PIN goes to the running server"
-msgstr "先にストリーミングをオンにする · PIN は動作中のサーバーに送られます"
+msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
+msgstr "ストリーミングサーバーが停止しています · 「オンにする」で再び起動すると、Moonlight が PIN を要求できます"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "ストリーミングはオフです · 「オンにする」で起動すると、Moonlight が PIN を要求できます"

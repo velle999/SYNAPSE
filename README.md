@@ -2153,7 +2153,9 @@ syn-remote stream status     # what it is serving, and to how many
 ```
 
 Settings ▸ Remote Desktop has the same switch, and a **Pair a Moonlight
-client** row that takes the PIN.
+client** row that takes the PIN — or, while the server is not running, starts
+it, since Moonlight can only ask a running server for one. The unit rows at the
+bottom start, stop and restart either server (`syn-settings unit --user`).
 
 It captures the same way VNC does — sunshine's Wayland grabber binds
 `zwlr_export_dmabuf_manager_v1` and `xdg_output`, both of which synui exports —

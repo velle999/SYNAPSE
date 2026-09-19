@@ -448,7 +448,22 @@ pkgver=0.1.0
 #   Four checks, through a stand-in syn-remote. Six strings, all thirteen
 #   catalogs, 506/506 — appended rather than msgmerged, which re-sorts every
 #   catalog and buries six lines in three thousand.
-pkgrel=60
+# 61: A STOPPED STREAMING SERVER COULD NOT BE STARTED FROM THIS WINDOW, and
+#   "Pair a Moonlight client" did nothing when clicked. The switch reads "at
+#   every login", so a server that had stopped under it left the switch On, the
+#   Pair row saying "turn streaming on first", and no control on the page that
+#   started anything. The Pair row now carries the switch's own `stream on`
+#   (enable and start, harmless to repeat) while the server is down and says
+#   which case it is in; Moonlight asks the RUNNING server before it shows a
+#   PIN, so starting on Pair would have been too late. The unit rows under the
+#   Remote Desktop and Speech switches were facts with no action: they take
+#   Start, Stop and Restart now, as `unit --user <action> <name>`. No
+#   Enable/Disable there — the switch is that. syn-remote's two servers start
+#   and stop THROUGH syn-remote, whose stop also deletes the connection count a
+#   bare systemctl stop would leave on the page. 10 checks, and the check that
+#   every emitted verb has a button now reads Remote and Speech too. Two strings
+#   replace one, all thirteen catalogs, 507/507.
+pkgrel=61
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

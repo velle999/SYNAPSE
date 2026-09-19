@@ -1576,7 +1576,7 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice",
+                    visible: ["unit", "userunit", "mode", "pkg", "device", "boot", "app", "choice",
                               "enroll", "forget", "secret", "drop", "password", "promote",
                               "demote", "fforget", "deluser", "adduser"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
@@ -1762,6 +1762,21 @@ FloatingWindow {
                         label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
                         onGo: root.runWrite(["unit", modelData, root.actionArgFor(root.selAction, "unit")],
                                             modelData + " " + root.actionArgFor(root.selAction, "unit") + "…")
+                    }
+                }
+
+                // A SESSION service: the unit rows under a switch on the Remote
+                // Desktop and Speech panes. No Enable or Disable — the switch
+                // above the row is that, and it runs its owner's own command.
+                Repeater {
+                    model: root.actionHas(root.selAction, "userunit")
+                           ? ["start", "stop", "restart"] : []
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
+                        onGo: root.runWrite(["unit", "--user", modelData,
+                                             root.actionArgFor(root.selAction, "userunit")],
+                                            modelData + " " + root.actionArgFor(root.selAction, "userunit") + "…")
                     }
                 }
             }
