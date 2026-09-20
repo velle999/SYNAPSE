@@ -29,6 +29,9 @@ msgstr[2] "%1 строк"
 msgid "AI"
 msgstr "ИИ"
 
+msgid "Administrator"
+msgstr "Администратор"
+
 msgid "Apply"
 msgstr "Применить"
 
@@ -58,6 +61,12 @@ msgstr "Отмена"
 msgid "Change boot configuration?"
 msgstr "Изменить конфигурацию загрузки?"
 
+msgid "Click again to remove %1"
+msgstr "Нажмите ещё раз, чтобы удалить %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Нажмите ещё раз — файлы %1 тоже будут удалены"
+
 msgid "Close"
 msgstr "Закрыть"
 
@@ -66,6 +75,9 @@ msgstr "Конфигурация"
 
 msgid "Connect"
 msgstr "Подключить"
+
+msgid "Create account"
+msgstr "Создать учётную запись"
 
 msgid "Date & Time"
 msgstr "Дата и время"
@@ -119,6 +131,9 @@ msgstr ""
 "Пусть это работает. Закрытие окна не остановит процесс — вы лишь не увидите, "
 "чем он закончился."
 
+msgid "Make administrator"
+msgstr "Сделать администратором"
+
 msgid "Make bootable"
 msgstr "Сделать загрузочным"
 
@@ -131,6 +146,9 @@ msgstr "Сделать основным"
 msgid "Make default…"
 msgstr "Сделать основным…"
 
+msgid "Make standard"
+msgstr "Сделать обычной"
+
 msgid "Making %1 bootable"
 msgstr "%1 делается загрузочным"
 
@@ -140,8 +158,14 @@ msgstr "%1 делается основным"
 msgid "Malware Scanning"
 msgstr "Проверка на вредоносное ПО"
 
+msgid "Measure"
+msgstr "Измерить"
+
 msgid "Network"
 msgstr "Сеть"
+
+msgid "Pair"
+msgstr "Сопрячь"
 
 msgid "Power & Sleep"
 msgstr "Питание и сон"
@@ -168,6 +192,12 @@ msgstr "Удалить"
 msgid "Remove key"
 msgstr "Удалить ключ"
 
+msgid "Remove with files"
+msgstr "Удалить вместе с файлами"
+
+msgid "Remove, keep files"
+msgstr "Удалить, сохранить файлы"
+
 msgid "Removing %1"
 msgstr "Удаление %1"
 
@@ -180,8 +210,14 @@ msgstr "Параметры SYNAPSE"
 msgid "Save key"
 msgstr "Сохранить ключ"
 
+msgid "Set password"
+msgstr "Задать пароль"
+
 msgid "Speech"
 msgstr "Речь"
+
+msgid "Startup"
+msgstr "Автозапуск"
 
 msgid "System"
 msgstr "Система"
@@ -214,6 +250,9 @@ msgstr "Выключить"
 msgid "Turn on"
 msgstr "Включить"
 
+msgid "Users"
+msgstr "Пользователи"
+
 msgid "You may be asked to authenticate."
 msgstr "Может потребоваться аутентификация."
 
@@ -226,9 +265,15 @@ msgstr ""
 "сборку генератора пунктов меню из исходников, что занимает несколько минут — "
 "строки ниже и есть эта работа."
 
+msgid "account name, e.g. alex"
+msgstr "имя учётной записи, например alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "адреса, интерфейсы, радиомодули и фильтрует ли что-нибудь трафик"
+
+msgid "again"
+msgstr "ещё раз"
 
 msgid "connecting %1…"
 msgstr "подключение %1…"
@@ -239,6 +284,9 @@ msgstr ""
 
 msgid "could not work out what to run"
 msgstr "не удалось определить, что запускать"
+
+msgid "creating %1…"
+msgstr "создание %1…"
 
 msgid "disconnecting %1…"
 msgstr "отключение %1…"
@@ -253,6 +301,15 @@ msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr ""
 "поднимайте и снова кладите палец при каждом запросе; нужно несколько проходов"
 
+msgid "making %1 a standard account…"
+msgstr "%1 становится обычной учётной записью…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 становится администратором…"
+
+msgid "measuring…"
+msgstr "измерение…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "режимы не перечислены — установлен ли wlr-randr?"
 
@@ -265,6 +322,12 @@ msgstr "для этого параметра не предложен списо�
 msgid "nothing reported"
 msgstr "ничего не сообщено"
 
+msgid "pairing…"
+msgstr "сопряжение…"
+
+msgid "password"
+msgstr "пароль"
+
 msgid "re-probing %1…"
 msgstr "повторный опрос %1…"
 
@@ -273,6 +336,9 @@ msgstr "чтение…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "отказано (код %1) — возможно, отказал polkit"
+
+msgid "removing %1…"
+msgstr "удаление %1…"
 
 msgid "removing every fingerprint…"
 msgstr "удаление всех отпечатков…"
@@ -289,6 +355,9 @@ msgstr "%1 устанавливается в %2…"
 msgid "setting %1…"
 msgstr "настройка %1…"
 
+msgid "setting the password for %1…"
+msgstr "задаётся пароль для %1…"
+
 msgid "storing the %1 key…"
 msgstr "сохранение ключа %1…"
 
@@ -297,6 +366,16 @@ msgstr "переключение %1…"
 
 msgid "synui only — %1 is the session running"
 msgstr "только synui — запущенный сеанс: %1"
+
+msgid "the PIN Moonlight shows"
+msgstr "PIN-код, который показывает Moonlight"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"учётные записи на этой машине — добавление, пароль, право администрировать "
+"машину, отпечатки пальцев и удаление"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "адаптер, оба вида блокировки радио и что сопряжено"
@@ -339,6 +418,9 @@ msgstr ""
 "системные часы — и как их записывает рабочий стол: 12 или 24 часа и в каком "
 "порядке дата"
 
+msgid "the two passwords differ"
+msgstr "пароли не совпадают"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 "юниты, от которых зависит работающий спящий режим, и что сделал последний"
@@ -346,6 +428,13 @@ msgstr ""
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr ""
 "что открывает каждый тип файлов — и выбирал ли это кто-нибудь на самом деле"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"что запускается при входе — собственный список synui, ваши фоновые службы и "
+"записи автозапуска, которые этот рабочий стол никогда не запускает"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -402,6 +491,23 @@ msgid ""
 msgstr ""
 "127.0.0.1:8080 для интерфейсов, написанных под llama-server или API OpenAI, "
 "через поставляемый сокет"
+
+msgid "Speed"
+msgstr "Скорость"
+
+msgid "last answer"
+msgstr "последний ответ"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "ответ, токен за токеном · запрос прочитан со скоростью"
+
+msgid "not measured yet"
+msgstr "ещё не измерено"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "как быстро эта модель отвечает на этой машине · служба измеряет запрос и ответ раздельно"
 
 msgid "unknown"
 msgstr "неизвестно"
@@ -657,6 +763,58 @@ msgstr "Левый безымянный"
 
 msgid "Left little"
 msgstr "Левый мизинец"
+
+msgid "administrator prompts"
+msgstr "запросы администратора"
+
+msgid "on"
+msgstr "вкл"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"sudo в терминале и окно пароля, которое открывают настройки и обновления, "
+"сначала просят палец; пароль по-прежнему работает, если подождать или палец "
+"не совпадёт"
+
+msgid "off"
+msgstr "выкл"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"sudo и окно пароля администратора спрашивают только пароль; включите, чтобы "
+"сначала принимать палец"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"включено, но ещё не во всех запросах администратора — это применит следующая "
+"загрузка, или включите здесь"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr ""
+"в /etc/pam.d/sudo есть вручную написанная строка pam_fprintd; этот "
+"переключатель её не трогает"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr ""
+"pam_fprintd не установлен, поэтому ни один запрос администратора не может "
+"попросить палец"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo — не тот стек, который ожидается, поэтому он не изменяется — "
+"добавьте pam_fprintd.so как sufficient над его auth include"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1166,7 +1324,9 @@ msgstr "Трансляция (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "Видео вместо пикселей · достаточно плавно для игр и полноэкранного видео, и доступно любому клиенту Moonlight в этой сети"
+msgstr ""
+"Видео вместо пикселей · достаточно плавно для игр и полноэкранного видео, и "
+"доступно любому клиенту Moonlight в этой сети"
 
 msgid "Streaming server"
 msgstr "Сервер трансляции"
@@ -1189,7 +1349,9 @@ msgstr "Кто подключится, увидит этот рабочий ст
 msgid ""
 "synui grows a screen with no monitor behind it, sized to whatever the "
 "connecting client asks for"
-msgstr "synui создаёт экран, за которым нет монитора, такого размера, какой запросит подключившийся клиент"
+msgstr ""
+"synui создаёт экран, за которым нет монитора, такого размера, какой запросит "
+"подключившийся клиент"
 
 msgid "Blank this machine while streaming"
 msgstr "Гасить экраны этой машины во время трансляции"
@@ -1197,7 +1359,9 @@ msgstr "Гасить экраны этой машины во время тран
 msgid ""
 "The screens in this room go dark while somebody is connected, and come back "
 "when they leave"
-msgstr "Экраны в этой комнате гаснут, пока кто-то подключён, и возвращаются, когда он уходит"
+msgstr ""
+"Экраны в этой комнате гаснут, пока кто-то подключён, и возвращаются, когда "
+"он уходит"
 
 msgid "Stream port"
 msgstr "Порт трансляции"
@@ -1205,6 +1369,28 @@ msgstr "Порт трансляции"
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
 msgstr "куда направляют клиент Moonlight · страница настроек — на порт выше"
+
+msgid "Pair a Moonlight client"
+msgstr "Сопрячь клиент Moonlight"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"введите четыре цифры, которые Moonlight показывает при добавлении этой "
+"машины · один раз для каждого устройства"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+"сервер трансляции остановлен · «Включить» снова запускает его, после чего "
+"Moonlight может запросить PIN-код"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr ""
+"трансляция выключена · «Включить» запускает её, после чего Moonlight может "
+"запросить PIN-код"
 
 msgid "Streaming now"
 msgstr "Транслируется сейчас"
@@ -1483,9 +1669,6 @@ msgstr "Отзываться на своё имя"
 msgid "listening"
 msgstr "слушает"
 
-msgid "off"
-msgstr "выкл"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1506,7 +1689,8 @@ msgid "Dictation"
 msgstr "Диктовка"
 
 msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
-msgstr "faster-whisper, из synapse-voice. Super+Shift+V печатает то, что слышит"
+msgstr ""
+"faster-whisper, из synapse-voice. Super+Shift+V печатает то, что слышит"
 
 msgid "Speech rate"
 msgstr "Скорость речи"
@@ -1537,6 +1721,52 @@ msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr "слушатель. Поставляется выключенным · включает его переключатель выше"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"встроенное значение synui по умолчанию — synuirc ещё нет; добавление "
+"программы здесь его сохранит"
+
+msgid "synui starts this when you log in"
+msgstr "synui запускает это при входе"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "выключено — сохранено, чтобы можно было включить снова"
+
+msgid "Add a program"
+msgstr "Добавить программу"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"synui запускает при входе не больше 32 программ — выключите одну, чтобы "
+"добавить другую"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"команда, которую synui выполнит при входе, в том виде, как вы набрали бы её "
+"в терминале, — она сработает со следующего входа"
+
+msgid "background services"
+msgstr "фоновые службы"
+
+msgid "unavailable"
+msgstr "недоступно"
+
+msgid "there is no user service manager in this session to ask"
+msgstr ""
+"в этом сеансе нет пользовательского менеджера служб, которого можно спросить"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"запись автозапуска, которую synui никогда не запускает, — включите её, чтобы "
+"скопировать команду в список synui"
 
 msgid "kernel hardening baseline"
 msgstr "основа усиления ядра"
@@ -1654,9 +1884,6 @@ msgstr "панель, экран блокировки и часы рабочег
 msgid "time-seconds"
 msgstr "секунды"
 
-msgid "on"
-msgstr "вкл"
-
 msgid "seconds in the bar clock"
 msgstr "секунды в часах на панели"
 
@@ -1720,146 +1947,6 @@ msgstr "CPU  (без переноса на GPU)"
 msgid "Off  (mask the daemon)"
 msgstr "Выкл  (замаскировать демон)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "Bluetooth"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "sudo в терминале сначала просит палец; пароль по-прежнему работает, если подождать или палец не совпадёт"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo спрашивает только пароль; включите, чтобы сначала принимать палец"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "включено, но ещё не в стеке PAM для sudo — это применит следующая загрузка, или включите здесь"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "в /etc/pam.d/sudo есть вручную написанная строка pam_fprintd; этот переключатель её не трогает"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd не установлен, поэтому sudo не может попросить палец"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo — не тот стек, который ожидается, поэтому он не изменяется — добавьте pam_fprintd.so как sufficient над его auth include"
-
-msgid "Startup"
-msgstr "Автозапуск"
-
-msgid "removing %1…"
-msgstr "удаление %1…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "что запускается при входе — собственный список synui, ваши фоновые службы и записи автозапуска, которые этот рабочий стол никогда не запускает"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "встроенное значение synui по умолчанию — synuirc ещё нет; добавление программы здесь его сохранит"
-
-msgid "synui starts this when you log in"
-msgstr "synui запускает это при входе"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "выключено — сохранено, чтобы можно было включить снова"
-
-msgid "Add a program"
-msgstr "Добавить программу"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui запускает при входе не больше 32 программ — выключите одну, чтобы добавить другую"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "команда, которую synui выполнит при входе, в том виде, как вы набрали бы её в терминале, — она сработает со следующего входа"
-
-msgid "background services"
-msgstr "фоновые службы"
-
-msgid "unavailable"
-msgstr "недоступно"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "в этом сеансе нет пользовательского менеджера служб, которого можно спросить"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "запись автозапуска, которую synui никогда не запускает, — включите её, чтобы скопировать команду в список synui"
-
-msgid "Administrator"
-msgstr "Администратор"
-
-msgid "Click again to remove %1"
-msgstr "Нажмите ещё раз, чтобы удалить %1"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "Нажмите ещё раз — файлы %1 тоже будут удалены"
-
-msgid "Create account"
-msgstr "Создать учётную запись"
-
-msgid "Make administrator"
-msgstr "Сделать администратором"
-
-msgid "Make standard"
-msgstr "Сделать обычной"
-
-msgid "Remove with files"
-msgstr "Удалить вместе с файлами"
-
-msgid "Remove, keep files"
-msgstr "Удалить, сохранить файлы"
-
-msgid "Set password"
-msgstr "Задать пароль"
-
-msgid "Users"
-msgstr "Пользователи"
-
-msgid "account name, e.g. alex"
-msgstr "имя учётной записи, например alex"
-
-msgid "again"
-msgstr "ещё раз"
-
-msgid "creating %1…"
-msgstr "создание %1…"
-
-msgid "making %1 a standard account…"
-msgstr "%1 становится обычной учётной записью…"
-
-msgid "making %1 an administrator…"
-msgstr "%1 становится администратором…"
-
-msgid "password"
-msgstr "пароль"
-
-msgid "setting the password for %1…"
-msgstr "задаётся пароль для %1…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "учётные записи на этой машине — добавление, пароль, право администрировать машину, отпечатки пальцев и удаление"
-
-msgid "the two passwords differ"
-msgstr "пароли не совпадают"
-
 msgid "administrator"
 msgstr "администратор"
 
@@ -1872,7 +1959,9 @@ msgstr "это вы — учётная запись, от имени котор�
 msgid ""
 "the only administrator — make another one before this one can be made "
 "standard"
-msgstr "единственный администратор — сначала сделайте администратором другую запись, прежде чем эта станет обычной"
+msgstr ""
+"единственный администратор — сначала сделайте администратором другую запись, "
+"прежде чем эта станет обычной"
 
 msgid "an administrator: it can use sudo and change the system"
 msgstr "администратор: может пользоваться sudo и менять систему"
@@ -1883,10 +1972,14 @@ msgstr "обычная учётная запись: не может пользо
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "введите новый пароль дважды — старый не спрашивается, так администратор может сбросить забытый"
+msgstr ""
+"введите новый пароль дважды — старый не спрашивается, так администратор "
+"может сбросить забытый"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
-msgstr "выберите палец, затем поднимайте и прикладывайте его к сканеру каждый раз, когда он попросит"
+msgstr ""
+"выберите палец, затем поднимайте и прикладывайте его к сканеру каждый раз, "
+"когда он попросит"
 
 msgid "forget every fingerprint on file for this account"
 msgstr "забыть все сохранённые отпечатки этой учётной записи"
@@ -1898,7 +1991,9 @@ msgid "the only administrator cannot be removed"
 msgstr "единственного администратора удалить нельзя"
 
 msgid "removes the account; its files in /home can go with it or stay"
-msgstr "удаляет учётную запись; её файлы в /home можно удалить вместе с ней или оставить"
+msgstr ""
+"удаляет учётную запись; её файлы в /home можно удалить вместе с ней или "
+"оставить"
 
 msgid "Add a user"
 msgstr "Добавить пользователя"
@@ -1906,48 +2001,34 @@ msgstr "Добавить пользователя"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "ещё одна учётная запись со своими файлами и рабочим столом — на экране входа Tab переходит к полю имени"
+msgstr ""
+"ещё одна учётная запись со своими файлами и рабочим столом — на экране входа "
+"Tab переходит к полю имени"
 
-msgid "administrator prompts"
-msgstr "запросы администратора"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "sudo в терминале и окно пароля, которое открывают настройки и обновления, сначала просят палец; пароль по-прежнему работает, если подождать или палец не совпадёт"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo и окно пароля администратора спрашивают только пароль; включите, чтобы сначала принимать палец"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "sudo в терминале сначала просит палец; пароль по-прежнему работает, если "
+#~ "подождать или палец не совпадёт"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "включено, но ещё не во всех запросах администратора — это применит следующая загрузка, или включите здесь"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr ""
+#~ "sudo спрашивает только пароль; включите, чтобы сначала принимать палец"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd не установлен, поэтому ни один запрос администратора не может попросить палец"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "включено, но ещё не в стеке PAM для sudo — это применит следующая "
+#~ "загрузка, или включите здесь"
 
-msgid "Pair"
-msgstr "Сопрячь"
-
-msgid "pairing…"
-msgstr "сопряжение…"
-
-msgid "the PIN Moonlight shows"
-msgstr "PIN-код, который показывает Moonlight"
-
-msgid "Pair a Moonlight client"
-msgstr "Сопрячь клиент Moonlight"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "введите четыре цифры, которые Moonlight показывает при добавлении этой машины · один раз для каждого устройства"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "сервер трансляции остановлен · «Включить» снова запускает его, после чего Moonlight может запросить PIN-код"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "трансляция выключена · «Включить» запускает её, после чего Moonlight может запросить PIN-код"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr "pam_fprintd не установлен, поэтому sudo не может попросить палец"

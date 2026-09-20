@@ -28,6 +28,28 @@
 #include <sys/stat.h>
 
 #define AI_HELPER "synui-ai-backend"
+#define AI_BENCH  "synapd-bench"
+
+/*
+ * One `key=value` field out of a machine-readable line, matched as a WHOLE key.
+ *
+ * ⛔ NOT strstr(s, "decode_tps="). The line ends with model_file="…", which is
+ * free text out of the GGUF's metadata — a model whose name contained a key
+ * would be read as that key. synapd-bench's own parser was written twice for
+ * this exact reason and its test pins it; this one only ever reads the numeric
+ * fields, which come before the quoted one, and it still checks the whole key
+ * rather than relying on that ordering holding.
+ */
+static double kv_num(const char *s, const char *key, double missing)
+{
+	size_t klen = strlen(key);
+	for (const char *p = s; (p = strstr(p, key)); p += klen) {
+		if (p != s && p[-1] != ' ') continue;
+		if (p[klen] != '=')         continue;
+		return strtod(p + klen + 1, NULL);
+	}
+	return missing;
+}
 
 /* The model synapd.service names on its command line. Fixed, not configurable:
  * syn-model(1) downloads to this path and repoints it. */
@@ -114,6 +136,41 @@ static int unit_absent(const char *en)
 	       !strcmp(en, "not-found\n");
 }
 
+/*
+ * `syn-settings bench [HOST]` — measure, rather than read.
+ *
+ * ⛔ IT DOES NOT REIMPLEMENT THE MEASUREMENT, for the same reason the backend
+ * switch above is handed to synui-ai-backend(1): the numbers have to come from
+ * the daemon that did the work. synapd-bench asks it for the token counts and
+ * the time each half took; a settings app timing a round trip from out here
+ * would be counting the network and the queue as if they were the model.
+ *
+ * Streamed, not captured: it prints a line per run and takes seconds, and a
+ * window that shows nothing until the end of a slow operation reads as a
+ * window that has hung.
+ */
+int do_bench(int argc, char **argv)
+{
+	if (!have_cmd(AI_BENCH)) {
+		fprintf(stderr, "syn-settings: %s is not installed "
+		                "(it ships with synapd)\n", AI_BENCH);
+		return 1;
+	}
+
+	/* An optional host, so a laptop can measure the desktop's daemon over
+	 * the LAN bridge — which is the case where the interesting number is not
+	 * the model's speed but what the network adds to it. */
+	char *a[5];
+	int n = 0;
+	a[n++] = (char *)AI_BENCH;
+	if (argc > 0 && argv[0] && argv[0][0]) {
+		a[n++] = (char *)"--host";
+		a[n++] = argv[0];
+	}
+	a[n] = NULL;
+	return run_or_show_progress(a);
+}
+
 int pane_ai(void)
 {
 	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
@@ -160,6 +217,50 @@ int pane_ai(void)
 			rec_row("llama-api\t%s\t%s\t%s\t%s\ttoggle:llama-api",
 			        N_("llama.cpp API port"), on, act,
 			        N_("127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, over the model synapd already holds \xc2\xb7 no authentication, so every process on this machine can reach it \xc2\xb7 loopback only, never the network"));
+		}
+	}
+
+	/* ── How fast it answers ──────────────────────────────────────────── */
+	/*
+	 * ⚠ READ WHEN THIS PANE DRAWS, NEVER MEASURED. `synapd-bench --last` is
+	 * a single status round trip that asks the daemon nothing: running a
+	 * real benchmark to fill in a row would spend seconds of GPU and a few
+	 * hundred generated tokens every time somebody opened this window. The
+	 * button is what measures.
+	 *
+	 * ⛔ AND THE NUMBER IS WHOEVER ASKED LAST — a vibe turn, chibi, the
+	 * command bar — not this pane's measurement. That is why the state
+	 * column says "last answer": it is a fair picture of how the machine is
+	 * behaving and a poor one for comparing two models, because nothing here
+	 * chose the prompt. Pressing the button is what fixes the prompt.
+	 */
+	if (have_cmd(AI_BENCH)) {
+		char out[512] = "";
+		char *argv[] = { (char *)AI_BENCH, (char *)"--last", NULL };
+		run_capture_quiet(argv, out, sizeof out);
+
+		double tps  = kv_num(out, "decode_tps", -1);
+		double toks = kv_num(out, "gen_tok", 0);
+
+		if (tps >= 0 && toks > 0) {
+			/* Two numbers, because they answer different questions: slow
+			 * prefill is layers that are not on the GPU, slow decode with
+			 * fast prefill is weights in the wrong kind of memory.
+			 *
+			 * ⚠ THE RATE IS FORMATTED FIRST, so the format string here holds
+			 * no prose at all — the sentence a translator receives is whole
+			 * and the number arrives in a %s. A phrase split across a format
+			 * ships half of itself in English inside every other language. */
+			char pre_s[32];
+			snprintf(pre_s, sizeof pre_s, "%.0f tok/s", kv_num(out, "prefill_tps", 0));
+			rec_row("bench\t%s\t%.1f tok/s\t%s\t%s %s\tbench:run",
+			        N_("Speed"), tps, N_("last answer"),
+			        N_("the answer, token by token \xc2\xb7 the prompt was read at"),
+			        pre_s);
+		} else {
+			rec_row("bench\t%s\t%s\t-\t%s\tbench:run",
+			        N_("Speed"), N_("not measured yet"),
+			        N_("how fast this model answers on this machine \xc2\xb7 the daemon times the prompt and the answer separately"));
 		}
 	}
 

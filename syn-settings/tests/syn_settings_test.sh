@@ -94,7 +94,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|userunit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*|password:*|promote:*|demote:*|fforget:*|deluser:*|adduser:*) ;;
+                set:*|toggle:*|unit:*|userunit:*|probe:*|bench:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*|choice:*|enroll:*|forget:*|secret:*|unavailable:*|address:*|drop:*|password:*|promote:*|demote:*|fforget:*|deluser:*|adduser:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -509,6 +509,71 @@ if [ -n "$real" ]; then
 else
     ok "no DRM connectors here; probe resolution not exercised"
 fi
+
+# ── The AI pane's speed row ─────────────────────────────────────────────────
+#
+# ⛔ THE SOURCE IS FAKED, ON PURPOSE. This row's value comes from
+# `synapd-bench --last`, which needs a running daemon with a model loaded —
+# so a test that ran the real one would be measuring THIS machine and would
+# pass or fail on whether a 7B happens to be resident. The same trap the
+# fingerprint labels fell into: a gate that runs the program reads the box it
+# runs on. A stub first on PATH makes the row's three outcomes reachable
+# anywhere.
+benchdir=$(mktemp -d)
+trap 'rm -rf "$benchdir" "$stubdir" "$SBOX"' EXIT
+
+fake_bench() {   # fake_bench <what it prints on stdout>
+    printf '#!/bin/sh\nprintf "%%s\\n" %s\n' "$(printf '%q' "$1")" \
+        > "$benchdir/synapd-bench"
+    chmod +x "$benchdir/synapd-bench"
+}
+
+fake_bench 'decode_tps=45.70 prefill_tps=1084.2 gen_tok=96 prefill_tok=412 model_file="synapse.gguf"'
+row=$(PATH="$benchdir:$PATH" "$BIN" --rec ai 2>/dev/null | awk -F'\t' '$1=="bench"')
+case "$row" in
+    *"45.7 tok/s"*) ok "the speed row shows the last answer's rate" ;;
+    *) bad "the speed row did not show the rate [$row]" ;;
+esac
+case "$row" in
+    *"1084 tok/s"*) ok "...and what the prompt was read at" ;;
+    *) bad "the speed row dropped the prefill rate [$row]" ;;
+esac
+
+# ⛔ THE KEY IS MATCHED AS A WHOLE KEY. model_file= is free text out of the
+# GGUF's metadata, so a model whose NAME contains one of these keys must not be
+# read as that key — the row would print a number that came from a string and
+# look exactly like a measurement. synapd-bench's own parser is pinned by
+# synapd/tests/bench_test.c; this pins the copy in ai.c.
+fake_bench 'decode_tps=45.70 prefill_tps=1084.2 gen_tok=96 prefill_tok=412 model_file="decode_tps=9999 hostile.gguf"'
+row=$(PATH="$benchdir:$PATH" "$BIN" --rec ai 2>/dev/null | awk -F'\t' '$1=="bench"')
+case "$row" in
+    *9999*) bad "a key inside a model NAME was read as the rate [$row]" ;;
+    *"45.7 tok/s"*) ok "a key inside a model name is not the rate" ;;
+    *) bad "the speed row broke on a hostile model name [$row]" ;;
+esac
+
+# Nothing answered yet: a loaded model that has never been asked anything
+# reports zero tokens, and zero tokens is not a speed of zero.
+fake_bench 'decode_tps=0.00 prefill_tps=0.0 gen_tok=0 prefill_tok=0 model_file="synapse.gguf"'
+row=$(PATH="$benchdir:$PATH" "$BIN" --rec ai 2>/dev/null | awk -F'\t' '$1=="bench"')
+case "$row" in
+    *"0.0 tok/s"*) bad "an unused model was reported as 0 tok/s [$row]" ;;
+    *"not measured"*) ok "an unused model says not measured, not 0 tok/s" ;;
+    *) bad "the speed row said something else entirely [$row]" ;;
+esac
+
+# And the button must not exist where the tool does not. A row whose action
+# cannot run is a dead button in the app whose whole job is showing true state.
+onlybin=$(mktemp -d)
+for t in awk sed grep cat systemctl stat; do
+    src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$onlybin/$t"
+done
+if PATH="$onlybin" "$BIN" --rec ai 2>/dev/null | awk -F'\t' '$1=="bench"' | grep -q .; then
+    bad "the speed row is offered with no synapd-bench installed"
+else
+    ok "no synapd-bench, no speed row"
+fi
+rm -rf "$onlybin"
 
 # ── Bootloaders ─────────────────────────────────────────────────────────────
 #

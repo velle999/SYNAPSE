@@ -27,6 +27,9 @@ msgstr[1] "%1 righe"
 msgid "AI"
 msgstr "IA"
 
+msgid "Administrator"
+msgstr "Amministratore"
+
 msgid "Apply"
 msgstr "Applica"
 
@@ -56,6 +59,12 @@ msgstr "Annulla"
 msgid "Change boot configuration?"
 msgstr "Modificare la configurazione di avvio?"
 
+msgid "Click again to remove %1"
+msgstr "Fai clic di nuovo per rimuovere %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Fai clic di nuovo — vengono eliminati anche i file di %1"
+
 msgid "Close"
 msgstr "Chiudi"
 
@@ -64,6 +73,9 @@ msgstr "Configurazione"
 
 msgid "Connect"
 msgstr "Connetti"
+
+msgid "Create account"
+msgstr "Crea account"
 
 msgid "Date & Time"
 msgstr "Data e ora"
@@ -117,6 +129,9 @@ msgstr ""
 "Lascialo in esecuzione. Chiudere la finestra non lo ferma: ti impedisce solo "
 "di vedere com'è andata."
 
+msgid "Make administrator"
+msgstr "Rendi amministratore"
+
 msgid "Make bootable"
 msgstr "Rendi avviabile"
 
@@ -129,6 +144,9 @@ msgstr "Imposta come predefinito"
 msgid "Make default…"
 msgstr "Imposta come predefinito…"
 
+msgid "Make standard"
+msgstr "Rendi standard"
+
 msgid "Making %1 bootable"
 msgstr "%1 viene reso avviabile"
 
@@ -138,8 +156,14 @@ msgstr "%1 viene impostato come predefinito"
 msgid "Malware Scanning"
 msgstr "Analisi malware"
 
+msgid "Measure"
+msgstr "Misura"
+
 msgid "Network"
 msgstr "Rete"
+
+msgid "Pair"
+msgstr "Associa"
 
 msgid "Power & Sleep"
 msgstr "Energia e sospensione"
@@ -166,6 +190,12 @@ msgstr "Rimuovi"
 msgid "Remove key"
 msgstr "Rimuovi la chiave"
 
+msgid "Remove with files"
+msgstr "Rimuovi con i file"
+
+msgid "Remove, keep files"
+msgstr "Rimuovi, tieni i file"
+
 msgid "Removing %1"
 msgstr "Rimozione di %1"
 
@@ -178,8 +208,14 @@ msgstr "Impostazioni SYNAPSE"
 msgid "Save key"
 msgstr "Salva la chiave"
 
+msgid "Set password"
+msgstr "Imposta password"
+
 msgid "Speech"
 msgstr "Voce"
+
+msgid "Startup"
+msgstr "Avvio"
 
 msgid "System"
 msgstr "Sistema"
@@ -211,6 +247,9 @@ msgstr "Disattiva"
 msgid "Turn on"
 msgstr "Attiva"
 
+msgid "Users"
+msgstr "Utenti"
+
 msgid "You may be asked to authenticate."
 msgstr "Potrebbe esserti chiesto di autenticarti."
 
@@ -223,9 +262,15 @@ msgstr ""
 "compilare da sorgente il generatore delle voci, cosa che richiede diversi "
 "minuti: le righe qui sotto sono quel lavoro."
 
+msgid "account name, e.g. alex"
+msgstr "nome dell'account, es. alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "indirizzi, interfacce, radio, e se qualcosa sta filtrando il traffico"
+
+msgid "again"
+msgstr "di nuovo"
 
 msgid "connecting %1…"
 msgstr "connessione di %1…"
@@ -236,6 +281,9 @@ msgstr ""
 
 msgid "could not work out what to run"
 msgstr "impossibile determinare cosa eseguire"
+
+msgid "creating %1…"
+msgstr "creazione di %1…"
 
 msgid "disconnecting %1…"
 msgstr "disconnessione di %1…"
@@ -250,6 +298,15 @@ msgstr "l'identità, e da quale livello proviene ciascun file di configurazione"
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "solleva e riappoggia il dito a ogni richiesta; servono più passaggi"
 
+msgid "making %1 a standard account…"
+msgstr "%1 diventa un account standard…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 diventa amministratore…"
+
+msgid "measuring…"
+msgstr "misurazione…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "nessuna modalità elencata: wlr-randr è installato?"
 
@@ -262,6 +319,12 @@ msgstr "nulla ha offerto un elenco di scelte per questa impostazione"
 msgid "nothing reported"
 msgstr "nulla riportato"
 
+msgid "pairing…"
+msgstr "associazione…"
+
+msgid "password"
+msgstr "password"
+
 msgid "re-probing %1…"
 msgstr "nuova sonda di %1…"
 
@@ -270,6 +333,9 @@ msgstr "lettura…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "rifiutato (uscita %1) — polkit potrebbe aver negato"
+
+msgid "removing %1…"
+msgstr "rimozione di %1…"
 
 msgid "removing every fingerprint…"
 msgstr "rimozione di tutte le impronte…"
@@ -286,6 +352,9 @@ msgstr "%1 viene impostato su %2…"
 msgid "setting %1…"
 msgstr "impostazione di %1…"
 
+msgid "setting the password for %1…"
+msgstr "impostazione della password di %1…"
+
 msgid "storing the %1 key…"
 msgstr "salvataggio della chiave %1…"
 
@@ -294,6 +363,16 @@ msgstr "commutazione di %1…"
 
 msgid "synui only — %1 is the session running"
 msgstr "solo synui — la sessione in corso è %1"
+
+msgid "the PIN Moonlight shows"
+msgstr "il PIN mostrato da Moonlight"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"gli account di questa macchina — aggiungerne uno, la sua password, se può "
+"amministrare la macchina, le sue impronte e rimuoverlo"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "l'adattatore, entrambi i tipi di blocco radio, e cosa è associato"
@@ -338,12 +417,22 @@ msgstr ""
 "l'orologio di sistema — e come il desktop lo scrive: 12 o 24 ore, e in quale "
 "ordine la data"
 
+msgid "the two passwords differ"
+msgstr "le due password sono diverse"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 "le unità da cui dipende una sospensione funzionante, e cosa ha fatto l'ultima"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "cosa apre ogni tipo di file — e se qualcuno l'ha davvero scelto"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"cosa parte quando accedi — la lista di synui, i tuoi servizi in background e "
+"le voci di avvio automatico che questo desktop non esegue mai"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -400,6 +489,23 @@ msgid ""
 msgstr ""
 "127.0.0.1:8080 per i frontend scritti per llama-server o per l'API di "
 "OpenAI, tramite il socket fornito"
+
+msgid "Speed"
+msgstr "Velocità"
+
+msgid "last answer"
+msgstr "ultima risposta"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "la risposta, token per token · il prompt è stato letto a"
+
+msgid "not measured yet"
+msgstr "non ancora misurato"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "quanto velocemente questo modello risponde su questa macchina · il demone misura il prompt e la risposta separatamente"
 
 msgid "unknown"
 msgstr "sconosciuto"
@@ -662,6 +768,58 @@ msgstr "Anulare sinistro"
 
 msgid "Left little"
 msgstr "Mignolo sinistro"
+
+msgid "administrator prompts"
+msgstr "richieste di amministratore"
+
+msgid "on"
+msgstr "acceso"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"sudo in un terminale, e la finestra della password che aprono le "
+"impostazioni e gli aggiornamenti, chiedono prima un dito; la password "
+"funziona comunque se aspetti o se nessun dito corrisponde"
+
+msgid "off"
+msgstr "spento"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"sudo e la finestra della password di amministratore chiedono solo la "
+"password; attivalo per accettare prima un dito"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"attivato ma non ancora in tutte le richieste di amministratore — il prossimo "
+"avvio lo applica, oppure attivalo qui"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr ""
+"in /etc/pam.d/sudo c'è una riga pam_fprintd scritta a mano; questo "
+"interruttore non la tocca"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr ""
+"pam_fprintd non è installato, quindi nessuna richiesta di amministratore può "
+"chiedere un dito"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo non è lo stack atteso, quindi viene lasciato com'è — "
+"aggiungi pam_fprintd.so come sufficient sopra il suo auth include"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1178,7 +1336,9 @@ msgstr "Streaming (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "Video invece di pixel · abbastanza fluido per i giochi e per il video a schermo intero, e raggiungibile da qualsiasi client Moonlight di questa rete"
+msgstr ""
+"Video invece di pixel · abbastanza fluido per i giochi e per il video a "
+"schermo intero, e raggiungibile da qualsiasi client Moonlight di questa rete"
 
 msgid "Streaming server"
 msgstr "Server di streaming"
@@ -1201,7 +1361,9 @@ msgstr "Chi si collega vede questa scrivania com'è, alla sua risoluzione"
 msgid ""
 "synui grows a screen with no monitor behind it, sized to whatever the "
 "connecting client asks for"
-msgstr "synui crea uno schermo senza monitor dietro, della dimensione che chiede il client che si collega"
+msgstr ""
+"synui crea uno schermo senza monitor dietro, della dimensione che chiede il "
+"client che si collega"
 
 msgid "Blank this machine while streaming"
 msgstr "Spegnere gli schermi di questa macchina durante lo streaming"
@@ -1209,14 +1371,39 @@ msgstr "Spegnere gli schermi di questa macchina durante lo streaming"
 msgid ""
 "The screens in this room go dark while somebody is connected, and come back "
 "when they leave"
-msgstr "Gli schermi di questa stanza si spengono finché qualcuno è collegato, e tornano quando se ne va"
+msgstr ""
+"Gli schermi di questa stanza si spengono finché qualcuno è collegato, e "
+"tornano quando se ne va"
 
 msgid "Stream port"
 msgstr "Porta dello streaming"
 
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
-msgstr "dove si punta un client Moonlight · la sua pagina di impostazioni è una porta più in alto"
+msgstr ""
+"dove si punta un client Moonlight · la sua pagina di impostazioni è una "
+"porta più in alto"
+
+msgid "Pair a Moonlight client"
+msgstr "Associa un client Moonlight"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"scrivi le quattro cifre che Moonlight mostra quando aggiunge questa macchina "
+"· una volta per dispositivo"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+"il server di streaming si è fermato · Attiva lo riavvia, poi Moonlight può "
+"chiedere un PIN"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr ""
+"lo streaming è spento · Attiva lo avvia, poi Moonlight può chiedere un PIN"
 
 msgid "Streaming now"
 msgstr "In streaming ora"
@@ -1501,9 +1688,6 @@ msgstr "Rispondere al proprio nome"
 msgid "listening"
 msgstr "in ascolto"
 
-msgid "off"
-msgstr "spento"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1524,7 +1708,8 @@ msgid "Dictation"
 msgstr "Dettatura"
 
 msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
-msgstr "faster-whisper, da synapse-voice. Super+Maiusc+V scrive quello che sente"
+msgstr ""
+"faster-whisper, da synapse-voice. Super+Maiusc+V scrive quello che sente"
 
 msgid "Speech rate"
 msgstr "Velocità del parlato"
@@ -1558,6 +1743,52 @@ msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr ""
 "l'ascoltatore. Viene fornito disattivato · è l'interruttore qui sopra ad "
 "accenderlo"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"il valore predefinito integrato di synui — non c'è ancora un synuirc; "
+"aggiungere un programma qui lo mantiene"
+
+msgid "synui starts this when you log in"
+msgstr "synui lo avvia quando accedi"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "disattivato — mantenuto per poterlo riattivare"
+
+msgid "Add a program"
+msgstr "Aggiungi un programma"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"synui avvia al massimo 32 programmi all'accesso — disattivane uno per "
+"aggiungerne un altro"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"un comando che synui esegue all'accesso, come lo scriveresti in un terminale "
+"— parte dal prossimo accesso"
+
+msgid "background services"
+msgstr "servizi in background"
+
+msgid "unavailable"
+msgstr "non disponibile"
+
+msgid "there is no user service manager in this session to ask"
+msgstr ""
+"in questa sessione non c'è un gestore dei servizi utente a cui chiedere"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"una voce di avvio automatico che synui non esegue mai — attivala per "
+"copiarne il comando nella lista di synui"
 
 msgid "kernel hardening baseline"
 msgstr "base di rafforzamento del kernel"
@@ -1676,9 +1907,6 @@ msgstr "la barra, la schermata di blocco e l'orologio del desktop"
 msgid "time-seconds"
 msgstr "secondi"
 
-msgid "on"
-msgstr "acceso"
-
 msgid "seconds in the bar clock"
 msgstr "i secondi nell'orologio della barra"
 
@@ -1744,146 +1972,6 @@ msgstr "CPU  (nessuno scarico su GPU)"
 msgid "Off  (mask the daemon)"
 msgstr "Disattivo  (maschera il demone)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "Bluetooth"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "sudo in un terminale chiede prima un dito; la password funziona comunque se aspetti o se nessun dito corrisponde"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo chiede solo la password; attivalo per accettare prima un dito"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "attivato ma non ancora nello stack PAM di sudo — il prossimo avvio lo applica, oppure attivalo qui"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "in /etc/pam.d/sudo c'è una riga pam_fprintd scritta a mano; questo interruttore non la tocca"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd non è installato, quindi sudo non può chiedere un dito"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo non è lo stack atteso, quindi viene lasciato com'è — aggiungi pam_fprintd.so come sufficient sopra il suo auth include"
-
-msgid "Startup"
-msgstr "Avvio"
-
-msgid "removing %1…"
-msgstr "rimozione di %1…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "cosa parte quando accedi — la lista di synui, i tuoi servizi in background e le voci di avvio automatico che questo desktop non esegue mai"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "il valore predefinito integrato di synui — non c'è ancora un synuirc; aggiungere un programma qui lo mantiene"
-
-msgid "synui starts this when you log in"
-msgstr "synui lo avvia quando accedi"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "disattivato — mantenuto per poterlo riattivare"
-
-msgid "Add a program"
-msgstr "Aggiungi un programma"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui avvia al massimo 32 programmi all'accesso — disattivane uno per aggiungerne un altro"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "un comando che synui esegue all'accesso, come lo scriveresti in un terminale — parte dal prossimo accesso"
-
-msgid "background services"
-msgstr "servizi in background"
-
-msgid "unavailable"
-msgstr "non disponibile"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "in questa sessione non c'è un gestore dei servizi utente a cui chiedere"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "una voce di avvio automatico che synui non esegue mai — attivala per copiarne il comando nella lista di synui"
-
-msgid "Administrator"
-msgstr "Amministratore"
-
-msgid "Click again to remove %1"
-msgstr "Fai clic di nuovo per rimuovere %1"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "Fai clic di nuovo — vengono eliminati anche i file di %1"
-
-msgid "Create account"
-msgstr "Crea account"
-
-msgid "Make administrator"
-msgstr "Rendi amministratore"
-
-msgid "Make standard"
-msgstr "Rendi standard"
-
-msgid "Remove with files"
-msgstr "Rimuovi con i file"
-
-msgid "Remove, keep files"
-msgstr "Rimuovi, tieni i file"
-
-msgid "Set password"
-msgstr "Imposta password"
-
-msgid "Users"
-msgstr "Utenti"
-
-msgid "account name, e.g. alex"
-msgstr "nome dell'account, es. alex"
-
-msgid "again"
-msgstr "di nuovo"
-
-msgid "creating %1…"
-msgstr "creazione di %1…"
-
-msgid "making %1 a standard account…"
-msgstr "%1 diventa un account standard…"
-
-msgid "making %1 an administrator…"
-msgstr "%1 diventa amministratore…"
-
-msgid "password"
-msgstr "password"
-
-msgid "setting the password for %1…"
-msgstr "impostazione della password di %1…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "gli account di questa macchina — aggiungerne uno, la sua password, se può amministrare la macchina, le sue impronte e rimuoverlo"
-
-msgid "the two passwords differ"
-msgstr "le due password sono diverse"
-
 msgid "administrator"
 msgstr "amministratore"
 
@@ -1896,7 +1984,9 @@ msgstr "sei tu — l'account con cui gira questa finestra"
 msgid ""
 "the only administrator — make another one before this one can be made "
 "standard"
-msgstr "l'unico amministratore — nominane un altro prima che questo possa diventare standard"
+msgstr ""
+"l'unico amministratore — nominane un altro prima che questo possa diventare "
+"standard"
 
 msgid "an administrator: it can use sudo and change the system"
 msgstr "un amministratore: può usare sudo e modificare il sistema"
@@ -1907,22 +1997,29 @@ msgstr "un account standard: non può usare sudo né modificare il sistema"
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "scrivi due volte una nuova password — quella vecchia non viene chiesta, così un amministratore può reimpostarne una dimenticata"
+msgstr ""
+"scrivi due volte una nuova password — quella vecchia non viene chiesta, così "
+"un amministratore può reimpostarne una dimenticata"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
-msgstr "scegli un dito, poi sollevalo e appoggialo sul lettore ogni volta che lo chiede"
+msgstr ""
+"scegli un dito, poi sollevalo e appoggialo sul lettore ogni volta che lo "
+"chiede"
 
 msgid "forget every fingerprint on file for this account"
 msgstr "dimentica tutte le impronte registrate per questo account"
 
 msgid "signed in right now — it has to sign out before it can be removed"
-msgstr "connesso in questo momento — deve disconnettersi prima di poter essere rimosso"
+msgstr ""
+"connesso in questo momento — deve disconnettersi prima di poter essere "
+"rimosso"
 
 msgid "the only administrator cannot be removed"
 msgstr "l'unico amministratore non può essere rimosso"
 
 msgid "removes the account; its files in /home can go with it or stay"
-msgstr "rimuove l'account; i suoi file in /home possono andarsene con lui o restare"
+msgstr ""
+"rimuove l'account; i suoi file in /home possono andarsene con lui o restare"
 
 msgid "Add a user"
 msgstr "Aggiungi un utente"
@@ -1930,48 +2027,33 @@ msgstr "Aggiungi un utente"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "un altro account con file e desktop propri — nella schermata di accesso, Tab passa al campo del nome"
+msgstr ""
+"un altro account con file e desktop propri — nella schermata di accesso, Tab "
+"passa al campo del nome"
 
-msgid "administrator prompts"
-msgstr "richieste di amministratore"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "sudo in un terminale, e la finestra della password che aprono le impostazioni e gli aggiornamenti, chiedono prima un dito; la password funziona comunque se aspetti o se nessun dito corrisponde"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo e la finestra della password di amministratore chiedono solo la password; attivalo per accettare prima un dito"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "sudo in un terminale chiede prima un dito; la password funziona comunque "
+#~ "se aspetti o se nessun dito corrisponde"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "attivato ma non ancora in tutte le richieste di amministratore — il prossimo avvio lo applica, oppure attivalo qui"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr "sudo chiede solo la password; attivalo per accettare prima un dito"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd non è installato, quindi nessuna richiesta di amministratore può chiedere un dito"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "attivato ma non ancora nello stack PAM di sudo — il prossimo avvio lo "
+#~ "applica, oppure attivalo qui"
 
-msgid "Pair"
-msgstr "Associa"
-
-msgid "pairing…"
-msgstr "associazione…"
-
-msgid "the PIN Moonlight shows"
-msgstr "il PIN mostrato da Moonlight"
-
-msgid "Pair a Moonlight client"
-msgstr "Associa un client Moonlight"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "scrivi le quattro cifre che Moonlight mostra quando aggiunge questa macchina · una volta per dispositivo"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "il server di streaming si è fermato · Attiva lo riavvia, poi Moonlight può chiedere un PIN"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "lo streaming è spento · Attiva lo avvia, poi Moonlight può chiedere un PIN"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr "pam_fprintd non è installato, quindi sudo non può chiedere un dito"

@@ -26,6 +26,9 @@ msgstr[0] "%1 行"
 msgid "AI"
 msgstr "AI"
 
+msgid "Administrator"
+msgstr "管理员"
+
 msgid "Apply"
 msgstr "应用"
 
@@ -54,6 +57,12 @@ msgstr "取消"
 msgid "Change boot configuration?"
 msgstr "更改引导配置？"
 
+msgid "Click again to remove %1"
+msgstr "再次点击以移除 %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "再次点击 — %1 的文件也会被删除"
+
 msgid "Close"
 msgstr "关闭"
 
@@ -62,6 +71,9 @@ msgstr "配置"
 
 msgid "Connect"
 msgstr "连接"
+
+msgid "Create account"
+msgstr "创建账户"
 
 msgid "Date & Time"
 msgstr "日期和时间"
@@ -113,6 +125,9 @@ msgid ""
 "you seeing how it went."
 msgstr "让它继续运行。关闭窗口不会中止它，只会让你看不到结果。"
 
+msgid "Make administrator"
+msgstr "设为管理员"
+
 msgid "Make bootable"
 msgstr "设为可引导"
 
@@ -125,6 +140,9 @@ msgstr "设为默认"
 msgid "Make default…"
 msgstr "设为默认…"
 
+msgid "Make standard"
+msgstr "设为标准"
+
 msgid "Making %1 bootable"
 msgstr "正在将 %1 设为可引导"
 
@@ -134,8 +152,14 @@ msgstr "正在将 %1 设为默认"
 msgid "Malware Scanning"
 msgstr "恶意软件扫描"
 
+msgid "Measure"
+msgstr "测量"
+
 msgid "Network"
 msgstr "网络"
+
+msgid "Pair"
+msgstr "配对"
 
 msgid "Power & Sleep"
 msgstr "电源与睡眠"
@@ -162,6 +186,12 @@ msgstr "移除"
 msgid "Remove key"
 msgstr "移除密钥"
 
+msgid "Remove with files"
+msgstr "连同文件移除"
+
+msgid "Remove, keep files"
+msgstr "移除，保留文件"
+
 msgid "Removing %1"
 msgstr "正在移除 %1"
 
@@ -174,8 +204,14 @@ msgstr "SYNAPSE 设置"
 msgid "Save key"
 msgstr "保存密钥"
 
+msgid "Set password"
+msgstr "设置密码"
+
 msgid "Speech"
 msgstr "语音"
+
+msgid "Startup"
+msgstr "启动项"
 
 msgid "System"
 msgstr "系统"
@@ -207,6 +243,9 @@ msgstr "关闭"
 msgid "Turn on"
 msgstr "开启"
 
+msgid "Users"
+msgstr "用户"
+
 msgid "You may be asked to authenticate."
 msgstr "可能会要求你进行身份验证。"
 
@@ -218,9 +257,15 @@ msgstr ""
 "可能会要求你进行身份验证。在 limine 上，这可能意味着从源码构建启动项生成器，"
 "需要好几分钟——下面的输出就是这项工作。"
 
+msgid "account name, e.g. alex"
+msgstr "账户名，例如 alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "地址、网络接口、无线电，以及是否有东西在过滤流量"
+
+msgid "again"
+msgstr "再输一次"
 
 msgid "connecting %1…"
 msgstr "正在连接 %1…"
@@ -230,6 +275,9 @@ msgstr "内核所见的接口，以及合成器实际驱动的内容"
 
 msgid "could not work out what to run"
 msgstr "无法确定要运行什么"
+
+msgid "creating %1…"
+msgstr "正在创建 %1…"
 
 msgid "disconnecting %1…"
 msgstr "正在断开 %1…"
@@ -243,6 +291,15 @@ msgstr "身份标识，以及每个配置文件来自哪一层"
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "每次提示时抬起手指再放回；需要多次采集"
 
+msgid "making %1 a standard account…"
+msgstr "正在将 %1 设为标准账户…"
+
+msgid "making %1 an administrator…"
+msgstr "正在将 %1 设为管理员…"
+
+msgid "measuring…"
+msgstr "正在测量…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "未列出任何模式——是否安装了 wlr-randr？"
 
@@ -255,6 +312,12 @@ msgstr "没有为该设置提供可选项列表"
 msgid "nothing reported"
 msgstr "没有任何报告"
 
+msgid "pairing…"
+msgstr "正在配对…"
+
+msgid "password"
+msgstr "密码"
+
 msgid "re-probing %1…"
 msgstr "正在重新探测 %1…"
 
@@ -263,6 +326,9 @@ msgstr "正在读取…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "被拒绝（退出码 %1）——可能是 polkit 拒绝了"
+
+msgid "removing %1…"
+msgstr "正在移除 %1…"
 
 msgid "removing every fingerprint…"
 msgstr "正在移除所有指纹…"
@@ -279,6 +345,9 @@ msgstr "正在将 %1 设为 %2…"
 msgid "setting %1…"
 msgstr "正在设置 %1…"
 
+msgid "setting the password for %1…"
+msgstr "正在设置 %1 的密码…"
+
 msgid "storing the %1 key…"
 msgstr "正在保存 %1 的密钥…"
 
@@ -287,6 +356,14 @@ msgstr "正在切换 %1…"
 
 msgid "synui only — %1 is the session running"
 msgstr "仅限 synui — 当前运行的会话是 %1"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight 显示的 PIN"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr "这台机器上的账户 — 添加账户、密码、是否能管理这台机器、指纹，以及移除"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "适配器、两种无线屏蔽方式，以及已配对的设备"
@@ -321,11 +398,21 @@ msgid ""
 msgstr ""
 "系统时钟，以及桌面的书写方式：12 小时制还是 24 小时制，日期采用哪种顺序"
 
+msgid "the two passwords differ"
+msgstr "两次输入的密码不一致"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "正常挂起所依赖的服务单元，以及上一次挂起的结果"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "各类文件由什么打开——以及是否真有人选择过"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"登录时运行的内容 — synui 自己的列表、你的后台服务，以及此桌面从不运行的自动启"
+"动项"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -377,6 +464,23 @@ msgid ""
 msgstr ""
 "127.0.0.1:8080，供按 llama-server 或 OpenAI API 编写的前端使用，通过随附的套"
 "接字"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "last answer"
+msgstr "最近一次回答"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "逐个 token 生成回答 · 提示词的读取速度为"
+
+msgid "not measured yet"
+msgstr "尚未测量"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "该模型在本机上的回答速度 · 守护进程分别测量提示词和回答"
 
 msgid "unknown"
 msgstr "未知"
@@ -628,6 +732,49 @@ msgstr "左手无名指"
 
 msgid "Left little"
 msgstr "左手小指"
+
+msgid "administrator prompts"
+msgstr "管理员验证"
+
+msgid "on"
+msgstr "开启"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"终端里的 sudo，以及设置和软件更新弹出的密码框，会先要求手指；等待或没有手指匹"
+"配时，密码依然可用"
+
+msgid "off"
+msgstr "关闭"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr "sudo 和管理员密码框只要求密码；打开后会先接受手指"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr "已打开，但尚未应用到所有管理员验证 — 下次启动时生效，也可以在这里打开"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "/etc/pam.d/sudo 中有一行手写的 pam_fprintd；此开关不会动它"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "未安装 pam_fprintd，因此任何管理员验证都无法要求手指"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo 不是预期的结构，因此保持不变 — 请在其 auth include 之上以 "
+"sufficient 添加 pam_fprintd.so"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1093,7 +1240,9 @@ msgstr "串流 (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "传的是视频而不是像素 · 流畅到足以玩游戏和看全屏视频，本网络上任何 Moonlight 客户端都能连上"
+msgstr ""
+"传的是视频而不是像素 · 流畅到足以玩游戏和看全屏视频，本网络上任何 Moonlight "
+"客户端都能连上"
 
 msgid "Streaming server"
 msgstr "串流服务器"
@@ -1132,6 +1281,22 @@ msgstr "串流端口"
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
 msgstr "Moonlight 客户端要指向的地方 · 设置页在往上一个端口"
+
+msgid "Pair a Moonlight client"
+msgstr "配对 Moonlight 客户端"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr "输入 Moonlight 添加这台机器时显示的四位数字 · 每台设备一次"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr "串流服务器已停止 · “开启”会重新启动它，之后 Moonlight 才能请求 PIN"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "串流已关闭 · “开启”会启动它，之后 Moonlight 才能请求 PIN"
 
 msgid "Streaming now"
 msgstr "正在串流"
@@ -1390,9 +1555,6 @@ msgstr "响应自己的名字"
 msgid "listening"
 msgstr "正在聆听"
 
-msgid "off"
-msgstr "关闭"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1444,6 +1606,43 @@ msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr "监听端。出厂为禁用状态 · 由上面的开关启用"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr "synui 的内置默认值 — 还没有 synuirc；在此添加程序会保留它"
+
+msgid "synui starts this when you log in"
+msgstr "登录时由 synui 启动"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "已关闭 — 保留下来以便重新打开"
+
+msgid "Add a program"
+msgstr "添加程序"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr "synui 登录时最多启动 32 个程序 — 关闭一个才能再添加"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr "登录时由 synui 运行的命令，写法与在终端中输入相同 — 从下次登录开始生效"
+
+msgid "background services"
+msgstr "后台服务"
+
+msgid "unavailable"
+msgstr "不可用"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "此会话中没有可查询的用户服务管理器"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr "synui 从不运行的自动启动项 — 打开后会把它的命令复制到 synui 的列表中"
 
 msgid "kernel hardening baseline"
 msgstr "内核加固基线"
@@ -1555,9 +1754,6 @@ msgstr "状态栏、锁屏和桌面时钟"
 msgid "time-seconds"
 msgstr "显示秒"
 
-msgid "on"
-msgstr "开启"
-
 msgid "seconds in the bar clock"
 msgstr "状态栏时钟中的秒"
 
@@ -1621,146 +1817,6 @@ msgstr "CPU  (不卸载到 GPU)"
 msgid "Off  (mask the daemon)"
 msgstr "关闭  (屏蔽守护进程)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "蓝牙"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "终端里的 sudo 会先要求手指；等待或没有手指匹配时，密码依然可用"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo 只要求密码；打开后会先接受手指"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "已打开，但尚未写入 sudo 的 PAM 栈 — 下次启动时生效，也可以在这里打开"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "/etc/pam.d/sudo 中有一行手写的 pam_fprintd；此开关不会动它"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "未安装 pam_fprintd，因此 sudo 无法要求手指"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo 不是预期的结构，因此保持不变 — 请在其 auth include 之上以 sufficient 添加 pam_fprintd.so"
-
-msgid "Startup"
-msgstr "启动项"
-
-msgid "removing %1…"
-msgstr "正在移除 %1…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "登录时运行的内容 — synui 自己的列表、你的后台服务，以及此桌面从不运行的自动启动项"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "synui 的内置默认值 — 还没有 synuirc；在此添加程序会保留它"
-
-msgid "synui starts this when you log in"
-msgstr "登录时由 synui 启动"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "已关闭 — 保留下来以便重新打开"
-
-msgid "Add a program"
-msgstr "添加程序"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui 登录时最多启动 32 个程序 — 关闭一个才能再添加"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "登录时由 synui 运行的命令，写法与在终端中输入相同 — 从下次登录开始生效"
-
-msgid "background services"
-msgstr "后台服务"
-
-msgid "unavailable"
-msgstr "不可用"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "此会话中没有可查询的用户服务管理器"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "synui 从不运行的自动启动项 — 打开后会把它的命令复制到 synui 的列表中"
-
-msgid "Administrator"
-msgstr "管理员"
-
-msgid "Click again to remove %1"
-msgstr "再次点击以移除 %1"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "再次点击 — %1 的文件也会被删除"
-
-msgid "Create account"
-msgstr "创建账户"
-
-msgid "Make administrator"
-msgstr "设为管理员"
-
-msgid "Make standard"
-msgstr "设为标准"
-
-msgid "Remove with files"
-msgstr "连同文件移除"
-
-msgid "Remove, keep files"
-msgstr "移除，保留文件"
-
-msgid "Set password"
-msgstr "设置密码"
-
-msgid "Users"
-msgstr "用户"
-
-msgid "account name, e.g. alex"
-msgstr "账户名，例如 alex"
-
-msgid "again"
-msgstr "再输一次"
-
-msgid "creating %1…"
-msgstr "正在创建 %1…"
-
-msgid "making %1 a standard account…"
-msgstr "正在将 %1 设为标准账户…"
-
-msgid "making %1 an administrator…"
-msgstr "正在将 %1 设为管理员…"
-
-msgid "password"
-msgstr "密码"
-
-msgid "setting the password for %1…"
-msgstr "正在设置 %1 的密码…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "这台机器上的账户 — 添加账户、密码、是否能管理这台机器、指纹，以及移除"
-
-msgid "the two passwords differ"
-msgstr "两次输入的密码不一致"
-
 msgid "administrator"
 msgstr "管理员"
 
@@ -1809,46 +1865,26 @@ msgid ""
 "moves to the name field"
 msgstr "另一个拥有自己文件和桌面的账户 — 在登录界面按 Tab 可切换到用户名栏"
 
-msgid "administrator prompts"
-msgstr "管理员验证"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "蓝牙"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "终端里的 sudo，以及设置和软件更新弹出的密码框，会先要求手指；等待或没有手指匹配时，密码依然可用"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo 和管理员密码框只要求密码；打开后会先接受手指"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr "终端里的 sudo 会先要求手指；等待或没有手指匹配时，密码依然可用"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "已打开，但尚未应用到所有管理员验证 — 下次启动时生效，也可以在这里打开"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr "sudo 只要求密码；打开后会先接受手指"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "未安装 pam_fprintd，因此任何管理员验证都无法要求手指"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "已打开，但尚未写入 sudo 的 PAM 栈 — 下次启动时生效，也可以在这里打开"
 
-msgid "Pair"
-msgstr "配对"
-
-msgid "pairing…"
-msgstr "正在配对…"
-
-msgid "the PIN Moonlight shows"
-msgstr "Moonlight 显示的 PIN"
-
-msgid "Pair a Moonlight client"
-msgstr "配对 Moonlight 客户端"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "输入 Moonlight 添加这台机器时显示的四位数字 · 每台设备一次"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "串流服务器已停止 · “开启”会重新启动它，之后 Moonlight 才能请求 PIN"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "串流已关闭 · “开启”会启动它，之后 Moonlight 才能请求 PIN"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr "未安装 pam_fprintd，因此 sudo 无法要求手指"

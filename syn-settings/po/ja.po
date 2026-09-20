@@ -26,6 +26,9 @@ msgstr[0] "%1 行"
 msgid "AI"
 msgstr "AI"
 
+msgid "Administrator"
+msgstr "管理者"
+
 msgid "Apply"
 msgstr "適用"
 
@@ -55,6 +58,12 @@ msgstr "キャンセル"
 msgid "Change boot configuration?"
 msgstr "起動構成を変更しますか？"
 
+msgid "Click again to remove %1"
+msgstr "%1 を削除するにはもう一度クリック"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "もう一度クリック — %1 のファイルも削除されます"
+
 msgid "Close"
 msgstr "閉じる"
 
@@ -63,6 +72,9 @@ msgstr "設定"
 
 msgid "Connect"
 msgstr "接続"
+
+msgid "Create account"
+msgstr "アカウントを作成"
 
 msgid "Date & Time"
 msgstr "日付と時刻"
@@ -116,6 +128,9 @@ msgstr ""
 "このまま実行させてください。ウィンドウを閉じても処理は止まらず、結果が見えな"
 "くなるだけです。"
 
+msgid "Make administrator"
+msgstr "管理者にする"
+
 msgid "Make bootable"
 msgstr "起動可能にする"
 
@@ -128,6 +143,9 @@ msgstr "既定にする"
 msgid "Make default…"
 msgstr "既定にする…"
 
+msgid "Make standard"
+msgstr "標準にする"
+
 msgid "Making %1 bootable"
 msgstr "%1 を起動可能にしています"
 
@@ -137,8 +155,14 @@ msgstr "%1 を既定にしています"
 msgid "Malware Scanning"
 msgstr "マルウェアスキャン"
 
+msgid "Measure"
+msgstr "計測"
+
 msgid "Network"
 msgstr "ネットワーク"
+
+msgid "Pair"
+msgstr "ペアリング"
 
 msgid "Power & Sleep"
 msgstr "電源とスリープ"
@@ -165,6 +189,12 @@ msgstr "削除"
 msgid "Remove key"
 msgstr "キーを削除"
 
+msgid "Remove with files"
+msgstr "ファイルごと削除"
+
+msgid "Remove, keep files"
+msgstr "削除、ファイルは残す"
+
 msgid "Removing %1"
 msgstr "%1 を削除中"
 
@@ -177,8 +207,14 @@ msgstr "SYNAPSE 設定"
 msgid "Save key"
 msgstr "キーを保存"
 
+msgid "Set password"
+msgstr "パスワードを設定"
+
 msgid "Speech"
 msgstr "音声"
+
+msgid "Startup"
+msgstr "スタートアップ"
 
 msgid "System"
 msgstr "システム"
@@ -210,6 +246,9 @@ msgstr "オフにする"
 msgid "Turn on"
 msgstr "オンにする"
 
+msgid "Users"
+msgstr "ユーザー"
+
 msgid "You may be asked to authenticate."
 msgstr "認証を求められる場合があります。"
 
@@ -221,9 +260,15 @@ msgstr ""
 "認証を求められる場合があります。limine ではエントリ生成ツールをソースからビル"
 "ドすることがあり、数分かかります。下の行はその作業です。"
 
+msgid "account name, e.g. alex"
+msgstr "アカウント名 (例: alex)"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "アドレス、インターフェース、無線、そして通信を遮断しているものがあるか"
+
+msgid "again"
+msgstr "もう一度"
 
 msgid "connecting %1…"
 msgstr "%1 に接続中…"
@@ -233,6 +278,9 @@ msgstr "カーネルから見たコネクターと、コンポジターが実際
 
 msgid "could not work out what to run"
 msgstr "何を実行すべきか判断できませんでした"
+
+msgid "creating %1…"
+msgstr "%1 を作成しています…"
 
 msgid "disconnecting %1…"
 msgstr "%1 を切断中…"
@@ -248,6 +296,15 @@ msgstr "識別情報と、各設定ファイルがどの層から来ているか
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "求められるたびに指を離して置き直してください。数回の読み取りが必要です"
 
+msgid "making %1 a standard account…"
+msgstr "%1 を標準アカウントにしています…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 を管理者にしています…"
+
+msgid "measuring…"
+msgstr "計測中…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "モードが一覧に出ません — wlr-randr はインストールされていますか？"
 
@@ -260,6 +317,12 @@ msgstr "この設定に選択肢の一覧が提供されませんでした"
 msgid "nothing reported"
 msgstr "報告なし"
 
+msgid "pairing…"
+msgstr "ペアリング中…"
+
+msgid "password"
+msgstr "パスワード"
+
 msgid "re-probing %1…"
 msgstr "%1 を再検出中…"
 
@@ -268,6 +331,9 @@ msgstr "読み取り中…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "拒否されました (終了コード %1) — polkit が却下した可能性があります"
+
+msgid "removing %1…"
+msgstr "%1 を削除しています…"
 
 msgid "removing every fingerprint…"
 msgstr "すべての指紋を削除中…"
@@ -284,6 +350,9 @@ msgstr "%1 を %2 に設定中…"
 msgid "setting %1…"
 msgstr "%1 を設定中…"
 
+msgid "setting the password for %1…"
+msgstr "%1 のパスワードを設定しています…"
+
 msgid "storing the %1 key…"
 msgstr "%1 のキーを保存中…"
 
@@ -292,6 +361,16 @@ msgstr "%1 を切り替え中…"
 
 msgid "synui only — %1 is the session running"
 msgstr "synui 専用 — 実行中のセッションは %1 です"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight に表示された PIN"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"このマシンのアカウント — 追加、パスワード、マシンを管理できるか、指紋、そして"
+"削除"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "アダプター、2 種類の無線ブロック、そしてペアリング済みの機器"
@@ -333,11 +412,21 @@ msgstr ""
 "システム時計と、デスクトップでの表記: 12 時間制か 24 時間制か、日付の順序はど"
 "れか"
 
+msgid "the two passwords differ"
+msgstr "2 つのパスワードが一致しません"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "サスペンドの動作が依存するユニットと、直近のサスペンドの結果"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "各ファイル種別を開くもの — そしてそれを実際に誰かが選んだのかどうか"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"ログイン時に起動するもの — synui 自身のリスト、バックグラウンドサービス、そし"
+"てこのデスクトップが実行しない自動起動エントリ"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -392,6 +481,23 @@ msgid ""
 msgstr ""
 "llama-server や OpenAI API 向けに書かれたフロントエンド用の 127.0.0.1:8080。"
 "同梱のソケット経由です"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "last answer"
+msgstr "直近の応答"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "応答をトークン単位で計測 · プロンプトの読み込み速度は"
+
+msgid "not measured yet"
+msgstr "未計測"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "このマシンでこのモデルがどれだけ速く応答するか · デーモンがプロンプトと応答を別々に計測します"
 
 msgid "unknown"
 msgstr "不明"
@@ -649,6 +755,57 @@ msgstr "左手 薬指"
 
 msgid "Left little"
 msgstr "左手 小指"
+
+msgid "administrator prompts"
+msgstr "管理者の確認"
+
+msgid "on"
+msgstr "オン"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"ターミナルの sudo と、設定やソフトウェア更新が開くパスワード画面は、まず指を"
+"求めます。待つか指が一致しなければ、パスワードも使えます"
+
+msgid "off"
+msgstr "オフ"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"sudo と管理者のパスワード画面はパスワードだけを求めます。オンにすると先に指を"
+"受け付けます"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"オンにしましたが、まだすべての管理者の確認には入っていません — 次回の起動で適"
+"用されます。ここでオンにすることもできます"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr ""
+"/etc/pam.d/sudo に手書きの pam_fprintd 行があります。このスイッチはそれに触れ"
+"ません"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr ""
+"pam_fprintd がインストールされていないため、どの管理者の確認も指を求められま"
+"せん"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo が想定した構成ではないため、変更しません — auth include の上"
+"に pam_fprintd.so を sufficient として追加してください"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1152,7 +1309,9 @@ msgstr "ストリーミング (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "ピクセルではなく映像 · ゲームや全画面動画にも十分滑らかで、このネットワーク上のどの Moonlight クライアントからも届きます"
+msgstr ""
+"ピクセルではなく映像 · ゲームや全画面動画にも十分滑らかで、このネットワーク上"
+"のどの Moonlight クライアントからも届きます"
 
 msgid "Streaming server"
 msgstr "ストリーミングサーバー"
@@ -1175,7 +1334,9 @@ msgstr "接続した人は、このデスクトップをそのままの解像度
 msgid ""
 "synui grows a screen with no monitor behind it, sized to whatever the "
 "connecting client asks for"
-msgstr "synui がモニターのない画面を作り、接続してきたクライアントが求めた大きさに合わせます"
+msgstr ""
+"synui がモニターのない画面を作り、接続してきたクライアントが求めた大きさに合"
+"わせます"
 
 msgid "Blank this machine while streaming"
 msgstr "ストリーミング中はこのマシンの画面を消す"
@@ -1191,6 +1352,27 @@ msgstr "ストリームのポート"
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
 msgstr "Moonlight クライアントを向ける先 · 設定ページは 1 つ上のポート"
+
+msgid "Pair a Moonlight client"
+msgstr "Moonlight クライアントをペアリング"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"Moonlight がこのマシンを追加するときに表示する 4 桁を入力 · 端末ごとに 1 回"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+"ストリーミングサーバーが停止しています · 「オンにする」で再び起動すると、"
+"Moonlight が PIN を要求できます"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr ""
+"ストリーミングはオフです · 「オンにする」で起動すると、Moonlight が PIN を要"
+"求できます"
 
 msgid "Streaming now"
 msgstr "ストリーミング中"
@@ -1469,9 +1651,6 @@ msgstr "名前に応答する"
 msgid "listening"
 msgstr "待ち受け中"
 
-msgid "off"
-msgstr "オフ"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1492,7 +1671,8 @@ msgid "Dictation"
 msgstr "ディクテーション"
 
 msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
-msgstr "synapse-voice の faster-whisper。Super+Shift+V で聞き取った内容を入力します"
+msgstr ""
+"synapse-voice の faster-whisper。Super+Shift+V で聞き取った内容を入力します"
 
 msgid "Speech rate"
 msgstr "読み上げ速度"
@@ -1523,6 +1703,51 @@ msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr "待ち受け側。無効の状態で提供されます · 上のスイッチが有効にします"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"synui の組み込みの既定値 — まだ synuirc がありません。ここでプログラムを追加"
+"しても維持されます"
+
+msgid "synui starts this when you log in"
+msgstr "ログイン時に synui がこれを起動します"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "オフ — 再びオンにできるよう残してあります"
+
+msgid "Add a program"
+msgstr "プログラムを追加"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"synui がログイン時に起動するのは 32 個までです — 追加するには 1 つオフにして"
+"ください"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"ログイン時に synui が実行するコマンド。ターミナルで入力する形で書きます — 次"
+"回のログインから起動します"
+
+msgid "background services"
+msgstr "バックグラウンドサービス"
+
+msgid "unavailable"
+msgstr "利用できません"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "このセッションには問い合わせるユーザーサービスマネージャーがありません"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"synui が実行しない自動起動エントリ — オンにするとそのコマンドを synui のリス"
+"トにコピーします"
 
 msgid "kernel hardening baseline"
 msgstr "カーネル強化のベースライン"
@@ -1642,9 +1867,6 @@ msgstr "バー、ロック画面、デスクトップ時計"
 msgid "time-seconds"
 msgstr "秒を表示"
 
-msgid "on"
-msgstr "オン"
-
 msgid "seconds in the bar clock"
 msgstr "バーの時計に秒を表示します"
 
@@ -1709,146 +1931,6 @@ msgstr "CPU  (GPU オフロードなし)"
 msgid "Off  (mask the daemon)"
 msgstr "オフ  (デーモンをマスクする)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "Bluetooth"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "ターミナルの sudo はまず指を求めます。待つか指が一致しなければ、パスワードも使えます"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo はパスワードだけを求めます。オンにすると先に指を受け付けます"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "オンにしましたが、まだ sudo の PAM スタックに入っていません — 次回の起動で適用されます。ここでオンにすることもできます"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "/etc/pam.d/sudo に手書きの pam_fprintd 行があります。このスイッチはそれに触れません"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd がインストールされていないため、sudo は指を求められません"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo が想定した構成ではないため、変更しません — auth include の上に pam_fprintd.so を sufficient として追加してください"
-
-msgid "Startup"
-msgstr "スタートアップ"
-
-msgid "removing %1…"
-msgstr "%1 を削除しています…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "ログイン時に起動するもの — synui 自身のリスト、バックグラウンドサービス、そしてこのデスクトップが実行しない自動起動エントリ"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "synui の組み込みの既定値 — まだ synuirc がありません。ここでプログラムを追加しても維持されます"
-
-msgid "synui starts this when you log in"
-msgstr "ログイン時に synui がこれを起動します"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "オフ — 再びオンにできるよう残してあります"
-
-msgid "Add a program"
-msgstr "プログラムを追加"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui がログイン時に起動するのは 32 個までです — 追加するには 1 つオフにしてください"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "ログイン時に synui が実行するコマンド。ターミナルで入力する形で書きます — 次回のログインから起動します"
-
-msgid "background services"
-msgstr "バックグラウンドサービス"
-
-msgid "unavailable"
-msgstr "利用できません"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "このセッションには問い合わせるユーザーサービスマネージャーがありません"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "synui が実行しない自動起動エントリ — オンにするとそのコマンドを synui のリストにコピーします"
-
-msgid "Administrator"
-msgstr "管理者"
-
-msgid "Click again to remove %1"
-msgstr "%1 を削除するにはもう一度クリック"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "もう一度クリック — %1 のファイルも削除されます"
-
-msgid "Create account"
-msgstr "アカウントを作成"
-
-msgid "Make administrator"
-msgstr "管理者にする"
-
-msgid "Make standard"
-msgstr "標準にする"
-
-msgid "Remove with files"
-msgstr "ファイルごと削除"
-
-msgid "Remove, keep files"
-msgstr "削除、ファイルは残す"
-
-msgid "Set password"
-msgstr "パスワードを設定"
-
-msgid "Users"
-msgstr "ユーザー"
-
-msgid "account name, e.g. alex"
-msgstr "アカウント名 (例: alex)"
-
-msgid "again"
-msgstr "もう一度"
-
-msgid "creating %1…"
-msgstr "%1 を作成しています…"
-
-msgid "making %1 a standard account…"
-msgstr "%1 を標準アカウントにしています…"
-
-msgid "making %1 an administrator…"
-msgstr "%1 を管理者にしています…"
-
-msgid "password"
-msgstr "パスワード"
-
-msgid "setting the password for %1…"
-msgstr "%1 のパスワードを設定しています…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "このマシンのアカウント — 追加、パスワード、マシンを管理できるか、指紋、そして削除"
-
-msgid "the two passwords differ"
-msgstr "2 つのパスワードが一致しません"
-
 msgid "administrator"
 msgstr "管理者"
 
@@ -1861,7 +1943,8 @@ msgstr "あなたです — このウィンドウを実行しているアカウ�
 msgid ""
 "the only administrator — make another one before this one can be made "
 "standard"
-msgstr "唯一の管理者です — 標準にする前に、別のアカウントを管理者にしてください"
+msgstr ""
+"唯一の管理者です — 標準にする前に、別のアカウントを管理者にしてください"
 
 msgid "an administrator: it can use sudo and change the system"
 msgstr "管理者: sudo を使い、システムを変更できます"
@@ -1872,7 +1955,9 @@ msgstr "標準アカウント: sudo を使えず、システムを変更でき�
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "新しいパスワードを 2 回入力します — 古いパスワードは求められないので、管理者は忘れたパスワードをリセットできます"
+msgstr ""
+"新しいパスワードを 2 回入力します — 古いパスワードは求められないので、管理者"
+"は忘れたパスワードをリセットできます"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
 msgstr "指を選び、求められるたびにリーダーから指を離して置き直してください"
@@ -1887,7 +1972,9 @@ msgid "the only administrator cannot be removed"
 msgstr "唯一の管理者は削除できません"
 
 msgid "removes the account; its files in /home can go with it or stay"
-msgstr "アカウントを削除します。/home 内のファイルは一緒に削除することも残すこともできます"
+msgstr ""
+"アカウントを削除します。/home 内のファイルは一緒に削除することも残すこともで"
+"きます"
 
 msgid "Add a user"
 msgstr "ユーザーを追加"
@@ -1895,48 +1982,34 @@ msgstr "ユーザーを追加"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "独自のファイルとデスクトップを持つ別のアカウント — ログイン画面では Tab で名前欄に移ります"
+msgstr ""
+"独自のファイルとデスクトップを持つ別のアカウント — ログイン画面では Tab で名"
+"前欄に移ります"
 
-msgid "administrator prompts"
-msgstr "管理者の確認"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "ターミナルの sudo と、設定やソフトウェア更新が開くパスワード画面は、まず指を求めます。待つか指が一致しなければ、パスワードも使えます"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo と管理者のパスワード画面はパスワードだけを求めます。オンにすると先に指を受け付けます"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "ターミナルの sudo はまず指を求めます。待つか指が一致しなければ、パスワード"
+#~ "も使えます"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "オンにしましたが、まだすべての管理者の確認には入っていません — 次回の起動で適用されます。ここでオンにすることもできます"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr "sudo はパスワードだけを求めます。オンにすると先に指を受け付けます"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd がインストールされていないため、どの管理者の確認も指を求められません"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "オンにしましたが、まだ sudo の PAM スタックに入っていません — 次回の起動で"
+#~ "適用されます。ここでオンにすることもできます"
 
-msgid "Pair"
-msgstr "ペアリング"
-
-msgid "pairing…"
-msgstr "ペアリング中…"
-
-msgid "the PIN Moonlight shows"
-msgstr "Moonlight に表示された PIN"
-
-msgid "Pair a Moonlight client"
-msgstr "Moonlight クライアントをペアリング"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "Moonlight がこのマシンを追加するときに表示する 4 桁を入力 · 端末ごとに 1 回"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "ストリーミングサーバーが停止しています · 「オンにする」で再び起動すると、Moonlight が PIN を要求できます"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "ストリーミングはオフです · 「オンにする」で起動すると、Moonlight が PIN を要求できます"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr ""
+#~ "pam_fprintd がインストールされていないため、sudo は指を求められません"

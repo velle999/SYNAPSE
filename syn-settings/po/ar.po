@@ -32,6 +32,9 @@ msgstr[5] "%1 صف"
 msgid "AI"
 msgstr "الذكاء الاصطناعي"
 
+msgid "Administrator"
+msgstr "مدير"
+
 msgid "Apply"
 msgstr "تطبيق"
 
@@ -60,6 +63,12 @@ msgstr "إلغاء"
 msgid "Change boot configuration?"
 msgstr "أتريد تغيير إعدادات الإقلاع؟"
 
+msgid "Click again to remove %1"
+msgstr "انقر مجددًا لإزالة %1"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "انقر مجددًا — ستُحذف ملفات %1 أيضًا"
+
 msgid "Close"
 msgstr "إغلاق"
 
@@ -68,6 +77,9 @@ msgstr "الإعدادات"
 
 msgid "Connect"
 msgstr "اتصال"
+
+msgid "Create account"
+msgstr "إنشاء الحساب"
 
 msgid "Date & Time"
 msgstr "التاريخ والوقت"
@@ -119,6 +131,9 @@ msgid ""
 "you seeing how it went."
 msgstr "اترك هذا يعمل. إغلاق النافذة لن يوقفه، بل سيمنعك فقط من رؤية النتيجة."
 
+msgid "Make administrator"
+msgstr "جعله مديرًا"
+
 msgid "Make bootable"
 msgstr "اجعله قابلاً للإقلاع"
 
@@ -131,6 +146,9 @@ msgstr "اجعله الافتراضي"
 msgid "Make default…"
 msgstr "اجعله الافتراضي…"
 
+msgid "Make standard"
+msgstr "جعله قياسيًا"
+
 msgid "Making %1 bootable"
 msgstr "جارٍ جعل %1 قابلاً للإقلاع"
 
@@ -140,8 +158,14 @@ msgstr "جارٍ جعل %1 الافتراضي"
 msgid "Malware Scanning"
 msgstr "فحص البرمجيات الخبيثة"
 
+msgid "Measure"
+msgstr "قياس"
+
 msgid "Network"
 msgstr "الشبكة"
+
+msgid "Pair"
+msgstr "إقران"
 
 msgid "Power & Sleep"
 msgstr "الطاقة والسكون"
@@ -168,6 +192,12 @@ msgstr "إزالة"
 msgid "Remove key"
 msgstr "إزالة المفتاح"
 
+msgid "Remove with files"
+msgstr "إزالة مع الملفات"
+
+msgid "Remove, keep files"
+msgstr "إزالة مع إبقاء الملفات"
+
 msgid "Removing %1"
 msgstr "جارٍ إزالة %1"
 
@@ -180,8 +210,14 @@ msgstr "إعدادات SYNAPSE"
 msgid "Save key"
 msgstr "حفظ المفتاح"
 
+msgid "Set password"
+msgstr "تعيين كلمة المرور"
+
 msgid "Speech"
 msgstr "النطق"
+
+msgid "Startup"
+msgstr "بدء التشغيل"
 
 msgid "System"
 msgstr "النظام"
@@ -213,6 +249,9 @@ msgstr "إيقاف"
 msgid "Turn on"
 msgstr "تشغيل"
 
+msgid "Users"
+msgstr "المستخدمون"
+
 msgid "You may be asked to authenticate."
 msgstr "قد يُطلب منك الاستيثاق."
 
@@ -224,10 +263,16 @@ msgstr ""
 "قد يُطلب منك الاستيثاق. مع limine قد يعني ذلك بناء مولّد المُدخلات من المصدر، "
 "وهو ما يستغرق عدة دقائق — والأسطر أدناه هي ذلك العمل."
 
+msgid "account name, e.g. alex"
+msgstr "اسم الحساب، مثل alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr ""
 "العناوين، والواجهات، وأجهزة الراديو، وما إذا كان شيء ما يرشّح حركة البيانات"
+
+msgid "again"
+msgstr "مرة أخرى"
 
 msgid "connecting %1…"
 msgstr "جارٍ الاتصال بـ %1…"
@@ -237,6 +282,9 @@ msgstr "الموصّلات كما تراها النواة، إلى جانب ما
 
 msgid "could not work out what to run"
 msgstr "تعذّر تحديد ما ينبغي تشغيله"
+
+msgid "creating %1…"
+msgstr "جارٍ إنشاء %1…"
 
 msgid "disconnecting %1…"
 msgstr "جارٍ قطع الاتصال بـ %1…"
@@ -250,6 +298,15 @@ msgstr "الهوية، ومن أي طبقة يأتي كل ملف إعدادات"
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "ارفع إصبعك ثم ضعه من جديد في كل مرة يُطلب منك ذلك؛ يلزم عدة مرات"
 
+msgid "making %1 a standard account…"
+msgstr "جارٍ جعل %1 حسابًا قياسيًا…"
+
+msgid "making %1 an administrator…"
+msgstr "جارٍ جعل %1 مديرًا…"
+
+msgid "measuring…"
+msgstr "جارٍ القياس…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "لم تُذكر أي أوضاع — هل wlr-randr مثبّت؟"
 
@@ -262,6 +319,12 @@ msgstr "لم تُقدَّم قائمة خيارات لهذا الإعداد"
 msgid "nothing reported"
 msgstr "لا شيء مُبلَّغ عنه"
 
+msgid "pairing…"
+msgstr "جارٍ الإقران…"
+
+msgid "password"
+msgstr "كلمة المرور"
+
 msgid "re-probing %1…"
 msgstr "جارٍ إعادة فحص %1…"
 
@@ -270,6 +333,9 @@ msgstr "جارٍ القراءة…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "رُفض (رمز الخروج %1) — ربما رفض polkit"
+
+msgid "removing %1…"
+msgstr "جارٍ إزالة %1…"
 
 msgid "removing every fingerprint…"
 msgstr "جارٍ إزالة كل البصمات…"
@@ -286,6 +352,9 @@ msgstr "جارٍ ضبط %1 على %2…"
 msgid "setting %1…"
 msgstr "جارٍ ضبط %1…"
 
+msgid "setting the password for %1…"
+msgstr "جارٍ تعيين كلمة مرور %1…"
+
 msgid "storing the %1 key…"
 msgstr "جارٍ حفظ مفتاح %1…"
 
@@ -294,6 +363,16 @@ msgstr "جارٍ تبديل %1…"
 
 msgid "synui only — %1 is the session running"
 msgstr "synui فقط — الجلسة العاملة هي %1"
+
+msgid "the PIN Moonlight shows"
+msgstr "الرمز الذي يعرضه Moonlight"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"الحسابات على هذا الجهاز — إضافة حساب، وكلمة مروره، وهل يمكنه إدارة الجهاز، "
+"وبصماته، وإزالته"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "المُهايئ، ونوعا حجب الراديو، وما هو مقترن"
@@ -330,11 +409,21 @@ msgid ""
 msgstr ""
 "ساعة النظام — وكيف يكتبها سطح المكتب: 12 أو 24 ساعة، وبأي ترتيب للتاريخ"
 
+msgid "the two passwords differ"
+msgstr "كلمتا المرور مختلفتان"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "الوحدات التي يعتمد عليها التعليق السليم، وما فعله آخر تعليق"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "ما الذي يفتح كل نوع من الملفات — وهل اختاره أحد فعلاً"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"ما يعمل عند تسجيل الدخول — قائمة synui الخاصة، وخدماتك في الخلفية، ومدخلات "
+"التشغيل التلقائي التي لا يشغّلها هذا السطح أبدًا"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -389,6 +478,23 @@ msgid ""
 msgstr ""
 "‏127.0.0.1:8080 للواجهات المكتوبة لـ llama-server أو لواجهة OpenAI، عبر "
 "المقبس المرفق"
+
+msgid "Speed"
+msgstr "السرعة"
+
+msgid "last answer"
+msgstr "آخر إجابة"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "الإجابة، رمزًا برمز · قُرئ الموجّه بسرعة"
+
+msgid "not measured yet"
+msgstr "لم يُقَس بعد"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "سرعة إجابة هذا النموذج على هذا الجهاز · تقيس الخدمة الموجّه والإجابة كلًّا على حدة"
 
 msgid "unknown"
 msgstr "غير معروف"
@@ -640,6 +746,51 @@ msgstr "البنصر الأيسر"
 
 msgid "Left little"
 msgstr "الخنصر الأيسر"
+
+msgid "administrator prompts"
+msgstr "طلبات المدير"
+
+msgid "on"
+msgstr "تشغيل"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"يطلب sudo في الطرفية، ومربع كلمة المرور الذي تفتحه الإعدادات وتحديثات "
+"البرامج، إصبعًا أولًا؛ وتبقى كلمة المرور صالحة إن انتظرت أو لم يتطابق أي إصبع"
+
+msgid "off"
+msgstr "إيقاف"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"يطلب sudo ومربع كلمة مرور المدير كلمة المرور فقط؛ شغّله ليقبل إصبعًا أولًا"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"مُشغَّل لكنه ليس في كل طلبات المدير بعد — يطبّقه الإقلاع التالي، أو شغّله هنا"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "في /etc/pam.d/sudo سطر pam_fprintd مكتوب يدويًا؛ وهذا المفتاح لا يلمسه"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع أي طلب للمدير أن يطلب إصبعًا"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"‏/etc/pam.d/sudo ليس المكدس المتوقَّع، لذا يُترك كما هو — أضف pam_fprintd.so "
+"بصفة sufficient فوق auth include الخاص به"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1122,7 +1273,9 @@ msgstr "البث (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "فيديو بدل البكسلات · سلس بما يكفي للألعاب والفيديو بملء الشاشة، ويصل إليه أي عميل Moonlight على هذه الشبكة"
+msgstr ""
+"فيديو بدل البكسلات · سلس بما يكفي للألعاب والفيديو بملء الشاشة، ويصل إليه أي "
+"عميل Moonlight على هذه الشبكة"
 
 msgid "Streaming server"
 msgstr "خادوم البث"
@@ -1161,6 +1314,24 @@ msgstr "منفذ البث"
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
 msgstr "ما يوجّه إليه عميل Moonlight · صفحة إعداداته على المنفذ التالي"
+
+msgid "Pair a Moonlight client"
+msgstr "إقران عميل Moonlight"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"اكتب الأرقام الأربعة التي يعرضها Moonlight عند إضافة هذا الجهاز · مرة واحدة "
+"لكل جهاز"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr "توقف خادوم البث · «تشغيل» يعيد تشغيله، ثم يستطيع Moonlight طلب رمز"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "البث مُطفأ · «تشغيل» يبدؤه، ثم يستطيع Moonlight طلب رمز"
 
 msgid "Streaming now"
 msgstr "يبثّ الآن"
@@ -1427,9 +1598,6 @@ msgstr "الاستجابة لاسمه"
 msgid "listening"
 msgstr "يستمع"
 
-msgid "off"
-msgstr "إيقاف"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1481,6 +1649,49 @@ msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr "المُنصِت. يُسلَّم معطّلًا · والمفتاح أعلاه هو ما يشغّله"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"الإعداد الافتراضي المدمج في synui — لا يوجد synuirc بعد؛ وإضافة برنامج هنا "
+"تُبقي عليه"
+
+msgid "synui starts this when you log in"
+msgstr "يبدأ synui هذا عند تسجيل الدخول"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "مُطفأ — محفوظ ليمكن تشغيله مجددًا"
+
+msgid "Add a program"
+msgstr "إضافة برنامج"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"يبدأ synui عند تسجيل الدخول 32 برنامجًا على الأكثر — أطفئ واحدًا لتضيف غيره"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"أمر يشغّله synui عند تسجيل الدخول، كما تكتبه في الطرفية — يبدأ من تسجيل دخولك "
+"التالي"
+
+msgid "background services"
+msgstr "خدمات الخلفية"
+
+msgid "unavailable"
+msgstr "غير متاح"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "لا يوجد في هذه الجلسة مدير خدمات للمستخدم يمكن سؤاله"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"مدخل تشغيل تلقائي لا يشغّله synui أبدًا — شغّله لينسخ أمره إلى قائمة synui"
 
 msgid "kernel hardening baseline"
 msgstr "أساس تقوية النواة"
@@ -1594,9 +1805,6 @@ msgstr "الشريط وقفل الشاشة وساعة سطح المكتب"
 msgid "time-seconds"
 msgstr "الثواني"
 
-msgid "on"
-msgstr "تشغيل"
-
 msgid "seconds in the bar clock"
 msgstr "الثواني في ساعة الشريط"
 
@@ -1660,146 +1868,6 @@ msgstr "CPU  (بلا تفريغ إلى المعالج الرسومي)"
 msgid "Off  (mask the daemon)"
 msgstr "مُعطَّل  (إخفاء الخدمة)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "بلوتوث"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "يطلب sudo في الطرفية إصبعًا أولًا؛ وتبقى كلمة المرور صالحة إن انتظرت أو لم يتطابق أي إصبع"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "يطلب sudo كلمة المرور فقط؛ شغّله ليقبل إصبعًا أولًا"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "مُشغَّل لكنه ليس في مكدس PAM الخاص بـ sudo بعد — يطبّقه الإقلاع التالي، أو شغّله هنا"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "في /etc/pam.d/sudo سطر pam_fprintd مكتوب يدويًا؛ وهذا المفتاح لا يلمسه"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع sudo طلب إصبع"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "‏/etc/pam.d/sudo ليس المكدس المتوقَّع، لذا يُترك كما هو — أضف pam_fprintd.so بصفة sufficient فوق auth include الخاص به"
-
-msgid "Startup"
-msgstr "بدء التشغيل"
-
-msgid "removing %1…"
-msgstr "جارٍ إزالة %1…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "ما يعمل عند تسجيل الدخول — قائمة synui الخاصة، وخدماتك في الخلفية، ومدخلات التشغيل التلقائي التي لا يشغّلها هذا السطح أبدًا"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "الإعداد الافتراضي المدمج في synui — لا يوجد synuirc بعد؛ وإضافة برنامج هنا تُبقي عليه"
-
-msgid "synui starts this when you log in"
-msgstr "يبدأ synui هذا عند تسجيل الدخول"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "مُطفأ — محفوظ ليمكن تشغيله مجددًا"
-
-msgid "Add a program"
-msgstr "إضافة برنامج"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "يبدأ synui عند تسجيل الدخول 32 برنامجًا على الأكثر — أطفئ واحدًا لتضيف غيره"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "أمر يشغّله synui عند تسجيل الدخول، كما تكتبه في الطرفية — يبدأ من تسجيل دخولك التالي"
-
-msgid "background services"
-msgstr "خدمات الخلفية"
-
-msgid "unavailable"
-msgstr "غير متاح"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "لا يوجد في هذه الجلسة مدير خدمات للمستخدم يمكن سؤاله"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "مدخل تشغيل تلقائي لا يشغّله synui أبدًا — شغّله لينسخ أمره إلى قائمة synui"
-
-msgid "Administrator"
-msgstr "مدير"
-
-msgid "Click again to remove %1"
-msgstr "انقر مجددًا لإزالة %1"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "انقر مجددًا — ستُحذف ملفات %1 أيضًا"
-
-msgid "Create account"
-msgstr "إنشاء الحساب"
-
-msgid "Make administrator"
-msgstr "جعله مديرًا"
-
-msgid "Make standard"
-msgstr "جعله قياسيًا"
-
-msgid "Remove with files"
-msgstr "إزالة مع الملفات"
-
-msgid "Remove, keep files"
-msgstr "إزالة مع إبقاء الملفات"
-
-msgid "Set password"
-msgstr "تعيين كلمة المرور"
-
-msgid "Users"
-msgstr "المستخدمون"
-
-msgid "account name, e.g. alex"
-msgstr "اسم الحساب، مثل alex"
-
-msgid "again"
-msgstr "مرة أخرى"
-
-msgid "creating %1…"
-msgstr "جارٍ إنشاء %1…"
-
-msgid "making %1 a standard account…"
-msgstr "جارٍ جعل %1 حسابًا قياسيًا…"
-
-msgid "making %1 an administrator…"
-msgstr "جارٍ جعل %1 مديرًا…"
-
-msgid "password"
-msgstr "كلمة المرور"
-
-msgid "setting the password for %1…"
-msgstr "جارٍ تعيين كلمة مرور %1…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "الحسابات على هذا الجهاز — إضافة حساب، وكلمة مروره، وهل يمكنه إدارة الجهاز، وبصماته، وإزالته"
-
-msgid "the two passwords differ"
-msgstr "كلمتا المرور مختلفتان"
-
 msgid "administrator"
 msgstr "مدير"
 
@@ -1823,7 +1891,9 @@ msgstr "حساب قياسي: لا يمكنه استخدام sudo ولا تغيي
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "اكتب كلمة مرور جديدة مرتين — لا تُطلب القديمة، لذا يستطيع المدير إعادة تعيين كلمة منسية"
+msgstr ""
+"اكتب كلمة مرور جديدة مرتين — لا تُطلب القديمة، لذا يستطيع المدير إعادة تعيين "
+"كلمة منسية"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
 msgstr "اختر إصبعًا، ثم ارفعه وضعه على القارئ في كل مرة يطلب ذلك"
@@ -1846,48 +1916,32 @@ msgstr "إضافة مستخدم"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "حساب آخر بملفاته وسطح مكتبه — في شاشة تسجيل الدخول ينقل Tab إلى حقل الاسم"
+msgstr ""
+"حساب آخر بملفاته وسطح مكتبه — في شاشة تسجيل الدخول ينقل Tab إلى حقل الاسم"
 
-msgid "administrator prompts"
-msgstr "طلبات المدير"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "بلوتوث"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "يطلب sudo في الطرفية، ومربع كلمة المرور الذي تفتحه الإعدادات وتحديثات البرامج، إصبعًا أولًا؛ وتبقى كلمة المرور صالحة إن انتظرت أو لم يتطابق أي إصبع"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "يطلب sudo ومربع كلمة مرور المدير كلمة المرور فقط؛ شغّله ليقبل إصبعًا أولًا"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "يطلب sudo في الطرفية إصبعًا أولًا؛ وتبقى كلمة المرور صالحة إن انتظرت أو لم "
+#~ "يتطابق أي إصبع"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "مُشغَّل لكنه ليس في كل طلبات المدير بعد — يطبّقه الإقلاع التالي، أو شغّله هنا"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr "يطلب sudo كلمة المرور فقط؛ شغّله ليقبل إصبعًا أولًا"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع أي طلب للمدير أن يطلب إصبعًا"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "مُشغَّل لكنه ليس في مكدس PAM الخاص بـ sudo بعد — يطبّقه الإقلاع التالي، أو "
+#~ "شغّله هنا"
 
-msgid "Pair"
-msgstr "إقران"
-
-msgid "pairing…"
-msgstr "جارٍ الإقران…"
-
-msgid "the PIN Moonlight shows"
-msgstr "الرمز الذي يعرضه Moonlight"
-
-msgid "Pair a Moonlight client"
-msgstr "إقران عميل Moonlight"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "اكتب الأرقام الأربعة التي يعرضها Moonlight عند إضافة هذا الجهاز · مرة واحدة لكل جهاز"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "توقف خادوم البث · «تشغيل» يعيد تشغيله، ثم يستطيع Moonlight طلب رمز"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "البث مُطفأ · «تشغيل» يبدؤه، ثم يستطيع Moonlight طلب رمز"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr "pam_fprintd غير مثبّت، لذا لا يستطيع sudo طلب إصبع"

@@ -27,6 +27,9 @@ msgstr[1] "%1 rijen"
 msgid "AI"
 msgstr "AI"
 
+msgid "Administrator"
+msgstr "Beheerder"
+
 msgid "Apply"
 msgstr "Toepassen"
 
@@ -56,6 +59,12 @@ msgstr "Annuleren"
 msgid "Change boot configuration?"
 msgstr "Opstartconfiguratie wijzigen?"
 
+msgid "Click again to remove %1"
+msgstr "Klik nogmaals om %1 te verwijderen"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "Klik nogmaals — de bestanden van %1 worden ook verwijderd"
+
 msgid "Close"
 msgstr "Sluiten"
 
@@ -64,6 +73,9 @@ msgstr "Configuratie"
 
 msgid "Connect"
 msgstr "Verbinden"
+
+msgid "Create account"
+msgstr "Account aanmaken"
 
 msgid "Date & Time"
 msgstr "Datum en tijd"
@@ -117,6 +129,9 @@ msgstr ""
 "Laat dit doorlopen. Het venster sluiten stopt het niet — het houdt je alleen "
 "tegen om te zien hoe het afliep."
 
+msgid "Make administrator"
+msgstr "Beheerder maken"
+
 msgid "Make bootable"
 msgstr "Opstartbaar maken"
 
@@ -129,6 +144,9 @@ msgstr "Als standaard instellen"
 msgid "Make default…"
 msgstr "Als standaard instellen…"
 
+msgid "Make standard"
+msgstr "Standaard maken"
+
 msgid "Making %1 bootable"
 msgstr "%1 wordt opstartbaar gemaakt"
 
@@ -138,8 +156,14 @@ msgstr "%1 wordt de standaard"
 msgid "Malware Scanning"
 msgstr "Malware-scan"
 
+msgid "Measure"
+msgstr "Meten"
+
 msgid "Network"
 msgstr "Netwerk"
+
+msgid "Pair"
+msgstr "Koppelen"
 
 msgid "Power & Sleep"
 msgstr "Energie en slaapstand"
@@ -166,6 +190,12 @@ msgstr "Verwijderen"
 msgid "Remove key"
 msgstr "Sleutel verwijderen"
 
+msgid "Remove with files"
+msgstr "Verwijderen met bestanden"
+
+msgid "Remove, keep files"
+msgstr "Verwijderen, bestanden houden"
+
 msgid "Removing %1"
 msgstr "%1 wordt verwijderd"
 
@@ -178,8 +208,14 @@ msgstr "SYNAPSE-instellingen"
 msgid "Save key"
 msgstr "Sleutel opslaan"
 
+msgid "Set password"
+msgstr "Wachtwoord instellen"
+
 msgid "Speech"
 msgstr "Spraak"
+
+msgid "Startup"
+msgstr "Opstarten"
 
 msgid "System"
 msgstr "Systeem"
@@ -212,6 +248,9 @@ msgstr "Uitschakelen"
 msgid "Turn on"
 msgstr "Inschakelen"
 
+msgid "Users"
+msgstr "Gebruikers"
+
 msgid "You may be asked to authenticate."
 msgstr "Mogelijk wordt om authenticatie gevraagd."
 
@@ -224,9 +263,15 @@ msgstr ""
 "de itemgenerator uit de broncode wordt gebouwd, wat enkele minuten duurt — "
 "de regels hieronder zijn dat werk."
 
+msgid "account name, e.g. alex"
+msgstr "accountnaam, bijv. alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "adressen, interfaces, radio's, en of er iets verkeer filtert"
+
+msgid "again"
+msgstr "nogmaals"
 
 msgid "connecting %1…"
 msgstr "%1 wordt verbonden…"
@@ -237,6 +282,9 @@ msgstr ""
 
 msgid "could not work out what to run"
 msgstr "kon niet bepalen wat er uitgevoerd moest worden"
+
+msgid "creating %1…"
+msgstr "%1 aanmaken…"
 
 msgid "disconnecting %1…"
 msgstr "verbinding met %1 wordt verbroken…"
@@ -254,6 +302,15 @@ msgstr ""
 "til je vinger op en leg hem er telkens opnieuw op wanneer erom wordt "
 "gevraagd; er zijn meerdere rondes nodig"
 
+msgid "making %1 a standard account…"
+msgstr "%1 wordt een standaardaccount…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 wordt beheerder…"
+
+msgid "measuring…"
+msgstr "bezig met meten…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "geen modi vermeld — is wlr-randr geïnstalleerd?"
 
@@ -266,6 +323,12 @@ msgstr "niets bood een keuzelijst voor deze instelling"
 msgid "nothing reported"
 msgstr "niets gemeld"
 
+msgid "pairing…"
+msgstr "koppelen…"
+
+msgid "password"
+msgstr "wachtwoord"
+
 msgid "re-probing %1…"
 msgstr "%1 wordt opnieuw onderzocht…"
 
@@ -274,6 +337,9 @@ msgstr "lezen…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "geweigerd (afsluitcode %1) — polkit heeft het mogelijk afgewezen"
+
+msgid "removing %1…"
+msgstr "%1 verwijderen…"
 
 msgid "removing every fingerprint…"
 msgstr "alle vingerafdrukken worden verwijderd…"
@@ -290,6 +356,9 @@ msgstr "%1 wordt op %2 gezet…"
 msgid "setting %1…"
 msgstr "%1 wordt ingesteld…"
 
+msgid "setting the password for %1…"
+msgstr "wachtwoord van %1 instellen…"
+
 msgid "storing the %1 key…"
 msgstr "de sleutel van %1 wordt opgeslagen…"
 
@@ -298,6 +367,16 @@ msgstr "%1 wordt omgeschakeld…"
 
 msgid "synui only — %1 is the session running"
 msgstr "alleen synui — de draaiende sessie is %1"
+
+msgid "the PIN Moonlight shows"
+msgstr "de pincode die Moonlight toont"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"de accounts op deze machine — er een toevoegen, het wachtwoord, of het de "
+"machine mag beheren, de vingerafdrukken en verwijderen"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "de adapter, beide soorten radioblokkering, en wat er gekoppeld is"
@@ -341,12 +420,22 @@ msgstr ""
 "de systeemklok — en hoe het bureaublad die schrijft: 12- of 24-uurs, en in "
 "welke datumvolgorde"
 
+msgid "the two passwords differ"
+msgstr "de twee wachtwoorden verschillen"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr ""
 "de units waarvan een werkende slaapstand afhangt, en wat de laatste deed"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "wat elk soort bestand opent — en of iemand dat ook echt gekozen heeft"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"wat er start als u zich aanmeldt — synui's eigen lijst, uw "
+"achtergronddiensten en autostart-items die deze desktop nooit uitvoert"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -402,6 +491,23 @@ msgid ""
 msgstr ""
 "127.0.0.1:8080 voor frontends geschreven tegen llama-server of de OpenAI-"
 "API, via de meegeleverde socket"
+
+msgid "Speed"
+msgstr "Snelheid"
+
+msgid "last answer"
+msgstr "laatste antwoord"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "het antwoord, token voor token · de prompt werd gelezen met"
+
+msgid "not measured yet"
+msgstr "nog niet gemeten"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "hoe snel dit model op deze machine antwoordt · de daemon meet de prompt en het antwoord apart"
 
 msgid "unknown"
 msgstr "onbekend"
@@ -663,6 +769,58 @@ msgstr "Linkerringvinger"
 
 msgid "Left little"
 msgstr "Linkerpink"
+
+msgid "administrator prompts"
+msgstr "beheerdersvragen"
+
+msgid "on"
+msgstr "aan"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"sudo in een terminal, en het wachtwoordvenster dat instellingen en software-"
+"updates openen, vragen eerst om een vinger; het wachtwoord werkt nog steeds "
+"als u wacht of geen vinger overeenkomt"
+
+msgid "off"
+msgstr "uit"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"sudo en het beheerderswachtwoordvenster vragen alleen om het wachtwoord; zet "
+"aan om eerst een vinger te accepteren"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"aangezet, maar nog niet in elke beheerdersvraag — de volgende start past het "
+"toe, of zet het hier aan"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr ""
+"er staat een met de hand geschreven pam_fprintd-regel in /etc/pam.d/sudo; "
+"deze schakelaar laat die met rust"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr ""
+"pam_fprintd is niet geïnstalleerd, dus geen enkele beheerdersvraag kan om "
+"een vinger vragen"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo is niet de verwachte stack en blijft dus ongemoeid — zet "
+"pam_fprintd.so als sufficient boven de auth include"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1175,7 +1333,9 @@ msgstr "Streamen (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "Video in plaats van pixels · vloeiend genoeg voor games en schermvullende video, en bereikbaar voor elke Moonlight-client op dit netwerk"
+msgstr ""
+"Video in plaats van pixels · vloeiend genoeg voor games en schermvullende "
+"video, en bereikbaar voor elke Moonlight-client op dit netwerk"
 
 msgid "Streaming server"
 msgstr "Streamserver"
@@ -1193,12 +1353,15 @@ msgid "a display of its own"
 msgstr "een eigen scherm"
 
 msgid "Whoever connects sees this desk as it is, at its resolution"
-msgstr "Wie verbinding maakt, ziet dit bureaublad zoals het is, op zijn resolutie"
+msgstr ""
+"Wie verbinding maakt, ziet dit bureaublad zoals het is, op zijn resolutie"
 
 msgid ""
 "synui grows a screen with no monitor behind it, sized to whatever the "
 "connecting client asks for"
-msgstr "synui maakt een scherm zonder monitor erachter, zo groot als de verbindende client vraagt"
+msgstr ""
+"synui maakt een scherm zonder monitor erachter, zo groot als de verbindende "
+"client vraagt"
 
 msgid "Blank this machine while streaming"
 msgstr "Schermen van deze machine uitzetten tijdens het streamen"
@@ -1206,14 +1369,40 @@ msgstr "Schermen van deze machine uitzetten tijdens het streamen"
 msgid ""
 "The screens in this room go dark while somebody is connected, and come back "
 "when they leave"
-msgstr "De schermen in deze kamer gaan uit zolang iemand verbonden is, en komen terug als die weggaat"
+msgstr ""
+"De schermen in deze kamer gaan uit zolang iemand verbonden is, en komen "
+"terug als die weggaat"
 
 msgid "Stream port"
 msgstr "Streampoort"
 
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
-msgstr "waar een Moonlight-client op wordt gericht · de instellingenpagina zit één poort hoger"
+msgstr ""
+"waar een Moonlight-client op wordt gericht · de instellingenpagina zit één "
+"poort hoger"
+
+msgid "Pair a Moonlight client"
+msgstr "Een Moonlight-client koppelen"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"typ de vier cijfers die Moonlight toont wanneer het deze machine toevoegt · "
+"één keer per apparaat"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+"de streamserver is gestopt · Inschakelen start hem opnieuw, daarna kan "
+"Moonlight om een pincode vragen"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr ""
+"streamen staat uit · Inschakelen start het, daarna kan Moonlight om een "
+"pincode vragen"
 
 msgid "Streaming now"
 msgstr "Streamt nu"
@@ -1494,9 +1683,6 @@ msgstr "Op zijn naam reageren"
 msgid "listening"
 msgstr "luistert"
 
-msgid "off"
-msgstr "uit"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1550,6 +1736,51 @@ msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr ""
 "de luisteraar. Wordt uitgeschakeld geleverd · de schakelaar hierboven zet "
 "hem aan"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"synui's ingebouwde standaard — er is nog geen synuirc; een programma hier "
+"toevoegen behoudt die"
+
+msgid "synui starts this when you log in"
+msgstr "synui start dit als u zich aanmeldt"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "uitgezet — bewaard zodat het weer aangezet kan worden"
+
+msgid "Add a program"
+msgstr "Programma toevoegen"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"synui start bij het aanmelden hoogstens 32 programma's — zet er een uit om "
+"een ander toe te voegen"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"een opdracht die synui bij het aanmelden uitvoert, zoals u die in een "
+"terminal zou typen — hij start vanaf uw volgende aanmelding"
+
+msgid "background services"
+msgstr "achtergronddiensten"
+
+msgid "unavailable"
+msgstr "niet beschikbaar"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "er is in deze sessie geen gebruikersdienstbeheerder om het te vragen"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"een autostart-item dat synui nooit uitvoert — zet het aan om de opdracht "
+"naar synui's lijst te kopiëren"
 
 msgid "kernel hardening baseline"
 msgstr "basis voor kernelharding"
@@ -1668,9 +1899,6 @@ msgstr "de balk, het vergrendelscherm en de bureaubladklok"
 msgid "time-seconds"
 msgstr "seconden"
 
-msgid "on"
-msgstr "aan"
-
 msgid "seconds in the bar clock"
 msgstr "de seconden in de klok van de balk"
 
@@ -1734,146 +1962,6 @@ msgstr "CPU  (geen GPU-uitbesteding)"
 msgid "Off  (mask the daemon)"
 msgstr "Uit  (de daemon maskeren)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "Bluetooth"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "sudo in een terminal vraagt eerst om een vinger; het wachtwoord werkt nog steeds als u wacht of geen vinger overeenkomt"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo vraagt alleen om het wachtwoord; zet aan om eerst een vinger te accepteren"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "aangezet, maar nog niet in de PAM-stack van sudo — de volgende start past het toe, of zet het hier aan"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "er staat een met de hand geschreven pam_fprintd-regel in /etc/pam.d/sudo; deze schakelaar laat die met rust"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd is niet geïnstalleerd, dus sudo kan niet om een vinger vragen"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo is niet de verwachte stack en blijft dus ongemoeid — zet pam_fprintd.so als sufficient boven de auth include"
-
-msgid "Startup"
-msgstr "Opstarten"
-
-msgid "removing %1…"
-msgstr "%1 verwijderen…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "wat er start als u zich aanmeldt — synui's eigen lijst, uw achtergronddiensten en autostart-items die deze desktop nooit uitvoert"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "synui's ingebouwde standaard — er is nog geen synuirc; een programma hier toevoegen behoudt die"
-
-msgid "synui starts this when you log in"
-msgstr "synui start dit als u zich aanmeldt"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "uitgezet — bewaard zodat het weer aangezet kan worden"
-
-msgid "Add a program"
-msgstr "Programma toevoegen"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui start bij het aanmelden hoogstens 32 programma's — zet er een uit om een ander toe te voegen"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "een opdracht die synui bij het aanmelden uitvoert, zoals u die in een terminal zou typen — hij start vanaf uw volgende aanmelding"
-
-msgid "background services"
-msgstr "achtergronddiensten"
-
-msgid "unavailable"
-msgstr "niet beschikbaar"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "er is in deze sessie geen gebruikersdienstbeheerder om het te vragen"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "een autostart-item dat synui nooit uitvoert — zet het aan om de opdracht naar synui's lijst te kopiëren"
-
-msgid "Administrator"
-msgstr "Beheerder"
-
-msgid "Click again to remove %1"
-msgstr "Klik nogmaals om %1 te verwijderen"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "Klik nogmaals — de bestanden van %1 worden ook verwijderd"
-
-msgid "Create account"
-msgstr "Account aanmaken"
-
-msgid "Make administrator"
-msgstr "Beheerder maken"
-
-msgid "Make standard"
-msgstr "Standaard maken"
-
-msgid "Remove with files"
-msgstr "Verwijderen met bestanden"
-
-msgid "Remove, keep files"
-msgstr "Verwijderen, bestanden houden"
-
-msgid "Set password"
-msgstr "Wachtwoord instellen"
-
-msgid "Users"
-msgstr "Gebruikers"
-
-msgid "account name, e.g. alex"
-msgstr "accountnaam, bijv. alex"
-
-msgid "again"
-msgstr "nogmaals"
-
-msgid "creating %1…"
-msgstr "%1 aanmaken…"
-
-msgid "making %1 a standard account…"
-msgstr "%1 wordt een standaardaccount…"
-
-msgid "making %1 an administrator…"
-msgstr "%1 wordt beheerder…"
-
-msgid "password"
-msgstr "wachtwoord"
-
-msgid "setting the password for %1…"
-msgstr "wachtwoord van %1 instellen…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "de accounts op deze machine — er een toevoegen, het wachtwoord, of het de machine mag beheren, de vingerafdrukken en verwijderen"
-
-msgid "the two passwords differ"
-msgstr "de twee wachtwoorden verschillen"
-
 msgid "administrator"
 msgstr "beheerder"
 
@@ -1886,33 +1974,42 @@ msgstr "dit bent u — het account waaronder dit venster draait"
 msgid ""
 "the only administrator — make another one before this one can be made "
 "standard"
-msgstr "de enige beheerder — maak eerst een ander account beheerder voordat dit standaard kan worden"
+msgstr ""
+"de enige beheerder — maak eerst een ander account beheerder voordat dit "
+"standaard kan worden"
 
 msgid "an administrator: it can use sudo and change the system"
 msgstr "een beheerder: kan sudo gebruiken en het systeem wijzigen"
 
 msgid "a standard account: it cannot use sudo or change the system"
-msgstr "een standaardaccount: kan geen sudo gebruiken en het systeem niet wijzigen"
+msgstr ""
+"een standaardaccount: kan geen sudo gebruiken en het systeem niet wijzigen"
 
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "typ twee keer een nieuw wachtwoord — het oude wordt niet gevraagd, zodat een beheerder een vergeten wachtwoord kan herstellen"
+msgstr ""
+"typ twee keer een nieuw wachtwoord — het oude wordt niet gevraagd, zodat een "
+"beheerder een vergeten wachtwoord kan herstellen"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
-msgstr "kies een vinger, til hem daarna op en leg hem op de lezer telkens als die erom vraagt"
+msgstr ""
+"kies een vinger, til hem daarna op en leg hem op de lezer telkens als die "
+"erom vraagt"
 
 msgid "forget every fingerprint on file for this account"
 msgstr "alle vastgelegde vingerafdrukken van dit account vergeten"
 
 msgid "signed in right now — it has to sign out before it can be removed"
-msgstr "nu aangemeld — het moet zich eerst afmelden voordat het verwijderd kan worden"
+msgstr ""
+"nu aangemeld — het moet zich eerst afmelden voordat het verwijderd kan worden"
 
 msgid "the only administrator cannot be removed"
 msgstr "de enige beheerder kan niet worden verwijderd"
 
 msgid "removes the account; its files in /home can go with it or stay"
-msgstr "verwijdert het account; de bestanden in /home kunnen meegaan of blijven"
+msgstr ""
+"verwijdert het account; de bestanden in /home kunnen meegaan of blijven"
 
 msgid "Add a user"
 msgstr "Gebruiker toevoegen"
@@ -1920,48 +2017,36 @@ msgstr "Gebruiker toevoegen"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "nog een account met eigen bestanden en bureaublad — in het aanmeldscherm gaat Tab naar het naamveld"
+msgstr ""
+"nog een account met eigen bestanden en bureaublad — in het aanmeldscherm "
+"gaat Tab naar het naamveld"
 
-msgid "administrator prompts"
-msgstr "beheerdersvragen"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "Bluetooth"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "sudo in een terminal, en het wachtwoordvenster dat instellingen en software-updates openen, vragen eerst om een vinger; het wachtwoord werkt nog steeds als u wacht of geen vinger overeenkomt"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo en het beheerderswachtwoordvenster vragen alleen om het wachtwoord; zet aan om eerst een vinger te accepteren"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "sudo in een terminal vraagt eerst om een vinger; het wachtwoord werkt nog "
+#~ "steeds als u wacht of geen vinger overeenkomt"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "aangezet, maar nog niet in elke beheerdersvraag — de volgende start past het toe, of zet het hier aan"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr ""
+#~ "sudo vraagt alleen om het wachtwoord; zet aan om eerst een vinger te "
+#~ "accepteren"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd is niet geïnstalleerd, dus geen enkele beheerdersvraag kan om een vinger vragen"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "aangezet, maar nog niet in de PAM-stack van sudo — de volgende start past "
+#~ "het toe, of zet het hier aan"
 
-msgid "Pair"
-msgstr "Koppelen"
-
-msgid "pairing…"
-msgstr "koppelen…"
-
-msgid "the PIN Moonlight shows"
-msgstr "de pincode die Moonlight toont"
-
-msgid "Pair a Moonlight client"
-msgstr "Een Moonlight-client koppelen"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "typ de vier cijfers die Moonlight toont wanneer het deze machine toevoegt · één keer per apparaat"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "de streamserver is gestopt · Inschakelen start hem opnieuw, daarna kan Moonlight om een pincode vragen"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "streamen staat uit · Inschakelen start het, daarna kan Moonlight om een pincode vragen"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr ""
+#~ "pam_fprintd is niet geïnstalleerd, dus sudo kan niet om een vinger vragen"

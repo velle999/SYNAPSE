@@ -473,7 +473,28 @@ pkgver=0.1.0
 #   no longer need the companion app; "piper is chibi's" would send somebody to
 #   install the wrong thing. Two strings, swapped in place in all thirteen
 #   catalogs, 507/507.
-pkgrel=63
+# 64: THE AI PANE SAYS HOW FAST IT IS. It already reported which ggml backend
+#   library is installed and called that "the same question as will this be
+#   fast" — which it is not, quite: a CUDA build with too few layers offloaded
+#   is CUDA and slow. A Speed row now shows the rate of the LAST answer synapd
+#   gave, and a Measure button runs a real one (synapd-bench, new in synapd 55).
+#   ⚠ READ WHEN THE PANE DRAWS, NEVER MEASURED THERE. `synapd-bench --last` is
+#     one status round trip and generates nothing; benchmarking to fill a row
+#     would spend seconds of GPU and a few hundred tokens every time this window
+#     was opened.
+#   ⛔ AND THE NUMBER BELONGS TO WHOEVER ASKED LAST — a vibe turn, chibi, the
+#     command bar. The state column says "last answer" for that reason; the
+#     button is what fixes the prompt and makes it a measurement.
+#   ⛔ THE ROW IS ABSENT WHERE synapd-bench IS, not greyed: an action that
+#     cannot run is a dead button in the app whose job is showing true state.
+#     Same rule the AI backend switch follows for synui-ai-backend(1).
+#   ⚠ ITS PARSER MATCHES A WHOLE KEY. model_file= is free text out of the GGUF,
+#     so a model NAME containing `decode_tps=` would otherwise be read as the
+#     rate — a number that came from a string, indistinguishable from a
+#     measurement. Pinned by a stub on PATH in the suite, because the real tool
+#     needs a resident model and a gate that runs it reads this machine.
+#   Seven strings, all thirteen catalogs, 509/509.
+pkgrel=64
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

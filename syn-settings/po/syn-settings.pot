@@ -151,6 +151,9 @@ msgstr ""
 msgid "Malware Scanning"
 msgstr ""
 
+msgid "Measure"
+msgstr ""
+
 msgid "Network"
 msgstr ""
 
@@ -281,6 +284,9 @@ msgid "making %1 a standard account…"
 msgstr ""
 
 msgid "making %1 an administrator…"
+msgstr ""
+
+msgid "measuring…"
 msgstr ""
 
 msgid "no modes listed — is wlr-randr installed?"
@@ -439,6 +445,23 @@ msgid ""
 "127.0.0.1:8080 for frontends written against llama-server or the OpenAI API, "
 "over the model synapd already holds · no authentication, so every process on "
 "this machine can reach it · loopback only, never the network"
+msgstr ""
+
+msgid "Speed"
+msgstr ""
+
+msgid "last answer"
+msgstr ""
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr ""
+
+msgid "not measured yet"
+msgstr ""
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
 msgstr ""
 
 msgid "unknown"

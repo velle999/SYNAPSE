@@ -27,6 +27,9 @@ msgstr[1] "%1 पंक्तियाँ"
 msgid "AI"
 msgstr "एआई"
 
+msgid "Administrator"
+msgstr "व्यवस्थापक"
+
 msgid "Apply"
 msgstr "लागू करें"
 
@@ -55,6 +58,12 @@ msgstr "रद्द करें"
 msgid "Change boot configuration?"
 msgstr "बूट कॉन्फ़िगरेशन बदलें?"
 
+msgid "Click again to remove %1"
+msgstr "%1 को हटाने के लिए फिर क्लिक करें"
+
+msgid "Click again — %1's files are deleted too"
+msgstr "फिर क्लिक करें — %1 की फ़ाइलें भी मिट जाएँगी"
+
 msgid "Close"
 msgstr "बंद करें"
 
@@ -63,6 +72,9 @@ msgstr "कॉन्फ़िगरेशन"
 
 msgid "Connect"
 msgstr "जोड़ें"
+
+msgid "Create account"
+msgstr "खाता बनाएँ"
 
 msgid "Date & Time"
 msgstr "दिनांक और समय"
@@ -114,6 +126,9 @@ msgid ""
 "you seeing how it went."
 msgstr "इसे चलने दें। विंडो बंद करने से यह रुकेगा नहीं — बस आप देख नहीं पाएँगे कि क्या हुआ।"
 
+msgid "Make administrator"
+msgstr "व्यवस्थापक बनाएँ"
+
 msgid "Make bootable"
 msgstr "बूट योग्य बनाएँ"
 
@@ -126,6 +141,9 @@ msgstr "डिफ़ॉल्ट बनाएँ"
 msgid "Make default…"
 msgstr "डिफ़ॉल्ट बनाएँ…"
 
+msgid "Make standard"
+msgstr "मानक बनाएँ"
+
 msgid "Making %1 bootable"
 msgstr "%1 को बूट योग्य बनाया जा रहा है"
 
@@ -135,8 +153,14 @@ msgstr "%1 को डिफ़ॉल्ट बनाया जा रहा ह�
 msgid "Malware Scanning"
 msgstr "मैलवेयर जाँच"
 
+msgid "Measure"
+msgstr "मापें"
+
 msgid "Network"
 msgstr "नेटवर्क"
+
+msgid "Pair"
+msgstr "पेयर करें"
 
 msgid "Power & Sleep"
 msgstr "पावर और स्लीप"
@@ -163,6 +187,12 @@ msgstr "हटाएँ"
 msgid "Remove key"
 msgstr "कुंजी हटाएँ"
 
+msgid "Remove with files"
+msgstr "फ़ाइलों सहित हटाएँ"
+
+msgid "Remove, keep files"
+msgstr "हटाएँ, फ़ाइलें रखें"
+
 msgid "Removing %1"
 msgstr "%1 हटाया जा रहा है"
 
@@ -175,8 +205,14 @@ msgstr "SYNAPSE सेटिंग्स"
 msgid "Save key"
 msgstr "कुंजी सहेजें"
 
+msgid "Set password"
+msgstr "पासवर्ड सेट करें"
+
 msgid "Speech"
 msgstr "वाणी"
+
+msgid "Startup"
+msgstr "स्टार्टअप"
 
 msgid "System"
 msgstr "सिस्टम"
@@ -208,6 +244,9 @@ msgstr "बंद करें"
 msgid "Turn on"
 msgstr "चालू करें"
 
+msgid "Users"
+msgstr "उपयोगकर्ता"
+
 msgid "You may be asked to authenticate."
 msgstr "आपसे प्रमाणीकरण माँगा जा सकता है।"
 
@@ -219,9 +258,15 @@ msgstr ""
 "आपसे प्रमाणीकरण माँगा जा सकता है। limine पर इसका मतलब एंट्री जनरेटर को स्रोत से बनाना "
 "हो सकता है, जिसमें कई मिनट लगते हैं — नीचे की पंक्तियाँ वही काम हैं।"
 
+msgid "account name, e.g. alex"
+msgstr "खाते का नाम, जैसे alex"
+
 msgid ""
 "addresses, interfaces, radios, and whether anything is filtering traffic"
 msgstr "पते, इंटरफ़ेस, रेडियो, और क्या कुछ ट्रैफ़िक छान रहा है"
+
+msgid "again"
+msgstr "फिर से"
 
 msgid "connecting %1…"
 msgstr "%1 से जुड़ा जा रहा है…"
@@ -231,6 +276,9 @@ msgstr "कर्नेल जिन कनेक्टर को देखत�
 
 msgid "could not work out what to run"
 msgstr "तय नहीं हो सका कि क्या चलाना है"
+
+msgid "creating %1…"
+msgstr "%1 बनाया जा रहा है…"
 
 msgid "disconnecting %1…"
 msgstr "%1 अलग किया जा रहा है…"
@@ -244,6 +292,15 @@ msgstr "पहचान, और हर कॉन्फ़िगरेशन फ�
 msgid "lift and rest it again each time it asks; several passes are needed"
 msgstr "हर बार पूछे जाने पर उँगली उठाकर फिर से रखें; कई बार पढ़ना पड़ता है"
 
+msgid "making %1 a standard account…"
+msgstr "%1 को मानक खाता बनाया जा रहा है…"
+
+msgid "making %1 an administrator…"
+msgstr "%1 को व्यवस्थापक बनाया जा रहा है…"
+
+msgid "measuring…"
+msgstr "माप रहे हैं…"
+
 msgid "no modes listed — is wlr-randr installed?"
 msgstr "कोई मोड सूचीबद्ध नहीं — क्या wlr-randr इंस्टॉल है?"
 
@@ -256,6 +313,12 @@ msgstr "इस सेटिंग के लिए विकल्पों क�
 msgid "nothing reported"
 msgstr "कुछ नहीं बताया गया"
 
+msgid "pairing…"
+msgstr "पेयर किया जा रहा है…"
+
+msgid "password"
+msgstr "पासवर्ड"
+
 msgid "re-probing %1…"
 msgstr "%1 की फिर से जाँच हो रही है…"
 
@@ -264,6 +327,9 @@ msgstr "पढ़ा जा रहा है…"
 
 msgid "refused (exit %1) — polkit may have declined"
 msgstr "अस्वीकृत (निकास %1) — शायद polkit ने मना कर दिया"
+
+msgid "removing %1…"
+msgstr "%1 हटाया जा रहा है…"
 
 msgid "removing every fingerprint…"
 msgstr "सभी फ़िंगरप्रिंट हटाए जा रहे हैं…"
@@ -280,6 +346,9 @@ msgstr "%1 को %2 पर सेट किया जा रहा है…"
 msgid "setting %1…"
 msgstr "%1 सेट किया जा रहा है…"
 
+msgid "setting the password for %1…"
+msgstr "%1 का पासवर्ड सेट किया जा रहा है…"
+
 msgid "storing the %1 key…"
 msgstr "%1 की कुंजी सहेजी जा रही है…"
 
@@ -288,6 +357,16 @@ msgstr "%1 बदला जा रहा है…"
 
 msgid "synui only — %1 is the session running"
 msgstr "केवल synui — चल रहा सत्र %1 है"
+
+msgid "the PIN Moonlight shows"
+msgstr "Moonlight जो PIN दिखाता है"
+
+msgid ""
+"the accounts on this machine — adding one, its password, whether it can "
+"administer the machine, its fingerprints, and removing it"
+msgstr ""
+"इस मशीन के खाते — नया जोड़ना, उसका पासवर्ड, क्या वह मशीन का प्रबंधन कर सकता है, उसके "
+"फ़िंगरप्रिंट, और उसे हटाना"
 
 msgid "the adapter, both kinds of radio block, and what is paired"
 msgstr "अडैप्टर, दोनों तरह के रेडियो ब्लॉक, और क्या-क्या जुड़ा हुआ है"
@@ -324,11 +403,21 @@ msgid ""
 "date order"
 msgstr "सिस्टम घड़ी — और डेस्कटॉप उसे कैसे लिखता है: 12 या 24 घंटे, और दिनांक किस क्रम में"
 
+msgid "the two passwords differ"
+msgstr "दोनों पासवर्ड अलग हैं"
+
 msgid "the units a working suspend depends on, and what the last one did"
 msgstr "सस्पेंड ठीक चलने के लिए जिन यूनिट पर निर्भर है, और पिछली बार क्या हुआ"
 
 msgid "what opens each kind of file — and whether anybody actually chose it"
 msgstr "हर तरह की फ़ाइल क्या खोलता है — और क्या वाकई किसी ने उसे चुना था"
+
+msgid ""
+"what runs when you log in — synui's own list, your background services, and "
+"autostart entries this desktop never runs"
+msgstr ""
+"लॉग इन करने पर क्या चलता है — synui की अपनी सूची, आपकी पृष्ठभूमि सेवाएँ, और वे "
+"ऑटोस्टार्ट प्रविष्टियाँ जिन्हें यह डेस्कटॉप कभी नहीं चलाता"
 
 msgid ""
 "whether this desktop can be reached from another machine, and from how far "
@@ -383,6 +472,23 @@ msgid ""
 msgstr ""
 "llama-server या OpenAI एपीआई के लिए लिखे फ़्रंटएंड हेतु 127.0.0.1:8080, साथ आने वाले "
 "सॉकेट के ज़रिये"
+
+msgid "Speed"
+msgstr "गति"
+
+msgid "last answer"
+msgstr "पिछला उत्तर"
+
+msgid "the answer, token by token · the prompt was read at"
+msgstr "उत्तर, टोकन दर टोकन · प्रॉम्प्ट पढ़ने की गति रही"
+
+msgid "not measured yet"
+msgstr "अभी मापा नहीं गया"
+
+msgid ""
+"how fast this model answers on this machine · the daemon times the prompt "
+"and the answer separately"
+msgstr "इस मशीन पर यह मॉडल कितनी तेज़ी से उत्तर देता है · डेमन प्रॉम्प्ट और उत्तर को अलग-अलग मापता है"
 
 msgid "unknown"
 msgstr "अज्ञात"
@@ -635,6 +741,52 @@ msgstr "बायाँ अनामिका"
 
 msgid "Left little"
 msgstr "बायाँ कनिष्ठा"
+
+msgid "administrator prompts"
+msgstr "व्यवस्थापक पुष्टि"
+
+msgid "on"
+msgstr "चालू"
+
+msgid ""
+"sudo in a terminal, and the password box that settings and software updates "
+"open, ask for a finger first; the password still works if you wait or no "
+"finger matches"
+msgstr ""
+"टर्मिनल में sudo, और सेटिंग्स व सॉफ़्टवेयर अपडेट जो पासवर्ड बॉक्स खोलते हैं, पहले उँगली माँगते "
+"हैं; इंतज़ार करने पर या कोई उँगली न मिलने पर पासवर्ड भी चलता है"
+
+msgid "off"
+msgstr "बंद"
+
+msgid ""
+"sudo and the administrator password box ask for the password only; turn on "
+"to accept a finger first"
+msgstr ""
+"sudo और व्यवस्थापक पासवर्ड बॉक्स केवल पासवर्ड माँगते हैं; पहले उँगली स्वीकार करने के लिए "
+"चालू करें"
+
+msgid ""
+"switched on but not in every administrator prompt yet — the next boot "
+"applies it, or turn it on here"
+msgstr ""
+"चालू है, पर अभी हर व्यवस्थापक पुष्टि में नहीं — अगला बूट इसे लागू करेगा, या इसे यहीं चालू करें"
+
+msgid ""
+"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
+"it alone"
+msgstr "/etc/pam.d/sudo में हाथ से लिखी pam_fprintd पंक्ति है; यह स्विच उसे नहीं छूता"
+
+msgid ""
+"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
+msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए कोई भी व्यवस्थापक पुष्टि उँगली नहीं माँग सकती"
+
+msgid ""
+"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
+"pam_fprintd.so as sufficient above its auth include"
+msgstr ""
+"/etc/pam.d/sudo अपेक्षित स्टैक नहीं है, इसलिए उसे छुआ नहीं गया — उसके auth include के "
+"ऊपर pam_fprintd.so को sufficient के रूप में जोड़ें"
 
 msgid "fprintd"
 msgstr "fprintd"
@@ -1118,7 +1270,9 @@ msgstr "स्ट्रीमिंग (Moonlight)"
 msgid ""
 "Video rather than pixels · smooth enough for games and full-screen video, "
 "and reachable by any Moonlight client on this network"
-msgstr "पिक्सेल नहीं, वीडियो · खेलों और पूरे स्क्रीन के वीडियो के लिए भी पर्याप्त सहज, और इस नेटवर्क के हर Moonlight क्लायंट की पहुँच में"
+msgstr ""
+"पिक्सेल नहीं, वीडियो · खेलों और पूरे स्क्रीन के वीडियो के लिए भी पर्याप्त सहज, और इस "
+"नेटवर्क के हर Moonlight क्लायंट की पहुँच में"
 
 msgid "Streaming server"
 msgstr "स्ट्रीमिंग सर्वर"
@@ -1141,7 +1295,9 @@ msgstr "जो जुड़ता है, उसे यह डेस्कटॉ
 msgid ""
 "synui grows a screen with no monitor behind it, sized to whatever the "
 "connecting client asks for"
-msgstr "synui ऐसी स्क्रीन बनाता है जिसके पीछे कोई मॉनिटर नहीं होता, और उसका आकार जुड़ने वाले क्लायंट के माँगे अनुसार रखता है"
+msgstr ""
+"synui ऐसी स्क्रीन बनाता है जिसके पीछे कोई मॉनिटर नहीं होता, और उसका आकार जुड़ने वाले "
+"क्लायंट के माँगे अनुसार रखता है"
 
 msgid "Blank this machine while streaming"
 msgstr "स्ट्रीमिंग के दौरान इस मशीन की स्क्रीन बुझा दें"
@@ -1157,6 +1313,26 @@ msgstr "स्ट्रीम पोर्ट"
 msgid ""
 "what a Moonlight client is pointed at · its settings page is one port above"
 msgstr "Moonlight क्लायंट को यहीं भेजा जाता है · सेटिंग्स पृष्ठ एक पोर्ट ऊपर है"
+
+msgid "Pair a Moonlight client"
+msgstr "Moonlight क्लायंट पेयर करें"
+
+msgid ""
+"type the four digits Moonlight shows when it adds this machine · once per "
+"device"
+msgstr ""
+"Moonlight इस मशीन को जोड़ते समय जो चार अंक दिखाता है, वे लिखें · हर डिवाइस के लिए एक "
+"बार"
+
+msgid ""
+"the streaming server has stopped · Turn on starts it again, then Moonlight "
+"can ask for a PIN"
+msgstr ""
+"स्ट्रीमिंग सर्वर रुक गया है · “चालू करें” इसे फिर से शुरू करता है, फिर Moonlight PIN माँग "
+"सकता है"
+
+msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
+msgstr "स्ट्रीमिंग बंद है · “चालू करें” इसे शुरू करता है, फिर Moonlight PIN माँग सकता है"
 
 msgid "Streaming now"
 msgstr "अभी स्ट्रीम हो रहा है"
@@ -1427,9 +1603,6 @@ msgstr "अपने नाम पर उत्तर देना"
 msgid "listening"
 msgstr "सुन रहा है"
 
-msgid "off"
-msgstr "बंद"
-
 msgid ""
 "Listen for \"Synapse\" and answer out loud. HOLDS THE MICROPHONE OPEN until "
 "it is turned off; the bar shows a microphone while it is on"
@@ -1450,7 +1623,8 @@ msgid "Dictation"
 msgstr "श्रुतलेख"
 
 msgid "faster-whisper, from synapse-voice. Super+Shift+V types what it hears"
-msgstr "synapse-voice का faster-whisper। Super+Shift+V जो सुनता है वह टाइप करता है"
+msgstr ""
+"synapse-voice का faster-whisper। Super+Shift+V जो सुनता है वह टाइप करता है"
 
 msgid "Speech rate"
 msgstr "बोलने की गति"
@@ -1481,6 +1655,51 @@ msgstr ""
 
 msgid "the listener. Shipped disabled · the switch above is what turns it on"
 msgstr "सुनने वाला। बंद अवस्था में आता है · ऊपर का स्विच इसे चालू करता है"
+
+msgid ""
+"synui's built-in default — there is no synuirc yet; adding a program here "
+"keeps it"
+msgstr ""
+"synui का अंतर्निहित डिफ़ॉल्ट — अभी कोई synuirc नहीं है; यहाँ प्रोग्राम जोड़ने पर यह बना "
+"रहता है"
+
+msgid "synui starts this when you log in"
+msgstr "लॉग इन करने पर synui इसे शुरू करता है"
+
+msgid "switched off — kept so it can be switched back on"
+msgstr "बंद — रखा गया है ताकि फिर से चालू किया जा सके"
+
+msgid "Add a program"
+msgstr "प्रोग्राम जोड़ें"
+
+msgid ""
+"synui starts at most 32 programs at login — switch one off to add another"
+msgstr ""
+"synui लॉग इन पर अधिकतम 32 प्रोग्राम शुरू करता है — एक और जोड़ने के लिए किसी एक को बंद "
+"करें"
+
+msgid ""
+"a command for synui to run at login, as you would type it in a terminal — it "
+"starts from your next login"
+msgstr ""
+"लॉग इन पर synui द्वारा चलाया जाने वाला कमांड, जैसे आप उसे टर्मिनल में लिखते — यह अगले "
+"लॉग इन से शुरू होता है"
+
+msgid "background services"
+msgstr "पृष्ठभूमि सेवाएँ"
+
+msgid "unavailable"
+msgstr "उपलब्ध नहीं"
+
+msgid "there is no user service manager in this session to ask"
+msgstr "इस सत्र में पूछने के लिए कोई उपयोगकर्ता सेवा प्रबंधक नहीं है"
+
+msgid ""
+"an autostart entry synui never runs — switch it on to copy its command into "
+"synui's list"
+msgstr ""
+"एक ऑटोस्टार्ट प्रविष्टि जिसे synui कभी नहीं चलाता — इसका कमांड synui की सूची में कॉपी "
+"करने के लिए इसे चालू करें"
 
 msgid "kernel hardening baseline"
 msgstr "कर्नेल कठोरता का आधार"
@@ -1594,9 +1813,6 @@ msgstr "पट्टी, लॉक पर्दा और डेस्कटॉ�
 msgid "time-seconds"
 msgstr "सेकंड"
 
-msgid "on"
-msgstr "चालू"
-
 msgid "seconds in the bar clock"
 msgstr "पट्टी की घड़ी में सेकंड"
 
@@ -1660,146 +1876,6 @@ msgstr "CPU  (कोई GPU ऑफ़लोड नहीं)"
 msgid "Off  (mask the daemon)"
 msgstr "बंद  (डेमॉन को मास्क करें)"
 
-#, fuzzy
-#~ msgid "bluetooth.service"
-#~ msgstr "ब्लूटूथ"
-
-msgid "sudo"
-msgstr "sudo"
-
-msgid ""
-"sudo in a terminal asks for a finger first; the password still works if you "
-"wait or no finger matches"
-msgstr "टर्मिनल में sudo पहले उँगली माँगता है; इंतज़ार करने पर या कोई उँगली न मिलने पर पासवर्ड भी चलता है"
-
-msgid "sudo asks for the password only; turn on to accept a finger first"
-msgstr "sudo केवल पासवर्ड माँगता है; पहले उँगली स्वीकार करने के लिए चालू करें"
-
-msgid ""
-"switched on but not in sudo's PAM stack yet — the next boot applies it, or "
-"turn it on here"
-msgstr "चालू है, पर अभी sudo के PAM स्टैक में नहीं — अगला बूट इसे लागू करेगा, या इसे यहीं चालू करें"
-
-msgid ""
-"a pam_fprintd line written by hand is in /etc/pam.d/sudo; this switch leaves "
-"it alone"
-msgstr "/etc/pam.d/sudo में हाथ से लिखी pam_fprintd पंक्ति है; यह स्विच उसे नहीं छूता"
-
-msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
-msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए sudo उँगली नहीं माँग सकता"
-
-msgid ""
-"/etc/pam.d/sudo is not the stack this expects, so it is left alone — add "
-"pam_fprintd.so as sufficient above its auth include"
-msgstr "/etc/pam.d/sudo अपेक्षित स्टैक नहीं है, इसलिए उसे छुआ नहीं गया — उसके auth include के ऊपर pam_fprintd.so को sufficient के रूप में जोड़ें"
-
-msgid "Startup"
-msgstr "स्टार्टअप"
-
-msgid "removing %1…"
-msgstr "%1 हटाया जा रहा है…"
-
-msgid ""
-"what runs when you log in — synui's own list, your background services, and "
-"autostart entries this desktop never runs"
-msgstr "लॉग इन करने पर क्या चलता है — synui की अपनी सूची, आपकी पृष्ठभूमि सेवाएँ, और वे ऑटोस्टार्ट प्रविष्टियाँ जिन्हें यह डेस्कटॉप कभी नहीं चलाता"
-
-msgid ""
-"synui's built-in default — there is no synuirc yet; adding a program here "
-"keeps it"
-msgstr "synui का अंतर्निहित डिफ़ॉल्ट — अभी कोई synuirc नहीं है; यहाँ प्रोग्राम जोड़ने पर यह बना रहता है"
-
-msgid "synui starts this when you log in"
-msgstr "लॉग इन करने पर synui इसे शुरू करता है"
-
-msgid "switched off — kept so it can be switched back on"
-msgstr "बंद — रखा गया है ताकि फिर से चालू किया जा सके"
-
-msgid "Add a program"
-msgstr "प्रोग्राम जोड़ें"
-
-msgid ""
-"synui starts at most 32 programs at login — switch one off to add another"
-msgstr "synui लॉग इन पर अधिकतम 32 प्रोग्राम शुरू करता है — एक और जोड़ने के लिए किसी एक को बंद करें"
-
-msgid ""
-"a command for synui to run at login, as you would type it in a terminal — it "
-"starts from your next login"
-msgstr "लॉग इन पर synui द्वारा चलाया जाने वाला कमांड, जैसे आप उसे टर्मिनल में लिखते — यह अगले लॉग इन से शुरू होता है"
-
-msgid "background services"
-msgstr "पृष्ठभूमि सेवाएँ"
-
-msgid "unavailable"
-msgstr "उपलब्ध नहीं"
-
-msgid "there is no user service manager in this session to ask"
-msgstr "इस सत्र में पूछने के लिए कोई उपयोगकर्ता सेवा प्रबंधक नहीं है"
-
-msgid ""
-"an autostart entry synui never runs — switch it on to copy its command into "
-"synui's list"
-msgstr "एक ऑटोस्टार्ट प्रविष्टि जिसे synui कभी नहीं चलाता — इसका कमांड synui की सूची में कॉपी करने के लिए इसे चालू करें"
-
-msgid "Administrator"
-msgstr "व्यवस्थापक"
-
-msgid "Click again to remove %1"
-msgstr "%1 को हटाने के लिए फिर क्लिक करें"
-
-msgid "Click again — %1's files are deleted too"
-msgstr "फिर क्लिक करें — %1 की फ़ाइलें भी मिट जाएँगी"
-
-msgid "Create account"
-msgstr "खाता बनाएँ"
-
-msgid "Make administrator"
-msgstr "व्यवस्थापक बनाएँ"
-
-msgid "Make standard"
-msgstr "मानक बनाएँ"
-
-msgid "Remove with files"
-msgstr "फ़ाइलों सहित हटाएँ"
-
-msgid "Remove, keep files"
-msgstr "हटाएँ, फ़ाइलें रखें"
-
-msgid "Set password"
-msgstr "पासवर्ड सेट करें"
-
-msgid "Users"
-msgstr "उपयोगकर्ता"
-
-msgid "account name, e.g. alex"
-msgstr "खाते का नाम, जैसे alex"
-
-msgid "again"
-msgstr "फिर से"
-
-msgid "creating %1…"
-msgstr "%1 बनाया जा रहा है…"
-
-msgid "making %1 a standard account…"
-msgstr "%1 को मानक खाता बनाया जा रहा है…"
-
-msgid "making %1 an administrator…"
-msgstr "%1 को व्यवस्थापक बनाया जा रहा है…"
-
-msgid "password"
-msgstr "पासवर्ड"
-
-msgid "setting the password for %1…"
-msgstr "%1 का पासवर्ड सेट किया जा रहा है…"
-
-msgid ""
-"the accounts on this machine — adding one, its password, whether it can "
-"administer the machine, its fingerprints, and removing it"
-msgstr "इस मशीन के खाते — नया जोड़ना, उसका पासवर्ड, क्या वह मशीन का प्रबंधन कर सकता है, उसके फ़िंगरप्रिंट, और उसे हटाना"
-
-msgid "the two passwords differ"
-msgstr "दोनों पासवर्ड अलग हैं"
-
 msgid "administrator"
 msgstr "व्यवस्थापक"
 
@@ -1823,7 +1899,9 @@ msgstr "मानक खाता: न sudo इस्तेमाल कर स�
 msgid ""
 "type a new password twice — the old one is not asked for, so an "
 "administrator can reset a forgotten one"
-msgstr "नया पासवर्ड दो बार लिखें — पुराना नहीं पूछा जाता, इसलिए व्यवस्थापक भूला हुआ पासवर्ड रीसेट कर सकता है"
+msgstr ""
+"नया पासवर्ड दो बार लिखें — पुराना नहीं पूछा जाता, इसलिए व्यवस्थापक भूला हुआ पासवर्ड "
+"रीसेट कर सकता है"
 
 msgid "pick a finger, then lift and rest it on the reader each time it asks"
 msgstr "एक उँगली चुनें, फिर हर बार कहे जाने पर उसे रीडर से उठाकर दोबारा रखें"
@@ -1846,48 +1924,32 @@ msgstr "उपयोगकर्ता जोड़ें"
 msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
-msgstr "अपनी फ़ाइलों और डेस्कटॉप वाला एक और खाता — लॉगिन स्क्रीन पर Tab नाम वाले खाने पर ले जाता है"
+msgstr ""
+"अपनी फ़ाइलों और डेस्कटॉप वाला एक और खाता — लॉगिन स्क्रीन पर Tab नाम वाले खाने पर ले "
+"जाता है"
 
-msgid "administrator prompts"
-msgstr "व्यवस्थापक पुष्टि"
+#, fuzzy
+#~ msgid "bluetooth.service"
+#~ msgstr "ब्लूटूथ"
 
-msgid ""
-"sudo in a terminal, and the password box that settings and software updates "
-"open, ask for a finger first; the password still works if you wait or no "
-"finger matches"
-msgstr "टर्मिनल में sudo, और सेटिंग्स व सॉफ़्टवेयर अपडेट जो पासवर्ड बॉक्स खोलते हैं, पहले उँगली माँगते हैं; इंतज़ार करने पर या कोई उँगली न मिलने पर पासवर्ड भी चलता है"
+#~ msgid "sudo"
+#~ msgstr "sudo"
 
-msgid ""
-"sudo and the administrator password box ask for the password only; turn on "
-"to accept a finger first"
-msgstr "sudo और व्यवस्थापक पासवर्ड बॉक्स केवल पासवर्ड माँगते हैं; पहले उँगली स्वीकार करने के लिए चालू करें"
+#~ msgid ""
+#~ "sudo in a terminal asks for a finger first; the password still works if "
+#~ "you wait or no finger matches"
+#~ msgstr ""
+#~ "टर्मिनल में sudo पहले उँगली माँगता है; इंतज़ार करने पर या कोई उँगली न मिलने पर पासवर्ड "
+#~ "भी चलता है"
 
-msgid ""
-"switched on but not in every administrator prompt yet — the next boot "
-"applies it, or turn it on here"
-msgstr "चालू है, पर अभी हर व्यवस्थापक पुष्टि में नहीं — अगला बूट इसे लागू करेगा, या इसे यहीं चालू करें"
+#~ msgid "sudo asks for the password only; turn on to accept a finger first"
+#~ msgstr "sudo केवल पासवर्ड माँगता है; पहले उँगली स्वीकार करने के लिए चालू करें"
 
-msgid ""
-"pam_fprintd is not installed, so no administrator prompt can ask for a finger"
-msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए कोई भी व्यवस्थापक पुष्टि उँगली नहीं माँग सकती"
+#~ msgid ""
+#~ "switched on but not in sudo's PAM stack yet — the next boot applies it, "
+#~ "or turn it on here"
+#~ msgstr ""
+#~ "चालू है, पर अभी sudo के PAM स्टैक में नहीं — अगला बूट इसे लागू करेगा, या इसे यहीं चालू करें"
 
-msgid "Pair"
-msgstr "पेयर करें"
-
-msgid "pairing…"
-msgstr "पेयर किया जा रहा है…"
-
-msgid "the PIN Moonlight shows"
-msgstr "Moonlight जो PIN दिखाता है"
-
-msgid "Pair a Moonlight client"
-msgstr "Moonlight क्लायंट पेयर करें"
-
-msgid "type the four digits Moonlight shows when it adds this machine · once per device"
-msgstr "Moonlight इस मशीन को जोड़ते समय जो चार अंक दिखाता है, वे लिखें · हर डिवाइस के लिए एक बार"
-
-msgid "the streaming server has stopped · Turn on starts it again, then Moonlight can ask for a PIN"
-msgstr "स्ट्रीमिंग सर्वर रुक गया है · “चालू करें” इसे फिर से शुरू करता है, फिर Moonlight PIN माँग सकता है"
-
-msgid "streaming is off · Turn on starts it, then Moonlight can ask for a PIN"
-msgstr "स्ट्रीमिंग बंद है · “चालू करें” इसे शुरू करता है, फिर Moonlight PIN माँग सकता है"
+#~ msgid "pam_fprintd is not installed, so sudo cannot ask for a finger"
+#~ msgstr "pam_fprintd इंस्टॉल नहीं है, इसलिए sudo उँगली नहीं माँग सकता"

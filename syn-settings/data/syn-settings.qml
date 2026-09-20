@@ -1585,6 +1585,10 @@ FloatingWindow {
                         if (v === "toggle") return root.isOn(root.selValue) ? I18n.tr("Turn off")
                                                              : I18n.tr("Turn on")
                         if (v === "probe")  return I18n.tr("Re-probe")
+                        // The row says "Speed" and shows the LAST answer's rate,
+                        // which nothing here chose the prompt for. This button is
+                        // what makes it a measurement, so it says so.
+                        if (v === "bench")  return I18n.tr("Measure")
                         // A button says what it does: this one pairs a device.
                         if (v === "set" && root.actionArgFor(root.selAction, "set")
                                            === "remote-stream-pair")
@@ -1610,6 +1614,12 @@ FloatingWindow {
                                           I18n.tr("switching %1…").arg(arg))
                         else if (v === "probe")
                             root.runWrite(["probe", arg], I18n.tr("re-probing %1…").arg(arg))
+                        // ⚠ It TALKS while it runs — a line per run, seconds apart —
+                        // and run_progress() folds those into the work panel. Same
+                        // reason enrolment streams: this one is slow enough that a
+                        // silent window would read as a hung one.
+                        else if (v === "bench")
+                            root.runWrite(["bench"], I18n.tr("measuring…"))
                     }
                 }
 

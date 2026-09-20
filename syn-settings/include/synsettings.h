@@ -324,6 +324,7 @@ int do_device(int argc, char **argv);
 
 /* Re-probe a DRM connector. Does NOT escalate — see src/probe.c. */
 int do_probe(int argc, char **argv);
+int do_bench(int argc, char **argv);
 
 /* Display modes, via wlr-randr; synui persists whatever it sets. */
 int do_modes(int argc, char **argv);

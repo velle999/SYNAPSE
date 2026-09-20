@@ -84,6 +84,8 @@ static void usage(void)
 "                            its switch in the pane is what enables it\n"
 "  device connect|disconnect <if>   bring an interface up or down (nmcli)\n"
 "  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
+"  bench [host]              measure how fast synapd answers, here or on\n"
+"                            another machine over the LAN bridge\n"
 "  modes <connector>         list the modes that output can take\n"
 "  apps <role>               list the applications that could take a role\n"
 "  choices <key>             list what a setting can be set TO, with an\n"
@@ -212,6 +214,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "unit")) return do_unit(rest_argc, rest);
 	if (!strcmp(cmd, "device")) return do_device(rest_argc, rest);
 	if (!strcmp(cmd, "probe")) return do_probe(rest_argc, rest);
+	if (!strcmp(cmd, "bench")) return do_bench(rest_argc, rest);
 	if (!strcmp(cmd, "modes")) return do_modes(rest_argc, rest);
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
