@@ -6,12 +6,16 @@
  * and disarms synui's own idle stages in power.c — so nothing dims, blanks or
  * locks while one is held, and everything re-arms the instant it is released.
  *
- * This process reads a control stream on stdin: a byte '1' creates the inhibitor
- * (media active), '0' destroys it (media idle). EOF or a Wayland disconnect
- * exits (systemd restarts us for the next synui session).
+ * This process reads a control stream on stdin: a byte '1' creates the inhibitor,
+ * '0' destroys it. EOF or a Wayland disconnect exits.
  *
- * Detection of "media playing" lives in the feeding script (synui-media-inhibit);
- * this program only knows how to hold and release the Wayland inhibitor.
+ * ⛔ NOTHING FEEDS THIS BY DEFAULT ANY MORE. It used to be driven by a
+ * `synui-media-inhibit` service that held an inhibitor whenever PipeWire showed
+ * a running audio stream; that policy was wrong and is gone — see the header of
+ * power.c for the four all-night no-sleep bugs it caused. Audio playing does not
+ * keep the screen awake on this desktop. The helper is kept because holding an
+ * inhibitor from a script is a reasonable thing to want (`printf 1` to its stdin
+ * for as long as you need the screen up), not because anything ships a feeder.
  */
 #include <poll.h>
 #include <stdio.h>

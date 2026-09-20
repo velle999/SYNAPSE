@@ -206,7 +206,7 @@ case "$(cat "$SPEAK_SAID")" in
     *) bad "with no WAYLAND_DISPLAY nothing was announced. That is the
         environment syn-speak.service actually starts in; display_name() must
         fall back to \$XDG_RUNTIME_DIR/synui-display, the same file
-        synui-foot.service and synui-media-inhibit read." ;;
+        synui-foot.service reads." ;;
 esac
 
 # ── 5. and an explicit display is never overridden ──────────────────────

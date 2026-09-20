@@ -46,8 +46,7 @@
 #
 # ⛔ NO jq. synui's own code deliberately has none — see the depends= comment in
 # the PKGBUILD; jq is there for the Omarchy plugins it hosts, not for this. The
-# JSON is read by python3, which synui already depends on and which
-# synui-media-inhibit already uses.
+# JSON is read by python3, which synui already depends on.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later

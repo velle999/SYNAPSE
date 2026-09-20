@@ -21,8 +21,25 @@
  * left the session with no idle policy at all and Restart=on-failure never
  * noticed.
  *
- * Idle inhibitors (zwp_idle_inhibit_manager_v1 — synui-media-inhibit creates
- * one whenever audio is playing) disarm every stage while any are held.
+ * Idle inhibitors disarm every stage while any are held. They come from apps
+ * that ask for it: the Wayland protocol (zwp_idle_inhibit_manager_v1) or the
+ * org.freedesktop.ScreenSaver bus name screensaver.c owns — a video player
+ * saying somebody is watching this.
+ *
+ * ⛔ AUDIO PLAYING IS NOT ONE OF THEM, and must not become one again. A
+ * `synui-media-inhibit` service used to watch PipeWire and hold an inhibitor
+ * whenever any Stream/Output/Audio node read `running`. That premise is wrong
+ * twice over: sound coming out of the speakers says nothing about whether
+ * anyone is at the desk, and "a node is running" does not even mean audio is
+ * playing. It cost four separate all-night no-sleep bugs —
+ * linux-wallpaperengine's silent SDL device, the same engine's embedded mpv,
+ * cava holding the EQ chain open for the visualiser widget, and finally the
+ * bar's own music widget, whose cliamp backend goes through the PipeWire ALSA
+ * compat layer and so pins its node at `running` even while MPRIS reports
+ * `Paused`. Each fix put one more name on an IGNORE list and the list lost the
+ * race every time, because the thing being tested was never the thing that
+ * mattered. Removed in pkgrel 618; an app that genuinely needs the screen up
+ * asks for it.
  *
  * Closing a laptop lid is handled here too, though it is not an idle stage:
  * it is an event, not a timeout, and it runs its action at once. See

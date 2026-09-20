@@ -2453,7 +2453,7 @@ int synui_init(syn_server_t *s)
      * on it, so a nested/headless synui can't collide with the session's. */
     ipc_setup(s);
 
-    /* Publish the socket name for synui-foot.service and synui-media-inhibit.
+    /* Publish the socket name for synui-foot.service and friends.
      *
      * This goes in XDG_RUNTIME_DIR (0700, owned by the session user), not in
      * /tmp as it used to. synui-foot runs the session's only terminal as root,

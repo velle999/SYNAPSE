@@ -166,9 +166,8 @@ speak() {   # speak TEXT
 # nothing, for ever.
 #
 # synui publishes the name for exactly this: $XDG_RUNTIME_DIR/synui-display,
-# which synui-foot.service and synui-media-inhibit already read. /tmp is the
-# fallback only where XDG_RUNTIME_DIR is unset (synui outside a session, i.e.
-# the test rigs), matching synui-media-inhibit.sh.
+# which synui-foot.service already reads. /tmp is the fallback only where
+# XDG_RUNTIME_DIR is unset (synui outside a session, i.e. the test rigs).
 #
 # ⛔ AN EXPLICIT WAYLAND_DISPLAY ALWAYS WINS, and is never overridden. A nested
 # or headless synui sets its own, while the published file still names the LIVE

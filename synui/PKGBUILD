@@ -2744,7 +2744,7 @@ pkgver=0.1.0
 #   the compositor even with the unit in place — it would have polled in
 #   silence, which is the same symptom for a second reason. display_name()
 #   resolves $XDG_RUNTIME_DIR/synui-display, the name synui publishes and that
-#   synui-foot.service and synui-media-inhibit already read; an explicit
+#   synui-foot.service already reads; an explicit
 #   WAYLAND_DISPLAY always wins, because that file names the LIVE desktop and a
 #   nested synui must not read the real session's windows out loud.
 #   tests/speak_announcer.sh pins both: the unit is shipped AND installed (read
@@ -3102,8 +3102,7 @@ pkgver=0.1.0
 #   a line of this was written.
 #
 #   ⛔ NO jq. This tree deliberately has none (see depends=); the JSON is read
-#   by python3, which synui already depends on and synui-media-inhibit already
-#   uses.
+#   by python3, which synui already depends on.
 #
 #   ⛔ THE PICKER APPLIES ON HIGHLIGHT, so an action row had to be DEFERRED or
 #   scrolling past it would open a network browser. It reuses `pending_we` —
@@ -3701,7 +3700,7 @@ pkgver=0.1.0
 #   dispcfg_reclaim_windows() now, which is also the only place the sweep can
 #   go: the boxes are measured against an origin a re-attached output does not
 #   have until rechain has placed it.
-pkgrel=617
+pkgrel=618
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -4532,12 +4531,6 @@ package() {
         "$pkgdir/usr/share/synui/waybar/network-menu.xml"
     install -Dm644 config/waybar/bluetooth-menu.xml \
         "$pkgdir/usr/share/synui/waybar/bluetooth-menu.xml"
-
-    # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
-    install -Dm755 systemd/synui-media-inhibit.sh \
-        "$pkgdir/usr/lib/synui/synui-media-inhibit"
-    install -Dm644 systemd/synui-media-inhibit.service \
-        "$pkgdir/usr/lib/systemd/user/synui-media-inhibit.service"
 
     # Screen sharing. The portals file is keyed on XDG_CURRENT_DESKTOP=synui,
     # which the session sets; both halves are needed or portal falls back to

@@ -8,12 +8,15 @@
  * owner" warnings per boot — and the screen would dim on top of a full-screen
  * film.
  *
- * That gap is why synui-media-inhibit exists: a shell script polling pw-dump for
- * a running audio stream and forging a Wayland idle inhibitor when it sees one.
- * That guesses ("is audio playing?") at what an app will now simply tell us
- * ("please don't idle"), and it cannot know *why* or notice a silent video. It
- * stays for now — it still covers apps that inhibit via PipeWire alone — but
- * this is the mechanism that should carry the load.
+ * That gap is why synui-media-inhibit used to exist: a shell script polling
+ * pw-dump for a running audio stream and forging a Wayland idle inhibitor when
+ * it saw one. It guessed ("is audio playing?") at what an app simply tells us
+ * here ("please don't idle"), could not know *why*, and never noticed a silent
+ * video. This header said for months that this file was the mechanism that
+ * should carry the load; in pkgrel 618 it finally does, and the guess is gone.
+ * See power.c's header for the four all-night no-sleep bugs it cost on the way
+ * out. Audio playing no longer keeps the screen awake — an app that needs it
+ * awake says so, right here.
  *
  * An Inhibit() is held until the caller UnInhibit()s it or drops off the bus.
  * That last part matters: a browser that crashes mid-video would otherwise pin
