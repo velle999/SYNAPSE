@@ -138,6 +138,32 @@ at 0600 where it does not. The environment (`ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`) beats both, for a single run. `vibe key <provider> --forget`
 removes it from everywhere.
 
+**And synapd does not have to be on this machine.**
+
+```bash
+vibe host                 # where synapd queries go now
+vibe host desktop.lan     # that box's synapd-bridge.socket, tcp/11435
+vibe host desktop.lan 11500   # ... on a port other than the default
+vibe host local           # back to /run/synapd/synapd.sock
+```
+
+A laptop with no GPU answers from its CPU in tens of seconds; a desktop whose
+daemon already holds the model answers in one. The wire is the same binary
+protocol either way — only the socket changes — so nothing about the
+conversation, the tools or the confirmations differs. The window's header says
+which machine is answering, because "synapd" alone read as *this* one on a box
+that was asking another.
+
+The choice is stored in `~/.config/synui/vibe.env` beside the backend, which is
+what the **bar button** reads: a launch from the dock carries no environment of
+its own, so a host exported in a shell reaches the terminal REPL and never the
+window. `VIBE_SYNAPD_HOST=other.lan vibe` still wins for one run.
+
+⚠ The far end needs `synapd-bridge.socket` running **and** this machine on its
+`synapd-bridge.nft` allowlist. That guard **drops** rather than refuses, so a
+box nobody added there hangs until the timeout instead of saying no — `vibe
+host` pings the target as it writes it and says which of the two it got.
+
 ⛔ `secret-tool` **exits 0 when there is no keyring running** — it prints its
 complaint to stderr and returns success. Every write is therefore verified by
 reading it back, and only a value that comes back byte for byte counts as
@@ -301,6 +327,7 @@ If a model doesn't fit entirely in VRAM, use `/offload` at runtime to split laye
 | `/nothink` | Disable chain-of-thought (faster)                 |
 | `/tokens`  | Show context usage with a visual bar              |
 | `/model`   | Show current backend and model info               |
+| `/host`    | Which synapd answers — a hostname, or `local`      |
 | `/save`    | Summarize session to `.vibe/memory.md`            |
 | `/memory`  | Print current `.vibe/memory.md`                   |
 | `/exit`    | Quit                                              |

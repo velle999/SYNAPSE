@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 # Backend: "llama_cpp", "ollama", "synapd", "anthropic" or "openai".
@@ -54,6 +55,54 @@ OPENAI_TIMEOUT = 600
 
 # The context window each cloud model can hold, for the usage bar.
 ANTHROPIC_CTX = 200000
+
+
+# ── The launcher's env file ──────────────────────────────────────────────────
+#
+# /usr/bin/vibe reads this before exec'ing main.py, so it is where a choice that
+# has to outlive the process goes: config.py itself lives under /usr/lib and is
+# read-only at runtime, and a setting that needs root to change is not a
+# setting. The launcher MATCHES this file with sed rather than sourcing it, so
+# what is written here can never run.
+ENV_FILE = KEY_DIR.parent / "vibe.env"      # ~/.config/synui/vibe.env
+
+# What the launcher's reader will accept back for VIBE_SYNAPD_HOST. Kept beside
+# the writer on purpose: a name this rejects is a name the launcher would skip
+# in silence, leaving the daemon target on whatever it was and nothing said.
+_HOST_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def host_ok(name: str) -> bool:
+    return bool(_HOST_RE.match(name))
+
+
+def env_set(key: str, value: str) -> str:
+    """Set one key in ENV_FILE, keeping the rest. "" on success, else the error.
+
+    ⛔ IT MERGES, AND THAT IS THE WHOLE FUNCTION. This file holds the backend
+    AND the synapd target now. The first version of `vibe provider` wrote it
+    with write_text(), so picking a backend deleted the host that pointed this
+    machine at another box's daemon — the next answer came from the local
+    model, correctly and from the wrong place, with nothing on screen saying
+    the target had moved.
+    """
+    try:
+        lines = []
+        if ENV_FILE.is_file():
+            lines = [ln for ln in ENV_FILE.read_text(encoding="utf-8").splitlines()
+                     if ln.strip() and not ln.startswith(f"{key}=")]
+        if value:
+            lines.append(f"{key}={value}")
+        ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ENV_FILE.write_text("".join(f"{ln}\n" for ln in lines), encoding="utf-8")
+    except OSError as e:
+        return f"cannot write {ENV_FILE}: {e}"
+    return ""
+
+
+def synapd_target() -> str:
+    """Where synapd queries go, as one string fit to show a person."""
+    return f"{SYNAPD_HOST}:{SYNAPD_PORT}" if SYNAPD_HOST else SYNAPD_SOCKET
 
 
 def key_path(provider: str) -> Path:

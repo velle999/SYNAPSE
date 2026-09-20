@@ -43,6 +43,7 @@ Commands:
   confirm ID yes|no      allow or refuse the tool waiting under ID
   reset                  forget the conversation
   provider NAME          switch backend, for this process
+  host NAME [PORT]       which synapd answers — another box, or `local`
   state                  re-emit the S records
   companion              re-emit the P records
   check todo|habit ID    tick a row off in the panel
@@ -277,7 +278,11 @@ class Server:
         if cfg.BACKEND == "ollama":
             return cfg.OLLAMA_MODEL
         if cfg.BACKEND == "synapd":
-            return "synapd (local)"
+            # ⚠ IT SAYS WHICH MACHINE. "synapd" alone read as "the daemon on
+            # this box" on a laptop that was answering from the desktop's — the
+            # same words for two very different places, one of which is off on
+            # the network and can stop being there.
+            return f"synapd ({cfg.SYNAPD_HOST})" if cfg.SYNAPD_HOST else "synapd (local)"
         if cfg.BACKEND == "anthropic":
             return cfg.ANTHROPIC_MODEL
         if cfg.BACKEND == "openai":
@@ -369,6 +374,13 @@ class Server:
         if verb == "persona":
             self.wire.rec("U", text)
             self.set_persona(dec(rest).strip() if rest.strip() else "")
+            return True
+        # Like persona: a live setting, so it goes to the handler that changes
+        # the process, not through _SLASH to a CLI function whose printed output
+        # would be all that happened.
+        if verb == "host":
+            self.wire.rec("U", text)
+            self.set_host(dec(rest).strip() if rest.strip() else "")
             return True
         fn = self._SLASH.get(verb)
         if fn is None:
@@ -525,6 +537,9 @@ class Server:
             return True
         if verb == "provider":
             self.set_provider(dec(rest).strip())
+            return True
+        if verb == "host":
+            self.set_host(dec(rest).strip())
             return True
         if verb == "persona":
             self.set_persona(dec(rest).strip())
@@ -708,6 +723,59 @@ class Server:
         # wire shape for those is different. A new provider is a new thread.
         self.model = None
         self.wire.rec("S", "reset", "yes")
+        self.emit_state()
+
+    def set_host(self, target: str):
+        """Point synapd queries at another box's bridge, or back at this one.
+
+        ⚠ TWO THINGS HAVE TO HAPPEN, and each alone is a bug somebody reports
+        differently. The running process holds a model object built against the
+        old target, so without dropping it the window keeps answering from
+        where it was and the menu entry looks inert. And the choice has to
+        reach vibe.env, or it is forgotten the next time the window opens —
+        which reads as a setting that will not stick.
+
+        ⛔ NOT A BACKEND SWITCH. It changes WHERE synapd is, and says so when
+        the backend is something else entirely, rather than storing a host that
+        will not be consulted until somebody also runs `provider synapd`.
+        """
+        name, _, port = target.partition(" ")
+        name = name.strip()
+        port = port.strip()
+        if not name:
+            self.wire.rec("A", f"synapd: {cfg.synapd_target()}")
+            return
+
+        if name in ("local", "localhost", "-"):
+            err = cfg.env_set("VIBE_SYNAPD_HOST", "") or cfg.env_set("VIBE_SYNAPD_PORT", "")
+            if err:
+                self.wire.rec("A", err)
+                return
+            cfg.SYNAPD_HOST = ""
+            said = f"synapd is this machine again ({cfg.SYNAPD_SOCKET})"
+        else:
+            if not cfg.host_ok(name):
+                self.wire.rec("A", f"not a hostname vibe can store: {name}")
+                return
+            if port and not (port.isdigit() and 1 <= int(port) <= 65535):
+                self.wire.rec("A", f"not a port: {port}")
+                return
+            err = cfg.env_set("VIBE_SYNAPD_HOST", name) or cfg.env_set("VIBE_SYNAPD_PORT", port)
+            if err:
+                self.wire.rec("A", err)
+                return
+            cfg.SYNAPD_HOST = name
+            if port:
+                cfg.SYNAPD_PORT = int(port)
+            said = f"synapd is {name}:{cfg.SYNAPD_PORT}"
+
+        # Dropped for the same reason a provider switch drops it: the transcript
+        # belongs to the model object, and this one is being replaced.
+        self.model = None
+        self.wire.rec("S", "reset", "yes")
+        if cfg.BACKEND != "synapd":
+            said += f" — but the backend is {cfg.BACKEND}, so nothing asks it yet"
+        self.wire.rec("A", said)
         self.emit_state()
 
     def serve(self, stream=None):

@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=34
+pkgrel=35
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -97,5 +97,11 @@ package() {
     # Launcher → /usr/bin/vibe. Defaults VIBE_BACKEND=synapd and puts the app on
     # PYTHONPATH. Installed to /usr/bin (NOT ~/.local/bin) so the synui session
     # PATH actually sees it.
+    #
+    # ⚠ IT IS ALSO WHAT READS THE REMOTE-synapd SETTING (pkgrel 35). `vibe host
+    # <name>` stores a hostname in ~/.config/synui/vibe.env and this script is
+    # the only thing that reads it back, because a dock or bar launch hands the
+    # app no environment of its own — a host exported in a shell would reach the
+    # terminal REPL and never the window.
     install -Dm755 packaging/vibe-launcher.sh "$pkgdir/usr/bin/vibe"
 }

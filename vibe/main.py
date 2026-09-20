@@ -268,14 +268,76 @@ def _verb_provider(argv) -> int:
     if name not in known:
         print_error(f"no such backend: {name} (try {', '.join(known)})")
         return 1
-    envf = cfg.KEY_DIR.parent / "vibe.env"
-    try:
-        envf.parent.mkdir(parents=True, exist_ok=True)
-        envf.write_text(f"VIBE_BACKEND={name}\n", encoding="utf-8")
-    except OSError as e:
-        print_error(f"cannot write {envf}: {e}")
+    err = cfg.env_set("VIBE_BACKEND", name)
+    if err:
+        print_error(err)
         return 1
     print_info(f"backend is {name} — it applies to the next `vibe`")
+    return 0
+
+
+def _verb_host(argv) -> int:
+    """Which synapd answers: this machine's, or another box's over the LAN.
+
+        vibe host                     where it goes now
+        vibe host desktop.lan         that host's synapd-bridge.socket
+        vibe host desktop.lan 11435   ... on a non-default port
+        vibe host local               back to /run/synapd/synapd.sock
+
+    A laptop with no GPU answers from CPU in tens of seconds; the desktop's
+    daemon already holds the model, so pointing at it is the difference between
+    an assistant somebody uses and one they stop opening. The wire is the same
+    binary protocol either way — only the socket changes.
+
+    ⚠ THE HOST MUST SURVIVE THE LAUNCHER'S READER. /usr/bin/vibe matches
+    vibe.env with sed instead of sourcing it, so a name with a character that
+    class does not cover would be written here, skipped there, and every answer
+    would come from the local daemon with nothing saying why. Refused up front
+    rather than written and ignored.
+    """
+    if not argv:
+        print_info(f"synapd: {cfg.synapd_target()}")
+        return 0
+
+    name = argv[0].strip()
+    if name in ("local", "localhost", "-"):
+        err = cfg.env_set("VIBE_SYNAPD_HOST", "") or cfg.env_set("VIBE_SYNAPD_PORT", "")
+        if err:
+            print_error(err)
+            return 1
+        print_info(f"synapd is local again ({cfg.SYNAPD_SOCKET}) "
+                   "— it applies to the next `vibe`")
+        return 0
+
+    if not cfg.host_ok(name):
+        print_error(f"not a hostname vibe can store: {name}")
+        return 1
+    port = ""
+    if len(argv) > 1:
+        port = argv[1].strip()
+        if not port.isdigit() or not 1 <= int(port) <= 65535:
+            print_error(f"not a port: {port}")
+            return 1
+    err = cfg.env_set("VIBE_SYNAPD_HOST", name) or cfg.env_set("VIBE_SYNAPD_PORT", port)
+    if err:
+        print_error(err)
+        return 1
+
+    # Say whether it can actually be reached, because the failure this setting
+    # invites is a SILENT one: synapd-bridge.nft drops a host that is not on its
+    # allowlist rather than refusing it, so a box nobody added there hangs until
+    # the timeout instead of saying no.
+    port_n = int(port) if port else cfg.SYNAPD_PORT
+    print_info(f"synapd is {name}:{port_n} — it applies to the next `vibe`")
+    from vibe import synapd_client
+    try:
+        synapd_client.ping(host=name, port=port_n, timeout=5.0)
+        print_info("reached it just now")
+    except synapd_client.SynapdError as e:
+        print_error(f"{e}\n"
+                    f"      a timeout here usually means {name} is not on that "
+                    f"box's synapd-bridge allowlist — its guard drops, it does "
+                    f"not refuse")
     return 0
 
 
@@ -559,6 +621,7 @@ _VERBS = {
     "voice": _verb_voice,
     "gui": _verb_gui,
     "provider": _verb_provider,
+    "host": _verb_host,
     "key": _verb_key,
 }
 
@@ -636,6 +699,16 @@ def main():
                     console.print(f"  Host:    {cfg.OLLAMA_HOST}")
                     console.print(f"  Context: {cfg.OLLAMA_CTX:,}")
                     n = cfg.OLLAMA_NUM_GPU
+                elif cfg.BACKEND == "synapd":
+                    # ⚠ WHERE, not which file. The daemon owns the model and
+                    # this backend never loads one, so the llama-cpp path below
+                    # named a GGUF that has nothing to do with the answers —
+                    # and on a laptop pointed at another box it named a local
+                    # file while every reply came over the network.
+                    console.print(f"  Model:   synapd's resident model")
+                    console.print(f"  Host:    {cfg.synapd_target()}")
+                    console.print(f"  Context: {cfg.SYNAPD_CTX:,}")
+                    n = -1
                 else:
                     console.print(f"  Model:   {cfg.MODEL_PATH.name}")
                     console.print(f"  Context: {cfg.N_CTX:,}")
@@ -645,6 +718,11 @@ def main():
                 console.print(f"  Temp:    {cfg.TEMPERATURE}")
                 console.print(f"  Tokens:  {cfg.MAX_TOKENS:,}")
                 console.print(f"  Think:   {'on' if cfg.THINKING else 'off'}")
+            elif cmd == "/host":
+                # The same verb the window's menu sends and `vibe host` runs —
+                # one writer for the file, so the two surfaces cannot disagree
+                # about what was stored.
+                _verb_host(rest.split())
             elif cmd == "/tokens":
                 _show_tokens(model)
             elif cmd == "/save":

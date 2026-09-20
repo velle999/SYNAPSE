@@ -773,6 +773,17 @@ FloatingWindow {
                                 onTriggered: root.send("provider " + brow.modelData)
                             }
                         }
+
+                        SynMenuSeparator {}
+
+                        // ⚠ PREFILLED, NOT A LIST. Every other entry in this
+                        // menu is a closed set the engine can name; a hostname
+                        // is typed, and a machine this box has never heard of
+                        // is the ordinary case. Same shape as "Markets…".
+                        SynMenuItem {
+                            text: "Remote synapd…"
+                            onTriggered: root.prefill("/host ")
+                        }
                     }
 
                     SynMenuSeparator {}
@@ -1551,7 +1562,8 @@ FloatingWindow {
                             ["/goal",    "goals and their milestones"],
                             ["/pom",     "the focus timer"],
                             ["/quant",   "a ticker's price and indicators"],
-                            ["/persona", "the voice it answers in"]]
+                            ["/persona", "the voice it answers in"],
+                            ["/host",    "which synapd answers — a host, or local"]]
 
                     Rectangle {
                         id: hrowItem
