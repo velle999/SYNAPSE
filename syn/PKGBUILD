@@ -54,81 +54,7 @@ pkgver=0.1.0
 # 34: a `voice` row in the Nix profile example, for synapse-voice — the speech
 #   engine that left chibi's package in chibi 27, and its own checkbox from
 #   syn-install 123.
-# ── 0.1.0-35: `syn downloads` — the ISO download count on the bar ──────────
-#
-# GitHub keeps a download counter on every release asset. This reads them and
-# leaves the answer where synui's bar can draw it (synui 620,
-# modules/IsoDownloads.qml) — a row beside the update badge showing how many
-# people have downloaded the ISO.
-#
-# ⛔ THERE IS NO SINGLE "DOWNLOAD COUNT", and getting that wrong is the whole
-# feature. The ISO is five gigabytes, GitHub refuses an asset over two, so
-# publish-release.sh splits it — and the parts do not agree: 0.3.1 sits at 6, 6,
-# 4. Somebody started three parts and kept two. So the report is a FLOOR (the
-# least-downloaded part of the set, the most people who could have assembled an
-# ISO) and a CEILING (the most-downloaded part, how many began). Summing the
-# assets — the obvious implementation — reports a three-part release three times
-# over, and the part count has been 2, 3, 4 and 5 across the releases to date, so
-# the number would also jump whenever THAT changed.
-#
-# ⛔ AND `.parts.sha256` IS NOT A PART. Every release also carries .sha256,
-# .b2sum, .asc and that one, which matches a naive *part* glob and is a 300-byte
-# file verifiers fetch far more often than the media — counting it pins the floor
-# to something unrelated. The match is anchored: `.iso`, or `.iso.part<digits>`
-# at the END of the name.
-#
-# ⛔ per_page=100 AND A PAGING LOOP. GitHub's default page is 30 and this
-# repository already has 28 releases: on the default, release 31 would push the
-# oldest off page one and the LIFETIME TOTAL WOULD DROP on the day a release was
-# published. A counter that goes backwards when the project ships, with nothing
-# saying why.
-#
-# ⚠ THE BAR NEVER FETCHES. Same arrangement as `syn-update ping` and weather.c:
-# the module is instantiated once per MONITOR inside the compositor's shell
-# process, so a request there is one per screen and a stalled connect is a
-# stalled bar. A systemd USER timer runs this and writes ~/.cache/syn/downloads;
-# the module watches that file. Renamed into place, because a FileView on a path
-# written in place sees it empty for a frame and the badge blinks to nothing on
-# every tick.
-#
-# ⚠ OFF BY DEFAULT, which is the difference from the update notifier's timer —
-# that one ships a timers.target.wants symlink to be on everywhere. An update
-# check is something every machine needs; counting our own downloads is one
-# person's curiosity, and it is not worth a background request to GitHub from
-# every installed SynapseOS. `syn downloads --watch 12h` is the opt-in, and the
-# interval lives in a drop-in under ~/.config (this package owns the unit and
-# every upgrade replaces it), which RESETS OnUnitActiveSec= before setting it
-# because systemd's list settings accumulate across drop-ins.
-#
-# ⛔ THE REASON FOR A FAILURE TRAVELLED OUT OF A SUBSHELL AND ARRIVED EMPTY.
-# `json=$(fetch_json)` runs in one, so the FAIL_REASON set on the way out died
-# with it and the state file got `reason=` — the bar then says "could not count
-# downloads" with nothing after it, which is the one thing the whole
-# write-the-refusal arrangement exists to prevent. Found by pulling the network
-# out from under it. A redirection into a file is not a subshell.
-#
-# ⚠ NO PRIVILEGE ANYWHERE IN IT, and that is asserted rather than assumed. This
-# runs from a timer, where there is no terminal, and a bare sudo there does not
-# fail — it opens a PAM conversation pam_faillock counts as a wrong password
-# against a user who never typed one, and greetd shares that stack (syn-update
-# 58). The way not to have the problem is to need nothing: a public HTTP endpoint
-# and one file under ~/.cache.
-#
-# ⛔ NO jq AND NO PYTHON in the parser. This package depends on bash and systemd;
-# synui's tree deliberately has no jq either. It is a token stream and an awk
-# state machine, and what makes that safe is the order GitHub writes plus a name
-# filter: `name` precedes `download_count` inside an asset, the `uploader` object
-# between them has a login and no name, and a name is CONSUMED by the counter
-# that uses it — so the release BODY, the one field a human writes, cannot lend a
-# name to a stray "download_count" further down. Nothing whose name fails the
-# .iso test is counted, so a misparse reports zero ISO assets, which the script
-# refuses to write, rather than a plausible wrong number.
-#
-# tests/downloads_test.sh is the guard: 25 checks against a fixture, no network
-# ever. RED-verified against four deliberate regressions — summing the parts,
-# matching *part* loosely, the command substitution above, and dropping
-# per_page — each of which it names.
-pkgrel=35
+pkgrel=34
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -164,9 +90,6 @@ optdepends=('nix: declarative user environment via `syn nix` (Home Manager)'
 # package() installs them under their real names.
 source=("syn.sh"
         "syn-nix-facts.sh"
-        "syn-downloads.sh"
-        "syn-downloads.service"
-        "syn-downloads.timer"
         "syn-resolve.sh"
         "syn-printer.sh"
         "syn-resolve.hook"
@@ -181,9 +104,6 @@ source=("syn.sh"
         "nix-render.nix"
         "nix-profile-example.nix")
 sha256sums=('SKIP'
-            'SKIP'
-            'SKIP'
-            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -212,25 +132,6 @@ package() {
     # transaction, which is not somewhere to have opinions about PATH.
     install -Dm755 "$srcdir/syn-resolve.sh" "$pkgdir/usr/lib/syn/syn-resolve"
     install -Dm755 "$srcdir/syn-printer.sh" "$pkgdir/usr/lib/syn/syn-printer"
-
-    # The ISO download counter. Not in /usr/bin for the same reason as the two
-    # above — `syn downloads` is the spelling, and the unit below execs this
-    # path directly rather than going through PATH.
-    install -Dm755 "$srcdir/syn-downloads.sh" "$pkgdir/usr/lib/syn/syn-downloads"
-
-    # The background check, and the timer that runs it. USER units: it writes
-    # into the user's cache and reads a public endpoint, so there is nothing for
-    # a system unit to do except run as root against somebody's ~/.cache.
-    #
-    # ⚠ AND NO timers.target.wants SYMLINK, unlike syn-update-ping.timer. That
-    # symlink is how a package enables a user unit for everybody, and this is
-    # deliberately not enabled: `syn downloads --watch on` is the opt-in. Every
-    # installed SynapseOS asking GitHub how our own ISO is doing, twice a day,
-    # unasked, is not a default worth having.
-    install -Dm644 "$srcdir/syn-downloads.service" \
-        "$pkgdir/usr/lib/systemd/user/syn-downloads.service"
-    install -Dm644 "$srcdir/syn-downloads.timer" \
-        "$pkgdir/usr/lib/systemd/user/syn-downloads.timer"
 
     # Same again, and this one is ONLY ever run by its hook — it takes no
     # arguments and rewrites a file in /etc, which is not a thing to leave

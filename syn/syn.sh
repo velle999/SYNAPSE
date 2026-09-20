@@ -31,8 +31,6 @@ Usage:
                           (off by default; status to ask)
   syn cal [cmd...]        Calendars: sync with no arguments, or pass through
                           (syn cal accounts, syn cal discover work)
-  syn downloads           How many people have downloaded the SynapseOS ISO
-                          (--cached, --watch <on|off|12h>)
   syn install             Install SynapseOS to disk
   syn update [check|apply]  Update SynapseOS itself from git
   syn help                This help
@@ -344,7 +342,6 @@ case "${1:-help}" in
     # to go through `syn` would break if PATH were ever not what it expects.
     resolve)        shift; exec /usr/lib/syn/syn-resolve "$@" ;;
     printer)        shift; exec /usr/lib/syn/syn-printer "$@" ;;
-    downloads)      shift; exec /usr/lib/syn/syn-downloads "$@" ;;
     # A window, like `syn ui` and `syn install` above it: a cloud stream has no
     # terminal form to degrade to, and the launcher is the whole CLI — its
     # flags (--browser, --profile, --list-browsers) pass straight through.

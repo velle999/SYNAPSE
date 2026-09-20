@@ -179,10 +179,17 @@ BarModule {
 
     // "18 min ago", for the Check row's right-hand side. Shares the tooltip's
     // arithmetic through one function rather than two copies of the same
-    // three-branch formatter — and that function is BarModule's now, because
-    // the ISO-downloads row asks the same question and the two have to answer
-    // it in the same words.
+    // three-branch formatter.
     readonly property string sinceChecked: root.ago(root.checkedAt)
+
+    function ago(when) {
+        if (!when || when <= 0) return ""
+        const mins = Math.floor((Date.now() / 1000 - when) / 60)
+        return mins < 1 ? I18n.tr("just now")
+             : mins < 60 ? I18n.trn("%1 min ago", "%1 min ago", mins).arg(mins)
+             : I18n.trn("%1h ago", "%1h ago", Math.floor(mins / 60))
+                   .arg(Math.floor(mins / 60))
+    }
 
     Process {
         id: updatesWindow

@@ -40,7 +40,7 @@ msgid "%1 held back"
 msgid_plural "%1 held back"
 msgstr[0] "%1 件保留中"
 
-#: WeatherState.qml:65 components/BarModule.qml:233
+#: WeatherState.qml:65 modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "%1 分前"
@@ -72,10 +72,6 @@ msgstr[0] "再ビルド %1 件"
 msgid "%1 until full"
 msgstr "満充電まで %1"
 
-#: modules/IsoDownloads.qml:98
-msgid "%1 — %2 complete, %3 started"
-msgstr "%1 — 完了 %2、開始 %3"
-
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1日%2時間"
@@ -88,7 +84,7 @@ msgstr "%1日%2時間  ·  %3 oz"
 msgid "%1h %2m"
 msgstr "%1時間%2分"
 
-#: WeatherState.qml:66 components/BarModule.qml:234
+#: WeatherState.qml:66 modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "%1 時間前"
@@ -160,10 +156,6 @@ msgstr "アクセサリ"
 msgid "Adjust"
 msgstr "調整"
 
-#: modules/IsoDownloads.qml:134
-msgid "All releases"
-msgstr "すべてのリリース"
-
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "コマンドバーからも答えます。"
@@ -188,7 +180,7 @@ msgstr "矢印キーで移動 · Enter で開く · Esc でガイドを閉じる
 msgid "Ask for a command; it answers with one you can run."
 msgstr "コマンドを尋ねると、そのまま実行できるものを返します。"
 
-#: BarConfig.qml:79
+#: BarConfig.qml:67
 msgid "Assistant"
 msgstr "アシスタント"
 
@@ -212,7 +204,7 @@ msgstr "オーディオ"
 msgid "Audio: %1"
 msgstr "オーディオ: %1"
 
-#: BarConfig.qml:67
+#: BarConfig.qml:60
 msgid "Auto-hide bar"
 msgstr "バーを自動的に隠す"
 
@@ -268,7 +260,7 @@ msgstr ""
 "CPU %1 %\n"
 "クリックでタスクマネージャー"
 
-#: BarConfig.qml:81
+#: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + メモリ"
 
@@ -293,7 +285,7 @@ msgstr ""
 msgid "Cat Mode"
 msgstr "ねこモード"
 
-#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
+#: modules/Updates.qml:161
 msgid "Check now"
 msgstr "今すぐ確認"
 
@@ -304,10 +296,6 @@ msgstr "確認中…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "クリックで Bluetooth パネル · 中クリックで無線を切り替え"
-
-#: modules/IsoDownloads.qml:103
-msgid "Click for the breakdown · right-click for more"
-msgstr "クリックで内訳を表示 · 右クリックでその他"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -333,7 +321,7 @@ msgstr "クリックで更新"
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "クリックで停止 (または Super+Shift+R)"
 
-#: BarConfig.qml:70
+#: BarConfig.qml:63
 msgid "Clock"
 msgstr "時計"
 
@@ -357,10 +345,6 @@ msgstr "コントロールパネル ▸ Desktop ▸ 配置に七つとも並ん�
 msgid "Could not check for updates\n"
 msgstr "更新を確認できませんでした\n"
 
-#: modules/IsoDownloads.qml:88
-msgid "Could not count downloads"
-msgstr "ダウンロード数を取得できませんでした"
-
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "レイアウトを切り替え"
@@ -377,7 +361,7 @@ msgstr "デスクトップ"
 msgid "Desktop Widgets"
 msgstr "デスクトップウィジェット"
 
-#: BarConfig.qml:68
+#: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "デスクトップ切り替え"
 
@@ -473,7 +457,7 @@ msgstr "ごきげん"
 msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr "Floating — 自動では置きません。ウィンドウは置いた場所にとどまります。"
 
-#: BarConfig.qml:80
+#: BarConfig.qml:68
 msgid "Focus timer"
 msgstr "集中タイマー"
 
@@ -528,10 +512,6 @@ msgstr "保留中"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "ウィンドウの並べ方"
-
-#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
-msgid "ISO downloads"
-msgstr "ISO ダウンロード数"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -593,7 +573,7 @@ msgstr "ミキサー"
 msgid "Make it yours"
 msgstr "自分好みに"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:62
 msgid "Media preview"
 msgstr "メディアのプレビュー"
 
@@ -627,7 +607,7 @@ msgstr "再生中"
 msgid "Network"
 msgstr "ネットワーク"
 
-#: BarConfig.qml:83
+#: BarConfig.qml:71
 msgid "Network + Bluetooth"
 msgstr "ネットワーク + Bluetooth"
 
@@ -746,10 +726,6 @@ msgstr "録画中"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "録画中 %1"
-
-#: modules/IsoDownloads.qml:138
-msgid "Releases page"
-msgstr "リリースページ"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -886,7 +862,7 @@ msgstr "システム状態"
 msgid "System Tools"
 msgstr "システムツール"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:64
 msgid "System tray"
 msgstr "システムトレイ"
 
@@ -986,7 +962,7 @@ msgstr "%1 をアンインストール"
 msgid "Update System"
 msgstr "システムを更新"
 
-#: BarConfig.qml:72
+#: BarConfig.qml:65
 msgid "Update notifier"
 msgstr "更新通知"
 
@@ -998,7 +974,7 @@ msgstr "更新"
 msgid "Version, hardware and what is installed."
 msgstr "バージョン、ハードウェア、インストール済みのもの。"
 
-#: BarConfig.qml:82
+#: BarConfig.qml:70
 msgid "Volume"
 msgstr "音量"
 
@@ -1014,7 +990,7 @@ msgstr "体重"
 msgid "Wallpaper"
 msgstr "壁紙"
 
-#: BarConfig.qml:78
+#: BarConfig.qml:66
 msgid "Weather"
 msgstr "天気"
 
@@ -1076,10 +1052,6 @@ msgstr "ソース"
 msgid "again to delete"
 msgstr "もう一度押すと削除"
 
-#: modules/IsoDownloads.qml:100
-msgid "all releases — %1 complete"
-msgstr "全リリース — 完了 %1"
-
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "たまご"
@@ -1092,7 +1064,7 @@ msgstr "新しいメモ"
 msgid "app launcher"
 msgstr "アプリランチャー"
 
-#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
+#: modules/Updates.qml:106
 msgid "checked %1"
 msgstr "確認 %1"
 
@@ -1144,7 +1116,7 @@ msgstr "満充電"
 msgid "ill"
 msgstr "病気"
 
-#: WeatherState.qml:64 components/BarModule.qml:232
+#: WeatherState.qml:64 modules/Updates.qml:188
 msgid "just now"
 msgstr "たった今"
 
@@ -1239,10 +1211,6 @@ msgstr "壁紙を選択"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "まだ前の処理中です"
-
-#: modules/IsoDownloads.qml:90
-msgid "syn downloads   to try now"
-msgstr "syn downloads   今すぐ試すには"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"

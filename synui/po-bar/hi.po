@@ -42,7 +42,7 @@ msgid_plural "%1 held back"
 msgstr[0] "%1 रोका गया"
 msgstr[1] "%1 रोके गए"
 
-#: WeatherState.qml:65 components/BarModule.qml:233
+#: WeatherState.qml:65 modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "%1 मिनट पहले"
@@ -78,10 +78,6 @@ msgstr[1] "%1 फिर से बनाने हैं"
 msgid "%1 until full"
 msgstr "पूरा होने में %1"
 
-#: modules/IsoDownloads.qml:98
-msgid "%1 — %2 complete, %3 started"
-msgstr "%1 — %2 पूर्ण, %3 आरंभ"
-
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1 दि %2 घं"
@@ -94,7 +90,7 @@ msgstr "%1 दि %2 घं  ·  %3 औंस"
 msgid "%1h %2m"
 msgstr "%1 घं %2 मि"
 
-#: WeatherState.qml:66 components/BarModule.qml:234
+#: WeatherState.qml:66 modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "%1 घंटे पहले"
@@ -165,10 +161,6 @@ msgstr "सहायक उपकरण"
 msgid "Adjust"
 msgstr "समायोजित करें"
 
-#: modules/IsoDownloads.qml:134
-msgid "All releases"
-msgstr "सभी रिलीज़"
-
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "कमांड बार से भी उत्तर देता है।"
@@ -193,7 +185,7 @@ msgstr "तीर कुंजियाँ चलाती हैं · Enter �
 msgid "Ask for a command; it answers with one you can run."
 msgstr "कोई कमांड माँगिए; उत्तर में वही मिलेगी जिसे आप चला सकते हैं।"
 
-#: BarConfig.qml:79
+#: BarConfig.qml:67
 msgid "Assistant"
 msgstr "सहायक"
 
@@ -217,7 +209,7 @@ msgstr "ऑडियो"
 msgid "Audio: %1"
 msgstr "ऑडियो: %1"
 
-#: BarConfig.qml:67
+#: BarConfig.qml:60
 msgid "Auto-hide bar"
 msgstr "पट्टी अपने आप छिपाएँ"
 
@@ -273,7 +265,7 @@ msgstr ""
 "CPU %1 %\n"
 "कार्य प्रबंधक के लिए क्लिक करें"
 
-#: BarConfig.qml:81
+#: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + मेमोरी"
 
@@ -297,7 +289,7 @@ msgstr "Cascade — एक-दूसरे पर चढ़े पत्ते, 
 msgid "Cat Mode"
 msgstr "बिल्ली मोड"
 
-#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
+#: modules/Updates.qml:161
 msgid "Check now"
 msgstr "अभी जाँचें"
 
@@ -308,10 +300,6 @@ msgstr "जाँच हो रही है…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "ब्लूटूथ पैनल के लिए क्लिक करें · मध्य-क्लिक रेडियो बदलता है"
-
-#: modules/IsoDownloads.qml:103
-msgid "Click for the breakdown · right-click for more"
-msgstr "विवरण के लिए क्लिक करें · और के लिए दायाँ-क्लिक"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -338,7 +326,7 @@ msgstr "ताज़ा करने के लिए क्लिक करे�
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "रोकने के लिए क्लिक करें (या Super+Shift+R)"
 
-#: BarConfig.qml:70
+#: BarConfig.qml:63
 msgid "Clock"
 msgstr "घड़ी"
 
@@ -362,10 +350,6 @@ msgstr "नियंत्रण कक्ष ▸ Desktop ▸ विन्या
 msgid "Could not check for updates\n"
 msgstr "अद्यतन की जाँच नहीं हो सकी\n"
 
-#: modules/IsoDownloads.qml:88
-msgid "Could not count downloads"
-msgstr "डाउनलोड गिने नहीं जा सके"
-
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "विन्यास बदलें"
@@ -382,7 +366,7 @@ msgstr "डेस्कटॉप"
 msgid "Desktop Widgets"
 msgstr "डेस्कटॉप विजेट"
 
-#: BarConfig.qml:68
+#: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "डेस्कटॉप बदलने वाला"
 
@@ -478,7 +462,7 @@ msgstr "मस्ती"
 msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr "Floating — कुछ रखा नहीं जाता; खिड़कियाँ वहीं रहती हैं जहाँ आप रखें।"
 
-#: BarConfig.qml:80
+#: BarConfig.qml:68
 msgid "Focus timer"
 msgstr "एकाग्रता टाइमर"
 
@@ -533,10 +517,6 @@ msgstr "रोके गए"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "खिड़कियाँ किस तरह सजती हैं"
-
-#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
-msgid "ISO downloads"
-msgstr "ISO डाउनलोड"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -598,7 +578,7 @@ msgstr "मिक्सर"
 msgid "Make it yours"
 msgstr "इसे अपना बनाइए"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:62
 msgid "Media preview"
 msgstr "मीडिया झलक"
 
@@ -631,7 +611,7 @@ msgstr "अभी चल रहा है"
 msgid "Network"
 msgstr "नेटवर्क"
 
-#: BarConfig.qml:83
+#: BarConfig.qml:71
 msgid "Network + Bluetooth"
 msgstr "नेटवर्क + ब्लूटूथ"
 
@@ -750,10 +730,6 @@ msgstr "रिकॉर्ड हो रहा है"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "रिकॉर्ड हो रहा है %1"
-
-#: modules/IsoDownloads.qml:138
-msgid "Releases page"
-msgstr "रिलीज़ पृष्ठ"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -886,7 +862,7 @@ msgstr "सिस्टम स्थिति"
 msgid "System Tools"
 msgstr "सिस्टम उपकरण"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:64
 msgid "System tray"
 msgstr "सिस्टम ट्रे"
 
@@ -986,7 +962,7 @@ msgstr "%1 अनइंस्टॉल करें"
 msgid "Update System"
 msgstr "सिस्टम अद्यतन करें"
 
-#: BarConfig.qml:72
+#: BarConfig.qml:65
 msgid "Update notifier"
 msgstr "अद्यतन सूचक"
 
@@ -998,7 +974,7 @@ msgstr "अद्यतन"
 msgid "Version, hardware and what is installed."
 msgstr "संस्करण, हार्डवेयर और क्या स्थापित है।"
 
-#: BarConfig.qml:82
+#: BarConfig.qml:70
 msgid "Volume"
 msgstr "आवाज़"
 
@@ -1014,7 +990,7 @@ msgstr "वज़न"
 msgid "Wallpaper"
 msgstr "वॉलपेपर"
 
-#: BarConfig.qml:78
+#: BarConfig.qml:66
 msgid "Weather"
 msgstr "मौसम"
 
@@ -1076,10 +1052,6 @@ msgstr "एक स्रोत"
 msgid "again to delete"
 msgstr "मिटाने के लिए फिर से"
 
-#: modules/IsoDownloads.qml:100
-msgid "all releases — %1 complete"
-msgstr "सभी रिलीज़ — %1 पूर्ण"
-
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "एक अंडा"
@@ -1092,7 +1064,7 @@ msgstr "एक और नोट"
 msgid "app launcher"
 msgstr "ऐप लॉन्चर"
 
-#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
+#: modules/Updates.qml:106
 msgid "checked %1"
 msgstr "जाँचा %1"
 
@@ -1144,7 +1116,7 @@ msgstr "पूरा"
 msgid "ill"
 msgstr "बीमार"
 
-#: WeatherState.qml:64 components/BarModule.qml:232
+#: WeatherState.qml:64 modules/Updates.qml:188
 msgid "just now"
 msgstr "अभी-अभी"
 
@@ -1239,10 +1211,6 @@ msgstr "वॉलपेपर चुनें"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "अब भी पिछले पर काम चल रहा है"
-
-#: modules/IsoDownloads.qml:90
-msgid "syn downloads   to try now"
-msgstr "syn downloads   अभी आज़माने के लिए"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"

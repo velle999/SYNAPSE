@@ -40,7 +40,7 @@ msgid "%1 held back"
 msgid_plural "%1 held back"
 msgstr[0] "%1개 보류됨"
 
-#: WeatherState.qml:65 components/BarModule.qml:233
+#: WeatherState.qml:65 modules/Updates.qml:189
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "%1분 전"
@@ -72,10 +72,6 @@ msgstr[0] "%1개 다시 빌드"
 msgid "%1 until full"
 msgstr "완충까지 %1"
 
-#: modules/IsoDownloads.qml:98
-msgid "%1 — %2 complete, %3 started"
-msgstr "%1 — 완료 %2, 시작 %3"
-
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1일 %2시간"
@@ -88,7 +84,7 @@ msgstr "%1일 %2시간  ·  %3 oz"
 msgid "%1h %2m"
 msgstr "%1시간 %2분"
 
-#: WeatherState.qml:66 components/BarModule.qml:234
+#: WeatherState.qml:66 modules/Updates.qml:190
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "%1시간 전"
@@ -160,10 +156,6 @@ msgstr "보조 도구"
 msgid "Adjust"
 msgstr "조정"
 
-#: modules/IsoDownloads.qml:134
-msgid "All releases"
-msgstr "모든 릴리스"
-
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "명령 막대에서도 답합니다."
@@ -188,7 +180,7 @@ msgstr "화살표로 이동 · Enter로 열기 · Esc로 안내 닫기"
 msgid "Ask for a command; it answers with one you can run."
 msgstr "명령을 물어보면 바로 실행할 수 있는 것으로 답합니다."
 
-#: BarConfig.qml:79
+#: BarConfig.qml:67
 msgid "Assistant"
 msgstr "어시스턴트"
 
@@ -212,7 +204,7 @@ msgstr "오디오"
 msgid "Audio: %1"
 msgstr "오디오: %1"
 
-#: BarConfig.qml:67
+#: BarConfig.qml:60
 msgid "Auto-hide bar"
 msgstr "막대 자동 숨기기"
 
@@ -268,7 +260,7 @@ msgstr ""
 "CPU %1 %\n"
 "클릭하면 작업 관리자"
 
-#: BarConfig.qml:81
+#: BarConfig.qml:69
 msgid "CPU + memory"
 msgstr "CPU + 메모리"
 
@@ -293,7 +285,7 @@ msgstr ""
 msgid "Cat Mode"
 msgstr "고양이 모드"
 
-#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
+#: modules/Updates.qml:161
 msgid "Check now"
 msgstr "지금 확인"
 
@@ -304,10 +296,6 @@ msgstr "확인 중…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "클릭하면 블루투스 패널 · 가운데 클릭은 무선을 전환합니다"
-
-#: modules/IsoDownloads.qml:103
-msgid "Click for the breakdown · right-click for more"
-msgstr "클릭하면 세부 내역 · 오른쪽 클릭하면 더 보기"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -333,7 +321,7 @@ msgstr "클릭하여 새로 고침"
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "클릭하여 중지 (또는 Super+Shift+R)"
 
-#: BarConfig.qml:70
+#: BarConfig.qml:63
 msgid "Clock"
 msgstr "시계"
 
@@ -357,10 +345,6 @@ msgstr "제어판 ▸ Desktop ▸ 배치에 일곱 가지가 모두 있습니다
 msgid "Could not check for updates\n"
 msgstr "업데이트를 확인할 수 없습니다\n"
 
-#: modules/IsoDownloads.qml:88
-msgid "Could not count downloads"
-msgstr "다운로드 수를 셀 수 없습니다"
-
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "배치 바꾸기"
@@ -377,7 +361,7 @@ msgstr "바탕화면"
 msgid "Desktop Widgets"
 msgstr "바탕화면 위젯"
 
-#: BarConfig.qml:68
+#: BarConfig.qml:61
 msgid "Desktop switcher"
 msgstr "바탕화면 전환기"
 
@@ -473,7 +457,7 @@ msgstr "즐거움"
 msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr "Floating — 대신 놓아 주지 않습니다. 창은 둔 자리에 그대로 있습니다."
 
-#: BarConfig.qml:80
+#: BarConfig.qml:68
 msgid "Focus timer"
 msgstr "집중 타이머"
 
@@ -528,10 +512,6 @@ msgstr "보류됨"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "창이 놓이는 방식"
-
-#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
-msgid "ISO downloads"
-msgstr "ISO 다운로드 수"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -593,7 +573,7 @@ msgstr "믹서"
 msgid "Make it yours"
 msgstr "나만의 것으로"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:62
 msgid "Media preview"
 msgstr "미디어 미리보기"
 
@@ -626,7 +606,7 @@ msgstr "재생 중"
 msgid "Network"
 msgstr "네트워크"
 
-#: BarConfig.qml:83
+#: BarConfig.qml:71
 msgid "Network + Bluetooth"
 msgstr "네트워크 + 블루투스"
 
@@ -745,10 +725,6 @@ msgstr "녹화 중"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "녹화 중 %1"
-
-#: modules/IsoDownloads.qml:138
-msgid "Releases page"
-msgstr "릴리스 페이지"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -881,7 +857,7 @@ msgstr "시스템 상태"
 msgid "System Tools"
 msgstr "시스템 도구"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:64
 msgid "System tray"
 msgstr "시스템 트레이"
 
@@ -981,7 +957,7 @@ msgstr "%1 제거"
 msgid "Update System"
 msgstr "시스템 업데이트"
 
-#: BarConfig.qml:72
+#: BarConfig.qml:65
 msgid "Update notifier"
 msgstr "업데이트 알림"
 
@@ -993,7 +969,7 @@ msgstr "업데이트"
 msgid "Version, hardware and what is installed."
 msgstr "버전, 하드웨어, 설치된 것들."
 
-#: BarConfig.qml:82
+#: BarConfig.qml:70
 msgid "Volume"
 msgstr "음량"
 
@@ -1009,7 +985,7 @@ msgstr "몸무게"
 msgid "Wallpaper"
 msgstr "배경화면"
 
-#: BarConfig.qml:78
+#: BarConfig.qml:66
 msgid "Weather"
 msgstr "날씨"
 
@@ -1071,10 +1047,6 @@ msgstr "소스"
 msgid "again to delete"
 msgstr "한 번 더 누르면 삭제"
 
-#: modules/IsoDownloads.qml:100
-msgid "all releases — %1 complete"
-msgstr "모든 릴리스 — 완료 %1"
-
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "알"
@@ -1087,7 +1059,7 @@ msgstr "메모 하나 더"
 msgid "app launcher"
 msgstr "앱 실행기"
 
-#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
+#: modules/Updates.qml:106
 msgid "checked %1"
 msgstr "확인 %1"
 
@@ -1139,7 +1111,7 @@ msgstr "완충"
 msgid "ill"
 msgstr "아픔"
 
-#: WeatherState.qml:64 components/BarModule.qml:232
+#: WeatherState.qml:64 modules/Updates.qml:188
 msgid "just now"
 msgstr "방금"
 
@@ -1234,10 +1206,6 @@ msgstr "배경 선택"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "아직 이전 작업 중입니다"
-
-#: modules/IsoDownloads.qml:90
-msgid "syn downloads   to try now"
-msgstr "syn downloads   지금 시도하려면"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"

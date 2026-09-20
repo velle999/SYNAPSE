@@ -13,7 +13,6 @@ Ui/ConfirmDialog.qml
 Ui/SearchableDropdown.qml
 WeatherState.qml
 components/BarMenu.qml
-components/BarModule.qml
 components/Mixer.qml
 components/MixerEqRow.qml
 modules/Assistant.qml
@@ -21,7 +20,6 @@ modules/Battery.qml
 modules/Bluetooth.qml
 modules/Clock.qml
 modules/Cpu.qml
-modules/IsoDownloads.qml
 modules/Media.qml
 modules/Memory.qml
 modules/Network.qml
