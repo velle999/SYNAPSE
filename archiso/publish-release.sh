@@ -51,8 +51,20 @@ out="$(cd "$(dirname "$0")/out" && pwd)"
 notesdir="$(cd "$(dirname "$0")" && pwd)/release-notes"
 iso="SynapseOS-${ver}-x86_64.iso"
 
+# Where the WHOLE image lives. GitHub's 2 GiB asset cap is the only reason the
+# split below exists, so the release page leads with a mirror that has no such
+# cap and keeps the parts as a fallback. publish-mirrors.sh is what puts the
+# image there; these two must agree, which is why both read the same env vars.
+dl_base="${R2_PUBLIC_BASE:-https://dl.soslinux.org}"
+ia_item="${IA_ITEM:-synapseos-${ver}}"
+
 cd "$out"
 [[ -f $iso ]] || { echo "missing $out/$iso" >&2; exit 1; }
+
+# Printed in the notes so the size is a fact from the file rather than a number
+# someone remembered to update. 1.0.0's was described as "about 4.6 GB" in three
+# places that were each edited by hand.
+iso_gib="$(awk "BEGIN{printf \"%.1f\", $(stat -c '%s' "$iso")/1073741824}")"
 
 echo "verifying $iso ..."
 sha256sum -c "$iso.sha256"
@@ -128,7 +140,31 @@ if (( have_own_download == 0 )); then
 cat >> "$notes" <<EOF
 ## Download
 
-The ISO is split into parts to fit GitHub's 2 GiB release-asset limit.
+### ⬇ [SynapseOS ${ver} — the whole ISO, one file](${dl_base}/${iso})
+
+${iso_gib} GiB. Resumable, and nothing to reassemble.
+
+Mirror: [Internet Archive](https://archive.org/download/${ia_item}/${iso}) —
+which also carries a **torrent** for the same image.
+
+Then check what you got, in the folder you downloaded to:
+
+\`\`\`sh
+curl -O ${dl_base}/${iso}.sha256
+sha256sum -c ${iso}.sha256
+\`\`\`
+
+On macOS the checksum tool is spelled differently — \`shasum -a 256 -c ${iso}.sha256\`.
+On Windows, \`certutil -hashfile ${iso} SHA256\` prints the hash to compare
+against the contents of that file.
+
+<details>
+<summary><b>Or download it in parts, from this release page</b></summary>
+
+GitHub caps a release asset at 2 GiB, so the copy attached to this page is split
+into \`.part*\` files. The mirrors above carry the image whole and are the
+easier road; this one needs no third-party host.
+
 Download **all** \`.part*\` files into one folder, then join them back into a
 single ISO and check it. Joining is a plain byte-for-byte concatenation, so any
 tool that does not "help" works; the checksum is what tells you it worked.
@@ -141,8 +177,6 @@ sha256sum -c ${iso}.sha256
 \`\`\`
 
 (Optionally verify each part before reassembly: \`sha256sum -c ${iso}.parts.sha256\`)
-
-On macOS the checksum tool is spelled differently — \`shasum -a 256 -c ${iso}.sha256\`.
 
 ### Windows
 
@@ -179,6 +213,8 @@ Get-ChildItem '${iso}.part*' | Sort-Object Name | ForEach-Object {
 }
 \$out.Close()
 \`\`\`
+
+</details>
 
 ## Write to USB
 

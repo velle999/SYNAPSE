@@ -133,6 +133,71 @@ Verified against a throwaway key before shipping: a good signature passes, a
 **tampered ISO is refused**, and an unknown key id is an error rather than a
 silent fallback to some other key.
 
+## Mirrors
+
+GitHub caps a release asset at 2 GiB, which is the only reason
+`publish-release.sh` splits the image at all. The download the site points at is
+the whole ISO in one file, served from two hosts that have no such cap:
+
+| Host | URL | Why it is there |
+|------|-----|-----------------|
+| Cloudflare R2 | `https://dl.soslinux.org/<iso>` | Primary. Egress is not billed, so a 4.6 GB image can be handed out without a bandwidth budget. |
+| Internet Archive | `https://archive.org/download/synapseos-<ver>/<iso>` | Mirror, and it builds a **torrent** of the same image for free. |
+
+Both are filled by one command, after `publish-release.sh`:
+
+```bash
+./archiso/publish-mirrors.sh <ver>
+```
+
+It verifies the local checksum and signature first, uploads the ISO plus its
+`.sha256`, `.b2sum` and `.asc` to each host, and then reads back from the public
+URL to confirm what is actually served. Already-uploaded files of the right size
+are skipped, so re-running after an interrupted transfer resumes it.
+
+### Setting up rclone for R2
+
+⛔ **The account id and the S3 keys never go in this repo.** R2's endpoint URL
+contains the account id, and the access keys are secrets; both belong in
+`~/.config/rclone/rclone.conf`, which is outside the tree. The script names a
+*remote*, and the remote knows where it points — which is also what makes
+`R2_REMOTE` enough to publish to a different account without editing anything.
+
+Create an **R2 API token** (Cloudflare dashboard ▸ R2 ▸ Manage API tokens) with
+Object Read & Write on the bucket, then:
+
+```bash
+sudo pacman -S rclone
+rclone config
+#   name>     r2
+#   storage>  s3
+#   provider> Cloudflare
+#   access_key_id / secret_access_key> from the R2 API token
+#   endpoint> https://<account-id>.r2.cloudflarestorage.com
+#   region>   auto
+```
+
+The bucket defaults to `synapseos-dl` (`R2_BUCKET` overrides it) and needs a
+**custom domain** of `dl.soslinux.org` connected to it, not the `r2.dev` URL —
+Cloudflare rate-limits `r2.dev` and documents it as development-only. Check the
+remote before a release:
+
+```bash
+rclone lsd r2:                 # the bucket should be listed
+```
+
+### Setting up the Internet Archive client
+
+```bash
+pipx install internetarchive
+ia configure                   # archive.org login, writes ~/.config/ia.ini
+```
+
+⚠ **An Archive item is effectively permanent.** Uploading into an identifier is
+easy; taking it back is a support request. So the identifier is per release —
+`synapseos-<ver>`, never reused — and a bad 1.0.0 upload cannot contaminate
+1.0.1.
+
 ## Write to USB
 
 ```bash
