@@ -455,7 +455,7 @@ pkgver=0.1.0
 # up to the first `)` — including one inside a comment — and chibi's list has
 # "(no Ollama needed)" on its synapd line, so every name after it was invisible
 # to it. Comments are stripped first now.
-pkgrel=123
+pkgrel=124
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

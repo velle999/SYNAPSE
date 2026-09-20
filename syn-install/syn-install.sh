@@ -4997,6 +4997,30 @@ arch-chroot /mnt install -d -o "$NEW_USER" -g "$NEW_USER" /var/lib/synapse-src \
 
 # ── Enable services ──────────────────────────────────────
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
+# ...but NOT NetworkManager-wait-online. The line above enables it whether or
+# not it is named: NetworkManager.service's own [Install] carries
+# `Also=NetworkManager-wait-online.service`, so `systemctl enable NetworkManager`
+# drags it in, and it lands in network-online.target.wants.
+#
+# What it costs: the unit runs `nm-online -s`, and -s waits for NetworkManager
+# *startup* to finish — every device settled, not merely one connection usable.
+# On wifi that is association plus DHCP, and an ethernet port with no cable has
+# to time out into `unavailable` first. Measured on a wifi install: 7.6s of a
+# 13.2s userspace, with graphical.target sitting behind all of it, because
+# smb/nmb/docker/clamav-freshclam each declare Wants=network-online.target and
+# any one of them pulls the target into the boot transaction.
+#
+# Why dropping it is safe: none of those services actually needs a configured
+# network at start. Samba binds interfaces as they appear, docker brings its own
+# bridge up, freshclam retries on a timer. network-online.target is for daemons
+# that genuinely cannot cope with a network arriving late, which on a desktop is
+# none of them. Disabled, the target has no job left and completes immediately.
+#
+# Reversible in one line for anyone who does need a guaranteed-up network at
+# boot (an NFS root, a machine that mounts shares from fstab at boot):
+#   sudo systemctl enable NetworkManager-wait-online.service
+arch-chroot /mnt systemctl disable NetworkManager-wait-online.service \
+    2>/dev/null || true
 # Bluetooth: bluez ships the unit but enables nothing. Without this the radio
 # stays down and synui's panel (Super+B) correctly reports no adapter.
 # Skipped entirely when step 4 declined it — the unit is not even installed.
@@ -5796,10 +5820,23 @@ if [ "$ENCRYPT" = "yes" ]; then
     fi
 fi
 
+# Menu timeout. A single-OS install has nothing to choose between, so the five
+# seconds every bootloader defaults to are five seconds of staring at one entry.
+# One second still draws the menu and a keypress still stops the countdown, so
+# the recovery and snapshot entries stay reachable.
+#
+# ALONGSIDE keeps 5s. That menu is the only way to reach the other OS, and a
+# dual-booter who has to hit the key inside one second will miss it.
+if [ "$INSTALL_MODE" = "alongside" ]; then
+    BOOT_TIMEOUT=5
+else
+    BOOT_TIMEOUT=1
+fi
+
 if [ "$BOOTLOADER" = "grub" ]; then
     cat > /mnt/etc/default/grub << EOF
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
+GRUB_TIMEOUT=$BOOT_TIMEOUT
 GRUB_DISTRIBUTOR="SynapseOS"
 GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
 GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
@@ -5952,7 +5989,7 @@ elif [ "$BOOTLOADER" = "systemd-boot" ]; then
     mkdir -p /mnt/boot/loader/entries
     cat > /mnt/boot/loader/loader.conf << EOF
 default synapseos.conf
-timeout 5
+timeout $BOOT_TIMEOUT
 console-mode keep
 editor no
 EOF
@@ -6079,7 +6116,7 @@ else
     # It needs a branch it can append its own "//Snapshots" subtree to. This is
     # the shape of upstream's own documented example.
     cat > /mnt/boot/limine.conf << EOF
-timeout: 5
+timeout: $BOOT_TIMEOUT
 
 /+SynapseOS
 comment: machine-id=$(cat /mnt/etc/machine-id 2>/dev/null)
