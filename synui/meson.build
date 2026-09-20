@@ -385,9 +385,10 @@ executable('synui-lock-fprint',
   install : true)
 
 # synui-idle-inhibit: standalone helper that holds a real Wayland idle inhibitor
-# on demand, driven by whatever writes '1'/'0' to its stdin. Nothing ships a
-# feeder — the audio watcher that used to drive it is gone (see power.c's
-# header). Installed under libdir/synui
+# on demand, driven by whatever writes '1'/'0' to its stdin. ⛔ NOT dead code —
+# syn-remote drives it for VNC viewers and Sunshine streams. (The audio watcher
+# that also used to drive it is gone; see power.c's header.)
+# Installed under libdir/synui
 # alongside synui-idle-wrapper.
 executable('synui-idle-inhibit',
   sources : [

@@ -3700,7 +3700,7 @@ pkgver=0.1.0
 #   dispcfg_reclaim_windows() now, which is also the only place the sweep can
 #   go: the boxes are measured against an origin a re-attached output does not
 #   have until rechain has placed it.
-pkgrel=618
+pkgrel=619
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

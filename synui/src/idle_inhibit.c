@@ -9,13 +9,18 @@
  * This process reads a control stream on stdin: a byte '1' creates the inhibitor,
  * '0' destroys it. EOF or a Wayland disconnect exits.
  *
- * ⛔ NOTHING FEEDS THIS BY DEFAULT ANY MORE. It used to be driven by a
- * `synui-media-inhibit` service that held an inhibitor whenever PipeWire showed
- * a running audio stream; that policy was wrong and is gone — see the header of
- * power.c for the four all-night no-sleep bugs it caused. Audio playing does not
- * keep the screen awake on this desktop. The helper is kept because holding an
- * inhibitor from a script is a reasonable thing to want (`printf 1` to its stdin
- * for as long as you need the screen up), not because anything ships a feeder.
+ * ⛔ DO NOT DELETE THIS AS DEAD CODE — syn-remote drives it, from two places:
+ * a coprocess started by `syn-remote run` and fed '1'/'0' as VNC viewers come
+ * and go, and inhibit_hold()/inhibit_release() around a Sunshine stream. A
+ * blanked output cannot be captured (grim returns "failed to copy output"), so
+ * a remote viewer on an idle desktop sees nothing at all without this. That is
+ * a person watching, which is what an idle inhibitor is for.
+ *
+ * ⛔ WHAT IS GONE is the OTHER feeder: a `synui-media-inhibit` service that held
+ * an inhibitor whenever PipeWire showed a running audio stream. That policy was
+ * wrong — see power.c's header for the four all-night no-sleep bugs it cost.
+ * Audio playing does not keep the screen awake on this desktop; a remote viewer
+ * does.
  */
 #include <poll.h>
 #include <stdio.h>
