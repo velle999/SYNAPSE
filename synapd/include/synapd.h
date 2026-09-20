@@ -196,6 +196,12 @@ typedef struct {
      */
     unsigned    offload_ram_floor_mib;  /* release below this much MemAvailable */
     unsigned    offload_psi_limit_pct;  /* `some avg10` above this is a shortage */
+    /* At or above this, somebody else is working the card and we do not start a
+     * reload into it. 0 turns the rule off. See gpuload.h. */
+    unsigned    offload_gpu_busy_pct;
+    /* The smallest move worth a destroy+reload, in MiB. 0 turns the guard off
+     * and restores the old behaviour of re-fitting for a single layer. */
+    unsigned    offload_refit_min_mib;
     unsigned    offload_dwell_s;   /* minimum seconds between two moves */
     unsigned    offload_poll_s;    /* how often to look */
 } synapd_config_t;

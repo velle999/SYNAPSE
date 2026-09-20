@@ -120,7 +120,7 @@ pkgver=0.1.0
 #   ⚠ A run overlapping another client's request is DISCARDED, not averaged in:
 #     STATUS reports the last request the daemon answered, whoever asked it, so
 #     the tool checks requests= moved by exactly one.
-pkgrel=55
+pkgrel=56
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

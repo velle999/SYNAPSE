@@ -424,6 +424,99 @@ int main(void) {
     check("a release waits out the dwell like everything else",
           (out.act == SYN_PRESSURE_HOLD));
 
+    /* ── What a move COSTS ─────────────────────────────────────────────
+     *
+     * The 2026-09-20 case, in numbers: a shallow dip under the floor asked for
+     * a single layer, and that single layer bought a full destroy+reload —
+     * 2m20s of saturated card. base() is a 4400 MiB model over 40 layers, so a
+     * layer is 110 MiB; a 100 MiB deficit asks for exactly one.
+     */
+    in = base();
+    in.vram_free      = 950;          /* 74 MiB under a 1024 floor: one layer */
+    in.refit_min_mib  = 512;
+    syn_pressure_decide(&in, &out);
+    check("a one-layer shed is refused when a reload costs more than it gains",
+          (out.act == SYN_PRESSURE_HOLD && out.target_layers == 40));
+
+    /* ⚠ And the guard is OFF by default, so every caller that does not set it
+     * keeps the old behaviour exactly. This is the same input with the one
+     * field cleared. */
+    in.refit_min_mib = 0;
+    syn_pressure_decide(&in, &out);
+    check("...and that same shed still happens with the guard off",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers == 39));
+
+    /* A real shortage clears the bar on its own — which is why refusing above
+     * cannot deadlock. 2000 MiB under the floor is 19 layers, far past 512 MiB
+     * of movement. */
+    in = base();
+    in.vram_free     = 100;
+    in.refit_min_mib = 512;
+    syn_pressure_decide(&in, &out);
+    check("a deep shortage still sheds — the guard cannot wedge the policy",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers < 40));
+
+    /* ⛔ The emergency path is never priced. Going entirely to RAM hands back
+     * the whole allocation, so it is exempt however few layers are left. */
+    in = base();
+    in.layers_resident = 1;
+    in.vram_free       = 900;
+    in.refit_min_mib   = 100000;      /* absurd, to prove the exemption */
+    syn_pressure_decide(&in, &out);
+    check("a move to zero is never blocked by the cost guard",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers == 0));
+
+    /* ── Not reloading into a busy card ────────────────────────────────── */
+    /*
+     * Restoring is the one move that is never urgent: we are already above the
+     * floor by the restore margin. Starting the most GPU-expensive thing the
+     * daemon does while a game has the card is what turned the remedy into the
+     * symptom.
+     */
+    syn_pressure_in_t r;
+    r = base();
+    r.layers_resident = 10;           /* room to take a lot back */
+    r.vram_free       = 6000;         /* well past floor + margin + reserve */
+    syn_pressure_decide(&r, &out);
+    check("a quiet card lets the model take its layers back",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers > 10));
+
+    r.gpu_busy_available = 1;
+    r.gpu_busy_limit_pct = 80;
+    r.gpu_busy_pct       = 95;        /* somebody is working it */
+    syn_pressure_decide(&r, &out);
+    check("a busy card defers the restore rather than reloading into it",
+          (out.act == SYN_PRESSURE_HOLD && out.target_layers == 10));
+
+    /*
+     * ⛔ AND IT IS OFTEN US. A generation drives the card exactly as hard, so
+     * without the `busy` guard synapd would read its own work as contention
+     * and never take its layers back at all.
+     */
+    r.busy = 1;
+    syn_pressure_decide(&r, &out);
+    check("...but not when that load is our own generation",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers > 10));
+
+    /* An unreadable card must not read as a busy one — or as an idle one. */
+    r.busy               = 0;
+    r.gpu_busy_available = 0;
+    r.gpu_busy_pct       = 0;
+    syn_pressure_decide(&r, &out);
+    check("an unmeasured card does not block the restore",
+          (out.act == SYN_PRESSURE_REFIT && out.target_layers > 10));
+
+    /* ⛔ A BUSY CARD IS NOT A REASON TO SHED. There is nothing to relieve: an
+     * idle synapd runs no kernels, it only holds VRAM. A card at 99% with
+     * plenty of VRAM free must leave the layer count alone. */
+    r = base();
+    r.gpu_busy_available = 1;
+    r.gpu_busy_limit_pct = 80;
+    r.gpu_busy_pct       = 99;
+    syn_pressure_decide(&r, &out);
+    check("a busy card with free VRAM sheds nothing — there is nothing to give",
+          (out.act == SYN_PRESSURE_HOLD && out.target_layers == 40));
+
     printf("\n%s\n", failures ? "FAILURES" : "all pressure tests passed");
     return failures ? 1 : 0;
 }

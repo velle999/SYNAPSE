@@ -115,6 +115,47 @@ typedef struct {
      */
     int      busy;
 
+    /*
+     * ── GPU COMPUTE, which is not VRAM and is not the CPU ───────────────
+     *
+     * ⛔ A BUSY CARD IS NOT A REASON TO SHED. An idle synapd runs no kernels;
+     * it only holds VRAM. So there is no layer count that relieves a GPU
+     * somebody else is pinning — shedding would spend RAM and cores to give
+     * back capacity nobody was short of. What a busy card IS, is a reason not
+     * to start a RELOAD: destroy+reload is the most GPU-expensive thing this
+     * daemon does, and doing it into contention is how the remedy becomes the
+     * symptom. That is the whole use of this input; see the restore branch.
+     *
+     * ⚠ AND IT IS OFTEN US — a generation drives the card as hard as a game,
+     * so `busy` above gates this exactly as it gates CPU pressure.
+     *
+     * ⚠ ZERO in gpu_busy_available means not measured, and no GPU rule fires.
+     */
+    unsigned gpu_busy_pct;
+    unsigned gpu_busy_limit_pct;  /* at or above this, somebody wants the card */
+    int      gpu_busy_available;
+
+    /*
+     * ── What a move COSTS ───────────────────────────────────────────────
+     *
+     * ⛔ THE POLICY USED TO PRICE ONLY THE BENEFIT. Every REFIT is a full
+     * destroy+reload — tens of seconds to minutes for a multi-GB model, with
+     * the card saturated throughout and the KV cache thrown away — and that
+     * price is the same whether the move is one layer or thirty. So a deficit
+     * of a single layer bought a reload as expensive as shedding half the
+     * model. Measured 2026-09-20: 40 layers → 39, about 300 MiB recovered, for
+     * 2m20s of pinned GPU and a desktop that could barely move the mouse.
+     *
+     * A REFIT is therefore allowed only when it moves at least this much. 0
+     * disables the guard, which is what every existing caller and test that
+     * does not set it gets.
+     *
+     * ⚠ NOT APPLIED TO A MOVE TO ZERO. Going entirely to RAM is the one move
+     * whose benefit is not proportional to the layers it shifts — it hands back
+     * the whole allocation — and it is the emergency path. It is never blocked.
+     */
+    size_t   refit_min_mib;
+
     /* Already released BY THIS POLICY (not by a client's SLEEP — that one is
      * somebody else's decision and the watcher does not second-guess it). */
     int      released;

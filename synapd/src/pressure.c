@@ -17,6 +17,31 @@ static size_t div_up(size_t a, size_t b) {
     return b ? (a + b - 1) / b : 0;
 }
 
+/*
+ * Is this move worth what it costs?
+ *
+ * ⛔ EVERY REFIT IS A DESTROY+RELOAD, and that price does not scale with the
+ * size of the move: shifting one layer costs the same full reload — the card
+ * saturated for tens of seconds to minutes, the KV cache gone — as shifting
+ * thirty. The policy priced only the benefit, so a one-layer deficit bought the
+ * whole bill. See refit_min_mib in pressure.h for the day that cost 2m20s of
+ * unusable desktop to recover about 300 MiB.
+ *
+ * ⚠ A move to ZERO is never blocked: handing the whole allocation back is the
+ * emergency path, and its benefit is not the count of layers it shifts.
+ */
+static int refit_worth_it(const syn_pressure_in_t *in, int target,
+                          size_t per_layer)
+{
+    if (target <= 0)             return 1;
+    if (in->refit_min_mib == 0)  return 1;   /* guard off — every old caller */
+
+    int moved = target > in->layers_resident
+              ? target - in->layers_resident
+              : in->layers_resident - target;
+    return (size_t)moved * per_layer >= in->refit_min_mib;
+}
+
 void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
 {
     out->target_layers = in->layers_resident;
@@ -141,6 +166,18 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
         int    target  = in->layers_resident - drop;
         if (target < 0) target = 0;
 
+        /*
+         * ⚠ REFUSING HERE LEAVES US UNDER THE FLOOR, on purpose. The floor is
+         * headroom for other people, not a hard limit, and sitting a little
+         * under it costs far less than a reload that pins the card for minutes.
+         * It cannot deadlock: if the shortage grows the deficit grows with it,
+         * the required drop grows, and the move clears the bar on its own.
+         */
+        if (!refit_worth_it(in, target, per_layer)) {
+            out->why = "under the floor, but too small a move to be worth a reload";
+            return;
+        }
+
         out->target_layers = target;
         out->act           = SYN_PRESSURE_REFIT;
         out->why           = in->demand_high
@@ -165,6 +202,23 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
         return;
     }
 
+    /*
+     * ⛔ NOT INTO A BUSY CARD. Taking layers back is the one move that is never
+     * urgent — we are comfortably above the floor by the time we get here — and
+     * the reload it costs is the most GPU-expensive thing this daemon does.
+     * Starting one while another application is pinning the card is how a
+     * policy meant to relieve contention becomes the contention.
+     *
+     * ⚠ `busy` is what keeps this honest: a generation drives the card as hard
+     * as any game, so without that guard synapd would read its own work as
+     * somebody else's and put off ever taking its layers back.
+     */
+    if (in->gpu_busy_available && !in->busy && in->gpu_busy_limit_pct &&
+        in->gpu_busy_pct >= in->gpu_busy_limit_pct) {
+        out->why = "another application has the GPU — not reloading into contention";
+        return;
+    }
+
     const size_t margin  = floor / 2;
     const size_t wanted  = floor + margin + in->reserve_mib;
     if (in->vram_free <= wanted) {
@@ -181,6 +235,13 @@ void syn_pressure_decide(const syn_pressure_in_t *in, syn_pressure_out_t *out)
 
     int target = in->layers_resident + add;
     if (target > in->n_layer) target = in->n_layer;
+
+    /* Same price on the way up. Reloading a multi-GB model to gain one layer
+     * back is the same bad trade as reloading it to give one away. */
+    if (!refit_worth_it(in, target, per_layer)) {
+        out->why = "VRAM recovered, but too small a move to be worth a reload";
+        return;
+    }
 
     out->target_layers = target;
     out->act           = SYN_PRESSURE_REFIT;

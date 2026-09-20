@@ -124,6 +124,20 @@ struct synapd_state g_state = {
          */
         .offload_ram_floor_mib = 1536,
         .offload_psi_limit_pct = 40,
+        /*
+         * ⚠ 80, NOT 50. This only ever DEFERS taking layers back, so the cost
+         * of reading it high is one more poll of waiting and the cost of
+         * reading it low is a reload landing on a working card. A single NVML
+         * sample is noisy; the bar is set where sustained real work sits.
+         */
+        .offload_gpu_busy_pct = 80,
+        /*
+         * ⚠ HALF A GIGABYTE. Smaller than this and the reload — tens of seconds
+         * to minutes of saturated card — costs more than the headroom it buys.
+         * On the shipped 12B model a layer is about 200 MiB, so this asks for a
+         * real move rather than a nudge.
+         */
+        .offload_refit_min_mib = 512,
     },
     .offload_cap      = -1,   /* -1 = no cap; auto-detect decides, as it always did */
     .offload_resident = 0,
@@ -235,6 +249,8 @@ static void usage(const char *prog) {
         "  -G, --offload-game MIB     The same while a client declares high demand (4096)\n"
         "  -R, --offload-ram MIB      Release the model below this MemAvailable (1536)\n"
         "  -S, --offload-psi PCT      Release above this stall percentage (60s avg, 40)\n"
+        "      --offload-gpu-busy PCT No reload while GPU load is this or higher (80)\n"
+        "      --offload-refit-min MIB Smallest move worth a destroy+reload (512)\n"
         "  -W, --offload-dwell SEC    Minimum between moves (default: 120)\n"
         "  -L, --offload-poll SEC     How often to look (default: 20)\n"
         "\n"
@@ -309,6 +325,10 @@ int main(int argc, char *argv[]) {
         {"offload-poll",   required_argument, 0, 'L'},
         {"offload-ram",    required_argument, 0, 'R'},
         {"offload-psi",    required_argument, 0, 'S'},
+        /* ⚠ Long-only, with vals past the ASCII range: the short letters are
+         * nearly exhausted and a rule this specific does not earn one. */
+        {"offload-gpu-busy",  required_argument, 0, 1000},
+        {"offload-refit-min", required_argument, 0, 1001},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
         {"version",    no_argument,       0, 'v'},
@@ -343,6 +363,8 @@ int main(int argc, char *argv[]) {
         case 'L': g_state.config.offload_poll_s    = (unsigned)atoi(optarg); break;
         case 'R': g_state.config.offload_ram_floor_mib = (unsigned)atoi(optarg); break;
         case 'S': g_state.config.offload_psi_limit_pct = (unsigned)atoi(optarg); break;
+        case 1000: g_state.config.offload_gpu_busy_pct  = (unsigned)atoi(optarg); break;
+        case 1001: g_state.config.offload_refit_min_mib = (unsigned)atoi(optarg); break;
         case 'd': g_state.debug = 1; foreground = 1; break;
         case 'f': foreground = 1; break;
         case 'v':

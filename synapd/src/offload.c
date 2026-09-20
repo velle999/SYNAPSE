@@ -34,6 +34,7 @@
 #include "offload.h"
 #include "pressure.h"
 #include "sysload.h"
+#include "gpuload.h"
 #include "inference.h"
 #include "log.h"
 
@@ -202,6 +203,23 @@ static void *offload_thread(void *arg)
         syn_log(LOG_INFO, "offload: ...RAM and core pressure are off — only the "
                 "card is watched");
     }
+    {
+        syn_gpuload_t g;
+        syn_gpuload_read(NULL, &g);
+        if (!s->config.offload_gpu_busy_pct) {
+            syn_log(LOG_INFO, "offload: ...GPU contention is not consulted");
+        } else if (!g.available) {
+            syn_log(LOG_INFO, "offload: ...GPU load CANNOT BE READ on this "
+                    "machine — a reload may land on a busy card");
+        } else {
+            syn_log(LOG_INFO, "offload: ...and the card itself — no reload while "
+                    "GPU load is %u%% or more (it reads %u%% now)",
+                    s->config.offload_gpu_busy_pct, g.busy_pct);
+        }
+        syn_log(LOG_INFO, "offload: ...smallest move worth a reload: %u MiB%s",
+                s->config.offload_refit_min_mib,
+                s->config.offload_refit_min_mib ? "" : " (guard off)");
+    }
 
     while (!atomic_load(&s->offload_stop)) {
         /* Sliced, so a shutdown does not wait out a whole poll interval. */
@@ -252,6 +270,9 @@ static void *offload_thread(void *arg)
         syn_sysload_t sys;
         syn_sysload_read(NULL, &sys);
 
+        syn_gpuload_t gpu;
+        syn_gpuload_read(NULL, &gpu);
+
         syn_pressure_in_t in = {
             .vram_free       = vram_free,
             .vram_total      = vram_total,
@@ -279,6 +300,11 @@ static void *offload_thread(void *arg)
             .psi_cpu_pct     = sys.psi_cpu_pct,
             .psi_limit_pct   = s->config.offload_psi_limit_pct,
             .psi_available   = sys.psi_available,
+
+            .gpu_busy_pct       = gpu.busy_pct,
+            .gpu_busy_limit_pct = s->config.offload_gpu_busy_pct,
+            .gpu_busy_available = gpu.available,
+            .refit_min_mib      = s->config.offload_refit_min_mib,
             /* A generation saturates n_threads and is indistinguishable from a
              * build to a stall counter. See `busy` in pressure.h. */
             .busy            = atomic_load(&s->requests_active) > 0,
@@ -293,9 +319,12 @@ static void *offload_thread(void *arg)
 
         if (s->debug)
             syn_log(LOG_DEBUG, "offload: vram %zu/%zu MiB free, holding %d/%d "
-                    "layers, demand %s — %s",
+                    "layers, demand %s, gpu %d%% %s — %s",
                     vram_free, vram_total, in.layers_resident, n_layer,
-                    in.demand_high ? "high" : "normal", out.why);
+                    in.demand_high ? "high" : "normal",
+                    gpu.available ? (int)gpu.busy_pct : -1,
+                    in.busy ? "(a query is running — that load is ours)" : "",
+                    out.why);
 
         switch (out.act) {
         case SYN_PRESSURE_HOLD:

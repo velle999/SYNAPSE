@@ -71,7 +71,8 @@ executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
         'src/http_server.c',
         'src/context.c','src/scheduler.c','src/log.c','src/profile.c',
-        'src/selected.c','src/pressure.c','src/offload.c','src/sysload.c'),
+        'src/selected.c','src/pressure.c','src/offload.c','src/sysload.c',
+        'src/gpuload.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
@@ -147,6 +148,18 @@ sysload_test = executable('sysload_test',
   files('tests/sysload_test.c','src/sysload.c'),
   include_directories: include_directories('include'))
 test('sysload', sysload_test)
+
+# How hard the CARD is being worked, which is neither how full it is nor what
+# the CPU is doing. The sysfs half takes its tree as a parameter for the same
+# reason sysload.c does; the NVML half is dlopen'd and is deliberately
+# unreachable when a tree is named, so a build machine that HAS an NVIDIA card
+# cannot make this suite measure the real one.
+# ⚠ dl is linked here, not just in the daemon: the test pulls in gpuload.c.
+gpuload_test = executable('gpuload_test',
+  files('tests/gpuload_test.c','src/gpuload.c'),
+  include_directories: include_directories('include'),
+  dependencies: cc.find_library('dl', required: false))
+test('gpuload', gpuload_test)
 
 selected_test = executable('selected_test',
   files('tests/selected_test.c','src/selected.c','src/log.c'),
