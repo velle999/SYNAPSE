@@ -413,6 +413,17 @@ jobs:
         run: |
           ./syn/tests/resolve_test.sh
 
+      # The ISO download counter. The ISO is published in parts whose counters
+      # disagree, so "how many downloads" is a floor and a ceiling, and every way
+      # of getting it wrong — summing the parts, letting .parts.sha256 count as
+      # one, losing the failure reason out of a subshell, paging GitHub's default
+      # 30 so the lifetime total drops when release 31 ships — produces a
+      # plausible number rather than an error. Runs against a fixture: it never
+      # touches the network.
+      - name: ISO download counter (syn downloads)
+        run: |
+          ./syn/tests/downloads_test.sh
+
       # syn-gfn's flags, which are the whole app: --class is what makes the
       # window dock-pinnable (synui resolves a pin by <app_id>.desktop and runs
       # the app_id as a command on a miss), --app= would silently take that

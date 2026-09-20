@@ -51,7 +51,7 @@ msgstr[3] "%1 محجوزة"
 msgstr[4] "%1 محجوزًا"
 msgstr[5] "%1 محجوز"
 
-#: WeatherState.qml:65 modules/Updates.qml:189
+#: WeatherState.qml:65 components/BarModule.qml:233
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "قبل أقل من دقيقة"
@@ -103,6 +103,10 @@ msgstr[5] "%1 لإعادة البناء"
 msgid "%1 until full"
 msgstr "%1 حتى الاكتمال"
 
+#: modules/IsoDownloads.qml:98
+msgid "%1 — %2 complete, %3 started"
+msgstr "%1 — %2 مكتملة، %3 بدأت"
+
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1 ي %2 س"
@@ -115,7 +119,7 @@ msgstr "%1 ي %2 س  ·  %3 أونصة"
 msgid "%1h %2m"
 msgstr "%1 س %2 د"
 
-#: WeatherState.qml:66 modules/Updates.qml:190
+#: WeatherState.qml:66 components/BarModule.qml:234
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "قبل أقل من ساعة"
@@ -192,6 +196,10 @@ msgstr "الملحقات"
 msgid "Adjust"
 msgstr "اضبط"
 
+#: modules/IsoDownloads.qml:134
+msgid "All releases"
+msgstr "كل الإصدارات"
+
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "يجيب أيضاً من شريط الأوامر."
@@ -216,7 +224,7 @@ msgstr "أسهم التنقل تُحرّك · Enter يفتح · Esc يغلق ا�
 msgid "Ask for a command; it answers with one you can run."
 msgstr "اطلب أمراً؛ يجيبك بأمر يمكنك تنفيذه مباشرة."
 
-#: BarConfig.qml:67
+#: BarConfig.qml:79
 msgid "Assistant"
 msgstr "المساعد"
 
@@ -240,7 +248,7 @@ msgstr "الصوت"
 msgid "Audio: %1"
 msgstr "الصوت: %1"
 
-#: BarConfig.qml:60
+#: BarConfig.qml:67
 msgid "Auto-hide bar"
 msgstr "إخفاء الشريط تلقائيًا"
 
@@ -296,7 +304,7 @@ msgstr ""
 "المعالج %1 %\n"
 "انقر لمدير المهام"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:81
 msgid "CPU + memory"
 msgstr "المعالج + الذاكرة"
 
@@ -320,7 +328,7 @@ msgstr "Cascade — بطاقات متداخلة، مزاحة ليبقى كل ش�
 msgid "Cat Mode"
 msgstr "وضع القطة"
 
-#: modules/Updates.qml:161
+#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
 msgid "Check now"
 msgstr "تحقق الآن"
 
@@ -331,6 +339,10 @@ msgstr "جارٍ التحقق…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "انقر للوحة البلوتوث · الزر الأوسط يبدّل اللاسلكي"
+
+#: modules/IsoDownloads.qml:103
+msgid "Click for the breakdown · right-click for more"
+msgstr "انقر للتفصيل · انقر باليمين للمزيد"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -356,7 +368,7 @@ msgstr "انقر للتحديث"
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "انقر للإيقاف (أو Super+Shift+R)"
 
-#: BarConfig.qml:63
+#: BarConfig.qml:70
 msgid "Clock"
 msgstr "الساعة"
 
@@ -380,6 +392,10 @@ msgstr "لوحة التحكم ▸ Desktop ▸ التخطيط تسمّي السب
 msgid "Could not check for updates\n"
 msgstr "تعذّر التحقق من التحديثات\n"
 
+#: modules/IsoDownloads.qml:88
+msgid "Could not count downloads"
+msgstr "تعذّر عدّ التنزيلات"
+
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "تبديل التخطيط"
@@ -396,7 +412,7 @@ msgstr "سطح المكتب"
 msgid "Desktop Widgets"
 msgstr "أدوات سطح المكتب"
 
-#: BarConfig.qml:61
+#: BarConfig.qml:68
 msgid "Desktop switcher"
 msgstr "مبدّل أسطح المكتب"
 
@@ -492,7 +508,7 @@ msgstr "مرح"
 msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr "Floating — لا يُرتَّب شيء؛ تبقى النوافذ حيث تضعها."
 
-#: BarConfig.qml:68
+#: BarConfig.qml:80
 msgid "Focus timer"
 msgstr "مؤقّت التركيز"
 
@@ -548,6 +564,10 @@ msgstr "محجوزة"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "كيف تُرتَّب النوافذ"
+
+#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
+msgid "ISO downloads"
+msgstr "تنزيلات ISO"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -609,7 +629,7 @@ msgstr "المازج"
 msgid "Make it yours"
 msgstr "اجعله لك"
 
-#: BarConfig.qml:62
+#: BarConfig.qml:69
 msgid "Media preview"
 msgstr "معاينة الوسائط"
 
@@ -642,7 +662,7 @@ msgstr "يُشغَّل الآن"
 msgid "Network"
 msgstr "الشبكة"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:83
 msgid "Network + Bluetooth"
 msgstr "الشبكة + البلوتوث"
 
@@ -761,6 +781,10 @@ msgstr "يسجّل"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "يسجّل %1"
+
+#: modules/IsoDownloads.qml:138
+msgid "Releases page"
+msgstr "صفحة الإصدارات"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -896,7 +920,7 @@ msgstr "حالة النظام"
 msgid "System Tools"
 msgstr "أدوات النظام"
 
-#: BarConfig.qml:64
+#: BarConfig.qml:71
 msgid "System tray"
 msgstr "صينية النظام"
 
@@ -996,7 +1020,7 @@ msgstr "إلغاء تثبيت %1"
 msgid "Update System"
 msgstr "حدّث النظام"
 
-#: BarConfig.qml:65
+#: BarConfig.qml:72
 msgid "Update notifier"
 msgstr "منبّه التحديثات"
 
@@ -1008,7 +1032,7 @@ msgstr "التحديثات"
 msgid "Version, hardware and what is installed."
 msgstr "الإصدار والعتاد وما هو مثبَّت."
 
-#: BarConfig.qml:70
+#: BarConfig.qml:82
 msgid "Volume"
 msgstr "مستوى الصوت"
 
@@ -1024,7 +1048,7 @@ msgstr "الوزن"
 msgid "Wallpaper"
 msgstr "خلفية الشاشة"
 
-#: BarConfig.qml:66
+#: BarConfig.qml:78
 msgid "Weather"
 msgstr "الطقس"
 
@@ -1086,6 +1110,10 @@ msgstr "مصدر"
 msgid "again to delete"
 msgstr "مرة أخرى للحذف"
 
+#: modules/IsoDownloads.qml:100
+msgid "all releases — %1 complete"
+msgstr "كل الإصدارات — %1 مكتملة"
+
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "بيضة"
@@ -1098,7 +1126,7 @@ msgstr "ملاحظة أخرى"
 msgid "app launcher"
 msgstr "مُشغّل التطبيقات"
 
-#: modules/Updates.qml:106
+#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
 msgid "checked %1"
 msgstr "فُحص %1"
 
@@ -1150,7 +1178,7 @@ msgstr "ممتلئة"
 msgid "ill"
 msgstr "مريض"
 
-#: WeatherState.qml:64 modules/Updates.qml:188
+#: WeatherState.qml:64 components/BarModule.qml:232
 msgid "just now"
 msgstr "الآن"
 
@@ -1245,6 +1273,10 @@ msgstr "اختر خلفية"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "ما زال يعمل على السابق"
+
+#: modules/IsoDownloads.qml:90
+msgid "syn downloads   to try now"
+msgstr "syn downloads   للمحاولة الآن"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"

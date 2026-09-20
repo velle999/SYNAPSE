@@ -3700,7 +3700,46 @@ pkgver=0.1.0
 #   dispcfg_reclaim_windows() now, which is also the only place the sweep can
 #   go: the boxes are measured against an origin a re-attached output does not
 #   have until rechain has placed it.
-pkgrel=619
+# 620: THE ISO DOWNLOAD COUNT ON THE BAR. modules/IsoDownloads.qml, beside the
+#   update badge, reading the file `syn downloads` writes (syn 35) — the counters
+#   GitHub keeps on every release asset.
+#   ⚠ IT FETCHES NOTHING, for the reason Updates.qml and WeatherState.qml both
+#   give: a module is instantiated once per MONITOR inside the shell process, so
+#   an HTTP request here is one per screen and a stalled connect is a stalled bar.
+#   `syn downloads` does the network from a systemd user timer and leaves
+#   ~/.cache/syn/downloads behind; this watches that file. Two switches, neither
+#   a copy of the other — the TIMER is traffic, the BarConfig key `isodl` is
+#   furniture, per monitor, in the bar's right-click menu.
+#   ⚠ THE BADGE IS THE LIFETIME TOTAL, not the current release's. A per-release
+#   number resets to 0 on the day a release is published — the one day somebody
+#   is watching it — and a counter reading 0 the morning after a release reads as
+#   broken. The release's own share is in the tooltip, where a 0 is a fact rather
+#   than an alarm. (1.0.0's parts are in fact at 0 while its .sha256 is at 1.)
+#   ⚠ AND IT IS THE FLOOR, NOT THE SUM. The ISO ships in parts and they do not
+#   agree — 0.3.1 is at 6, 6, 4 — so `complete` is the least-downloaded part of
+#   each set and `started` the most. syn-downloads' header has the rest.
+#   ⚠ INVISIBLE UNTIL SOMETHING HAS COUNTED, which is why the BarConfig default
+#   can be `true` without putting a row on anybody's bar: the background check is
+#   off by default, so the file is absent and the module draws nothing. The same
+#   shape Weather uses, and for the same reason — one switch to find instead of
+#   two on the machine that did ask for it.
+#   ⚠ THE `ago()` FORMATTER MOVED TO components/BarModule.qml. Updates.qml had
+#   the only copy and this is the second module to ask; two modules on one strip
+#   printing "18 min ago" and "18 minutes ago" is two people's formatting on one
+#   bar. Not into Commons/Util.qml, which is the surface bar PLUGINS import and
+#   is deliberately measured against what they actually call.
+#   ⚠ Icons.isoDownloads is nf-fa-cloud_download and NOT the download arrow
+#   F019, which at 14px is the update badge's F01A with the circle taken off —
+#   and these two rows sit next to each other, both showing a bare number.
+#   Checked against SymbolsNerdFontMono with fontTools, like the weather block:
+#   a PUA codepoint no installed font covers draws as nothing at all.
+#   Eight new bar strings, filled in all thirteen catalogs (303/303 each).
+#   Verified by rendering the bar headless against a seeded state file: the badge
+#   appears and grows with the digits (25px at 7, 47px at 4242), the errored
+#   state draws its "!" with no `Unable to assign [undefined] to QColor` — the
+#   trap Updates.qml documents — and with no state file there is no module ink on
+#   the strip at all.
+pkgrel=620
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

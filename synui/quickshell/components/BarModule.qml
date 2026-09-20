@@ -210,4 +210,29 @@ Rectangle {
             }
         }
     }
+
+    /*
+     * "just now" / "18 min ago" / "4h ago" — how long ago a reading was taken.
+     *
+     * ⚠ ON THE BASE TYPE BECAUSE MORE THAN ONE MODULE ASKS THE QUESTION, and it
+     * has to be the same answer: a bar whose update badge says "18 min ago" and
+     * whose download count says "18 minutes ago" beside it has two people's
+     * formatting on one strip. It began as Updates.qml's own three lines and
+     * moved here when IsoDownloads needed it — not into Commons/Util.qml, which
+     * is the surface bar PLUGINS import and is deliberately measured against
+     * what they actually call (see its header). This is the bar's own business.
+     *
+     * The strings are shared through the catalog rather than through the code:
+     * "checked %1" and these three are one msgid each, however many modules
+     * print them.
+     */
+    function ago(when) {
+        if (!when || when <= 0) return ""
+        const mins = Math.floor((Date.now() / 1000 - when) / 60)
+        return mins < 1 ? I18n.tr("just now")
+             : mins < 60 ? I18n.trn("%1 min ago", "%1 min ago", mins).arg(mins)
+             : I18n.trn("%1h ago", "%1h ago", Math.floor(mins / 60))
+                   .arg(Math.floor(mins / 60))
+    }
+
 }

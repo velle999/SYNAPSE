@@ -42,7 +42,7 @@ msgid_plural "%1 held back"
 msgstr[0] "%1 tegengehouden"
 msgstr[1] "%1 tegengehouden"
 
-#: WeatherState.qml:65 modules/Updates.qml:189
+#: WeatherState.qml:65 components/BarModule.qml:233
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "%1 min geleden"
@@ -78,6 +78,10 @@ msgstr[1] "%1 opnieuw te bouwen"
 msgid "%1 until full"
 msgstr "%1 tot vol"
 
+#: modules/IsoDownloads.qml:98
+msgid "%1 — %2 complete, %3 started"
+msgstr "%1 — %2 volledig, %3 begonnen"
+
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1 d %2 u"
@@ -90,7 +94,7 @@ msgstr "%1 d %2 u  ·  %3 oz"
 msgid "%1h %2m"
 msgstr "%1 u %2 min"
 
-#: WeatherState.qml:66 modules/Updates.qml:190
+#: WeatherState.qml:66 components/BarModule.qml:234
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "%1 u geleden"
@@ -164,6 +168,10 @@ msgstr "Hulpmiddelen"
 msgid "Adjust"
 msgstr "Aanpassen"
 
+#: modules/IsoDownloads.qml:134
+msgid "All releases"
+msgstr "Alle releases"
+
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "Antwoordt ook vanuit de opdrachtbalk."
@@ -188,7 +196,7 @@ msgstr "Pijltjes verplaatsen · Enter opent · Esc sluit de gids."
 msgid "Ask for a command; it answers with one you can run."
 msgstr "Vraag om een opdracht; je krijgt er een die je kunt uitvoeren."
 
-#: BarConfig.qml:67
+#: BarConfig.qml:79
 msgid "Assistant"
 msgstr "Assistent"
 
@@ -212,7 +220,7 @@ msgstr "Audio"
 msgid "Audio: %1"
 msgstr "Audio: %1"
 
-#: BarConfig.qml:60
+#: BarConfig.qml:67
 msgid "Auto-hide bar"
 msgstr "Balk automatisch verbergen"
 
@@ -268,7 +276,7 @@ msgstr ""
 "CPU %1 %\n"
 "Klik voor het taakbeheer"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:81
 msgid "CPU + memory"
 msgstr "CPU + geheugen"
 
@@ -294,7 +302,7 @@ msgstr ""
 msgid "Cat Mode"
 msgstr "Kattenmodus"
 
-#: modules/Updates.qml:161
+#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
 msgid "Check now"
 msgstr "Nu controleren"
 
@@ -305,6 +313,10 @@ msgstr "Bezig met controleren…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "Klik voor het Bluetooth-paneel · middelklik schakelt de radio om"
+
+#: modules/IsoDownloads.qml:103
+msgid "Click for the breakdown · right-click for more"
+msgstr "Klik voor de uitsplitsing · rechtsklik voor meer"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -330,7 +342,7 @@ msgstr "Klik om te verversen"
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "Klik om te stoppen (of Super+Shift+R)"
 
-#: BarConfig.qml:63
+#: BarConfig.qml:70
 msgid "Clock"
 msgstr "Klok"
 
@@ -354,6 +366,10 @@ msgstr "Configuratiescherm ▸ Desktop ▸ Indeling noemt ze alle zeven."
 msgid "Could not check for updates\n"
 msgstr "Kon niet op updates controleren\n"
 
+#: modules/IsoDownloads.qml:88
+msgid "Could not count downloads"
+msgstr "Kon downloads niet tellen"
+
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "Indeling doorlopen"
@@ -370,7 +386,7 @@ msgstr "Bureaublad"
 msgid "Desktop Widgets"
 msgstr "Bureaubladwidgets"
 
-#: BarConfig.qml:61
+#: BarConfig.qml:68
 msgid "Desktop switcher"
 msgstr "Bureaubladwisselaar"
 
@@ -467,7 +483,7 @@ msgstr "PLEZIER"
 msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr "Floating — er wordt niets neergezet; vensters blijven waar je ze zet."
 
-#: BarConfig.qml:68
+#: BarConfig.qml:80
 msgid "Focus timer"
 msgstr "Focustimer"
 
@@ -522,6 +538,10 @@ msgstr "Tegengehouden"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "Hoe de vensters geschikt worden"
+
+#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
+msgid "ISO downloads"
+msgstr "ISO-downloads"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -583,7 +603,7 @@ msgstr "MIXER"
 msgid "Make it yours"
 msgstr "Maak het van jou"
 
-#: BarConfig.qml:62
+#: BarConfig.qml:69
 msgid "Media preview"
 msgstr "Mediavoorbeeld"
 
@@ -616,7 +636,7 @@ msgstr "SPEELT NU"
 msgid "Network"
 msgstr "Netwerk"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:83
 msgid "Network + Bluetooth"
 msgstr "Netwerk + Bluetooth"
 
@@ -735,6 +755,10 @@ msgstr "Opnemen"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "Opnemen %1"
+
+#: modules/IsoDownloads.qml:138
+msgid "Releases page"
+msgstr "Releasepagina"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -872,7 +896,7 @@ msgstr "Systeemstatus"
 msgid "System Tools"
 msgstr "Systeemgereedschap"
 
-#: BarConfig.qml:64
+#: BarConfig.qml:71
 msgid "System tray"
 msgstr "Systeemvak"
 
@@ -976,7 +1000,7 @@ msgstr "%1 verwijderen"
 msgid "Update System"
 msgstr "Systeem bijwerken"
 
-#: BarConfig.qml:65
+#: BarConfig.qml:72
 msgid "Update notifier"
 msgstr "Updatemelder"
 
@@ -988,7 +1012,7 @@ msgstr "Updates"
 msgid "Version, hardware and what is installed."
 msgstr "Versie, hardware en wat er geïnstalleerd is."
 
-#: BarConfig.qml:70
+#: BarConfig.qml:82
 msgid "Volume"
 msgstr "Volume"
 
@@ -1004,7 +1028,7 @@ msgstr "GEWICHT"
 msgid "Wallpaper"
 msgstr "Achtergrond"
 
-#: BarConfig.qml:66
+#: BarConfig.qml:78
 msgid "Weather"
 msgstr "Weer"
 
@@ -1066,6 +1090,10 @@ msgstr "een bron"
 msgid "again to delete"
 msgstr "nogmaals om te verwijderen"
 
+#: modules/IsoDownloads.qml:100
+msgid "all releases — %1 complete"
+msgstr "alle releases — %1 volledig"
+
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "een ei"
@@ -1078,7 +1106,7 @@ msgstr "nog een notitie"
 msgid "app launcher"
 msgstr "toepassingsstarter"
 
-#: modules/Updates.qml:106
+#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
 msgid "checked %1"
 msgstr "gecontroleerd %1"
 
@@ -1130,7 +1158,7 @@ msgstr "vol"
 msgid "ill"
 msgstr "ziek"
 
-#: WeatherState.qml:64 modules/Updates.qml:188
+#: WeatherState.qml:64 components/BarModule.qml:232
 msgid "just now"
 msgstr "zojuist"
 
@@ -1225,6 +1253,10 @@ msgstr "achtergrond kiezen"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "nog bezig met de vorige"
+
+#: modules/IsoDownloads.qml:90
+msgid "syn downloads   to try now"
+msgstr "syn downloads   om het nu te proberen"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"

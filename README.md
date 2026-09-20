@@ -2056,6 +2056,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install`, and `syn game <cmd…>` to run something with the MangoHud overlay and gamemode (`syn game hud on` puts the overlay back in every Vulkan client) |
 | `syn nix` | The optional Nix layer — `apply`, `build`, `update`, `facts`, `edit`, `rollback`, `init`. See [Declarative user environment](#declarative-user-environment-nix) |
 | `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch`, and `gui` — the **DaVinci Doctor** window, which reads the same checks and walks you through the rest |
+| `syn downloads` | How many people have downloaded the ISO, from the counters GitHub keeps on each release asset — a table per release, and the number on the bar. `--cached` reads the last answer without asking, `--watch 12h` checks in the background, `--watch off` stops. Off until asked |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
@@ -2571,6 +2572,33 @@ with no warning, and it only fails on a machine nobody here is sitting at.
 ⚠ Step 5 is not only a release-time step. It belongs after **any** `pkgrel`
 bump that reaches `main`, release or not — see
 [`packaging/README.md`](packaging/README.md).
+
+#### Who is downloading it
+
+`syn downloads` reads the counters GitHub keeps on every release asset and
+prints a table — one row per release, plus a lifetime total. `syn downloads
+--watch 12h` puts the total on the bar, beside the update badge; `--watch off`
+stops asking and right-click the bar ▸ **ISO downloads** hides the row without
+stopping anything.
+
+```bash
+syn downloads                 # ask now, print the table
+syn downloads --cached        # the last answer, no network
+syn downloads --watch 12h     # check in the background — 30m, 1d, systemd's syntax
+syn downloads --watch off     # stop checking
+```
+
+⚠ **There is no single download count, and the table says so in two columns.**
+The ISO is larger than GitHub's 2 GiB asset limit, so a release is published as
+`.part00`, `.part01`, … — and the parts do not agree, because people stop
+part-way. **complete** is the least-downloaded part of a release's set, so the
+most people who could have assembled an ISO; **started** is the most-downloaded
+part. Adding the parts up would report a three-part release three times over,
+and the part count has been anywhere from two to five.
+
+Nothing asks GitHub until you switch the background check on, and the bar draws
+nothing until something has counted — the same arrangement the weather has, for
+the same reason.
 
 ---
 

@@ -32,6 +32,13 @@ QtObject {
         "clock":      true,
         "tray":       true,
         "updates":    true,     // syn-update's pending count
+        /* The ISO download counter. On, and it costs nobody anything: the
+         * background check that writes the file it reads is OFF by default
+         * (`syn downloads --watch on`), so the module has nothing to draw and
+         * stays invisible on a machine that never asked for it. Same shape as
+         * the weather row below, and for the same reason — one switch to find
+         * instead of two. */
+        "isodl":      true,
         /* On, but the module hides itself until there is a reading — and there
          * is none until `synctl weather on`, because the weather is the only
          * part of this desktop that goes to the network. So a default of true
@@ -63,6 +70,11 @@ QtObject {
         { key: "clock",      label: I18n.tr("Clock") },
         { key: "tray",       label: I18n.tr("System tray") },
         { key: "updates",    label: I18n.tr("Update notifier") },
+        // ⚠ THE KEY IS `isodl` AND THE FILE IS modules/IsoDownloads.qml. The
+        // key is a bar.json spelling and stays terse like `netbt` and `sysinfo`;
+        // the file name has to say which downloads, because "Downloads" in a
+        // desktop shell reads as a browser's.
+        { key: "isodl",      label: I18n.tr("ISO downloads") },
         { key: "weather",    label: I18n.tr("Weather") },
         { key: "assistant",  label: I18n.tr("Assistant") },
         { key: "pomodoro",   label: I18n.tr("Focus timer") },

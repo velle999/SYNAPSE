@@ -649,6 +649,18 @@ PanelWindow {
                     // connected — see RemoteDesktop.qml.
                     RemoteDesktop { barScreen: bar.screen }
 
+                    /* The ISO download count, immediately left of the update
+                     * badge: the two are the same kind of thing — a number
+                     * about the project rather than about this machine — and
+                     * they are the two rows somebody glances at together.
+                     *
+                     * Invisible unless `syn downloads --watch on` has been
+                     * asked for, which is nobody by default, so an ordinary
+                     * bar is unchanged by its being here. See
+                     * modules/IsoDownloads.qml. */
+                    IsoDownloads { barScreen: bar.screen
+                                barVisible: BarConfig.get(bar.outName, "isodl") }
+
                     // Immediately left of the tray, which is where an
                     // indicator of this kind is looked for — and it is hidden
                     // whenever there is nothing pending, so on a current

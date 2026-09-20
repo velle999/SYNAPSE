@@ -72,6 +72,18 @@ QtObject {
     // indicator at 14px rather than as part of the module beside it.
     readonly property string updates:    "\uF01A"
 
+    // -- ISO downloads (`syn downloads`) --
+    // nf-fa-cloud_download. ⚠ DELIBERATELY NOT the download arrow F019, which
+    // at 14px is the update badge's F01A with the circle taken off — and these
+    // two rows sit next to each other, both showing a bare number, so a glyph
+    // that reads as "the same indicator twice" is the whole message lost. The
+    // cloud says the number came from somewhere else, which is what it is.
+    // ⚠ Checked against SymbolsNerdFontMono-Regular.ttf with fontTools before
+    // being used here, like the weather and focus blocks: a Nerd Font PUA
+    // codepoint no font on the box covers draws as nothing at all, and an
+    // icon-only module then collapses to zero width and vanishes.
+    readonly property string isoDownloads: "\uF0ED"
+
     // The assistant. ⚠ A SPEECH BUBBLE AND NOT A ROBOT: F544 (robot) and
     // F5DC (brain) are the obvious glyphs for this and NEITHER IS IN
     // Symbols Nerd Font Mono — which is the font THIS FILE's codepoints come

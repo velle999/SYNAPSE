@@ -42,7 +42,7 @@ msgid_plural "%1 held back"
 msgstr[0] "%1 trattenuto"
 msgstr[1] "%1 trattenuti"
 
-#: WeatherState.qml:65 modules/Updates.qml:189
+#: WeatherState.qml:65 components/BarModule.qml:233
 msgid "%1 min ago"
 msgid_plural "%1 min ago"
 msgstr[0] "%1 min fa"
@@ -78,6 +78,10 @@ msgstr[1] "%1 da ricostruire"
 msgid "%1 until full"
 msgstr "%1 alla carica completa"
 
+#: modules/IsoDownloads.qml:98
+msgid "%1 — %2 complete, %3 started"
+msgstr "%1 — %2 completi, %3 iniziati"
+
 #: widgets/Tuxagotchi.qml:156
 msgid "%1d %2h"
 msgstr "%1 g %2 h"
@@ -90,7 +94,7 @@ msgstr "%1 g %2 h  ·  %3 oz"
 msgid "%1h %2m"
 msgstr "%1 h %2 min"
 
-#: WeatherState.qml:66 modules/Updates.qml:190
+#: WeatherState.qml:66 components/BarModule.qml:234
 msgid "%1h ago"
 msgid_plural "%1h ago"
 msgstr[0] "%1 h fa"
@@ -164,6 +168,10 @@ msgstr "Accessori"
 msgid "Adjust"
 msgstr "Regola"
 
+#: modules/IsoDownloads.qml:134
+msgid "All releases"
+msgstr "Tutte le versioni"
+
 #: welcome/pages.js:237
 msgid "Also answers from the command bar."
 msgstr "Risponde anche dalla barra dei comandi."
@@ -188,7 +196,7 @@ msgstr "Le frecce spostano · Invio apre · Esc chiude la guida."
 msgid "Ask for a command; it answers with one you can run."
 msgstr "Chiedi un comando; risponde con uno che puoi eseguire."
 
-#: BarConfig.qml:67
+#: BarConfig.qml:79
 msgid "Assistant"
 msgstr "Assistente"
 
@@ -212,7 +220,7 @@ msgstr "Audio"
 msgid "Audio: %1"
 msgstr "Audio: %1"
 
-#: BarConfig.qml:60
+#: BarConfig.qml:67
 msgid "Auto-hide bar"
 msgstr "Nascondi la barra automaticamente"
 
@@ -268,7 +276,7 @@ msgstr ""
 "CPU %1 %\n"
 "Clicca per il gestore attività"
 
-#: BarConfig.qml:69
+#: BarConfig.qml:81
 msgid "CPU + memory"
 msgstr "CPU + memoria"
 
@@ -294,7 +302,7 @@ msgstr ""
 msgid "Cat Mode"
 msgstr "Modalità gatto"
 
-#: modules/Updates.qml:161
+#: modules/IsoDownloads.qml:136 modules/Updates.qml:161
 msgid "Check now"
 msgstr "Controlla ora"
 
@@ -305,6 +313,10 @@ msgstr "Controllo…"
 #: modules/Bluetooth.qml:47
 msgid "Click for the Bluetooth panel · middle-click toggles the radio"
 msgstr "Clicca per il pannello Bluetooth · il clic centrale commuta la radio"
+
+#: modules/IsoDownloads.qml:103
+msgid "Click for the breakdown · right-click for more"
+msgstr "Clicca per il dettaglio · clic destro per altro"
 
 #: modules/Media.qml:87
 msgid "Click play/pause · scroll to change track"
@@ -330,7 +342,7 @@ msgstr "Clicca per aggiornare"
 msgid "Click to stop (or Super+Shift+R)"
 msgstr "Clicca per fermare (o Super+Maiusc+R)"
 
-#: BarConfig.qml:63
+#: BarConfig.qml:70
 msgid "Clock"
 msgstr "Orologio"
 
@@ -355,6 +367,10 @@ msgstr ""
 msgid "Could not check for updates\n"
 msgstr "Impossibile controllare gli aggiornamenti\n"
 
+#: modules/IsoDownloads.qml:88
+msgid "Could not count downloads"
+msgstr "Impossibile contare i download"
+
 #: welcome/pages.js:151
 msgid "Cycle layout"
 msgstr "Cambia disposizione"
@@ -371,7 +387,7 @@ msgstr "Scrivania"
 msgid "Desktop Widgets"
 msgstr "Widget della scrivania"
 
-#: BarConfig.qml:61
+#: BarConfig.qml:68
 msgid "Desktop switcher"
 msgstr "Selettore di scrivania"
 
@@ -470,7 +486,7 @@ msgid "Floating — nothing is placed for you; windows stay where you put them."
 msgstr ""
 "Floating — non viene collocato nulla; le finestre restano dove le metti."
 
-#: BarConfig.qml:68
+#: BarConfig.qml:80
 msgid "Focus timer"
 msgstr "Timer di concentrazione"
 
@@ -525,6 +541,10 @@ msgstr "Trattenuti"
 #: welcome/pages.js:146
 msgid "How the windows are arranged"
 msgstr "Come vengono disposte le finestre"
+
+#: BarConfig.qml:77 modules/IsoDownloads.qml:92 modules/IsoDownloads.qml:128
+msgid "ISO downloads"
+msgstr "Download ISO"
 
 #: welcome/pages.js:235
 msgid "Idle, sleep, and what the lid does."
@@ -586,7 +606,7 @@ msgstr "MIXER"
 msgid "Make it yours"
 msgstr "Rendilo tuo"
 
-#: BarConfig.qml:62
+#: BarConfig.qml:69
 msgid "Media preview"
 msgstr "Anteprima multimediale"
 
@@ -620,7 +640,7 @@ msgstr "IN RIPRODUZIONE"
 msgid "Network"
 msgstr "Rete"
 
-#: BarConfig.qml:71
+#: BarConfig.qml:83
 msgid "Network + Bluetooth"
 msgstr "Rete + Bluetooth"
 
@@ -739,6 +759,10 @@ msgstr "Registrazione"
 #: modules/Recording.qml:121
 msgid "Recording %1"
 msgstr "Registrazione %1"
+
+#: modules/IsoDownloads.qml:138
+msgid "Releases page"
+msgstr "Pagina delle versioni"
 
 #: welcome/pages.js:200
 msgid "Resolution, refresh rate, scale and monitor layout."
@@ -878,7 +902,7 @@ msgstr "Stato del sistema"
 msgid "System Tools"
 msgstr "Strumenti di sistema"
 
-#: BarConfig.qml:64
+#: BarConfig.qml:71
 msgid "System tray"
 msgstr "Area di notifica"
 
@@ -982,7 +1006,7 @@ msgstr "Disinstalla %1"
 msgid "Update System"
 msgstr "Aggiorna il sistema"
 
-#: BarConfig.qml:65
+#: BarConfig.qml:72
 msgid "Update notifier"
 msgstr "Notifiche di aggiornamento"
 
@@ -994,7 +1018,7 @@ msgstr "Aggiornamenti"
 msgid "Version, hardware and what is installed."
 msgstr "Versione, hardware e cosa è installato."
 
-#: BarConfig.qml:70
+#: BarConfig.qml:82
 msgid "Volume"
 msgstr "Volume"
 
@@ -1010,7 +1034,7 @@ msgstr "PESO"
 msgid "Wallpaper"
 msgstr "Sfondo"
 
-#: BarConfig.qml:66
+#: BarConfig.qml:78
 msgid "Weather"
 msgstr "Meteo"
 
@@ -1072,6 +1096,10 @@ msgstr "una fonte"
 msgid "again to delete"
 msgstr "di nuovo per eliminare"
 
+#: modules/IsoDownloads.qml:100
+msgid "all releases — %1 complete"
+msgstr "tutte le versioni — %1 completi"
+
 #: widgets/Tuxagotchi.qml:141
 msgid "an egg"
 msgstr "un uovo"
@@ -1084,7 +1112,7 @@ msgstr "un'altra nota"
 msgid "app launcher"
 msgstr "avviatore di applicazioni"
 
-#: modules/Updates.qml:106
+#: modules/IsoDownloads.qml:102 modules/Updates.qml:106
 msgid "checked %1"
 msgstr "controllato %1"
 
@@ -1136,7 +1164,7 @@ msgstr "carica"
 msgid "ill"
 msgstr "malato"
 
-#: WeatherState.qml:64 modules/Updates.qml:188
+#: WeatherState.qml:64 components/BarModule.qml:232
 msgid "just now"
 msgstr "proprio ora"
 
@@ -1232,6 +1260,10 @@ msgstr "scegli lo sfondo"
 #: MusicLibrary.qml:544
 msgid "still working on the last one"
 msgstr "sto ancora lavorando al precedente"
+
+#: modules/IsoDownloads.qml:90
+msgid "syn downloads   to try now"
+msgstr "syn downloads   per provare ora"
 
 #: modules/Updates.qml:94
 msgid "syn-update ping   to try now"
