@@ -85,7 +85,42 @@ pkgver=0.1.0
 #   sysload_test drives a no-PSI kernel and a stalling machine off fixtures —
 #   neither of which a build machine can be asked to be. The usage text also
 #   grew the six offload flags, none of which it had ever listed.
-pkgrel=54
+# 55: IT SAYS HOW FAST IT WAS, AND THERE IS A TOOL THAT ASKS. synapd knew both
+#   token counts already — n_prompt_tokens and n_generated are right there in
+#   inference_run — and threw them away every request. Nothing on this machine
+#   could answer "is this model fast here" except by timing a round trip from
+#   outside and guessing at tokenisation, which counts the network and the queue
+#   as if they were the model.
+#   SYN_MSG_STATUS now carries the last request in two halves — prefill_tok,
+#   prefill_ms, gen_tok, gen_ms — plus gpu_layers. APPENDED, because synui
+#   parses this line key-by-key with strstr and reordering the old keys would
+#   break it; checked against all fourteen of its searches before naming these.
+#   ⚠ TWO SPEEDS, NEVER ONE. Prefill is batched and compute-bound; decode is one
+#     token at a time and bandwidth-bound. A single tokens/second over the turn
+#     averages them together and hides whichever one is broken — and they have
+#     different causes: slow prefill means layers are not on the GPU, slow
+#     decode with fast prefill means the weights are in the wrong memory.
+#   ⚠ ATOMIC, because inference_describe answers a status poll on another thread
+#     and deliberately does not take the inference lock. Plain fields would let
+#     a poll mid-generation return one half of this turn and one half of the
+#     last, which reads as a measurement and is not one. The gen count is stored
+#     last, with release ordering, and read first with acquire.
+#   New /usr/bin/synapd-bench asks for those numbers. It links nothing but the
+#   wire header — no llama, no ggml — so it runs on a machine with no model at
+#   all, which is what makes --host work: a laptop can benchmark the desktop's
+#   daemon over the LAN bridge. It reports the wire separately (wall minus what
+#   the daemon accounted for), which is the number that decides whether remote
+#   inference feels immediate and is invisible to a benchmark run on the
+#   daemon's own box.
+#   ⛔ ITS PARSER WALKS THE LINE AS TOKENS AND STEPS OVER QUOTED VALUES WHOLE.
+#     model_name= is free text out of the GGUF, so a model called
+#     `gen_tok=9999 prefill_ms=0.1` carries a well-formed fake key inside a
+#     value. A "preceded by a space" rule accepts it — bench_test caught
+#     exactly that, in the first version of this function.
+#   ⚠ A run overlapping another client's request is DISCARDED, not averaged in:
+#     STATUS reports the last request the daemon answered, whoever asked it, so
+#     the tool checks requests= moved by exactly one.
+pkgrel=55
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

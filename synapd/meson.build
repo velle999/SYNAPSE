@@ -76,6 +76,23 @@ executable('synapd',
   dependencies: deps,
   install: true)
 
+# The benchmark client. Links NOTHING but the wire header — no llama, no ggml,
+# no json-c — because it asks the daemon what it did rather than doing any
+# inference of its own. That is also why it can be pointed at another machine:
+# it is a client, and the model never has to be on the box running it.
+executable('synapd-bench',
+  files('src/bench.c'),
+  include_directories: include_directories('include'),
+  install: true)
+
+# Its parser, against a status line whose model NAME contains the keys it is
+# looking for. No socket, no daemon, no model — the test includes bench.c so it
+# exercises the shipped helpers rather than a second copy of them.
+bench_test = executable('bench_test',
+  files('tests/bench_test.c'),
+  include_directories: include_directories('include'))
+test('bench', bench_test)
+
 # Unit test for the wire-protocol input gate. wire.c is pure (no llama, no
 # sockets), so the test links just it — no model, no daemon, runs in a blink.
 wire_test = executable('wire_test',

@@ -20,6 +20,8 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdatomic.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <errno.h>
 
@@ -172,7 +174,40 @@ struct synapd_inference {
     uint64_t total_tokens_in;
     uint64_t total_tokens_out;
     double   total_inference_ms;
+
+    /*
+     * The last request, in two halves, because they are two different speeds
+     * and a single tokens/second over the whole turn hides which one is slow.
+     * Prefill is batched and parallel; generation is one token at a time and
+     * memory-bandwidth bound. A model that reads a long prompt in 0.4s and
+     * then writes at 6 tok/s is a completely different diagnosis from one
+     * that takes 20s to read it.
+     *
+     * ⚠ ATOMIC BECAUSE OF WHO READS THEM. inference_describe() answers a
+     * status poll on another thread and deliberately does NOT take `lock` —
+     * it try-locks model_rw and gives up, precisely so a poll cannot block
+     * behind a running generation. Plain fields would let a status arriving
+     * mid-request return one half of the previous turn and one half of this
+     * one, which reads as a real measurement and is not one.
+     *
+     * Zero means NOTHING HAS BEEN MEASURED YET. A caller that divides without
+     * checking prints an infinite rate on a freshly loaded model.
+     */
+    _Atomic uint32_t last_prefill_tokens;
+    _Atomic uint32_t last_gen_tokens;
+    _Atomic uint64_t last_prefill_us;
+    _Atomic uint64_t last_gen_us;
 };
+
+/* CLOCK_MONOTONIC, in microseconds: unaffected by NTP stepping the wall clock
+ * mid-generation, which is the one way a benchmark can report a negative
+ * duration. */
+static uint64_t inf_now_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
 
 /*
  * ── Retrieval embeddings ──
@@ -926,6 +961,7 @@ int inference_run(synapd_state_t *s,
      * across chunks from the KV state (no clear between chunks). */
     int n_batch = (int)llama_n_batch(inf->ctx);
     if (n_batch < 1) n_batch = 512;
+    const uint64_t t_prefill_start = inf_now_us();
     for (int off = 0; off < n_prompt_tokens; off += n_batch) {
         int chunk = n_prompt_tokens - off;
         if (chunk > n_batch) chunk = n_batch;
@@ -938,6 +974,7 @@ int inference_run(synapd_state_t *s,
             return -1;
         }
     }
+    const uint64_t t_prefill_us = inf_now_us() - t_prefill_start;
     free(tokens);
 
     /* Generate */
@@ -949,6 +986,7 @@ int inference_run(synapd_state_t *s,
     size_t out_pos = 0;
     int n_generated = 0;
     const struct llama_vocab *vocab = llama_model_get_vocab(inf->model);
+    const uint64_t t_gen_start = inf_now_us();
 
     for (int i = 0; i < max_gen && out_pos < out_len - 1; i++) {
         llama_token tok = llama_sampler_sample(inf->sampler, inf->ctx, -1);
@@ -975,11 +1013,28 @@ int inference_run(synapd_state_t *s,
         n_generated++;
         llama_sampler_accept(inf->sampler, tok);
     }
+    const uint64_t t_gen_us = inf_now_us() - t_gen_start;
     out_buf[out_pos] = '\0';
 
     /* Update stats */
     inf->total_tokens_in  += n_prompt_tokens;
     inf->total_tokens_out += n_generated;
+    inf->total_inference_ms += (double)(t_prefill_us + t_gen_us) / 1000.0;
+
+    /*
+     * ⚠ PUBLISHED LAST, AFTER BOTH HALVES ARE KNOWN. A reader that catches
+     * the token counts updated and the durations not yet written would divide
+     * one turn's tokens by another's time — the numbers would look ordinary
+     * and be wrong, which is the only kind of wrong a benchmark cannot
+     * survive. Release ordering pairs with the acquire in describe().
+     */
+    atomic_store_explicit(&inf->last_prefill_tokens, (uint32_t)n_prompt_tokens,
+                          memory_order_relaxed);
+    atomic_store_explicit(&inf->last_prefill_us, t_prefill_us, memory_order_relaxed);
+    atomic_store_explicit(&inf->last_gen_us, t_gen_us, memory_order_relaxed);
+    atomic_store_explicit(&inf->last_gen_tokens, (uint32_t)n_generated,
+                          memory_order_release);
+
     atomic_fetch_add(&s->requests_total, 1);
 
     pthread_mutex_unlock(&inf->lock);
@@ -1154,13 +1209,38 @@ void inference_describe(synapd_state_t *s, char *buf, size_t len) {
         const char *slash = strrchr(inf->model_path, '/');
         const char *file  = slash ? slash + 1 : inf->model_path;
 
+        /*
+         * The acquire load comes FIRST and is the gen token count, because
+         * that is what inference_run() stores last: reading it non-zero is
+         * what makes the other three visible and settled. See the store block
+         * there.
+         *
+         * ⚠ APPENDED, and the names are deliberately unlike every key already
+         * here. synui parses this line with bare strstr(), so a new key that
+         * merely CONTAINS an old one — or an old search that now matches a new
+         * key — silently repoints an existing field. Checked against all
+         * fourteen searches in synui/src/synapd_mon.c before choosing these.
+         *
+         * Zero tokens means no request has been answered since this model was
+         * loaded. Reported as the zeros rather than omitted, so a reader can
+         * tell "nothing measured" from "this key is missing because the
+         * daemon is older than the feature".
+         */
+        uint32_t g_tok = atomic_load_explicit(&inf->last_gen_tokens, memory_order_acquire);
+        uint32_t p_tok = atomic_load_explicit(&inf->last_prefill_tokens, memory_order_relaxed);
+        uint64_t p_us  = atomic_load_explicit(&inf->last_prefill_us, memory_order_relaxed);
+        uint64_t g_us  = atomic_load_explicit(&inf->last_gen_us, memory_order_relaxed);
+
         snprintf(buf, len,
                  " model_name=\"%s\" model_file=\"%s\" format=\"%s\" profile=%s "
-                 "temp=%.2f top_p=%.2f top_k=%d",
+                 "temp=%.2f top_p=%.2f top_k=%d gpu_layers=%d "
+                 "prefill_tok=%u prefill_ms=%.1f gen_tok=%u gen_ms=%.1f",
                  inf->model_name, file,
                  inf->tmpl_probe,
                  inf->prof_name[0] ? inf->prof_name : "none",
-                 (double)inf->temperature, (double)inf->top_p, inf->top_k);
+                 (double)inf->temperature, (double)inf->top_p, inf->top_k,
+                 inf->n_gpu_layers,
+                 p_tok, (double)p_us / 1000.0, g_tok, (double)g_us / 1000.0);
     }
 
     pthread_rwlock_unlock(&s->model_rw);
