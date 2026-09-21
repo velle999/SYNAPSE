@@ -302,8 +302,15 @@ static void cmd_pointer(syn_server_t *s, ipc_buf_t *b)
     struct wlr_surface *pfocus = s->seat->pointer_state.focused_surface;
 
     bprintf(b, "{\"cursor\":[%.3f,%.3f]", s->cursor->x, s->cursor->y);
-    bprintf(b, ",\"seat_surface_xy\":[%.3f,%.3f]",
-            s->seat->pointer_state.sx, s->seat->pointer_state.sy);
+    /* The seat leaves sx/sy NaN while the pointer is over no surface at all,
+     * and "%f" of NaN is `nan` — not JSON, so every parser refused the whole
+     * answer at exactly the moment pointer_focus below was the question. */
+    if (pfocus && isfinite(s->seat->pointer_state.sx) &&
+        isfinite(s->seat->pointer_state.sy))
+        bprintf(b, ",\"seat_surface_xy\":[%.3f,%.3f]",
+                s->seat->pointer_state.sx, s->seat->pointer_state.sy);
+    else
+        bputs(b, ",\"seat_surface_xy\":null");
     bprintf(b, ",\"buttons\":%u", s->seat->pointer_state.button_count);
     bprintf(b, ",\"smoothing\":%d", s->config.pointer_smoothing);
 
@@ -678,6 +685,17 @@ static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
          * desktop reads `lit` before it believes a black picture. */
         bprintf(b, ",\"lit\":%s", o->wlr_output->enabled ? "true" : "false");
         bprintf(b, ",\"detached\":%s", o->detached ? "true" : "false");
+        /* The box left once bars and docks have reserved their edges, in the
+         * same layout coordinates as `at`. A layer-shell client is never told
+         * where its own surface landed, so one that places things against
+         * windows — chibi's desktop buddy standing on a window's top edge —
+         * cannot turn `clients` coordinates into its own without this. Falls
+         * back to the full box before the first arrange, as every other
+         * reader of usable_area does. */
+        struct wlr_box usable;
+        output_usable_box_of(s, o, &usable);
+        bprintf(b, ",\"usable\":[%d,%d,%d,%d]",
+                usable.x, usable.y, usable.width, usable.height);
         bputs(b, "}");
     }
     bputs(b, "]\n");

@@ -112,6 +112,19 @@ $(synctl outputs)"
        between them cannot be measured on x. $(synctl outputs)"
 echo "outputs:  $(outs | awk '{printf "%s at x=%s  ", $1, $2}')"
 
+# `usable`: the box left once layer surfaces have reserved their edges, in the
+# same layout coordinates as `at`. Nothing in this rig reserves an edge, so it
+# must be each output's whole box — and it must be there at all, because a
+# layer-shell client (chibi's desktop buddy) turns `clients` positions into its
+# own coordinates through it.
+synctl outputs | python3 -c '
+import json, sys
+for o in json.load(sys.stdin):
+    want = o["at"] + o["size"]
+    if o.get("usable") != want:
+        sys.exit("%s: usable %s != at+size %s" % (o["name"], o.get("usable"), want))
+' || fail "outputs' usable box is wrong: $(synctl outputs)"
+
 # ── the desktop has to be FLOATING before the window maps ────────────────
 # layout_restore_geometry asks the layout whether it has any say, so a window
 # that opens on a tiling desktop never reaches the branch that hand-places it.

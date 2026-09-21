@@ -70,7 +70,8 @@ PanelWindow {
     // ⚠ IT IS ON-DEMAND, NOT EXCLUSIVE. WlrKeyboardFocus is
     // None=0/Exclusive=1/OnDemand=2 and this reads back 2. The guide gets the
     // keyboard anyway because layer.c:layer_surface_map() grants it to any
-    // interactivity that is not NONE — at MAP and nowhere else. Which also means
+    // interactivity that is not NONE — at MAP, and afterwards only to a surface
+    // that switches to EXCLUSIVE, which this never does. Which also means
     // it LOSES the keyboard the moment a toplevel maps and focus_view() notifies
     // it; see the ToplevelManager watch above, which is the other half of that
     // fact rather than a workaround for it.

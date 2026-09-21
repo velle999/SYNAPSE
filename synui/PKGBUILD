@@ -3700,7 +3700,18 @@ pkgver=0.1.0
 #   dispcfg_reclaim_windows() now, which is also the only place the sweep can
 #   go: the boxes are measured against an origin a re-attached output does not
 #   have until rechain has placed it.
-pkgrel=621
+# 622: A LAYER SURFACE THAT ASKS FOR THE KEYBOARD LATER GETS IT. layer.c only
+#   read keyboard_interactive at map, so a surface that mapped with none and
+#   switched to EXCLUSIVE afterwards — chibi's desktop buddy opening her talk
+#   box — never got focus, and what was typed went to the window underneath.
+#   A commit that changes it now takes the keyboard (EXCLUSIVE) or hands it back
+#   to the focused window (NONE). The plugin panel is the one shell surface that
+#   switches at runtime, and gains from it: reopened mid-fade it was deaf.
+#   `synctl outputs` reports each screen's `usable` box (bars and docks taken
+#   off, layout coordinates), which a layer-shell client needs to place anything
+#   against windows; move_output.sh asserts it. `synctl pointer` printed `nan`
+#   for seat_surface_xy over no surface — not JSON — and now prints null.
+pkgrel=622
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

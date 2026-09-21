@@ -421,6 +421,25 @@ static void layer_surface_commit(struct wl_listener *listener, void *data)
      * commits, which would loop configure/ack forever. */
     if (lsurf->initial_commit || lsurf->current.committed != 0)
         layer_arrange_output(ls->output);
+
+    /* Keyboard interactivity is double-buffered state like any other, and a
+     * surface may change it long after it mapped. Only map used to look at it,
+     * so a surface that opened with none and later asked for the keyboard —
+     * chibi's desktop buddy opening her talk box — never got it, and what was
+     * typed went to the window underneath. EXCLUSIVE takes the keyboard now;
+     * dropping back to NONE hands it back to the focused window. ON_DEMAND
+     * changes nothing by itself: it is focused the way a window is, when
+     * somebody picks it. */
+    if (lsurf->surface->mapped &&
+        (lsurf->current.committed & WLR_LAYER_SURFACE_V1_STATE_KEYBOARD_INTERACTIVITY)) {
+        bool holds = s->seat->keyboard_state.focused_surface == lsurf->surface;
+        enum zwlr_layer_surface_v1_keyboard_interactivity k =
+            lsurf->current.keyboard_interactive;
+        if (k == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE && !holds)
+            layer_keyboard_enter(s, lsurf->surface);
+        else if (k == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE && holds)
+            restore_toplevel_focus(s);
+    }
 }
 
 /* ── The lifecycle of syn_layer_popup_t, whose struct is at the top ─────────
