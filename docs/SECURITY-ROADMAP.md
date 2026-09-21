@@ -480,12 +480,14 @@ repository and every published source tarball.
   key, because one on `main` stops every machine before it until it is
   re-signed and force-pushed.
 - **Published tarballs** go up with a `.sig`; the package repositories'
-  PKGBUILDs name it and the key; their commits are signed. The 23 existing
-  releases were signed only where a fresh clone makes the same files: 20 byte
-  for byte, synguard with the same files packed differently; synui 623 and
-  synapd 56 carried build leftovers (a `__pycache__`, a symlink to a path on
-  the build machine). The tarball builders now leave out anything
-  `.gitignore` names, and synui's and synguard's pack reproducibly.
+  PKGBUILDs name it and the key; their commits are signed. Of the 23 existing
+  releases, the 20 that a fresh clone rebuilds byte for byte were signed as
+  they stood. synui and synguard were released again (624, 45) from builders
+  that now pack reproducibly; synui 623's asset had carried a `__pycache__`.
+  synapd 56's carried a symlink to a path on the build machine and was
+  republished without it. The tarball builders now leave out anything
+  `.gitignore` names. makepkg in a fresh clone of each package repository,
+  with only the public key imported, passes every one.
 
 **Done when:**
 
