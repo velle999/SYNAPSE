@@ -56,7 +56,12 @@ typing. Run it where you can reach the keyboard anyway.
       both directions. **Observed.**
 - [ ] `synapse.bpf_enforce=0` on the kernel command line brings the VM up
       detect-only, with the canary readable. This is the way back from a bad
-      rule and it must be verified before anybody needs it.
+      rule and it must be verified before anybody needs it. **Still not
+      exercised (checked 2026-09-21):** the gate has never been armed outside
+      the rig, on the laptop or the desktop, so there has been nothing for the
+      switch to turn off. It needs one boot with `--bpf-enforce` in the unit
+      and the parameter on the command line — and it is the only box left
+      before arming the gate by default is a decision rather than a risk.
 - [x] Planting `/etc/ld.so.preload` shows the open refused, the process still
       running, and the preload not applied. **Observed 2026-08-20** — and in
       four parts, because the first two attempts each passed for the wrong
@@ -67,12 +72,20 @@ typing. Run it where you can reach the keyboard anyway.
       ⚠ Twice reported as passing before it was actually testing anything —
       once because the rule refused the O_CREAT so the file never existed, once
       because the plant's scope was killed and the status read as failure.
-- [ ] A normal desktop session comes up, logs in, and runs for an hour with no
+- [x] A normal desktop session comes up, logs in, and runs for an hour with no
       rule firing. The false-positive rate of these three rules is asserted;
-      it has not been measured. **This is now the only thing standing between
-      here and a decision on `--bpf-enforce`** — and it is worth doing whether
-      or not the gate is ever armed, because the userspace path acts on these
-      rules today, on every machine, and that is what took a laptop down.
+      it has not been measured. **Measured 2026-09-21, over a month rather than
+      an hour:** the laptop's journal spans 27 boots from 2026-08-20, the
+      desktop's 12 from 2026-09-16, both running these rules on the userspace
+      path. Nothing an ordinary program does tripped them. Every firing had a
+      cause: `deny-ld-preload` three times, a user `sh` refused with EACCES,
+      each in the minute of a `syn-update` build — matching syn-confine's test
+      suite, the one thing in the tree that writes `/etc/ld.so.preload` (on
+      purpose, as a user: `syn_confine_test.sh`). A real attempt, caught; and
+      `deny-bpf-canary` once per boot on both machines — **synguard tripping
+      itself**: the unit recreated the canary with `install` on every start,
+      and that open is what the rule catches. Fixed in synguard 0.1.0-42, which
+      creates it only when it is missing.
 
 **The answer, recorded 2026-08-20: NOT YET, and the reason is not the gate.**
 
@@ -97,7 +110,8 @@ arming the gate would not have prevented it. So the remaining risk is not in
 this item at all — it is the false-positive box below, which needs a day of
 ordinary use rather than a script.
 
-Revisit when that box closes.
+Revisit when that box closes. **Closed 2026-09-21** (above). What remains
+before `--bpf-enforce` could ship on is the escape-hatch box — one boot.
 
 ## 2. Attacker-controlled text reaching the AI classifier
 
@@ -167,17 +181,40 @@ Anybody who can replace the ISO can replace the checksum beside it.
 
 **Done when:**
 
-- [ ] A release-signing key exists, its fingerprint is published in
+**Done — shipped 2026-09-03 (`4782a2c4`); this section was not updated
+then, and was reconciled against the tree on 2026-09-21.** Every release from
+0.2.9.5 on carries an `.asc` on GitHub, v1.0.0 included.
+
+- [x] A release-signing key exists, its fingerprint is published in
       `SECURITY.md` and on soslinux.org, and the private half is not on a
-      machine running an alpha OS.
-- [ ] `publish-release.sh` signs the ISO (detached `.sig`) and refuses to
-      publish unsigned.
-- [ ] Verification is **one command** in the release notes and on the download
+      machine running an alpha OS. ed25519 `65489EF5…952B609E`, expires
+      2029-08-28, named in `archiso/release-key.fingerprint`; the public key
+      is `soslinux.org/synapseos-release-key.asc`. The fingerprint reached
+      `SECURITY.md` on 2026-09-21. The private half lives in the release box's
+      keyring (per that file).
+- [x] `publish-release.sh` signs the ISO (detached `.sig`) and refuses to
+      publish unsigned. Signing is `build.sh`'s default via `sign-iso.sh`
+      (armored `.asc`), the key is checked before the build starts, and
+      `sign-iso.sh <ver>` signs an existing image without a rebuild.
+      `publish-release.sh` verifies the `.asc` against the ISO and refuses a
+      bad one. ⚠ A MISSING one is a loud warning rather than a refusal — kept
+      deliberately, so a test build can still be published.
+- [x] Verification is **one command** in the release notes and on the download
       page, with the Windows and macOS spellings the checksum instructions
-      already carry.
-- [ ] The ISO's own `pacman` keyring story is written down: what signs the
+      already carry. In the README (*Check who built it*) and on soslinux.org:
+      import, `gpg --verify`, and the fingerprint to compare. Not repeated in
+      each release's notes; the gpg command is the same on Gpg4win and GPG
+      Suite.
+- [x] The ISO's own `pacman` keyring story is written down: what signs the
       SynapseOS packages inside it, and what happens on a box whose keyring is
-      older than the key.
+      older than the key. **Nothing signs them.** The ISO's `[synapseos]`
+      repo is `SigLevel = Optional TrustAll` over a local `file://` path, so
+      those packages are exactly as trustworthy as the ISO — which is signed.
+      After install, `syn-update` builds from source fetched from GitHub over
+      HTTPS: no signature anywhere on that path, so its trust is GitHub's
+      account security and TLS. There is no package key, so there is no stale
+      keyring case. Written into `SECURITY.md`. ⚠ That update path is the
+      real supply-chain surface and belongs in §6.
 
 ## 4. Reproducible ISO builds
 

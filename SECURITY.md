@@ -132,14 +132,25 @@ be missing, in the order it is being done, with what "done" means for each. It
 is kept in the repository rather than in an issue tracker so that the honest
 answer to "is X covered yet" is one file away.
 
-Two things named there are worth knowing before you install anything:
+**Kernel-level enforcement is off by default.** `synguard`'s BPF-LSM gate is
+not armed in the shipped unit, so its policy kills after the fact rather than
+refusing a syscall. `--bpf-enforce` arms it.
 
-- **Releases are checksummed but not signed.** The `.sha256` proves the file is
-  intact, not that it came from us.
-- **Kernel-level enforcement is off by default.** `synguard`'s BPF-LSM gate is
-  not armed in the shipped unit, so its policy kills after the fact rather than
-  refusing a syscall. That is deliberate and it is also not yet verified in a
-  VM — which is why it is item one.
+## Verifying a release
+
+Releases from 0.2.9.5 onward are signed with the SynapseOS release key:
+
+```
+6548 9EF5 C20D 0BD9 4211  472B ED33 6DB7 952B 609E
+SynapseOS Release Signing <releases@soslinux.org>   ed25519, expires 2029-08-28
+```
+
+The public key is at <https://soslinux.org/synapseos-release-key.asc>, and the
+README's *Check who built it* section has the commands.
+
+SynapseOS's own packages are not signed one by one. On the ISO they are covered
+by the ISO's signature; an installed system's `syn-update` builds them from
+source fetched from GitHub over HTTPS.
 
 ## Please do not
 

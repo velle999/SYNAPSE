@@ -2460,11 +2460,12 @@ sudo archiso/build.sh --llama-only # build and stage llama.cpp, then stop
 sudo archiso/build.sh --jobs=8     # parallel build jobs; defaults to nproc
 ```
 
-`--sign` also exists — it runs `gpg --detach-sign --armor` on the finished
-image — but note it runs as **root**, so it uses root's keyring, and it is the
-last step before the checksums: with no key there, a 25-minute build fails at
-the very end. Nothing in the release path consumes the `.asc`; the published
-checksums are the `.sha256`/`.b2sum` files the build always writes.
+The ISO is **signed by default**, with the key named in
+`archiso/release-key.fingerprint`. `archiso/sign-iso.sh` signs as the user who
+ran `sudo`, from that user's keyring, and the build checks the key is usable
+before it starts. `--no-sign` builds unsigned; `./archiso/sign-iso.sh <ver>`
+signs an existing image without rebuilding. `publish-release.sh` verifies the
+`.asc` against the ISO before uploading it.
 
 Two defaults are worth stating because they used to be the other way round:
 
