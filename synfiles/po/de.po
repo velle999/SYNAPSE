@@ -1314,6 +1314,12 @@ msgid "cannot write trash info for %s"
 msgstr "die Papierkorb-Info für %s kann nicht geschrieben werden"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "%s kann nicht in den Papierkorb verschoben werden: Der Ordner ist schreibgeschützt (mit chmod -R u+w lässt er sich verschieben)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "%s kann nicht in den Papierkorb verschoben werden: %s"
 

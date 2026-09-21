@@ -1283,6 +1283,12 @@ msgid "cannot write trash info for %s"
 msgstr "%s의 휴지통 정보를 기록할 수 없습니다"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "%s을(를) 휴지통으로 옮길 수 없습니다: 읽기 전용 폴더입니다 (chmod -R u+w 로 옮길 수 있게 됩니다)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "%s을(를) 휴지통으로 옮길 수 없습니다: %s"
 

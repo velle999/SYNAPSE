@@ -178,12 +178,49 @@ static char *now_iso(void)
 	return xstrdup(buf);
 }
 
+/* A failure is a record as well as a warning. The window counts records and
+ * never reads the warning, so a trash or restore that failed with only a
+ * warning came back as "done" while nothing had moved. The detail is data,
+ * like every other record field, and is not translated. */
+static void rec_failed(const char *path, const char *detail)
+{
+	if (g_out != OUT_REC)
+		return;
+	char *e = pct_encode(path, true);
+	rec_row(3, e, "failed", detail);
+	free(e);
+}
+
+/* Why moving `real` failed with EACCES, when the answer is that the folder
+ * itself is read-only. Moving a directory to a new parent rewrites its ".."
+ * entry, so the kernel wants write permission on the directory, not just on
+ * the folders it leaves and enters. A folder copied off a disc keeps the
+ * disc's read-only mode and hits exactly this, with a "Permission denied"
+ * that names nothing the person can see. Only claimed when the folder it is
+ * in IS writable; otherwise that is the cause and strerror says it. */
+static bool is_readonly_dir(const char *real)
+{
+	struct stat st;
+	if (lstat(real, &st) != 0 || !S_ISDIR(st.st_mode) || access(real, W_OK) == 0)
+		return false;
+	char *parent = xstrdup(real);
+	char *slash = strrchr(parent, '/');
+	if (slash == parent)
+		slash[1] = '\0';
+	else if (slash)
+		*slash = '\0';
+	bool parent_ok = access(parent, W_OK) == 0;
+	free(parent);
+	return parent_ok;
+}
+
 static int trash_put_one(const char *path)
 {
 	char *real = sf_resolve(path);
 
 	if (!strcmp(real, "/")) {
 		warn(_("refusing to trash the root directory"));
+		rec_failed(real, "refusing to trash the root directory");
 		free(real);
 		return 1;
 	}
@@ -192,6 +229,7 @@ static int trash_put_one(const char *path)
 	char *trash = trash_for(real, &topdir);
 	if (!trash) {
 		warn(_("cannot work out where to trash %s"), real);
+		rec_failed(real, "no trash for this location");
 		free(real);
 		return 1;
 	}
@@ -199,7 +237,9 @@ static int trash_put_one(const char *path)
 	char *filesdir = xasprintf("%s/files", trash);
 	char *infodir = xasprintf("%s/info", trash);
 	if (mkdir_p(filesdir, 0700) != 0 || mkdir_p(infodir, 0700) != 0) {
-		warn(_("cannot create the trash directory at %s: %s"), trash, strerror(errno));
+		int err = errno;
+		warn(_("cannot create the trash directory at %s: %s"), trash, strerror(err));
+		rec_failed(real, strerror(err));
 		free(filesdir); free(infodir); free(trash); free(topdir); free(real);
 		return 1;
 	}
@@ -236,6 +276,7 @@ static int trash_put_one(const char *path)
 
 	if (infofd < 0) {
 		warn(_("cannot find a free name in the trash for %s"), base);
+		rec_failed(real, "no free name in the trash");
 		free(chosen); free(filesdir); free(infodir); free(trash);
 		free(topdir); free(real);
 		return 1;
@@ -256,10 +297,18 @@ static int trash_put_one(const char *path)
 		/* Roll the reservation back. A .trashinfo with no file beside it
 		 * shows up in every trash viewer as a phantom entry that cannot be
 		 * restored or removed. */
-		if (!wrote)
+		int err = errno;
+		if (!wrote) {
 			warn(_("cannot write trash info for %s"), real);
-		else
-			warn(_("cannot move %s to the trash: %s"), real, strerror(errno));
+			rec_failed(real, "cannot write trash info");
+		} else if ((err == EACCES || err == EPERM) && is_readonly_dir(real)) {
+			warn(_("cannot move %s to the trash: it is a read-only folder "
+			       "(chmod -R u+w makes it movable)"), real);
+			rec_failed(real, "read-only folder");
+		} else {
+			warn(_("cannot move %s to the trash: %s"), real, strerror(err));
+			rec_failed(real, strerror(err));
+		}
 		char *ipath = xasprintf("%s/%s.trashinfo", infodir, chosen);
 		unlink(ipath);
 		free(ipath);
@@ -470,15 +519,19 @@ static void restore_cb(const char *trash, const char *topdir, void *vctx)
 
 	if (!target || !*target) {
 		warn(_("%s has no Path in its trash info"), ctx->want);
+		rec_failed(ctx->want, "no Path in its trash info");
 		ctx->rc = 1;
 	} else if (faccessat(AT_FDCWD, target, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
 		/* Never overwrite on restore. Something already occupies the place
 		 * this came from, and clobbering it would destroy the newer file to
 		 * recover the older one. */
 		warn(_("%s already exists — not restoring over it"), target);
+		rec_failed(target, "already exists");
 		ctx->rc = 1;
 	} else if (rename(from, target) != 0) {
-		warn(_("cannot restore %s: %s"), target, strerror(errno));
+		int err = errno;
+		warn(_("cannot restore %s: %s"), target, strerror(err));
+		rec_failed(target, strerror(err));
 		ctx->rc = 1;
 	} else {
 		unlink(ipath);
@@ -515,6 +568,7 @@ static int trash_restore(const char *name)
 
 	if (!ctx.found) {
 		warn(_("nothing called '%s' is in the trash"), name);
+		rec_failed(raw, "not in the trash");
 		free(raw);
 		return 1;
 	}

@@ -356,7 +356,19 @@ pkgver=0.1.0
 #   a double-click in the rig said "opening …" before, and only selects now.
 #   Two new checks: activate() returns first for a Trash row, and only the
 #   Trash listing sets the trashName the guard keys on.
-pkgrel=80
+# 81: A FAILED MOVE TO THE TRASH WAS REPORTED AS "DONE".
+#   Every failure in `trash` and `trash restore` was a stderr warning and no
+#   record, and the window counts records, so it said "done" and the file
+#   stayed put. Seen on a Halo 2 installer copied off its disc: the folder
+#   kept the disc's 555 mode, and moving a directory to a new parent rewrites
+#   its "..", which needs write permission on the directory itself. Each
+#   failure is now a `failed` record with its reason, and a read-only folder
+#   is named as one ("read-only folder"; the CLI adds that chmod -R u+w makes
+#   it movable), where it used to be a bare "Permission denied". A refused
+#   restore ("already exists") and a name not in the trash are records too.
+#   One new message, in all thirteen catalogs (421/421). Eight new checks;
+#   four of them fail on 80.
+pkgrel=81
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

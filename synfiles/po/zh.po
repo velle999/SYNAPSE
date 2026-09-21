@@ -1268,6 +1268,12 @@ msgid "cannot write trash info for %s"
 msgstr "无法写入 %s 的回收站信息"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "无法把 %s 移入回收站：该文件夹是只读的（执行 chmod -R u+w 后即可移动）"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "无法把 %s 移入回收站：%s"
 

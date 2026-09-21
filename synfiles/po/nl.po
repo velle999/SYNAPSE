@@ -1311,6 +1311,12 @@ msgid "cannot write trash info for %s"
 msgstr "kan de prullenbakinformatie voor %s niet schrijven"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "kan %s niet naar de prullenbak verplaatsen: de map is alleen-lezen (met chmod -R u+w kan hij worden verplaatst)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "kan %s niet naar de prullenbak verplaatsen: %s"
 

@@ -1384,6 +1384,12 @@ msgid "cannot write trash info for %s"
 msgstr "تعذّرت كتابة معلومات المهملات لـ %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "تعذّر نقل %s إلى المهملات: المجلد للقراءة فقط (يتيح chmod -R u+w نقله)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "تعذّر نقل %s إلى المهملات: %s"
 

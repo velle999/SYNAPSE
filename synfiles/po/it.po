@@ -1309,6 +1309,12 @@ msgid "cannot write trash info for %s"
 msgstr "impossibile scrivere le informazioni di cestino per %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "impossibile spostare %s nel cestino: la cartella è di sola lettura (chmod -R u+w la rende spostabile)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "impossibile spostare %s nel cestino: %s"
 

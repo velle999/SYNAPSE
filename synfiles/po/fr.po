@@ -1312,6 +1312,12 @@ msgid "cannot write trash info for %s"
 msgstr "impossible d'écrire les informations de corbeille pour %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "impossible de mettre %s à la corbeille : le dossier est en lecture seule (chmod -R u+w permet de le déplacer)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "impossible de mettre %s à la corbeille : %s"
 

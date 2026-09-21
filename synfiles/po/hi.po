@@ -1297,6 +1297,12 @@ msgid "cannot write trash info for %s"
 msgstr "%s के लिए रद्दी की जानकारी नहीं लिखी जा सकी"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "%s को रद्दी में नहीं ले जाया जा सका: फ़ोल्डर केवल पढ़ने के लिए है (chmod -R u+w से इसे ले जाया जा सकेगा)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "%s को रद्दी में नहीं ले जाया जा सका: %s"
 

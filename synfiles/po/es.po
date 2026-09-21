@@ -1308,6 +1308,12 @@ msgid "cannot write trash info for %s"
 msgstr "no se puede escribir la información de papelera de %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "no se puede mover %s a la papelera: la carpeta es de solo lectura (chmod -R u+w permite moverla)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "no se puede mover %s a la papelera: %s"
 

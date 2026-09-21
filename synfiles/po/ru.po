@@ -1330,6 +1330,12 @@ msgid "cannot write trash info for %s"
 msgstr "не удаётся записать сведения корзины для %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "не удаётся переместить %s в корзину: папка доступна только для чтения (chmod -R u+w позволит её переместить)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "не удаётся переместить %s в корзину: %s"
 

@@ -1310,6 +1310,12 @@ msgid "cannot write trash info for %s"
 msgstr "não é possível escrever a informação de lixo de %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "não é possível mover %s para o lixo: a pasta é só de leitura (chmod -R u+w permite movê-la)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "não é possível mover %s para o lixo: %s"
 

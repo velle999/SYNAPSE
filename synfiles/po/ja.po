@@ -1288,6 +1288,12 @@ msgid "cannot write trash info for %s"
 msgstr "%s のごみ箱情報を書き込めません"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "%s をごみ箱に移動できません: 読み取り専用のフォルダーです (chmod -R u+w で移動できるようになります)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "%s をごみ箱に移動できません: %s"
 

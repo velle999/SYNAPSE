@@ -1328,6 +1328,12 @@ msgid "cannot write trash info for %s"
 msgstr "nie można zapisać informacji kosza dla %s"
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr "nie można przenieść %s do kosza: folder jest tylko do odczytu (chmod -R u+w pozwoli go przenieść)"
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr "nie można przenieść %s do kosza: %s"
 

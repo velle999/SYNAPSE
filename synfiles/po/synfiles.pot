@@ -1274,6 +1274,12 @@ msgid "cannot write trash info for %s"
 msgstr ""
 
 #, c-format
+msgid ""
+"cannot move %s to the trash: it is a read-only folder (chmod -R u+w makes it "
+"movable)"
+msgstr ""
+
+#, c-format
 msgid "cannot move %s to the trash: %s"
 msgstr ""
 

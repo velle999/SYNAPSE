@@ -1334,6 +1334,12 @@ echo "newer" > "$W/notes.txt"
 "$SYNFILES" trash restore notes.txt >/dev/null 2>&1
 grep -q '^newer$' "$W/notes.txt"
 check "restore refuses to overwrite what is already there" $?
+# ...and the refusal is a failed RECORD. The window counts records and never
+# reads stderr, so a refusal that was only a warning came back as "done".
+out=$("$SYNFILES" --rec trash restore notes.txt 2>/dev/null)
+has -P "\tfailed\talready exists$" <<<"$out" \
+    && ok "a refused restore is a failed record" \
+    || bad "a refused restore reported no failure record: $out"
 
 # Directories go to the trash whole.
 "$SYNFILES" trash "$W/subdir" >/dev/null 2>&1
@@ -1348,6 +1354,42 @@ n=$(ls -A "$SYNFILES_TRASH/files" 2>/dev/null | wc -l)
 [ "$n" = 0 ] && ok "trash empty --yes clears files/" || bad "$n items left in files/"
 n=$(ls -A "$SYNFILES_TRASH/info" 2>/dev/null | wc -l)
 [ "$n" = 0 ] && ok "trash empty --yes clears info/" || bad "$n items left in info/"
+
+# A READ-ONLY FOLDER cannot be trashed: moving a directory to a new parent
+# rewrites its "..", which needs write permission on the directory itself. A
+# folder copied off a disc keeps the disc's mode and hits this. The failure
+# must come back as a failed record naming the cause; it used to be a stderr
+# warning only, which the window reported as "done" with the folder still
+# where it was. Root ignores permissions, so there is nothing to test as root.
+if [ "$(id -u)" != 0 ]; then
+    mkdir -p "$W/disc/sub" && echo x > "$W/disc/sub/f"
+    chmod 555 "$W/disc/sub" "$W/disc"
+    out=$("$SYNFILES" --rec trash "$W/disc" 2>/dev/null); rc=$?
+    [ "$rc" = 1 ] && ok "trashing a read-only folder exits 1" \
+                  || bad "trashing a read-only folder exited $rc"
+    has -P "\tfailed\tread-only folder$" <<<"$out" \
+        && ok "...as a failed record that says it is read-only" \
+        || bad "...but the record did not say so: $out"
+    [ -d "$W/disc/sub" ] && ok "...and the folder is still where it was" \
+                         || bad "...and the folder went somewhere"
+    n=$(ls -A "$SYNFILES_TRASH/info" 2>/dev/null | wc -l)
+    [ "$n" = 0 ] && ok "...leaving no phantom trashinfo" \
+                 || bad "...but left $n trashinfo file(s) behind"
+    err=$("$SYNFILES" trash "$W/disc" 2>&1 >/dev/null)
+    has "read-only folder" <<<"$err" \
+        && ok "...and the CLI says why" || bad "...the CLI said: $err"
+    # A file INSIDE it fails because its folder is read-only, not because it
+    # is one: that is "Permission denied", still a record.
+    out=$("$SYNFILES" --rec trash "$W/disc/sub/f" 2>/dev/null)
+    has -P "\tfailed\t" <<<"$out" && ! has "read-only folder" <<<"$out" \
+        && ok "a file in a read-only folder fails as a record, with its own reason" \
+        || bad "a file in a read-only folder: $out"
+    chmod -R u+w "$W/disc"
+    "$SYNFILES" trash "$W/disc" >/dev/null 2>&1
+    [ -d "$SYNFILES_TRASH/files/disc/sub" ] \
+        && ok "made writable, the same folder trashes" \
+        || bad "made writable, the folder still did not trash"
+fi
 
 unset SYNFILES_TRASH
 
