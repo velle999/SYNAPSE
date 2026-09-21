@@ -252,17 +252,105 @@ already; what there is not is a systematic read against it.
 Not an audit, and this item does not pretend to be one. A structured internal
 pass finds the easy half.
 
+**Done 2026-09-21 — synapse_kmod 0.1.0-29, with synguard 0.1.0-43.** All of
+`src/` read (≈2,450 lines), and a rig built so the findings are observations:
+`synapse_kmod/tests/run-vm-tests.sh` boots the stock kernel under qemu with the
+module and a fuzzing `/init`, one mode per boot, as root inside the VM and with
+nothing on the host touched. Against the module as it was, it produced **two
+kernel Oopses and seven failed checks**; after the fixes, none. `GAP` lines are
+the limits below, confirmed rather than assumed.
+
 **Done when:**
 
-- [ ] Every sysfs attribute is listed with its permissions and who may write
+- [x] Every sysfs attribute is listed with its permissions and who may write
       it, and each write path is checked for bounds and for what happens on a
       partial or oversized write.
-- [ ] Every path where a userspace string enters the module has its length
+
+      | attribute | mode | written by | bound, and oversized/partial writes |
+      |---|---|---|---|
+      | `status` | 0644 | root (synapd) | stores ≤255 bytes. kernfs passes at most one page: an 8192-byte write returns 4096, a short write the caller sees |
+      | `ai_hints` | 0200 | root (synapd) | `kstrndup` of ≤ one page, per line `sscanf %d %d %31s`; nice clamped; protected pids refused (tested: pid 1, kthreadd). A line straddling the page split arrives as two halves, each dropped or read as class `normal` — synapd writes one short line per write |
+      | `config` | 0644 | root; game mode's `game_quiet_kmod` via `synui-kmod-events` | `sscanf %d`. **Reported events_enabled=1 after capture was switched off — fixed**, and synguard 43 alerts on the switch |
+      | `lockdown` | 0640 | root | `sscanf %d`, EINVAL on junk; pinning twice then unpinning once leaves the module unloadable (tested) |
+      | `syscall_log` | 0440 | — | read-only; the newest 32 events, consumes nothing |
+      | `stats`, `version`, `sensitive_paths` | 0444 | — | read-only; `sensitive_paths` stops at the page |
+      | module parameters | **were 0644** | root | ⛔ `synapse_events` was re-read at unload: flipped at runtime, rmmod left `/dev/synapse-events` registered and the next open **faulted in freed module text** (Oops, mode `unload`). 0444 now. ⛔ `synapse_ring_size=0` loaded and the first event **divided by zero** in a kprobe (Oops, mode `ring0`). Ranges enforced at load now |
+
+- [x] Every path where a userspace string enters the module has its length
       bound identified, and a fuzz case for it.
-- [ ] The ring buffer between the kmod and synguard is examined for the
-      producer/consumer races that a userspace reader can provoke.
-- [ ] The custom syscalls are enumerated with who may call them.
-- [ ] Anything unresolved is written down here rather than closed.
+
+      | entry | bound | case in `run-vm-tests.sh` |
+      |---|---|---|
+      | execve path | `strncpy_from_user` ≤127 into a zeroed 128 | path on the stack; a literal in a fresh child (GAP) |
+      | execveat path | same — **it was read from the dfd argument, so every execveat had no filename; fixed**, and an fd exec is `fd:<n>` | `AT_FDCWD` path; memfd with `AT_EMPTY_PATH` |
+      | openat path | ≤127 into a zeroed 128 | space, newline, `\`, 0x01 and DEL escaped and still one field; a 4199-byte path captured as 127; pointer `0x1`; a non-resident page (GAP) |
+      | connect sockaddr | ≤ `sizeof(sockaddr_storage)`, zeroed, per-family length required | 2-byte AF_INET; addrlen 1<<20 at the edge of a mapping |
+      | comm | the kernel's own 16 bytes, escaped on output | covered by the escaping case; synguard's own tests cover its side |
+      | sysfs stores | table above | 4095- and 8192-byte `status`; 20-digit ints, a 200-char class and an 8192-byte `ai_hints` |
+
+      Output is bounded twice: `syn_escape` by its destination, a line by
+      `SYN_LOG_LINE_MAX`, and a read never emits half a line.
+
+- [x] The ring buffer between the kmod and synguard is examined for the
+      producer/consumer races that a userspace reader can provoke. One
+      spinlock covers the push (kprobe context) and both readers (process
+      context); nothing takes it from softirq or hardirq, so plain
+      `spin_lock` is right there. Head and tail are free-running `u32`s and
+      every index is taken modulo the size. Each reader has its own cursor: a
+      lapped reader is moved forward and told `!dropped N` in the stream
+      (tested with a 16-slot ring: 84 dropped, newest kept, oldest gone). A
+      cursor `lseek`ed past the head reads stale slots but never leaves the
+      array (tested). What userspace CAN provoke is a flood: any process that
+      opens watched paths in a loop laps the ring, and that is reported, not
+      hidden. A reader holds the lock while formatting up to 64 KB, stalling
+      every probe for that long; readers are root-only, so that is latency
+      rather than a lever. **Found alongside it:** `daemon_lock` and
+      `hint_table_lock` were taken by the watchdog timer in softirq context and
+      by process context without `_bh` — a timer firing on the holder's CPU
+      spins forever. Fixed; found by reading, since the stock kernel has no
+      lockdep.
+- [x] The custom syscalls are enumerated with who may call them. **There are
+      none**: no syscall-table hook, no ioctl — `/dev/synapse-events` has open,
+      read, llseek and release. The AI_CTX family was removed earlier; its
+      documentation in `synapse_kmod/README.md` was not, and described a
+      `do_syscall_64` shim that does not exist. Rewritten.
+- [x] Anything unresolved is written down here rather than closed — below.
+
+### Unresolved: what the probes cannot see
+
+Confirmed in the VM unless marked.
+
+1. **Opens are matched on the caller's string, not on the file.** A relative
+   path (`openat(cwd=/etc, "shadow")`), a doubled slash (`/etc//shadow`) and a
+   symlink to a watched file are not reported. Neither are `..`, dirfd-relative
+   paths, `/proc/self/root/…` or a bind mount (by construction; not each run).
+2. **The copy cannot fault a page in.** Probe handlers run with preemption
+   off, so a path in a page the process has not touched yet cannot be read:
+   the open is dropped, the exec has no filename. That is not only an
+   attacker's trick — `fork()` then `execve("/bin/sh", …)` from a string
+   literal is exactly this, and it is common.
+3. **The path can change after it is read** (not tested; follows from 1–2):
+   another thread rewrites the string between the probe's copy and the
+   kernel's own, and the event names a file that was not opened.
+4. **Syscalls with no probe:** `open`, `openat2`, `creat`, `open_by_handle_at`,
+   io_uring, the 32-bit compat entry points, `setreuid`/`setresuid`/`setfsuid`,
+   the setgid family, `capset`, `mount`, `kill`. Confirmed for `open`,
+   `openat2` and `setresuid`. A synguard rule on `event mount` —
+   `escalate-bind-mount` ships — can never fire.
+5. The global `/sys/kernel/debug/kprobes/enabled` switch is invisible to the
+   module's integrity check (synguard's canary covers it).
+
+**What would close 1–3** is reporting from hooks that see the kernel's own
+resolved object — `security_file_open` and `security_bprm_check`, taking the
+path from the `struct file` — or reporting from the BPF-LSM programs synguard
+already attaches for enforcement. That is a new event source rather than a
+patch, and it changes what an event is: a hook after lookup never sees an
+ENOENT attempt, which the current probes report. A decision, then, and the
+largest single gain left in this component.
+
+For §6: the scheduling-hint path lets synapd's model give any unprotected
+process nice −20, and the protected list is matched on `comm`, which a process
+chooses — that only lets a process exempt itself from hints, not gain one.
 
 ## 6. A threat model, once the above have taught us what it says
 
@@ -294,3 +382,10 @@ scope section is a first draft of the audience-facing half.
   2026-08-20. It had been running the whole time.
 - **The shipped synguard policy never acted** — `8e471f1`, 2026-08-20. 55
   rules, none of them `deny` or `quarantine`.
+- **The AI could quiet an escalate rule** — synguard 41, `85a54587`,
+  2026-09-21. §2.
+- **synguard tripped its own canary rule on every boot** — synguard 42,
+  `b3a05ce0`, 2026-09-21. §1.
+- **Two root-reachable kernel crashes, a softirq deadlock, execveat reported
+  with no path, PTRACE_SEIZE unreported, and `config` misreporting capture** —
+  synapse_kmod 29 and synguard 43, 2026-09-21. §5.
