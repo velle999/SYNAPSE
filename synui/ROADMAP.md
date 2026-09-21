@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~5,640 LOC)
+## Where it started (`src/` at ~5,640 LOC; ~108,700 today)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -625,15 +625,28 @@ security borders, the dock and game mode, and gains the parts worth having.
       between frames: no locking, no racing the scene graph. Window titles are
       JSON-escaped (arbitrary user data must not be able to forge fields).
 
-### Not done: rounded corners + blur
-Both need per-surface render control that `wlr_scene` does not expose — there is
-no corner radius, no blur and no per-node shader hook, and the CRT post-process
-pass in `effects.c` cannot help: it runs on the *composited* frame, where the
-pixels behind a window's corner have already been occluded, so there is nothing
-left to round *to*. The real path is **scenefx** (the `wlr_scene` fork SwayFX
-uses, which adds corner radius, blur and shadows). It is not packaged here and
-would mean migrating every `wlr_scene_*` call and pinning to a wlroots version.
-Left as an explicit decision rather than a silent gap.
+### Rounded corners, blur and shadows — scenefx  *(done)*
+Stock `wlr_scene` exposes no per-surface render control — no corner radius, no
+blur, no per-node shader hook — and the CRT pass in `effects.c` cannot supply
+it, because it runs on the composited frame, after the pixels behind a window's
+corner are already occluded. All three come from **scenefx**, the `wlr_scene`
+fork SwayFX uses, built here from `scenefx0.5/` (see the comment at the top of
+`meson.build`).
+
+- [x] **Render on scenefx's `fx_renderer`** — `7c701562` (stages 3+4). The
+      tree-wide header swap is `wlr/` → `scenefx/`; scenefx's `wlr_scene.h` is a
+      superset of wlroots', so every existing `wlr_scene_*` call kept working.
+- [x] **Blur and rounded corners** — `8d7b77cb`, pkgrel 139. synuirc
+      `corner_radius` (default 12), `blur` (default on) and
+      `blur_passes/radius/noise/brightness/contrast/saturation`. The radius is 0
+      on maximized and fullscreen windows, and blur is applied only to a window
+      that is actually translucent, so opaque windows cost no GPU.
+- [x] **Shadows** — `eb1c9e99`, pkgrel 140. One `wlr_scene_shadow` node per
+      frame, lowered beneath it (`deco.c`).
+- [x] **wlroots 0.20 + scenefx 0.5** — `ee34454f`.
+
+The radius reaching panels, menus and the bar is its own section below
+(*`corner_radius` reaches the desktop's own furniture*).
 
 ### Phase Q — niri-style scrollable tiling  *(done)*
 A fifth layout, on the Super+Tab cycle after AI and spelled `niri` everywhere

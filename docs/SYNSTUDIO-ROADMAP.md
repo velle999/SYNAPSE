@@ -508,8 +508,15 @@ Fairlight-style automation: four features for one piece of work.
    range, seven presets, burn-in, image sequences and a queue.
 
 **The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan — and as of 0.1.0-39 it is empty.
-What is left is whatever the next hour of using it turns up. Auto-save was never a gap and is not a feature
+short list of named gaps rather than a plan — the boxes still open:
+
+- title templates (§2)
+- keyframed effect parameters (§2)
+- keys on a title's size and colour (§3)
+- masks on a clip's grade — darkroom only today (§7)
+- the Rec.709 output transform and its colour tags (§7)
+
+Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what
 that was missing, until 0.1.0-34, was a way to give it a name.
 
