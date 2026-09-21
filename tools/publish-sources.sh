@@ -34,6 +34,12 @@
 # from the tagged commit and compare. (The PKGBUILDs still carry
 # sha256sums=('SKIP') — see packaging/README.md for why they must.)
 #
+# ⚠ AND SIGNED. Every tarball goes up with a detached `.sig` made with the
+# update key (syn-update/synapseos-update.key), and the exported PKGBUILD names
+# it with validpgpkeys, so makepkg refuses a tarball the project did not sign.
+# A release published before that gets its signature on the next run — only if
+# this tree makes the same files; see backfill_signature.
+#
 # Usage:
 #   tools/publish-sources.sh --list           # every package and its state
 #   tools/publish-sources.sh --dry-run        # what would be published
@@ -209,6 +215,86 @@ pkgfield() {  # pkgfield <component> <field>
     ( set +u; . "$BASE/$1/PKGBUILD" >/dev/null 2>&1; printf '%s' "${!2}" )
 }
 
+# ── signing ─────────────────────────────────────────────────────────────────
+#
+# The update key signs, and it has no passphrase so that this runs unattended.
+# Signatures are written to a temp dir, never beside the tarball: the tree has
+# to stay clean for the next run's check above.
+SIGN_FPR=$(gpg --batch --with-colons --show-keys "$BASE/syn-update/synapseos-update.key" 2>/dev/null |
+           awk -F: '$1 == "fpr" { print $10; exit }')
+[ -n "$SIGN_FPR" ] || { echo "publish-sources: cannot read syn-update/synapseos-update.key" >&2; exit 1; }
+if [ "$list" -eq 0 ] && [ "$dry" -eq 0 ]; then
+    gpg --batch --list-secret-keys "$SIGN_FPR" >/dev/null 2>&1 || {
+        echo "publish-sources: the update-signing key $SIGN_FPR is not on this machine" >&2
+        exit 1; }
+fi
+SIGDIR=$(mktemp -d); trap 'rm -rf "$SIGDIR"' EXIT
+
+sign_file() {  # sign_file <file> → $SIGDIR/<basename>.sig
+    local out="$SIGDIR/$(basename "$1").sig"
+    rm -f "$out"
+    gpg --batch --yes --quiet --local-user "$SIGN_FPR" --detach-sign --output "$out" "$1"
+}
+
+make_tarball() {  # make_tarball <component>
+    if [ -x "$BASE/$1/mktarball.sh" ]; then
+        ( cd "$BASE/$1" && ./mktarball.sh >/dev/null )
+    else
+        "$BASE/tools/collect-source.sh" "$1" >/dev/null
+    fi
+}
+
+# The same member names, types, modes and contents — everything but the
+# timestamps and owners an older, non-reproducible pack recorded.
+same_files() {  # same_files <a.tar.gz> <b.tar.gz>
+    local a b r=1
+    a=$(mktemp -d); b=$(mktemp -d)
+    if tar -xpzf "$1" -C "$a" && tar -xpzf "$2" -C "$b" &&
+       diff -r --no-dereference "$a" "$b" >/dev/null &&
+       [ "$(cd "$a" && find . -printf '%m %y %P\n' | sort)" = \
+         "$(cd "$b" && find . -printf '%m %y %P\n' | sort)" ]; then
+        r=0
+    fi
+    rm -rf "$a" "$b"
+    return $r
+}
+
+# ⛔ A RELEASE PUBLISHED BEFORE SIGNING BEGAN IS SIGNED ONLY IF THIS TREE MAKES
+# IT. Signing the asset GitHub serves would put the project's name on whatever
+# is there now — the one thing this signature exists to stop taking on trust.
+# So the tarball is rebuilt here and compared: the same bytes are signed as
+# they are; the same files packed differently (an asset from before the packing
+# was reproducible) are replaced by the reproducible pack and signed; anything
+# else is refused and reported — an edit that never bumped pkgrel, or an asset
+# somebody changed. The exported PKGBUILD then stays unsigned until it is fixed.
+backfill_signature() {  # backfill_signature <name> <repo> <tag> <asset>
+    local name=$1 repo=$2 tag=$3 asset=$4 src tmp
+    make_tarball "$name"
+    src="$BASE/$name/$asset"
+    [ -s "$src" ] || { echo "  FAILED    $name produced no tarball"; return 1; }
+    tmp=$(mktemp -d)
+    if ! gh release download "$tag" --repo "$repo" --pattern "$asset" -D "$tmp" >/dev/null 2>&1; then
+        rm -rf "$tmp"
+        echo "  FAILED    $name: could not download the published $asset"
+        return 1
+    fi
+    if cmp -s "$src" "$tmp/$asset"; then
+        sign_file "$src"
+        gh release upload "$tag" "$SIGDIR/$asset.sig" --repo "$repo" --clobber >/dev/null
+        printf '  signed    %-13s %s %s\n' "$name" "$repo" "$tag"
+    elif same_files "$src" "$tmp/$asset"; then
+        sign_file "$src"
+        gh release upload "$tag" "$src" "$SIGDIR/$asset.sig" --repo "$repo" --clobber >/dev/null
+        printf '  signed    %-13s %s %s  (same files, repacked reproducibly)\n' "$name" "$repo" "$tag"
+    else
+        printf '  REFUSED   %-13s %s: the published %s holds different files from this tree — not signed\n' \
+               "$name" "$tag" "$asset"
+        rm -rf "$tmp"
+        return 1
+    fi
+    rm -rf "$tmp"
+}
+
 rc=0
 for name in "${EXTERNAL[@]}"; do
     want "$name" || continue
@@ -220,21 +306,29 @@ for name in "${EXTERNAL[@]}"; do
     tag="$pkgver-$pkgrel"
     asset="$name-$pkgver.tar.gz"
 
-    have_repo=""; have_rel=""
+    have_repo=""; have_rel=""; have_sig=""; assets=""
     if command -v gh >/dev/null 2>&1; then
         gh repo view "$repo" >/dev/null 2>&1 && have_repo=yes
-        [ -n "$have_repo" ] && gh release view "$tag" --repo "$repo" >/dev/null 2>&1 && have_rel=yes
+        [ -n "$have_repo" ] &&
+            assets=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' 2>/dev/null) &&
+            have_rel=yes
+        grep -qxF "$asset.sig" <<<"$assets" && have_sig=yes
     fi
+    has_src=""; [ -n "$(pkgfield "$name" source)" ] && has_src=yes
 
     if [ "$list" -eq 1 ]; then
-        printf '  %-14s %-10s %-9s %s\n' "$name" "$tag" \
+        printf '  %-14s %-10s %-9s %-13s %s\n' "$name" "$tag" \
                "$([ -n "$have_repo" ] && echo 'repo ok' || echo 'NO REPO')" \
-               "$([ -n "$have_rel" ] && echo published || echo 'not published')"
+               "$([ -n "$have_rel" ] && echo published || echo 'not published')" \
+               "$([ -z "$has_src" ] && echo '' || { [ -n "$have_sig" ] && echo signed || echo UNSIGNED; })"
         continue
     fi
 
     if [ "$dry" -eq 1 ]; then
-        if [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
+        if [ -n "$have_rel" ] && [ -n "$has_src" ] && [ -z "$have_sig" ] && [ "$force" -eq 0 ]; then
+            printf '  would     %-13s %s  <- sign %s, if this tree makes the same files\n' \
+                   "$name" "$repo" "$tag"
+        elif [ -n "$have_rel" ] && [ "$force" -eq 0 ]; then
             printf '  would     %-13s %s  <- the repository; %s is published already\n' \
                    "$name" "$repo" "$tag"
         else
@@ -260,7 +354,17 @@ for name in "${EXTERNAL[@]}"; do
     # PKGBUILD. Anything that is not the source tarball — the README, the
     # .SRCINFO, an .install scriptlet — is published by this line or not at
     # all.
-    "$BASE/packaging/git-export.sh" "$name" >/dev/null
+    #
+    # ⚠ THE SIGNATURE COMES FIRST, WHEN THE RELEASE IS OLDER THAN SIGNING. The
+    # export names the .sig under --signed, and a PKGBUILD naming a file that
+    # is not there fails for everybody who builds it. A release this run is
+    # about to create is created with its signature, so it counts as signed.
+    if [ -n "$have_rel" ] && [ -n "$has_src" ] && [ -z "$have_sig" ] && [ "$force" -eq 0 ]; then
+        if backfill_signature "$name" "$repo" "$tag" "$asset"; then have_sig=yes; else rc=1; fi
+    fi
+    signed=()
+    if [ -n "$have_sig" ] || [ -z "$have_rel" ] || [ "$force" -eq 1 ]; then signed=(--signed); fi
+    "$BASE/packaging/git-export.sh" "${signed[@]}" "$name" >/dev/null
 
     d="$BASE/packaging/out/$name"
     if [ -z "$have_repo" ]; then
@@ -280,7 +384,7 @@ for name in "${EXTERNAL[@]}"; do
     # it is a name and a list of dependencies, so its repository is complete
     # with the PKGBUILD alone and there is no tarball to attach. Publishing an
     # empty one would be publishing a promise nothing keeps.
-    if [ -z "$(pkgfield "$name" source)" ]; then
+    if [ -z "$has_src" ]; then
         printf '  ok        %-13s %s  (no sources — the PKGBUILD is the package)\n' \
                "$name" "$repo"
         continue
@@ -290,13 +394,10 @@ for name in "${EXTERNAL[@]}"; do
         printf '  ok        %-13s %s %s\n' "$name" "$repo" "$tag"
         continue
     fi
-    if [ -x "$BASE/$name/mktarball.sh" ]; then
-        ( cd "$BASE/$name" && ./mktarball.sh >/dev/null )
-    else
-        "$BASE/tools/collect-source.sh" "$name" >/dev/null
-    fi
+    make_tarball "$name"
     src="$BASE/$name/$asset"
     [ -s "$src" ] || { echo "  FAILED    $name produced no tarball"; rc=1; continue; }
+    sign_file "$src"
 
     notes="Source for \`$name $tag\`, so it can be built without a checkout of
 [the SynapseOS monorepo](https://github.com/velle999/SYNAPSE).
@@ -309,13 +410,20 @@ cd $name && makepkg -si
 The PKGBUILD composes this URL from its own \`pkgver\`/\`pkgrel\`, so it can only
 ever build the source it was written against. The tarball is reproducible:
 \`tools/collect-source.sh $name\` at the matching commit re-derives it byte for
-byte."
+byte.
+
+\`$asset.sig\` is its signature, made with the SynapseOS update key
+(\`$SIGN_FPR\`), and makepkg checks it. Import the key once:
+
+\`\`\`bash
+curl -sL https://soslinux.org/synapseos-update-key.asc | gpg --import
+\`\`\`"
 
     if [ -n "$have_rel" ]; then
-        gh release upload "$tag" "$src" --repo "$repo" --clobber
+        gh release upload "$tag" "$src" "$SIGDIR/$asset.sig" --repo "$repo" --clobber
         printf '  updated   %-13s %s %s\n' "$name" "$repo" "$tag"
     else
-        gh release create "$tag" "$src" --repo "$repo" \
+        gh release create "$tag" "$src" "$SIGDIR/$asset.sig" --repo "$repo" \
             --title "$name $tag" --notes "$notes" >/dev/null
         printf '  published %-13s %s %s\n' "$name" "$repo" "$tag"
     fi

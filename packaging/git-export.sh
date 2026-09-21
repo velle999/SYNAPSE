@@ -18,6 +18,16 @@
 # free to drift, and the drift would surface as a package that builds here and
 # not for the person who filed the bug.
 #
+# ⚠ WITH ONE ADDITION, UNDER --signed: three lines appended to the copy that
+# name the release asset's detached signature and the key it must be made
+# with, so makepkg refuses a tarball the project did not sign. Appended rather
+# than written into the tree's PKGBUILD because build-all.sh builds from a
+# tarball it just made, which nobody has signed; and appended rather than
+# edited in, so the copy above them stays byte-for-byte the tree's.
+# tools/publish-sources.sh passes --signed only once the signature is
+# published, so an exported PKGBUILD never names a .sig that is not there.
+# The commits in these repositories are signed with the same key.
+#
 # ⚠ .SRCINFO IS GENERATED, NEVER WRITTEN. `makepkg --printsrcinfo` expands the
 # same variables makepkg itself will, so the metadata a host displays cannot
 # disagree with what is built. It is regenerated on every run.
@@ -32,6 +42,7 @@
 #   packaging/git-export.sh syn-play        # one of them
 #   packaging/git-export.sh -o /srv/pkgrepos
 #   packaging/git-export.sh --origin 'https://github.com/velle999/pkg-%s.git'
+#   packaging/git-export.sh --signed syn-play   # name the release's .sig too
 #
 # `--origin` takes a printf template; %s becomes the package name, and it
 # defaults to github.com/velle999/<pkgname> — the same repository that carries
@@ -53,11 +64,13 @@ out="$BASE/packaging/out"
 # The package's own repository, which is also where its source releases live.
 # tools/publish-sources.sh creates it and pushes here.
 origin_tpl="https://github.com/velle999/%s.git"
+signed=0
 only=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -o|--out)    out=$2; shift ;;
         --origin)    origin_tpl=$2; shift ;;
+        --signed)    signed=1 ;;
         -h|--help)   sed -n '2,40p' "$0"; exit 0 ;;
         -*) echo "git-export: unknown option $1" >&2; exit 2 ;;
         *)  only+=("$1") ;;
@@ -74,6 +87,13 @@ mapfile -t EXTERNAL < <(
     ( set +u; eval "$block"; printf '%s\n' "${EXTERNAL[@]}" )
 )
 [ ${#EXTERNAL[@]} -gt 0 ] || { echo "git-export: could not read EXTERNAL" >&2; exit 1; }
+
+# The update-signing key: it signs these repositories' commits and the source
+# tarballs their PKGBUILDs fetch. Read from the one copy syn-update ships.
+KEYFILE="$BASE/syn-update/synapseos-update.key"
+SIGN_FPR=$(gpg --batch --with-colons --show-keys "$KEYFILE" 2>/dev/null |
+           awk -F: '$1 == "fpr" { print $10; exit }')
+[ -n "$SIGN_FPR" ] || { echo "git-export: cannot read the update key at $KEYFILE" >&2; exit 1; }
 
 want() {
     [ ${#only[@]} -eq 0 ] && return 0
@@ -98,9 +118,24 @@ for name in "${EXTERNAL[@]}"; do
         cp "$BASE/$name/$inst" "$d/$inst"
     fi
 
-    # ⚠ makepkg --printsrcinfo must run in the package's own directory: it
-    # sources the PKGBUILD, and several of ours read files beside them.
-    ( cd "$BASE/$name" && makepkg --printsrcinfo ) > "$d/.SRCINFO"
+    # Only a package with a source tarball has anything to sign.
+    if [ "$signed" = 1 ] && grep -q 'releases/download' "$d/PKGBUILD"; then
+        cat >> "$d/PKGBUILD" <<SIG
+
+# Added by packaging/git-export.sh: the tarball is signed with the SynapseOS
+# update key, and makepkg refuses it unless the signature is good.
+source+=("\$pkgname-\$pkgver.tar.gz.sig::https://github.com/velle999/\$pkgname/releases/download/\$pkgver-\$pkgrel/\$pkgname-\$pkgver.tar.gz.sig")
+sha256sums+=('SKIP')
+validpgpkeys=('$SIGN_FPR')  # SynapseOS Update Signing <updates@soslinux.org>
+SIG
+    fi
+
+    # ⚠ makepkg --printsrcinfo must run where the PKGBUILD is, and several of
+    # ours read their .install scriptlet from beside it — copied above, so the
+    # export's own directory gives the same answer as the component's, and
+    # includes the lines appended for the signature.
+    ( cd "$d" && makepkg --printsrcinfo ) > "$d/.SRCINFO.new"
+    mv "$d/.SRCINFO.new" "$d/.SRCINFO"
 
     ver=$( set +u; . "$BASE/$name/PKGBUILD" >/dev/null 2>&1; printf '%s-%s' "$pkgver" "$pkgrel" )
 
@@ -111,6 +146,7 @@ pkg/
 src/
 *.pkg.tar.zst
 *.tar.gz
+*.tar.gz.sig
 IGN
 
     # ── the README that repository shows ────────────────────────────────────
@@ -146,12 +182,20 @@ IGN
 
         printf '\n## Install\n\n'
         printf '%s\n' '```bash'
+        if grep -q '^validpgpkeys=' "$d/PKGBUILD"; then
+            printf '%s\n' 'curl -sL https://soslinux.org/synapseos-update-key.asc | gpg --import   # once'
+        fi
         printf 'git clone https://github.com/velle999/%s\n' "$name"
         printf 'cd %s && makepkg -si\n' "$name"
         printf '%s\n' '```'
         printf '\n%s\n' 'makepkg fetches the source for this PKGBUILD'"'"'s exact version from this'
         printf '%s\n' 'repository'"'"'s releases, so a clone can only ever build the source it was'
         printf '%s\n' 'written against. `.SRCINFO` lists what it needs.'
+        if grep -q '^validpgpkeys=' "$d/PKGBUILD"; then
+            printf '\n%s\n' 'The source is signed with the SynapseOS update key, and makepkg refuses it'
+            printf '%s\n' 'unless the signature is good. The fingerprint is in'
+            printf '%s\n' '[SECURITY.md](https://github.com/velle999/SYNAPSE/blob/main/SECURITY.md).'
+        fi
 
         printf '\n## Where this comes from\n\n'
         printf '%s\n' 'Developed in [the SynapseOS monorepo](https://github.com/velle999/SYNAPSE),'
@@ -169,6 +213,8 @@ IGN
     # existed, or copied from somewhere, would otherwise keep the wrong one.
     git -C "$d" config user.name  "$GIT_NAME"
     git -C "$d" config user.email "$GIT_EMAIL"
+    git -C "$d" config commit.gpgsign true
+    git -C "$d" config user.signingkey "$SIGN_FPR"
 
     # The AUR's own URL, recorded and not pushed. Whenever submissions open,
     # `git push aur main` is the whole of it.

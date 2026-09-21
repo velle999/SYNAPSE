@@ -234,7 +234,7 @@ then, and was reconciled against the tree on 2026-09-21.** Every release from
       HTTPS: no signature anywhere on that path, so its trust is GitHub's
       account security and TLS. There is no package key, so there is no stale
       keyring case. Written into `SECURITY.md`. ⚠ That update path is the
-      real supply-chain surface and belongs in §6.
+      real supply-chain surface and belongs in §6. (§7 signs it.)
 
 ## 4. Reproducible ISO builds
 
@@ -458,6 +458,48 @@ before it could be written down as they were:
 
 ---
 
+## 7. Updates only the project signed
+
+**Why:** the threat model's one path from outside into every installed machine
+was `syn-update` building whatever GitHub served, and plain-Arch users building
+tarballs nothing pinned. Whoever could push to GitHub could ship code to every
+box.
+
+**Done 2026-09-21.** A dedicated update key (`648B 4C32 942C 79B2 0E8A  C3F4 9CEC EBCD F480 37C1`,
+ed25519, no passphrase so it signs unattended) signs every commit to this
+repository and every published source tarball.
+
+- **syn-update 63** builds only commits signed with a key in
+  `/usr/share/syn-update/keys`. It walks every commit since the last one it
+  verified — a signed commit on top does not carry an unsigned one under it —
+  and stops before the first that fails. Commits up to `29ace401`, the last
+  before signing began, are exempt. A first clone is made without checkout, so
+  nothing unverified sits where `syn printer` builds from.
+  `tests/signed_update_test.sh` (15 checks, in CI) fails 13 against 62.
+- **`tools/pre-push`** refuses to push a commit that is not signed with the
+  key, because one on `main` stops every machine before it until it is
+  re-signed and force-pushed.
+- **Published tarballs** go up with a `.sig`; the package repositories'
+  PKGBUILDs name it and the key; their commits are signed. The 23 existing
+  releases were signed only where a fresh clone makes the same files: 20 byte
+  for byte, synguard with the same files packed differently; synui 623 and
+  synapd 56 carried build leftovers (a `__pycache__`, a symlink to a path on
+  the build machine). The tarball builders now leave out anything
+  `.gitignore` names, and synui's and synguard's pack reproducibly.
+
+**Done when:**
+
+- [x] syn-update refuses an unsigned or wrongly signed commit, including one
+      under a signed tip, and says what it skipped.
+- [x] An unsigned commit cannot be pushed from the build machine.
+- [x] makepkg refuses an unsigned or tampered published tarball.
+- [x] The key and its fingerprint are published (`SECURITY.md`,
+      soslinux.org).
+- [ ] The update key is certified by the release key, so one fingerprint
+      vouches for both.
+
+---
+
 ## Done
 
 - **`SECURITY.md` and private vulnerability reporting** — `ac77b3a`,
@@ -482,3 +524,5 @@ before it could be written down as they were:
   — synguard 44 and syn-settings 65, `c22564fc`, 2026-09-21. §1.
 - **The command bar ran model output unconfined, from a window title** — synui
   623; **vibe's confirmation failed open** — vibe 36. 2026-09-21. §6.
+- **Updates built whatever GitHub served** — syn-update 63, signed commits and
+  signed source tarballs, 2026-09-21. §7.

@@ -158,9 +158,28 @@ SynapseOS Release Signing <releases@soslinux.org>   ed25519, expires 2029-08-28
 The public key is at <https://soslinux.org/synapseos-release-key.asc>, and the
 README's *Check who built it* section has the commands.
 
-SynapseOS's own packages are not signed one by one. On the ISO they are covered
-by the ISO's signature; an installed system's `syn-update` builds them from
-source fetched from GitHub over HTTPS.
+## Verifying an update
+
+Updates are signed with the SynapseOS update key:
+
+```
+648B 4C32 942C 79B2 0E8A  C3F4 9CEC EBCD F480 37C1
+SynapseOS Update Signing <updates@soslinux.org>     ed25519
+```
+
+The public key is at <https://soslinux.org/synapseos-update-key.asc>, and
+`syn-update` carries a copy in `/usr/share/syn-update/keys/`.
+
+- **An installed SynapseOS** updates with `syn-update`, which builds only
+  commits signed with this key. When newer commits are not signed it builds up
+  to the last one that is, and `syn-update check` lists the rest.
+- **The components installed on plain Arch** carry a signature beside each
+  source tarball, and their PKGBUILDs name this key, so makepkg refuses a
+  tarball it did not sign. Import the key once (`packaging/README.md`).
+
+SynapseOS's own packages are not signed one by one: on the ISO they are covered
+by the ISO's signature, and after that `syn-update` builds them from signed
+commits.
 
 ## Please do not
 

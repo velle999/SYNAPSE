@@ -883,7 +883,9 @@ setup_src() {
     while read -r url; do
         [ -n "$url" ] || continue
         info "first run: cloning $url into $SRC"
-        if git clone --branch "$REPO_REF" "$url" "$SRC"; then cloned=1; break; fi
+        # --no-checkout: nothing lands in the working tree until verify_fetched()
+        # has said which revision may. `syn printer` builds straight out of it.
+        if git clone --no-checkout --branch "$REPO_REF" "$url" "$SRC"; then cloned=1; break; fi
         warn "could not clone from $url"
         rm -rf -- "$SRC/.git"
     done < <(repo_sources)
@@ -894,16 +896,166 @@ setup_src() {
 
 # The revision currently checked out, and the one upstream is offering.
 local_rev()  { git -C "$SRC" rev-parse HEAD 2>/dev/null; }
-remote_rev() { git -C "$SRC" rev-parse "origin/$REPO_REF" 2>/dev/null; }
+# ⚠ THE VERIFIED COMMIT, not origin's tip — see verify_fetched() below. Every
+# consumer (check, apply, ping, the PKGBUILD scan) reads this, so nothing that
+# was fetched but not signed is ever looked at as an update.
+remote_rev() { git -C "$SRC" rev-parse "$TARGET_REF" 2>/dev/null; }
+
+# ── Only what the project signed ────────────────────────────────────────────
+#
+# This tool builds whatever it fetches and installs it as root. Until 0.1.0-63
+# "whatever it fetches" meant whatever GitHub — or a mirror, or anything that
+# could answer for either — served for $REPO_REF: nobody's signature was
+# checked, so a stolen GitHub login or token reached every machine at its next
+# `apply`. docs/THREAT-MODEL.md §4.
+#
+# Now every commit it would build has to carry a good signature from a key in
+# $KEYS_DIR — the INSTALLED keys, never the fetched tree's, which is exactly
+# the thing being checked. The fetched history is walked oldest first from the
+# last commit already verified, and the target is the last commit before the
+# first one that fails. Not only the tip: a signature covers the commit's whole
+# history, so checking the tip alone would let one unsigned commit slipped in
+# underneath be "blessed" by the next signed commit on top of it. Anything past
+# the first failure waits, and `check` says so.
+#
+# TRUST_ANCHOR is the last commit made before signing began (2026-09-21). It
+# and its history are exempt; a tree that does not contain it — history
+# rewritten below it, or somebody else's repository — has to be signed all the
+# way down, which in practice means it is refused. A first check walks every
+# commit since it, about 3ms each; moving it forward to a later signed commit is
+# safe (this file is itself signed) whenever that walk gets slow.
+#
+# ⛔ AN UNSIGNED COMMIT ON $REPO_REF STOPS EVERY MACHINE BEFORE IT, for good:
+# every later commit contains it. Commit only from a checkout with signing on
+# (tools/pre-push refuses to push anything unsigned); a commit made anywhere
+# else — the GitHub web editor, a merged pull request, another machine — has
+# to be re-signed there and force-pushed before any machine will move past it.
+#
+# SYN_UPDATE_ALLOW_UNSIGNED=1 turns the check off for one run, loudly: for
+# somebody deliberately tracking a fork with no key of theirs installed.
+KEYS_DIR="${SYN_UPDATE_KEYS_DIR:-/usr/share/syn-update/keys}"
+TRUST_ANCHOR=29ace401c6c1a07fbb29d9b330ca3be9e8776c78
+TARGET_REF=refs/syn-update/verified
+ALLOWED_FPRS=""
+SIGN_GNUPG=""
+VERIFIED=""
+FIRST_BAD=""
+PENDING_UNSIGNED=0
+
+# A keyring holding only the installed keys, so nothing a user imported into
+# their own can vouch for a commit.
+signers_setup() {
+    [ -n "$SIGN_GNUPG" ] && return 0
+    local keys=("$KEYS_DIR"/*.asc)
+    [ -e "${keys[0]}" ] ||
+        die "no update-signing keys in $KEYS_DIR — cannot check who signed the source, so nothing will be built"
+    SIGN_GNUPG=$(mktemp -d "${TMPDIR:-/tmp}/syn-update-gnupg.XXXXXX")
+    chmod 700 "$SIGN_GNUPG"
+    local k
+    for k in "${keys[@]}"; do
+        GNUPGHOME="$SIGN_GNUPG" gpg --batch --quiet --import "$k" 2>/dev/null ||
+            die "could not read the update-signing key $k"
+    done
+    ALLOWED_FPRS=$(GNUPGHOME="$SIGN_GNUPG" gpg --batch --with-colons --list-keys 2>/dev/null |
+                   awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }' |
+                   tr '\n' ' ')
+    [ -n "$ALLOWED_FPRS" ] || die "no usable key in $KEYS_DIR"
+}
+signers_cleanup() { [ -n "$SIGN_GNUPG" ] && rm -rf "$SIGN_GNUPG"; SIGN_GNUPG=""; }
+
+signer_allowed() {
+    [ -n "$1" ] || return 1
+    case " $ALLOWED_FPRS " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
+# signed_through <git-dir> <tip>: sets VERIFIED (the newest commit whose whole
+# history back to the last trusted point is signed), FIRST_BAD and
+# PENDING_UNSIGNED. Returns 1 when not even one commit qualifies.
+signed_through() {
+    local dir=$1 tip=$2 base="" prev
+    prev=$(git -C "$dir" rev-parse -q --verify "$TARGET_REF^{commit}" 2>/dev/null)
+    if [ -n "$prev" ] && git -C "$dir" merge-base --is-ancestor "$prev" "$tip" 2>/dev/null; then
+        base=$prev
+    elif git -C "$dir" cat-file -e "$TRUST_ANCHOR^{commit}" 2>/dev/null &&
+         git -C "$dir" merge-base --is-ancestor "$TRUST_ANCHOR" "$tip" 2>/dev/null; then
+        base=$TRUST_ANCHOR
+    fi
+    VERIFIED=$base FIRST_BAD="" PENDING_UNSIGNED=0
+    local sha status primary
+    # --topo-order --reverse: every ancestor before its descendants, so the
+    # first failure bounds everything after it on every branch.
+    while read -r sha status primary; do
+        if [ -z "$FIRST_BAD" ] && { [ "$status" = G ] || [ "$status" = U ]; } &&
+           signer_allowed "$primary"; then
+            VERIFIED=$sha
+        else
+            [ -n "$FIRST_BAD" ] || FIRST_BAD=$sha
+            PENDING_UNSIGNED=$((PENDING_UNSIGNED + 1))
+        fi
+    done < <(GNUPGHOME="$SIGN_GNUPG" git -C "$dir" log --topo-order --reverse \
+                 --format='%H %G? %GP' "${base:+$base..}$tip" 2>/dev/null)
+    [ -n "$VERIFIED" ]
+}
+
+# After every fetch: point $TARGET_REF at what may be built.
+verify_fetched() {
+    local tip
+    tip=$(git -C "$SRC" rev-parse "origin/$REPO_REF" 2>/dev/null) ||
+        die "no origin/$REPO_REF after the fetch"
+    if [ "${SYN_UPDATE_ALLOW_UNSIGNED:-0}" = 1 ]; then
+        warn "SYN_UPDATE_ALLOW_UNSIGNED=1 — building origin/$REPO_REF WITHOUT checking who signed it"
+        git -C "$SRC" update-ref "$TARGET_REF" "$tip"
+    else
+        signers_setup
+        if ! signed_through "$SRC" "$tip"; then
+            signers_cleanup
+            die "nothing on origin/$REPO_REF is signed by a SynapseOS update key ($(git -C "$SRC" log -1 --format='%h %s' "${FIRST_BAD:-$tip}" 2>/dev/null | cut -c1-70)) — refusing to build it"
+        fi
+        signers_cleanup
+        git -C "$SRC" update-ref "$TARGET_REF" "$VERIFIED"
+        if [ "$PENDING_UNSIGNED" -gt 0 ]; then
+            warn "$PENDING_UNSIGNED newer commit(s) on origin/$REPO_REF are not signed by a SynapseOS update key, and are not built:"
+            warn "  the first is $(git -C "$SRC" log -1 --format='%h %s' "$FIRST_BAD" | cut -c1-70)"
+        else
+            ok "origin/$REPO_REF is signed through $(git -C "$SRC" rev-parse --short "$VERIFIED")"
+        fi
+    fi
+    # A first clone has no index until something is checked out (setup_src
+    # clones with --no-checkout), and until now nothing was allowed to be.
+    if [ ! -e "$SRC/.git/index" ]; then
+        git -C "$SRC" checkout --quiet -B "$REPO_REF" "$TARGET_REF" &&
+            git -C "$SRC" reset --quiet --hard "$TARGET_REF" ||
+            die "could not check out the verified revision of $REPO_REF"
+    fi
+}
+
+# `syn-update verify-range [<git-dir>] <rev>` — the same check, for a checkout
+# rather than $SRC; tools/pre-push runs it on what is about to be pushed.
+# Exit 0 only when every commit in range is signed.
+cmd_verify_range() {
+    local dir=. rev
+    if [ $# -ge 2 ]; then dir=$1; rev=$2; else rev=${1:-HEAD}; fi
+    local tip; tip=$(git -C "$dir" rev-parse "$rev^{commit}" 2>/dev/null) || die "no commit $rev in $dir"
+    signers_setup
+    signed_through "$dir" "$tip"
+    signers_cleanup
+    if [ "$PENDING_UNSIGNED" -gt 0 ]; then
+        say "not signed by a SynapseOS update key: $(git -C "$dir" log -1 --format='%h %s' "$FIRST_BAD" | cut -c1-70)"
+        say "($PENDING_UNSIGNED commit(s) from there to $rev)"
+        return 1
+    fi
+    say "signed through $(git -C "$dir" rev-parse --short "$tip")"
+}
 
 fetch_src() {
     info "fetching $REPO_REF from origin"
     if ! git -C "$SRC" fetch --quiet origin "$REPO_REF"; then
         # ⚠ THE MIRROR WRITES THE REF origin WOULD HAVE WRITTEN, which is the
         # whole reason this is three lines rather than a remote-swapping dance.
-        # Everything downstream — remote_rev(), checkout_remote() — reads
-        # `origin/$REPO_REF` and must not care which host answered; an explicit
-        # refspec means it never finds out. The leading + is not optional: a
+        # verify_fetched() reads `origin/$REPO_REF` and must not care which
+        # host answered — a mirror is checked against the same keys as GitHub;
+        # an explicit refspec means it never finds out. The leading + is not optional: a
         # mirror that is momentarily behind would otherwise be refused as a
         # non-fast-forward and the fallback would fail for looking like it
         # worked.
@@ -928,6 +1080,8 @@ fetch_src() {
         [ "$fetched" = 1 ] ||
             die "git fetch failed from every source (no network?): $(repo_sources | tr '\n' ' ')"
     fi
+
+    verify_fetched
 
     # A dirty tree means someone edited the update cache by hand. Refuse rather
     # than reset --hard over their work without asking.
@@ -954,9 +1108,9 @@ checkout_remote() {
     if [ "${FORCE:-0}" = 1 ]; then
         git -C "$SRC" clean --quiet -fd
     fi
-    git -C "$SRC" checkout --quiet -B "$REPO_REF" "origin/$REPO_REF" ||
-        die "could not check out origin/$REPO_REF"
-    git -C "$SRC" reset --quiet --hard "origin/$REPO_REF"
+    git -C "$SRC" checkout --quiet -B "$REPO_REF" "$TARGET_REF" ||
+        die "could not check out the verified revision of $REPO_REF"
+    git -C "$SRC" reset --quiet --hard "$TARGET_REF"
 }
 
 # ── what is behind ───────────────────────────────────────────
@@ -1070,7 +1224,7 @@ BUILT=()
 # the tree through it would fail, silently, in exactly the mode whose whole job
 # is to tell you what apply is going to do.
 buildable_names() {
-    git -C "${SRC_GIT:-$SRC}" show "origin/$REPO_REF:build-all.sh" 2>/dev/null |
+    git -C "${SRC_GIT:-$SRC}" show "$TARGET_REF:build-all.sh" 2>/dev/null |
         awk '/^KNOWN=\(/{f=1} f{print} f && /\)/{exit}' |
         sed 's/^KNOWN=(//; s/).*//' | tr -s ' \t\n' ' '
 }
@@ -1107,7 +1261,7 @@ scan_remote() {
         # pkgver/pkgrel" warning — two pieces of noise for a component that is
         # simply not there yet, which is the normal case when an older system
         # updates to a tree that has since gained a component.
-        git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
+        git -C "$SRC" show "$TARGET_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
             rm -rf "$tmp/$c"
     done
     local real="$SRC"; SRC="$tmp"; SRC_GIT="$real"; scan; SRC="$real"; SRC_GIT=""
@@ -1328,7 +1482,7 @@ cmd_check() {
     if [ "$from" = "$to" ]; then
         ok "source is already at $(git -C "$SRC" rev-parse --short HEAD) ($REPO_REF)"
     else
-        info "$(git -C "$SRC" rev-parse --short HEAD) -> $(git -C "$SRC" rev-parse --short origin/"$REPO_REF")"
+        info "$(git -C "$SRC" rev-parse --short HEAD) -> $(git -C "$SRC" rev-parse --short "$TARGET_REF")"
     fi
     show_commits "$from" "$to"
 
@@ -1977,7 +2131,7 @@ ping_scan_and_write() {
     done
 
     ping_write ok \
-        "rev=$(git -C "$SRC" rev-parse --short "origin/$REPO_REF" 2>/dev/null)" \
+        "rev=$(git -C "$SRC" rev-parse --short "$TARGET_REF" 2>/dev/null)" \
         "updates=${#CHANGED[@]}" \
         "new=${#NEW[@]}" \
         "held=${#HELD[@]}" \
@@ -2093,6 +2247,9 @@ Usage:
                             Let one go again.
   syn-update ignored        What is being held back
   syn-update status         Show the source revision and installed versions
+  syn-update verify-range [<dir>] <rev>
+                            Check that every commit up to <rev> in a checkout
+                            is signed by an installed update key
   syn-update ping           Check quietly and write the answer where the bar's
                             update indicator reads it. This is what the timer
                             runs; by hand it prints one line.
@@ -2115,6 +2272,10 @@ Options:
 
 Environment:
   SYN_UPDATE_REPO           Source repository (default: the SynapseOS GitHub)
+  SYN_UPDATE_KEYS_DIR       Keys whose signatures updates must carry
+                            (default: /usr/share/syn-update/keys)
+  SYN_UPDATE_ALLOW_UNSIGNED Set to 1 to build without checking signatures, for
+                            a fork signed by nobody whose key is installed
   SYN_UPDATE_REF            Branch to track (default: main)
   SYN_UPDATE_SRC            Where the source tree lives (default: /var/lib/synapse-src)
   SYN_UPDATE_MANIFEST       The component selection record
@@ -2126,6 +2287,14 @@ Environment:
                             one case -Sy cannot fix — a cached signature older
                             than the database it signs — and for a -Sy that
                             comes back complaining about one.
+
+SIGNED UPDATES
+
+Every commit syn-update builds must carry a signature from a key in
+/usr/share/syn-update/keys — a copy of the source from GitHub, a mirror or
+anywhere else is checked the same way. If newer commits are not signed,
+syn-update builds up to the last one that is, says how many it left out, and
+builds nothing past them.
 
 COMPONENTS YOU DID NOT PICK
 
@@ -2176,6 +2345,7 @@ while [ $# -gt 0 ]; do
         --ref)          shift; REPO_REF="${1:-main}" ;;
         -h|--help|help) usage; exit 0 ;;
         check|apply|status|ignore|unignore|ignored|ping) CMD="$1" ;;
+        verify-range)   shift; cmd_verify_range "$@"; exit $? ;;
         --every)        shift; PING_EVERY="${1:-}" ;;
         --on)           PING_TOGGLE=on ;;
         --off)          PING_TOGGLE=off ;;

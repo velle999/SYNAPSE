@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# pre-push — refuse to push a commit that is not signed by the update key.
+#
+# Installed machines build only commits signed by a key syn-update ships
+# (syn-update/synapseos-update.key), and stop at the first one that is not.
+# Every later commit contains it, so one unsigned commit on main holds every
+# machine back until it is re-signed and force-pushed. This is the last point
+# where that costs a `git commit --amend -S` instead.
+#
+# Install:
+#     ln -sf ../../tools/pre-push .git/hooks/pre-push
+#
+# Checks what the remote does not already have: every commit reachable from
+# what is being pushed and from no remote-tracking branch of that remote.
+#
+# SynapseOS Project — GPL-2.0-or-later
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -uo pipefail
+
+remote=${1:-origin}
+root=$(git rev-parse --show-toplevel)
+key="$root/syn-update/synapseos-update.key"
+[ -f "$key" ] || { echo "pre-push: no update key at $key" >&2; exit 1; }
+
+keyring=$(mktemp -d "${TMPDIR:-/tmp}/pre-push-gnupg.XXXXXX")
+cleanup() { gpgconf --homedir "$keyring" --kill gpg-agent 2>/dev/null; rm -rf "$keyring"; }
+trap cleanup EXIT
+chmod 700 "$keyring"
+GNUPGHOME="$keyring" gpg --batch --quiet --import "$key" 2>/dev/null ||
+    { echo "pre-push: could not read $key" >&2; exit 1; }
+allowed=$(GNUPGHOME="$keyring" gpg --batch --with-colons --list-keys 2>/dev/null |
+          awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }')
+
+zero=0000000000000000000000000000000000000000
+bad=0
+while read -r _lref lsha _rref _rsha; do
+    [ "$lsha" = "$zero" ] && continue          # a deletion pushes no commits
+    while IFS=$'\x1f' read -r sha status primary subject; do
+        [ -n "$sha" ] || continue
+        if { [ "$status" = G ] || [ "$status" = U ]; } && grep -qxF "$primary" <<<"$allowed"; then
+            continue
+        fi
+        [ "$bad" = 0 ] && echo "pre-push: not signed by the SynapseOS update key:" >&2
+        echo "  ${sha:0:10} [$status] $subject" >&2
+        bad=1
+    done < <(GNUPGHOME="$keyring" git log --format='%H%x1f%G?%x1f%GP%x1f%s' \
+                 "$lsha" --not --remotes="$remote" 2>/dev/null)
+done
+
+if [ "$bad" = 1 ]; then
+    cat >&2 <<'EOF'
+
+Installed machines stop at the first of these and never build past it.
+Sign them and push again:
+    git rebase --exec 'git commit --amend --no-edit -S' <last signed commit>
+Signing is on for this checkout when `git config commit.gpgsign` says true.
+EOF
+    exit 1
+fi
+exit 0

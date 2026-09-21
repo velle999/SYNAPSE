@@ -372,6 +372,15 @@ jobs:
           ./syn-update/tests/mirror_failover_test.sh || rc=$?
           [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
 
+      # Only commits signed by an installed key are ever built: the unsigned
+      # commit on top, the signed commit on top of an unsigned one, another
+      # key, no keys, and the override. The stand-in upstreams are signed with
+      # a throwaway key made by the suite.
+      - name: syn-update builds only signed commits
+        run: |
+          ./syn-update/tests/signed_update_test.sh || rc=$?
+          [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
+
       # build-all.sh installs one package per transaction, and pacman deletes a
       # file that moved between packages when its old owner upgrades later —
       # synapse-voice lost both speech models that way. The heal it runs after

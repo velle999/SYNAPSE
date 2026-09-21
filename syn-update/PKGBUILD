@@ -265,7 +265,18 @@ pkgver=0.1.0
 # screen reader no longer need the companion app. Listed before chibi, which
 # depends on it. An older syn-update that asks for chibi alone still gets it:
 # build-all.sh pulls a missing in-repo dependency into the build.
-pkgrel=62
+# ── 0.1.0-63: only signed commits are built ─────────────────────────────────
+#
+# Every commit on the way to what it builds has to carry a signature from a key
+# in /usr/share/syn-update/keys; anything past the first that does not is left
+# out and reported. Before this, whoever could push to GitHub — or answer for
+# it — could ship code to every machine at its next apply.
+# ⚠ THE KEYS ARE READ FROM THE INSTALLED PACKAGE, never from the fetched tree,
+# which is the thing being checked. A new key reaches machines the same way any
+# fix does: in a commit signed by a key they already have.
+# ⚠ THIS RELEASE IS THE LAST ONE A MACHINE TAKES WITHOUT CHECKING — the apply
+# that installs it runs the old script. tests/signed_update_test.sh.
+pkgrel=63
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -279,7 +290,8 @@ license=('GPL-2.0-or-later')
 # toolchain it actually uses. Hard-depending on cmake would add ~150 MiB
 # (cmake + boost-libs) for the benefit of one component that this tool does not
 # update anyway.
-depends=('bash' 'git' 'base-devel' 'pacman' 'sudo')
+# gnupg checks the commit signatures; pacman already pulls it in.
+depends=('bash' 'git' 'base-devel' 'pacman' 'sudo' 'gnupg')
 # The GUI is optional on purpose. Every SynapseOS install has quickshell
 # already (synui's bar is built on it), so in practice the window is always
 # there — but a headless or minimal install should not be made to pull Qt in
@@ -297,14 +309,21 @@ optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" 
             'syntty>=0.1.0-27: terminal the GUI hands the privileged build off to'
             'zenity: dialog used to report a missing quickshell')
 source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update.desktop"
-        "syn-update.svg" "syn-update-ping.service" "syn-update-ping.timer")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        "syn-update.svg" "syn-update-ping.service" "syn-update-ping.timer"
+        "synapseos-update.key")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-update.sh"     "$pkgdir/usr/bin/syn-update"
     install -Dm755 "$srcdir/syn-update-gui.sh" "$pkgdir/usr/bin/syn-update-gui"
 
     install -Dm644 "$srcdir/shell.qml" "$pkgdir/usr/share/syn-update/shell.qml"
+
+    # The keys an update has to be signed by. Every *.asc here counts.
+    # ⚠ .key IN THE TREE because makepkg takes any .asc source for a detached
+    # signature of the file named without it, and fails looking for that.
+    install -Dm644 "$srcdir/synapseos-update.key" \
+        "$pkgdir/usr/share/syn-update/keys/synapseos-update.asc"
 
     # The background check, and the timer that runs it. USER units, not system
     # ones: the check reads /var/lib/synapse-src, which syn-update keeps owned

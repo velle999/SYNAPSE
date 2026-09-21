@@ -53,11 +53,24 @@ while IFS= read -r d; do
 done < <(grep -oE "subdir\('[^']+'\)" meson.build \
          | sed "s/subdir('//; s/')//" | cut -d/ -f1 | sort -u)
 
+# ⛔ NOTHING .gitignore NAMES, AND THE SAME BYTES EVERY TIME. The walk is of
+# directories, so whatever a build or a test run left in them went in too: a
+# __pycache__ rode into synui 0.1.0-623's published source, and the release's
+# signature would have vouched for it. Untracked files that are NOT ignored
+# still go in — a new source file builds before it is committed. And sorted,
+# with the clock and the build user taken out, as tools/collect-source.sh
+# does, so a published tarball can be re-derived from its commit and compared.
+ignored=()
+while IFS= read -r i; do ignored+=(--exclude="${i%/}"); done < <(
+    git ls-files --others --ignored --exclude-standard --directory -- "${contents[@]}")
+
 tmp=$(mktemp -t "synui-tarball-XXXXXX.tar.gz")
 trap 'rm -f "$tmp"' EXIT
 
 tar czf "$tmp" \
     --transform "s,^,$top/," \
+    --sort=name --mtime="UTC 2020-01-01" \
+    --owner=0 --group=0 --numeric-owner \
     --exclude="$top" \
     --exclude="$top.tar.gz" \
     --exclude='_build' \
@@ -68,6 +81,7 @@ tar czf "$tmp" \
     --exclude='pkg' \
     --exclude='*.o' \
     --exclude='*.pkg.tar.zst' \
+    --anchored --no-wildcards "${ignored[@]}" \
     "${contents[@]}"
 
 # A tarball that carries either poison entry is worse than no tarball: the

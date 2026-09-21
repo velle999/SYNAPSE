@@ -204,6 +204,16 @@ trap 'rm -f "$tmp" "$err"' EXIT
 # of them rode into syn-disks 0.1.0-25's and syn-arcade 0.1.0-51's published
 # sources. Harmless to the build, and exactly the kind of thing somebody
 # downloads a release to read.
+# ⛔ NOTHING .gitignore NAMES. The walk is of directories, so whatever a build
+# left in them went in too: synapd's PKGBUILD links src/llama-staging to a path
+# on the building machine, and that link rode into synapd 0.1.0-56's published
+# source, where the release's signature would have vouched for it. Untracked
+# files that are NOT ignored still go in (see above: publishable before it is
+# committed). --anchored --no-wildcards: each is a literal path from the top.
+ignored=()
+while IFS= read -r _i; do ignored+=(--exclude="${_i%/}"); done < <(
+    git -C "$BASE" ls-files --others --ignored --exclude-standard --directory -- "${dirs[@]}")
+
 st=0
 tar czf "$tmp" \
     --transform "s|^$name/|$prefix/|" \
@@ -222,6 +232,7 @@ tar czf "$tmp" \
     --exclude="$name/*.mod*" \
     --exclude="$name/modules.order" \
     --exclude="$name/Module.symvers" \
+    --anchored --no-wildcards "${ignored[@]}" \
     "${dirs[@]}" 2>"$err" || st=$?
 
 if [ "$st" -gt 1 ]; then

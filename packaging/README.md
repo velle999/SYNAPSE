@@ -36,21 +36,30 @@ package to trust: `makepkg` builds from source in front of you.
 ## Installing an application
 
 Each application is one package repository, and none of them needs the
-compositor:
+compositor. First, once per machine, import the key the source is signed with:
+
+```bash
+curl -sL https://soslinux.org/synapseos-update-key.asc | gpg --import
+```
+
+Its fingerprint is `648B 4C32 942C 79B2 0E8A  C3F4 9CEC EBCD F480 37C1` — compare it
+with the one in [`SECURITY.md`](../SECURITY.md). Then:
 
 ```bash
 git clone https://github.com/velle999/syn-play
 cd syn-play && makepkg -si
 ```
 
-That is the whole of it. The `PKGBUILD` fetches its own source tarball from the
-release matching its version, and a build leaves the clone clean, so `git pull`
-later gets the next version.
+That is the whole of it. The `PKGBUILD` fetches its own source tarball and the
+tarball's signature from the release matching its version, and makepkg refuses
+the tarball unless the signature is good. A build leaves the clone clean, so
+`git pull` later gets the next version. The package repository's commits are
+signed with the same key: `git log --show-signature` shows it.
 
 Without cloning anything, the `PKGBUILD` alone is enough:
 
 ```bash
-curl -LO https://github.com/velle999/SYNAPSE/raw/main/syn-play/PKGBUILD
+curl -LO https://github.com/velle999/syn-play/raw/main/PKGBUILD
 makepkg -si
 ```
 
@@ -182,9 +191,15 @@ regenerates that tarball from the working tree, so the moment anybody edits a
 source file its hash changes and `makepkg` rejects it — the local-file path and
 a pinned hash cannot both be true.
 
-The published asset is **reproducible** instead, which is the property that
-actually matters to somebody downloading it. `collect-source.sh` sorts entries
-and zeroes timestamps and ownership, so at the tagged commit:
+What makepkg checks instead is the **signature**. The PKGBUILD in each
+package repository is the tree's, plus three lines `packaging/git-export.sh`
+appends: the release's `.sig` as a second source, and the update key in
+`validpgpkeys`. The tree's own PKGBUILDs do not carry them, because
+`build-all.sh` builds from a tarball it has just made and nobody has signed.
+
+The published asset is also **reproducible**. `collect-source.sh` (and synui's
+and synguard's `mktarball.sh`) sort entries, zero timestamps and ownership and
+leave out anything `.gitignore` names, so at the tagged commit:
 
 ```bash
 git checkout <the commit that published it>
@@ -201,7 +216,11 @@ tools/publish-sources.sh             # create what is missing
 ```
 
 For each package it regenerates the repository, creates it on GitHub if it is
-missing, pushes it, and attaches the source release. ⛔ In that order: a release
+missing, pushes it, and attaches the source release with its signature, made
+with the update key (`syn-update/synapseos-update.key`; the secret half is on
+the build machine). A release published before signing began is signed on the
+next run, and only if this tree makes the same files — otherwise it is reported
+and left unsigned. ⛔ In that order: a release
 published for a version whose `PKGBUILD` was never pushed hands somebody a clone
 that fetches a tarball its own `PKGBUILD` does not name.
 

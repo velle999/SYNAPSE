@@ -36,9 +36,14 @@ pass=0; fail=0
 ok()  { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
 
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d)
 export XDG_CACHE_HOME="$T/cache" XDG_CONFIG_HOME="$T/config" HOME="$T"
 export GIT_CONFIG_GLOBAL="$T/gitconfig" GIT_CONFIG_SYSTEM=/dev/null
+# Every source is signed, the way the real one is: a mirror is checked against
+# the same keys, so an unsigned stand-in would be refused after the fetch.
+. "$here/signing_lib.sh"
+signing_setup
+trap 'signing_teardown; rm -rf "$T"' EXIT
 
 # The stand-in for the mirror: a real repository with a real branch.
 UP="$T/upstream"

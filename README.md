@@ -2513,15 +2513,20 @@ that is not running SynapseOS. Every dependency except `scenefx0.5` is in Arch's
 own repositories, and each component is one `PKGBUILD`:
 
 ```bash
+curl -sL https://soslinux.org/synapseos-update-key.asc | gpg --import   # once
 git clone https://github.com/velle999/syn-play && cd syn-play && makepkg -si
 ```
 
 or, without cloning anything, the `PKGBUILD` alone:
 
 ```bash
-curl -LO https://github.com/velle999/SYNAPSE/raw/main/syn-play/PKGBUILD
+curl -LO https://github.com/velle999/syn-play/raw/main/PKGBUILD
 makepkg -si
 ```
+
+The source tarballs are signed with the SynapseOS update key, and makepkg
+refuses one the key did not sign. Its fingerprint is in
+[`SECURITY.md`](SECURITY.md).
 
 `synui` installs a `wayland-sessions` entry, so any display manager offers it as
 a session. It also ships system-wide files — including `/etc/xdg/kdeglobals`,

@@ -31,8 +31,13 @@ bad() { printf '  FAIL  %s\n' "$1" >&2; fail=$((fail + 1)); }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else
     bad "$1 — wanted [$2], got [$3]"; fi; }
 
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d)
 export XDG_CACHE_HOME="$T/cache" XDG_CONFIG_HOME="$T/config" HOME="$T"
+export GIT_CONFIG_GLOBAL="$T/gitconfig" GIT_CONFIG_SYSTEM=/dev/null
+# The stand-in upstream in phase 4 is signed, the way the real one is.
+. "$here/signing_lib.sh"
+signing_setup
+trap 'signing_teardown; rm -rf "$T"' EXIT
 
 # ── 1. an unusable tree is refused, and the refusal is RECORDED ─────────────
 #

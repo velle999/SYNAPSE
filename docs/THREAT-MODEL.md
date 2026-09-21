@@ -115,16 +115,27 @@ a tunnel comes up and its inbound packets are dropped.
 | AI egress blocks | the kernel (nftables set) | same |
 | command sandboxes (vibe `bash`, the command bar) | the kernel (Landlock) — cannot be undone from inside | nothing to stop: it binds only the confined process. Root outside it is unaffected |
 | which Wayland clients can capture the screen, read keystrokes through an input method, or watch the clipboard | synui, userspace — withheld only from clients that carry a **security context** (Flatpak and other sandboxes) | not needed: an ordinary process running as the user already gets them |
-| what an update installs | TLS to GitHub | — ; see below |
+| what an update installs | the update key's signature, checked by `syn-update` (commits) and by makepkg (published source tarballs) | add a key to `/usr/share/syn-update/keys`, or run with `SYN_UPDATE_ALLOW_UNSIGNED=1` |
 
 **Updates** are the one path from outside into every installed machine.
-`syn-update` clones `github.com/velle999/SYNAPSE` over HTTPS and builds what
-it finds; no commit signature is checked. The components published on their
-own (for plain Arch) carry `sha256sums=('SKIP')`, so their downloaded source
-is not pinned by checksum either. Whoever can push to those
-repositories can ship code to every box at its next `syn-update apply`. The
-ISO is signed; what it installs afterwards rests on GitHub's account security
-and TLS.
+`syn-update` fetches `github.com/velle999/SYNAPSE` and builds only commits
+signed with the SynapseOS update key. The key it checks against is the one in
+the installed syn-update package, never one in the fetched tree. It checks
+every commit since the last one it verified, not only the newest, and stops
+before the first that is not signed: `syn-update check` names what it left
+out. Pushing to GitHub, or answering for it, is not enough to reach an
+installed machine. (syn-update 0.1.0-63 brought the check; the apply that
+installs it is the last one taken unchecked.)
+
+The components published on their own (for plain Arch) are signed the same
+way: each release carries the tarball's `.sig`, and the package repository's
+PKGBUILD names the key in `validpgpkeys`, so makepkg refuses a tarball the key
+did not sign. The PKGBUILD itself comes from the package repository, whose
+commits carry the same signature.
+
+The update key is kept on the build machine **without a passphrase**, so that
+every commit and release is signed without a prompt. Whoever controls that
+machine controls updates; `SECURITY.md` has the fingerprint.
 
 ---
 
