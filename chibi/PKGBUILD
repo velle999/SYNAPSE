@@ -71,7 +71,7 @@ pkgver=0.1.0
 #   ships voice_input.py or voice_output.py (python would import a leftover copy
 #   ahead of PYTHONPATH), and the launcher puts the engine on the path after
 #   chibi's own pydeps and checks that it was built for the same python.
-pkgrel=30
+pkgrel=31
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -85,7 +85,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=ac9bdbee3fecc7e9f502ed9e31c05747acc9104d
+_commit=c9f8a85191359ff5d7e1d7809822585f980363d9
 
 # Runtime deps.
 #
