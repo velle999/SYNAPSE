@@ -37,6 +37,51 @@
 
 /* The name synui-widgets knows each row by. NULL for the master row, which is
  * the helper's `all`/group form rather than a widget. */
+/* Is one widget switched on, per widgets.state?
+ *
+ * The file IS the state — synui-widgets writes it and quickshell watches it, so
+ * there is nothing authoritative in syn_server_t to consult, and a missing file
+ * means nothing has been switched on yet.
+ *
+ * Exists so the compositor can avoid work for a widget nobody has enabled:
+ * gpu.c samples NVML only while the system monitor is up.
+ *
+ * ⚠ ctlpanel.c parses this same file for a different question ("all, some or
+ * none") and keeps its own reader. Two readers of one format; the writer is
+ * still only synui-widgets. */
+bool widget_state_is_on(const char *name)
+{
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "widgets.state")) return false;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return false;
+
+    bool on = false;
+    const size_t nlen = strlen(name);
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '#') continue;
+        const char *eq = strchr(line, '=');
+        if (!eq) continue;
+
+        /* The writer pads both sides of the '=', so trim before comparing —
+         * a prefix match would make "sysmon" answer for "sysmonitor". */
+        const char *k = line;
+        while (*k == ' ' || *k == '\t') k++;
+        const char *ke = eq;
+        while (ke > k && (ke[-1] == ' ' || ke[-1] == '\t')) ke--;
+        if ((size_t)(ke - k) != nlen || strncmp(k, name, nlen) != 0) continue;
+
+        const char *v = eq + 1;
+        while (*v == ' ' || *v == '\t') v++;
+        on = strncmp(v, "on", 2) == 0;
+        break;
+    }
+    fclose(f);
+    return on;
+}
+
 const char *widget_row_name(int row)
 {
     switch (row) {

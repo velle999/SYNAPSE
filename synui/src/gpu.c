@@ -441,17 +441,19 @@ static void drm_fdinfo_procs(syn_server_t *s)
     closedir(proc);
 }
 
-void gpu_sample(syn_server_t *s)
+/* Device-level figures only: utilisation, VRAM, temperature, power.
+ *
+ * Split out so a caller that only needs a METER does not pay for the
+ * per-process table, which is the expensive half — on amdgpu that is a
+ * walk of every process's DRM fdinfo (7-10 ms for 344 processes). The
+ * desktop widget samples at 0.33 Hz and wants none of it.
+ *
+ * Leaves gpu_proc_n alone: this is not a full sample and must not look
+ * like one to the task manager. */
+void gpu_sample_devices(syn_server_t *s)
 {
-    s->gpu_proc_n = 0;
-
     if (!nvml.lib) {
         for (int i = 0; i < s->gpu_n; i++) amd_sample(&s->gpu[i]);
-        /* ⚠ AND THE PER-PROCESS COLUMN, which used to stop at the return above
-         * — see drm_fdinfo_procs(). NVIDIA is excluded because its driver
-         * publishes no drm-memory keys at all: NVML is where that answer lives,
-         * and the branch below is the one that asks. */
-        drm_fdinfo_procs(s);
         return;
     }
 
@@ -482,7 +484,24 @@ void gpu_sample(syn_server_t *s)
         g->power_w = (nvml.power &&
                       nvml.power(nvml_dev[i], &mw) == NVML_SUCCESS)
                          ? (int)((mw + 500) / 1000) : -1;
+    }
+}
 
+void gpu_sample(syn_server_t *s)
+{
+    s->gpu_proc_n = 0;
+    gpu_sample_devices(s);
+
+    if (!nvml.lib) {
+        /* ⚠ AND THE PER-PROCESS COLUMN, which used to stop at the return above
+         * — see drm_fdinfo_procs(). NVIDIA is excluded because its driver
+         * publishes no drm-memory keys at all: NVML is where that answer lives,
+         * and the branch below is the one that asks. */
+        drm_fdinfo_procs(s);
+        return;
+    }
+
+    for (int i = 0; i < s->gpu_n; i++) {
         /* Both calls take the array size in *count and overwrite it with how
          * many they wrote. They fail with INSUFFICIENT_SIZE if the array is
          * too small; a machine with more than 64 GPU clients would just lose

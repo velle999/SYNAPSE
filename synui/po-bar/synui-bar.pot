@@ -20,8 +20,12 @@ msgstr ""
 msgid "%1 (%2%)\n%3\nClick to pick a network"
 msgstr ""
 
-#: widgets/SysMonitor.qml:168
+#: widgets/SysMonitor.qml:189
 msgid "%1 / %2 GiB"
+msgstr ""
+
+#: widgets/SysMonitor.qml:204
+msgid "%1 / %2 GiB VRAM"
 msgstr ""
 
 #: modules/Bluetooth.qml:41
@@ -208,7 +212,7 @@ msgstr ""
 msgid "Auto-hide bar"
 msgstr ""
 
-#: widgets/SysMonitor.qml:82
+#: widgets/SysMonitor.qml:103
 msgid "BAT"
 msgstr ""
 
@@ -246,7 +250,7 @@ msgstr ""
 msgid "CLOCK"
 msgstr ""
 
-#: widgets/SysMonitor.qml:80
+#: widgets/SysMonitor.qml:96
 msgid "CPU"
 msgstr ""
 
@@ -469,6 +473,10 @@ msgstr ""
 msgid "Focus — %1 · click to stop"
 msgstr ""
 
+#: widgets/SysMonitor.qml:101
+msgid "GPU"
+msgstr ""
+
 #: welcome/pages.js:223
 msgid "GPU, CPU or off. Off masks the sockets, so it holds."
 msgstr ""
@@ -549,7 +557,7 @@ msgstr ""
 msgid "Log Out"
 msgstr ""
 
-#: widgets/SysMonitor.qml:81
+#: widgets/SysMonitor.qml:97
 msgid "MEM"
 msgstr ""
 
@@ -723,7 +731,7 @@ msgstr ""
 msgid "STAGE"
 msgstr ""
 
-#: widgets/SysMonitor.qml:29
+#: widgets/SysMonitor.qml:36
 msgid "SYS://MONITOR"
 msgstr ""
 

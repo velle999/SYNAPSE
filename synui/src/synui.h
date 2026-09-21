@@ -7405,6 +7405,7 @@ struct syn_server {
      * when no supported GPU was found — every consumer must handle that. */
     syn_gpu_t       gpu[SYN_GPU_MAX];
     int             gpu_n;
+    struct wl_event_source *gpu_mon_timer;  /* publishes for the widget */
     struct { pid_t pid; unsigned long vram_kb; } gpu_proc[SYN_GPU_PROC_MAX];
     int             gpu_proc_n;
 
@@ -8887,6 +8888,16 @@ void gpu_sample(syn_server_t *s);
  * back end cannot attribute VRAM per process (amdgpu). */
 unsigned long gpu_proc_vram_kb(syn_server_t *s, pid_t pid);
 
+/* Device figures only — no per-process table. For a caller that wants a meter
+ * rather than the panel; see the comment on the definition. */
+void gpu_sample_devices(syn_server_t *s);
+
+/* Publishes device figures to $XDG_RUNTIME_DIR/synui-gpu for the quickshell
+ * system-monitor widget, which cannot open an NVML handle of its own. Runs only
+ * while that widget is switched on, and not at all without a GPU back end. */
+void gpu_mon_init(syn_server_t *s);
+void gpu_mon_finish(syn_server_t *s);
+
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
 /* The CPU column's arithmetic, exposed for taskmgr_cpu_test: percent of the
  * WHOLE MACHINE (0-100), the same scale as the panel's own CPU meter. */
@@ -9339,6 +9350,7 @@ int  widgets_click(syn_server_t *s, double lx, double ly, uint32_t button,
 int  widgets_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* The name synui-widgets knows this row by ("visualizer", "sysmon", …), or NULL
  * for the master row. This is the whole binding between the enum and the helper. */
+bool widget_state_is_on(const char *name);
 const char *widget_row_name(int row);
 const char *widget_row_label(int row);
 /* The word a row shows. The master row answers all/some/none, because "on" with

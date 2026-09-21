@@ -2522,6 +2522,8 @@ int synui_init(syn_server_t *s)
 
     /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
     taskmgr_init(s);
+    /* After taskmgr_init: that is what opens NVML and fills gpu_n. */
+    gpu_mon_init(s);
 
     /* What is under the bar, which is the wallpaper only until a window covers
      * it. After the outputs exist, so the first tick has something to scan. */
@@ -2827,6 +2829,7 @@ void synui_destroy(syn_server_t *s)
 
     saver_finish(s);
     power_finish(s);
+    gpu_mon_finish(s);
     taskmgr_finish(s);
     barscan_finish(s);
     news_finish(s);

@@ -5,12 +5,19 @@ import Quickshell.Services.UPower
 import ".."
 
 /*
- * SYS://MONITOR — CPU, memory and battery as segmented meters on the desktop.
+ * SYS://MONITOR — CPU, memory, GPU and battery as segmented meters on the
+ * desktop.
  *
  * Deliberately the same numbers the bar already shows. The bar is for a glance
  * down; this is for reading across the room, and the two disagreeing would be
  * worse than either alone — so both derive from /proc and UPower directly
  * rather than one copying the other.
+ *
+ * GPU is the odd one out: there is no /proc for it. NVML lives behind a dlopen
+ * in the compositor (gpu.c), so synui samples it and publishes the figures to
+ * $XDG_RUNTIME_DIR/synui-gpu, and this reads that file like any other. It is
+ * written ONLY while this widget is switched on, so turning the widget off
+ * stops the sampling as well as the drawing.
  *
  * Slower than the bar's modules on purpose: 3s here against the bar's 2s and
  * 5s. A desktop widget nobody is looking at should not be the reason a core
@@ -63,6 +70,15 @@ WidgetFrame {
     property real memUsedGiB: 0
     property real memTotalGiB: 0
 
+    // -1 is "the back end cannot report it", which is not the same as 0 — an
+    // amdgpu card with no utilisation counter must not read as an idle one.
+    property bool hasGpu: false
+    property string gpuName: ""
+    property int  gpuUtil: -1
+    property int  gpuTempC: -1
+    property real vramUsedGiB: 0
+    property real vramTotalGiB: 0
+
     readonly property var batDev: UPower.displayDevice
     readonly property bool hasBattery:
         batDev ? (batDev.isLaptopBattery && batDev.isPresent) : false
@@ -79,6 +95,11 @@ WidgetFrame {
                 // because they are read, not matched — nothing switches on them.
                 { key: I18n.tr("CPU"), value: root.cpu, show: true },
                 { key: I18n.tr("MEM"), value: root.mem, show: true },
+                // Shown only when there is a figure to show: a card whose back
+                // end reports no utilisation gets the VRAM line below and no
+                // meter, rather than a meter stuck at nothing.
+                { key: I18n.tr("GPU"), value: Math.max(0, root.gpuUtil),
+                  show: root.hasGpu && root.gpuUtil >= 0 },
                 { key: I18n.tr("BAT"), value: root.bat, show: root.hasBattery }
             ]
 
@@ -172,6 +193,21 @@ WidgetFrame {
             font.family: Theme.fontFamily
             font.pixelSize: 9
         }
+
+        // The same question for the card: how much of it is gone, not what
+        // fraction. Temperature rides along because it is the one GPU figure
+        // that says "something is wrong" rather than "something is busy".
+        Text {
+            width: col.width
+            horizontalAlignment: Text.AlignRight
+            visible: root.hasGpu && root.vramTotalGiB > 0
+            text: I18n.tr("%1 / %2 GiB VRAM").arg(root.vramUsedGiB.toFixed(1))
+                                             .arg(root.vramTotalGiB.toFixed(1))
+                  + (root.gpuTempC >= 0 ? "  ·  " + root.gpuTempC + "°C" : "")
+            color: root.inkDim
+            font.family: Theme.fontFamily
+            font.pixelSize: 9
+        }
     }
 
     // ── Sources ──────────────────────────────────────────
@@ -215,12 +251,42 @@ WidgetFrame {
         }
     }
 
+    /*
+     * Published by synui (gpu.c). Absent is the normal case, not an error: no
+     * NVIDIA or AMD back end, or the widget only just switched on and the first
+     * tick has not landed yet. Either way the GPU rows simply stay hidden.
+     */
+    FileView {
+        id: gpu
+        path: Quickshell.env("XDG_RUNTIME_DIR") + "/synui-gpu"
+        onLoadFailed: root.hasGpu = false
+        onLoaded: {
+            const kv = {}
+            for (const line of this.text().split("\n")) {
+                const i = line.indexOf("=")
+                if (i > 0) kv[line.slice(0, i)] = line.slice(i + 1)
+            }
+            if (parseInt(kv.count, 10) > 0) {
+                // Device 0. A second card would need a row of its own, and
+                // nothing on this desktop has one to test against.
+                root.gpuName      = kv["0.name"] || ""
+                root.gpuUtil      = parseInt(kv["0.util"], 10)
+                root.gpuTempC     = parseInt(kv["0.temp_c"], 10)
+                root.vramUsedGiB  = (parseInt(kv["0.vram_used_kb"], 10)  || 0) / 1048576
+                root.vramTotalGiB = (parseInt(kv["0.vram_total_kb"], 10) || 0) / 1048576
+                root.hasGpu = true
+            } else {
+                root.hasGpu = false
+            }
+        }
+    }
+
     Timer {
         interval: 3000
         // Nothing is read while the widget is off.
         running: root.visible
         repeat: true
         triggeredOnStart: true
-        onTriggered: { stat.reload(); meminfo.reload() }
+        onTriggered: { stat.reload(); meminfo.reload(); gpu.reload() }
     }
 }
