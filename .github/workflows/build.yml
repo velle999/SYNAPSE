@@ -372,6 +372,14 @@ jobs:
           ./syn-update/tests/mirror_failover_test.sh || rc=$?
           [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
 
+      # build-all.sh installs one package per transaction, and pacman deletes a
+      # file that moved between packages when its old owner upgrades later —
+      # synapse-voice lost both speech models that way. The heal it runs after
+      # its last install is tested against stand-in pacman/sudo, so it needs
+      # nothing from the runner and can reinstall nothing on it.
+      - name: build-all restores files a package move deleted
+        run: ./tools/tests/restore_missing_files_test.sh
+
       # The language chosen at boot, and the two places it has to reach: the
       # SCREEN (a Linux VT cannot draw CJK, Arabic or Devanagari — 512 glyphs,
       # no shaper — so the text installer keeps English prose there) and the

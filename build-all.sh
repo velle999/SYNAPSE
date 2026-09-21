@@ -521,6 +521,14 @@ build_component syn-remote
 # script. See build_vendored_pkg.
 build_vendored_pkg limine-mkinitcpio-hook
 
+# ⛔ AFTER THE LAST INSTALL, AND OVER EVERY COMPONENT. Installing each package in
+# its own transaction, as everything above has to, deletes a file that moved
+# from one package to another the moment its old owner upgrades — synapse-voice
+# lost both speech models that way when chibi 27 followed it. That can happen a
+# run later too, so this checks every installed component, not just the ones
+# built now. See the script.
+"$BASE/tools/restore-missing-files.sh" "$BASE" "${KNOWN[@]}"
+
 # A name in KNOWN= with no build rule above is what this catches.
 #
 # syn-arsenal sat in KNOWN= and in syn-update's COMPONENTS for two releases with
