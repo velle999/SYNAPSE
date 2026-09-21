@@ -54,14 +54,20 @@ typing. Run it where you can reach the keyboard anyway.
       case the heartbeat exists for) leaves the canary readable again, and it
       goes back to being refused when synguard resumes. Fail-open is real in
       both directions. **Observed.**
-- [ ] `synapse.bpf_enforce=0` on the kernel command line brings the VM up
+- [x] `synapse.bpf_enforce=0` on the kernel command line brings the VM up
       detect-only, with the canary readable. This is the way back from a bad
-      rule and it must be verified before anybody needs it. **Still not
-      exercised (checked 2026-09-21):** the gate has never been armed outside
-      the rig, on the laptop or the desktop, so there has been nothing for the
-      switch to turn off. It needs one boot with `--bpf-enforce` in the unit
-      and the parameter on the command line — and it is the only box left
-      before arming the gate by default is a decision rather than a risk.
+      rule and it must be verified before anybody needs it. **Observed
+      2026-09-21 on the laptop** (synguard 0.1.0-40), with `--bpf-enforce` in
+      the unit through a drop-in and the parameter added at the Limine menu
+      with `E` — the path this box exists for, and one that works because
+      the Limine config is not enrolled (an enrolled config disables the
+      editor). synguard logged `bpf-lsm: DISABLED by kernel cmdline
+      (synapse.bpf_enforce=0) — not loading` and `detect-only this boot`,
+      never attached the gate, and kept detecting (`mode=ENFORCE rules=58`,
+      alerts raised). As root, `systemd-run --wait cat` of the canary
+      returned 0; the kmod reported that open and the userspace rule alerted
+      on it, which is the detect-only behaviour this promises. 6 checks, 0
+      failures.
 - [x] Planting `/etc/ld.so.preload` shows the open refused, the process still
       running, and the preload not applied. **Observed 2026-08-20** — and in
       four parts, because the first two attempts each passed for the wrong
@@ -110,8 +116,13 @@ arming the gate would not have prevented it. So the remaining risk is not in
 this item at all — it is the false-positive box below, which needs a day of
 ordinary use rather than a script.
 
-Revisit when that box closes. **Closed 2026-09-21** (above). What remains
-before `--bpf-enforce` could ship on is the escape-hatch box — one boot.
+Revisit when that box closes. **Closed 2026-09-21** (above), and the
+escape-hatch box with it. **Every box in this item is now observed.** Whether
+`--bpf-enforce` ships in the unit is a decision rather than a risk: the gate,
+its warmup, its fail-open, its way back and its false-positive rate have all
+been watched. What it adds over the userspace path is refusal in place of a
+kill after the fact, for the two rules that lower (`deny-ld-preload`,
+`deny-bpf-canary`).
 
 ## 2. Attacker-controlled text reaching the AI classifier
 
