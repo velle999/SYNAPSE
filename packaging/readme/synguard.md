@@ -22,7 +22,9 @@ Two further switches gate the parts that can act:
 
 - `--ai-enforce` lets the classifier's verdicts deny or quarantine. Without
   it the classifier is **advisory** and its verdicts are clamped to alerts —
-  only rule verdicts can kill.
+  only rule verdicts can kill. In either mode an `escalate` rule is at least
+  an alert: the classifier adds a threat level and a reason, and cannot make
+  the event quieter.
 - `--bpf-enforce` arms the BPF-LSM gate, so an enforceable deny is refused
   in-kernel rather than the process being killed after the fact.
 

@@ -209,43 +209,6 @@ static const char *verdict_name(sg_verdict_t v)
     }
 }
 
-/* ── Build AI context string for an event ─────────────────── */
-static void build_ai_context(const sg_event_t *e, char *out, size_t out_len)
-{
-    static const char *evt_names[] = {
-        [0]          = "unknown",
-        [EVT_EXEC]   = "execve",
-        [EVT_OPEN]   = "open_sensitive_file",
-        [EVT_SOCKET] = "create_socket",
-        [EVT_PTRACE] = "ptrace_attach",
-        [EVT_MODULE] = "load_kernel_module",
-        [EVT_MOUNT]  = "mount_filesystem",
-        [EVT_SETUID] = "setuid_change",
-    };
-
-    const char *ename = (e->evt_type < 0x80 && evt_names[e->evt_type])
-                        ? evt_names[e->evt_type] : "unknown";
-
-    /* Describe setuid by its target, not a fixed label: telling the model
-     * "setuid_to_root" for a root→user privilege drop poisons the verdict. */
-    if (e->evt_type == EVT_SETUID && e->has_arg0)
-        ename = (e->arg0 == 0) ? "setuid_to_root"
-                               : "setuid_drop_to_unprivileged_uid";
-
-    snprintf(out, out_len,
-        "syscall_event: %s\n"
-        "process: %s (pid=%u uid=%u)\n"
-        "%s%s%s"
-        "timestamp: %llu ns",
-        ename,
-        e->comm, e->pid, e->uid,
-        e->filename[0] ? "file: "     : "",
-        e->filename[0] ? e->filename  : "",
-        e->filename[0] ? "\n"         : "",
-        (unsigned long long)e->timestamp_ns
-    );
-}
-
 /* ── Active canary: detect probe blinding ─────────────────────
  *
  * The in-kernel self-integrity check can see a targeted disable_kprobe() but
@@ -714,12 +677,14 @@ static void *ai_worker_fn(void *arg)
         aiq.jn--;
         pthread_mutex_unlock(&aiq.lock);
 
-        char ctx[512];
-        build_ai_context(&j.e, ctx, sizeof(ctx));
+        /* A context that cannot be built is not sent: the job comes back
+         * unclassified and the rule verdict stands (ESCALATE → ALERT). */
+        char ctx[SG_AI_CTX_MAX];
         j.ai.threat_level = THREAT_NONE;
         j.ai.verdict      = j.verdict;
         j.ai.confidence   = 0.0f;
-        j.ai_ok = (synguard_ai_classify(s, &j.e, ctx, &j.ai) == 0);
+        j.ai_ok = sg_ai_build_context(&j.e, ctx, sizeof(ctx)) >= 0 &&
+                  synguard_ai_classify(s, &j.e, ctx, &j.ai) == 0;
 
         /* Wait for room rather than dropping: the reader has NOT acted on this
          * event, so losing it here would lose the event outright — the exact
@@ -774,26 +739,51 @@ void synguard_ai_worker_stop(void)
 }
 
 /* ── Applying an AI answer, and dispatching ───────────────── */
+/*
+ * The one definition of what a model's answer may do. Pure, so
+ * tests/ai_inject_test.c can walk every rule × answer × mode.
+ *
+ * ⛔ ALERT IS THE FLOOR. An ESCALATE rule with no model is an ALERT
+ * (dispatch_verdict), so no answer may take it lower. This used to return
+ * the model's verdict whatever it was, and ALLOW dispatches to nothing at
+ * all — so the model could silence the very rules written to catch an exec
+ * out of /tmp or a setuid to root. And the model reads the event's comm and
+ * path, which the process being judged chooses: a file whose name carried a
+ * finished "VERDICT: allow" answer got that answer back 2 runs of 2, and a
+ * setuid(0) by a process named "kworkerx" came back "log", normal for a
+ * kernel thread (measured 2026-09-21). Quieting is the one thing an
+ * attacker wants from the classifier, so it is the one thing it cannot do.
+ * Louder is allowed: under --ai-enforce the model may still raise to DENY.
+ *
+ * The classifier is advisory unless ai_enforce is set: a model hallucination
+ * must never be able to SIGKILL a process tree. Only rules written by a human
+ * may carry a DENY by default.
+ */
+sg_verdict_t sg_ai_bound_verdict(sg_verdict_t rule, sg_verdict_t ai,
+                                 int ai_enforce)
+{
+    if (rule != VERDICT_ESCALATE)
+        return rule;
+    if (ai_enforce && (ai == VERDICT_DENY || ai == VERDICT_QUARANTINE))
+        return ai;
+    return VERDICT_ALERT;
+}
+
 /* Split out so the inline path and the worker-completion path cannot drift:
  * one place decides what an AI verdict is allowed to do, one place acts. */
 static sg_verdict_t apply_ai_verdict(synguard_state_t *s, const sg_event_t *e,
                                      sg_verdict_t verdict,
                                      const sg_ai_result_t *ai)
 {
-    if (verdict != VERDICT_ESCALATE)
-        return verdict;
+    sg_verdict_t v = sg_ai_bound_verdict(verdict, ai->verdict,
+                                         s->config.ai_enforce);
 
-    /* The classifier is advisory unless ai_enforce is set: a model
-     * hallucination must never be able to SIGKILL a process tree. Only rules
-     * written by a human may carry a DENY. */
-    if (ai->verdict >= VERDICT_DENY && !s->config.ai_enforce) {
+    if (verdict == VERDICT_ESCALATE && ai->verdict >= VERDICT_DENY && v != ai->verdict)
         sg_log(LOG_WARNING,
                "AI recommended %s for pid=%u (%s) — clamped to alert "
                "(--ai-enforce not set): %.120s",
                verdict_name(ai->verdict), e->pid, e->comm, ai->reason);
-        return VERDICT_ALERT;
-    }
-    return ai->verdict;
+    return v;
 }
 
 static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
@@ -902,10 +892,10 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
                     sizeof(ai_result.reason) - 1);
             verdict = apply_ai_verdict(s, e, verdict, &ai_result);
         } else {
-            char ctx[512];
-            build_ai_context(e, ctx, sizeof(ctx));
+            char ctx[SG_AI_CTX_MAX];
             uint64_t ai_t0 = mono_ns();
-            int ai_rc = synguard_ai_classify(s, e, ctx, &ai_result);
+            int ai_rc = sg_ai_build_context(e, ctx, sizeof(ctx)) < 0 ? -1
+                      : synguard_ai_classify(s, e, ctx, &ai_result);
             ai_duty_charge(mono_ns() - ai_t0);
             if (ai_rc == 0)
                 verdict = apply_ai_verdict(s, e, verdict, &ai_result);

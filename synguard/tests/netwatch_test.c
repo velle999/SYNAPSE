@@ -40,6 +40,8 @@ sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
 int synguard_ai_classify(synguard_state_t *s, const sg_event_t *e,
                          const char *context, sg_ai_result_t *r)
 { (void)s; (void)e; (void)context; (void)r; return -1; }
+int sg_ai_build_context(const sg_event_t *e, char *out, size_t n)
+{ (void)e; if (n) out[0] = '\0'; return -1; }
 int  rules_load(synguard_state_t *s, const char *dir) { (void)s; (void)dir; return 0; }
 void rules_free(synguard_state_t *s) { (void)s; }
 int  secfeed_init(void) { return 0; }

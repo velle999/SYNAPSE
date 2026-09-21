@@ -2,6 +2,10 @@
 # AI-assisted rules — these escalate to the AI classifier
 # for context-aware threat scoring.
 #
+# An escalated event is always at least an alert. The classifier adds a
+# threat level and a reason, and can raise the event to a deny only when
+# synguard runs with --ai-enforce.
+#
 # Requires synguard to be running with --mode enforce or --mode audit
 # and synapd to be online.
 

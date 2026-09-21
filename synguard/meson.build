@@ -198,6 +198,16 @@ netwatch_test = executable('netwatch_test',
   dependencies: [dep_threads, dep_systemd])
 test('netwatch', netwatch_test, timeout: 60)
 
+# Attacker-chosen comm/path text against the AI classifier: the prompt it
+# builds, the parser, the ALERT floor in sg_ai_bound_verdict(), and the whole
+# path against a fake synapd playing a compromised model. SECURITY-ROADMAP §2.
+ai_inject_test = executable('ai_inject_test',
+  files('tests/ai_inject_test.c', 'src/event_processor.c', 'src/ai_classifier.c',
+        'src/core.c', 'src/sg_log.c'),
+  include_directories: inc,
+  dependencies: [dep_threads, dep_systemd])
+test('ai_inject', ai_inject_test, timeout: 60)
+
 # The unit is installed by the PKGBUILD, to /usr/lib/systemd/system — NOT here
 # and NOT to /etc.
 #

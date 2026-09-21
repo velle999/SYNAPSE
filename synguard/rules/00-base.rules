@@ -38,9 +38,10 @@ rule alert-module-load {
 
 # ── Privilege escalation ──────────────────────────────────────
 # The kmod only reports setuid(0) — privilege drops (root→user at login)
-# never generate events. escalate consults the AI, but AI verdicts are
-# advisory (clamped to alert) unless synguard runs with --ai-enforce, so
-# this can never kill the login chain on a hallucinated "deny".
+# never generate events. escalate is an alert the AI annotates: its answer
+# can never make the event quieter than an alert, and can make it a deny only
+# when synguard runs with --ai-enforce, so this can never kill the login
+# chain on a hallucinated "deny".
 
 rule escalate-setuid-to-root {
     event   setuid
@@ -116,9 +117,10 @@ rule allow-reexec-pid {
     priority 33
 }
 
-# escalate (→ alert when the AI is advisory), not deny: a static deny here
-# is an instant SIGKILL. Executing directly out of /dev or /proc is unusual
-# enough to review, but promote to 'deny' only after baselining.
+# escalate (an alert; a deny only if the AI says so under --ai-enforce), not
+# deny: a static deny here is an instant SIGKILL. Executing directly out of
+# /dev or /proc is unusual enough to review, but promote to 'deny' only after
+# baselining.
 rule escalate-exec-from-dev {
     event   exec
     path    /dev/*
