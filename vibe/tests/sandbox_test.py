@@ -6,8 +6,11 @@ path is a bypass: set it to /bin/sh and the confinement is gone), so a test
 patches the module instead.
 """
 import os, sys, tempfile, pathlib
-sys.path.insert(0, "vibe")
-import tools
+# The project root, not vibe/: tools imports the `vibe` package by name, so a
+# path that only reaches the module fails with ModuleNotFoundError before a
+# single sandbox check runs — which is how this suite stopped running.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vibe import tools
 
 BUILD = os.path.abspath(sys.argv[1])
 tools._SYN_CONFINE = BUILD

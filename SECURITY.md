@@ -138,6 +138,14 @@ kernel. Settings ▸ Security turns it off, by writing `off` to
 `/etc/synguard/bpf-enforce`; `synapse.bpf_enforce=0` on the kernel command line
 keeps the gate from loading for one boot.
 
+## What it defends, and what it does not
+
+[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) says, component by component,
+what the local AI can and cannot cause, what keeps working if the security
+monitor is killed, what the firewall lets in — including on public Wi-Fi,
+where every other guest counts as the local network — and which protections
+the kernel enforces and which a root attacker can simply stop.
+
 ## Verifying a release
 
 Releases from 0.2.9.5 onward are signed with the SynapseOS release key:

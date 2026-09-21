@@ -194,14 +194,20 @@ class VibeModel:
 
     def _gate(self, name: str, args: dict) -> bool:
         """True to run the tool. Destructive tools consult confirm_tool; a
-        missing callback (non-interactive) always proceeds. A callback that
-        raises must never wedge the agent, so treat an error as approval."""
+        missing callback (non-interactive) always proceeds.
+
+        ⛔ A CALLBACK THAT RAISES IS A NO. It used to count as approval, so a
+        confirmation dialog that broke — a window that failed to open, a closed
+        socket to the GUI — ran the bash command or the file write nobody had
+        agreed to: the one gate on a write, failing open. Refusing does not
+        wedge the agent either; the model is told the tool was declined and
+        carries on. docs/THREAT-MODEL.md."""
         if name not in self._CONFIRM_TOOLS or self.confirm_tool is None:
             return True
         try:
             return bool(self.confirm_tool(name, args))
         except Exception:
-            return True
+            return False
 
     def _init_synapd(self):
         try:

@@ -43,11 +43,13 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <stdatomic.h>
+#include <limits.h>
 
 #include <wlr/render/wlr_renderer.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "synui.h"
+#include "cmdplan.h"
 #include "i18n.h"
 
 /* ── synapd wire protocol ────────────────────────────────── */
@@ -866,13 +868,22 @@ static bool cmdcap_spawn(syn_server_t *s, const char *path,
     return cmdcap_spawn_kind(s, CMDCAP_OUTPUT, path, argv);
 }
 
-/* A shell command line, captured the same way. This is the CMD: path: what the
- * model returns is a *shell fragment* — pipes, redirects and quoting are the
- * point of it — so it has to reach a shell to mean anything. */
-static bool cmdcap_run(syn_server_t *s, const char *cmd)
+/* Whether `name` is an executable somewhere on PATH. */
+static bool prog_on_path(const char *name)
 {
-    const char *argv[] = { "sh", "-c", cmd, NULL };
-    return cmdcap_spawn(s, "/bin/sh", argv);
+    const char *path = getenv("PATH");
+    if (!path || !*path) path = "/usr/local/bin:/usr/bin:/bin";
+    char dir[PATH_MAX];
+    for (const char *p = path; *p; ) {
+        size_t n = strcspn(p, ":");
+        if (n && n + strlen(name) + 2 < sizeof(dir)) {
+            snprintf(dir, sizeof(dir), "%.*s/%s", (int)n, p, name);
+            if (access(dir, X_OK) == 0) return true;
+        }
+        p += n;
+        if (*p == ':') p++;
+    }
+    return false;
 }
 
 /*
@@ -890,27 +901,57 @@ void execute_ai_action(syn_server_t *s, const char *response)
 {
     /* Parse structured actions from AI response */
 
-    /* CMD: <shell command> */
-    const char *cmd = strstr(response, "CMD:");
-    if (cmd) {
-        cmd += 4;
-        while (*cmd == ' ') cmd++;
-        char cmdcopy[512];
-        strncpy(cmdcopy, cmd, sizeof(cmdcopy) - 1);
-        cmdcopy[sizeof(cmdcopy) - 1] = '\0';
-        /* Truncate at newline */
-        char *nl = strchr(cmdcopy, '\n');
-        if (nl) *nl = '\0';
-        wlr_log(WLR_INFO, "cmdbar: executing CMD: %s", cmdcopy);
+    /* CMD: <shell command> — only when the answer STARTS with it, and run in
+     * syn-confine's sandbox unless it names an installed application and
+     * nothing else. Why, and what was measured, is at the top of cmdplan.c;
+     * the decision itself is there too, so tests/cmdplan_test.c can hold it. */
+    {
+        if (!s->appgrid.scanned) appgrid_rescan(s);
+        static cmdplan_app_t apps[APPGRID_MAX];
+        int n_apps = 0;
+        for (int i = 0; i < s->appgrid.count && n_apps < APPGRID_MAX; i++) {
+            apps[n_apps].exec     = s->appgrid.apps[i].exec;
+            apps[n_apps].terminal = s->appgrid.apps[i].terminal;
+            n_apps++;
+        }
 
-        /* Naming what ran is the honest report until the output lands — and
-         * stays the whole report for a GUI launch, which prints nothing. */
-        snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
-                 "▸ %s", cmdcopy);
-        if (!cmdcap_run(s, cmdcopy))
+        char cmdcopy[512];
+        cmdplan_kind_t plan = cmdplan_decide(response, apps, n_apps,
+                                             cmdcopy, sizeof(cmdcopy));
+        if (plan == CMDPLAN_LAUNCH) {
+            wlr_log(WLR_INFO, "cmdbar: launching %s", cmdcopy);
+            /* Naming what ran is the honest report until the output lands —
+             * and stays the whole report for a GUI launch, which prints
+             * nothing. */
             snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
-                     "could not run: %s", cmdcopy);
-        return;
+                     "▸ %.400s", cmdcopy);
+            const char *argv[] = { cmdcopy, NULL };
+            if (!cmdcap_spawn(s, cmdcopy, argv))
+                snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                         "could not run: %.400s", cmdcopy);
+            return;
+        }
+        if (plan == CMDPLAN_CONFINED) {
+            /* No sandbox, no command — the rule vibe's bash tool follows. A
+             * missing syn-confine is a machine where running what a model
+             * answered would be exactly the unconfined shell this replaced. */
+            if (!prog_on_path("syn-confine")) {
+                wlr_log(WLR_INFO, "cmdbar: NOT running (no syn-confine): %s", cmdcopy);
+                snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                         "not run — the sandbox (syn-confine) is not installed: %.400s",
+                         cmdcopy);
+                return;
+            }
+            wlr_log(WLR_INFO, "cmdbar: executing CMD, sandboxed: %s", cmdcopy);
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     "▸ %.400s", cmdcopy);
+            const char *argv[CMDPLAN_ARGV_MAX + 1];
+            cmdplan_confine_argv(cmdcopy, getenv("HOME"), argv);
+            if (!cmdcap_spawn(s, "syn-confine", argv))
+                snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                         "could not run: %.400s", cmdcopy);
+            return;
+        }
     }
 
     /* ACTION: focus <app_id> */

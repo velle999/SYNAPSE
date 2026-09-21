@@ -291,6 +291,7 @@ synui_exe = executable('synui',
     'src/weather.c',
     'src/kbdlayout.c',
     'src/ai_interface.c',
+    'src/cmdplan.c',
     'src/secfeed.c',
     'src/synapd_mon.c',
     'src/config.c',
@@ -858,6 +859,16 @@ hit_test = executable('hit_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('hit', hit_test)
+
+# What the command bar may do with a model's answer: only an answer that
+# STARTS with CMD: is a command, it runs inside syn-confine, and only a bare
+# installed GUI application is launched as itself. Includes the answers the
+# model actually gave with a hostile window title in the prompt.
+cmdplan_test = executable('cmdplan_test',
+  ['tests/cmdplan_test.c', 'src/cmdplan.c'],
+  include_directories : include_directories('src'),
+  build_by_default : false)
+test('cmdplan', cmdplan_test)
 
 # Touchpad gestures, with no touchpad. libinput decides a swipe has four
 # fingers; gesture.c decides whether synui takes it and which way it went, and

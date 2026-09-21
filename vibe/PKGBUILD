@@ -1,7 +1,13 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=35
+# 36: a confirmation that FAILS is a no. _gate() treated an exception from the
+#   confirm callback as approval, so a dialog that broke ran the bash command
+#   or file write nobody had agreed to. tests/gate_test.py pins it, and fails
+#   against the old line. tests/sandbox_test.py had stopped running at its
+#   import (it put vibe/ on the path, and tools imports the `vibe` package);
+#   it runs again, 9/9 against the installed syn-confine.
+pkgrel=36
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"

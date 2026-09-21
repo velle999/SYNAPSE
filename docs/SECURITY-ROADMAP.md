@@ -430,13 +430,30 @@ chooses — that only lets a process exempt itself from hints, not gain one.
 Written after items 1, 2 and 5, it can say what was observed. `SECURITY.md`'s
 scope section is a first draft of the audience-facing half.
 
+**Done 2026-09-21: [`THREAT-MODEL.md`](THREAT-MODEL.md).** Every row is measured
+or read from the code, with the file. Writing it found two things worth fixing
+before it could be written down as they were:
+
+- **The synui command bar ran what a web page asked it to.** It handed any
+  `CMD:` in the model's answer to `/bin/sh` — no confirmation, no sandbox — and
+  Super+Backspace puts the focused window's title in the prompt. Against the
+  shipped model a hostile page title got its command emitted in 4 of 12 runs.
+  synui 623: only an answer that starts with `CMD:` is a command, and it runs
+  inside syn-confine (files read-only, `/tmp` writable, network allowed); a
+  bare installed app name still launches as itself. The owner chose the
+  sandbox over asking before every command.
+- **vibe's confirmation failed open.** An exception from the confirm callback
+  counted as approval. vibe 36 makes it a refusal; `tests/gate_test.py` fails
+  against the old line. Its sandbox suite had stopped running at an import and
+  runs again, 9/9.
+
 **Done when:**
 
-- [ ] What the AI can and cannot influence, per component, as a table.
-- [ ] What survives synguard being killed, and what does not.
-- [ ] What the firewall's LAN-trust actually admits, with the roaming case
+- [x] What the AI can and cannot influence, per component, as a table.
+- [x] What survives synguard being killed, and what does not.
+- [x] What the firewall's LAN-trust actually admits, with the roaming case
       spelled out.
-- [ ] Which of these are enforced by the kernel and which by a userspace
+- [x] Which of these are enforced by the kernel and which by a userspace
       daemon that a root attacker can stop.
 
 ---
@@ -463,3 +480,5 @@ scope section is a first draft of the audience-facing half.
   synapse_kmod 29 and synguard 43, 2026-09-21. §5.
 - **The kernel gate armed by default, with Settings ▸ Security to decline it**
   — synguard 44 and syn-settings 65, `c22564fc`, 2026-09-21. §1.
+- **The command bar ran model output unconfined, from a window title** — synui
+  623; **vibe's confirmation failed open** — vibe 36. 2026-09-21. §6.
