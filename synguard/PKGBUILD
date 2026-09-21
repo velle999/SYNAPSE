@@ -79,7 +79,14 @@ pkgver=0.1.0
 #   a fake synapd playing a compromised model. SECURITY-ROADMAP §2.
 #   ⚠ Expect more alerts: every escalation the model used to quiet now reaches
 #   the journal and secfeed.
-pkgrel=41
+# 42: synguard tripped its own deny rule on every start. ExecStartPre
+#   recreated /var/lib/synguard/bpf-canary with `install`, and that open is
+#   exactly what deny-bpf-canary catches — 25 alerts in a month on the laptop,
+#   one per boot, each a kill attempt the stale-pid guard refused. It now
+#   creates the canary only when it is missing (`test -e` is a stat, which
+#   neither the kprobe nor lsm/file_open sees). Found while closing
+#   SECURITY-ROADMAP §1's false-positive check.
+pkgrel=42
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

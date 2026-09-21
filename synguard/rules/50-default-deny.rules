@@ -127,8 +127,8 @@ rule deny-ld-preload {
 # ⚠ The file must EXIST or this is unenforceable on BOTH paths while looking
 # perfectly armed: lsm/file_open only fires for an open that reaches a file,
 # and the kprobe path sees the ENOENT attempt but can only kill afterwards, by
-# which time a short-lived opener has exited. synguard.service recreates it in
-# ExecStartPre for exactly this reason — if you move this rule, move that too.
+# which time a short-lived opener has exited. synguard.service creates it in
+# ExecStartPre, only when it is missing — if you move this rule, move that too.
 #
 # Verify, as root:
 #

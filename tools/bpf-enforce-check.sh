@@ -188,7 +188,7 @@ fi
 
 # ⚠ The rule cannot fire on a file that is not there: lsm/file_open only fires
 # for an open that reaches a file, so a missing canary is a rule that looks
-# armed and can never act. synguard.service recreates it in ExecStartPre.
+# armed and can never act. synguard.service creates it in ExecStartPre when missing.
 [ -e "$CANARY" ] && ok "the canary file exists" \
                  || { bad "$CANARY is missing — the positive control cannot work"; exit 1; }
 

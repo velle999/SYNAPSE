@@ -21,7 +21,14 @@ ExecStartPre=/bin/mkdir -p /var/log/synguard /var/lib/synguard
 # canary on a nonexistent path is therefore unenforceable on both paths, which
 # is exactly how it sat armed and inert. Leading '-' so a denied or read-only
 # recreate cannot block startup.
-ExecStartPre=-/usr/bin/install -m 600 /dev/null /var/lib/synguard/bpf-canary
+#
+# ⚠ Only when it is MISSING. Creating it is an open of the canary, which is
+# precisely what deny-bpf-canary exists to catch — so recreating it on every
+# start made synguard trip its own deny rule once per boot (25 times in a
+# month on the laptop, and every one an alert). `test -e` is a stat, which
+# neither the kprobe nor lsm/file_open sees, so a canary that exists costs
+# nothing and only the first start after it goes missing trips the rule.
+ExecStartPre=-/bin/sh -c 'test -e /var/lib/synguard/bpf-canary || exec /usr/bin/install -m 600 /dev/null /var/lib/synguard/bpf-canary'
 ExecStart=/usr/bin/synguard \
     --foreground \
     --mode enforce \
