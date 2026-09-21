@@ -194,6 +194,7 @@ bool  synapse_daemon_is_alive(void);
 
 /* The two runtime switches every hot path checks first. */
 bool  synapse_events_enabled(void);
+void  synapse_set_events_enabled(bool on);
 bool  synapse_sched_enabled(void);
 
 /* Counters. Each is one atomic increment; they are functions so the state

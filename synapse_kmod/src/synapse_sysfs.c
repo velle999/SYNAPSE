@@ -114,8 +114,10 @@ static void process_hint_line(const char *line)
 
     /*
      * Parse: "HINT pid=N nice=N class=X"
-     * sscanf is safe here — we're in a sysfs write handler,
-     * single-threaded via the sysfs lock, with bounded input.
+     * sscanf is safe here: every field lands in a local, class_str is bounded
+     * by %31s, and the line is a slice of a kstrndup()'d copy of at most one
+     * page. (Stores are NOT serialised across writers — kernfs locks per open
+     * file, not per attribute — which is why nothing here is shared.)
      */
     if (sscanf(line, "HINT pid=%d nice=%d class=%31s",
                &pid, &nice, class_str) < 2) {
@@ -250,6 +252,7 @@ static ssize_t config_store(struct kobject *kobj,
         else
             pr_info("synapse_kmod: events_enabled → %d\n", val);
         synapse_probe_set_enabled(val != 0);
+        synapse_set_events_enabled(val != 0);
     } else if (sscanf(buf, "sched_enabled=%d", &val) == 1) {
         pr_info("synapse_kmod: sched_enabled → %d\n", val);
         synapse_sched_set_enabled(val != 0);

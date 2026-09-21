@@ -304,7 +304,9 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
         return;
     }
 
-    spin_lock(&hint_table_lock);
+    /* _bh: the watchdog's sweep takes this lock in softirq context — see
+     * synapse_daemon_heartbeat() in synapse_main.c. */
+    spin_lock_bh(&hint_table_lock);
     struct pid_hint *h = hint_find(pid);
 
     /*
@@ -324,7 +326,7 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     if (!h) {
         h = hint_alloc(pid, task);
         if (!h) {
-            spin_unlock(&hint_table_lock);
+            spin_unlock_bh(&hint_table_lock);
             put_task_struct(task);
             synapse_stat_hint_fail();
             return;
@@ -335,7 +337,7 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     }
     h->sched_class   = cls;
     h->nice_applied  = new_nice;
-    spin_unlock(&hint_table_lock);
+    spin_unlock_bh(&hint_table_lock);
 
     /*
      * Adjust the task. We're in process context (sysfs store), so it is
@@ -395,12 +397,12 @@ static void revert_all_hints(void)
     unsigned int bkt;
     HLIST_HEAD(drain);
 
-    spin_lock(&hint_table_lock);
+    spin_lock_bh(&hint_table_lock);
     hash_for_each_safe(hint_table, bkt, tmp, h, node) {
         hash_del(&h->node);
         hlist_add_head(&h->node, &drain);
     }
-    spin_unlock(&hint_table_lock);
+    spin_unlock_bh(&hint_table_lock);
 
     hlist_for_each_entry_safe(h, tmp, &drain, node) {
         /*

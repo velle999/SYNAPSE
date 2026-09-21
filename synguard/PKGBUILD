@@ -86,7 +86,15 @@ pkgver=0.1.0
 #   creates the canary only when it is missing (`test -e` is a stat, which
 #   neither the kprobe nor lsm/file_open sees). Found while closing
 #   SECURITY-ROADMAP §1's false-positive check.
-pkgrel=42
+# 43: SWITCHING KMOD CAPTURE OFF RAISES ONE ALERT. synapse_kmod 29 makes
+#   /sys/kernel/synapse/config report events_enabled=0 when capture is off; it
+#   used to go on reading 1. synguard's canary stands down when that file says
+#   0 — which, while the file lied, never happened, so turning capture off was
+#   always caught as a blinded kmod after two missed canaries. With the file
+#   telling the truth, that stand-down would have made the off switch a silent
+#   way to blind synguard. It now raises one CRITICAL alert naming the switch
+#   when capture goes off, and logs when it comes back. Ship with kmod 29.
+pkgrel=43
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

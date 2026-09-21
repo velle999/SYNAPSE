@@ -47,19 +47,31 @@ MODULE_VERSION(SYNAPSE_KMOD_VERSION);
 
 /* ── Module parameters ────────────────────────────────────── */
 
+/*
+ * ⛔ 0444, ALL THREE. These are read once, at init, into synapse_state; the
+ * runtime switches are /sys/kernel/synapse/config. At 0644 a root write to
+ * /sys/module/synapse_kmod/parameters/ changed nothing it appeared to — and
+ * synapse_events was ALSO read again at unload to decide whether to
+ * deregister /dev/synapse-events. Flipped to 0 at runtime, rmmod skipped the
+ * deregister and left the device pointing into freed module text: the next
+ * open was a kernel page fault (reproduced in tests/run-vm-tests.sh, mode
+ * `unload`). Exit now asks synapse_state.evchr_up instead, and nothing can
+ * flip these after load anyway.
+ */
+
 /* Enable/disable syscall event capturing */
 static bool synapse_events = true;
-module_param(synapse_events, bool, 0644);
+module_param(synapse_events, bool, 0444);
 MODULE_PARM_DESC(synapse_events, "Capture syscall events for AI analysis (default: true)");
 
 /* Enable/disable AI scheduler hints */
 static bool synapse_sched = true;
-module_param(synapse_sched, bool, 0644);
+module_param(synapse_sched, bool, 0444);
 MODULE_PARM_DESC(synapse_sched, "Apply AI scheduling hints (default: true)");
 
 /* Daemon heartbeat timeout in seconds before fallback */
 static int synapse_daemon_timeout = 30;
-module_param(synapse_daemon_timeout, int, 0644);
+module_param(synapse_daemon_timeout, int, 0444);
 MODULE_PARM_DESC(synapse_daemon_timeout, "Seconds before daemon considered dead (default: 30)");
 
 /* Ring buffer size for syscall event log */
@@ -102,6 +114,10 @@ struct synapse_module_state {
 
     /* Workqueue for deferred synapd communication */
     struct workqueue_struct *wq;
+
+    /* /dev/synapse-events is registered. Exit deregisters on THIS, never on
+     * a module parameter — see the note on synapse_events. */
+    bool                 evchr_up;
 
     /* Module parameters (live copies) */
     bool                 events_enabled;
@@ -214,25 +230,34 @@ u64 synapse_integrity_alert_count(void)
 
 /* Called by sysfs status attribute write handler when
  * synapd writes "ALIVE ..." to /sys/kernel/synapse/status */
+/*
+ * ⚠ _bh IN PROCESS CONTEXT, for daemon_lock and for synapse_sched.c's
+ * hint_table_lock alike. The watchdog is a timer, so it runs in SOFTIRQ
+ * context and takes both locks there. A plain spin_lock() here leaves softirqs
+ * on: the timer can fire on this CPU while this writer holds the lock, and the
+ * softirq then spins on a lock its own CPU can never release. The heartbeat
+ * arrives every few seconds and the timer every five, so it was a matter of
+ * time. Found by reading, not reproduced — the stock kernel has no lockdep.
+ */
 void synapse_daemon_heartbeat(void)
 {
-    spin_lock(&synapse_state.daemon_lock);
+    spin_lock_bh(&synapse_state.daemon_lock);
     synapse_state.last_heartbeat_jiffies = jiffies;
     if (!synapse_state.daemon_alive) {
         synapse_state.daemon_alive = true;
         pr_info("synapse_kmod: synapd reconnected\n");
         synapse_sched_daemon_ready();
     }
-    spin_unlock(&synapse_state.daemon_lock);
+    spin_unlock_bh(&synapse_state.daemon_lock);
     atomic64_inc(&synapse_state.daemon_heartbeats);
 }
 
 /* Called by sysfs when synapd writes "SHUTDOWN" */
 void synapse_daemon_shutdown(void)
 {
-    spin_lock(&synapse_state.daemon_lock);
+    spin_lock_bh(&synapse_state.daemon_lock);
     synapse_state.daemon_alive = false;
-    spin_unlock(&synapse_state.daemon_lock);
+    spin_unlock_bh(&synapse_state.daemon_lock);
     pr_info("synapse_kmod: synapd announced shutdown\n");
     synapse_sched_daemon_lost();
 }
@@ -241,13 +266,18 @@ void synapse_daemon_shutdown(void)
 bool synapse_daemon_is_alive(void)
 {
     bool alive;
-    spin_lock(&synapse_state.daemon_lock);
+    spin_lock_bh(&synapse_state.daemon_lock);
     alive = synapse_state.daemon_alive;
-    spin_unlock(&synapse_state.daemon_lock);
+    spin_unlock_bh(&synapse_state.daemon_lock);
     return alive;
 }
 
-bool synapse_events_enabled(void)  { return synapse_state.events_enabled; }
+bool synapse_events_enabled(void)  { return READ_ONCE(synapse_state.events_enabled); }
+
+/* The config attribute reports synapse_events_enabled(), so the switch has to
+ * move it: it used to disable the probes and leave this reading 1, so
+ * `cat config` said events_enabled=1 on a module that was capturing nothing. */
+void synapse_set_events_enabled(bool on) { WRITE_ONCE(synapse_state.events_enabled, on); }
 bool synapse_sched_enabled(void)   { return synapse_state.sched_enabled;  }
 
 void synapse_stat_event(void)      { atomic64_inc(&synapse_state.events_captured); }
@@ -303,6 +333,25 @@ static int __init synapse_kmod_init(void)
     atomic64_set(&synapse_state.daemon_timeouts,   0);
     atomic_set(&synapse_state.active_contexts,     0);
 
+    /* Parameters are root's to set, but a bad one must fail the load, not
+     * the machine. synapse_ring_size=0 used to load: kvzalloc(0) returns
+     * ZERO_SIZE_PTR, which is not NULL, and the first event then computed
+     * `head % 0` inside a kprobe — a divide error in every process that
+     * opened a sensitive path (tests/run-vm-tests.sh, mode `ring0`). The upper
+     * bound keeps size * sizeof(event) far from any overflow; 1M events is
+     * ~208 MB, already absurd. A timeout <= 0 would declare the daemon dead on
+     * every tick, or never. */
+    if (synapse_ring_size < 16 || synapse_ring_size > (1 << 20)) {
+        pr_err("synapse_kmod: synapse_ring_size=%d is outside 16..%d\n",
+               synapse_ring_size, 1 << 20);
+        return -EINVAL;
+    }
+    if (synapse_daemon_timeout < 1 || synapse_daemon_timeout > 3600) {
+        pr_err("synapse_kmod: synapse_daemon_timeout=%d is outside 1..3600\n",
+               synapse_daemon_timeout);
+        return -EINVAL;
+    }
+
     synapse_state.events_enabled      = synapse_events;
     synapse_state.sched_enabled       = synapse_sched;
     synapse_state.daemon_timeout_secs = synapse_daemon_timeout;
@@ -342,6 +391,7 @@ static int __init synapse_kmod_init(void)
             pr_err("synapse_kmod: event device init failed: %d\n", ret);
             goto err_evchr;
         }
+        synapse_state.evchr_up = true;
     }
 
 
@@ -366,8 +416,10 @@ static int __init synapse_kmod_init(void)
     return 0;
 
 err_wq:
-    if (synapse_events)
+    if (synapse_state.evchr_up) {
         synapse_evchr_exit();
+        synapse_state.evchr_up = false;
+    }
 err_evchr:
     synapse_probe_exit();
 err_probe:
@@ -382,6 +434,15 @@ static void __exit synapse_kmod_exit(void)
 {
     pr_info("synapse_kmod: unloading\n");
 
+    /* The sysfs files go FIRST: they are how userspace reaches in, and every
+     * store can call into something torn down below — a config write queues
+     * work on the workqueue this function destroys. kernfs removal waits for
+     * any store already running, so after this returns nothing new arrives.
+     * (It used to go last, leaving every attribute live through the whole
+     * teardown.) */
+    synapse_sysfs_exit(synapse_state.kobj);
+    synapse_state.kobj = NULL;
+
     /* Stop watchdog */
     timer_delete_sync(&synapse_state.watchdog);
 
@@ -395,11 +456,12 @@ static void __exit synapse_kmod_exit(void)
     /* Teardown in reverse init order. The device goes first: it hands out
      * pointers into the ring, so it must stop accepting readers before the
      * ring is freed. */
-    if (synapse_events)
+    if (synapse_state.evchr_up) {
         synapse_evchr_exit();
+        synapse_state.evchr_up = false;
+    }
     synapse_probe_exit();
     synapse_sched_exit();
-    synapse_sysfs_exit(synapse_state.kobj);
 
     pr_info("synapse_kmod: unloaded. stats: events=%llu hints=%llu syscalls=%llu\n",
             atomic64_read(&synapse_state.events_captured),

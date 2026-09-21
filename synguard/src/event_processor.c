@@ -232,9 +232,19 @@ static time_t canary_fired_at  = 0;
 static int    canary_pending   = 0;
 static int    canary_misses    = 0;
 
-/* True if the kmod says event capture is currently enabled. If an admin
- * deliberately turned it off (config events_enabled=0), a missing canary is
- * expected and already logged loudly by the kmod — don't cry wolf. */
+/* True if the kmod says event capture is currently enabled. When it is off
+ * (config events_enabled=0) a missing canary is expected, so the canary stands
+ * down — and canary_tick() raises ONE alert saying capture is off instead.
+ *
+ * ⚠ That alert is new with synapse_kmod 29, and it is not optional. Before it,
+ * the kmod's config attribute never reported 0: the switch disabled the probes
+ * and the file went on reading events_enabled=1. So this function always said
+ * "on", the canary kept firing into a blind kmod, and after two misses it
+ * raised a CRITICAL — which is how switching capture off, by anyone, has
+ * always been reported. Once the file tells the truth, standing down quietly
+ * would have made the blinding switch the one silent way to blind synguard. It
+ * cannot tell an admin (or game mode's game_quiet_kmod) from an attacker with
+ * root, so it says so either way. */
 static int kmod_events_enabled(void)
 {
     int fd = open("/sys/kernel/synapse/config", O_RDONLY | O_CLOEXEC);
@@ -247,6 +257,8 @@ static int kmod_events_enabled(void)
 }
 
 /* Recognise our own canary event coming back through the feed. */
+static int capture_off_reported;   /* reader thread only */
+
 static int is_canary_event(const sg_event_t *e)
 {
     return e->evt_type == EVT_OPEN &&
@@ -290,7 +302,34 @@ static void canary_tick(synguard_state_t *s)
 
     /* Fire a fresh canary on schedule (only while capture should be on). */
     if (!canary_pending && (now - canary_last_fire) >= CANARY_INTERVAL_S) {
-        if (!kmod_events_enabled()) { canary_last_fire = now; return; }
+        if (!kmod_events_enabled()) {
+            canary_last_fire = now;
+            if (!capture_off_reported) {
+                capture_off_reported = 1;
+                sg_alert_t a = {
+                    .timestamp = now,
+                    .verdict   = VERDICT_ALERT,
+                    .threat    = THREAT_CRITICAL,
+                };
+                strncpy(a.event.comm, "synapse_kmod", sizeof(a.event.comm) - 1);
+                a.event.evt_type = EVT_UNKNOWN;
+                snprintf(a.reason, sizeof(a.reason),
+                         "kmod event capture is switched OFF "
+                         "(/sys/kernel/synapse/config events_enabled=0) — "
+                         "synguard sees nothing until it is back on");
+                snprintf(a.action_taken, sizeof(a.action_taken), "alert");
+                s->stats.alerts++;
+                action_alert(s, &a);
+                if (s->config.audit_enabled)
+                    audit_write(s, &a);
+            }
+            return;
+        }
+        if (capture_off_reported) {
+            capture_off_reported = 0;
+            canary_misses = 0;
+            sg_log(LOG_WARNING, "canary: kmod event capture is back on");
+        }
         int fd = open(CANARY_PATH, O_RDONLY | O_CLOEXEC);
         if (fd >= 0) close(fd);
         canary_last_fire = now;

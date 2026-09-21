@@ -53,7 +53,36 @@ pkgver=0.1.0
 #
 # ⚠ This file is `backup=`, so an installed box keeps its local copy and gets
 # the new one as .pacnew. A machine that never merges it keeps skipping the test.
-pkgrel=28
+# ── 0.1.0-29: the SECURITY-ROADMAP §5 pass, and two kernel crashes ──────────
+#
+# Found by tests/run-vm-tests.sh, which boots the stock kernel in qemu with this
+# module and a fuzzing /init — no root and nothing on the host is touched. Every
+# item below failed there before this change and passes after it.
+#
+# ⛔ Two crashes, both root-reachable:
+#   - synapse_ring_size=0 LOADED. kvzalloc(0) is ZERO_SIZE_PTR, not NULL, so
+#     the first sensitive open computed `head % 0` in a kprobe: "Oops: divide
+#     error". Out-of-range ring sizes and daemon timeouts now fail the load.
+#   - The module parameters were 0644 and synapse_events was read again at
+#     unload. Flipped at runtime, rmmod skipped deregistering
+#     /dev/synapse-events and the next open faulted in freed module text. They
+#     are 0444 now (they were only ever read at init), and exit asks
+#     synapse_state.evchr_up. sysfs is also removed FIRST on exit now, so no
+#     store can queue work on a workqueue that is being destroyed.
+# Also:
+#   - daemon_lock and hint_table_lock were taken by the watchdog TIMER
+#     (softirq) and by process context with plain spin_lock — a softirq firing
+#     on the holder's CPU spins forever. _bh on the process side. Found by
+#     reading; the stock kernel has no lockdep to show it.
+#   - execveat shared execve's handler and read the path from the dfd
+#     argument: every execveat — fexecve, memfd exec — arrived with no
+#     filename. It has its own handler; an fd exec is written "fd:<n>".
+#   - ptrace: PTRACE_SEIZE, the attach gdb and strace use, was not reported.
+#   - config reported events_enabled=1 after capture was switched off. It
+#     tells the truth now — ship with synguard 43, which alerts on it.
+# Written down in docs/SECURITY-ROADMAP.md §5, not fixed: what the open and
+# exec probes cannot see, because they read the caller's own string at entry.
+pkgrel=29
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

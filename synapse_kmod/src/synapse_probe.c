@@ -5,17 +5,20 @@
  * Captured events are written to a ring buffer which
  * synapd reads via /sys/kernel/synapse/syscall_log.
  *
- * Monitored syscalls:
+ * Monitored syscalls — this list is the probe table below, and nothing else:
  *   execve / execveat   — process execution
  *   openat              — file opens (filtered to sensitive paths)
- *   socket / connect    — network activity
- *   ptrace              — process inspection/injection
+ *   socket / connect    — network activity (IP families only)
+ *   ptrace              — TRACEME, ATTACH, SEIZE, PEEKTEXT
  *   init_module         — kernel module loading
  *   finit_module        — kernel module loading (fd-based)
- *   mount               — filesystem mount
- *   setuid / setgid     — privilege changes
- *   capset              — capability changes
- *   kill (SIGKILL only) — targeted termination
+ *   setuid              — setuid(0) only
+ *
+ * NOT monitored, though earlier versions of this comment said so: mount,
+ * setgid, setreuid/setresuid, capset, kill, open, openat2, creat, io_uring.
+ * A rule for an event nothing here produces loads and never fires. The
+ * open/exec paths are also captured from the caller's own string, at syscall
+ * entry — see docs/SECURITY-ROADMAP.md §5 for what that cannot see.
  *
  * Implementation uses kretprobes + kprobes depending on
  * whether we need pre or post-syscall inspection.
@@ -43,6 +46,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/fcntl.h>
+#include <linux/ptrace.h>
 
 #include "synapse_kmod.h"
 #include "synapse_probe.h"
@@ -485,9 +489,42 @@ static struct kprobe kp_execve = {
     .pre_handler = execve_pre_handler,
 };
 
+/*
+ * execveat(dfd, filename, argv, envp, flags). It shared execve's handler,
+ * which read the path from the FIRST argument — here the directory fd — so
+ * every execveat was reported with an empty filename and matched no exec-path
+ * rule. That is fexecve(), memfd "fileless" execution, and anything calling
+ * execveat directly. An exec of an fd (AT_EMPTY_PATH with an empty path) is
+ * written as "fd:<n>", so it reads as what it is instead of as nothing.
+ */
+static int execveat_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+
+    struct synapse_syscall_event e = {0};
+    fill_event(&e, __NR_execveat, SYNAPSE_EVT_EXEC);
+
+    struct pt_regs *u = syscall_uregs(regs);
+    int dfd = (int)u->di;
+    const char __user *filename = (const char __user *)u->si;
+    int flags = (int)u->r8;
+
+    if (filename && strncpy_from_user(e.filename, filename,
+                                      sizeof(e.filename) - 1) < 0)
+        e.filename[0] = '\0';
+    if (!e.filename[0] && (flags & AT_EMPTY_PATH))
+        scnprintf(e.filename, sizeof(e.filename), "fd:%d", dfd);
+    e.args[0] = (u64)(unsigned int)flags;
+
+    ring_push(&e);
+    synapse_stat_event();
+    synapse_stat_syscall();
+    return 0;
+}
+
 static struct kprobe kp_execveat = {
     .symbol_name = "__x64_sys_execveat",
-    .pre_handler = execve_pre_handler,   /* same handler, args differ */
+    .pre_handler = execveat_pre_handler,
 };
 
 /* ── openat kretprobe ─────────────────────────────────────── */
@@ -718,8 +755,13 @@ static int ptrace_pre_handler(struct kprobe *p, struct pt_regs *regs)
 
     struct pt_regs *u = syscall_uregs(regs);
     long request = (long)u->di;
-    /* Only report ATTACH and PEEKTEXT/DATA */
-    if (request != PTRACE_ATTACH && request != 0 && request != 1)
+    /* TRACEME (0), PEEKTEXT (1), ATTACH and SEIZE. This said "ATTACH and
+     * PEEKTEXT/DATA" and tested 0 and 1, which are TRACEME and PEEKTEXT —
+     * PEEKDATA is 2 — and it did not test PTRACE_SEIZE at all, the attach
+     * gdb and strace actually use. Every peek needs an attach first, so the
+     * attach is the event; SEIZE is that attach under another name. */
+    if (request != PTRACE_ATTACH && request != PTRACE_SEIZE &&
+        request != PTRACE_TRACEME && request != PTRACE_PEEKTEXT)
         return 0;
 
     struct synapse_syscall_event e = {0};
