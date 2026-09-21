@@ -361,10 +361,13 @@ int synguard_init(synguard_state_t *s)
                    "off, the userspace path is unaffected", lerr);
         } else if (nl > 0) {
             /*
-             * Arming is opt-in and separate from loading, exactly as
-             * --ai-enforce is separate from having an AI. The kernel path
-             * PREVENTS rather than reacts, so switching it on for every
-             * install must be something someone chose.
+             * Arming is separate from loading, exactly as --ai-enforce is
+             * separate from having an AI. The kernel path PREVENTS rather than
+             * reacts, so switching it on for every install had to be chosen —
+             * and was, in 0.1.0-44, once the warmup, the fail-open, the boot
+             * escape and a month of false-positive data had all been watched
+             * (SECURITY-ROADMAP §1). The unit passes --bpf-enforce;
+             * /etc/synguard/bpf-enforce is how a machine declines it.
              */
             if (s->config.bpf_enforce) {
                 sg_bpf_set_enforce(1);
@@ -394,6 +397,12 @@ int synguard_init(synguard_state_t *s)
                              sizeof(s->bpf_enforced_rules[i]),
                              "%s", lowered[i].rule_name);
                 s->bpf_enforced_count = nl;
+            } else if (s->config.bpf_enforce_off) {
+                sg_log(LOG_WARNING,
+                       "bpf-lsm: %d rule%s loaded but NOT armed — turned off in "
+                       SG_BPF_OVERRIDE_PATH " (Settings ▸ Security); they are "
+                       "enforced only after the fact, by the userspace path",
+                       nl, nl == 1 ? "" : "s");
             } else {
                 sg_log(LOG_WARNING,
                        "bpf-lsm: %d rule%s loaded but NOT armed (--bpf-enforce "

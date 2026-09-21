@@ -2926,6 +2926,99 @@ if [ -r "$qml" ]; then
         || bad "the QML's userunit buttons or its Apply exclusion is missing"
 fi
 
+# ── Security: the kernel-enforcement switch ─────────────────────────────────
+#
+# synguard arms its BPF-LSM gate by default (0.1.0-44), and
+# /etc/synguard/bpf-enforce saying "off" declines it. This pane reads that file
+# and writes it through pkexec. The file and /proc/cmdline are seams, and a
+# stub synguard on PATH stands in for the daemon, so every answer below is the
+# same on a build box, velle's desktop and a runner with no synguard at all.
+SECDIR=$(mktemp -d)
+mkdir -p "$SECDIR/bin" "$SECDIR/empty"
+printf '#!/bin/sh\nexit 0\n' > "$SECDIR/bin/synguard"; chmod +x "$SECDIR/bin/synguard"
+printf 'root=/dev/sda1 rw\n' > "$SECDIR/cmdline"
+printf 'root=/dev/sda1 rw synapse.bpf_enforce=0\n' > "$SECDIR/cmdline-hatch"
+
+secrec() {  # $1 override file, $2 cmdline file, [$3 the unit's ExecStart]
+    PATH="$SECDIR/bin:$PATH" SYN_SETTINGS_GUARD_OVERRIDE="$1" \
+        SYN_SETTINGS_CMDLINE="$2" \
+        SYN_SETTINGS_GUARD_EXECSTART="${3:-/usr/bin/synguard --foreground --bpf-enforce}" \
+        "$BIN" --rec security
+}
+secswitch() { awk -F'\t' '$1 == "switch" { print $3 "|" $6 }' <<<"$1"; }
+
+r=$(secrec "$SECDIR/none" "$SECDIR/cmdline")
+[ "$(secswitch "$r")" = "on|toggle:kernel-enforce" ] \
+    && ok "no override file: kernel enforcement reads on, and offers the switch" \
+    || bad "no override file gave [$(secswitch "$r")]"
+
+# ⛔ ONLY A CLEAR "off" TURNS IT OFF — the same cases synguard's own
+# bpf_override_test pins, because two readers of one file that disagree would
+# be a pane saying off over a gate that is armed.
+for case in "off" "  off" "# note
+off" "off  # why"; do
+    printf '%s\n' "$case" > "$SECDIR/ov"
+    [ "$(secswitch "$(secrec "$SECDIR/ov" "$SECDIR/cmdline")")" = "off|toggle:kernel-enforce" ] \
+        && ok "override [$(printf '%s' "$case" | tr '\n' '/')] reads off" \
+        || bad "override [$case] did not read off"
+done
+for case in "" "on" "of" "offline" "OFF" "0" "# off"; do
+    printf '%s\n' "$case" > "$SECDIR/ov"
+    [ "$(secswitch "$(secrec "$SECDIR/ov" "$SECDIR/cmdline")")" = "on|toggle:kernel-enforce" ] \
+        && ok "override [$case] leaves it on" \
+        || bad "override [$case] was read as off"
+done
+printf 'off\n' > "$SECDIR/target"; ln -s "$SECDIR/target" "$SECDIR/link"
+[ "$(secswitch "$(secrec "$SECDIR/link" "$SECDIR/cmdline")")" = "on|toggle:kernel-enforce" ] \
+    && ok "a symlink saying off is not a setting" \
+    || bad "a symlinked override was followed"
+
+# The boot escape changes what the row SAYS, not what the switch is.
+r=$(secrec "$SECDIR/none" "$SECDIR/cmdline-hatch")
+case $r in
+    *"synapse.bpf_enforce=0"*) ok "a boot with synapse.bpf_enforce=0 is named on the row" ;;
+    *) bad "the escape-hatch boot was not mentioned: [$r]" ;;
+esac
+
+# ⛔ A UNIT THAT DOES NOT ASK FOR THE GATE IS NOT "on". synguard before 44, or
+# an admin's drop-in over ExecStart: the file changes nothing, so the switch
+# must say off and offer nothing.
+r=$(secrec "$SECDIR/none" "$SECDIR/cmdline" "/usr/bin/synguard --foreground --mode enforce")
+[ "$(secswitch "$r")" = "off|-" ] \
+    && ok "a unit without --bpf-enforce reads off, with no switch to flip" \
+    || bad "a unit without --bpf-enforce gave [$(secswitch "$r")]"
+
+norec=$(PATH="$SECDIR/empty" "$BIN" --rec security)
+case $norec in
+    *unavailable*) ok "no synguard is one unavailable row" ;;
+    *) bad "the pane without synguard printed [$norec]" ;;
+esac
+
+# The write: the asking half goes through pkexec, the root half writes the file
+# and restarts synguard — both only printed under --dry-run.
+out=$(PATH="$SECDIR/bin:$PATH" "$BIN" --dry-run set kernel-enforce off 2>&1)
+case $out in
+    "would run: pkexec "*" security kernel-enforce off --as-root") ok "set kernel-enforce off asks pkexec" ;;
+    *) bad "set kernel-enforce off ran: [$out]" ;;
+esac
+out=$(SYN_SETTINGS_GUARD_OVERRIDE="$SECDIR/ov" "$BIN" --dry-run security kernel-enforce off --as-root 2>&1)
+[ "$out" = "would write $SECDIR/ov: off
+would run: systemctl restart synguard.service" ] \
+    && ok "the root half writes the override and restarts synguard" \
+    || bad "the root half for off printed [$out]"
+out=$(SYN_SETTINGS_GUARD_OVERRIDE="$SECDIR/ov" "$BIN" --dry-run security kernel-enforce on --as-root 2>&1)
+[ "$out" = "would remove $SECDIR/ov
+would run: systemctl restart synguard.service" ] \
+    && ok "on REMOVES the file rather than writing on" \
+    || bad "the root half for on printed [$out]"
+rc=0; PATH="$SECDIR/bin:$PATH" "$BIN" --dry-run set kernel-enforce maybe >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok "kernel-enforce refuses anything but on or off" \
+                || bad "kernel-enforce accepted 'maybe' (rc=$rc)"
+rc=0; "$BIN" --dry-run security kernel-enforce off >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok "the root verb refuses to run without --as-root" \
+                || bad "security kernel-enforce ran without --as-root (rc=$rc)"
+rm -rf "$SECDIR"
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"
     exit 1

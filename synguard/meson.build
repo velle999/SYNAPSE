@@ -20,6 +20,7 @@ sources = files(
   'src/isolation.c',
   'src/secfeed.c',
   'src/core.c',
+  'src/bpf_override.c',
   'src/sg_log.c',
 )
 
@@ -207,6 +208,13 @@ ai_inject_test = executable('ai_inject_test',
   include_directories: inc,
   dependencies: [dep_threads, dep_systemd])
 test('ai_inject', ai_inject_test, timeout: 60)
+
+# The admin's override of --bpf-enforce: what counts as "off", and that nothing
+# else does — a stray word or a symlink must leave the unit in charge.
+bpf_override_test = executable('bpf_override_test',
+  files('tests/bpf_override_test.c', 'src/bpf_override.c'),
+  include_directories: inc)
+test('bpf_override', bpf_override_test, timeout: 30)
 
 # The unit is installed by the PKGBUILD, to /usr/lib/systemd/system — NOT here
 # and NOT to /etc.

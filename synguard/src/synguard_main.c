@@ -377,6 +377,14 @@ int main(int argc, char *argv[])
     }
 
     /* Parse mode */
+    /* The unit asks for the kernel gate; the machine can decline it. See
+     * bpf_override.c — this is what Settings ▸ Security writes. */
+    if (g_state.config.bpf_enforce &&
+        sg_bpf_override_off(SG_BPF_OVERRIDE_PATH)) {
+        g_state.config.bpf_enforce     = 0;
+        g_state.config.bpf_enforce_off = 1;
+    }
+
     if (strcmp(mode_str, "enforce")  == 0) g_state.config.mode = MODE_ENFORCE;
     else if (strcmp(mode_str, "audit")    == 0) g_state.config.mode = MODE_AUDIT;
     else if (strcmp(mode_str, "learning") == 0) g_state.config.mode = MODE_LEARNING;

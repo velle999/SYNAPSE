@@ -494,7 +494,20 @@ pkgver=0.1.0
 #     measurement. Pinned by a stub on PATH in the suite, because the real tool
 #     needs a resident model and a gate that runs it reads this machine.
 #   Seven strings, all thirteen catalogs, 509/509.
-pkgrel=64
+# 65: A SECURITY PANE, WITH ONE SWITCH: KERNEL ENFORCEMENT. synguard 44 arms
+#   its BPF-LSM gate by default; /etc/synguard/bpf-enforce saying "off" is how
+#   a machine declines it, and this pane is where a person does that. `set
+#   kernel-enforce on|off` re-runs this binary under pkexec with --as-root, as
+#   boot.c and users.c do — there is no systemd tool in front of that file, and
+#   no polkit policy ships, so it asks for an administrator. Off writes the
+#   file; on REMOVES it, so the shipped default lives in one place.
+#   ⛔ The switch reads the unit systemd will actually run: a synguard older
+#   than 44, or a drop-in over ExecStart, does not ask for the gate, and then
+#   the pane says off with nothing to flip rather than claiming on.
+#   ⚠ It reads the file exactly as synguard does — only a clear "off" counts,
+#   a symlink never — and the suite pins the same cases on both sides.
+#   Nine strings, all thirteen catalogs, 518/518.
+pkgrel=65
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

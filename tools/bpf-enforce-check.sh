@@ -2,10 +2,12 @@
 #
 # bpf-enforce-check.sh — does synguard's kernel enforcement do what it says?
 #
-# Item 1 of docs/SECURITY-ROADMAP.md. synguard ships three acting rules
-# (50-default-deny.rules) but `--bpf-enforce` is NOT in its unit, so the kernel
-# gate has never run outside a developer's head — and every safety property
-# that makes arming it thinkable is currently a claim in a comment:
+# Item 1 of docs/SECURITY-ROADMAP.md. It was written when `--bpf-enforce` was
+# NOT in synguard's unit and the kernel gate had never run outside a
+# developer's head; every safety property that made arming it thinkable was a
+# claim in a comment. It turned those into observations, and the unit has
+# armed the gate by default since synguard 0.1.0-44. It still earns its keep
+# as the way to re-check a new rule or a new kernel. The properties:
 #
 #   · a 30-second warmup, so a bad rule cannot stop you logging in
 #   · fail-open when the daemon wedges, so a hung synguard is not a brick
@@ -25,11 +27,20 @@
 # THREE THINGS PROTECT YOU, in order of how much you should rely on them:
 #
 #   1. A DEAD-MAN TIMER. Before arming, this schedules a transient systemd
-#      timer that removes the drop-in and restarts synguard after
-#      $DISARM_AFTER seconds no matter what — if this script dies, if your SSH
-#      drops, if the machine stops answering you. It is cancelled on a clean
-#      finish. This is the protection that works when you are not in a position
-#      to type.
+#      timer that DISARMS — writes `off` to /etc/synguard/bpf-enforce, removes
+#      the drop-in and restarts synguard — after $DISARM_AFTER seconds no
+#      matter what: if this script dies, if your SSH drops, if the machine
+#      stops answering you. It is cancelled on a clean finish. This is the
+#      protection that works when you are not in a position to type.
+#
+#      ⛔ Disarming means the OVERRIDE FILE, not "remove the drop-in". Since
+#      0.1.0-44 the unit itself passes --bpf-enforce, so a restart without the
+#      drop-in comes back ARMED. The file is the only off switch that holds
+#      whatever the unit says.
+#
+#   ⚠ AND THE RUN ENDS DISARMED, ON PURPOSE. It cannot know whether the
+#      machine should be armed afterwards, and "off, and saying so" is the
+#      side to err on. Settings ▸ Security (or deleting the file) puts it back.
 #   2. An EXIT trap that disarms immediately on any exit path, including Ctrl-C.
 #   3. `synapse.bpf_enforce=0` at the boot menu, which needs hands on the
 #      keyboard and is therefore the LAST resort rather than the first — and is
@@ -50,6 +61,7 @@ DISARM_AFTER=${DISARM_AFTER:-600}
 DROPIN_DIR=/etc/systemd/system/synguard.service.d
 DROPIN=$DROPIN_DIR/99-bpf-enforce-check.conf
 DEADMAN=synguard-bpf-disarm
+OVERRIDE=/etc/synguard/bpf-enforce
 CANARY=/var/lib/synguard/bpf-canary
 PRELOAD=/etc/ld.so.preload
 MARKER=bpf-enforce-check-not-a-real-library
@@ -125,7 +137,9 @@ denied_now() { bpf_sample
                journalctl -u synguard -n 400 --no-pager 2>/dev/null |
                grep -o 'denied=[0-9]*' | tail -1 | cut -d= -f2; }
 
+# Off, whatever the unit says — see the ⛔ in the header.
 disarm() {
+    printf 'off\n' > "$OVERRIDE"
     rm -f "$DROPIN"
     rmdir "$DROPIN_DIR" 2>/dev/null
     systemctl daemon-reload 2>/dev/null
@@ -136,6 +150,7 @@ disarm() {
 # Put the drop-in back and restart. Phase 4 needs the gate down to plant a file
 # the armed rule refuses to let it create, and up again to test it.
 rearm() {
+    rm -f "$OVERRIDE"
     mkdir -p "$DROPIN_DIR"
     {
         echo "[Service]"
@@ -165,6 +180,8 @@ cleanup() {
     sleep 2
     if systemctl is-active --quiet synguard; then
         printf '  \033[32mok\033[0m    synguard is running, gate not armed\n'
+        note "left DISARMED: $OVERRIDE says off. Back to the default (armed):"
+        note "Settings ▸ Security, or: rm $OVERRIDE && systemctl restart synguard"
     else
         printf '  \033[31mFAIL\033[0m  synguard is NOT running — start it: systemctl start synguard\n'
     fi
@@ -200,6 +217,11 @@ grep -q 'deny-bpf-canary' /etc/synguard/rules.d/50-default-deny.rules 2>/dev/nul
 #
 # Without this, "refused" proves nothing: a read failing for some unrelated
 # reason would look exactly like enforcement working.
+# Since 0.1.0-44 the machine may already be armed, which would make the
+# control below fail for the wrong reason. Start from a known-disarmed gate.
+disarm
+sleep 3
+
 head2 "1 · before arming, the canary is readable (the control)"
 if read_canary; then
     ok "root can read the canary with the gate unarmed"
@@ -216,7 +238,7 @@ head2 "arming (dead-man disarm in ${DISARM_AFTER}s)"
 # is a window where the machine is armed with nothing scheduled to disarm it.
 systemctl stop "$DEADMAN.timer" "$DEADMAN.service" 2>/dev/null
 if systemd-run -q --unit="$DEADMAN" --on-active="$DISARM_AFTER" \
-       /bin/sh -c "rm -f $DROPIN; systemctl daemon-reload; systemctl restart synguard" 2>/dev/null; then
+       /bin/sh -c "printf 'off\\n' > $OVERRIDE; rm -f $DROPIN; systemctl daemon-reload; systemctl restart synguard" 2>/dev/null; then
     ok "dead-man timer armed — this machine disarms itself in ${DISARM_AFTER}s"
     note "even if this script, or your session, goes away"
 else
@@ -224,6 +246,7 @@ else
     exit 1
 fi
 
+rm -f "$OVERRIDE"
 mkdir -p "$DROPIN_DIR"
 {
     echo "# Written by tools/bpf-enforce-check.sh. Removed when it finishes, and"
@@ -393,10 +416,9 @@ fi
 # ── What this cannot check ───────────────────────────────────────────────────
 head2 "not checked here"
 skipm "synapse.bpf_enforce=0 — needs a reboot and the boot menu"
-note "To verify by hand: reboot, add synapse.bpf_enforce=0 at the boot menu,"
-note "and with the drop-in in place synguard should come up detect-only —"
-note "'bpf-lsm: not loaded' in the journal, canary readable. That is the way"
-note "back from a bad rule, and it is worth knowing it works BEFORE you need it."
+note "Verified by hand 2026-09-21 on the laptop: add synapse.bpf_enforce=0 at"
+note "the Limine menu (E, end of the cmdline: line, F10) and synguard comes up"
+note "'bpf-lsm: DISABLED by kernel cmdline', detect-only, canary readable."
 skipm "the false-positive rate — needs an ordinary desktop session, not a script"
 note "Arm it for a day of real use and watch:"
 note "journalctl -u synguard | grep -E 'DENY|QUARANTINE'"

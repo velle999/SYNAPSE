@@ -409,6 +409,13 @@ int do_set(int argc, char **argv)
 		if (rc >= 0) return rc;
 	}
 
+	/* kernel-enforce: a root-owned file with no systemd tool in front of it,
+	 * so security.c asks pkexec, as boot.c and users.c do. */
+	{
+		int rc = security_set(key, val);
+		if (rc >= 0) return rc;
+	}
+
 	if (!strcmp(key, "firewall")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("firewall takes on or off");
@@ -532,8 +539,8 @@ int do_set(int argc, char **argv)
 
 	return refuse("unknown key — try keymap, xkb, locale, timezone, ntp, "
 	              "time-format, time-seconds, date-format, wifi, bluetooth, "
-	              "malware-scan, signature-updates, scan-daemon "
-	              "or llama-api");
+	              "malware-scan, signature-updates, scan-daemon, "
+	              "kernel-enforce or llama-api");
 }
 
 /* Bring a single interface up or down.

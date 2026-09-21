@@ -249,6 +249,9 @@ bool fprint_reader_present(void);
  * itself under pkexec for everything that needs root; users_set() answers
  * `set finger/<user> <finger>` and returns -1 for any other key. */
 int pane_users(void);
+int pane_security(void);
+int security_set(const char *key, const char *val);
+int do_security(int argc, char **argv);
 int do_user(int argc, char **argv);
 int users_set(const char *key, const char *val);
 

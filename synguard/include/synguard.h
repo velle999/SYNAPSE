@@ -217,6 +217,8 @@ typedef struct {
                                       after the fact. Off by default: the kernel
                                       path PREVENTS, and turning that on for every
                                       install has to be deliberate. */
+    int         bpf_enforce_off;   /* --bpf-enforce was asked for and
+                                      /etc/synguard/bpf-enforce said off */
     int         ai_enforce;        /* let an AI verdict escalate to DENY/QUARANTINE.
                                       Off by default: the classifier is advisory, and a
                                       hallucinated "deny" must never SIGKILL the login
@@ -402,6 +404,10 @@ int          rules_report_unreachable_paths_from(const synguard_state_t *s,
 sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
                              const sg_rule_t **matched_rule);
 void         rules_free(synguard_state_t *s);
+
+/* The admin's override of --bpf-enforce (bpf_override.c). */
+#define SG_BPF_OVERRIDE_PATH "/etc/synguard/bpf-enforce"
+int sg_bpf_override_off(const char *path);
 
 /* AI classifier */
 int synguard_ai_classify(synguard_state_t *s,

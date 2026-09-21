@@ -45,6 +45,8 @@ static void usage(void)
 "                    box can actually use\n"
 "  --rec scan        the scheduled malware sweep, the engines behind it, and\n"
 "                    what the last one found\n"
+"  --rec security    the intrusion monitor, and whether the kernel refuses\n"
+"                    what its deny rules forbid\n"
 "  --rec ai         the AI backend switch, the units that can restart it,\n"
 "                    and which model is on disk\n"
 "  --rec system      identity, and WHERE configuration actually lives\n"
@@ -71,6 +73,9 @@ static void usage(void)
 "  set scan-daemon on|off    hold the signature set in memory (clamd) — it\n"
 "                            makes a scan start instantly and costs about a\n"
 "                            gigabyte. Off unless you switch it on.\n"
+"  set kernel-enforce on|off whether the kernel refuses what synguard's deny\n"
+"                            rules forbid (on by default); asks for an\n"
+"                            administrator through pkexec\n"
 "  set llama-api on|off      a llama.cpp-compatible port on 127.0.0.1:8080,\n"
 "                            so frontends written for llama-server or the\n"
 "                            OpenAI API can use the model synapd already\n"
@@ -221,6 +226,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "enroll")) return cmd_enroll(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "forget")) return cmd_forget(rest_argc > 0 ? rest[0] : NULL);
 	if (!strcmp(cmd, "user"))   return do_user(rest_argc, rest);
+	/* What pkexec runs for `set kernel-enforce` — see security.c. */
+	if (!strcmp(cmd, "security")) return do_security(rest_argc, rest);
 	/* The key comes in SYN_SETTINGS_SECRET, never in argv — see assistant.c. */
 	if (!strcmp(cmd, "assistant-key"))
 		return assistant_key(rest_argc > 0 ? rest[0] : NULL);
@@ -254,6 +261,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "speech"))    return pane_speech();
 		if (!strcmp(pane, "remote"))    return pane_remote();
 		if (!strcmp(pane, "scan"))      return pane_scan();
+		if (!strcmp(pane, "security"))  return pane_security();
 		if (!strcmp(pane, "fprint"))    return pane_fprint();
 		if (!strcmp(pane, "startup"))   return pane_startup();
 		if (!strcmp(pane, "users"))     return pane_users();

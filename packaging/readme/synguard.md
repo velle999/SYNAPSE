@@ -14,11 +14,13 @@ synguard -d                  # foreground, verbose
 
 ## What it will and will not do on its own
 
-**It starts in `audit`.** Nothing is denied until you say so, because a
-security tool that begins by killing processes on an unfamiliar machine is a
-tool that gets uninstalled on day one.
+**Run by hand, it starts in `audit`:** nothing is denied until you say so.
+**The packaged service runs `--mode enforce --bpf-enforce`** and acts on the
+three rules in `50-default-deny.rules`: a write to `/etc/ld.so.preload` and a
+read of synguard's canary file are refused in the kernel, and a program run
+from `/dev` is stopped. Every other rule alerts or logs.
 
-Two further switches gate the parts that can act:
+Two switches gate the parts that can act:
 
 - `--ai-enforce` lets the classifier's verdicts deny or quarantine. Without
   it the classifier is **advisory** and its verdicts are clamped to alerts —
@@ -26,7 +28,10 @@ Two further switches gate the parts that can act:
   an alert: the classifier adds a threat level and a reason, and cannot make
   the event quieter.
 - `--bpf-enforce` arms the BPF-LSM gate, so an enforceable deny is refused
-  in-kernel rather than the process being killed after the fact.
+  in-kernel rather than the process being killed after the fact. The packaged
+  unit passes it. `/etc/synguard/bpf-enforce` containing `off` leaves the gate
+  loaded but unarmed; `synapse.bpf_enforce=0` on the kernel command line keeps
+  it from loading at all for that boot.
 
 ## Rules
 

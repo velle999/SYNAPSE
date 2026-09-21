@@ -29,10 +29,25 @@ ExecStartPre=/bin/mkdir -p /var/log/synguard /var/lib/synguard
 # neither the kprobe nor lsm/file_open sees, so a canary that exists costs
 # nothing and only the first start after it goes missing trips the rule.
 ExecStartPre=-/bin/sh -c 'test -e /var/lib/synguard/bpf-canary || exec /usr/bin/install -m 600 /dev/null /var/lib/synguard/bpf-canary'
+#
+# --bpf-enforce ARMS THE KERNEL GATE, by default since 0.1.0-44: the rules that
+# lower to it (deny-ld-preload, deny-bpf-canary) are refused in the kernel
+# instead of killed after the fact. Armed only once every property that makes
+# it safe had been watched working — the 30s warmup, fail-open when synguard
+# wedges, the boot escape, and a month on the laptop with no false positive
+# (docs/SECURITY-ROADMAP.md §1).
+#
+# Two ways back, and neither is editing this line (a drop-in over ExecStart
+# would shadow every later change to it):
+#   /etc/synguard/bpf-enforce containing "off" — what Settings ▸ Security
+#       writes; the gate loads and is not armed
+#   synapse.bpf_enforce=0 on the kernel command line — for a machine that
+#       cannot boot far enough to reach Settings; the gate never loads
 ExecStart=/usr/bin/synguard \
     --foreground \
     --mode enforce \
-    --rules /etc/synguard/rules.d/
+    --rules /etc/synguard/rules.d/ \
+    --bpf-enforce
 
 ExecReload=/bin/kill -HUP $MAINPID
 

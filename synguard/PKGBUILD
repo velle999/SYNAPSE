@@ -94,7 +94,24 @@ pkgver=0.1.0
 #   telling the truth, that stand-down would have made the off switch a silent
 #   way to blind synguard. It now raises one CRITICAL alert naming the switch
 #   when capture goes off, and logs when it comes back. Ship with kmod 29.
-pkgrel=43
+# 44: THE KERNEL GATE IS ARMED BY DEFAULT. The unit passes --bpf-enforce: the
+#   rules that lower (deny-ld-preload, deny-bpf-canary) are refused in the
+#   kernel instead of killed after the fact. Every box in SECURITY-ROADMAP §1
+#   was observed first — warmup, fail-open on a wedge, re-arm, the
+#   synapse.bpf_enforce=0 boot escape (on the laptop, 2026-09-21), and no
+#   false positive in a month of the laptop's journal or twelve armed boots of
+#   the desktop's (denied=0 in all 6,788 samples).
+#   Declining it is /etc/synguard/bpf-enforce containing "off" — what Settings
+#   ▸ Security writes (syn-settings 65). synguard reads it at start
+#   (src/bpf_override.c): only a clear "off" counts, and a symlink never does,
+#   pinned by tests/bpf_override_test.c. The unit is never edited for this; a
+#   drop-in over ExecStart shadows every later change to the shipped line.
+#   tools/bpf-enforce-check.sh disarms through that file now, since removing
+#   its drop-in would restart synguard armed.
+#   ⚠ A machine that armed itself with a local drop-in (the desktop's
+#   10-bpf-enforce.conf) should drop it: it is redundant from here, and it
+#   hides every future change to ExecStart.
+pkgrel=44
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

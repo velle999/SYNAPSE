@@ -132,9 +132,11 @@ be missing, in the order it is being done, with what "done" means for each. It
 is kept in the repository rather than in an issue tracker so that the honest
 answer to "is X covered yet" is one file away.
 
-**Kernel-level enforcement is off by default.** `synguard`'s BPF-LSM gate is
-not armed in the shipped unit, so its policy kills after the fact rather than
-refusing a syscall. `--bpf-enforce` arms it.
+**Kernel-level enforcement is on by default** (synguard 0.1.0-44 and later):
+the deny rules that lower to `synguard`'s BPF-LSM gate are refused in the
+kernel. Settings ▸ Security turns it off, by writing `off` to
+`/etc/synguard/bpf-enforce`; `synapse.bpf_enforce=0` on the kernel command line
+keeps the gate from loading for one boot.
 
 ## Verifying a release
 

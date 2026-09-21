@@ -81,9 +81,14 @@ typing. Run it where you can reach the keyboard anyway.
 - [x] A normal desktop session comes up, logs in, and runs for an hour with no
       rule firing. The false-positive rate of these three rules is asserted;
       it has not been measured. **Measured 2026-09-21, over a month rather than
-      an hour:** the laptop's journal spans 27 boots from 2026-08-20, the
-      desktop's 12 from 2026-09-16, both running these rules on the userspace
-      path. Nothing an ordinary program does tripped them. Every firing had a
+      an hour:** the laptop's journal spans 27 boots from 2026-08-20, running
+      these rules on the userspace path; the desktop's 12 from 2026-09-16, and
+      the desktop had been **armed** all along — a local drop-in
+      (`10-bpf-enforce.conf`, 2026-07-31) put `--bpf-enforce` on its unit, and
+      the gate logged `enforcement ARMED` on every one of those boots with
+      `denied=0` in all 6,788 samples. Nothing an ordinary program does
+      tripped them on either path. (First written up as userspace-only on
+      both machines; corrected the same day.) Every firing had a
       cause: `deny-ld-preload` three times, a user `sh` refused with EACCES,
       each in the minute of a `syn-update` build — matching syn-confine's test
       suite, the one thing in the tree that writes `/etc/ld.so.preload` (on
@@ -117,12 +122,16 @@ this item at all — it is the false-positive box below, which needs a day of
 ordinary use rather than a script.
 
 Revisit when that box closes. **Closed 2026-09-21** (above), and the
-escape-hatch box with it. **Every box in this item is now observed.** Whether
-`--bpf-enforce` ships in the unit is a decision rather than a risk: the gate,
-its warmup, its fail-open, its way back and its false-positive rate have all
-been watched. What it adds over the userspace path is refusal in place of a
-kill after the fact, for the two rules that lower (`deny-ld-preload`,
-`deny-bpf-canary`).
+escape-hatch box with it. **Every box in this item is now observed.**
+
+**Decided 2026-09-21: armed by default, with a way to decline it.** synguard
+0.1.0-44 ships `--bpf-enforce` in its unit. `/etc/synguard/bpf-enforce`
+containing `off` leaves the gate loaded and unarmed — Settings ▸ Security
+writes it (syn-settings 65), and only a clear `off` counts. The unit is never
+edited for this, because a drop-in over `ExecStart` hides every later change to
+the shipped line. `synapse.bpf_enforce=0` stays the boot-time escape.
+`tools/bpf-enforce-check.sh` now disarms through the file, since removing its
+drop-in would restart synguard armed.
 
 ## 2. Attacker-controlled text reaching the AI classifier
 
