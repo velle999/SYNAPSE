@@ -244,17 +244,69 @@ implicitly makes and currently cannot support. `profiledef.sh` already honours
 `SOURCE_DATE_EPOCH` for the label, which is the shape of the work and about one
 per cent of it.
 
+**Where it stands, 2026-09-21: our packages are reproducible; the image is
+waiting on two builds.** The first measurement found that nothing was: makepkg
+stamps `SOURCE_DATE_EPOCH` into every package — the builddate and every file's
+mtime — and uses the current time when it is unset, which it always was. Two
+builds of `syn` from one commit differed by their builddate and nothing else.
+
+With the date pinned, `tools/repro-check.sh --all` built every component twice
+from a clean clone of `c22564fc`: **37 of the 39 it could build are
+bit-identical, debug packages included** — synui, synguard, synapse_kmod,
+synstudio, synapd and the rest. The two that are not, and one it cannot build:
+
+| component | why | what would remove it |
+|---|---|---|
+| `chibi` | pygame is compiled from source by pip during the build (no wheel for this Python), in pip's random temp directory; every extension module gets a different build-id | build pygame from its sdist in a fixed directory under `$srcdir`, without build isolation |
+| `limine-mkinitcpio-hook` | vendored upstream package; `limine-entry-tool` is a Kotlin/Native binary built by Gradle, and two builds differ in ten million bytes | upstream's to fix — this is one of the packages "we do not build" in every sense but the command |
+| `synapse-llama` | not checked: it packages the llama.cpp tree `archiso/build.sh` compiles from upstream into `llama-staging-*/`, which is not in the repository, so a clean clone cannot build it | the ISO comparison below covers it |
+
+⚠ **Same commit and same build PATH.** `.BUILDINFO` records the build
+directory, so two builds at different paths differ in exactly those two lines
+(measured: `builddir` and `startdir`, nothing else). That is how Arch's own
+reproducibility works — a verifier builds where `.BUILDINFO` says — and it is
+why `archiso/build.sh` now builds each package at a fixed path instead of a
+`mktemp` one.
+
+Found on the way: `build-all.sh` could build `samsung-m2020` once per checkout.
+Its driver tarball extracts read-only, so the next build's extraction failed —
+on every installed machine's `/var/lib/synapse-src`, at its next pkgrel bump.
+
 **Done when:**
 
-- [ ] `SOURCE_DATE_EPOCH` is set from the release commit and honoured
+- [x] `SOURCE_DATE_EPOCH` is set from the release commit and honoured
       throughout the build, not only in the ISO label.
+      `tools/source-date-epoch.sh` is the one source of the date: per
+      component for a package (its last commit, so a package's bytes move with
+      its own source), HEAD for the image. `build-all.sh` sets it for every
+      package, so `syn-update` on an installed machine gets the same date for
+      the same commit; `archiso/build.sh` exports it for `mkarchiso` (the ISO's
+      volume dates and UUID, the squashfs times) and hands it to each
+      package build through `sudo`, which would otherwise scrub it. Computed as
+      the invoking user: git will not read another user's repository as root,
+      and `safe.directory` would let that repository's config run commands.
 - [ ] Two builds of the same commit on the same host produce ISOs that differ
       only in ways that are **listed** — and the list shrinks over time rather
-      than being a permanent excuse.
-- [ ] A script does that comparison, so "is it still reproducible" is a command
-      and not a project.
-- [ ] The remaining non-determinism is documented per cause: package build
-      order, timestamps in squashfs, the AUR packages we do not build.
+      than being a permanent excuse. **Not observed yet**: it needs two root
+      builds of one commit (`sudo archiso/build.sh`, keep the first ISO aside,
+      build again) and then the comparison below.
+- [x] A script does that comparison, so "is it still reproducible" is a command
+      and not a project. Two: `tools/repro-check.sh` for packages (clean
+      clone, two builds each, file-by-file when they differ) and
+      `tools/iso-repro-diff.sh A.iso B.iso` for images (unpacks both, hashes
+      everything including inside `airootfs.sfs`, compares metadata, and files
+      each difference under a cause — exit 0 identical, 1 listed causes only,
+      2 anything unexplained). The latter was checked against two synthetic
+      images, not yet two real ones.
+- [x] The remaining non-determinism is documented per cause: package build
+      order, timestamps in squashfs, the AUR packages we do not build. For
+      packages, the table above. For the image, the cause table at the top of
+      `iso-repro-diff.sh` — pacman's `%INSTALLDATE%`, the sync databases,
+      `/etc/shadow`'s change day, ldconfig/fontconfig/GTK caches, bytecode,
+      the initramfs and bootloader images — each with what would remove it.
+      These are predicted from how the image is built; the first real
+      comparison turns them into a measured list, and anything it prints as
+      UNEXPLAINED is either a cause to add or a bug to fix.
 
 ⚠ Note the honest ceiling: SynapseOS ships packages built from the AUR
 (`davinci-resolve`, `linux-wallpaperengine`) and Arch packages we do not build.
@@ -409,3 +461,5 @@ scope section is a first draft of the audience-facing half.
 - **Two root-reachable kernel crashes, a softirq deadlock, execveat reported
   with no path, PTRACE_SEIZE unreported, and `config` misreporting capture** —
   synapse_kmod 29 and synguard 43, 2026-09-21. §5.
+- **The kernel gate armed by default, with Settings ▸ Security to decline it**
+  — synguard 44 and syn-settings 65, `c22564fc`, 2026-09-21. §1.

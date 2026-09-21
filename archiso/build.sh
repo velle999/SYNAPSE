@@ -420,6 +420,37 @@ step "Preflight checks"
 
 [[ "$(id -u)" -eq 0 ]] || err "Must run as root (needed for mkarchiso)"
 
+# ── The build date: from git, never from the clock ────────────────────────────
+#
+# makepkg stamps SOURCE_DATE_EPOCH into every package and mkarchiso into the
+# image (the ISO volume dates, the squashfs timestamps); both fall back to the
+# CURRENT time when it is unset, so two builds of one commit could never be the
+# same bytes. SECURITY-ROADMAP §4. The image takes HEAD's commit time; each
+# package takes the last commit that touched it (build_package below), which is
+# what build-all.sh gives it too — so the ISO's packages and an installed
+# machine's syn-update builds of the same commit agree.
+#
+# ⚠ ASKED AS THE INVOKING USER. This runs as root, and git refuses to read a
+# repository another user owns ("dubious ownership"); the way round that,
+# safe.directory, would let that repository's config run commands as root.
+# An explicit SOURCE_DATE_EPOCH in the environment still wins.
+repo_date() {   # [component]
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        sudo -u "${SUDO_USER}" "${PROJECT_ROOT}/tools/source-date-epoch.sh" "$@" 2>/dev/null
+    else
+        "${PROJECT_ROOT}/tools/source-date-epoch.sh" "$@" 2>/dev/null
+    fi
+}
+if [[ -z "${SOURCE_DATE_EPOCH:-}" ]]; then
+    SOURCE_DATE_EPOCH=$(repo_date) || SOURCE_DATE_EPOCH=
+fi
+if [[ -n "${SOURCE_DATE_EPOCH}" ]]; then
+    export SOURCE_DATE_EPOCH
+else
+    unset SOURCE_DATE_EPOCH
+    warn "no build date from git — this image will carry today's date and cannot be reproduced"
+fi
+
 command -v pacman &>/dev/null || err "pacman not found — must build on Arch Linux"
 
 # ⛔ THE SIGNING KEY IS CHECKED HERE, NOT AT THE END. Signing is the last step of
@@ -1091,8 +1122,23 @@ build_package() {
     # tree. Build under /var/tmp, not inside the project: synbuild cannot
     # traverse /home/velle (mode 700), so paths under it are unreachable
     # once makepkg drops privileges.
-    local tmpbuild
-    tmpbuild="$(mktemp -d "/var/tmp/synapse-pkg-${pkg}.XXXXXX")"
+    #
+    # ⚠ THE SAME PATH EVERY BUILD. It was mktemp's random one, and makepkg
+    # writes its build directory into .BUILDINFO — so every ISO carried
+    # packages that differed from the last build's in that line alone. A fixed
+    # name directly in /var/tmp would be a gift to anyone who can create it
+    # first (this runs as root, and cp -a / chown -R follow what they find),
+    # so the fixed part sits under a directory root owns and checks: a real
+    # directory, not a link, uid 0, not writable by anyone else.
+    local pkgroot=/var/tmp/synapse-pkgbuild
+    if [[ ! -e "${pkgroot}" ]]; then
+        install -d -m 0755 -o root -g root "${pkgroot}"
+    fi
+    [[ -d "${pkgroot}" && ! -L "${pkgroot}" && "$(stat -c '%u %a' "${pkgroot}")" == "0 755" ]] \
+        || err "${pkgroot} is not a root-owned 0755 directory — refusing to build in it"
+    local tmpbuild="${pkgroot}/${pkg}"
+    rm -rf "${tmpbuild}"
+    mkdir -m 0755 "${tmpbuild}"
     cp -a "${pkgdir}/." "${tmpbuild}/"
 
     # Copy llama-staging for packages that need it — synapd links against it,
@@ -1137,7 +1183,12 @@ build_package() {
     # SYNAPSE_LLAMA_BACKEND selects which variant synapse-llama's PKGBUILD
     # builds (cpu -> synapse-llama, cuda -> synapse-llama-cuda). sudo scrubs the
     # environment, so hand it over explicitly via env.
+    # SOURCE_DATE_EPOCH per package, handed over explicitly for the same
+    # reason as the backend: sudo scrubs the environment.
+    local pkg_date
+    pkg_date=$(repo_date "${pkg}") || pkg_date="${SOURCE_DATE_EPOCH:-}"
     sudo -u synbuild -H env "SYNAPSE_LLAMA_BACKEND=${llama_backend}" \
+        ${pkg_date:+"SOURCE_DATE_EPOCH=${pkg_date}"} \
         makepkg -fd --noconfirm \
         2>&1 | sed 's/^/  /' \
         || err "${pkg} build failed — aborting (packages.x86_64 needs every package)"

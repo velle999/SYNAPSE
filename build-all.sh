@@ -92,10 +92,33 @@ want() {
     return 1
 }
 
+# ── A build date from git, not from the clock ────────────────────────────────
+#
+# makepkg stamps SOURCE_DATE_EPOCH into every package — the builddate in
+# .PKGINFO/.BUILDINFO and the mtime of every file it packs — and uses the
+# CURRENT time when the variable is unset. So no two builds of one commit were
+# ever the same bytes, whatever the compiler did. Measured 2026-09-21: pinned,
+# synguard, syntty, syn and syn-update each built bit-identical twice; unpinned,
+# `syn` differed by nothing but its builddate. SECURITY-ROADMAP §4,
+# tools/repro-check.sh.
+#
+# Per component: the time of the last commit that touched it, so a package's
+# bytes move when its own source does. Outside a git checkout makepkg keeps its
+# own behaviour. syn-update drives this script, so installed machines get the
+# same date for the same commit.
+set_build_date() {
+    unset SOURCE_DATE_EPOCH
+    local t
+    if t=$("$BASE/tools/source-date-epoch.sh" "$1" 2>/dev/null); then
+        export SOURCE_DATE_EPOCH=$t
+    fi
+}
+
 build_component() {
     local name=$1
     want "$name" || return 0
     echo "=== Building $name ==="
+    set_build_date "$name"
     cd "$BASE/$name"
 
     # Clean prior makepkg droppings so the source tarball never
@@ -155,7 +178,16 @@ build_script_pkg() {
     local name=$1
     want "$name" || return 0
     echo "=== Building $name ==="
+    set_build_date "$name"
     cd "$BASE/$name"
+    # A script package's src/ is makepkg's last extraction, and makepkg -f
+    # extracts over it. When a source tarball unpacks READ-ONLY — samsung-m2020's
+    # driver does — the second extraction cannot replace those files and the
+    # build dies with "Failed to extract": so the first build of a component
+    # worked and every later one, on the same checkout, did not. That checkout
+    # is /var/lib/synapse-src on every installed machine. Write permission back,
+    # not rm: some script packages keep tracked files under src/.
+    [ -d src ] && chmod -R u+w src 2>/dev/null
     makepkg -sf --noconfirm
     local pkg
     pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
