@@ -71,7 +71,7 @@ pkgver=0.1.0
 #   ships voice_input.py or voice_output.py (python would import a leftover copy
 #   ahead of PYTHONPATH), and the launcher puts the engine on the path after
 #   chibi's own pydeps and checks that it was built for the same python.
-pkgrel=34
+pkgrel=35
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -85,7 +85,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=416388a5e4306f8376438ccdee802e33b37034ab
+_commit=d2fe0e113fc34aaa4e4f9d067f04907477c5a7cc
 
 # Runtime deps.
 #
@@ -137,6 +137,13 @@ depends=(
     'synapd'              # default LLM backend on SynapseOS (no Ollama needed)
     'synguard'            # security mode subscribes to its verdict feed
     'synapse-voice'       # hearing and speaking — the engine and its models
+    # Buddy mode (F4): chibi on the desktop, drawn by buddy.py's helper on a
+    # GTK 4 layer-shell overlay. The helper runs on the system python, so these
+    # are system packages rather than vendored wheels. Without them the star
+    # button only says what is missing.
+    'gtk4-layer-shell'
+    'python-gobject'
+    'python-cairo'        # gi.require_foreign("cairo"): the input region
 )
 makedepends=('git' 'python-pip')
 optdepends=('ollama: alternative LLM backend (set CHIBI_LLM_BACKEND=ollama)')
