@@ -4,6 +4,14 @@ set -e
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
 
+# A build needs a UTF-8 locale: bsdtar cannot unpack a file name it cannot
+# represent, and pygame's source has Korean ones (chibi). An update run over SSH,
+# from a timer or from a stripped environment has none at all — POSIX — and
+# then that package fails to extract. C.UTF-8 is built into glibc.
+if [ -z "${LC_ALL:-}${LC_CTYPE:-}${LANG:-}" ]; then
+    export LANG=C.UTF-8
+fi
+
 # Which llama backend the synapse-llama package is built from. The staged tree
 # (llama-staging-$SYNAPSE_LLAMA_BACKEND) is produced by:
 #     sudo archiso/build.sh --gpu=cuda --llama-only
@@ -142,7 +150,7 @@ build_component() {
     if [ -x "$BASE/$name/mktarball.sh" ]; then
         ( cd "$BASE/$name" && ./mktarball.sh )
         cd "$BASE/$name"
-        makepkg -sf --noconfirm
+        makepkg -sf --noconfirm --config "$BASE/tools/makepkg-build-all.conf"
         local pkg_mk
         pkg_mk=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null \
                  | grep -v "^$name-debug-" | head -1)
@@ -163,7 +171,7 @@ build_component() {
     "$BASE/tools/collect-source.sh" "$name" >/dev/null
 
     cd "$BASE/$name"
-    makepkg -sf --noconfirm
+    makepkg -sf --noconfirm --config "$BASE/tools/makepkg-build-all.conf"
     local pkg
     pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
     if [ -n "$pkg" ]; then
@@ -188,7 +196,7 @@ build_script_pkg() {
     # is /var/lib/synapse-src on every installed machine. Write permission back,
     # not rm: some script packages keep tracked files under src/.
     [ -d src ] && chmod -R u+w src 2>/dev/null
-    makepkg -sf --noconfirm
+    makepkg -sf --noconfirm --config "$BASE/tools/makepkg-build-all.conf"
     local pkg
     pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
     if [ -n "$pkg" ]; then
