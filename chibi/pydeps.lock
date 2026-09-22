@@ -1,0 +1,61 @@
+# chibi's vendored Python packages, pinned with the hash of the exact file.
+# The full closure, for python 3.14 on x86_64 — installed with
+# `pip install --no-deps --require-hashes --only-binary :all:`, so nothing
+# is resolved, and no file pip has not seen before is accepted, at build time.
+# pygame is not here: it is built from its sdist, a PKGBUILD source.
+#
+# To move a version: `pip install --dry-run --report` with the new top-level
+# pins (PKGBUILD's comment above source=() lists them), then regenerate this
+# from the report's download_info hashes, and bump pkgrel.
+beautifulsoup4==4.15.0 \
+    --hash=sha256:d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9
+certifi==2026.7.22 \
+    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+cffi==2.1.1 \
+    --hash=sha256:b0431303acaea1089ad4b3e9ce4e6518193def1118d4073ca848635ee4ea2e96
+charset-normalizer==3.5.1 \
+    --hash=sha256:15f024313246a4ed976c60f440bb8d257815513a681d212ff74fd46f7d715a90
+curl_cffi==0.16.3 \
+    --hash=sha256:a875a661e2f9a949be29454880bbb9553307a487c4c08819738298cf5c1622e2
+idna==3.20 \
+    --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+lxml==6.1.3 \
+    --hash=sha256:a7eb78ba28b187e1e9203a55c60fcf70df2d22cb205fe6d51b9383d6097419f0
+multitasking==0.0.13 \
+    --hash=sha256:ec9243af140c67bfe52dc98d7173c294512735a88e8425c458b250db99dc2b48
+numpy==2.5.3 \
+    --hash=sha256:b0521d0f4aebb6e06189451025fa17a913287b13c03d5fe05c017333b654ea5b
+opencv-python-headless==5.0.0.93 \
+    --hash=sha256:ed709fdf9aa0bd1f2ed8549e71d19449b03a675bb581eb292285f6861953be37
+pandas==3.0.6 \
+    --hash=sha256:62f51d7f651c8054c5e82a69265c98082e795d1442df7ca6edc3a545d61214b1
+peewee==4.5.1 \
+    --hash=sha256:dbbdc93e9be08d1df49ceed48dc5d609bfeda6112848086f1f6c1f1debe70975
+pillow==12.3.0 \
+    --hash=sha256:251bf95b67017e27b13d82f5b326234ca62d70f9cf4c2b9032de2358a3b12c7b
+platformdirs==4.11.11 \
+    --hash=sha256:972ea6b2b387155a536226a0750e46923d731d459a387c4a255c583ed2f64547
+protobuf==7.36.2 \
+    --hash=sha256:89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2
+psutil==7.2.2 \
+    --hash=sha256:076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+pytz==2026.3.post1 \
+    --hash=sha256:dd95840dd199baea12d9cc096a1d452caa6596a1c1e4b5f3dbd1541855d5e815
+requests==2.34.2 \
+    --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+soupsieve==2.9.2 \
+    --hash=sha256:8089a26fd974ca7a1f30276d3d8492ab266ab15af581642dfe8aa162e0c1c823
+typing_extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+urllib3==2.8.0 \
+    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+websockets==17.1 \
+    --hash=sha256:6f42912fa9eb4cb7c7ec9fde9b3332ba339eb8a8811981043d4029599f3d950b
+yfinance==1.7.0 \
+    --hash=sha256:91281ecd1f71069a37155ff8653aff2d3085f3492bd8721f18b70955da62911a

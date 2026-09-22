@@ -258,11 +258,17 @@ builds of `syn` from one commit differed by their builddate and nothing else.
 With the date pinned, `tools/repro-check.sh --all` built every component twice
 from a clean clone of `c22564fc`: **37 of the 39 it could build are
 bit-identical, debug packages included** — synui, synguard, synapse_kmod,
-synstudio, synapd and the rest. The two that are not, and one it cannot build:
+synstudio, synapd and the rest. chibi was the 38th, from chibi 38
+(2026-09-22): pygame is now a checksummed sdist built in place under `$srcdir`
+instead of in pip's random temp directory, the rest of its Python packages
+are pinned with a hash per file (`chibi/pydeps.lock`) instead of whatever PyPI
+held that day, and `src/pydeps` is emptied first — it had been accumulating
+every earlier build's packages, 288 MB of them. Two builds of one commit are
+bit-identical, debug package included. The one that is not, and one it cannot
+build:
 
 | component | why | what would remove it |
 |---|---|---|
-| `chibi` | pygame is compiled from source by pip during the build (no wheel for this Python), in pip's random temp directory; every extension module gets a different build-id | build pygame from its sdist in a fixed directory under `$srcdir`, without build isolation |
 | `limine-mkinitcpio-hook` | vendored upstream package; `limine-entry-tool` is a Kotlin/Native binary built by Gradle, and two builds differ in ten million bytes | upstream's to fix — this is one of the packages "we do not build" in every sense but the command |
 | `synapse-llama` | not checked: it packages the llama.cpp tree `archiso/build.sh` compiles from upstream into `llama-staging-*/`, which is not in the repository, so a clean clone cannot build it | the ISO comparison below covers it |
 

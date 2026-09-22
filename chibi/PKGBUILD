@@ -71,7 +71,24 @@ pkgver=0.1.0
 #   ships voice_input.py or voice_output.py (python would import a leftover copy
 #   ahead of PYTHONPATH), and the launcher puts the engine on the path after
 #   chibi's own pydeps and checks that it was built for the same python.
-pkgrel=37
+# 38: THE SAME COMMIT NOW BUILDS THE SAME PACKAGE — and a much smaller one.
+#   Three things made it depend on when and where it was built:
+#   ⛔ src/pydeps WAS NEVER EMPTIED. `pip install --target --upgrade` into a
+#   directory that survives between builds (syn-update's tree keeps src/) left
+#   every earlier build's packages in it, so 37 shipped 672 MB including
+#   ~288 MB that chibi stopped using at 27 — faster_whisper, ctranslate2,
+#   onnxruntime, piper, av — plus two or three dist-infos of anything that had
+#   moved a version. The launcher puts chibi's pydeps AHEAD of synapse-voice's,
+#   so those stale copies were what loaded, not synapse-voice's own.
+#   ⚠ NOTHING WAS PINNED. Every build took whatever PyPI had that day, so two
+#   builds of one commit a week apart differed, and every installed machine
+#   trusted PyPI at build time. pydeps.lock pins the full closure with the
+#   hash of each file — the versions 37 shipped — installed with --no-deps
+#   --require-hashes --only-binary :all:.
+#   ⚠ pygame was compiled by pip in a random /tmp directory, so every
+#   extension module got a different build-id. It is now a PKGBUILD source
+#   (sdist, checksummed) built in place under $srcdir without build isolation.
+pkgrel=38
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -145,7 +162,9 @@ depends=(
     'python-gobject'
     'python-cairo'        # gi.require_foreign("cairo"): the input region
 )
-makedepends=('git' 'python-pip')
+# python-setuptools builds pygame from its sdist without build isolation, so it
+# comes from the system rather than being fetched by pip.
+makedepends=('git' 'python-pip' 'python-setuptools')
 optdepends=('ollama: alternative LLM backend (set CHIBI_LLM_BACKEND=ollama)')
 
 # Python deps are vendored into /usr/lib/chibi/pydeps with `pip --target`
@@ -157,15 +176,13 @@ optdepends=('ollama: alternative LLM backend (set CHIBI_LLM_BACKEND=ollama)')
 #
 # openwakeword is deliberately NOT vendored: oww_enabled is False by default,
 # and it drags in a tflite runtime for a feature nothing turns on.
-_pydeps=(
-    'pygame'
-    'numpy'
-    'requests'
-    'yfinance'                # market ticker
-    'opencv-python-headless'  # webcam vision
-    'psutil'                  # soul: system monitoring
-    'Pillow'                  # soul: screen awareness
-)
+#
+# ⛔ WHAT IS VENDORED IS pydeps.lock, pinned and hashed — never a bare name
+# resolved at build time. The top level is pygame (built here, below), numpy,
+# requests, yfinance (market ticker), opencv-python-headless (webcam vision),
+# psutil and Pillow (soul: system monitoring and screen awareness); the lock is
+# their whole closure.
+_pygame_ver=2.6.1
 
 # ⚠ NO MODELS HERE SINCE 27, and no speech libraries. The recorder, the voice,
 # faster-whisper, piper and both models are synapse-voice's, which the desktop's
@@ -177,6 +194,8 @@ source=(
     "chibi.desktop"
     "chibi-64.png"
     "chibi-128.png"
+    "pydeps.lock"
+    "https://files.pythonhosted.org/packages/49/cc/08bba60f00541f62aaa252ce0cfbd60aebd04616c0b9574f755b583e45ae/pygame-$_pygame_ver.tar.gz"
 )
 sha256sums=(
     'SKIP'
@@ -184,6 +203,8 @@ sha256sums=(
     'SKIP'
     'b1a06457cb55d7389bd08383842f04cd873b41b3d1597f30d0182a27cdaa0ca0'
     '967d7f9481e27383d09ec460a0c238974ae76658af9cbbc0cc2f34012de11243'
+    'SKIP'
+    '56fb02ead529cee00d415c3e007f75e0780c655909aaa8e8bf616ee09c9feb1f'
 )
 
 # Walks the declared `depends` closure with plain pacman (no pacman-contrib /
@@ -282,13 +303,40 @@ build() {
     # ⛔ This silences the CONFLICT REPORT ONLY. A dependency pip cannot resolve
     # for the packages actually being installed here is still a hard error and
     # still fails the build.
+    #
+    # ⛔ EMPTIED FIRST. src/ survives between builds in syn-update's tree, and
+    # a --target install only ever adds: 37 shipped every earlier build's
+    # packages alongside this one's.
+    rm -rf "$srcdir/pydeps" "$srcdir/wheels"
     pip install \
         --target="$srcdir/pydeps" \
         --no-cache-dir \
         --no-compile \
         --no-warn-conflicts \
-        --upgrade \
-        "${_pydeps[@]}"
+        --no-deps \
+        --require-hashes \
+        --only-binary :all: \
+        -r "$srcdir/pydeps.lock"
+
+    # pygame has no wheel for this python, so it is compiled — here, in a
+    # directory under $srcdir, rather than in pip's random temp dir: makepkg's
+    # -ffile-prefix-map rewrites $srcdir, and nothing rewrites /tmp/pip-*, so
+    # every build's extension modules had a different build-id.
+    # --no-build-isolation keeps pip from fetching setuptools at build time.
+    rm -rf "$srcdir/pygame-$_pygame_ver/build" "$srcdir/pygame-$_pygame_ver"/*.egg-info
+    pip wheel \
+        --no-cache-dir \
+        --no-deps \
+        --no-build-isolation \
+        --wheel-dir="$srcdir/wheels" \
+        "$srcdir/pygame-$_pygame_ver"
+    pip install \
+        --target="$srcdir/pydeps" \
+        --no-cache-dir \
+        --no-compile \
+        --no-warn-conflicts \
+        --no-deps \
+        "$srcdir/wheels"/pygame-"$_pygame_ver"-*.whl
 }
 
 package() {
