@@ -93,23 +93,61 @@ ShellRoot {
         }
     }
 
+    function toFindings(out) {
+        return root.parseRecords(out, "finding").map(f => ({
+            engine: f[1], verdict: f[2],
+            path: root.unesc(f[3] || ""), detail: root.unesc(f[4] || "")
+        }))
+    }
+
+    // What needs a person: an engine that did not finish is listed, never
+    // counted — it says the scan was not whole, not that the machine is not.
+    function outstanding(rows) {
+        return rows.filter(f => f.verdict !== "clean" && f.verdict !== "incomplete").length
+    }
+
     Process {
         id: scanProc
         stdout: StdioCollector {
             onStreamFinished: {
-                const rows = root.parseRecords(this.text, "finding")
-                root.findings = rows.map(f => ({
-                    engine: f[1], verdict: f[2],
-                    path: root.unesc(f[3] || ""), detail: root.unesc(f[4] || "")
-                }))
+                root.findings = root.toFindings(this.text)
                 root.busy = false
-                root.status = root.findings.length === 0
+                const n = root.outstanding(root.findings)
+                root.status = n === 0
                     ? I18n.tr("Nothing found.")
-                    : I18n.tr("%1 need a look.").arg(root.findings.length)
+                    : I18n.tr("%1 need a look.").arg(n)
             }
         }
         stderr: StdioCollector { id: scanErr }
         onExited: root.busy = false
+    }
+
+    // ── what the weekly scan found ─────────────────────────────────────────
+    //
+    // ⛔ THE WINDOW OPENED ON AN EMPTY LIST while Settings said "1 outstanding",
+    // and nothing anywhere said what it was. It now opens on the scheduled
+    // sweep's findings — the record Settings and the bar count — until a scan
+    // started here replaces them.
+    Process {
+        id: weeklyProc
+        command: [root.bin, "--rec", "status", "--weekly"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.busy) return           // a scan started meanwhile
+                const st = root.parseRecords(this.text, "status")[0]
+                if (!st || st[1] !== "ran") {
+                    root.status = I18n.tr("The weekly scan has not run yet.")
+                    return
+                }
+                root.findings = root.toFindings(this.text)
+                const when = Qt.formatDateTime(new Date(parseInt(st[2]) * 1000),
+                                               "yyyy-MM-dd hh:mm")
+                const n = root.outstanding(root.findings)
+                root.status = n === 0
+                    ? I18n.tr("The weekly scan on %1 found nothing.").arg(when)
+                    : I18n.tr("The weekly scan on %1: %2 need a look.").arg(when).arg(n)
+            }
+        }
     }
 
     Process {
@@ -142,7 +180,11 @@ ShellRoot {
         scanProc.running = true
     }
 
-    Component.onCompleted: { enginesProc.running = true; quarProc.running = true }
+    Component.onCompleted: {
+        enginesProc.running = true
+        quarProc.running = true
+        weeklyProc.running = true
+    }
 
     FloatingWindow {
         title: "Malware Scan"
@@ -245,13 +287,24 @@ ShellRoot {
                             font.family: root.uiFont
                             font.pixelSize: root.ui(13)
                         }
+                        // Wrapped, not elided: rkhunter's detail is the whole
+                        // of what it found ("The file properties have changed:
+                        // File: … Current hash: …"), and cutting it off at the
+                        // edge of the window leaves the finding unreadable.
                         Text {
                             width: parent.width
-                            text: root.page === "scan"
-                                  ? (modelData.engine + " · " + modelData.detail)
-                                  : (modelData.id + " · " + modelData.engine)
+                            text: root.page !== "scan"
+                                  ? (modelData.id + " · " + modelData.engine)
+                                  : modelData.verdict === "incomplete"
+                                  ? (modelData.engine + " · " + I18n.tr("did not finish")
+                                     + " · " + modelData.detail)
+                                  : (modelData.engine + " · " + modelData.detail)
                             color: root.page === "scan" && modelData.verdict === "infected"
-                                   ? "#ff6b6b" : "#8b97a8"
+                                   ? "#ff6b6b"
+                                 : root.page === "scan" && modelData.verdict === "incomplete"
+                                   ? "#6b7688" : "#8b97a8"
+                            wrapMode: Text.WrapAnywhere
+                            maximumLineCount: 4
                             elide: Text.ElideRight
                             font.family: root.uiFont
                             font.pixelSize: root.ui(11)

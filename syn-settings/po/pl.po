@@ -1103,7 +1103,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "Domyślne odrzucanie na wejściu. Przechodzą loopback, odpowiedzi na połączenia tego komputera i ICMP, a sieć lokalna tylko w zaufanej sieci; pozostały niezamówiony ruch nie."
+msgstr ""
+"Domyślne odrzucanie na wejściu. Przechodzą loopback, odpowiedzi na "
+"połączenia tego komputera i ICMP, a sieć lokalna tylko w zaufanej sieci; "
+"pozostały niezamówiony ruch nie."
 
 msgid "input filtering"
 msgstr "filtrowanie wejścia"
@@ -1117,12 +1120,16 @@ msgstr "niezaufana"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "Inne urządzenia w tej sieci mogą łączyć się z udostępnionymi usługami tego komputera — udziałami plików, serwerami multimediów, pulpitem zdalnym."
+msgstr ""
+"Inne urządzenia w tej sieci mogą łączyć się z udostępnionymi usługami tego "
+"komputera — udziałami plików, serwerami multimediów, pulpitem zdalnym."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "Z tej sieci wchodzą tylko odpowiedzi, ping, DHCP i otwarte porty. Zaufaj jej, jeśli jest twoja, np. domowa lub w pracy."
+msgstr ""
+"Z tej sieci wchodzą tylko odpowiedzi, ping, DHCP i otwarte porty. Zaufaj "
+"jej, jeśli jest twoja, np. domowa lub w pracy."
 
 msgid "container links"
 msgstr "połączenia kontenerów"
@@ -1504,6 +1511,29 @@ msgstr "zainstalowany"
 msgid "Engine"
 msgstr "Silnik"
 
+msgid "infected"
+msgstr "zainfekowany"
+
+msgid "suspicious"
+msgstr "podejrzany"
+
+msgid "did not finish"
+msgstr "nie ukończono"
+
+msgid "unreadable"
+msgstr "nieczytelny"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "zatrzymano przed końcem, więc skanowanie nie jest pełne · to problem samego silnika i nie mówi nic o tym, co jest na komputerze"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "ostrzeżenie dotyczące samego systemu, a nie jednego pliku"
+
+msgid "needs a look"
+msgstr "wymaga sprawdzenia"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "harmonogram · włącza go przełącznik na górze tej strony"
 
@@ -1598,24 +1628,35 @@ msgid ""
 msgstr ""
 "co zegar zrobił ostatnio · przechodzi katalogi domowe, /srv i tymczasowe"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "skanowanie oznaczyło te elementy i nikt ich nie przejrzał · każdy jest wymieniony poniżej, a syn-scan status --weekly wypisuje tę samą listę · nic nigdy nie jest usuwane"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "ten zapis powstał, zanim syn-scan prowadził listę, więc może je tylko policzyć · następne skanowanie zapisze, czym są, albo sudo syn-scan scan --system sprawdzi system teraz"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "nic nie oznaczono, ale jedno sprawdzenie nie zostało ukończone · jest wymienione poniżej"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "ostatni przebieg zakończył się bez żadnych zgłoszeń"
+
 msgid "Outstanding findings"
 msgstr "Nierozpatrzone znaleziska"
-
-msgid "needs a look"
-msgstr "wymaga sprawdzenia"
 
 msgid "clear"
 msgstr "czysto"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"przebieg je zgłosił i nikt na nie nie spojrzał · sudo syn-scan status je "
-"wypisuje, a nic nigdy nie jest usuwane"
+msgid "More findings"
+msgstr "Więcej wyników"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "ostatni przebieg zakończył się bez żadnych zgłoszeń"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "reszta listy · syn-scan status --weekly wypisuje wszystkie"
 
 msgid "Your last scan"
 msgstr "Twoje ostatnie skanowanie"
@@ -2002,7 +2043,9 @@ msgstr ""
 "Wyłączona — odpowiadaj na wszystko, co dotrze do tej maszyny, w każdej sieci"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "Zaufana — inne urządzenia w niej mogą łączyć się z udostępnionymi usługami tego komputera"
+msgstr ""
+"Zaufana — inne urządzenia w niej mogą łączyć się z udostępnionymi usługami "
+"tego komputera"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "Niezaufana — wchodzą tylko odpowiedzi, ping, DHCP i otwarte porty"
@@ -2078,6 +2121,13 @@ msgid ""
 msgstr ""
 "kolejne konto z własnymi plikami i pulpitem — na ekranie logowania Tab "
 "przechodzi do pola nazwy"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "przebieg je zgłosił i nikt na nie nie spojrzał · sudo syn-scan status je "
+#~ "wypisuje, a nic nigdy nie jest usuwane"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

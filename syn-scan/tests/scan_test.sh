@@ -71,16 +71,22 @@ exit 0
 STUB
 
 chmod +x "$STUBS"/*
-# ⚠ The stub dir goes FIRST. engine_path() takes the first match in PATH order,
-# so this shadows a real clamscan if the machine has one — which the developer
-# box will, and CI will not.
-export PATH="$STUBS:$PATH"
+# ⛔ syn-scan SEES ONLY THE STUBS. The stub dir used to go first on the normal
+# PATH, which shadows a real engine only while the stub is there and runnable:
+# the moment a test made one unrunnable, or asked for an engine with none on
+# PATH, the machine's own rkhunter, chkrootkit or clamscan was found behind
+# it. Five checks failed on every machine with the engines installed — and
+# check() runs this suite, so syn-scan could not be BUILT on the very machines
+# that use it. The script's own tools keep the normal PATH; only syn-scan's
+# runs get the stubs alone. (A stub has no #! line; execvp falls back to
+# /bin/sh by absolute path, so it needs nothing on PATH.)
+sc() { PATH="$STUBS" "$BIN" "$@"; }
 
 printf 'harmless\n' > "$SCANME/clean.txt"
 printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR\n' > "$SCANME/eicar.com"
 
 # ── 1. engines: an absent engine is reported, not hidden ────────────────────
-out=$("$BIN" --rec engines)
+out=$(sc --rec engines)
 grep -q '^#engine	id	name	present	runnable	path$' <<<"$out" \
   && ok "engines --rec emits the header row the window keys off" \
   || bad "engines --rec header" "got: $(head -1 <<<"$out")"
@@ -94,22 +100,22 @@ grep -q '^engine	clamav	.*	1	1	' <<<"$out" \
 # Reporting that as "not installed" sends somebody to reinstall a package they
 # already have — while lynis, auditing as root, finds it and awards MALW-3276.
 chmod 0600 "$STUBS/chkrootkit"
-out=$("$BIN" --rec engines)
+out=$(sc --rec engines)
 grep -q '^engine	chkrootkit	.*	1	0	' <<<"$out" \
   && ok "an installed but unexecutable engine reads present=1 runnable=0" \
   || bad "present/runnable split" "$(grep chkrootkit <<<"$out")"
 
 # ⚠ CAPTURE, THEN GREP. `set -o pipefail` is on and syn-scan exits 1 when it
-# has findings, so `"$BIN" ... | grep -q` reports failure even when grep
+# has findings, so `sc ... | grep -q` reports failure even when grep
 # matched — the assertion would fail on a working program.
-sysout=$("$BIN" scan --system 2>&1)
+sysout=$(sc scan --system 2>&1)
 grep -qi 'needs root' <<<"$sysout" \
   && ok "a scan says an engine needs root rather than 'not installed'" \
   || bad "needs-root message" "$sysout"
 chmod 0755 "$STUBS/chkrootkit"
 
 # ── 2. clamav parsing ───────────────────────────────────────────────────────
-out=$("$BIN" --rec scan "$SCANME")
+out=$(sc --rec scan "$SCANME")
 n=$(grep -c '^finding	clamav	' <<<"$out")
 [ "$n" = 3 ] && ok "clamscan: 2 FOUND + 1 ERROR parsed, OK line ignored" \
              || bad "clamscan finding count" "expected 3, got $n"
@@ -158,7 +164,7 @@ STUB
 chmod +x "$STUBS/clamdscan"
 : > "$ROOT/fake-clamd.sock"
 
-out=$(SYNSCAN_CLAMD_SOCKET="$ROOT/fake-clamd.sock" "$BIN" --rec scan "$SCANME")
+out=$(SYNSCAN_CLAMD_SOCKET="$ROOT/fake-clamd.sock" sc --rec scan "$SCANME")
 grep -q -- '--fdpass' "$STUBS/clamdscan.args" \
   && ok "the clamd path passes --fdpass" \
   || bad "--fdpass missing" "argv was: $(cat "$STUBS/clamdscan.args" 2>/dev/null)"
@@ -168,18 +174,18 @@ grep -q '^finding	clamav	infected	.*Eicar-Test-Signature' <<<"$out" \
 
 # ⚠ And the fallback is what runs when there is no socket — the ordinary case.
 rm -f "$STUBS/clamscan.args"
-"$BIN" --rec scan "$SCANME" >/dev/null
+sc --rec scan "$SCANME" >/dev/null
 grep -q -- '--scan-archive=yes' "$STUBS/clamscan.args" 2>/dev/null \
   && ok "with no clamd socket it falls back to clamscan" \
   || bad "clamscan fallback not taken"
 
 # ── 3. system engines only run for --system ─────────────────────────────────
-out=$("$BIN" --rec scan "$SCANME")
+out=$(sc --rec scan "$SCANME")
 grep -q 'rkhunter' <<<"$out" \
   && bad "rkhunter ran on a file scan" "a path list means nothing to it" \
   || ok "a file scan does not run the system engines"
 
-out=$("$BIN" --rec scan --system)
+out=$(sc --rec scan --system)
 grep -q '^finding	rkhunter	suspect	' <<<"$out" \
   && ok "--system runs rkhunter and drops its 'Warning:' prefix" \
   || bad "rkhunter --system"
@@ -188,11 +194,11 @@ grep -q '^finding	chkrootkit	suspect	' <<<"$out" \
   && ok "--system runs chkrootkit" || bad "chkrootkit --system"
 
 # ── 4. --only ───────────────────────────────────────────────────────────────
-out=$("$BIN" --rec --only clamav scan "$SCANME")
+out=$(sc --rec --only clamav scan "$SCANME")
 grep -q 'rkhunter' <<<"$out" && bad "--only clamav ran another engine" \
                              || ok "--only runs exactly the engine named"
 
-"$BIN" --only nosuchengine scan "$SCANME" >/dev/null 2>&1 \
+sc --only nosuchengine scan "$SCANME" >/dev/null 2>&1 \
   && bad "--only accepted an engine that does not exist" \
   || ok "--only refuses an unknown engine"
 
@@ -202,11 +208,11 @@ printf 'original contents\n' > "$victim"
 chmod 0644 "$victim"
 before=$(sha256sum < "$victim")
 
-"$BIN" --yes quarantine take "$victim" >/dev/null 2>&1
+sc --yes quarantine take "$victim" >/dev/null 2>&1
 [ -e "$victim" ] && bad "quarantine take left the original in place" \
                  || ok "quarantine take removes the original"
 
-id=$("$BIN" --rec quarantine list | awk -F'\t' '/^quarantine/{print $2; exit}')
+id=$(sc --rec quarantine list | awk -F'\t' '/^quarantine/{print $2; exit}')
 [ -n "$id" ] && ok "quarantine list names what it holds" || bad "quarantine list empty"
 
 # ⛔ 0600 AND NOT EXECUTABLE. A quarantine full of files that are still +x has
@@ -216,7 +222,7 @@ perm=$(stat -c %a "$blob" 2>/dev/null)
 [ "$perm" = 600 ] && ok "quarantined file is 0600, whatever it was before" \
                   || bad "quarantine permissions" "got $perm"
 
-"$BIN" --yes quarantine restore "$id" >/dev/null 2>&1
+sc --yes quarantine restore "$id" >/dev/null 2>&1
 after=$(sha256sum < "$victim" 2>/dev/null)
 [ "$before" = "$after" ] && ok "restore returns the exact bytes" \
                          || bad "restore content mismatch"
@@ -226,10 +232,10 @@ perm=$(stat -c %a "$victim" 2>/dev/null)
 
 # ── 6. restore never clobbers ───────────────────────────────────────────────
 printf 'replacement\n' > "$victim"
-"$BIN" --yes quarantine take "$victim" >/dev/null 2>&1
-id=$("$BIN" --rec quarantine list | awk -F'\t' '/^quarantine/{print $2; exit}')
+sc --yes quarantine take "$victim" >/dev/null 2>&1
+id=$(sc --rec quarantine list | awk -F'\t' '/^quarantine/{print $2; exit}')
 printf 'somebody put this back\n' > "$victim"
-"$BIN" --yes quarantine restore "$id" >/dev/null 2>&1
+sc --yes quarantine restore "$id" >/dev/null 2>&1
 grep -q 'somebody put this back' "$victim" \
   && ok "restore refuses to overwrite a file that reappeared" \
   || bad "restore clobbered a replacement"
@@ -238,24 +244,24 @@ grep -q 'somebody put this back' "$victim" \
 #
 # ⛔ NOT A STYLE CHECK. The design promise is that a false positive can always
 # be undone. A `delete` verb added later would break that silently.
-"$BIN" scan --delete "$SCANME" >/dev/null 2>&1 \
+sc scan --delete "$SCANME" >/dev/null 2>&1 \
   && bad "a --delete option exists" \
   || ok "there is no --delete"
 
-"$BIN" --help 2>&1 | grep -qiE '^\s*syn-scan (delete|remove)' \
+sc --help 2>&1 | grep -qiE '^\s*syn-scan (delete|remove)' \
   && bad "help advertises a delete command" \
   || ok "help advertises no delete command"
 
 # ── 8. --dry-run changes nothing ────────────────────────────────────────────
 printf 'untouched\n' > "$SCANME/dry.bin"
-"$BIN" --dry-run --yes quarantine take "$SCANME/dry.bin" >/dev/null 2>&1
+sc --dry-run --yes quarantine take "$SCANME/dry.bin" >/dev/null 2>&1
 [ -e "$SCANME/dry.bin" ] && ok "--dry-run leaves the file alone" \
                          || bad "--dry-run moved a file"
 
 # ── 9. diagnostics stay off stdout in --rec ─────────────────────────────────
 #
 # ⚠ A warning printed on stdout is a parse error in the window, not a message.
-out=$("$BIN" --rec --only clamav scan "$ROOT/does-not-exist" 2>/dev/null)
+out=$(sc --rec --only clamav scan "$ROOT/does-not-exist" 2>/dev/null)
 grep -qv '^\(#\|finding\|engine\|quarantine\|status\)' <<<"${out:-}" && true
 badline=$(grep -vE '^(#|finding|engine|quarantine|status)' <<<"${out:-}" | grep -v '^$' | head -1)
 [ -z "$badline" ] && ok "--rec stdout carries records only" \
@@ -269,7 +275,7 @@ badline=$(grep -vE '^(#|finding|engine|quarantine|status)' <<<"${out:-}" | grep 
 # did not happen must not look like a scan that found nothing.
 emptypath="$ROOT/no-engines"; mkdir -p "$emptypath"
 noeng_home="$ROOT/state-noeng"; mkdir -p "$noeng_home"
-out=$(PATH="/nonexistent-for-tests:/usr/bin" SYNSCAN_HOME="$noeng_home" \
+out=$(PATH="/nonexistent-for-tests" SYNSCAN_HOME="$noeng_home" \
       "$BIN" --only chkrootkit scan --system 2>&1)
 rc=$?
 grep -qi 'nothing found' <<<"$out" \
@@ -280,6 +286,94 @@ grep -qi 'nothing found' <<<"$out" \
 [ -e "$noeng_home/last-scan" ] \
   && bad "a scan that ran nothing wrote a clean result to the state file" \
   || ok "a scan that ran nothing records no status"
+
+# ── 11. rkhunter: a warning, its detail, and rkhunter's own trouble ─────────
+#
+# ⛔ Every line rkhunter printed used to be a finding. The weekly sweep runs
+# sandboxed, rkhunter could not write /var/log/rkhunter.log there, and that
+# sentence was reported every week as the one Suspicious finding Settings
+# counted. A "Warning:" line is a finding, an indented line belongs to it, and
+# anything else is the engine's problem — listed, never counted.
+cat > "$STUBS/rkhunter" <<STUB
+echo "\$@" > "$STUBS/rkhunter.args"
+echo "Warning: The file properties have changed:"
+echo "         File: /usr/bin/foo"
+echo "         Current hash: abc123"
+echo "Warning: Hidden directory found: /dev/.udev"
+echo "Logfile directory is not writable: /var/log/rkhunter.log"
+exit 1
+STUB
+chmod +x "$STUBS/rkhunter"
+rk_home="$ROOT/state-rk"; mkdir -p "$rk_home"
+out=$(SYNSCAN_HOME="$rk_home" sc --rec --only rkhunter scan --system 2>/dev/null); rc=$?
+[ "$(grep -c '^finding	rkhunter	suspect	' <<<"$out")" = 2 ] \
+  && ok "two warnings are two findings" || bad "rkhunter warning count" "$out"
+grep -q '^finding	rkhunter	suspect	[^	]*	The file properties have changed: File: /usr/bin/foo Current hash: abc123	' <<<"$out" \
+  && ok "an indented line belongs to the warning above it" \
+  || bad "rkhunter continuation" "$(grep properties <<<"$out")"
+grep -q '^finding	rkhunter	incomplete	[^	]*	Logfile directory is not writable' <<<"$out" \
+  && ok "rkhunter's own complaint is 'incomplete', not a finding" \
+  || bad "rkhunter engine trouble" "$out"
+[ "$rc" = 1 ] && ok "…and the exit status counts the two warnings" || bad "exit" "$rc"
+grep -q -- "--logfile $rk_home/rkhunter.log" "$STUBS/rkhunter.args" \
+  && ok "rkhunter logs into syn-scan's state, which the weekly unit can write" \
+  || bad "rkhunter --logfile" "$(cat "$STUBS/rkhunter.args")"
+human=$(SYNSCAN_HOME="$rk_home" sc --only rkhunter scan --system 2>&1)
+grep -q '2 things need a look' <<<"$human" \
+  && ok "the summary counts the warnings only" || bad "summary count" "$human"
+grep -q 'rkhunter did not finish: Logfile directory is not writable' <<<"$human" \
+  && ok "…and says rkhunter did not finish, and why" || bad "incomplete line" "$human"
+
+# ── 12. what the last scan found is kept, and status says what it was ──────
+#
+# Settings showed "1 outstanding" and nothing said what: only the count was
+# saved. Both halves of the weekly sweep — the system checks, then the files —
+# are kept, and the count is both of them.
+st_home="$ROOT/state-status"; mkdir -p "$st_home"
+SYNSCAN_HOME="$st_home" sc --only rkhunter scan --system >/dev/null 2>&1
+SYNSCAN_HOME="$st_home" sc --only clamav scan "$SCANME" >/dev/null 2>&1
+grep -q '^findings=5$' "$st_home/last-scan" \
+  && ok "the saved count is both halves: 2 system + 3 files" \
+  || bad "saved count" "$(cat "$st_home/last-scan")"
+out=$(SYNSCAN_HOME="$st_home" sc --rec status)
+grep -q '^status	ran	[0-9]*	5$' <<<"$out" && ok "status --rec keeps its status row" \
+  || bad "status row" "$out"
+[ "$(grep -c '^finding	' <<<"$out")" = 6 ] \
+  && ok "status --rec lists every finding it saved, the incomplete one too" \
+  || bad "status finding rows" "$out"
+grep -q "^finding	clamav	infected	$SCANME/eicar.com	" <<<"$out" \
+  && ok "…with the path" || bad "status clamav row" "$out"
+out=$(SYNSCAN_HOME="$st_home" sc status 2>&1)
+grep -q "$SCANME/eicar.com" <<<"$out" && grep -q 'The file properties have changed' <<<"$out" \
+  && ok "plain status names what was found, not just how many" \
+  || bad "human status list" "$out"
+grep -q '5 things need a look' <<<"$out" && ok "…and the count" || bad "human count" "$out"
+wk=$(SYNSCAN_HOME="$st_home" sc status --weekly 2>&1)
+grep -q 'Weekly scan:' <<<"$wk" && grep -q "$SCANME/eicar.com" <<<"$wk" \
+  && ok "status --weekly reads the same kind of record" || bad "--weekly" "$wk"
+
+old_home="$ROOT/state-old"; mkdir -p "$old_home"
+printf 'started=1\nfinished=2\nfindings=1\n' > "$old_home/last-scan"
+out=$(SYNSCAN_HOME="$old_home" sc status 2>&1)
+grep -q 'does not say what' <<<"$out" \
+  && ok "a record from before the list was kept says so, rather than nothing" \
+  || bad "old record" "$out"
+
+# ── 13. the window's app_id, which is how the dock finds its icon ───────────
+cat > "$STUBS/quickshell" <<STUB
+echo "QS_APP_ID=\$QS_APP_ID"
+STUB
+chmod +x "$STUBS/quickshell"
+out=$(sc gui 2>&1)
+grep -q '^QS_APP_ID=syn-scan$' <<<"$out" \
+  && ok "gui runs quickshell as app_id syn-scan, matching syn-scan.desktop" \
+  || bad "gui app_id" "$out"
+# ⚠ AND AN INHERITED ONE IS REPLACED: opened from Settings, the window would
+# otherwise wear Settings' id and share its dock entry.
+out=$(QS_APP_ID=syn-settings sc gui 2>&1)
+grep -q '^QS_APP_ID=syn-scan$' <<<"$out" \
+  && ok "…even when started from another quickshell app" \
+  || bad "gui kept an inherited app_id" "$out"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

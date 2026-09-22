@@ -45,6 +45,14 @@ const char *state_dir(void)
 	return g_state;
 }
 
+void state_dir_use_system(void)
+{
+	if (g_state) return;
+	const char *env = getenv("SYNSCAN_HOME");
+	g_state = strdup(env && *env ? env : SYNSCAN_STATEDIR);
+	if (!g_state) die("out of memory");
+}
+
 const char *quarantine_dir(void)
 {
 	if (!g_quar && asprintf(&g_quar, "%s/quarantine", state_dir()) < 0)

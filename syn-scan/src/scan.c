@@ -85,31 +85,143 @@ static const char *state_file(void)
 	return p;
 }
 
-void status_record(const findings_t *f, time_t started)
+/* What the last scan of each kind found, in the `finding` record format.
+ * Two files because the weekly sweep is two runs — the system checks, then
+ * the files — and one list would hold only whichever ran second. */
+static char *findings_file(bool system)
 {
-	size_t bad = 0;
-	for (const finding_t *p = f->head; p; p = p->next)
-		if (p->verdict != VERDICT_CLEAN) bad++;
+	char *p = NULL;
+	if (asprintf(&p, "%s/findings-%s", state_dir(), system ? "system" : "files") < 0)
+		die("out of memory");
+	return p;
+}
 
+/* How many rows in a saved list need a person (verdict not clean/incomplete). */
+static size_t saved_outstanding(bool system)
+{
+	char *path = findings_file(system);
+	FILE *r = fopen(path, "r");
+	free(path);
+	if (!r) return 0;
+	size_t n = 0;
+	char *line = NULL; size_t cap = 0;
+	while (getline(&line, &cap, r) > 0) {
+		char *t1 = strchr(line, '\t');                 /* after "finding" */
+		char *t2 = t1 ? strchr(t1 + 1, '\t') : NULL;   /* after the engine */
+		if (!t2) continue;
+		if (strncmp(t2 + 1, "clean\t", 6) && strncmp(t2 + 1, "incomplete\t", 11))
+			n++;
+	}
+	free(line);
+	fclose(r);
+	return n;
+}
+
+void status_record(const findings_t *f, time_t started, bool system)
+{
 	if (mkdir(state_dir(), 0750) != 0 && errno != EEXIST) {
 		/* Not fatal: an unprivileged on-demand scan has nowhere to write and
 		 * still has everything to report. */
 		return;
 	}
 
-	FILE *w = fopen(state_file(), "w");
+	/* The list first, so last-scan's count is read from what was just
+	 * written. World-readable like last-scan: Settings and the window read
+	 * the weekly sweep's record as the user. */
+	char *path = findings_file(system);
+	char *tmp = NULL;
+	if (asprintf(&tmp, "%s.tmp", path) < 0) die("out of memory");
+	FILE *w = fopen(tmp, "w");
+	if (w) {
+		fchmod(fileno(w), 0644);
+		findings_write_rec(w, f);
+		if (fclose(w) == 0) rename(tmp, path);
+		else unlink(tmp);
+	}
+	free(tmp);
+	free(path);
+
+	size_t bad = saved_outstanding(true) + saved_outstanding(false);
+	w = fopen(state_file(), "w");
 	if (!w) return;
 	fprintf(w, "started=%lld\nfinished=%lld\nfindings=%zu\n",
 	        (long long)started, (long long)time(NULL), bad);
 	fclose(w);
 }
 
-int status_show(void)
+/* The saved rows, straight through (they are already records). */
+static void cat_findings(bool system, FILE *out)
 {
+	char *path = findings_file(system);
+	FILE *r = fopen(path, "r");
+	free(path);
+	if (!r) return;
+	char buf[4096];
+	size_t n;
+	while ((n = fread(buf, 1, sizeof buf, r)) > 0) fwrite(buf, 1, n, out);
+	fclose(r);
+}
+
+/* Undo put_field's escaping, in place: \t, \n, \\ . */
+static void unescape(char *s)
+{
+	char *w = s;
+	for (char *p = s; *p; p++) {
+		if (*p == '\\' && p[1]) {
+			p++;
+			*w++ = *p == 't' ? '\t' : *p == 'n' ? '\n' : *p;
+		} else {
+			*w++ = *p;
+		}
+	}
+	*w = '\0';
+}
+
+/* The saved findings, read back for a person. Returns how many were shown,
+ * and says whether any engine did not finish. */
+static size_t show_findings(bool system, size_t *incomplete)
+{
+	char *path = findings_file(system);
+	FILE *r = fopen(path, "r");
+	free(path);
+	if (!r) return 0;
+	size_t shown = 0;
+	char *line = NULL; size_t cap = 0;
+	while (getline(&line, &cap, r) > 0) {
+		line[strcspn(line, "\n")] = '\0';
+		char *f[6] = { 0 };
+		int nf = 0;
+		for (char *save = NULL, *t = strtok_r(line, "\t", &save); t && nf < 6;
+		     t = strtok_r(NULL, "\t", &save))
+			f[nf++] = t;
+		if (nf < 5) continue;
+		for (int i = 1; i < 5; i++) unescape(f[i]);
+		if (!strcmp(f[2], "clean")) continue;
+		if (!strcmp(f[2], "incomplete")) {
+			warn(_("%s did not finish: %s"), f[1], f[4]);
+			(*incomplete)++;
+			continue;
+		}
+		verdict_t v = !strcmp(f[2], "infected") ? VERDICT_INFECTED
+		            : !strcmp(f[2], "suspect")  ? VERDICT_SUSPECT : VERDICT_ERROR;
+		printf("  %-10s %-11s %s\n", f[1], _(verdict_label(v)), f[3]);
+		if (*f[4]) printf("  %-10s %-11s   %s\n", "", "", f[4]);
+		shown++;
+	}
+	free(line);
+	fclose(r);
+	return shown;
+}
+
+int status_show(bool weekly)
+{
+	if (weekly) state_dir_use_system();
+
 	FILE *r = fopen(state_file(), "r");
 	if (!r) {
 		if (g_out == OUT_REC) puts("#status\tstate\nstatus\tnever");
-		else info("%s", _("No scan has run yet."));
+		else info("%s", weekly ? _("The weekly scan has not run yet.")
+		                       : _("No scan has run yet."));
 		return 0;
 	}
 
@@ -125,6 +237,10 @@ int status_show(void)
 	if (g_out == OUT_REC) {
 		puts("#status\tstate\tfinished\tfindings");
 		printf("status\tran\t%lld\t%lu\n", finished, bad);
+		/* ⛔ Column names are the protocol — the same as a scan's rows. */
+		puts("#finding\tengine\tverdict\tpath\tdetail\twhen");
+		cat_findings(true, stdout);
+		cat_findings(false, stdout);
 		return 0;
 	}
 
@@ -133,10 +249,19 @@ int status_show(void)
 	struct tm tm;
 	if (localtime_r(&t, &tm)) strftime(when, sizeof when, "%Y-%m-%d %H:%M", &tm);
 
-	info(_("Last scan: %s"), when);
+	info(weekly ? _("Weekly scan: %s") : _("Last scan: %s"), when);
+	size_t incomplete = 0;
+	size_t shown = show_findings(true, &incomplete) + show_findings(false, &incomplete);
 	if (bad == 0) info("%s", _("Nothing outstanding."));
-	else          printf(P_("%lu finding needs a look. `syn-scan status --rec` for the list.\n",
-	                        "%lu findings need a look. `syn-scan status --rec` for the list.\n",
-	                        bad), bad);
+	else if (shown == 0)
+		/* A record from before the list was kept: the count, and no way to
+		 * say what it was. */
+		printf(P_("%lu finding needs a look, but this record does not say what — "
+		          "run the scan again to see it.\n",
+		          "%lu findings need a look, but this record does not say what — "
+		          "run the scan again to see them.\n", bad), bad);
+	else
+		printf(P_("\n%lu thing needs a look.\n",
+		          "\n%lu things need a look.\n", bad), bad);
 	return bad ? 1 : 0;
 }

@@ -1113,7 +1113,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "Descarte por omissão à entrada. Passam o loopback, as respostas a ligações desta máquina e o ICMP, e a rede local só numa rede de confiança; o restante tráfego não solicitado, não."
+msgstr ""
+"Descarte por omissão à entrada. Passam o loopback, as respostas a ligações "
+"desta máquina e o ICMP, e a rede local só numa rede de confiança; o restante "
+"tráfego não solicitado, não."
 
 msgid "input filtering"
 msgstr "filtragem de entrada"
@@ -1127,12 +1130,17 @@ msgstr "não é de confiança"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "Os outros dispositivos nesta rede podem aceder aos serviços partilhados desta máquina — partilha de ficheiros, servidores multimédia, ambiente de trabalho remoto."
+msgstr ""
+"Os outros dispositivos nesta rede podem aceder aos serviços partilhados "
+"desta máquina — partilha de ficheiros, servidores multimédia, ambiente de "
+"trabalho remoto."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "Desta rede só entram respostas, ping, DHCP e portas abertas. Confie nela se for sua, como em casa ou no trabalho."
+msgstr ""
+"Desta rede só entram respostas, ping, DHCP e portas abertas. Confie nela se "
+"for sua, como em casa ou no trabalho."
 
 msgid "container links"
 msgstr "ligações de contentores"
@@ -1519,6 +1527,29 @@ msgstr "instalado"
 msgid "Engine"
 msgstr "Motor"
 
+msgid "infected"
+msgstr "infetado"
+
+msgid "suspicious"
+msgstr "suspeito"
+
+msgid "did not finish"
+msgstr "não terminou"
+
+msgid "unreadable"
+msgstr "ilegível"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "parou antes do fim, por isso a varredura não está completa · é um problema do próprio motor e não diz nada sobre o que está na máquina"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "um aviso sobre o próprio sistema e não sobre um ficheiro"
+
+msgid "needs a look"
+msgstr "precisa de atenção"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "o agendamento · é o interruptor no topo desta página que o liga"
 
@@ -1614,24 +1645,35 @@ msgstr ""
 "o que o temporizador fez da última vez · percorre as pastas pessoais, /srv e "
 "as temporárias"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "a varredura assinalou estes itens e ninguém os analisou · cada um está listado abaixo, e syn-scan status --weekly mostra a mesma lista · nada é alguma vez apagado"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "este registo foi escrito antes de o syn-scan guardar uma lista, por isso só os consegue contar · a próxima varredura regista o que são, ou sudo syn-scan scan --system verifica o sistema agora"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "nada foi assinalado, mas uma verificação não terminou · está listada abaixo"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "a última varredura terminou sem nada a assinalar"
+
 msgid "Outstanding findings"
 msgstr "Achados por rever"
-
-msgid "needs a look"
-msgstr "precisa de atenção"
 
 msgid "clear"
 msgstr "limpo"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"a varredura assinalou-os e ninguém os viu · sudo syn-scan status lista-os, e "
-"nada é jamais apagado"
+msgid "More findings"
+msgstr "Mais resultados"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "a última varredura terminou sem nada a assinalar"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "o resto da lista · syn-scan status --weekly mostra todos"
 
 msgid "Your last scan"
 msgstr "A sua última análise"
@@ -2021,7 +2063,9 @@ msgstr ""
 "Desligado — responder a tudo o que chegue a esta máquina, em qualquer rede"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "De confiança — os outros dispositivos nessa rede podem aceder aos serviços partilhados desta máquina"
+msgstr ""
+"De confiança — os outros dispositivos nessa rede podem aceder aos serviços "
+"partilhados desta máquina"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "Não é de confiança — só entram respostas, ping, DHCP e portas abertas"
@@ -2097,6 +2141,13 @@ msgid ""
 msgstr ""
 "outra conta com os seus próprios ficheiros e ambiente — no ecrã de início de "
 "sessão, Tab passa para o campo do nome"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "a varredura assinalou-os e ninguém os viu · sudo syn-scan status lista-"
+#~ "os, e nada é jamais apagado"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

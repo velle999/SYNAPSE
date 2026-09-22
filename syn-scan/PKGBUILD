@@ -34,6 +34,33 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-4: a count with nothing behind it ─────────────────────────────────
+#
+# ⛔ THE RECORD KEPT A NUMBER AND NOT THE LIST. last-scan said findings=1, and
+# Settings drew "Outstanding findings 1 · needs a look" with no way to find out
+# what the one was — `syn-scan status` could only repeat the number. Each scan
+# now saves its findings beside the record (findings-system for the rootkit
+# checks, findings-files for the file scan, 0644 like last-scan), and `status`
+# lists them: `--rec` as finding rows, and a person's view under the date.
+# `status --weekly` reads the scheduled sweep's record from any account.
+#
+# ⛔ AND THE ONE WAS rkhunter FAILING TO WRITE ITS OWN LOG. Every line rkhunter
+# printed that was not a "Warning:" was taken as a warning, so its complaint
+# about /var/log/rkhunter.log under the unit's ProtectSystem=strict became a
+# finding. Now: "Warning:" is a finding, an indented line continues the one
+# before it, and anything else is the engine's own trouble — "Did not finish",
+# shown and not counted. rkhunter writes its log into the state directory.
+#
+# The unit: ReadWritePaths gains /var/lib/rkhunter, TMPDIR is a directory the
+# unit may write, SuccessExitStatus=1 (findings are not a failed unit), and the
+# man page it pointed at, which never shipped, is gone.
+#
+# `syn-scan gui` sets QS_APP_ID, so the window matches syn-scan.desktop and the
+# dock shows its icon. The window opens on the weekly sweep's results.
+#
+# The suite now runs every command with PATH holding only its stubs: five checks
+# failed on a machine that had the real engines installed.
+#
 # ── 0.1.0-3: ClamAV's own units were the worst on the system ────────────────
 #
 # Lynis BOOT-5264 scored clamav-freshclam.service and clamav-daemon.service
@@ -66,7 +93,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=3
+pkgrel=4
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

@@ -157,7 +157,15 @@ FPL
 case "$1" in
 status)
     printf '#status\tstate\tfinished\tfindings\n'
-    printf 'status\tran\t1700000000\t2\n' ;;
+    printf 'status\tran\t1700000000\t2\n'
+    # One finding of each shape the pane draws. `when` is 0 so the detail
+    # carries no date: a cell with a digit in it is skipped as data, and these
+    # are exactly the cells whose marked prefix this check has to see.
+    printf '#finding\tengine\tverdict\tpath\tdetail\twhen\n'
+    printf 'finding\tclamav\tinfected\t/home/u/a.exe\tEicar-Test-Signature\t0\n'
+    printf 'finding\trkhunter\tsuspect\tRootkit Hunter\tSuspicious file types found\t0\n'
+    printf 'finding\trkhunter\tincomplete\tRootkit Hunter\tUnable to write to log file\t0\n'
+    printf 'finding\tyara\terror\t\tno such rule set\t0\n' ;;
 engines)
     printf '#engine\tid\tname\tpresent\trunnable\tpath\n'
     printf 'engine\tclamav\tClamAV\t1\t1\t/usr/bin/clamscan\n'

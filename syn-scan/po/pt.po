@@ -7,14 +7,14 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-clean\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "%1 need a look."
 msgstr ""
@@ -49,6 +49,18 @@ msgstr ""
 msgid "Scanning..."
 msgstr ""
 
+msgid "The weekly scan has not run yet."
+msgstr ""
+
+msgid "The weekly scan on %1 found nothing."
+msgstr ""
+
+msgid "The weekly scan on %1: %2 need a look."
+msgstr ""
+
+msgid "did not finish"
+msgstr ""
+
 msgid "ClamAV"
 msgstr ""
 
@@ -67,7 +79,14 @@ msgstr ""
 msgid "Unreadable"
 msgstr ""
 
+msgid "Did not finish"
+msgstr ""
+
 msgid "Clean"
+msgstr ""
+
+#, c-format
+msgid "%s did not finish: %s"
 msgstr ""
 
 #, c-format
@@ -81,6 +100,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 msgid ""
+"Moving these aside now; `syn-scan quarantine restore` puts any of them back."
+msgstr ""
+
+msgid ""
 "Nothing has been moved. `syn-scan quarantine take <path>` puts a file aside; "
 "it can always be restored."
 msgstr ""
@@ -89,6 +112,9 @@ msgid "nothing to ask on a pipe — pass --yes if you mean it"
 msgstr ""
 
 msgid "not installed"
+msgstr ""
+
+msgid "installed — needs root"
 msgstr ""
 
 msgid "quickshell is not installed — the window needs it"
@@ -146,6 +172,10 @@ msgid "would restore %s to %s"
 msgstr ""
 
 #, c-format
+msgid "%s: could not restore the original mode: %s"
+msgstr ""
+
+#, c-format
 msgid "%s already exists — not overwriting it"
 msgstr ""
 
@@ -174,6 +204,14 @@ msgid "  %-12s not installed, skipped"
 msgstr ""
 
 #, c-format
+msgid "%s needs root — try: sudo syn-scan ..."
+msgstr ""
+
+#, c-format
+msgid "  %-12s installed, but needs root — skipped"
+msgstr ""
+
+#, c-format
 msgid "  %-12s running..."
 msgstr ""
 
@@ -188,6 +226,10 @@ msgid "No scan has run yet."
 msgstr ""
 
 #, c-format
+msgid "Weekly scan: %s"
+msgstr ""
+
+#, c-format
 msgid "Last scan: %s"
 msgstr ""
 
@@ -195,8 +237,21 @@ msgid "Nothing outstanding."
 msgstr ""
 
 #, c-format
-msgid "%lu finding needs a look. `syn-scan status --rec` for the list.\n"
+msgid ""
+"%lu finding needs a look, but this record does not say what — run the scan "
+"again to see it.\n"
 msgid_plural ""
-"%lu findings need a look. `syn-scan status --rec` for the list.\n"
+"%lu findings need a look, but this record does not say what — run the scan "
+"again to see them.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+#, c-format
+msgid ""
+"\n"
+"%lu thing needs a look.\n"
+msgid_plural ""
+"\n"
+"%lu things need a look.\n"
 msgstr[0] ""
 msgstr[1] ""

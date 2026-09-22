@@ -2672,7 +2672,10 @@ status)
     printf '#status\tstate\tfinished\tfindings\n'
     if [ -n "$SYNSCAN_HOME" ]; then
         [ -f "$SYNSCAN_HOME/last-scan" ] || { printf 'status\tnever\n'; exit 0; }
-        printf 'status\tran\t1700000000\t3\n'
+        printf 'status\tran\t1700000000\t%s\n' "$(cat "$SYNSCAN_HOME/count" 2>/dev/null || echo 3)"
+        # The list syn-scan keeps beside the record, when this directory has one.
+        printf '#finding\tengine\tverdict\tpath\tdetail\twhen\n'
+        if [ -f "$SYNSCAN_HOME/rows" ]; then cat "$SYNSCAN_HOME/rows"; fi
     else
         printf 'status\tran\t1600000000\t0\n'
     fi ;;
@@ -2690,9 +2693,23 @@ esac
 STUB
 chmod +x "$SCANDIR/bin/syn-scan"
 : > "$SCANDIR/sys/last-scan"
+# What that sweep found, in syn-scan's own escaping: a path carrying an escaped
+# TAB, a rootkit warning that names the engine where a path would be, a clean
+# row (not a finding), an engine that did not finish, and an EMPTY path field —
+# which strtok would have folded away, shifting the detail into its place.
+{
+    printf 'finding\tclamav\tinfected\t/home/u/odd\\tname.exe\tWin.Test.EICAR_HDB-1\t1700000000\n'
+    printf 'finding\trkhunter\tsuspect\tRootkit Hunter\tThe file properties have changed: /usr/bin/ls\t1700000000\n'
+    printf 'finding\tclamav\tclean\t/home/u/fine.txt\t\t1700000000\n'
+    printf 'finding\trkhunter\tincomplete\tRootkit Hunter\tUnable to write to log file\t1700000000\n'
+    printf 'finding\tchkrootkit\tsuspect\t\tpacket sniffer on eth0\t1700000000\n'
+} > "$SCANDIR/sys/rows"
 
 scanrec() { PATH="$SCANDIR/bin:$PATH" SYN_SETTINGS_SCAN_HOME="$1" "$BIN" --rec scan; }
-scanfield() { awk -F'\t' -v k="$2" -v c="$3" '$2 == k { print $c }' <<<"$1"; }
+# ⚠ A FINDING CAN SHARE ITS NAME WITH AN ENGINE ROW — a rootkit warning is named
+# for the engine that raised it — so the two are asked for separately.
+scanfield() { awk -F'\t' -v k="$2" -v c="$3" '$1 != "finding" && $2 == k { print $c }' <<<"$1"; }
+findfield() { awk -F'\t' -v k="$2" -v c="$3" '$1 == "finding" && $2 == k { print $c }' <<<"$1"; }
 
 srec=$(scanrec "$SCANDIR/sys")
 
@@ -2722,6 +2739,70 @@ esac
 case $(scanfield "$srec" "Outstanding findings" 3) in
     3) ok "the outstanding count comes from the sweep's record" ;;
     *) bad "outstanding findings read [$(scanfield "$srec" "Outstanding findings" 3)]" ;;
+esac
+
+# ⛔ AND WHAT THEY ARE, ONE ROW EACH. The pane said "1 · needs a look" and
+# nothing else; the only way to learn what the one was ran as root in a
+# terminal. Each finding in the sweep's list is a row, named for the file — or
+# for the engine, when it checked the system rather than a file.
+nfind=$(awk -F'\t' '$1 == "finding"' <<<"$srec" | wc -l)
+[ "$nfind" = 4 ] && ok "the sweep's four findings are four rows (the clean one is not a finding)" \
+                 || bad "the pane drew $nfind finding rows, not 4"
+case $(findfield "$srec" "/home/u/odd name.exe" 3) in
+    infected) ok "…a file is named by its path, escaped TAB and all, with its verdict" ;;
+    *) bad "the infected file's row read [$(findfield "$srec" "/home/u/odd name.exe" 3)]" ;;
+esac
+case $(findfield "$srec" "/home/u/odd name.exe" 5) in
+    "Signature scanner · Win.Test.EICAR_HDB-1 · 2023-11-"*) ok "…and says which engine said what, and when" ;;
+    *) bad "the infected file's detail read [$(findfield "$srec" "/home/u/odd name.exe" 5)]" ;;
+esac
+if awk -F'\t' '$1 == "finding" && $2 == "Rootkit checks" && $3 == "suspicious" &&
+                $5 ~ /The file properties have changed: \/usr\/bin\/ls/ { f = 1 } END { exit !f }' <<<"$srec"; then
+    ok "…a warning about the system is named for the engine, in the pane's words"
+else
+    bad "the rkhunter warning is not a row of its own"
+fi
+if awk -F'\t' '$1 == "finding" && $3 == "did not finish" && $4 == "-" { f = 1 } END { exit !f }' <<<"$srec"; then
+    ok "…an engine that did not finish is shown, and is not a thing that needs a look"
+else
+    bad "the incomplete engine's row is missing or marked as a finding"
+fi
+if awk -F'\t' '$1 == "finding" && $2 == "Second rootkit opinion" && $5 ~ /packet sniffer on eth0/ { f = 1 } END { exit !f }' <<<"$srec"; then
+    ok "…and an empty path field does not shift the detail into its place"
+else
+    bad "the chkrootkit row with an empty path came out wrong"
+fi
+case $srec in
+    *"/home/u/fine.txt"*) bad "a clean row was drawn as a finding" ;;
+    *) ok "…and a clean row is not drawn" ;;
+esac
+case $(scanfield "$srec" "Outstanding findings" 5) in
+    *"listed below"*) ok "the count's own sentence points at the rows under it" ;;
+    *) bad "the outstanding row still says [$(scanfield "$srec" "Outstanding findings" 5)]" ;;
+esac
+
+# ⚠ A RECORD FROM BEFORE THE LIST WAS KEPT can only be counted, and says so
+# rather than pointing at rows that are not there.
+mkdir -p "$SCANDIR/old"; : > "$SCANDIR/old/last-scan"; echo 1 > "$SCANDIR/old/count"
+oldrec=$(scanrec "$SCANDIR/old")
+case $(scanfield "$oldrec" "Outstanding findings" 5) in
+    *"before syn-scan kept a list"*) ok "an old record's count says it cannot say what" ;;
+    *) bad "an old record's count read [$(scanfield "$oldrec" "Outstanding findings" 5)]" ;;
+esac
+
+# ⚠ AND A LONG LIST IS CAPPED, with the rest counted in one row that names the
+# command — and the buffer holds all of it: 45 rows is well past the 512 bytes
+# the record used to be read into.
+mkdir -p "$SCANDIR/many"; : > "$SCANDIR/many/last-scan"; echo 45 > "$SCANDIR/many/count"
+for i in $(seq 1 45); do
+    printf 'finding\tclamav\tinfected\t/home/u/.steam/prefix/drive_c/payload-%02d.exe\tWin.Trojan.Agent-%d\t1700000000\n' "$i" "$i"
+done > "$SCANDIR/many/rows"
+manyrec=$(scanrec "$SCANDIR/many")
+nmany=$(awk -F'\t' '$1 == "finding" && $3 == "infected"' <<<"$manyrec" | wc -l)
+[ "$nmany" = 40 ] && ok "a list of 45 draws 40 rows" || bad "a list of 45 drew $nmany rows"
+case $(findfield "$manyrec" "More findings" 3) in
+    5) ok "…and counts the other 5 in one row" ;;
+    *) bad "the overflow row read [$(findfield "$manyrec" "More findings" 3)]" ;;
 esac
 
 # ⛔ AND $SYNSCAN_HOME IS PUT BACK. The stub refuses to list a quarantine while

@@ -24,6 +24,7 @@ const char *verdict_id(verdict_t v)
 	case VERDICT_INFECTED: return "infected";
 	case VERDICT_SUSPECT:  return "suspect";
 	case VERDICT_ERROR:    return "error";
+	case VERDICT_INCOMPLETE: return "incomplete";
 	case VERDICT_CLEAN:
 	default:               return "clean";
 	}
@@ -37,6 +38,7 @@ const char *verdict_label(verdict_t v)
 	case VERDICT_INFECTED: return N_("Infected");
 	case VERDICT_SUSPECT:  return N_("Suspicious");
 	case VERDICT_ERROR:    return N_("Unreadable");
+	case VERDICT_INCOMPLETE: return N_("Did not finish");
 	case VERDICT_CLEAN:
 	default:               return N_("Clean");
 	}
@@ -74,6 +76,15 @@ finding_t *findings_add(findings_t *f, const char *engine, verdict_t v,
 	return n;
 }
 
+size_t findings_outstanding(const findings_t *f)
+{
+	size_t n = 0;
+	for (const finding_t *p = f->head; p; p = p->next)
+		if (p->verdict != VERDICT_CLEAN && p->verdict != VERDICT_INCOMPLETE)
+			n++;
+	return n;
+}
+
 void findings_free(findings_t *f)
 {
 	finding_t *p = f->head;
@@ -101,18 +112,23 @@ static void put_field(FILE *out, const char *s)
 	}
 }
 
+void findings_write_rec(FILE *out, const findings_t *f)
+{
+	for (const finding_t *p = f->head; p; p = p->next) {
+		fputs("finding\t", out);
+		put_field(out, p->engine); fputc('\t', out);
+		fputs(verdict_id(p->verdict), out); fputc('\t', out);
+		put_field(out, p->path); fputc('\t', out);
+		put_field(out, p->detail); fputc('\t', out);
+		fprintf(out, "%lld\n", (long long)p->when);
+	}
+}
+
 static void print_rec(const findings_t *f)
 {
 	/* ⛔ Column names are the protocol. data/syn-scan.qml reads this row. */
 	puts("#finding\tengine\tverdict\tpath\tdetail\twhen");
-	for (const finding_t *p = f->head; p; p = p->next) {
-		fputs("finding\t", stdout);
-		put_field(stdout, p->engine); fputc('\t', stdout);
-		fputs(verdict_id(p->verdict), stdout); fputc('\t', stdout);
-		put_field(stdout, p->path); fputc('\t', stdout);
-		put_field(stdout, p->detail); fputc('\t', stdout);
-		printf("%lld\n", (long long)p->when);
-	}
+	findings_write_rec(stdout, f);
 }
 
 static void print_human(const findings_t *f)
@@ -120,13 +136,19 @@ static void print_human(const findings_t *f)
 	size_t bad = 0;
 
 	for (const finding_t *p = f->head; p; p = p->next) {
-		if (p->verdict == VERDICT_CLEAN) continue;
+		if (p->verdict == VERDICT_CLEAN || p->verdict == VERDICT_INCOMPLETE)
+			continue;
 		bad++;
 		printf("  %-10s %-11s %s\n",
 		       p->engine, _(verdict_label(p->verdict)), p->path);
 		if (*p->detail)
 			printf("  %-10s %-11s   %s\n", "", "", p->detail);
 	}
+	/* An engine's own trouble, apart: it says the scan is not whole, and it
+	 * says nothing about the machine. */
+	for (const finding_t *p = f->head; p; p = p->next)
+		if (p->verdict == VERDICT_INCOMPLETE)
+			warn(_("%s did not finish: %s"), p->engine, p->detail);
 
 	if (bad == 0) {
 		info("%s", _("Nothing found."));

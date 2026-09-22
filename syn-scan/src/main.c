@@ -23,7 +23,8 @@ static void usage(FILE *f)
 "\n"
 "  syn-scan scan <path...>        look inside these files\n"
 "  syn-scan scan --system         the rootkit and system checks (root)\n"
-"  syn-scan status                what ran, when, and what is outstanding\n"
+"  syn-scan status                what your last scan found, and when\n"
+"  syn-scan status --weekly       what the weekly scan found\n"
 "  syn-scan engines               which back ends are installed\n"
 "  syn-scan quarantine list       what has been put aside\n"
 "  syn-scan quarantine take <path>\n"
@@ -96,6 +97,14 @@ static int cmd_gui(void)
 {
 	/* ⚠ The window is quickshell reading data/syn-scan.qml, which shells back
 	 * to this same binary with --rec. One implementation, three faces. */
+	/* The window's app_id: without it every quickshell window is
+	 * "org.quickshell", so the dock cannot find syn-scan.desktop and draws no
+	 * icon — or the wrong one, beside the updater or the file manager.
+	 *
+	 * ⚠ OVERWRITTEN, NOT DEFAULTED. Opened from Settings or the launcher —
+	 * quickshell apps both — this process inherits THEIR QS_APP_ID, and a
+	 * window wearing syn-settings' id gets no dock entry of its own. */
+	setenv("QS_APP_ID", "syn-scan", 1);
 	execlp("quickshell", "quickshell", "-p", SYNSCAN_DATADIR "/syn-scan.qml", (char *)NULL);
 	die(_("quickshell is not installed — the window needs it"));
 	return 2;
@@ -106,7 +115,7 @@ int main(int argc, char **argv)
 	syn_scan_i18n_init();
 
 	const char *only = NULL;
-	bool want_system = false, want_quarantine = false;
+	bool want_system = false, want_quarantine = false, want_weekly = false;
 
 	/* Options first so they can appear anywhere. */
 	int w = 1;
@@ -117,6 +126,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--yes"))       g_yes = true;
 		else if (!strcmp(a, "--quiet"))     g_quiet = true;
 		else if (!strcmp(a, "--system"))    want_system = true;
+		else if (!strcmp(a, "--weekly"))    want_weekly = true;
 		else if (!strcmp(a, "--quarantine")) want_quarantine = g_will_quarantine = true;
 		else if (!strcmp(a, "--only")) {
 			if (++i >= argc) die(_("--only needs an engine name"));
@@ -135,7 +145,7 @@ int main(int argc, char **argv)
 	const char *cmd = argv[1];
 
 	if (!strcmp(cmd, "engines"))  return cmd_engines();
-	if (!strcmp(cmd, "status"))   return status_show();
+	if (!strcmp(cmd, "status"))   return status_show(want_weekly);
 	if (!strcmp(cmd, "gui"))      return cmd_gui();
 
 	if (!strcmp(cmd, "quarantine")) {
@@ -185,11 +195,9 @@ int main(int argc, char **argv)
 		}
 
 		findings_print(&f);
-		status_record(&f, started);
+		status_record(&f, started, want_system);
 
-		size_t bad = 0;
-		for (const finding_t *p = f.head; p; p = p->next)
-			if (p->verdict != VERDICT_CLEAN) bad++;
+		size_t bad = findings_outstanding(&f);
 
 		if (want_quarantine && bad) {
 			for (const finding_t *p = f.head; p; p = p->next) {

@@ -1107,7 +1107,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "По умолчанию вход отбрасывается. Проходят loopback, ответы на соединения этого компьютера и ICMP, а локальная сеть — только в доверенной сети; прочий незапрошенный трафик — нет."
+msgstr ""
+"По умолчанию вход отбрасывается. Проходят loopback, ответы на соединения "
+"этого компьютера и ICMP, а локальная сеть — только в доверенной сети; прочий "
+"незапрошенный трафик — нет."
 
 msgid "input filtering"
 msgstr "фильтрация входящего"
@@ -1121,12 +1124,16 @@ msgstr "не доверенная"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "Другие устройства в этой сети могут обращаться к общим службам этого компьютера — общим папкам, медиасерверам, удалённому рабочему столу."
+msgstr ""
+"Другие устройства в этой сети могут обращаться к общим службам этого "
+"компьютера — общим папкам, медиасерверам, удалённому рабочему столу."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "Из этой сети проходят только ответы, ping, DHCP и открытые порты. Доверяйте ей, если она ваша, например домашняя или рабочая."
+msgstr ""
+"Из этой сети проходят только ответы, ping, DHCP и открытые порты. Доверяйте "
+"ей, если она ваша, например домашняя или рабочая."
 
 msgid "container links"
 msgstr "связи контейнеров"
@@ -1505,6 +1512,29 @@ msgstr "установлен"
 msgid "Engine"
 msgstr "Движок"
 
+msgid "infected"
+msgstr "заражён"
+
+msgid "suspicious"
+msgstr "подозрительно"
+
+msgid "did not finish"
+msgstr "не завершено"
+
+msgid "unreadable"
+msgstr "не читается"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "остановлено до конца, поэтому проверка неполная · это проблема самого движка, и она ничего не говорит о том, что есть на машине"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "предупреждение о самой системе, а не об одном файле"
+
+msgid "needs a look"
+msgstr "нужно посмотреть"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "расписание · включает его переключатель наверху этой страницы"
 
@@ -1599,24 +1629,35 @@ msgstr ""
 "что таймер делал в последний раз · он обходит домашние каталоги, /srv и "
 "временные"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "проверка отметила это, и никто это не просматривал · каждый пункт указан ниже, а syn-scan status --weekly выводит тот же список · ничего никогда не удаляется"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "эта запись сделана до того, как syn-scan начал вести список, поэтому она может их только сосчитать · следующая проверка запишет, что это, или sudo syn-scan scan --system проверит систему сейчас"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "ничего не отмечено, но одна проверка не завершилась · она указана ниже"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "последний обход завершился без замечаний"
+
 msgid "Outstanding findings"
 msgstr "Необработанные находки"
-
-msgid "needs a look"
-msgstr "нужно посмотреть"
 
 msgid "clear"
 msgstr "чисто"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"обход отметил их, и никто в них не заглядывал · sudo syn-scan status покажет "
-"список, и ничего никогда не удаляется"
+msgid "More findings"
+msgstr "Другие находки"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "последний обход завершился без замечаний"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "остальная часть списка · syn-scan status --weekly выводит всё"
 
 msgid "Your last scan"
 msgstr "Ваша последняя проверка"
@@ -2004,7 +2045,9 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "Выкл — отвечать на всё, что доходит до этой машины, в любой сети"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "Доверенная — другие устройства в ней могут обращаться к общим службам этого компьютера"
+msgstr ""
+"Доверенная — другие устройства в ней могут обращаться к общим службам этого "
+"компьютера"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "Не доверенная — проходят только ответы, ping, DHCP и открытые порты"
@@ -2081,6 +2124,13 @@ msgid ""
 msgstr ""
 "ещё одна учётная запись со своими файлами и рабочим столом — на экране входа "
 "Tab переходит к полю имени"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "обход отметил их, и никто в них не заглядывал · sudo syn-scan status "
+#~ "покажет список, и ничего никогда не удаляется"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

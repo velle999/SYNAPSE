@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -231,29 +232,68 @@ static int run_clamav(const engine_t *e, char *const *paths, findings_t *out)
 
 /* ── rkhunter ────────────────────────────────────────────────────────────────
  *
- * --rwo is "report warnings only", so every line that arrives IS a finding.
+ * --rwo is "report warnings only", but what arrives is not only warnings:
+ *
+ *   Warning: The file properties have changed:        ← a finding
+ *            File: /usr/bin/foo                         ← more of that finding
+ *   Logfile directory is not writable: /var/log/...    ← rkhunter's own trouble
+ *
+ * ⛔ Every line used to be a finding. The weekly sweep runs sandboxed, rkhunter
+ * could not write /var/log/rkhunter.log there, and "Logfile directory is not
+ * writable" was reported every week as a Suspicious finding — the only one,
+ * and the one Settings counted as "1 outstanding". Now: a "Warning:" line is a
+ * finding, an indented line belongs to the finding above it, and anything else
+ * is INCOMPLETE — the engine's problem, listed, never counted.
+ *
+ * The log goes to our state directory, which the unit can write and root's
+ * scans own; /var/log is outside the sandbox.
+ *
  * ⚠ rkhunter exits 1 when it warns, which is success for our purposes; the
  * exit status is deliberately not consulted.
  */
+static void append_detail(finding_t *f, const char *more)
+{
+	while (*more == ' ' || *more == '\t') more++;
+	if (!*more) return;
+	size_t a = strlen(f->detail), b = strlen(more);
+	char *d = realloc(f->detail, a + b + 2);
+	if (!d) die("out of memory");
+	if (a) d[a++] = ' ';
+	memcpy(d + a, more, b + 1);
+	f->detail = d;
+}
+
 static int run_rkhunter(const engine_t *e, char *const *paths, findings_t *out)
 {
 	(void)paths;                    /* system-wide; a path list means nothing */
+	char *logfile = NULL;
+	mkdir(state_dir(), 0750);           /* EEXIST is the normal answer */
+	if (asprintf(&logfile, "%s/rkhunter.log", state_dir()) < 0) die("out of memory");
 	const char *argv[] = {
-		e->binary, "--check", "--skip-keypress", "--nocolors", "--rwo", NULL
+		e->binary, "--check", "--skip-keypress", "--nocolors", "--rwo",
+		"--logfile", logfile, NULL
 	};
 	FILE *f = engine_popen(argv);
-	if (!f) return -1;
+	if (!f) { free(logfile); return -1; }
 
 	char *line = NULL; size_t cap = 0;
+	finding_t *last = NULL;
 	while (getline(&line, &cap, f) > 0) {
 		chomp(line);
 		if (!*line) continue;
-		/* "Warning: The file properties have changed: /usr/bin/foo" */
-		const char *msg = line;
-		if (!strncmp(msg, "Warning:", 8)) { msg += 8; while (*msg == ' ') msg++; }
-		findings_add(out, e->id, VERDICT_SUSPECT, e->name, msg);
+		if (!strncmp(line, "Warning:", 8)) {
+			const char *msg = line + 8;
+			while (*msg == ' ') msg++;
+			last = findings_add(out, e->id, VERDICT_SUSPECT, e->name, msg);
+		} else if ((line[0] == ' ' || line[0] == '\t') && last) {
+			append_detail(last, line);
+		} else {
+			findings_add(out, e->id, VERDICT_INCOMPLETE, e->name, line);
+			last = NULL;
+		}
 	}
 	free(line);
+	free(logfile);
 	engine_pclose(f);
 	return 0;
 }

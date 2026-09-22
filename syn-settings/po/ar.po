@@ -1059,7 +1059,9 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "الإسقاط الافتراضي للوارد. يمر loopback والردود على اتصالات هذا الجهاز وICMP، والشبكة المحلية فقط على شبكة موثوقة؛ أما بقية الحركة غير المطلوبة فلا."
+msgstr ""
+"الإسقاط الافتراضي للوارد. يمر loopback والردود على اتصالات هذا الجهاز وICMP، "
+"والشبكة المحلية فقط على شبكة موثوقة؛ أما بقية الحركة غير المطلوبة فلا."
 
 msgid "input filtering"
 msgstr "ترشيح الوارد"
@@ -1073,12 +1075,16 @@ msgstr "غير موثوقة"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "يمكن للأجهزة الأخرى على هذه الشبكة الوصول إلى الخدمات المشتركة لهذا الجهاز — مشاركة الملفات وخوادم الوسائط وسطح المكتب البعيد."
+msgstr ""
+"يمكن للأجهزة الأخرى على هذه الشبكة الوصول إلى الخدمات المشتركة لهذا الجهاز — "
+"مشاركة الملفات وخوادم الوسائط وسطح المكتب البعيد."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "لا يدخل من هذه الشبكة إلا الردود وping وDHCP والمنافذ المفتوحة. ثق بها إن كانت شبكتك، مثل شبكة المنزل أو العمل."
+msgstr ""
+"لا يدخل من هذه الشبكة إلا الردود وping وDHCP والمنافذ المفتوحة. ثق بها إن "
+"كانت شبكتك، مثل شبكة المنزل أو العمل."
 
 msgid "container links"
 msgstr "روابط الحاويات"
@@ -1444,6 +1450,29 @@ msgstr "مثبّت"
 msgid "Engine"
 msgstr "محرّك"
 
+msgid "infected"
+msgstr "مُصاب"
+
+msgid "suspicious"
+msgstr "مشبوه"
+
+msgid "did not finish"
+msgstr "لم يكتمل"
+
+msgid "unreadable"
+msgstr "غير مقروء"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "توقّف قبل النهاية، لذا فالفحص غير كامل · هذه مشكلة في المحرّك نفسه ولا تقول شيئًا عمّا على الجهاز"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "تحذير عن النظام نفسه وليس عن ملف واحد"
+
+msgid "needs a look"
+msgstr "تحتاج إلى نظرة"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "الجدولة · المفتاح في أعلى هذه الصفحة هو ما يشغّلها"
 
@@ -1530,24 +1559,35 @@ msgid ""
 msgstr ""
 "ما فعله المؤقّت آخر مرة · يمرّ على مجلدات المستخدمين و/srv والمجلدات المؤقتة"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "علّم الفحص هذه العناصر ولم يطّلع عليها أحد · كل واحد منها مدرج أدناه، ويطبع syn-scan status --weekly القائمة نفسها · لا يُحذف أي شيء أبدًا"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "كُتب هذا السجل قبل أن يحتفظ syn-scan بقائمة، لذا لا يمكنه إلا عدّها · الفحص التالي يسجّل ما هي، أو يفحص sudo syn-scan scan --system النظام الآن"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "لم يُعلَّم شيء، لكن أحد الفحوص لم يكتمل · وهو مدرج أدناه"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "انتهت آخر جولة من دون شيء تبلّغ عنه"
+
 msgid "Outstanding findings"
 msgstr "نتائج معلّقة"
-
-msgid "needs a look"
-msgstr "تحتاج إلى نظرة"
 
 msgid "clear"
 msgstr "لا شيء"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"أشّرت عليها الجولة ولم ينظر فيها أحد · sudo syn-scan status يسردها، ولا يُحذف "
-"شيء أبدًا"
+msgid "More findings"
+msgstr "نتائج أخرى"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "انتهت آخر جولة من دون شيء تبلّغ عنه"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "بقية القائمة · يطبع syn-scan status --weekly كل واحد منها"
 
 msgid "Your last scan"
 msgstr "آخر فحص لك"
@@ -1921,7 +1961,8 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "مُعطَّل — الرد على كل ما يصل هذا الجهاز، على أي شبكة"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "موثوقة — يمكن للأجهزة الأخرى عليها الوصول إلى الخدمات المشتركة لهذا الجهاز"
+msgstr ""
+"موثوقة — يمكن للأجهزة الأخرى عليها الوصول إلى الخدمات المشتركة لهذا الجهاز"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "غير موثوقة — لا يدخل إلا الردود وping وDHCP والمنافذ المفتوحة"
@@ -1991,6 +2032,13 @@ msgid ""
 "moves to the name field"
 msgstr ""
 "حساب آخر بملفاته وسطح مكتبه — في شاشة تسجيل الدخول ينقل Tab إلى حقل الاسم"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "أشّرت عليها الجولة ولم ينظر فيها أحد · sudo syn-scan status يسردها، ولا "
+#~ "يُحذف شيء أبدًا"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

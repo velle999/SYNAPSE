@@ -513,7 +513,18 @@ pkgver=0.1.0
 #   `pkexec synnet --trust-network|--untrust-network <uuid>`; a key that is not
 #   a uuid is refused before anything runs. The input-filtering detail now says
 #   the local network gets in only on a trusted network.
-pkgrel=66
+# 67: THE SCAN PANE LISTS WHAT THE SWEEP FOUND. "Outstanding findings 1 ·
+#   needs a look" had nothing behind it, and the sentence sent people to a root
+#   terminal. syn-scan 4 keeps the list beside its record; each entry is now a
+#   row under the count: the file (or, for a rootkit check, the engine) with the
+#   verdict, what the engine said, and when. An engine that stopped part-way is
+#   shown as "did not finish" and is not counted. A record from before the list
+#   says it can only count, and more than 40 entries end in one "More findings"
+#   row that names `syn-scan status --weekly`.
+#   ⚠ The record is read into 64 KB, not 512 bytes, and split on every tab:
+#     strtok would fold an empty path field and shift the detail into its place.
+#   Eleven strings, all thirteen catalogs, 534/534.
+pkgrel=67
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

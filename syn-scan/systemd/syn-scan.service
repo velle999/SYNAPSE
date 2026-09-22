@@ -14,7 +14,6 @@
 # opt in, and costs nothing on the ones that did not.
 [Unit]
 Description=SynapseOS scheduled malware scan
-Documentation=man:syn-scan(1)
 # Signatures that are a week stale are worth saying out loud, but a scan is
 # still worth running without the network.
 After=clamav-daemon.service network-online.target
@@ -23,6 +22,13 @@ After=clamav-daemon.service network-online.target
 Type=oneshot
 ExecStart=/usr/bin/syn-scan scan --system --quiet
 ExecStart=/usr/bin/syn-scan scan --quiet /home /srv /tmp /var/tmp
+# ⛔ 1 IS "IT FOUND SOMETHING", NOT "IT FAILED". A oneshot stops at the first
+# ExecStart that fails, so while 1 counted as failure a single finding from the
+# system checks meant the files were never scanned at all — which is what every
+# weekly run did for as long as rkhunter reported its own log problem. What the
+# scan found is in /var/lib/syn-scan (`syn-scan status --weekly`, Settings);
+# 2 — an engine that could not run at all — is still a failed unit.
+SuccessExitStatus=1
 
 # ⚠ Nice/IOSchedulingClass are not politeness — this walks every game install
 # on the disk, and a sweep that makes the desktop stutter is a sweep the user
@@ -31,9 +37,17 @@ Nice=15
 IOSchedulingClass=idle
 CPUSchedulingPolicy=idle
 
-# The scan reads everything and writes only its own state.
+# The scan reads everything and writes only its own state — and its engines'
+# scratch, which has to be somewhere writable too:
+#   - clamscan unpacks archives into $TMPDIR, and /tmp is read-only here (it
+#     is scanned, so it cannot be a private one). Without this, every archive
+#     came back unreadable — a mod pack is exactly what this is for.
+#   - rkhunter keeps temporary files in /var/lib/rkhunter; its log goes to
+#     /var/lib/syn-scan (syn-scan passes --logfile).
 ProtectSystem=strict
-ReadWritePaths=/var/lib/syn-scan
+ReadWritePaths=/var/lib/syn-scan -/var/lib/rkhunter
+Environment=TMPDIR=/var/lib/syn-scan/tmp
+ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/syn-scan/tmp
 PrivateTmp=no
 NoNewPrivileges=yes
 ProtectKernelTunables=yes

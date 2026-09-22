@@ -1028,7 +1028,9 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "入站默认丢弃。允许回环、对本机所发起连接的回复和 ICMP，本地网络仅在受信任网络上允许；其他未经请求的流量一律不允许。"
+msgstr ""
+"入站默认丢弃。允许回环、对本机所发起连接的回复和 ICMP，本地网络仅在受信任网络"
+"上允许；其他未经请求的流量一律不允许。"
 
 msgid "input filtering"
 msgstr "入站过滤"
@@ -1042,12 +1044,15 @@ msgstr "不受信任"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "该网络中的其他设备可以访问本机的共享服务 — 文件共享、媒体服务器、远程桌面。"
+msgstr ""
+"该网络中的其他设备可以访问本机的共享服务 — 文件共享、媒体服务器、远程桌面。"
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "只允许来自该网络的回复、ping、DHCP 和已开放的端口。如果这是你自己的网络（比如家里或公司），请信任它。"
+msgstr ""
+"只允许来自该网络的回复、ping、DHCP 和已开放的端口。如果这是你自己的网络（比如"
+"家里或公司），请信任它。"
 
 msgid "container links"
 msgstr "容器链接"
@@ -1403,6 +1408,29 @@ msgstr "已安装"
 msgid "Engine"
 msgstr "引擎"
 
+msgid "infected"
+msgstr "已感染"
+
+msgid "suspicious"
+msgstr "可疑"
+
+msgid "did not finish"
+msgstr "未完成"
+
+msgid "unreadable"
+msgstr "无法读取"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "在结束前停止，因此扫描不完整 · 这是引擎本身的问题，与本机上有什么无关"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "关于系统本身而不是单个文件的警告"
+
+msgid "needs a look"
+msgstr "需要看一下"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "计划安排 · 本页顶部的开关负责打开它"
 
@@ -1487,24 +1515,35 @@ msgid ""
 "temporary ones"
 msgstr "定时器上一次做的事 · 它会走遍各个主目录、/srv 和临时目录"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "扫描标记了这些项目，尚无人查看 · 每一项都列在下面，syn-scan status --weekly 也会打印同一列表 · 任何内容都不会被删除"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "这条记录写于 syn-scan 开始保存列表之前，因此只能计数 · 下一次扫描会记录它们是什么，或者运行 sudo syn-scan scan --system 立即检查系统"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "没有标记任何内容，但有一项检查未完成 · 列在下面"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "上一次清扫结束时没有任何需要报告的内容"
+
 msgid "Outstanding findings"
 msgstr "待查看的发现"
-
-msgid "needs a look"
-msgstr "需要看一下"
 
 msgid "clear"
 msgstr "干净"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"清扫标记了它们，还没有人看过 · sudo syn-scan status 可以列出，而且任何东西都"
-"不会被删除"
+msgid "More findings"
+msgstr "更多发现"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "上一次清扫结束时没有任何需要报告的内容"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "列表的其余部分 · syn-scan status --weekly 会全部打印"
 
 msgid "Your last scan"
 msgstr "你上次的扫描"
@@ -1936,6 +1975,13 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "另一个拥有自己文件和桌面的账户 — 在登录界面按 Tab 可切换到用户名栏"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "清扫标记了它们，还没有人看过 · sudo syn-scan status 可以列出，而且任何东西"
+#~ "都不会被删除"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

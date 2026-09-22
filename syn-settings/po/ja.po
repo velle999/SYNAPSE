@@ -1090,7 +1090,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "受信は既定で破棄します。ループバック、このマシンが開始した接続への応答、ICMP は通し、ローカルネットワークは信頼するネットワークでのみ通します。それ以外の要求していない通信は通しません。"
+msgstr ""
+"受信は既定で破棄します。ループバック、このマシンが開始した接続への応答、ICMP "
+"は通し、ローカルネットワークは信頼するネットワークでのみ通します。それ以外の"
+"要求していない通信は通しません。"
 
 msgid "input filtering"
 msgstr "受信フィルタリング"
@@ -1104,12 +1107,16 @@ msgstr "信頼していません"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "このネットワーク上のほかの機器が、このマシンの共有サービス (ファイル共有、メディアサーバー、リモートデスクトップ) に接続できます。"
+msgstr ""
+"このネットワーク上のほかの機器が、このマシンの共有サービス (ファイル共有、メ"
+"ディアサーバー、リモートデスクトップ) に接続できます。"
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "このネットワークからは応答、ping、DHCP、開いたポートだけが入れます。自宅や職場など、自分のネットワークなら信頼してください。"
+msgstr ""
+"このネットワークからは応答、ping、DHCP、開いたポートだけが入れます。自宅や職"
+"場など、自分のネットワークなら信頼してください。"
 
 msgid "container links"
 msgstr "コンテナーの接続"
@@ -1486,6 +1493,29 @@ msgstr "インストール済み"
 msgid "Engine"
 msgstr "エンジン"
 
+msgid "infected"
+msgstr "感染"
+
+msgid "suspicious"
+msgstr "疑わしい"
+
+msgid "did not finish"
+msgstr "完了せず"
+
+msgid "unreadable"
+msgstr "読み取れない"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "最後まで終わらずに止まったため、スキャンは完全ではありません · これはエンジン自体の問題で、このマシンに何があるかについては何も示しません"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "1 つのファイルではなく、システム自体についての警告"
+
+msgid "needs a look"
+msgstr "確認が必要"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "スケジュール · このページ上部のスイッチがこれを入れます"
 
@@ -1579,24 +1609,35 @@ msgstr ""
 "タイマーが前回行ったこと · ホームディレクトリ、/srv、一時ディレクトリを回りま"
 "す"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "スキャンがこれらを検出し、まだ誰も確認していません · 各項目は下に一覧表示され、syn-scan status --weekly でも同じ一覧が表示されます · 何も削除されることはありません"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "この記録は syn-scan が一覧を保存するようになる前のものなので、件数しか分かりません · 次回のスキャンで内容が記録されます。今すぐ確認するには sudo syn-scan scan --system を実行します"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "何も検出されませんでしたが、1 つのチェックが完了しませんでした · 下に表示されています"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "前回のスイープは報告すべきものなく終わりました"
+
 msgid "Outstanding findings"
 msgstr "未確認の検出"
-
-msgid "needs a look"
-msgstr "確認が必要"
 
 msgid "clear"
 msgstr "問題なし"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"スイープが報告し、まだ誰も見ていないものです · sudo syn-scan status で一覧で"
-"き、何かが削除されることは決してありません"
+msgid "More findings"
+msgstr "その他の検出"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "前回のスイープは報告すべきものなく終わりました"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "一覧の残り · syn-scan status --weekly ですべて表示されます"
 
 msgid "Your last scan"
 msgstr "あなたの前回のスキャン"
@@ -1984,7 +2025,9 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "オフ — どのネットワークでも、このマシンに届いたものすべてに応答する"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "信頼する — このネットワーク上のほかの機器がこのマシンの共有サービスに接続できます"
+msgstr ""
+"信頼する — このネットワーク上のほかの機器がこのマシンの共有サービスに接続でき"
+"ます"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "信頼しない — 応答、ping、DHCP、開いたポートだけが入れます"
@@ -2058,6 +2101,13 @@ msgid ""
 msgstr ""
 "独自のファイルとデスクトップを持つ別のアカウント — ログイン画面では Tab で名"
 "前欄に移ります"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "スイープが報告し、まだ誰も見ていないものです · sudo syn-scan status で一覧"
+#~ "でき、何かが削除されることは決してありません"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

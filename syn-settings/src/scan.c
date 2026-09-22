@@ -104,33 +104,119 @@ static int unit_absent(const char *en)
  * this pane runs — the quarantine count — would read root's 0700 directory and
  * report an error instead of a number.
  */
-static int scan_status(const char *home, long long *finished,
-                       unsigned long *findings)
+/* One thing the record lists, its fields already unescaped. */
+struct scan_finding {
+	char engine[64];
+	char verdict[16];
+	char path[PATH_CAP];
+	char detail[512];
+	long long when;
+};
+
+/* How many of the list are drawn as rows. A sweep that found a Proton prefix
+ * full of payloads is hundreds of lines, and the pane is not the place to read
+ * them all: the rest are counted in one row that names the command. */
+#define SCAN_LISTED 40
+
+/* syn-scan's field escaping undone in place: \t, \n and \\ (put_field() in its
+ * src/finding.c). Anything else after a backslash is left as it was. */
+static void scan_unescape(char *s)
 {
-	char rec[512] = "";
+	char *w = s;
+	for (const char *r = s; *r; r++) {
+		if (r[0] == '\\' && r[1]) {
+			r++;
+			*w++ = *r == 't' ? '\t' : *r == 'n' ? '\n' : *r;
+		} else {
+			*w++ = *r;
+		}
+	}
+	*w = '\0';
+}
+
+/* One `finding` row of the record, or 0 when the line is not one. */
+static int scan_finding_parse(char *line, struct scan_finding *out)
+{
+	char *f[6] = { 0 };
+	int nf = 0;
+	/* ⚠ NOT strtok: it folds two tabs into one, and an empty path or detail
+	 * is an empty FIELD — skipping it would shift every column after it. */
+	for (char *p = line; nf < 6; ) {
+		f[nf++] = p;
+		char *t = strchr(p, '\t');
+		if (!t) break;
+		*t = '\0';
+		p = t + 1;
+	}
+	if (nf < 6 || strcmp(f[0], "finding") != 0) return 0;
+	for (int i = 1; i < 5; i++) scan_unescape(f[i]);
+	snprintf(out->engine,  sizeof out->engine,  "%s", f[1]);
+	snprintf(out->verdict, sizeof out->verdict, "%s", f[2]);
+	snprintf(out->path,    sizeof out->path,    "%s", f[3]);
+	snprintf(out->detail,  sizeof out->detail,  "%s", f[4]);
+	out->when = atoll(f[5]);
+	tsv_clean(out->engine); tsv_clean(out->path); tsv_clean(out->detail);
+	return 1;
+}
+
+/* What the record says: the `status` row, and — when `list` is given — the
+ * findings it keeps, up to `list_cap` of them, with `*listed` set to how many
+ * there are in all (clean rows are not counted; they are not things to look at).
+ * Returns 0 when there is no `status` row saying a scan ran.
+ *
+ * ⚠ THE BUFFER IS SIZED FOR THE LIST, NOT THE ONE ROW. It was 512 bytes when
+ * all this read was a count, and a count with nothing behind it is what the
+ * pane showed: "1 outstanding" and no way to find out what. A line cut off at
+ * the end of the buffer is dropped rather than parsed half-read.
+ */
+#define SCAN_REC_CAP 65536
+
+static int scan_status(const char *home, long long *finished,
+                       unsigned long *findings,
+                       struct scan_finding *list, size_t list_cap,
+                       size_t *listed)
+{
 	char *a[] = { (char *)"syn-scan", (char *)"status", (char *)"--rec", NULL };
 	int got = 0;
 
 	*finished = 0;
 	*findings = 0;
+	if (listed) *listed = 0;
+
+	char *rec = calloc(1, SCAN_REC_CAP);
+	if (!rec) return 0;
 
 	if (home) setenv("SYNSCAN_HOME", home, 1);
-	int rc = run_capture_quiet(a, rec, sizeof rec);
+	int rc = run_capture_quiet(a, rec, SCAN_REC_CAP);
 	if (home) unsetenv("SYNSCAN_HOME");
-	if (rc != 0) return 0;
+	if (rc != 0) { free(rec); return 0; }
 
-	for (char *line = strtok(rec, "\n"); line; line = strtok(NULL, "\n")) {
-		if (strncmp(line, "status\t", 7) != 0) continue;
-		char state[32] = "";
-		long long fin = 0; unsigned long bad = 0;
-		/* "status<TAB>ran<TAB><epoch><TAB><count>", or "status<TAB>never". */
-		if (sscanf(line, "status\t%31[^\t]\t%lld\t%lu", state, &fin, &bad) >= 1
-		    && !strcmp(state, "ran")) {
-			*finished = fin;
-			*findings = bad;
-			got = 1;
+	for (char *line = rec; line && *line; ) {
+		char *nl = strchr(line, '\n');
+		if (!nl) break;                 /* the unterminated tail: cut off */
+		*nl = '\0';
+		char *next = nl + 1;
+
+		if (strncmp(line, "status\t", 7) == 0) {
+			char state[32] = "";
+			long long fin = 0; unsigned long bad = 0;
+			/* "status<TAB>ran<TAB><epoch><TAB><count>", or "status<TAB>never". */
+			if (sscanf(line, "status\t%31[^\t]\t%lld\t%lu", state, &fin, &bad) >= 1
+			    && !strcmp(state, "ran")) {
+				*finished = fin;
+				*findings = bad;
+				got = 1;
+			}
+		} else if (list && strncmp(line, "finding\t", 8) == 0) {
+			struct scan_finding one;
+			if (scan_finding_parse(line, &one) && strcmp(one.verdict, "clean") != 0) {
+				if (*listed < list_cap) list[*listed] = one;
+				(*listed)++;
+			}
 		}
+		line = next;
 	}
+	free(rec);
 	return got;
 }
 
@@ -252,6 +338,60 @@ static void engine_rows(void)
 	}
 }
 
+/* ── What the sweep found, one row each ──────────────────────────────────────
+ *
+ * ⛔ A COUNT WITH NOTHING BEHIND IT IS NOT AN ANSWER. This pane said
+ * "Outstanding findings 1 · needs a look" and the only way to find out what
+ * the one was ran as root in a terminal. The list is syn-scan's (it keeps it
+ * beside last-scan since release 4); the rows are drawn from it here.
+ *
+ * ⚠ THE VERDICT IDS ARE syn-scan's PROTOCOL, THE WORDS ARE OURS — the same
+ * split as the engine labels above. "incomplete" is the engine's own trouble
+ * (rkhunter unable to write its log, say): it is shown, because a sweep that
+ * did not finish is not a clean one, and it is not counted, because it says
+ * nothing about what is on the machine.
+ */
+static const char *verdict_word(const char *id)
+{
+	if (!strcmp(id, "infected"))   return N_("infected");
+	if (!strcmp(id, "suspect"))    return N_("suspicious");
+	if (!strcmp(id, "incomplete")) return N_("did not finish");
+	return N_("unreadable");
+}
+
+static void finding_row(const struct scan_finding *f)
+{
+	const struct scan_engine *e = engine_by_id(f->engine);
+	const char *label = e ? e->label : N_("a scanning back end");
+	int incomplete = !strcmp(f->verdict, "incomplete");
+	int is_path = f->path[0] == '/';
+
+	char when[64];
+	when_str(f->when, when, sizeof when);
+
+	/* The file is the row's name when there is one. rkhunter and chkrootkit
+	 * check the system rather than a file, and name themselves in that field
+	 * instead — so those rows are named for the engine, in our words. */
+	const char *key = is_path ? f->path : label;
+
+	/* ⚠ EVERY DETAIL OPENS WITH A MARKED PHRASE and the engine's own words
+	 * follow it. Those words come from another program at runtime and no
+	 * catalog can hold them — the drawn-label check's prefix rule is what lets
+	 * a cell be both. */
+	const char *lead = incomplete ? N_("stopped before the end, so the sweep is not whole \xc2\xb7 this is the engine's own trouble and says nothing about what is on the machine")
+	                 : is_path    ? label
+	                              : N_("a warning about the system itself rather than one file");
+
+	char detail[1200];
+	snprintf(detail, sizeof detail, "%s%s%s%s%s", lead,
+	         f->detail[0] ? " \xc2\xb7 " : "", f->detail,
+	         when[0] ? " \xc2\xb7 " : "", when);
+
+	rec_row("finding\t%s\t%s\t%s\t%s\t-",
+	        key, verdict_word(f->verdict),
+	        incomplete ? "-" : N_("needs a look"), detail);
+}
+
 /* ── The units behind the switches ───────────────────────────────────────── */
 struct scan_unit {
 	const char *unit;
@@ -355,7 +495,14 @@ int pane_scan(void)
 		int hidden = access(sysfile, F_OK) == 0 && access(sysfile, R_OK) != 0;
 
 		long long fin = 0; unsigned long bad = 0;
-		int ran = scan_status(scan_system_home(), &fin, &bad);
+		static struct scan_finding list[SCAN_LISTED];
+		size_t listed = 0;
+		int ran = scan_status(scan_system_home(), &fin, &bad,
+		                      list, SCAN_LISTED, &listed);
+		size_t shown = listed < SCAN_LISTED ? listed : SCAN_LISTED;
+		size_t unfinished = 0;
+		for (size_t i = 0; i < shown; i++)
+			if (!strcmp(list[i].verdict, "incomplete")) unfinished++;
 		char when[64];
 		when_str(fin, when, sizeof when);
 
@@ -372,18 +519,35 @@ int pane_scan(void)
 			        N_("Last sweep"), when,
 			        N_("what the timer last did \xc2\xb7 it walks the home directories, /srv and the temporary ones"));
 
-		if (ran)
+		/* ⚠ FOUR ANSWERS, NOT TWO. Findings with the list behind them;
+		 * findings from a record written before syn-scan kept one, which can
+		 * only be counted; nothing flagged but a check that did not finish;
+		 * and clear. */
+		if (ran) {
+			const char *why =
+			    bad && listed > unfinished
+			        ? N_("the sweep flagged these and nothing has looked at them \xc2\xb7 each one is listed below, and syn-scan status --weekly prints the same list \xc2\xb7 nothing is ever deleted")
+			  : bad ? N_("this record was written before syn-scan kept a list, so it can only count them \xc2\xb7 the next sweep records what they are, or sudo syn-scan scan --system checks the system now")
+			  : unfinished
+			        ? N_("nothing was flagged, but a check did not finish \xc2\xb7 it is listed below")
+			        : N_("the last sweep finished with nothing to report");
 			rec_row("value\t%s\t%lu\t%s\t%s\t-",
 			        N_("Outstanding findings"), bad,
-			        bad ? N_("needs a look") : N_("clear"),
-			        bad ? N_("the sweep flagged these and nothing has looked at them \xc2\xb7 sudo syn-scan status lists them, and nothing is ever deleted")
-			            : N_("the last sweep finished with nothing to report"));
+			        bad ? N_("needs a look") : N_("clear"), why);
+		}
+
+		for (size_t i = 0; i < shown; i++)
+			finding_row(&list[i]);
+		if (listed > shown)
+			rec_row("finding\t%s\t%zu\t-\t%s\t-",
+			        N_("More findings"), listed - shown,
+			        N_("the rest of the list \xc2\xb7 syn-scan status --weekly prints every one"));
 	}
 
 	/* ── And this account's own scans ─────────────────────────────────── */
 	{
 		long long fin = 0; unsigned long bad = 0;
-		int ran = scan_status(NULL, &fin, &bad);
+		int ran = scan_status(NULL, &fin, &bad, NULL, 0, NULL);
 		char when[64];
 		when_str(fin, when, sizeof when);
 

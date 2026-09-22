@@ -1331,6 +1331,29 @@ msgstr ""
 msgid "Engine"
 msgstr ""
 
+msgid "infected"
+msgstr ""
+
+msgid "suspicious"
+msgstr ""
+
+msgid "did not finish"
+msgstr ""
+
+msgid "unreadable"
+msgstr ""
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr ""
+
+msgid "a warning about the system itself rather than one file"
+msgstr ""
+
+msgid "needs a look"
+msgstr ""
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr ""
 
@@ -1405,21 +1428,34 @@ msgid ""
 "temporary ones"
 msgstr ""
 
-msgid "Outstanding findings"
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
 msgstr ""
 
-msgid "needs a look"
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr ""
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr ""
+
+msgid "the last sweep finished with nothing to report"
+msgstr ""
+
+msgid "Outstanding findings"
 msgstr ""
 
 msgid "clear"
 msgstr ""
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
+msgid "More findings"
 msgstr ""
 
-msgid "the last sweep finished with nothing to report"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
 msgstr ""
 
 msgid "Your last scan"

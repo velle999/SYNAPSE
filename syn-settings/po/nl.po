@@ -1115,7 +1115,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "Standaard weigeren op inkomend. Loopback, antwoorden op verbindingen van deze machine en ICMP komen door, het lokale netwerk alleen op een vertrouwd netwerk; ander ongevraagd verkeer niet."
+msgstr ""
+"Standaard weigeren op inkomend. Loopback, antwoorden op verbindingen van "
+"deze machine en ICMP komen door, het lokale netwerk alleen op een vertrouwd "
+"netwerk; ander ongevraagd verkeer niet."
 
 msgid "input filtering"
 msgstr "invoerfiltering"
@@ -1129,12 +1132,16 @@ msgstr "niet vertrouwd"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "Andere apparaten op dit netwerk kunnen de gedeelde diensten van deze machine bereiken — bestandsdeling, mediaservers, extern bureaublad."
+msgstr ""
+"Andere apparaten op dit netwerk kunnen de gedeelde diensten van deze machine "
+"bereiken — bestandsdeling, mediaservers, extern bureaublad."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "Van dit netwerk komen alleen antwoorden, ping, DHCP en open poorten binnen. Vertrouw het als het van jou is, zoals thuis of op het werk."
+msgstr ""
+"Van dit netwerk komen alleen antwoorden, ping, DHCP en open poorten binnen. "
+"Vertrouw het als het van jou is, zoals thuis of op het werk."
 
 msgid "container links"
 msgstr "containerkoppelingen"
@@ -1519,6 +1526,29 @@ msgstr "geïnstalleerd"
 msgid "Engine"
 msgstr "Motor"
 
+msgid "infected"
+msgstr "geïnfecteerd"
+
+msgid "suspicious"
+msgstr "verdacht"
+
+msgid "did not finish"
+msgstr "niet voltooid"
+
+msgid "unreadable"
+msgstr "onleesbaar"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "gestopt voor het einde, dus de scan is niet volledig · dit is een probleem van de engine zelf en zegt niets over wat er op de machine staat"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "een waarschuwing over het systeem zelf en niet over één bestand"
+
+msgid "needs a look"
+msgstr "moet bekeken worden"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "de planning · de schakelaar boven aan deze pagina is wat hem aanzet"
 
@@ -1613,24 +1643,35 @@ msgstr ""
 "wat de timer het laatst deed · hij loopt door de persoonlijke mappen, /srv "
 "en de tijdelijke"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "de scan heeft deze gemarkeerd en niemand heeft ernaar gekeken · elk staat hieronder, en syn-scan status --weekly toont dezelfde lijst · er wordt nooit iets verwijderd"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "dit record is geschreven voordat syn-scan een lijst bijhield, dus het kan ze alleen tellen · de volgende scan legt vast wat het zijn, of sudo syn-scan scan --system controleert het systeem nu"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "er is niets gemarkeerd, maar een controle is niet voltooid · die staat hieronder"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "de laatste ronde eindigde zonder iets te melden"
+
 msgid "Outstanding findings"
 msgstr "Openstaande vondsten"
-
-msgid "needs a look"
-msgstr "moet bekeken worden"
 
 msgid "clear"
 msgstr "schoon"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"de ronde heeft ze gemeld en niemand heeft ernaar gekeken · sudo syn-scan "
-"status somt ze op, en er wordt nooit iets verwijderd"
+msgid "More findings"
+msgstr "Meer bevindingen"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "de laatste ronde eindigde zonder iets te melden"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "de rest van de lijst · syn-scan status --weekly toont ze allemaal"
 
 msgid "Your last scan"
 msgstr "Uw laatste scan"
@@ -2020,10 +2061,13 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "Uit — antwoorden op alles wat deze machine bereikt, op elk netwerk"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "Vertrouwd — andere apparaten erop kunnen de gedeelde diensten van deze machine bereiken"
+msgstr ""
+"Vertrouwd — andere apparaten erop kunnen de gedeelde diensten van deze "
+"machine bereiken"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
-msgstr "Niet vertrouwd — alleen antwoorden, ping, DHCP en open poorten komen binnen"
+msgstr ""
+"Niet vertrouwd — alleen antwoorden, ping, DHCP en open poorten komen binnen"
 
 msgid "gpu"
 msgstr "gpu"
@@ -2098,6 +2142,13 @@ msgid ""
 msgstr ""
 "nog een account met eigen bestanden en bureaublad — in het aanmeldscherm "
 "gaat Tab naar het naamveld"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "de ronde heeft ze gemeld en niemand heeft ernaar gekeken · sudo syn-scan "
+#~ "status somt ze op, en er wordt nooit iets verwijderd"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

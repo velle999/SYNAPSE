@@ -90,7 +90,15 @@ typedef enum {
 	VERDICT_INFECTED,   /* a signature matched */
 	VERDICT_SUSPECT,    /* engine flagged it without naming a signature */
 	VERDICT_ERROR,      /* engine could not read or decide */
+	VERDICT_INCOMPLETE, /* the ENGINE had a problem — a log it could not
+	                       write, a check it could not run. About the scanner,
+	                       not the machine: listed, never counted as a finding */
 } verdict_t;
+
+/* Findings that need a person: everything but CLEAN and INCOMPLETE. The one
+ * count the summary, the exit status, the saved record and the bar agree on. */
+struct findings;
+size_t findings_outstanding(const struct findings *f);
 
 /* ⛔ NEVER TRANSLATED — travels in records, matched by the window. */
 const char *verdict_id(verdict_t v);
@@ -106,7 +114,7 @@ typedef struct finding {
 	struct finding *next;
 } finding_t;
 
-typedef struct {
+typedef struct findings {
 	finding_t *head, *tail;
 	size_t     n;
 } findings_t;
@@ -199,7 +207,18 @@ int scan_run(const scan_req_t *req, findings_t *out);
 #define SYNSCAN_STATEDIR "/var/lib/syn-scan"
 #endif
 
-int  status_show(void);
-void status_record(const findings_t *f, time_t started);
+/* `syn-scan status`: the last scan's time, count AND the findings themselves.
+ * `weekly` reads the scheduled sweep's record (SYNSCAN_STATEDIR) whoever runs
+ * it — the files are world-readable — rather than this account's own. */
+int  status_show(bool weekly);
+/* Remember a scan: its findings go to findings-system or findings-files by
+ * `system`, so the weekly sweep's two halves (the system checks, then the
+ * files) do not overwrite each other, and last-scan's count is both. */
+void status_record(const findings_t *f, time_t started, bool system);
+/* Point state_dir() at the scheduled sweep's record (SYNSCAN_HOME still wins,
+ * for the suite). Call before anything asks state_dir(). */
+void state_dir_use_system(void);
+/* Rows only, in the `finding` record format, escaped. */
+void findings_write_rec(FILE *out, const findings_t *f);
 
 #endif /* SYNSCAN_H */

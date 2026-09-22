@@ -1072,7 +1072,10 @@ msgid ""
 "Default-drop inbound. Loopback, replies to connections this machine made and "
 "ICMP are let through, and the local network only on a trusted network; other "
 "unsolicited traffic is not."
-msgstr "인바운드는 기본 차단입니다. 루프백, 이 컴퓨터가 연 연결에 대한 응답, ICMP는 통과하고, 로컬 네트워크는 신뢰하는 네트워크에서만 통과합니다. 그 밖의 요청하지 않은 트래픽은 차단됩니다."
+msgstr ""
+"인바운드는 기본 차단입니다. 루프백, 이 컴퓨터가 연 연결에 대한 응답, ICMP는 "
+"통과하고, 로컬 네트워크는 신뢰하는 네트워크에서만 통과합니다. 그 밖의 요청하"
+"지 않은 트래픽은 차단됩니다."
 
 msgid "input filtering"
 msgstr "인바운드 필터링"
@@ -1086,12 +1089,16 @@ msgstr "신뢰하지 않음"
 msgid ""
 "Other devices on this network can reach this machine's shared services — "
 "file sharing, media servers, remote desktop."
-msgstr "이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스(파일 공유, 미디어 서버, 원격 데스크톱)에 접속할 수 있습니다."
+msgstr ""
+"이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스(파일 공유, 미디어 서버, 원"
+"격 데스크톱)에 접속할 수 있습니다."
 
 msgid ""
 "Only replies, ping, DHCP and opened ports get in from this network. Trust it "
 "if it is your own, such as home or work."
-msgstr "이 네트워크에서는 응답, ping, DHCP, 열린 포트만 들어옵니다. 집이나 직장처럼 자신의 네트워크라면 신뢰하세요."
+msgstr ""
+"이 네트워크에서는 응답, ping, DHCP, 열린 포트만 들어옵니다. 집이나 직장처럼 "
+"자신의 네트워크라면 신뢰하세요."
 
 msgid "container links"
 msgstr "컨테이너 연결"
@@ -1467,6 +1474,29 @@ msgstr "설치됨"
 msgid "Engine"
 msgstr "엔진"
 
+msgid "infected"
+msgstr "감염됨"
+
+msgid "suspicious"
+msgstr "의심스러움"
+
+msgid "did not finish"
+msgstr "완료되지 않음"
+
+msgid "unreadable"
+msgstr "읽을 수 없음"
+
+msgid ""
+"stopped before the end, so the sweep is not whole · this is the engine's own "
+"trouble and says nothing about what is on the machine"
+msgstr "끝까지 가지 못하고 멈췄으므로 검사가 완전하지 않습니다 · 이는 엔진 자체의 문제이며 이 컴퓨터에 무엇이 있는지와는 관계가 없습니다"
+
+msgid "a warning about the system itself rather than one file"
+msgstr "파일 하나가 아니라 시스템 자체에 대한 경고"
+
+msgid "needs a look"
+msgstr "살펴봐야 함"
+
 msgid "the schedule · the switch at the top of this pane is what turns it on"
 msgstr "일정 · 이 페이지 맨 위의 스위치가 이것을 켭니다"
 
@@ -1558,24 +1588,35 @@ msgid ""
 msgstr ""
 "타이머가 마지막으로 한 일 · 홈 디렉터리와 /srv, 임시 디렉터리를 돌아봅니다"
 
+msgid ""
+"the sweep flagged these and nothing has looked at them · each one is listed "
+"below, and syn-scan status --weekly prints the same list · nothing is ever "
+"deleted"
+msgstr "검사가 이 항목들을 표시했지만 아직 아무도 확인하지 않았습니다 · 각 항목은 아래에 나열되며 syn-scan status --weekly도 같은 목록을 출력합니다 · 아무것도 삭제되지 않습니다"
+
+msgid ""
+"this record was written before syn-scan kept a list, so it can only count "
+"them · the next sweep records what they are, or sudo syn-scan scan --system "
+"checks the system now"
+msgstr "이 기록은 syn-scan이 목록을 저장하기 전에 작성되어 개수만 알 수 있습니다 · 다음 검사에서 무엇인지 기록되며, 지금 확인하려면 sudo syn-scan scan --system을 실행하세요"
+
+msgid "nothing was flagged, but a check did not finish · it is listed below"
+msgstr "표시된 것은 없지만 검사 하나가 완료되지 않았습니다 · 아래에 나열되어 있습니다"
+
+msgid "the last sweep finished with nothing to report"
+msgstr "마지막 훑기는 보고할 것 없이 끝났습니다"
+
 msgid "Outstanding findings"
 msgstr "확인하지 않은 발견"
-
-msgid "needs a look"
-msgstr "살펴봐야 함"
 
 msgid "clear"
 msgstr "깨끗함"
 
-msgid ""
-"the sweep flagged these and nothing has looked at them · sudo syn-scan "
-"status lists them, and nothing is ever deleted"
-msgstr ""
-"훑기가 표시해 두었고 아직 아무도 보지 않았습니다 · sudo syn-scan status 로 목"
-"록을 볼 수 있으며, 무엇도 삭제되지 않습니다"
+msgid "More findings"
+msgstr "추가 발견 항목"
 
-msgid "the last sweep finished with nothing to report"
-msgstr "마지막 훑기는 보고할 것 없이 끝났습니다"
+msgid "the rest of the list · syn-scan status --weekly prints every one"
+msgstr "목록의 나머지 · syn-scan status --weekly가 모두 출력합니다"
 
 msgid "Your last scan"
 msgstr "내 마지막 검사"
@@ -1953,7 +1994,9 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "끔 — 어떤 네트워크에서든 이 컴퓨터에 도달하는 모든 것에 응답"
 
 msgid "Trusted — other devices on it can reach this machine's shared services"
-msgstr "신뢰함 — 이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스에 접속할 수 있습니다"
+msgstr ""
+"신뢰함 — 이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스에 접속할 수 있습니"
+"다"
 
 msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr "신뢰하지 않음 — 응답, ping, DHCP, 열린 포트만 들어옵니다"
@@ -2025,6 +2068,13 @@ msgid ""
 msgstr ""
 "자신만의 파일과 데스크톱을 가진 다른 계정 — 로그인 화면에서 Tab을 누르면 이"
 "름 칸으로 이동합니다"
+
+#~ msgid ""
+#~ "the sweep flagged these and nothing has looked at them · sudo syn-scan "
+#~ "status lists them, and nothing is ever deleted"
+#~ msgstr ""
+#~ "훑기가 표시해 두었고 아직 아무도 보지 않았습니다 · sudo syn-scan status "
+#~ "로 목록을 볼 수 있으며, 무엇도 삭제되지 않습니다"
 
 #~ msgid ""
 #~ "Default-drop inbound. Loopback, replies to connections this machine made, "

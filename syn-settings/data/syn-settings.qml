@@ -997,14 +997,21 @@ FloatingWindow {
     function tone(col, val) {
         const v = (val || "").toLowerCase()
         if (v === "absent" || v === "not installed" || v === "not executable"
-            || v === "failed" || v === "not driven" || v === "none")
+            || v === "failed" || v === "not driven" || v === "none"
+            // The scan pane's findings: what the sweep flagged, and the count
+            // above them.
+            || v === "infected" || v === "suspicious" || v === "unreadable"
+            || v === "needs a look")
             return root.cBad
         if (v === "disabled" || v === "inactive" || v === "unknown"
             || v === "disconnected" || v === "no"
             // Nobody chose this: it is whatever mimeinfo.cache listed first,
             // and it changes the day a package is installed. Not an error,
             // but not a setting either.
-            || v === "fallback")
+            || v === "fallback"
+            // A scan engine that stopped part-way: not a finding, but the
+            // sweep is not whole either.
+            || v === "did not finish")
             return root.cWarn
         if (v === "enabled" || v === "active" || v === "connected"
             || v === "executable" || v === "present" || v === "yes"
