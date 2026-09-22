@@ -69,7 +69,7 @@ if bpf_ok
     command: [cc_bpftool, 'gen', 'skeleton', '@INPUT@'],
     capture: true)
 
-  bpf_sources = [files('src/bpf_loader.c', 'src/policy_lower.c'), bpf_skel]
+  bpf_sources = [files('src/bpf_loader.c', 'src/policy_lower.c', 'src/watch.c'), bpf_skel]
   bpf_deps    = [dep_bpf]
   bpf_args    = ['-DSYNGUARD_HAVE_BPF_LSM=1']
 
@@ -79,7 +79,7 @@ if bpf_ok
   # Needs root; reports meson SKIP otherwise instead of a false pass.
   bpf_test_cmdline = meson.current_build_dir() / 'failsafe-cmdline.txt'
   bpf_failsafe_test = executable('bpf_failsafe_test',
-    files('tests/bpf_failsafe_test.c', 'src/bpf_loader.c', 'src/sg_log.c'),
+    files('tests/bpf_failsafe_test.c', 'src/bpf_loader.c', 'src/watch.c', 'src/sg_log.c'),
     bpf_skel,
     include_directories: inc,
     dependencies: [dep_threads, dep_bpf],
@@ -96,11 +96,23 @@ if bpf_ok
   # dangerous direction.
   bpf_policy_test = executable('bpf_policy_test',
     files('tests/bpf_policy_test.c', 'src/bpf_loader.c', 'src/policy_lower.c',
-          'src/sg_log.c'),
+          'src/watch.c', 'src/sg_log.c'),
     bpf_skel,
     include_directories: inc,
     dependencies: [dep_threads, dep_bpf])
   test('bpf_policy', bpf_policy_test, timeout: 120)
+
+  # The reports: every way the kmod's probes miss a watched file — a relative
+  # path, //, .., a symlink, openat2, io_uring, a page never faulted in — driven
+  # against the real hooks, each of which must report the resolved path. Needs
+  # root; tests/run-vm-bpf-tests.sh runs it (and the two above) in a VM.
+  bpf_report_test = executable('bpf_report_test',
+    files('tests/bpf_report_test.c', 'src/bpf_loader.c', 'src/watch.c',
+          'src/sg_log.c'),
+    bpf_skel,
+    include_directories: inc,
+    dependencies: [dep_threads, dep_bpf])
+  test('bpf_report', bpf_report_test, timeout: 120)
 endif
 
 executable('synguard', sources, bpf_sources,
@@ -208,6 +220,20 @@ ai_inject_test = executable('ai_inject_test',
   include_directories: inc,
   dependencies: [dep_threads, dep_systemd])
 test('ai_inject', ai_inject_test, timeout: 60)
+
+# What the BPF-LSM hooks are told to report, derived from the shipped rules and
+# checked against fnmatch — the watch list must never miss a path a rule
+# matches — plus the two-witness dedup and the events synapse_kmod 30 added.
+# Pure userspace: runs on every build, BPF or not.
+report_test = executable('report_test',
+  files('tests/report_test.c', 'src/watch.c', 'src/rule_engine.c',
+        'src/event_processor.c', 'src/ai_classifier.c', 'src/core.c',
+        'src/sg_log.c'),
+  include_directories: inc,
+  dependencies: [dep_threads, dep_systemd],
+  c_args: ['-DSYNGUARD_SHIPPED_RULES_DIR="@0@/rules"'.format(
+    meson.current_source_dir())])
+test('report', report_test, timeout: 60)
 
 # The admin's override of --bpf-enforce: what counts as "off", and that nothing
 # else does — a stray word or a symlink must leave the unit in charge.

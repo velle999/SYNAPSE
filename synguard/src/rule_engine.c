@@ -101,6 +101,7 @@ static uint8_t parse_event(const char *s)
     if (strcmp(s, "module") == 0) return EVT_MODULE;
     if (strcmp(s, "mount")  == 0) return EVT_MOUNT;
     if (strcmp(s, "setuid") == 0) return EVT_SETUID;
+    if (strcmp(s, "signal") == 0) return EVT_SIGNAL;
     if (strcmp(s, "any")    == 0) return 0xFF;
     return 0;
 }

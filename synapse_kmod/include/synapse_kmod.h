@@ -71,7 +71,10 @@ typedef enum {
  *   <timestamp_ns> <pid> <uid> <syscall_nr> <comm> <filename|-> <flags:hex> <arg0> <ret|->
  * The trailing "<flags> <arg0>" pair was appended in 0.1.1 and <ret> after it;
  * readers must treat both as optional, since a reader may be newer than the
- * loaded module. For SYNAPSE_EVT_SETUID, arg0 is the target uid.
+ * loaded module. For SYNAPSE_EVT_SETUID, arg0 is the target id (0 — only a
+ * change TO root is reported), or for capset the effective set asked for; for
+ * SYNAPSE_EVT_MOUNT, the MS_* flags with filename the target; for
+ * SYNAPSE_EVT_SIGNAL, the signal. syscall_nr says which call it was.
  *
  * <ret> is the SYSCALL'S RETURN VALUE, or "-" when this event was reported at
  * syscall entry and the outcome is therefore unknown. It exists because a
@@ -121,6 +124,9 @@ struct synapse_syscall_event {
 #define SYNAPSE_EVT_MODULE  0x10  /* init_module/finit_module */
 #define SYNAPSE_EVT_MOUNT   0x20  /* mount/umount */
 #define SYNAPSE_EVT_SETUID  0x40  /* setuid/setgid/capset */
+#define SYNAPSE_EVT_SIGNAL  0x80  /* kill/tkill/tgkill aimed at pid 1 or a
+                                   * security daemon; arg0 is the signal and
+                                   * filename the target's comm or "(all)" */
 
 /* ── Hint wire format ─────────────────────────────────────── */
 /*

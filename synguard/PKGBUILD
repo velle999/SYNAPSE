@@ -127,7 +127,28 @@ pkgver=0.1.0
 #   sentence is kept only in the audit log, as a new last field (AI_NOTE),
 #   with '|' and control bytes replaced. tests/ai_inject_test.c: 163 checks
 #   fail if the sentence is shown again.
-pkgrel=46
+# 47: THE HOOKS REPORT WHAT THE KMOD CANNOT SEE. The kmod's probes read the
+#   path the caller typed, at syscall entry: a relative path, `//`, `..`, a
+#   symlink, openat2, io_uring or a path in a page not yet faulted in reached a
+#   watched file unseen. The BPF-LSM hooks already resolved every open's path;
+#   they now REPORT the ones the rules watch, into a ring buffer the reader
+#   drains beside the kmod feed. Which paths: each open/exec rule's literal
+#   prefix in an LPM trie, and `/home/<user>/…` rules in a second trie keyed on
+#   the part after the user (src/watch.c) — so an ordinary open costs one miss.
+#   The kmod keeps reporting: it alone sees an attempt that fails before the
+#   file is found. An absolute open seen by both is one event (sg_dedup_check).
+#   Also: the `signal` event and alert-signal-to-security-daemon for
+#   synapse_kmod 30's kill/tkill/tgkill reports; the setgid family and capset
+#   named for the classifier; escalate-bind-mount finally fed.
+#   ⚠ allow-ssh-tools-own-keys: alert-ssh-key-user had never fired (nothing
+#   reported /home/<user>/.ssh); now it would, on every `ssh`. The SSH tools
+#   reading their own keys are allowed by name.
+#   tests/report_test.c (the watch list never misses a path a shipped rule
+#   matches; dedup; the new events) and tests/bpf_report_test.c (every blind
+#   spot above, against the real hooks). tests/run-vm-bpf-tests.sh runs the
+#   three BPF suites as root in a VM on a stock kernel: all pass, and the
+#   report suite fails 12 of 17 with the report call removed.
+pkgrel=47
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

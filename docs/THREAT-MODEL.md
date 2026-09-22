@@ -153,9 +153,12 @@ machine controls updates; `SECURITY.md` has the fingerprint.
 ## What this does not cover
 
 - **What the probes cannot see.** synapse_kmod reports an open or an exec from
-  the path the caller passed, at syscall entry, so a relative path, a symlink,
-  or a path in a page the process has not touched yet is not reported; several
-  syscalls have no probe at all. Measured and listed in
+  the path the caller passed, at syscall entry. synguard 47's BPF-LSM hooks
+  report the path the kernel resolved, for the paths the rules watch — a
+  relative path, a symlink, `..`, openat2, io_uring or a path in a page not
+  yet faulted in all reach them — but only while synguard runs, since the
+  hooks are its. `pidfd_send_signal`, `open_by_handle_at` and the 32-bit
+  compat calls have no probe. Listed in
   [`SECURITY-ROADMAP.md` §5](SECURITY-ROADMAP.md).
 - **Anything inside a file.** synguard watches activity; malware scanning is
   `syn-scan`'s, on a schedule.

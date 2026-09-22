@@ -58,10 +58,22 @@ static evt_type_t syscall_to_evt(uint32_t nr)
     case 101: /* ptrace    */  return EVT_PTRACE;
     case 175: /* init_module */
     case 313: /* finit_module*/ return EVT_MODULE;
-    case 165: /* mount     */  return EVT_MOUNT;
+    case 165: /* mount     */
+    case 429: /* move_mount */ return EVT_MOUNT;
     case 105: /* setuid    */
+    case 106: /* setgid    */
+    case 113: /* setreuid  */
+    case 114: /* setregid  */
     case 117: /* setresuid */
-    case 126: /* setgroups */  return EVT_SETUID;
+    case 119: /* setresgid */
+    case 122: /* setfsuid  */
+    case 123: /* setfsgid  */
+    case 126: /* capset    */  return EVT_SETUID;
+    case 62:  /* kill      */
+    case 200: /* tkill     */
+    case 234: /* tgkill    */  return EVT_SIGNAL;
+    case 85:  /* creat     */
+    case 437: /* openat2   */  return EVT_OPEN;
     default:                   return EVT_UNKNOWN;
     }
 }
@@ -830,6 +842,97 @@ static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
                              sg_verdict_t verdict, const char *rule_name,
                              const sg_ai_result_t *ai);
 
+/* ── One event, two witnesses ─────────────────────────────────
+ *
+ * An absolute open of a watched path is seen by the kmod's probe (the string
+ * the caller typed) and by the BPF-LSM hook (the file the kernel resolved), and
+ * the two arrive on different channels in either order. The second copy within
+ * a moment is dropped. Only ACROSS sources: the same source reporting the same
+ * open twice is two opens.
+ *
+ * Keyed on pid, event and a hash of the path; a small table with a short
+ * probe, because a missed match costs one duplicate alert — which the repeat
+ * aggregation in action_engine collapses anyway — and a wrong match costs one
+ * event, so the key is narrow. */
+#define SG_DEDUP_SLOTS     512
+#define SG_DEDUP_PROBE     4
+#define SG_DEDUP_WINDOW_NS 2000000000ULL
+
+static struct {
+    uint64_t t;
+    uint32_t pid, h;
+    uint8_t  evt, src, used;
+} dedup_tab[SG_DEDUP_SLOTS];
+
+static uint32_t path_hash(const char *s, size_t max)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < max && s[i]; i++)
+        h = (h ^ (uint8_t)s[i]) * 16777619u;
+    return h;
+}
+
+int sg_dedup_check(const sg_event_t *e, uint64_t now_ns)
+{
+    if ((e->evt_type != EVT_OPEN && e->evt_type != EVT_EXEC) || !e->filename[0])
+        return 0;
+    uint32_t h = path_hash(e->filename, sizeof(e->filename));
+    uint32_t home = (h ^ (e->pid * 2654435761u)) % SG_DEDUP_SLOTS;
+    int free_slot = -1;
+
+    for (int k = 0; k < SG_DEDUP_PROBE; k++) {
+        uint32_t i = (home + (uint32_t)k) % SG_DEDUP_SLOTS;
+        int live = dedup_tab[i].used && now_ns - dedup_tab[i].t < SG_DEDUP_WINDOW_NS;
+        if (live && dedup_tab[i].pid == e->pid && dedup_tab[i].h == h &&
+            dedup_tab[i].evt == e->evt_type) {
+            if (dedup_tab[i].src != e->source) {
+                dedup_tab[i].used = 0;      /* matched once; a third is new */
+                return 1;
+            }
+            dedup_tab[i].t = now_ns;
+            return 0;
+        }
+        if (!live && free_slot < 0)
+            free_slot = (int)i;
+    }
+    uint32_t i = free_slot >= 0 ? (uint32_t)free_slot : home;
+    dedup_tab[i].t    = now_ns;
+    dedup_tab[i].pid  = e->pid;
+    dedup_tab[i].h    = h;
+    dedup_tab[i].evt  = e->evt_type;
+    dedup_tab[i].src  = e->source;
+    dedup_tab[i].used = 1;
+    return 0;
+}
+
+#ifdef SYNGUARD_HAVE_BPF_LSM
+void sg_bpf_report_to_event(void *ctx, const struct sg_bpf_report *r)
+{
+    synguard_state_t *s = ctx;
+    sg_event_t e;
+    memset(&e, 0, sizeof(e));
+
+    e.timestamp_ns = mono_ns();
+    e.pid      = r->pid;
+    e.uid      = r->uid;
+    e.evt_type = (r->evt & 0x01) ? EVT_EXEC : EVT_OPEN;
+    e.syscall_nr = e.evt_type == EVT_EXEC ? 59 : 257;
+    /* The open's own flags, as the kmod ships an openat's: `access write`
+     * rules read them. has_ret stays 0 — the hook runs before the open
+     * completes, so the outcome is not known here. */
+    e.arg0     = e.evt_type == EVT_OPEN ? r->flags : 0;
+    e.has_arg0 = 1;
+    memcpy(e.comm, r->comm, sizeof(e.comm));
+    e.comm[sizeof(e.comm) - 1] = '\0';
+    snprintf(e.filename, sizeof(e.filename), "%.*s",
+             (int)sizeof(r->path), r->path);
+    e.source = SG_SRC_LSM;
+
+    s->stats.lsm_reports++;
+    synguard_process_event(s, &e);
+}
+#endif
+
 /* ── Full decision pipeline ───────────────────────────────── */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
 {
@@ -839,6 +942,11 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
     if (strcmp(e->comm, "synguard") == 0 ||
         strcmp(e->comm, "synapd")   == 0)
         return;
+
+    if (sg_dedup_check(e, mono_ns())) {
+        s->stats.dedup_skips++;
+        return;
+    }
 
     /* ── Step 0: Worm/C2 egress fan-out check (connect only) ── */
     /* syscall_nr 42 == connect; the kmod put the dest IP:port in filename. */
@@ -1255,6 +1363,13 @@ static void *reader_thread_fn(void *arg)
                 cursor = now;
         }
         close(fd);
+
+#ifdef SYNGUARD_HAVE_BPF_LSM
+        /* What the LSM hooks resolved since last time: on this thread, like
+         * the kmod feed, so stats, actions and the audit log stay
+         * single-writer. */
+        sg_bpf_poll_reports();
+#endif
 
         /*
          * How STALE is the stream, not merely whether the ring lapped.

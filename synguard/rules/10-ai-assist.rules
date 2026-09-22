@@ -124,6 +124,10 @@ rule alert-ld-preload {
 
 # ── Unusual mount activity ────────────────────────────────────
 
+# synapse_kmod 30 is the first to feed this: it reports a bind or a move in the
+# HOST mount namespace (mount with MS_BIND/MS_MOVE, and move_mount) — the way a
+# root attacker lays a file over /etc or /usr/bin. A new filesystem (a USB
+# stick) and anything inside a sandbox's own namespace are not reported.
 rule escalate-bind-mount {
     event   mount
     verdict escalate

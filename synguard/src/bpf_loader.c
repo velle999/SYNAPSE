@@ -42,6 +42,7 @@
 
 #include "sg_bpf.h"
 #include "sg_lower.h"
+#include "sg_watch.h"
 #include "sg_log.h"
 #include "sg_lsm.skel.h"
 
@@ -366,15 +367,124 @@ const char *sg_bpf_counters(char *buf, size_t len)
 
 	snprintf(buf, len,
 	         "bpf-lsm: denied=%llu budget=%u opens[switch=%llu warmup=%llu "
-	         "heartbeat=%llu budget=%llu] longpath=%llu",
+	         "heartbeat=%llu budget=%llu] longpath=%llu reports-dropped=%llu",
 	         (unsigned long long)c.denies_total,
 	         c.deny_budget,
 	         (unsigned long long)c.gate_opens[SG_OFF_MASTER_SWITCH],
 	         (unsigned long long)c.gate_opens[SG_OFF_WARMUP],
 	         (unsigned long long)c.gate_opens[SG_OFF_HEARTBEAT],
 	         (unsigned long long)c.gate_opens[SG_OFF_BUDGET],
-	         longpath);
+	         longpath, sg_bpf_reports_dropped());
 	return buf;
+}
+
+/* ── reports ─────────────────────────────────────────────────────────── */
+
+static struct ring_buffer *g_rb;
+static void (*g_report_cb)(void *ctx, const struct sg_bpf_report *r);
+static void *g_report_ctx;
+
+/* Empty one LPM trie. Deleting while walking skips entries on some kernels,
+ * so the keys are gathered first. */
+static void trie_clear(int fd)
+{
+	static struct sg_watch_key keys[SG_BPF_WATCH_MAX];
+	struct sg_watch_key cur, next;
+	int n = 0, have = 0;
+
+	while (n < SG_BPF_WATCH_MAX &&
+	       bpf_map_get_next_key(fd, have ? &cur : NULL, &next) == 0) {
+		keys[n++] = next;
+		cur = next;
+		have = 1;
+	}
+	for (int i = 0; i < n; i++)
+		bpf_map_delete_elem(fd, &keys[i]);
+}
+
+int sg_bpf_load_watch(const struct sg_rule *head)
+{
+	if (!g_skel)
+		return -1;
+
+	sg_watch_t w[SG_BPF_WATCH_MAX];
+	char skipped[512];
+	int n = sg_watch_derive(head, w, SG_BPF_WATCH_MAX, skipped, sizeof(skipped));
+	if (n < 0) {
+		sg_log(LOG_WARNING, "bpf-lsm: more than %d watched path prefixes — "
+		       "reports from the hooks are OFF; the kmod still reports",
+		       SG_BPF_WATCH_MAX);
+		return -1;
+	}
+	if (skipped[0])
+		sg_log(LOG_NOTICE, "bpf-lsm: not watched from the hooks (a path with "
+		       "no literal part would report every open): %s", skipped);
+
+	int fd_all  = bpf_map__fd(g_skel->maps.sg_watch);
+	int fd_home = bpf_map__fd(g_skel->maps.sg_watch_home);
+	trie_clear(fd_all);
+	trie_clear(fd_home);
+
+	int written = 0;
+	for (int i = 0; i < n; i++) {
+		struct sg_watch_key k;
+		memset(&k, 0, sizeof(k));
+		size_t len = strlen(w[i].prefix);
+		memcpy(k.p, w[i].prefix, len);
+		k.prefixlen = (__u32)(len * 8);
+		/* EVT_EXEC/EVT_OPEN are 0x01/0x02 — the bits the hooks test. */
+		__u32 mask = w[i].evt_mask & 0x03;
+		if (bpf_map_update_elem(w[i].home ? fd_home : fd_all, &k, &mask,
+		                        BPF_ANY) == 0)
+			written++;
+		else
+			sg_log(LOG_WARNING, "bpf-lsm: could not watch '%s%s': %s",
+			       w[i].home ? "/home/<user>/" : "", w[i].prefix,
+			       strerror(errno));
+	}
+	sg_log(LOG_INFO, "bpf-lsm: hooks report opens and execs under %d watched "
+	       "prefix(es)", written);
+	return written;
+}
+
+static int report_trampoline(void *ctx, void *data, size_t size)
+{
+	(void)ctx;
+	if (size < sizeof(struct sg_bpf_report) || !g_report_cb)
+		return 0;
+	g_report_cb(g_report_ctx, data);
+	return 0;
+}
+
+int sg_bpf_reports_start(void (*cb)(void *ctx, const struct sg_bpf_report *r),
+                         void *ctx)
+{
+	if (!g_skel)
+		return -1;
+	g_report_cb  = cb;
+	g_report_ctx = ctx;
+	if (!g_rb) {
+		g_rb = ring_buffer__new(bpf_map__fd(g_skel->maps.sg_reports),
+		                        report_trampoline, NULL, NULL);
+		if (!g_rb) {
+			sg_log(LOG_WARNING, "bpf-lsm: report ring unavailable: %s",
+			       strerror(errno));
+			return -1;
+		}
+	}
+	__u32 zero = 0, on = 1;
+	return bpf_map_update_elem(bpf_map__fd(g_skel->maps.sg_report_on),
+	                           &zero, &on, BPF_ANY);
+}
+
+int sg_bpf_poll_reports(void)
+{
+	return g_rb ? ring_buffer__consume(g_rb) : 0;
+}
+
+unsigned long long sg_bpf_reports_dropped(void)
+{
+	return (g_skel && g_skel->bss) ? g_skel->bss->sg_reports_dropped : 0;
 }
 
 unsigned long long sg_bpf_denies_total(void)
@@ -540,6 +650,10 @@ void sg_bpf_shutdown(void)
 	if (g_hb_running) {
 		g_hb_running = 0;
 		pthread_join(g_hb_thread, NULL);
+	}
+	if (g_rb) {
+		ring_buffer__free(g_rb);
+		g_rb = NULL;
 	}
 	if (g_skel) {
 		sg_lsm_bpf__destroy(g_skel);   /* detaches every link */

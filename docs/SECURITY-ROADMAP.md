@@ -399,37 +399,44 @@ the limits below, confirmed rather than assumed.
       `do_syscall_64` shim that does not exist. Rewritten.
 - [x] Anything unresolved is written down here rather than closed — below.
 
-### Unresolved: what the probes cannot see
+### What the probes cannot see — and what reports it since synguard 47
 
-Confirmed in the VM unless marked.
+Confirmed in the VM unless marked. The owner chose to keep the probes and
+add reports from the BPF-LSM hooks, rather than switch: the probes alone
+see an attempt that fails before the file is found.
 
 1. **Opens are matched on the caller's string, not on the file.** A relative
-   path (`openat(cwd=/etc, "shadow")`), a doubled slash (`/etc//shadow`) and a
-   symlink to a watched file are not reported. Neither are `..`, dirfd-relative
-   paths, `/proc/self/root/…` or a bind mount (by construction; not each run).
+   path (`openat(cwd=/etc, "shadow")`), a doubled slash (`/etc//shadow`), `..`
+   and a symlink to a watched file are not reported by the kmod. **Reported
+   since synguard 47** by the `file_open` hook, with the path the kernel
+   resolved (`tests/bpf_report_test.c`, all four, in a VM).
 2. **The copy cannot fault a page in.** Probe handlers run with preemption
    off, so a path in a page the process has not touched yet cannot be read:
-   the open is dropped, the exec has no filename. That is not only an
-   attacker's trick — `fork()` then `execve("/bin/sh", …)` from a string
-   literal is exactly this, and it is common.
-3. **The path can change after it is read** (not tested; follows from 1–2):
-   another thread rewrites the string between the probe's copy and the
-   kernel's own, and the event names a file that was not opened.
-4. **Syscalls with no probe:** `open`, `openat2`, `creat`, `open_by_handle_at`,
-   io_uring, the 32-bit compat entry points, `setreuid`/`setresuid`/`setfsuid`,
-   the setgid family, `capset`, `mount`, `kill`. Confirmed for `open`,
-   `openat2` and `setresuid`. A synguard rule on `event mount` —
-   `escalate-bind-mount` ships — can never fire.
+   the kmod drops the open and sends the exec with no filename. `fork()` then
+   `execve("/bin/sh", …)` from a string literal is exactly this. **Reported
+   since synguard 47**: the hook reads the kernel's copy, not the caller's.
+3. **The path can change after it is read** (not tested; follows from 1–2).
+   The hook reports the file the kernel actually opened, so its report names
+   the right one whatever the kmod's copy said.
+4. **Syscalls with no probe.** synapse_kmod 30 probes `open`, `creat`,
+   `openat2`, the whole setuid and setgid families (a change to root),
+   `capset` (a non-root process enabling an administrator capability),
+   `mount` and `move_mount` (a bind or move in the host's mount namespace —
+   what `escalate-bind-mount` was written for), and `kill`, `tkill` and
+   `tgkill` (a terminating or stopping signal to pid 1 or a security daemon;
+   a new `signal` event and rule). An io_uring open is reported by the hook.
+   Still unprobed: `pidfd_send_signal`, `open_by_handle_at` (its open is
+   reported by the hook), and the 32-bit compat entry points.
 5. The global `/sys/kernel/debug/kprobes/enabled` switch is invisible to the
    module's integrity check (synguard's canary covers it).
 
-**What would close 1–3** is reporting from hooks that see the kernel's own
-resolved object — `security_file_open` and `security_bprm_check`, taking the
-path from the `struct file` — or reporting from the BPF-LSM programs synguard
-already attaches for enforcement. That is a new event source rather than a
-patch, and it changes what an event is: a hook after lookup never sees an
-ENOENT attempt, which the current probes report. A decision, then, and the
-largest single gain left in this component.
+The hooks report only paths the rules watch: each open and exec rule's
+literal prefix goes into an LPM trie, and `/home/<user>/…` rules into a
+second one keyed on the part after the user, so an ordinary open costs one
+trie miss. An absolute open of a watched path is seen by both halves; the
+reader drops the second copy within two seconds. `tests/report_test.c` checks
+the watch list never misses a path a shipped rule matches, and
+`tests/run-vm-bpf-tests.sh` runs all three BPF suites as root in a VM.
 
 For §6: the scheduling-hint path lets synapd's model give any unprotected
 process nice −20, and the protected list is matched on `comm`, which a process

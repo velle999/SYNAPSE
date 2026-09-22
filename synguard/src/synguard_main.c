@@ -309,7 +309,7 @@ static int run_event_loop(synguard_state_t *s)
                 "alerts=%lu quarantines=%lu protected-skips=%lu "
                 "stale-pid-skips=%lu failed-syscall-skips=%lu "
                 "kernel-enforced-skips=%lu dropped=%lu suppressed=%lu "
-                "lag=%lums/%lumax",
+                "lag=%lums/%lumax lsm-reports=%lu dedup=%lu",
                 s->stats.events_processed,
                 s->stats.rules_matched,
                 s->stats.ai_queries,
@@ -324,7 +324,9 @@ static int run_event_loop(synguard_state_t *s)
                 s->stats.events_dropped,
                 s->stats.alerts_suppressed,
                 s->stats.reader_lag_ms,
-                s->stats.reader_lag_max_ms);
+                s->stats.reader_lag_max_ms,
+                s->stats.lsm_reports,
+                s->stats.dedup_skips);
 #ifdef SYNGUARD_HAVE_BPF_LSM
             {
                 char cb[256];

@@ -124,11 +124,18 @@ A value outside its range fails the load.
   autostart files (`~/.bashrc`, `~/.config/autostart/`, …)
 - `socket`, `connect` — IP sockets and their destinations
 - `ptrace` — `PTRACE_TRACEME`, `PTRACE_ATTACH`, `PTRACE_SEIZE`, `PTRACE_PEEKTEXT`
+- `open`, `creat`, `openat2` — the same paths as `openat`
 - `init_module`, `finit_module` — kernel module loading
-- `setuid` — `setuid(0)` only
+- `setuid`, `setreuid`, `setresuid`, `setfsuid`, `setgid`, `setregid`,
+  `setresgid`, `setfsgid` — a change to root (uid or gid 0)
+- `capset` — a non-root process switching on an administrator-class capability
+- `mount`, `move_mount` — a bind or a move in the host's mount namespace
+- `kill`, `tkill`, `tgkill` — a terminating or stopping signal to pid 1,
+  `synguard`, `synnet` or `synapd`, or to every process, from anything but pid 1
 
-Not monitored: `open`, `openat2`, `creat`, io_uring, `setreuid`, `setresuid`,
-`setgid`, `capset`, `mount`, `kill`.
+Not monitored: io_uring, `open_by_handle_at`, the 32-bit compat entry points.
+synguard 47 and later also reports opens and program starts from its BPF-LSM
+hooks, which see the file the kernel resolved — including io_uring opens.
 
 ### What the probes cannot see
 

@@ -141,6 +141,47 @@ struct sg_bpf_rule {
 	char  comm[SG_BPF_COMM_MAX];
 };
 
+/* ── Reports: what the hooks saw, handed to the rule engine ──────────────
+ *
+ * The kmod's open and exec probes read the path the CALLER typed, at syscall
+ * entry: a relative path, `//`, a symlink, `..`, openat2 or an io_uring open
+ * of a watched file is invisible to them, and a path in a page the process
+ * has not touched cannot be read at all (SECURITY-ROADMAP §5). The LSM hooks
+ * see the file the kernel actually resolved, so they report too — for the
+ * paths the rules watch, and nothing else, because file_open runs on every
+ * open the machine makes.
+ *
+ * WHICH paths is a superset filter, and deliberately so: userspace matches
+ * every report against the real fnmatch rule, so the kernel only has to never
+ * MISS one. Each open/exec rule contributes the literal part of its path
+ * before the first wildcard, as an LPM-trie prefix (sg_watch). A rule of the
+ * shape `/home/-star-/<rest>` contributes <rest>'s literal part to a second
+ * trie (sg_watch_home), looked up with the path after `/home/<user>/` — the
+ * user dotfile rules would otherwise have to watch all of /home.
+ *
+ * Both the kmod and this report an absolute open of a watched path; the
+ * reader drops the second of the two within a moment (sg_dedup_*). The kmod
+ * alone reports an ATTEMPT that failed before the LSM hook — a file that does
+ * not exist — which is why it keeps reporting.
+ */
+#define SG_BPF_WATCH_MAX   128
+#define SG_BPF_REPORTS_SZ  (256 * 1024)
+
+struct sg_watch_key {
+	__u32 prefixlen;               /* in BITS, as LPM tries count */
+	char  p[SG_BPF_PATH_MAX];
+};
+
+struct sg_bpf_report {
+	__u32 pid;                     /* tgid */
+	__u32 uid;                     /* in the initial user namespace */
+	__u32 flags;                   /* open: the file's f_flags; exec: 0 */
+	__u8  evt;                     /* 0x01 exec, 0x02 open */
+	__u8  pad[3];
+	char  comm[SG_BPF_COMM_MAX];
+	char  path[SG_BPF_PATH_MAX];
+};
+
 #ifndef SG_BPF_KERNEL
 /* ── Daemon-side API (src/bpf_loader.c) ──────────────────────────────────
  * All of these are safe no-ops when the BPF layer never loaded, so callers
@@ -192,6 +233,21 @@ int  sg_bpf_set_canary_ino(unsigned long long ino);
  * rules armed, or -1 with `err` naming the rule this matcher cannot evaluate.
  * Declared in sg_lower.h terms, so that header must be included first. */
 struct sg_lowered;
+/* Fill sg_watch / sg_watch_home from the open and exec rules (replacing
+ * what was there). Returns how many prefixes were written, or -1. A rule
+ * whose path has no literal part is not watched from BPF, and says so. */
+struct sg_rule;
+int  sg_bpf_load_watch(const struct sg_rule *head);
+
+/* Start consuming reports: every one is handed to `cb` on the calling thread,
+ * from sg_bpf_poll_reports(). Switches the hooks' reporting on. */
+int  sg_bpf_reports_start(void (*cb)(void *ctx, const struct sg_bpf_report *r),
+                          void *ctx);
+/* Drain what the hooks have reported, without blocking. Returns how many. */
+int  sg_bpf_poll_reports(void);
+/* How many reports the hooks could not queue (the ring was full). */
+unsigned long long sg_bpf_reports_dropped(void);
+
 int  sg_bpf_load_policy(const struct sg_lowered *rules, int n,
                         char *err, size_t errlen);
 

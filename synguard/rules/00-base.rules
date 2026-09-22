@@ -49,6 +49,18 @@ rule escalate-setuid-to-root {
     priority 15
 }
 
+# ── Somebody stopping the security daemons ────────────────────
+# synapse_kmod 30 reports a terminating or stopping signal (INT, QUIT, ABRT,
+# KILL, TERM, STOP, TSTP) sent to pid 1, synguard, synnet or synapd — or to
+# every process at once — by anything but systemd, which starts and stops
+# units itself and logs it. The event is in the ring before the signal lands,
+# so a restarted synguard still reads the record of whoever stopped it.
+rule alert-signal-to-security-daemon {
+    event   signal
+    verdict alert
+    priority 11
+}
+
 # ── Sensitive file access ─────────────────────────────────────
 # alert, not deny: every PAM authentication (greetd, login, sudo, su)
 # opens /etc/shadow to verify the password, and sudo reads /etc/sudoers
@@ -74,6 +86,20 @@ rule alert-ssh-key-access {
     path    /root/.ssh/*
     verdict alert
     priority 25
+}
+
+# The SSH tools reading your own keys is what the keys are for. Until synguard
+# 47 nothing reported an open under /home/<user>/.ssh at all, so the rule below
+# never fired; the BPF-LSM hooks now report it, and without this every `ssh`
+# and `git push` over SSH would alert. ⚠ Matched on the process NAME, which a
+# process can set for itself — this is for the ordinary case, and anything else
+# reading a private key still alerts.
+rule allow-ssh-tools-own-keys {
+    event   open
+    path    /home/*/.ssh/id_*
+    comm    ssh*
+    verdict allow
+    priority 24
 }
 
 rule alert-ssh-key-user {

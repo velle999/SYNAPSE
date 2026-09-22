@@ -48,6 +48,12 @@
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
 
+#include <linux/nsproxy.h>
+#include <linux/cred.h>
+#include <linux/pid.h>
+#include <linux/sched/signal.h>
+#include <linux/mount.h>
+#include <uapi/linux/mount.h>
 #include "synapse_kmod.h"
 #include "synapse_probe.h"
 
@@ -558,20 +564,22 @@ static struct kprobe kp_execveat = {
 struct openat_ctx {
     char kbuf[128];
     int  oflags;
+    int  nr;        /* which of the open family this is */
 };
 
-static int openat_entry_handler(struct kretprobe_instance *ri,
-                                struct pt_regs *regs)
+/*
+ * The shared half of every open-family entry handler: filter the caller's
+ * string, and stash what to report. openat, legacy open, creat and openat2
+ * differ only in where the filename and the flags are found, so each has a
+ * three-line entry handler that finds them and hands them here — one filter,
+ * one decision about what is sensitive.
+ */
+static int open_entry_common(struct kretprobe_instance *ri,
+                             const char __user *filename, int oflags, int nr)
 {
     struct openat_ctx *ctx = (struct openat_ctx *)ri->data;
 
-    if (!synapse_events_enabled()) return 1;
-
-    /* openat(dfd, filename, flags, mode): filename is 2nd arg, flags is 3rd. */
-    struct pt_regs *u = syscall_uregs(regs);
-    const char __user *filename = (const char __user *)u->si;
     if (!filename) return 1;
-    int oflags = (int)u->dx;
 
     char kbuf[128] = {0};
     if (strncpy_from_user(kbuf, filename, sizeof(kbuf) - 1) <= 0)
@@ -593,7 +601,59 @@ static int openat_entry_handler(struct kretprobe_instance *ri,
      * instance is recycled now. */
     memcpy(ctx->kbuf, kbuf, sizeof(ctx->kbuf));
     ctx->oflags = oflags;
+    ctx->nr     = nr;
     return 0;
+}
+
+/* openat(dfd, filename, flags, mode): filename is 2nd arg, flags is 3rd. */
+static int openat_entry_handler(struct kretprobe_instance *ri,
+                                struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 1;
+    struct pt_regs *u = syscall_uregs(regs);
+    return open_entry_common(ri, (const char __user *)u->si, (int)u->dx,
+                             __NR_openat);
+}
+
+/* open(filename, flags, mode) — the legacy call, still in every libc's
+ * syscall(2) reach and in static binaries that predate openat. */
+static int open_entry_handler(struct kretprobe_instance *ri,
+                              struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 1;
+    struct pt_regs *u = syscall_uregs(regs);
+    return open_entry_common(ri, (const char __user *)u->di, (int)u->si,
+                             __NR_open);
+}
+
+/* creat(filename, mode) is open(filename, O_CREAT|O_WRONLY|O_TRUNC, mode). */
+static int creat_entry_handler(struct kretprobe_instance *ri,
+                               struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 1;
+    struct pt_regs *u = syscall_uregs(regs);
+    return open_entry_common(ri, (const char __user *)u->di,
+                             O_CREAT | O_WRONLY | O_TRUNC, __NR_creat);
+}
+
+/*
+ * openat2(dfd, filename, struct open_how *how, size): the flags live in user
+ * memory, first member of open_how. copy_from_user_nofault because this runs
+ * with preemption off — the same reason the path copy cannot fault a page in.
+ * Flags that cannot be read are reported as 0 (a read): the event still goes
+ * out, which is the point of probing this call at all.
+ */
+static int openat2_entry_handler(struct kretprobe_instance *ri,
+                                 struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 1;
+    struct pt_regs *u = syscall_uregs(regs);
+    u64 flags = 0;
+    if (u->dx &&
+        copy_from_user_nofault(&flags, (const void __user *)u->dx, sizeof(flags)))
+        flags = 0;
+    return open_entry_common(ri, (const char __user *)u->si, (int)flags,
+                             __NR_openat2);
 }
 
 static int openat_ret_handler(struct kretprobe_instance *ri,
@@ -606,7 +666,7 @@ static int openat_ret_handler(struct kretprobe_instance *ri,
      * The timestamp is now the completion time rather than the attempt time —
      * a sub-microsecond shift on a syscall, and the more accurate one to
      * report for an access that did occur. */
-    fill_event(&e, __NR_openat, SYNAPSE_EVT_OPEN);
+    fill_event(&e, ctx->nr, SYNAPSE_EVT_OPEN);
     e.args[0] = (u64)(unsigned int)ctx->oflags;   /* open flags → wire arg0 */
     /* ⚠ strscpy(), NOT strncpy() — removed from <linux/string.h> in 7.2. The
      * padding strncpy did is not lost: `e` is declared `= {0}` and this event
@@ -637,12 +697,48 @@ static struct kretprobe kr_openat = {
     .maxactive      = 64,
 };
 
-/* Published in the stats attribute: how many openat events were lost because
- * no return instance was free. Losing events is the failure this ring has
+static struct kretprobe kr_open = {
+    .kp.symbol_name = "__x64_sys_open",
+    .entry_handler  = open_entry_handler,
+    .handler        = openat_ret_handler,
+    .data_size      = sizeof(struct openat_ctx),
+    .maxactive      = 64,
+};
+
+static struct kretprobe kr_creat = {
+    .kp.symbol_name = "__x64_sys_creat",
+    .entry_handler  = creat_entry_handler,
+    .handler        = openat_ret_handler,
+    .data_size      = sizeof(struct openat_ctx),
+    .maxactive      = 64,
+};
+
+static struct kretprobe kr_openat2 = {
+    .kp.symbol_name = "__x64_sys_openat2",
+    .entry_handler  = openat2_entry_handler,
+    .handler        = openat_ret_handler,
+    .data_size      = sizeof(struct openat_ctx),
+    .maxactive      = 64,
+};
+
+/* The kretprobes, registered, enabled, watched and torn down together. openat
+ * stays first: its failure is the one reported loudest. */
+static struct kretprobe *all_kretprobes[] = {
+    &kr_openat, &kr_open, &kr_creat, &kr_openat2,
+};
+#define N_KRETPROBES ARRAY_SIZE(all_kretprobes)
+static bool kretprobe_registered[ARRAY_SIZE(all_kretprobes)];
+
+/* Published in the stats attribute: how many open events were lost because
+ * no return instance was free — across the whole open family, which shares
+ * one filter and one kind of loss. Losing events is the failure this ring has
  * actually suffered, so it gets a counter rather than a comment. */
 unsigned long synapse_probe_openat_missed(void)
 {
-    return kr_openat.nmissed;
+    unsigned long n = 0;
+    for (int i = 0; i < (int)N_KRETPROBES; i++)
+        n += all_kretprobes[i]->nmissed;
+    return n;
 }
 
 /* ── socket / connect kprobe ─────────────────────────────── */
@@ -830,6 +926,258 @@ static struct kprobe kp_setuid = {
     .pre_handler = setuid_pre_handler,
 };
 
+/* ── the rest of the credential family ────────────────────── */
+/*
+ * setuid(0) was the only one probed, so setresuid(0,0,0) — what sudo, su and
+ * every modern privilege change actually call — changed identity unseen, and
+ * so did every gid change and capset. The rule stays the setuid probe's:
+ * report a change whose TARGET is root (uid or gid 0). -1 means "unchanged"
+ * and is never a target.
+ */
+static void cred_report(int nr, u64 target)
+{
+    struct synapse_syscall_event e = {0};
+    fill_event(&e, nr, SYNAPSE_EVT_SETUID);
+    e.args[0] = target;
+    ring_push(&e);
+    synapse_stat_event();
+}
+
+#define CRED_ID_ROOT(x) ((u32)(x) == 0)
+
+static int setreuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di) || CRED_ID_ROOT(u->si)) cred_report(__NR_setreuid, 0);
+    return 0;
+}
+static int setresuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di) || CRED_ID_ROOT(u->si) || CRED_ID_ROOT(u->dx))
+        cred_report(__NR_setresuid, 0);
+    return 0;
+}
+static int setfsuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setfsuid, 0);
+    return 0;
+}
+static int setgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setgid, 0);
+    return 0;
+}
+static int setregid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di) || CRED_ID_ROOT(u->si)) cred_report(__NR_setregid, 0);
+    return 0;
+}
+static int setresgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di) || CRED_ID_ROOT(u->si) || CRED_ID_ROOT(u->dx))
+        cred_report(__NR_setresgid, 0);
+    return 0;
+}
+static int setfsgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setfsgid, 0);
+    return 0;
+}
+
+/*
+ * capset(header, data): a process that is not root switching on an
+ * administrator-class capability. Root sets capabilities all day (every
+ * systemd unit with CapabilityBoundingSet= does, at start); a non-root process
+ * turning on CAP_SYS_ADMIN is the one worth a line. arg0 is the effective set
+ * it asked for. The set is in user memory, read without faulting (preemption
+ * is off here); a set that cannot be read is not reported.
+ */
+#define CAPSET_ADMIN_MASK ( \
+    (1ULL << 1)  /* DAC_OVERRIDE */ | (1ULL << 2)  /* DAC_READ_SEARCH */ | \
+    (1ULL << 6)  /* SETGID */       | (1ULL << 7)  /* SETUID */          | \
+    (1ULL << 12) /* NET_ADMIN */    | (1ULL << 16) /* SYS_MODULE */      | \
+    (1ULL << 17) /* SYS_RAWIO */    | (1ULL << 19) /* SYS_PTRACE */      | \
+    (1ULL << 21) /* SYS_ADMIN */    | (1ULL << 39) /* BPF */)
+
+static int capset_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    if (from_kuid_munged(&init_user_ns, current_euid()) == 0) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    u32 d[6];                       /* two __user_cap_data_struct */
+    if (!u->si || copy_from_user_nofault(d, (const void __user *)u->si, sizeof(d)))
+        return 0;
+    u64 eff = (u64)d[0] | ((u64)d[3] << 32);
+    if (eff & CAPSET_ADMIN_MASK) cred_report(__NR_capset, eff);
+    return 0;
+}
+
+static struct kprobe kp_setreuid  = { .symbol_name = "__x64_sys_setreuid",  .pre_handler = setreuid_pre_handler  };
+static struct kprobe kp_setresuid = { .symbol_name = "__x64_sys_setresuid", .pre_handler = setresuid_pre_handler };
+static struct kprobe kp_setfsuid  = { .symbol_name = "__x64_sys_setfsuid",  .pre_handler = setfsuid_pre_handler  };
+static struct kprobe kp_setgid    = { .symbol_name = "__x64_sys_setgid",    .pre_handler = setgid_pre_handler    };
+static struct kprobe kp_setregid  = { .symbol_name = "__x64_sys_setregid",  .pre_handler = setregid_pre_handler  };
+static struct kprobe kp_setresgid = { .symbol_name = "__x64_sys_setresgid", .pre_handler = setresgid_pre_handler };
+static struct kprobe kp_setfsgid  = { .symbol_name = "__x64_sys_setfsgid",  .pre_handler = setfsgid_pre_handler  };
+static struct kprobe kp_capset    = { .symbol_name = "__x64_sys_capset",    .pre_handler = capset_pre_handler    };
+
+/* ── mount ─────────────────────────────────────────────────── */
+/*
+ * synguard ships `escalate-bind-mount` and nothing ever fed it: mount was not
+ * probed. What is reported is what that rule is about — a bind or a move in
+ * the HOST's mount namespace, which is how a root attacker lays a file over
+ * /etc or /usr/bin. Mounting a new filesystem (a USB stick) is not, and
+ * neither is anything inside another mount namespace: bubblewrap, flatpak
+ * and every container mount constantly in their own. filename is the TARGET;
+ * arg0 the MS_* flags.
+ */
+static bool in_host_mntns(void)
+{
+    return current->nsproxy && init_task.nsproxy &&
+           current->nsproxy->mnt_ns == init_task.nsproxy->mnt_ns;
+}
+
+static void mount_report(int nr, const char __user *target, u64 flags)
+{
+    struct synapse_syscall_event e = {0};
+    fill_event(&e, nr, SYNAPSE_EVT_MOUNT);
+    e.args[0] = flags;
+    if (target &&
+        strncpy_from_user(e.filename, target, sizeof(e.filename) - 1) <= 0)
+        e.filename[0] = '\0';
+    ring_push(&e);
+    synapse_stat_event();
+}
+
+/* mount(dev_name, dir_name, type, flags, data) */
+static int mount_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    u64 flags = u->r10;
+    if (!(flags & (MS_BIND | MS_MOVE)) || !in_host_mntns()) return 0;
+    mount_report(__NR_mount, (const char __user *)u->si, flags);
+    return 0;
+}
+
+/* move_mount(from_dfd, from_path, to_dfd, to_path, flags): the new mount API
+ * attaches with this, so it is a mount by any other name. */
+static int move_mount_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+    if (!in_host_mntns()) return 0;
+    struct pt_regs *u = syscall_uregs(regs);
+    mount_report(__NR_move_mount, (const char __user *)u->r10, MS_MOVE);
+    return 0;
+}
+
+static struct kprobe kp_mount      = { .symbol_name = "__x64_sys_mount",      .pre_handler = mount_pre_handler      };
+static struct kprobe kp_move_mount = { .symbol_name = "__x64_sys_move_mount", .pre_handler = move_mount_pre_handler };
+
+/* ── signals to the security daemons ───────────────────────── */
+/*
+ * Killing or stopping synguard is the first thing an attacker with root does,
+ * and until now it left nothing but a restart line in the journal. Reported:
+ * a terminating or stopping signal to pid 1, to synguard, synnet or synapd, or
+ * to every process at once (kill -1). NOT reported: anything systemd sends —
+ * stopping and restarting units is its job, and it logs that itself.
+ *
+ * The event is in the ring before the signal lands, and a restarted synguard
+ * reads the ring from the oldest event still there, so killing it does not
+ * erase the record of having killed it. filename is the target's comm (or
+ * "(all)"); arg0 the signal.
+ */
+static bool signal_is_hostile(int sig)
+{
+    switch (sig) {
+    case SIGINT: case SIGQUIT: case SIGABRT: case SIGKILL:
+    case SIGTERM: case SIGSTOP: case SIGTSTP:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static const char *const signal_watched[] = { "synguard", "synnet", "synapd", NULL };
+
+static void signal_check(int nr, pid_t target, int sig)
+{
+    if (!synapse_events_enabled() || !signal_is_hostile(sig)) return;
+    if (task_tgid_nr(current) == 1) return;           /* systemd */
+
+    char comm[TASK_COMM_LEN] = "";
+    if (target == -1) {
+        strscpy(comm, "(all)", sizeof(comm));
+    } else if (target > 0) {
+        struct task_struct *t;
+        bool watched = false;
+        rcu_read_lock();
+        t = pid_task(find_vpid(target), PIDTYPE_PID);
+        if (t) {
+            if (task_tgid_nr(t) == 1) {
+                watched = true;
+            } else {
+                for (int i = 0; signal_watched[i]; i++)
+                    if (strncmp(t->comm, signal_watched[i], TASK_COMM_LEN) == 0)
+                        watched = true;
+            }
+            if (watched) memcpy(comm, t->comm, TASK_COMM_LEN);
+        }
+        rcu_read_unlock();
+        if (!watched) return;
+        comm[TASK_COMM_LEN - 1] = '\0';
+    } else {
+        return;                                        /* a process group */
+    }
+
+    struct synapse_syscall_event e = {0};
+    fill_event(&e, nr, SYNAPSE_EVT_SIGNAL);
+    e.args[0] = (u64)sig;
+    e.args[1] = (u64)(s64)target;
+    strscpy(e.filename, comm, sizeof(e.filename));
+    ring_push(&e);
+    synapse_stat_event();
+}
+
+/* kill(pid, sig) */
+static int kill_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    struct pt_regs *u = syscall_uregs(regs);
+    signal_check(__NR_kill, (pid_t)u->di, (int)u->si);
+    return 0;
+}
+/* tkill(tid, sig) */
+static int tkill_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    struct pt_regs *u = syscall_uregs(regs);
+    signal_check(__NR_tkill, (pid_t)u->di, (int)u->si);
+    return 0;
+}
+/* tgkill(tgid, tid, sig) */
+static int tgkill_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    struct pt_regs *u = syscall_uregs(regs);
+    signal_check(__NR_tgkill, (pid_t)u->si, (int)u->dx);
+    return 0;
+}
+
+static struct kprobe kp_kill   = { .symbol_name = "__x64_sys_kill",   .pre_handler = kill_pre_handler   };
+static struct kprobe kp_tkill  = { .symbol_name = "__x64_sys_tkill",  .pre_handler = tkill_pre_handler  };
+static struct kprobe kp_tgkill = { .symbol_name = "__x64_sys_tgkill", .pre_handler = tgkill_pre_handler };
+
 /* ── Probe table ──────────────────────────────────────────── */
 /* openat is NOT here: it is a kretprobe and registers separately. Its inner
  * kp is still handed to the integrity watchdog below, so disarming it is as
@@ -843,6 +1191,19 @@ static struct kprobe *all_probes[] = {
     &kp_insmod,
     &kp_finit_module,
     &kp_setuid,
+    &kp_setreuid,
+    &kp_setresuid,
+    &kp_setfsuid,
+    &kp_setgid,
+    &kp_setregid,
+    &kp_setresgid,
+    &kp_setfsgid,
+    &kp_capset,
+    &kp_mount,
+    &kp_move_mount,
+    &kp_kill,
+    &kp_tkill,
+    &kp_tgkill,
 };
 
 #define N_PROBES  ARRAY_SIZE(all_probes)
@@ -852,8 +1213,6 @@ static struct kprobe *all_probes[] = {
  * never-registered kprobe is undefined. */
 static bool probe_registered[ARRAY_SIZE(all_probes)];
 
-/* Same, for the openat kretprobe, which is not in all_probes[]. */
-static bool openat_registered;
 
 /* ── Enable / disable ─────────────────────────────────────── */
 static bool g_probes_enabled = true;
@@ -868,12 +1227,14 @@ void synapse_probe_set_enabled(bool enabled)
     if (enabled) {
         for (int i = 0; i < (int)N_PROBES; i++)
             if (probe_registered[i]) enable_kprobe(all_probes[i]);
-        if (openat_registered) enable_kretprobe(&kr_openat);
+        for (int i = 0; i < (int)N_KRETPROBES; i++)
+            if (kretprobe_registered[i]) enable_kretprobe(all_kretprobes[i]);
         pr_info("synapse_kmod: probes enabled\n");
     } else {
         for (int i = 0; i < (int)N_PROBES; i++)
             if (probe_registered[i]) disable_kprobe(all_probes[i]);
-        if (openat_registered) disable_kretprobe(&kr_openat);
+        for (int i = 0; i < (int)N_KRETPROBES; i++)
+            if (kretprobe_registered[i]) disable_kretprobe(all_kretprobes[i]);
         pr_info("synapse_kmod: probes disabled\n");
     }
 }
@@ -903,13 +1264,14 @@ int synapse_probe_integrity_check(void)
             tampered++;
     }
 
-    /* The kretprobe's inner kp carries the same flags, so openat is covered
-     * by the watchdog exactly as it was when it was a plain kprobe. Leaving it
-     * out would have made the file-open probe the one probe an attacker could
-     * disarm unobserved. */
-    if (openat_registered &&
-        (kr_openat.kp.flags & (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE)))
-        tampered++;
+    /* A kretprobe's inner kp carries the same flags, so the open family is
+     * covered by the watchdog exactly as it was when openat was a plain
+     * kprobe. Leaving them out would have made the file-open probes the ones
+     * an attacker could disarm unobserved. */
+    for (i = 0; i < (int)N_KRETPROBES; i++)
+        if (kretprobe_registered[i] &&
+            (all_kretprobes[i]->kp.flags & (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE)))
+            tampered++;
 
     return tampered;
 }
@@ -941,15 +1303,21 @@ int synapse_probe_init(int ring_size)
      * are not, but it is louder — openat is the probe the file-access rules are
      * built on, and losing it silently would leave a policy that looks armed
      * with nothing feeding it. */
-    ret = register_kretprobe(&kr_openat);
-    if (ret) {
-        pr_warn("synapse_kmod: kretprobe %s failed: %d — file-open events "
-                "are NOT being reported this boot\n",
-                kr_openat.kp.symbol_name, ret);
-        openat_registered = false;
-    } else {
-        openat_registered = true;
-        ok++;
+    for (i = 0; i < (int)N_KRETPROBES; i++) {
+        ret = register_kretprobe(all_kretprobes[i]);
+        if (ret) {
+            if (all_kretprobes[i] == &kr_openat)
+                pr_warn("synapse_kmod: kretprobe %s failed: %d — file-open "
+                        "events are NOT being reported this boot\n",
+                        kr_openat.kp.symbol_name, ret);
+            else
+                pr_warn("synapse_kmod: kretprobe %s failed: %d (skipping)\n",
+                        all_kretprobes[i]->kp.symbol_name, ret);
+            kretprobe_registered[i] = false;
+        } else {
+            kretprobe_registered[i] = true;
+            ok++;
+        }
     }
 
     if (ok == 0) {
@@ -958,8 +1326,8 @@ int synapse_probe_init(int ring_size)
         return -ENODEV;
     }
 
-    pr_info("synapse_kmod: %d/%zu probes registered (openat=kretprobe), "
-            "ring_size=%d\n", ok, N_PROBES + 1, ring_size);
+    pr_info("synapse_kmod: %d/%zu probes registered (the open family as "
+            "kretprobes), ring_size=%d\n", ok, N_PROBES + N_KRETPROBES, ring_size);
     return 0;
 }
 
@@ -973,9 +1341,11 @@ void synapse_probe_exit(void)
         }
         /* unregister_kretprobe() waits out in-flight return instances, so no
          * handler can still be running against the ring we free below. */
-        if (openat_registered) {
-            unregister_kretprobe(&kr_openat);
-            openat_registered = false;
+        for (i = 0; i < (int)N_KRETPROBES; i++) {
+            if (kretprobe_registered[i]) {
+                unregister_kretprobe(all_kretprobes[i]);
+                kretprobe_registered[i] = false;
+            }
         }
         ring_free();
     }

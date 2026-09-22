@@ -419,6 +419,19 @@ int synguard_init(synguard_state_t *s)
                        "userspace path", nl, nl == 1 ? "" : "s");
             }
         }
+
+        /*
+         * What the hooks REPORT, apart from what they refuse (sg_bpf.h,
+         * "Reports"): every open and exec rule's path is watched, armed or
+         * not, so a relative path, a symlink, openat2 or io_uring reaching a
+         * watched file is seen with the path the kernel resolved. Read once
+         * at start, like the policy above; a rules change reaches it at the
+         * next restart.
+         */
+        if (sg_bpf_load_watch(s->rules_head) > 0 &&
+            sg_bpf_reports_start(sg_bpf_report_to_event, s) != 0)
+            sg_log(LOG_WARNING, "bpf-lsm: reports from the hooks are off — "
+                   "the kmod still reports");
     }
 #endif
 

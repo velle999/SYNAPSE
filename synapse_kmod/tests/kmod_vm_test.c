@@ -43,6 +43,7 @@
 #include <netinet/in.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/reboot.h>
 #include <sys/socket.h>
@@ -348,11 +349,15 @@ static void test_open_gaps(int dev)
     munmap(m, 4096);
     close(f);
 
-    /* 3. openat2 and 32-bit-free alternatives the probe set does not cover. */
-    struct { unsigned long long flags, mode, resolve; } how = { O_RDONLY, 0, 0 };
+    /* 3. openat2, legacy open() and creat(): probed since kmod 30. The flags
+     * travel too — openat2's from the open_how struct in user memory. */
+    struct { unsigned long long flags, mode, resolve; } how = { O_WRONLY, 0, 0 };
     fd = (int)syscall(SYS_openat2, AT_FDCWD, "/etc/shadow-openat2", &how, sizeof(how));
     if (fd >= 0) close(fd);
     fd = (int)syscall(SYS_open, "/etc/shadow-legacy-open", O_RDONLY);
+    if (fd >= 0) close(fd);
+    mkdir("/etc/cron.d", 0755);
+    fd = (int)syscall(SYS_creat, "/etc/cron.d/kft-creat", 0600);
     if (fd >= 0) close(fd);
     drain(dev);
 
@@ -370,10 +375,18 @@ static void test_open_gaps(int dev)
         GAP("open: a path in a not-yet-faulted page is not reported (the probe cannot fault it in)");
     else
         INFO("open: the non-resident path WAS reported");
-    if (!find_line("shadow-openat2", NULL))
-        GAP("open: openat2() is not probed");
-    if (!find_line("shadow-legacy-open", NULL))
-        GAP("open: legacy open() is not probed");
+    char fl[64];
+    const char *l = find_line("shadow-openat2", NULL);
+    EXPECT(l && strstr(l, " 437 "), "open: openat2() is reported, as syscall 437");
+    if (l) field(l, 7, fl, sizeof(fl));
+    EXPECT(l && strtoull(fl, NULL, 10) == O_WRONLY,
+           "open: openat2's flags are read from open_how (arg0=%s)", l ? fl : "none");
+    l = find_line("shadow-legacy-open", NULL);
+    EXPECT(l && strstr(l, " 2 "), "open: legacy open() is reported, as syscall 2");
+    l = find_line("kft-creat", NULL);
+    if (l) field(l, 7, fl, sizeof(fl));
+    EXPECT(l && (strtoull(fl, NULL, 10) & (O_CREAT | O_WRONLY)) == (O_CREAT | O_WRONLY),
+           "open: creat() is reported, as a create for writing (arg0=%s)", l ? fl : "none");
 }
 
 static void test_connect(int dev)
@@ -429,13 +442,120 @@ static void test_setuid(int dev)
     if (p == 0) {
         setuid(0);
         syscall(SYS_setresuid, 0, 0, 0);
+        syscall(SYS_setreuid, -1, 0);
+        syscall(SYS_setfsuid, 0);
+        syscall(SYS_setgid, 0);
+        syscall(SYS_setresgid, -1, 0, -1);
+        syscall(SYS_setregid, 0, -1);
+        syscall(SYS_setfsgid, 0);
+        /* not a change to root: never reported */
+        syscall(SYS_setresgid, -1, -1, -1);
         _exit(0);
     }
     reap(p);
     drain(dev);
     EXPECT(find_line(" 105 ", " 40 "), "setuid(0) is reported");
-    if (!find_line(" 117 ", NULL))
-        GAP("setresuid(0,0,0) is not probed");
+    EXPECT(find_line(" 117 ", " 40 "), "setresuid(0,0,0) is reported");
+    EXPECT(find_line(" 113 ", " 40 "), "setreuid(-1,0) is reported");
+    EXPECT(find_line(" 122 ", " 40 "), "setfsuid(0) is reported");
+    EXPECT(find_line(" 106 ", " 40 "), "setgid(0) is reported");
+    EXPECT(find_line(" 119 ", " 40 "), "setresgid(-1,0,-1) is reported");
+    EXPECT(find_line(" 114 ", " 40 "), "setregid(0,-1) is reported");
+    EXPECT(find_line(" 123 ", " 40 "), "setfsgid(0) is reported");
+}
+
+/* capset: a process that is not root switching on CAP_SYS_ADMIN is reported;
+ * root doing the same is not (it does so constantly). */
+struct kft_cap_hdr { unsigned int version; int pid; };
+struct kft_cap_data { unsigned int effective, permitted, inheritable; };
+
+static void test_capset(int dev)
+{
+    pid_t p = fork();
+    if (p == 0) {
+        struct kft_cap_hdr h = { 0x20080522, 0 };
+        struct kft_cap_data d[2];
+        syscall(SYS_capget, &h, d);
+        d[0].effective = d[0].permitted;          /* root: not reported */
+        syscall(SYS_capset, &h, d);
+        prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+        syscall(SYS_setresuid, 1000, 1000, 1000);
+        syscall(SYS_capget, &h, d);
+        d[0].effective = d[0].permitted & (1u << 21);   /* CAP_SYS_ADMIN */
+        syscall(SYS_capset, &h, d);
+        _exit(0);
+    }
+    reap(p);
+    drain(dev);
+    const char *l = find_line(" 126 ", " 40 ");
+    char f[64] = "";
+    if (l) field(l, 7, f, sizeof(f));
+    EXPECT(l && strtoull(f, NULL, 10) == (1ull << 21),
+           "capset: a non-root process turning on CAP_SYS_ADMIN is reported (arg0=%s)",
+           l ? f : "none");
+    EXPECT(l && strstr(l, " 1000 "), "capset: …as the uid it now runs as");
+}
+
+/* mount: a bind or a move in the host's mount namespace; not a bind inside a
+ * private one (what every sandbox does), and not a plain mount. */
+static void test_mount(int dev)
+{
+    mkdir("/kft-src", 0755);
+    mkdir("/kft-host", 0755);
+    mkdir("/kft-private", 0755);
+    pid_t p = fork();
+    if (p == 0) {
+        /* On the stack: a literal a forked child reads first is in a page it
+         * has not faulted in, and the probe cannot fault it (see test_exec). */
+        char src[] = "/kft-src", host[] = "/kft-host", priv[] = "/kft-private";
+        mount(src, host, NULL, MS_BIND, NULL);
+        umount(host);
+        if (unshare(CLONE_NEWNS) == 0) {
+            mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL);
+            mount(src, priv, NULL, MS_BIND, NULL);
+        }
+        _exit(0);
+    }
+    reap(p);
+    drain(dev);
+    EXPECT(find_line("/kft-host", " 20 "), "mount: a bind in the host namespace is reported");
+    EXPECT(!find_line("/kft-private", NULL),
+           "mount: a bind inside a private mount namespace is not");
+}
+
+/* signals: a terminating signal to something called synguard is reported, from
+ * any sender but pid 1 — and /init IS pid 1 here, so a child sends them. */
+static void named_sleeper(void *arg)
+{
+    prctl(PR_SET_NAME, (unsigned long)arg, 0, 0, 0);
+    for (;;) pause();
+}
+
+static void test_signal(int dev)
+{
+    pid_t sg = spawn(named_sleeper, "synguard");
+    pid_t other = spawn(named_sleeper, "kft-other");
+    usleep(100000);
+    pid_t p = fork();
+    if (p == 0) {
+        kill(sg, SIGSTOP);
+        kill(other, SIGKILL);
+        kill(sg, SIGUSR1);          /* not a hostile signal */
+        _exit(0);
+    }
+    reap(p);
+    kill(sg, SIGKILL);              /* from pid 1: never reported */
+    kill(other, SIGKILL);
+    reap(sg); reap(other);
+    drain(dev);
+    char want[32];
+    snprintf(want, sizeof(want), " 80 %d ", SIGSTOP);
+    EXPECT(find_line(" synguard ", want), "signal: SIGSTOP to synguard is reported");
+    EXPECT(!find_line(" kft-other ", " 80 "), "signal: a signal to anything else is not");
+    snprintf(want, sizeof(want), " 80 %d ", SIGUSR1);
+    EXPECT(!find_line(" synguard ", want), "signal: a signal that stops nothing is not");
+    snprintf(want, sizeof(want), " 80 %d ", SIGKILL);
+    EXPECT(!find_line(" synguard ", want), "signal: pid 1's own signal is not");
 }
 
 static void test_sysfs(void)
@@ -522,6 +642,9 @@ static void mode_main(void)
     test_connect(dev);
     test_ptrace(dev);
     test_setuid(dev);
+    test_capset(dev);
+    test_mount(dev);
+    test_signal(dev);
     test_device(dev);
     close(dev);
     test_sysfs();   /* last: it unloads the module */

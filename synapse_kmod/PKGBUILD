@@ -82,7 +82,28 @@ pkgver=0.1.0
 #     tells the truth now — ship with synguard 43, which alerts on it.
 # Written down in docs/SECURITY-ROADMAP.md §5, not fixed: what the open and
 # exec probes cannot see, because they read the caller's own string at entry.
-pkgrel=29
+# 30: THE SYSCALLS NOTHING PROBED. An attacker only had to call the neighbour
+#   of the one being watched:
+#   - legacy open(), creat() and openat2() now report like openat — same path
+#     filter, same return value; openat2's flags are read out of open_how.
+#   - setreuid, setresuid, setfsuid and the whole setgid family report a change
+#     TO root, as setuid(0) always did. setresuid(0,0,0) is what sudo, su and
+#     every modern privilege change actually call.
+#   - capset: a process that is not root switching on an administrator-class
+#     capability (SYS_ADMIN, SYS_MODULE, SYS_PTRACE, DAC_OVERRIDE, BPF, …).
+#   - mount and move_mount: a bind or a move in the HOST mount namespace —
+#     what synguard's escalate-bind-mount rule was written for, and never
+#     received. Sandboxes mount in their own namespace and are not reported.
+#   - kill, tkill and tgkill: a terminating or stopping signal to pid 1,
+#     synguard, synnet or synapd, or to every process, from anything but pid 1.
+#     A new event type, SYNAPSE_EVT_SIGNAL (0x80); synguard 47 reads it. The
+#     record is in the ring before the signal lands, so it survives the
+#     daemon it stopped.
+#   The four open-family kretprobes are one table now: registered, enabled,
+#   watched by the integrity check and counted in `openat_missed` together.
+#   tests/run-vm-tests.sh: the three GAPs this closes are PASSes, with new
+#   cases for every call above, and all four modes pass.
+pkgrel=30
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

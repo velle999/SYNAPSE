@@ -104,6 +104,9 @@ typedef enum {
     EVT_MODULE  = 0x10,
     EVT_MOUNT   = 0x20,
     EVT_SETUID  = 0x40,
+    EVT_SIGNAL  = 0x80,   /* a terminating or stopping signal to pid 1 or a
+                             security daemon (synapse_kmod 30); filename is the
+                             target's comm or "(all)", arg0 the signal */
     EVT_UNKNOWN = 0x00,
 } evt_type_t;
 
@@ -135,7 +138,19 @@ typedef struct {
     uint64_t  arg0;           /* first syscall arg (setuid: target uid) */
     char      comm[16];
     char      filename[128];
+    uint8_t   source;         /* SG_SRC_*: which half of the kernel saw it */
 } sg_event_t;
+
+/* The kmod's probes read the path the caller typed, at syscall entry; the
+ * BPF-LSM hooks read the file the kernel resolved. An absolute open of a
+ * watched path is seen by both, and sg_dedup_check() drops the second. */
+#define SG_SRC_KMOD 0
+#define SG_SRC_LSM  1
+
+/* 1 if this open/exec was already processed from the OTHER source within the
+ * last moment, so this copy should be dropped; 0 otherwise (and it is
+ * remembered). Reader thread only. `now_ns` is CLOCK_MONOTONIC. */
+int sg_dedup_check(const sg_event_t *e, uint64_t now_ns);
 
 /*
  * has_ret == 0 means the kmod reported this event at syscall ENTRY and the
@@ -335,6 +350,8 @@ typedef struct {
     _Atomic uint64_t  reader_lag_ms;   /* age of the newest event processed */
     _Atomic uint64_t  reader_lag_max_ms; /* worst lag, so a stall still shows */
     _Atomic uint64_t  alerts_suppressed; /* repeats collapsed into a summary */
+    _Atomic uint64_t  lsm_reports;     /* opens/execs the BPF-LSM hooks reported */
+    _Atomic uint64_t  dedup_skips;     /* the second witness of one event */
     time_t            start_time;
 } sg_stats_t;
 
@@ -593,6 +610,11 @@ int  audit_init(synguard_state_t *s);
 void audit_write(synguard_state_t *s, const sg_alert_t *alert);
 void sg_alert_fill_reason(sg_alert_t *alert, const char *rule_name,
                           const sg_ai_result_t *ai);
+
+/* A report from the BPF-LSM hooks, as an event, through the whole pipeline.
+ * The callback sg_bpf_reports_start() is handed; ctx is the state. */
+struct sg_bpf_report;
+void sg_bpf_report_to_event(void *ctx, const struct sg_bpf_report *r);
 void audit_close(synguard_state_t *s);
 
 /* Baseline */

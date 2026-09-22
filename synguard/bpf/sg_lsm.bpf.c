@@ -80,7 +80,44 @@ struct {
 struct sg_scratch {
 	struct sg_path_key path;
 	struct sg_path_key key;
+	struct sg_watch_key wk;         /* LPM lookup key for the watch tries */
 };
+
+/* ── reports (sg_bpf.h, "Reports") ───────────────────────────────────── */
+
+/* Whole-path prefixes the rules watch, and the part after /home/<user>/. */
+struct {
+	__uint(type, BPF_MAP_TYPE_LPM_TRIE);
+	__uint(max_entries, SG_BPF_WATCH_MAX);
+	__type(key, struct sg_watch_key);
+	__type(value, __u32);           /* SG_EVT_* bits wanted at this prefix */
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+} sg_watch SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_LPM_TRIE);
+	__uint(max_entries, SG_BPF_WATCH_MAX);
+	__type(key, struct sg_watch_key);
+	__type(value, __u32);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+} sg_watch_home SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, SG_BPF_REPORTS_SZ);
+} sg_reports SEC(".maps");
+
+/* Set to 1 by the daemon once it is reading sg_reports. Its own map rather
+ * than a field of sg_control, which three threads read-modify-write. */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} sg_report_on SEC(".maps");
+
+/* Reports the ring had no room for: visible under-reporting, never silent. */
+__u64 sg_reports_dropped = 0;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -276,6 +313,92 @@ static __always_inline int path_to_rule(struct sg_scratch *sc, __u32 len)
 #define SG_EVT_OPEN 0x02   /* mirrors EVT_OPEN */
 
 /*
+ * The report. Two trie lookups at most, after the path is already resolved
+ * and zero-filled (path_to_rule did both), so an open matching no watched
+ * prefix costs one LPM miss. Callbacks through bpf_loop, like the scans above,
+ * so the verifier checks each byte loop once.
+ */
+struct home_ctx {
+	struct sg_scratch *sc;
+	__u32 len;
+	__u32 sep;      /* index of the '/' ending /home/<user>, or 0 */
+};
+
+/* First '/' at or after index 6, i.e. the one after the user's name. */
+static int home_sep_cb(__u32 i, void *ctx)
+{
+	struct home_ctx *c = ctx;
+
+	if (i >= SG_BPF_PATH_MAX || i >= c->len)
+		return 1;
+	if (i < 6)
+		return 0;
+	if (c->sc->path.p[i] == '/') {
+		c->sep = i;
+		return 1;
+	}
+	return 0;
+}
+
+/* wk.p[i] = path[sep + 1 + i], zero past the end. */
+static int home_copy_cb(__u32 i, void *ctx)
+{
+	struct home_ctx *c = ctx;
+
+	if (i >= SG_BPF_PATH_MAX)
+		return 1;
+	__u32 src = c->sep + 1 + i;
+	c->sc->wk.p[i] = src < SG_BPF_PATH_MAX
+	               ? c->sc->path.p[src & (SG_BPF_PATH_MAX - 1)] : '\0';
+	return 0;
+}
+
+static __always_inline void sg_report(struct sg_scratch *sc, __u32 len,
+                                      __u8 evt, __u32 flags)
+{
+	__u32 zero = 0;
+	__u32 *on = bpf_map_lookup_elem(&sg_report_on, &zero);
+	if (!on || !*on || len == 0 || len >= SG_BPF_PATH_MAX)
+		return;
+
+	__builtin_memcpy(sc->wk.p, sc->path.p, SG_BPF_PATH_MAX);
+	sc->wk.prefixlen = len * 8;
+	__u32 *want = bpf_map_lookup_elem(&sg_watch, &sc->wk);
+	int hit = want && (*want & evt);
+
+	/* "/home/" — 6 bytes, then the user, then the part the dotfile rules name */
+	if (!hit && len > 7 &&
+	    sc->path.p[0] == '/' && sc->path.p[1] == 'h' && sc->path.p[2] == 'o' &&
+	    sc->path.p[3] == 'm' && sc->path.p[4] == 'e' && sc->path.p[5] == '/') {
+		struct home_ctx hc = { .sc = sc, .len = len, .sep = 0 };
+		bpf_loop(SG_BPF_PATH_MAX, home_sep_cb, &hc, 0);
+		if (hc.sep > 6 && hc.sep + 1 < len) {
+			bpf_loop(SG_BPF_PATH_MAX, home_copy_cb, &hc, 0);
+			sc->wk.prefixlen = (len - hc.sep - 1) * 8;
+			want = bpf_map_lookup_elem(&sg_watch_home, &sc->wk);
+			hit = want && (*want & evt);
+		}
+	}
+	if (!hit)
+		return;
+
+	struct sg_bpf_report *r = bpf_ringbuf_reserve(&sg_reports, sizeof(*r), 0);
+	if (!r) {
+		__sync_fetch_and_add(&sg_reports_dropped, 1);
+		return;
+	}
+	__u64 pt = bpf_get_current_pid_tgid();
+	r->pid   = (__u32)(pt >> 32);
+	r->uid   = (__u32)bpf_get_current_uid_gid();
+	r->flags = flags;
+	r->evt   = evt;
+	r->pad[0] = r->pad[1] = r->pad[2] = 0;
+	bpf_get_current_comm(r->comm, sizeof(r->comm));
+	__builtin_memcpy(r->path, sc->path.p, SG_BPF_PATH_MAX);
+	bpf_ringbuf_submit(r, 0);
+}
+
+/*
  * Shared tail for both hooks: resolve the path, find a rule, check the
  * conditions that are not the key, then ask the gate. Returns -EPERM or 0.
  *
@@ -283,7 +406,7 @@ static __always_inline int path_to_rule(struct sg_scratch *sc, __u32 len)
  * be produced, and exactly one call to sg_may_deny(). A second hook that grew
  * its own copy of this is how one of them would eventually skip the gate.
  */
-static __always_inline int sg_evaluate(struct path *p, __u8 evt)
+static __always_inline int sg_evaluate(struct path *p, __u8 evt, __u32 flags)
 {
 	__u32 zero = 0;
 	struct sg_scratch *sc = bpf_map_lookup_elem(&sg_scratch_map, &zero);
@@ -297,6 +420,11 @@ static __always_inline int sg_evaluate(struct path *p, __u8 evt)
 	}
 
 	int idx = path_to_rule(sc, (__u32)(n - 1));
+
+	/* Reported whatever the gate decides below: a refused open is still an
+	 * attempt somebody should see. */
+	sg_report(sc, (__u32)(n - 1), evt, flags);
+
 	if (idx < 0)
 		return 0;		/* the overwhelmingly common case */
 
@@ -363,7 +491,7 @@ int BPF_PROG(sg_file_open, struct file *file)
 	 * a silent under-enforce for very deep paths, so sg_evaluate counts it:
 	 * fail open, but visibly.
 	 */
-	return sg_evaluate(&file->f_path, SG_EVT_OPEN);
+	return sg_evaluate(&file->f_path, SG_EVT_OPEN, BPF_CORE_READ(file, f_flags));
 }
 
 /*
@@ -382,5 +510,5 @@ int BPF_PROG(sg_file_open, struct file *file)
 SEC("lsm/bprm_check_security")
 int BPF_PROG(sg_bprm_check, struct linux_binprm *bprm)
 {
-	return sg_evaluate(&bprm->file->f_path, SG_EVT_EXEC);
+	return sg_evaluate(&bprm->file->f_path, SG_EVT_EXEC, 0);
 }

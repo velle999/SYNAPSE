@@ -319,11 +319,12 @@ int sg_ai_build_context(const sg_event_t *e, char *out, size_t out_len)
         [EVT_SOCKET] = "create_socket",
         [EVT_PTRACE] = "ptrace_attach",
         [EVT_MODULE] = "load_kernel_module",
-        [EVT_MOUNT]  = "mount_filesystem",
+        [EVT_MOUNT]  = "bind_or_move_mount_on_host",
         [EVT_SETUID] = "setuid_change",
+        [EVT_SIGNAL] = "stop_or_kill_signal_to_security_process",
     };
 
-    const char *ename = (e->evt_type < 0x80 && evt_names[e->evt_type])
+    const char *ename = (e->evt_type <= 0x80 && evt_names[e->evt_type])
                         ? evt_names[e->evt_type] : "unknown";
 
     /* Describe setuid by its target, not a fixed label: telling the model
@@ -331,6 +332,15 @@ int sg_ai_build_context(const sg_event_t *e, char *out, size_t out_len)
     if (e->evt_type == EVT_SETUID && e->has_arg0)
         ename = (e->arg0 == 0) ? "setuid_to_root"
                                : "setuid_drop_to_unprivileged_uid";
+    /* The rest of the credential family, by which call it was: a gid change
+     * to root is not a uid change, and capset's arg0 is a capability set. */
+    if (e->evt_type == EVT_SETUID) {
+        switch (e->syscall_nr) {
+        case 106: case 114: case 119: case 123: ename = "setgid_to_root_group"; break;
+        case 126: ename = "unprivileged_process_enabling_admin_capabilities"; break;
+        default: break;
+        }
+    }
 
     /* sizeof the kmod's fields, fully escaped, quoted and terminated. The
      * copies are bounded by the arrays even if a field arrives unterminated. */
