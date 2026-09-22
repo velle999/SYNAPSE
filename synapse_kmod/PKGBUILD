@@ -103,7 +103,15 @@ pkgver=0.1.0
 #   watched by the integrity check and counted in `openat_missed` together.
 #   tests/run-vm-tests.sh: the three GAPs this closes are PASSes, with new
 #   cases for every call above, and all four modes pass.
-pkgrel=30
+# 31: NO FRAMEBUFFER CONSOLE ON THE NVIDIA DISPLAY DRIVER. Ships
+#   /usr/lib/modprobe.d/90-synapse-nvidia-drm.conf with nvidia_drm fbdev=0.
+#   On 615.71.09 a suspend can hang forever at ENTRY: the PM notifier hands
+#   the display back to nvidia_drm's fbdev console, the resulting modeset makes
+#   a GSP RPC that never answers, and the task spins holding the nvkms lock.
+#   The monitors go dark, the machine never sleeps, and only a reboot recovers
+#   it. With fbdev=0 that code path does not run. The file has the stack.
+#   Only affects NVIDIA; Intel and AMD keep their console.
+pkgrel=31
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')
@@ -180,6 +188,12 @@ package() {
     # parameters, and the two need to be revertible separately.
     install -Dm644 config/90-synapse-blacklist.conf \
         "$pkgdir/usr/lib/modprobe.d/90-synapse-blacklist.conf"
+
+    # nvidia_drm fbdev=0: its suspend-time console handback is where the GSP
+    # RPC hang at suspend entry happens. Its own file so it can be overridden
+    # (a same-named file in /etc/modprobe.d) without touching the blacklist.
+    install -Dm644 config/90-synapse-nvidia-drm.conf \
+        "$pkgdir/usr/lib/modprobe.d/90-synapse-nvidia-drm.conf"
 
     # Lynis audit profile. Lynis merges every .prf in /etc/lynis, so this adds
     # to the stock default.prf rather than replacing it. It is in backup=, so
