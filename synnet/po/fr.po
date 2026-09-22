@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,51 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet : %s nécessite root (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet : aucune connexion enregistrée ne s'appelle '%s' — `nmcli connection "
+"show` les liste\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr ""
+"synnet : plusieurs connexions s'appellent '%s' — indiquez plutôt son UUID\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet : impossible de mettre à jour %s\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet : %s enregistré, mais le pare-feu n'a pas pu être rechargé — cette "
+"machine n'est PAS filtrée en entrée en ce moment\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet : « %s » est maintenant de confiance — les appareils qui s'y trouvent "
+"peuvent joindre les services de cette machine\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet : « %s » n'est plus de confiance — seuls les réponses, le ping, le "
+"DHCP et les ports ouverts en passent\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet : --firewall nécessite root (sudo synnet --firewall)\n"
@@ -48,14 +93,11 @@ msgstr ""
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
 "synnet : pare-feu d'entrée appliqué (rejet par défaut en entrée ; loopback, "
-"connexions établies, ICMP, sources en plage privée et DHCP acceptés)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet : %s nécessite root (sudo synnet %s %s)\n"
+"connexions établies, ICMP et DHCP acceptés, et sources en plage privée sur "
+"les réseaux de confiance)\n"
 
 #, c-format
 msgid ""
@@ -64,10 +106,6 @@ msgid ""
 msgstr ""
 "synnet : « %s » n'est pas un nom d'interface valide (1 à 15 caractères : "
 "lettres, chiffres, « _ », « . », « - »)\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet : impossible de mettre à jour %s\n"
 
 #, c-format
 msgid ""
@@ -84,14 +122,6 @@ msgid ""
 msgstr ""
 "synnet : %s retiré des fiables dans %s — le pare-feu est désactivé, donc "
 "rien n'a changé dans le noyau.\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet : %s enregistré, mais le pare-feu n'a pas pu être rechargé — cette "
-"machine n'est PAS filtrée en entrée en ce moment\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -115,27 +145,48 @@ msgstr ""
 "dès son apparition.\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet : « %s » n'est pas une règle valide. Écrivez-la comme <tcp|udp>/<port> suivi d'une source, par ex. « tcp/5900 100.64.0.0/10 » ou « tcp/5900 any »\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet : « %s » n'est pas une règle valide. Écrivez-la comme <tcp|udp>/"
+"<port> suivi d'une source, par ex. « tcp/5900 100.64.0.0/10 » ou « tcp/5900 "
+"any »\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet : « %s » enregistré dans %s — le pare-feu est désactivé, rien n'a donc changé dans le noyau.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet : « %s » enregistré dans %s — le pare-feu est désactivé, rien n'a "
+"donc changé dans le noyau.\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet : « %s » retiré de %s — le pare-feu est désactivé, rien n'a donc changé dans le noyau.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet : « %s » retiré de %s — le pare-feu est désactivé, rien n'a donc "
+"changé dans le noyau.\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet : « %s » enregistré, mais le pare-feu n'a pas pu être rechargé — cette machine n'est PAS filtrée en entrée actuellement\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet : « %s » enregistré, mais le pare-feu n'a pas pu être rechargé — "
+"cette machine n'est PAS filtrée en entrée actuellement\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet : %s est ouvert\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet : ⚠ c'est ouvert à N'IMPORTE QUELLE source, y compris Internet si cette machine y est joignable. Indiquez un CIDR pour restreindre.\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet : ⚠ c'est ouvert à N'IMPORTE QUELLE source, y compris Internet si "
+"cette machine y est joignable. Indiquez un CIDR pour restreindre.\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -185,11 +236,13 @@ msgstr ""
 "    écrire dans /run/synnet.\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    ACTIF — rejet par défaut en entrée, LAN et trafic établi\n"
-"    autorisés. Appliqué par synnet au démarrage et revérifié chaque minute.\n"
+"    ACTIF — rejet par défaut en entrée ; connexions établies et, sur\n"
+"    les réseaux de confiance, réseau local acceptés. Appliqué par\n"
+"    synnet au démarrage et vérifié chaque minute.\n"
 
 #, c-format
 msgid ""
@@ -198,6 +251,24 @@ msgid ""
 msgstr ""
 "    ⚠ reconstruit %s fois pendant cette exécution — quelque chose sur\n"
 "      cette machine vide nftables.\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    NetworkManager n'a pas répondu : les sources en plage privée sont "
+"acceptées sur toutes les interfaces.\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s : « %s » — de confiance\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s : « %s » — PAS de confiance ; seuls les réponses, le ping, le DHCP et "
+"les ports ouverts passent\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -265,8 +336,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  Ports ouverts à des sources que cette machine rejetterait sinon\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    aucun — seuls la boucle locale, les réponses, ICMP et les sources\n    d'adresses privées atteignent cette machine.\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    aucun — seuls la boucle locale, les réponses, ICMP et les sources\n"
+"    d'adresses privées atteignent cette machine.\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -284,3 +359,61 @@ msgstr "    (non affiché — nécessite root)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    aucune — la table synnet n'est pas chargée.\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager n'a pas répondu, aucun réseau n'est donc connu : les sources "
+"en plage privée sont acceptées sur toutes les interfaces.\n"
+
+msgid "On now:\n"
+msgstr "Connecté en ce moment :\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — de confiance\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"  %-10s %s — PAS de confiance : seuls les réponses, le ping, le DHCP et les "
+"ports ouverts passent\n"
+
+msgid "Not connected to any network.\n"
+msgstr "Connecté à aucun réseau.\n"
+
+msgid "Trusted networks:\n"
+msgstr "Réseaux de confiance :\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "Aucun réseau n'est encore de confiance.\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr ""
+"synnet : --ask interroge l'utilisateur du bureau ; lancez-le en son nom\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"Faire confiance au réseau « %s » ?\n"
+"\n"
+"Sur un réseau de confiance, les autres appareils qui s'y trouvent peuvent "
+"joindre les services partagés de cet ordinateur — partage de fichiers, "
+"serveurs multimédias, bureau à distance. Faites confiance à vos propres "
+"réseaux, comme à la maison ou au travail. Pas au Wi-Fi public."
+
+msgid "New network"
+msgstr "Nouveau réseau"
+
+msgid "Trust"
+msgstr "Faire confiance"
+
+msgid "Don't trust"
+msgstr "Ne pas faire confiance"

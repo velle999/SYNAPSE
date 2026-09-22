@@ -1025,15 +1025,29 @@ msgid ""
 msgstr "把名字翻译成地址的服务器。网络是通的却打不开网站，通常就是这里的问题。"
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"入站流量默认丢弃。回环、本机发起连接的响应、ICMP 以及来自本地网络的一切都会放"
-"行；来自公网地址的未经请求的流量则不会。"
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "入站默认丢弃。允许回环、对本机所发起连接的回复和 ICMP，本地网络仅在受信任网络上允许；其他未经请求的流量一律不允许。"
 
 msgid "input filtering"
 msgstr "入站过滤"
+
+msgid "trusted"
+msgstr "受信任"
+
+msgid "not trusted"
+msgstr "不受信任"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "该网络中的其他设备可以访问本机的共享服务 — 文件共享、媒体服务器、远程桌面。"
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "只允许来自该网络的回复、ping、DHCP 和已开放的端口。如果这是你自己的网络（比如家里或公司），请信任它。"
 
 msgid "container links"
 msgstr "容器链接"
@@ -1553,7 +1567,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "本机的 synguard 不会启用内核闸门 · 它早于 0.1.0-44，或其单元已被修改 · 其拒绝规则只在事后生效"
+msgstr ""
+"本机的 synguard 不会启用内核闸门 · 它早于 0.1.0-44，或其单元已被修改 · 其拒绝"
+"规则只在事后生效"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1852,6 +1868,12 @@ msgstr "开启 — 拒绝来自本地网络之外的主动连接"
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "关闭 — 在任何网络上都回应任何到达本机的请求"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "受信任 — 其中的其他设备可以访问本机的共享服务"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "不受信任 — 只允许回复、ping、DHCP 和已开放的端口"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -1914,6 +1936,14 @@ msgid ""
 "another account with its own files and desktop — at the login screen, Tab "
 "moves to the name field"
 msgstr "另一个拥有自己文件和桌面的账户 — 在登录界面按 Tab 可切换到用户名栏"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "入站流量默认丢弃。回环、本机发起连接的响应、ICMP 以及来自本地网络的一切都"
+#~ "会放行；来自公网地址的未经请求的流量则不会。"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

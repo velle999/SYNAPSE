@@ -1110,16 +1110,29 @@ msgstr ""
 "levantada y aun así no abre ningún sitio suele ser esto."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"Todo lo entrante se descarta por defecto. El bucle local, las respuestas a "
-"conexiones hechas por esta máquina, ICMP y todo lo que venga de la red local "
-"pasan; el tráfico no solicitado desde una dirección pública, no."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "Descarte por defecto en entrada. Pasan el loopback, las respuestas a conexiones de este equipo y el ICMP, y la red local solo en una red de confianza; el resto del tráfico no solicitado, no."
 
 msgid "input filtering"
 msgstr "filtrado de entrada"
+
+msgid "trusted"
+msgstr "de confianza"
+
+msgid "not trusted"
+msgstr "no es de confianza"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "Los demás dispositivos de esta red pueden acceder a los servicios compartidos de este equipo: carpetas compartidas, servidores multimedia, escritorio remoto."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "Desde esta red solo entran respuestas, ping, DHCP y puertos abiertos. Confía en ella si es tuya, como la de casa o la del trabajo."
 
 msgid "container links"
 msgstr "enlaces de contenedores"
@@ -1684,7 +1697,10 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "synguard en este equipo no arma la barrera del núcleo · es anterior a 0.1.0-44, o su unidad se ha modificado · sus reglas de denegación solo actúan a posteriori"
+msgstr ""
+"synguard en este equipo no arma la barrera del núcleo · es anterior a "
+"0.1.0-44, o su unidad se ha modificado · sus reglas de denegación solo "
+"actúan a posteriori"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -2008,6 +2024,12 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr ""
 "Desactivado — responder a todo lo que llegue a esta máquina, en cualquier red"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "De confianza — los demás dispositivos de esa red pueden acceder a los servicios compartidos de este equipo"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "No es de confianza — solo entran respuestas, ping, DHCP y puertos abiertos"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2078,6 +2100,15 @@ msgid ""
 msgstr ""
 "otra cuenta con sus propios archivos y escritorio — en la pantalla de inicio "
 "de sesión, Tab pasa al campo del nombre"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "Todo lo entrante se descarta por defecto. El bucle local, las respuestas "
+#~ "a conexiones hechas por esta máquina, ICMP y todo lo que venga de la red "
+#~ "local pasan; el tráfico no solicitado desde una dirección pública, no."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

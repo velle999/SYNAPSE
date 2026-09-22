@@ -1117,16 +1117,29 @@ msgstr ""
 "steht und trotzdem keine Seite öffnet, liegt meistens hieran."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"Eingehendes wird grundsätzlich verworfen. Loopback, Antworten auf "
-"Verbindungen dieser Maschine, ICMP und alles aus dem lokalen Netz werden "
-"durchgelassen; unaufgeforderter Verkehr von einer öffentlichen Adresse nicht."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "Eingehend standardmäßig verworfen. Loopback, Antworten auf Verbindungen dieses Rechners und ICMP kommen durch, das lokale Netz nur in einem vertrauenswürdigen Netzwerk; anderer unaufgeforderter Verkehr nicht."
 
 msgid "input filtering"
 msgstr "Eingangsfilterung"
+
+msgid "trusted"
+msgstr "vertrauenswürdig"
+
+msgid "not trusted"
+msgstr "nicht vertrauenswürdig"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "Andere Geräte in diesem Netzwerk können die freigegebenen Dienste dieses Rechners erreichen — Dateifreigaben, Medienserver, Fernzugriff."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "Aus diesem Netzwerk kommen nur Antworten, Ping, DHCP und geöffnete Ports herein. Vertraue ihm, wenn es dein eigenes ist, etwa zu Hause oder bei der Arbeit."
 
 msgid "container links"
 msgstr "Container-Verbindungen"
@@ -1696,7 +1709,10 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "synguard auf diesem Rechner schaltet das Kernel-Gate nicht scharf · es ist älter als 0.1.0-44, oder seine Unit wurde geändert · seine Sperrregeln greifen nur im Nachhinein"
+msgstr ""
+"synguard auf diesem Rechner schaltet das Kernel-Gate nicht scharf · es ist "
+"älter als 0.1.0-44, oder seine Unit wurde geändert · seine Sperrregeln "
+"greifen nur im Nachhinein"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -2020,6 +2036,12 @@ msgstr ""
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "Aus — auf alles antworten, was diese Maschine erreicht, in jedem Netz"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "Vertrauenswürdig — andere Geräte darin können die freigegebenen Dienste dieses Rechners erreichen"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "Nicht vertrauenswürdig — nur Antworten, Ping, DHCP und geöffnete Ports kommen herein"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2092,6 +2114,16 @@ msgid ""
 msgstr ""
 "ein weiteres Konto mit eigenen Dateien und eigenem Desktop — am "
 "Anmeldebildschirm wechselt Tab ins Namensfeld"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "Eingehendes wird grundsätzlich verworfen. Loopback, Antworten auf "
+#~ "Verbindungen dieser Maschine, ICMP und alles aus dem lokalen Netz werden "
+#~ "durchgelassen; unaufgeforderter Verkehr von einer öffentlichen Adresse "
+#~ "nicht."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

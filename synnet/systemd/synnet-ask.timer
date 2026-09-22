@@ -1,0 +1,11 @@
+[Unit]
+Description=Ask about an untrusted network once after login
+
+[Timer]
+# The network usually came up before anyone logged in, when there was nobody
+# to ask. Late enough for the compositor to have exported WAYLAND_DISPLAY.
+OnStartupSec=30s
+Unit=synnet-ask.service
+
+[Install]
+WantedBy=timers.target

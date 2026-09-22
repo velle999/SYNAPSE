@@ -1052,16 +1052,29 @@ msgstr ""
 "पर वजह यही होती है।"
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"भीतर आने वाला सब कुछ डिफ़ॉल्ट रूप से गिरा दिया जाता है। लूपबैक, इस मशीन द्वारा बनाए गए "
-"संबंधों के उत्तर, ICMP और स्थानीय नेटवर्क से आने वाला सब कुछ जाने दिया जाता है; सार्वजनिक "
-"पते से बिना माँगे आया ट्रैफ़िक नहीं।"
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "इनपुट डिफ़ॉल्ट-ड्रॉप। लूपबैक, इस मशीन के कनेक्शनों के जवाब और ICMP अंदर आते हैं, और स्थानीय नेटवर्क केवल विश्वसनीय नेटवर्क पर; बाकी बिन माँगा ट्रैफ़िक नहीं।"
 
 msgid "input filtering"
 msgstr "आवक छनाई"
+
+msgid "trusted"
+msgstr "विश्वसनीय"
+
+msgid "not trusted"
+msgstr "विश्वसनीय नहीं"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "इस नेटवर्क के दूसरे डिवाइस इस मशीन की साझा सेवाओं तक पहुँच सकते हैं — फ़ाइल शेयरिंग, मीडिया सर्वर, रिमोट डेस्कटॉप।"
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "इस नेटवर्क से केवल जवाब, ping, DHCP और खुले पोर्ट ही अंदर आते हैं। अगर यह आपका अपना नेटवर्क है, जैसे घर या दफ़्तर का, तो इस पर भरोसा करें।"
 
 msgid "container links"
 msgstr "कंटेनर कड़ियाँ"
@@ -1603,7 +1616,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "इस मशीन पर synguard कर्नेल गेट सक्रिय नहीं करता · यह 0.1.0-44 से पुराना है, या इसकी यूनिट बदली गई है · इसके निषेध नियम केवल बाद में काम करते हैं"
+msgstr ""
+"इस मशीन पर synguard कर्नेल गेट सक्रिय नहीं करता · यह 0.1.0-44 से पुराना है, या इसकी "
+"यूनिट बदली गई है · इसके निषेध नियम केवल बाद में काम करते हैं"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1913,6 +1928,12 @@ msgstr "चालू — स्थानीय नेटवर्क के ब�
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "बंद — किसी भी नेटवर्क पर, इस मशीन तक पहुँचने वाली हर चीज़ का उत्तर दें"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "विश्वसनीय — उस पर मौजूद दूसरे डिवाइस इस मशीन की साझा सेवाओं तक पहुँच सकते हैं"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "विश्वसनीय नहीं — केवल जवाब, ping, DHCP और खुले पोर्ट ही अंदर आते हैं"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -1979,6 +2000,15 @@ msgid ""
 msgstr ""
 "अपनी फ़ाइलों और डेस्कटॉप वाला एक और खाता — लॉगिन स्क्रीन पर Tab नाम वाले खाने पर ले "
 "जाता है"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "भीतर आने वाला सब कुछ डिफ़ॉल्ट रूप से गिरा दिया जाता है। लूपबैक, इस मशीन द्वारा बनाए "
+#~ "गए संबंधों के उत्तर, ICMP और स्थानीय नेटवर्क से आने वाला सब कुछ जाने दिया जाता है; "
+#~ "सार्वजनिक पते से बिना माँगे आया ट्रैफ़िक नहीं।"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

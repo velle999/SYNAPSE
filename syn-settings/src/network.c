@@ -335,6 +335,29 @@ static const char *fw_ifaces_file(void)
 	return (e && *e) ? e : "/etc/synnet/trusted-ifaces";
 }
 
+/* The networks this machine is on, as synnet published them at its last apply:
+ * `uuid<TAB>trusted|untrusted<TAB>dev<TAB>name`, `#` lines notes. */
+static const char *fw_networks_file(void)
+{
+	const char *e = getenv("SYNNET_NETWORKS_STATE_FILE");
+	return (e && *e) ? e : "/run/synnet/networks";
+}
+
+int synnet_network_trusted(const char *uuid)
+{
+	FILE *f = fopen(fw_networks_file(), "r");
+	if (!f) return -1;
+	char line[512];
+	int r = -1;
+	while (r < 0 && fgets(line, sizeof line, f)) {
+		if (line[0] == '#' || strncmp(line, uuid, 36) || line[36] != '\t')
+			continue;
+		r = !strncmp(line + 37, "trusted\t", 8);
+	}
+	fclose(f);
+	return r;
+}
+
 /* One key out of a `key=value` file, or "" — used for both synnet files. */
 static void kv_get(const char *path, const char *key, char *out, size_t outlen)
 {
@@ -388,8 +411,8 @@ static void firewall_rows(void)
 		value  = "on";
 		state  = "active";
 		detail = N_("Default-drop inbound. Loopback, replies to connections this "
-		         "machine made, ICMP, and anything from the local network are "
-		         "let through; unsolicited traffic from a public address is not.");
+		         "machine made and ICMP are let through, and the local network "
+		         "only on a trusted network; other unsolicited traffic is not.");
 	} else if (!strcmp(st, "off")) {
 		/* The daemon publishes this after an explicit switch-off, so the
 		 * preference and the state agree and there is nothing to reconcile. */
@@ -405,6 +428,44 @@ static void firewall_rows(void)
 
 	rec_row("firewall\t%s\t%s\t%s\t%s\tchoice:firewall",
 	        N_("input filtering"), value, state, detail);
+
+	/* ── One row per network this machine is on ─────────────────────────
+	 *
+	 * Trust is per network, not per machine: a café's Wi-Fi hands out the same
+	 * private addresses a home router does, so synnet lets the local network
+	 * in only on a network somebody has trusted. The row is where that answer
+	 * is changed — and where a share that "stopped working" at home turns out
+	 * to be a network that was never trusted.
+	 *
+	 * The name is the connection's, so it is data, never translated. Not
+	 * trusted is not a warning: it is what every network starts as. */
+	if (want) {
+		FILE *nf = fopen(fw_networks_file(), "r");
+		if (nf) {
+			char line[512];
+			while (fgets(line, sizeof line, nf)) {
+				if (line[0] == '#') continue;
+				line[strcspn(line, "\r\n")] = '\0';
+				char *uuid = strtok(line, "\t"), *tr = strtok(NULL, "\t");
+				char *dev = strtok(NULL, "\t"), *name = strtok(NULL, "");
+				if (!uuid || !tr || !dev || strlen(uuid) != 36) continue;
+				char nm[160];
+				snprintf(nm, sizeof nm, "%s", name && *name ? name : dev);
+				tsv_clean(nm);
+				int t = !strcmp(tr, "trusted");
+				rec_row("firewall\t%s\t%s\t-\t%s\tchoice:network/%s",
+				        nm, t ? N_("trusted") : N_("not trusted"),
+				        t ? N_("Other devices on this network can reach this "
+				               "machine's shared services — file sharing, media "
+				               "servers, remote desktop.")
+				          : N_("Only replies, ping, DHCP and opened ports get in "
+				               "from this network. Trust it if it is your own, "
+				               "such as home or work."),
+				        uuid);
+			}
+			fclose(nf);
+		}
+	}
 
 	/* ── Container / VM links ────────────────────────────────────────────
 	 *

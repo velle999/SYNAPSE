@@ -1,0 +1,13 @@
+# /etc/synnet/trusted-networks — the networks this machine trusts.
+#
+# One NetworkManager connection per line: `<uuid> <name>`. The name is only a
+# reminder; the uuid is what counts. `nmcli connection show` lists them.
+#
+# On a trusted network, other devices on it can reach this machine's services —
+# file sharing, media servers, remote desktop. On any other network, only
+# replies to connections this machine made, ping, DHCP and ports opened with
+# `synnet --open` get in.
+#
+# Write it with `sudo synnet --trust-network <uuid|name>` (or --untrust-network),
+# or Settings ▸ Network, which apply the change at once. Editing this file by
+# hand takes effect at the next connection change, or `sudo synnet --firewall`.

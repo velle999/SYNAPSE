@@ -515,6 +515,19 @@ int do_choices(int argc, char **argv)
 		return 0;
 	}
 
+	/* A network's trust (the Network pane's per-network rows). The ids are
+	 * synnet's verbs' words, never translated. */
+	if (!strncmp(key, "network/", 8)) {
+		int t = synnet_network_trusted(key + 8);
+		rec_row("trusted\t%s\t%s",
+		        N_("Trusted — other devices on it can reach this machine's "
+		           "shared services"), t == 1 ? "current" : "-");
+		rec_row("untrusted\t%s\t%s",
+		        N_("Not trusted — only replies, ping, DHCP and opened ports "
+		           "get in"), t == 0 ? "current" : "-");
+		return 0;
+	}
+
 	/* The AI backend's three settable values. Asked of the helper for the
 	 * CURRENT one rather than read off a file, because the answer has to come
 	 * from the MASK first: a hand-placed `systemctl mask synapd.service` means

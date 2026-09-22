@@ -157,6 +157,61 @@ int  synnet_open_port_set(const char *spec, int open);
 int  synnet_port_rule_norm(const char *proto_port, const char *src,
                            char *out, size_t outsz);
 
+/*
+ * ── Which networks are trusted ──────────────────────────────────────────────
+ *
+ * ⛔ "PRIVATE ADDRESS" IS NOT "MY NETWORK". The input chain used to accept every
+ * port from any RFC1918 / ULA / link-local source, on every interface — and a
+ * café or hotel Wi-Fi hands out exactly those addresses, so every other guest
+ * counted as the home LAN. Now a PHYSICAL interface NetworkManager manages is
+ * untrusted unless the connection it carries is listed here: from an untrusted
+ * network only replies, ICMP, DHCP and --open ports get in.
+ *
+ * Virtual interfaces keep the old rule (a private source is accepted), because
+ * that is what containers and VMs talking to their host depend on, and they are
+ * not a network anybody else is on. tailscale0 is accepted outright: who is on
+ * a tailnet is decided by Tailscale's own login and ACLs.
+ *
+ * Trust is per NetworkManager CONNECTION (its UUID), not per interface: the same
+ * wlp6s0 is trusted at home and not at the café. A connection nobody has
+ * answered for is untrusted, and `synnet --ask` (the user's synnet-ask.service)
+ * asks about it once.
+ *
+ * ⚠ When NetworkManager does not answer, nothing is known about any network and
+ * the old rule applies everywhere — a server without NetworkManager must not
+ * lose its LAN to this. It is said in the journal and the state file.
+ */
+#define SYNNET_FW_NETWORKS     "/etc/synnet/trusted-networks"
+#define SYNNET_NETWORKS_STATE  "/run/synnet/networks"
+#define SYNNET_UUID_MAX        40
+#define SYNNET_NETNAME_MAX     128
+#define SYNNET_MAX_NETWORKS    32
+const char *synnet_fw_networks_path(void);      /* $SYNNET_FW_NETWORKS_FILE */
+const char *synnet_networks_state_path(void);   /* $SYNNET_NETWORKS_STATE_FILE */
+
+typedef struct {
+    char dev[SYNNET_IFNAME_MAX];
+    char uuid[SYNNET_UUID_MAX];      /* "" when the device carries no connection */
+    char name[SYNNET_NETNAME_MAX];
+    int  trusted;
+} synnet_net_t;
+
+/* The physical, managed interfaces and whether each is on a trusted network.
+ * Returns how many, or -1 when NetworkManager did not answer (the old rule). */
+int  synnet_networks_scan(synnet_net_t *out, size_t max);
+/* Write /run/synnet/networks: `uuid<TAB>trusted|untrusted<TAB>dev<TAB>name`. */
+void synnet_networks_publish(const synnet_net_t *nets, int n);
+int  synnet_uuid_valid(const char *u);
+/* 0, -1 if the file could not be written, -2 if the uuid is not one.
+ * ⚠ THE CALLER HAS TO RE-APPLY THE FIREWALL, as with the other lists. */
+int  synnet_trusted_network_set(const char *uuid, const char *name, int trusted);
+/* A uuid, or a saved connection's exact name, to its uuid and name.
+ * 0, -1 if nothing matches, -2 if the name is on more than one connection. */
+int  synnet_network_resolve(const char *arg, char *uuid, size_t usz,
+                            char *name, size_t nsz);
+int  synnet_networks_list(void);   /* --networks */
+int  synnet_ask(void);             /* --ask, as the desktop user */
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,

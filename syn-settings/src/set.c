@@ -17,6 +17,7 @@
 #include "synsettings.h"
 #include "i18n.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -414,6 +415,30 @@ int do_set(int argc, char **argv)
 	{
 		int rc = security_set(key, val);
 		if (rc >= 0) return rc;
+	}
+
+	/* A network's trust — through synnet, which records it and re-applies the
+	 * firewall in one step, under pkexec like the firewall switch. The uuid is
+	 * checked here too: it lands in argv, never a shell, but a key that is not
+	 * one is refused rather than handed on. */
+	if (!strncmp(key, "network/", 8)) {
+		const char *u = key + 8;
+		int okuuid = strlen(u) == 36;
+		for (int i = 0; okuuid && i < 36; i++)
+			okuuid = (i == 8 || i == 13 || i == 18 || i == 23)
+			         ? u[i] == '-' : isxdigit((unsigned char)u[i]) != 0;
+		if (!okuuid)
+			return refuse("network/<uuid> takes a NetworkManager connection uuid");
+		if (strcmp(val, "trusted") && strcmp(val, "untrusted"))
+			return refuse("a network takes trusted or untrusted");
+		if (!have_cmd("synnet"))
+			return refuse("synnet is not installed — it is what applies the "
+			              "firewall on this system");
+		char *a[] = { (char *)"pkexec", (char *)"synnet",
+		              (char *)(strcmp(val, "trusted") ? "--untrust-network"
+		                                              : "--trust-network"),
+		              (char *)u, NULL };
+		return run_or_show(a);
 	}
 
 	if (!strcmp(key, "firewall")) {

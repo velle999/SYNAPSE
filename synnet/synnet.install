@@ -1,0 +1,28 @@
+# synnet.install — pacman scriptlet.
+#
+# ⚠ THE UPGRADE THAT INTRODUCES PER-NETWORK TRUST MARKS THE NETWORK THIS
+# MACHINE IS ON AS TRUSTED. Before 0.1.0-13 every private address was trusted
+# on every interface; without this, the first boot after the upgrade would drop
+# the home LAN (shares, the media server, a remote desktop) until somebody
+# answered a dialog. A fresh install gets no entry and is asked instead.
+
+post_upgrade() {
+    # $1 new version, $2 old version
+    [ "$(vercmp "$2" 0.1.0-13)" -lt 0 ] || return 0
+    f=/etc/synnet/trusted-networks
+    command -v nmcli >/dev/null 2>&1 || return 0
+    grep -Eq '^[0-9a-fA-F]{8}-' "$f" 2>/dev/null && return 0
+    LC_ALL=C nmcli -t -e yes -f DEVICE,CON-UUID,CONNECTION device status 2>/dev/null |
+    while IFS= read -r line; do
+        dev=${line%%:*}
+        rest=${line#*:}
+        uuid=${rest%%:*}
+        name=${rest#*:}
+        name=$(printf '%s' "$name" | sed 's/\\\(.\)/\1/g')
+        [ -e "/sys/class/net/$dev/device" ] || continue
+        printf '%s' "$uuid" | grep -Eqx '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}' || continue
+        printf '%s %s\n' "$uuid" "$name" >> "$f"
+        echo "  synnet: trusting \"$name\", the network this machine is on — Settings ▸ Network changes it"
+    done
+    /usr/bin/synnet --reapply >/dev/null 2>&1 || true
+}

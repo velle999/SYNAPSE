@@ -2027,6 +2027,44 @@ if [ -f "$QML" ]; then
         && ok "a firewall that keeps vanishing gets a row with the count" \
         || bad "the rebuild count was not reported"
 
+    # ── One row per network, each a trust choice ────────────────────────────
+    #
+    # A café hands out the same private addresses a home router does, so synnet
+    # lets the local network in only on a network somebody trusted. These rows
+    # are where that answer changes; their names are the connections' own.
+    fwnets="$fwdir/networks"
+    printf '# note line\n%s\t%s\t%s\t%s\n%s\t%s\t%s\t%s\n' \
+        51e4f81d-8de6-4752-a3fb-e36406a569ed untrusted wlp6s0 'Cafe Wi-Fi' \
+        11111111-2222-3333-4444-555555555555 trusted enp7s0 Home > "$fwnets"
+    printf 'state=active\nreasserts=0\n' > "$fwstate"
+    netrows=$(SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+              SYNNET_NETWORKS_STATE_FILE="$fwnets" "$BIN" --rec network)
+    grep -q "^firewall	Cafe Wi-Fi	not trusted	-	.*	choice:network/51e4f81d-8de6-4752-a3fb-e36406a569ed$" <<<"$netrows" \
+        && ok "an untrusted network is a row, with a trust choice keyed by its uuid" \
+        || bad "no row for the untrusted network: $(grep 'Cafe' <<<"$netrows")"
+    grep -q "^firewall	Home	trusted	" <<<"$netrows" \
+        && ok "a trusted network reads as trusted" || bad "no trusted row for Home"
+    grep -q "note line" <<<"$netrows" && bad "a # note line became a row" \
+        || ok "note lines are not rows"
+    ch=$(SYNNET_NETWORKS_STATE_FILE="$fwnets" "$BIN" choices \
+         network/51e4f81d-8de6-4752-a3fb-e36406a569ed)
+    grep -q "^untrusted	.*	current$" <<<"$ch" && grep -q "^trusted	.*	-$" <<<"$ch" \
+        && ok "the choices are trusted/untrusted, with the current one marked" \
+        || bad "network choices wrong: $ch"
+    "$BIN" set "network/x;rm -rf ~" trusted >/dev/null 2>&1 \
+        && bad "a network key that is not a uuid was accepted" \
+        || ok "a network key that is not a uuid is refused"
+    "$BIN" set network/51e4f81d-8de6-4752-a3fb-e36406a569ed maybe >/dev/null 2>&1 \
+        && bad "a trust value other than trusted/untrusted was accepted" \
+        || ok "a trust value other than trusted/untrusted is refused"
+    printf 'off\n' > "$fwpref"
+    SYNNET_FW_STATE_FILE="$fwstate" SYNNET_FW_PREF_FILE="$fwpref" \
+        SYNNET_NETWORKS_STATE_FILE="$fwnets" "$BIN" --rec network \
+        | grep -q "choice:network/" \
+        && bad "network rows drawn while the firewall is off" \
+        || ok "with the firewall off there are no network rows — nothing is filtered"
+    rm -f "$fwpref"
+
     # The row has to be actionable, or it is a status display wearing a
     # settings pane's clothes. `choice:` is the generic verb the QML already
     # knows, so no dead button — the verb sweep above covers that.

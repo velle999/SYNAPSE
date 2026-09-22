@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,6 +15,50 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s को root चाहिए (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: '%s' नाम का कोई सहेजा गया कनेक्शन नहीं है — `nmcli connection show` उनकी "
+"सूची दिखाता है\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr "synnet: '%s' नाम के एक से अधिक कनेक्शन हैं — इसके बजाय उसका UUID दें\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: %s अद्यतन नहीं हो सका\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s दर्ज हो गया, पर फ़ायरवॉल फिर से लोड नहीं हो सका — यह मशीन अभी इनग्रेस-"
+"फ़िल्टर्ड नहीं है\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet: “%s” पर भरोसा किया जा रहा है — उस पर मौजूद डिवाइस इस मशीन की सेवाओं तक "
+"पहुँच सकते हैं\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: अब “%s” पर भरोसा नहीं — वहाँ से केवल जवाब, ping, DHCP और खुले पोर्ट ही अंदर "
+"आते हैं\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall को root चाहिए (sudo synnet --firewall)\n"
@@ -44,14 +88,10 @@ msgstr "synnet: इनपुट फ़ायरवॉल लागू नही�
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
-"synnet: इनपुट फ़ायरवॉल लागू (इनपुट डिफ़ॉल्ट-ड्रॉप; लूपबैक, स्थापित कनेक्शन, ICMP, निजी "
-"रेंज के स्रोत और DHCP स्वीकृत)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: %s को root चाहिए (sudo synnet %s %s)\n"
+"synnet: इनपुट फ़ायरवॉल लागू (इनपुट डिफ़ॉल्ट-ड्रॉप; लूपबैक, स्थापित कनेक्शन, ICMP और DHCP "
+"स्वीकृत, और विश्वसनीय नेटवर्क पर निजी रेंज के स्रोत)\n"
 
 #, c-format
 msgid ""
@@ -59,10 +99,6 @@ msgid ""
 "'_', '.', '-')\n"
 msgstr ""
 "synnet: '%s' मान्य इंटरफ़ेस नाम नहीं है (1-15 अक्षर: अक्षर, अंक, '_', '.', '-')\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: %s अद्यतन नहीं हो सका\n"
 
 #, c-format
 msgid ""
@@ -79,14 +115,6 @@ msgid ""
 msgstr ""
 "synnet: %s को %s से अविश्वसनीय दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं "
 "बदला।\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet: %s दर्ज हो गया, पर फ़ायरवॉल फिर से लोड नहीं हो सका — यह मशीन अभी इनग्रेस-"
-"फ़िल्टर्ड नहीं है\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -107,27 +135,44 @@ msgstr ""
 "synnet: %s अभी मौजूद नहीं — नियम नाम से मेल खाता है और उसके आते ही लागू होगा।\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: '%s' एक वैध नियम नहीं है। इसे <tcp|udp>/<पोर्ट> और एक स्रोत के रूप में लिखें, जैसे 'tcp/5900 100.64.0.0/10' या 'tcp/5900 any'\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: '%s' एक वैध नियम नहीं है। इसे <tcp|udp>/<पोर्ट> और एक स्रोत के रूप में लिखें, जैसे "
+"'tcp/5900 100.64.0.0/10' या 'tcp/5900 any'\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: '%s' को %s में दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: '%s' को %s में दर्ज किया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
 msgstr "synnet: '%s' को %s से हटाया — फ़ायरवॉल बंद है, इसलिए कर्नेल में कुछ नहीं बदला।\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: '%s' दर्ज हो गया, पर फ़ायरवॉल पुनः लोड नहीं हो सका — यह मशीन अभी इनग्रेस-फ़िल्टर्ड नहीं है\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: '%s' दर्ज हो गया, पर फ़ायरवॉल पुनः लोड नहीं हो सका — यह मशीन अभी इनग्रेस-"
+"फ़िल्टर्ड नहीं है\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s खुला है\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ यह किसी भी स्रोत के लिए खुला है, और यदि यह मशीन इंटरनेट से पहुँच योग्य है तो इंटरनेट के लिए भी। इसे सीमित करने के लिए CIDR दें।\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ यह किसी भी स्रोत के लिए खुला है, और यदि यह मशीन इंटरनेट से पहुँच योग्य है तो "
+"इंटरनेट के लिए भी। इसे सीमित करने के लिए CIDR दें।\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -177,11 +222,13 @@ msgstr ""
 "    नहीं सका।\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    सक्रिय — इनपुट डिफ़ॉल्ट-ड्रॉप, LAN और स्थापित ट्रैफ़िक की अनुमति।\n"
-"    synnet इसे बूट पर लागू करता है और हर मिनट जाँचता है।\n"
+"    सक्रिय — इनपुट डिफ़ॉल्ट-ड्रॉप; स्थापित कनेक्शन और विश्वसनीय\n"
+"    नेटवर्क पर स्थानीय नेटवर्क की अनुमति। synnet इसे बूट पर\n"
+"    लागू करता है और हर मिनट जाँचता है।\n"
 
 #, c-format
 msgid ""
@@ -190,6 +237,23 @@ msgid ""
 msgstr ""
 "    ⚠ इस रन में %s बार फिर से बना — इस मशीन पर कुछ nftables को\n"
 "      खाली कर रहा है।\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    NetworkManager ने जवाब नहीं दिया: हर इंटरफ़ेस पर निजी रेंज के स्रोत स्वीकार किए "
+"जाते हैं।\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s: “%s” — विश्वसनीय\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s: “%s” — विश्वसनीय नहीं; केवल जवाब, ping, DHCP और खुले पोर्ट ही अंदर आते हैं\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -257,8 +321,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  उन स्रोतों के लिए खुले पोर्ट जिन्हें यह मशीन अन्यथा गिरा देती\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    कोई नहीं — इस मशीन तक केवल लूपबैक, उत्तर, ICMP और निजी\n    श्रेणियों के स्रोत पहुँचते हैं।\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    कोई नहीं — इस मशीन तक केवल लूपबैक, उत्तर, ICMP और निजी\n"
+"    श्रेणियों के स्रोत पहुँचते हैं।\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -276,3 +344,59 @@ msgstr "    (नहीं दिखाया — root चाहिए)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    कोई नहीं — synnet तालिका लोड नहीं है।\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager ने जवाब नहीं दिया, इसलिए कोई नेटवर्क ज्ञात नहीं है: हर इंटरफ़ेस पर निजी "
+"रेंज के स्रोत स्वीकार किए जाते हैं।\n"
+
+msgid "On now:\n"
+msgstr "अभी जुड़ा हुआ:\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — विश्वसनीय\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"  %-10s %s — विश्वसनीय नहीं: केवल जवाब, ping, DHCP और खुले पोर्ट ही अंदर आते हैं\n"
+
+msgid "Not connected to any network.\n"
+msgstr "किसी नेटवर्क से नहीं जुड़ा।\n"
+
+msgid "Trusted networks:\n"
+msgstr "विश्वसनीय नेटवर्क:\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "अभी तक किसी नेटवर्क पर भरोसा नहीं किया गया है।\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr ""
+"synnet: --ask डेस्कटॉप उपयोगकर्ता से पूछता है; इसे उसी उपयोगकर्ता के रूप में चलाएँ\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"नेटवर्क “%s” पर भरोसा करें?\n"
+"\n"
+"विश्वसनीय नेटवर्क पर उस नेटवर्क के दूसरे डिवाइस इस कंप्यूटर की साझा सेवाओं तक पहुँच सकते हैं — "
+"फ़ाइल शेयरिंग, मीडिया सर्वर, रिमोट डेस्कटॉप। अपने खुद के नेटवर्क पर भरोसा करें, जैसे घर या "
+"दफ़्तर का। सार्वजनिक Wi-Fi पर भरोसा न करें।"
+
+msgid "New network"
+msgstr "नया नेटवर्क"
+
+msgid "Trust"
+msgstr "भरोसा करें"
+
+msgid "Don't trust"
+msgstr "भरोसा न करें"

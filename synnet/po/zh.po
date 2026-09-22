@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,6 +15,44 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s 需要 root（sudo synnet %s %s）\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: 没有名为 '%s' 的已保存连接 — `nmcli connection show` 可列出所有连接\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr "synnet: 名为 '%s' 的连接不止一个 — 请改用它的 UUID\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: 无法更新 %s\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr "synnet: 已记录 %s，但无法重新载入防火墙 — 这台机器现在没有入站过滤\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr "synnet: 已信任“%s” — 该网络中的设备可以访问本机的服务\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: 不再信任“%s” — 只允许来自该网络的回复、ping、DHCP 和已开放的端口\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall 需要 root（sudo synnet --firewall）\n"
@@ -43,14 +81,10 @@ msgstr "synnet: 无法应用入站防火墙 — 这台机器没有入站过滤\n
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
-"synnet: 已应用入站防火墙（入站默认丢弃；允许回环、已建立的连接、ICMP、私有地"
-"址段来源和 DHCP）\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: %s 需要 root（sudo synnet %s %s）\n"
+"synnet: 已应用入站防火墙（入站默认丢弃；允许回环、已建立的连接、ICMP 和 "
+"DHCP，受信任网络上还允许私有地址段来源）\n"
 
 #, c-format
 msgid ""
@@ -58,10 +92,6 @@ msgid ""
 "'_', '.', '-')\n"
 msgstr ""
 "synnet: '%s' 不是合法的接口名（1-15 个字符：字母、数字、'_'、'.'、'-'）\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: 无法更新 %s\n"
 
 #, c-format
 msgid ""
@@ -77,12 +107,6 @@ msgid ""
 msgstr ""
 "synnet: 已把 %s 从 %s 的受信任列表移除 — 防火墙已关闭，因此内核中什么也没有改"
 "变。\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr "synnet: 已记录 %s，但无法重新载入防火墙 — 这台机器现在没有入站过滤\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -101,27 +125,42 @@ msgid ""
 msgstr "synnet: %s 还不存在 — 规则按名称匹配，它出现时即生效。\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: '%s' 不是合法规则。请写成 <tcp|udp>/<端口> 加来源，例如 'tcp/5900 100.64.0.0/10' 或 'tcp/5900 any'\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: '%s' 不是合法规则。请写成 <tcp|udp>/<端口> 加来源，例如 'tcp/5900 "
+"100.64.0.0/10' 或 'tcp/5900 any'\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
 msgstr "synnet: 已将 '%s' 记录到 %s — 防火墙已关闭，因此内核中没有任何变化。\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: 已将 '%s' 从 %s 中移除 — 防火墙已关闭，因此内核中没有任何变化。\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: 已将 '%s' 从 %s 中移除 — 防火墙已关闭，因此内核中没有任何变化。\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
 msgstr "synnet: 已记录 '%s'，但无法重新加载防火墙 — 本机当前未启用入站过滤\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s 已开放\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ 这对任何来源都开放，如果本机可从互联网访问，也包括互联网。请指定 CIDR 以缩小范围。\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ 这对任何来源都开放，如果本机可从互联网访问，也包括互联网。请指定 "
+"CIDR 以缩小范围。\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -170,17 +209,33 @@ msgstr ""
 "    说明守护进程早于此版本，或者无法写入 /run/synnet。\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    已生效 — 入站默认丢弃，允许局域网和已建立的连接。\n"
-"    由 synnet 在启动时应用，并每分钟复查一次。\n"
+"    已启用 — 入站默认丢弃；允许已建立的连接，受信任网络上\n"
+"    还允许本地网络。synnet 在启动时应用，\n"
+"    并每分钟检查一次。\n"
 
 #, c-format
 msgid ""
 "    ⚠ rebuilt %s time(s) this run — something on this box\n"
 "      is flushing nftables.\n"
 msgstr "    ⚠ 本次运行中重建了 %s 次 — 这台机器上有东西在清空 nftables。\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr "    NetworkManager 没有响应：所有接口都允许私有地址段来源。\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s：“%s” — 受信任\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr "    %s：“%s” — 不受信任；只允许回复、ping、DHCP 和已开放的端口\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -248,8 +303,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  向本机原本会丢弃的来源开放的端口\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    无 — 只有回环、响应、ICMP 和私有地址段的来源\n    能到达本机。\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    无 — 只有回环、响应、ICMP 和私有地址段的来源\n"
+"    能到达本机。\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -267,3 +326,56 @@ msgstr "    (未显示 — 需要 root)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    无 — synnet 表未加载。\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager 没有响应，因此不知道任何网络：所有接口都允许私有地址段来源。\n"
+
+msgid "On now:\n"
+msgstr "当前连接：\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — 受信任\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr "  %-10s %s — 不受信任：只允许回复、ping、DHCP 和已开放的端口\n"
+
+msgid "Not connected to any network.\n"
+msgstr "未连接到任何网络。\n"
+
+msgid "Trusted networks:\n"
+msgstr "受信任的网络：\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "还没有受信任的网络。\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr "synnet: --ask 询问的是桌面用户；请以该用户身份运行\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"信任网络“%s”吗？\n"
+"\n"
+"在受信任的网络上，网络中的其他设备可以访问这台电脑的共享服务 — 文件共享、媒体"
+"服务器、远程桌面。请只信任你自己的网络，比如家里或公司的网络。不要信任公共 "
+"Wi-Fi。"
+
+msgid "New network"
+msgstr "新网络"
+
+msgid "Trust"
+msgstr "信任"
+
+msgid "Don't trust"
+msgstr "不信任"

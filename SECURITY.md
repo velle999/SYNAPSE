@@ -77,13 +77,11 @@ in order of how much damage a flaw in them would do:
 - Bugs in Arch Linux packages, the AUR, or upstream projects SynapseOS merely
   ships. Report those upstream; if SynapseOS's *use* of them is what is unsafe,
   that is ours.
-- The default trust model of the firewall, which accepts unsolicited traffic
-  from RFC1918 and IPv6 ULA/link-local sources so that LAN services stay
-  reachable. This means a hostile device on the same network is trusted, and on
-  public Wi-Fi handing out `192.168.x` addresses, so is that network. It is a
-  deliberate tradeoff, documented in `synnet/src/monitor.c`, and it can be
-  narrowed by the operator. A better default is a design discussion — open an
-  issue — rather than a vulnerability report.
+- The firewall's trust in a network you marked trusted: on it, every device
+  can reach this machine's services on every port, so a hostile device on your
+  own network is trusted. Networks start untrusted, and SynapseOS asks the first
+  time you join one (synnet 13 and later). A better default is a design
+  discussion — open an issue — rather than a vulnerability report.
 - `synguard` being killable by root. It is a userspace daemon by design, stated
   in `synguard/src/synguard_main.c`: the threat model is a workstation and an
   AI assistant, not adversarial kernel hardening.
@@ -142,9 +140,9 @@ keeps the gate from loading for one boot.
 
 [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) says, component by component,
 what the local AI can and cannot cause, what keeps working if the security
-monitor is killed, what the firewall lets in — including on public Wi-Fi,
-where every other guest counts as the local network — and which protections
-the kernel enforces and which a root attacker can simply stop.
+monitor is killed, what the firewall lets in on a trusted network and on any
+other, and which protections the kernel enforces and which a root attacker can
+simply stop.
 
 ## Verifying a release
 

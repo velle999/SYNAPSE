@@ -12,6 +12,7 @@ synnet_exe = executable('synnet',
   sources : [
     'src/main.c',
     'src/monitor.c',
+    'src/networks.c',
   ],
   include_directories : include_directories('include', '.'),
   install : true)
@@ -27,6 +28,14 @@ synnet_exe = executable('synnet',
 # $SYNNET_FW_STATE_FILE, and the ruleset half puts a stub `nft` on PATH and
 # reads back what `--firewall` actually handed it — the recipe as cooked, not
 # as written.
+# Which networks are trusted, the ruleset order that makes the drop mean
+# something, and asking — against a stub nmcli, a fake sysfs and a recording
+# nft, so it needs no root, no NetworkManager and no display.
+test('networks', find_program('tests/networks_test.sh'),
+     args    : [synnet_exe.full_path()],
+     depends : [synnet_exe],
+     timeout : 60)
+
 firewall_test = find_program('tests/firewall_test.sh')
 test('firewall', firewall_test,
      args    : [synnet_exe.full_path()],
@@ -37,8 +46,12 @@ test('firewall', firewall_test,
 # <localedir>/<lang>/LC_MESSAGES/**synnet**.mo — named after the DOMAIN — and a
 # loop over the languages can only name its output de.mo, which installs to the
 # right directory under a name nothing ever looks for.
-i18n = import('i18n')
-i18n.gettext('synnet', preset : 'glib', install : true)
+#
+# ⛔ AND FROM po/, NOT FROM HERE. i18n.gettext() reads LINGUAS from the directory
+# it is called in; called at the top level it found none, so not one catalog
+# was ever compiled or installed — synnet 12 shipped no .mo at all, and printed
+# English in every language whatever its .po files said.
+subdir('po')
 
 # ⛔ REGENERATE WITH `ninja -C <build> synnet-template`, NOT `synnet-pot`:
 # i18n.gettext() defines that second name itself and drives it from po/POTFILES,

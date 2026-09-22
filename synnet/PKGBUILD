@@ -137,15 +137,44 @@ pkgver=0.1.0
 #   New: /etc/synnet/open-ports (backup=), `ports=` in the published state, and
 #   a --status section that is printed even when empty — a section that
 #   disappears when nothing is open says nothing at all.
-pkgrel=12
+# 13: A PRIVATE ADDRESS IS NOT "MY NETWORK". The input chain accepted every
+#   port from any RFC1918 / ULA / link-local source on every interface, and café
+#   and hotel Wi-Fi hand out exactly those — every other guest was the home LAN.
+#   Now trust is per NetworkManager CONNECTION: a physical interface on a
+#   network nobody has trusted gets only replies, ICMP, DHCP and --open ports.
+#   Virtual interfaces (containers, VMs) keep the old private-source rule, and
+#   tailscale0 is accepted outright — its 100.64/10 had every packet dropped.
+#   New: /etc/synnet/trusted-networks (backup=), `--networks`,
+#   `--trust-network`/`--untrust-network <uuid|name>`, `--reapply`, and a
+#   NetworkManager dispatcher hook (also in pre-up.d, so an untrusted network
+#   is dropped before it carries traffic). `synnet --ask`, run as the desktop
+#   user by synnet-ask.path/.timer, asks once about a network nobody has
+#   answered for: Trust goes through pkexec; "Don't trust" is remembered in
+#   ~/.local/state/synnet/declined and needs no password.
+#   ⚠ The upgrade to 13 marks the network the machine is on as trusted
+#   (synnet.install), or the first boot after it would drop the home LAN.
+#   ⚠ When NetworkManager does not answer, the old rule applies everywhere, and
+#   the state file and journal say so.
+#   ⛔ AND ITS TRANSLATIONS NOW SHIP. i18n.gettext() was called from the
+#   top-level meson.build, which has no LINGUAS, so no catalog was ever
+#   compiled: 12 installed no .mo at all and was English in every language. It
+#   is in po/meson.build now; 13 installs all thirteen.
+pkgrel=13
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
+# networkmanager and zenity are optional: without NetworkManager no network is
+# known and the old rule applies; without zenity nobody is asked, and Settings
+# or `synnet --trust-network` still trust a network.
 depends=('nftables' 'synapd')
+optdepends=('networkmanager: per-network trust — which connection is trusted'
+            'zenity: the question asked when a new network is joined')
 makedepends=('meson' 'ninja')
 # ⚠ backup=, or every upgrade would overwrite the list of bridges the user has
 # trusted — silently un-firewalling their containers on a routine syn-update.
-backup=('etc/synnet/trusted-ifaces' 'etc/synnet/open-ports')
+backup=('etc/synnet/trusted-ifaces' 'etc/synnet/open-ports'
+        'etc/synnet/trusted-networks')
+install=synnet.install
 # ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
 # what makepkg looks for on disk, so a build from this checkout uses the tarball
 # build-all.sh just collected and never downloads. The URL after it is for
@@ -175,4 +204,27 @@ package() {
     # Same reasoning, and more so: what is open is exactly the thing somebody
     # should be able to read without being root.
     install -Dm644 config/open-ports "$pkgdir/etc/synnet/open-ports"
+    install -Dm644 config/trusted-networks "$pkgdir/etc/synnet/trusted-networks"
+
+    # Re-applied on every connection change, so trust follows the machine.
+    # ⚠ pre-up.d as well: NetworkManager runs only what is linked there before
+    # a connection carries traffic, and `up` alone leaves a moment in which an
+    # untrusted network is still covered by the old rule.
+    install -Dm755 systemd/90-synnet \
+        "$pkgdir/usr/lib/NetworkManager/dispatcher.d/90-synnet"
+    install -d "$pkgdir/usr/lib/NetworkManager/dispatcher.d/pre-up.d"
+    ln -s ../90-synnet "$pkgdir/usr/lib/NetworkManager/dispatcher.d/pre-up.d/90-synnet"
+
+    # The question, asked as the desktop user. USER units, enabled for every
+    # account by the .wants links (a package cannot `systemctl --user enable`):
+    # the path unit fires when synnet rewrites /run/synnet/networks, the timer
+    # once after login for the network that came up before anybody did.
+    local u
+    for u in synnet-ask.service synnet-ask.path synnet-ask.timer; do
+        install -Dm644 "systemd/$u" "$pkgdir/usr/lib/systemd/user/$u"
+    done
+    install -d "$pkgdir/usr/lib/systemd/user/paths.target.wants" \
+               "$pkgdir/usr/lib/systemd/user/timers.target.wants"
+    ln -s ../synnet-ask.path "$pkgdir/usr/lib/systemd/user/paths.target.wants/synnet-ask.path"
+    ln -s ../synnet-ask.timer "$pkgdir/usr/lib/systemd/user/timers.target.wants/synnet-ask.timer"
 }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# NetworkManager dispatcher hook: re-apply synnet's firewall whenever a
+# connection comes or goes, so which interfaces count as trusted follows the
+# machine from network to network. pre-up (linked from pre-up.d) runs before a
+# connection carries traffic, so an untrusted network is dropped from its first
+# packet rather than from the `up` event a moment later.
+case "$2" in
+    pre-up|up|down|vpn-up|vpn-down) ;;
+    *) exit 0 ;;
+esac
+[ -x /usr/bin/synnet ] || exit 0
+exec /usr/bin/synnet --reapply

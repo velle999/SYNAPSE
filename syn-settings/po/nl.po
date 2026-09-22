@@ -1112,16 +1112,29 @@ msgstr ""
 "toch geen site opent, is meestal dit."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"Alles wat binnenkomt wordt standaard verworpen. Loopback, antwoorden op "
-"verbindingen die deze machine zelf maakte, ICMP en alles uit het lokale "
-"netwerk worden doorgelaten; ongevraagd verkeer van een openbaar adres niet."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "Standaard weigeren op inkomend. Loopback, antwoorden op verbindingen van deze machine en ICMP komen door, het lokale netwerk alleen op een vertrouwd netwerk; ander ongevraagd verkeer niet."
 
 msgid "input filtering"
 msgstr "invoerfiltering"
+
+msgid "trusted"
+msgstr "vertrouwd"
+
+msgid "not trusted"
+msgstr "niet vertrouwd"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "Andere apparaten op dit netwerk kunnen de gedeelde diensten van deze machine bereiken — bestandsdeling, mediaservers, extern bureaublad."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "Van dit netwerk komen alleen antwoorden, ping, DHCP en open poorten binnen. Vertrouw het als het van jou is, zoals thuis of op het werk."
 
 msgid "container links"
 msgstr "containerkoppelingen"
@@ -1683,7 +1696,10 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "synguard op deze machine zet de kernelpoort niet op scherp · het is ouder dan 0.1.0-44, of de unit is aangepast · de blokkeerregels werken alleen achteraf"
+msgstr ""
+"synguard op deze machine zet de kernelpoort niet op scherp · het is ouder "
+"dan 0.1.0-44, of de unit is aangepast · de blokkeerregels werken alleen "
+"achteraf"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -2003,6 +2019,12 @@ msgstr "Aan — ongevraagde verbindingen van buiten het lokale netwerk weigeren"
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "Uit — antwoorden op alles wat deze machine bereikt, op elk netwerk"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "Vertrouwd — andere apparaten erop kunnen de gedeelde diensten van deze machine bereiken"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "Niet vertrouwd — alleen antwoorden, ping, DHCP en open poorten komen binnen"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2076,6 +2098,16 @@ msgid ""
 msgstr ""
 "nog een account met eigen bestanden en bureaublad — in het aanmeldscherm "
 "gaat Tab naar het naamveld"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "Alles wat binnenkomt wordt standaard verworpen. Loopback, antwoorden op "
+#~ "verbindingen die deze machine zelf maakte, ICMP en alles uit het lokale "
+#~ "netwerk worden doorgelaten; ongevraagd verkeer van een openbaar adres "
+#~ "niet."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

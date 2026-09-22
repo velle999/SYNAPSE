@@ -377,6 +377,10 @@ const char *synnet_fw_ports_path(void) {
 
 /* How many port rules the last apply loaded, for the published state file. */
 static unsigned g_fw_ports;
+/* Interfaces this apply dropped as untrusted networks, and whether
+ * NetworkManager answered at all (0 = the old private-source rule everywhere). */
+static unsigned g_fw_untrusted;
+static int      g_fw_nm = 1;
 
 /*
  * Is this a legal source? A CIDR, or the word `any`.
@@ -763,7 +767,8 @@ static void firewall_publish_state(const char *state) {
     fprintf(f,
             "state=%s\n"
             "policy=drop\n"
-            "trust=lan\n"
+            "trust=%s\n"
+            "untrusted=%u\n"
             "links=%u\n"
             /* ⚠ ADDITIVE, and it has to be: syn-settings reads `state`, `links`
              * and `reasserts` out of here by name, so a new key costs nothing
@@ -771,8 +776,8 @@ static void firewall_publish_state(const char *state) {
             "ports=%u\n"
             "since=%lld\n"
             "reasserts=%lu\n",
-            state, g_fw_ifaces, g_fw_ports, (long long)time(NULL),
-            g_fw_reasserts);
+            state, g_fw_nm ? "networks" : "lan", g_fw_untrusted,
+            g_fw_ifaces, g_fw_ports, (long long)time(NULL), g_fw_reasserts);
     fclose(f);
     if (rename(tmp, synnet_fw_state_path()) != 0)
         unlink(tmp);
@@ -788,10 +793,13 @@ static void firewall_publish_state(const char *state) {
  *   - loopback (covers ::1)
  *   - established/related — replies to anything we connected out to
  *   - ICMP / ICMPv6 — ping, path-MTU, and IPv6 ND (without which IPv6 breaks)
+ *   - DHCP client replies, whose source may not be in a trusted range yet
+ *   - anything arriving over the tailnet (tailscale0)
+ *   - ports opened with --open
  *   - private-range sources: RFC1918, IPv6 ULA + link-local — so every service
  *     on the home LAN (Plex, Steam, the python:8077, …) stays reachable without
- *     enumerating their ports, and their dynamic UDP ports are not a problem
- *   - DHCP client replies, whose source may not be in a trusted range yet
+ *     enumerating their ports — EXCEPT on an interface whose network nobody
+ *     has trusted, which is dropped just before this rule (networks.c)
  *
  * Everything else — unsolicited inbound from a public address, e.g. on the
  * café/hotel Wi-Fi the box can now roam onto — hits the drop policy. ollama's
@@ -803,9 +811,11 @@ static void firewall_publish_state(const char *state) {
  * add/delete/re-add-as-base-chain idiom (redefining a chain in place would
  * otherwise stack duplicate rules every boot).
  *
- * Trust boundary caveat: "private ranges" means public Wi-Fi that also hands out
- * 192.168.x addresses is trusted too. That is the standard pragmatic tradeoff
- * for this model; per-subnet trust would be stricter but breaks on every roam.
+ * ⛔ "PRIVATE RANGE" USED TO BE THE WHOLE TRUST RULE, and public Wi-Fi hands out
+ * 192.168.x addresses too — so every café guest was the home LAN, on every
+ * port. Trust is now per NetworkManager connection (synnet.h, "Which networks
+ * are trusted"): the same wlp6s0 is trusted at home and dropped at the café,
+ * and the NetworkManager dispatcher re-runs this on every connection change.
  */
 int synnet_nft_ensure_firewall(void) {
     static const char *base =
@@ -822,12 +832,24 @@ int synnet_nft_ensure_firewall(void) {
         " ct state established,related accept\n"
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " meta l4proto icmp accept\n"
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " meta l4proto icmpv6 accept\n"
+        /* DHCP client: offer/ack can arrive before we hold a trusted-range IP. */
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n"
+        /* The tailnet: who is on it is decided by Tailscale's login and ACLs,
+         * and its 100.64.0.0/10 is not a private range, so without this every
+         * packet inside the tunnel was dropped. `iifname`, like the bridges,
+         * so a tailnet that comes up after boot needs no reload. */
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+        " iifname \"tailscale0\" accept comment \"synnet-tailnet\"\n";
+
+    /* ⚠ THE PRIVATE-SOURCE ACCEPT GOES LAST, after the untrusted-network drops
+     * below. The chain used to hold only accepts and a drop POLICY, so order
+     * never mattered; now an untrusted interface has an explicit drop, and a
+     * private-source accept ahead of it would let the café straight back in. */
+    static const char *lan =
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
         " ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept\n"
         "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
-        " ip6 saddr { fc00::/7, fe80::/10 } accept\n"
-        /* DHCP client: offer/ack can arrive before we hold a trusted-range IP. */
-        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n";
+        " ip6 saddr { fc00::/7, fe80::/10 } accept\n";
 
     char script[32768];
     int off = snprintf(script, sizeof(script), "%s", base);
@@ -932,6 +954,49 @@ int synnet_nft_ensure_firewall(void) {
         papplied++;
     }
 
+    /* ── networks nobody has trusted ──────────────────────────
+     *
+     * AFTER the open ports, which are the one deliberate way in and must keep
+     * working on any network, and BEFORE the private-source accept. Everything
+     * an untrusted network may send has been accepted above by now — replies,
+     * ICMP, DHCP, an --open port — so what reaches this drop is exactly the
+     * unsolicited traffic the café should not get. */
+    synnet_net_t nets[SYNNET_MAX_NETWORKS];
+    int nn = synnet_networks_scan(nets, SYNNET_MAX_NETWORKS);
+    unsigned untrusted = 0;
+    g_fw_nm = nn >= 0;
+    if (nn < 0)
+        syslog(LOG_NOTICE, "synnet: NetworkManager did not answer — no network "
+                           "is known, so private-range sources are accepted on "
+                           "every interface");
+    for (int i = 0; i < nn; i++) {
+        if (nets[i].trusted) continue;
+        int w = snprintf(script + off, sizeof(script) - (size_t)off,
+            "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+            " iifname \"%s\" drop comment \"synnet-untrusted\"\n", nets[i].dev);
+        /* ⚠ Out of room means the private-source accept below would cover
+         * this interface too — the café back in. Fail the apply instead: an
+         * unfiltered box is reported loudly, a quietly trusted café is not. */
+        if (w < 0 || (size_t)w >= sizeof(script) - (size_t)off) {
+            syslog(LOG_ERR, "synnet: firewall script full at the untrusted "
+                            "networks — not applied");
+            firewall_publish(0);
+            return -1;
+        }
+        off += w;
+        untrusted++;
+    }
+
+    {
+        int w = snprintf(script + off, sizeof(script) - (size_t)off, "%s", lan);
+        if (w < 0 || (size_t)w >= sizeof(script) - (size_t)off) {
+            syslog(LOG_ERR, "synnet: no room for the local-network rules — not applied");
+            firewall_publish(0);
+            return -1;
+        }
+        off += w;
+    }
+
     if (off + 12 >= (int)sizeof(script)) {   /* "SYNNET_FW\n" and slack */
         syslog(LOG_ERR, "synnet: no room to close the firewall script — not applied");
         firewall_publish(0);
@@ -945,7 +1010,14 @@ int synnet_nft_ensure_firewall(void) {
      * quietly keeps the previous run's number. */
     g_fw_ifaces = (unsigned)applied;
     g_fw_ports  = (unsigned)papplied;
+    g_fw_untrusted = untrusted;
     firewall_publish(rc == 0);
+    synnet_networks_publish(nets, nn);
+    for (int i = 0; rc == 0 && i < nn; i++)
+        if (!nets[i].trusted)
+            syslog(LOG_NOTICE, "synnet: %s is on an untrusted network%s%s — "
+                               "only replies, ICMP, DHCP and open ports get in",
+                   nets[i].dev, nets[i].name[0] ? ": " : "", nets[i].name);
     if (rc == 0 && applied)
         syslog(LOG_INFO, "synnet: %zu container/VM link(s) trusted for DHCP+DNS",
                applied);
@@ -1377,12 +1449,34 @@ int synnet_status(void) {
                 "    could not write to /run/synnet.\n"), stdout);
     } else if (strcmp(st, "active") == 0) {
         const char *n = fw_state_get("reasserts");
-        fputs(_("    ACTIVE — default-drop input, LAN and established traffic\n"
-                "    trusted. Asserted by synnet at boot and re-checked every "
-                "minute.\n"), stdout);
+        fputs(_("    ACTIVE — default-drop input; established traffic, and the\n"
+                "    local network on trusted networks, let through. Asserted by\n"
+                "    synnet at boot and re-checked every minute.\n"), stdout);
         if (n[0] && strcmp(n, "0") != 0)
             printf(_("    ⚠ rebuilt %s time(s) this run — something on this box\n"
                      "      is flushing nftables.\n"), n);
+        /* Which networks, from the file the last apply published — readable
+         * without root, like the rest of this section. */
+        FILE *nf = fopen(synnet_networks_state_path(), "r");
+        if (nf) {
+            char line[512];
+            while (fgets(line, sizeof(line), nf)) {
+                if (line[0] == '#') {
+                    fputs(_("    NetworkManager did not answer: private-range "
+                            "sources are accepted on every interface.\n"), stdout);
+                    continue;
+                }
+                char *uuid = strtok(line, "\t\n"), *tr = strtok(NULL, "\t\n");
+                char *dev = strtok(NULL, "\t\n"), *nm = strtok(NULL, "\n");
+                if (!uuid || !tr || !dev) continue;
+                if (!strcmp(tr, "trusted"))
+                    printf(_("    %s: “%s” — trusted\n"), dev, nm ? nm : uuid);
+                else
+                    printf(_("    %s: “%s” — NOT trusted; only replies, ping, "
+                             "DHCP and open ports get in\n"), dev, nm ? nm : uuid);
+            }
+            fclose(nf);
+        }
     } else {
         fputs(_("    FAILED to apply — this box is NOT ingress-filtered.\n"
                 "    See `journalctl -u synnet` for what nft said.\n"), stdout);

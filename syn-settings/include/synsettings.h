@@ -320,6 +320,9 @@ int do_choices(int argc, char **argv);
  * machine that is in fact filtered, which is the failure this whole area
  * already had once. Defined in network.c, beside the rows that show it. */
 int synnet_firewall_on(void);
+/* A network's trust as synnet last published it (/run/synnet/networks):
+ * 1 trusted, 0 not trusted, -1 not a network this machine is on. */
+int synnet_network_trusted(const char *uuid);
 int do_unit(int argc, char **argv);
 
 /* Bring one interface up or down, wired or wireless. */

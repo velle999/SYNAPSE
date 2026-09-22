@@ -507,7 +507,13 @@ pkgver=0.1.0
 #   ⚠ It reads the file exactly as synguard does — only a clear "off" counts,
 #   a symlink never — and the suite pins the same cases on both sides.
 #   Nine strings, all thirteen catalogs, 518/518.
-pkgrel=65
+# 66: ONE ROW PER NETWORK in the Network pane, each a Trusted / Not trusted
+#   choice (synnet 13 trusts per NetworkManager connection, not per machine).
+#   The row reads /run/synnet/networks, and the choice runs
+#   `pkexec synnet --trust-network|--untrust-network <uuid>`; a key that is not
+#   a uuid is refused before anything runs. The input-filtering detail now says
+#   the local network gets in only on a trusted network.
+pkgrel=66
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -62,6 +62,13 @@ export SYNNET_FW_IFACES_FILE="$tmp/trusted-ifaces"
 # /etc/synnet/open-ports, and a rule a developer had added on their own box
 # would put an extra accept into every ruleset asserted below.
 export SYNNET_FW_PORTS_FILE="$tmp/open-ports"
+# The per-network files, sealed off the same way: run as root (CI's container
+# is) this would otherwise publish over the real /run/synnet/networks, and the
+# real nmcli would decide which interfaces this ruleset drops. An nmcli that
+# does not answer is the old private-source rule, which is what this file tests.
+export SYNNET_FW_NETWORKS_FILE="$tmp/trusted-networks"
+export SYNNET_NETWORKS_STATE_FILE="$tmp/networks"
+export SYNNET_NMCLI=/bin/false
 
 # ⚠ THIS RUNS BOTH AS A USER AND AS ROOT. CI is a container running as root,
 # a developer is not, and the first version of this file assumed the second:
@@ -274,7 +281,7 @@ if [ "$ran" = yes ]; then
         PATH="$tmp/bin:$PATH" fakeroot "$SYNNET" --firewall >/dev/null 2>&1
     fi
     rules=$(cat "$NFT_LOG")
-    hasnt "iifname" "$rules" "no list, no link rules"
+    hasnt "synnet-gw" "$rules" "no list, no link rules"
     has "policy drop" "$rules" "…and the base firewall is unaffected"
 fi
 

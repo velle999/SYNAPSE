@@ -1087,16 +1087,29 @@ msgstr ""
 "が開かない場合、たいていはこれが原因です。"
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"受信は既定で破棄します。ループバック、このマシンから張った接続への応答、"
-"ICMP、ローカルネットワークからのものはすべて通します。公開アドレスからの要求"
-"していない通信は通しません。"
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "受信は既定で破棄します。ループバック、このマシンが開始した接続への応答、ICMP は通し、ローカルネットワークは信頼するネットワークでのみ通します。それ以外の要求していない通信は通しません。"
 
 msgid "input filtering"
 msgstr "受信フィルタリング"
+
+msgid "trusted"
+msgstr "信頼済み"
+
+msgid "not trusted"
+msgstr "信頼していません"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "このネットワーク上のほかの機器が、このマシンの共有サービス (ファイル共有、メディアサーバー、リモートデスクトップ) に接続できます。"
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "このネットワークからは応答、ping、DHCP、開いたポートだけが入れます。自宅や職場など、自分のネットワークなら信頼してください。"
 
 msgid "container links"
 msgstr "コンテナーの接続"
@@ -1649,7 +1662,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "このマシンの synguard はカーネルのゲートを有効にしません · 0.1.0-44 より古いか、ユニットが変更されています · 拒否ルールは事後にのみ働きます"
+msgstr ""
+"このマシンの synguard はカーネルのゲートを有効にしません · 0.1.0-44 より古い"
+"か、ユニットが変更されています · 拒否ルールは事後にのみ働きます"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1968,6 +1983,12 @@ msgstr "オン — ローカルネットワーク外からの求めていない�
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "オフ — どのネットワークでも、このマシンに届いたものすべてに応答する"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "信頼する — このネットワーク上のほかの機器がこのマシンの共有サービスに接続できます"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "信頼しない — 応答、ping、DHCP、開いたポートだけが入れます"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2037,6 +2058,15 @@ msgid ""
 msgstr ""
 "独自のファイルとデスクトップを持つ別のアカウント — ログイン画面では Tab で名"
 "前欄に移ります"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "受信は既定で破棄します。ループバック、このマシンから張った接続への応答、"
+#~ "ICMP、ローカルネットワークからのものはすべて通します。公開アドレスからの要"
+#~ "求していない通信は通しません。"
 
 #, fuzzy
 #~ msgid "bluetooth.service"

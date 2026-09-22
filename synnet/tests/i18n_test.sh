@@ -54,6 +54,10 @@ echo "synnet translations"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
 export SYNNET_FW_STATE_FILE="$tmp/firewall.state"
+# Kept off the real /run/synnet/networks and the real nmcli (see firewall_test).
+export SYNNET_FW_NETWORKS_FILE="$tmp/trusted-networks"
+export SYNNET_NETWORKS_STATE_FILE="$tmp/networks"
+export SYNNET_NMCLI=/bin/false
 export SYNNET_FW_PREF_FILE="$tmp/firewall.pref"
 export SYNNET_FW_IFACES_FILE="$tmp/trusted-ifaces"
 printf 'on\n' > "$SYNNET_FW_PREF_FILE"

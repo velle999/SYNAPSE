@@ -513,6 +513,47 @@ repository and every published source tarball.
 
 ---
 
+## 8. The firewall trusted every network
+
+**Why:** synnet accepted every port from any private address on every
+interface, and café and hotel Wi-Fi hand out private addresses too — so every
+other guest counted as the home network (THREAT-MODEL §3). Tailscale's
+`100.64.0.0/10` is not a private range, so its tunnel came up and every packet
+inside it was dropped.
+
+**Done 2026-09-22, synnet 13 and syn-settings 66.** The owner chose to be asked
+on first connect, and to trust the tailnet.
+
+- Trust belongs to a NetworkManager connection, in
+  `/etc/synnet/trusted-networks`. A physical interface NetworkManager manages
+  is dropped unless its connection is trusted; replies, ICMP, DHCP and `--open`
+  ports come first in the chain and still get in. Virtual interfaces keep the
+  private-source rule, so containers and VMs still reach their host.
+  `tailscale0` is accepted.
+- A NetworkManager dispatcher hook re-applies the firewall on every connection
+  change, from `pre-up`, so an untrusted network is dropped before it carries
+  traffic.
+- `synnet --ask`, run as the desktop user when synnet publishes a change and
+  once after login, asks once per network: Trust goes through pkexec, "Don't
+  trust" is remembered without a password. Settings ▸ Network has a row per
+  network; `synnet --networks`, `--trust-network`, `--untrust-network` are the
+  CLI.
+- The upgrade marks the network the machine is on as trusted, so the home LAN
+  does not drop on the first boot after it.
+- `synnet/tests/networks_test.sh` (39 checks): the rule order that makes the
+  drop mean something, virtual and unmanaged interfaces left alone, a device
+  name that is not legal kept out of the script, NetworkManager down, the ask
+  flow.
+
+**Done when:**
+
+- [x] A network nobody trusted cannot reach this machine's services.
+- [x] Home keeps working through the upgrade, and a new network is asked about.
+- [x] Containers, VMs and `--open` ports are unaffected.
+- [x] Tailscale works without an `--open` rule.
+
+---
+
 ## Done
 
 - **`SECURITY.md` and private vulnerability reporting** — `ac77b3a`,
@@ -539,3 +580,5 @@ repository and every published source tarball.
   623; **vibe's confirmation failed open** — vibe 36. 2026-09-21. §6.
 - **Updates built whatever GitHub served** — syn-update 63, signed commits and
   signed source tarballs, 2026-09-21. §7.
+- **The firewall trusted every network** — synnet 13 and syn-settings 66,
+  per-network trust asked on first connect, 2026-09-22. §8.

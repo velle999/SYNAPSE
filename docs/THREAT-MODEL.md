@@ -68,38 +68,49 @@ tripwire, not a wall, and it is off by default.
 
 ---
 
-## 3. What the firewall's LAN trust admits
+## 3. What the firewall lets in, and from which networks
 
-synnet's input chain (`synnet/src/monitor.c`, `synnet_nft_ensure_firewall`) is
-**policy drop**, and accepts:
+synnet's input chain (`synnet/src/monitor.c`, `synnet_nft_ensure_firewall`;
+the network rule in `synnet/src/networks.c`) is **policy drop**, and accepts:
 
 - loopback, and established/related connections;
 - all ICMP and ICMPv6;
-- **every port, from any RFC1918 source** — `10.0.0.0/8`, `172.16.0.0/12`,
-  `192.168.0.0/16` — and from IPv6 ULA `fc00::/7` and link-local `fe80::/10`;
 - DHCP client replies (`udp 68`, `546`);
-- the gateway services on container/VM bridges it is told to trust.
+- anything arriving over Tailscale (`tailscale0`);
+- ports opened with `synnet --open`;
+- the gateway services on container/VM bridges it is told to trust;
+- **every port from any private source** — `10.0.0.0/8`, `172.16.0.0/12`,
+  `192.168.0.0/16`, IPv6 ULA `fc00::/7` and link-local `fe80::/10` — **except
+  on an untrusted network**.
 
 Everything else inbound is dropped. Outbound is not filtered, except
 destinations synnet (or its model) has blocked.
 
-**At home** that means any device on the home network can reach any service
-that listens on all interfaces. **Roaming**, it means the same thing on
-somebody else's network: café and hotel Wi-Fi hand out RFC1918 addresses, so
-**every other guest is "LAN"**, on every port, and on IPv6 so is everyone on
-the same link. The firewall does not know which network it is on.
+**Which networks are trusted** (synnet 13 and later): trust belongs to a
+NetworkManager connection — a saved Wi-Fi network or wired profile — not to the
+machine. A network starts untrusted, and a small window asks the first time you
+join it. On an untrusted network a physical interface gets only replies, ping,
+DHCP and `--open` ports; a café's other guests cannot reach anything. On a
+trusted network every device on it can reach every service that listens on all
+interfaces. Settings ▸ Network and `sudo synnet --trust-network` change the
+answer. The upgrade to synnet 13 marked the network each machine was on at the
+time as trusted.
 
-What that exposes depends on what listens. A fresh install enables avahi
-(mDNS: it announces the machine's name and services to the network), CUPS
-(bound to localhost by default) and Syncthing (port 22000, which authenticates
-peers by device ID). Anything the owner turns on — SSH, VNC, Samba, a media
-server, game streaming — joins that list, reachable by the café the same as by
-the house.
+What stays covered by the private-source rule regardless: virtual interfaces
+(container and VM bridges, veth, VPN tunnels other than Tailscale), and a
+physical interface NetworkManager does not manage. When NetworkManager does not
+answer at all, no network is known and the private-source rule applies on
+every interface; `synnet --status` and the journal say so.
 
-`synnet --open <port>` opens a port to everyone; `--allow <ip>` only removes a
-block and opens nothing; `--trust-if` covers DHCP and DNS on a bridge, not
-every port. Tailscale's `100.64.0.0/10` is **not** in the trusted ranges, so
-a tunnel comes up and its inbound packets are dropped.
+What a trusted network exposes depends on what listens. A fresh install enables
+avahi (mDNS: it announces the machine's name and services), CUPS (bound to
+localhost by default) and Syncthing (port 22000, which authenticates peers by
+device ID). Anything the owner turns on — SSH, VNC, Samba, a media server, game
+streaming — joins that list.
+
+`synnet --open <port>` opens a port to everyone, on every network; `--allow
+<ip>` only removes a block and opens nothing; `--trust-if` covers DHCP and DNS
+on a bridge, not every port.
 
 ---
 

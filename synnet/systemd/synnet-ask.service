@@ -1,0 +1,6 @@
+[Unit]
+Description=Ask whether to trust a network synnet has not been told about
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/synnet --ask

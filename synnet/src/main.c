@@ -47,6 +47,17 @@ static void usage(void) {
         "                  internet if this box is reachable from it. This is\n"
         "                  NOT what --allow does: that only un-blocks an\n"
         "                  address. Applied immediately and remembered. (root)\n"
+        "  --networks      The networks this machine is on, and which are trusted\n"
+        "  --trust-network <uuid|name>\n"
+        "  --untrust-network <uuid|name>\n"
+        "                  Trust a NetworkManager connection, or stop: on a\n"
+        "                  trusted network other devices can reach this box's\n"
+        "                  services; on any other, only replies, ping, DHCP and\n"
+        "                  --open ports get in. Applied immediately. (root)\n"
+        "  --reapply       Re-apply the firewall if it is on — what the\n"
+        "                  NetworkManager hook runs on every connection change\n"
+        "  --ask           Ask the desktop user about a network nobody has\n"
+        "                  answered for (synnet-ask.service runs this)\n"
         "  --allow <ip>    Un-block an IP that --block blocked. Does NOT open\n"
         "                  the firewall to it; see --open\n"
         "  --block <ip>    Block IP\n"
@@ -85,6 +96,59 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i], "--debug"))      debug = 1;
         else if (!strcmp(argv[i], "--status")) {
             return synnet_status();
+        } else if (!strcmp(argv[i], "--networks")) {
+            return synnet_networks_list();
+        } else if (!strcmp(argv[i], "--ask")) {
+            return synnet_ask();
+        } else if (!strcmp(argv[i], "--reapply")) {
+            /* The NetworkManager dispatcher runs this on every connection
+             * change, as root, so the untrusted-network drops follow the
+             * machine from home to café. Quiet and never an error when the
+             * firewall is switched off: that is a preference, not a fault. */
+            if (geteuid() != 0 || !synnet_firewall_enabled()) return 0;
+            return synnet_nft_ensure_firewall() == 0 ? 0 : 1;
+        } else if ((!strcmp(argv[i], "--trust-network") ||
+                    !strcmp(argv[i], "--untrust-network")) && i + 1 < argc) {
+            int on = !strcmp(argv[i], "--trust-network");
+            const char *arg = argv[++i];
+            if (geteuid() != 0) {
+                fprintf(stderr, _("synnet: %s needs root (sudo synnet %s %s)\n"),
+                        on ? "--trust-network" : "--untrust-network",
+                        on ? "--trust-network" : "--untrust-network", arg);
+                return 1;
+            }
+            char uuid[SYNNET_UUID_MAX], name[SYNNET_NETNAME_MAX];
+            int r = synnet_network_resolve(arg, uuid, sizeof(uuid),
+                                           name, sizeof(name));
+            if (r == -1) {
+                fprintf(stderr, _("synnet: no saved connection is called '%s' — "
+                                  "`nmcli connection show` lists them\n"), arg);
+                return 1;
+            }
+            if (r == -2) {
+                fprintf(stderr, _("synnet: more than one connection is called "
+                                  "'%s' — give its UUID instead\n"), arg);
+                return 1;
+            }
+            if (synnet_trusted_network_set(uuid, name, on) != 0) {
+                fprintf(stderr, _("synnet: could not update %s\n"),
+                        synnet_fw_networks_path());
+                return 1;
+            }
+            const char *shown = name[0] ? name : uuid;
+            if (synnet_firewall_enabled() && synnet_nft_ensure_firewall() != 0) {
+                fprintf(stderr, _("synnet: %s recorded, but the firewall could "
+                                  "not be reloaded — this box is NOT ingress-"
+                                  "filtered right now\n"), shown);
+                return 1;
+            }
+            if (on)
+                printf(_("synnet: trusting “%s” — devices on it can reach this "
+                         "machine's services\n"), shown);
+            else
+                printf(_("synnet: no longer trusting “%s” — only replies, ping, "
+                         "DHCP and open ports get in from it\n"), shown);
+            return 0;
         } else if (!strcmp(argv[i], "--firewall")) {
             /* `--firewall`, `--firewall on`, `--firewall off`. The bare form is
              * "apply it now" and stays what it was; the two words are the
@@ -141,8 +205,9 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             fputs(_("synnet: input firewall applied "
-                    "(default-drop input; loopback, established, ICMP, "
-                    "private-range sources and DHCP accepted)\n"), stdout);
+                    "(default-drop input; loopback, established, ICMP and DHCP "
+                    "accepted, and private-range sources on trusted networks)\n"),
+                  stdout);
             return 0;
         } else if ((!strcmp(argv[i], "--trust-if") ||
                     !strcmp(argv[i], "--untrust-if")) && i + 1 < argc) {

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,50 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s에는 root가 필요합니다 (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: '%s'(이)라는 저장된 연결이 없습니다 — `nmcli connection show`로 목록"
+"을 볼 수 있습니다\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr "synnet: '%s'(이)라는 연결이 여러 개입니다 — 대신 UUID를 지정하세요\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: %s을(를) 갱신하지 못했습니다\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s을(를) 기록했지만 방화벽을 다시 불러오지 못했습니다 — 이 컴퓨터는 "
+"지금 인바운드 필터링이 되지 않습니다\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet: “%s”을(를) 신뢰합니다 — 이 네트워크의 기기가 이 컴퓨터의 서비스에 접"
+"속할 수 있습니다\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: 더 이상 “%s”을(를) 신뢰하지 않습니다 — 이 네트워크에서는 응답, ping, "
+"DHCP, 열린 포트만 들어옵니다\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall에는 root가 필요합니다 (sudo synnet --firewall)\n"
@@ -47,14 +91,11 @@ msgstr ""
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
 "synnet: 인바운드 방화벽을 적용했습니다 (인바운드 기본 차단, 루프백"
-"·established·ICMP·사설 대역 출발지·DHCP는 허용)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: %s에는 root가 필요합니다 (sudo synnet %s %s)\n"
+"·established·ICMP·DHCP는 허용, 사설 대역 출발지는 신뢰하는 네트워크에서만 허"
+"용)\n"
 
 #, c-format
 msgid ""
@@ -63,10 +104,6 @@ msgid ""
 msgstr ""
 "synnet: '%s'은(는) 올바른 인터페이스 이름이 아닙니다 (1~15자: 문자, 숫자, "
 "'_', '.', '-')\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: %s을(를) 갱신하지 못했습니다\n"
 
 #, c-format
 msgid ""
@@ -83,14 +120,6 @@ msgid ""
 msgstr ""
 "synnet: %s을(를) %s의 신뢰 목록에서 제거했습니다 — 방화벽이 꺼져 있어 커널에"
 "서는 아무것도 바뀌지 않았습니다.\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet: %s을(를) 기록했지만 방화벽을 다시 불러오지 못했습니다 — 이 컴퓨터는 "
-"지금 인바운드 필터링이 되지 않습니다\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -113,27 +142,47 @@ msgstr ""
 "적용됩니다.\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: '%s' 은(는) 올바른 규칙이 아닙니다. <tcp|udp>/<포트> 와 출발지 형식으로 쓰세요. 예: 'tcp/5900 100.64.0.0/10' 또는 'tcp/5900 any'\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: '%s' 은(는) 올바른 규칙이 아닙니다. <tcp|udp>/<포트> 와 출발지 형식으"
+"로 쓰세요. 예: 'tcp/5900 100.64.0.0/10' 또는 'tcp/5900 any'\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: '%s' 을(를) %s 에 기록했습니다 — 방화벽이 꺼져 있으므로 커널에서는 아무것도 바뀌지 않았습니다.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: '%s' 을(를) %s 에 기록했습니다 — 방화벽이 꺼져 있으므로 커널에서는 아"
+"무것도 바뀌지 않았습니다.\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: '%s' 을(를) %s 에서 제거했습니다 — 방화벽이 꺼져 있으므로 커널에서는 아무것도 바뀌지 않았습니다.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: '%s' 을(를) %s 에서 제거했습니다 — 방화벽이 꺼져 있으므로 커널에서는 "
+"아무것도 바뀌지 않았습니다.\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: '%s' 을(를) 기록했지만 방화벽을 다시 불러올 수 없었습니다 — 이 컴퓨터는 현재 인그레스 필터링되지 않습니다\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: '%s' 을(를) 기록했지만 방화벽을 다시 불러올 수 없었습니다 — 이 컴퓨터"
+"는 현재 인그레스 필터링되지 않습니다\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s 이(가) 열렸습니다\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ 이는 모든 출발지에 열려 있으며, 이 컴퓨터에 접근할 수 있다면 인터넷에서도 열려 있습니다. CIDR 을 지정해 범위를 좁히세요.\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ 이는 모든 출발지에 열려 있으며, 이 컴퓨터에 접근할 수 있다면 인터넷"
+"에서도 열려 있습니다. CIDR 을 지정해 범위를 좁히세요.\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -183,11 +232,13 @@ msgstr ""
 "    것입니다.\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    활성 — 인바운드 기본 차단, LAN과 established 트래픽은 허용.\n"
-"    synnet이 부팅 시 적용하고 1분마다 다시 확인합니다.\n"
+"    활성 — 인바운드 기본 차단. 기존 연결과, 신뢰하는 네트워크에서는\n"
+"    로컬 네트워크를 허용합니다. synnet이 부팅 시 적용하고\n"
+"    매분 다시 확인합니다.\n"
 
 #, c-format
 msgid ""
@@ -196,6 +247,23 @@ msgid ""
 msgstr ""
 "    ⚠ 이번 실행에서 %s번 다시 만들어졌습니다 — 이 컴퓨터의 무언가가\n"
 "      nftables를 비우고 있습니다.\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    NetworkManager가 응답하지 않았습니다: 사설 대역 출발지가 모든 인터페이스"
+"에서 허용됩니다.\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s: “%s” — 신뢰함\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s: “%s” — 신뢰하지 않음. 응답, ping, DHCP, 열린 포트만 들어옵니다\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -264,8 +332,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  원래는 버려질 출발지에 열어 둔 포트\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    없음 — 이 컴퓨터에는 루프백, 응답, ICMP, 사설 대역\n    출발지만 도달합니다.\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    없음 — 이 컴퓨터에는 루프백, 응답, ICMP, 사설 대역\n"
+"    출발지만 도달합니다.\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -283,3 +355,58 @@ msgstr "    (표시되지 않음 — root가 필요합니다)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    없음 — synnet 테이블이 로드되어 있지 않습니다.\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager가 응답하지 않아 알려진 네트워크가 없습니다: 사설 대역 출발지"
+"가 모든 인터페이스에서 허용됩니다.\n"
+
+msgid "On now:\n"
+msgstr "현재 연결:\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — 신뢰함\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr "  %-10s %s — 신뢰하지 않음: 응답, ping, DHCP, 열린 포트만 들어옵니다\n"
+
+msgid "Not connected to any network.\n"
+msgstr "연결된 네트워크가 없습니다.\n"
+
+msgid "Trusted networks:\n"
+msgstr "신뢰하는 네트워크:\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "아직 신뢰하는 네트워크가 없습니다.\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr ""
+"synnet: --ask는 데스크톱 사용자에게 묻습니다. 해당 사용자로 실행하세요\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"“%s” 네트워크를 신뢰할까요?\n"
+"\n"
+"신뢰하는 네트워크에서는 같은 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스"
+"(파일 공유, 미디어 서버, 원격 데스크톱)에 접속할 수 있습니다. 집이나 직장처"
+"럼 자신의 네트워크만 신뢰하세요. 공용 Wi-Fi는 신뢰하지 마세요."
+
+msgid "New network"
+msgstr "새 네트워크"
+
+msgid "Trust"
+msgstr "신뢰"
+
+msgid "Don't trust"
+msgstr "신뢰 안 함"

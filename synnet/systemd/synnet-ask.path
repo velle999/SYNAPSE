@@ -1,0 +1,11 @@
+[Unit]
+Description=Ask about each new network as it is joined
+
+[Path]
+# synnet rewrites this whenever it re-applies the firewall — on every
+# NetworkManager connection change.
+PathChanged=/run/synnet/networks
+Unit=synnet-ask.service
+
+[Install]
+WantedBy=paths.target

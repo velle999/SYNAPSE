@@ -1104,16 +1104,29 @@ msgstr ""
 "не открывает сайт, — обычно как раз это."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"Входящий трафик по умолчанию отбрасывается. Петля, ответы на соединения, "
-"начатые этой машиной, ICMP и всё из локальной сети пропускаются; "
-"незапрошенный трафик с публичного адреса — нет."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "По умолчанию вход отбрасывается. Проходят loopback, ответы на соединения этого компьютера и ICMP, а локальная сеть — только в доверенной сети; прочий незапрошенный трафик — нет."
 
 msgid "input filtering"
 msgstr "фильтрация входящего"
+
+msgid "trusted"
+msgstr "доверенная"
+
+msgid "not trusted"
+msgstr "не доверенная"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "Другие устройства в этой сети могут обращаться к общим службам этого компьютера — общим папкам, медиасерверам, удалённому рабочему столу."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "Из этой сети проходят только ответы, ping, DHCP и открытые порты. Доверяйте ей, если она ваша, например домашняя или рабочая."
 
 msgid "container links"
 msgstr "связи контейнеров"
@@ -1669,7 +1682,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "synguard на этой машине не активирует шлюз ядра · он старше 0.1.0-44 или его юнит был изменён · его запрещающие правила действуют только постфактум"
+msgstr ""
+"synguard на этой машине не активирует шлюз ядра · он старше 0.1.0-44 или его "
+"юнит был изменён · его запрещающие правила действуют только постфактум"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1988,6 +2003,12 @@ msgstr "Вкл — отклонять непрошеные подключени�
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "Выкл — отвечать на всё, что доходит до этой машины, в любой сети"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "Доверенная — другие устройства в ней могут обращаться к общим службам этого компьютера"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "Не доверенная — проходят только ответы, ping, DHCP и открытые порты"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2060,6 +2081,15 @@ msgid ""
 msgstr ""
 "ещё одна учётная запись со своими файлами и рабочим столом — на экране входа "
 "Tab переходит к полю имени"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "Входящий трафик по умолчанию отбрасывается. Петля, ответы на соединения, "
+#~ "начатые этой машиной, ICMP и всё из локальной сети пропускаются; "
+#~ "незапрошенный трафик с публичного адреса — нет."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

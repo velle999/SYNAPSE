@@ -1069,16 +1069,29 @@ msgstr ""
 "않는다면 보통 이것 때문입니다."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"들어오는 트래픽은 기본적으로 버립니다. 루프백, 이 컴퓨터가 맺은 연결에 대한 "
-"응답, ICMP, 그리고 로컬 네트워크에서 오는 것은 모두 통과시키고, 공인 주소에"
-"서 오는 요청하지 않은 트래픽은 통과시키지 않습니다."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "인바운드는 기본 차단입니다. 루프백, 이 컴퓨터가 연 연결에 대한 응답, ICMP는 통과하고, 로컬 네트워크는 신뢰하는 네트워크에서만 통과합니다. 그 밖의 요청하지 않은 트래픽은 차단됩니다."
 
 msgid "input filtering"
 msgstr "인바운드 필터링"
+
+msgid "trusted"
+msgstr "신뢰함"
+
+msgid "not trusted"
+msgstr "신뢰하지 않음"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스(파일 공유, 미디어 서버, 원격 데스크톱)에 접속할 수 있습니다."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "이 네트워크에서는 응답, ping, DHCP, 열린 포트만 들어옵니다. 집이나 직장처럼 자신의 네트워크라면 신뢰하세요."
 
 msgid "container links"
 msgstr "컨테이너 연결"
@@ -1626,7 +1639,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "이 컴퓨터의 synguard는 커널 게이트를 활성화하지 않습니다 · 0.1.0-44보다 오래되었거나 유닛이 변경되었습니다 · 거부 규칙은 사후에만 동작합니다"
+msgstr ""
+"이 컴퓨터의 synguard는 커널 게이트를 활성화하지 않습니다 · 0.1.0-44보다 오래"
+"되었거나 유닛이 변경되었습니다 · 거부 규칙은 사후에만 동작합니다"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1937,6 +1952,12 @@ msgstr "켬 — 로컬 네트워크 밖에서 오는 요청하지 않은 연결�
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "끔 — 어떤 네트워크에서든 이 컴퓨터에 도달하는 모든 것에 응답"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "신뢰함 — 이 네트워크의 다른 기기가 이 컴퓨터의 공유 서비스에 접속할 수 있습니다"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "신뢰하지 않음 — 응답, ping, DHCP, 열린 포트만 들어옵니다"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2004,6 +2025,15 @@ msgid ""
 msgstr ""
 "자신만의 파일과 데스크톱을 가진 다른 계정 — 로그인 화면에서 Tab을 누르면 이"
 "름 칸으로 이동합니다"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "들어오는 트래픽은 기본적으로 버립니다. 루프백, 이 컴퓨터가 맺은 연결에 대"
+#~ "한 응답, ICMP, 그리고 로컬 네트워크에서 오는 것은 모두 통과시키고, 공인 주"
+#~ "소에서 오는 요청하지 않은 트래픽은 통과시키지 않습니다."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

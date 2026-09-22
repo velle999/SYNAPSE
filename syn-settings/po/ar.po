@@ -1056,16 +1056,29 @@ msgstr ""
 "موقع، غالباً ما يكون هذا سببها."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"يُسقَط الوارد مبدئيًا. تُمرَّر الحلقة المحلية، والردود على الاتصالات التي بدأها "
-"هذا الجهاز، و ICMP، وكل ما يأتي من الشبكة المحلية؛ أما الحركة غير المطلوبة "
-"من عنوان عام فلا."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "الإسقاط الافتراضي للوارد. يمر loopback والردود على اتصالات هذا الجهاز وICMP، والشبكة المحلية فقط على شبكة موثوقة؛ أما بقية الحركة غير المطلوبة فلا."
 
 msgid "input filtering"
 msgstr "ترشيح الوارد"
+
+msgid "trusted"
+msgstr "موثوقة"
+
+msgid "not trusted"
+msgstr "غير موثوقة"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "يمكن للأجهزة الأخرى على هذه الشبكة الوصول إلى الخدمات المشتركة لهذا الجهاز — مشاركة الملفات وخوادم الوسائط وسطح المكتب البعيد."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "لا يدخل من هذه الشبكة إلا الردود وping وDHCP والمنافذ المفتوحة. ثق بها إن كانت شبكتك، مثل شبكة المنزل أو العمل."
 
 msgid "container links"
 msgstr "روابط الحاويات"
@@ -1597,7 +1610,9 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "لا يفعّل synguard على هذا الجهاز بوابة النواة · إصداره أقدم من 0.1.0-44، أو غُيّرت وحدته · قواعد المنع فيه لا تعمل إلا بعد وقوع الأمر"
+msgstr ""
+"لا يفعّل synguard على هذا الجهاز بوابة النواة · إصداره أقدم من 0.1.0-44، أو "
+"غُيّرت وحدته · قواعد المنع فيه لا تعمل إلا بعد وقوع الأمر"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1905,6 +1920,12 @@ msgstr "مُفعَّل — رفض الاتصالات غير المطلوبة م�
 msgid "Off — answer anything that reaches this machine, on any network"
 msgstr "مُعطَّل — الرد على كل ما يصل هذا الجهاز، على أي شبكة"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "موثوقة — يمكن للأجهزة الأخرى عليها الوصول إلى الخدمات المشتركة لهذا الجهاز"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "غير موثوقة — لا يدخل إلا الردود وping وDHCP والمنافذ المفتوحة"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -1970,6 +1991,15 @@ msgid ""
 "moves to the name field"
 msgstr ""
 "حساب آخر بملفاته وسطح مكتبه — في شاشة تسجيل الدخول ينقل Tab إلى حقل الاسم"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "يُسقَط الوارد مبدئيًا. تُمرَّر الحلقة المحلية، والردود على الاتصالات التي بدأها "
+#~ "هذا الجهاز، و ICMP، وكل ما يأتي من الشبكة المحلية؛ أما الحركة غير "
+#~ "المطلوبة من عنوان عام فلا."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

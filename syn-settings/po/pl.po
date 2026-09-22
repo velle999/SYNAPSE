@@ -1100,16 +1100,29 @@ msgstr ""
 "otwiera żadnej strony, to zwykle właśnie to."
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
-msgstr ""
-"Ruch przychodzący jest domyślnie odrzucany. Pętla zwrotna, odpowiedzi na "
-"połączenia nawiązane przez ten komputer, ICMP i wszystko z sieci lokalnej są "
-"przepuszczane; niezamówiony ruch z adresu publicznego nie."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
+msgstr "Domyślne odrzucanie na wejściu. Przechodzą loopback, odpowiedzi na połączenia tego komputera i ICMP, a sieć lokalna tylko w zaufanej sieci; pozostały niezamówiony ruch nie."
 
 msgid "input filtering"
 msgstr "filtrowanie wejścia"
+
+msgid "trusted"
+msgstr "zaufana"
+
+msgid "not trusted"
+msgstr "niezaufana"
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr "Inne urządzenia w tej sieci mogą łączyć się z udostępnionymi usługami tego komputera — udziałami plików, serwerami multimediów, pulpitem zdalnym."
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
+msgstr "Z tej sieci wchodzą tylko odpowiedzi, ping, DHCP i otwarte porty. Zaufaj jej, jeśli jest twoja, np. domowa lub w pracy."
 
 msgid "container links"
 msgstr "połączenia kontenerów"
@@ -1669,7 +1682,10 @@ msgid ""
 "synguard on this machine does not arm the kernel gate · it is older than "
 "0.1.0-44, or its unit has been changed · its deny rules act only after the "
 "fact"
-msgstr "synguard na tym komputerze nie uzbraja bramki jądra · jest starszy niż 0.1.0-44 albo zmieniono jego jednostkę · jego reguły blokujące działają tylko po fakcie"
+msgstr ""
+"synguard na tym komputerze nie uzbraja bramki jądra · jest starszy niż "
+"0.1.0-44 albo zmieniono jego jednostkę · jego reguły blokujące działają "
+"tylko po fakcie"
 
 msgid ""
 "off, and this boot was also started with synapse.bpf_enforce=0, which keeps "
@@ -1985,6 +2001,12 @@ msgid "Off — answer anything that reaches this machine, on any network"
 msgstr ""
 "Wyłączona — odpowiadaj na wszystko, co dotrze do tej maszyny, w każdej sieci"
 
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr "Zaufana — inne urządzenia w niej mogą łączyć się z udostępnionymi usługami tego komputera"
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
+msgstr "Niezaufana — wchodzą tylko odpowiedzi, ping, DHCP i otwarte porty"
+
 msgid "gpu"
 msgstr "gpu"
 
@@ -2056,6 +2078,15 @@ msgid ""
 msgstr ""
 "kolejne konto z własnymi plikami i pulpitem — na ekranie logowania Tab "
 "przechodzi do pola nazwy"
+
+#~ msgid ""
+#~ "Default-drop inbound. Loopback, replies to connections this machine made, "
+#~ "ICMP, and anything from the local network are let through; unsolicited "
+#~ "traffic from a public address is not."
+#~ msgstr ""
+#~ "Ruch przychodzący jest domyślnie odrzucany. Pętla zwrotna, odpowiedzi na "
+#~ "połączenia nawiązane przez ten komputer, ICMP i wszystko z sieci lokalnej "
+#~ "są przepuszczane; niezamówiony ruch z adresu publicznego nie."
 
 #, fuzzy
 #~ msgid "bluetooth.service"

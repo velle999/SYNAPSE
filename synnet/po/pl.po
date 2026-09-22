@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,6 +17,52 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
 "|| n%100>=20) ? 1 : 2);\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s wymaga roota (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: żadne zapisane połączenie nie nazywa się '%s' — `nmcli connection "
+"show` je wyświetla\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr ""
+"synnet: więcej niż jedno połączenie nazywa się '%s' — podaj zamiast tego "
+"jego UUID\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: nie udało się zaktualizować %s\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s zapisany, ale nie udało się przeładować zapory — ta maszyna NIE "
+"jest teraz filtrowana na wejściu\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet: sieć „%s” jest zaufana — urządzenia w niej mogą łączyć się z "
+"usługami tego komputera\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: sieć „%s” nie jest już zaufana — wchodzą z niej tylko odpowiedzi, "
+"ping, DHCP i otwarte porty\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall wymaga roota (sudo synnet --firewall)\n"
@@ -49,15 +95,11 @@ msgstr ""
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
 "synnet: zapora wejściowa zastosowana (domyślne odrzucanie na wejściu; "
-"dopuszczone loopback, połączenia nawiązane, ICMP, źródła z zakresów "
-"prywatnych i DHCP)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: %s wymaga roota (sudo synnet %s %s)\n"
+"dopuszczone loopback, połączenia nawiązane, ICMP i DHCP, a w zaufanych "
+"sieciach także źródła z zakresów prywatnych)\n"
 
 #, c-format
 msgid ""
@@ -66,10 +108,6 @@ msgid ""
 msgstr ""
 "synnet: '%s' nie jest poprawną nazwą interfejsu (1-15 znaków: litery, cyfry, "
 "'_', '.', '-')\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: nie udało się zaktualizować %s\n"
 
 #, c-format
 msgid ""
@@ -86,14 +124,6 @@ msgid ""
 msgstr ""
 "synnet: %s usunięty z zaufanych w %s — zapora jest wyłączona, więc w jądrze "
 "nic się nie zmieniło.\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet: %s zapisany, ale nie udało się przeładować zapory — ta maszyna NIE "
-"jest teraz filtrowana na wejściu\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -117,27 +147,47 @@ msgstr ""
 "gdy się pojawi.\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: „%s” nie jest prawidłową regułą. Zapisz ją jako <tcp|udp>/<port> i źródło, np. „tcp/5900 100.64.0.0/10” lub „tcp/5900 any”\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: „%s” nie jest prawidłową regułą. Zapisz ją jako <tcp|udp>/<port> i "
+"źródło, np. „tcp/5900 100.64.0.0/10” lub „tcp/5900 any”\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: zapisano „%s” w %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: zapisano „%s” w %s — zapora jest wyłączona, więc w jądrze nic się "
+"nie zmieniło.\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: usunięto „%s” z %s — zapora jest wyłączona, więc w jądrze nic się nie zmieniło.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: usunięto „%s” z %s — zapora jest wyłączona, więc w jądrze nic się "
+"nie zmieniło.\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: zapisano „%s”, ale nie udało się przeładować zapory — ta maszyna NIE jest teraz filtrowana na wejściu\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: zapisano „%s”, ale nie udało się przeładować zapory — ta maszyna NIE "
+"jest teraz filtrowana na wejściu\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s jest otwarty\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ to jest otwarte dla DOWOLNEGO źródła, w tym dla internetu, jeśli ta maszyna jest z niego osiągalna. Podaj CIDR, aby to zawęzić.\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ to jest otwarte dla DOWOLNEGO źródła, w tym dla internetu, jeśli "
+"ta maszyna jest z niego osiągalna. Podaj CIDR, aby to zawęzić.\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -187,12 +237,13 @@ msgstr ""
 "    zapisać w /run/synnet.\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    AKTYWNA — domyślne odrzucanie na wejściu, LAN i ruch\n"
-"    nawiązany dozwolone. Zastosowana przez synnet przy starcie i sprawdzana "
-"co minutę.\n"
+"    AKTYWNA — domyślne odrzucanie na wejściu; dopuszczone połączenia\n"
+"    nawiązane, a w zaufanych sieciach także sieć lokalna. Stosowana\n"
+"    przez synnet przy starcie i sprawdzana co minutę.\n"
 
 #, c-format
 msgid ""
@@ -201,6 +252,24 @@ msgid ""
 msgstr ""
 "    ⚠ odbudowana %s raz(y) w tym uruchomieniu — coś na tej maszynie\n"
 "      czyści nftables.\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    NetworkManager nie odpowiedział: źródła z zakresów prywatnych są "
+"dopuszczane na każdym interfejsie.\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s: „%s” — zaufana\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s: „%s” — NIEZAUFANA; wchodzą tylko odpowiedzi, ping, DHCP i otwarte "
+"porty\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -269,8 +338,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  Porty otwarte dla źródeł, które ta maszyna inaczej by odrzuciła\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    brak — tę maszynę osiągają tylko pętla zwrotna, odpowiedzi, ICMP\n    i źródła z zakresów prywatnych.\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    brak — tę maszynę osiągają tylko pętla zwrotna, odpowiedzi, ICMP\n"
+"    i źródła z zakresów prywatnych.\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -288,3 +361,61 @@ msgstr "    (nie pokazano — wymaga roota)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    brak — tablica synnet nie jest wczytana.\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager nie odpowiedział, więc żadna sieć nie jest znana: źródła z "
+"zakresów prywatnych są dopuszczane na każdym interfejsie.\n"
+
+msgid "On now:\n"
+msgstr "Połączono teraz:\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — zaufana\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"  %-10s %s — NIEZAUFANA: wchodzą tylko odpowiedzi, ping, DHCP i otwarte "
+"porty\n"
+
+msgid "Not connected to any network.\n"
+msgstr "Brak połączenia z jakąkolwiek siecią.\n"
+
+msgid "Trusted networks:\n"
+msgstr "Zaufane sieci:\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "Żadna sieć nie jest jeszcze zaufana.\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr ""
+"synnet: --ask pyta użytkownika pulpitu; uruchom je jako ten użytkownik\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"Czy ufać sieci „%s”?\n"
+"\n"
+"W zaufanej sieci inne urządzenia w niej mogą łączyć się z udostępnionymi "
+"usługami tego komputera — udziałami plików, serwerami multimediów, pulpitem "
+"zdalnym. Ufaj własnym sieciom, np. domowej lub w pracy. Nie ufaj publicznym "
+"sieciom Wi-Fi."
+
+msgid "New network"
+msgstr "Nowa sieć"
+
+msgid "Trust"
+msgstr "Ufaj"
+
+msgid "Don't trust"
+msgstr "Nie ufaj"

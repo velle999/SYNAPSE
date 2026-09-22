@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -15,6 +15,48 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: يحتاج %s إلى root (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: لا يوجد اتصال محفوظ باسم '%s' — يعرضها `nmcli connection show`\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr "synnet: يوجد أكثر من اتصال باسم '%s' — أعطِ معرّفه UUID بدلاً من ذلك\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: تعذّر تحديث %s\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: سُجِّل %s، لكن تعذّر إعادة تحميل الجدار — هذا الجهاز غير مُرشَّح عند الدخول "
+"الآن\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet: صارت “%s” موثوقة — يمكن للأجهزة عليها الوصول إلى خدمات هذا الجهاز\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: لم تعد “%s” موثوقة — لا يدخل منها إلا الردود وping وDHCP والمنافذ "
+"المفتوحة\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: يحتاج --firewall إلى root (sudo synnet --firewall)\n"
@@ -42,14 +84,10 @@ msgstr "synnet: تعذّر تطبيق جدار الدخول — هذا الجه�
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
 "synnet: طُبِّق جدار الدخول (الإسقاط الافتراضي للوارد؛ ويُقبل loopback والاتصالات "
-"القائمة وICMP والمصادر في النطاقات الخاصة وDHCP)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: يحتاج %s إلى root (sudo synnet %s %s)\n"
+"القائمة وICMP وDHCP، والمصادر في النطاقات الخاصة على الشبكات الموثوقة)\n"
 
 #, c-format
 msgid ""
@@ -57,10 +95,6 @@ msgid ""
 "'_', '.', '-')\n"
 msgstr ""
 "synnet: '%s' ليس اسم واجهة صالحاً (1-15 محرفاً: حروف وأرقام و'_' و'.' و'-')\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: تعذّر تحديث %s\n"
 
 #, c-format
 msgid ""
@@ -74,14 +108,6 @@ msgid ""
 "changed in the kernel.\n"
 msgstr ""
 "synnet: أُزيل %s من الموثوقين في %s — الجدار مُعطَّل، فلم يتغيّر شيء في النواة.\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet: سُجِّل %s، لكن تعذّر إعادة تحميل الجدار — هذا الجهاز غير مُرشَّح عند الدخول "
-"الآن\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -100,27 +126,45 @@ msgid ""
 msgstr "synnet: %s غير موجود بعد — والقاعدة تطابق بالاسم وتسري فور ظهوره.\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: '%s' ليست قاعدة صالحة. اكتبها على الشكل <tcp|udp>/<port> مع مصدر، مثل 'tcp/5900 100.64.0.0/10' أو 'tcp/5900 any'\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: '%s' ليست قاعدة صالحة. اكتبها على الشكل <tcp|udp>/<port> مع مصدر، "
+"مثل 'tcp/5900 100.64.0.0/10' أو 'tcp/5900 any'\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: سُجّل '%s' في %s — الجدار الناري مُطفأ، لذا لم يتغيّر شيء في النواة.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: سُجّل '%s' في %s — الجدار الناري مُطفأ، لذا لم يتغيّر شيء في النواة.\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: أُزيل '%s' من %s — الجدار الناري مُطفأ، لذا لم يتغيّر شيء في النواة.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: أُزيل '%s' من %s — الجدار الناري مُطفأ، لذا لم يتغيّر شيء في النواة.\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: سُجّل '%s'، لكن تعذّر إعادة تحميل الجدار الناري — هذا الجهاز غير مُرشَّح على المدخل حاليًا\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: سُجّل '%s'، لكن تعذّر إعادة تحميل الجدار الناري — هذا الجهاز غير مُرشَّح "
+"على المدخل حاليًا\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s مفتوح\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ هذا مفتوح لأي مصدر، بما في ذلك الإنترنت إذا كان الوصول إلى هذا الجهاز ممكنًا منه. حدّد CIDR لتضييقه.\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ هذا مفتوح لأي مصدر، بما في ذلك الإنترنت إذا كان الوصول إلى هذا "
+"الجهاز ممكنًا منه. حدّد CIDR لتضييقه.\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -170,11 +214,13 @@ msgstr ""
 "    /run/synnet.\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    فعّال — إسقاط افتراضي للوارد، مع السماح للشبكة المحلية\n"
-"    وللاتصالات القائمة. يطبّقه synnet عند الإقلاع ويعيد فحصه كل دقيقة.\n"
+"    نشط — الإسقاط الافتراضي للوارد؛ ويُسمح بالاتصالات القائمة،\n"
+"    وبالشبكة المحلية على الشبكات الموثوقة. يطبّقه synnet عند\n"
+"    الإقلاع ويعيد التحقق منه كل دقيقة.\n"
 
 #, c-format
 msgid ""
@@ -183,6 +229,23 @@ msgid ""
 msgstr ""
 "    ⚠ أُعيد بناؤه %s مرة في هذا التشغيل — شيء على هذا الجهاز\n"
 "      يُفرغ nftables.\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    لم يستجب NetworkManager: تُقبل المصادر في النطاقات الخاصة على كل "
+"الواجهات.\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s: “%s” — موثوقة\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s: “%s” — غير موثوقة؛ لا يدخل إلا الردود وping وDHCP والمنافذ المفتوحة\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -250,8 +313,12 @@ msgstr ""
 msgid "  Ports opened to sources this box would otherwise drop\n"
 msgstr "  المنافذ المفتوحة لمصادر كان هذا الجهاز ليُسقطها\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    لا شيء — لا يصل إلى هذا الجهاز سوى الاسترجاع المحلي والردود\n    وICMP والمصادر من النطاقات الخاصة.\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    لا شيء — لا يصل إلى هذا الجهاز سوى الاسترجاع المحلي والردود\n"
+"    وICMP والمصادر من النطاقات الخاصة.\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -269,3 +336,58 @@ msgstr "    (غير معروض — يحتاج root)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    لا شيء — جدول synnet غير مُحمَّل.\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"لم يستجب NetworkManager، لذا لا تُعرف أي شبكة: تُقبل المصادر في النطاقات "
+"الخاصة على كل الواجهات.\n"
+
+msgid "On now:\n"
+msgstr "المتصل الآن:\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — موثوقة\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"  %-10s %s — غير موثوقة: لا يدخل إلا الردود وping وDHCP والمنافذ المفتوحة\n"
+
+msgid "Not connected to any network.\n"
+msgstr "غير متصل بأي شبكة.\n"
+
+msgid "Trusted networks:\n"
+msgstr "الشبكات الموثوقة:\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "لا توجد شبكة موثوقة بعد.\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr "synnet: يسأل --ask مستخدمَ سطح المكتب؛ شغّله بصفته\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"هل تثق بالشبكة “%s”؟\n"
+"\n"
+"على الشبكة الموثوقة، يمكن للأجهزة الأخرى عليها الوصول إلى الخدمات المشتركة "
+"لهذا الحاسوب — مشاركة الملفات وخوادم الوسائط وسطح المكتب البعيد. ثق بشبكاتك "
+"أنت، مثل شبكة المنزل أو العمل. لا تثق بشبكات Wi-Fi العامة."
+
+msgid "New network"
+msgstr "شبكة جديدة"
+
+msgid "Trust"
+msgstr "ثق بها"
+
+msgid "Don't trust"
+msgstr "لا تثق بها"

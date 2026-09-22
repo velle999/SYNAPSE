@@ -972,12 +972,28 @@ msgid ""
 msgstr ""
 
 msgid ""
-"Default-drop inbound. Loopback, replies to connections this machine made, "
-"ICMP, and anything from the local network are let through; unsolicited "
-"traffic from a public address is not."
+"Default-drop inbound. Loopback, replies to connections this machine made and "
+"ICMP are let through, and the local network only on a trusted network; other "
+"unsolicited traffic is not."
 msgstr ""
 
 msgid "input filtering"
+msgstr ""
+
+msgid "trusted"
+msgstr ""
+
+msgid "not trusted"
+msgstr ""
+
+msgid ""
+"Other devices on this network can reach this machine's shared services — "
+"file sharing, media servers, remote desktop."
+msgstr ""
+
+msgid ""
+"Only replies, ping, DHCP and opened ports get in from this network. Trust it "
+"if it is your own, such as home or work."
 msgstr ""
 
 msgid "container links"
@@ -1741,6 +1757,12 @@ msgid "On — refuse unsolicited connections from outside the local network"
 msgstr ""
 
 msgid "Off — answer anything that reaches this machine, on any network"
+msgstr ""
+
+msgid "Trusted — other devices on it can reach this machine's shared services"
+msgstr ""
+
+msgid "Not trusted — only replies, ping, DHCP and opened ports get in"
 msgstr ""
 
 msgid "gpu"

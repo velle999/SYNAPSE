@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: synnet\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-04 03:13-0500\n"
+"POT-Creation-Date: 2026-09-21 23:07-0500\n"
 "PO-Revision-Date: 2026-09-03 00:15-0500\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,6 +16,52 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#, c-format
+msgid "synnet: %s needs root (sudo synnet %s %s)\n"
+msgstr "synnet: %s heeft root nodig (sudo synnet %s %s)\n"
+
+#, c-format
+msgid ""
+"synnet: no saved connection is called '%s' — `nmcli connection show` lists "
+"them\n"
+msgstr ""
+"synnet: geen opgeslagen verbinding heet '%s' — `nmcli connection show` toont "
+"ze\n"
+
+#, c-format
+msgid ""
+"synnet: more than one connection is called '%s' — give its UUID instead\n"
+msgstr ""
+"synnet: meer dan één verbinding heet '%s' — geef in plaats daarvan de UUID "
+"op\n"
+
+#, c-format
+msgid "synnet: could not update %s\n"
+msgstr "synnet: kon %s niet bijwerken\n"
+
+#, c-format
+msgid ""
+"synnet: %s recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: %s genoteerd, maar de firewall kon niet herladen worden — deze "
+"machine is op dit moment NIET ingangsgefilterd\n"
+
+#, c-format
+msgid ""
+"synnet: trusting “%s” — devices on it can reach this machine's services\n"
+msgstr ""
+"synnet: “%s” wordt vertrouwd — apparaten op dat netwerk kunnen de diensten "
+"van deze machine bereiken\n"
+
+#, c-format
+msgid ""
+"synnet: no longer trusting “%s” — only replies, ping, DHCP and open ports "
+"get in from it\n"
+msgstr ""
+"synnet: “%s” wordt niet meer vertrouwd — daarvandaan komen alleen "
+"antwoorden, ping, DHCP en open poorten binnen\n"
 
 msgid "synnet: --firewall needs root (sudo synnet --firewall)\n"
 msgstr "synnet: --firewall heeft root nodig (sudo synnet --firewall)\n"
@@ -48,15 +94,11 @@ msgstr ""
 
 msgid ""
 "synnet: input firewall applied (default-drop input; loopback, established, "
-"ICMP, private-range sources and DHCP accepted)\n"
+"ICMP and DHCP accepted, and private-range sources on trusted networks)\n"
 msgstr ""
 "synnet: inkomende firewall toegepast (standaard weigeren op inkomend; "
-"loopback, bestaande verbindingen, ICMP, bronnen uit privébereik en DHCP "
-"toegestaan)\n"
-
-#, c-format
-msgid "synnet: %s needs root (sudo synnet %s %s)\n"
-msgstr "synnet: %s heeft root nodig (sudo synnet %s %s)\n"
+"loopback, bestaande verbindingen, ICMP en DHCP toegestaan, en bronnen uit "
+"privébereik op vertrouwde netwerken)\n"
 
 #, c-format
 msgid ""
@@ -65,10 +107,6 @@ msgid ""
 msgstr ""
 "synnet: '%s' is geen geldige interfacenaam (1-15 tekens: letters, cijfers, "
 "'_', '.', '-')\n"
-
-#, c-format
-msgid "synnet: could not update %s\n"
-msgstr "synnet: kon %s niet bijwerken\n"
 
 #, c-format
 msgid ""
@@ -85,14 +123,6 @@ msgid ""
 msgstr ""
 "synnet: %s uit de vertrouwde lijst gehaald in %s — de firewall staat uit, "
 "dus in de kernel is niets veranderd.\n"
-
-#, c-format
-msgid ""
-"synnet: %s recorded, but the firewall could not be reloaded — this box is "
-"NOT ingress-filtered right now\n"
-msgstr ""
-"synnet: %s genoteerd, maar de firewall kon niet herladen worden — deze "
-"machine is op dit moment NIET ingangsgefilterd\n"
 
 #, c-format
 msgid "synnet: trusting %s — DHCP and DNS from that link are accepted\n"
@@ -116,27 +146,47 @@ msgstr ""
 "verschijnt.\n"
 
 #, c-format
-msgid "synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
-msgstr "synnet: '%s' is geen geldige regel. Schrijf hem als <tcp|udp>/<poort> en een bron, bijv. 'tcp/5900 100.64.0.0/10' of 'tcp/5900 any'\n"
+msgid ""
+"synnet: '%s' is not a legal rule. Write it as <tcp|udp>/<port> and a source, "
+"e.g. 'tcp/5900 100.64.0.0/10' or 'tcp/5900 any'\n"
+msgstr ""
+"synnet: '%s' is geen geldige regel. Schrijf hem als <tcp|udp>/<poort> en een "
+"bron, bijv. 'tcp/5900 100.64.0.0/10' of 'tcp/5900 any'\n"
 
 #, c-format
-msgid "synnet: recorded '%s' in %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: '%s' vastgelegd in %s — de firewall staat uit, er is dus niets veranderd in de kernel.\n"
+msgid ""
+"synnet: recorded '%s' in %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: '%s' vastgelegd in %s — de firewall staat uit, er is dus niets "
+"veranderd in de kernel.\n"
 
 #, c-format
-msgid "synnet: removed '%s' from %s — the firewall is switched off, so nothing changed in the kernel.\n"
-msgstr "synnet: '%s' verwijderd uit %s — de firewall staat uit, er is dus niets veranderd in de kernel.\n"
+msgid ""
+"synnet: removed '%s' from %s — the firewall is switched off, so nothing "
+"changed in the kernel.\n"
+msgstr ""
+"synnet: '%s' verwijderd uit %s — de firewall staat uit, er is dus niets "
+"veranderd in de kernel.\n"
 
 #, c-format
-msgid "synnet: '%s' recorded, but the firewall could not be reloaded — this box is NOT ingress-filtered right now\n"
-msgstr "synnet: '%s' vastgelegd, maar de firewall kon niet opnieuw worden geladen — deze machine is op dit moment NIET ingangsgefilterd\n"
+msgid ""
+"synnet: '%s' recorded, but the firewall could not be reloaded — this box is "
+"NOT ingress-filtered right now\n"
+msgstr ""
+"synnet: '%s' vastgelegd, maar de firewall kon niet opnieuw worden geladen — "
+"deze machine is op dit moment NIET ingangsgefilterd\n"
 
 #, c-format
 msgid "synnet: %s is open\n"
 msgstr "synnet: %s is open\n"
 
-msgid "synnet: ⚠ that is open to ANY source, including the internet if this machine is reachable from it. Name a CIDR to narrow it.\n"
-msgstr "synnet: ⚠ dat staat open voor ELKE bron, ook voor internet als deze machine daarvandaan bereikbaar is. Geef een CIDR op om het te beperken.\n"
+msgid ""
+"synnet: ⚠ that is open to ANY source, including the internet if this machine "
+"is reachable from it. Name a CIDR to narrow it.\n"
+msgstr ""
+"synnet: ⚠ dat staat open voor ELKE bron, ook voor internet als deze machine "
+"daarvandaan bereikbaar is. Geef een CIDR op om het te beperken.\n"
 
 #, c-format
 msgid "synnet: %s is closed\n"
@@ -186,12 +236,13 @@ msgstr ""
 "    niet naar /run/synnet schrijven.\n"
 
 msgid ""
-"    ACTIVE — default-drop input, LAN and established traffic\n"
-"    trusted. Asserted by synnet at boot and re-checked every minute.\n"
+"    ACTIVE — default-drop input; established traffic, and the\n"
+"    local network on trusted networks, let through. Asserted by\n"
+"    synnet at boot and re-checked every minute.\n"
 msgstr ""
-"    ACTIEF — standaard weigeren op inkomend, LAN en bestaand\n"
-"    verkeer toegestaan. Toegepast door synnet bij het opstarten en elke "
-"minuut herzien.\n"
+"    ACTIEF — standaard weigeren op inkomend; bestaande verbindingen\n"
+"    en, op vertrouwde netwerken, het lokale netwerk toegestaan. Door\n"
+"    synnet bij het opstarten toegepast en elke minuut gecontroleerd.\n"
 
 #, c-format
 msgid ""
@@ -200,6 +251,24 @@ msgid ""
 msgstr ""
 "    ⚠ %s keer herbouwd tijdens deze run — iets op deze machine leegt\n"
 "      nftables.\n"
+
+msgid ""
+"    NetworkManager did not answer: private-range sources are accepted on "
+"every interface.\n"
+msgstr ""
+"    NetworkManager antwoordde niet: bronnen uit privébereik worden op elke "
+"interface toegestaan.\n"
+
+#, c-format
+msgid "    %s: “%s” — trusted\n"
+msgstr "    %s: “%s” — vertrouwd\n"
+
+#, c-format
+msgid ""
+"    %s: “%s” — NOT trusted; only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"    %s: “%s” — NIET vertrouwd; alleen antwoorden, ping, DHCP en open poorten "
+"komen binnen\n"
 
 msgid ""
 "    FAILED to apply — this box is NOT ingress-filtered.\n"
@@ -265,10 +334,15 @@ msgstr ""
 "\n"
 
 msgid "  Ports opened to sources this box would otherwise drop\n"
-msgstr "  Poorten die openstaan voor bronnen die deze machine anders zou verwerpen\n"
+msgstr ""
+"  Poorten die openstaan voor bronnen die deze machine anders zou verwerpen\n"
 
-msgid "    none — only loopback, replies, ICMP and private-range\n    sources reach this machine.\n"
-msgstr "    geen — alleen loopback, antwoorden, ICMP en bronnen uit\n    privéreeksen bereiken deze machine.\n"
+msgid ""
+"    none — only loopback, replies, ICMP and private-range\n"
+"    sources reach this machine.\n"
+msgstr ""
+"    geen — alleen loopback, antwoorden, ICMP en bronnen uit\n"
+"    privéreeksen bereiken deze machine.\n"
 
 #, c-format
 msgid "    %s/%ld  from ANYWHERE, including the internet\n"
@@ -286,3 +360,62 @@ msgstr "    (niet getoond — vereist root)\n"
 
 msgid "    none — the synnet table is not loaded.\n"
 msgstr "    geen — de synnet-tabel is niet geladen.\n"
+
+msgid ""
+"NetworkManager did not answer, so no network is known: private-range sources "
+"are accepted on every interface.\n"
+msgstr ""
+"NetworkManager antwoordde niet, dus er is geen netwerk bekend: bronnen uit "
+"privébereik worden op elke interface toegestaan.\n"
+
+msgid "On now:\n"
+msgstr "Nu verbonden:\n"
+
+#, c-format
+msgid "  %-10s %s — trusted\n"
+msgstr "  %-10s %s — vertrouwd\n"
+
+#, c-format
+msgid ""
+"  %-10s %s — NOT trusted: only replies, ping, DHCP and open ports get in\n"
+msgstr ""
+"  %-10s %s — NIET vertrouwd: alleen antwoorden, ping, DHCP en open poorten "
+"komen binnen\n"
+
+msgid "Not connected to any network.\n"
+msgstr "Met geen enkel netwerk verbonden.\n"
+
+msgid "Trusted networks:\n"
+msgstr "Vertrouwde netwerken:\n"
+
+msgid "No network is trusted yet.\n"
+msgstr "Er wordt nog geen netwerk vertrouwd.\n"
+
+msgid "synnet: --ask asks the desktop user; run it as them\n"
+msgstr ""
+"synnet: --ask vraagt het de gebruiker van het bureaublad; voer het als die "
+"gebruiker uit\n"
+
+#, c-format
+msgid ""
+"Trust the network “%s”?\n"
+"\n"
+"On a trusted network, other devices on it can reach this computer's shared "
+"services — file sharing, media servers, remote desktop. Trust your own "
+"networks, such as home or work. Don't trust public Wi-Fi."
+msgstr ""
+"Het netwerk “%s” vertrouwen?\n"
+"\n"
+"Op een vertrouwd netwerk kunnen andere apparaten op dat netwerk de gedeelde "
+"diensten van deze computer bereiken — bestandsdeling, mediaservers, extern "
+"bureaublad. Vertrouw je eigen netwerken, zoals thuis of op het werk. "
+"Vertrouw geen openbare wifi."
+
+msgid "New network"
+msgstr "Nieuw netwerk"
+
+msgid "Trust"
+msgstr "Vertrouwen"
+
+msgid "Don't trust"
+msgstr "Niet vertrouwen"
