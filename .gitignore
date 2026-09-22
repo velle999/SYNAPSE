@@ -210,6 +210,10 @@ archiso/out/*.asc
 /chibi/whisper-*vocabulary.txt
 /chibi/*.onnx
 /chibi/*.onnx.json
+# pygame's sdist (chibi 38 builds it from source, pinned by pydeps.lock). A URL
+# source is downloaded beside the PKGBUILD like the models above; a glob, so
+# the next pygame version's file is covered as well.
+/chibi/pygame-*.tar.gz
 
 # synapse-voice took over those models (and chibi-llm's engine files) in chibi
 # 27. Same shape, same reason: syn-update refuses to fetch into a tree with

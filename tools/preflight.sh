@@ -1104,6 +1104,28 @@ check_leavings() {
         # …and the cached clone of a git+ source, whose directory is named by
         # the source spec rather than by the package.
         while IFS= read -r spec; do
+            # ⛔ A DOWNLOADED FILE LANDS THERE TOO. SRCDEST is the PKGBUILD's
+            # directory for a plain URL source as well, so the file sits beside
+            # it untracked. chibi 38 added pygame's sdist this way, and every
+            # machine that built it then refused to update. The local name is
+            # the part before `::`, else the URL's last segment.
+            local file=""
+            case "$spec" in
+                *::git+*) ;;
+                *::http://*|*::https://*|*::ftp://*) file=${spec%%::*} ;;
+                http://*|https://*|ftp://*)
+                          file=${spec%%#*}; file=${file%%\?*}; file=${file##*/} ;;
+            esac
+            if [ -n "$file" ]; then
+                git check-ignore -q "$pkg/$file" || fail leavings \
+                    "$pkg/$file is not ignored — makepkg downloads it there" \
+                    "SRCDEST is the PKGBUILD's own directory, so a URL source is" \
+                    "saved beside it and untracked. Same consequence as src/:" \
+                    "the first machine to build $pkg cannot update again." \
+                    "Fix: add a '/$pkg/<name>-*' rule to .gitignore in this commit," \
+                    "as a glob so the next version's file is covered too."
+                continue
+            fi
             case "$spec" in
                 *::git+*) clone=${spec%%::git+*} ;;
                 git+*)    clone=${spec#git+}
