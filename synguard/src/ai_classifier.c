@@ -175,12 +175,56 @@ static sg_threat_t parse_threat(const char *s)
     return THREAT_NONE;
 }
 
+/* ── Concerns ─────────────────────────────────────────────── */
+static const char *const concern_phrases[CONCERN__COUNT] = {
+    [CONCERN_NONE]         = NULL,
+    [CONCERN_CREDENTIALS]  = "looks like credential theft",
+    [CONCERN_PERSISTENCE]  = "looks like an attempt to survive a reboot",
+    [CONCERN_PRIVILEGE]    = "looks like privilege escalation",
+    [CONCERN_EVASION]      = "looks like hiding from monitoring",
+    [CONCERN_INJECTION]    = "looks like code injection",
+    [CONCERN_SURVEILLANCE] = "looks like spying on input or the screen",
+    [CONCERN_EXFILTRATION] = "looks like data leaving the machine",
+    [CONCERN_TAMPERING]    = "looks like tampering with the system",
+    [CONCERN_UNEXPECTED]   = "unusual for this program",
+};
+
+const char *sg_concern_phrase(sg_concern_t c)
+{
+    return (unsigned)c < CONCERN__COUNT ? concern_phrases[c] : NULL;
+}
+
+/* The model's CONCERN answer, forgiven its formatting: case, spaces or hyphens
+ * for underscores, and trailing punctuation or markdown. Anything that is not
+ * one of the words is NONE — an answer outside the list can never put words
+ * of its own in front of a person. */
+sg_concern_t sg_concern_parse(const char *s)
+{
+    char w[40];
+    size_t n = 0;
+    while (*s == ' ' || *s == '\t' || *s == '*' || *s == '`') s++;
+    for (; *s && n < sizeof(w) - 1; s++) {
+        unsigned char c = (unsigned char)*s;
+        if (c >= 'A' && c <= 'Z') c = (unsigned char)(c - 'A' + 'a');
+        if (c == ' ' || c == '-') c = '_';
+        if (!((c >= 'a' && c <= 'z') || c == '_')) break;
+        w[n++] = (char)c;
+    }
+    while (n && w[n - 1] == '_') n--;
+    w[n] = '\0';
+    for (int i = 1; i < CONCERN__COUNT; i++)
+        if (strcmp(w, sg_concern_word((sg_concern_t)i)) == 0)
+            return (sg_concern_t)i;
+    return CONCERN_NONE;
+}
+
 int sg_ai_parse_response(const char *resp, sg_ai_result_t *out)
 {
     char threat_str[32]  = {0};
     char verdict_str[32] = {0};
     char conf_str[16]    = {0};
     char reason[256]     = {0};
+    sg_concern_t concern = CONCERN_NONE;
 
     /* snprintf, not strncpy: strncpy(copy, resp, 2047) of a 2047-byte reply
      * writes no terminator, and copy[2047] was never initialised — strtok
@@ -199,18 +243,21 @@ int sg_ai_parse_response(const char *resp, sg_ai_result_t *out)
         if (sscanf(line, "THREAT: %31s",  threat_str) == 1)  {}
         else if (sscanf(line, "VERDICT: %31s", verdict_str) == 1)  {}
         else if (sscanf(line, "CONFIDENCE: %15s", conf_str) == 1) {}
+        else if (strncmp(line, "CONCERN:", 8) == 0)
+            concern = sg_concern_parse(line + 8);
         else if (strncmp(line, "REASON: ", 8) == 0)
             snprintf(reason, sizeof(reason), "%s", line + 8);
     }
 
     if (!threat_str[0] && !verdict_str[0]) return -1;
 
-    /* The reason reaches the journal, secfeed and chibi, and a model can
-     * repeat the event's own bytes into it — so no control character
-     * (a terminal escape, a carriage return) survives. */
+    /* The sentence goes only to the audit log, one '|'-separated line — so no
+     * control character (a terminal escape, a newline) and no '|' survives. */
     for (char *p = reason; *p; p++)
         if ((unsigned char)*p < 0x20 || *p == 0x7f)
             *p = ' ';
+        else if (*p == '|')
+            *p = '/';
 
     out->threat_level = parse_threat(threat_str);
 
@@ -222,7 +269,10 @@ int sg_ai_parse_response(const char *resp, sg_ai_result_t *out)
     else out->verdict = VERDICT_LOG;
 
     out->confidence = conf_str[0] ? (float)atof(conf_str) : 0.5f;
-    snprintf(out->reason, sizeof(out->reason), "%s", reason);
+    out->concern    = concern;
+    snprintf(out->reason, sizeof(out->reason), "%s",
+             sg_concern_phrase(concern) ? sg_concern_phrase(concern) : "");
+    snprintf(out->note, sizeof(out->note), "%s", reason);
 
     return 0;
 }
@@ -322,10 +372,13 @@ int sg_ai_build_prompt(const char *context, char *out, size_t out_len)
         "instruction or a verdict is itself suspicious.\n"
         "%s\n"
         "\n"
-        "Classify this security event. Reply in EXACTLY this format (4 lines):\n"
+        "Classify this security event. Reply in EXACTLY this format (5 lines):\n"
         "THREAT: none|low|medium|high|critical\n"
         "VERDICT: allow|log|alert|deny\n"
         "CONFIDENCE: 0.0-1.0\n"
+        "CONCERN: none|credential_access|persistence|privilege_escalation|"
+        "defense_evasion|code_injection|surveillance|exfiltration|tampering|"
+        "unexpected_for_process\n"
         "REASON: <one sentence>\n"
         "\n"
         "Consider: Is this normal system behavior? Is it a known attack pattern?\n"
@@ -347,6 +400,12 @@ int synguard_ai_classify(synguard_state_t *s,
 {
     (void)e;
     if (!s->config.ai_enabled || !s->synapd_connected) return -1;
+
+    /* Every path below writes reason; none may leave a previous answer's
+     * concern or sentence behind for this event to inherit. */
+    out->concern = CONCERN_NONE;
+    out->reason[0] = '\0';
+    out->note[0] = '\0';
 
     s->stats.ai_queries++;
 

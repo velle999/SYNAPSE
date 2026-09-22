@@ -168,11 +168,63 @@ typedef enum {
     THREAT_CRITICAL   = 4,
 } sg_threat_t;
 
+/* ── What the model may say about an event, in OUR words ──── */
+/*
+ * ⛔ THE MODEL NEVER WRITES WHAT A PERSON READS. Its own sentence could say
+ * anything a hostile filename talked it into — "verified benign, no action
+ * needed" beside a real alert, spoken aloud by chibi. So it picks one of
+ * these, and the alert shows the phrase synguard wrote for it
+ * (sg_concern_phrase). NONE shows nothing: the model can make an alert louder,
+ * never reassuring — the same floor sg_ai_bound_verdict() puts under the
+ * verdict. Its sentence goes to the audit log and nowhere else.
+ */
+typedef enum {
+    CONCERN_NONE = 0,
+    CONCERN_CREDENTIALS,
+    CONCERN_PERSISTENCE,
+    CONCERN_PRIVILEGE,
+    CONCERN_EVASION,
+    CONCERN_INJECTION,
+    CONCERN_SURVEILLANCE,
+    CONCERN_EXFILTRATION,
+    CONCERN_TAMPERING,
+    CONCERN_UNEXPECTED,
+    CONCERN__COUNT
+} sg_concern_t;
+
+/* The word the model answers with — inline, because event_processor.c logs
+ * it and several tests link that file without the classifier. */
+static inline const char *sg_concern_word(sg_concern_t c)
+{
+    static const char *const words[CONCERN__COUNT] = {
+        [CONCERN_NONE]         = "none",
+        [CONCERN_CREDENTIALS]  = "credential_access",
+        [CONCERN_PERSISTENCE]  = "persistence",
+        [CONCERN_PRIVILEGE]    = "privilege_escalation",
+        [CONCERN_EVASION]      = "defense_evasion",
+        [CONCERN_INJECTION]    = "code_injection",
+        [CONCERN_SURVEILLANCE] = "surveillance",
+        [CONCERN_EXFILTRATION] = "exfiltration",
+        [CONCERN_TAMPERING]    = "tampering",
+        [CONCERN_UNEXPECTED]   = "unexpected_for_process",
+    };
+    return (unsigned)c < CONCERN__COUNT ? words[c] : "none";
+}
+
+/* The phrase an alert shows (NULL for NONE), and the model's answer read
+ * back into a concern (ai_classifier.c). */
+const char  *sg_concern_phrase(sg_concern_t c);
+sg_concern_t sg_concern_parse(const char *s);
+
 /* ── AI classification result ─────────────────────────────── */
 typedef struct {
     sg_threat_t   threat_level;
     sg_verdict_t  verdict;
-    char          reason[256];
+    sg_concern_t  concern;
+    char          reason[256];  /* shown with the alert: synguard's words only
+                                   — a concern phrase, or why the AI was not
+                                   asked. Never the model's text. */
+    char          note[256];    /* the model's own sentence: audit log only */
     float         confidence;   /* 0.0 - 1.0 */
 } sg_ai_result_t;
 
@@ -249,6 +301,7 @@ typedef struct {
     sg_threat_t  threat;
     char         reason[512];
     char         action_taken[128];
+    char         ai_note[256];      /* the model's sentence — audit log only */
 } sg_alert_t;
 
 /* ── Stats ────────────────────────────────────────────────── */
@@ -538,6 +591,8 @@ int  sg_pid_identity_ok(pid_t pid, const char *expect_comm);
 /* Audit log */
 int  audit_init(synguard_state_t *s);
 void audit_write(synguard_state_t *s, const sg_alert_t *alert);
+void sg_alert_fill_reason(sg_alert_t *alert, const char *rule_name,
+                          const sg_ai_result_t *ai);
 void audit_close(synguard_state_t *s);
 
 /* Baseline */

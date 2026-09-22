@@ -187,11 +187,16 @@ Each check was shown to fail when its protection is removed: the old policy
 (91 failures), `--ai-enforce` unable to raise (16), newlines passed raw (23),
 backslash passed raw (2), truncation accepted (1).
 
-**Still open, and not this item:** the model's REASON is shown with the alert,
-and a steered model can put reassuring words there. It is sanitised of control
-bytes and can no longer change the verdict — but a human reading "verified
-benign" beside an alert is being addressed by the attacker. secfeed carries it
-to chibi, which may hand it to a model again; that path has not been attacked.
+**The words, closed 2026-09-22 (synguard 46).** The model's own sentence was
+shown with every alert, so a steered model could put "verified benign" beside a
+real one — and secfeed carried it to chibi, whose model then read it back as
+its own conversation. Now the model picks one concern from a fixed list and the
+alert shows synguard's phrase for it; "none", or anything off the list, adds
+nothing. Its sentence goes only to the audit log (`AI_NOTE`). What reaches
+chibi is the process name, the rule name and that phrase.
+`tests/ai_inject_test.c` fails 163 checks if the sentence is shown again.
+Not measured: how reliably the shipped model answers the new `CONCERN:` line —
+synapd was off. When it does not, the alert shows no AI phrase at all.
 
 ## 3. Signed release artifacts, with one documented way to verify
 

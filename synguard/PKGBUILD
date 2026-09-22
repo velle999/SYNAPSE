@@ -115,7 +115,19 @@ pkgver=0.1.0
 #   commit. mktarball.sh packs the same bytes every time (sorted, fixed clock
 #   and owner) and leaves out anything .gitignore names. The package is
 #   unchanged.
-pkgrel=45
+# 46: THE MODEL NO LONGER WRITES WHAT A PERSON READS. An alert showed the
+#   model's own sentence ("rule / AI: <whatever it said>"), and a model steered
+#   by a hostile filename could put "verified benign, no action needed" beside
+#   a real alert — in the journal, on the bar, and aloud from chibi, whose own
+#   model then read it back as its conversation. The verdict could no longer
+#   be lowered (41); the words still could.
+#   The model now picks one CONCERN from a fixed list and the alert shows the
+#   phrase synguard wrote for it; "none" or anything off the list shows
+#   nothing, so an answer can make an alert louder, never reassuring. Its
+#   sentence is kept only in the audit log, as a new last field (AI_NOTE),
+#   with '|' and control bytes replaced. tests/ai_inject_test.c: 163 checks
+#   fail if the sentence is shown again.
+pkgrel=46
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

@@ -820,8 +820,9 @@ static sg_verdict_t apply_ai_verdict(synguard_state_t *s, const sg_event_t *e,
     if (verdict == VERDICT_ESCALATE && ai->verdict >= VERDICT_DENY && v != ai->verdict)
         sg_log(LOG_WARNING,
                "AI recommended %s for pid=%u (%s) — clamped to alert "
-               "(--ai-enforce not set): %.120s",
-               verdict_name(ai->verdict), e->pid, e->comm, ai->reason);
+               "(--ai-enforce not set), concern=%s",
+               verdict_name(ai->verdict), e->pid, e->comm,
+               sg_concern_word(ai->concern));
     return v;
 }
 
@@ -947,6 +948,19 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
     dispatch_verdict(s, e, verdict, rname, &ai_result);
 }
 
+/* What a person reads with an alert — the journal, the bar, chibi — and what
+ * only the audit log gets. ai->reason is synguard's own words
+ * (sg_ai_result_t); the model's sentence goes to ai_note and nowhere else. */
+void sg_alert_fill_reason(sg_alert_t *alert, const char *rule_name,
+                          const sg_ai_result_t *ai)
+{
+    snprintf(alert->reason, sizeof(alert->reason), "%s%s%s",
+             rule_name ? rule_name : "default",
+             ai->reason[0] ? " / AI: " : "",
+             ai->reason);
+    snprintf(alert->ai_note, sizeof(alert->ai_note), "%s", ai->note);
+}
+
 /* Dispatch a decided verdict. Reader thread only — this is where stats,
  * actions and the audit log are mutated, and keeping it single-writer is why
  * the worker hands results back instead of acting on them itself. */
@@ -963,10 +977,7 @@ static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
         .verdict     = verdict,
         .threat      = ai_result.threat_level,
     };
-    snprintf(alert.reason, sizeof(alert.reason), "%s%s%s",
-             rule_name ? rule_name : "default",
-             ai_result.reason[0] ? " / AI: " : "",
-             ai_result.reason);
+    sg_alert_fill_reason(&alert, rule_name, &ai_result);
 
     switch (verdict) {
     case VERDICT_ALLOW:
@@ -1299,10 +1310,10 @@ static void *reader_thread_fn(void *arg)
                 sg_verdict_t v = fin.verdict;
                 if (fin.ai_ok) {
                     sg_log(LOG_DEBUG,
-                           "AI: threat=%d verdict=%s confidence=%.2f reason=%.80s",
+                           "AI: threat=%d verdict=%s confidence=%.2f concern=%s",
                            (int)fin.ai.threat_level,
                            verdict_name(fin.ai.verdict),
-                           fin.ai.confidence, fin.ai.reason);
+                           fin.ai.confidence, sg_concern_word(fin.ai.concern));
                     v = apply_ai_verdict(s, &fin.e, v, &fin.ai);
                 } else {
                     sg_log(LOG_DEBUG,

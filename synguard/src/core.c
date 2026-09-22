@@ -194,7 +194,10 @@ int baseline_is_anomalous(synguard_state_t *s, const sg_event_t *evt)
  *
  * Writes a structured log line for each security event.
  * Format:
- *   TIMESTAMP|VERDICT|THREAT|PID|UID|COMM|EVT|FILE|REASON|ACTION
+ *   TIMESTAMP|VERDICT|THREAT|PID|UID|COMM|EVT|FILE|REASON|ACTION|AI_NOTE
+ *
+ * AI_NOTE is the model's own sentence, and this file is the only place it is
+ * written: the journal, the bar and chibi get the concern phrase in REASON.
  */
 
 int audit_init(synguard_state_t *s)
@@ -219,7 +222,7 @@ int audit_init(synguard_state_t *s)
     if (st.st_size == 0) {
         const char *hdr =
             "# synguard audit log\n"
-            "# FORMAT: TIMESTAMP|VERDICT|THREAT|PID|UID|COMM|EVT|FILE|REASON|ACTION\n";
+            "# FORMAT: TIMESTAMP|VERDICT|THREAT|PID|UID|COMM|EVT|FILE|REASON|ACTION|AI_NOTE\n";
         write(s->audit_fd, hdr, strlen(hdr));
     }
 
@@ -242,17 +245,23 @@ void audit_write(synguard_state_t *s, const sg_alert_t *alert)
     const char *vn = alert->verdict < 6 ? vnames[alert->verdict] : "?";
     const char *tn = alert->threat  < 5 ? tnames[alert->threat]  : "?";
 
-    char line[1024];
+    char line[1400];
     int n = snprintf(line, sizeof(line),
-        "%llu|%s|%s|%u|%u|%s|%02x|%s|%s|%s\n",
+        "%llu|%s|%s|%u|%u|%s|%02x|%s|%s|%s|%s\n",
         (unsigned long long)((uint64_t)alert->timestamp * 1000000000ULL),
         vn, tn,
         e->pid, e->uid, e->comm,
         e->evt_type,
         e->filename[0] ? e->filename : "-",
         alert->reason[0] ? alert->reason : "-",
-        alert->action_taken[0] ? alert->action_taken : "-"
+        alert->action_taken[0] ? alert->action_taken : "-",
+        alert->ai_note[0] ? alert->ai_note : "-"
     );
+    if (n < 0) return;
+    if ((size_t)n >= sizeof(line)) {        /* cut, but keep it one line */
+        n = (int)sizeof(line) - 1;
+        line[n - 1] = '\n';
+    }
 
     pthread_mutex_lock(&s->audit_lock);
     write(s->audit_fd, line, n);
