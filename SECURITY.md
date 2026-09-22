@@ -168,7 +168,9 @@ SynapseOS Update Signing <updates@soslinux.org>     ed25519
 ```
 
 The public key is at <https://soslinux.org/synapseos-update-key.asc>, and
-`syn-update` carries a copy in `/usr/share/syn-update/keys/`.
+`syn-update` carries a copy in `/usr/share/syn-update/keys/`. It is signed by
+the release key: with both imported, `gpg --check-sigs 648B4C32942C79B20E8AC3F49CECEBCDF48037C1`
+shows a good signature from SynapseOS Release Signing.
 
 - **An installed SynapseOS** updates with `syn-update`, which builds only
   commits signed with this key. When newer commits are not signed it builds up

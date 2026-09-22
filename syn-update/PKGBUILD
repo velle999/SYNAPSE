@@ -276,7 +276,10 @@ pkgver=0.1.0
 # fix does: in a commit signed by a key they already have.
 # ⚠ THIS RELEASE IS THE LAST ONE A MACHINE TAKES WITHOUT CHECKING — the apply
 # that installs it runs the old script. tests/signed_update_test.sh.
-pkgrel=63
+# 64: the shipped update key now carries the release key's certification, so
+#   anyone who trusts the release key can check the update key with gpg. The
+#   key itself, and what syn-update accepts, are unchanged.
+pkgrel=64
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -497,8 +497,8 @@ repository and every published source tarball.
 - [x] makepkg refuses an unsigned or tampered published tarball.
 - [x] The key and its fingerprint are published (`SECURITY.md`,
       soslinux.org).
-- [ ] The update key is certified by the release key, so one fingerprint
-      vouches for both.
+- [x] The update key is certified by the release key, so one fingerprint
+      vouches for both. Signed 2026-09-22; the published key carries it.
 
 ---
 
