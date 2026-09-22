@@ -159,7 +159,15 @@ pkgver=0.1.0
 #   top-level meson.build, which has no LINGUAS, so no catalog was ever
 #   compiled: 12 installed no .mo at all and was English in every language. It
 #   is in po/meson.build now; 13 installs all thirteen.
-pkgrel=13
+# 14: THE PROMPT'S ICON FOLLOWS THE DEVICE. `--icon=network-wireless` was
+#   hardcoded, so "Trust the network “Wired connection 1”?" was drawn with a
+#   Wi-Fi symbol, beside a sentence telling the reader not to trust public
+#   Wi-Fi — in the one window that asks for a security decision. The device is
+#   already in the state row; wireless is `wireless` or `phy80211` under
+#   /sys/class/net, and anything else present there is wired. A device that has
+#   gone by the time the question is asked keeps the wireless icon, which is
+#   the case the warning is for. Seen on the 1.0.1 ISO in a VM.
+pkgrel=14
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

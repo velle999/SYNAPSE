@@ -48,6 +48,29 @@ static const char *sysfs_net(void) {
     return (e && *e) ? e : "/sys/class/net";
 }
 
+/* Which picture the prompt shows. The device decides it: a wired connection
+ * drawn with a Wi-Fi symbol is the one part of that window a person can see is
+ * wrong, and it undercuts the sentence next to it about public Wi-Fi. A device
+ * that is gone by the time the question is asked keeps the wireless icon,
+ * which is the case the warning is written for.
+ *
+ * `wireless` is the old ioctl interface and `phy80211` the cfg80211 one; a
+ * driver may publish either, so both are checked. */
+static const char *ask_icon(const char *dev)
+{
+    if (!dev || !*dev) return "network-wireless";
+
+    char p[PATH_MAX];
+    snprintf(p, sizeof(p), "%s/%s/wireless", sysfs_net(), dev);
+    if (access(p, F_OK) == 0) return "network-wireless";
+    snprintf(p, sizeof(p), "%s/%s/phy80211", sysfs_net(), dev);
+    if (access(p, F_OK) == 0) return "network-wireless";
+
+    snprintf(p, sizeof(p), "%s/%s", sysfs_net(), dev);
+    if (access(p, F_OK) == 0) return "network-wired";
+    return "network-wireless";
+}
+
 int synnet_uuid_valid(const char *u) {
     if (!u || strlen(u) != 36) return 0;
     for (int i = 0; i < 36; i++) {
@@ -391,7 +414,6 @@ int synnet_ask(void) {
         char *trust = strtok(NULL, "\t\n");
         char *dev = strtok(NULL, "\t\n");
         char *name = strtok(NULL, "\n");
-        (void)dev;
         if (!uuid || !trust || !synnet_uuid_valid(uuid)) continue;
         if (strcmp(trust, "untrusted") != 0) continue;
         if (declined_has(declined, uuid)) continue;
@@ -411,8 +433,11 @@ int synnet_ask(void) {
         snprintf(titlearg, sizeof(titlearg), "--title=%s", title);
         snprintf(textarg, sizeof(textarg), "--text=%s", text);
 
+        char iconarg[64];
+        snprintf(iconarg, sizeof(iconarg), "--icon=%s", ask_icon(dev));
+
         char *z[] = { (char *)"zenity", (char *)"--question",
-                      (char *)"--no-markup", (char *)"--icon=network-wireless",
+                      (char *)"--no-markup", iconarg,
                       titlearg, textarg, yes, no, NULL };
         int rc = run_wait(z);
         if (rc == 0) {

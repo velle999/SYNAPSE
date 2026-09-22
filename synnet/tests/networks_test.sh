@@ -34,6 +34,10 @@ hasnt() { case "$2" in *"$1"*) bad "$3" ;; *) ok "$3" ;; esac; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/sys/wlp6s0/device" "$T/sys/enp7s0/device" \
          "$T/sys/enp9s0/device" "$T/sys/docker0" "$T/state"
+# What makes wlp6s0 a RADIO rather than a name that looks like one: the kernel
+# publishes `wireless` (the old ioctl interface) or `phy80211` (cfg80211) for a
+# wifi device and neither for a wired one. The prompt's icon is read from here.
+mkdir -p "$T/sys/wlp6s0/wireless"
 export SYNNET_NMCLI="$T/bin/nmcli" SYNNET_SYSFS_NET="$T/sys"
 export SYNNET_FW_NETWORKS_FILE="$T/trusted-networks"
 export SYNNET_NETWORKS_STATE_FILE="$T/networks"
@@ -176,6 +180,23 @@ n=$(grep -c ZENITY "$ASK_LOG")
 has "$CAFE" "$(cat "$T/state/synnet/declined")" "the answer is kept in the user's state"
 hasnt "PKEXEC" "$(cat "$ASK_LOG")" "…and saying no needs no password"
 has "Trust the network “Caf:e Wi-Fi”?" "$(cat "$ASK_LOG")" "the question names the network"
+
+# ⚠ THE ICON FOLLOWS THE DEVICE. It was `network-wireless` for every network,
+# so a wired connection was drawn with a Wi-Fi symbol beside a sentence about
+# public Wi-Fi — visibly wrong, and in the one window that is asking somebody
+# to make a security decision. Caught on the 1.0.1 ISO in a VM, where the only
+# network is "Wired connection 1".
+asked=$(cat "$ASK_LOG")
+if grep -q 'ZENITY.*--icon=network-wireless.*Caf:e Wi-Fi' <<<"$asked"; then
+    ok "a wifi device keeps the wireless icon"
+else
+    bad "the café prompt's icon: $(grep -o '\--icon=[a-z-]*' <<<"$asked" | tr '\n' ' ')"
+fi
+if grep -q 'ZENITY.*--icon=network-wired.*Home' <<<"$asked"; then
+    ok "…and a wired one is drawn as wired"
+else
+    bad "the wired prompt's icon: $(grep -o '\--icon=[a-z-]*' <<<"$asked" | tr '\n' ' ')"
+fi
 
 rm -f "$T/state/synnet/declined"; : > "$ASK_LOG"
 WAYLAND_DISPLAY=w ZENITY_RC=0 "$SYNNET" --ask
