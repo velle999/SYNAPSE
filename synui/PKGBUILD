@@ -3729,7 +3729,21 @@ pkgver=0.1.0
 #   commit. mktarball.sh packs the same bytes every time (sorted, fixed clock
 #   and owner) and leaves out anything .gitignore names — 623's published
 #   source carried a stray __pycache__. The package is unchanged.
-pkgrel=624
+# 625: A BOOT FRAMEBUFFER NEVER BECOMES THE RENDER GPU. With synapse_kmod 31
+#   (nvidia_drm fbdev=0) simpledrm outlived the handover, wlroots found "2 GPUs"
+#   and made simpledrm its primary, although the 3060's own card reads
+#   boot_display=1. fx_renderer on simpledrm got only software GL, the fallback
+#   forced llvmpipe, and the whole desktop (greeter and session) was drawn on
+#   the CPU and copied to the GPU: corruption on all three monitors, a phantom
+#   2560x1440 `Unknown-1`, ~780% CPU. synapse_kmod 32 evicts the framebuffer;
+#   this is the compositor's half. Before wlr_backend_autocreate(), src/drmpick.c
+#   reads /sys/class/drm, and when a firmware framebuffer (simpledrm, efidrm,
+#   vesadrm, ofdrm) sits beside a KMS card with connectors, WLR_DRM_DEVICES is
+#   set to the real cards only, boot display first, for that one call. A
+#   framebuffer that is the only display (a VM with no GPU driver, nvidia_drm
+#   modeset=0) is left alone, and so is a WLR_DRM_DEVICES already set.
+#   tests/drmpick_test.c covers it on a fake sysfs, 9 cases.
+pkgrel=625
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -8499,6 +8499,13 @@ void view_refresh_visibility(syn_server_t *s);
 void view_place_saved_box(syn_server_t *s, syn_view_t *view,
                           struct wlr_box saved);
 
+/* ── drmpick.c ───────────────────────────────────────────── */
+/* A WLR_DRM_DEVICES value naming the real KMS cards under `drm_class`
+ * (/sys/class/drm), boot display first, as paths under `dev_dir` (/dev/dri);
+ * malloc'd. NULL when there is nothing to exclude: no firmware framebuffer, or
+ * no real KMS card beside it. */
+char *drm_pick_devices(const char *drm_class, const char *dev_dir);
+
 /* ── output_exile.c ──────────────────────────────────────── */
 /* A monitor is going away: move its windows onto `home` (NULL when it was the
  * last screen) and remember which connector each one came off, so it can go

@@ -278,6 +278,7 @@ synui_exe = executable('synui',
     'src/nightlight.c',
     'src/clipboard.c',
     'src/gpu.c',
+    'src/drmpick.c',
     'src/gpumon.c',
     'src/taskmgr.c',
     'src/news.c',
@@ -843,6 +844,18 @@ gpu_fdinfo_test = executable('gpu_fdinfo_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('gpu_fdinfo', gpu_fdinfo_test)
+
+# A firmware framebuffer beside a real GPU once made wlroots render the whole
+# desktop with llvmpipe. The picker reads only sysfs, so a fake
+# /sys/class/drm covers every shape of it, including the ones this box cannot
+# boot into (a framebuffer as the only display, NVIDIA with modeset=0).
+drmpick_test = executable('drmpick_test',
+  ['tests/drmpick_test.c', 'src/drmpick.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('drmpick', drmpick_test)
 
 barscan_format_test = executable('barscan_format_test',
   ['tests/barscan_format_test.c', 'src/barscan.c', 'src/contrast.c'],

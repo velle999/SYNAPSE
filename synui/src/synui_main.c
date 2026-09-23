@@ -2102,12 +2102,27 @@ int synui_init(syn_server_t *s)
     s->sighup_src  = wl_event_loop_add_signal(loop, SIGHUP,
                                               handle_reload_signal, s);
 
+    /* A firmware framebuffer left beside a real GPU must not become the render
+     * GPU: it ends in forced llvmpipe for the whole desktop. See drmpick.c.
+     * Set only for this call, so nothing synui spawns inherits it. */
+    char *drm_devices = getenv("WLR_DRM_DEVICES")
+                        ? NULL : drm_pick_devices("/sys/class/drm", "/dev/dri");
+    if (drm_devices) {
+        fprintf(stderr, "synui: firmware framebuffer beside a real GPU — "
+                        "WLR_DRM_DEVICES=%s\n", drm_devices);
+        setenv("WLR_DRM_DEVICES", drm_devices, 1);
+    }
+
     /* Create wlroots backend */
     /* Keep the session (2nd arg) instead of discarding it: it is what
      * wlr_session_change_vt() needs, and without a VT switch there is no way
      * off a session whose lock client will not let you back in. */
     s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display),
                                         &s->session);
+    if (drm_devices) {
+        unsetenv("WLR_DRM_DEVICES");
+        free(drm_devices);
+    }
     if (!s->backend) {
         fprintf(stderr, "synui: wlr_backend_autocreate() failed (WLR_BACKENDS=%s WLR_RENDERER=%s)\n",
                 getenv("WLR_BACKENDS") ? getenv("WLR_BACKENDS") : "(auto)",
