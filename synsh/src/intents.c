@@ -668,8 +668,14 @@ static int intent_pkg(synsh_state_t *s, const char *prefix, const char *args)
  *
  * Every claim goes through here so that matching and acting cannot disagree:
  * the branch that says "mine" is the branch that runs it.
+ *
+ * Each claim also records WHICH intent it was, for synsh_intent_name(). The
+ * name is set on the same line that claims, so the two cannot disagree either.
  */
-#define CLAIM(call) do {                        \
+static const char *claimed_name;
+
+#define CLAIM(name, call) do {                  \
+        claimed_name = (name);                  \
         if (!check_only) *exit_code = (call);   \
         return 1;                               \
     } while (0)
@@ -683,16 +689,17 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
 
     /* Whole-line phrases — see the note above line_is()'s replacement. Every
      * list is in phrases.c and holds every language at once. */
-    if (synsh_fold_in(p, SYNSH_P_TIME))    CLAIM(intent_time(s, false));
-    if (synsh_fold_in(p, SYNSH_P_DATE))    CLAIM(intent_time(s, true));
-    if (synsh_fold_in(p, SYNSH_P_MUSIC))   CLAIM(intent_music(s));
-    if (synsh_fold_in(p, SYNSH_P_FILES))   CLAIM(intent_files(s));
-    if (synsh_fold_in(p, SYNSH_P_YOUTUBE)) CLAIM(intent_url(s, "https://www.youtube.com"));
+    if (synsh_fold_in(p, SYNSH_P_TIME))    CLAIM("time", intent_time(s, false));
+    if (synsh_fold_in(p, SYNSH_P_DATE))    CLAIM("date", intent_time(s, true));
+    if (synsh_fold_in(p, SYNSH_P_MUSIC))   CLAIM("music", intent_music(s));
+    if (synsh_fold_in(p, SYNSH_P_FILES))   CLAIM("files", intent_files(s));
+    if (synsh_fold_in(p, SYNSH_P_YOUTUBE)) CLAIM("youtube", intent_url(s, "https://www.youtube.com"));
 
     /* "what can you do" / "hilfe" / "ayuda". Bare "help" is deliberately NOT
      * in that list — it is a built-in, and intents run before the classifier,
      * so an entry for it would take the built-in away from itself. */
     if (synsh_fold_in(p, SYNSH_P_CANDO)) {
+        claimed_name = "help";
         if (check_only) return 1;
         synsh_intent_help(s);
         *exit_code = 0;
@@ -703,7 +710,7 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
 
     /* Parameterised: "set alarm for 7:30am", "weck mich um 7", "7時に起こして". */
     if (synsh_phrase_arg(p, SYNSH_C_ALARM, arg, sizeof(arg)))
-        CLAIM(intent_alarm(s, p));
+        CLAIM("alarm", intent_alarm(s, p));
 
     /* ── Packages ──
      * Arch syntax, which is most of the reason these are here at all: asked to
@@ -716,19 +723,19 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
      * version is a pointless download and, mid-upgrade, a partial-upgrade risk. */
     if (synsh_phrase_arg(p, SYNSH_C_INSTALL, arg, sizeof(arg)) &&
         looks_like_packages(arg))
-        CLAIM(intent_pkg(s, "sudo pacman -S --needed", arg));
+        CLAIM("install", intent_pkg(s, "sudo pacman -S --needed", arg));
 
     if (synsh_phrase_arg(p, SYNSH_C_UNINSTALL, arg, sizeof(arg)) &&
         looks_like_packages(arg))
         /* -Rns: the package, its now-orphaned deps, and its config. Plain -R
          * leaves both behind and that is never what "uninstall" means. */
-        CLAIM(intent_pkg(s, "sudo pacman -Rns", arg));
+        CLAIM("uninstall", intent_pkg(s, "sudo pacman -Rns", arg));
 
     /* Before the search verbs, because "is firefox installed" opens with a
      * word that is not one of them but closes with one that decides it. */
     if (synsh_phrase_arg(p, SYNSH_C_ISINSTALLED, arg, sizeof(arg)) &&
         looks_like_packages(arg))
-        CLAIM(intent_pkg(s, "pacman -Q", arg));
+        CLAIM("installed", intent_pkg(s, "pacman -Q", arg));
 
     /* ⚠ looks_like_packages() HERE TOO, not just on install. `search` is not
      * a program, but a person who types `search /tmp -name x` means find(1),
@@ -737,17 +744,18 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
      * prevent. A flag or a path means they were not asking about packages. */
     if (synsh_phrase_arg(p, SYNSH_C_SEARCH, arg, sizeof(arg)) &&
         looks_like_packages(arg))
-        CLAIM(intent_pkg(s, "pacman -Ss", arg));
+        CLAIM("search", intent_pkg(s, "pacman -Ss", arg));
 
     if (synsh_fold_in(p, SYNSH_P_UPDATE))
         /* Always -Syu. A bare -Sy syncs the databases without upgrading, which
          * is a partial upgrade, which is how Arch breaks. */
-        CLAIM(intent_pkg(s, "sudo pacman -Syu", NULL));
+        CLAIM("update", intent_pkg(s, "sudo pacman -Syu", NULL));
 
     /* The everyday commands. Last, so a more specific intent above always
      * wins. */
     for (int i = 0; SYNSH_EVERYDAY[i].phrases; i++) {
         if (!synsh_fold_in(p, SYNSH_EVERYDAY[i].phrases)) continue;
+        claimed_name = "command";
         if (check_only) return 1;
 
         const char *cmd = SYNSH_EVERYDAY[i].cmd;
@@ -797,10 +805,27 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
         snprintf(cmd, sizeof cmd,
                  "pacman -Qtdq >/dev/null 2>&1 && sudo pacman -Rns $(pacman -Qtdq) "
                  "|| echo '%s'", q);
-        CLAIM(run_pkg(s, cmd));
+        CLAIM("orphans", run_pkg(s, cmd));
     }
 
     return 0;   /* not ours — let synapd have it */
+}
+
+/*
+ * Which intent would claim this line, or NULL. Check-only: nothing runs.
+ *
+ * For a caller that wants SOME of these answers and not others. chibi speaks
+ * what it is given, so it takes the intents that launch something (music,
+ * youtube) and leaves the ones that answer with text to its own model: `df -h`
+ * read aloud is no answer, and "where am i" answered with synsh's working
+ * directory is a wrong one. Filtering by name keeps the phrase tables here —
+ * the caller never has to know how any of it is said, in any language.
+ */
+const char *synsh_intent_name(synsh_state_t *s, const char *line)
+{
+    int ignored = 0;
+    claimed_name = NULL;
+    return synsh_intent(s, line, &ignored, true) ? claimed_name : NULL;
 }
 
 void synsh_intent_help(synsh_state_t *s)

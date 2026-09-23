@@ -1,6 +1,24 @@
 # Maintainer: SynapseOS Project <dev@synapseos.dev>
 pkgname=synsh
 pkgver=0.1.0
+# ── 0.1.0-30: --intent-name — which intent, not just whether ─────────────────
+#
+# chibi asked vibe's matcher and never synsh, so "open youtube" and "play
+# music" went to her model, which said it was opening YouTube and could not.
+# vibe's window asks synsh first with --intent-check; chibi cannot simply do
+# the same, because it SPEAKS what it is handed — `df -h` read aloud, "where am
+# i" answered with synsh's working directory instead of the city chibi knows,
+# "temperature" as CPU sensors instead of the weather. It needs to take some
+# intents and leave the rest.
+#
+# `synsh --intent-name LINE` prints which intent claims the line and exits 0,
+# or exits 70 printing nothing — same place in main() as --intent-check, before
+# the rc load and synapd, so the same ~1ms. The name is set by the CLAIM() that
+# claims, so the name and the claim cannot disagree. The names are an interface
+# (listed in intents.h). ⚠ A caller on an older synsh gets getopt's nonzero
+# exit, which reads as "not mine" — the behaviour before this existed.
+# lang_test.sh asserts the names, in more than one language, and the 70.
+# ─────────────────────────────────────────────────────────────────────────────
 # ── 0.1.0-29: the thirty-nine messages that were never messages ──────────────
 #
 # ⛔ THE CATALOG WAS COMPLETE, ALL FOURTEEN COLUMNS FILLED, AND tests/
@@ -58,7 +76,7 @@ pkgver=0.1.0
 # now. ⚠ And both make their argument absolute first: the cases cd, so a
 # relative ./build/synsh failed 53 of them at once with "No such file or
 # directory" — which reads as a broken shell rather than a mistyped path.
-pkgrel=29
+pkgrel=30
 pkgdesc="SynapseOS natural language shell — AI-native command interface, in 14 languages"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

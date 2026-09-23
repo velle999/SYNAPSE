@@ -14,6 +14,12 @@
 int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
                  bool check_only);
 
+/* The name of the intent that would claim LINE, or NULL if none would. Runs
+ * nothing, like check_only. `synsh --intent-name` prints it. The names are an
+ * interface and do not change: time date music files youtube help alarm
+ * install uninstall installed search update command orphans. */
+const char *synsh_intent_name(synsh_state_t *s, const char *line);
+
 /* Human-readable list of what synsh can do without the model — `help` prints
  * this, and ai_translate() feeds it to synapd so the model stops inventing
  * programs this machine does not have. */

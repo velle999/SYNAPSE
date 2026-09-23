@@ -88,7 +88,15 @@ pkgver=0.1.0
 #   ⚠ pygame was compiled by pip in a random /tmp directory, so every
 #   extension module got a different build-id. It is now a PKGBUILD source
 #   (sdist, checksummed) built in place under $srcdir without build isolation.
-pkgrel=38
+# 39: "OPEN YOUTUBE" AND "PLAY MUSIC" DID NOTHING. Both are synsh intents, and
+#   chibi's desktop requests went only to vibe's matcher, which claims neither,
+#   so both reached the model, which said it was opening YouTube and could
+#   not. assistant_bridge now asks `synsh --intent-name` first (synsh 0.1.0-30)
+#   and takes only music and youtube. synsh answers many other lines with text
+#   that chibi would read aloud or get wrong ("where am i" as a directory,
+#   "temperature" as CPU sensors). cliamp opens in a terminal window, as it
+#   does from Super+Space. An older synsh answers nonzero and nothing changes.
+pkgrel=39
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -102,7 +110,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=b28a9454c01d7aa423581ead764dabb09287f9d7
+_commit=b1424da8570455961afdd3266cb11ad62707cbea
 
 # Runtime deps.
 #

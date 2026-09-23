@@ -119,6 +119,17 @@ passes ls       "ls -la"
 passes pacman   "uninstall /usr/bin/x"
 
 echo
+echo "  naming: --intent-name says WHICH intent, for a caller that takes only some"
+check "play music is music"            "music"   "$(timeout 5 "$SYNSH" --intent-name 'play music')"
+check "de: musik abspielen is music"   "music"   "$(timeout 5 "$SYNSH" --intent-name 'musik abspielen')"
+check "Open YouTube. is youtube"       "youtube" "$(timeout 5 "$SYNSH" --intent-name 'Open YouTube.')"
+check "what time is it is time"        "time"    "$(timeout 5 "$SYNSH" --intent-name 'what time is it')"
+check "where am i is a command"        "command" "$(timeout 5 "$SYNSH" --intent-name 'where am i')"
+check "a real command is no intent"    ""        "$(timeout 5 "$SYNSH" --intent-name 'play music.wav')"
+timeout 5 "$SYNSH" --intent-name 'play music.wav' >/dev/null 2>&1
+check "  ...and exits 70, as --intent-check does" "70" "$?"
+
+echo
 echo "  classification: prose is prose in any script"
 check "de is natural language"  "ai" "$(timeout 5 "$SYNSH" --classify 'wie viele dateien liegen hier')"
 check "de keeps its capitals"   "ai" "$(timeout 5 "$SYNSH" --classify 'Wie viele Dateien liegen hier')"

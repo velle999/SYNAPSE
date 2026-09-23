@@ -102,6 +102,9 @@ static void usage(const char *prog) {
         "  --intent-check LINE\n"
         "                 Exit 0 if LINE is an intent synsh answers itself,\n"
         "                 %d if it is not. Runs nothing, prints nothing.\n"
+        "  --intent-name LINE\n"
+        "                 Print which intent answers LINE (music, youtube,\n"
+        "                 time, ...) and exit 0, or exit %d. Runs nothing.\n"
         "  --classify LINE\n"
         "                 Print what LINE is — shell, builtin, ai, hybrid — and\n"
         "                 exit 0. Runs nothing.\n"
@@ -126,7 +129,7 @@ static void usage(const char *prog) {
         "  syn explain          Explain the last command run\n"
         "  syn history          Show AI query history\n"
         "  cd, exit, help, ...  Standard builtins\n",
-        prog, SYNSH_NO_INTENT
+        prog, SYNSH_NO_INTENT, SYNSH_NO_INTENT
     );
 }
 
@@ -332,6 +335,7 @@ int main(int argc, char *argv[]) {
     int cmd_intents = 0;
     char *lang_arg = NULL;
     char *intent_check = NULL;
+    char *intent_name = NULL;
     char *cmd_string = NULL;
     char *script_path = NULL;
 
@@ -341,6 +345,7 @@ int main(int argc, char *argv[]) {
         {"no-color",    no_argument,       0, 0},
         {"intent",      no_argument,       0, 0},
         {"intent-check", required_argument, 0, 0},
+        {"intent-name", required_argument, 0, 0},
         {"classify",    required_argument, 0, 0},
         {"toolinfo",    no_argument,       0, 0},
         {"lang",        required_argument, 0, 0},
@@ -364,6 +369,8 @@ int main(int argc, char *argv[]) {
                 cmd_intents = 1;
             else if (strcmp(long_opts[longidx].name, "intent-check") == 0)
                 intent_check = optarg;
+            else if (strcmp(long_opts[longidx].name, "intent-name") == 0)
+                intent_name = optarg;
             else if (strcmp(long_opts[longidx].name, "lang") == 0)
                 /* Applied after the rc load, so the command line wins — the
                  * same precedence, for the same reason, as --no-color. */
@@ -438,6 +445,14 @@ int main(int argc, char *argv[]) {
         int ignored = 0;
         return synsh_intent(&g_state, intent_check, &ignored, true)
                ? 0 : SYNSH_NO_INTENT;
+    }
+    /* Same place and the same cost, for a caller that takes some intents and
+     * not others (chibi). The name is a record, like --classify's answer. */
+    if (intent_name) {
+        const char *n = synsh_intent_name(&g_state, intent_name);
+        if (!n) return SYNSH_NO_INTENT;
+        puts(n);
+        return 0;
     }
 
     /* Determine mode */

@@ -88,10 +88,16 @@ line is before deciding what to do with it — none of these run anything:
 ```bash
 synsh --classify 'delete the logs'    # shell, builtin, ai or hybrid
 synsh --intent-check 'open downloads' # exit 0 if synsh answers it itself
+synsh --intent-name 'play music'      # which intent answers it: music
 synsh --toolinfo                      # the tools resolved from $PATH
 ```
 
-`--classify` and `--intent-check` answer the same for a given line whatever
+`--intent-name` prints one of `time date music files youtube help alarm install
+uninstall installed search update command orphans`, or nothing with exit 70
+when no intent answers the line. Chibi uses it to take the intents that open
+something (`music`, `youtube`) and leave the rest to its own model.
+
+`--classify`, `--intent-check` and `--intent-name` answer the same for a given line whatever
 language the caller's environment is in: the phrase tables hold every language
 at once and matching never depends on which one synsh was told to speak.
 
