@@ -3743,7 +3743,21 @@ pkgver=0.1.0
 #   framebuffer that is the only display (a VM with no GPU driver, nvidia_drm
 #   modeset=0) is left alone, and so is a WLR_DRM_DEVICES already set.
 #   tests/drmpick_test.c covers it on a fake sysfs, 9 cases.
-pkgrel=625
+# 626: SOFTWARE RENDERING STOPS CORRUPTING. The shredded glass bar, the blank
+#   badge and pips, and stray tiles on every no-GPU desktop were llvmpipe
+#   rasterizing asynchronously: on the forced path (swrast) and on GBM over a
+#   KMS-only card, whole 64x64 tiles of synui's frames came out wrong. Measured
+#   in QEMU, 10 sweep-and-capture cycles of the default bar per run: 5-9 of 10
+#   frames wrong with worker threads, still 5 of 10 with ONE worker thread, and
+#   0 of 10 with none. Client buffers, damage, scanout, VRAM pressure and buffer
+#   churn were each ruled out by measurement. create_renderer() now sets
+#   LP_NUM_THREADS=0 around fx_renderer_create() whenever the renderer is forced
+#   software, and removes it after, so no app synui starts inherits it. A value
+#   the user set wins. Hardware GL is untouched. The cost is speed on software:
+#   ~8 to ~3 frames/s during a pointer sweep in that VM, CPU ~180% to ~90% of
+#   one core. Verified: the stock no-3D VM path 0/10 in two stress runs (5-6/10
+#   before), the bar client keeps its own llvmpipe threads, smoke passes.
+pkgrel=626
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

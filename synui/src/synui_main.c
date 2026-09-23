@@ -2000,6 +2000,46 @@ static void server_new_idle_inhibitor(struct wl_listener *listener, void *data)
     power_notify_activity(s);
 }
 
+/*
+ * fx_renderer_create(), with llvmpipe kept on one thread whenever the renderer
+ * is going to be software.
+ *
+ * llvmpipe rasterizes a frame in 64x64 tiles on worker threads, after the draw
+ * calls have returned. On the forced path (WLR_RENDERER_FORCE_SOFTWARE: swrast,
+ * no DRM device) and on GBM over a KMS-only card, whole tiles of synui's frames
+ * then come out wrong: the bar's glass shreds, the badge and pips go blank,
+ * tiles of one surface land on another. Measured in QEMU with the default bar,
+ * ten sweep-and-capture cycles per run: 5-9 of 10 frames wrong with threads,
+ * 0 of 10 with LP_NUM_THREADS=0 on every path, and still 5 of 10 with a single
+ * worker thread. So it is the asynchronous rasterization itself, not threads
+ * racing each other. Client buffers, damage, scanout, VRAM pressure and buffer
+ * churn were each ruled out by measurement
+ * (project_scenefx_llvmpipe_tile_corruption).
+ *
+ * The cost is speed: in that VM, frames during a pointer sweep drop from ~8/s
+ * to ~3/s, and synui's CPU from ~180% to ~90% of one core. A slow software
+ * desktop that is correct beats a faster one that is corrupt. Hardware GL is
+ * never affected: this runs only for the software renderer.
+ *
+ * llvmpipe reads LP_NUM_THREADS once, when its screen is created, which
+ * happens inside this call. So it is set for the call and removed after, and
+ * nothing synui spawns inherits it. A value the user set is left alone.
+ */
+static struct wlr_renderer *create_renderer(struct wlr_backend *backend)
+{
+    bool one_thread = getenv("WLR_RENDERER_FORCE_SOFTWARE") &&
+                      !getenv("LP_NUM_THREADS");
+    if (one_thread) {
+        fprintf(stderr, "synui: software rendering — llvmpipe on one thread "
+                        "(set LP_NUM_THREADS to override)\n");
+        setenv("LP_NUM_THREADS", "0", 1);
+    }
+    struct wlr_renderer *renderer = fx_renderer_create(backend);
+    if (one_thread)
+        unsetenv("LP_NUM_THREADS");
+    return renderer;
+}
+
 /* ── Server init ─────────────────────────────────────────── */
 int synui_init(syn_server_t *s)
 {
@@ -2135,8 +2175,9 @@ int synui_init(syn_server_t *s)
      * that also knows how to paint corner radius / backdrop blur / shadows during
      * the scene pass — the whole reason we can do real glass. Everything else on
      * the wlr_renderer interface (allocator autocreate, wl_display init, the CRT
-     * post-pass) treats it as an ordinary renderer. */
-    s->renderer = fx_renderer_create(s->backend);
+     * post-pass) treats it as an ordinary renderer. create_renderer() adds the
+     * one-thread rule for llvmpipe. */
+    s->renderer = create_renderer(s->backend);
     if (!s->renderer && !getenv("WLR_RENDERER_FORCE_SOFTWARE")) {
         /* The GPU we decided to trust cannot drive scenefx — nouveau is the
          * standing example, and a hypervisor advertising a render node it
@@ -2148,7 +2189,7 @@ int synui_init(syn_server_t *s)
                         "software rendering\n");
         setenv("WLR_RENDERER_FORCE_SOFTWARE", "1", 1);
         setenv("WLR_RENDERER_ALLOW_SOFTWARE", "1", 1);
-        s->renderer = fx_renderer_create(s->backend);
+        s->renderer = create_renderer(s->backend);
     }
     if (!s->renderer) {
         fprintf(stderr, "synui: fx_renderer_create() failed (WLR_RENDERER=%s)\n",
