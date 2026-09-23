@@ -55,6 +55,13 @@ install_data('systemd/clamav-daemon-hardening.conf',
   install_dir: get_option('prefix') / 'lib/systemd/system/clamav-daemon.service.d',
   rename: '50-synapse-hardening.conf')
 
+# What rkhunter reports on every stock Arch system and is not a finding: eight
+# of the thirteen rows the weekly sweep listed on 2026-09-22. rkhunter reads
+# /etc/rkhunter.d only — it has no /usr/lib config directory — so this is the
+# one file syn-scan puts in /etc. Harmless where rkhunter is not installed.
+install_data('data/rkhunter.d/50-synapse.conf',
+  install_dir: get_option('sysconfdir') / 'rkhunter.d')
+
 subdir('po')
 
 test('qml', find_program('tests/qml_test.sh'),

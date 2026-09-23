@@ -33,7 +33,13 @@ export SYNSCAN_HOME="$ROOT/state"
 # at a socket that cannot exist is what keeps the suite testing the stubs
 # instead of scanning the developer's actual machine.
 export SYNSCAN_CLAMD_SOCKET="$ROOT/no-such-clamd.sock"
-mkdir -p "$STUBS" "$SCANME" "$SYNSCAN_HOME"
+# ⛔ AND THE SIGNATURE DATABASE IS A FIXTURE. syn-scan checks every file in
+# clamscan's database directory before it runs; against the real
+# /var/lib/clamav the suite's result would depend on the build machine's
+# freshclam — and on a machine with no clamav, every scan would refuse.
+export SYNSCAN_CLAMAV_DBDIR="$ROOT/clamav-db"
+mkdir -p "$STUBS" "$SCANME" "$SYNSCAN_HOME" "$SYNSCAN_CLAMAV_DBDIR"
+printf 'stub\n' > "$SYNSCAN_CLAMAV_DBDIR/main.cvd"
 
 pass=0 fail=0
 ok()   { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
@@ -374,6 +380,73 @@ out=$(QS_APP_ID=syn-settings sc gui 2>&1)
 grep -q '^QS_APP_ID=syn-scan$' <<<"$out" \
   && ok "…even when started from another quickshell app" \
   || bad "gui kept an inherited app_id" "$out"
+
+# ── 14. a signature file clamscan cannot read ───────────────────────────────
+#
+# ⛔ clamscan SKIPS AN UNREADABLE DATABASE FILE WITHOUT A WORD and scans on what
+# is left — exit 0, "OK". On 2026-09-22 daily.cld was 0640 clamav:clamav and
+# every scan a person ran used main.cvd alone. A stub cannot reproduce that
+# silence; what is under test is that syn-scan no longer depends on clamscan
+# to report it.
+db="$ROOT/clamav-db-partial"; mkdir -p "$db"
+printf 'stub\n' > "$db/main.cvd"
+printf 'stub\n' > "$db/daily.cld"
+printf 'stub\n' > "$db/freshclam.dat"
+chmod 0000 "$db/daily.cld" "$db/freshclam.dat"
+if [ -r "$db/daily.cld" ]; then
+  # root reads a 0000 file, so there is nothing unreadable to find.
+  printf '  skip the unreadable-database checks: running as root\n'
+else
+  db_home="$ROOT/state-db"; mkdir -p "$db_home"
+  out=$(SYNSCAN_CLAMAV_DBDIR="$db" SYNSCAN_HOME="$db_home" sc --rec scan "$SCANME" 2>/dev/null)
+  grep -q "^finding	clamav	incomplete	$db/daily.cld	could not read $db/daily.cld " <<<"$out" \
+    && ok "an unreadable signature file is an 'incomplete' row naming it" \
+    || bad "unreadable daily.cld" "$out"
+  [ "$(grep -c '^finding	clamav	\(infected\|error\)	' <<<"$out")" = 3 ] \
+    && ok "…and the scan still runs on the signatures that are there" \
+    || bad "partial-database scan" "$out"
+  grep -q 'freshclam\.dat' <<<"$out" \
+    && bad "freshclam's state file was taken for a signature file" "$out" \
+    || ok "freshclam.dat is not a signature file"
+  human=$(SYNSCAN_CLAMAV_DBDIR="$db" SYNSCAN_HOME="$db_home" sc scan "$SCANME" 2>&1)
+  grep -q "clamav did not finish: could not read $db/daily.cld" <<<"$human" \
+    && ok "a person is told the scan ran without it" || bad "human incomplete line" "$human"
+  grep -q '3 things need a look' <<<"$human" \
+    && ok "…and it is not counted as a finding" || bad "summary count" "$human"
+  grep -q '^findings=3$' "$db_home/last-scan" \
+    && ok "…nor in the saved record" || bad "saved count" "$(cat "$db_home/last-scan")"
+
+  # Nothing readable at all: clamscan would refuse to scan and print only to
+  # stderr, and that empty stream must not become "Nothing found."
+  chmod 0000 "$db/main.cvd"
+  none_home="$ROOT/state-db-none"; mkdir -p "$none_home"
+  out=$(SYNSCAN_CLAMAV_DBDIR="$db" SYNSCAN_HOME="$none_home" sc --only clamav scan "$SCANME" 2>&1); rc=$?
+  grep -q 'cannot be read by this account' <<<"$out" && ! grep -qi 'nothing found' <<<"$out" \
+    && ok "a database with nothing readable in it is refused, not scanned" \
+    || bad "all-unreadable database" "$out"
+  [ "$rc" -ne 0 ] && [ ! -e "$none_home/last-scan" ] \
+    && ok "…exits non-zero and records nothing" \
+    || bad "all-unreadable exit/record" "rc=$rc, record: $(cat "$none_home/last-scan" 2>/dev/null)"
+  chmod 0644 "$db/main.cvd"
+fi
+chmod 0644 "$db/daily.cld" "$db/freshclam.dat"
+
+# Before freshclam's first download the directory is empty.
+empty="$ROOT/clamav-db-empty"; mkdir -p "$empty"
+empty_home="$ROOT/state-db-empty"; mkdir -p "$empty_home"
+out=$(SYNSCAN_CLAMAV_DBDIR="$empty" SYNSCAN_HOME="$empty_home" sc --only clamav scan "$SCANME" 2>&1); rc=$?
+grep -q 'no signature database at .* yet' <<<"$out" && ! grep -qi 'nothing found' <<<"$out" \
+  && [ "$rc" -ne 0 ] && [ ! -e "$empty_home/last-scan" ] \
+  && ok "an empty database directory is an engine that could not run" \
+  || bad "empty database" "rc=$rc: $out"
+
+# ⚠ clamd reads the database as its own user; the client never opens it, so
+# the check must not stand in the way of the daemon path.
+out=$(SYNSCAN_CLAMD_SOCKET="$ROOT/fake-clamd.sock" SYNSCAN_CLAMAV_DBDIR="$empty" \
+      sc --rec scan "$SCANME" 2>/dev/null)
+grep -q '^finding	clamav	infected	.*Eicar-Test-Signature' <<<"$out" \
+  && ok "the clamd path does not check a database it never reads" \
+  || bad "clamd path blocked by the database check" "$out"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

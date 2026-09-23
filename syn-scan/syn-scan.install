@@ -64,6 +64,28 @@ _synscan_units() {
     fi
 }
 
+_synscan_db_readable() {
+    # ⛔ UNDO WHAT RELEASES 3 AND 4 LEFT BEHIND. Their freshclam drop-in set
+    # UMask=0027, so every update since wrote daily.cld 0640 clamav:clamav —
+    # and clamscan run by anyone but root skips a database file it cannot open
+    # without a word, scanning on main.cvd alone and printing "OK". The drop-in
+    # is 0022 now; this fixes the files that are already there. Official
+    # databases and their .sign files only — nothing else in the directory is
+    # ours to open up.
+    find /var/lib/clamav -maxdepth 1 -type f \
+        \( -name '*.cvd' -o -name '*.cld' -o -name '*.cud' -o -name '*.sign' \) \
+        ! -perm -o=r -exec chmod a+r {} + 2>/dev/null || true
+
+    # ⚠ AND A RUNNING freshclam KEEPS THE UMASK IT STARTED WITH, so its next
+    # update, a couple of hours away, would write 0640 again. Reload first:
+    # pacman's own daemon-reload hook runs after this scriptlet, and a restart
+    # before it would start freshclam with the old drop-in. try-restart leaves
+    # a stopped freshclam stopped, and in a chroot (the ISO build) both calls
+    # do nothing.
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl try-restart clamav-freshclam.service >/dev/null 2>&1 || true
+}
+
 _synscan_note_engines() {
     # ⚠ An absent engine is a normal state, not a fault. chkrootkit lives in
     # [blackarch], which syn-install offers as a choice rather than a
@@ -89,6 +111,7 @@ post_install() {
 
 post_upgrade() {
     _synscan_units
+    _synscan_db_readable
 }
 
 pre_remove() {

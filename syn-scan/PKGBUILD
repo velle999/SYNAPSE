@@ -34,6 +34,33 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-5: a scan without its newest signatures said "OK" ─────────────────
+#
+# ⛔ EVERY SCAN A PERSON RAN WAS MISSING daily.cld. Release 3's freshclam
+# drop-in set UMask=0027, so each update wrote daily.cld 0640 clamav:clamav,
+# and clamscan skips a database file it cannot open WITHOUT A WORD — exit 0,
+# "OK", on main.cvd and bytecode.cvd alone (`clamscan --debug` lists what it
+# loaded). Only the weekly sweep, as root, was whole. The drop-in is 0022; the
+# scriptlet makes the files already there readable and restarts a running
+# freshclam, which would otherwise keep the old umask. And syn-scan now checks
+# the database before clamscan runs: a file this account cannot read is a
+# "Did not finish" row naming it, and a directory with nothing readable is an
+# engine that could not run — never "Nothing found."
+#
+# ⛔ THE WEEKLY UNIT HID /usr/lib/modules FROM rkhunter. ProtectKernelModules=
+# makes that directory inaccessible as well as blocking module loads, so every
+# sweep reported "'/lib/modules' is missing or empty" and the kernel-module
+# check never ran. The unit keeps the two parts that block a load
+# (CAP_SYS_MODULE out of the bounding set, @module filtered with EPERM) and
+# drops the part that hid the directory. Offline exposure is unchanged at 8.0.
+#
+# /etc/rkhunter.d/50-synapse.conf: eight of the thirteen rkhunter rows on
+# 2026-09-22 were stock Arch — egrep, fgrep and ldd are scripts; /etc/.updated
+# and two krb5 man pages are dot-files; PermitRootLogin and Protocol are unset
+# in sshd_config, whose defaults have been safe since OpenSSH 7.0 and 7.6.
+# Verified against rkhunter 1.4.6's own checks: those eight warnings, and none
+# with the file.
+#
 # ── 0.1.0-4: a count with nothing behind it ─────────────────────────────────
 #
 # ⛔ THE RECORD KEPT A NUMBER AND NOT THE LIST. last-scan said findings=1, and
@@ -93,7 +120,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=4
+pkgrel=5
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

@@ -16,6 +16,7 @@
 #include "synscan.h"
 #include "i18n.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -161,6 +162,92 @@ static bool clamd_available(void)
 	return engine_present(&probe);
 }
 
+/* ── the signature database clamscan is about to load ────────────────────────
+ *
+ * ⛔ clamscan SKIPS A SIGNATURE FILE IT CANNOT READ, AND SAYS NOTHING. No
+ * error, exit 0, "OK" for every file. Found 2026-09-22: this package's own
+ * freshclam drop-in set UMask=0027, every update wrote daily.cld 0640
+ * clamav:clamav, and every scan a person ran loaded main.cvd and bytecode.cvd
+ * only — `clamscan --debug` lists what it loaded, and daily.cld was not in it.
+ * Every signature newer than main.cvd was missing, and nothing said so. The
+ * weekly sweep runs as root and was whole.
+ *
+ * So each file in the database directory is checked for THIS account before
+ * clamscan starts. One it cannot read is an "incomplete" row naming it: the
+ * scan still runs, on the signatures that are there, and says it is not
+ * whole. A directory with nothing readable in it is an engine that cannot
+ * run — clamscan would refuse, print to stderr, and leave this parser an
+ * empty stream to call "Nothing found."
+ *
+ * ⚠ clamscan only. clamd loads the database as its own user, and a client
+ * talking to it never opens these files.
+ *
+ * ⚠ $SYNSCAN_CLAMAV_DBDIR is for the suite, for the same reason as
+ * $SYNSCAN_CLAMD_SOCKET: without it the tests would check the real
+ * /var/lib/clamav, and a box whose database is unreadable would fail them. */
+#ifndef SYNSCAN_CLAMAV_DBDIR
+#define SYNSCAN_CLAMAV_DBDIR "/var/lib/clamav"
+#endif
+
+static int clamav_db_check(findings_t *out)
+{
+	const char *dir = getenv("SYNSCAN_CLAMAV_DBDIR");
+	if (!dir || !*dir) dir = SYNSCAN_CLAMAV_DBDIR;
+
+	DIR *d = opendir(dir);
+	if (!d) {
+		int err = errno;
+		warn(_("ClamAV has no signature database at %s (%s)"), dir, strerror(err));
+		return -1;
+	}
+
+	/* Collected apart, so a directory with nothing readable adds no rows. */
+	findings_t unread; findings_init(&unread);
+	size_t readable = 0;
+	struct dirent *de;
+	while ((de = readdir(d))) {
+		/* freshclam's own state, not signatures — clamscan never opens it. */
+		if (de->d_name[0] == '.' || !strcmp(de->d_name, "freshclam.dat")
+		    || !strcmp(de->d_name, "mirrors.dat"))
+			continue;
+
+		char *p = NULL;
+		if (asprintf(&p, "%s/%s", dir, de->d_name) < 0) die("out of memory");
+		struct stat st;
+		if (stat(p, &st) == 0 && S_ISREG(st.st_mode)) {
+			if (access(p, R_OK) == 0) {
+				readable++;
+			} else {
+				int err = errno;
+				char *why = NULL;
+				if (asprintf(&why, _("could not read %s (%s), so this scan ran "
+				                     "without the signatures in it"),
+				             p, strerror(err)) < 0)
+					die("out of memory");
+				findings_add(&unread, "clamav", VERDICT_INCOMPLETE, p, why);
+				free(why);
+			}
+		}
+		free(p);
+	}
+	closedir(d);
+
+	if (readable == 0) {
+		if (unread.n)
+			warn(_("ClamAV's signature database at %s cannot be read by this "
+			       "account"), dir);
+		else
+			warn(_("ClamAV has no signature database at %s yet — freshclam may "
+			       "still be downloading it"), dir);
+		findings_free(&unread);
+		return -1;
+	}
+	for (const finding_t *u = unread.head; u; u = u->next)
+		findings_add(out, u->engine, u->verdict, u->path, u->detail);
+	findings_free(&unread);
+	return 0;
+}
+
 static int run_clamav(const engine_t *e, char *const *paths, findings_t *out)
 {
 	size_t np = 0;
@@ -168,6 +255,8 @@ static int run_clamav(const engine_t *e, char *const *paths, findings_t *out)
 	if (np == 0) return 0;
 
 	bool viad = clamd_available();
+	if (!viad && clamav_db_check(out) != 0) return -1;
+
 	const char **argv = calloc(np + 8, sizeof *argv);
 	if (!argv) die("out of memory");
 	size_t i = 0;

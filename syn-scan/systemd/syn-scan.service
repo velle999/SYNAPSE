@@ -51,7 +51,15 @@ ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/syn-scan/tmp
 PrivateTmp=no
 NoNewPrivileges=yes
 ProtectKernelTunables=yes
-ProtectKernelModules=yes
+# ⛔ NOT ProtectKernelModules=yes. It also makes /usr/lib/modules inaccessible,
+# and rkhunter looks there for rootkit modules: every sweep reported "The kernel
+# modules directory '/lib/modules' is missing or empty" as a finding, and that
+# check never ran. These are the other two things it does, which is what keeps
+# the scan from loading a module. EPERM, as ProtectKernelModules= returns,
+# rather than the default SIGSYS.
+CapabilityBoundingSet=~CAP_SYS_MODULE
+SystemCallFilter=~@module
+SystemCallErrorNumber=EPERM
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 RestrictRealtime=yes
