@@ -59,6 +59,9 @@ msgstr ""
 msgid "The weekly scan on %1: %2 need a look."
 msgstr ""
 
+msgid "Unreadable"
+msgstr ""
+
 msgid "did not finish"
 msgstr ""
 
@@ -95,14 +98,22 @@ msgstr ""
 msgid "Suspicious"
 msgstr ""
 
-msgid "Unreadable"
-msgstr ""
-
 msgid "Did not finish"
 msgstr ""
 
 msgid "Clean"
 msgstr ""
+
+#, c-format
+msgid ""
+"\n"
+"%zu file could not be scanned:\n"
+msgid_plural ""
+"\n"
+"%zu files could not be scanned:\n"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
 
 #, c-format
 msgid "%s did not finish: %s"

@@ -34,6 +34,34 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-6: rkhunter keeps a baseline, and "unreadable" is not a finding ───
+#
+# ⛔ rkhunter HAD NO BASELINE, and on a rolling release one made by hand goes
+# stale with every upgrade. 76-syn-scan-rkhunter.hook runs after every
+# transaction that touches what rkhunter tracks (112 commands in /usr/bin,
+# systemd, its own config) and hands /usr/lib/syn-scan/rkhunter-baseline the
+# paths pacman touched. rkhunter records the whole system into a scratch copy
+# of its database, and ONLY those paths' entries are taken from it — every
+# other entry is kept, so a binary replaced behind pacman's back is still
+# reported. rkhunter's own `--propupd <file>` cannot do this: it never adds or
+# drops an entry, and awk's entry records gawk's hash through the link. With no
+# baseline yet the first one is made, and each file is checked against its
+# package with `pacman -Qkk`; one that does not match, or that no package owns,
+# is left out and keeps being reported. Verified against rkhunter 1.4.6 with a
+# tracked scratch directory: upgraded, installed, removed and linked files
+# taken; a file changed outside the transaction still reported.
+# /etc/rkhunter.d gains WARN_ON_OS_CHANGE=0: every SynapseOS release would
+# otherwise add two warnings to each sweep until a full --propupd.
+#
+# ⛔ "Unreadable" IS LISTED, NOT COUNTED. The first sweep under release 4 said
+# "40 things need a look" and 26 were one Rust crate's corrupt-on-purpose xz
+# test files, which ClamAV 1.5.4 answers with "Can't allocate memory" (the same
+# outside the unit). A file an engine could not read is a gap in the scan, not
+# something it found: it is listed apart, by name, under "N files could not be
+# scanned", and the count, the exit status and the saved record hold only
+# infected and suspect. `status` recounts a saved list by this rule, so an
+# older record reads right in Settings before the next sweep.
+#
 # ── 0.1.0-5: a scan without its newest signatures said "OK" ─────────────────
 #
 # ⛔ EVERY SCAN A PERSON RAN WAS MISSING daily.cld. Release 3's freshclam
@@ -120,7 +148,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=5
+pkgrel=6
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

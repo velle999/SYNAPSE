@@ -80,7 +80,7 @@ size_t findings_outstanding(const findings_t *f)
 {
 	size_t n = 0;
 	for (const finding_t *p = f->head; p; p = p->next)
-		if (p->verdict != VERDICT_CLEAN && p->verdict != VERDICT_INCOMPLETE)
+		if (p->verdict == VERDICT_INFECTED || p->verdict == VERDICT_SUSPECT)
 			n++;
 	return n;
 }
@@ -131,18 +131,31 @@ static void print_rec(const findings_t *f)
 	findings_write_rec(stdout, f);
 }
 
+static void print_row(const finding_t *p)
+{
+	printf("  %-10s %-11s %s\n", p->engine, _(verdict_label(p->verdict)), p->path);
+	if (*p->detail)
+		printf("  %-10s %-11s   %s\n", "", "", p->detail);
+}
+
 static void print_human(const findings_t *f)
 {
-	size_t bad = 0;
+	size_t bad = 0, unread = 0;
 
 	for (const finding_t *p = f->head; p; p = p->next) {
-		if (p->verdict == VERDICT_CLEAN || p->verdict == VERDICT_INCOMPLETE)
+		if (p->verdict == VERDICT_ERROR) unread++;
+		if (p->verdict != VERDICT_INFECTED && p->verdict != VERDICT_SUSPECT)
 			continue;
 		bad++;
-		printf("  %-10s %-11s %s\n",
-		       p->engine, _(verdict_label(p->verdict)), p->path);
-		if (*p->detail)
-			printf("  %-10s %-11s   %s\n", "", "", p->detail);
+		print_row(p);
+	}
+	/* What the engine could not read, apart and uncounted — see
+	 * findings_outstanding(). */
+	if (unread) {
+		printf(P_("\n%zu file could not be scanned:\n",
+		          "\n%zu files could not be scanned:\n", unread), unread);
+		for (const finding_t *p = f->head; p; p = p->next)
+			if (p->verdict == VERDICT_ERROR) print_row(p);
 	}
 	/* An engine's own trouble, apart: it says the scan is not whole, and it
 	 * says nothing about the machine. */

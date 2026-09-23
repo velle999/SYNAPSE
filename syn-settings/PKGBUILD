@@ -524,7 +524,13 @@ pkgver=0.1.0
 #   ⚠ The record is read into 64 KB, not 512 bytes, and split on every tab:
 #     strtok would fold an empty path field and shift the detail into its place.
 #   Eleven strings, all thirteen catalogs, 534/534.
-pkgrel=67
+# 68: A FILE THE SCANNER COULD NOT READ IS LISTED, NOT COUNTED. syn-scan 6
+#   counts only what an engine found; a file it could not read is a gap in
+#   the scan (26 of 40 rows in one sweep were a Rust crate's corrupt-on-purpose
+#   xz test files). Its row here says "unreadable" and not "needs a look", and
+#   a sweep with only those says nothing was flagged but some files could not
+#   be scanned. One string, all thirteen catalogs, 535/535.
+pkgrel=68
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and language, date and time, network addresses and interfaces, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

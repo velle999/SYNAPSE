@@ -350,6 +350,11 @@ static void engine_rows(void)
  * (rkhunter unable to write its log, say): it is shown, because a sweep that
  * did not finish is not a clean one, and it is not counted, because it says
  * nothing about what is on the machine.
+ *
+ * ⚠ "error" — a file the engine could not read — is the same kind of row since
+ * syn-scan 0.1.0-6: shown, by name, and not counted. syn-scan's own count left
+ * it out first, and a row saying "needs a look" under a count saying "clear"
+ * would be two answers.
  */
 static const char *verdict_word(const char *id)
 {
@@ -364,6 +369,7 @@ static void finding_row(const struct scan_finding *f)
 	const struct scan_engine *e = engine_by_id(f->engine);
 	const char *label = e ? e->label : N_("a scanning back end");
 	int incomplete = !strcmp(f->verdict, "incomplete");
+	int uncounted = incomplete || !strcmp(f->verdict, "error");
 	int is_path = f->path[0] == '/';
 
 	char when[64];
@@ -389,7 +395,7 @@ static void finding_row(const struct scan_finding *f)
 
 	rec_row("finding\t%s\t%s\t%s\t%s\t-",
 	        key, verdict_word(f->verdict),
-	        incomplete ? "-" : N_("needs a look"), detail);
+	        uncounted ? "-" : N_("needs a look"), detail);
 }
 
 /* ── The units behind the switches ───────────────────────────────────────── */
@@ -500,9 +506,11 @@ int pane_scan(void)
 		int ran = scan_status(scan_system_home(), &fin, &bad,
 		                      list, SCAN_LISTED, &listed);
 		size_t shown = listed < SCAN_LISTED ? listed : SCAN_LISTED;
-		size_t unfinished = 0;
-		for (size_t i = 0; i < shown; i++)
+		size_t unfinished = 0, unread = 0;
+		for (size_t i = 0; i < shown; i++) {
 			if (!strcmp(list[i].verdict, "incomplete")) unfinished++;
+			if (!strcmp(list[i].verdict, "error"))      unread++;
+		}
 		char when[64];
 		when_str(fin, when, sizeof when);
 
@@ -519,17 +527,19 @@ int pane_scan(void)
 			        N_("Last sweep"), when,
 			        N_("what the timer last did \xc2\xb7 it walks the home directories, /srv and the temporary ones"));
 
-		/* ⚠ FOUR ANSWERS, NOT TWO. Findings with the list behind them;
+		/* ⚠ FIVE ANSWERS, NOT TWO. Findings with the list behind them;
 		 * findings from a record written before syn-scan kept one, which can
 		 * only be counted; nothing flagged but a check that did not finish;
-		 * and clear. */
+		 * nothing flagged but files that could not be read; and clear. */
 		if (ran) {
 			const char *why =
-			    bad && listed > unfinished
+			    bad && listed > unfinished + unread
 			        ? N_("the sweep flagged these and nothing has looked at them \xc2\xb7 each one is listed below, and syn-scan status --weekly prints the same list \xc2\xb7 nothing is ever deleted")
 			  : bad ? N_("this record was written before syn-scan kept a list, so it can only count them \xc2\xb7 the next sweep records what they are, or sudo syn-scan scan --system checks the system now")
 			  : unfinished
 			        ? N_("nothing was flagged, but a check did not finish \xc2\xb7 it is listed below")
+			  : unread
+			        ? N_("nothing was flagged, but some files could not be scanned \xc2\xb7 they are listed below")
 			        : N_("the last sweep finished with nothing to report");
 			rec_row("value\t%s\t%lu\t%s\t%s\t-",
 			        N_("Outstanding findings"), bad,

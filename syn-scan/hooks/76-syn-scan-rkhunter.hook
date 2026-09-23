@@ -1,0 +1,31 @@
+# Keep rkhunter's baseline in step with what pacman installs.
+#
+# rkhunter compares every command it tracks against a recorded baseline
+# (/var/lib/rkhunter/db/rkhunter.dat). On a rolling release that baseline is
+# stale after every upgrade, and each upgraded binary would be a weekly
+# "file properties have changed" warning. The helper takes into the baseline
+# exactly the files this transaction wrote or removed, and nothing else, so a
+# binary replaced behind pacman's back is still reported. With no baseline yet
+# it makes the first one, checked against pacman's own checksums.
+#
+# The targets are what rkhunter 1.4.6 tracks on Arch: 112 commands in
+# /usr/bin, systemd, and its own configuration file.
+#
+# PostTransaction, because the files it records are the ones pacman is in the
+# middle of writing. Removal of rkhunter is a trigger too: its binary is under
+# usr/bin, and the helper drops a baseline nothing will keep current.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Path
+Target = usr/bin/*
+Target = usr/lib/systemd/systemd
+Target = etc/rkhunter.conf
+
+[Action]
+Description = Recording pacman's changes in rkhunter's baseline...
+When = PostTransaction
+Exec = /usr/lib/syn-scan/rkhunter-baseline
+NeedsTargets

@@ -1,0 +1,146 @@
+#!/bin/bash
+# rkhunter-baseline — keep rkhunter's record of the system's commands in step
+# with what pacman installs, and with nothing else.
+#
+# Run by 76-syn-scan-rkhunter.hook after every transaction that touches a file
+# rkhunter tracks. The touched paths arrive on stdin, one per line, relative
+# to /.
+#
+# ⛔ ONLY WHAT PACMAN WROTE IS ACCEPTED. `rkhunter --propupd` with no argument
+# re-records EVERY file, which would bless anything that changed since the last
+# run — including a binary replaced behind pacman's back, the one thing the
+# check exists to catch. So rkhunter records the whole system into a scratch
+# copy of its database, and only the entries for this transaction's paths are
+# taken from it. Every other entry is kept exactly as it was.
+#
+# ⚠ rkhunter's own `--propupd <file>` is not enough. It refreshes only entries
+# that already exist, so a command pacman installs or removes would be reported
+# every week; and /usr/bin/awk is recorded with gawk's hash, through the link,
+# so upgrading gawk has to refresh awk's entry too. Both verified against
+# rkhunter 1.4.6 on 2026-09-22.
+#
+# ⛔ THE FIRST BASELINE IS CHECKED AGAINST PACMAN. With no rkhunter.dat yet,
+# every entry is new. Each recorded file is checked with `pacman -Qkk` against
+# the checksums its package shipped, and one that does not match, or that no
+# package owns, is left OUT: rkhunter then reports it every week until somebody
+# looks. `pacman -Q` takes no lock, so it is safe inside the transaction.
+#
+# Never fails the transaction: a problem is printed, the baseline is left as it
+# was, and the script exits 0.
+#
+# SynapseOS Project — GPL-2.0-or-later
+# SPDX-License-Identifier: GPL-2.0-or-later
+set -u
+
+# The three overrides are the suite's: stub engines and a database of its own.
+dbdir=${SYNSCAN_RKH_DBDIR:-/var/lib/rkhunter/db}
+rkhunter=${SYNSCAN_RKHUNTER:-rkhunter}
+pacman=${SYNSCAN_PACMAN:-pacman}
+dat=$dbdir/rkhunter.dat
+say() { printf 'syn-scan: %s\n' "$*"; }
+
+# rkhunter is optdepends. Removing it leaves rkhunter.dat behind, and nothing
+# records what changes while it is gone — a baseline kept past that would
+# report every update made in the meantime. Drop it; a reinstall starts a
+# fresh, checked one.
+if ! command -v "$rkhunter" >/dev/null 2>&1; then
+	rm -f "$dat"
+	exit 0
+fi
+[ -d "$dbdir" ] || exit 0
+
+tmp=$(mktemp -d) || { say "rkhunter baseline unchanged: no temporary directory"; exit 0; }
+trap 'rm -rf "$tmp"' EXIT
+
+sed -e 's|^/*|/|' > "$tmp/targets"
+
+# The copy carries the data files --propupd reads beside rkhunter.dat.
+cp -a "$dbdir" "$tmp/db" || { say "rkhunter baseline unchanged: could not copy $dbdir"; exit 0; }
+rm -f "$tmp/db/rkhunter.dat"
+# ⚠ Judged by what it wrote, not by its exit status: --propupd exits 1 when a
+# single file had no hash (a broken link, one it could not read), and a
+# baseline refused for that would never be made at all.
+LC_ALL=C "$rkhunter" --propupd --dbdir "$tmp/db" --nolog --nocolors >"$tmp/propupd.out" 2>&1
+if ! grep -q '^File:' "$tmp/db/rkhunter.dat" 2>/dev/null; then
+	say "rkhunter could not record the system; its baseline is unchanged:"
+	grep -v 'egrep: warning\|stray \\' "$tmp/propupd.out" | tail -n 5 | sed 's/^/    /'
+	exit 0
+fi
+new=$tmp/db/rkhunter.dat
+
+# Everything below reads FormatVersion 1:
+#   File:<colons in name>:<name>:<hash>:<inode>:<mode>:<uid>:<gid>:<size>:<mtime>:<pkg>:<colons in link>:<link>:
+# A name or link containing ':' spans that many extra fields.
+for f in "$new" "$dat"; do
+	[ -s "$f" ] || continue
+	grep -qx 'FormatVersion:1' "$f" || {
+		say "rkhunter baseline unchanged: $f is not the format this was written for"
+		exit 0
+	}
+done
+
+# entries <paths> <dat> <keep|take>: the File: lines whose name or link
+# target is (take) or is not (keep) one of <paths>.
+#
+# ⛔ FILENAME == ARGV[1], NOT FNR == NR. The usual idiom takes the SECOND file
+# for the first when the first is empty — and an empty list of paths that
+# failed the check is the normal case, which would have kept no entry at all.
+entries() {
+	awk -F: -v mode="$3" '
+		FILENAME == ARGV[1] { t[$0] = 1; next }
+		!/^File:/ { next }
+		{
+			cc = $2 + 0; name = $3
+			for (k = 1; k <= cc; k++) name = name ":" $(3 + k)
+			i = 3 + cc; lcc = $(i + 9) + 0; link = $(i + 10)
+			for (k = 1; k <= lcc; k++) link = link ":" $(i + 10 + k)
+			hit = (name in t) || (link != "" && link in t)
+			if ((mode == "take") == hit) print
+		}' "$1" "$2"
+}
+
+out=$tmp/rkhunter.dat.new
+grep -v '^File:' "$new" > "$out"          # the header: OS, host, hash function
+
+if [ -s "$dat" ]; then
+	entries "$tmp/targets" "$dat" keep >> "$out"
+	entries "$tmp/targets" "$new" take >> "$out"
+else
+	# Every name and link target rkhunter recorded, then who owns each.
+	: > "$tmp/none"
+	entries "$tmp/none" "$new" keep | awk -F: '{
+			cc = $2 + 0; name = $3
+			for (k = 1; k <= cc; k++) name = name ":" $(3 + k)
+			i = 3 + cc; lcc = $(i + 9) + 0; link = $(i + 10)
+			for (k = 1; k <= lcc; k++) link = link ":" $(i + 10 + k)
+			print name; if (link != "") print link
+		}' | sort -u > "$tmp/files"
+
+	: > "$tmp/bad"
+	mapfile -t files < "$tmp/files"
+	LC_ALL=C "$pacman" -Qo -- "${files[@]}" > "$tmp/owned" 2> "$tmp/unowned"
+	sed -n 's/^error: No package owns \(.*\)$/\1 (no package owns it)/p' "$tmp/unowned" >> "$tmp/bad"
+	mapfile -t pkgs < <(sed -n 's/^.* is owned by \([^ ]*\) .*$/\1/p' "$tmp/owned" | sort -u)
+	if [ "${#pkgs[@]}" -gt 0 ]; then
+		# ⚠ "warning:" only. A changed config file is "backup file:",
+		# and /etc/rkhunter.conf is one that is meant to be edited.
+		LC_ALL=C "$pacman" -Qkk -- "${pkgs[@]}" 2>&1 \
+			| sed -n 's/^warning: [^:]*: \(.*\) (\(.*\))$/\1 (\2)/p' \
+			| awk 'FILENAME == ARGV[1] { f[$0] = 1; next }
+			       { p = $0; sub(/ \([^(]*\)$/, "", p); if (p in f) print }' \
+				"$tmp/files" - >> "$tmp/bad"
+	fi
+
+	sed 's/ ([^(]*)$//' "$tmp/bad" | sort -u > "$tmp/badpaths"
+	entries "$tmp/badpaths" "$new" keep >> "$out"
+	n=$(grep -c '^File:' "$out")
+	say "rkhunter has a baseline: $n files, each checked against its package."
+	if [ -s "$tmp/bad" ]; then
+		say "left out, so rkhunter reports them until they match their package:"
+		sort -u "$tmp/bad" | sed 's/^/    /'
+	fi
+fi
+
+install -m 600 "$out" "$dat.syn-scan" && mv -f "$dat.syn-scan" "$dat" \
+	|| say "rkhunter baseline unchanged: could not write $dat"
+exit 0

@@ -96,8 +96,9 @@ static char *findings_file(bool system)
 	return p;
 }
 
-/* How many rows in a saved list need a person (verdict not clean/incomplete). */
-static size_t saved_outstanding(bool system)
+/* How many rows in a saved list carry one of `verdicts` (a NULL-terminated
+ * list of verdict ids). */
+static size_t saved_count(bool system, const char *const *verdicts)
 {
 	char *path = findings_file(system);
 	FILE *r = fopen(path, "r");
@@ -109,12 +110,39 @@ static size_t saved_outstanding(bool system)
 		char *t1 = strchr(line, '\t');                 /* after "finding" */
 		char *t2 = t1 ? strchr(t1 + 1, '\t') : NULL;   /* after the engine */
 		if (!t2) continue;
-		if (strncmp(t2 + 1, "clean\t", 6) && strncmp(t2 + 1, "incomplete\t", 11))
-			n++;
+		for (const char *const *v = verdicts; *v; v++) {
+			size_t len = strlen(*v);
+			if (!strncmp(t2 + 1, *v, len) && t2[1 + len] == '\t') { n++; break; }
+		}
 	}
 	free(line);
 	fclose(r);
 	return n;
+}
+
+/* The rows that need a person: infected or suspect, the same rule as
+ * findings_outstanding(). */
+static size_t saved_outstanding(bool system)
+{
+	static const char *const counted[] = { "infected", "suspect", NULL };
+	return saved_count(system, counted);
+}
+
+static size_t saved_unread(bool system)
+{
+	static const char *const error[] = { "error", NULL };
+	return saved_count(system, error);
+}
+
+static bool saved_list_exists(void)
+{
+	bool any = false;
+	for (int sys = 0; sys < 2 && !any; sys++) {
+		char *path = findings_file(sys);
+		any = access(path, F_OK) == 0;
+		free(path);
+	}
+	return any;
 }
 
 void status_record(const findings_t *f, time_t started, bool system)
@@ -177,9 +205,11 @@ static void unescape(char *s)
 	*w = '\0';
 }
 
-/* The saved findings, read back for a person. Returns how many were shown,
- * and says whether any engine did not finish. */
-static size_t show_findings(bool system, size_t *incomplete)
+/* The saved findings, read back for a person. `unread` false: the rows that
+ * need a look, and a line for each engine that did not finish. `unread` true:
+ * the files an engine could not read, which are listed apart and not counted.
+ * Returns how many rows were shown. */
+static size_t show_findings(bool system, bool unread, size_t *incomplete)
 {
 	char *path = findings_file(system);
 	FILE *r = fopen(path, "r");
@@ -198,12 +228,15 @@ static size_t show_findings(bool system, size_t *incomplete)
 		for (int i = 1; i < 5; i++) unescape(f[i]);
 		if (!strcmp(f[2], "clean")) continue;
 		if (!strcmp(f[2], "incomplete")) {
-			warn(_("%s did not finish: %s"), f[1], f[4]);
-			(*incomplete)++;
+			if (!unread) {
+				warn(_("%s did not finish: %s"), f[1], f[4]);
+				(*incomplete)++;
+			}
 			continue;
 		}
 		verdict_t v = !strcmp(f[2], "infected") ? VERDICT_INFECTED
 		            : !strcmp(f[2], "suspect")  ? VERDICT_SUSPECT : VERDICT_ERROR;
+		if ((v == VERDICT_ERROR) != unread) continue;
 		printf("  %-10s %-11s %s\n", f[1], _(verdict_label(v)), f[3]);
 		if (*f[4]) printf("  %-10s %-11s   %s\n", "", "", f[4]);
 		shown++;
@@ -234,6 +267,12 @@ int status_show(bool weekly)
 	}
 	fclose(r);
 
+	/* ⚠ COUNTED FROM THE LIST WHEN THERE IS ONE, by today's rule. A record
+	 * written before 0.1.0-6 counted what an engine could not read, and
+	 * would go on saying so — here and in Settings — until the next sweep. */
+	if (saved_list_exists())
+		bad = saved_outstanding(true) + saved_outstanding(false);
+
 	if (g_out == OUT_REC) {
 		puts("#status\tstate\tfinished\tfindings");
 		printf("status\tran\t%lld\t%lu\n", finished, bad);
@@ -251,7 +290,15 @@ int status_show(bool weekly)
 
 	info(weekly ? _("Weekly scan: %s") : _("Last scan: %s"), when);
 	size_t incomplete = 0;
-	size_t shown = show_findings(true, &incomplete) + show_findings(false, &incomplete);
+	size_t shown = show_findings(true, false, &incomplete)
+	             + show_findings(false, false, &incomplete);
+	size_t unread = saved_unread(true) + saved_unread(false);
+	if (unread) {
+		printf(P_("\n%zu file could not be scanned:\n",
+		          "\n%zu files could not be scanned:\n", unread), unread);
+		show_findings(true, true, &incomplete);
+		show_findings(false, true, &incomplete);
+	}
 	if (bad == 0) info("%s", _("Nothing outstanding."));
 	else if (shown == 0)
 		/* A record from before the list was kept: the count, and no way to

@@ -1443,6 +1443,11 @@ msgstr ""
 msgid "nothing was flagged, but a check did not finish · it is listed below"
 msgstr ""
 
+msgid ""
+"nothing was flagged, but some files could not be scanned · they are listed "
+"below"
+msgstr ""
+
 msgid "the last sweep finished with nothing to report"
 msgstr ""
 

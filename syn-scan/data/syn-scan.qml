@@ -100,10 +100,12 @@ ShellRoot {
         }))
     }
 
-    // What needs a person: an engine that did not finish is listed, never
-    // counted — it says the scan was not whole, not that the machine is not.
+    // What needs a person: what an engine FOUND. An engine that did not
+    // finish, and a file it could not read ("error"), are listed, never
+    // counted — they say the scan was not whole, not that the machine is not.
+    // The same rule as findings_outstanding() in the binary.
     function outstanding(rows) {
-        return rows.filter(f => f.verdict !== "clean" && f.verdict !== "incomplete").length
+        return rows.filter(f => f.verdict === "infected" || f.verdict === "suspect").length
     }
 
     Process {
@@ -298,10 +300,14 @@ ShellRoot {
                                   : modelData.verdict === "incomplete"
                                   ? (modelData.engine + " · " + I18n.tr("did not finish")
                                      + " · " + modelData.detail)
+                                  : modelData.verdict === "error"
+                                  ? (modelData.engine + " · " + I18n.tr("Unreadable")
+                                     + " · " + modelData.detail)
                                   : (modelData.engine + " · " + modelData.detail)
                             color: root.page === "scan" && modelData.verdict === "infected"
                                    ? "#ff6b6b"
-                                 : root.page === "scan" && modelData.verdict === "incomplete"
+                                 : root.page === "scan" && (modelData.verdict === "incomplete"
+                                                            || modelData.verdict === "error")
                                    ? "#6b7688" : "#8b97a8"
                             wrapMode: Text.WrapAnywhere
                             maximumLineCount: 4

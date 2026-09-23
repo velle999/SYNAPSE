@@ -2790,6 +2790,23 @@ case $(scanfield "$oldrec" "Outstanding findings" 5) in
     *) bad "an old record's count read [$(scanfield "$oldrec" "Outstanding findings" 5)]" ;;
 esac
 
+# ⚠ A FILE THE ENGINE COULD NOT READ IS LISTED, NOT COUNTED — syn-scan's count
+# leaves it out since 0.1.0-6, so the row must not say "needs a look" under a
+# count that says "clear", and the count's sentence says why there are rows.
+mkdir -p "$SCANDIR/unread"; : > "$SCANDIR/unread/last-scan"; echo 0 > "$SCANDIR/unread/count"
+printf 'finding\tclamav\terror\t/home/u/.cargo/registry/bad-1-lzma2-1.xz\tCan'"'"'t allocate memory\t1700000000\n' \
+    > "$SCANDIR/unread/rows"
+unrec=$(scanrec "$SCANDIR/unread")
+if awk -F'\t' '$1 == "finding" && $2 ~ /bad-1-lzma2-1\.xz$/ && $3 == "unreadable" && $4 == "-" { f = 1 } END { exit !f }' <<<"$unrec"; then
+    ok "a file that could not be scanned is a row of its own, and not a thing that needs a look"
+else
+    bad "the unreadable row is missing or marked as a finding"
+fi
+case "$(scanfield "$unrec" "Outstanding findings" 3) $(scanfield "$unrec" "Outstanding findings" 5)" in
+    "0 nothing was flagged, but some files could not be scanned"*) ok "…and the count says nothing was flagged, and points at it" ;;
+    *) bad "the unread-only count read [$(scanfield "$unrec" "Outstanding findings" 3) $(scanfield "$unrec" "Outstanding findings" 5)]" ;;
+esac
+
 # ⚠ AND A LONG LIST IS CAPPED, with the rest counted in one row that names the
 # command — and the buffer holds all of it: 45 rows is well past the 512 bytes
 # the record used to be read into.

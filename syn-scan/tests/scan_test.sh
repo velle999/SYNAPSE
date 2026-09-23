@@ -338,11 +338,11 @@ grep -q 'rkhunter did not finish: Logfile directory is not writable' <<<"$human"
 st_home="$ROOT/state-status"; mkdir -p "$st_home"
 SYNSCAN_HOME="$st_home" sc --only rkhunter scan --system >/dev/null 2>&1
 SYNSCAN_HOME="$st_home" sc --only clamav scan "$SCANME" >/dev/null 2>&1
-grep -q '^findings=5$' "$st_home/last-scan" \
-  && ok "the saved count is both halves: 2 system + 3 files" \
+grep -q '^findings=4$' "$st_home/last-scan" \
+  && ok "the saved count is both halves: 2 system + 2 files (the unreadable one is not counted)" \
   || bad "saved count" "$(cat "$st_home/last-scan")"
 out=$(SYNSCAN_HOME="$st_home" sc --rec status)
-grep -q '^status	ran	[0-9]*	5$' <<<"$out" && ok "status --rec keeps its status row" \
+grep -q '^status	ran	[0-9]*	4$' <<<"$out" && ok "status --rec keeps its status row" \
   || bad "status row" "$out"
 [ "$(grep -c '^finding	' <<<"$out")" = 6 ] \
   && ok "status --rec lists every finding it saved, the incomplete one too" \
@@ -353,7 +353,7 @@ out=$(SYNSCAN_HOME="$st_home" sc status 2>&1)
 grep -q "$SCANME/eicar.com" <<<"$out" && grep -q 'The file properties have changed' <<<"$out" \
   && ok "plain status names what was found, not just how many" \
   || bad "human status list" "$out"
-grep -q '5 things need a look' <<<"$out" && ok "…and the count" || bad "human count" "$out"
+grep -q '4 things need a look' <<<"$out" && ok "…and the count" || bad "human count" "$out"
 wk=$(SYNSCAN_HOME="$st_home" sc status --weekly 2>&1)
 grep -q 'Weekly scan:' <<<"$wk" && grep -q "$SCANME/eicar.com" <<<"$wk" \
   && ok "status --weekly reads the same kind of record" || bad "--weekly" "$wk"
@@ -411,9 +411,9 @@ else
   human=$(SYNSCAN_CLAMAV_DBDIR="$db" SYNSCAN_HOME="$db_home" sc scan "$SCANME" 2>&1)
   grep -q "clamav did not finish: could not read $db/daily.cld" <<<"$human" \
     && ok "a person is told the scan ran without it" || bad "human incomplete line" "$human"
-  grep -q '3 things need a look' <<<"$human" \
+  grep -q '2 things need a look' <<<"$human" \
     && ok "…and it is not counted as a finding" || bad "summary count" "$human"
-  grep -q '^findings=3$' "$db_home/last-scan" \
+  grep -q '^findings=2$' "$db_home/last-scan" \
     && ok "…nor in the saved record" || bad "saved count" "$(cat "$db_home/last-scan")"
 
   # Nothing readable at all: clamscan would refuse to scan and print only to
@@ -447,6 +447,143 @@ out=$(SYNSCAN_CLAMD_SOCKET="$ROOT/fake-clamd.sock" SYNSCAN_CLAMAV_DBDIR="$empty"
 grep -q '^finding	clamav	infected	.*Eicar-Test-Signature' <<<"$out" \
   && ok "the clamd path does not check a database it never reads" \
   || bad "clamd path blocked by the database check" "$out"
+
+# ── 15. what an engine could not read is listed, not counted ────────────────
+#
+# ⛔ The first sweep under release 4 said "40 things need a look"; 26 were one
+# Rust crate's deliberately corrupt xz test files, which ClamAV answers with
+# "Can't allocate memory". Unreadable is a gap in the scan, not a finding: it
+# is listed apart, by name, and the count, the exit status and the saved
+# record hold only what an engine found.
+ur_home="$ROOT/state-unread"; mkdir -p "$ur_home"
+human=$(SYNSCAN_HOME="$ur_home" sc --only clamav scan "$SCANME" 2>&1)
+grep -q '2 things need a look' <<<"$human" && grep -q '1 file could not be scanned:' <<<"$human" \
+  && grep -q "$SCANME/big.zip" <<<"$human" \
+  && ok "an unreadable file is listed apart, by name, and not counted" \
+  || bad "unreadable listing" "$human"
+
+cp "$STUBS/clamscan" "$ROOT/clamscan.orig"
+cat > "$STUBS/clamscan" <<STUB
+#!/bin/sh
+echo "$SCANME/bad-1-lzma2-1.xz: Can't allocate memory ERROR"
+exit 2
+STUB
+chmod +x "$STUBS/clamscan"
+ur2_home="$ROOT/state-unread-only"; mkdir -p "$ur2_home"
+human=$(SYNSCAN_HOME="$ur2_home" sc --only clamav scan "$SCANME" 2>&1); rc=$?
+[ "$rc" = 0 ] && grep -q '1 file could not be scanned:' <<<"$human" \
+  && grep -q '^findings=0$' "$ur2_home/last-scan" \
+  && ok "a scan that found nothing but could not read a file exits 0 and saves 0" \
+  || bad "unreadable-only scan" "rc=$rc $human $(cat "$ur2_home/last-scan" 2>/dev/null)"
+cp "$ROOT/clamscan.orig" "$STUBS/clamscan"
+
+# A record written before this rule counted the unreadable row; status counts
+# the saved list by today's rule, so Settings is right before the next sweep.
+old2="$ROOT/state-oldcount"; mkdir -p "$old2"
+printf 'started=1\nfinished=2\nfindings=3\n' > "$old2/last-scan"
+{ printf 'finding\tclamav\tinfected\t/x/a\tSig-1\t2\n'
+  printf 'finding\tclamav\tinfected\t/x/b\tSig-2\t2\n'
+  printf 'finding\tclamav\terror\t/x/c.xz\tCan'"'"'t allocate memory\t2\n'; } > "$old2/findings-files"
+out=$(SYNSCAN_HOME="$old2" sc --rec status)
+grep -q '^status	ran	2	2$' <<<"$out" \
+  && ok "status recounts an older record's list by today's rule" \
+  || bad "status recount" "$out"
+out=$(SYNSCAN_HOME="$old2" sc status 2>&1)
+grep -q '2 things need a look' <<<"$out" && grep -q '1 file could not be scanned:' <<<"$out" \
+  && ok "…and says which file could not be scanned" || bad "status unread block" "$out"
+
+# ── 16. rkhunter's baseline follows pacman, and only pacman ─────────────────
+#
+# ⛔ `rkhunter --propupd` re-records every file, blessing whatever changed —
+# including a binary replaced behind pacman's back. The hook's helper takes
+# only the entries for the paths the transaction touched. Stubs stand in for
+# rkhunter (it "records" the system from a fixture) and pacman; the helper runs
+# against a database directory of the suite's own.
+SRC=$(cd "$(dirname "$0")/.." && pwd)
+HELPER="$SRC/hooks/rkhunter-baseline"
+rkdb="$ROOT/rkhdb"; mkdir -p "$rkdb"; printf 'x\n' > "$rkdb/programs_bad.dat"
+entry() { printf 'File:0:%s:%s:1:0755:0:0:10:100::0:%s:\n' "$1" "$2" "${3:-}"; }
+cat > "$ROOT/rkh-stub" <<STUB
+#!/bin/sh
+while [ \$# -gt 0 ]; do [ "\$1" = --dbdir ] && d=\$2; shift; done
+[ -e "$ROOT/rkh-fail" ] && exit 1
+cp "$ROOT/rkh-current.dat" "\$d/rkhunter.dat"
+exit 1
+STUB
+cat > "$ROOT/pacman-stub" <<STUB
+#!/bin/sh
+case "\$1" in
+-Qo)  shift; [ "\$1" = -- ] && shift
+      for p; do
+          if grep -qxF "\$p" "$ROOT/unowned"; then echo "error: No package owns \$p" >&2
+          else echo "\$p is owned by pkg 1-1"; fi
+      done ;;
+-Qkk) while read -r p; do echo "warning: pkg: \$p (SHA256 checksum mismatch)"; done < "$ROOT/mismatch"
+      echo "backup file: pkg: /etc/rkhunter.conf (Modification time mismatch)"
+      echo "pkg: 9 total files, 1 altered file" ;;
+esac
+exit 1
+STUB
+chmod +x "$ROOT/rkh-stub" "$ROOT/pacman-stub"
+runh() { SYNSCAN_RKH_DBDIR="$rkdb" SYNSCAN_RKHUNTER="${RKH:-$ROOT/rkh-stub}" \
+         SYNSCAN_PACMAN="$ROOT/pacman-stub" bash "$HELPER"; }
+
+# The first baseline: checked against pacman. b does not match its package,
+# bb is a link to it, and x belongs to no package — none of the three is
+# recorded. A changed config file is pacman's "backup file", and stays in.
+{ printf 'Version:2026092200\nHost:box\nOS:SynapseOS 1\nFormatVersion:1\n'
+  entry /usr/bin/a h2; entry /usr/bin/b h2; entry /usr/bin/bb h2 /usr/bin/b
+  entry /usr/bin/awk h2 /usr/bin/gawk; entry /usr/bin/gawk h2
+  entry /usr/local/bin/x h2; entry /etc/rkhunter.conf h2; } > "$ROOT/rkh-current.dat"
+printf '/usr/bin/b\n' > "$ROOT/mismatch"; printf '/usr/local/bin/x\n' > "$ROOT/unowned"
+out=$(printf 'usr/bin/syn-scan\n' | runh)
+got=$(grep '^File:' "$rkdb/rkhunter.dat" 2>/dev/null | cut -d: -f3 | sort | tr '\n' ' ')
+[ "$got" = "/etc/rkhunter.conf /usr/bin/a /usr/bin/awk /usr/bin/gawk " ] \
+  && ok "the first baseline records only what matches its package" \
+  || bad "first baseline" "got [$got] — $out"
+grep -q '/usr/bin/b (SHA256 checksum mismatch)' <<<"$out" && grep -q '/usr/local/bin/x (no package owns it)' <<<"$out" \
+  && ok "…and names what it left out, and why" || bad "first baseline report" "$out"
+[ "$(stat -c %a "$rkdb/rkhunter.dat" 2>/dev/null)" = 600 ] \
+  && ok "…root-only, as rkhunter keeps it" || bad "baseline mode"
+
+# A transaction: a upgraded, gawk upgraded (awk records it through the link),
+# who installed, kill removed. b changed too, and pacman did not touch it —
+# that is the tampered binary, and it must keep its old entry.
+{ printf 'Version:2026092200\nHost:box\nOS:SynapseOS 1\nFormatVersion:1\n'
+  entry /usr/bin/a h1; entry /usr/bin/b h1; entry /usr/bin/awk h1 /usr/bin/gawk
+  entry /usr/bin/gawk h1; entry /usr/bin/kill h1; } > "$rkdb/rkhunter.dat"
+{ printf 'Version:2026092300\nHost:box\nOS:SynapseOS 2\nFormatVersion:1\n'
+  entry /usr/bin/a h2; entry /usr/bin/b h2; entry /usr/bin/awk h2 /usr/bin/gawk
+  entry /usr/bin/gawk h2; entry /usr/bin/who h2; } > "$ROOT/rkh-current.dat"
+printf 'usr/bin/a\nusr/bin/gawk\nusr/bin/who\nusr/bin/kill\n' | runh >/dev/null
+got=$(grep '^File:' "$rkdb/rkhunter.dat" | cut -d: -f3,4 | sort | tr '\n' ' ')
+[ "$got" = "/usr/bin/a:h2 /usr/bin/awk:h2 /usr/bin/b:h1 /usr/bin/gawk:h2 /usr/bin/who:h2 " ] \
+  && ok "a transaction re-records what it touched — and a binary it did not touch keeps its old entry" \
+  || bad "merge" "got [$got]"
+grep -qx 'OS:SynapseOS 2' "$rkdb/rkhunter.dat" \
+  && ok "…and the header follows the system" || bad "merge header" "$(head -4 "$rkdb/rkhunter.dat")"
+
+# rkhunter failing to record anything leaves the baseline alone.
+cp "$rkdb/rkhunter.dat" "$ROOT/dat.before"; : > "$ROOT/rkh-fail"
+out=$(printf 'usr/bin/a\n' | runh); rc=$?
+cmp -s "$rkdb/rkhunter.dat" "$ROOT/dat.before" && [ "$rc" = 0 ] \
+  && ok "a failed --propupd leaves the baseline as it was, and the transaction alone" \
+  || bad "propupd failure" "rc=$rc $out"
+rm -f "$ROOT/rkh-fail"
+
+# rkhunter removed: nothing will keep the baseline current, so it goes.
+printf 'usr/bin/rkhunter\n' | RKH="$ROOT/no-such-rkhunter" runh >/dev/null
+[ ! -e "$rkdb/rkhunter.dat" ] \
+  && ok "removing rkhunter drops a baseline nothing would keep current" \
+  || bad "baseline left behind after rkhunter was removed"
+
+# The hook hands the helper its targets, at the path meson installs it to.
+hook="$SRC/hooks/76-syn-scan-rkhunter.hook"
+grep -qx 'Exec = /usr/lib/syn-scan/rkhunter-baseline' "$hook" && grep -qx 'NeedsTargets' "$hook" \
+  && grep -qx 'Target = usr/bin/\*' "$hook" && grep -qx 'When = PostTransaction' "$hook" \
+  && grep -q "install_dir: get_option('prefix') / 'lib/syn-scan'" "$SRC/meson.build" \
+  && ok "the hook runs the installed helper after the transaction, with its targets" \
+  || bad "hook file"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

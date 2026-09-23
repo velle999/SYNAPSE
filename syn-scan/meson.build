@@ -62,6 +62,14 @@ install_data('systemd/clamav-daemon-hardening.conf',
 install_data('data/rkhunter.d/50-synapse.conf',
   install_dir: get_option('sysconfdir') / 'rkhunter.d')
 
+# rkhunter's baseline, kept in step with pacman: the hook hands the helper the
+# paths each transaction touched, and only those are re-recorded.
+install_data('hooks/76-syn-scan-rkhunter.hook',
+  install_dir: get_option('datadir') / 'libalpm/hooks')
+install_data('hooks/rkhunter-baseline',
+  install_dir: get_option('prefix') / 'lib/syn-scan',
+  install_mode: 'rwxr-xr-x')
+
 subdir('po')
 
 test('qml', find_program('tests/qml_test.sh'),

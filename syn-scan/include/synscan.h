@@ -89,14 +89,24 @@ typedef enum {
 	VERDICT_CLEAN = 0,
 	VERDICT_INFECTED,   /* a signature matched */
 	VERDICT_SUSPECT,    /* engine flagged it without naming a signature */
-	VERDICT_ERROR,      /* engine could not read or decide */
+	VERDICT_ERROR,      /* engine could not read or decide — listed, never
+	                       counted: a gap in the scan, not a finding */
 	VERDICT_INCOMPLETE, /* the ENGINE had a problem — a log it could not
 	                       write, a check it could not run. About the scanner,
 	                       not the machine: listed, never counted as a finding */
 } verdict_t;
 
-/* Findings that need a person: everything but CLEAN and INCOMPLETE. The one
- * count the summary, the exit status, the saved record and the bar agree on. */
+/* Findings that need a person: INFECTED and SUSPECT. The one count the
+ * summary, the exit status, the saved record and Settings agree on.
+ *
+ * ⛔ ERROR ("Unreadable") IS LISTED, NOT COUNTED — since 0.1.0-6. A file the
+ * engine could not read is a gap in the scan, like INCOMPLETE, not something
+ * it found. Counted, the first sweep under release 4 said "40 things need a
+ * look": 26 of them were one Rust crate's deliberately corrupt xz test files,
+ * which ClamAV 1.5.4 answers with "Can't allocate memory". A count that is
+ * mostly noise every week is a count nobody reads. The rows stay in every
+ * list, apart and by name, so a file built to be unscannable is still there
+ * to see. */
 struct findings;
 size_t findings_outstanding(const struct findings *f);
 
