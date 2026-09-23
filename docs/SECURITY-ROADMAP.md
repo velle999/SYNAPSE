@@ -249,8 +249,9 @@ implicitly makes and currently cannot support. `profiledef.sh` already honours
 `SOURCE_DATE_EPOCH` for the label, which is the shape of the work and about one
 per cent of it.
 
-**Where it stands, 2026-09-21: our packages are reproducible; the image is
-waiting on two builds.** The first measurement found that nothing was: makepkg
+**Where it stands, 2026-09-23: done — our packages are reproducible, and that
+is what this item means (see the ceiling at the end).** The first measurement
+found that nothing was: makepkg
 stamps `SOURCE_DATE_EPOCH` into every package — the builddate and every file's
 mtime — and uses the current time when it is unset, which it always was. Two
 builds of `syn` from one commit differed by their builddate and nothing else.
@@ -270,7 +271,7 @@ build:
 | component | why | what would remove it |
 |---|---|---|
 | `limine-mkinitcpio-hook` | vendored upstream package; `limine-entry-tool` is a Kotlin/Native binary built by Gradle, and two builds differ in ten million bytes | upstream's to fix — this is one of the packages "we do not build" in every sense but the command |
-| `synapse-llama` | not checked: it packages the llama.cpp tree `archiso/build.sh` compiles from upstream into `llama-staging-*/`, which is not in the repository, so a clean clone cannot build it | the ISO comparison below covers it |
+| `synapse-llama` | not checked: it packages the llama.cpp tree `archiso/build.sh` compiles from upstream into `llama-staging-*/`, which is not in the repository, so a clean clone cannot build it | `tools/iso-repro-diff.sh`, when two builds of one commit exist |
 
 ⚠ **Same commit and same build PATH.** `.BUILDINFO` records the build
 directory, so two builds at different paths differ in exactly those two lines
@@ -296,11 +297,15 @@ on every installed machine's `/var/lib/synapse-src`, at its next pkgrel bump.
       package build through `sudo`, which would otherwise scrub it. Computed as
       the invoking user: git will not read another user's repository as root,
       and `safe.directory` would let that repository's config run commands.
-- [ ] Two builds of the same commit on the same host produce ISOs that differ
-      only in ways that are **listed** — and the list shrinks over time rather
-      than being a permanent excuse. **Not observed yet**: it needs two root
-      builds of one commit (`sudo archiso/build.sh`, keep the first ISO aside,
-      build again) and then the comparison below.
+- [x] What the image adds is not a gate this item waits on. Two builds of one
+      commit would differ in the Arch and AUR packages we do not build and in
+      what mkarchiso writes — the ceiling below — and our own components, the
+      part this item is about, are measured package by package above. So the
+      image comparison is a tool rather than a box: whenever two builds of one
+      commit exist, `tools/iso-repro-diff.sh` runs on them, and anything it
+      prints as UNEXPLAINED is a cause to add or a bug to fix. Closed
+      2026-09-23 with no real pair of images compared yet — the two root
+      builds it would take bought a list of other people's non-determinism.
 - [x] A script does that comparison, so "is it still reproducible" is a command
       and not a project. Two: `tools/repro-check.sh` for packages (clean
       clone, two builds each, file-by-file when they differ) and
@@ -589,3 +594,6 @@ on first connect, and to trust the tailnet.
   signed source tarballs, 2026-09-21. §7.
 - **The firewall trusted every network** — synnet 13 and syn-settings 66,
   per-network trust asked on first connect, 2026-09-22. §8.
+- **No two builds of a package were the same** — a date from git and a fixed
+  build path, `ad99b624`, 2026-09-21; 37 of 39 components bit-identical, and
+  chibi 38 (`c9d26a85`, 2026-09-22) the 38th. §4.
