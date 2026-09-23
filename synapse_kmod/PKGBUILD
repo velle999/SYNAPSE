@@ -111,7 +111,13 @@ pkgver=0.1.0
 #   The monitors go dark, the machine never sleeps, and only a reboot recovers
 #   it. With fbdev=0 that code path does not run. The file has the stack.
 #   Only affects NVIDIA; Intel and AMD keep their console.
-pkgrel=31
+# 32: THE BOOT FRAMEBUFFER IS EVICTED WHEN NVIDIA_DRM COMES UP. fbdev=0 also
+#   skips nvidia_drm's removal of the firmware framebuffer, so simpledrm stayed
+#   a second DRM card on the GPU. synui drove it as a fourth, phantom output
+#   through llvmpipe: every monitor corrupted at login and synui sat near 800%
+#   CPU. A udev rule now unbinds any other DRM card on the nvidia PCI device
+#   when nvidia_drm registers.
+pkgrel=32
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')
@@ -194,6 +200,14 @@ package() {
     # (a same-named file in /etc/modprobe.d) without touching the blacklist.
     install -Dm644 config/90-synapse-nvidia-drm.conf \
         "$pkgdir/usr/lib/modprobe.d/90-synapse-nvidia-drm.conf"
+
+    # fbdev=0 also turns off nvidia_drm's eviction of the firmware framebuffer,
+    # which then stays a second DRM card that the compositor drives as a
+    # phantom output. This rule does the eviction when nvidia_drm registers.
+    install -Dm644 config/90-synapse-nvidia-boot-fb.rules \
+        "$pkgdir/usr/lib/udev/rules.d/90-synapse-nvidia-boot-fb.rules"
+    install -Dm755 config/synapse-evict-boot-fb \
+        "$pkgdir/usr/lib/synapse/synapse-evict-boot-fb"
 
     # Lynis audit profile. Lynis merges every .prf in /etc/lynis, so this adds
     # to the stock default.prf rather than replacing it. It is in backup=, so

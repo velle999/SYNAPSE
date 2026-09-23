@@ -1,0 +1,20 @@
+#!/bin/sh
+# synapse-evict-boot-fb <sysfs path of an nvidia_drm card>
+#
+# Unbind every other DRM card that hangs off the same PCI device: the firmware
+# framebuffer nvidia_drm leaves behind with fbdev=0. See
+# /usr/lib/udev/rules.d/90-synapse-nvidia-boot-fb.rules.
+card=$(readlink -f "$1") || exit 0
+pci=${card%/drm/*}
+[ -d "$pci" ] || exit 0
+
+for other in /sys/class/drm/card[0-9]*; do
+    case ${other##*/} in *-*) continue ;; esac
+    dev=$(readlink -f "$other/device") || continue
+    case $dev in "$pci"/*) ;; *) continue ;; esac   # a child of the GPU, not the GPU
+    drv=$(readlink -f "$dev/driver") || continue
+    [ -w "$drv/unbind" ] || continue
+    echo "synapse-evict-boot-fb: unbinding ${dev##*/} (${drv##*/}) from ${pci##*/}"
+    printf '%s' "${dev##*/}" > "$drv/unbind"
+done
+exit 0

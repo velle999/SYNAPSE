@@ -1,0 +1,15 @@
+# /usr/lib/udev/rules.d/90-synapse-nvidia-boot-fb.rules — shipped with synapse_kmod.
+#
+# nvidia_drm only evicts the firmware framebuffer (simpledrm, efidrm, vesadrm)
+# when its own fbdev client is on. SynapseOS ships fbdev=0
+# (90-synapse-nvidia-drm.conf), so the boot framebuffer outlives the handover
+# and stays a second DRM card on the same GPU. The compositor then drives it as
+# an extra 2560x1440 output with a software renderer. That output does not
+# exist, the renderer burns every core, and its scanout sits in VRAM that
+# nvidia now owns, which corrupts every monitor until the load settles.
+#
+# When nvidia_drm registers a card, remove any other DRM card on the same PCI
+# device. This is the eviction fbdev=1 would have done. The firmware
+# framebuffer still shows the early boot and LUKS prompt, because it is only
+# removed once nvidia_drm is up.
+ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DRIVERS=="nvidia", RUN+="/usr/lib/synapse/synapse-evict-boot-fb /sys%p"
