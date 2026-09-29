@@ -19,6 +19,13 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# ⛔ THE LOCALE IS PINNED. Every assertion below is on English text, and the
+# binary answers in the desktop's language once a catalog is installed — so a
+# German box building syn-scan through syn-update would fail check() on words,
+# not on bugs. LANGUAGE is UNSET, not set: gettext reads it before LC_ALL.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 BIN=${1:?usage: scan_test.sh /path/to/syn-scan}
 [ -x "$BIN" ] || { echo "not executable: $BIN" >&2; exit 1; }
 

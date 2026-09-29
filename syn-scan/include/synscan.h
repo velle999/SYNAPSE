@@ -114,6 +114,9 @@ size_t findings_outstanding(const struct findings *f);
 const char *verdict_id(verdict_t v);
 /* The human word, translated at the point it is drawn. */
 const char *verdict_label(verdict_t v);
+/* One finding as a person reads it — `scan` and `status` both print these. */
+void finding_print_row(const char *engine, verdict_t v, const char *path,
+                       const char *detail);
 
 typedef struct finding {
 	char     *engine;   /* engine id: "clamav", "rkhunter", "chkrootkit" */

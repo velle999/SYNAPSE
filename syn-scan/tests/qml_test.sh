@@ -17,6 +17,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -uo pipefail
 
+# qmllint's messages are translated too, and "^Error:" below is the English word.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
+
 ROOT=${1:-.}
 QML="$ROOT/data/syn-scan.qml"
 [ -f "$QML" ] || { echo "no such file: $QML" >&2; exit 1; }

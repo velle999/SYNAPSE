@@ -66,10 +66,20 @@ bool       g_dry   = false;
 bool       g_quiet = false;
 bool       g_will_quarantine = false;
 
+/* ⚠ SYN_SCAN_LOCALEDIR IS FOR tests/i18n_test.sh. An uninstalled binary's
+ * compiled-in localedir is under the install prefix, so it loads no catalog —
+ * or, on a machine with syn-scan installed, the INSTALLED one — and a check
+ * that the records do not change in German would pass with a _() sitting in
+ * one. */
 void syn_scan_i18n_init(void)
 {
 	setlocale(LC_ALL, "");
-	bindtextdomain(SYN_SCAN_GETTEXT_DOMAIN, SYNSCAN_LOCALEDIR);
+	setlocale(LC_NUMERIC, "C");
+
+	const char *dir = getenv("SYN_SCAN_LOCALEDIR");
+	bindtextdomain(SYN_SCAN_GETTEXT_DOMAIN,
+	               dir && *dir ? dir : SYNSCAN_LOCALEDIR);
+	bind_textdomain_codeset(SYN_SCAN_GETTEXT_DOMAIN, "UTF-8");
 	textdomain(SYN_SCAN_GETTEXT_DOMAIN);
 }
 

@@ -117,7 +117,7 @@ ShellRoot {
                 const n = root.outstanding(root.findings)
                 root.status = n === 0
                     ? I18n.tr("Nothing found.")
-                    : I18n.tr("%1 need a look.").arg(n)
+                    : I18n.trn("%1 thing needs a look.", "%1 things need a look.", n).arg(n)
             }
         }
         stderr: StdioCollector { id: scanErr }
@@ -147,7 +147,9 @@ ShellRoot {
                 const n = root.outstanding(root.findings)
                 root.status = n === 0
                     ? I18n.tr("The weekly scan on %1 found nothing.").arg(when)
-                    : I18n.tr("The weekly scan on %1: %2 need a look.").arg(when).arg(n)
+                    : I18n.trn("The weekly scan on %1: %2 thing needs a look.",
+                               "The weekly scan on %1: %2 things need a look.", n)
+                          .arg(when).arg(n)
             }
         }
     }
@@ -189,7 +191,7 @@ ShellRoot {
     }
 
     FloatingWindow {
-        title: "Malware Scan"
+        title: I18n.tr("Malware Scan")
         implicitWidth: 760
         implicitHeight: 560
         color: "#12151a"
@@ -246,7 +248,9 @@ ShellRoot {
                     model: root.engines
                     Text {
                         text: (modelData.runnable ? "● "
-                             : modelData.present  ? "◐ " : "○ ") + modelData.name
+                             : modelData.present  ? "◐ " : "○ ")
+                            // i18n-dynamic: engine names are N_() in src/engine.c's engines[]
+                            + I18n.tr(modelData.name)
                         color: modelData.runnable ? "#5ac87a"
                              : modelData.present  ? "#d9a441" : "#6b7688"
                         font.family: root.uiFont

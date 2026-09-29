@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 /* ⛔ NEVER TRANSLATED. The window matches on these and colours a row by the
  * result; syn-scan quarantine takes them back on the command line. */
@@ -131,11 +132,55 @@ static void print_rec(const findings_t *f)
 	findings_write_rec(stdout, f);
 }
 
+/* ── a row a person reads ─────────────────────────────────────────────────
+ *
+ * ⚠ THE VERDICT COLUMN IS MEASURED, IN COLUMNS. It was `%-11s`, which pads by
+ * BYTES and fits the English words: "Nicht lesbar" is 12 wide and pushed its
+ * path one column right of the row above, and 感染 is 6 bytes and 4 columns,
+ * so its path started two columns early. The column is as wide as this
+ * language's widest row label and never narrower than the English 11, so the
+ * English output is what it always was.
+ */
+static int text_cols(const char *s)
+{
+	size_t need = mbstowcs(NULL, s, 0);
+	if (need == (size_t)-1) return (int)strlen(s);   /* not this locale's encoding */
+	wchar_t *w = calloc(need + 1, sizeof *w);
+	if (!w) return (int)strlen(s);
+	mbstowcs(w, s, need + 1);
+	int cols = wcswidth(w, need);
+	free(w);
+	return cols < 0 ? (int)strlen(s) : cols;
+}
+
+static int verdict_cols(void)
+{
+	static int w = 0;
+	if (w) return w;
+	/* The three a row can carry: clean is never listed, and an engine that
+	 * did not finish is a warning line of its own. */
+	static const verdict_t listed[] = { VERDICT_INFECTED, VERDICT_SUSPECT, VERDICT_ERROR };
+	w = 11;
+	for (size_t i = 0; i < sizeof listed / sizeof *listed; i++) {
+		int c = text_cols(_(verdict_label(listed[i])));
+		if (c > w) w = c;
+	}
+	return w;
+}
+
+void finding_print_row(const char *engine, verdict_t v, const char *path,
+                       const char *detail)
+{
+	const char *label = _(verdict_label(v));
+	int pad = verdict_cols() - text_cols(label);
+	printf("  %-10s %s%*s %s\n", engine, label, pad > 0 ? pad : 0, "", path);
+	if (*detail)
+		printf("  %-10s %*s   %s\n", "", verdict_cols(), "", detail);
+}
+
 static void print_row(const finding_t *p)
 {
-	printf("  %-10s %-11s %s\n", p->engine, _(verdict_label(p->verdict)), p->path);
-	if (*p->detail)
-		printf("  %-10s %-11s   %s\n", "", "", p->detail);
+	finding_print_row(p->engine, p->verdict, p->path, p->detail);
 }
 
 static void print_human(const findings_t *f)

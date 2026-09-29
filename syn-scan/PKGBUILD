@@ -34,6 +34,36 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-7: every word, in thirteen languages ──────────────────────────────
+#
+# ⛔ EVERY CATALOG WAS EMPTY. The thirteen po/*.po files shipped through six
+# releases untranslated — each compiled, each installed, and everything syn-scan
+# printed or drew was English. All 70 msgids are translated in every language
+# now, and tests/i18n_test.sh fails when one is not.
+#
+# The window had three strings no catalog could reach: its title was unmarked,
+# the engine names were drawn as the record carried them, and "%1 need a look."
+# had no plural, so English read "1 need a look". Both counts are I18n.trn()
+# now. ar.po declares Arabic's six plural forms and zh.po Chinese's one; both
+# had been given English's two.
+#
+# ⛔ scan_test.sh DID NOT PIN THE LOCALE. It asserts English, and the binary
+# answers in the desktop's language once a catalog is installed: with these
+# catalogs, check() on a German desktop failed 14 of its 70 checks on words
+# alone, which stops syn-update. Both suites now export LC_ALL=C.UTF-8 and
+# unset LANGUAGE, and the i18n suite fails if either drops it.
+#
+# The verdict column in `scan` and `status` is measured in display columns.
+# `%-11s` padded bytes, so "Nicht lesbar" and 感染 each started their path in a
+# different column from the row above. English output is byte-identical.
+#
+# tests/i18n_test.sh, new: the template is current; every catalog is full and
+# declares its language's plural count; every --rec command is byte-identical
+# in C and German, and under a catalog that translates every msgid, with the
+# verdict column still the English id; the human path IS translated; rows line
+# up in German and Japanese. SYN_SCAN_LOCALEDIR points the binary at a scratch
+# catalog for it.
+#
 # ── 0.1.0-6: rkhunter keeps a baseline, and "unreadable" is not a finding ───
 #
 # ⛔ rkhunter HAD NO BASELINE, and on a rolling release one made by hand goes
@@ -148,7 +178,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=6
+pkgrel=7
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

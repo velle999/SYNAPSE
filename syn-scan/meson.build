@@ -80,3 +80,11 @@ test('cli', find_program('tests/scan_test.sh'),
      args: [syn_scan.full_path()],
      env: ['SYNSCAN_TESTROOT=' + meson.current_build_dir() / 'testroot'],
      timeout: 120)
+
+# ⛔ THE RECORDS UNDER A CATALOG THAT TRANSLATES EVERYTHING, and every catalog
+# full. syn-scan shipped six releases with all thirteen catalogs empty and
+# every check green; this is the check that goes red on that.
+test('i18n', find_program('tests/i18n_test.sh'),
+     args: [meson.current_source_dir(), syn_scan.full_path()],
+     depends: [syn_scan],
+     timeout: 120)

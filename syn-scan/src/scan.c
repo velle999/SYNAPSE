@@ -237,8 +237,7 @@ static size_t show_findings(bool system, bool unread, size_t *incomplete)
 		verdict_t v = !strcmp(f[2], "infected") ? VERDICT_INFECTED
 		            : !strcmp(f[2], "suspect")  ? VERDICT_SUSPECT : VERDICT_ERROR;
 		if ((v == VERDICT_ERROR) != unread) continue;
-		printf("  %-10s %-11s %s\n", f[1], _(verdict_label(v)), f[3]);
-		if (*f[4]) printf("  %-10s %-11s   %s\n", "", "", f[4]);
+		finding_print_row(f[1], v, f[3], f[4]);
 		shown++;
 	}
 	free(line);
