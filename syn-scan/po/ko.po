@@ -56,6 +56,9 @@ msgstr "홈 폴더 검사"
 msgid "Scanning..."
 msgstr "검사하는 중…"
 
+msgid "The scan did not run (exit %1)."
+msgstr "검사가 실행되지 않았습니다 (종료 코드 %1)."
+
 msgid "The weekly scan has not run yet."
 msgstr "주간 검사가 아직 실행되지 않았습니다."
 
@@ -78,17 +81,21 @@ msgstr "%s에 ClamAV 시그니처 데이터베이스가 없습니다 (%s)"
 
 #, c-format
 msgid "could not read %s (%s), so this scan ran without the signatures in it"
-msgstr "%s을(를) 읽을 수 없어서 (%s) 이번 검사는 그 안의 시그니처 없이 실행되었습니다"
+msgstr ""
+"%s을(를) 읽을 수 없어서 (%s) 이번 검사는 그 안의 시그니처 없이 실행되었습니다"
 
 #, c-format
 msgid "ClamAV's signature database at %s cannot be read by this account"
-msgstr "이 계정으로는 %s에 있는 ClamAV 시그니처 데이터베이스를 읽을 수 없습니다"
+msgstr ""
+"이 계정으로는 %s에 있는 ClamAV 시그니처 데이터베이스를 읽을 수 없습니다"
 
 #, c-format
 msgid ""
 "ClamAV has no signature database at %s yet — freshclam may still be "
 "downloading it"
-msgstr "%s에 아직 ClamAV 시그니처 데이터베이스가 없습니다 — freshclam이 아직 내려받는 중일 수 있습니다"
+msgstr ""
+"%s에 아직 ClamAV 시그니처 데이터베이스가 없습니다 — freshclam이 아직 내려받"
+"는 중일 수 있습니다"
 
 msgid "ClamAV"
 msgstr "ClamAV"
@@ -118,7 +125,9 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu files could not be scanned:\n"
-msgstr[0] "\n파일 %zu개를 검사할 수 없었습니다:\n"
+msgstr[0] ""
+"\n"
+"파일 %zu개를 검사할 수 없었습니다:\n"
 
 #, c-format
 msgid "%s did not finish: %s"
@@ -131,16 +140,22 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu things need a look.\n"
-msgstr[0] "\n살펴봐야 할 항목이 %zu개 있습니다.\n"
+msgstr[0] ""
+"\n"
+"살펴봐야 할 항목이 %zu개 있습니다.\n"
 
 msgid ""
 "Moving these aside now; `syn-scan quarantine restore` puts any of them back."
-msgstr "지금 이 항목들을 격리합니다. `syn-scan quarantine restore`로 어느 것이든 되돌릴 수 있습니다."
+msgstr ""
+"지금 이 항목들을 격리합니다. `syn-scan quarantine restore`로 어느 것이든 되돌"
+"릴 수 있습니다."
 
 msgid ""
 "Nothing has been moved. `syn-scan quarantine take <path>` puts a file aside; "
 "it can always be restored."
-msgstr "아무것도 옮기지 않았습니다. `syn-scan quarantine take <path>`로 파일을 격리할 수 있으며, 언제든 복원할 수 있습니다."
+msgstr ""
+"아무것도 옮기지 않았습니다. `syn-scan quarantine take <path>`로 파일을 격리"
+"할 수 있으며, 언제든 복원할 수 있습니다."
 
 msgid "nothing to ask on a pipe — pass --yes if you mean it"
 msgstr "파이프에서는 물어볼 상대가 없습니다 — 정말이라면 --yes를 붙이십시오"
@@ -173,7 +188,17 @@ msgid "no such quarantine command: %s"
 msgstr "그런 격리 명령이 없습니다: %s"
 
 msgid "nothing to scan — give a path, or --system for the rootkit checks"
-msgstr "검사할 대상이 없습니다 — 경로를 지정하거나, 루트킷 점검은 --system을 붙이십시오"
+msgstr ""
+"검사할 대상이 없습니다 — 경로를 지정하거나, 루트킷 점검은 --system을 붙이십시"
+"오"
+
+#, c-format
+msgid "%s does not exist — nothing was scanned"
+msgstr "%s이(가) 존재하지 않습니다 — 아무것도 검사하지 않았습니다"
+
+#, c-format
+msgid "%s: %s — nothing was scanned"
+msgstr "%s: %s — 아무것도 검사하지 않았습니다"
 
 msgid "--system without root: the checks will be partial"
 msgstr "root 없이 --system: 점검이 부분적으로만 이루어집니다"
@@ -254,7 +279,9 @@ msgid "%s could not be run"
 msgstr "%s을(를) 실행할 수 없었습니다"
 
 msgid "no engine ran — install clamav, or pass --only for the one you meant"
-msgstr "실행된 엔진이 없습니다 — clamav를 설치하거나, 의도한 엔진을 --only로 지정하십시오"
+msgstr ""
+"실행된 엔진이 없습니다 — clamav를 설치하거나, 의도한 엔진을 --only로 지정하십"
+"시오"
 
 msgid "No scan has run yet."
 msgstr "아직 실행된 검사가 없습니다."
@@ -277,7 +304,9 @@ msgid ""
 msgid_plural ""
 "%lu findings need a look, but this record does not say what — run the scan "
 "again to see them.\n"
-msgstr[0] "살펴봐야 할 항목이 %lu개 있지만 이 기록에는 무엇인지 나와 있지 않습니다 — 다시 검사하면 볼 수 있습니다.\n"
+msgstr[0] ""
+"살펴봐야 할 항목이 %lu개 있지만 이 기록에는 무엇인지 나와 있지 않습니다 — 다"
+"시 검사하면 볼 수 있습니다.\n"
 
 #, c-format
 msgid ""
@@ -286,4 +315,6 @@ msgid ""
 msgid_plural ""
 "\n"
 "%lu things need a look.\n"
-msgstr[0] "\n살펴봐야 할 항목이 %lu개 있습니다.\n"
+msgstr[0] ""
+"\n"
+"살펴봐야 할 항목이 %lu개 있습니다.\n"

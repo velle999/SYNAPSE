@@ -300,6 +300,32 @@ grep -qi 'nothing found' <<<"$out" \
   && bad "a scan that ran nothing wrote a clean result to the state file" \
   || ok "a scan that ran nothing records no status"
 
+# ⛔ AND A PATH THAT IS NOT THERE WAS NOT SCANNED. clamscan only complains on
+# its own stderr, so this printed "Nothing found." and exited 0 — and the
+# window's "Scan Downloads" drew that for a folder under another name.
+# Refused before any engine runs: the stub never sees it and nothing is
+# recorded, in --dry-run too, and one missing path among real ones refuses all.
+nx_home="$ROOT/state-nx"; mkdir -p "$nx_home"
+rm -f "$STUBS/clamscan.args"
+# (Not asserted on "Nothing found." here: the stub clamscan reports findings
+# for any path, so that needle could never fire. Exit 2 and the engine never
+# running are what separate the two.)
+out=$(SYNSCAN_HOME="$nx_home" sc scan "$ROOT/no-such-folder" 2>&1); rc=$?
+[ "$rc" -eq 2 ] && ok "a missing path exits 2" \
+                || bad "exit status for a missing path" "expected 2, got $rc"
+grep -q 'does not exist' <<<"$out" && ok "...and says the path does not exist" \
+                                  || bad "no reason given for a missing path" "$out"
+[ -e "$STUBS/clamscan.args" ] && bad "an engine ran on a missing path" \
+                              || ok "...before any engine runs"
+out=$(SYNSCAN_HOME="$nx_home" sc --rec scan "$SCANME" "$ROOT/no-such-folder" 2>/dev/null); rc=$?
+[ "$rc" -eq 2 ] && [ -z "$out" ] \
+  && ok "one missing path among real ones refuses the whole scan, with no records" \
+  || bad "a missing path among real ones" "rc=$rc out=$out"
+SYNSCAN_HOME="$nx_home" sc --dry-run scan "$ROOT/no-such-folder" >/dev/null 2>&1 \
+  && bad "--dry-run accepted a missing path" || ok "--dry-run refuses a missing path too"
+[ -e "$nx_home/last-scan" ] && bad "a refused scan wrote a status record" \
+                            || ok "a refused scan records no status"
+
 # ── 11. rkhunter: a warning, its detail, and rkhunter's own trouble ─────────
 #
 # ⛔ Every line rkhunter printed used to be a finding. The weekly sweep runs

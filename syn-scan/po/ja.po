@@ -56,6 +56,9 @@ msgstr "ホームフォルダーをスキャン"
 msgid "Scanning..."
 msgstr "スキャン中…"
 
+msgid "The scan did not run (exit %1)."
+msgstr "スキャンは実行されませんでした (終了コード %1)。"
+
 msgid "The weekly scan has not run yet."
 msgstr "週次スキャンはまだ実行されていません。"
 
@@ -78,17 +81,22 @@ msgstr "%s に ClamAV のシグネチャデータベースがありません (%s
 
 #, c-format
 msgid "could not read %s (%s), so this scan ran without the signatures in it"
-msgstr "%s を読み取れませんでした (%s)。このスキャンはそこに含まれるシグネチャなしで実行されました"
+msgstr ""
+"%s を読み取れませんでした (%s)。このスキャンはそこに含まれるシグネチャなしで"
+"実行されました"
 
 #, c-format
 msgid "ClamAV's signature database at %s cannot be read by this account"
-msgstr "%s にある ClamAV のシグネチャデータベースは、このアカウントでは読み取れません"
+msgstr ""
+"%s にある ClamAV のシグネチャデータベースは、このアカウントでは読み取れません"
 
 #, c-format
 msgid ""
 "ClamAV has no signature database at %s yet — freshclam may still be "
 "downloading it"
-msgstr "%s にはまだ ClamAV のシグネチャデータベースがありません — freshclam がまだダウンロード中かもしれません"
+msgstr ""
+"%s にはまだ ClamAV のシグネチャデータベースがありません — freshclam がまだダ"
+"ウンロード中かもしれません"
 
 msgid "ClamAV"
 msgstr "ClamAV"
@@ -118,7 +126,9 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu files could not be scanned:\n"
-msgstr[0] "\n%zu 個のファイルをスキャンできませんでした:\n"
+msgstr[0] ""
+"\n"
+"%zu 個のファイルをスキャンできませんでした:\n"
 
 #, c-format
 msgid "%s did not finish: %s"
@@ -131,16 +141,22 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu things need a look.\n"
-msgstr[0] "\n%zu 件の確認が必要です。\n"
+msgstr[0] ""
+"\n"
+"%zu 件の確認が必要です。\n"
 
 msgid ""
 "Moving these aside now; `syn-scan quarantine restore` puts any of them back."
-msgstr "これらを今から隔離します。`syn-scan quarantine restore` でどれでも元に戻せます。"
+msgstr ""
+"これらを今から隔離します。`syn-scan quarantine restore` でどれでも元に戻せま"
+"す。"
 
 msgid ""
 "Nothing has been moved. `syn-scan quarantine take <path>` puts a file aside; "
 "it can always be restored."
-msgstr "何も移動していません。`syn-scan quarantine take <path>` でファイルを隔離できます。いつでも元に戻せます。"
+msgstr ""
+"何も移動していません。`syn-scan quarantine take <path>` でファイルを隔離でき"
+"ます。いつでも元に戻せます。"
 
 msgid "nothing to ask on a pipe — pass --yes if you mean it"
 msgstr "パイプでは尋ねる相手がいません — 本気なら --yes を付けてください"
@@ -173,7 +189,17 @@ msgid "no such quarantine command: %s"
 msgstr "そのような quarantine コマンドはありません: %s"
 
 msgid "nothing to scan — give a path, or --system for the rootkit checks"
-msgstr "スキャンする対象がありません — パスを指定するか、ルートキット検査には --system を付けてください"
+msgstr ""
+"スキャンする対象がありません — パスを指定するか、ルートキット検査には --"
+"system を付けてください"
+
+#, c-format
+msgid "%s does not exist — nothing was scanned"
+msgstr "%s は存在しません — 何もスキャンしていません"
+
+#, c-format
+msgid "%s: %s — nothing was scanned"
+msgstr "%s: %s — 何もスキャンしていません"
 
 msgid "--system without root: the checks will be partial"
 msgstr "root なしの --system: 検査は部分的になります"
@@ -254,7 +280,9 @@ msgid "%s could not be run"
 msgstr "%s を実行できませんでした"
 
 msgid "no engine ran — install clamav, or pass --only for the one you meant"
-msgstr "どのエンジンも実行されませんでした — clamav をインストールするか、目的のエンジンを --only で指定してください"
+msgstr ""
+"どのエンジンも実行されませんでした — clamav をインストールするか、目的のエン"
+"ジンを --only で指定してください"
 
 msgid "No scan has run yet."
 msgstr "まだスキャンは実行されていません。"
@@ -277,7 +305,9 @@ msgid ""
 msgid_plural ""
 "%lu findings need a look, but this record does not say what — run the scan "
 "again to see them.\n"
-msgstr[0] "%lu 件の確認が必要ですが、この記録には内容が残っていません — もう一度スキャンすると表示されます。\n"
+msgstr[0] ""
+"%lu 件の確認が必要ですが、この記録には内容が残っていません — もう一度スキャン"
+"すると表示されます。\n"
 
 #, c-format
 msgid ""
@@ -286,4 +316,6 @@ msgid ""
 msgid_plural ""
 "\n"
 "%lu things need a look.\n"
-msgstr[0] "\n%lu 件の確認が必要です。\n"
+msgstr[0] ""
+"\n"
+"%lu 件の確認が必要です。\n"

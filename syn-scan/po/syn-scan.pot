@@ -54,6 +54,9 @@ msgstr ""
 msgid "Scanning..."
 msgstr ""
 
+msgid "The scan did not run (exit %1)."
+msgstr ""
+
 msgid "The weekly scan has not run yet."
 msgstr ""
 
@@ -174,6 +177,14 @@ msgid "no such quarantine command: %s"
 msgstr ""
 
 msgid "nothing to scan — give a path, or --system for the rootkit checks"
+msgstr ""
+
+#, c-format
+msgid "%s does not exist — nothing was scanned"
+msgstr ""
+
+#, c-format
+msgid "%s: %s — nothing was scanned"
 msgstr ""
 
 msgid "--system without root: the checks will be partial"

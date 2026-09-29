@@ -8,8 +8,10 @@
 #include "synscan.h"
 #include "i18n.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef SYNSCAN_DATADIR
@@ -176,6 +178,24 @@ int main(int argc, char **argv)
 		if (!want_system && argc < 3)
 			die(_("nothing to scan — give a path, or --system for the "
 			      "rootkit checks"));
+
+		/* ⛔ A PATH THAT IS NOT THERE WAS NOT SCANNED. clamscan says "No such
+		 * file or directory" on its own stderr, prints no finding, and this
+		 * program then said "Nothing found." and exited 0 — a clean result for
+		 * a folder nobody looked at, which is what the window showed for a
+		 * Downloads folder under another name. Every path is refused before
+		 * any engine runs, so nothing is scanned and nothing is recorded.
+		 *
+		 * toctou-ok: stat() only decides whether to refuse; nothing here opens
+		 * the name. If it changes before clamscan resolves it, clamscan reports
+		 * that itself. */
+		for (int i = 2; !want_system && i < argc; i++) {
+			struct stat st;
+			if (stat(argv[i], &st) == 0) continue;
+			if (errno == ENOENT || errno == ENOTDIR)
+				die(_("%s does not exist — nothing was scanned"), argv[i]);
+			die(_("%s: %s — nothing was scanned"), argv[i], strerror(errno));
+		}
 
 		/* ⚠ The system engines read files only root can read. Say so plainly
 		 * rather than reporting a clean machine that was never looked at. */

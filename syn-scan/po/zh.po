@@ -56,6 +56,9 @@ msgstr "扫描主目录"
 msgid "Scanning..."
 msgstr "正在扫描…"
 
+msgid "The scan did not run (exit %1)."
+msgstr "扫描没有运行（退出码 %1）。"
+
 msgid "The weekly scan has not run yet."
 msgstr "每周扫描尚未运行。"
 
@@ -118,7 +121,9 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu files could not be scanned:\n"
-msgstr[0] "\n有 %zu 个文件无法扫描：\n"
+msgstr[0] ""
+"\n"
+"有 %zu 个文件无法扫描：\n"
 
 #, c-format
 msgid "%s did not finish: %s"
@@ -131,16 +136,22 @@ msgid ""
 msgid_plural ""
 "\n"
 "%zu things need a look.\n"
-msgstr[0] "\n有 %zu 项需要看一下。\n"
+msgstr[0] ""
+"\n"
+"有 %zu 项需要看一下。\n"
 
 msgid ""
 "Moving these aside now; `syn-scan quarantine restore` puts any of them back."
-msgstr "现在将这些移入隔离区；`syn-scan quarantine restore` 可将其中任何一个放回原处。"
+msgstr ""
+"现在将这些移入隔离区；`syn-scan quarantine restore` 可将其中任何一个放回原"
+"处。"
 
 msgid ""
 "Nothing has been moved. `syn-scan quarantine take <path>` puts a file aside; "
 "it can always be restored."
-msgstr "没有移动任何文件。`syn-scan quarantine take <path>` 可将文件移入隔离区；随时都能恢复。"
+msgstr ""
+"没有移动任何文件。`syn-scan quarantine take <path>` 可将文件移入隔离区；随时"
+"都能恢复。"
 
 msgid "nothing to ask on a pipe — pass --yes if you mean it"
 msgstr "在管道里没人可问 — 如果确定，请加上 --yes"
@@ -174,6 +185,14 @@ msgstr "没有这个隔离命令：%s"
 
 msgid "nothing to scan — give a path, or --system for the rootkit checks"
 msgstr "没有可扫描的内容 — 请给出路径，或用 --system 进行 rootkit 检查"
+
+#, c-format
+msgid "%s does not exist — nothing was scanned"
+msgstr "%s 不存在 — 没有扫描任何内容"
+
+#, c-format
+msgid "%s: %s — nothing was scanned"
+msgstr "%s：%s — 没有扫描任何内容"
 
 msgid "--system without root: the checks will be partial"
 msgstr "没有 root 的 --system：检查将不完整"
@@ -277,7 +296,8 @@ msgid ""
 msgid_plural ""
 "%lu findings need a look, but this record does not say what — run the scan "
 "again to see them.\n"
-msgstr[0] "有 %lu 项需要看一下，但这条记录没有说明是什么 — 请重新扫描以查看。\n"
+msgstr[0] ""
+"有 %lu 项需要看一下，但这条记录没有说明是什么 — 请重新扫描以查看。\n"
 
 #, c-format
 msgid ""
@@ -286,4 +306,6 @@ msgid ""
 msgid_plural ""
 "\n"
 "%lu things need a look.\n"
-msgstr[0] "\n有 %lu 项需要看一下。\n"
+msgstr[0] ""
+"\n"
+"有 %lu 项需要看一下。\n"

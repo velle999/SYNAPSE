@@ -34,6 +34,25 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-9: a path that is not there was not scanned ───────────────────────
+#
+# ⛔ `syn-scan scan <missing path>` SAID "Nothing found." AND EXITED 0. clamscan
+# only complains on its own stderr and prints no finding, so a folder nobody
+# looked at came back clean. Every path is now checked before any engine
+# runs: a missing one is refused with "<path> does not exist — nothing was
+# scanned", exit 2, no records and no status written, in --dry-run too. One
+# missing path among real ones refuses the whole scan.
+#
+# ⛔ AND THE WINDOW SAID "Nothing found." FOR EVERY REFUSAL. It set its status
+# when stdout ended and never read the exit status, so a refusal (a missing
+# folder, or no engine installed, which already exited 2) drew as a clean
+# scan. The verdict now waits for stdout, stderr and the exit, in any order;
+# 0 and 1 are results, and anything else shows the binary's last line, which
+# is already in the user's language. The "No findings." placeholder is hidden
+# under a failed scan. Checked headless: clean, two findings, a refusal,
+# 20,000 rows, two scans in a row, and the real binary on a Downloads folder
+# that does not exist.
+#
 # ── 0.1.0-8: "Scan Downloads" asks where Downloads is ───────────────────────
 #
 # The button scanned $HOME/Downloads by name. A desktop in another language
@@ -193,7 +212,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=8
+pkgrel=9
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

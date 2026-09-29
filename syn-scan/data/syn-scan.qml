@@ -108,20 +108,52 @@ ShellRoot {
         return rows.filter(f => f.verdict === "infected" || f.verdict === "suspect").length
     }
 
+    // ⛔ A SCAN THAT DID NOT RUN IS NOT A CLEAN ONE. The status used to be set
+    // when stdout ended, and a refusal ends stdout with no rows in it — so a
+    // missing folder, or no engine installed, drew "Nothing found." while the
+    // binary exited 2 and said why on stderr. The verdict now waits for all
+    // three parts (stdout, stderr, the exit), in whatever order they arrive:
+    // exit 0 and 1 are results, anything else shows the binary's own words.
+    property int scanParts: 0
+    property int scanCode: 0
+    property bool scanFailed: false
+
+    function scanPart() {
+        if (++root.scanParts < 3) return
+        root.busy = false
+        if (root.scanCode !== 0 && root.scanCode !== 1) {
+            root.scanFailed = true
+            root.findings = []
+            // The last thing it said is the reason: die() and the no-engine
+            // refusal both end the run. Already in the user's language.
+            const lines = scanErr.text.split("\n").map(l => l.trim()).filter(l => l !== "")
+            const said = lines.length ? lines[lines.length - 1].replace(/^syn-scan: /, "") : ""
+            root.status = said || I18n.tr("The scan did not run (exit %1).").arg(root.scanCode)
+            return
+        }
+        const n = root.outstanding(root.findings)
+        root.status = n === 0
+            ? I18n.tr("Nothing found.")
+            : I18n.trn("%1 thing needs a look.", "%1 things need a look.", n).arg(n)
+    }
+
     Process {
         id: scanProc
         stdout: StdioCollector {
             onStreamFinished: {
                 root.findings = root.toFindings(this.text)
-                root.busy = false
-                const n = root.outstanding(root.findings)
-                root.status = n === 0
-                    ? I18n.tr("Nothing found.")
-                    : I18n.trn("%1 thing needs a look.", "%1 things need a look.", n).arg(n)
+                root.scanPart()
             }
         }
-        stderr: StdioCollector { id: scanErr }
-        onExited: root.busy = false
+        stderr: StdioCollector {
+            id: scanErr
+            onStreamFinished: root.scanPart()
+        }
+        onExited: (code, exitStatus) => {
+            // A crash is not a result either, whatever code it left behind.
+            root.scanCode = exitStatus === 0 ? code : -1
+            root.scanPart()
+        }
     }
 
     // ── what the weekly scan found ─────────────────────────────────────────
@@ -197,6 +229,8 @@ ShellRoot {
 
     function scanPath(p) {
         root.busy = true
+        root.scanParts = 0
+        root.scanFailed = false
         root.findings = []
         root.status = I18n.tr("Scanning...")
         scanProc.command = [root.bin, "--rec", "scan", p]
@@ -205,6 +239,8 @@ ShellRoot {
 
     function scanSystem() {
         root.busy = true
+        root.scanParts = 0
+        root.scanFailed = false
         root.findings = []
         root.status = I18n.tr("Running the system checks...")
         scanProc.command = [root.bin, "--rec", "scan", "--system"]
@@ -353,9 +389,10 @@ ShellRoot {
                 Text {
                     anchors.centerIn: parent
                     visible: list.count === 0
-                    text: root.page === "scan"
-                          ? I18n.tr("No findings.")
-                          : I18n.tr("Nothing in quarantine.")
+                    // Nothing under a failed scan: "No findings." there would
+                    // say the opposite of the status line above it.
+                    text: root.page !== "scan" ? I18n.tr("Nothing in quarantine.")
+                        : root.scanFailed ? "" : I18n.tr("No findings.")
                     color: "#5b6675"
                     font.family: root.uiFont
                     font.pixelSize: root.ui(13)
