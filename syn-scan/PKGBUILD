@@ -34,6 +34,21 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-8: "Scan Downloads" asks where Downloads is ───────────────────────
+#
+# The button scanned $HOME/Downloads by name. A desktop in another language
+# keeps its downloads in ~/Téléchargements or ~/ダウンロード, and syn-scan
+# reports a path that does not exist as "Nothing found." — so the button said
+# a folder was clean without having looked at it. The window now asks
+# `xdg-user-dir DOWNLOAD` once when it opens.
+#
+# ⛔ $HOME IS NOT AN ANSWER. With no user-dirs.dirs, which a fresh SynapseOS
+# install does not have, xdg-user-dir prints $HOME and exits 0; taken as given,
+# "Scan Downloads" would scan the whole home folder. That answer (with or
+# without a trailing slash), an empty one, and no xdg-user-dir installed all
+# keep ~/Downloads. Checked in a headless quickshell for each case, and by
+# clicking the button: `--rec scan /home/<user>/Téléchargements`.
+#
 # ── 0.1.0-7: every word, in thirteen languages ──────────────────────────────
 #
 # ⛔ EVERY CATALOG WAS EMPTY. The thirteen po/*.po files shipped through six
@@ -178,7 +193,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=7
+pkgrel=8
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

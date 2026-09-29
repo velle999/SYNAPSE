@@ -168,6 +168,33 @@ ShellRoot {
         }
     }
 
+    // ── where Downloads is ──────────────────────────────────────────────────
+    //
+    // ⚠ ASKED, NOT ASSUMED. A desktop in another language names the folder in
+    // that language — ~/Téléchargements, ~/ダウンロード — and user-dirs.dirs
+    // says where it is. A hard-coded ~/Downloads scanned a folder that was not
+    // there, and syn-scan reports a path that does not exist as "Nothing
+    // found."
+    //
+    // ⛔ AND $HOME IS NOT AN ANSWER. With no user-dirs.dirs — a fresh SynapseOS
+    // install has none — `xdg-user-dir DOWNLOAD` prints $HOME and exits 0, and
+    // taking it would make "Scan Downloads" scan the whole home folder. That
+    // answer, an empty one, and no xdg-user-dir at all each leave ~/Downloads.
+    readonly property string home: (Quickshell.env("HOME") || "").replace(/\/+$/, "")
+    property string downloadsDir: root.home + "/Downloads"
+
+    Process {
+        id: downloadsProc
+        command: ["xdg-user-dir", "DOWNLOAD"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const d = this.text.trim().replace(/\/+$/, "")
+                if (d !== "" && d !== root.home && d.startsWith("/"))
+                    root.downloadsDir = d
+            }
+        }
+    }
+
     function scanPath(p) {
         root.busy = true
         root.findings = []
@@ -186,6 +213,7 @@ ShellRoot {
 
     Component.onCompleted: {
         enginesProc.running = true
+        downloadsProc.running = true
         quarProc.running = true
         weeklyProc.running = true
     }
@@ -208,7 +236,7 @@ ShellRoot {
                 Button {
                     text: I18n.tr("Scan Downloads")
                     enabled: !root.busy
-                    onClicked: root.scanPath(Quickshell.env("HOME") + "/Downloads")
+                    onClicked: root.scanPath(root.downloadsDir)
                 }
                 Button {
                     text: I18n.tr("Scan Home Folder")
