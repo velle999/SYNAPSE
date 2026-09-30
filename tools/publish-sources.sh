@@ -317,9 +317,12 @@ for name in "${EXTERNAL[@]}"; do
     has_src=""; [ -n "$(pkgfield "$name" source)" ] && has_src=yes
 
     if [ "$list" -eq 1 ]; then
+        # A package with no sources has no release to publish (see below), so
+        # "not published" would read as work left undone.
         printf '  %-14s %-10s %-9s %-13s %s\n' "$name" "$tag" \
                "$([ -n "$have_repo" ] && echo 'repo ok' || echo 'NO REPO')" \
-               "$([ -n "$have_rel" ] && echo published || echo 'not published')" \
+               "$([ -z "$has_src" ] && echo 'PKGBUILD only' ||
+                  { [ -n "$have_rel" ] && echo published || echo 'not published'; })" \
                "$([ -z "$has_src" ] && echo '' || { [ -n "$have_sig" ] && echo signed || echo UNSIGNED; })"
         continue
     fi
