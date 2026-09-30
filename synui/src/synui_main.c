@@ -33,6 +33,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>         /* mkdir: the greeter's runtime config home */
 #include <getopt.h>
 #include <time.h>
 #include <assert.h>
@@ -3247,6 +3248,24 @@ int main(int argc, char *argv[])
         setenv("WLR_NO_HARDWARE_CURSORS", "1", 1);
     }
 
+
+    /* ⚠ THE GREETER'S HOME IS `/`. greetd runs this as the `greeter` account,
+     * so every *_state_save() aimed at //.config/synui and logged a failure at
+     * priority err — about sixty lines per login screen. Its state goes to the
+     * greeter session's runtime dir instead, which logind removes when that
+     * session ends, so nothing outlives the login screen. Set BEFORE
+     * synui_config_load() so reads and writes resolve to one directory; a
+     * missing synuirc there still falls through to /etc/synui/synuirc. Only
+     * for an unwritable home, and never over a config home someone chose. */
+    if (greeter && !getenv("XDG_CONFIG_HOME")) {
+        const char *home = getenv("HOME");
+        const char *rt = getenv("XDG_RUNTIME_DIR");
+        char dir[200];
+        if ((!home || !*home || access(home, W_OK) != 0) && rt && *rt
+            && snprintf(dir, sizeof(dir), "%s/synui-greeter", rt) < (int)sizeof(dir)
+            && (mkdir(dir, 0700) == 0 || errno == EEXIST))
+            setenv("XDG_CONFIG_HOME", dir, 1);
+    }
 
     syn_server_t server = {0};
     synui_config_load(&server.config);

@@ -306,9 +306,41 @@ grep -q "greeter bg: published" "$GLOG" \
        greeter happened to resolve."
 echo "read-only: the greeter published nothing of its own"
 
-if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG" "$GLOG"; then
+# ⚠ AND WITH THE HOME IT REALLY HAS, which is `/`. Every phase above gives the
+# greeter a writable $HOME; greetd gives it the `greeter` account's, so each
+# *_state_save() aimed at //.config/synui and logged a failure at priority err —
+# about sixty lines per login screen (backdrop.state, palette.state,
+# theme.state, news.seen, and the mkdir before each). Its state belongs in the
+# greeter session's runtime dir, which logind removes when that session ends.
+kill -9 "$SYNUI_PID" 2>/dev/null
+wait "$SYNUI_PID" 2>/dev/null
+RLOG="$TMP/greeter-home-root.log"
+mkdir -m 700 "$TMP/grt"
+HOME=/ XDG_RUNTIME_DIR="$TMP/grt" env -u XDG_CONFIG_HOME \
+    "$SYNUI" --greeter -d >"$RLOG" 2>&1 &
+SYNUI_PID=$!
+i=0
+while [ $i -lt 80 ]; do
+    grep -q "greeter bg:" "$RLOG" 2>/dev/null && break
+    kill -0 "$SYNUI_PID" 2>/dev/null || break
+    i=$((i + 1)); sleep 0.1
+done
+sleep 1   # the first backdrop.state save follows the first painted output
+grep -q "greeter bg: showing" "$RLOG" \
+    || fail "the greeter with HOME=/ never reached its background:
+$(tail -5 "$RLOG")"
+grep -qE "cannot write|mkdir .* failed" "$RLOG" \
+    && fail "the greeter still writes its state under its home of /:
+$(grep -E 'cannot write|mkdir .* failed' "$RLOG" | sort | uniq -c | head -5)"
+ls "$TMP/grt/synui-greeter/synui" 2>/dev/null | grep -q . \
+    || fail "the greeter logged no failure and saved nothing where it should —
+       so this phase proved nothing. Expected state under
+       \$XDG_RUNTIME_DIR/synui-greeter/synui."
+echo "home /:    the greeter keeps its state in its runtime dir, and logs no failure"
+
+if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG" "$GLOG" "$RLOG"; then
     fail "sanitizer reported errors"
 fi
 
 cleanup
-echo "greeter_bg: 6 phases passed"
+echo "greeter_bg: 7 phases passed"

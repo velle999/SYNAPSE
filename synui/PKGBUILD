@@ -3757,7 +3757,17 @@ pkgver=0.1.0
 #   ~8 to ~3 frames/s during a pointer sweep in that VM, CPU ~180% to ~90% of
 #   one core. Verified: the stock no-3D VM path 0/10 in two stress runs (5-6/10
 #   before), the bar client keeps its own llvmpipe threads, smoke passes.
-pkgrel=626
+# 627: THE LOGIN SCREEN STOPS LOGGING ~60 ERRORS EACH TIME IT STARTS. greetd runs
+#   `synui --greeter` as the `greeter` account, whose home is `/`, so every
+#   state save (backdrop.state, palette.state, theme.state, news.seen, and the
+#   mkdir before each) aimed at //.config/synui and failed at priority err.
+#   With an unwritable home and no XDG_CONFIG_HOME, the greeter now sets
+#   XDG_CONFIG_HOME to $XDG_RUNTIME_DIR/synui-greeter before loading config.
+#   logind removes that directory when the greeter's session ends. synuirc
+#   still falls through to /etc/synui/synuirc. tests/greeter_bg.sh has a
+#   seventh phase that runs the greeter with HOME=/. It fails on 626 with the
+#   same four messages seen in the journal, and passes on 627.
+pkgrel=627
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
