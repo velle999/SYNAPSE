@@ -3872,6 +3872,13 @@ static void render_crop_view(syn_server_t *s)
         syn_show_text(cr, keys);
     }
 
+    /* ⚠ THE cairo_t HOLDS A REFERENCE ON THE SURFACE. set_scene_buffer() drops
+     * only the wlr_buffer, so without this the scene frees the wrapper and the
+     * cr keeps a full-output ARGB image alive (14.7 MB at 2560x1440) on every
+     * repaint — every step, zoom and pan motion. It was missing here alone, and
+     * took the live compositor to 4 GB of [heap] and an OOM kill.
+     * tests/imgview_leak.sh measures it. */
+    cairo_destroy(cr);
     set_scene_buffer(&s->crop_ui.text_buf, s->crop_ui.tree, buf);
 }
 

@@ -3767,7 +3767,15 @@ pkgver=0.1.0
 #   still falls through to /etc/synui/synuirc. tests/greeter_bg.sh has a
 #   seventh phase that runs the greeter with HOME=/. It fails on 626 with the
 #   same four messages seen in the journal, and passes on 627.
-pkgrel=627
+# 628: THE IMAGE VIEWER NO LONGER LEAKS A SCREENFUL PER REPAINT. render_crop_view()
+#   never called cairo_destroy(cr), and the cairo_t kept its surface alive
+#   after the scene dropped the buffer — one full-output ARGB image per step,
+#   zoom, pan motion or re-open (14.7 MB at 2560x1440). Present since the
+#   viewer arrived in 405. A read of the live compositor's heap found 278 of
+#   them: 3.9 GB of its 4 GB [heap], owned by orphaned cairo_t's. An earlier
+#   session was OOM-killed at 13 GB. tests/imgview_leak.sh repaints the viewer
+#   30 times and bounds the growth. 626 grows 117 MB at 1280x720, 628 grows 0.
+pkgrel=628
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

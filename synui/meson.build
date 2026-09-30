@@ -1592,6 +1592,17 @@ test('imgview_mouse', imgview_mouse,
      depends : [synui_exe, synctl_exe, vpointer_click],
      timeout : 120)
 
+# `imgview_leak`: every viewer repaint paints a full-output cairo surface, and a
+# missing cairo_destroy(cr) kept each one alive — 278 of them, 3.9 GB, in the
+# live compositor before anyone found it. Nothing on screen shows it and no rig
+# test exits cleanly enough for LeakSanitizer to, so this measures the process:
+# thirty repaints must not grow it by more than three frames.
+imgview_leak = find_program('tests/imgview_leak.sh')
+test('imgview_leak', imgview_leak,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
 # `deskmenu_widgets`: the desktop right-click menu's widget-manager row. The
 # row is put on screen by an n++ walk, so deleting it builds and runs clean and
 # just draws a menu with nothing about widgets in it — only a pointer landing
