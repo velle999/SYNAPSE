@@ -156,7 +156,16 @@ pkgver=0.1.0
 #   the whole game session. Only events read in the current cycle count now,
 #   and a cycle that drains the ring empty reports 0. A reader that stalls
 #   still warns once it resumes, because the events it then reads are old.
-pkgrel=48
+# 49: an address lookup is not a port scan. glibc's getaddrinfo() sorts its
+#   answers by connect()ing a UDP socket to each one with port 0, and no packet
+#   leaves. netwatch counted each as a host on a non-web port, so one name with
+#   twenty addresses raised "port scan" HIGH: 72 of 74 such alerts in one week
+#   on the desktop, all to port 0, from Node, Firefox and Chromium resolver
+#   threads. netwatch now ignores port 0. The kmod reports connect() at entry
+#   without a socket type, so the port is the only tell. tests/netwatch_test.c
+#   feeds 75 port-0 probes (v6, v4 across /24s, and one /24 that tripped the
+#   sweep rule on 48) and expects no alert.
+pkgrel=49
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

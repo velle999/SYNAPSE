@@ -459,6 +459,19 @@ sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
     if (nw_split_dest(e->filename, host, sizeof(host), &port) != 0)
         return THREAT_NONE;
 
+    /* ⚠ PORT 0 IS AN ADDRESS LOOKUP, NOT A CONNECTION. glibc's getaddrinfo()
+     * sorts its answers (RFC 6724) by connect()ing a UDP socket to each one
+     * with port 0 to learn the source address; no packet leaves. One name with
+     * twenty addresses was twenty "hosts on non-web ports", and 72 of 74 HIGH
+     * scan alerts in one week were exactly that — Node's libuv workers,
+     * Firefox's DNS Resolver, Chromium's thread pool. The probe sees connect()
+     * at entry, with no socket type and no return value, so the port is the
+     * only tell. Nothing can listen on port 0, so no service is reachable
+     * there; a TCP "port 0 ping" used for host discovery is what this stops
+     * counting. */
+    if (port == 0)
+        return THREAT_NONE;
+
     uint32_t subkey = 0;
     char subname[20] = {0};
     int have_sub = (nw_subnet24(host, &subkey, subname, sizeof(subname)) == 0);

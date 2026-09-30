@@ -219,6 +219,41 @@ static void test_flood_is_medium(void)
           "a single-host flood must not be called a worm scan: \"%s\"", reason);
 }
 
+/* glibc's getaddrinfo() sorts its answers (RFC 6724) by connect()ing a UDP
+ * socket to each one with port 0 to learn the source address it would use. No
+ * packet leaves. A name with twenty addresses is therefore twenty "hosts on a
+ * non-web port" from one lookup, and Node's libuv workers, Firefox's DNS
+ * Resolver and Chromium's thread pool all tripped the scan rule this way — 72
+ * of 74 HIGH alerts in one week, every one to port 0. */
+static void test_address_sorting_is_not_a_scan(void)
+{
+    printf("getaddrinfo's port-0 address probes are not a scan\n");
+
+    char reason[200] = {0};
+    sg_threat_t worst = THREAT_NONE;
+
+    for (int i = 1; i <= 25; i++) {
+        char dest[64];
+        snprintf(dest, sizeof(dest), "[2606:4700::6810:%x]:0", i);
+        sg_threat_t t = connect_to(9008, "libuv-worker", dest, reason, sizeof(reason));
+        if (t > worst) worst = t;
+    }
+    for (int i = 1; i <= 25; i++) {
+        char dest[64];
+        snprintf(dest, sizeof(dest), "104.16.%d.9:0", i);
+        sg_threat_t t = connect_to(9009, "DNS Resolver #3", dest, reason, sizeof(reason));
+        if (t > worst) worst = t;
+    }
+    /* All in one /24, so the sweep rule would see it too if port 0 counted. */
+    for (int i = 1; i <= 25; i++) {
+        char dest[64];
+        snprintf(dest, sizeof(dest), "104.18.32.%d:0", i);
+        sg_threat_t t = connect_to(9010, "ThreadPoolForeg", dest, reason, sizeof(reason));
+        if (t > worst) worst = t;
+    }
+    CHECK(worst == THREAT_NONE, "port-0 probes raised threat %d: \"%s\"", worst, reason);
+}
+
 static void test_loopback_ignored(void)
 {
     printf("loopback chatter is not egress\n");
@@ -273,6 +308,7 @@ int main(void)
     test_subnet_sweep_fires();
     test_sweep_with_space_in_comm_fires();
     test_port_scan_fires();
+    test_address_sorting_is_not_a_scan();
     test_flood_is_medium();
     test_loopback_ignored();
     test_reason_fits_the_secfeed();
