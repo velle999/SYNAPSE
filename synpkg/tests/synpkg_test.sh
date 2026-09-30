@@ -70,6 +70,21 @@ check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 # Capturing the count cannot depend on which grep answered.
 has() { local n; n=$(grep -c "$@") || true; [ "${n:-0}" -gt 0 ]; }
 
+# ⛔ NO TEST MAY REACH THE REAL pkexec. Two have: `install yay` asked polkit to
+# authenticate a real transaction (see the --no-aur case), and the ignore block
+# once edited /etc/pacman.conf through it. escalate() finds pkexec on PATH, so
+# this stub first on PATH turns any escalation into a refusal — exit 126,
+# "authentication failed or was dismissed" — and a line in $PKX_LOG, which the
+# end of this file fails on. Without it, a guard that lets one case through puts
+# a polkit prompt on the desktop of whoever runs the suite and hangs it until
+# meson's timeout. Blocks with their own pkexec (PATH="$NOFP" …) replace PATH
+# outright and are unaffected.
+PKX=$(mktemp -d)
+PKX_LOG="$PKX/calls"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexit 126\n' "$PKX_LOG" > "$PKX/pkexec"
+chmod +x "$PKX/pkexec"
+export PATH="$PKX:$PATH"
+
 # `((n++))` evaluates to the OLD value, so a bare post-increment returns 1 the
 # first time and kills the script under `set -e`. Hence $((n + 1)) above.
 
@@ -882,9 +897,17 @@ esac
 # to do that, and "the name I picked is in no repo" is not a fact that stays
 # true: limine-mkinitcpio-hook is AUR-only today and is vendored in-tree, so on
 # a box whose local repo carries it this must skip, not escalate.
+#
+# ⚠ Only pacman's own "was not found" lets the case run. `pacman -Si` also exits
+# 1 when ANY sync database fails to load, and on the desktop a blackarch.db with
+# a stale .sig did exactly that while cachyos carried $probe: the guard read "in
+# no repository", and install went to pkexec for a real transaction.
 probe=limine-mkinitcpio-hook
-if pacman -Si "$probe" >/dev/null 2>&1; then
+si=$(pacman -Si "$probe" 2>&1); si_rc=$?
+if [ "$si_rc" -eq 0 ]; then
     ok "skipped: $probe is in a repository here, so it is not an AUR-only case"
+elif ! printf '%s\n' "$si" | has "package '$probe' was not found"; then
+    ok "skipped: pacman -Si could not answer for $probe, so it is not known to be AUR-only"
 elif curl -fsS --max-time 15 \
         "https://aur.archlinux.org/rpc/v5/info?arg[]=$probe" 2>/dev/null \
         | has '"resultcount":1'; then
@@ -1343,6 +1366,52 @@ if command -v pacman-conf >/dev/null 2>&1; then
 	esac
 fi
 
+# ── signatures: a repo with no SigLevel line inherits [options] ─────────────
+#
+# Same trap as HookDir. libalpm's default SigLevel is 0, which verifies nothing,
+# and pacman-conf prints NOTHING for a repo without its own line (core, extra and
+# multilib on a stock pacman.conf), so synpkg registers those with
+# ALPM_SIG_USE_DEFAULT. Until synpkg 56 it never set the default, installed from
+# them without checking a signature, and refreshed blackarch.db without
+# fetching its .sig.
+#
+# A FIXTURE, not this machine's pacman.conf: a one-package sync db with no .sig,
+# in a repo with no SigLevel line. Under "Required DatabaseRequired" it must be
+# refused; under "Never" (the control, proving the fixture is a readable db) it
+# must list its package. synpkg 55 lists it under both.
+SIGT=$(mktemp -d)
+mkdir -p "$SIGT/db/sync" "$SIGT/db/local" "$SIGT/gnupg" "$SIGT/stub" "$SIGT/mk/foo-1.0-1"
+chmod 700 "$SIGT/gnupg"
+echo 9 > "$SIGT/db/local/ALPM_DB_VERSION"
+printf '%%FILENAME%%\nfoo-1.0-1-any.pkg.tar.zst\n\n%%NAME%%\nfoo\n\n%%VERSION%%\n1.0-1\n\n%%ARCH%%\nany\n\n' \
+	> "$SIGT/mk/foo-1.0-1/desc"
+tar -C "$SIGT/mk" -czf "$SIGT/db/sync/foo.db" foo-1.0-1
+printf '#!/bin/sh\nexec /usr/bin/pacman-conf --config "%s/pacman.conf" "$@"\n' "$SIGT" \
+	> "$SIGT/stub/pacman-conf"
+chmod +x "$SIGT/stub/pacman-conf"
+sig_status() {   # sig_status SIGLEVEL — synpkg's row for repo foo
+	printf '[options]\nDBPath = %s/db/\nGPGDir = %s/gnupg/\nSigLevel = %s\nArchitecture = auto\n\n[foo]\nServer = file:///nonexistent/foo\n' \
+		"$SIGT" "$SIGT" "$1" > "$SIGT/pacman.conf"
+	PATH="$SIGT/stub:$PATH" "$SYNPKG" status 2>&1 | grep -E '^Repository +foo ' || true
+}
+if command -v pacman-conf >/dev/null 2>&1; then
+	row=$(sig_status "Never")
+	case "$row" in
+		*" 1 packages"*) check "an unsigned db lists its package under SigLevel = Never" 0 ;;
+		*) check "an unsigned db lists its package under SigLevel = Never (got: $row)" 1 ;;
+	esac
+	row=$(sig_status "Required DatabaseRequired")
+	case "$row" in
+		*"0 packages"*"signature invalid"*)
+			check "a repo with no SigLevel line is held to [options] SigLevel" 0 ;;
+		*)
+			check "a repo with no SigLevel line is held to [options] SigLevel (got: $row)" 1 ;;
+	esac
+else
+	printf '  skip  pacman-conf unavailable — SigLevel inheritance not checked\n'
+fi
+rm -rf "$SIGT"
+
 # ── the kernel staged for boot ──────────────────────────────────────────────
 #
 # Synthetic images, never the machine's own /boot: this suite runs on velle's
@@ -1771,6 +1840,13 @@ if has '^toolong' "$T/ai-long.txt"; then
 else
     ok "a manifest line too long to hold is dropped, not truncated"
 fi
+
+if [ -s "$PKX_LOG" ]; then
+    bad "a test escalated through pkexec — the stub refused: $(tr '\n' ';' < "$PKX_LOG")"
+else
+    ok "no test escalated through pkexec"
+fi
+rm -rf "$PKX"
 
 echo
 echo "  $pass passed, $fail failed"

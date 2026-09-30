@@ -664,9 +664,18 @@ int cmd_status(int argc, char **argv)
 		for (alpm_list_t *d = sp_syncdbs(h); d; d = d->next) {
 			alpm_db_t *db = d->data;
 			int n = alpm_list_count(alpm_db_get_pkgcache(db));
+			/* alpm lists a database whose signature fails as an EMPTY one,
+			 * so "0 packages" alone would call a refused file "never
+			 * synced". A missing file is valid to alpm, and is the one that
+			 * was never synced. */
+			const char *why = "";
+			if (!n)
+				why = alpm_db_get_valid(db) == 0 ? "  — never synced"
+				    : alpm_errno(h) == ALPM_ERR_DB_INVALID_SIG
+				        ? "  — signature invalid, run: synpkg refresh"
+				        : "  — unreadable, run: synpkg refresh";
 			printf("%s%-16s%s%-14s %s%d packages%s%s\n", C_DIM(), "Repository",
-			       C_RESET(), alpm_db_get_name(db), C_DIM(), n, C_RESET(),
-			       n ? "" : "  — never synced");
+			       C_RESET(), alpm_db_get_name(db), C_DIM(), n, C_RESET(), why);
 		}
 	}
 

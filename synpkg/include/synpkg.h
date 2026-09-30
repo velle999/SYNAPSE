@@ -118,6 +118,7 @@ char  *pconf_repo(const char *repo, const char *directive); /* malloc'd */
 char **pconf_repo_list(size_t *n);                          /* malloc'd argv-ish */
 void   pconf_free_list(char **list, size_t n);
 int    pconf_siglevel(const char *repo);                    /* ALPM_SIG_* bitmask */
+int    pconf_global_siglevel(const char *directive, int fallback);
 
 /* ── progress.c — pacman's progress bar, ILoveCandy and all ─────────────────
  * `key` is what the bar is FOR (a package name, a filename): it resets the

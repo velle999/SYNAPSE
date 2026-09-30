@@ -76,16 +76,10 @@ void pconf_free_list(char **list, size_t n)
 	free(list);
 }
 
-/* pacman-conf prints one SigLevel word per line, already resolved against the
- * global section. The mapping mirrors pacman's own process_siglevel(). */
-int pconf_siglevel(const char *repo)
+/* pacman-conf prints one SigLevel word per line. The mapping mirrors pacman's
+ * own process_siglevel(). `repo` only names the section in a warning. */
+static int siglevel_words(char *raw, const char *repo)
 {
-	char *raw = pconf_repo(repo, "SigLevel");
-	if (!*raw) {
-		free(raw);
-		return ALPM_SIG_USE_DEFAULT;
-	}
-
 	int level = 0;
 	size_t n = 0;
 	char **words = split(raw, '\n', &n);
@@ -121,6 +115,34 @@ int pconf_siglevel(const char *repo)
 	}
 
 	free(words);
+	return level;
+}
+
+/* A repo WITH a SigLevel line comes back merged with the global one: a line
+ * that names only Package* words inherits the Database* ones. A repo with NO
+ * line comes back empty — core, extra and multilib on a stock pacman.conf —
+ * and is registered with ALPM_SIG_USE_DEFAULT, which libalpm resolves to the
+ * handle's default. See pconf_global_siglevel for why that must be set. */
+int pconf_siglevel(const char *repo)
+{
+	char *raw = pconf_repo(repo, "SigLevel");
+	int level = *raw ? siglevel_words(raw, repo) : ALPM_SIG_USE_DEFAULT;
+	free(raw);
+	return level;
+}
+
+/* SigLevel, LocalFileSigLevel or RemoteFileSigLevel from [options], for the
+ * handle's alpm_option_set_*_siglevel(). `fallback` when pacman-conf prints
+ * nothing.
+ *
+ * ⛔ libalpm's own default for all three is 0: no signature is checked, on a
+ * package or on a database. pacman's CLI sets them from pacman.conf in
+ * setup_libalpm(); a libalpm frontend that does not inherits 0, and every
+ * repo without its own SigLevel line with it. */
+int pconf_global_siglevel(const char *directive, int fallback)
+{
+	char *raw = pconf(directive);
+	int level = *raw ? siglevel_words(raw, "[options]") : fallback;
 	free(raw);
 	return level;
 }

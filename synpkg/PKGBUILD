@@ -293,7 +293,28 @@ pkgver=0.1.0
 #   catalogue's icons and the curated packages they name, and both came back 0.
 #   It accepts either format now, and the drift check asks that a QML reading
 #   .jxl ships the decoder with it.
-pkgrel=55
+# 56: ⛔ SIGNATURES WERE NOT CHECKED. libalpm's default SigLevel is 0, which
+#   verifies nothing; pacman's CLI sets it from [options], and synpkg never
+#   did. pacman-conf prints nothing for a repo without its own SigLevel line,
+#   so core, extra, multilib and blackarch were registered as USE_DEFAULT, and
+#   with it as 0: a package installed from them was checked only against the
+#   checksum in a database whose own signature was never checked, and a
+#   refresh downloaded each .db without its .sig. On the desktop that left blackarch.db
+#   from 09-23 beside a .sig from 09-20, and every pacman command since has
+#   printed "signature … is invalid". The default, local-file and remote-file
+#   levels now come from [options]; an unanswered SigLevel fails closed at
+#   Arch's "Required DatabaseOptional". Same class as HookDir in 26.
+#   `status` says "signature invalid, run: synpkg refresh" for a database alpm
+#   refuses, which it had called "never synced". The TSV is unchanged.
+#   tests/synpkg_test.sh builds a one-package unsigned db in a repo with no
+#   SigLevel line: refused under Required, listed under Never. 55 lists both.
+#   ⚠ The suite also stopped reaching the real pkexec. Its --no-aur case trusted
+#   `pacman -Si`'s exit status, which is 1 when ANY database fails to load; with
+#   that blackarch pair it read "in no repository" while cachyos carried the
+#   probe, and `install` asked polkit for a real transaction until meson killed
+#   it at 300s. The case now runs only on pacman's own "was not found", and a
+#   pkexec stub first on PATH refuses any escalation and fails the suite.
+pkgrel=56
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -390,6 +390,25 @@ alpm_handle_t *sp_alpm_init(bool for_write)
 		alpm_option_set_sandboxuser(h, sandbox);
 	free(sandbox);
 
+	/* ⛔ SIGNATURES — the same trap as HookDir above. libalpm's default for all
+	 * three levels is 0, which verifies nothing; pacman's CLI sets them from
+	 * [options]. Every repo without a SigLevel line of its own (core, extra and
+	 * multilib on a stock pacman.conf) is registered with ALPM_SIG_USE_DEFAULT,
+	 * which libalpm resolves to THIS. Before it was set, synpkg installed from
+	 * those repos without checking a signature, and refreshed their databases
+	 * without fetching one: blackarch.db was replaced and its .sig from the
+	 * previous refresh stayed, so pacman called the pair invalid from then on.
+	 *
+	 * pacman-conf always prints [options] SigLevel, so an empty answer means it
+	 * failed. Fail closed at Arch's shipped "Required DatabaseOptional", never
+	 * at libalpm's 0. The file levels default to USE_DEFAULT, as pacman's do. */
+	alpm_option_set_default_siglevel(h, pconf_global_siglevel("SigLevel",
+	        ALPM_SIG_PACKAGE | ALPM_SIG_DATABASE | ALPM_SIG_DATABASE_OPTIONAL));
+	alpm_option_set_local_file_siglevel(h,
+	        pconf_global_siglevel("LocalFileSigLevel", ALPM_SIG_USE_DEFAULT));
+	alpm_option_set_remote_file_siglevel(h,
+	        pconf_global_siglevel("RemoteFileSigLevel", ALPM_SIG_USE_DEFAULT));
+
 	register_repos(h);
 
 	if (for_write) {
