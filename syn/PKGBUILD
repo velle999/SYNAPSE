@@ -54,7 +54,11 @@ pkgver=0.1.0
 # 34: a `voice` row in the Nix profile example, for synapse-voice — the speech
 #   engine that left chibi's package in chibi 27, and its own checkbox from
 #   syn-install 123.
-pkgrel=34
+# 36: carries the revert of 35 (the ISO download count, fd3c0d94). The revert
+#   took pkgrel back to 34, and pacman never downgrades, so every box that
+#   installed 35 kept /usr/lib/syn/syn-downloads and its user timer.
+#   ⛔ Never revert a pkgrel. Bump past the reverted one.
+pkgrel=36
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
