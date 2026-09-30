@@ -148,7 +148,15 @@ pkgver=0.1.0
 #   spot above, against the real hooks). tests/run-vm-bpf-tests.sh runs the
 #   three BPF suites as root in a VM on a stock kernel: all pass, and the
 #   report suite fails 12 of 17 with the report call removed.
-pkgrel=47
+# 48: silence is not lag. The reader's lag gauge kept the newest timestamp it
+#   had EVER seen, so with no events arriving it grew with the clock. With
+#   game mode's game_quiet_kmod switching capture off for a game, the journal
+#   said "kmod_reader: <hours> BEHIND the ring … Detection is degraded now" every
+#   minute (5232 times in one week on the desktop), and reader_lag_max_ms held
+#   the whole game session. Only events read in the current cycle count now,
+#   and a cycle that drains the ring empty reports 0. A reader that stalls
+#   still warns once it resumes, because the events it then reads are old.
+pkgrel=48
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

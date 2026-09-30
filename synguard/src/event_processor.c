@@ -1234,9 +1234,6 @@ static void *reader_thread_fn(void *arg)
     uint64_t last_ts = 0;
     int warned_fallback = 0;
 
-    /* Newest event timestamp we have actually looked at, for the lag gauge
-     * below. Separate from last_ts, which only gates the syscall_log fallback. */
-    uint64_t newest_ts    = 0;
     time_t   last_lag_warn = 0;
 
     sg_log(LOG_INFO, "kmod_reader: started, polling every %dms",
@@ -1244,6 +1241,10 @@ static void *reader_thread_fn(void *arg)
 
     while (s->running) {
         int using_dev = 1;
+        /* Newest event timestamp looked at THIS cycle, for the lag gauge
+         * below. Separate from last_ts, which only gates the syscall_log
+         * fallback. */
+        uint64_t newest_ts = 0;
         int fd = open(KMOD_EVENT_DEV, O_RDONLY);
 
         if (fd < 0) {
@@ -1384,8 +1385,17 @@ static void *reader_thread_fn(void *arg)
          * Event timestamps are ktime_get_raw_ns(), so CLOCK_MONOTONIC_RAW is
          * the same clock: the subtraction is exactly the age of the newest
          * event we have looked at, with no clock-domain guessing.
+         *
+         * ⚠ Only events read THIS cycle count. A cycle that drained the ring
+         * and found nothing is caught up, and its lag is 0. Carrying the last
+         * timestamp over made silence read as lag: while game mode's
+         * game_quiet_kmod had capture off, this warned every minute that the
+         * reader was hours BEHIND (5232 times in one week on the desktop).
+         * Probes that stop reporting are the canary's to catch, not this.
          */
-        if (newest_ts) {
+        if (!newest_ts) {
+            s->stats.reader_lag_ms = 0;
+        } else {
             struct timespec rt;
             clock_gettime(CLOCK_MONOTONIC_RAW, &rt);
             uint64_t now_ns = (uint64_t)rt.tv_sec * 1000000000ull +
