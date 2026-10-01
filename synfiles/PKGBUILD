@@ -368,7 +368,12 @@ pkgver=0.1.0
 #   restore ("already exists") and a name not in the trash are records too.
 #   One new message, in all thirteen catalogs (421/421). Eight new checks;
 #   four of them fail on 80.
-pkgrel=81
+# 82: `synfiles collisions` freed everything but its argument array; copy and
+#   move already did. One-shot and tiny, but it was the only finding in the
+#   ASan build (3 LeakSanitizer reports, 24-40 bytes each, fileops.c:651 via
+#   cmd_collisions), so the sanitizer suite went red on it: 2 ok / 1 FAIL
+#   before, 3 ok after.
+pkgrel=82
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

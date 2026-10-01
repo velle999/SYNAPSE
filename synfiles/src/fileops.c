@@ -743,6 +743,7 @@ int cmd_collisions(int argc, char **argv)
 
 	close(dfd);
 	free(dest);
+	free(a.srcs);
 	return 0;
 }
 
