@@ -43,7 +43,11 @@
 # would let upstream move it.
 pkgname=cliamp
 pkgver=1.63.2
-pkgrel=2
+# 3: check() returns go test's status. It piped `go test` into tail, and makepkg
+#    runs check() without pipefail, so a failing suite passed and the package
+#    built (shown with a go stub that fails: 2 passes it, 3 stops). The binary
+#    is unchanged; 1.63.2's own suite is green (43 packages ok).
+pkgrel=3
 pkgdesc="Terminal music player in the shape of Winamp — and the one big screen mode can drive"
 arch=('x86_64')
 url="https://github.com/bjarneo/cliamp"
@@ -121,7 +125,11 @@ check() {
     # socket protocol is what big screen mode talks to, so a change upstream
     # makes to it should fail HERE rather than as a Music tile that stops
     # responding on a television.
+    #
+    # ⚠ The status is go's, not tail's. makepkg runs check() without pipefail,
+    # so `go test | tail` returned tail's 0 and a red suite built and shipped.
     go test ./... 2>&1 | tail -40
+    return "${PIPESTATUS[0]}"
 }
 
 package() {
