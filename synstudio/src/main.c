@@ -3547,51 +3547,54 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                                 "--subs is ignored here\n");
         }
         warn_missing_fx(t);
+
+        /* A preset is a SIZE and a frame rate, applied by rendering the whole
+         * composite at them. Every clip, the base, the titles and the
+         * transitions are built from the project's own dimensions, so
+         * changing those changes all of them together and nothing has to be
+         * scaled afterwards — which is why this is a copy of the document
+         * rather than a filter on the end of the graph.
+         *
+         * A shallow copy on purpose: the clip arrays are shared with `t` and
+         * read-only from here, and the copy is never freed.
+         *
+         * ⚠ Decided BEFORE the bake, and the bake is handed the copy. A title
+         * that grows is a command file of PIXEL sizes at FRAME times, both of
+         * which a preset changes — baked from the project instead, a 1080
+         * cut delivered at 720 would draw every keyed caption half as big
+         * again as the monitor, and on the wrong frames. */
+        ss_timeline tp;
+        const ss_timeline *rt = t;
+        const ss_tl_format *f = ss_timeline_format(o.format, o.out);
+        if (o.preset) {
+            const ss_tl_preset *pr = ss_timeline_preset(o.preset);
+            if (!pr) return die("no preset called %s  (try `timeline "
+                                "presets`)", o.preset);
+            tp = *t;
+            tp.w = pr->w; tp.h = pr->h;
+            if (pr->fps > 0) tp.fps = pr->fps;
+            rt = &tp;
+        }
+        if (!f) return die("no such format: %s  (try `timeline formats`)",
+                           o.format);
+        if (o.subs && !o.preview && !f->scodec)
+            return die("%s cannot carry a subtitle stream — burn them in "
+                       "with `timeline subs`, or deliver as mkv", f->name);
+
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
 
         /* The .cube per graded clip and the text file per title, written
          * before the graph is built so every path it names exists by the
          * time ffmpeg opens it. */
-        if (ss_timeline_bake(t, dir, -1.0) < 0) {
+        if (ss_timeline_bake(rt, dir, -1.0) < 0) {
+            ss_timeline_unbake(rt, dir);
             rmdir(dir);
             return die("cannot write the grade LUTs");
         }
 
         tl_fill_audio(t);
-        {
-            const ss_tl_format *f = ss_timeline_format(o.format, o.out);
-            /* A preset is a SIZE and a frame rate, applied by rendering the
-             * whole composite at them. Every clip, the base, the titles and
-             * the transitions are built from the project's own dimensions, so
-             * changing those changes all of them together and nothing has to
-             * be scaled afterwards — which is why this is a copy of the
-             * document rather than a filter on the end of the graph.
-             *
-             * A shallow copy on purpose: the clip arrays are shared with `t`
-             * and read-only from here, and the copy is never freed. */
-            ss_timeline tp;
-            const ss_timeline *rt = t;
-            if (o.preset) {
-                const ss_tl_preset *pr = ss_timeline_preset(o.preset);
-                if (!pr) { ss_timeline_unbake(t, dir); rmdir(dir);
-                           return die("no preset called %s  (try `timeline "
-                                      "presets`)", o.preset); }
-                tp = *t;
-                tp.w = pr->w; tp.h = pr->h;
-                if (pr->fps > 0) tp.fps = pr->fps;
-                rt = &tp;
-            }
-            if (!f) { ss_timeline_unbake(t, dir); rmdir(dir);
-                      return die("no such format: %s  (try `timeline formats`)",
-                                 o.format); }
-            if (o.subs && !o.preview && !f->scodec) {
-                ss_timeline_unbake(t, dir); rmdir(dir);
-                return die("%s cannot carry a subtitle stream — burn them in "
-                           "with `timeline subs`, or deliver as mkv", f->name);
-            }
-            ac = ss_timeline_ffmpeg(rt, o.out, dir, o.preview, f, o.subs,
-                                    burn, o.mark, &av);
-        }
+        ac = ss_timeline_ffmpeg(rt, o.out, dir, o.preview, f, o.subs,
+                                burn, o.mark, &av);
         if (ac < 0) { ss_timeline_unbake(t, dir); rmdir(dir);
                       return die("cannot build the export graph"); }
         rc = tl_run(av, ac, o.print);

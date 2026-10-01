@@ -1005,6 +1005,78 @@ if [ -s "$box" ]; then
           "$($BIN timeline anim "$sp" 0 0 at xform.x --at 2)"
 fi
 
+# ---- a title that grows and changes colour ---------------------------------
+#
+# drawtext's size and colour are options, not expressions, so a keyed title is
+# a sendcmd FILE written by the bake: the same C function the monitor calls,
+# once a frame, as commands. Measured against a LOSSLESS export — through x264
+# a caption's edge moves by a pixel or two and hides exactly the off-by-one
+# frame this is looking for.
+#
+# The outline is on and the background is grey, because the outline, the
+# shadow and the line spacing are all fractions of the size and have to grow
+# with it; on black a hairline outline is invisible and would pass.
+maxdiff() {  # maxdiff <a.png> <b.png> -> the largest difference in any channel
+    paste <(ffmpeg -v error -i "$1" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 -v -w1) \
+          <(ffmpeg -v error -i "$2" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 -v -w1) \
+        | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > m) m = d }
+               END { print m + 0 }'
+}
+capw() {     # capw <image> <w> -> how wide the caption is, off a grey ground
+    ffmpeg -v error -i "$1" -f rawvideo -pix_fmt gray - 2>/dev/null \
+        | od -An -tu1 -v -w"$2" \
+        | awk '{ for (i = 1; i <= NF; i++) { d = $i - 128; if (d < 0) d = -d;
+                   if (d > 40) { if (!s || i < lo) lo = i; if (i > hi) hi = i; s = 1 } } }
+               END { print s ? hi - lo : 0 }'
+}
+$BIN timeline keys | rxseen "a title's size can be keyed"   '^text\.size(	[^	]*){7}	1$'
+$BIN timeline keys | rxseen "and its colour"                 '^text\.b(	[^	]*){7}	1$'
+tk=$TMP/tkeys.syntl
+$BIN timeline new "$tk" --size 640x360 --fps 25
+$BIN timeline track "$tk" video V >/dev/null
+$BIN timeline solid "$tk" 0 --at 0 --dur 2 --colour 0.5,0.5,0.5 >/dev/null
+$BIN timeline track "$tk" video T >/dev/null
+$BIN timeline title "$tk" 1 "HH" --at 0 --dur 2 >/dev/null
+$BIN timeline set "$tk" 1 0 text.pos=centre text.border=0.12
+$BIN timeline anim "$tk" 1 0 add text.size --at 0 --value 0.05 >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.size --at 2 --value 0.3  >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.r --at 0 --value 1 >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.r --at 2 --value 0 >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.g --at 0 --value 0 >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.b --at 0 --value 0 >/dev/null
+$BIN timeline anim "$tk" 1 0 add text.b --at 2 --value 1 >/dev/null
+check "the size is read at the playhead" "0.175" \
+      "$($BIN timeline get "$tk" 1 0 text.size --at 1)"
+mkdir -p "$TMP/tkseq"
+$BIN timeline export "$tk" --format png --out "$TMP/tkseq/f_%04d.png" >/dev/null 2>&1
+check "a keyed title exports" "50" "$(ls "$TMP/tkseq" | wc -l)"
+for n in 0 1 12 25 49; do
+    at=$(awk -v n=$n 'BEGIN { printf "%.6f", n/25 }')
+    $BIN timeline frame "$tk" --at "$at" --out "$TMP/tkm.png" >/dev/null 2>&1
+    near "a keyed title is the monitor's picture at frame $n" 0 \
+         "$(maxdiff "$TMP/tkm.png" "$(printf '%s/tkseq/f_%04d.png' "$TMP" $((n + 1)))")" 2
+done
+w0=$(capw "$TMP/tkseq/f_0001.png" 640); w1=$(capw "$TMP/tkseq/f_0050.png" 640)
+check "and it grows" "yes" "$([ "$w1" -gt $((w0 * 4)) ] && echo yes || echo no)"
+# The caption's own colour along the row through its middle, at either end:
+# red to blue. Grey ground and dark outline have no red-blue difference.
+cx() { ffmpeg -v error -i "$1" -vf "crop=$2:1:$(( (640 - $2) / 2 )):180" \
+           -f rawvideo -pix_fmt rgb24 - 2>/dev/null | od -An -tu1 -v -w3 \
+           | awk '{ d = $1 - $3 } d > 100 { r++ } d < -100 { b++ }
+                  END { print ((r > b) ? "red" : ((b > r) ? "blue" : "none")) }'; }
+check "it starts red"   "red"  "$(cx "$TMP/tkseq/f_0001.png" "$w0")"
+check "and ends blue"   "blue" "$(cx "$TMP/tkseq/f_0050.png" "$w1")"
+# A preset re-renders the whole composite at its own size, so the commands
+# have to be baked from the PRESET's height. Baked from the project's, every
+# frame after the first draws a 360-line caption into a 720-line picture.
+sed 's/^size\t640\t360$/size\t1280\t720/' "$tk" > "$TMP/tk720.syntl"
+mkdir -p "$TMP/tkp"
+$BIN timeline export "$tk" --preset youtube-720p --format png \
+    --out "$TMP/tkp/f_%04d.png" >/dev/null 2>&1
+$BIN timeline frame "$TMP/tk720.syntl" --at 1 --out "$TMP/tkm7.png" >/dev/null 2>&1
+near "a preset draws the keyed title at the preset's own size" 0 \
+     "$(maxdiff "$TMP/tkm7.png" "$TMP/tkp/f_0026.png")" 2
+
 echo "== transitions (one filter, sixty looks)"
 
 # Every transition is ffmpeg's xfade now, on BOTH sides of the program: the

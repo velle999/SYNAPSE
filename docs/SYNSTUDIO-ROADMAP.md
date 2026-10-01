@@ -169,7 +169,8 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
       quantised to 48 baked cubes so a scrub and an export agree
 - [~] eight is a ceiling (a fixed array; the 147MB stack object is why)
 - [x] **any clip property at t** — `timeline anim`, 64 keys a clip across all
-      properties. Opacity, gain, scale, position and angle today; WHICH ones
+      properties. Opacity, gain, scale, position, angle and a title's size
+      and colour; WHICH ones
       can be keyed is a column in the clip property table, so the inspector's
       diamond and the renderer cannot disagree about it. No cubes are involved:
       zoompan, rotate and volume each take an expression, and opacity — the one
@@ -196,8 +197,19 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
       screen. ⚠ Which means the exported expression's time variable is SHIFTED
       by where each clip starts: without it, every clip on the track would
       ride the automation from the top of the programme
-- [ ] keys on a title's size and colour — drawtext takes no expression for
-      either, so they need the sendcmd path opacity uses
+- [x] **keys on a title's size and colour** — shipped in 0.1.0-51. Both are
+      drawtext OPTIONS, set at an instant rather than evaluated, so the export
+      drives them with sendcmd — from a FILE the bake writes, one command per
+      frame where anything changed, because a long title that grows is a
+      command a frame and the whole graph is one 128KB argv string. The file
+      is `title_look_at` called once a frame, the same function the monitor
+      calls at the playhead, so the two are the same integers: measured
+      byte-identical against a lossless export. ⚠ The outline, shadow, plate
+      padding and line spacing are fractions of the size and are commanded
+      with it, or a title that grows ends in a hairline outline. ⚠ A preset
+      re-renders at its own height and frame rate, so the file is baked from
+      the PRESET's copy of the document — baked from the project, a 360-line
+      caption landed in a 720-line picture from the second frame on
 
 Doing this one unblocked speed ramps, animated titles, animated effects and
 Fairlight-style automation: four features for one piece of work.
@@ -512,7 +524,6 @@ short list of named gaps rather than a plan — the boxes still open:
 
 - title templates (§2)
 - keyframed effect parameters (§2)
-- keys on a title's size and colour (§3)
 - masks on a clip's grade — darkroom only today (§7)
 - the Rec.709 output transform and its colour tags (§7)
 

@@ -605,10 +605,10 @@ static const cfield cfields[] = {
     C("xform.y2",     CO_FLOAT, xf.pos_y2,   -1.0f,    1.0f, N_("Motion"), N_("End Y"), NULL, 0),
     C("xform.rotate2",CO_FLOAT, xf.rotate2,-180.0f,  180.0f, N_("Motion"), N_("End rotation"), NULL, 0),
     C("text",         CO_TEXT,  text,         0.0f,    0.0f, N_("Title"), N_("Caption"), NULL, 0),
-    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, N_("Title"), N_("Size"), NULL, 0),
-    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, N_("Title"), N_("Red"), NULL, 0),
-    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, N_("Title"), N_("Green"), NULL, 0),
-    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, N_("Title"), N_("Blue"), NULL, 0),
+    C("text.size",    CO_FLOAT, text_size,    0.01f,   0.5f, N_("Title"), N_("Size"), NULL, 1),
+    C("text.r",       CO_FLOAT, text_r,       0.0f,    1.0f, N_("Title"), N_("Red"), NULL, 1),
+    C("text.g",       CO_FLOAT, text_g,       0.0f,    1.0f, N_("Title"), N_("Green"), NULL, 1),
+    C("text.b",       CO_FLOAT, text_b,       0.0f,    1.0f, N_("Title"), N_("Blue"), NULL, 1),
     C("text.pos",     CO_ENUM,  text_pos,     0.0f,    8.0f, N_("Title"), N_("Placement"), POS_CHOICES, 0),
     C("text.font",    CO_TEXT,  text_font,    0.0f,    0.0f, N_("Title"), N_("Font"), NULL, 0),
     C("text.weight",  CO_ENUM,  text_weight,  0.0f,    4.0f, N_("Title"), N_("Weight"), WEIGHT_CHOICES, 0),
@@ -2356,6 +2356,9 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
 
 static void grade_path(char *out, size_t n, const char *dir,
                        int track, int idx, int step, int nsteps);
+static void title_cmd_path(char *out, size_t n, const char *dir, int track, int idx);
+static int  title_cmd_write(const ss_timeline *t, const ss_clip *c,
+                            const char *path, int track, int idx);
 
 typedef struct { char *s; size_t len, cap; } strbuf;
 
@@ -2567,6 +2570,15 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
                 fputs(c->text, fp);
                 fclose(fp);
                 n++;
+                /* Only for a whole render: the monitor draws one instant
+                 * and passes it as numbers. */
+                if (at < 0) {
+                    int r;
+                    title_cmd_path(p, sizeof p, dir, i, j);
+                    r = title_cmd_write(t, c, p, i, j);
+                    if (r < 0) return -1;
+                    if (r == 0) n++;
+                }
             }
         }
     return n;
@@ -2586,6 +2598,8 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
             snprintf(p, sizeof p, "%s/grade_%d_%d.cube", dir, i, j);
             remove(p);
             snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
+            remove(p);
+            title_cmd_path(p, sizeof p, dir, i, j);
             remove(p);
         }
 }
@@ -2844,14 +2858,121 @@ static void chain_grade(strbuf *fc, const ss_clip *c, const char *lutdir,
     chain_grade_at(fc, c, lutdir, track, idx, -1.0);
 }
 
-/* A title's caption, drawn over whatever the clip already is. The border is
- * not decoration: white text lands on a white sky often enough that a caption
- * without one is unreadable on the take you most wanted to label. */
+/* ---- a title that grows, or changes colour ----
+ *
+ * Everything about how a caption is DRAWN at one instant, in the units
+ * drawtext takes: whole pixels and a colour string. The outline, the shadow,
+ * the plate's padding and the line spacing are all fractions of the font
+ * size, so a title that grows has to grow those with it or it ends as a big
+ * caption in a hairline outline.
+ *
+ * ONE function, for the same reason xform_at is one: the monitor calls it at
+ * the instant it is showing, and the export's command file is this function
+ * called once a frame. Rounding happens in here, so the two do not merely
+ * agree to within a pixel — they are the same integers. */
+typedef struct {
+    int  size, line, pad, shadow, border;
+    char col[32];
+} title_look;
+
+static void title_look_at(const ss_timeline *t, const ss_clip *c, double tt,
+                          title_look *m)
+{
+    float sz = (float)ss_clip_prop_at(c, "text.size", tt);
+
+    m->size = (int)(sz * t->h + 0.5f);
+    if (m->size < 1) m->size = 1;
+    m->line = (int)(m->size * (c->text_line > 0 ? c->text_line : 0.0f));
+    m->pad  = (int)(m->size * 0.35f + 0.5f);
+    m->shadow = 0;
+    if (c->text_shadow > 0.0f) {
+        m->shadow = (int)(m->size * c->text_shadow + 0.5f);
+        if (m->shadow < 1) m->shadow = 1;
+    }
+    /* The outline is not decoration: white text lands on a white sky often
+     * enough that a caption without one is unreadable on the take you most
+     * wanted to label. It is a setting now, and zero means somebody chose
+     * that — so nothing is emitted rather than a one-pixel minimum. */
+    m->border = c->text_border > 0.0f ? (int)(m->size * c->text_border + 1.5f) : 0;
+    hexcol((float)ss_clip_prop_at(c, "text.r", tt),
+           (float)ss_clip_prop_at(c, "text.g", tt),
+           (float)ss_clip_prop_at(c, "text.b", tt), 1.0f, m->col, sizeof m->col);
+}
+
+/* Whether the export needs the command file at all. One key is a constant,
+ * which the filter's own options already say. */
+static int title_moves(const ss_clip *c)
+{
+    return c->kind == SS_CLIP_TITLE &&
+           (ss_clip_prop_moves(c, "text.size") || ss_clip_prop_moves(c, "text.r") ||
+            ss_clip_prop_moves(c, "text.g")    || ss_clip_prop_moves(c, "text.b"));
+}
+
+/* ONE place that decides what the command file is called, as grade_path is
+ * for a cube: the baker writes it and the export names it. */
+static void title_cmd_path(char *out, size_t n, const char *dir, int track, int idx)
+{
+    snprintf(out, n, "%s/textcmd_%d_%d.txt", dir, track, idx);
+}
+
+/* The export's half: title_look_at once a frame, written as sendcmd commands
+ * wherever anything changed.
+ *
+ * A FILE and not `c=`, because the graph is one argv string and Linux caps a
+ * single argument at 128KB — a long title that grows and changes colour is a
+ * command per frame, and a budget would mean a coarser staircase in the export
+ * than in the monitor. In a file it costs nothing and needs no escaping.
+ *
+ * Each command lands HALF A FRAME before its frame. At 29.97 a frame's
+ * timestamp and the printed start can disagree by a microsecond either way,
+ * and losing that coin toss applies the value one frame late.
+ *
+ * Returns 0, 1 when there was nothing to write, -1 when the file could not be. */
+static int title_cmd_write(const ss_timeline *t, const ss_clip *c,
+                           const char *path, int track, int idx)
+{
+    title_look prev, m;
+    double len = ss_clip_length(c), fps = t->fps > 0 ? t->fps : 25.0;
+    int k, nfr = (int)ceil(len * fps - 1e-9);
+    FILE *fp;
+
+    if (!title_moves(c)) return 1;
+    fp = fopen(path, "w");
+    if (!fp) return -1;
+    title_look_at(t, c, 0.0, &prev);
+    for (k = 1; k < nfr; k++) {
+        int any = 0;
+        title_look_at(t, c, k / fps, &m);
+#define TCMD(cond, opt, fmt, val) \
+        if (cond) { fprintf(fp, "%s drawtext@tl%d_%d " opt " " fmt, \
+                            any ? "," : "", track, idx, val); any = 1; }
+        if (m.size == prev.size && m.line == prev.line && m.pad == prev.pad &&
+            m.shadow == prev.shadow && m.border == prev.border &&
+            !strcmp(m.col, prev.col)) continue;
+        fprintf(fp, "%.6f", (k - 0.5) / fps);
+        TCMD(m.size != prev.size, "fontsize", "%d", m.size);
+        TCMD(m.line != prev.line, "line_spacing", "%d", m.line);
+        TCMD(strcmp(m.col, prev.col), "fontcolor", "%s", m.col);
+        /* Only the options the filter was built WITH. A plate, a shadow and
+         * an outline of zero are absent from the graph, and a command
+         * switching one on would draw something the monitor does not. */
+        TCMD(c->text_box > 0.0f && m.pad != prev.pad, "boxborderw", "%d", m.pad);
+        TCMD(m.shadow && m.shadow != prev.shadow, "shadowx", "%d", m.shadow);
+        TCMD(m.shadow && m.shadow != prev.shadow, "shadowy", "%d", m.shadow);
+        TCMD(m.border && m.border != prev.border, "borderw", "%d", m.border);
+#undef TCMD
+        fputs(";\n", fp);
+        prev = m;
+    }
+    return fclose(fp) == 0 ? 0 : -1;
+}
+
+/* A title's caption, drawn over whatever the clip already is. */
 static void chain_title_at(strbuf *fc, const ss_timeline *t, const ss_clip *c,
                            const char *dir, int track, int idx, double at)
 {
-    char tp[2048], esc[4200], fesc[1024], x[64], y[96], col[32], plate[32];
-    int size, bw;
+    char tp[2048], esc[4200], fesc[1024], x[64], y[96], plate[32], name[32];
+    title_look m;
     if (c->kind != SS_CLIP_TITLE) return;
     snprintf(tp, sizeof tp, "%s/text_%d_%d.txt", dir, track, idx);
     esc_filter(tp, esc, sizeof esc);
@@ -2861,22 +2982,31 @@ static void chain_title_at(strbuf *fc, const ss_timeline *t, const ss_clip *c,
      * not open, the same way a missing LUT renders as no LUT. */
     esc_filter(ss_font_file(c->text_font, c->text_weight), fesc, sizeof fesc);
 
-    size = (int)(c->text_size * t->h + 0.5f);
-    if (size < 1) size = 1;
+    /* The monitor draws the instant it is showing. The export starts from
+     * the clip's first frame and the command file moves it from there — the
+     * starting values are the filter's OWN options, because a command at the
+     * very first frame can land after that frame has already gone through. */
+    title_look_at(t, c, at >= 0 ? at : 0.0, &m);
+    name[0] = '\0';
+    if (at < 0 && title_moves(c)) {
+        char cp[2048], cesc[4200];
+        title_cmd_path(cp, sizeof cp, dir, track, idx);
+        esc_filter(cp, cesc, sizeof cesc);
+        sb_add(fc, ",sendcmd=f='%s'", cesc);
+        snprintf(name, sizeof name, "@tl%d_%d", track, idx);
+    }
 
     text_xy(c->text_pos, x, sizeof x, y, sizeof y);
     if (c->text_roll > 0.0f) text_roll_y(c, at, y, sizeof y);
-    hexcol(c->text_r, c->text_g, c->text_b, 1.0f, col, sizeof col);
 
     /* expansion=none. `textfile=` gets the caption past the filtergraph's
      * quoting, but drawtext STILL runs its own %%{...} expansion over whatever
      * it read, so a caption containing a percent sign fails the graph with
      * "Stray %%" — at export time, long after the title was typed. Nothing
      * here wants a strftime, and a caption is literal text by definition. */
-    sb_add(fc, ",drawtext=fontfile='%s':textfile='%s':expansion=none"
+    sb_add(fc, ",drawtext%s=fontfile='%s':textfile='%s':expansion=none"
                ":fontcolor=%s:fontsize=%d:x=%s:y=%s:line_spacing=%d",
-           fesc, esc, col, size, x, y,
-           (int)(size * (c->text_line > 0 ? c->text_line : 0.0f)));
+           name, fesc, esc, m.col, m.size, x, y, m.line);
 
     /* Which edge the LINES line up on inside the block, which only matters
      * once a caption has more than one of them. drawtext lays a multi-line
@@ -2899,23 +3029,15 @@ static void chain_title_at(strbuf *fc, const ss_timeline *t, const ss_clip *c,
      * same object as a caption over a solid, just smaller. */
     if (c->text_box > 0.0f) {
         hexcol(c->col_r, c->col_g, c->col_b, c->text_box, plate, sizeof plate);
-        sb_add(fc, ":box=1:boxcolor=%s:boxborderw=%d",
-               plate, (int)(size * 0.35f + 0.5f));
+        sb_add(fc, ":box=1:boxcolor=%s:boxborderw=%d", plate, m.pad);
     }
     /* Shadow before border, because a border drawn over a shadow is what
      * every other titler does and the other order reads as a smear. */
-    if (c->text_shadow > 0.0f) {
-        int off = (int)(size * c->text_shadow + 0.5f);
-        if (off < 1) off = 1;
-        sb_add(fc, ":shadowx=%d:shadowy=%d:shadowcolor=0x000000@0.75", off, off);
-    }
-    /* The outline is not decoration: white text lands on a white sky often
-     * enough that a caption without one is unreadable on the take you most
-     * wanted to label. It is a setting now, and zero means somebody chose
-     * that — so nothing is emitted rather than a one-pixel minimum. */
-    bw = c->text_border > 0.0f ? (int)(size * c->text_border + 1.5f) : 0;
-    if (bw > 0)
-        sb_add(fc, ":borderw=%d:bordercolor=0x000000@0.65", bw);
+    if (m.shadow > 0)
+        sb_add(fc, ":shadowx=%d:shadowy=%d:shadowcolor=0x000000@0.75",
+               m.shadow, m.shadow);
+    if (m.border > 0)
+        sb_add(fc, ":borderw=%d:bordercolor=0x000000@0.65", m.border);
 }
 
 /* The export, where a title's own `t` is clip seconds and a roll can be an

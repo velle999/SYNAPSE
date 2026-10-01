@@ -1544,7 +1544,43 @@ pkgver=0.1.0
 #   `%s.pacnew — merge it` came out as `%s.pacnew  merge it`.
 #   pot.sh now refuses the flag and asserts the round-trip, and the assertion
 #   was shown to fire by putting a · in a C label with --omit-header restored.
-pkgrel=50
+# 51: a title can grow, and change colour, over its length.
+#   text.size and text.r/g/b are keyable now. The inspector's diamond and the
+#   curve editor appear on those four rows because the clip property table
+#   says so; nothing in the window changed.
+#
+#   ⚠ BOTH ARE DRAWTEXT OPTIONS, set at an instant and held, so the export
+#   drives them with sendcmd — from a FILE the bake writes, one interval per
+#   frame where anything changed. A file and not `c=`, because the whole graph
+#   is one argv string and Linux caps an argument at 128KB: a long title that
+#   grows and changes colour is a command a frame, and a budget would mean a
+#   coarser staircase in the export than in the monitor.
+#
+#   ONE FUNCTION DECIDES THE NUMBERS. title_look_at turns the keys into whole
+#   pixels and a colour string at an instant; the monitor calls it at the
+#   playhead and the bake calls it once a frame. Measured against a PNG
+#   sequence export, the two are byte-identical at every frame sampled.
+#   Through x264 the same comparison is a pixel or two off at an edge — the
+#   size of the error being looked for — so the test exports losslessly.
+#
+#   ⚠ THE OUTLINE, SHADOW, PLATE PADDING AND LINE SPACING ARE FRACTIONS OF THE
+#   SIZE, and are commanded with it, or a title that grows ends as a big
+#   caption in a hairline outline. Dropping the outline's command fails three
+#   of the five frame comparisons.
+#
+#   ⚠ A PRESET IS RESOLVED BEFORE THE BAKE NOW, and the bake is handed the
+#   preset's copy of the document. A command file is pixel sizes at frame
+#   times and a preset changes both: baked from the project, a 360-line
+#   caption was drawn into a 720-line picture from the second frame on, while
+#   the first frame — the filter's own options, built from the copy — was
+#   right. Its own assertion catches that by 128 code values.
+#
+#   Each command lands half a frame before its frame: at 29.97 a timestamp
+#   and a printed start can disagree by a microsecond either way, and losing
+#   that toss applies the value one frame late.
+#
+#   759 assertions, clean under ASan+UBSan+LSan.
+pkgrel=51
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
