@@ -54,7 +54,11 @@ unmount_portals() {
 }
 
 cleanup() {
-    [ -n "${QS_PID:-}" ]    && kill -9 "$QS_PID"    2>/dev/null
+    # ⚠ QS_PID is dbus-run-session, and -9 on it alone strands its dbus-daemon
+    # with every service the bar activated on that bus — portal, permission
+    # store, at-spi: ~190 MB left running per suite run (2026-10-01). Its
+    # children first; the bus going takes the activated services with it.
+    [ -n "${QS_PID:-}" ]    && { pkill -9 -P "$QS_PID"; kill -9 "$QS_PID"; } 2>/dev/null
     [ -n "${SYNUI_PID:-}" ] && kill -9 "$SYNUI_PID" 2>/dev/null
     unmount_portals
     rm -rf "$TMP"

@@ -2806,6 +2806,15 @@ test('theme_seat_guard', theme_seat_guard,
      depends : [synui_exe],
      timeout : 60)
 
+# A rig that backgrounds `dbus-run-session -- quickshell` must reap the bus it
+# started. kill -9 on dbus-run-session alone left its dbus-daemon running with
+# the portal and at-spi the bar had activated: ~190 MB per suite run, never
+# reaped, on the machine of whoever ran the suite.
+rig_bus_reaped = find_program('tests/rig_bus_reaped.sh')
+test('rig_bus_reaped', rig_bus_reaped,
+     args    : [meson.current_source_dir() / 'tests'],
+     timeout : 30)
+
 # A UI string that no translator can reach is silently English forever, and
 # nothing else in the build can see it — see tests/i18n.sh.
 i18n_test = find_program('tests/i18n.sh')

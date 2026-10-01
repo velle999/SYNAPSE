@@ -67,7 +67,10 @@ unmount_portals() {
 }
 
 cleanup() {
-    for p in ${PIDS:-}; do kill -9 "$p" 2>/dev/null; done
+    # ⚠ Children first: each run's quickshell PID is dbus-run-session, and -9 on
+    # it alone strands its dbus-daemon with every service the bar activated on
+    # that bus — ~190 MB left running per suite run (2026-10-01).
+    for p in ${PIDS:-}; do pkill -9 -P "$p"; kill -9 "$p"; done 2>/dev/null
     unmount_portals
     rm -rf "$TMP"
 }

@@ -78,7 +78,11 @@ unmount_portals() {
 }
 
 cleanup() {
-    [ -n "${QS_PID:-}" ]    && kill -9 "$QS_PID"    2>/dev/null
+    # ⚠ QS_PID is dbus-run-session, and -9 on it alone strands its dbus-daemon
+    # with every service the bar activated on that bus — portal, permission
+    # store, at-spi: ~190 MB left running per suite run (2026-10-01). Its
+    # children first; the bus going takes the activated services with it.
+    [ -n "${QS_PID:-}" ]    && { pkill -9 -P "$QS_PID"; kill -9 "$QS_PID"; } 2>/dev/null
     [ -n "${SYNUI_PID:-}" ] && kill -9 "$SYNUI_PID" 2>/dev/null
     unmount_portals
     rm -rf "$TMP"
@@ -236,20 +240,25 @@ shoot() {
 # It does NOT fail when the change never comes. The assertions below are what
 # report that, with pixel counts and a name — a timeout here would say
 # "wait_repaint failed" and leave the reader to work out which frame.
-wait_repaint() {                # wait_repaint <before.ppm> <after-name>
+wait_repaint() {                # wait_repaint <before.ppm> <after-name> [card|strip]
     i=0
     while [ $i -lt 24 ]; do
         shoot "$2"
-        if python3 - "$TMP/$1.ppm" "$TMP/$2.ppm" <<'ENDPY'
+        if python3 - "$TMP/$1.ppm" "$TMP/$2.ppm" "${3:-card}" <<'ENDPY'
 import sys
 from PIL import Image
 a, b = (Image.open(p).convert('RGB') for p in sys.argv[1:3])
-# The card only: the bar carries a clock whose minute can tick mid-test.
-box = (20, 46, 236, 196)
+W = a.size[0]
+# The card by default: the bar carries a clock whose minute can tick
+# mid-test. `strip` is the box and threshold the bar-module assertion uses.
+if sys.argv[3] == "strip":
+    box, need = (W // 2, 4, W, 24), 20
+else:
+    box, need = (20, 46, 236, 196), 200
 ca, cb = a.crop(box).load(), b.crop(box).load()
-n = sum(1 for y in range(150) for x in range(216)
+n = sum(1 for y in range(box[3] - box[1]) for x in range(box[2] - box[0])
         if any(abs(ca[x, y][i] - cb[x, y][i]) > 6 for i in range(3)))
-sys.exit(0 if n > 200 else 1)
+sys.exit(0 if n > need else 1)
 ENDPY
         then
             return 0
@@ -268,6 +277,10 @@ shoot empty
 NOW=$(date +%s)
 seed 12.0 "$NOW"
 wait_repaint empty fresh
+# ⚠ AND FOR THE BAR. The module is a separate reader of the same file and can
+# land frames after the card: waiting on the card alone caught the strip still
+# empty in 4 of 4 standalone runs (2026-10-01), and 3 s later it was there.
+wait_repaint empty fresh strip
 
 # STALE: the SAME reading, four hours old. Everything on screen is in the same
 # place; only how it is drawn may differ — which is the point.

@@ -3781,7 +3781,18 @@ pkgver=0.1.0
 #   that is a compile error, so quickshell refused the whole component for any
 #   plugin that used it. Controls is now imported as QQC. tests/qs_module.sh
 #   fails on any property assignment its types lack — red on 628, green here.
-pkgrel=629
+# 630: THE TEST SUITE STOPS LEAVING ~190 MB RUNNING PER RUN. Five rigs start the
+#   bar under a backgrounded dbus-run-session and cleaned up with kill -9 on it,
+#   which strands the dbus-daemon it started, and with it the portal, the
+#   permission store and at-spi the bar had activated. That is six bus
+#   constellations per run, reparented to PID 1, on the machine of whoever ran
+#   `meson test` (check() does not run it). Five runs on 2026-10-01 left 123
+#   processes and 968 MB. The rigs now reap the session's children first.
+#   tests/rig_bus_reaped.sh fails a rig that does not (5 of 5 red on 629).
+#   weather_surfaces also waits for the bar module, not just the card: the
+#   module lags the card, and the test failed 4 of 4 standalone runs on 629.
+#   It passes 5 of 5 here.
+pkgrel=630
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
