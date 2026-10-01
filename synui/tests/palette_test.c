@@ -319,6 +319,7 @@ static void test_corrected_for_the_surface(void)
     /* And the dark case is left alone: correcting a colour that already passes
      * would drag every dark theme's accent toward the surface for nothing. */
     assert(lum(dark.accent) > lum(light.accent));
+    free(px);
     printf("  corrected for the surface .......... ok\n");
 }
 

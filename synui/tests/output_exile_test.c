@@ -112,6 +112,31 @@ void layout_apply_visible(syn_server_t *s)    { (void)s; applies++;   }
 
 /* ── A desk, made by hand ────────────────────────────────── */
 
+/* Every allocation a desk is made of, freed together when the run ends. Desks
+ * are thrown away phase by phase and a reconnect drops the old output, so
+ * without this LeakSanitizer counted all 74 and failed the ASan build on the
+ * fixture rather than on anything output_exile.c does. LOUD when full, for the
+ * same reason as FAKE_MAX. */
+#define FX_MAX 256
+static void *fx_owned[FX_MAX];
+static int fx_n;
+
+static void *fx_keep(void *p)
+{
+    if (!p) { perror("alloc"); exit(1); }
+    if (fx_n >= FX_MAX) {
+        printf("  FAIL — the test's allocation table is full; raise FX_MAX\n");
+        exit(1);
+    }
+    fx_owned[fx_n++] = p;
+    return p;
+}
+
+static void fx_free_all(void)
+{
+    while (fx_n > 0) free(fx_owned[--fx_n]);
+}
+
 /* Every phase gets a fresh desk and fresh counters — the output table is
  * per-desk, and a counter left over from the phase before reads as a call this
  * one made. */
@@ -122,8 +147,7 @@ static syn_server_t *mk_server(void)
     placed_view = NULL;
     placed_box  = (struct wlr_box){ 0, 0, 0, 0 };
 
-    syn_server_t *s = calloc(1, sizeof(*s));
-    if (!s) { perror("calloc"); exit(1); }
+    syn_server_t *s = fx_keep(calloc(1, sizeof(*s)));
     wl_list_init(&s->outputs);
     for (int i = 0; i < WORKSPACE_MAX; i++) {
         s->workspaces[i].index  = i;
@@ -136,10 +160,9 @@ static syn_server_t *mk_server(void)
 static syn_output_t *mk_output(syn_server_t *s, const char *name,
                                int x, int y, int w, int h)
 {
-    syn_output_t *o = calloc(1, sizeof(*o));
-    struct wlr_output *wo = calloc(1, sizeof(*wo));
-    if (!o || !wo) { perror("calloc"); exit(1); }
-    wo->name = strdup(name);
+    syn_output_t *o = fx_keep(calloc(1, sizeof(*o)));
+    struct wlr_output *wo = fx_keep(calloc(1, sizeof(*wo)));
+    wo->name = fx_keep(strdup(name));
     o->wlr_output = wo;
     o->server = s;
     wl_list_insert(s->outputs.prev, &o->link);
@@ -171,8 +194,7 @@ static syn_output_t *reconnect(syn_server_t *s, syn_output_t *gone,
 static syn_view_t *mk_view(syn_server_t *s, int ws, syn_output_t *o,
                            int x, int y, int w, int h, int floating)
 {
-    syn_view_t *v = calloc(1, sizeof(*v));
-    if (!v) { perror("calloc"); exit(1); }
+    syn_view_t *v = fx_keep(calloc(1, sizeof(*v)));
     v->server    = s;
     v->workspace = &s->workspaces[ws];
     v->output    = o;
@@ -421,6 +443,7 @@ int main(void)
     test_fullscreen_refits();
     test_a_deliberate_move_forgets();
     test_untouched_windows();
+    fx_free_all();
 
     if (failures) {
         printf("FAIL: %d checked, %d failed\n", checks, failures);

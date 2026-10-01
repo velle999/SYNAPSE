@@ -374,6 +374,13 @@ int main(int argc, char **argv)
 
     zwlr_virtual_pointer_v1_destroy(ptr);
     wl_display_roundtrip(dpy);
+    /* Every proxy, not just the pointer. The registry was a local that
+     * outlived main: 96 bytes to LeakSanitizer, which made this helper exit
+     * non-zero in the ASan build and failed every rig that clicks with it. */
+    zwlr_virtual_pointer_manager_v1_destroy(mgr);
+    if (seat) wl_seat_destroy(seat);
+    if (output) wl_output_destroy(output);
+    wl_registry_destroy(reg);
     wl_display_disconnect(dpy);
     return 0;
 }

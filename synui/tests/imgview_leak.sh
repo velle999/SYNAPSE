@@ -25,7 +25,12 @@ set -u
 
 TESTDIR=$(dirname "$0")
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
-export ASAN_OPTIONS="protect_shadow_gap=0:fast_unwind_on_malloc=0:halt_on_error=1:abort_on_error=1:print_summary=1"
+# quarantine_size_mb=0: ASan holds every freed chunk in a 256 MB quarantine by
+# default, so a painter that frees its surface correctly still grows RssAnon by
+# one frame per repaint — the exact signature this test fails on. Measured
+# under ASan: 117720 kB over 30 repaints with the quarantine, on a tree whose
+# plain build passes. This test asks about RSS, not use-after-free.
+export ASAN_OPTIONS="protect_shadow_gap=0:fast_unwind_on_malloc=0:halt_on_error=1:abort_on_error=1:print_summary=1:quarantine_size_mb=0"
 
 SYNUI=${1:?usage: imgview_leak.sh synui synctl}
 SYNCTL=${2:?usage: imgview_leak.sh synui synctl}

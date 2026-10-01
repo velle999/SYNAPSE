@@ -516,6 +516,11 @@ static void rig_init(void)
 {
     snprintf(the_icon.exec, sizeof(the_icon.exec), "%s", "true");
     memset(&server, 0, sizeof(server));
+    /* dock_apply_position() places the dock below the window tree. A NULL
+     * one is member access through NULL to UBSan, which aborted this test
+     * in the sanitizer build; the real server creates it before any output. */
+    static struct wlr_scene_tree window_tree;
+    server.window_tree = &window_tree;
     memset(&output, 0, sizeof(output));
     wl_list_init(&server.outputs);
     for (int i = 0; i < WORKSPACE_MAX; i++)
