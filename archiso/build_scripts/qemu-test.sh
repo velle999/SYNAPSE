@@ -48,7 +48,12 @@ fi
 # Build creates files as root — fix ownership so QEMU can open them
 if [[ "$NO_CD" != "1" && -f "$ISO" && "$(stat -c %U "$ISO")" != "$(whoami)" ]]; then
     echo "ISO owned by root — fixing ownership with sudo..."
-    sudo chown "$(whoami):$(id -gn)" "$ISO"
+    # sudo -n first: a bare sudo with no terminal to ask on is a faillock strike.
+    if ! sudo -n chown "$(whoami):$(id -gn)" "$ISO" 2>/dev/null; then
+        { : </dev/tty; } 2>/dev/null || {
+            echo "No terminal to ask for sudo on. Run: sudo chown $(whoami) $ISO"; exit 1; }
+        sudo chown "$(whoami):$(id -gn)" "$ISO"
+    fi
 fi
 
 RAM="${QEMU_RAM:-8G}"

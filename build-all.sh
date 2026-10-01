@@ -260,6 +260,18 @@ build_vendored_pkg() {
     build_script_pkg "$name"
 }
 
+# ⛔ NO TERMINAL AND NO CACHED CREDENTIAL: stop here, before the first sudo.
+# A sudo that cannot reach a terminal fails the PAM conversation, pam_faillock
+# counts that as a wrong password, and three lock the account until a reboot.
+# `sudo -n true` passes when the credential is cached (syn-update primes it and
+# keeps it alive) or no password is needed; /dev/tty is where sudo asks when
+# neither holds. With both missing nothing can answer, so say so and exit.
+if ! sudo -n true 2>/dev/null && ! { : </dev/tty; } 2>/dev/null; then
+    echo "build-all.sh: needs sudo, and there is no terminal to ask on." >&2
+    echo "  Run it from a terminal, or cache the credential first: sudo -v" >&2
+    exit 1
+fi
+
 # Retire the old ld.so.conf entries that pointed the DYNAMIC LINKER at this
 # build tree. They made a root daemon (synapd) load its core libraries out of a
 # user's $HOME, so a `git clean` or an ISO rebuild could take synapd down — and
