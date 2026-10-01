@@ -702,6 +702,11 @@ int         ss_stabilise(const char *path, double in, double out,
  * fails the whole graph to parse rather than degrading, so anything recent is
  * asked for before it is used. Cached; one fork per process. */
 int         ss_ffmpeg_filter_has(const char *filter, const char *option);
+/* Whether that option can be changed while the filter runs — the `T` in
+ * `ffmpeg -h filter=NAME`. A command to an option without it is refused, and
+ * sendcmd does not fail the graph over that: it carries on with the old
+ * value, so the export would quietly hold still while the monitor moved. */
+int         ss_ffmpeg_filter_runtime(const char *filter, const char *option);
 
 const char *ss_font_file(const char *family, int weight);
 /* The families this machine can draw with, sorted, one per line into `out`.
@@ -766,7 +771,27 @@ typedef struct {
 typedef struct {
     char   key[24], label[48];
     double def, lo, hi;
+    /* Every place this knob reaches is a NAMED option written as nothing but
+     * a value — `sigma=$radius`, `y='trunc(val/$step)*$step'` — and so can be
+     * re-sent whole as a command. A knob buried in a positional argument or
+     * an escaped expression cannot, and cannot be keyed. Decided when the
+     * recipe is read; whether this ffmpeg will TAKE the command is a second
+     * question, asked by ss_fx_param_keyable. */
+    int    direct;
 } ss_fx_param;
+
+/* One option of one filter that a knob reaches: what a keyed knob has to
+ * re-send, frame by frame, when it moves. `filt` counts the filters in the
+ * chain from 0, in the order they are written. `tmpl` is the option's value as
+ * the recipe wrote it, quotes removed, $knobs still in it. */
+#define SS_MAX_FX_TARGETS 24
+
+typedef struct {
+    int  filt;
+    char fname[32];
+    char opt[32];
+    char tmpl[160];
+} ss_fx_target;
 
 typedef struct {
     char name[32], label[48], group[32], about[160];
@@ -775,6 +800,8 @@ typedef struct {
     int  alpha;                 /* the chain can produce transparency */
     char filter[2048];
     char path[512];
+    int  ntarget;
+    ss_fx_target target[SS_MAX_FX_TARGETS];
 } ss_fx;
 
 /* The catalogue: what is installed, then the user's own, then anything named
@@ -786,10 +813,24 @@ const ss_fx *ss_fx_find(const char *name);
 /* One file, parsed and checked. 0, or -1 with the reason in `err`. */
 int          ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn);
 /* The chain with its parameters substituted, its labels made unique to `uid`,
- * and [$in]/[$out] replaced by the labels it is being spliced between. */
+ * and [$in]/[$out] replaced by the labels it is being spliced between.
+ *
+ * `tag` non-NULL gives every filter an instance name, `name@<tag>_<k>` with k
+ * counting filters from 0 the way ss_fx_target.filt does — which is what a
+ * command addresses when a knob is keyed. NULL leaves the names alone. */
 int          ss_fx_expand(const ss_fx *fx, const double *vals, int nvals,
-                          int uid, const char *inlab, const char *outlab,
-                          char *out, size_t n);
+                          int uid, const char *tag, const char *inlab,
+                          const char *outlab, char *out, size_t n);
+/* Whether knob `i` can move over time HERE: it reaches only named options,
+ * and this machine's ffmpeg accepts every one of them as a command. */
+int          ss_fx_param_keyable(const ss_fx *fx, int i);
+/* Whether target `tg` reads knob `i`. */
+int          ss_fx_target_uses(const ss_fx *fx, int tg, int i);
+/* Target `tg`'s value with the knobs substituted, printed exactly as
+ * ss_fx_expand prints them — so a command and the chain it replaces cannot
+ * differ by a digit. */
+int          ss_fx_target_arg(const ss_fx *fx, int tg, const double *vals,
+                              int nvals, char *out, size_t n);
 
 /* One effect ON a clip: which recipe, and where its knobs are set. The values
  * are positional against the recipe's own parameter list; the DOCUMENT stores
@@ -825,7 +866,9 @@ enum { SS_EASE_LINEAR, SS_EASE_IN, SS_EASE_OUT, SS_EASE_INOUT, SS_EASE_HOLD };
 #define SS_MAX_PKEYS 64
 
 typedef struct {
-    char   key[24];             /* a clip property key: "opacity", "xform.x" */
+    /* A clip property key — "opacity", "xform.x" — or an effect's knob,
+     * "fx.<N>.<knob>", N being where the effect sits in the clip's stack. */
+    char   key[40];
     double t, v;
     int    ease;
 } ss_propkey;
@@ -986,6 +1029,10 @@ int  ss_clip_key_remove(ss_clip *c, int i);
  * an expression for — the quantisation happens IN HERE, so what the monitor
  * shows is what the export writes and not merely close to it. */
 int    ss_clip_prop_animatable(const char *key);
+/* The same question about a property ON A CLIP, which is the only way it can
+ * be answered for an effect's knob: `fx.2.radius` means whatever effect sits
+ * third in this clip's stack. */
+int    ss_clip_prop_keyable(const ss_clip *c, const char *key);
 double ss_clip_prop_at(const ss_clip *c, const char *key, double tt);
 /* -1 if the property cannot be keyed or the clip is full; else the index of
  * the key within that property. A key at an instant that already has one

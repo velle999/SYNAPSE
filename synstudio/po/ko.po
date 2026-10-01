@@ -38,6 +38,11 @@ msgstr "%1  ·  길이 %2"
 msgid "%1 (missing)"
 msgstr "%1 (없음)"
 
+msgid ""
+"%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
+"holds its own value"
+msgstr "%1은(는) 이 ffmpeg에서 시간에 따라 바뀔 수 없습니다 — 키프레임은 유지되고 노브는 자체 값을 유지합니다"
+
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
 

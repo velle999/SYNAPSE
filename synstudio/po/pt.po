@@ -38,6 +38,11 @@ msgstr "%1  ·  %2 de duração"
 msgid "%1 (missing)"
 msgstr "%1 (em falta)"
 
+msgid ""
+"%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
+"holds its own value"
+msgstr "%1 não pode variar ao longo do tempo com este ffmpeg — os quadros-chave são mantidos e o controlo mantém o seu próprio valor"
+
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
 

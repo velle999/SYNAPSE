@@ -1580,7 +1580,45 @@ pkgver=0.1.0
 #   that toss applies the value one frame late.
 #
 #   759 assertions, clean under ASan+UBSan+LSan.
-pkgrel=51
+#
+# 52: an effect's knob can move over time.
+#   A blur's radius, a glow's amount, a key's similarity: any knob a recipe
+#   hands to a NAMED option that ffmpeg takes as a command — 33 of the 40 that
+#   ship. `fx params` says which in a seventh column, last so a reader of the
+#   first six keeps working, and the window draws the diamond and the curve on
+#   an effect's rows from it. The keys are the clip's own, named
+#   fx.<n>.<knob>, so `timeline anim`, the eases, the curve editor and the
+#   razor all work on them unchanged.
+#
+#   The export is the title's mechanism from 51: a sendcmd FILE per clip,
+#   re-sending the option's whole value each frame it changes, to filter
+#   instances the expansion names x<track>_<clip>_<n>_<k>. The monitor builds
+#   its one frame at the values under the playhead.
+#
+#   ⚠ A COMMAND IS NOT ALWAYS THE SAME AS STARTING AT THAT VALUE. Every
+#   runtime option of every whitelisted filter was sent one and compared with
+#   a filter started there: 126 agree, 50 make no difference to a test card,
+#   and three disagree. gblur's sigmaV and avgblur's sizeY copy their lead ONCE
+#   at init, so a moving radius blurred sideways only in the export — 32 code
+#   values off by mid-clip on glow, 89 on blur. The lead's command now goes to
+#   its twin as well, unless the recipe sets the twin itself. colorcorrect's
+#   analyze accepts a command and ignores it, so it is never keyable.
+#
+#   ⚠ KEYS ARE NAMED BY THE EFFECT'S PLACE IN THE STACK, so adding mid-stack,
+#   moving and removing renumber them, and the window closes an effect's open
+#   curve on any of the three. Keys on an effect this machine has not got are
+#   kept, the way the effect is.
+#
+#   Duotone tinted nothing. colorize at lightness 0 has a black tint, and every
+#   hue gave the same grey picture from the day the effect shipped; found
+#   because its keyed hue changed nothing. It is 0.5 now, ffmpeg's default.
+#
+#   Every keyable knob that ships is exported losslessly and compared with the
+#   monitor at three frames, and has to change the picture between its first
+#   and last. The frame comparison now scores a missing file as a mismatch: it
+#   scored 0, so a monitor render that failed would have passed as identical.
+#   796 assertions, clean under ASan+UBSan+LSan.
+pkgrel=52
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

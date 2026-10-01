@@ -25,6 +25,11 @@ msgstr ""
 msgid "%1 (missing)"
 msgstr ""
 
+msgid ""
+"%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
+"holds its own value"
+msgstr ""
+
 msgid "%1 × %2  ·  %3 fps"
 msgstr ""
 

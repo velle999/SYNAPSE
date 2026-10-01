@@ -1017,6 +1017,9 @@ fi
 # shadow and the line spacing are all fractions of the size and have to grow
 # with it; on black a hairline outline is invisible and would pass.
 maxdiff() {  # maxdiff <a.png> <b.png> -> the largest difference in any channel
+    # ⚠ A file that is not there is NOT a perfect match. Without this, a
+    # render that failed compared as 0 — an empty stream against anything.
+    [ -s "$1" ] && [ -s "$2" ] || { echo 999; return; }
     paste <(ffmpeg -v error -i "$1" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 -v -w1) \
           <(ffmpeg -v error -i "$2" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 -v -w1) \
         | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > m) m = d }
@@ -1052,6 +1055,7 @@ $BIN timeline export "$tk" --format png --out "$TMP/tkseq/f_%04d.png" >/dev/null
 check "a keyed title exports" "50" "$(ls "$TMP/tkseq" | wc -l)"
 for n in 0 1 12 25 49; do
     at=$(awk -v n=$n 'BEGIN { printf "%.6f", n/25 }')
+    rm -f "$TMP/tkm.png"
     $BIN timeline frame "$tk" --at "$at" --out "$TMP/tkm.png" >/dev/null 2>&1
     near "a keyed title is the monitor's picture at frame $n" 0 \
          "$(maxdiff "$TMP/tkm.png" "$(printf '%s/tkseq/f_%04d.png' "$TMP" $((n + 1)))")" 2
@@ -1076,6 +1080,165 @@ $BIN timeline export "$tk" --preset youtube-720p --format png \
 $BIN timeline frame "$TMP/tk720.syntl" --at 1 --out "$TMP/tkm7.png" >/dev/null 2>&1
 near "a preset draws the keyed title at the preset's own size" 0 \
      "$(maxdiff "$TMP/tkm7.png" "$TMP/tkp/f_0026.png")" 2
+
+# ---- an effect's knob, over time -------------------------------------------
+#
+# A knob is keyed under the name fx.<n>.<knob>, through the same key engine as
+# an opacity, and exported the way a title's size is: a sendcmd FILE of whole
+# option values, one command a frame, to filters the expansion has named. The
+# monitor builds its one frame at the value under the playhead.
+#
+# So the two renderers agree only where a command does exactly what starting
+# at that value does. EVERY keyable knob that ships is checked, lossless,
+# against the monitor — that is what found gblur's sigmaV staying where it
+# started while sigma moved, and a duotone whose hue had never done anything.
+$BIN fx params | rxseen "a knob says whether it can be keyed"  '^blur	radius(	[^	]*){4}	1$'
+$BIN fx params | rxseen "and unsharp's cannot: it has no commands" '^sharpen	amount(	[^	]*){4}	0$'
+$BIN fx show blur | seen "fx show says so too" "Radius	keyable"
+fk=$TMP/fxkeys
+mkdir -p "$fk"
+ffmpeg -v error -f lavfi -i "testsrc2=s=128x72:r=10" -frames:v 1 "$fk/src.png" -y
+fxkn=0; fxkbad=""; fxkdead=""
+while IFS=$'\t' read -r name key def lo hi label k; do
+    [ "$k" = 1 ] || continue
+    # The ones this tree SHIPS. A recipe in the tester's own config is theirs
+    # to get right, and must not fail somebody's build.
+    [ -f "${SYNSTUDIO_EFFECTS%%:*}/$name.synfx" ] || continue
+    fxkn=$((fxkn + 1))
+    p=$fk/$name.$key.syntl
+    $BIN timeline new "$p" --size 128x72 --fps 10 >/dev/null
+    $BIN timeline track "$p" video V >/dev/null
+    $BIN timeline clip "$p" 0 "$fk/src.png" --at 0 --dur 1 >/dev/null
+    $BIN timeline fx "$p" 0 0 add "$name" >/dev/null
+    $BIN timeline anim "$p" 0 0 add "fx.0.$key" --at 0 \
+        --value "$(awk -v l="$lo" -v h="$hi" 'BEGIN { print l + (h - l) * 0.1 }')" >/dev/null
+    $BIN timeline anim "$p" 0 0 add "fx.0.$key" --at 1 \
+        --value "$(awk -v l="$lo" -v h="$hi" 'BEGIN { print l + (h - l) * 0.9 }')" >/dev/null
+    rm -rf "$fk/o"; mkdir -p "$fk/o"
+    $BIN timeline export "$p" --format png --out "$fk/o/f_%04d.png" >/dev/null 2>&1
+    for n in 0 4 9; do
+        rm -f "$fk/m.png"
+        $BIN timeline frame "$p" --at "0.$n" --out "$fk/m.png" >/dev/null 2>&1
+        d=$(maxdiff "$fk/m.png" "$(printf '%s/o/f_%04d.png' "$fk" $((n + 1)))")
+        [ "$d" -le 2 ] || fxkbad="$fxkbad $name.$key@$n=$d"
+    done
+    # And it MOVES. A knob that changes nothing is a diamond that lies.
+    [ "$(maxdiff "$fk/o/f_0001.png" "$fk/o/f_0010.png")" -gt 2 ] \
+        || fxkdead="$fxkdead $name.$key"
+done < <($BIN fx params)
+check "at least thirty shipped knobs can be keyed" "yes" \
+      "$([ "$fxkn" -ge 30 ] && echo yes || echo no)"
+check "every one is the monitor's picture, frame for frame" "" "$fxkbad"
+check "and every one changes the picture" "" "$fxkdead"
+
+# The twin rule, both ways. A recipe that sets the vertical blur ITSELF keeps
+# it: sending it the radius as well would blur both ways in the export only.
+mkdir -p "$fk/own"
+cat > "$fk/own/hblur.synfx" <<'FX'
+# synstudio effect
+name    hblur
+label   Sideways blur
+group   Blur
+about   A blur along the row only
+param   r  2  0  40  Radius
+filter  [$in]gblur=sigma=$r:sigmaV=0.5[$out]
+FX
+cat > "$fk/own/posblur.synfx" <<'FX'
+# synstudio effect
+name    posblur
+label   Positional blur
+group   Blur
+about   The radius given without its name
+param   r  2  0  40  Radius
+filter  [$in]gblur=$r[$out]
+FX
+# And an option ffmpeg takes as a command and then ignores.
+cat > "$fk/own/cc.synfx" <<'FX'
+# synstudio effect
+name    ccan
+label   Corrector
+group   Colour
+about   colorcorrect with its analysis mode on a knob
+param   m  0  0  3  Mode
+filter  [$in]colorcorrect=analyze=$m[$out]
+FX
+fxe="$SYNSTUDIO_EFFECTS:$fk/own"
+SYNSTUDIO_EFFECTS=$fxe $BIN fx params | rxseen "a knob given by position cannot be keyed" \
+    '^posblur	r(	[^	]*){4}	0$'
+SYNSTUDIO_EFFECTS=$fxe $BIN fx params | rxseen "nor one ffmpeg ignores as a command" \
+    '^ccan	m(	[^	]*){4}	0$'
+SYNSTUDIO_EFFECTS=$fxe $BIN fx params | rxseen "while its own vertical blur leaves it keyable" \
+    '^hblur	r(	[^	]*){4}	1$'
+hp=$fk/hblur.syntl
+$BIN timeline new "$hp" --size 128x72 --fps 10 >/dev/null
+$BIN timeline track "$hp" video V >/dev/null
+$BIN timeline clip "$hp" 0 "$fk/src.png" --at 0 --dur 1 >/dev/null
+SYNSTUDIO_EFFECTS=$fxe $BIN timeline fx "$hp" 0 0 add hblur >/dev/null
+SYNSTUDIO_EFFECTS=$fxe $BIN timeline anim "$hp" 0 0 add fx.0.r --at 0 --value 1 >/dev/null
+SYNSTUDIO_EFFECTS=$fxe $BIN timeline anim "$hp" 0 0 add fx.0.r --at 1 --value 30 >/dev/null
+rm -rf "$fk/o"; mkdir -p "$fk/o"; rm -f "$fk/m.png"
+SYNSTUDIO_EFFECTS=$fxe $BIN timeline export "$hp" --format png --out "$fk/o/f_%04d.png" >/dev/null 2>&1
+SYNSTUDIO_EFFECTS=$fxe $BIN timeline frame "$hp" --at 0.9 --out "$fk/m.png" >/dev/null 2>&1
+near "a recipe's own vertical blur is left alone" 0 \
+     "$(maxdiff "$fk/m.png" "$fk/o/f_0010.png")" 2
+
+# The CLI around it.
+cp="$fk/cli.syntl"
+$BIN timeline new "$cp" --size 128x72 --fps 10 >/dev/null
+$BIN timeline track "$cp" video V >/dev/null
+$BIN timeline clip "$cp" 0 "$fk/src.png" --at 0 --dur 2 >/dev/null
+$BIN timeline fx "$cp" 0 0 add sharpen >/dev/null
+$BIN timeline fx "$cp" 0 0 add blur >/dev/null
+$BIN timeline anim "$cp" 0 0 add fx.0.amount --at 0 --value 1 2>&1 \
+    | seen "a knob ffmpeg cannot move is refused, and says why" "cannot move over time"
+$BIN timeline anim "$cp" 0 0 add fx.5.radius --at 0 --value 1 2>&1 \
+    | seen "an effect that is not there is refused" "has 2 effects"
+$BIN timeline anim "$cp" 0 0 add fx.1.radiu --at 0 --value 1 2>&1 \
+    | seen "and a misspelt knob is named as one" "no knob called radiu"
+$BIN timeline anim "$cp" 0 0 add fx.1.radius --at 0 --value 4  >/dev/null
+$BIN timeline anim "$cp" 0 0 add fx.1.radius --at 2 --value 20 >/dev/null
+check "a keyed knob is read at the playhead" "12" \
+      "$($BIN timeline get "$cp" 0 0 fx.1.radius --at 1)"
+$BIN timeline get "$cp" 0 0 --at 1 | seen "and is among the clip's values" "fx.1.radius	12"
+check "its keys are listed" "2" \
+      "$($BIN timeline anim "$cp" 0 0 list | grep -c '^fx\.1\.radius	')"
+check "and drawn as a curve" "20.000000" \
+      "$($BIN timeline anim "$cp" 0 0 curve fx.1.radius --count 5 | tail -1 | cut -f2)"
+# Keys are named by the effect's PLACE, so the stack moving has to carry them.
+$BIN timeline fx "$cp" 0 0 move 1 0 >/dev/null
+check "moving the effect carries its keys" "2" \
+      "$($BIN timeline anim "$cp" 0 0 list | grep -c '^fx\.0\.radius	')"
+$BIN timeline fx "$cp" 0 0 add glow >/dev/null
+$BIN timeline anim "$cp" 0 0 add fx.2.amount --at 0 --value 0.2 >/dev/null
+$BIN timeline fx "$cp" 0 0 remove 1 >/dev/null
+check "removing one below renumbers the keys above" "1" \
+      "$($BIN timeline anim "$cp" 0 0 list | grep -c '^fx\.1\.amount	')"
+$BIN timeline fx "$cp" 0 0 remove 0 >/dev/null
+check "removing the effect takes its keys" "0" \
+      "$($BIN timeline anim "$cp" 0 0 list | grep -c 'radius')"
+# A razor through a moving knob: the second half starts where the first was.
+sp2="$fk/split.syntl"
+$BIN timeline new "$sp2" --size 128x72 --fps 10 >/dev/null
+$BIN timeline track "$sp2" video V >/dev/null
+$BIN timeline clip "$sp2" 0 "$fk/src.png" --at 0 --dur 2 >/dev/null
+$BIN timeline fx "$sp2" 0 0 add blur >/dev/null
+$BIN timeline anim "$sp2" 0 0 add fx.0.radius --at 0 --value 4  >/dev/null
+$BIN timeline anim "$sp2" 0 0 add fx.0.radius --at 2 --value 20 >/dev/null
+$BIN timeline split "$sp2" 0 --at 1 >/dev/null
+check "a split knob picks up where it was cut" "12.000000" \
+      "$($BIN timeline anim "$sp2" 0 1 at fx.0.radius --at 0)"
+# ⚠ An effect this machine has not got keeps its keys: they are in somebody
+# else's document, and saving it here must not quietly delete them.
+sed -i 's/^fx\tblur/fx\tnosuch/' "$sp2"
+check "both halves carry two keys each" "4" \
+      "$(grep -c '^anim	fx\.0\.radius	' "$sp2")"
+$BIN timeline set "$sp2" 0 0 opacity=0.5 >/dev/null 2>&1
+check "keys on a missing effect survive an edit" "4" \
+      "$(grep -c '^anim	fx\.0\.radius	' "$sp2")"
+rm -f "$fk/m.png"
+$BIN timeline frame "$sp2" --at 0.5 --out "$fk/m.png" >/dev/null 2>&1
+check "and the clip still renders without it" "yes" \
+      "$([ -s "$fk/m.png" ] && echo yes || echo no)"
 
 echo "== transitions (one filter, sixty looks)"
 
@@ -4359,6 +4522,115 @@ if [ -f "$qml" ]; then
     notseen "the photograph is carried by the pointer, not by Drag" \
             'drag.target: photoDragProxy' < "$qml"
     seen "the release is what puts it in the cut" 'root.photoDropAt(' < "$qml"
+fi
+
+# ---- an effect's knob, in the window -------------------------------------
+#
+# The knob row reads a keyed value AT THE PLAYHEAD, and a release on a moving
+# knob is a key — not the recipe's number, which nothing renders once keys
+# exist. Driven through the row's own commit(), the function its slider calls,
+# and found by name: no pointer, so nothing lands on the live seat.
+if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffmpeg; then
+    kg=$TMP/fxknobgui
+    mkdir -p "$kg"
+    cp "$qml" "$kg/drv.qml"
+    cp "$(dirname "$qml")/synstudio-playback.qml" "$kg/" 2>/dev/null
+    cp -r "$(dirname "$qml")/qml" "$kg/" 2>/dev/null
+    ffmpeg -v error -f lavfi -i "testsrc2=s=128x72:r=10" -frames:v 1 "$kg/src.png" -y
+    kp=$kg/k.syntl
+    $BIN timeline new "$kp" --size 128x72 --fps 10 >/dev/null
+    $BIN timeline track "$kp" video V >/dev/null
+    $BIN timeline clip "$kp" 0 "$kg/src.png" --at 0 --dur 2 >/dev/null
+    $BIN timeline fx "$kp" 0 0 add blur >/dev/null
+    $BIN timeline fx "$kp" 0 0 add sharpen >/dev/null
+    $BIN timeline anim "$kp" 0 0 add fx.0.radius --at 0 --value 4  >/dev/null
+    $BIN timeline anim "$kp" 0 0 add fx.0.radius --at 2 --value 20 >/dev/null
+    python3 - "$kg" <<'PYEOF'
+import sys
+d = sys.argv[1]
+s = open(d + "/drv.qml").read()
+drv = """
+    Timer {
+        interval: 900; repeat: true; running: true
+        property int n: 0
+        function find(it, name) {
+            if (!it) return null
+            if (it.objectName === name) return it
+            const ch = it.children || []
+            for (let i = 0; i < ch.length; i++) {
+                const r = find(ch[i], name)
+                if (r) return r
+            }
+            return null
+        }
+        onTriggered: {
+            n++
+            if (n === 2) {
+                root.playhead = 1.0
+            } else if (n === 3) {
+                root.selTrack = 0; root.selClip = 0
+            } else if (n === 6) {
+                const k = find(inspCol, "fxctl:fx.0.radius")
+                const s = find(inspCol, "fxctl:fx.1.amount")
+                console.warn("FOUND " + (k !== null) + " " + (s !== null))
+                if (k) console.warn("KNOB " + k.moving + " " + k.nkeys + " " + k.val)
+                if (s) console.warn("SHARP " + s.row.keyable)
+                if (k) k.commit(30)
+            } else if (n === 9) {
+                console.warn("KEYS3 " + root.clipAnimKeys("fx.0.radius").length)
+                console.warn("STATIC " + root.selClipObj.fx[0].param.radius)
+                const s = find(inspCol, "fxctl:fx.1.amount")
+                if (s) s.commit(0.7)
+            } else if (n === 12) {
+                console.warn("SHARPV " + root.selClipObj.fx[1].param.amount)
+                root.animToggle("fx.0.radius")
+            } else if (n === 15) {
+                console.warn("KEYS2 " + root.clipAnimKeys("fx.0.radius").length)
+                root.openCurve("fx.0.radius")
+            } else if (n === 17) {
+                console.warn("CURVE " + root.curvePts.length + " " + root.curveKey)
+                root.fxRun(["move", "0", "1"])
+                console.warn("CURVEKEY [" + root.curveKey + "]")
+            } else if (n === 20) {
+                console.warn("MOVED " + root.clipAnimKeys("fx.1.radius").length)
+                Qt.quit()
+            }
+        }
+    }
+"""
+open(d + "/drv.qml", "w").write(s[:s.rstrip().rfind("}")] + drv + "}\n")
+PYEOF
+    HOME=$kg SYNSTUDIO_BIN=$BIN SYNSTUDIO_PROJECT=$kp DISABLE_MANGOHUD=1 MANGOHUD=0 \
+        QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+        timeout 60 quickshell -p "$kg/drv.qml" > "$kg/log" 2>&1
+    sed -i 's/\x1b\[[0-9;]*m//g' "$kg/log"
+    if grep -qE 'ReferenceError|TypeError' "$kg/log"; then
+        bad "the knob row drives with no throw: $(grep -m1 -E 'ReferenceError|TypeError' \
+             "$kg/log" | cut -c1-90)"
+    else
+        ok
+    fi
+    if grep -q "MOVED" "$kg/log"; then
+        kv() { grep -o "$1 .*" "$kg/log" | head -1 | cut -d' ' -f2-; }
+        check "the window finds both knob rows"            "true true" "$(kv FOUND)"
+        check "a keyed radius reads its value at the playhead" "true 2 12" "$(kv KNOB)"
+        check "and sharpen's amount offers no diamond"     "false"     "$(kv SHARP)"
+        check "a release on a moving knob adds a key"      "3"         "$(kv KEYS3)"
+        check "and leaves the recipe's own number alone"   "$($BIN fx params |
+              awk -F'\t' '$1 == "blur" && $2 == "radius" { print $3 }')" "$(kv STATIC)"
+        check "a release on a still knob sets the number"  "0.7"       "$(kv SHARPV)"
+        check "the diamond on a key takes it away"         "2"         "$(kv KEYS2)"
+        check "the knob's curve opens" "yes" \
+              "$(kv CURVE | awk '{ print ($1 > 100 && $2 == "fx.0.radius") ? "yes" : "no" }')"
+        check "moving the effect closes it, its name is stale" "[]" "$(kv CURVEKEY)"
+        check "and the keys went with the effect"          "2"         "$(kv MOVED)"
+    else
+        printf '  skip  the window did not start, no knob row asserted\n'
+    fi
+fi
+if [ -f "$qml" ]; then
+    seen "one curve editor serves clip and effect rows" 'component CurveEd' < "$qml"
+    seen "an effect's row keys by stack place"          '"fx." + fxc.fxIndex + "."' < "$qml"
 fi
 
 # ── a LUT used by path is kept, and browsable afterwards ────────────────────

@@ -137,6 +137,263 @@ static int check_name(const char *name, void *ctx)
     return -1;
 }
 
+/* ------------------------------------------------ which knobs can move -- */
+
+/* How long the knob name starting at `s` is: letters, digits and _. */
+static size_t knob_len(const char *s)
+{
+    size_t n = 0;
+    while (s[n] && (isalnum((unsigned char)s[n]) || s[n] == '_')) n++;
+    return n;
+}
+
+static int knob_index(const ss_fx *fx, const char *nm, size_t len)
+{
+    int i;
+    for (i = 0; i < fx->nparam; i++)
+        if (strlen(fx->param[i].key) == len && !strncmp(fx->param[i].key, nm, len))
+            return i;
+    return -1;
+}
+
+/* ⚠ WHERE A COMMAND IS NOT THE SAME AS STARTING AT THAT VALUE.
+ *
+ * Found by sending every runtime option of every filter on the whitelist a
+ * command, and comparing the frame with one from a filter that started at
+ * that value (ffmpeg 9.0.2; 126 agree, 50 make no difference to a test card).
+ *
+ * A twin is an option whose default is "the same as" another one, settled
+ * ONCE when the filter starts: gblur's sigmaV is -1 until then and avgblur's
+ * sizeY 0, and both are overwritten with the lead's value. A command to the
+ * lead afterwards moves the horizontal blur alone — the export's radius grew
+ * sideways while the monitor's, built at each value, grew both ways. So a
+ * recipe that leaves the twin unset gets the twin sent the same value.
+ *
+ * And an option ffmpeg accepts as a command and then does nothing with. */
+static const struct { const char *filter, *lead, *twin; int pos; } twins[] = {
+    { "gblur",   "sigma", "sigmaV", 4 },   /* pos: its place among positionals */
+    { "avgblur", "sizeX", "sizeY",  3 },
+    { NULL, NULL, NULL, 0 }
+};
+static const struct { const char *filter, *opt; } deaf[] = {
+    { "colorcorrect", "analyze" },
+    { NULL, NULL }
+};
+
+/* Every knob a run of the chain mentions can NOT be keyed. */
+static void undirect(ss_fx *fx, const char *a, const char *b)
+{
+    const char *p;
+    for (p = a; p < b; p++) {
+        size_t len;
+        int i;
+        if (*p != '$') continue;
+        len = knob_len(p + 1);
+        i = knob_index(fx, p + 1, len);
+        if (i >= 0) fx->param[i].direct = 0;
+        p += len;
+    }
+}
+
+/* Where every knob lands, option by option.
+ *
+ * A keyed knob is re-sent to ffmpeg as a COMMAND — `gblur@x sigma 12` — so
+ * what has to be known is which option of which filter it is the value of,
+ * and that option's whole value with the knob still in it. That is only
+ * knowable for a NAMED option written plainly: `sigma=$radius`, `bh=-$shift`,
+ * or one quoted run like `y='trunc(val/$step)*$step'`. A knob in a positional
+ * argument has no option name to address; one inside an escaped expression
+ * would have to be re-escaped for a second parser. Either makes the knob
+ * not `direct`, and it stays a plain number.
+ *
+ * ⚠ The walk must count filters EXACTLY as ss_fx_expand does, because the
+ * count is the instance name a command is addressed to. Same rules as
+ * scan_names: a label is skipped, `;` and `,` end a filter, a quoted run is
+ * one unit. */
+static void fx_analyse(ss_fx *fx)
+{
+    const char *s = fx->filter;
+    int filt = -1, i;
+
+    for (i = 0; i < fx->nparam; i++) fx->param[i].direct = 1;
+    fx->ntarget = 0;
+
+    while (*s) {
+        char fname[32];
+        size_t n = 0;
+        int first, npos = 0, named[8] = { 0 };
+
+        if (*s == '[') {
+            while (*s && *s != ']') s++;
+            if (*s) s++;
+            continue;
+        }
+        if (*s == ';' || *s == ',' || isspace((unsigned char)*s)) { s++; continue; }
+
+        while (*s && *s != '=' && *s != ',' && *s != ';' && *s != '[' &&
+               !isspace((unsigned char)*s)) {
+            if (n + 1 < sizeof fname) fname[n++] = *s;
+            s++;
+        }
+        fname[n] = '\0';
+        filt++;
+        first = fx->ntarget;
+        if (*s != '=') continue;
+        s++;
+
+        /* Its options, one at a time, to the end of the filter. */
+        for (;;) {
+            const char *a = s, *eq = NULL, *v, *b;
+            int quotes = 0, messy = 0;
+
+            while (*s && *s != ':' && *s != ',' && *s != ';' && *s != '[') {
+                if (*s == '\'') {
+                    quotes++;
+                    s++;
+                    while (*s && *s != '\'') {
+                        if (*s == '\\' && s[1]) { messy = 1; s++; }
+                        s++;
+                    }
+                    if (*s) s++;
+                    continue;
+                }
+                if (*s == '\\') { messy = 1; if (s[1]) s++; s++; continue; }
+                if (*s == '=' && !eq && !quotes) eq = s;
+                if (isspace((unsigned char)*s)) messy = 1;
+                s++;
+            }
+            b = s;
+
+            if (!eq) npos++;
+            else for (i = 0; twins[i].filter; i++)
+                if (!strcmp(fname, twins[i].filter) &&
+                    strlen(twins[i].twin) == (size_t)(eq - a) &&
+                    !strncmp(a, twins[i].twin, (size_t)(eq - a)))
+                    named[i] = 1;
+
+            if (memchr(a, '$', (size_t)(b - a))) {
+                ss_fx_target *t = &fx->target[fx->ntarget];
+                size_t ol, vl;
+                int ok = eq && !messy && fx->ntarget < SS_MAX_FX_TARGETS &&
+                         !memchr(a, '$', (size_t)(eq - a));
+                v = eq ? eq + 1 : b;
+                ol = eq ? (size_t)(eq - a) : 0;
+                if (ok && quotes) {
+                    /* One quoted run that IS the value, nothing either side. */
+                    ok = quotes == 1 && *v == '\'' && b - v >= 2 && b[-1] == '\'';
+                    if (ok) { v++; vl = (size_t)(b - v) - 1; }
+                    else vl = 0;
+                } else {
+                    vl = (size_t)(b - v);
+                }
+                for (i = 0; ok && i < (int)ol; i++)
+                    if (!isalnum((unsigned char)a[i]) && a[i] != '_') ok = 0;
+                if (ok && (ol >= sizeof t->opt || vl >= sizeof t->tmpl ||
+                           n >= sizeof t->fname))
+                    ok = 0;
+                if (ok) {
+                    t->filt = filt;
+                    snprintf(t->fname, sizeof t->fname, "%s", fname);
+                    memcpy(t->opt, a, ol);  t->opt[ol] = '\0';
+                    memcpy(t->tmpl, v, vl); t->tmpl[vl] = '\0';
+                    fx->ntarget++;
+                } else {
+                    undirect(fx, a, b);
+                }
+            }
+            if (*s != ':') break;
+            s++;
+        }
+
+        /* The twins of what this filter keys. One the recipe sets itself is
+         * its own number and is left alone; one it sets POSITIONALLY cannot
+         * be told from the others here, so the knob stays a plain number. */
+        for (i = first; i < fx->ntarget; i++) {
+            int k;
+            for (k = 0; twins[k].filter; k++) {
+                ss_fx_target *t = &fx->target[i], *w;
+                if (strcmp(t->fname, twins[k].filter) ||
+                    strcmp(t->opt, twins[k].lead) || named[k])
+                    continue;
+                if (npos >= twins[k].pos || fx->ntarget >= SS_MAX_FX_TARGETS) {
+                    undirect(fx, t->tmpl, t->tmpl + strlen(t->tmpl));
+                    continue;
+                }
+                w = &fx->target[fx->ntarget++];
+                *w = *t;
+                snprintf(w->opt, sizeof w->opt, "%s", twins[k].twin);
+            }
+        }
+    }
+}
+
+/* A knob's value, clamped to the recipe's range and printed. The ONE place a
+ * knob becomes text: the chain and every command use it, so the two cannot
+ * differ by a digit. */
+static void knob_num(const ss_fx *fx, int i, const double *vals, int nvals,
+                     char *num, size_t n)
+{
+    double v = (i < nvals && vals) ? vals[i] : fx->param[i].def;
+    if (v < fx->param[i].lo) v = fx->param[i].lo;
+    if (v > fx->param[i].hi) v = fx->param[i].hi;
+    snprintf(num, n, "%g", v);
+}
+
+int ss_fx_target_uses(const ss_fx *fx, int tg, int i)
+{
+    const char *p;
+    if (tg < 0 || tg >= fx->ntarget || i < 0 || i >= fx->nparam) return 0;
+    for (p = fx->target[tg].tmpl; (p = strchr(p, '$')) != NULL; ) {
+        size_t len = knob_len(p + 1);
+        if (knob_index(fx, p + 1, len) == i) return 1;
+        p += 1 + len;
+    }
+    return 0;
+}
+
+int ss_fx_target_arg(const ss_fx *fx, int tg, const double *vals, int nvals,
+                     char *out, size_t n)
+{
+    const char *s;
+    size_t o = 0;
+
+    if (tg < 0 || tg >= fx->ntarget || n == 0) return -1;
+    for (s = fx->target[tg].tmpl; *s; ) {
+        if (*s == '$') {
+            char num[48];
+            size_t len = knob_len(s + 1), k;
+            int i = knob_index(fx, s + 1, len);
+            if (i < 0) return -1;
+            knob_num(fx, i, vals, nvals, num, sizeof num);
+            for (k = 0; num[k]; k++) { if (o + 1 >= n) return -1; out[o++] = num[k]; }
+            s += 1 + len;
+            continue;
+        }
+        if (o + 1 >= n) return -1;
+        out[o++] = *s++;
+    }
+    out[o] = '\0';
+    return 0;
+}
+
+int ss_fx_param_keyable(const ss_fx *fx, int i)
+{
+    int tg, any = 0;
+    if (!fx || i < 0 || i >= fx->nparam || !fx->param[i].direct) return 0;
+    for (tg = 0; tg < fx->ntarget; tg++) {
+        int k;
+        if (!ss_fx_target_uses(fx, tg, i)) continue;
+        if (!ss_ffmpeg_filter_runtime(fx->target[tg].fname, fx->target[tg].opt))
+            return 0;
+        for (k = 0; deaf[k].filter; k++)
+            if (!strcmp(fx->target[tg].fname, deaf[k].filter) &&
+                !strcmp(fx->target[tg].opt, deaf[k].opt))
+                return 0;
+        any = 1;
+    }
+    return any;
+}
+
 /* --------------------------------------------------------- the parser -- */
 
 static char *trim(char *s)
@@ -250,6 +507,7 @@ int ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn)
         if (err) snprintf(err, errn, "%s is not an allowed filter", bad);
         return -1;
     }
+    fx_analyse(out);
     /* Every $name has to be one that was declared. An effect referring to a
      * parameter nobody can set would reach ffmpeg as a literal dollar sign and
      * fail the whole graph at export time. */
@@ -375,16 +633,19 @@ const ss_fx *ss_fx_find(const char *name)
  * That is what makes a value in a project file unable to smuggle a filter
  * argument into the chain. */
 int ss_fx_expand(const ss_fx *fx, const double *vals, int nvals, int uid,
-                 const char *inlab, const char *outlab, char *out, size_t n)
+                 const char *tag, const char *inlab, const char *outlab,
+                 char *out, size_t n)
 {
     const char *s = fx->filter;
     size_t o = 0;
+    int expect = 1, quoted = 0, filt = 0;
 
 #define PUT(str) do { const char *_p = (str); \
         while (*_p) { if (o + 1 >= n) return -1; out[o++] = *_p++; } } while (0)
+#define PUTC(ch) do { if (o + 1 >= n) return -1; out[o++] = (ch); } while (0)
 
     while (*s) {
-        if (*s == '[') {
+        if (!quoted && *s == '[') {
             const char *e = strchr(s, ']');
             char lab[64];
             size_t len;
@@ -403,36 +664,54 @@ int ss_fx_expand(const ss_fx *fx, const double *vals, int nvals, int uid,
             }
             PUT("]");
             s = e + 1;
+            expect = 1;
             continue;
         }
         if (*s == '$') {
-            char nm[32], num[48];
-            size_t len = 0;
-            int i;
-            s++;
-            while (s[len] && (isalnum((unsigned char)s[len]) || s[len] == '_')) {
-                if (len + 1 < sizeof nm) nm[len] = s[len];
-                len++;
-            }
-            nm[len < sizeof nm ? len : sizeof nm - 1] = '\0';
-            s += len;
-            for (i = 0; i < fx->nparam; i++)
-                if (!strcmp(fx->param[i].key, nm)) break;
-            if (i >= fx->nparam) return -1;
-            {
-                double v = (i < nvals && vals) ? vals[i] : fx->param[i].def;
-                if (v < fx->param[i].lo) v = fx->param[i].lo;
-                if (v > fx->param[i].hi) v = fx->param[i].hi;
-                snprintf(num, sizeof num, "%g", v);
-            }
+            char num[48];
+            size_t len = knob_len(s + 1);
+            int i = knob_index(fx, s + 1, len);
+            if (i < 0) return -1;
+            knob_num(fx, i, vals, nvals, num, sizeof num);
             PUT(num);
+            s += 1 + len;
             continue;
         }
-        if (o + 1 >= n) return -1;
-        out[o++] = *s++;
+        if (quoted) {
+            if (*s == '\\' && s[1]) { PUTC(*s); s++; }
+            else if (*s == '\'') quoted = 0;
+            PUTC(*s);
+            s++;
+            continue;
+        }
+        if (*s == '\'') { quoted = 1; PUTC(*s); s++; continue; }
+        if (*s == '\\' && s[1]) { PUTC(*s); s++; PUTC(*s); s++; continue; }
+        if (*s == ';' || *s == ',') { expect = 1; PUTC(*s); s++; continue; }
+        if (isspace((unsigned char)*s)) { PUTC(*s); s++; continue; }
+        if (expect) {
+            /* A filter's name, and — when its knobs are going to be sent
+             * commands — an instance name of its own after it, counted the
+             * way fx_analyse counts. */
+            while (*s && *s != '=' && *s != ',' && *s != ';' && *s != '[' &&
+                   !isspace((unsigned char)*s)) {
+                PUTC(*s);
+                s++;
+            }
+            if (tag) {
+                char nm[64];
+                snprintf(nm, sizeof nm, "@%s_%d", tag, filt);
+                PUT(nm);
+            }
+            filt++;
+            expect = 0;
+            continue;
+        }
+        PUTC(*s);
+        s++;
     }
     if (o >= n) return -1;
     out[o] = '\0';
     return 0;
 #undef PUT
+#undef PUTC
 }

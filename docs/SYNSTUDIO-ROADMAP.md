@@ -147,9 +147,20 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
 - [ ] title templates — the same manifest with `drawtext` behind it. Not the
       effect whitelist: drawtext reads a font and a textfile, so a title
       recipe needs its own rules about what a caption may contain
-- [ ] keyframed effect parameters — the keys are in place for clip properties,
-      but an effect's knobs are a dynamic table and most of the filters behind
-      them take a fixed value, not an expression
+- [x] **keyframed effect parameters** — shipped in 0.1.0-52. A knob is keyed
+      as `fx.<n>.<knob>` — the effect's place in the stack — through the same
+      keys, eases and curve as an opacity, and the export drives it the way it
+      drives a title's size: a sendcmd FILE re-sending the option's whole
+      value each frame it changes. So a knob is keyable where the recipe hands
+      it to a NAMED option that ffmpeg takes as a command — 33 of the 40 that
+      ship; `fx params` says which, and the window draws the diamond from it.
+      ⚠ A command is not always the same as starting at that value: every
+      runtime option on the whitelist was checked, and gblur's `sigmaV` and
+      avgblur's `sizeY` copy their lead once at init, so a moving radius
+      blurred sideways only in the export until the lead's command went to its
+      twin as well. colorcorrect's `analyze` takes a command and ignores it,
+      and is never keyable. Adding, moving or removing an effect renumbers its
+      keys; keys on an effect this machine has not got are kept
 - [x] **twenty-seven built-in effects**, all of them recipes like anybody
       else's: blur, sharpen, soft focus, glow, bloom, halation, pixelate,
       posterise, invert, desaturate, sepia, duotone, colour temperature,
@@ -523,7 +534,6 @@ Fairlight-style automation: four features for one piece of work.
 short list of named gaps rather than a plan — the boxes still open:
 
 - title templates (§2)
-- keyframed effect parameters (§2)
 - masks on a clip's grade — darkroom only today (§7)
 - the Rec.709 output transform and its colour tags (§7)
 

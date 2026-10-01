@@ -161,7 +161,8 @@ static void usage(void)
 "  timeline anim PROJ T C move PROP N [--at S] [--value V] [--ease E]\n"
 "  timeline anim PROJ T C curve PROP [--count N]   the curve, sampled\n"
 "       a key on ONE property — opacity, gain, a scale, a position, an\n"
-"       angle. `timeline keys` marks which ones take them; ease is\n"
+"       angle, or an effect's knob as fx.N.KNOB (fx.0.radius). `timeline\n"
+"       keys` and `fx params` mark which ones take them; ease is\n"
 "       linear, in, out, inout or hold\n"
 "  timeline transition PROJ T [C] [--at S] [--kind K] [--dur D]\n"
 "       a transition on the cut under the playhead, overlap and all —\n"
@@ -204,7 +205,8 @@ static void usage(void)
 "  loudness FILE [--in A] [--length S]\n"
 "                  integrated LUFS, true peak and range, from ebur128\n"
 "  fx list         every effect installed, with its group\n"
-"  fx params      every parameter of every effect, with its range\n"
+"  fx params      every parameter of every effect, with its range and\n"
+"                  whether this ffmpeg can key it (the last column)\n"
 "  fx show NAME    an effect\'s parameters, with their ranges\n"
 "  fx check NAME|FILE.synfx\n"
 "                  render one frame through it — what an effect has to\n"
@@ -1500,10 +1502,41 @@ static int cmd_timeline_keys(void)
 /* A clip property, at an instant. The same call as ss_clip_get for anything
  * that is not keyed — which is nearly everything — and the evaluator for
  * anything that is, so no caller has to ask which kind it is holding. */
+/* Why an effect's knob cannot be keyed. Four different mistakes, and one
+ * message for all of them sent somebody who had typed `radiu` off to read
+ * which knobs ffmpeg can move. */
+static int die_fx_key(const ss_clip *c, const char *key)
+{
+    int n = -1, q;
+    char knob[32] = "";
+    const ss_fx *r;
+
+    if (sscanf(key, "fx.%d.%31s", &n, knob) != 2 || n < 0)
+        return die("%s is not a knob — an effect's are named fx.<n>.<knob>", key);
+    if (n >= c->nfx)
+        return die("%s: this clip has %d effect%s, counted from 0", key,
+                   c->nfx, c->nfx == 1 ? "" : "s");
+    r = ss_fx_find(c->fx[n].name);
+    if (!r)
+        return die("%s: %s is not installed here, so it cannot be keyed",
+                   key, c->fx[n].name);
+    for (q = 0; q < r->nparam; q++)
+        if (!strcmp(r->param[q].key, knob))
+            return die("%s: %s's %s cannot move over time with this ffmpeg — "
+                       "`synstudio fx params` marks the knobs that can",
+                       key, r->name, knob);
+    return die("%s: %s has no knob called %s — `synstudio fx show %s` lists "
+               "them", key, r->name, knob, r->name);
+}
+
 static int clip_get_at(const ss_clip *c, const char *key, double at,
                        char *out, size_t n)
 {
-    if (ss_clip_prop_animatable(key) && ss_clip_prop_nkeys(c, key) > 0) {
+    /* Keys first and the question second: for an effect's knob "can this be
+     * keyed" asks ffmpeg, and almost no property has any keys to ask about.
+     * A keyed knob that this ffmpeg cannot move reports its own number,
+     * because that is what both renderers draw. */
+    if (ss_clip_prop_nkeys(c, key) > 0 && ss_clip_prop_keyable(c, key)) {
         snprintf(out, n, "%.6g", ss_clip_prop_at(c, key, at));
         return 0;
     }
@@ -1575,7 +1608,7 @@ static int fx_render_check(const ss_fx *f)
     char **av;
     int i, ac = 0, bad = 0;
 
-    if (ss_fx_expand(f, NULL, 0, 1, "fxin", "fxout", frag, sizeof frag) != 0)
+    if (ss_fx_expand(f, NULL, 0, 1, NULL, "fxin", "fxout", frag, sizeof frag) != 0)
         return die("%s: the chain will not expand", f->name);
     snprintf(graph, sizeof graph,
              "color=c=0x808080:s=64x64:d=0.04,format=rgba[fxin];%s;"
@@ -1625,14 +1658,20 @@ static int cmd_fx(int argc, char **argv)
     /* Every parameter of every effect, in ONE call. The window needs the
      * ranges to draw a slider with and would otherwise be asking `show` once
      * per effect — twenty-odd processes to open a panel. */
+    /* The last column is whether the knob can be KEYED here: it reaches only
+     * named options, and this ffmpeg will take every one of them as a
+     * command. The window draws its diamond from it, the same bargain the
+     * ninth column of `timeline keys` strikes for a clip property. LAST, so a
+     * reader of the first six keeps working. */
     if (!strcmp(sub, "params")) {
         int k;
         for (i = 0; i < ss_fx_count(); i++) {
             const ss_fx *f = ss_fx_at(i);
             for (k = 0; k < f->nparam; k++)
-                printf("%s\t%s\t%g\t%g\t%g\t%s\n", f->name,
+                printf("%s\t%s\t%g\t%g\t%g\t%s\t%d\n", f->name,
                        f->param[k].key, f->param[k].def, f->param[k].lo,
-                       f->param[k].hi, f->param[k].label);
+                       f->param[k].hi, f->param[k].label,
+                       ss_fx_param_keyable(f, k));
         }
         return 0;
     }
@@ -1648,9 +1687,10 @@ static int cmd_fx(int argc, char **argv)
         printf("alpha\t%d\n", f->alpha);
         printf("from\t%s\n", f->path);
         for (i = 0; i < f->nparam; i++)
-            printf("param\t%s\t%g\t%g\t%g\t%s\n", f->param[i].key,
+            printf("param\t%s\t%g\t%g\t%g\t%s\t%s\n", f->param[i].key,
                    f->param[i].def, f->param[i].lo, f->param[i].hi,
-                   f->param[i].label);
+                   f->param[i].label,
+                   ss_fx_param_keyable(f, i) ? "keyable" : "fixed");
         return 0;
     }
 
@@ -2895,6 +2935,19 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                 clip_get_at(c, f.key, o.at, buf, sizeof buf);
                 printf("%s\t%s\n", f.key, buf);
             }
+            /* Every effect's knobs under the names `anim` keys them by, so a
+             * panel parked on a moving blur shows the radius AT the playhead
+             * the way it shows a moving opacity. */
+            for (i = 0; i < c->nfx; i++) {
+                const ss_fx *r = ss_fx_find(c->fx[i].name);
+                int q;
+                for (q = 0; r && q < r->nparam; q++) {
+                    char key[64];
+                    snprintf(key, sizeof key, "fx.%d.%s", i, r->param[q].key);
+                    clip_get_at(c, key, o.at, buf, sizeof buf);
+                    printf("%s\t%s\n", key, buf);
+                }
+            }
             /* Whether the noise model this clip names is on THIS machine.
              * A model is somebody else's file and travels no better than a
              * LUT does — so the project keeps the name and the window shows
@@ -3302,6 +3355,18 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                            f.key, k, pk.t, pk.v, ss_ease_name(pk.ease));
                 }
             }
+            /* Then the effects' knobs, in stack order — read off the key list
+             * itself, so a key on an effect this machine has not got is still
+             * listed: it is in the document. */
+            for (i = 0; i < c->npkeys; i++) {
+                const ss_propkey *pk = &c->pkey[i];
+                int k = 0, j;
+                if (strncmp(pk->key, "fx.", 3)) continue;
+                if (key && strcmp(key, pk->key)) continue;
+                for (j = 0; j < i; j++) if (!strcmp(c->pkey[j].key, pk->key)) k++;
+                printf("%s\t%d\t%.6f\t%.6f\t%s\n",
+                       pk->key, k, pk->t, pk->v, ss_ease_name(pk->ease));
+            }
             return 0;
         }
 
@@ -3321,9 +3386,11 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             double v;
             if (!key) return die("anim %s wants a property "
                                  "(try `synstudio timeline keys`)", sub);
-            if (!ss_clip_prop_animatable(key))
-                return die("%s cannot be keyed — `timeline keys` marks the "
-                           "ones that can", key);
+            if (!ss_clip_prop_keyable(c, key))
+                return strncmp(key, "fx.", 3)
+                    ? die("%s cannot be keyed — `timeline keys` marks the "
+                          "ones that can", key)
+                    : die_fx_key(c, key);
             if (parse_opts(argc, argv, 8, &o, &rest, &nrest) != 0)
                 return die("bad option");
             if (o.ease && (ease = ss_ease_value(o.ease)) < 0)
@@ -3400,9 +3467,11 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             int n, i2;
             double len = ss_clip_length(c);
             if (!key) return die("anim curve wants a property");
-            if (!ss_clip_prop_animatable(key))
-                return die("%s cannot be keyed — `timeline keys` marks the "
-                           "ones that can", key);
+            if (!ss_clip_prop_keyable(c, key))
+                return strncmp(key, "fx.", 3)
+                    ? die("%s cannot be keyed — `timeline keys` marks the "
+                          "ones that can", key)
+                    : die_fx_key(c, key);
             if (parse_opts(argc, argv, 8, &o, &rest, &nrest) != 0)
                 return die("bad option");
             n = o.count > 1 ? o.count : 200;

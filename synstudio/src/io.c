@@ -207,6 +207,70 @@ int ss_ffmpeg_filter_has(const char *filter, const char *option)
     return lastv;
 }
 
+/* Whether `option` on `filter` can be changed while it runs.
+ *
+ * `ffmpeg -h filter=NAME` lists one option per indented line — name, type,
+ * then a flag column like `..FV.....T.` — and T is the one that says a
+ * command reaches it. The help is kept per FILTER rather than per question,
+ * because a keyed effect asks about every option it drives and a glow asks
+ * about two filters at most: one fork each, not one per knob.
+ */
+int ss_ffmpeg_filter_runtime(const char *filter, const char *option)
+{
+    static struct { char name[32]; char *help; } seen[24];
+    static int nseen;
+    const char *help = NULL, *p;
+    size_t olen;
+    int i;
+
+    if (!filter || !option || !*filter || !*option) return 0;
+    for (i = 0; i < nseen; i++)
+        if (!strcmp(seen[i].name, filter)) { help = seen[i].help; break; }
+    if (!help) {
+        char buf[262144], arg[128];
+        char *av[5];
+        snprintf(arg, sizeof arg, "filter=%s", filter);
+        av[0] = (char *)"ffmpeg";
+        av[1] = (char *)"-hide_banner";
+        av[2] = (char *)"-h";
+        av[3] = arg;
+        av[4] = NULL;
+        if (ss_capture(av, buf, sizeof buf) < 0) buf[0] = '\0';
+        if (nseen < (int)(sizeof seen / sizeof seen[0])) {
+            snprintf(seen[nseen].name, sizeof seen[nseen].name, "%s", filter);
+            seen[nseen].help = strdup(buf);
+            if (!seen[nseen].help) return 0;
+            help = seen[nseen++].help;
+        } else {
+            /* Full: answer from this fork and keep nothing. Twenty-four
+             * distinct filters in one process is more than any graph here. */
+            static char spare[262144];
+            snprintf(spare, sizeof spare, "%s", buf);
+            help = spare;
+        }
+    }
+
+    olen = strlen(option);
+    for (p = help; *p; ) {
+        const char *e = strchr(p, '\n');
+        size_t len = e ? (size_t)(e - p) : strlen(p);
+        char line[512], name[64], type[64], flags[64];
+        if (len >= sizeof line) len = sizeof line - 1;
+        memcpy(line, p, len);
+        line[len] = '\0';
+        /* Only an OPTION line: indented, then the name, then a <type>. The
+         * named constants an option offers sit under it, deeper, with no
+         * type — `left` under text_align is not an option. */
+        if ((line[0] == ' ' || line[0] == '\t') &&
+            sscanf(line, "%63s %63s %63s", name, type, flags) == 3 &&
+            type[0] == '<' && strlen(name) == olen && !strcmp(name, option))
+            return strchr(flags, 'T') != NULL;
+        if (!e) break;
+        p = e + 1;
+    }
+    return 0;
+}
+
 /* Run argv, writing data to its stdin. */
 static int run_feed(char *const argv[], const unsigned char *data, size_t len)
 {

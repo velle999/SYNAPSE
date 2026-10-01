@@ -771,11 +771,22 @@ static const char *enum_name(const cfield *f, int v, char *buf, size_t n)
     return buf;
 }
 
+static const ss_fx *fx_key_find(const ss_clip *c, const char *key, int *n, int *q);
+
 int ss_clip_set(ss_clip *c, const char *key, const char *val)
 {
     const cfield *f = cfind(key);
     void *p;
 
+    if (!f && val) {
+        /* An effect's knob by its property name, so the window can write one
+         * through the same `set` as an opacity and get the same keyed-or-not
+         * routing for free. */
+        int n, q;
+        const ss_fx *r = fx_key_find(c, key, &n, &q);
+        if (!r) return -1;
+        return ss_clip_fx_set(c, n, r->param[q].key, atof(val));
+    }
     if (!f || !val) return -1;
     p = (char *)c + f->off;
 
@@ -820,7 +831,12 @@ int ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n)
     const cfield *f = cfind(key);
     const void *p;
 
-    if (!f) return -1;
+    if (!f) {
+        int fn, q;
+        if (!fx_key_find(c, key, &fn, &q)) return -1;
+        snprintf(out, n, "%.6g", c->fx[fn].val[q]);
+        return 0;
+    }
     p = (const char *)c + f->off;
 
     switch (f->type) {
@@ -871,15 +887,76 @@ int ss_clip_prop_animatable(const char *key)
     return f && f->anim;
 }
 
-/* The value a clip with no keys has. */
-static double prop_static(const ss_clip *c, const cfield *f)
+/* ---- an effect's knob, as a property ----
+ *
+ * `fx.<N>.<knob>` is the knob of whatever effect sits Nth in the clip's
+ * stack. It goes through the SAME key list, the same evaluator, the same
+ * split and the same curve sampler as an opacity — and `timeline anim` and
+ * the window's diamond with them — so a moving blur is not a second keyframe
+ * system with its own ways of being wrong. The cost is that N is a POSITION,
+ * so removing or reordering effects renames keys; ss_clip_fx_remove and
+ * ss_clip_fx_move do that. */
+static int fx_key_parse(const char *key, int *n, const char **knob)
 {
-    const void *p = (const char *)c + f->off;
-    switch (f->type) {
-    case CO_INT: case CO_ENUM: return (double)*(const int *)p;
-    case CO_DOUBLE:            return *(const double *)p;
-    default:                   return (double)*(const float *)p;
+    char *end;
+    long v;
+    if (!key || strncmp(key, "fx.", 3)) return 0;
+    v = strtol(key + 3, &end, 10);
+    if (end == key + 3 || *end != '.' || v < 0 || v >= SS_MAX_FX || !end[1])
+        return 0;
+    *n = (int)v;
+    *knob = end + 1;
+    return 1;
+}
+
+/* The recipe and the knob's index in it, or NULL: no such effect on this
+ * clip, a recipe this machine has not got, or a knob it does not have. */
+static const ss_fx *fx_key_find(const ss_clip *c, const char *key, int *n, int *q)
+{
+    const char *knob;
+    const ss_fx *r;
+    int i;
+    if (!c || !fx_key_parse(key, n, &knob) || *n >= c->nfx) return NULL;
+    r = ss_fx_find(c->fx[*n].name);
+    if (!r) return NULL;
+    for (i = 0; i < r->nparam; i++)
+        if (!strcmp(r->param[i].key, knob)) { *q = i; return r; }
+    return NULL;
+}
+
+int ss_clip_prop_keyable(const ss_clip *c, const char *key)
+{
+    int n, q;
+    const ss_fx *r;
+    if (cfind(key)) return ss_clip_prop_animatable(key);
+    r = fx_key_find(c, key, &n, &q);
+    return r && ss_fx_param_keyable(r, q);
+}
+
+/* What a property is when nothing keys it, and what it is allowed to be. */
+static int prop_meta(const ss_clip *c, const char *key,
+                     double *stat, double *lo, double *hi)
+{
+    const cfield *f = cfind(key);
+    int n, q;
+    const ss_fx *r;
+    if (f) {
+        const void *p = (const char *)c + f->off;
+        switch (f->type) {
+        case CO_INT: case CO_ENUM: *stat = (double)*(const int *)p; break;
+        case CO_DOUBLE:            *stat = *(const double *)p; break;
+        default:                   *stat = (double)*(const float *)p; break;
+        }
+        *lo = f->lo;
+        *hi = f->hi;
+        return 1;
     }
+    r = fx_key_find(c, key, &n, &q);
+    if (!r) return 0;
+    *stat = c->fx[n].val[q];
+    *lo = r->param[q].lo;
+    *hi = r->param[q].hi;
+    return 1;
 }
 
 /* How finely the EXPORT can express this property, and therefore how finely
@@ -944,12 +1021,11 @@ int ss_clip_animated(const ss_clip *c)
 
 double ss_clip_prop_at(const ss_clip *c, const char *key, double tt)
 {
-    const cfield *f = cfind(key);
     const ss_propkey *a = NULL, *b = NULL;
-    double v, q;
+    double v, q, stat, lo, hi;
     int i;
 
-    if (!f) return 0.0;
+    if (!prop_meta(c, key, &stat, &lo, &hi)) return 0.0;
     /* The list is sorted, so the LAST key at or before tt is the one the
      * value is coming from and the first one after it is where it is going. */
     for (i = 0; i < c->npkeys; i++) {
@@ -958,14 +1034,14 @@ double ss_clip_prop_at(const ss_clip *c, const char *key, double tt)
         if (k->t <= tt)   a = k;
         else if (!b)      b = k;
     }
-    if (!a && !b) return prop_static(c, f);
+    if (!a && !b) return stat;
     if (!a)                             v = b->v;   /* before the first key */
     else if (!b || b->t <= a->t)        v = a->v;   /* after the last */
     else v = a->v + (b->v - a->v) *
              ease_apply(a->ease, (tt - a->t) / (b->t - a->t));
 
-    if (v < f->lo) v = f->lo;
-    if (v > f->hi) v = f->hi;
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
     q = prop_quant(key);
     if (q > 0.0) v = floor(v / q) * q;
     return v;
@@ -973,11 +1049,10 @@ double ss_clip_prop_at(const ss_clip *c, const char *key, double tt)
 
 void ss_clip_prop_range(const ss_clip *c, const char *key, double *lo, double *hi)
 {
-    const cfield *f = cfind(key);
     int i, seen = 0;
-    double a = 0, b = 0;
+    double a = 0, b = 0, stat, flo, fhi;
 
-    if (!f) { *lo = *hi = 0; return; }
+    if (!prop_meta(c, key, &stat, &flo, &fhi)) { *lo = *hi = 0; return; }
     for (i = 0; i < c->npkeys; i++) {
         const ss_propkey *k = &c->pkey[i];
         if (strcmp(k->key, key)) continue;
@@ -985,22 +1060,39 @@ void ss_clip_prop_range(const ss_clip *c, const char *key, double *lo, double *h
         if (k->v < a) a = k->v;
         if (k->v > b) b = k->v;
     }
-    if (!seen) a = b = prop_static(c, f);
-    if (a < f->lo) a = f->lo;
-    if (b > f->hi) b = f->hi;
+    if (!seen) a = b = stat;
+    if (a < flo) a = flo;
+    if (b > fhi) b = fhi;
     *lo = a; *hi = b;
 }
+
+static int pkey_insert(ss_clip *c, const char *key, double t, double v, int ease);
 
 int ss_clip_prop_add(ss_clip *c, const char *key, double t, double v, int ease)
 {
     const cfield *f = cfind(key);
+    double stat, lo, hi;
+
+    /* An effect's knob is taken whether or not THIS ffmpeg could move it:
+     * the document is read through here, and a key that cannot render on
+     * this machine is still somebody's work. `timeline anim` asks
+     * ss_clip_prop_keyable before it lets a person make one, and the
+     * renderers ask before they use one. */
+    if (f ? !f->anim : !prop_meta(c, key, &stat, &lo, &hi)) return -1;
+    if (f) { lo = f->lo; hi = f->hi; }
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
+    return pkey_insert(c, key, t, v, ease);
+}
+
+/* The list itself: replace at an instant, else insert in order. */
+static int pkey_insert(ss_clip *c, const char *key, double t, double v, int ease)
+{
     int i, at, n = 0;
 
-    if (!f || !f->anim) return -1;
+    if (strlen(key) >= sizeof c->pkey[0].key) return -1;
     if (ease < 0 || ease >= nease) ease = SS_EASE_LINEAR;
     if (t < 0) t = 0;
-    if (v < f->lo) v = f->lo;
-    if (v > f->hi) v = f->hi;
 
     /* A key at an instant that already has one REPLACES it. Otherwise moving
      * a slider with the playhead parked would grow the list a key at a time
@@ -1061,6 +1153,34 @@ int ss_clip_prop_remove(ss_clip *c, const char *key, int idx)
 
 /* ------------------------------------------------------- the fx stack -- */
 
+/* An effect's keys are named by its POSITION, so every change to the stack's
+ * order renames them: `map[old]` is where effect `old` now sits, or -1 when it
+ * is gone and its keys go with it. Re-inserted rather than renamed in place,
+ * because the list is kept sorted by name and fx.10 sorts before fx.9. */
+static void fx_keys_follow(ss_clip *c, const int *map, int nold)
+{
+    ss_propkey keep[SS_MAX_PKEYS];
+    int i, n = 0;
+
+    for (i = 0; i < c->npkeys; i++) {
+        ss_propkey pk = c->pkey[i];
+        const char *knob;
+        int k;
+        if (fx_key_parse(pk.key, &k, &knob)) {
+            char kn[sizeof pk.key];
+            if (k >= nold || map[k] < 0) continue;
+            snprintf(kn, sizeof kn, "%s", knob);
+            /* A knob's name is a recipe's ss_fx_param.key: 23 bytes at most,
+             * which the bound says out loud. */
+            snprintf(pk.key, sizeof pk.key, "fx.%d.%.23s", map[k], kn);
+        }
+        keep[n++] = pk;
+    }
+    c->npkeys = 0;
+    for (i = 0; i < n; i++)
+        pkey_insert(c, keep[i].key, keep[i].t, keep[i].v, keep[i].ease);
+}
+
 /* Effects on a clip, applied in order after the grade.
  *
  * Order is the whole reason this is a list and not a set: a blur under a glow
@@ -1082,6 +1202,11 @@ int ss_clip_fx_add(ss_clip *c, const char *name, int at)
     for (i = 0; i < r->nparam; i++) n.val[i] = r->param[i].def;
 
     if (at < 0 || at > c->nfx) at = c->nfx;
+    if (at < c->nfx) {
+        int map[SS_MAX_FX], k;
+        for (k = 0; k < c->nfx; k++) map[k] = k < at ? k : k + 1;
+        fx_keys_follow(c, map, c->nfx);
+    }
     memmove(&c->fx[at + 1], &c->fx[at],
             sizeof c->fx[0] * (size_t)(c->nfx - at));
     c->fx[at] = n;
@@ -1091,7 +1216,10 @@ int ss_clip_fx_add(ss_clip *c, const char *name, int at)
 
 int ss_clip_fx_remove(ss_clip *c, int i)
 {
+    int map[SS_MAX_FX], k;
     if (i < 0 || i >= c->nfx) return -1;
+    for (k = 0; k < c->nfx; k++) map[k] = k < i ? k : k == i ? -1 : k - 1;
+    fx_keys_follow(c, map, c->nfx);
     memmove(&c->fx[i], &c->fx[i + 1],
             sizeof c->fx[0] * (size_t)(c->nfx - i - 1));
     c->nfx--;
@@ -1101,7 +1229,17 @@ int ss_clip_fx_remove(ss_clip *c, int i)
 int ss_clip_fx_move(ss_clip *c, int i, int to)
 {
     ss_clip_fx t;
+    int map[SS_MAX_FX], k;
     if (i < 0 || i >= c->nfx || to < 0 || to >= c->nfx) return -1;
+    /* Where everything lands: `i` goes to `to`, and what was between them
+     * shuffles one place towards where `i` came from. */
+    for (k = 0; k < c->nfx; k++) {
+        if (k == i)                       map[k] = to;
+        else if (i < to && k > i && k <= to) map[k] = k - 1;
+        else if (to < i && k >= to && k < i) map[k] = k + 1;
+        else                              map[k] = k;
+    }
+    fx_keys_follow(c, map, c->nfx);
     t = c->fx[i];
     if (to > i) memmove(&c->fx[i], &c->fx[i + 1],
                         sizeof c->fx[0] * (size_t)(to - i));
@@ -2300,9 +2438,17 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             }
         } else if (!strncmp(line, "anim\t", 5) && cc) {
             char *f[4];
-            if (tabsplit(line + 5, f, 4) == 4)
+            int fn;
+            const char *knob;
+            if (tabsplit(line + 5, f, 4) == 4 &&
                 ss_clip_prop_add(cc, f[0], atof(f[1]), atof(f[2]),
-                                 ss_ease_value(f[3]));
+                                 ss_ease_value(f[3])) < 0 &&
+                fx_key_parse(f[0], &fn, &knob) && fn < cc->nfx &&
+                !ss_fx_find(cc->fx[fn].name))
+                /* A key on an effect this machine has not got is kept as it
+                 * was read, the way the effect itself is — it is somebody's
+                 * work, and the machine that has the recipe renders it. */
+                pkey_insert(cc, f[0], atof(f[1]), atof(f[2]), ss_ease_value(f[3]));
         } else if (!strncmp(line, "key\t", 4)) {
             char buf[16384];
             size_t used = 0;
@@ -2357,6 +2503,9 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
 static void grade_path(char *out, size_t n, const char *dir,
                        int track, int idx, int step, int nsteps);
 static void title_cmd_path(char *out, size_t n, const char *dir, int track, int idx);
+static void fx_cmd_path(char *out, size_t sz, const char *dir, int track, int idx);
+static int  fx_cmd_write(const ss_timeline *t, const ss_clip *c,
+                         const char *path, int track, int idx);
 static int  title_cmd_write(const ss_timeline *t, const ss_clip *c,
                             const char *path, int track, int idx);
 
@@ -2563,6 +2712,13 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
                     n++;
                 }
             }
+            if (at < 0) {
+                int r;
+                fx_cmd_path(p, sizeof p, dir, i, j);
+                r = fx_cmd_write(t, c, p, i, j);
+                if (r < 0) return -1;
+                if (r == 0) n++;
+            }
             if (c->kind == SS_CLIP_TITLE) {
                 snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
                 fp = fopen(p, "w");
@@ -2600,6 +2756,8 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
             snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
             remove(p);
             title_cmd_path(p, sizeof p, dir, i, j);
+            remove(p);
+            fx_cmd_path(p, sizeof p, dir, i, j);
             remove(p);
         }
 }
@@ -3282,6 +3440,126 @@ static void chain_source_ops(strbuf *fc, const ss_timeline *t, const ss_clip *c,
     }
 }
 
+/* ---- an effect whose knobs move ----
+ *
+ * The value every knob of effect `n` has `tt` seconds into the clip. A knob
+ * MOVES only when it is keyed and this ffmpeg can be told to move it;
+ * otherwise it is its own number in BOTH builders. A project keyed on a
+ * machine whose ffmpeg could do it and opened on one that cannot therefore
+ * holds still in the monitor as well as in the export, rather than moving in
+ * one and not the other. */
+static void fx_vals_at(const ss_clip *c, int n, const ss_fx *r, double tt,
+                       double *vals)
+{
+    int q;
+    for (q = 0; q < SS_MAX_FX_PARAMS; q++) vals[q] = c->fx[n].val[q];
+    for (q = 0; q < r->nparam; q++) {
+        char key[64];
+        snprintf(key, sizeof key, "fx.%d.%s", n, r->param[q].key);
+        if (ss_clip_prop_nkeys(c, key) > 0 && ss_fx_param_keyable(r, q))
+            vals[q] = ss_clip_prop_at(c, key, tt);
+    }
+}
+
+/* Knob q of effect n is going to be sent commands. */
+static int fx_knob_moves(const ss_clip *c, int n, const ss_fx *r, int q)
+{
+    char key[64];
+    snprintf(key, sizeof key, "fx.%d.%s", n, r->param[q].key);
+    return ss_clip_prop_moves(c, key) && ss_fx_param_keyable(r, q);
+}
+
+static int fx_moves(const ss_clip *c, int n, const ss_fx *r)
+{
+    int q;
+    for (q = 0; q < r->nparam; q++)
+        if (fx_knob_moves(c, n, r, q)) return 1;
+    return 0;
+}
+
+/* The effect at n, if it renders at all. */
+static const ss_fx *fx_live(const ss_clip *c, int n)
+{
+    return c->fx[n].on ? ss_fx_find(c->fx[n].name) : NULL;
+}
+
+static int clip_fx_moves(const ss_clip *c)
+{
+    int n;
+    for (n = 0; n < c->nfx; n++) {
+        const ss_fx *r = fx_live(c, n);
+        if (r && fx_moves(c, n, r)) return 1;
+    }
+    return 0;
+}
+
+static void fx_cmd_path(char *out, size_t sz, const char *dir, int track, int idx)
+{
+    snprintf(out, sz, "%s/fxcmd_%d_%d.txt", dir, track, idx);
+}
+
+/* The export's half, the way title_cmd_write is for a caption: fx_vals_at
+ * once a frame, and every option a moving knob reaches re-sent WHOLE where
+ * its printed value changed — the same ss_fx_target_arg text the chain itself
+ * was built from, so a command cannot be a digit away from the value the
+ * monitor drew. Quoted, because an option like lutyuv's `y` is an expression
+ * with commas in it and a comma ends a command. */
+static int fx_cmd_write(const ss_timeline *t, const ss_clip *c,
+                        const char *path, int track, int idx)
+{
+    static char prev[SS_MAX_FX][SS_MAX_FX_TARGETS][160];
+    unsigned char live[SS_MAX_FX][SS_MAX_FX_TARGETS];
+    double len = ss_clip_length(c), fps = t->fps > 0 ? t->fps : 25.0;
+    double vals[SS_MAX_FX_PARAMS];
+    int k, n, tg, q, nfr = (int)ceil(len * fps - 1e-9);
+    FILE *fp;
+
+    if (!clip_fx_moves(c)) return 1;
+    memset(live, 0, sizeof live);
+    for (n = 0; n < c->nfx; n++) {
+        const ss_fx *r = fx_live(c, n);
+        if (!r || !fx_moves(c, n, r)) continue;
+        fx_vals_at(c, n, r, 0.0, vals);
+        for (tg = 0; tg < r->ntarget; tg++) {
+            for (q = 0; q < r->nparam; q++)
+                if (ss_fx_target_uses(r, tg, q) && fx_knob_moves(c, n, r, q))
+                    live[n][tg] = 1;
+            if (live[n][tg] &&
+                ss_fx_target_arg(r, tg, vals, SS_MAX_FX_PARAMS, prev[n][tg],
+                                 sizeof prev[n][tg]) != 0)
+                live[n][tg] = 0;
+        }
+    }
+
+    fp = fopen(path, "w");
+    if (!fp) return -1;
+    for (k = 1; k < nfr; k++) {
+        int any = 0;
+        for (n = 0; n < c->nfx; n++) {
+            const ss_fx *r = fx_live(c, n);
+            int some = 0;
+            for (tg = 0; r && tg < r->ntarget; tg++) some |= live[n][tg];
+            if (!some) continue;
+            fx_vals_at(c, n, r, k / fps, vals);
+            for (tg = 0; tg < r->ntarget; tg++) {
+                char cur[160];
+                if (!live[n][tg]) continue;
+                if (ss_fx_target_arg(r, tg, vals, SS_MAX_FX_PARAMS,
+                                     cur, sizeof cur) != 0) continue;
+                if (!strcmp(cur, prev[n][tg])) continue;
+                if (!any) fprintf(fp, "%.6f", (k - 0.5) / fps);
+                fprintf(fp, "%s %s@x%d_%d_%d_%d %s '%s'", any ? "," : "",
+                        r->target[tg].fname, track, idx, n, r->target[tg].filt,
+                        r->target[tg].opt, cur);
+                memcpy(prev[n][tg], cur, sizeof cur);
+                any = 1;
+            }
+        }
+        if (any) fputs(";\n", fp);
+    }
+    return fclose(fp) == 0 ? 0 : -1;
+}
+
 /* The effect stack, spliced into a clip's chain.
  *
  * Each effect breaks OUT of the comma-chain into a fragment of its own,
@@ -3294,19 +3572,31 @@ static void chain_source_ops(strbuf *fc, const ss_timeline *t, const ss_clip *c,
  * effect are the same recipe twice in one graph, and two `[a]`s is a graph
  * ffmpeg refuses to parse.
  *
+ * `at` is seconds into the clip for the monitor's one frame, which draws every
+ * knob at that instant; negative for the export, which starts every knob at
+ * the clip's first frame and moves the keyed ones with the command file. The
+ * sendcmd goes BEFORE the stack, so a frame has been through it — and the
+ * commands for that frame have landed — before any effect sees it.
+ *
  * An effect naming a recipe that is not installed is SKIPPED here rather than
  * failing the render — the command layer says so before it starts, which is
  * where a person can do something about it. */
-static void chain_fx(strbuf *fc, const ss_clip *c, int id)
+static void chain_fx_at(strbuf *fc, const ss_clip *c, int id, const char *dir,
+                        int track, int idx, double at)
 {
     char in[40], out[40], buf[4096];
     int i, n = 0, any = 0;
 
-    for (i = 0; i < c->nfx; i++) {
-        const ss_fx *r = c->fx[i].on ? ss_fx_find(c->fx[i].name) : NULL;
-        if (r) any = 1;
-    }
+    for (i = 0; i < c->nfx; i++)
+        if (fx_live(c, i)) any = 1;
     if (!any) return;
+
+    if (at < 0 && clip_fx_moves(c)) {
+        char cp[2048], cesc[4200];
+        fx_cmd_path(cp, sizeof cp, dir, track, idx);
+        esc_filter(cp, cesc, sizeof cesc);
+        sb_add(fc, ",sendcmd=f='%s'", cesc);
+    }
 
     /* The chain so far is closed into a label; each effect runs from the
      * previous label to the next, so nothing has to be bridged; and the last
@@ -3316,13 +3606,19 @@ static void chain_fx(strbuf *fc, const ss_clip *c, int id)
      * filter taking two inputs. */
     sb_add(fc, "[fx%d_0]", id);
     for (i = 0; i < c->nfx; i++) {
-        const ss_fx *r;
-        if (!c->fx[i].on) continue;
-        r = ss_fx_find(c->fx[i].name);
+        const ss_fx *r = fx_live(c, i);
+        double vals[SS_MAX_FX_PARAMS];
+        char tag[48];
+        const char *tg = NULL;
         if (!r) continue;
+        fx_vals_at(c, i, r, at >= 0 ? at : 0.0, vals);
+        if (at < 0 && fx_moves(c, i, r)) {
+            snprintf(tag, sizeof tag, "x%d_%d_%d", track, idx, i);
+            tg = tag;
+        }
         snprintf(in,  sizeof in,  "fx%d_%d", id, n);
         snprintf(out, sizeof out, "fx%d_%d", id, n + 1);
-        if (ss_fx_expand(r, c->fx[i].val, SS_MAX_FX_PARAMS, id * 64 + n,
+        if (ss_fx_expand(r, vals, SS_MAX_FX_PARAMS, id * 64 + n, tg,
                          in, out, buf, sizeof buf) != 0)
             continue;
         sb_add(fc, ";%s", buf);
@@ -4349,7 +4645,7 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                  * is nobody's intention; the grade comes first because every
                  * effect here is looking at a picture that has been graded,
                  * which is the order a darkroom works in too. */
-                chain_fx(&fc, c, nvid);
+                chain_fx_at(&fc, c, nvid, lutdir, i, j, -1.0);
                 chain_title(&fc, t, c, lutdir, i, j);
 
                 if (c->fade_in > 0.0)
@@ -5172,7 +5468,7 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
                        (int)(c->stab_smooth + 0.5f), (double)c->stab_zoom);
             }
             chain_grade_at(&fc, c, lutdir, i, j, off);
-            chain_fx(&fc, c, nvid);
+            chain_fx_at(&fc, c, nvid, lutdir, i, j, off);
             /* `off` and not -1: the monitor holds one frame, so a title that
              * MOVES has to be drawn where it is at this instant rather than
              * where its expression starts. */
