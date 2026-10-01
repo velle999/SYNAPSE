@@ -5,6 +5,12 @@ project('synpkg', 'c',
 
 cc = meson.get_compiler('c')
 
+# A printf whose arguments do not match its format fails the build. From 47 to
+# 56 the arsenal header passed two stray colour codes ahead of its count, so
+# `%zu` printed a pointer ("BlackArch categories (94795239516326)"), and the
+# warning sat in every build log the whole time.
+add_project_arguments('-Werror=format', language : 'c')
+
 # libalpm ships no .pc file in some pacman releases; fall back to the bare
 # library plus a header check so a missing pacman-devel fails loudly at
 # configure time rather than with a wall of implicit-declaration warnings.

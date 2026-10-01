@@ -314,7 +314,13 @@ pkgver=0.1.0
 #   probe, and `install` asked polkit for a real transaction until meson killed
 #   it at 300s. The case now runs only on pacman's own "was not found", and a
 #   pkexec stub first on PATH refuses any escalation and fails the suite.
-pkgrel=56
+# 57: the TUI's Arsenal screen printed a pointer for its category count —
+#   "BlackArch categories (94795239516326)". 47's translation pass left a stray
+#   `C_BOLD(), C_RESET(),` in the header's printf, so `%zu` got a string and the
+#   count was never printed. gcc warned on every build since. meson.build now
+#   sets -Werror=format, so the unfixed tree no longer compiles (measured: two
+#   errors at tui.c:328), and `synpkg tui` → 6 shows the count.
+pkgrel=57
 pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

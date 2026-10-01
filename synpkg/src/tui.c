@@ -325,7 +325,7 @@ static void screen_arsenal(void)
 	}
 
 	for (;;) {
-		printf("\n  %s%s%s %s(%zu)%s\n", C_BOLD(), _("BlackArch categories"), C_RESET(), C_BOLD(), C_RESET(),
+		printf("\n  %s%s%s %s(%zu)%s\n", C_BOLD(), _("BlackArch categories"), C_RESET(),
 		       C_DIM(), cats.n, C_RESET());
 		for (size_t i = 0; i < cats.n; i++)
 			printf("  %s%3zu%s %s %-32s %s%s%s\n", C_DIM(), i + 1, C_RESET(),
