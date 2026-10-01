@@ -330,6 +330,11 @@ static void test_shipped(void)
 	 * 50-default-deny.rules does — which is the point of pinning it. */
 	ok(n == 3, "the same deny at priority 0 lowers (got %d%s%s)",
 	   n, n < 0 ? ": " : "", n < 0 ? err : "");
+
+	/* deny heads its own list now; s.rules_head is still the shipped one. */
+	free(deny);
+	rules_free(&s);
+	pthread_rwlock_destroy(&s.rules_lock);
 }
 
 int main(void)
