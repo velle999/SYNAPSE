@@ -212,7 +212,11 @@ else
             printf '        if (got !== %s) { console.log("      got [" + got + "]"); Qt.exit(1) }\n' "$want"
             printf '        Qt.exit(7)\n    }\n}\n'
         } > "$T/probe.qml"
-        "$QMLBIN" "$T/probe.qml" >/dev/null 2>&1; rc=$?
+        # ⛔ OFFSCREEN. `qml` is a QGuiApplication and connects to a display at
+        # startup: without this it opened a client on the LIVE session for every
+        # probe, and with no display at all (CI, a timer, an agent) it aborted
+        # with 134 and every reader assertion failed.
+        QT_QPA_PLATFORM=offscreen "$QMLBIN" "$T/probe.qml" >/dev/null 2>&1; rc=$?
         case "$rc" in
             7) ok "$name" ;;
             1) bad "$name" ;;
