@@ -36,6 +36,18 @@ typedef struct {
 	char *fail_put_once;
 } fake_t;
 
+/* Everything the fake holds, deleted items included. Without it the ASan build
+ * reports 30 leaks, all of them this file's, and a real one in the engine
+ * would be lost among them. */
+static void fake_free(fake_t *f)
+{
+	for (size_t i = 0; i < f->n; i++) {
+		free(f->it[i].href); free(f->it[i].etag); free(f->it[i].data);
+	}
+	free(f->fail_put_once);
+	memset(f, 0, sizeof *f);
+}
+
 static fake_item_t *fake_get(fake_t *f, const char *href)
 {
 	for (size_t i = 0; i < f->n; i++)
@@ -348,5 +360,6 @@ int main(void)
 	char *rm = xasprintf("rm -rf '%s'", root);
 	if (system(rm) != 0) fprintf(stderr, "note: could not clean %s\n", root);
 	free(rm);
+	fake_free(&f);
 	return fails ? 1 : 0;
 }
