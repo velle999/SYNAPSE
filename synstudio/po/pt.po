@@ -41,7 +41,9 @@ msgstr "%1 (em falta)"
 msgid ""
 "%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
 "holds its own value"
-msgstr "%1 não pode variar ao longo do tempo com este ffmpeg — os quadros-chave são mantidos e o controlo mantém o seu próprio valor"
+msgstr ""
+"%1 não pode variar ao longo do tempo com este ffmpeg — os quadros-chave são "
+"mantidos e o controlo mantém o seu próprio valor"
 
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
@@ -272,6 +274,9 @@ msgstr "Quadrado 1:1"
 
 msgid "Stop"
 msgstr "Parar"
+
+msgid "Templates"
+msgstr "Modelos"
 
 msgid "Thumbnail"
 msgstr "Miniatura"

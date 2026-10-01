@@ -415,10 +415,13 @@ static char *split_word(char *s, char **rest)
     return s;
 }
 
-int ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn)
+/* The manifest's LINES, and nothing about what they say. An effect and a
+ * title template are the same file shape with different rules about the
+ * chain, so the reading is shared and the judging is not. */
+int ss_recipe_parse(const char *path, ss_fx *out, char *err, size_t errn)
 {
     FILE *fp = fopen(path, "r");
-    char line[4096], bad[64] = "";
+    char line[4096];
     int ok = 0;
 
     if (err && errn) *err = '\0';
@@ -486,6 +489,22 @@ int ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn)
         return -1;
     }
     if (!*out->label) snprintf(out->label, sizeof out->label, "%s", out->name);
+    return 0;
+}
+
+const char *ss_recipe_names_file(const char *chain)
+{
+    int i;
+    for (i = 0; forbidden[i]; i++)
+        if (strstr(chain, forbidden[i])) return forbidden[i];
+    return NULL;
+}
+
+int ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn)
+{
+    char bad[64] = "";
+
+    if (ss_recipe_parse(path, out, err, errn) != 0) return -1;
     if (!*out->group) snprintf(out->group, sizeof out->group, "Effects");
 
     if (!strstr(out->filter, "[$in]") || !strstr(out->filter, "[$out]")) {
@@ -493,15 +512,10 @@ int ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn)
                           "the chain must take [$in] and produce [$out]");
         return -1;
     }
-    {
-        int i;
-        for (i = 0; forbidden[i]; i++)
-            if (strstr(out->filter, forbidden[i])) {
-                if (err) snprintf(err, errn,
-                                  "an effect may not name a file (%s)",
-                                  forbidden[i]);
-                return -1;
-            }
+    if (ss_recipe_names_file(out->filter)) {
+        if (err) snprintf(err, errn, "an effect may not name a file (%s)",
+                          ss_recipe_names_file(out->filter));
+        return -1;
     }
     if (scan_names(out->filter, check_name, bad) != 0) {
         if (err) snprintf(err, errn, "%s is not an allowed filter", bad);

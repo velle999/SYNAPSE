@@ -268,6 +268,9 @@ msgstr "正方形 1:1"
 msgid "Stop"
 msgstr "停止"
 
+msgid "Templates"
+msgstr "模板"
+
 msgid "Thumbnail"
 msgstr "缩略图"
 

@@ -1,0 +1,15 @@
+# synstudio title
+name    lower-bar
+label   Lower third with a bar
+about   A name over a role, beside an accent bar, sliding in from the left
+param   in    0.5   0   2     Slide in
+param   bar   0.008 0   0.03  Bar width
+# The bar takes the Background colour, the words the title's own. Line one
+# is the name, line two the role.
+filter  drawbox=x='iw*0.06':y='ih*0.74':w='ih*$bar':h='$size*2.25':color=$plate:t=fill,
+filter  drawtext=$font_bold:$line1:fontcolor=$colour:fontsize=$size
+filter  :x='w*0.06+h*$bar+$size*0.5-(1-min(t/max($in,0.001),1))^2*w*0.05'
+filter  :y='h*0.74':alpha='min(t/max($in,0.001),1)',
+filter  drawtext=$font:$line2:fontcolor=$colour@0.85:fontsize='$size*0.62'
+filter  :x='w*0.06+h*$bar+$size*0.5-(1-min(t/max($in,0.001),1))^2*w*0.05'
+filter  :y='h*0.74+$size*1.35':alpha='min(t/max($in,0.001),1)'

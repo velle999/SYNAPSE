@@ -115,9 +115,12 @@ static void usage(void)
 "  timeline title PROJ TRACK TEXT [--at T] [--dur S] [--colour R,G,B]\n"
 "       [--style S]      \\n in TEXT is a line break; `timeline styles`\n"
 "                        lists the styles\n"
+"       [--template T]   draw it through a template; `titles list` names them\n"
 "  timeline solid PROJ TRACK [--at T] [--dur S] [--colour R,G,B]\n"
 "  timeline styles               plain, lower third, subtitle, heading, roll\n"
 "  timeline style PROJ TRACK CLIP NAME    restyle a title already there\n"
+"  timeline template PROJ T C NAME|none [KNOB=VALUE...]\n"
+"                  draw a title through a template, or take it off\n"
 "  timeline stabilise PROJ T C [--dur SMOOTH] [--size ZOOM%] [--value 1-10]\n"
 "       watch the shot and write the analysis beside the project; --off\n"
 "       turns it off and KEEPS the measurement\n"
@@ -211,6 +214,12 @@ static void usage(void)
 "  fx check NAME|FILE.synfx\n"
 "                  render one frame through it — what an effect has to\n"
 "                  survive before it is worth putting on a clip\n"
+"  titles list     every title template installed, and the Title rows\n"
+"                  each one reads\n"
+"  titles params   every knob of every template, with its range\n"
+"  titles show NAME     a template's knobs and the rows it reads\n"
+"  titles check NAME|FILE.syntitle [--out F.png]\n"
+"                  draw a sample caption through it\n"
 "  formats         what a developed photograph can be written as\n"
 "  browse [DIR]    what is in a folder that this engine can open\n"
 "  kind FILE       image|video|audio|project|none — asked of ffmpeg, not of\n"
@@ -252,6 +261,7 @@ typedef struct {
     double duck_amt;
     int    has_duck_amt;
     const char *style;          /* a title style, applied on creation */
+    const char *tmpl;           /* a title template, likewise */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
     int    has_value;
@@ -319,6 +329,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--value"))   { const char *v = NEXT(); if (!v) return -1; o->value = atof(v); o->has_value = 1; }
         else if (!strcmp(a, "--ease"))    { const char *v = NEXT(); if (!v) return -1; o->ease = v; }
         else if (!strcmp(a, "--style"))   { const char *v = NEXT(); if (!v) return -1; o->style = v; }
+        else if (!strcmp(a, "--template")) { const char *v = NEXT(); if (!v) return -1; o->tmpl = v; }
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--force"))   { o->force = 1; }
@@ -1716,6 +1727,178 @@ static int cmd_fx(int argc, char **argv)
     return die("fx: unknown subcommand %s — try list, params, show, check", sub);
 }
 
+/* One frame through a title template, the way an effect is checked: a recipe
+ * can pass every rule and still be nonsense to ffmpeg — an expression that
+ * does not parse, an option this build has not got — and that has to fail
+ * HERE, not at the end of an export. Drawn with the default face at both
+ * weights and a three-line caption, so every token is real; `out` keeps the
+ * frame as a PNG, which is what a template looks like before it is used. */
+static int title_render_check(const ss_fx *f, const char *out)
+{
+    char dir[] = "/tmp/synstudio-title-XXXXXX";
+    char fonts[5][1024], texts[SS_TITLE_LINES + 1][2100], p[2048];
+    char *chain, *graph, **av;
+    ss_title_ctx cx;
+    int i, ac = 0, bad = 0, rc;
+    static const char *sample[SS_TITLE_LINES + 1] = {
+        "A Name\nWhat they do\nWhere", "A Name", "What they do", "Where",
+        "", "", "", "", "", ""
+    };
+
+    if (!mkdtemp(dir)) return die("cannot make a scratch directory");
+    memset(&cx, 0, sizeof cx);
+    cx.size = 14;
+    cx.pad = 5;
+    cx.outline = 1;
+    cx.shadow = 1;
+    snprintf(cx.colour, sizeof cx.colour, "0xFFFFFF");
+    snprintf(cx.plate, sizeof cx.plate, "0x202020");
+    for (i = 0; i < 5; i++) {
+        ss_filter_escape(ss_font_file("", i), fonts[i], sizeof fonts[i]);
+        cx.font[i] = fonts[i];
+    }
+    for (i = 0; i <= SS_TITLE_LINES; i++) {
+        FILE *fp;
+        ss_title_text_path(p, sizeof p, dir, 0, 0, i);
+        fp = fopen(p, "w");
+        if (fp) { fputs(sample[i], fp); fclose(fp); }
+        ss_filter_escape(p, texts[i], sizeof texts[i]);
+        cx.textfile[i] = texts[i];
+    }
+    chain = malloc(65536);
+    graph = malloc(66000);
+    if (!chain || !graph ||
+        ss_title_expand(f, NULL, 0, &cx, NULL, chain, 65536) != 0) {
+        rc = die("%s: the chain will not expand", f->name);
+        goto done;
+    }
+    /* At half a second in, so a move written against `t` is drawn partway
+     * rather than at its first frame. */
+    snprintf(graph, 66000, "color=c=0x406080:s=320x180:r=25:d=1,format=rgba,"
+                           "trim=start=0.48,%s[o]", chain);
+    av = calloc(24, sizeof *av);
+    if (!av) { rc = die("out of memory"); goto done; }
+    av[ac++] = strdup("ffmpeg");
+    av[ac++] = strdup("-v"); av[ac++] = strdup("error");
+    av[ac++] = strdup("-nostdin");
+    av[ac++] = strdup("-filter_complex"); av[ac++] = strdup(graph);
+    av[ac++] = strdup("-map"); av[ac++] = strdup("[o]");
+    av[ac++] = strdup("-frames:v"); av[ac++] = strdup("1");
+    if (out) {
+        av[ac++] = strdup("-y");
+        av[ac++] = strdup(out);
+    } else {
+        av[ac++] = strdup("-f"); av[ac++] = strdup("null");
+        av[ac++] = strdup("-");
+    }
+    av[ac] = NULL;
+    for (i = 0; i < ac; i++) if (!av[i]) bad = 1;
+    if (bad) {
+        for (i = 0; i < ac; i++) free(av[i]);
+        free(av);
+        rc = die("out of memory");
+        goto done;
+    }
+    rc = tl_run(av, ac, 0);
+done:
+    for (i = 0; i <= SS_TITLE_LINES; i++) {
+        ss_title_text_path(p, sizeof p, dir, 0, 0, i);
+        remove(p);
+    }
+    rmdir(dir);
+    free(chain);
+    free(graph);
+    return rc;
+}
+
+/* ---- the title template catalogue ----
+ *
+ * The same four verbs as the effects and the same tables, so the window
+ * builds its list and its knobs from them. `list` carries what the template
+ * READS of the clip as row names — the rows the window keeps showing. */
+static void title_uses_rows(const ss_fx *f, char *out, size_t n)
+{
+    int u = ss_title_uses(f);
+    snprintf(out, n, "%s%s%s%s%s%s%s%s",
+             (u & SS_TT_TEXT)    ? "text," : "",
+             (u & SS_TT_SIZE)    ? "text.size," : "",
+             (u & SS_TT_COLOUR)  ? "text.r,text.g,text.b," : "",
+             (u & SS_TT_FONT)    ? "text.font," : "",
+             (u & SS_TT_WEIGHT)  ? "text.weight," : "",
+             (u & SS_TT_OUTLINE) ? "text.border," : "",
+             (u & SS_TT_SHADOW)  ? "text.shadow," : "",
+             (u & SS_TT_PLATE)   ? "colour.r,colour.g,colour.b," : "");
+    if (*out) out[strlen(out) - 1] = '\0';
+}
+
+static int cmd_titles(int argc, char **argv)
+{
+    const char *sub = argc > 2 ? argv[2] : "list";
+    char uses[160];
+    int i;
+
+    if (!strcmp(sub, "list")) {
+        for (i = 0; i < ss_title_count(); i++) {
+            const ss_fx *f = ss_title_at(i);
+            title_uses_rows(f, uses, sizeof uses);
+            printf("%s\t%s\t%s\t%d\t%s\t%s\n", f->name, f->label, f->group,
+                   f->nparam, uses, f->about);
+        }
+        return 0;
+    }
+    if (!strcmp(sub, "params")) {
+        int k;
+        for (i = 0; i < ss_title_count(); i++) {
+            const ss_fx *f = ss_title_at(i);
+            for (k = 0; k < f->nparam; k++)
+                printf("%s\t%s\t%g\t%g\t%g\t%s\n", f->name,
+                       f->param[k].key, f->param[k].def, f->param[k].lo,
+                       f->param[k].hi, f->param[k].label);
+        }
+        return 0;
+    }
+    if (!strcmp(sub, "show")) {
+        const ss_fx *f = argc > 3 ? ss_title_find(argv[3]) : NULL;
+        if (!f) return die("no such template: %s  (try `synstudio titles`)",
+                           argc > 3 ? argv[3] : "");
+        title_uses_rows(f, uses, sizeof uses);
+        printf("name\t%s\n", f->name);
+        printf("label\t%s\n", f->label);
+        printf("group\t%s\n", f->group);
+        printf("about\t%s\n", f->about);
+        printf("uses\t%s\n", uses);
+        printf("from\t%s\n", f->path);
+        for (i = 0; i < f->nparam; i++)
+            printf("param\t%s\t%g\t%g\t%g\t%s\n", f->param[i].key,
+                   f->param[i].def, f->param[i].lo, f->param[i].hi,
+                   f->param[i].label);
+        return 0;
+    }
+    if (!strcmp(sub, "check")) {
+        ss_fx one;
+        const ss_fx *f = NULL;
+        const char *out = NULL;
+        char err[160] = "";
+
+        if (argc < 4) return die("check wants a template or a .syntitle file");
+        for (i = 4; i + 1 < argc; i++)
+            if (!strcmp(argv[i], "--out")) out = argv[++i];
+        if (strstr(argv[3], ".syntitle")) {
+            if (ss_title_read(argv[3], &one, err, sizeof err) != 0)
+                return die("%s: %s", argv[3], err);
+            f = &one;
+        } else {
+            f = ss_title_find(argv[3]);
+            if (!f) return die("no such template: %s", argv[3]);
+        }
+        if (title_render_check(f, out) != 0) return 1;
+        printf("ok\t%s\t%d\n", f->name, f->nparam);
+        return 0;
+    }
+    return die("titles: unknown subcommand %s — try list, params, show, check",
+               sub);
+}
+
 /* The verbs. Takes the document by pointer so ONE caller owns it and can free
  * it — there are ninety-odd returns in here and no cleanup label was ever
  * going to survive the next verb added. */
@@ -2402,6 +2585,9 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             if (o.style && ss_title_style_apply(&c, o.style) != 0)
                 return die("no style called %s — `timeline styles` lists them",
                            o.style);
+            if (o.tmpl && ss_clip_template_set(&c, o.tmpl) != 0)
+                return die("no template called %s — `synstudio titles` lists "
+                           "them", o.tmpl);
         } else {
             if (parse_opts(argc, argv, 5, &o, &rest, &nrest) != 0)
                 return die("bad option");
@@ -2468,6 +2654,39 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                        argv[6]);
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         printf("style\t%s\n", argv[6]);
+        return 0;
+    }
+
+    /* A template on a title, or off it, with any of its knobs set on the
+     * way. `none` is the plain caption again; the caption itself is never
+     * touched, because a template says how a title is drawn and never what
+     * it says. */
+    if (!strcmp(verb, "template")) {
+        ss_clip *c;
+        int i;
+
+        if (argc < 7)
+            return die("template wants PROJ TRACK CLIP NAME|none [KNOB=VALUE...] "
+                       "— `synstudio titles` lists them");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+        if (c->kind != SS_CLIP_TITLE)
+            return die("clip %d on track %d is not a title", cl, tr);
+        if (ss_clip_template_set(c, argv[6]) != 0)
+            return die("no template called %s — `synstudio titles` lists them",
+                       argv[6]);
+        for (i = 7; i < argc; i++) {
+            char key[64];
+            const char *eq = strchr(argv[i], '=');
+            if (!eq || eq == argv[i] || (size_t)(eq - argv[i]) >= sizeof key)
+                return die("%s is not KNOB=VALUE", argv[i]);
+            snprintf(key, sizeof key, "%.*s", (int)(eq - argv[i]), argv[i]);
+            if (ss_clip_template_param(c, key, atof(eq + 1)) != 0)
+                return die("%s has no knob called %s — `synstudio titles show "
+                           "%s` lists them", argv[6], key, argv[6]);
+        }
+        if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        printf("template\t%s\n", c->tmpl.name);
         return 0;
     }
 
@@ -2947,6 +3166,21 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
                     clip_get_at(c, key, o.at, buf, sizeof buf);
                     printf("%s\t%s\n", key, buf);
                 }
+            }
+            /* The title's template: its name, whether it resolved HERE (a
+             * template that did not draws the plain caption), which of the
+             * rows above it reads — the window hides the rest, which would
+             * otherwise be sliders that do nothing — and its knobs. */
+            if (c->kind == SS_CLIP_TITLE) {
+                const ss_fx *r = ss_title_find(c->tmpl.name);
+                char uses[160] = "";
+                int q;
+                printf("template\t%s\n", c->tmpl.name);
+                printf("template.found\t%d\n", r != NULL);
+                if (r) title_uses_rows(r, uses, sizeof uses);
+                printf("template.uses\t%s\n", uses);
+                for (q = 0; r && q < r->nparam; q++)
+                    printf("tmpl.%s\t%.6g\n", r->param[q].key, c->tmpl.val[q]);
             }
             /* Whether the noise model this clip names is on THIS machine.
              * A model is somebody else's file and travels no better than a
@@ -4048,6 +4282,7 @@ int main(int argc, char **argv)
         return cmd_kind(argv[2]);
     }
     if (!strcmp(cmd, "fx"))       return cmd_fx(argc, argv);
+    if (!strcmp(cmd, "titles"))   return cmd_titles(argc, argv);
     if (!strcmp(cmd, "luts"))     return cmd_luts();
     /* The noise models this machine has, the way `luts` lists the LUTs. None
      * ship: a trained model is somebody's licensed work far more often than a

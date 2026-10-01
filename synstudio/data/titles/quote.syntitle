@@ -1,0 +1,11 @@
+# synstudio title
+name    quote
+label   Quotation
+about   A line set large in italics, centred, with who said it beneath and to the right
+param   in    0.6   0   3   Fade in
+filter  drawtext=$font_italic:$line1:fontcolor=$colour:fontsize='$size*0.9'
+filter  :x='(w-text_w)/2':y='h*0.45-text_h/2'
+filter  :alpha='min(t/max($in,0.001),1)',
+filter  drawtext=$font:$line2:fontcolor=$colour@0.8:fontsize='$size*0.5'
+filter  :x='w*0.75-text_w':y='h*0.45+$size*0.9'
+filter  :alpha='min(t/max($in*1.5,0.001),1)'

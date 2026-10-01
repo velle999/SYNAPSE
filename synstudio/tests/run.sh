@@ -30,6 +30,16 @@ if [ -z "${SYNSTUDIO_EFFECTS:-}" ]; then
     done
 fi
 
+# And the title templates.
+if [ -z "${SYNSTUDIO_TITLES:-}" ]; then
+    for d in "$(dirname "$0")/../data/titles" "$(dirname "$BIN")/../data/titles"; do
+        [ -d "$d" ] || continue
+        SYNSTUDIO_TITLES=$(cd "$d" && pwd)
+        export SYNSTUDIO_TITLES
+        break
+    done
+fi
+
 # The looks are data in the same way, and found the same way.
 if [ -z "${SYNSTUDIO_LOOKS:-}" ]; then
     for d in "$(dirname "$0")/../data/looks" "$(dirname "$BIN")/../data/looks"; do
@@ -1239,6 +1249,173 @@ rm -f "$fk/m.png"
 $BIN timeline frame "$sp2" --at 0.5 --out "$fk/m.png" >/dev/null 2>&1
 check "and the clip still renders without it" "yes" \
       "$([ -s "$fk/m.png" ] && echo yes || echo no)"
+
+# ---- title templates -------------------------------------------------------
+#
+# A .syntitle is a chain of drawtext and drawbox that names TOKENS for the font
+# and the caption, never files: drawtext reads both, and a template that could
+# say `textfile=` could print any file on the machine into a frame. So the
+# refusals come first, then every shipped template is drawn by the monitor and
+# by a lossless export and compared — in a fade, with a keyed size and colour,
+# at 25 and 30 fps.
+tt=$TMP/titles
+mkdir -p "$tt/bad"
+ttbad() {   # ttbad <label> <expected fragment of the error> <filter line>
+    { printf '# synstudio title\nname    bad\nlabel   Bad\n'
+      [ -n "${4:-}" ] && printf '%s\n' "$4"
+      printf 'filter  %s\n' "$3"; } > "$tt/bad/bad.syntitle"
+    $BIN titles check "$tt/bad/bad.syntitle" 2>&1 | seen "$1" "$2"
+}
+ttbad "a template cannot read a caption file"   "may not name a file" \
+      'drawtext=$font:textfile=/etc/passwd:x=0'
+ttbad "nor choose its own font file"             "may not name a file" \
+      'drawtext=fontfile=/x.ttf:$line1'
+ttbad "nor write its own words"                  "cannot be set on a drawtext" \
+      'drawtext=$font:$line1:text=hi'
+ttbad "only drawtext and drawbox are drawn"      "is not drawtext or drawbox" \
+      'drawtext=$font:$line1,geq=lum=0'
+ttbad "and there is no second stream"            "';' cannot appear" \
+      'drawtext=$font:$line1;drawbox=c=red'
+ttbad "nor a labelled pad"                        "'[' cannot appear" \
+      'drawtext=$font:$line1[a]'
+ttbad "every drawtext has a font"                "one font token" \
+      'drawtext=$line1:x=0'
+ttbad "and one caption"                          "one font token" \
+      'drawtext=$font:$line1:$line2'
+ttbad "a box takes no caption"                   "drawbox takes no font" \
+      'drawbox=$line1'
+ttbad "options are NAME=VALUE"                   "is not NAME=VALUE" \
+      'drawtext=$font:$line1:10'
+ttbad "a plate's padding takes whole pixels"     "whole pixels" \
+      'drawtext=$font:$line1:box=1:boxborderw=$size*0.3'
+ttbad "a colour is not a size"                   "is a colour" \
+      'drawtext=$font:$line1:fontsize=$colour'
+ttbad "a font is a whole option"                 "whole option" \
+      'drawtext=$font:$line1:x=$font'
+ttbad "a name nobody declared is refused"        "not a parameter" \
+      'drawtext=$font:$line1:x=$nope'
+ttbad "a parameter cannot take a token's name"   "token's name" \
+      'drawtext=$font:$line1' 'param   size  1  0  2  Size'
+
+check "five templates ship" "5" "$($BIN titles | wc -l)"
+for n in $($BIN titles | cut -f1); do
+    $BIN titles check "$n" | seen "$n draws a frame" "ok	$n"
+done
+$BIN titles | rxseen "a template says which rows it reads" \
+    '^lower-bar	[^	]*	[^	]*	2	text,text\.size,.*colour\.r'
+$BIN titles show name-plate | seen "show gives its knobs" "param	shade	0.75"
+
+ttm() {   # ttm <project> <frame> <fps> <export dir> -> monitor vs export at frame
+    rm -f "$tt/m.png"
+    $BIN timeline frame "$1" --at "$(awk -v k="$2" -v f="$3" 'BEGIN { printf "%.6f", k / f }')" \
+        --out "$tt/m.png" >/dev/null 2>&1
+    maxdiff "$tt/m.png" "$(printf '%s/f_%04d.png' "$4" $(($2 + 1)))"
+}
+ttbadf=""
+for fps in 25 30; do
+    for n in $($BIN titles | cut -f1); do
+        p=$tt/$n.$fps.syntl
+        $BIN timeline new "$p" --size 192x108 --fps $fps >/dev/null
+        $BIN timeline track "$p" video V >/dev/null
+        $BIN timeline solid "$p" 0 --at 0 --dur 1 --colour 0.3,0.4,0.5 >/dev/null
+        $BIN timeline track "$p" video T >/dev/null
+        $BIN timeline title "$p" 1 'Jane Doe\nDirector' --at 0 --dur 1 \
+            --template "$n" >/dev/null
+        $BIN timeline set "$p" 1 0 colour.r=0.8 colour.g=0.2 colour.b=0.1 >/dev/null
+        # A keyed size and colour at 30: commands to every option that reads
+        # them, and the fade's `t` restamped on the monitor's one frame.
+        if [ $fps = 30 ]; then
+            $BIN timeline anim "$p" 1 0 add text.size --at 0 --value 0.05 >/dev/null
+            $BIN timeline anim "$p" 1 0 add text.size --at 1 --value 0.12 >/dev/null
+            $BIN timeline anim "$p" 1 0 add text.g --at 0 --value 1 >/dev/null
+            $BIN timeline anim "$p" 1 0 add text.g --at 1 --value 0.2 >/dev/null
+        fi
+        rm -rf "$tt/o"; mkdir -p "$tt/o"
+        $BIN timeline export "$p" --format png --out "$tt/o/f_%04d.png" >/dev/null 2>&1
+        # ⚠ Frame 12 at 30 fps is t = 0.4: the chapter's fade is at alpha
+        # one half there, exactly on a rounding tie, and a monitor stamped
+        # in microseconds rather than the export's own 1/30 lost it by three.
+        for k in 0 3 12 $((fps - 1)); do
+            d=$(ttm "$p" $k $fps "$tt/o")
+            [ "$d" -le 0 ] || ttbadf="$ttbadf $n@$fps:$k=$d"
+        done
+    done
+done
+check "every template is the monitor's picture, frame for frame" "" "$ttbadf"
+
+# The document side.
+tp=$TMP/tmpl.syntl
+$BIN timeline new "$tp" --size 192x108 --fps 25 >/dev/null
+$BIN timeline track "$tp" video T >/dev/null
+$BIN timeline title "$tp" 0 'Jane Doe' --at 0 --dur 1 >/dev/null
+$BIN timeline title "$tp" 0 'x' --at 2 --dur 1 --template nosuch 2>&1 \
+    | seen "an unknown template is refused" "no template called nosuch"
+$BIN timeline template "$tp" 0 0 lower-bar in=1.2 >/dev/null
+check "a template goes on a title" "lower-bar" \
+      "$($BIN timeline get "$tp" 0 0 template)"
+check "its knob is set on the way" "1.2" "$($BIN timeline get "$tp" 0 0 tmpl.in)"
+$BIN timeline set "$tp" 0 0 tmpl.in=9 >/dev/null
+check "and clamped to its range by set" "2" "$($BIN timeline get "$tp" 0 0 tmpl.in)"
+$BIN timeline get "$tp" 0 0 | seen "get says it resolved" "template.found	1"
+$BIN timeline get "$tp" 0 0 | rxseen "and which rows it reads" \
+    '^template\.uses	text,text\.size,.*'
+$BIN timeline template "$tp" 0 0 lower-bar >/dev/null
+check "picking it again keeps its knobs" "2" "$($BIN timeline get "$tp" 0 0 tmpl.in)"
+# One line of a two-line template: the second is an empty file, which draws
+# nothing — and must not fail the render.
+rm -f "$tt/one.png"
+$BIN timeline frame "$tp" --at 0.5 --out "$tt/one.png" >/dev/null 2>&1
+check "a one-line caption in a two-line template renders" "yes" \
+      "$([ -s "$tt/one.png" ] && echo yes || echo no)"
+$BIN timeline solid "$tp" 0 --at 4 --dur 1 >/dev/null
+# The refused "x" never landed, so the solid is clip 1.
+$BIN timeline template "$tp" 0 1 chapter 2>&1 \
+    | seen "a template goes on a title only" "is not a title"
+# ⚠ Missing here is not deleted: the name and the numbers go back out as they
+# came in, and the clip draws the plain caption meanwhile.
+$BIN timeline set "$tp" 0 0 text.pos=topleft >/dev/null
+sed -i 's/^template\tlower-bar/template\tsomebodys/' "$tp"
+$BIN timeline set "$tp" 0 0 opacity=0.9 >/dev/null
+check "a template this machine has not got survives an edit" "1" \
+      "$(grep -c '^template	somebodys	in=2	bar=0.008$' "$tp")"
+$BIN timeline get "$tp" 0 0 | seen "and is reported as not found" "template.found	0"
+cp "$tp" "$tt/plain.syntl"
+sed -i '/^template\t/d' "$tt/plain.syntl"
+rm -f "$tt/a.png" "$tt/b.png"
+$BIN timeline frame "$tp" --at 0.5 --out "$tt/a.png" >/dev/null 2>&1
+$BIN timeline frame "$tt/plain.syntl" --at 0.5 --out "$tt/b.png" >/dev/null 2>&1
+near "and the clip draws its plain caption meanwhile" 0 \
+     "$(maxdiff "$tt/a.png" "$tt/b.png")" 0
+$BIN timeline template "$tp" 0 0 none >/dev/null
+check "none takes it off" "" "$($BIN timeline get "$tp" 0 0 template)"
+check "and the line goes with it" "0" "$(grep -c '^template' "$tp")"
+
+# A preset re-renders at its own size, and the template's sizes, pads and
+# command values are pixels of THAT delivery.
+pp=$tt/lower-bar.30.syntl
+sed 's/^size\t192\t108$/size\t1280\t720/' "$pp" > "$tt/pp720.syntl"
+rm -rf "$tt/o"; mkdir -p "$tt/o"
+$BIN timeline export "$pp" --preset youtube-720p --format png \
+    --out "$tt/o/f_%04d.png" >/dev/null 2>&1
+check "a preset draws the template at its own size" "0" \
+      "$(ttm "$tt/pp720.syntl" 12 30 "$tt/o")"
+
+# Your own folder is read, and a later copy of a name replaces an earlier one:
+# shipped, then yours, then SYNSTUDIO_TITLES.
+mkdir -p "$tt/home/.config/synstudio/titles" "$tt/later"
+sed 's/^label .*/label   Mine/' "$SYNSTUDIO_TITLES/lower-bar.syntitle" \
+    > "$tt/home/.config/synstudio/titles/lower-bar.syntitle"
+check "your own folder's copy of a template wins" "Mine" \
+      "$(env -u SYNSTUDIO_TITLES -u XDG_CONFIG_HOME HOME="$tt/home" \
+         $BIN titles list | awk -F'\t' '$1 == "lower-bar" { print $2 }')"
+sed 's/^label .*/label   Later/' "$SYNSTUDIO_TITLES/lower-bar.syntitle" \
+    > "$tt/later/lower-bar.syntitle"
+check "and the last folder named wins over the first" "Later" \
+      "$(SYNSTUDIO_TITLES="$SYNSTUDIO_TITLES:$tt/later" \
+         $BIN titles list | awk -F'\t' '$1 == "lower-bar" { print $2 }')"
+check "with no second entry for the name" "1" \
+      "$(SYNSTUDIO_TITLES="$SYNSTUDIO_TITLES:$tt/later" \
+         $BIN titles list | grep -c '^lower-bar	')"
 
 echo "== transitions (one filter, sixty looks)"
 
@@ -4631,6 +4808,105 @@ fi
 if [ -f "$qml" ]; then
     seen "one curve editor serves clip and effect rows" 'component CurveEd' < "$qml"
     seen "an effect's row keys by stack place"          '"fx." + fxc.fxIndex + "."' < "$qml"
+fi
+
+# ---- a title's template, in the window -----------------------------------
+#
+# The template rows come from the engine's catalogue, a templated title hides
+# the Title rows its template does not read, and its knobs write `tmpl.<knob>`
+# through the same `set` as every row. Driven through the knob's commit() and
+# applyTemplate(), the calls its slider and its row make — no pointer.
+if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ]; then
+    tg=$TMP/tmplgui
+    mkdir -p "$tg"
+    cp "$qml" "$tg/drv.qml"
+    cp "$(dirname "$qml")/synstudio-playback.qml" "$tg/" 2>/dev/null
+    cp -r "$(dirname "$qml")/qml" "$tg/" 2>/dev/null
+    tgp=$tg/t.syntl
+    $BIN timeline new "$tgp" --size 128x72 --fps 10 >/dev/null
+    $BIN timeline track "$tgp" video T >/dev/null
+    $BIN timeline title "$tgp" 0 'Jane Doe
+Presenter' --at 0 --dur 2 --template lower-bar >/dev/null
+    python3 - "$tg" <<'PYEOF'
+import sys
+d = sys.argv[1]
+s = open(d + "/drv.qml").read()
+drv = """
+    Timer {
+        interval: 900; repeat: true; running: true
+        property int n: 0
+        function find(it, name) {
+            if (!it) return null
+            if (it.objectName === name) return it
+            const ch = it.children || []
+            for (let i = 0; i < ch.length; i++) {
+                const r = find(ch[i], name)
+                if (r) return r
+            }
+            return null
+        }
+        function shown(name) {
+            const r = find(inspCol, name)
+            return r === null ? "none" : String(r.visible)
+        }
+        onTriggered: {
+            n++
+            if (n === 2) {
+                root.selTrack = 0; root.selClip = 0
+            } else if (n === 5) {
+                console.warn("CAT " + root.titleTemplates.length)
+                console.warn("ROWS " + shown("clipctl:text.pos") + " "
+                             + shown("clipctl:text.size") + " "
+                             + root.titleRowApplies("text.pos") + " "
+                             + root.titleRowApplies("text.size"))
+                const k = find(inspCol, "tmplctl:in")
+                console.warn("KNOB " + (k !== null) + " " + (k ? k.val : ""))
+                if (k) k.commit(1.5)
+            } else if (n === 8) {
+                console.warn("SET " + root.clipValue("tmpl.in"))
+                root.applyTemplate("none")
+            } else if (n === 11) {
+                console.warn("TPLOFF [" + root.clipTemplate + "] "
+                             + shown("clipctl:text.pos") + " "
+                             + root.titleRowApplies("text.pos"))
+                root.applyTemplate("chapter")
+            } else if (n === 14) {
+                console.warn("TPLON " + root.clipTemplate + " "
+                             + (find(inspCol, "tmplctl:rule") !== null))
+                Qt.quit()
+            }
+        }
+    }
+"""
+open(d + "/drv.qml", "w").write(s[:s.rstrip().rfind("}")] + drv + "}\n")
+PYEOF
+    HOME=$tg SYNSTUDIO_BIN=$BIN SYNSTUDIO_PROJECT=$tgp DISABLE_MANGOHUD=1 MANGOHUD=0 \
+        QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+        timeout 60 quickshell -p "$tg/drv.qml" > "$tg/log" 2>&1
+    sed -i 's/\x1b\[[0-9;]*m//g' "$tg/log"
+    if grep -qE 'ReferenceError|TypeError' "$tg/log"; then
+        bad "the template rows drive with no throw: $(grep -m1 -E 'ReferenceError|TypeError' \
+             "$tg/log" | cut -c1-90)"
+    else
+        ok
+    fi
+    if grep -q "TPLON" "$tg/log"; then
+        tv() { grep -o "$1 .*" "$tg/log" | head -1 | cut -d' ' -f2-; }
+        check "the window lists the engine's templates" \
+              "$($BIN titles list | wc -l)" "$(tv CAT)"
+        check "a templated title hides the rows it does not read" \
+              "false true false true" "$(tv ROWS)"
+        check "and shows its own knob at the clip's value" "true 0.5" "$(tv KNOB)"
+        check "the knob writes the clip"                  "1.5"    "$(tv SET)"
+        check "taking it off brings every row back"       "[] true true" "$(tv TPLOFF)"
+        check "and another template brings its knobs"    "chapter true" "$(tv TPLON)"
+    else
+        printf '  skip  the window did not start, no template row asserted\n'
+    fi
+fi
+if [ -f "$qml" ]; then
+    seen "the window reads the template catalogue"  '"titles", "list"' < "$qml"
+    seen "a template's knob is a row of its own"    'component TmplCtl' < "$qml"
 fi
 
 # ── a LUT used by path is kept, and browsable afterwards ────────────────────

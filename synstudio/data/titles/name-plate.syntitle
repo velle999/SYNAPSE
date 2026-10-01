@@ -1,0 +1,11 @@
+# synstudio title
+name    name-plate
+label   Name on a plate
+about   A name and a role, each on its own dark plate, bottom left
+param   shade  0.75  0  1  Plate opacity
+filter  drawtext=$font_bold:$line1:fontcolor=$colour:fontsize=$size
+filter  :x='w*0.06':y='h*0.72'
+filter  :box=1:boxcolor=$plate@$shade:boxborderw=$pad,
+filter  drawtext=$font:$line2:fontcolor=$colour:fontsize='$size*0.6'
+filter  :x='w*0.06':y='h*0.72+$size*1.75'
+filter  :box=1:boxcolor=$plate@$shade:boxborderw=$pad

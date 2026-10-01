@@ -697,6 +697,43 @@ int ss_title_style_apply(ss_clip *c, const char *name)
     return -1;
 }
 
+int ss_clip_template_set(ss_clip *c, const char *name)
+{
+    const ss_fx *r;
+    int q;
+
+    if (!name || !*name || !strcmp(name, "none")) {
+        memset(&c->tmpl, 0, sizeof c->tmpl);
+        return 0;
+    }
+    r = ss_title_find(name);
+    if (!r) return -1;
+    /* The same template again keeps its knobs: picking the one already on a
+     * clip from a list is not a request to undo every adjustment to it. */
+    if (!strcmp(c->tmpl.name, r->name) && !*c->tmpl.raw) return 0;
+    memset(&c->tmpl, 0, sizeof c->tmpl);
+    snprintf(c->tmpl.name, sizeof c->tmpl.name, "%s", r->name);
+    c->tmpl.on = 1;
+    for (q = 0; q < r->nparam && q < SS_MAX_FX_PARAMS; q++)
+        c->tmpl.val[q] = r->param[q].def;
+    return 0;
+}
+
+int ss_clip_template_param(ss_clip *c, const char *key, double v)
+{
+    const ss_fx *r = ss_title_find(c->tmpl.name);
+    int q;
+    if (!r || !key) return -1;
+    for (q = 0; q < r->nparam; q++)
+        if (!strcmp(r->param[q].key, key)) {
+            if (v < r->param[q].lo) v = r->param[q].lo;
+            if (v > r->param[q].hi) v = r->param[q].hi;
+            c->tmpl.val[q] = v;
+            return 0;
+        }
+    return -1;
+}
+
 static const int ncfields = (int)(sizeof cfields / sizeof cfields[0]);
 
 int ss_clip_describe(int i, ss_clip_info *out)
@@ -783,7 +820,14 @@ int ss_clip_set(ss_clip *c, const char *key, const char *val)
          * through the same `set` as an opacity and get the same keyed-or-not
          * routing for free. */
         int n, q;
-        const ss_fx *r = fx_key_find(c, key, &n, &q);
+        const ss_fx *r;
+        /* And a title's template, by name, and its knobs as tmpl.<knob>. */
+        if (!strcmp(key, "template"))
+            return c->kind == SS_CLIP_TITLE || !*val || !strcmp(val, "none")
+                   ? ss_clip_template_set(c, val) : -1;
+        if (!strncmp(key, "tmpl.", 5))
+            return ss_clip_template_param(c, key + 5, atof(val));
+        r = fx_key_find(c, key, &n, &q);
         if (!r) return -1;
         return ss_clip_fx_set(c, n, r->param[q].key, atof(val));
     }
@@ -833,6 +877,19 @@ int ss_clip_get(const ss_clip *c, const char *key, char *out, size_t n)
 
     if (!f) {
         int fn, q;
+        if (!strcmp(key, "template")) {
+            snprintf(out, n, "%s", c->tmpl.name);
+            return 0;
+        }
+        if (!strncmp(key, "tmpl.", 5)) {
+            const ss_fx *r = ss_title_find(c->tmpl.name);
+            for (q = 0; r && q < r->nparam; q++)
+                if (!strcmp(r->param[q].key, key + 5)) {
+                    snprintf(out, n, "%.6g", c->tmpl.val[q]);
+                    return 0;
+                }
+            return -1;
+        }
         if (!fx_key_find(c, key, &fn, &q)) return -1;
         snprintf(out, n, "%.6g", c->fx[fn].val[q]);
         return 0;
@@ -2154,6 +2211,20 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                     fprintf(fp, "\n");
                 }
             }
+            /* The template, its knobs by name — or, where it is not
+             * installed, exactly as it was read. */
+            if (*c->tmpl.name) {
+                const ss_fx *r = ss_title_find(c->tmpl.name);
+                int q;
+                fprintf(fp, "template\t%s", c->tmpl.name);
+                if (!r) {
+                    if (*c->tmpl.raw) fprintf(fp, "\t%s", c->tmpl.raw);
+                } else {
+                    for (q = 0; q < r->nparam; q++)
+                        fprintf(fp, "\t%s=%g", r->param[q].key, c->tmpl.val[q]);
+                }
+                fprintf(fp, "\n");
+            }
             /* Parameter keys, one line each: a name, a time, a value and
              * how it leaves. Flat rather than nested because unlike a grade
              * key there is nothing to nest — the whole key IS the line. */
@@ -2436,6 +2507,26 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             } else if (nf >= 2) {
                 fx_add_unknown(cc, f[0], atoi(f[1]) != 0, raw);
             }
+        } else if (!strncmp(line, "template\t", 9) && cc) {
+            char raw[256] = "", *f[1 + SS_MAX_FX_PARAMS], *p;
+            int nf, q;
+            p = strchr(line + 9, '\t');
+            if (p) snprintf(raw, sizeof raw, "%s", p + 1);
+            nf = tabsplit(line + 9, f, 1 + SS_MAX_FX_PARAMS);
+            if (nf >= 1 && ss_clip_template_set(cc, f[0]) == 0) {
+                for (q = 1; q < nf; q++) {
+                    char *eq = strchr(f[q], '=');
+                    if (!eq) continue;
+                    *eq = '\0';
+                    ss_clip_template_param(cc, f[q], atof(eq + 1));
+                }
+            } else if (nf >= 1) {
+                /* Not installed here: the clip draws its plain caption, and
+                 * the name and numbers go back out as they came in. */
+                memset(&cc->tmpl, 0, sizeof cc->tmpl);
+                snprintf(cc->tmpl.name, sizeof cc->tmpl.name, "%.31s", f[0]);
+                snprintf(cc->tmpl.raw, sizeof cc->tmpl.raw, "%s", raw);
+            }
         } else if (!strncmp(line, "anim\t", 5) && cc) {
             char *f[4];
             int fn;
@@ -2503,6 +2594,9 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
 static void grade_path(char *out, size_t n, const char *dir,
                        int track, int idx, int step, int nsteps);
 static void title_cmd_path(char *out, size_t n, const char *dir, int track, int idx);
+static const ss_fx *clip_template(const ss_clip *c);
+static int  template_text_write(const ss_clip *c, const ss_fx *tr,
+                                const char *dir, int track, int idx);
 static void fx_cmd_path(char *out, size_t sz, const char *dir, int track, int idx);
 static int  fx_cmd_write(const ss_timeline *t, const ss_clip *c,
                          const char *path, int track, int idx);
@@ -2646,6 +2740,11 @@ static void esc_filter(const char *in, char *out, size_t n)
     out[o] = '\0';
 }
 
+void ss_filter_escape(const char *in, char *out, size_t n)
+{
+    esc_filter(in, out, n);
+}
+
 static char *xdup(const char *s)
 {
     char *p = malloc(strlen(s) + 1);
@@ -2726,6 +2825,9 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
                 fputs(c->text, fp);
                 fclose(fp);
                 n++;
+                if (clip_template(c) &&
+                    template_text_write(c, clip_template(c), dir, i, j) != 0)
+                    return -1;
                 /* Only for a whole render: the monitor draws one instant
                  * and passes it as numbers. */
                 if (at < 0) {
@@ -2759,6 +2861,10 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
             remove(p);
             fx_cmd_path(p, sizeof p, dir, i, j);
             remove(p);
+            for (s = 0; s <= SS_TITLE_LINES; s++) {
+                ss_title_text_path(p, sizeof p, dir, i, j, s);
+                remove(p);
+            }
         }
 }
 
@@ -3073,6 +3179,201 @@ static void title_cmd_path(char *out, size_t n, const char *dir, int track, int 
     snprintf(out, n, "%s/textcmd_%d_%d.txt", dir, track, idx);
 }
 
+/* ---- a title drawn by a template ----
+ *
+ * The clip's template when it has one this machine can draw; NULL means the
+ * built-in caption, which is also what a template that is not installed
+ * falls back to — the words still appear, in the plain style. */
+static const ss_fx *clip_template(const ss_clip *c)
+{
+    return (c->kind == SS_CLIP_TITLE && *c->tmpl.name)
+           ? ss_title_find(c->tmpl.name) : NULL;
+}
+
+/* Whether a keyed row the template reads actually moves. */
+static int template_moves(const ss_clip *c, const ss_fx *tr)
+{
+    int u = ss_title_uses(tr);
+    return tr->ntarget > 0 &&
+           (((u & (SS_TT_SIZE | SS_TT_OUTLINE | SS_TT_SHADOW)) &&
+             ss_clip_prop_moves(c, "text.size")) ||
+            ((u & SS_TT_COLOUR) && (ss_clip_prop_moves(c, "text.r") ||
+                                    ss_clip_prop_moves(c, "text.g") ||
+                                    ss_clip_prop_moves(c, "text.b"))));
+}
+
+/* The strings a context points into, kept by the caller while it is used. */
+typedef struct {
+    char font[5][1024];
+    char text[SS_TITLE_LINES + 1][4200];
+} title_strs;
+
+/* What the tokens stand for at clip time `tt`. The size and colour come from
+ * title_look_at — the same integers and the same string the plain caption is
+ * drawn with — so a keyed size moves a templated title exactly as it moves a
+ * plain one. Fonts and files only when `st` is given, and only the ones the
+ * template names: each font is an fc-match, and the monitor builds this on
+ * every frame of a scrub. */
+static void template_ctx_at(const ss_timeline *t, const ss_clip *c,
+                            const ss_fx *tr, const char *dir, int track,
+                            int idx, double tt, ss_title_ctx *cx,
+                            title_strs *st)
+{
+    title_look m;
+    char col[32];
+    int w, k, uses = ss_title_uses(tr);
+    int own = (c->text_weight >= 0 && c->text_weight < 5) ? c->text_weight : 0;
+
+    memset(cx, 0, sizeof *cx);
+    title_look_at(t, c, tt, &m);
+    cx->size = m.size;
+    cx->pad = m.pad;
+    cx->outline = m.border;
+    cx->shadow = m.shadow;
+    snprintf(cx->colour, sizeof cx->colour, "%.8s", m.col);
+    hexcol(c->col_r, c->col_g, c->col_b, 1.0f, col, sizeof col);
+    snprintf(cx->plate, sizeof cx->plate, "%.8s", col);
+    cx->weight = own;
+    if (!st) return;
+    for (w = 0; w < 5; w++)
+        if ((uses & SS_TT_FONTW(w)) || ((uses & SS_TT_WEIGHT) && w == own)) {
+            esc_filter(ss_font_file(c->text_font, w), st->font[w],
+                       sizeof st->font[w]);
+            cx->font[w] = st->font[w];
+        }
+    for (k = 0; k <= SS_TITLE_LINES; k++)
+        if (uses & SS_TT_LINE(k)) {
+            char p[2048];
+            ss_title_text_path(p, sizeof p, dir, track, idx, k);
+            esc_filter(p, st->text[k], sizeof st->text[k]);
+            cx->textfile[k] = st->text[k];
+        }
+}
+
+/* The caption's lines, one file each, for the ones the template reads: 0 is
+ * the whole caption and k the k-th line, empty past the last — and an empty
+ * file draws nothing at all, box included, which is what a role line left
+ * blank should do. */
+static int template_text_write(const ss_clip *c, const ss_fx *tr,
+                               const char *dir, int track, int idx)
+{
+    int k, uses = ss_title_uses(tr);
+    for (k = 0; k <= SS_TITLE_LINES; k++) {
+        char p[2048];
+        const char *a = c->text, *b;
+        int i;
+        FILE *fp;
+        if (!(uses & SS_TT_LINE(k))) continue;
+        ss_title_text_path(p, sizeof p, dir, track, idx, k);
+        fp = fopen(p, "w");
+        if (!fp) return -1;
+        if (k == 0) {
+            fputs(c->text, fp);
+        } else {
+            for (i = 1; i < k && a; i++) {
+                a = strchr(a, '\n');
+                if (a) a++;
+            }
+            if (a) {
+                b = strchr(a, '\n');
+                fwrite(a, 1, b ? (size_t)(b - a) : strlen(a), fp);
+            }
+        }
+        if (fclose(fp) != 0) return -1;
+    }
+    return 0;
+}
+
+/* The export's commands for a templated title whose size or colour is keyed:
+ * every option that reads $size or $colour, re-sent whole each frame its
+ * value changes, to the filter the expansion named for it. */
+static int template_cmd_write(const ss_timeline *t, const ss_clip *c,
+                              const ss_fx *tr, const char *path, int track,
+                              int idx)
+{
+    double len = ss_clip_length(c), fps = t->fps > 0 ? t->fps : 25.0;
+    int k, g, nfr = (int)ceil(len * fps - 1e-9);
+    char (*prev)[512];
+    ss_title_ctx cx;
+    FILE *fp;
+
+    if (!template_moves(c, tr)) return 1;
+    prev = calloc(SS_MAX_FX_TARGETS, sizeof *prev);
+    if (!prev) return -1;
+    fp = fopen(path, "w");
+    if (!fp) { free(prev); return -1; }
+    template_ctx_at(t, c, tr, NULL, track, idx, 0.0, &cx, NULL);
+    for (g = 0; g < tr->ntarget; g++)
+        ss_title_target_arg(tr, g, c->tmpl.val, tr->nparam, &cx,
+                            prev[g], sizeof prev[g]);
+    for (k = 1; k < nfr; k++) {
+        int any = 0;
+        template_ctx_at(t, c, tr, NULL, track, idx, k / fps, &cx, NULL);
+        for (g = 0; g < tr->ntarget; g++) {
+            char arg[512];
+            if (ss_title_target_arg(tr, g, c->tmpl.val, tr->nparam, &cx,
+                                    arg, sizeof arg) != 0 ||
+                !strcmp(arg, prev[g]))
+                continue;
+            if (!any) fprintf(fp, "%.6f", (k - 0.5) / fps);
+            fprintf(fp, "%s %s@tt%d_%d_%d %s '%s'", any ? "," : "",
+                    tr->target[g].fname, track, idx, tr->target[g].filt,
+                    tr->target[g].opt, arg);
+            snprintf(prev[g], sizeof prev[g], "%s", arg);
+            any = 1;
+        }
+        if (any) fputs(";\n", fp);
+    }
+    free(prev);
+    return fclose(fp) == 0 ? 0 : -1;
+}
+
+/* The template's chain, in place of the built-in caption.
+ *
+ * ⚠ `t` IS CLIP SECONDS ON BOTH SIDES. The export's title stream starts at
+ * zero where the clip does, so a template's `t` is clip time already. The
+ * monitor's is a single frame stamped zero, and a move in written against
+ * `t` would sit at its first frame on every scrub — so the monitor restamps
+ * that frame as the export's frame k and puts it back afterwards for the
+ * overlay.
+ *
+ * ⚠ IN THE EXPORT'S OWN TIMEBASE, 1/fps, and as the frame's INDEX. Stamped
+ * in microseconds, 0.4 s at 30 fps came out one ulp away from the export's
+ * 12 × (1/30) — and a fade's alpha of exactly one half rounded the other way,
+ * three code values off on the frame that sits on the tie. The same rational
+ * times the same integer is the same double. */
+static void chain_template_at(strbuf *fc, const ss_timeline *t,
+                              const ss_clip *c, const ss_fx *tr,
+                              const char *dir, int track, int idx, double at)
+{
+    title_strs *st = calloc(1, sizeof *st);
+    char *buf = malloc(65536), tag[32];
+    int moving = at < 0 && template_moves(c, tr);
+    ss_title_ctx cx;
+
+    if (st && buf) {
+        template_ctx_at(t, c, tr, dir, track, idx, at >= 0 ? at : 0.0, &cx, st);
+        snprintf(tag, sizeof tag, "tt%d_%d", track, idx);
+        if (ss_title_expand(tr, c->tmpl.val, tr->nparam, &cx,
+                            moving ? tag : NULL, buf, 65536) == 0) {
+            if (at >= 0) {
+                double fps = t->fps > 0 ? t->fps : 25.0;
+                sb_add(fc, ",settb=1/%.6g,setpts=%ld", fps, lround(at * fps));
+            }
+            if (moving) {
+                char cp[2048], cesc[4200];
+                title_cmd_path(cp, sizeof cp, dir, track, idx);
+                esc_filter(cp, cesc, sizeof cesc);
+                sb_add(fc, ",sendcmd=f='%s'", cesc);
+            }
+            sb_add(fc, ",%s", buf);
+            if (at >= 0) sb_add(fc, ",setpts=PTS-STARTPTS");
+        }
+    }
+    free(st);
+    free(buf);
+}
+
 /* The export's half: title_look_at once a frame, written as sendcmd commands
  * wherever anything changed.
  *
@@ -3092,8 +3393,10 @@ static int title_cmd_write(const ss_timeline *t, const ss_clip *c,
     title_look prev, m;
     double len = ss_clip_length(c), fps = t->fps > 0 ? t->fps : 25.0;
     int k, nfr = (int)ceil(len * fps - 1e-9);
+    const ss_fx *tr = clip_template(c);
     FILE *fp;
 
+    if (tr) return template_cmd_write(t, c, tr, path, track, idx);
     if (!title_moves(c)) return 1;
     fp = fopen(path, "w");
     if (!fp) return -1;
@@ -3131,7 +3434,12 @@ static void chain_title_at(strbuf *fc, const ss_timeline *t, const ss_clip *c,
 {
     char tp[2048], esc[4200], fesc[1024], x[64], y[96], plate[32], name[32];
     title_look m;
+    const ss_fx *tr;
     if (c->kind != SS_CLIP_TITLE) return;
+    if ((tr = clip_template(c)) != NULL) {
+        chain_template_at(fc, t, c, tr, dir, track, idx, at);
+        return;
+    }
     snprintf(tp, sizeof tp, "%s/text_%d_%d.txt", dir, track, idx);
     esc_filter(tp, esc, sizeof esc);
     /* A family NAME resolved to a FILE, once, before the graph is built. The

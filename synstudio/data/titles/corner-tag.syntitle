@@ -1,0 +1,7 @@
+# synstudio title
+name    corner-tag
+label   Corner tag
+about   A short word in a solid tag, top right — a place, a time, LIVE
+filter  drawtext=$font_bold:$line1:fontcolor=$colour:fontsize='$size*0.55'
+filter  :x='w-text_w-w*0.05':y='h*0.07'
+filter  :box=1:boxcolor=$plate:boxborderw=$pad

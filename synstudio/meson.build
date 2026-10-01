@@ -35,6 +35,7 @@ sources = files(
   'src/io.c',
   'src/timeline.c',
   'src/fx.c',
+  'src/titles.c',
   'src/font.c',
   'src/match.c',
   'src/scope.c',
@@ -76,6 +77,12 @@ test('i18n', find_program('tests/i18n_test.sh'),
 # a build that needed editing as well would be a build that quietly shipped
 # twenty-six of the twenty-seven.
 install_subdir('data/effects',
+               install_dir: get_option('datadir') / 'synstudio')
+
+# The title templates, for the same reason: a .syntitle is a layout of
+# drawtext and drawbox as text, and one of the user's own in
+# ~/.config/synstudio/titles wins on a name.
+install_subdir('data/titles',
                install_dir: get_option('datadir') / 'synstudio')
 
 # The looks, for the same reason and read the same way: a .synlook is the

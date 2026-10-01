@@ -1526,6 +1526,76 @@ FloatingWindow {
                     String(root.selClip), name])
     }
 
+    // ── Title templates ─────────────────────────────────────────────────────
+    //
+    // A layout of several things drawn together — a name over a role beside a
+    // bar, a rule under a heading — from a file in the engine's catalogue, so
+    // a template dropped in a folder this morning is in the list without this
+    // file learning its name. Unlike a style it IS a property of the clip: the
+    // title draws through it until it is taken off, and the Title rows it does
+    // not read are hidden rather than left as sliders that do nothing.
+    property var titleTemplates: []      // [{name, label, about}]
+    property var templateParams: ({})    // name -> [{key, def, lo, hi, label}]
+
+    function templateParamsOf(name) { return root.templateParams[name] || [] }
+
+    function templateLabel(name) {
+        for (let i = 0; i < root.titleTemplates.length; i++)
+            if (root.titleTemplates[i].name === name) return root.titleTemplates[i].label
+        return I18n.tr("%1 (missing)").arg(name)
+    }
+
+    function applyTemplate(name) {
+        if (root.selTrack < 0 || root.selClip < 0) { root.say(I18n.tr("pick a title first")); return }
+        root.tlRun(["template", root.proj, String(root.selTrack),
+                    String(root.selClip), name])
+    }
+
+    // The selected title's template, and whether it resolved HERE — one that
+    // did not draws the plain caption, so every row is live again.
+    readonly property string clipTemplate: root.clipValue("template")
+    readonly property bool clipTemplated:
+        root.clipTemplate !== "" && root.clipValue("template.found") === "1"
+
+    function titleRowApplies(key) {
+        if (!root.clipTemplated) return true
+        return root.clipValue("template.uses").split(",").indexOf(key) >= 0
+    }
+
+    Process {
+        id: tmplListProc
+        command: [root.bin, "titles", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [], lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length >= 6) out.push({ name: f[0], label: f[1], about: f[5] })
+                }
+                root.titleTemplates = out
+            }
+        }
+    }
+
+    Process {
+        id: tmplParamProc
+        command: [root.bin, "titles", "params"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = ({}), lines = this.text.split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split("\t")
+                    if (f.length < 6) continue
+                    if (!m[f[0]]) m[f[0]] = []
+                    m[f[0]].push({ key: f[1], def: parseFloat(f[2]),
+                                   lo: parseFloat(f[3]), hi: parseFloat(f[4]),
+                                   label: f[5] })
+                }
+                root.templateParams = m
+            }
+        }
+    }
+
     // ── The families a title can be lettered in ─────────────────────────────
     //
     // `text.font` is a plain text field in the clip table, which meant the
@@ -3235,6 +3305,8 @@ FloatingWindow {
         clipKeysProc.running = true
         transListProc.running = true
         styleListProc.running = true
+        tmplListProc.running = true
+        tmplParamProc.running = true
         fontListProc.running = true
         fxListProc.running = true
         fxParamProc.running = true
@@ -5278,6 +5350,87 @@ FloatingWindow {
                                                     styleRow.modelData.name)
                                             }
                                         }
+                                    }
+
+                                    // The templates, under the styles: a
+                                    // style stamps the rows and leaves, a
+                                    // template stays on the clip and draws
+                                    // it. The one in force is marked, and
+                                    // picking it again takes it off.
+                                    Text {
+                                        visible: cgrp.open && cgrp.modelData === "Title"
+                                                 && root.titleTemplates.length > 0
+                                        height: visible ? 22 : 0
+                                        leftPadding: 20
+                                        verticalAlignment: Text.AlignBottom
+                                        text: I18n.tr("Templates")
+                                        color: root.cDim
+                                        font.pixelSize: root.ui(10)
+                                        font.family: root.uiFont
+                                    }
+                                    Repeater {
+                                        model: (cgrp.open && cgrp.modelData === "Title")
+                                               ? root.titleTemplates : []
+                                        Rectangle {
+                                            id: tmplRow
+                                            required property var modelData
+                                            readonly property bool cur:
+                                                root.clipTemplate === tmplRow.modelData.name
+                                            width: inspCol.width
+                                            height: 26
+                                            color: tmplRow.cur ? root.wash(0.22)
+                                                 : tmplArea.containsMouse ? root.wash(0.16)
+                                                 : "transparent"
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 20
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 12
+                                                text: (tmplRow.cur ? "◆  " : "◇  ")
+                                                      + tmplRow.modelData.label
+                                                elide: Text.ElideRight
+                                                color: tmplRow.cur ? root.cAccent : root.cText
+                                                font.pixelSize: root.ui(11)
+                                                font.family: root.uiFont
+                                            }
+                                            MouseArea {
+                                                id: tmplArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onClicked: root.applyTemplate(
+                                                    tmplRow.cur ? "none" : tmplRow.modelData.name)
+                                            }
+                                        }
+                                    }
+                                    // A template named by the clip that this
+                                    // machine has not got: said, and offered
+                                    // off, rather than silently drawn plain.
+                                    Rectangle {
+                                        visible: cgrp.open && cgrp.modelData === "Title"
+                                                 && root.clipTemplate !== "" && !root.clipTemplated
+                                        width: inspCol.width
+                                        height: visible ? 26 : 0
+                                        color: "transparent"
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 20
+                                            text: "◆  " + root.templateLabel(root.clipTemplate)
+                                            color: root.cBad
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: root.applyTemplate("none")
+                                        }
+                                    }
+                                    Repeater {
+                                        model: (cgrp.open && cgrp.modelData === "Title"
+                                                && root.clipTemplated)
+                                               ? root.templateParamsOf(root.clipTemplate) : []
+                                        TmplCtl {}
                                     }
 
                                     Repeater {
@@ -7528,9 +7681,11 @@ FloatingWindow {
         readonly property bool applies:
             (cc.row.key === "trans.r" || cc.row.key === "trans.g"
              || cc.row.key === "trans.b") ? root.clipValue("trans") === "dip"
-                                          : true
+            : cc.row.group === "Title"     ? root.titleRowApplies(cc.row.key)
+                                           : true
         visible: cc.applies
         width: inspCol.width
+        objectName: "clipctl:" + cc.row.key
         readonly property bool curveOpen: root.curveKey === cc.row.key
         height: !cc.applies ? 0
                 : cc.longEnum ? 150
@@ -8104,6 +8259,82 @@ FloatingWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── One knob of a title's template ──────────────────────────────────────
+    //
+    // The effect knob's slider, writing `tmpl.<knob>` through the same `set`
+    // as every clip row — so it is undone, saved and reloaded like one.
+    component TmplCtl: Item {
+        id: tpc
+        required property var modelData
+        readonly property var row: tpc.modelData
+        readonly property real val: {
+            const v = root.clipValue("tmpl." + tpc.row.key)
+            return v === "" ? tpc.row.def : parseFloat(v)
+        }
+        width: inspCol.width
+        height: 34
+        objectName: "tmplctl:" + tpc.row.key
+
+        function commit(v) { root.setClip("tmpl." + tpc.row.key, v) }
+
+        Text {
+            id: tplbl
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: tpc.row.label
+            color: root.cText
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: Math.round(tpc.val * 1000) / 1000
+            color: root.cAccent
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
+        }
+        Rectangle {
+            id: tptrack
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: tplbl.bottom; anchors.topMargin: 6
+            height: 4
+            radius: 2
+            color: root.isLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
+
+            readonly property real frac:
+                Math.max(0, Math.min(1, (tpc.val - tpc.row.lo)
+                                        / (tpc.row.hi - tpc.row.lo)))
+            Rectangle {
+                height: parent.height; radius: 2
+                color: root.cAccent
+                width: tptrack.frac * tptrack.width
+            }
+            Rectangle {
+                width: 11; height: 11; radius: 6
+                color: root.cAccent
+                y: -4
+                x: tptrack.frac * tptrack.width - 5
+            }
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -10
+                preventStealing: true
+                // On RELEASE, for the reason every slider in this file is.
+                property real pending: tpc.val
+                function pick(mx) {
+                    const f = Math.max(0, Math.min(1, (mx - 10) / tptrack.width))
+                    pending = Math.round((tpc.row.lo
+                              + f * (tpc.row.hi - tpc.row.lo)) * 1000) / 1000
+                }
+                onPressed: function (m) { pick(m.x) }
+                onPositionChanged: function (m) { if (pressed) pick(m.x) }
+                onReleased: tpc.commit(pending)
             }
         }
     }

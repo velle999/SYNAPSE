@@ -254,6 +254,9 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
+msgid "Templates"
+msgstr ""
+
 msgid "Thumbnail"
 msgstr ""
 

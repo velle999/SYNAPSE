@@ -41,7 +41,9 @@ msgstr "%1（見つかりません）"
 msgid ""
 "%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
 "holds its own value"
-msgstr "%1 はこの ffmpeg では時間とともに変化できません — キーフレームは保持され、つまみは固定の値のままです"
+msgstr ""
+"%1 はこの ffmpeg では時間とともに変化できません — キーフレームは保持され、つ"
+"まみは固定の値のままです"
 
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
@@ -271,6 +273,9 @@ msgstr "正方形 1:1"
 
 msgid "Stop"
 msgstr "停止"
+
+msgid "Templates"
+msgstr "テンプレート"
 
 msgid "Thumbnail"
 msgstr "サムネイル"

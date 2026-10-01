@@ -1,0 +1,14 @@
+# synstudio title
+name    chapter
+label   Chapter card
+about   A small line over a rule and a large one beneath it, centred, fading in
+param   in    0.8   0   3    Fade in
+param   rule  0.12  0   0.6  Rule length
+filter  drawtext=$font_light:$line1:fontcolor=$colour@0.8:fontsize='$size*0.45'
+filter  :x='(w-text_w)/2':y='h*0.5-$size*1.1'
+filter  :alpha='min(t/max($in,0.001),1)',
+filter  drawbox=x='iw*(1-$rule)/2':y='ih*0.5-$size*0.35':w='iw*$rule':h='max($size*0.04,1)'
+filter  :color=$colour@0.8:t=fill,
+filter  drawtext=$font_bold:$line2:fontcolor=$colour:fontsize='$size*1.2'
+filter  :x='(w-text_w)/2':y='h*0.5-$size*0.05'
+filter  :alpha='min(t/max($in,0.001),1)'

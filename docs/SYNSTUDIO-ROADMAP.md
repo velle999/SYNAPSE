@@ -23,7 +23,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | audio     | EQ, dynamics, noise reduction, ducking, delivery loudness      |
 | effects   | sixty-one transitions (a morph among them), twenty-seven effects |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
-| titles    | a face, a plate, more than one line, five styles, .srt both ways |
+| titles    | a face, a plate, five styles, five templates, .srt both ways |
 | delivery  | range, presets, burn-in, sequences, a queue, and thumbnails    |
 | scopes    | histogram, waveform, parade and vectorscope — all measured here |
 | media     | one project, named and saved as — no pool, no proxies, no relink |
@@ -144,9 +144,29 @@ because a grade is baked to an Iridas `.cube` before it reaches ffmpeg.
       `~/.config/synstudio/effects` (which wins on a name), and a bundle
       anywhere via `SYNSTUDIO_EFFECTS`. `fx list|params|show|check`,
       `timeline fx add|list|set|remove|move`.
-- [ ] title templates — the same manifest with `drawtext` behind it. Not the
-      effect whitelist: drawtext reads a font and a textfile, so a title
-      recipe needs its own rules about what a caption may contain
+- [x] **title templates** — shipped in 0.1.0-53. A `.syntitle` is the effect
+      manifest with a chain of `drawtext` and `drawbox` behind it: a name over
+      a role beside a bar, a rule under a heading, a plate behind each line, a
+      move in written against `t`. Five ship — `lower-bar`, `name-plate`,
+      `chapter`, `corner-tag`, `quote`. The template stays on the clip: the
+      clip's own rows feed it (caption, size, colour, family, weight, outline,
+      shadow, plate colour), its knobs are `tmpl.<knob>`, and the window hides
+      the Title rows a template does not read.
+      Its rules are a whitelist at every level: two filters joined by commas,
+      a short list of options for each written NAME=VALUE, none of which reads
+      a file, and every `$` a token or a declared knob. The font and the
+      caption are tokens the engine fills — the clip's family resolved to a
+      file, each caption line baked to a file read with expansion off — so a
+      template can neither print a file nor add words to a caption.
+      ⚠ boxborderw is a string drawtext parses itself, and reads `14*0.3` as
+      14, so it takes whole pixels and the whole-pixel tokens only.
+      A keyed size or colour moves a templated title exactly as it moves a
+      plain one, through the same sendcmd file. The monitor restamps its one
+      frame as the export's frame k in the export's own 1/fps timebase, so `t`
+      is clip seconds on both sides: in microseconds, a fade's alpha on a
+      half-way tie rounded the other way at 30 fps. A template this machine has
+      not got keeps its name and numbers and draws the plain caption.
+      `titles list|params|show|check`, `timeline template`, `--template`.
 - [x] **keyframed effect parameters** — shipped in 0.1.0-52. A knob is keyed
       as `fx.<n>.<knob>` — the effect's place in the stack — through the same
       keys, eases and curve as an opacity, and the export drives it the way it
@@ -281,8 +301,9 @@ Fairlight-style automation: four features for one piece of work.
 - [no] letter spacing — drawtext has no tracking option at any version, and a
        second text renderer to gain one is the trade this program does not
        make
-- [~] animate on and off — a title's position and opacity move now; its size
-      and colour cannot, because drawtext takes no expression for either
+- [x] **animate on and off** — a title's position, opacity, size and colour
+      all take keys. Size and colour since 0.1.0-51: drawtext takes no
+      expression for either, so the export sends them as commands (§3)
 - [x] **lower thirds and credit rolls as presets** — five styles (plain,
       lower third, subtitle, heading, credit roll) that SET the fields above
       and then get out of the way, so every one is still a slider afterwards.
@@ -533,7 +554,6 @@ Fairlight-style automation: four features for one piece of work.
 **The build order is finished.** What is left in the sections above is a
 short list of named gaps rather than a plan — the boxes still open:
 
-- title templates (§2)
 - masks on a clip's grade — darkroom only today (§7)
 - the Rec.709 output transform and its colour tags (§7)
 

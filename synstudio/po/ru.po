@@ -42,7 +42,9 @@ msgstr "%1 (отсутствует)"
 msgid ""
 "%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
 "holds its own value"
-msgstr "%1 не может меняться во времени с этим ffmpeg — ключевые кадры сохраняются, а регулятор держит своё значение"
+msgstr ""
+"%1 не может меняться во времени с этим ffmpeg — ключевые кадры сохраняются, "
+"а регулятор держит своё значение"
 
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 кадр/с"
@@ -273,6 +275,9 @@ msgstr "Квадрат 1:1"
 
 msgid "Stop"
 msgstr "Стоп"
+
+msgid "Templates"
+msgstr "Шаблоны"
 
 msgid "Thumbnail"
 msgstr "Миниатюра"

@@ -41,7 +41,9 @@ msgstr "%1 (ontbreekt)"
 msgid ""
 "%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
 "holds its own value"
-msgstr "%1 kan met deze ffmpeg niet in de tijd veranderen — de keyframes blijven bewaard en de knop houdt zijn eigen waarde"
+msgstr ""
+"%1 kan met deze ffmpeg niet in de tijd veranderen — de keyframes blijven "
+"bewaard en de knop houdt zijn eigen waarde"
 
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
@@ -272,6 +274,9 @@ msgstr "Vierkant 1:1"
 
 msgid "Stop"
 msgstr "Stoppen"
+
+msgid "Templates"
+msgstr "Sjablonen"
 
 msgid "Thumbnail"
 msgstr "Miniatuur"

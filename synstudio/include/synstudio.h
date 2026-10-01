@@ -802,6 +802,7 @@ typedef struct {
     char path[512];
     int  ntarget;
     ss_fx_target target[SS_MAX_FX_TARGETS];
+    int  uses;                  /* a title template's SS_TT_* and lines */
 } ss_fx;
 
 /* The catalogue: what is installed, then the user's own, then anything named
@@ -812,6 +813,12 @@ const ss_fx *ss_fx_at(int i);
 const ss_fx *ss_fx_find(const char *name);
 /* One file, parsed and checked. 0, or -1 with the reason in `err`. */
 int          ss_fx_read(const char *path, ss_fx *out, char *err, size_t errn);
+/* The manifest's lines alone — name, label, group, about, param, filter —
+ * shared by effects and title templates, which judge the chain differently. */
+int          ss_recipe_parse(const char *path, ss_fx *out, char *err, size_t errn);
+/* The fragment of `chain` that names a file (`fontfile=`, `textfile=`…), or
+ * NULL. Both kinds of recipe refuse one. */
+const char  *ss_recipe_names_file(const char *chain);
 /* The chain with its parameters substituted, its labels made unique to `uid`,
  * and [$in]/[$out] replaced by the labels it is being spliced between.
  *
@@ -994,6 +1001,11 @@ typedef struct {
 
     int    nfx;
     ss_clip_fx fx[SS_MAX_FX];
+
+    /* A title's template, or an empty name for the built-in caption. The
+     * same shape as an effect on the stack, `raw` included: a template this
+     * machine has not got keeps its numbers and draws the plain caption. */
+    ss_clip_fx tmpl;
 } ss_clip;
 
 void ss_clip_reset(ss_clip *c);
@@ -1468,6 +1480,102 @@ typedef struct {
 
 const ss_title_style *ss_title_styles(void);        /* NULL-name terminated */
 int  ss_title_style_apply(ss_clip *c, const char *name);   /* 0 ok, -1 no */
+
+/* A template on a title clip, its knobs at their defaults — kept as they are
+ * if it is the one already there. NULL, "" or "none" takes it off. -1 for a
+ * name not installed. */
+int  ss_clip_template_set(ss_clip *c, const char *name);
+/* One of its knobs, clamped to the recipe's range. -1 for no such knob. */
+int  ss_clip_template_param(ss_clip *c, const char *key, double v);
+
+/* ---- title templates ----
+ *
+ * What a style cannot say: a layout of SEVERAL things drawn together — a
+ * name over a role in two sizes, an accent bar beside them, a rule under a
+ * heading, a move in. A `.syntitle` is the effect manifest with a chain of
+ * drawtext and drawbox behind it, applied to a title clip in place of its
+ * built-in caption.
+ *
+ * ⚠ DRAWTEXT READS FILES, so a template never names a font or a caption.
+ * It names TOKENS, and the engine writes what they stand for:
+ *
+ *   $font, $font_bold, $font_light, $font_italic, $font_bolditalic,
+ *   $font_regular  fontfile= the clip's own family, resolved to a file
+ *   $text          textfile= the whole caption, expansion=none
+ *   $line1..$line9 textfile= one line of it (empty past the last)
+ *   $size          the clip's text size, in pixels of this delivery
+ *   $pad           a plate's padding for that size, in whole pixels
+ *   $outline       the clip's Outline at that size, whole pixels (0 = off)
+ *   $shadow        the clip's Shadow at that size, whole pixels (0 = off)
+ *   $colour        the clip's text colour, 0xRRGGBB (append @A for alpha)
+ *   $plate         the clip's background colour, 0xRRGGBB
+ *   $NAME          a declared `param`, a number clamped to its range
+ *
+ * ⚠ boxborderw is a STRING drawtext reads itself, so `$size*0.3` there is
+ * read as $size: it takes whole numbers and the whole-pixel tokens only, and
+ * a template that does arithmetic on it is refused rather than drawn wrong.
+ *
+ * Every drawtext names one font token and one text token as whole options;
+ * every other option is NAME=VALUE from a short list per filter, none of
+ * which reads anything. `t` in an expression is clip seconds in the export
+ * and in the monitor alike. So the Caption, Font, Size, colour and
+ * Background rows still drive a templated title, and the window hides the
+ * rows a template does not read.
+ *
+ * Installed to $datadir/synstudio/titles, a user's own to
+ * ~/.config/synstudio/titles (which wins on a name), and SYNSTUDIO_TITLES. */
+int          ss_title_read(const char *path, ss_fx *out, char *err, size_t errn);
+int          ss_title_load(void);
+int          ss_title_count(void);
+const ss_fx *ss_title_at(int i);
+const ss_fx *ss_title_find(const char *name);
+
+/* Which of the clip's own rows a template reads. */
+enum {
+    SS_TT_TEXT   = 1 << 0,     /* the caption */
+    SS_TT_SIZE   = 1 << 1,
+    SS_TT_COLOUR = 1 << 2,
+    SS_TT_PLATE  = 1 << 3,     /* the background colour */
+    SS_TT_FONT   = 1 << 4,     /* the family */
+    SS_TT_WEIGHT = 1 << 5,     /* the clip's own weight: a bare $font */
+    SS_TT_OUTLINE = 1 << 6,
+    SS_TT_SHADOW  = 1 << 7
+};
+#define SS_TT_LINE(k) (1 << (8 + (k)))   /* reads caption line k; 0 = all */
+#define SS_TT_FONTW(w) (1 << (20 + (w)))  /* names weight w (SS_FW_*) itself */
+int          ss_title_uses(const ss_fx *tt);
+
+#define SS_TITLE_LINES 9
+/* Where line `k` of a title's caption is baked: 0 is the whole caption,
+ * 1..SS_TITLE_LINES one line each. One function, so the bake writes the file
+ * the chain names. */
+void         ss_title_text_path(char *out, size_t n, const char *dir,
+                                int track, int idx, int k);
+/* A path or a word made safe to stand as one filter option's value. */
+void         ss_filter_escape(const char *in, char *out, size_t n);
+
+/* What the tokens stand for at one instant. The font and text entries are
+ * ALREADY ESCAPED for a filtergraph; a text entry left NULL is a line the
+ * template does not read. */
+typedef struct {
+    int         size, pad, outline, shadow;
+    char        colour[16];
+    char        plate[16];
+    const char *font[5];       /* by SS_FW_* */
+    int         weight;        /* the clip's own, for a bare $font */
+    const char *textfile[SS_TITLE_LINES + 1];
+} ss_title_ctx;
+
+/* The chain with every token replaced. With `tag`, each filter is named
+ * `<filter>@<tag>_<k>` so a command can reach it. -1 when it does not fit. */
+int          ss_title_expand(const ss_fx *tt, const double *vals, int nvals,
+                             const ss_title_ctx *cx, const char *tag,
+                             char *out, size_t n);
+/* One option's whole value at an instant — what a command re-sends when the
+ * size or colour it reads is keyed. `tg` indexes tt->target. */
+int          ss_title_target_arg(const ss_fx *tt, int tg, const double *vals,
+                                 int nvals, const ss_title_ctx *cx,
+                                 char *out, size_t n);
 
 /* ---- subtitles ----
  *

@@ -41,7 +41,9 @@ msgstr "%1 (no está)"
 msgid ""
 "%1 cannot move over time with this ffmpeg — its keys are kept, and the knob "
 "holds its own value"
-msgstr "%1 no puede variar con el tiempo con este ffmpeg: sus fotogramas clave se conservan y el control mantiene su propio valor"
+msgstr ""
+"%1 no puede variar con el tiempo con este ffmpeg: sus fotogramas clave se "
+"conservan y el control mantiene su propio valor"
 
 msgid "%1 × %2  ·  %3 fps"
 msgstr "%1 × %2  ·  %3 fps"
@@ -272,6 +274,9 @@ msgstr "Cuadrado 1:1"
 
 msgid "Stop"
 msgstr "Parar"
+
+msgid "Templates"
+msgstr "Plantillas"
 
 msgid "Thumbnail"
 msgstr "Miniatura"

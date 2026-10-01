@@ -1618,7 +1618,41 @@ pkgver=0.1.0
 #   and last. The frame comparison now scores a missing file as a mismatch: it
 #   scored 0, so a monitor render that failed would have passed as identical.
 #   796 assertions, clean under ASan+UBSan+LSan.
-pkgrel=52
+#
+# 53: title templates.
+#   A .syntitle is the effect manifest with a chain of drawtext and drawbox
+#   behind it — a name over a role beside a bar, a rule under a heading, a
+#   plate behind each line, a move in written against t. Five ship:
+#   lower-bar, name-plate, chapter, corner-tag, quote, installed to
+#   $datadir/synstudio/titles; a user's own in ~/.config/synstudio/titles win
+#   on a name. `titles list|params|show|check`, `timeline template`, and
+#   `timeline title --template`. The template stays on the clip and the
+#   clip's rows feed it; its knobs are tmpl.<knob>, set, clamped and undone
+#   like any row, and the window hides the Title rows it does not read.
+#
+#   ⚠ DRAWTEXT READS FILES, so the rules are a whitelist at every level: two
+#   filters joined by commas, a short list of options for each written
+#   NAME=VALUE, and every $ a token or a declared knob. The font and the
+#   caption are TOKENS — the clip's family resolved to a file, each caption
+#   line baked to a file read with expansion off — so a template can neither
+#   print a file into a frame nor add words to a caption. And by KIND:
+#   boxborderw is a string drawtext parses itself, which reads 14*0.3 as 14,
+#   so it takes whole pixels and the whole-pixel tokens only.
+#
+#   A keyed size or colour moves a templated title through 51's sendcmd file,
+#   to filter instances the expansion names tt<track>_<clip>_<k>. The monitor
+#   restamps its one frame as the export's frame k, in the export's own 1/fps,
+#   so t is clip seconds on both sides — stamped in microseconds, a fade's
+#   alpha on the half-way tie rounded the other way at 30 fps.
+#
+#   A template this machine has not got keeps its name and numbers through
+#   every edit and draws the plain caption meanwhile, pixel for pixel.
+#
+#   The effect recipe's line reader is shared rather than copied. Every
+#   shipped template is drawn by the monitor and by a lossless export and
+#   compared at four frames, at 25 and 30 fps, keyed and not, and through a
+#   preset at its own size: identical. 847 assertions.
+pkgrel=53
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')
