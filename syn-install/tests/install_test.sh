@@ -19,8 +19,8 @@
 #   FS=xfs LOADER=systemd-boot ENCRYPT=yes ./install_test.sh
 #   ISO=/path/to.iso KEEP=1 ./install_test.sh  # keep the disk for poking at
 #
-# Needs: qemu, edk2-ovmf, sshpass, and sudo for qemu-nbd. Takes ~10 minutes,
-# most of it pacstrap.
+# Needs: qemu, edk2-ovmf, sshpass, and a cached sudo credential (`sudo -v`)
+# for qemu-nbd. Takes ~10 minutes, most of it pacstrap.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -45,6 +45,7 @@ VARS="$work/OVMF_VARS.fd"
 LOG="$work/install.log"
 QPID=""
 NBD=""
+SUDO_KEEP=""
 
 pass=0; fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
@@ -53,8 +54,9 @@ info() { printf '  ..    %s\n' "$1"; }
 die()  { printf '\n  ABORT %s\n' "$1"; cleanup; exit 2; }
 
 cleanup() {
-    [ -n "$NBD" ] && { sudo umount "$work/esp" 2>/dev/null; sudo qemu-nbd -d "$NBD" >/dev/null 2>&1; }
+    [ -n "$NBD" ] && { sudo -n umount "$work/esp" 2>/dev/null; sudo -n qemu-nbd -d "$NBD" >/dev/null 2>&1; }
     [ -n "$QPID" ] && kill "$QPID" 2>/dev/null
+    [ -n "$SUDO_KEEP" ] && kill "$SUDO_KEEP" 2>/dev/null
     if [ "$KEEP" = "1" ]; then
         printf '\n  artifacts kept in %s\n' "$work"
     else
@@ -113,6 +115,18 @@ answers() {
 # ── Boot the ISO ──────────────────────────────────────────
 [ -n "$ISO" ] && [ -f "$ISO" ] || die "no ISO found — pass ISO=/path/to.iso"
 command -v sshpass >/dev/null || die "sshpass is required to drive the installer"
+
+# ⛔ `sudo -n`, NEVER bare sudo. The inspection needs root for qemu-nbd and mount,
+# and a run with no tty (an agent, a timer, a pipe) cannot answer a password
+# prompt: bare sudo then fails the PAM conversation, pam_faillock counts each
+# failure as a wrong password, and three lock the account until a reboot. This
+# script made fifteen such calls, all with stderr thrown away. `sudo -n` refuses
+# before PAM opens and never counts, so the credential is checked HERE, before
+# ten minutes of pacstrap, and kept fresh until the inspection is done.
+sudo -n true 2>/dev/null ||
+    die "needs a cached sudo credential for qemu-nbd and mount — run 'sudo -v' in this terminal, then run this again"
+( while sleep 60; do sudo -n -v 2>/dev/null || exit 0; done ) &
+SUDO_KEEP=$!
 
 OVMF_CODE=""
 for d in /usr/share/edk2/x64 /usr/share/edk2-ovmf/x64 /usr/share/OVMF; do
@@ -229,9 +243,9 @@ QPID=""
 #
 # From the host, on the powered-off image. "The installer said it worked" is the
 # claim under test, not the evidence.
-sudo modprobe nbd max_part=8 2>/dev/null
+sudo -n modprobe nbd max_part=8 2>/dev/null
 for n in /dev/nbd0 /dev/nbd1 /dev/nbd2 /dev/nbd3; do
-    sudo qemu-nbd --read-only -c "$n" "$DISK" 2>/dev/null && { NBD="$n"; break; }
+    sudo -n qemu-nbd --read-only -c "$n" "$DISK" 2>/dev/null && { NBD="$n"; break; }
 done
 [ -n "$NBD" ] || die "could not attach the disk image for inspection"
 sleep 2
@@ -247,15 +261,15 @@ fi
 
 espdev=$(lsblk -rno NAME,FSTYPE "$NBD" | awk '$2=="vfat"{print "/dev/"$1; exit}')
 mkdir -p "$work/esp"
-if [ -n "$espdev" ] && sudo mount -o ro "$espdev" "$work/esp" 2>/dev/null; then
+if [ -n "$espdev" ] && sudo -n mount -o ro "$espdev" "$work/esp" 2>/dev/null; then
     case "$LOADER" in
         grub)         boot_bin="EFI/SynapseOS/grubx64.efi" ;;
         systemd-boot) boot_bin="EFI/systemd/systemd-bootx64.efi" ;;
         limine)       boot_bin="EFI/BOOT/BOOTX64.EFI" ;;
     esac
-    sudo test -f "$work/esp/$boot_bin" && ok "$LOADER is on the ESP ($boot_bin)" \
+    sudo -n test -f "$work/esp/$boot_bin" && ok "$LOADER is on the ESP ($boot_bin)" \
                                        || bad "$LOADER's EFI binary is missing from the ESP"
-    sudo test -f "$work/esp/EFI/BOOT/BOOTX64.EFI" \
+    sudo -n test -f "$work/esp/EFI/BOOT/BOOTX64.EFI" \
         && ok "the removable-media fallback exists" \
         || info "no \\EFI\\BOOT\\BOOTX64.EFI (only matters if NVRAM is lost)"
 
@@ -264,14 +278,14 @@ if [ -n "$espdev" ] && sudo mount -o ro "$espdev" "$work/esp" 2>/dev/null; then
     missing=""
     while read -r key val _; do
         case "$key" in
-            linux|initrd)   sudo test -f "$work/esp/$val" || missing="$missing $val" ;;
+            linux|initrd)   sudo -n test -f "$work/esp/$val" || missing="$missing $val" ;;
             kernel_path:|module_path:) p="${val#boot():}"
-                            sudo test -f "$work/esp/$p" || missing="$missing $p" ;;
+                            sudo -n test -f "$work/esp/$p" || missing="$missing $p" ;;
         esac
-    done < <(sudo cat "$work/esp"/loader/entries/*.conf "$work/esp"/limine.conf 2>/dev/null)
+    done < <(sudo -n cat "$work/esp"/loader/entries/*.conf "$work/esp"/limine.conf 2>/dev/null)
     [ -z "$missing" ] && ok "every boot entry names a file that exists" \
                       || bad "boot entries name missing files:$missing"
-    sudo umount "$work/esp" 2>/dev/null
+    sudo -n umount "$work/esp" 2>/dev/null
 else
     bad "could not mount the ESP"
 fi
@@ -289,15 +303,15 @@ if [ "$LOADER" = grub ] && [ "$ENCRYPT" = no ]; then
               awk '$2!="" && $2!="vfat" && $2!="swap" {print "/dev/"$1; exit}')
     mkdir -p "$work/root"
     if [ -n "$rootdev" ] &&
-       { sudo mount -o ro "$rootdev" "$work/root" 2>/dev/null ||
-         sudo mount -o ro,subvol=@ "$rootdev" "$work/root" 2>/dev/null; }; then
-        mode=$(sudo stat -c %a "$work/root/boot/grub/grub.cfg" 2>/dev/null)
+       { sudo -n mount -o ro "$rootdev" "$work/root" 2>/dev/null ||
+         sudo -n mount -o ro,subvol=@ "$rootdev" "$work/root" 2>/dev/null; }; then
+        mode=$(sudo -n stat -c %a "$work/root/boot/grub/grub.cfg" 2>/dev/null)
         case "$mode" in
             "")      info "no /boot/grub/grub.cfg on the root filesystem to check" ;;
             *[4567]) ok "grub.cfg is world-readable ($mode) — the Kernel pane can see its own boot entries" ;;
             *)       bad "grub.cfg is mode $mode — the Kernel pane will report NO BOOT ENTRY for every kernel" ;;
         esac
-        sudo umount "$work/root" 2>/dev/null
+        sudo -n umount "$work/root" 2>/dev/null
     else
         info "could not mount the root filesystem to check grub.cfg's mode"
     fi
@@ -311,7 +325,7 @@ else
     bad "NVRAM has no entry for this install — it would boot the installer again"
 fi
 
-sudo qemu-nbd -d "$NBD" >/dev/null 2>&1; NBD=""
+sudo -n qemu-nbd -d "$NBD" >/dev/null 2>&1; NBD=""
 
 echo
 if [ "$fail" -gt 0 ]; then
