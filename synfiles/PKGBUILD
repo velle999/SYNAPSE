@@ -373,7 +373,13 @@ pkgver=0.1.0
 #   ASan build (3 LeakSanitizer reports, 24-40 bytes each, fileops.c:651 via
 #   cmd_collisions), so the sanitizer suite went red on it: 2 ok / 1 FAIL
 #   before, 3 ok after.
-pkgrel=82
+# 83: every human-mode `synfiles find` ended "N matches (stopped at the limit)",
+#   and an empty one printed it straight after "no matches". 74's translation
+#   pass split the summary's printf in three under an unbraced
+#   `else if (s.truncated)`, so only the first was guarded (gcc:
+#   -Wmisleading-indentation, find.c:272). Braced. Three new checks on the
+#   summary; two fail on 82.
+pkgrel=83
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -2215,6 +2215,23 @@ n=$("$SYNFILES" --rec find "$F" --name='*' --limit=2 | tail -n +2 | wc -l)
 "$SYNFILES" find "$F" --name=nothing-matches-this >/dev/null 2>&1
 [ $? -eq 100 ] && ok "find with no matches exits 100" || bad "empty find did not exit 100"
 
+# The human summary line. 74 split its printf in three under an unbraced
+# `else if (s.truncated)`, so every search ended "N matches (stopped at the
+# limit)": a complete one, and an empty one right after "no matches".
+out=$(NO_COLOR=1 "$SYNFILES" find "$F" --name=deep 2>&1)
+case "$out" in
+    *"stopped at the limit"*) bad "a complete search claims it stopped at the limit" ;;
+    *) ok "a complete search does not claim a limit" ;;
+esac
+out=$(NO_COLOR=1 "$SYNFILES" find "$F" --name=nothing-matches-this 2>&1)
+[ "$out" = "no matches" ] && ok "an empty search says only \"no matches\"" \
+    || bad "an empty search printed: $(printf '%s' "$out" | tr '\n' '|')"
+out=$(NO_COLOR=1 "$SYNFILES" find "$F" --name='*' --limit=1 2>&1)
+case "$out" in
+    *"stopped at the limit"*) ok "a capped search says it stopped at the limit" ;;
+    *) bad "a capped search did not say so: $(printf '%s' "$out" | tr '\n' '|')" ;;
+esac
+
 "$SYNFILES" find "$F" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "find with no pattern is an error" || bad "find ran with no pattern"
 

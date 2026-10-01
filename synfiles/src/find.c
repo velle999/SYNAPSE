@@ -269,10 +269,11 @@ int cmd_find(int argc, char **argv)
 	if (g_out == OUT_HUMAN) {
 		if (s.found == 0)
 			printf("%s%s%s\n", C_DIM(), _("no matches"), C_RESET());
-		else if (s.truncated)
+		else if (s.truncated) {
 			printf("%s", C_DIM());
 			printf(_("%ld matches (stopped at the limit)"), s.found);
 			printf("%s\n", C_RESET());
+		}
 	}
 
 	return s.found ? 0 : 100;
