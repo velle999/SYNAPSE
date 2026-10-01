@@ -173,6 +173,9 @@ msgstr "线性 %1"
 msgid "Looks"
 msgstr "风格"
 
+msgid "Made for"
+msgstr "用途"
+
 msgid "Mark"
 msgstr "标记"
 
@@ -259,6 +262,9 @@ msgstr "半径（横向）"
 
 msgid "Radius down"
 msgstr "半径（纵向）"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — 广播电视"
 
 msgid "Record"
 msgstr "录制"
@@ -458,6 +464,9 @@ msgstr "已在播放头处插入"
 msgid "levels at the playhead"
 msgstr "播放头处的电平"
 
+msgid "linear light, whatever the project is made for"
+msgstr "线性光，与项目用途无关"
+
 msgid "mark in, mark out on the source"
 msgstr "在源上标记入点、出点"
 
@@ -577,6 +586,9 @@ msgstr "正在生成预览…"
 
 msgid "roll the timeline"
 msgstr "让时间线跟着滚动"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — 屏幕与网页"
 
 msgid "save the cut under a name"
 msgstr "为剪辑命名并保存"

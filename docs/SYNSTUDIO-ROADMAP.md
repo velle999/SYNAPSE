@@ -24,7 +24,7 @@ Status: `[x]` shipped · `[~]` partial · `[ ]` absent · `[no]` decided against
 | effects   | sixty-one transitions (a morph among them), twenty-seven effects |
 | looks     | .cube in and out, twelve looks, and a format for those too   |
 | titles    | a face, a plate, five styles, five templates, .srt both ways |
-| delivery  | range, presets, burn-in, sequences, a queue, and thumbnails    |
+| delivery  | range, presets, burn-in, sequences, a queue, thumbnails, Rec.709 |
 | scopes    | histogram, waveform, parade and vectorscope — all measured here |
 | media     | one project, named and saved as — no pool, no proxies, no relink |
 
@@ -495,8 +495,20 @@ Fairlight-style automation: four features for one piece of work.
       code either way. ⚠ V-Log's 0.599 is 100% reflectance, NOT 90% (that is
       0.588); the spec's table is easy to misread and the anchor test is what
       caught it
-- [ ] the OUTPUT transform — a Rec.709 display curve distinct from sRGB, and
-      the colour tags to say so on a delivery
+- [x] **the output transform** — shipped in 0.1.0-55. Every video delivery
+      is converted to the BT.709 matrix and TAGGED: the composite is built
+      with BT.601 and nothing had ever said so, so a player assuming 709 (all
+      of them, for HD) showed a clip of 192,48,64 as 204,61,63. `timeline
+      output PROJ srgb|rec709` is in the document, beside the loudness target:
+      `rec709` re-encodes for a BT.1886 (2.4) display with a 1D table baked
+      from `colour.c`'s own curves, so a broadcast monitor shows what the sRGB
+      monitor did — grey 128 goes out as 135. The preview and the monitor stay
+      sRGB. ⚠ `colorspace` for the matrix, never swscale, whose yuv-to-yuv
+      change measured 192,48,64 as 189,47,61; zscale for the float path,
+      because swscale ignores tv range there. ⚠ And an EXR is LINEAR now,
+      whatever the project is made for — it had held the sRGB values,
+      misscaled: white 0.923, mid-grey 0.428. A PNG keeps the monitor's values
+      exactly and gains the tags
 - [x] **shot match** — **shipped in 0.1.0-25.** `synstudio match FILE --ref
       REF` for two photographs, `timeline match PROJ T C REFT REFC` for two
       clips. FITTED, not solved: every control has a transfer function of its
@@ -565,10 +577,10 @@ Fairlight-style automation: four features for one piece of work.
    vectorscope measured by this program rather than by a filter; a render
    range, seven presets, burn-in, image sequences and a queue.
 
-**The build order is finished.** What is left in the sections above is a
-short list of named gaps rather than a plan — the boxes still open:
-
-- the Rec.709 output transform and its colour tags (§7)
+**The build order is finished, and so is every named gap** — the last, the
+Rec.709 output transform and its colour tags, shipped in 0.1.0-55. No box
+above is open. One is `[~]` (eight grade keys a clip is a ceiling), and the
+`[no]` ones were decided against, with the reason beside each.
 
 Auto-save was never a gap and is not a feature
 here: every verb writes, so the file on disk is the cut as it stands — what

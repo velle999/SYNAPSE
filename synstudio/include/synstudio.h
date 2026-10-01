@@ -400,6 +400,12 @@ int ss_shot_match(const ss_image *ref, const ss_image *tgt, ss_develop *d,
  * exact same grade to every frame of a clip. */
 int ss_lut_write(const ss_develop *d, int size, FILE *fp, const char *title);
 
+/* A 1D .cube of one transfer function, the same curve on all three channels,
+ * for ffmpeg's lut1d. The output transforms are these: a delivery's curve is
+ * decided by colour.c like every other colour, not by a filter's own idea of
+ * what sRGB is. */
+int ss_lut1d_write(float (*fn)(float), int size, FILE *fp, const char *title);
+
 /* ----------------------------------------------------------- looks in -- */
 
 /* The other direction: somebody ELSE's .cube, read and applied.
@@ -1227,6 +1233,13 @@ typedef struct {
      * property of the deliverable, not of one render. */
     float  lufs;
 
+    /* The display a DELIVERY is encoded for: SS_OUT_SRGB (what every project
+     * starts as) or SS_OUT_REC709, a BT.1886 2.4-gamma display. Every video
+     * delivery is converted to the BT.709 matrix and tagged either way; this
+     * decides only the CURVE. The monitor and the preview are always sRGB —
+     * they are watched on this screen. An EXR is linear whatever it says. */
+    int    output;
+
     /* The program monitor only, and never written: tint where one clip's
      * mask covers, so it can be placed. Set by `timeline frame --show-mask`. */
     int    show_mask, show_mask_track, show_mask_clip, show_mask_k;
@@ -1234,6 +1247,12 @@ typedef struct {
 
 /* What actually gets rendered: the range if there is one, else 0..duration. */
 void ss_timeline_range(const ss_timeline *t, double *in, double *out);
+
+/* The two output transforms, by name: `srgb` and `rec709`. */
+enum { SS_OUT_SRGB = 0, SS_OUT_REC709 = 1 };
+int         ss_output_value(const char *s);     /* -1 = not a name */
+const char *ss_output_name(int v);
+const char *ss_output_label(int v);
 
 /* ---- delivery presets ----
  *
@@ -1473,6 +1492,13 @@ typedef struct {
 const ss_tl_format *ss_timeline_formats(void);
 const ss_tl_format *ss_timeline_format(const char *name, const char *out);
 
+/* Whether this delivery's output transform runs through zscale: 2 for an
+ * EXR (always), 1 for a Rec.709 video or PNG, 0 for neither. zscale is
+ * libzimg's, so an ffmpeg can lack it — and a graph naming a filter that is
+ * not there fails before the first frame. */
+int ss_output_needs_zscale(const ss_timeline *t, const ss_tl_format *f,
+                           int preview);
+
 /* `subs` is a .srt shipped as a soft stream rather than burnt in — NULL for
  * none, and ignored on a preview. It is an argument and not a project field
  * because it is a property of the DELIVERY: the same cut ships with captions
@@ -1664,6 +1690,8 @@ int    ss_textpos_value(const char *s);
 
 float ss_srgb_to_linear(float v);
 float ss_linear_to_srgb(float v);
+/* Light to a BT.1886 display's code value: a pure 2.4 power, black at zero. */
+float ss_linear_to_bt1886(float v);
 float ss_clampf(float v, float lo, float hi);
 float ss_luma(float r, float g, float b);
 

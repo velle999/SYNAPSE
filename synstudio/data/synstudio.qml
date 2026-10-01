@@ -921,6 +921,10 @@ FloatingWindow {
     readonly property string exportSrc: root.mode === "video" ? root.proj : root.file
     readonly property string exportDir:
         root.exportSrc.replace(/\/[^\/]*$/, "") || "/"
+    readonly property bool exportIsExr:
+        root.mode === "video" && root.exportFmt >= 0
+        && root.exportFmt < root.exportFormats.length
+        && root.exportFormats[root.exportFmt].name === "exr"
     readonly property string exportExt:
         (root.exportFmt >= 0 && root.exportFmt < root.exportFormats.length)
         ? root.exportFormats[root.exportFmt].ext : ""
@@ -1197,7 +1201,7 @@ FloatingWindow {
     // `timeline show` is tab-separated and line-oriented, and a grade is a
     // block between `grade` and `endgrade` belonging to the clip above it.
     function parseTimeline(text) {
-        const doc = { w: 1920, h: 1080, fps: 25, master: 0,
+        const doc = { w: 1920, h: 1080, fps: 25, master: 0, output: "srgb",
                       markers: [], tracks: [] }
         const lines = text.split("\n")
         let tr = null, cl = null, inGrade = false, inKey = false, inMask = null
@@ -1246,6 +1250,8 @@ FloatingWindow {
                 }
                 break
             case "master": doc.master = parseFloat(f[1]) || 0; break
+            // Only written when it is not sRGB.
+            case "output": doc.output = f[1] || "srgb"; break
             case "marker":
                 doc.markers.push({ t: parseFloat(f[1]) || 0,
                                    colour: parseInt(f[2]) || 0,
@@ -6520,6 +6526,49 @@ FloatingWindow {
                             hoverEnabled: true
                             onClicked: root.exportFmt = fmtRow.index
                         }
+                    }
+                }
+
+                // The display the cut is made for. A property of the PROJECT
+                // (`timeline output`), so it is set here and kept: the next
+                // export is mastered the same way. A Flow, so a longer
+                // translation wraps instead of running off the sheet.
+                Flow {
+                    id: outPick
+                    visible: root.mode === "video"
+                    width: parent.width
+                    spacing: 6
+
+                    Text {
+                        height: 26
+                        verticalAlignment: Text.AlignVCenter
+                        text: I18n.tr("Made for")
+                        color: root.cDim
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
+                    }
+                    Repeater {
+                        model: [
+                            { name: "srgb",   label: I18n.tr("sRGB — screens and the web") },
+                            { name: "rec709", label: I18n.tr("Rec.709 — broadcast") }
+                        ]
+                        Btn {
+                            required property var modelData
+                            label: modelData.label
+                            visible: !root.exportIsExr
+                            on: ((root.tl && root.tl.output) || "srgb") === modelData.name
+                            onClicked: if (!on) root.tlRun(["output", root.proj,
+                                                            modelData.name])
+                        }
+                    }
+                    Text {
+                        visible: root.exportIsExr
+                        height: 26
+                        verticalAlignment: Text.AlignVCenter
+                        text: I18n.tr("linear light, whatever the project is made for")
+                        color: root.cText
+                        font.pixelSize: root.ui(11)
+                        font.family: root.uiFont
                     }
                 }
 

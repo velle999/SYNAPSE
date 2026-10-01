@@ -178,6 +178,9 @@ msgstr "Lineair %1"
 msgid "Looks"
 msgstr "Looks"
 
+msgid "Made for"
+msgstr "Bedoeld voor"
+
 msgid "Mark"
 msgstr "Markering"
 
@@ -264,6 +267,9 @@ msgstr "Straal horizontaal"
 
 msgid "Radius down"
 msgstr "Straal verticaal"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — omroep"
 
 msgid "Record"
 msgstr "Opnemen"
@@ -465,6 +471,9 @@ msgstr "ingevoegd bij de afspeelkop"
 msgid "levels at the playhead"
 msgstr "niveaus bij de afspeelkop"
 
+msgid "linear light, whatever the project is made for"
+msgstr "lineair licht, waarvoor het project ook bedoeld is"
+
 msgid "mark in, mark out on the source"
 msgstr "begin- en eindpunt op de bron"
 
@@ -584,6 +593,9 @@ msgstr "voorvertoning wordt berekend…"
 
 msgid "roll the timeline"
 msgstr "de tijdlijn mee laten lopen"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — schermen en web"
 
 msgid "save the cut under a name"
 msgstr "de montage onder een naam opslaan"

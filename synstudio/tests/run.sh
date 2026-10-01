@@ -1712,20 +1712,25 @@ done
 # values away from it — near enough to look right and not near enough to be
 # the same picture.
 $BIN timeline set "$xp" 0 1 trans=dip trans.r=1 trans.g=1 trans.b=1
-$BIN timeline export "$xp" --out "$TMP/dip.mp4" >/dev/null 2>&1
+# A PNG sequence, which holds the monitor's own values. An mp4 is converted to
+# the BT.709 matrix on the way out and can round a code value differently —
+# and this check is EXACT because an alpha a few code values off is the bug
+# it was written for, which a tolerance would let through.
+rm -rf "$TMP/dip"; mkdir -p "$TMP/dip"
+$BIN timeline export "$xp" --format png --out "$TMP/dip/f_%04d.png" >/dev/null 2>&1
 # 1.52 and not 1.5: the frames either side of the middle are what the export
 # actually writes, and the monitor stamps its own frame on the same grid — so
 # asking for an instant BETWEEN two frames gets the earlier one, which is the
 # picture that will be on screen there. That is the right answer and not a
 # rounding error.
 $BIN timeline frame "$xp" --at 1.52 --out "$TMP/dipm.png" >/dev/null 2>&1
-exp_frame "$TMP/dip.mp4" 38 "$TMP/dipe.png"
+cp "$TMP/dip/f_0039.png" "$TMP/dipe.png"      # frame 38
 check "the middle of a dip IS the colour" "255,255,255" \
       "$(pixel_at "$TMP/dipm.png" 160 80 45)"
 check "and the export dips through the same one" "255,255,255" \
       "$(pixel_at "$TMP/dipe.png" 160 80 45)"
 $BIN timeline frame "$xp" --at 1.25 --out "$TMP/dipq.png" >/dev/null 2>&1
-exp_frame "$TMP/dip.mp4" 31 "$TMP/dipqe.png"
+cp "$TMP/dip/f_0032.png" "$TMP/dipqe.png"     # frame 31
 check "and they are the same picture on the way in" \
       "$(pixel_at "$TMP/dipq.png" 160 80 45)" \
       "$(pixel_at "$TMP/dipqe.png" 160 80 45)"
@@ -5258,6 +5263,166 @@ check "and a refusal changes nothing" "1922" \
 if [ -f "$qml" ]; then
     seen "the status size opens the frame picker" 'root.sizeMenuOpen = true' < "$qml"
     seen "picking one goes through the edit queue" 'root.tlRun(["size"' < "$qml"
+fi
+
+# ── the output transform: the matrix, the curve and the tags ─────────────────
+#
+# The composite is 8-bit yuv420 built with the BT.601 matrix, and nothing ever
+# said so: a delivery went out BT.601 and UNTAGGED, and a player assuming
+# BT.709 (all of them, for HD) showed a clip of 192,48,64 as 204,61,63. Every
+# video delivery is converted to 709 and tagged now; `output rec709` adds the
+# BT.1886 curve for a broadcast display; an EXR is linear whatever is set.
+echo "== the output transform (Rec.709, the matrix, the tags)"
+op=$TMP/out.syntl
+$BIN timeline new "$op" --size 320x180 --fps 25 >/dev/null 2>&1
+$BIN timeline track "$op" video V1 >/dev/null
+# 192,48,64 — far enough from grey that the two matrices disagree by a lot.
+$BIN timeline solid "$op" 0 --at 0 --dur 1 --colour 0.752941,0.188235,0.250980 >/dev/null
+# mid-grey 128, and white
+$BIN timeline solid "$op" 0 --at 1 --dur 1 --colour 0.501961,0.501961,0.501961 >/dev/null
+$BIN timeline solid "$op" 0 --at 2 --dur 1 --colour 1,1,1 >/dev/null
+
+outof() { $BIN timeline output "$1" | awk -F'\t' '$1=="output"{print $2}'; }
+check "a project starts out made for sRGB" "srgb" "$(outof "$op")"
+check "and says nothing about it in the file" "0" "$(grep -c '^output' "$op")"
+$BIN timeline output "$op" rec709 >/dev/null
+check "rec709 is written into the project" "1" "$(grep -c '^output	rec709$' "$op")"
+check "and read back" "rec709" "$(outof "$op")"
+$BIN timeline undo "$op" >/dev/null 2>&1
+check "it is an edit like any other: undo takes it back" "srgb" "$(outof "$op")"
+$BIN timeline output "$op" REC709 >/dev/null
+check "the name is not case-sensitive" "rec709" "$(outof "$op")"
+check "a name that is not one is refused" "1" \
+      "$($BIN timeline output "$op" p3 >/dev/null 2>&1; echo $?)"
+check "and the refusal changes nothing" "rec709" "$(outof "$op")"
+$BIN timeline output "$op" srgb >/dev/null
+check "srgb takes the line back out" "0" "$(grep -c '^output' "$op")"
+# A name from some later build reads as sRGB: the one answer that cannot make
+# a delivery darker or lighter than the monitor showed it.
+{ cat "$op"; printf 'output\tp3-d65\n'; } > "$TMP/out-later.syntl"
+check "(the line is there to be read)" "1" "$(grep -c '^output	p3-d65$' "$TMP/out-later.syntl")"
+check "a name this build does not know reads as sRGB" "srgb" "$(outof "$TMP/out-later.syntl")"
+
+# What a player is told, and what it then shows.
+tags() {    # tags <file> -> range,space,transfer,primaries as ffprobe names them
+    ffprobe -v error -select_streams v:0 -show_entries \
+        stream=color_range,color_space,color_transfer,color_primaries \
+        -of csv=p=0 "$1" 2>/dev/null
+}
+exr_at() {  # exr_at <file.exr> <x> <y> -> "r g b" as floats
+    ffmpeg -v error -i "$1" -vf "crop=1:1:$2:$3" -f rawvideo -pix_fmt gbrpf32le - \
+        2>/dev/null | od -An -tf4 -v | awk '{ printf "%s %s %s", $3, $1, $2 }'
+}
+if have ffmpeg && have ffprobe; then
+    $BIN timeline frame "$op" --at 0.5 --out "$TMP/om.png" >/dev/null 2>&1
+    mon=$(pixel_at "$TMP/om.png" 320 160 90)
+
+    $BIN timeline export "$op" --out "$TMP/os.mp4" >/dev/null 2>&1
+    check "an sRGB delivery is tagged 709 matrix, sRGB curve, tv range" \
+          "tv,bt709,iec61966-2-1,bt709" "$(tags "$TMP/os.mp4")"
+    exp_frame "$TMP/os.mp4" 12 "$TMP/ose.png"
+    samepx "and a player reading those tags shows the monitor's colour" \
+           "$mon" "$(pixel_at "$TMP/ose.png" 320 160 90)"
+    $BIN timeline export "$op" --out "$TMP/os2.mov" --format prores >/dev/null 2>&1
+    check "ProRes is tagged the same way" "tv,bt709,iec61966-2-1,bt709" \
+          "$(tags "$TMP/os2.mov")"
+    exp_frame "$TMP/os2.mov" 12 "$TMP/ose2.png"
+    samepx "and shows the same colour" "$mon" "$(pixel_at "$TMP/ose2.png" 320 160 90)"
+    for f in mkv webm; do
+        $BIN timeline export "$op" --format $f --out "$TMP/os3.$f" >/dev/null 2>&1
+        check "$f is tagged too" "tv,bt709,iec61966-2-1,bt709" "$(tags "$TMP/os3.$f")"
+    done
+
+    # A PNG sequence keeps the monitor's values EXACTLY and only says what
+    # they are.
+    rm -rf "$TMP/ops"; mkdir -p "$TMP/ops"
+    $BIN timeline export "$op" --format png --out "$TMP/ops/f_%04d.png" >/dev/null 2>&1
+    check "an sRGB PNG is the monitor's picture, exactly" "$mon" \
+          "$(pixel_at "$TMP/ops/f_0013.png" 320 160 90)"
+    check "and is tagged sRGB" "iec61966-2-1" \
+          "$(tags "$TMP/ops/f_0013.png" | cut -d, -f3)"
+
+    # ---- rec709: the BT.1886 curve ----
+    #
+    # The same light on a 2.4 display needs a higher code value than on sRGB:
+    # grey 128 is 0.2159 linear, and 0.2159^(1/2.4) is 134.6 of 255. White
+    # and black do not move.
+    $BIN timeline output "$op" rec709 >/dev/null
+    $BIN timeline export "$op" --out "$TMP/or.mp4" >/dev/null 2>&1
+    check "a Rec.709 delivery is tagged with the 709 curve" "tv,bt709,bt709,bt709" \
+          "$(tags "$TMP/or.mp4")"
+    exp_frame "$TMP/or.mp4" 37 "$TMP/ore.png"
+    near "and grey 128 is lifted to 134.6" 134.6 \
+         "$(pixel_at "$TMP/ore.png" 320 160 90 | cut -d, -f2)" 1.5
+    exp_frame "$TMP/or.mp4" 62 "$TMP/orw.png"
+    check "white stays white" "255,255,255" "$(pixel_at "$TMP/orw.png" 320 160 90)"
+    rm -rf "$TMP/orp"; mkdir -p "$TMP/orp"
+    $BIN timeline export "$op" --format png --out "$TMP/orp/f_%04d.png" >/dev/null 2>&1
+    near "a Rec.709 PNG carries the curve too" 134.6 \
+         "$(pixel_at "$TMP/orp/f_0038.png" 320 160 90 | cut -d, -f2)" 1.5
+    # ⚠ The preview is watched on THIS screen, so it is sRGB whatever the
+    # delivery is made for.
+    $BIN timeline export "$op" --preview --out "$TMP/opv.mp4" >/dev/null 2>&1
+    check "the preview stays sRGB" "tv,bt709,iec61966-2-1,bt709" "$(tags "$TMP/opv.mp4")"
+    exp_frame "$TMP/opv.mp4" 37 "$TMP/opve.png"
+    check "and shows grey 128 as 128" "128" \
+          "$(pixel_at "$TMP/opve.png" 320 160 90 | cut -d, -f2)"
+    $BIN timeline frame "$op" --at 1.5 --out "$TMP/omg.png" >/dev/null 2>&1
+    check "and so does the monitor" "128,128,128" "$(pixel_at "$TMP/omg.png" 320 160 90)"
+
+    # ---- EXR: linear, whatever the project is made for ----
+    #
+    # ⛔ Before 0.1.0-55 an EXR held the sRGB values, misscaled — white 0.923,
+    # grey 0.428 — in a format whose whole meaning is linear light.
+    for o in rec709 srgb; do
+        $BIN timeline output "$op" $o >/dev/null
+        rm -rf "$TMP/oe"; mkdir -p "$TMP/oe"
+        $BIN timeline export "$op" --format exr --out "$TMP/oe/f_%04d.exr" >/dev/null 2>&1
+        set -- $(exr_at "$TMP/oe/f_0063.exr" 160 90)
+        near "an EXR's white is 1.0 ($o)" 1.0 "${2:-0}" 0.002
+        set -- $(exr_at "$TMP/oe/f_0038.exr" 160 90)
+        near "and grey 128 is 0.2159 linear ($o)" 0.2159 "${2:-0}" 0.002
+        set -- $(exr_at "$TMP/oe/f_0013.exr" 160 90)
+        near "and 192 of red is 0.527 ($o)" 0.5271 "${1:-0}" 0.004
+    done
+
+    # ⚠ The curve tables are scratch, and go with the render.
+    : > "$TMP/.omark"
+    $BIN timeline export "$op" --format exr --out "$TMP/oe/f_%04d.exr" >/dev/null 2>&1
+    check "the curve tables are cleaned up after a render" "0" \
+          "$(find /tmp -maxdepth 2 -path '/tmp/synstudio-lut-*' -name 'out_*.cube' \
+                  -newer "$TMP/.omark" 2>/dev/null | wc -l)"
+fi
+
+# ⚠ zscale is libzimg's, and an ffmpeg can be built without it. A graph that
+# names a filter ffmpeg has not got fails with a message about the GRAPH, so
+# the export says it first, in words about the delivery. A stand-in ffmpeg
+# that has no zscale and hands everything else to the real one:
+if have ffmpeg; then
+    nz=$TMP/nozscale; mkdir -p "$nz"
+    {
+        echo '#!/bin/bash'
+        echo 'for a in "$@"; do'
+        echo '    [ "$a" = "filter=zscale" ] && { echo "Unknown filter '"'"'zscale'"'"'."; exit 1; }'
+        echo 'done'
+        echo "exec \"$(command -v ffmpeg)\" \"\$@\""
+    } > "$nz/ffmpeg"
+    chmod +x "$nz/ffmpeg"
+    $BIN timeline output "$op" rec709 >/dev/null
+    PATH="$nz:$PATH" $BIN timeline export "$op" --out "$TMP/nz.mp4" --print 2>&1 \
+        | seen "a Rec.709 delivery without zscale is refused, by name" "no zscale filter"
+    PATH="$nz:$PATH" $BIN timeline export "$op" --out "$TMP/nz.mp4" --print 2>&1 \
+        | seen "and says how to deliver without it" "timeline output $op srgb"
+    $BIN timeline output "$op" srgb >/dev/null
+    PATH="$nz:$PATH" $BIN timeline export "$op" --out "$TMP/nz.mp4" --print 2>&1 \
+        | seen "an sRGB one does not need it" "colorspace=ispace=bt470bg"
+    PATH="$nz:$PATH" $BIN timeline export "$op" --format exr --out "$TMP/nz/f_%04d.exr" \
+        --print 2>&1 | seen "an EXR without zscale is refused too" "PNG sequence"
+fi
+
+if [ -f "$qml" ]; then
+    seen "the export sheet sets it through the edit queue" 'root.tlRun(["output"' < "$qml"
+    seen "and the window reads it back from the document" 'case "output":' < "$qml"
 fi
 
 pass=$(grep -c '^p' "$RESULTS")

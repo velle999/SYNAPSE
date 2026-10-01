@@ -59,3 +59,26 @@ int ss_lut_write(const ss_develop *d, int size, FILE *fp, const char *title)
 
     return ferror(fp) ? -1 : 0;
 }
+
+/* A transfer function as a 1D LUT. 4096 entries is what an output transform
+ * is written with: lut1d interpolates linearly between them, and at that
+ * spacing sRGB-to-linear is within 1e-7 of the formula everywhere and the
+ * BT.1886 curve within 4e-6 from the first 8-bit code value up. Only inside
+ * the table's first step, below any code a picture here can hold, does the
+ * 2.4 root's vertical start open a gap (0.003). */
+int ss_lut1d_write(float (*fn)(float), int size, FILE *fp, const char *title)
+{
+    int i;
+
+    if (!fn || size < 2 || size > 65536) return -1;
+
+    if (title && *title) fprintf(fp, "TITLE \"%s\"\n", title);
+    fprintf(fp, "LUT_1D_SIZE %d\n", size);
+    fprintf(fp, "DOMAIN_MIN 0.0 0.0 0.0\n");
+    fprintf(fp, "DOMAIN_MAX 1.0 1.0 1.0\n\n");
+    for (i = 0; i < size; i++) {
+        float v = fn((float)i / (float)(size - 1));
+        fprintf(fp, "%.6f %.6f %.6f\n", v, v, v);
+    }
+    return ferror(fp) ? -1 : 0;
+}

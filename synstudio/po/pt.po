@@ -178,6 +178,9 @@ msgstr "Linear %1"
 msgid "Looks"
 msgstr "Estilos"
 
+msgid "Made for"
+msgstr "Feito para"
+
 msgid "Mark"
 msgstr "Marca"
 
@@ -264,6 +267,9 @@ msgstr "Raio horizontal"
 
 msgid "Radius down"
 msgstr "Raio vertical"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — transmissão"
 
 msgid "Record"
 msgstr "Gravar"
@@ -465,6 +471,9 @@ msgstr "inserido na cabeça de leitura"
 msgid "levels at the playhead"
 msgstr "níveis na cabeça de leitura"
 
+msgid "linear light, whatever the project is made for"
+msgstr "luz linear, seja qual for o destino do projeto"
+
 msgid "mark in, mark out on the source"
 msgstr "marcar entrada e saída na origem"
 
@@ -584,6 +593,9 @@ msgstr "a gerar uma pré-visualização…"
 
 msgid "roll the timeline"
 msgstr "fazer correr a linha de tempo"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — ecrãs e web"
 
 msgid "save the cut under a name"
 msgstr "guardar a montagem com um nome"

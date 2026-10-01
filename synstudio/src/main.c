@@ -187,6 +187,10 @@ static void usage(void)
 "       the same frame, MEASURED — composited first, so it describes the\n"
 "       picture that will be delivered\n"
 "  timeline range PROJ [--at A] [--to B] [--off]   what a render covers\n"
+"  timeline output PROJ [srgb|rec709]   the display a delivery is for:\n"
+"       sRGB for screens and the web, Rec.709 for a broadcast (2.4) display.\n"
+"       Either way a video is converted to the BT.709 matrix and tagged;\n"
+"       an EXR is always linear\n"
 "  timeline presets              delivery sizes, by where they are going\n"
 "  timeline queue PROJ add --out F ...   put a render on the queue\n"
 "  timeline queue PROJ list|run|clear    run them one at a time\n"
@@ -2276,6 +2280,22 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         return 0;
     }
 
+    /* The display a delivery is encoded for. A verb, like the loudness
+     * target, because it is a property of the programme: the same cut
+     * mastered for broadcast is mastered for broadcast at every render. */
+    if (!strcmp(verb, "output")) {
+        if (argc > 4) {
+            int v = ss_output_value(argv[4]);
+            if (v < 0) return die("output is srgb or rec709, not %s", argv[4]);
+            if (argc > 5) return die("output takes one name");
+            t->output = v;
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+        }
+        printf("output\t%s\nlabel\t%s\n", ss_output_name(t->output),
+               ss_output_label(t->output));
+        return 0;
+    }
+
     /* The frame this project delivers in.
      *
      * ⛔ `timeline new --size WxH` was the ONLY way to say it, so a cut started
@@ -4007,6 +4027,22 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         if (o.subs && !o.preview && !f->scodec)
             return die("%s cannot carry a subtitle stream — burn them in "
                        "with `timeline subs`, or deliver as mkv", f->name);
+        /* Said before the bake and the encode, in words about the delivery:
+         * a graph naming a filter ffmpeg has not got fails with a message
+         * about the GRAPH. */
+        {
+            int z = ss_output_needs_zscale(rt, f, o.preview);
+            if (z && !ss_ffmpeg_filter_has("zscale", "matrixin")) {
+                if (z == 2)
+                    return die("this ffmpeg has no zscale filter (it was built "
+                               "without libzimg), and an EXR is made linear "
+                               "through it — deliver a PNG sequence instead");
+                return die("this ffmpeg has no zscale filter (it was built "
+                           "without libzimg), and a Rec.709 delivery needs it "
+                           "— `timeline output %s srgb` delivers without it",
+                           proj);
+            }
+        }
 
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
 

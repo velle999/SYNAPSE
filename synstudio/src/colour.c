@@ -61,6 +61,18 @@ float ss_linear_to_srgb(float v)
     return s * a;
 }
 
+/* The inverse of BT.1886's EOTF with the display's black at zero: a pure 2.4
+ * power, no linear toe. This is the curve a Rec.709 delivery is encoded with
+ * so that a broadcast display shows the light the sRGB monitor showed — the
+ * same code value means more light on a 2.4 display than on sRGB's ~2.2, so
+ * the shadows have to be lifted to arrive at the same place. Mirrored like
+ * the two above. */
+float ss_linear_to_bt1886(float v)
+{
+    float s = v < 0.0f ? -1.0f : 1.0f;
+    return s * powf(fabsf(v), 1.0f / 2.4f);
+}
+
 /* ------------------------------------------------------- white balance -- */
 
 /* Planckian locus, Kim et al.'s cubic fit, valid 1667K..25000K. Below 4000K

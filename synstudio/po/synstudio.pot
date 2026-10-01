@@ -159,6 +159,9 @@ msgstr ""
 msgid "Looks"
 msgstr ""
 
+msgid "Made for"
+msgstr ""
+
 msgid "Mark"
 msgstr ""
 
@@ -244,6 +247,9 @@ msgid "Radius across"
 msgstr ""
 
 msgid "Radius down"
+msgstr ""
+
+msgid "Rec.709 — broadcast"
 msgstr ""
 
 msgid "Record"
@@ -442,6 +448,9 @@ msgstr ""
 msgid "levels at the playhead"
 msgstr ""
 
+msgid "linear light, whatever the project is made for"
+msgstr ""
+
 msgid "mark in, mark out on the source"
 msgstr ""
 
@@ -560,6 +569,9 @@ msgid "rendering a preview…"
 msgstr ""
 
 msgid "roll the timeline"
+msgstr ""
+
+msgid "sRGB — screens and the web"
 msgstr ""
 
 msgid "save the cut under a name"

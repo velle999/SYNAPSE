@@ -179,6 +179,9 @@ msgstr "Liniowa %1"
 msgid "Looks"
 msgstr "Style"
 
+msgid "Made for"
+msgstr "Przeznaczenie"
+
 msgid "Mark"
 msgstr "Znacznik"
 
@@ -266,6 +269,9 @@ msgstr "Promień w poziomie"
 
 msgid "Radius down"
 msgstr "Promień w pionie"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — emisja telewizyjna"
 
 msgid "Record"
 msgstr "Nagrywaj"
@@ -465,6 +471,9 @@ msgstr "wstawiono przy głowicy"
 msgid "levels at the playhead"
 msgstr "poziomy przy głowicy"
 
+msgid "linear light, whatever the project is made for"
+msgstr "światło liniowe, niezależnie od przeznaczenia projektu"
+
 msgid "mark in, mark out on the source"
 msgstr "punkt początkowy i końcowy na źródle"
 
@@ -584,6 +593,9 @@ msgstr "generowanie podglądu…"
 
 msgid "roll the timeline"
 msgstr "przewijaj oś czasu"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — ekrany i internet"
 
 msgid "save the cut under a name"
 msgstr "zapisz montaż pod nazwą"

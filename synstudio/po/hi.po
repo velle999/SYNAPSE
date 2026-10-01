@@ -176,6 +176,9 @@ msgstr "रैखिक %1"
 msgid "Looks"
 msgstr "रूप"
 
+msgid "Made for"
+msgstr "किसके लिए"
+
 msgid "Mark"
 msgstr "चिह्न"
 
@@ -262,6 +265,9 @@ msgstr "त्रिज्या क्षैतिज"
 
 msgid "Radius down"
 msgstr "त्रिज्या ऊर्ध्वाधर"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — प्रसारण"
 
 msgid "Record"
 msgstr "रिकॉर्ड करें"
@@ -461,6 +467,9 @@ msgstr "प्लेहेड पर डाला गया"
 msgid "levels at the playhead"
 msgstr "प्लेहेड पर स्तर"
 
+msgid "linear light, whatever the project is made for"
+msgstr "रैखिक प्रकाश, प्रोजेक्ट चाहे जिसके लिए हो"
+
 msgid "mark in, mark out on the source"
 msgstr "स्रोत पर आरंभ और अंत चिह्न लगाएँ"
 
@@ -580,6 +589,9 @@ msgstr "झलक बनाई जा रही है…"
 
 msgid "roll the timeline"
 msgstr "समयरेखा साथ चलाएँ"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — स्क्रीन और वेब"
 
 msgid "save the cut under a name"
 msgstr "संपादन को नाम देकर सहेजें"

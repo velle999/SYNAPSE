@@ -175,6 +175,9 @@ msgstr "線形 %1"
 msgid "Looks"
 msgstr "ルック"
 
+msgid "Made for"
+msgstr "用途"
+
 msgid "Mark"
 msgstr "マーカー"
 
@@ -263,6 +266,9 @@ msgstr "半径（横）"
 
 msgid "Radius down"
 msgstr "半径（縦）"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — 放送"
 
 msgid "Record"
 msgstr "録音"
@@ -464,6 +470,9 @@ msgstr "再生ヘッドの位置にインサートしました"
 msgid "levels at the playhead"
 msgstr "再生ヘッドの位置のレベル"
 
+msgid "linear light, whatever the project is made for"
+msgstr "プロジェクトの用途にかかわらずリニア光"
+
 msgid "mark in, mark out on the source"
 msgstr "ソースに IN 点・OUT 点を打つ"
 
@@ -583,6 +592,9 @@ msgstr "プレビューを生成しています…"
 
 msgid "roll the timeline"
 msgstr "タイムラインを送る"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — 画面とウェブ"
 
 msgid "save the cut under a name"
 msgstr "カットに名前を付けて保存する"

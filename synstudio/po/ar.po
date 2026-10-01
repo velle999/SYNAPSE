@@ -182,6 +182,9 @@ msgstr "خطي %1"
 msgid "Looks"
 msgstr "المظاهر"
 
+msgid "Made for"
+msgstr "مخصّص لـ"
+
 msgid "Mark"
 msgstr "علامة"
 
@@ -268,6 +271,9 @@ msgstr "نصف القطر أفقيًا"
 
 msgid "Radius down"
 msgstr "نصف القطر عموديًا"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — للبث"
 
 msgid "Record"
 msgstr "تسجيل"
@@ -467,6 +473,9 @@ msgstr "أُدرج عند رأس التشغيل"
 msgid "levels at the playhead"
 msgstr "المستويات عند رأس التشغيل"
 
+msgid "linear light, whatever the project is made for"
+msgstr "ضوء خطي، أيًّا كان ما صُمّم له المشروع"
+
 msgid "mark in, mark out on the source"
 msgstr "تحديد البداية والنهاية على المصدر"
 
@@ -586,6 +595,9 @@ msgstr "جارٍ توليد معاينة…"
 
 msgid "roll the timeline"
 msgstr "تمرير الخط الزمني"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — للشاشات والويب"
 
 msgid "save the cut under a name"
 msgstr "حفظ المونتاج باسم"

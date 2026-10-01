@@ -1682,7 +1682,37 @@ pkgver=0.1.0
 #   against 18 without its masks. Every case — yuv, alpha, a moving grade, a
 #   crop, a mask's own sharpening, a turn, a zoom, a zoom and a turn — is the
 #   monitor's picture exactly. 882 assertions.
-pkgrel=54
+#
+# 55: the output transform, and colour tags on every delivery.
+#   ⛔ EVERY VIDEO WAS DELIVERED BT.601 AND UNTAGGED. The composite is 8-bit
+#   yuv420 built by overlay with the 601 matrix, and the monitor decodes it
+#   with the same matrix, which is why the two always agreed. A player
+#   assumes 709 for HD and showed a clip of 192,48,64 as 204,61,63. Every
+#   video delivery and the preview now end in `colorspace` (601 to 709, the
+#   matrix only) and setparams tags — bt709 primaries and matrix, the sRGB
+#   curve, tv range — which x264, x265, vp9 and prores_ks all carry.
+#   ⚠ Not swscale: its yuv-to-yuv matrix change measured 192,48,64 as
+#   189,47,61.
+#
+#   `timeline output PROJ srgb|rec709`, in the document beside the loudness
+#   target, and a Made for row on the export sheet. rec709 re-encodes for a
+#   BT.1886 2.4 display: zscale to float, a 4096-entry lut1d table baked from
+#   colour.c (ss_srgb_to_linear, then the new ss_linear_to_bt1886), back to
+#   the 709 matrix. Grey 128 goes out as 135 (134.6 by the formula); white
+#   and black stay. The preview and the monitor are always sRGB.
+#
+#   ⛔ AN EXR WAS NOT LINEAR. swscale's yuv-to-float ignores tv range, so an
+#   EXR held the sRGB values misscaled: white 0.923, grey 128 0.428. zscale
+#   (exact: white 1.000) and the sRGB-to-linear table give 1.0 and 0.2162
+#   against 0.2159. A PNG keeps the monitor's values exactly and gains the
+#   tags. zscale is libzimg's, so an export that needs it says so before it
+#   starts when ffmpeg lacks it.
+#
+#   ⚠ The dip test compared the monitor to an mp4 EXACTLY; the 709
+#   conversion rounds a code value differently, and that check guards an
+#   alpha a few values off, so it reads a lossless PNG export now. 921
+#   assertions, 15 mutations each caught, clean under ASan+UBSan+LSan.
+pkgrel=55
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

@@ -180,6 +180,9 @@ msgstr "Линейная %1"
 msgid "Looks"
 msgstr "Образы"
 
+msgid "Made for"
+msgstr "Предназначено для"
+
 msgid "Mark"
 msgstr "Метка"
 
@@ -267,6 +270,9 @@ msgstr "Радиус по горизонтали"
 
 msgid "Radius down"
 msgstr "Радиус по вертикали"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — вещание"
 
 msgid "Record"
 msgstr "Запись"
@@ -466,6 +472,9 @@ msgstr "вставлено у указателя"
 msgid "levels at the playhead"
 msgstr "уровни у указателя"
 
+msgid "linear light, whatever the project is made for"
+msgstr "линейный свет, независимо от назначения проекта"
+
 msgid "mark in, mark out on the source"
 msgstr "начальная и конечная точки на источнике"
 
@@ -585,6 +594,9 @@ msgstr "строится предпросмотр…"
 
 msgid "roll the timeline"
 msgstr "прокручивать монтажную линейку"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — экраны и веб"
 
 msgid "save the cut under a name"
 msgstr "сохранить монтаж под именем"

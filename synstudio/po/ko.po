@@ -175,6 +175,9 @@ msgstr "선형 %1"
 msgid "Looks"
 msgstr "룩"
 
+msgid "Made for"
+msgstr "용도"
+
 msgid "Mark"
 msgstr "마커"
 
@@ -261,6 +264,9 @@ msgstr "반지름 가로"
 
 msgid "Radius down"
 msgstr "반지름 세로"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — 방송"
 
 msgid "Record"
 msgstr "녹음"
@@ -460,6 +466,9 @@ msgstr "재생 헤드에 삽입했습니다"
 msgid "levels at the playhead"
 msgstr "재생 헤드 위치의 레벨"
 
+msgid "linear light, whatever the project is made for"
+msgstr "프로젝트 용도와 관계없이 선형 광"
+
 msgid "mark in, mark out on the source"
 msgstr "소스에 시작점·끝점 표시"
 
@@ -579,6 +588,9 @@ msgstr "미리보기를 만드는 중…"
 
 msgid "roll the timeline"
 msgstr "타임라인을 따라 움직이기"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — 화면과 웹"
 
 msgid "save the cut under a name"
 msgstr "편집본에 이름을 붙여 저장"

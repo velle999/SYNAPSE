@@ -2079,6 +2079,8 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
     fprintf(fp, "fps\t%.6g\n", t->fps);
     if (t->master_db != 0.0f) fprintf(fp, "master\t%.3f\n", t->master_db);
     if (t->lufs < 0.0f) fprintf(fp, "loudness\t%.2f\n", t->lufs);
+    if (t->output != SS_OUT_SRGB)
+        fprintf(fp, "output\t%s\n", ss_output_name(t->output));
     /* The render range, when there is one. Absent means the whole timeline,
      * which is what a project without one has always meant. */
     if (t->range_out > t->range_in)
@@ -2338,6 +2340,12 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
             t->master_db = (float)atof(line + 7);
         } else if (!strncmp(line, "loudness\t", 9)) {
             t->lufs = (float)atof(line + 9);
+        } else if (!strncmp(line, "output\t", 7)) {
+            /* A name this build does not know reads as sRGB, the default —
+             * the one answer that cannot make a delivery darker or lighter
+             * than the monitor showed it. */
+            int v = ss_output_value(line + 7);
+            t->output = v < 0 ? SS_OUT_SRGB : v;
         } else if (!strncmp(line, "range\t", 6)) {
             char *f[2];
             if (tabsplit(line + 6, f, 2) == 2) {
@@ -2847,9 +2855,53 @@ static void hexcol(float r, float g, float b, float a, char *out, size_t n)
  * caption needs escaping that differs between the two passes, and getting it
  * wrong fails at parse time with a message about the graph, not the caption.
  * `textfile=` has one level of quoting and holds whatever bytes are in it. */
+/* The output transforms' curves, as tables lut1d reads. Both start from the
+ * sRGB-encoded composite and are composed here, in C, from colour.c's own
+ * transfer functions — so the curve a delivery leaves with is decided where
+ * every other colour is. */
+static float out_curve_linear(float v) { return ss_srgb_to_linear(v); }
+static float out_curve_bt1886(float v)
+{
+    return ss_linear_to_bt1886(ss_srgb_to_linear(v));
+}
+
+#define OUT_CURVE_SIZE 4096
+
+static void out_curve_path(char *out, size_t n, const char *dir, const char *which)
+{
+    snprintf(out, n, "%s/out_%s.cube", dir, which);
+}
+
+static int out_curve_write(const char *dir, const char *which, float (*fn)(float))
+{
+    char p[4300], title[64];
+    FILE *fp;
+    int rc;
+
+    out_curve_path(p, sizeof p, dir, which);
+    fp = fopen(p, "w");
+    if (!fp) return -1;
+    snprintf(title, sizeof title, "synstudio output: %s", which);
+    rc = ss_lut1d_write(fn, OUT_CURVE_SIZE, fp, title);
+    if (fclose(fp) != 0) rc = -1;
+    return rc;
+}
+
 int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
 {
     int i, j, n = 0;
+
+    /* Only for a whole render: the monitor is the sRGB composite as it is.
+     * The linear table is written every time because an EXR needs it and
+     * nothing here knows the format; it is 100KB. */
+    if (at < 0) {
+        if (out_curve_write(dir, "linear", out_curve_linear) != 0) return -1;
+        n++;
+        if (t->output == SS_OUT_REC709) {
+            if (out_curve_write(dir, "bt1886", out_curve_bt1886) != 0) return -1;
+            n++;
+        }
+    }
 
     for (i = 0; i < t->ntracks; i++)
         for (j = 0; j < t->track[i].nclips; j++) {
@@ -2925,6 +2977,12 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
 void ss_timeline_unbake(const ss_timeline *t, const char *dir)
 {
     int i, j;
+    char op[4300];
+
+    out_curve_path(op, sizeof op, dir, "linear");
+    remove(op);
+    out_curve_path(op, sizeof op, dir, "bt1886");
+    remove(op);
     for (i = 0; i < t->ntracks; i++)
         for (j = 0; j < t->track[i].nclips; j++) {
             char p[4300];
@@ -4798,6 +4856,47 @@ void ss_timeline_range(const ss_timeline *t, double *in, double *out)
     if (out) *out = b;
 }
 
+/* The output transforms. Two, because those are the two displays a cut is
+ * made for: a computer, a phone or the web (sRGB), and a broadcast or
+ * grading monitor (BT.1886, which Rec.709 deliveries are mastered against). */
+static const struct { const char *name, *label; } tl_outputs[] = {
+    { "srgb",   "sRGB — for screens and the web" },
+    { "rec709", "Rec.709 — for broadcast, a 2.4-gamma display" },
+};
+
+int ss_output_value(const char *s)
+{
+    int i;
+    if (!s) return -1;
+    for (i = 0; i < (int)(sizeof tl_outputs / sizeof tl_outputs[0]); i++)
+        if (!strcasecmp(s, tl_outputs[i].name)) return i;
+    return -1;
+}
+
+const char *ss_output_name(int v)
+{
+    return v == SS_OUT_REC709 ? tl_outputs[1].name : tl_outputs[0].name;
+}
+
+const char *ss_output_label(int v)
+{
+    return v == SS_OUT_REC709 ? tl_outputs[1].label : tl_outputs[0].label;
+}
+
+/* A float delivery is an EXR, and an EXR is linear. */
+static int pix_is_float(const char *pix)
+{
+    return pix && strstr(pix, "f32") != NULL;
+}
+
+int ss_output_needs_zscale(const ss_timeline *t, const ss_tl_format *f,
+                           int preview)
+{
+    if (preview) return 0;
+    if (f && pix_is_float(f->pix)) return 2;
+    return t->output == SS_OUT_REC709 ? 1 : 0;
+}
+
 int ss_burn_value(const char *s)
 {
     if (!s || !strcmp(s, "off") || !strcmp(s, "none")) return 0;
@@ -5398,8 +5497,75 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
         vlabel = "[wout]";
     }
 
-    if (preview && t->w > 960)
+    if (preview && t->w > 960) {
         sb_add(&fc, ";%sscale=960:-2:flags=fast_bilinear[pout]", vlabel);
+        vlabel = "[pout]";
+    }
+
+    /* ---- the output transform: the last thing done to a picture ----
+     *
+     * The composite is 8-bit yuv420 that nothing ever labelled: ffmpeg's
+     * overlay builds it with the BT.601 matrix, and the monitor decodes it
+     * with the same matrix, which is why the two have always agreed. A
+     * delivery left like that is BT.601 and UNTAGGED, and every player
+     * assumes BT.709 for HD: a clip of 192,48,64 played as 204,61,63.
+     *
+     * So every video delivery is converted to the 709 matrix and says so,
+     * and a person who masters for a broadcast display gets that display's
+     * curve as well. Each delivery kind is its own chain:
+     *
+     *   yuv, sRGB    `colorspace` changes the MATRIX only (equal primaries
+     *                and trc on both sides). Not swscale: its yuv-to-yuv
+     *                matrix change measured 192,48,64 as 189,47,61.
+     *   yuv, Rec.709 zscale to float (exact, unlike swscale, which ignores
+     *                tv range there and writes white as 0.923), the BT.1886
+     *                curve as a lut1d table from colour.c, then back to the
+     *                709 matrix at tv range.
+     *   PNG, sRGB    tags only. The values stay the monitor's, exactly.
+     *   PNG, Rec.709 the same curve, to rgb24.
+     *   EXR          LINEAR, as the format means: the same float path with
+     *                sRGB undone. Before this an EXR held the sRGB values,
+     *                misscaled: white came out 0.923 and mid-grey 0.428.
+     *
+     * The preview is always sRGB: it is played on this screen. */
+    {
+        const ss_tl_format *vf = fmt ? fmt : ss_timeline_format(NULL, out);
+        const char *pix = preview ? "yuv420p" : (vf ? vf->pix : "yuv420p");
+        int isfloat = pix_is_float(pix);
+        int isrgb = !isfloat && (!strncmp(pix, "rgb", 3) || !strncmp(pix, "gbr", 3));
+        int rec = !preview && t->output == SS_OUT_REC709;
+        char cp[4300], cesc[8700];
+        static const char *to_float =
+            "zscale=matrixin=170m:rangein=limited,format=gbrpf32le";
+
+        if (isfloat || rec) {
+            out_curve_path(cp, sizeof cp, lutdir ? lutdir : ".",
+                           isfloat ? "linear" : "bt1886");
+            esc_filter(cp, cesc, sizeof cesc);
+        }
+        if (isfloat)
+            sb_add(&fc, ";%s%s,lut1d=file=%s,setparams=color_primaries=bt709"
+                        ":color_trc=linear[cout]", vlabel, to_float, cesc);
+        else if (isrgb && rec)
+            sb_add(&fc, ";%s%s,lut1d=file=%s,format=%s,setparams="
+                        "color_primaries=bt709:color_trc=bt709[cout]",
+                   vlabel, to_float, cesc, pix);
+        else if (isrgb)
+            sb_add(&fc, ";%ssetparams=color_primaries=bt709"
+                        ":color_trc=iec61966-2-1[cout]", vlabel);
+        else if (rec)
+            sb_add(&fc, ";%s%s,lut1d=file=%s,scale=out_color_matrix=bt709"
+                        ":out_range=tv,format=%s,setparams=color_primaries=bt709"
+                        ":color_trc=bt709:colorspace=bt709:range=tv[cout]",
+                   vlabel, to_float, cesc, pix);
+        else
+            sb_add(&fc, ";%scolorspace=ispace=bt470bg:irange=tv"
+                        ":iprimaries=bt709:itrc=bt709:space=bt709:range=tv"
+                        ":primaries=bt709:trc=bt709,setparams=color_primaries=bt709"
+                        ":color_trc=iec61966-2-1:colorspace=bt709:range=tv[cout]",
+                   vlabel);
+        vlabel = "[cout]";
+    }
 
     if (naud > 0) {
         int k;
@@ -5548,7 +5714,7 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
     PUSH(xdup("-filter_complex"));
     PUSH(xdup(fc.s ? fc.s : ""));
     PUSH(xdup("-map"));
-    PUSH(xdup(preview && t->w > 960 ? "[pout]" : vlabel));
+    PUSH(xdup(vlabel));
     {
         const ss_tl_format *af = fmt ? fmt : ss_timeline_format(NULL, out);
         /* ⚠ A format with no audio codec is a format with nowhere to put the

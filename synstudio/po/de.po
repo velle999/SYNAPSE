@@ -178,6 +178,9 @@ msgstr "Linear %1"
 msgid "Looks"
 msgstr "Looks"
 
+msgid "Made for"
+msgstr "Ausgelegt für"
+
 msgid "Mark"
 msgstr "Marke"
 
@@ -266,6 +269,9 @@ msgstr "Radius waagerecht"
 
 msgid "Radius down"
 msgstr "Radius senkrecht"
+
+msgid "Rec.709 — broadcast"
+msgstr "Rec.709 — Rundfunk"
 
 msgid "Record"
 msgstr "Aufnehmen"
@@ -468,6 +474,9 @@ msgstr "am Abspielkopf eingefügt"
 msgid "levels at the playhead"
 msgstr "Pegel am Abspielkopf"
 
+msgid "linear light, whatever the project is made for"
+msgstr "lineares Licht, egal wofür das Projekt ausgelegt ist"
+
 msgid "mark in, mark out on the source"
 msgstr "Anfang und Ende an der Quelle setzen"
 
@@ -587,6 +596,9 @@ msgstr "Vorschau wird berechnet…"
 
 msgid "roll the timeline"
 msgstr "die Zeitleiste mitlaufen lassen"
+
+msgid "sRGB — screens and the web"
+msgstr "sRGB — Bildschirme und Web"
 
 msgid "save the cut under a name"
 msgstr "den Schnitt unter einem Namen speichern"
