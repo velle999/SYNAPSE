@@ -1,11 +1,15 @@
 import QtQuick
-import QtQuick.Controls
+// ⛔ QUALIFIED, so `TextField` below is OURS. An explicit import outranks
+// the implicit one of this file's own directory, so with Controls imported
+// bare, `TextField` meant Qt's — which has no `foreground`/`accent`, and
+// assigning them is a compile error: the whole component failed to load,
+// for every plugin that used it. Only Popup and ScrollBar come from here.
+import QtQuick.Controls as QQC
 import qs.Commons
 // ⚠ THE SHELL ROOT, for I18n. quickshell resolves `qs.Ui` to <shell
 // root>/Ui, so `..` from here is the root module and its qmldir — the
 // same directory `qs.Commons` sits beside. It is not reachable as
 // `qs.something` because the root is the shell itself, not a submodule.
-import ".."
 import ".."
 
 /*
@@ -146,7 +150,7 @@ Item {
                 onClicked: { trigger.forceActiveFocus(); root.toggle() }
             }
 
-            Popup {
+            QQC.Popup {
                 id: popup
                 x: 0
                 y: trigger.height + Style.spacing.xxs
@@ -217,7 +221,7 @@ Item {
 
                     ListView {
                         // A view that scrolls says so — see SynScrollBar.qml.
-                        ScrollBar.vertical: SynScrollBar {}
+                        QQC.ScrollBar.vertical: SynScrollBar {}
                         id: optionList
                         width: parent.width
                         height: Math.min(root.filtered.length, 8) * root.popupRowHeight

@@ -3775,7 +3775,13 @@ pkgver=0.1.0
 #   them: 3.9 GB of its 4 GB [heap], owned by orphaned cairo_t's. An earlier
 #   session was OOM-killed at 13 GB. tests/imgview_leak.sh repaints the viewer
 #   30 times and bounds the growth. 626 grows 117 MB at 1280x720, 628 grows 0.
-pkgrel=628
+# 629: qs.Ui's SearchableDropdown LOADS. It imported QtQuick.Controls bare, and
+#   an explicit import outranks the file's own directory, so its filter box was
+#   Qt's TextField rather than the panel kit's. Setting `foreground`/`accent` on
+#   that is a compile error, so quickshell refused the whole component for any
+#   plugin that used it. Controls is now imported as QQC. tests/qs_module.sh
+#   fails on any property assignment its types lack — red on 628, green here.
+pkgrel=629
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

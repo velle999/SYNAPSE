@@ -66,6 +66,22 @@ for mod in Ui Commons; do
     else
         bad "qs.$mod names types nothing provides: $missing"
     fi
+
+    # ⛔ AND ASSIGNS ONLY PROPERTIES ITS TYPES HAVE. qmllint calls this a
+    # WARNING; quickshell calls it a compile error and refuses the whole file.
+    # SearchableDropdown set `foreground` on a TextField that had resolved to
+    # Qt's own (an unqualified QtQuick.Controls import outranks the directory),
+    # and never loaded. Only this wording: the far more numerous `Member "x"
+    # not found on type "QObject"` lines are reads through a QtObject group,
+    # which work at runtime.
+    noprop=$("$LINT" -I "$FARM" "$TREE/$mod"/*.qml 2>&1 |
+             sed -n 's/^Warning: .*\/\([A-Za-z0-9_]*\.qml:[0-9]*\):[0-9]*: Could not find property "\([A-Za-z0-9_]*\)".*/\1 \2/p' |
+             sort -u | tr '\n' ' ')
+    if [ -z "$noprop" ]; then
+        ok "qs.$mod assigns only properties its types declare"
+    else
+        bad "qs.$mod assigns properties its types do not have (a load error in quickshell): $noprop"
+    fi
 done
 
 # ── 2. qmldir and the directory agree, both ways ────────────────────────────
