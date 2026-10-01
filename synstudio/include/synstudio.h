@@ -234,6 +234,10 @@ typedef struct {
 void ss_mask_reset(ss_mask *m, int type);
 /* Coverage 0..1 for a pixel, frame-relative coords. */
 float ss_mask_at(const ss_mask *m, float fx, float fy);
+/* The same coverage as a geq expression in X, Y, W and H, scaled to 0..255
+ * and rounded — what a clip's mask is drawn with. 0, or -1 if `out` is too
+ * small. */
+int   ss_mask_expr(const ss_mask *m, char *out, size_t n);
 /* Apply one mask: renders the masked develop and blends by coverage. */
 int  ss_apply_mask(ss_image *im, const ss_mask *m);
 
@@ -768,6 +772,11 @@ typedef struct {
 #define SS_MAX_FX         8
 #define SS_MAX_FX_PARAMS 10
 
+/* Masks on a clip's grade. Each one holds a whole develop stack, and the
+ * clip — masks and all — is copied by every split, paste and duplicate, so a
+ * clip carries four rather than a photograph's sixteen. */
+#define SS_MAX_CLIP_MASKS 4
+
 typedef struct {
     char   key[24], label[48];
     double def, lo, hi;
@@ -1006,6 +1015,13 @@ typedef struct {
      * same shape as an effect on the stack, `raw` included: a template this
      * machine has not got keeps its numbers and draws the plain caption. */
     ss_clip_fx tmpl;
+
+    /* Local adjustments to the grade: the darkroom's masks, in fractions of
+     * the picture the grade is applied to, each with a develop stack of its
+     * own applied over the graded frame where it covers. Static over the
+     * clip, and applied after the grade in the order they were added. */
+    int     nmasks;
+    ss_mask mask[SS_MAX_CLIP_MASKS];
 } ss_clip;
 
 void ss_clip_reset(ss_clip *c);
@@ -1210,6 +1226,10 @@ typedef struct {
      * services normalise to anyway. It lives in the document because it is a
      * property of the deliverable, not of one render. */
     float  lufs;
+
+    /* The program monitor only, and never written: tint where one clip's
+     * mask covers, so it can be placed. Set by `timeline frame --show-mask`. */
+    int    show_mask, show_mask_track, show_mask_clip, show_mask_k;
 } ss_timeline;
 
 /* What actually gets rendered: the range if there is one, else 0..duration. */
@@ -1487,6 +1507,11 @@ int  ss_title_style_apply(ss_clip *c, const char *name);   /* 0 ok, -1 no */
 int  ss_clip_template_set(ss_clip *c, const char *name);
 /* One of its knobs, clamped to the recipe's range. -1 for no such knob. */
 int  ss_clip_template_param(ss_clip *c, const char *key, double v);
+
+/* A mask on the clip's grade, at the darkroom's defaults for its kind. The
+ * new index, or -1 at SS_MAX_CLIP_MASKS. */
+int  ss_clip_mask_add(ss_clip *c, int type);
+int  ss_clip_mask_remove(ss_clip *c, int n);          /* -1 for no such mask */
 
 /* ---- title templates ----
  *

@@ -51,6 +51,12 @@ msgstr "%1 × %2  ·  %3 fps"
 msgid "+ Add"
 msgstr "+ 추가"
 
+msgid "+ linear"
+msgstr "+ 선형"
+
+msgid "+ radial"
+msgstr "+ 원형"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -68,6 +74,12 @@ msgstr "소재 추가"
 
 msgid "Cancel"
 msgstr "취소"
+
+msgid "Centre across"
+msgstr "중심 가로"
+
+msgid "Centre down"
+msgstr "중심 세로"
 
 msgid "Choose a file…"
 msgstr "파일 선택…"
@@ -122,8 +134,17 @@ msgstr "섬네일 내보내기"
 msgid "Export…"
 msgstr "내보내는 중…"
 
+msgid "Feather"
+msgstr "가장자리 흐림"
+
 msgid "From"
 msgstr "시작"
+
+msgid "From across"
+msgstr "시작 가로"
+
+msgid "From down"
+msgstr "시작 세로"
 
 msgid "Grade"
 msgstr "색보정"
@@ -133,6 +154,9 @@ msgstr "삽입"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "설치된 것들이며, 어디서든 .cube 파일을 고를 수도 있습니다."
+
+msgid "Invert"
+msgstr "반전"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -145,6 +169,9 @@ msgstr "단축키"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "선형 %1"
+
 msgid "Looks"
 msgstr "룩"
 
@@ -156,6 +183,9 @@ msgstr "시작점 표시"
 
 msgid "Mark out"
 msgstr "끝점 표시"
+
+msgid "Masks"
+msgstr "마스크"
 
 msgid "Master"
 msgstr "마스터"
@@ -223,6 +253,15 @@ msgstr "프로젝트 화면비"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW 또는 스틸 — 암실에서 현상하세요"
 
+msgid "Radial %1"
+msgstr "원형 %1"
+
+msgid "Radius across"
+msgstr "반지름 가로"
+
+msgid "Radius down"
+msgstr "반지름 세로"
+
 msgid "Record"
 msgstr "녹음"
 
@@ -255,6 +294,9 @@ msgstr "다른 이름으로 저장"
 msgid "Save the cut as"
 msgstr "편집본 저장 이름"
 
+msgid "Show"
+msgstr "표시"
+
 msgid "Snap"
 msgstr "스냅"
 
@@ -278,6 +320,12 @@ msgstr "섬네일"
 
 msgid "Title"
 msgstr "제목"
+
+msgid "To across"
+msgstr "끝 가로"
+
+msgid "To down"
+msgstr "끝 세로"
 
 msgid "Transition"
 msgstr "전환"
@@ -552,6 +600,9 @@ msgstr "먼저 프로젝트를 시작하세요"
 
 msgid "take of %1s at %2"
 msgstr "%2에서 %1초 테이크"
+
+msgid "the sliders below change mask %1 only"
+msgstr "아래 슬라이더는 마스크 %1만 바꿉니다"
 
 msgid "the start, the end"
 msgstr "맨 앞으로, 맨 뒤로"

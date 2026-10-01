@@ -49,6 +49,12 @@ msgstr "%1 × %2  ·  %3 fps"
 msgid "+ Add"
 msgstr "+ 添加"
 
+msgid "+ linear"
+msgstr "+ 线性"
+
+msgid "+ radial"
+msgstr "+ 径向"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -66,6 +72,12 @@ msgstr "添加素材"
 
 msgid "Cancel"
 msgstr "取消"
+
+msgid "Centre across"
+msgstr "中心（横向）"
+
+msgid "Centre down"
+msgstr "中心（纵向）"
 
 msgid "Choose a file…"
 msgstr "选择文件…"
@@ -120,8 +132,17 @@ msgstr "导出缩略图"
 msgid "Export…"
 msgstr "导出中…"
 
+msgid "Feather"
+msgstr "羽化"
+
 msgid "From"
 msgstr "起点"
+
+msgid "From across"
+msgstr "起点（横向）"
+
+msgid "From down"
+msgstr "起点（纵向）"
 
 msgid "Grade"
 msgstr "调色"
@@ -131,6 +152,9 @@ msgstr "插入"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "已安装的，或者从任意位置选择一个 .cube 文件。"
+
+msgid "Invert"
+msgstr "反转"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -143,6 +167,9 @@ msgstr "快捷键"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "线性 %1"
+
 msgid "Looks"
 msgstr "风格"
 
@@ -154,6 +181,9 @@ msgstr "标记入点"
 
 msgid "Mark out"
 msgstr "标记出点"
+
+msgid "Masks"
+msgstr "蒙版"
 
 msgid "Master"
 msgstr "总输出"
@@ -221,6 +251,15 @@ msgstr "项目画幅"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW 或静帧——在暗房里冲洗它"
 
+msgid "Radial %1"
+msgstr "径向 %1"
+
+msgid "Radius across"
+msgstr "半径（横向）"
+
+msgid "Radius down"
+msgstr "半径（纵向）"
+
 msgid "Record"
 msgstr "录制"
 
@@ -253,6 +292,9 @@ msgstr "另存为"
 msgid "Save the cut as"
 msgstr "将剪辑另存为"
 
+msgid "Show"
+msgstr "显示"
+
 msgid "Snap"
 msgstr "吸附"
 
@@ -276,6 +318,12 @@ msgstr "缩略图"
 
 msgid "Title"
 msgstr "标题"
+
+msgid "To across"
+msgstr "终点（横向）"
+
+msgid "To down"
+msgstr "终点（纵向）"
 
 msgid "Transition"
 msgstr "转场"
@@ -550,6 +598,9 @@ msgstr "请先新建一个项目"
 
 msgid "take of %1s at %2"
 msgstr "在 %2 处录了 %1 秒"
+
+msgid "the sliders below change mask %1 only"
+msgstr "下方滑块只改变蒙版 %1"
 
 msgid "the start, the end"
 msgstr "到开头，到结尾"

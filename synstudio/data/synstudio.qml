@@ -1182,8 +1182,8 @@ FloatingWindow {
     // showing the last clip's numbers whenever a new path appears — after a
     // split, after a delete renumbers the track, on opening a project. Hang it
     // off the change instead and there is no such path.
-    onSelClipChanged:  root.loadClip()
-    onSelTrackChanged: root.loadClip()
+    onSelClipChanged:  { root.selMask = -1; root.loadClip() }
+    onSelTrackChanged: { root.selMask = -1; root.loadClip() }
 
     readonly property var selClipObj: {
         if (root.selTrack < 0 || root.selTrack >= root.tl.tracks.length) return null
@@ -1200,10 +1200,22 @@ FloatingWindow {
         const doc = { w: 1920, h: 1080, fps: 25, master: 0,
                       markers: [], tracks: [] }
         const lines = text.split("\n")
-        let tr = null, cl = null, inGrade = false, inKey = false
+        let tr = null, cl = null, inGrade = false, inKey = false, inMask = null
         let dur = 0
         for (let i = 0; i < lines.length; i++) {
             const f = lines[i].split("\t")
+            // A mask is the sidecar's block: its kind on the opening line,
+            // then its geometry, then its own develop stack.
+            if (inMask) {
+                if (f[0] === "endmask") { inMask = null; continue }
+                if (f[0] === "mask.invert") inMask.invert = f[1] === "1"
+                else if (f[0] === "mask.geom")
+                    inMask.geom = { x0: parseFloat(f[1]) || 0, y0: parseFloat(f[2]) || 0,
+                                    x1: parseFloat(f[3]) || 0, y1: parseFloat(f[4]) || 0,
+                                    feather: parseFloat(f[5]) || 0 }
+                else if (f.length >= 2) inMask.grade[f[0]] = f[1]
+                continue
+            }
             if (inGrade) {
                 if (f[0] === "endgrade" || f[0] === "endkey") {
                     inGrade = false; inKey = false; continue
@@ -1247,7 +1259,7 @@ FloatingWindow {
                        fadeIn: parseFloat(f[7]), fadeOut: parseFloat(f[8]),
                        path: f[9] || "", kind: "media", still: false,
                        text: "", trans: "none", graded: false, grade: ({}), keys: [],
-                       anim: ({}), animAll: [], fx: [] }
+                       anim: ({}), animAll: [], fx: [], masks: [] }
                 cl.len = (cl.srcOut - cl.srcIn) / (cl.speed > 0 ? cl.speed : 1)
                 tr.clips.push(cl)
                 if (cl.tlIn + cl.len > dur) dur = cl.tlIn + cl.len
@@ -1282,6 +1294,14 @@ FloatingWindow {
             case "text":  if (cl) cl.text = f[6] || ""; break
             case "trans": if (cl) cl.trans = f[1]; break
             case "grade": if (cl) { cl.graded = true; inGrade = true } break
+            case "mask":
+                if (cl) {
+                    inMask = { kind: f[1] === "linear" ? "linear" : "radial",
+                               invert: false, grade: ({}),
+                               geom: { x0: 0, y0: 0, x1: 0, y1: 0, feather: 0 } }
+                    cl.masks.push(inMask)
+                }
+                break
             case "key":
                 if (cl) {
                     cl.graded = true
@@ -1355,6 +1375,9 @@ FloatingWindow {
                              "--at", String(root.playhead),
                              "--out", root.scratch + "-frame.png",
                              "--size", String(root.scrubbing ? 540 : 1400)]
+                            .concat(root.maskShowing
+                                    ? ["--show-mask", root.selTrack + ":" + root.selClip
+                                                      + ":" + root.selMask] : [])
         frameProc.running = true
     }
 
@@ -1739,11 +1762,20 @@ FloatingWindow {
     // The clip's LUT is a NAME, and gradeValue parses everything as a number
     // — which reads every reference as 0 and shows every clip as having none.
     function gradeRaw(key) {
-        const c = root.selClipObj
-        if (!c || !c.graded) return ""
-        const src = (root.selKey >= 0) ? c.keys[root.selKey].grade : c.grade
+        const src = root.gradeSrc()
+        if (!src) return ""
         const v = src[key]
         return v === undefined ? "" : String(v)
+    }
+
+    // The develop stack the grade sliders are pointed at: a picked mask's,
+    // else the key under the playhead, else the clip's own grade.
+    function gradeSrc() {
+        const c = root.selClipObj
+        if (!c) return null
+        if (root.selMaskObj) return root.selMaskObj.grade
+        if (!c.graded) return null
+        return (root.selKey >= 0) ? c.keys[root.selKey].grade : c.grade
     }
 
     // A look lands on whatever page asked for it: the darkroom writes the
@@ -1752,8 +1784,9 @@ FloatingWindow {
     function applyLook(name) {
         if (root.mode === "video") {
             if (root.selTrack < 0 || root.selClip < 0) { root.say(I18n.tr("pick a clip first")); return }
-            root.tlRun(["grade", root.proj, String(root.selTrack),
-                        String(root.selClip), "--look", name])
+            if (root.selMaskObj) root.maskRun([String(root.selMask), "--look", name])
+            else root.tlRun(["grade", root.proj, String(root.selTrack),
+                             String(root.selClip), "--look", name])
         } else {
             if (!root.file) { root.say(I18n.tr("open a photograph first")); return }
             lookApplyProc.command = [root.bin, "look", "apply", name, "--to", root.file]
@@ -2129,6 +2162,7 @@ FloatingWindow {
 
     function gradeClip(key, v) {
         if (root.selTrack < 0 || root.selClip < 0) return
+        if (root.selMaskObj) { root.setMask(key, v); return }
         // With keyframes, a slider edits the KEY the panel is pointed at.
         // Writing to the static grade instead would change nothing anybody
         // could see — the keys are what the renderer reads — and the slider
@@ -2156,11 +2190,69 @@ FloatingWindow {
     }
 
     function gradeValue(key) {
-        const c = root.selClipObj
-        if (!c || !c.graded) return 0
-        const src = (root.selKey >= 0) ? c.keys[root.selKey].grade : c.grade
+        const src = root.gradeSrc()
+        if (!src) return 0
         const v = src[key]
         return v === undefined ? 0 : (parseFloat(v) || 0)
+    }
+
+    // ── Masks on the clip's grade ───────────────────────────────────────────
+    //
+    // The darkroom's local adjustments, on a shot. Picking one points every
+    // grade slider, the LUT row and the looks at THAT mask's develop stack,
+    // which is where `timeline mask` keeps it; picking it again goes back to
+    // the clip's own grade. While one is picked the monitor tints where it
+    // covers — drawn by the engine in the same graph, so the tint sits
+    // exactly where the mask does on a scaled, turned or zooming clip.
+    property int  selMask: -1
+    property bool maskOverlay: true
+    readonly property var selMaskObj: {
+        const c = root.selClipObj
+        if (!c || !c.masks || root.selMask < 0 || root.selMask >= c.masks.length)
+            return null
+        return c.masks[root.selMask]
+    }
+    readonly property bool maskShowing:
+        root.mode === "video" && root.selMaskObj !== null && root.maskOverlay
+    onMaskShowingChanged: root.requestFrame()
+    onSelMaskChanged: root.requestFrame()
+
+    // Linear: the effect fades in from the first point to the second.
+    // Radial: full inside, feathered out to the edge of the ellipse.
+    readonly property var maskGeomRows: !root.selMaskObj ? []
+        : root.selMaskObj.kind === "radial"
+        ? [ { key: "x0", label: I18n.tr("Centre across"), lo: 0, hi: 1 },
+            { key: "y0", label: I18n.tr("Centre down"), lo: 0, hi: 1 },
+            { key: "x1", label: I18n.tr("Radius across"), lo: 0, hi: 1 },
+            { key: "y1", label: I18n.tr("Radius down"), lo: 0, hi: 1 },
+            { key: "feather", label: I18n.tr("Feather"), lo: 0, hi: 1 } ]
+        : [ { key: "x0", label: I18n.tr("From across"), lo: 0, hi: 1 },
+            { key: "y0", label: I18n.tr("From down"), lo: 0, hi: 1 },
+            { key: "x1", label: I18n.tr("To across"), lo: 0, hi: 1 },
+            { key: "y1", label: I18n.tr("To down"), lo: 0, hi: 1 } ]
+
+    function maskRun(args) {
+        if (root.selTrack < 0 || root.selClip < 0) return
+        root.tlRun(["mask", root.proj, String(root.selTrack), String(root.selClip)]
+                   .concat(args))
+    }
+    function addMask(kind) {
+        const c = root.selClipObj
+        if (!c) { root.say(I18n.tr("pick a clip first")); return }
+        root.maskRun(["add", kind])
+        // Picked on arrival: a new mask does nothing until its sliders move.
+        // One past the limit is refused by the engine, and an index with no
+        // mask behind it picks nothing.
+        root.selMask = c.masks.length
+    }
+    function removeMask() {
+        if (!root.selMaskObj) return
+        root.maskRun(["remove", String(root.selMask)])
+        root.selMask = -1
+    }
+    function setMask(key, v) {
+        if (!root.selMaskObj) return
+        root.maskRun([String(root.selMask), key + "=" + v])
     }
 
     function addKey() {
@@ -5604,15 +5696,18 @@ FloatingWindow {
                                     anchors.rightMargin: 10
                                     spacing: 6
 
+                                    // A key pins the clip's own grade; with a
+                                    // mask picked there is nothing for it to pin.
                                     Tag {
                                         label: I18n.tr("◆ key")
                                         on: false
+                                        visible: !root.selMaskObj
                                         onClicked: root.addKey()
                                     }
                                     Tag {
                                         label: "✕"
                                         on: false
-                                        visible: root.selKey >= 0
+                                        visible: root.selKey >= 0 && !root.selMaskObj
                                         onClicked: root.removeKey()
                                     }
                                 }
@@ -5628,6 +5723,7 @@ FloatingWindow {
                                 color: root.wash(0.10)
                                 visible: root.selClipObj && root.selClipObj.keys
                                          && root.selClipObj.keys.length > 0
+                                         && !root.selMaskObj
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
@@ -5641,6 +5737,133 @@ FloatingWindow {
                                     color: root.cAccent
                                     font.pixelSize: root.ui(10)
                                     font.family: root.uiFont
+                                }
+                            }
+
+                            // ── Masks ──────────────────────────────────
+                            //
+                            // The clip's masks, one row each; picking one
+                            // points every slider below at it.
+                            Column {
+                                id: maskGrp
+                                width: inspCol.width
+                                property bool open: root.selClipObj !== null
+                                                    && root.selClipObj.masks.length > 0
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 28
+                                    color: root.wash(0.07)
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 20
+                                        text: (maskGrp.open ? "▾  " : "▸  ") + I18n.tr("Masks")
+                                              + (root.selClipObj && root.selClipObj.masks.length
+                                                 ? "  " + root.selClipObj.masks.length : "")
+                                        color: root.cText
+                                        font.pixelSize: root.ui(11)
+                                        font.family: root.uiFont
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: maskGrp.open = !maskGrp.open
+                                    }
+                                    Row {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 10
+                                        spacing: 6
+                                        Tag {
+                                            label: I18n.tr("+ linear")
+                                            on: false
+                                            onClicked: { maskGrp.open = true; root.addMask("linear") }
+                                        }
+                                        Tag {
+                                            label: I18n.tr("+ radial")
+                                            on: false
+                                            onClicked: { maskGrp.open = true; root.addMask("radial") }
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: maskGrp.open && root.selClipObj ? root.selClipObj.masks : []
+                                    Rectangle {
+                                        id: maskRow
+                                        required property var modelData
+                                        required property int index
+                                        readonly property bool cur: root.selMask === maskRow.index
+                                        objectName: "maskrow:" + maskRow.index
+                                        width: inspCol.width
+                                        height: 26
+                                        color: maskRow.cur ? root.wash(0.22)
+                                             : maskArea.containsMouse ? root.wash(0.16)
+                                             : "transparent"
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 28
+                                            text: (maskRow.cur ? "◆  " : "◇  ")
+                                                  + (maskRow.modelData.kind === "linear"
+                                                     ? I18n.tr("Linear %1") : I18n.tr("Radial %1"))
+                                                    .arg(maskRow.index + 1)
+                                            color: maskRow.cur ? root.cAccent : root.cText
+                                            font.pixelSize: root.ui(11)
+                                            font.family: root.uiFont
+                                        }
+                                        MouseArea {
+                                            id: maskArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: root.selMask = maskRow.cur ? -1 : maskRow.index
+                                        }
+                                        Row {
+                                            visible: maskRow.cur
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 10
+                                            spacing: 6
+                                            Tag {
+                                                label: I18n.tr("Invert")
+                                                on: maskRow.modelData.invert
+                                                onClicked: root.setMask("invert",
+                                                    maskRow.modelData.invert ? 0 : 1)
+                                            }
+                                            Tag {
+                                                label: I18n.tr("Show")
+                                                on: root.maskOverlay
+                                                onClicked: root.maskOverlay = !root.maskOverlay
+                                            }
+                                            Tag {
+                                                label: "✕"
+                                                on: false
+                                                onClicked: root.removeMask()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: maskGrp.open ? root.maskGeomRows : []
+                                    MaskCtl {}
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 22
+                                    color: root.wash(0.10)
+                                    visible: root.selMaskObj !== null
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 20
+                                        text: I18n.tr("the sliders below change mask %1 only")
+                                                  .arg(root.selMask + 1)
+                                        color: root.cAccent
+                                        font.pixelSize: root.ui(10)
+                                        font.family: root.uiFont
+                                    }
                                 }
                             }
 
@@ -8335,6 +8558,80 @@ FloatingWindow {
                 onPressed: function (m) { pick(m.x) }
                 onPositionChanged: function (m) { if (pressed) pick(m.x) }
                 onReleased: tpc.commit(pending)
+            }
+        }
+    }
+
+    // ── One number of a mask's shape ────────────────────────────────────────
+    //
+    // The template knob's slider, writing one of x0, y0, x1, y1 or feather
+    // through `timeline mask`.
+    component MaskCtl: Item {
+        id: mkc
+        required property var modelData
+        readonly property var row: mkc.modelData
+        readonly property real val:
+            root.selMaskObj ? (root.selMaskObj.geom[mkc.row.key] || 0) : 0
+        width: inspCol.width
+        height: 34
+        objectName: "maskctl:" + mkc.row.key
+
+        function commit(v) { root.setMask(mkc.row.key, v) }
+
+        Text {
+            id: mklbl
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: mkc.row.label
+            color: root.cText
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: parent.top; anchors.topMargin: 2
+            text: Math.round(mkc.val * 1000) / 1000
+            color: root.cAccent
+            font.pixelSize: root.ui(10)
+            font.family: root.uiFont
+        }
+        Rectangle {
+            id: mktrack
+            anchors.left: parent.left; anchors.leftMargin: 26
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.top: mklbl.bottom; anchors.topMargin: 6
+            height: 4
+            radius: 2
+            color: root.isLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
+
+            readonly property real frac:
+                Math.max(0, Math.min(1, (mkc.val - mkc.row.lo)
+                                        / (mkc.row.hi - mkc.row.lo)))
+            Rectangle {
+                height: parent.height; radius: 2
+                color: root.cAccent
+                width: mktrack.frac * mktrack.width
+            }
+            Rectangle {
+                width: 11; height: 11; radius: 6
+                color: root.cAccent
+                y: -4
+                x: mktrack.frac * mktrack.width - 5
+            }
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -10
+                preventStealing: true
+                // On RELEASE, for the reason every slider in this file is.
+                property real pending: mkc.val
+                function pick(mx) {
+                    const f = Math.max(0, Math.min(1, (mx - 10) / mktrack.width))
+                    pending = Math.round((mkc.row.lo
+                              + f * (mkc.row.hi - mkc.row.lo)) * 1000) / 1000
+                }
+                onPressed: function (m) { pick(m.x) }
+                onPositionChanged: function (m) { if (pressed) pick(m.x) }
+                onReleased: mkc.commit(pending)
             }
         }
     }

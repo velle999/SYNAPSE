@@ -159,6 +159,11 @@ static void usage(void)
 "  timeline key PROJ T C list|remove N\n"
 "  timeline key PROJ T C set N KEY=VALUE...\n"
 "       two or more keys and the grade MOVES between them\n"
+"  timeline mask PROJ T C add linear|radial    a local adjustment on the grade\n"
+"  timeline mask PROJ T C list|remove N\n"
+"  timeline mask PROJ T C N KEY=VALUE... [--look NAME]\n"
+"                  geom=x0,y0,x1,y1[,feather] or one of them, invert=0|1,\n"
+"                  and any develop key: the mask's own stack\n"
 "  timeline anim PROJ T C add PROP --at S [--value V] [--ease E]\n"
 "  timeline anim PROJ T C list|clear [PROP]   remove PROP N   at PROP --at S\n"
 "  timeline anim PROJ T C move PROP N [--at S] [--value V] [--ease E]\n"
@@ -177,6 +182,7 @@ static void usage(void)
 "\n"
 " out\n"
 "  timeline frame PROJ --at T --out F.png [--size N]   one composited frame\n"
+"       [--show-mask T:C:K]   tint where that clip's mask K covers\n"
 "  timeline scope PROJ --at T --out F.png [--kind waveform|parade|vector]\n"
 "       the same frame, MEASURED — composited first, so it describes the\n"
 "       picture that will be delivered\n"
@@ -262,6 +268,7 @@ typedef struct {
     int    has_duck_amt;
     const char *style;          /* a title style, applied on creation */
     const char *tmpl;           /* a title template, likewise */
+    const char *showmask;       /* T:C:K — tint one mask's coverage in a frame */
     const char *subs;           /* a .srt shipped as a stream, not burnt in */
     double value;
     int    has_value;
@@ -330,6 +337,7 @@ static int parse_opts(int argc, char **argv, int start, opts *o, char ***rest,
         else if (!strcmp(a, "--ease"))    { const char *v = NEXT(); if (!v) return -1; o->ease = v; }
         else if (!strcmp(a, "--style"))   { const char *v = NEXT(); if (!v) return -1; o->style = v; }
         else if (!strcmp(a, "--template")) { const char *v = NEXT(); if (!v) return -1; o->tmpl = v; }
+        else if (!strcmp(a, "--show-mask")) { const char *v = NEXT(); if (!v) return -1; o->showmask = v; }
         else if (!strcmp(a, "--subs"))    { const char *v = NEXT(); if (!v) return -1; o->subs = v; }
         else if (!strcmp(a, "--ripple"))  { o->ripple = 1; }
         else if (!strcmp(a, "--force"))   { o->force = 1; }
@@ -1899,6 +1907,14 @@ static int cmd_titles(int argc, char **argv)
                sub);
 }
 
+/* A pasted grade brings the copied clip's masks and replaces the target's. */
+static void paste_masks(ss_clip *to, const ss_clip *from)
+{
+    int k;
+    to->nmasks = from->nmasks;
+    for (k = 0; k < from->nmasks; k++) to->mask[k] = from->mask[k];
+}
+
 /* The verbs. Takes the document by pointer so ONE caller owns it and can free
  * it — there are ninety-odd returns in here and no cleanup label was ever
  * going to survive the next verb added. */
@@ -2483,9 +2499,9 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
          * so the whole stack travels by assignment and every setting is still
          * a row in the inspector afterwards.
          *
-         * ⚠ MASKS DO NOT TRAVEL. A mask is a local adjustment on the ss_edit,
-         * not part of the develop stack, and a clip has no such list — so a
-         * photograph with masks lands with everything except them.
+         * Its masks travel too, onto the clip's grade, in the order the
+         * darkroom applies them — up to SS_MAX_CLIP_MASKS, and it says so
+         * when a photograph has more than that.
          *
          * ⚠ And an untouched photograph must not be marked as graded: an
          * identity stack written to the project is a clip that claims a grade
@@ -2495,10 +2511,18 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             char side[4200];
             ss_edit e;
             ss_sidecar_path(c.path, side, sizeof side);
-            if (path_exists(side) && ss_edit_load(&e, side) == 0
-                && !ss_develop_is_identity(&e.dev)) {
-                c.grade = e.dev;
-                c.has_grade = 1;
+            if (path_exists(side) && ss_edit_load(&e, side) == 0) {
+                int k;
+                if (!ss_develop_is_identity(&e.dev)) {
+                    c.grade = e.dev;
+                    c.has_grade = 1;
+                }
+                for (k = 0; k < e.nmasks && k < SS_MAX_CLIP_MASKS; k++)
+                    c.mask[c.nmasks++] = e.mask[k];
+                if (e.nmasks > SS_MAX_CLIP_MASKS)
+                    fprintf(stderr, "synstudio: %s has %d masks and a clip carries "
+                                    "%d — the first %d came with it\n",
+                            c.path, e.nmasks, SS_MAX_CLIP_MASKS, SS_MAX_CLIP_MASKS);
             }
         }
 
@@ -2884,14 +2908,16 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             return die("nothing has been copied yet");
 
         if (o.grade) {
-            /* Onto EXISTING clips: the grade only. */
+            /* Onto EXISTING clips: the grade only — its masks included, which
+             * are local adjustments TO it. */
             int i, n = 0;
-            if (!src.has_grade)
+            if (!src.has_grade && !src.nmasks)
                 return die("the copied clip has no grade on it");
             if (o.all) {
                 for (i = 0; i < t->track[tr].nclips; i++) {
+                    paste_masks(&t->track[tr].clip[i], &src);
                     t->track[tr].clip[i].grade = src.grade;
-                    t->track[tr].clip[i].has_grade = 1;
+                    t->track[tr].clip[i].has_grade = src.has_grade;
                     /* ⚠ A pasted grade replaces a MOVING one. Keys hold whole
                      * develop stacks, so leaving them would leave the clip
                      * being driven by the grade it had while claiming to wear
@@ -2902,8 +2928,9 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
             } else {
                 if (argc < 6) return die("paste --grade wants a CLIP, or --all");
                 if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+                paste_masks(&t->track[tr].clip[cl], &src);
                 t->track[tr].clip[cl].grade = src.grade;
-                t->track[tr].clip[cl].has_grade = 1;
+                t->track[tr].clip[cl].has_grade = src.has_grade;
                 t->track[tr].clip[cl].nkeys = 0;
                 n = 1;
             }
@@ -3295,6 +3322,91 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
         }
         if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
         return 0;
+    }
+
+    /* Masks on the grade: `synstudio mask` for a clip. The same kinds, the
+     * same geometry in fractions of the picture, the same develop keys, the
+     * same list — so a mask learnt on a photograph is a mask on a shot. */
+    if (!strcmp(verb, "mask")) {
+        const char *sub = argc > 6 ? argv[6] : "list";
+        ss_clip *c;
+        int i;
+
+        if (argc < 6) return die("mask wants PROJ TRACK CLIP [list|add KIND|remove N|N KEY=VALUE...]");
+        if (tl_pick(t, argv[4], argv[5], &tr, &cl) != 0) return 1;
+        c = &t->track[tr].clip[cl];
+
+        if (!strcmp(sub, "list")) {
+            for (i = 0; i < c->nmasks; i++) {
+                const ss_mask *m = &c->mask[i];
+                printf("%d\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n", i,
+                       m->type == SS_MASK_LINEAR ? "linear" : "radial",
+                       m->x0, m->y0, m->x1, m->y1, m->feather, m->invert);
+            }
+            return 0;
+        }
+        if (!strcmp(sub, "add")) {
+            const char *kind = argc > 7 ? argv[7] : "radial";
+            int k;
+            if (strcmp(kind, "linear") && strcmp(kind, "radial"))
+                return die("mask kind must be linear or radial, not %s", kind);
+            k = ss_clip_mask_add(c, strcmp(kind, "radial") ? SS_MASK_LINEAR
+                                                           : SS_MASK_RADIAL);
+            if (k < 0) return die("at the %d mask limit for a clip", SS_MAX_CLIP_MASKS);
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            printf("%d\n", k);
+            return 0;
+        }
+        if (!strcmp(sub, "remove")) {
+            int n = argc > 7 ? atoi(argv[7]) : -1;
+            if (argc < 8 || ss_clip_mask_remove(c, n) != 0)
+                return die("clip %d on track %d has no mask %s", cl, tr,
+                           argc > 7 ? argv[7] : "(none given)");
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
+        {
+            char *end;
+            long n = strtol(sub, &end, 10);
+            ss_mask *m;
+            if (*end || end == sub || n < 0 || n >= c->nmasks)
+                return die("clip %d on track %d has no mask %s", cl, tr, sub);
+            m = &c->mask[n];
+            for (i = 7; i < argc; i++) {
+                char *eq;
+                if (!strcmp(argv[i], "--look") && i + 1 < argc) {
+                    const ss_look *k = ss_look_find(argv[++i]);
+                    int bad;
+                    if (!k) return die("no such look: %s  (try `synstudio look list`)",
+                                       argv[i]);
+                    bad = ss_look_apply(k, &m->dev);
+                    if (bad < 0) return die("cannot read %s", k->path);
+                    continue;
+                }
+                eq = strchr(argv[i], '=');
+                if (!eq) return die("expected KEY=VALUE, got: %s", argv[i]);
+                *eq = '\0';
+                if (!strcmp(argv[i], "geom")) {
+                    if (sscanf(eq + 1, "%f,%f,%f,%f,%f",
+                               &m->x0, &m->y0, &m->x1, &m->y1, &m->feather) < 4)
+                        return die("geom wants x0,y0,x1,y1[,feather]");
+                } else if (!strcmp(argv[i], "invert")) {
+                    m->invert = atoi(eq + 1) ? 1 : 0;
+                } else if (!strcmp(argv[i], "x0") || !strcmp(argv[i], "y0") ||
+                           !strcmp(argv[i], "x1") || !strcmp(argv[i], "y1") ||
+                           !strcmp(argv[i], "feather")) {
+                    /* One number of the geometry, for a slider that moves one. */
+                    float v = (float)atof(eq + 1);
+                    if (argv[i][0] == 'f') m->feather = ss_clampf(v, 0.0f, 1.0f);
+                    else *(argv[i][0] == 'x' ? (argv[i][1] == '0' ? &m->x0 : &m->x1)
+                                             : (argv[i][1] == '0' ? &m->y0 : &m->y1)) = v;
+                } else if (apply_set(&m->dev, argv[i], eq + 1) != 0) {
+                    return 1;
+                }
+            }
+            if (tl_save(proj, t) != 0) return die("cannot write %s", proj);
+            return 0;
+        }
     }
 
     /* Keyframes. A key holds a WHOLE develop stack at one instant in the
@@ -3752,6 +3864,18 @@ static int timeline_verb(int argc, char **argv, ss_timeline *t)
 
         if (parse_opts(argc, argv, 4, &o, &rest, &nrest) != 0) return die("bad option");
         if (!o.out) return die("frame needs --out");
+        if (o.showmask) {
+            int mt, mc, mk;
+            char extra;
+            if (sscanf(o.showmask, "%d:%d:%d%c", &mt, &mc, &mk, &extra) != 3)
+                return die("--show-mask wants TRACK:CLIP:MASK, not %s", o.showmask);
+            if (mt < 0 || mt >= t->ntracks || mc < 0 || mc >= t->track[mt].nclips)
+                return die("no clip %d on track %d", mc, mt);
+            if (mk < 0 || mk >= t->track[mt].clip[mc].nmasks)
+                return die("clip %d on track %d has no mask %d", mc, mt, mk);
+            t->show_mask = 1;
+            t->show_mask_track = mt; t->show_mask_clip = mc; t->show_mask_k = mk;
+        }
         if (!mkdtemp(dir)) return die("cannot make a scratch directory");
         if (ss_timeline_bake(t, dir, o.at) < 0) {
             rmdir(dir);

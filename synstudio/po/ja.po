@@ -51,6 +51,12 @@ msgstr "%1 × %2  ·  %3 fps"
 msgid "+ Add"
 msgstr "+ 追加"
 
+msgid "+ linear"
+msgstr "+ 線形"
+
+msgid "+ radial"
+msgstr "+ 円形"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -68,6 +74,12 @@ msgstr "素材を追加"
 
 msgid "Cancel"
 msgstr "キャンセル"
+
+msgid "Centre across"
+msgstr "中心（横）"
+
+msgid "Centre down"
+msgstr "中心（縦）"
 
 msgid "Choose a file…"
 msgstr "ファイルを選ぶ…"
@@ -122,8 +134,17 @@ msgstr "サムネイルを書き出す"
 msgid "Export…"
 msgstr "書き出し中…"
 
+msgid "Feather"
+msgstr "ぼかし"
+
 msgid "From"
 msgstr "開始位置"
+
+msgid "From across"
+msgstr "始点（横）"
+
+msgid "From down"
+msgstr "始点（縦）"
 
 msgid "Grade"
 msgstr "カラーグレーディング"
@@ -133,6 +154,9 @@ msgstr "インサート"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "インストール済みのもの、または任意の .cube ファイルを選べます。"
+
+msgid "Invert"
+msgstr "反転"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -145,6 +169,9 @@ msgstr "キー"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "線形 %1"
+
 msgid "Looks"
 msgstr "ルック"
 
@@ -156,6 +183,9 @@ msgstr "IN 点"
 
 msgid "Mark out"
 msgstr "OUT 点"
+
+msgid "Masks"
+msgstr "マスク"
 
 msgid "Master"
 msgstr "マスター"
@@ -225,6 +255,15 @@ msgstr "プロジェクトの画面サイズ"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW または静止画 — 暗室で現像します"
 
+msgid "Radial %1"
+msgstr "円形 %1"
+
+msgid "Radius across"
+msgstr "半径（横）"
+
+msgid "Radius down"
+msgstr "半径（縦）"
+
 msgid "Record"
 msgstr "録音"
 
@@ -259,6 +298,9 @@ msgstr "名前を付けて保存"
 msgid "Save the cut as"
 msgstr "カットの保存先"
 
+msgid "Show"
+msgstr "表示"
+
 msgid "Snap"
 msgstr "スナップ"
 
@@ -282,6 +324,12 @@ msgstr "サムネイル"
 
 msgid "Title"
 msgstr "タイトル"
+
+msgid "To across"
+msgstr "終点（横）"
+
+msgid "To down"
+msgstr "終点（縦）"
 
 msgid "Transition"
 msgstr "トランジション"
@@ -556,6 +604,9 @@ msgstr "先にプロジェクトを始めてください"
 
 msgid "take of %1s at %2"
 msgstr "%2 から %1 秒のテイク"
+
+msgid "the sliders below change mask %1 only"
+msgstr "下のスライダーはマスク %1 だけを変更します"
 
 msgid "the start, the end"
 msgstr "先頭へ、末尾へ"

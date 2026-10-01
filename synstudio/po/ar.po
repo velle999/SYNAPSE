@@ -52,6 +52,12 @@ msgstr "%1 × %2  ·  %3 إطار/ث"
 msgid "+ Add"
 msgstr "+ إضافة"
 
+msgid "+ linear"
+msgstr "+ خطي"
+
+msgid "+ radial"
+msgstr "+ شعاعي"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -69,6 +75,12 @@ msgstr "إضافة مواد"
 
 msgid "Cancel"
 msgstr "إلغاء"
+
+msgid "Centre across"
+msgstr "المركز أفقيًا"
+
+msgid "Centre down"
+msgstr "المركز عموديًا"
 
 msgid "Choose a file…"
 msgstr "اختر ملفاً…"
@@ -128,8 +140,17 @@ msgstr "تصدير المصغّرة"
 msgid "Export…"
 msgstr "جارٍ التصدير…"
 
+msgid "Feather"
+msgstr "تنعيم الحافة"
+
 msgid "From"
 msgstr "من"
+
+msgid "From across"
+msgstr "من أفقيًا"
+
+msgid "From down"
+msgstr "من عموديًا"
 
 msgid "Grade"
 msgstr "تصحيح الألوان"
@@ -139,6 +160,9 @@ msgstr "إدراج"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "المثبَّتة، أو اختر ملف ‎.cube من أي مكان."
+
+msgid "Invert"
+msgstr "عكس"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -152,6 +176,9 @@ msgstr "المفاتيح"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "خطي %1"
+
 msgid "Looks"
 msgstr "المظاهر"
 
@@ -163,6 +190,9 @@ msgstr "تحديد البداية"
 
 msgid "Mark out"
 msgstr "تحديد النهاية"
+
+msgid "Masks"
+msgstr "الأقنعة"
 
 msgid "Master"
 msgstr "الرئيسي"
@@ -230,6 +260,15 @@ msgstr "إطار المشروع"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "ملف RAW أو صورة ثابتة — طوّرها في غرفة التحميض"
 
+msgid "Radial %1"
+msgstr "شعاعي %1"
+
+msgid "Radius across"
+msgstr "نصف القطر أفقيًا"
+
+msgid "Radius down"
+msgstr "نصف القطر عموديًا"
+
 msgid "Record"
 msgstr "تسجيل"
 
@@ -262,6 +301,9 @@ msgstr "حفظ باسم"
 msgid "Save the cut as"
 msgstr "حفظ المونتاج باسم"
 
+msgid "Show"
+msgstr "إظهار"
+
 msgid "Snap"
 msgstr "الالتقاط"
 
@@ -285,6 +327,12 @@ msgstr "المصغّرة"
 
 msgid "Title"
 msgstr "عنوان"
+
+msgid "To across"
+msgstr "إلى أفقيًا"
+
+msgid "To down"
+msgstr "إلى عموديًا"
 
 msgid "Transition"
 msgstr "انتقال"
@@ -559,6 +607,9 @@ msgstr "ابدأ مشروعاً أولاً"
 
 msgid "take of %1s at %2"
 msgstr "لقطة بطول %1 ث عند %2"
+
+msgid "the sliders below change mask %1 only"
+msgstr "المنزلقات أدناه تغيّر القناع %1 فقط"
 
 msgid "the start, the end"
 msgstr "إلى البداية، إلى النهاية"

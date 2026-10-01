@@ -52,6 +52,12 @@ msgstr "%1 × %2  ·  %3 кадр/с"
 msgid "+ Add"
 msgstr "+ Добавить"
 
+msgid "+ linear"
+msgstr "+ линейная"
+
+msgid "+ radial"
+msgstr "+ радиальная"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -69,6 +75,12 @@ msgstr "Добавить материал"
 
 msgid "Cancel"
 msgstr "Отмена"
+
+msgid "Centre across"
+msgstr "Центр по горизонтали"
+
+msgid "Centre down"
+msgstr "Центр по вертикали"
 
 msgid "Choose a file…"
 msgstr "Выбрать файл…"
@@ -125,8 +137,17 @@ msgstr "Экспортировать миниатюру"
 msgid "Export…"
 msgstr "Экспорт…"
 
+msgid "Feather"
+msgstr "Растушёвка"
+
 msgid "From"
 msgstr "С"
+
+msgid "From across"
+msgstr "Откуда по горизонтали"
+
+msgid "From down"
+msgstr "Откуда по вертикали"
 
 msgid "Grade"
 msgstr "Цветокоррекция"
@@ -136,6 +157,9 @@ msgstr "Вставить"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "Установленные, либо выберите .cube откуда угодно."
+
+msgid "Invert"
+msgstr "Инвертировать"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -150,6 +174,9 @@ msgstr "Клавиши"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "Линейная %1"
+
 msgid "Looks"
 msgstr "Образы"
 
@@ -161,6 +188,9 @@ msgstr "Начальная точка"
 
 msgid "Mark out"
 msgstr "Конечная точка"
+
+msgid "Masks"
+msgstr "Маски"
 
 msgid "Master"
 msgstr "Мастер"
@@ -229,6 +259,15 @@ msgstr "Формат проекта"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW или отдельный кадр — проявите его в тёмной комнате"
 
+msgid "Radial %1"
+msgstr "Радиальная %1"
+
+msgid "Radius across"
+msgstr "Радиус по горизонтали"
+
+msgid "Radius down"
+msgstr "Радиус по вертикали"
+
 msgid "Record"
 msgstr "Запись"
 
@@ -261,6 +300,9 @@ msgstr "Сохранить как"
 msgid "Save the cut as"
 msgstr "Сохранить монтаж как"
 
+msgid "Show"
+msgstr "Показать"
+
 msgid "Snap"
 msgstr "Прилипание"
 
@@ -284,6 +326,12 @@ msgstr "Миниатюра"
 
 msgid "Title"
 msgstr "Титр"
+
+msgid "To across"
+msgstr "Куда по горизонтали"
+
+msgid "To down"
+msgstr "Куда по вертикали"
 
 msgid "Transition"
 msgstr "Переход"
@@ -558,6 +606,9 @@ msgstr "сначала начните проект"
 
 msgid "take of %1s at %2"
 msgstr "дубль %1 с на %2"
+
+msgid "the sliders below change mask %1 only"
+msgstr "ползунки ниже меняют только маску %1"
 
 msgid "the start, the end"
 msgstr "в начало, в конец"

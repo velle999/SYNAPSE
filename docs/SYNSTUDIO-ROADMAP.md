@@ -455,8 +455,22 @@ Fairlight-style automation: four features for one piece of work.
       one table, and the panel is built from it
 - [x] histogram (stills)
 - [x] six delivery formats with a name and format picker
-- [~] masks — darkroom only; a clip's grade is pointwise so it can ride the
-      LUT, and a mask is spatial, so it needs the filter path
+- [x] **masks on a clip's grade** — shipped in 0.1.0-54. The darkroom's
+      linear and radial masks, each with its own develop stack, applied over
+      the graded frame where it covers — up to four on a clip, in fractions of
+      its picture before the grade's crop, as a photograph's are. In the
+      graph, the graded frame is split three ways: as it is, through the
+      mask's own cube and spatial filters, and a matte; maskedmerge blends the
+      first two by the third, the darkroom's `a + (b - a) * k`. ⚠ The matte is
+      drawn ONCE, by geq on the first frame, and held: drawn per frame it cost
+      ten times the rest of the export. A photograph placed on the timeline
+      brings its masks, `paste --grade` carries them, and `--show-mask` tints
+      where one covers on the monitor, drawn in the same graph.
+      ⚠ A clip whose framing MOVES is graded on the export's zoompan VIEW, and
+      the monitor graded the whole scaled picture — a mask sat elsewhere on
+      every zooming clip, and so did the grade's crop and vignette. The
+      monitor now cuts the same view out first. `timeline mask
+      add|list|remove|N KEY=VALUE`, `timeline frame --show-mask T:C:K`
 - [x] **waveform, RGB parade, vectorscope** — **shipped in 0.1.0-23/24.**
       Computed HERE rather than by an ffmpeg filter, which is the bargain the
       histogram already strikes: a scope is read to decide whether a shot is
@@ -554,7 +568,6 @@ Fairlight-style automation: four features for one piece of work.
 **The build order is finished.** What is left in the sections above is a
 short list of named gaps rather than a plan — the boxes still open:
 
-- masks on a clip's grade — darkroom only today (§7)
 - the Rec.709 output transform and its colour tags (§7)
 
 Auto-save was never a gap and is not a feature

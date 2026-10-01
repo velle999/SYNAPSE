@@ -1652,7 +1652,37 @@ pkgver=0.1.0
 #   shipped template is drawn by the monitor and by a lossless export and
 #   compared at four frames, at 25 and 30 fps, keyed and not, and through a
 #   preset at its own size: identical. 847 assertions.
-pkgrel=53
+#
+# 54: masks on a clip's grade.
+#   The darkroom's linear and radial masks, each with a develop stack of its
+#   own, applied over the graded frame where it covers: up to four on a clip,
+#   in fractions of its picture before the grade's crop, as a photograph's
+#   are — so the crop now comes after them. `timeline mask
+#   add|list|remove|N KEY=VALUE` with `--look`, and `timeline frame
+#   --show-mask T:C:K` tints where one covers. A photograph placed on the
+#   timeline brings its masks, and `paste --grade` carries them. The window
+#   lists them under Grade; a picked mask turns every grade slider, the LUT
+#   and the looks onto it, and the monitor shows its tint.
+#
+#   In the graph the graded frame is split three ways — as it is, through
+#   the mask's own cube and spatial filters, and a matte — and maskedmerge
+#   blends the first two by the third. ⚠ The matte is drawn ONCE, by geq on
+#   the first frame, and held for the clip: per frame it cost ten times the
+#   rest of the export, and the held one is identical. ⚠ Planar RGB for all
+#   three, and back to packed RGBA after where the chain carries alpha: left
+#   planar, a clip at 0.8 opacity came out four code values off the export.
+#
+#   ⚠ A CLIP WHOSE FRAMING MOVES WAS GRADED ON TWO DIFFERENT PICTURES. The
+#   export's zoompan hands the grade a VIEW, the project's size; the monitor
+#   graded the whole scaled picture. A mask sat 92 code values off on every
+#   zooming clip, and the grade's crop and vignette had always been wrong
+#   there the same way. The monitor now cuts the same view out first.
+#
+#   A photograph with masks through the darkroom and as a clip: 39 dB apart,
+#   against 18 without its masks. Every case — yuv, alpha, a moving grade, a
+#   crop, a mask's own sharpening, a turn, a zoom, a zoom and a turn — is the
+#   monitor's picture exactly. 882 assertions.
+pkgrel=54
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

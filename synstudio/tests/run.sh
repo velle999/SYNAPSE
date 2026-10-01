@@ -1417,6 +1417,180 @@ check "with no second entry for the name" "1" \
       "$(SYNSTUDIO_TITLES="$SYNSTUDIO_TITLES:$tt/later" \
          $BIN titles list | grep -c '^lower-bar	')"
 
+# ---- masks on a clip's grade ------------------------------------------------
+#
+# The darkroom's masks on a shot: each a develop stack of its own, blended
+# over the graded frame by a matte drawn ONCE by geq and held for the clip.
+# The monitor and a lossless export have to agree to the pixel — through a
+# yuv clip, an alpha one, a moving grade, a crop, a mask's own sharpening
+# and a rotation.
+#
+# ⚠ AND THROUGH A ZOOM, ON A FLAT PICTURE. A zooming clip is resampled twice
+# by the export's zoompan and once by the monitor's scale, which puts a test
+# card's edges tens of code values apart with no mask at all. Grey has no
+# edges to resample, so what is left to differ is where the mask landed —
+# which is the thing under test, and was 92 off before the monitor graded
+# the export's view.
+echo "== masks on a clip's grade"
+if have ffmpeg; then
+    mk=$TMP/masks
+    mkdir -p "$mk"
+    ffmpeg -v error -y -f lavfi -i testsrc2=s=192x108:r=25:d=1 \
+           -c:v libx264 -pix_fmt yuv420p "$mk/src.mp4"
+    mp=$mk/m.syntl
+    $BIN timeline new "$mp" --size 192x108 --fps 25 >/dev/null
+    $BIN timeline track "$mp" video V >/dev/null
+    $BIN timeline clip "$mp" 0 "$mk/src.mp4" --at 0 >/dev/null
+
+    check "a radial mask is mask 0" "0" "$($BIN timeline mask "$mp" 0 0 add radial)"
+    check "a linear one is mask 1"  "1" "$($BIN timeline mask "$mp" 0 0 add linear)"
+    $BIN timeline mask "$mp" 0 0 add oval 2>&1 \
+        | seen "a kind it has not got is refused" "linear or radial"
+    $BIN timeline mask "$mp" 0 0 0 exposure=-1.5 geom=0.3,0.4,0.25,0.35,0.4 >/dev/null
+    $BIN timeline mask "$mp" 0 0 1 saturation=-100 invert=1 sharpen=40 >/dev/null
+    $BIN timeline mask "$mp" 0 0 1 y0=0.1 >/dev/null
+    check "list says what each one is, as the darkroom's does" \
+          "0	radial	0.3000	0.4000	0.2500	0.3500	0.4000	0
+1	linear	0.5000	0.1000	0.5000	0.8000	0.5000	1" \
+          "$($BIN timeline mask "$mp" 0 0 list)"
+    $BIN timeline mask "$mp" 0 0 0 geom=1,2 2>&1 | seen "geom wants four numbers" "x0,y0,x1,y1"
+    $BIN timeline mask "$mp" 0 0 0 nosuch=1 2>&1 | seen "a develop key it has not got is refused" "nosuch"
+    $BIN timeline mask "$mp" 0 0 7 exposure=1 2>&1 | seen "and a mask it has not got" "has no mask 7"
+    $BIN timeline mask "$mp" 0 0 add >/dev/null
+    $BIN timeline mask "$mp" 0 0 add >/dev/null
+    $BIN timeline mask "$mp" 0 0 add 2>&1 | seen "a clip carries four" "at the 4 mask limit"
+    $BIN timeline mask "$mp" 0 0 remove 3 >/dev/null
+    $BIN timeline mask "$mp" 0 0 remove 2 >/dev/null
+    $BIN timeline mask "$mp" 0 0 remove 2 2>&1 | seen "removing one that is not there says so" "has no mask 2"
+    cp "$mp" "$mk/look.syntl"
+    $BIN timeline mask "$mk/look.syntl" 0 0 0 --look noir >/dev/null
+    check "a look lands on a mask as on a grade" "1" \
+          "$(sed -n '/^mask	radial$/,/^endmask$/p' "$mk/look.syntl" | grep -c '^saturation	-100$')"
+    $BIN timeline mask "$mk/look.syntl" 0 0 0 --look nosuch 2>&1 | seen "and an unknown look is refused" "no such look"
+    before=$($BIN timeline mask "$mp" 0 0 list)
+    $BIN timeline set "$mp" 0 0 gain=-3 >/dev/null
+    check "they survive an unrelated edit" "$before" "$($BIN timeline mask "$mp" 0 0 list)"
+    check "and so does a mask's own develop" "1" "$(grep -c '^saturation	-100$' "$mp")"
+
+    # The monitor against a lossless export, frame for frame.
+    mkx() {   # mkx <project> <frame> <fps> -> monitor vs export at frame k
+        rm -rf "$mk/o" "$mk/m.png"; mkdir -p "$mk/o"
+        $BIN timeline export "$1" --format png --out "$mk/o/f_%04d.png" >/dev/null 2>&1
+        $BIN timeline frame "$1" --at "$(awk -v k="$2" -v f="$3" 'BEGIN { printf "%.6f", k / f }')" \
+            --out "$mk/m.png" >/dev/null 2>&1
+        maxdiff "$mk/m.png" "$(printf '%s/f_%04d.png' "$mk/o" $(($2 + 1)))"
+    }
+    ffmpeg -v error -y -f lavfi -i color=c=0x909090:s=192x108:r=25:d=1 \
+           -c:v libx264 -pix_fmt yuv420p -qp 0 "$mk/grey.mp4"
+    $BIN timeline new "$mk/flat.syntl" --size 192x108 --fps 25 >/dev/null
+    $BIN timeline track "$mk/flat.syntl" video V >/dev/null
+    $BIN timeline clip "$mk/flat.syntl" 0 "$mk/grey.mp4" --at 0 >/dev/null
+    $BIN timeline mask "$mk/flat.syntl" 0 0 add radial >/dev/null
+    $BIN timeline mask "$mk/flat.syntl" 0 0 0 exposure=-3 geom=0.3,0.4,0.2,0.3,0.3 >/dev/null
+    mkbad=""
+    for v in plain alpha keyed crop rotate zoom zoomrot; do
+        case $v in zoom*) cp "$mk/flat.syntl" "$mk/$v.syntl" ;;
+                   *)     cp "$mp" "$mk/$v.syntl" ;; esac
+        case $v in
+            alpha)  $BIN timeline set "$mk/$v.syntl" 0 0 opacity=0.8 >/dev/null ;;
+            keyed)  $BIN timeline key "$mk/$v.syntl" 0 0 add --at 0 >/dev/null
+                    $BIN timeline key "$mk/$v.syntl" 0 0 add --at 0.9 >/dev/null
+                    $BIN timeline key "$mk/$v.syntl" 0 0 set 1 temp=8000 contrast=30 >/dev/null ;;
+            crop)   $BIN timeline grade "$mk/$v.syntl" 0 0 crop=1 crop.x=0.2 crop.w=0.6 >/dev/null ;;
+            rotate) $BIN timeline set "$mk/$v.syntl" 0 0 xform.rotate=12 >/dev/null ;;
+            zoom)   $BIN timeline set "$mk/$v.syntl" 0 0 xform.animate=1 xform.scale2=1.6 >/dev/null ;;
+            zoomrot) $BIN timeline set "$mk/$v.syntl" 0 0 xform.animate=1 xform.scale2=1.6 \
+                         xform.rotate=10 xform.rotate2=10 >/dev/null ;;
+        esac
+        for k in 0 7 24; do
+            d=$(mkx "$mk/$v.syntl" $k 25)
+            [ "$d" -le 0 ] || mkbad="$mkbad $v:$k=$d"
+        done
+    done
+    check "the monitor is the export, mask for mask" "" "$mkbad"
+
+    # It does something, and only where it covers.
+    cp "$mp" "$mk/none.syntl"
+    $BIN timeline mask "$mk/none.syntl" 0 0 remove 1 >/dev/null
+    $BIN timeline mask "$mk/none.syntl" 0 0 remove 0 >/dev/null
+    $BIN timeline frame "$mk/none.syntl" --at 0.2 --out "$mk/n.png" >/dev/null 2>&1
+    $BIN timeline frame "$mp" --at 0.2 --out "$mk/y.png" >/dev/null 2>&1
+    check "a mask changes the picture" "yes" \
+          "$(awk -v d="$(maxdiff "$mk/n.png" "$mk/y.png")" 'BEGIN { print (d > 60) ? "yes" : "no" }')"
+    cp "$mk/none.syntl" "$mk/off.syntl"
+    $BIN timeline mask "$mk/off.syntl" 0 0 add radial >/dev/null
+    $BIN timeline mask "$mk/off.syntl" 0 0 0 exposure=-3 geom=5,5,0.1,0.1,0.2 >/dev/null
+    $BIN timeline frame "$mk/off.syntl" --at 0.2 --out "$mk/off.png" >/dev/null 2>&1
+    near "a mask that covers nothing changes nothing" 0 \
+         "$(maxdiff "$mk/n.png" "$mk/off.png")" 0
+    rm -rf "$mk/o"; mkdir -p "$mk/o"
+    $BIN timeline mask "$mk/off.syntl" 0 0 0 exposure=0 >/dev/null
+    $BIN timeline export "$mk/off.syntl" --format png --out "$mk/o/f_%04d.png" --print 2>/dev/null \
+        | notseen "and one that does nothing is not in the graph" "maskedmerge"
+
+    # Placed in the UNCROPPED picture, as a photograph's are: a dark spot at
+    # x=0.75 of a clip cropped to its right half sits in the middle of it.
+    ffmpeg -v error -y -f lavfi -i color=c=0x808080:s=320x180:d=1 -frames:v 1 "$mk/grey.png"
+    cg=$mk/crop.syntl
+    $BIN timeline new "$cg" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$cg" video V >/dev/null
+    $BIN timeline clip "$cg" 0 "$mk/grey.png" --at 0 --dur 1 >/dev/null
+    $BIN timeline grade "$cg" 0 0 crop=1 crop.x=0.5 crop.w=0.5 >/dev/null
+    $BIN timeline mask "$cg" 0 0 add radial >/dev/null
+    $BIN timeline mask "$cg" 0 0 0 exposure=-4 geom=0.75,0.5,0.1,0.15,0.2 >/dev/null
+    $BIN timeline frame "$cg" --at 0.2 --out "$mk/c.png" >/dev/null 2>&1
+    mpx() { ffmpeg -v error -i "$1" -vf "crop=1:1:$2:$3,format=gray" -f rawvideo - | od -An -tu1 | tr -d ' '; }
+    check "a mask is placed before the crop" "dark grey" \
+          "$(awk -v a="$(mpx "$mk/c.png" 160 90)" -v b="$(mpx "$mk/c.png" 200 90)" \
+             'BEGIN { print (a < 60 ? "dark" : "light"), (b > 100 ? "grey" : "dark") }')"
+
+    # The monitor shows where one covers, over the finished picture.
+    $BIN timeline frame "$mp" --at 0.2 --out "$mk/s.png" --show-mask 0:0:0 >/dev/null 2>&1
+    check "--show-mask tints the frame" "yes" \
+          "$(awk -v d="$(maxdiff "$mk/y.png" "$mk/s.png")" 'BEGIN { print (d > 40) ? "yes" : "no" }')"
+    $BIN timeline frame "$mk/none.syntl" --at 0.2 --out "$mk/s.png" --show-mask 0:0:0 2>&1 \
+        | seen "a mask that is not there is not shown" "has no mask 0"
+    $BIN timeline frame "$mp" --at 0.2 --out "$mk/s.png" --show-mask 0,0,0 2>&1 \
+        | seen "and the triple is TRACK:CLIP:MASK" "TRACK:CLIP:MASK"
+
+    # A photograph's masks come with it, and look as they did in the darkroom.
+    ffmpeg -v error -y -f lavfi \
+           -i "gradients=s=320x180:c0=0x3060c0:c1=0xe0a040:c2=0x40c060:nb_colors=3:speed=0,format=rgb24" \
+           -frames:v 1 "$mk/ph.png"
+    $BIN set "$mk/ph.png" contrast=20 >/dev/null
+    $BIN mask "$mk/ph.png" add radial >/dev/null
+    $BIN mask "$mk/ph.png" 0 exposure=-1.5 geom=0.3,0.4,0.25,0.35,0.4
+    $BIN mask "$mk/ph.png" add linear >/dev/null
+    $BIN mask "$mk/ph.png" 1 saturation=-100 invert=1
+    $BIN render "$mk/ph.png" --out "$mk/dark.png" --bits 8 >/dev/null
+    pg=$mk/ph.syntl
+    $BIN timeline new "$pg" --size 320x180 --fps 25 >/dev/null
+    $BIN timeline track "$pg" video V >/dev/null
+    $BIN timeline clip "$pg" 0 "$mk/ph.png" --at 0 --dur 1 >/dev/null
+    $BIN timeline clip "$pg" 0 "$mk/ph.png" --at 1 --dur 1 --flat >/dev/null
+    check "a photograph's masks come with it" "2" "$($BIN timeline mask "$pg" 0 0 list | wc -l)"
+    $BIN timeline frame "$pg" --at 0.2 --out "$mk/pc.png" >/dev/null 2>&1
+    $BIN timeline frame "$pg" --at 1.2 --out "$mk/pf.png" >/dev/null 2>&1
+    mpsnr2() { ffmpeg -v error -i "$1" -i "$2" -lavfi psnr=stats_file=- -f null - 2>&1 \
+               | awk -F'psnr_avg:' '/psnr_avg/{split($2,a," "); v=(a[1]=="inf")?999:a[1]+0; print v}' \
+               | tail -1; }
+    check "and the clip looks as the darkroom does (>36dB, flat <25dB)" "yes yes" \
+          "$(awk -v a="$(mpsnr2 "$mk/dark.png" "$mk/pc.png")" -v b="$(mpsnr2 "$mk/dark.png" "$mk/pf.png")" \
+             'BEGIN { print (a > 36 ? "yes" : "no"), (b < 25 ? "yes" : "no") }')"
+    for q in 2 3 4 5; do $BIN mask "$mk/ph.png" add radial >/dev/null; done
+    $BIN timeline clip "$pg" 0 "$mk/ph.png" --at 2 --dur 1 2>&1 >/dev/null \
+        | seen "more than a clip carries is said" "the first 4 came with it"
+    $BIN reset "$mk/ph.png" >/dev/null
+
+    # A pasted grade brings its masks, and a copied clip carries them.
+    $BIN timeline copy "$mp" 0 0 >/dev/null
+    $BIN timeline paste "$mk/none.syntl" 0 0 --grade >/dev/null
+    check "a pasted grade brings its masks" "2" "$($BIN timeline mask "$mk/none.syntl" 0 0 list | wc -l)"
+    $BIN timeline paste "$mk/none.syntl" 0 >/dev/null 2>&1
+    check "and a pasted clip carries them" "2" \
+          "$($BIN timeline mask "$mk/none.syntl" 0 "$(($($BIN timeline show "$mk/none.syntl" | grep -c '^clip')-1))" list | wc -l)"
+fi
+
 echo "== transitions (one filter, sixty looks)"
 
 # Every transition is ffmpeg's xfade now, on BOTH sides of the program: the
@@ -4907,6 +5081,106 @@ fi
 if [ -f "$qml" ]; then
     seen "the window reads the template catalogue"  '"titles", "list"' < "$qml"
     seen "a template's knob is a row of its own"    'component TmplCtl' < "$qml"
+fi
+
+# ---- a clip's masks, in the window ----------------------------------------
+#
+# Picking a mask points the grade sliders at its develop stack and tints the
+# monitor where it covers; its shape is five sliders through `timeline mask`.
+# Driven through addMask(), a slider row's commit() and gradeClip() — the
+# calls the buttons and sliders make — so nothing lands on the live seat.
+if have quickshell && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$qml" ] && have ffmpeg; then
+    mg=$TMP/maskgui
+    mkdir -p "$mg"
+    cp "$qml" "$mg/drv.qml"
+    cp "$(dirname "$qml")/synstudio-playback.qml" "$mg/" 2>/dev/null
+    cp -r "$(dirname "$qml")/qml" "$mg/" 2>/dev/null
+    ffmpeg -v error -y -f lavfi -i "testsrc2=s=128x72:r=10" -frames:v 1 "$mg/src.png"
+    mgp=$mg/m.syntl
+    $BIN timeline new "$mgp" --size 128x72 --fps 10 >/dev/null
+    $BIN timeline track "$mgp" video V >/dev/null
+    $BIN timeline clip "$mgp" 0 "$mg/src.png" --at 0 --dur 2 >/dev/null
+    $BIN timeline grade "$mgp" 0 0 contrast=10 >/dev/null
+    python3 - "$mg" <<'PYEOF'
+import sys
+d = sys.argv[1]
+s = open(d + "/drv.qml").read()
+drv = """
+    Timer {
+        interval: 900; repeat: true; running: true
+        property int n: 0
+        function find(it, name) {
+            if (!it) return null
+            if (it.objectName === name) return it
+            const ch = it.children || []
+            for (let i = 0; i < ch.length; i++) {
+                const r = find(ch[i], name)
+                if (r) return r
+            }
+            return null
+        }
+        onTriggered: {
+            n++
+            if (n === 2) {
+                root.selTrack = 0; root.selClip = 0
+            } else if (n === 4) {
+                root.addMask("radial")
+            } else if (n === 7) {
+                console.warn("PICKED " + root.selMask + " " + root.selMaskObj.kind
+                             + " " + root.maskShowing)
+                console.warn("SHOWN " + (frameProc.command.indexOf("--show-mask") >= 0)
+                             + " " + frameProc.command[frameProc.command.indexOf("--show-mask") + 1])
+                const k = find(inspCol, "maskctl:x0")
+                console.warn("ROW " + (k !== null) + " " + (k ? k.val : ""))
+                if (k) k.commit(0.25)
+                root.gradeClip("exposure", -1)
+            } else if (n === 10) {
+                console.warn("MASKSET " + root.selMaskObj.geom.x0 + " "
+                             + root.gradeValue("exposure") + " "
+                             + root.selClipObj.grade.exposure)
+                root.selMask = -1
+            } else if (n === 12) {
+                console.warn("CLIPGRADE " + root.gradeValue("contrast") + " "
+                             + root.maskShowing + " "
+                             + (frameProc.command.indexOf("--show-mask") >= 0))
+                root.selMask = 0
+                root.removeMask()
+            } else if (n === 15) {
+                console.warn("MASKGONE " + root.selClipObj.masks.length + " " + root.selMask)
+                Qt.quit()
+            }
+        }
+    }
+"""
+open(d + "/drv.qml", "w").write(s[:s.rstrip().rfind("}")] + drv + "}\n")
+PYEOF
+    HOME=$mg SYNSTUDIO_BIN=$BIN SYNSTUDIO_PROJECT=$mgp DISABLE_MANGOHUD=1 MANGOHUD=0 \
+        QT_QPA_PLATFORM=offscreen QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+        timeout 60 quickshell -p "$mg/drv.qml" > "$mg/log" 2>&1
+    sed -i 's/\x1b\[[0-9;]*m//g' "$mg/log"
+    if grep -qE 'ReferenceError|TypeError' "$mg/log"; then
+        bad "the mask rows drive with no throw: $(grep -m1 -E 'ReferenceError|TypeError' \
+             "$mg/log" | cut -c1-90)"
+    else
+        ok
+    fi
+    if grep -q "MASKGONE" "$mg/log"; then
+        mv_() { grep -o "$1 .*" "$mg/log" | head -1 | cut -d' ' -f2-; }
+        check "a new mask is picked as it arrives"         "0 radial true" "$(mv_ PICKED)"
+        check "and the monitor is asked to show it"       "true 0:0:0"    "$(mv_ SHOWN)"
+        check "its shape is a row, at the darkroom's default" "true 0.5"   "$(mv_ ROW)"
+        check "the shape and the grade sliders write the mask, not the clip" \
+              "0.25 -1 0" "$(mv_ MASKSET)"
+        check "putting it down goes back to the clip's grade" \
+              "10 false false" "$(mv_ CLIPGRADE)"
+        check "and the ✕ takes it off"                    "0 -1"          "$(mv_ MASKGONE)"
+    else
+        printf '  skip  the window did not start, no mask row asserted\n'
+    fi
+fi
+if [ -f "$qml" ]; then
+    seen "the window asks the engine for a mask's tint" '"--show-mask"' < "$qml"
+    seen "and writes masks through the engine"          '["mask", root.proj' < "$qml"
 fi
 
 # ── a LUT used by path is kept, and browsable afterwards ────────────────────

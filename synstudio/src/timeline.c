@@ -734,6 +734,21 @@ int ss_clip_template_param(ss_clip *c, const char *key, double v)
     return -1;
 }
 
+int ss_clip_mask_add(ss_clip *c, int type)
+{
+    if (c->nmasks >= SS_MAX_CLIP_MASKS) return -1;
+    ss_mask_reset(&c->mask[c->nmasks], type);
+    return c->nmasks++;
+}
+
+int ss_clip_mask_remove(ss_clip *c, int n)
+{
+    if (n < 0 || n >= c->nmasks) return -1;
+    memmove(&c->mask[n], &c->mask[n + 1], sizeof(ss_mask) * (size_t)(c->nmasks - n - 1));
+    c->nmasks--;
+    return 0;
+}
+
 static const int ncfields = (int)(sizeof cfields / sizeof cfields[0]);
 
 int ss_clip_describe(int i, ss_clip_info *out)
@@ -2253,6 +2268,21 @@ int ss_timeline_write(const ss_timeline *t, FILE *fp)
                     fprintf(fp, "endkey\n");
                 }
             }
+            /* A mask as a photograph's sidecar writes one, so the block reads
+             * the same in either document. */
+            {
+                int k;
+                for (k = 0; k < c->nmasks; k++) {
+                    const ss_mask *m = &c->mask[k];
+                    fprintf(fp, "mask\t%s\n",
+                            m->type == SS_MASK_LINEAR ? "linear" : "radial");
+                    fprintf(fp, "mask.invert\t%d\n", m->invert);
+                    fprintf(fp, "mask.geom\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\n",
+                            m->x0, m->y0, m->x1, m->y1, m->feather);
+                    ss_develop_write(&m->dev, fp);
+                    fprintf(fp, "endmask\n");
+                }
+            }
         }
     }
     return ferror(fp) ? -1 : 0;
@@ -2563,6 +2593,43 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
                     ss_clip_key_add(cc, kt, &d);
                 }
             }
+        } else if (!strncmp(line, "mask\t", 5)) {
+            /* The geometry lines first, then the develop block up to endmask
+             * — read the way a grade is. One past the limit is skipped whole,
+             * so its develop lines cannot land on the clip. */
+            char buf[16384];
+            size_t used = 0;
+            ss_mask *m = NULL;
+            int type = strncmp(line + 5, "radial", 6) ? SS_MASK_LINEAR
+                                                      : SS_MASK_RADIAL;
+            FILE *ms;
+            if (cc) {
+                int k = ss_clip_mask_add(cc, type);
+                if (k >= 0) m = &cc->mask[k];
+            }
+            while (fgets(line, sizeof line, fp)) {
+                if (!strncmp(line, "endmask", 7)) break;
+                if (!strncmp(line, "mask.invert\t", 12)) {
+                    if (m) m->invert = atoi(line + 12) ? 1 : 0;
+                    continue;
+                }
+                if (!strncmp(line, "mask.geom\t", 10)) {
+                    if (m) sscanf(line + 10, "%f %f %f %f %f",
+                                  &m->x0, &m->y0, &m->x1, &m->y1, &m->feather);
+                    continue;
+                }
+                if (used + strlen(line) + 1 >= sizeof buf) continue;
+                strcpy(buf + used, line);
+                used += strlen(line);
+            }
+            buf[used] = '\0';
+            if (m && used) {
+                ms = fmemopen(buf, used, "r");
+                if (ms) {
+                    ss_develop_read(&m->dev, ms);
+                    fclose(ms);
+                }
+            }
         } else if (!strncmp(line, "grade\t", 6)) {
             /* Read the develop block up to endgrade into a memory stream so
              * ss_develop_read, which takes a FILE*, needs no second parser. */
@@ -2593,6 +2660,7 @@ int ss_timeline_read(ss_timeline *t, FILE *fp)
 
 static void grade_path(char *out, size_t n, const char *dir,
                        int track, int idx, int step, int nsteps);
+static void mask_path(char *out, size_t n, const char *dir, int track, int idx, int k);
 static void title_cmd_path(char *out, size_t n, const char *dir, int track, int idx);
 static const ss_fx *clip_template(const ss_clip *c);
 static int  template_text_write(const ss_clip *c, const ss_fx *tr,
@@ -2811,6 +2879,18 @@ int ss_timeline_bake(const ss_timeline *t, const char *dir, double at)
                     n++;
                 }
             }
+            {
+                int k;
+                for (k = 0; k < c->nmasks; k++) {
+                    if (ss_develop_is_identity(&c->mask[k].dev)) continue;
+                    mask_path(p, sizeof p, dir, i, j, k);
+                    fp = fopen(p, "w");
+                    if (!fp) return -1;
+                    ss_lut_write(&c->mask[k].dev, 33, fp, "synstudio clip mask");
+                    fclose(fp);
+                    n++;
+                }
+            }
             if (at < 0) {
                 int r;
                 fx_cmd_path(p, sizeof p, dir, i, j);
@@ -2855,6 +2935,10 @@ void ss_timeline_unbake(const ss_timeline *t, const char *dir)
             }
             snprintf(p, sizeof p, "%s/grade_%d_%d.cube", dir, i, j);
             remove(p);
+            for (s = 0; s < SS_MAX_CLIP_MASKS; s++) {
+                mask_path(p, sizeof p, dir, i, j, s);
+                remove(p);
+            }
             snprintf(p, sizeof p, "%s/text_%d_%d.txt", dir, i, j);
             remove(p);
             title_cmd_path(p, sizeof p, dir, i, j);
@@ -3017,7 +3101,10 @@ static void text_roll_y(const ss_clip *c, double at, char *y, size_t yn)
 
 /* The grade's spatial half, which a 3D LUT cannot carry because every one of
  * these needs a neighbouring pixel. Shared by both graph builders so a scrub
- * and an export sharpen by the same amount. */
+ * and an export sharpen by the same amount.
+ *
+ * The CROP is not here: it goes after the clip's masks, which are fractions
+ * of the uncropped picture as a photograph's are — see chain_crop. */
 static void chain_spatial(strbuf *fc, const ss_develop *d)
 {
     if (d->sharpen > 0.0f) {
@@ -3032,9 +3119,22 @@ static void chain_spatial(strbuf *fc, const ss_develop *d)
         sb_add(fc, ",hqdn3d=%.2f:%.2f:%.2f:%.2f",
                d->nr_luma / 25.0f, d->nr_chroma / 25.0f,
                d->nr_luma / 16.0f, d->nr_chroma / 16.0f);
-    if (d->crop.on)
+}
+
+/* The grade's crop, from the same middle-of-the-clip stack as the spatial
+ * half, AFTER the masks: the darkroom masks first and crops last, because a
+ * mask's coordinates are fractions of the uncropped frame and cropping first
+ * would move every one of them. */
+static void chain_crop(strbuf *fc, const ss_clip *c)
+{
+    int n = ss_clip_grade_steps(c);
+    ss_develop mid;
+
+    if (n <= 0) return;
+    ss_clip_grade_step(c, n / 2, &mid);
+    if (mid.crop.on)
         sb_add(fc, ",crop=iw*%.5f:ih*%.5f:iw*%.5f:ih*%.5f",
-               d->crop.w, d->crop.h, d->crop.x, d->crop.y);
+               mid.crop.w, mid.crop.h, mid.crop.x, mid.crop.y);
 }
 
 /* ONE place that decides what a cube is called. The baker writes them and
@@ -3120,6 +3220,82 @@ static void chain_grade(strbuf *fc, const ss_clip *c, const char *lutdir,
                         int track, int idx)
 {
     chain_grade_at(fc, c, lutdir, track, idx, -1.0);
+}
+
+static void mask_path(char *out, size_t n, const char *dir, int track, int idx, int k)
+{
+    snprintf(out, n, "%s/mask_%d_%d_%d.cube", dir, track, idx, k);
+}
+
+/* ---- masks on the grade ----
+ *
+ * The darkroom renders a mask's stack over a copy of the picture and blends
+ * the two by coverage. So does this, as a graph: the graded frame is split
+ * three ways — the picture as it is, the picture through the mask's own
+ * cube and spatial filters, and a matte — and maskedmerge blends the first
+ * two by the third, which is the darkroom's `a + (b - a) * k` per plane.
+ *
+ * ⚠ THE MATTE IS DRAWN ONCE. geq evaluates an expression per pixel, and over
+ * every frame of a 1080p clip that was ten times the cost of the whole rest
+ * of the export. The mask does not move, so geq draws it on the FIRST frame
+ * only and maskedmerge holds that frame for the rest of the clip — measured
+ * identical to drawing it every frame. Sized by the frame it is drawn from,
+ * so it fits whatever the grade sees: fitted, rotated or zoomed.
+ *
+ * ⚠ PLANAR RGB, AND ONE FORMAT FOR ALL THREE. maskedmerge takes no packed
+ * format and wants its inputs alike, so the frame is made gbrp — gbrap where
+ * the chain carries alpha, the monitor's always does — before the split. The
+ * matte's alpha plane is 0: the clip's alpha comes from the picture as it
+ * is, whatever the mask's own filters did to theirs. */
+static void mask_stage(strbuf *fc, const ss_mask *m, const char *lutdir,
+                       int track, int idx, int k, char tag, int alpha)
+{
+    const char *pf = alpha ? "gbrap" : "gbrp";
+    char ex[512], lp[2048], esc[4200];
+
+    if (ss_mask_expr(m, ex, sizeof ex) != 0) return;
+    sb_add(fc, ",format=%s,split=3[%c%d_%d_%da][%c%d_%d_%db][%c%d_%d_%dc]", pf,
+           tag, track, idx, k, tag, track, idx, k, tag, track, idx, k);
+    sb_add(fc, ";[%c%d_%d_%db]", tag, track, idx, k);
+    if (tag == 't') {
+        sb_add(fc, "drawbox=c=red@0.5:t=fill");
+    } else {
+        mask_path(lp, sizeof lp, lutdir, track, idx, k);
+        esc_filter(lp, esc, sizeof esc);
+        sb_add(fc, "lut3d=file='%s':interp=tetrahedral", esc);
+        /* A mask colours and sharpens; it does not crop, and chain_spatial
+         * does not. */
+        chain_spatial(fc, &m->dev);
+    }
+    sb_add(fc, ",format=%s[%c%d_%d_%dg]", pf, tag, track, idx, k);
+    sb_add(fc, ";[%c%d_%d_%dc]trim=end_frame=1,geq=r='%s':g='%s':b='%s'%s[%c%d_%d_%dm]",
+           tag, track, idx, k, ex, ex, ex, alpha ? ":a='0'" : "",
+           tag, track, idx, k);
+    sb_add(fc, ";[%c%d_%d_%da][%c%d_%d_%dg][%c%d_%d_%dm]maskedmerge",
+           tag, track, idx, k, tag, track, idx, k, tag, track, idx, k);
+    /* ⚠ And back to packed RGBA where the chain carried alpha. Left planar,
+     * the monitor's opacity and overlay took gbrap through a different
+     * swscale path than the export's explicit rgba, and every pixel of a
+     * clip at 0.8 came out up to four code values apart. */
+    if (alpha) sb_add(fc, ",format=rgba");
+}
+
+/* Every mask in the order it was added, then — on the monitor, for
+ * --show-mask — a red tint over the one mask's coverage, on top of the
+ * finished picture, so the matte that is shown is the matte that is used. */
+static void chain_masks(strbuf *fc, const ss_timeline *t, const ss_clip *c,
+                        const char *lutdir, int track, int idx, int alpha)
+{
+    int k;
+
+    for (k = 0; k < c->nmasks; k++)
+        if (!ss_develop_is_identity(&c->mask[k].dev))
+            mask_stage(fc, &c->mask[k], lutdir, track, idx, k, 'm', alpha);
+    if (t && t->show_mask && t->show_mask_track == track &&
+        t->show_mask_clip == idx && t->show_mask_k >= 0 &&
+        t->show_mask_k < c->nmasks)
+        mask_stage(fc, &c->mask[t->show_mask_k], lutdir, track, idx,
+                   t->show_mask_k, 't', alpha);
 }
 
 /* ---- a title that grows, or changes colour ----
@@ -4948,6 +5124,8 @@ int ss_timeline_ffmpeg(const ss_timeline *t, const char *out,
                 }
 
                 chain_grade(&fc, c, lutdir, i, j);
+                chain_masks(&fc, NULL, c, lutdir, i, j, needs_alpha(c) || opkey);
+                chain_crop(&fc, c);
                 /* Colour first, then effects, then the caption. A title is
                  * something written ON the shot and blurring it with the shot
                  * is nobody's intention; the grade comes first because every
@@ -5760,6 +5938,17 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
              * start of the timeline. */
             sb_add(&fc, ";[%d:v]setpts=PTS-STARTPTS,format=rgba,scale=%d:%d"
                         ":force_original_aspect_ratio=decrease", input, fw, fh);
+            /* ⚠ A framing that MOVES is the export's zoompan, whose output is
+             * a VIEW: the project's size, centred on the picture, black where
+             * the picture does not reach. Everything after it — the turn, the
+             * grade's crop and vignette, a mask, an effect, a caption — works
+             * on that view, so the monitor cuts the same one out of the
+             * scaled picture. Graded on the whole picture instead, a mask at
+             * 0.3 sat somewhere else on every zooming clip. */
+            if (xform_moves(c))
+                sb_add(&fc, ",crop='min(iw,%d)':'min(ih,%d)'"
+                            ",pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black",
+                       t->w, t->h, t->w, t->h);
             if (rot != 0.0f)
                 sb_add(&fc, ",rotate=%.6f:ow='hypot(iw,ih)':oh='hypot(iw,ih)'"
                             ":c=black@0", (double)rot * M_PI / 180.0);
@@ -5776,6 +5965,8 @@ int ss_timeline_frame(const ss_timeline *t, double time, const char *out,
                        (int)(c->stab_smooth + 0.5f), (double)c->stab_zoom);
             }
             chain_grade_at(&fc, c, lutdir, i, j, off);
+            chain_masks(&fc, t, c, lutdir, i, j, 1);
+            chain_crop(&fc, c);
             chain_fx_at(&fc, c, nvid, lutdir, i, j, off);
             /* `off` and not -1: the monitor holds one frame, so a title that
              * MOVES has to be drawn where it is at this instant rather than

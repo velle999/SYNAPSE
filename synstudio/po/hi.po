@@ -51,6 +51,12 @@ msgstr "%1 × %2  ·  %3 fps"
 msgid "+ Add"
 msgstr "+ जोड़ें"
 
+msgid "+ linear"
+msgstr "+ रैखिक"
+
+msgid "+ radial"
+msgstr "+ त्रिज्य"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -68,6 +74,12 @@ msgstr "सामग्री जोड़ें"
 
 msgid "Cancel"
 msgstr "रद्द करें"
+
+msgid "Centre across"
+msgstr "केंद्र क्षैतिज"
+
+msgid "Centre down"
+msgstr "केंद्र ऊर्ध्वाधर"
 
 msgid "Choose a file…"
 msgstr "फ़ाइल चुनें…"
@@ -123,8 +135,17 @@ msgstr "थंबनेल निर्यात करें"
 msgid "Export…"
 msgstr "निर्यात हो रहा है…"
 
+msgid "Feather"
+msgstr "किनारा नरम"
+
 msgid "From"
 msgstr "यहाँ से"
+
+msgid "From across"
+msgstr "से क्षैतिज"
+
+msgid "From down"
+msgstr "से ऊर्ध्वाधर"
 
 msgid "Grade"
 msgstr "रंग सुधार"
@@ -134,6 +155,9 @@ msgstr "डालें"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "स्थापित, या कहीं से भी कोई .cube फ़ाइल चुनें।"
+
+msgid "Invert"
+msgstr "उलटें"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -146,6 +170,9 @@ msgstr "कुंजियाँ"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "रैखिक %1"
+
 msgid "Looks"
 msgstr "रूप"
 
@@ -157,6 +184,9 @@ msgstr "आरंभ चिह्न"
 
 msgid "Mark out"
 msgstr "अंत चिह्न"
+
+msgid "Masks"
+msgstr "मास्क"
 
 msgid "Master"
 msgstr "मास्टर"
@@ -224,6 +254,15 @@ msgstr "परियोजना का आकार"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW या स्थिर चित्र — इसे डार्करूम में विकसित करें"
 
+msgid "Radial %1"
+msgstr "त्रिज्य %1"
+
+msgid "Radius across"
+msgstr "त्रिज्या क्षैतिज"
+
+msgid "Radius down"
+msgstr "त्रिज्या ऊर्ध्वाधर"
+
 msgid "Record"
 msgstr "रिकॉर्ड करें"
 
@@ -256,6 +295,9 @@ msgstr "इस रूप में सहेजें"
 msgid "Save the cut as"
 msgstr "संपादन को इस रूप में सहेजें"
 
+msgid "Show"
+msgstr "दिखाएँ"
+
 msgid "Snap"
 msgstr "चिपकाव"
 
@@ -279,6 +321,12 @@ msgstr "थंबनेल"
 
 msgid "Title"
 msgstr "शीर्षक"
+
+msgid "To across"
+msgstr "तक क्षैतिज"
+
+msgid "To down"
+msgstr "तक ऊर्ध्वाधर"
 
 msgid "Transition"
 msgstr "संक्रमण"
@@ -553,6 +601,9 @@ msgstr "पहले कोई परियोजना शुरू करे�
 
 msgid "take of %1s at %2"
 msgstr "%2 पर %1 सेकंड की रिकॉर्डिंग"
+
+msgid "the sliders below change mask %1 only"
+msgstr "नीचे के स्लाइडर केवल मास्क %1 बदलते हैं"
 
 msgid "the start, the end"
 msgstr "शुरुआत में, अंत में"

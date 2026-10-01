@@ -36,6 +36,12 @@ msgstr ""
 msgid "+ Add"
 msgstr ""
 
+msgid "+ linear"
+msgstr ""
+
+msgid "+ radial"
+msgstr ""
+
 msgid "1080p HD"
 msgstr ""
 
@@ -52,6 +58,12 @@ msgid "Add media"
 msgstr ""
 
 msgid "Cancel"
+msgstr ""
+
+msgid "Centre across"
+msgstr ""
+
+msgid "Centre down"
 msgstr ""
 
 msgid "Choose a file…"
@@ -106,7 +118,16 @@ msgstr ""
 msgid "Export…"
 msgstr ""
 
+msgid "Feather"
+msgstr ""
+
 msgid "From"
+msgstr ""
+
+msgid "From across"
+msgstr ""
+
+msgid "From down"
 msgstr ""
 
 msgid "Grade"
@@ -116,6 +137,9 @@ msgid "Insert"
 msgstr ""
 
 msgid "Installed, or choose a .cube from anywhere."
+msgstr ""
+
+msgid "Invert"
 msgstr ""
 
 msgid ""
@@ -129,6 +153,9 @@ msgstr ""
 msgid "LUT"
 msgstr ""
 
+msgid "Linear %1"
+msgstr ""
+
 msgid "Looks"
 msgstr ""
 
@@ -139,6 +166,9 @@ msgid "Mark in"
 msgstr ""
 
 msgid "Mark out"
+msgstr ""
+
+msgid "Masks"
 msgstr ""
 
 msgid "Master"
@@ -207,6 +237,15 @@ msgstr ""
 msgid "RAW or a still — develop it in the darkroom"
 msgstr ""
 
+msgid "Radial %1"
+msgstr ""
+
+msgid "Radius across"
+msgstr ""
+
+msgid "Radius down"
+msgstr ""
+
 msgid "Record"
 msgstr ""
 
@@ -239,6 +278,9 @@ msgstr ""
 msgid "Save the cut as"
 msgstr ""
 
+msgid "Show"
+msgstr ""
+
 msgid "Snap"
 msgstr ""
 
@@ -261,6 +303,12 @@ msgid "Thumbnail"
 msgstr ""
 
 msgid "Title"
+msgstr ""
+
+msgid "To across"
+msgstr ""
+
+msgid "To down"
 msgstr ""
 
 msgid "Transition"
@@ -533,6 +581,9 @@ msgid "start a project first"
 msgstr ""
 
 msgid "take of %1s at %2"
+msgstr ""
+
+msgid "the sliders below change mask %1 only"
 msgstr ""
 
 msgid "the start, the end"

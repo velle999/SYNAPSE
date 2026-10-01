@@ -51,6 +51,12 @@ msgstr "%1 × %2  ·  %3 fps"
 msgid "+ Add"
 msgstr "+ Hinzufügen"
 
+msgid "+ linear"
+msgstr "+ linear"
+
+msgid "+ radial"
+msgstr "+ radial"
+
 msgid "1080p HD"
 msgstr "1080p HD"
 
@@ -68,6 +74,12 @@ msgstr "Material hinzufügen"
 
 msgid "Cancel"
 msgstr "Abbrechen"
+
+msgid "Centre across"
+msgstr "Mitte waagerecht"
+
+msgid "Centre down"
+msgstr "Mitte senkrecht"
 
 msgid "Choose a file…"
 msgstr "Datei wählen…"
@@ -123,8 +135,17 @@ msgstr "Vorschaubild exportieren"
 msgid "Export…"
 msgstr "Exportieren…"
 
+msgid "Feather"
+msgstr "Weiche Kante"
+
 msgid "From"
 msgstr "Von"
+
+msgid "From across"
+msgstr "Von waagerecht"
+
+msgid "From down"
+msgstr "Von senkrecht"
 
 msgid "Grade"
 msgstr "Farbkorrektur"
@@ -134,6 +155,9 @@ msgstr "Einfügen"
 
 msgid "Installed, or choose a .cube from anywhere."
 msgstr "Installiert, oder wählen Sie eine .cube-Datei von überall."
+
+msgid "Invert"
+msgstr "Umkehren"
 
 msgid ""
 "J shuttles back through the frame monitor — it is a fast scrub, not playback "
@@ -148,6 +172,9 @@ msgstr "Tasten"
 msgid "LUT"
 msgstr "LUT"
 
+msgid "Linear %1"
+msgstr "Linear %1"
+
 msgid "Looks"
 msgstr "Looks"
 
@@ -159,6 +186,9 @@ msgstr "Anfang setzen"
 
 msgid "Mark out"
 msgstr "Ende setzen"
+
+msgid "Masks"
+msgstr "Masken"
 
 msgid "Master"
 msgstr "Summe"
@@ -228,6 +258,15 @@ msgstr "Projektformat"
 msgid "RAW or a still — develop it in the darkroom"
 msgstr "RAW oder ein Einzelbild — in der Dunkelkammer entwickeln"
 
+msgid "Radial %1"
+msgstr "Radial %1"
+
+msgid "Radius across"
+msgstr "Radius waagerecht"
+
+msgid "Radius down"
+msgstr "Radius senkrecht"
+
 msgid "Record"
 msgstr "Aufnehmen"
 
@@ -262,6 +301,9 @@ msgstr "Speichern unter"
 msgid "Save the cut as"
 msgstr "Schnitt speichern unter"
 
+msgid "Show"
+msgstr "Zeigen"
+
 msgid "Snap"
 msgstr "Einrasten"
 
@@ -285,6 +327,12 @@ msgstr "Vorschaubild"
 
 msgid "Title"
 msgstr "Titel"
+
+msgid "To across"
+msgstr "Bis waagerecht"
+
+msgid "To down"
+msgstr "Bis senkrecht"
 
 msgid "Transition"
 msgstr "Übergang"
@@ -560,6 +608,9 @@ msgstr "zuerst ein Projekt beginnen"
 
 msgid "take of %1s at %2"
 msgstr "Aufnahme von %1 s bei %2"
+
+msgid "the sliders below change mask %1 only"
+msgstr "die Regler unten ändern nur Maske %1"
 
 msgid "the start, the end"
 msgstr "an den Anfang, ans Ende"

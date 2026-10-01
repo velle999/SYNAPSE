@@ -12,6 +12,7 @@
  */
 #include "synstudio.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
 
@@ -63,6 +64,43 @@ float ss_mask_at(const ss_mask *m, float fx, float fy)
 
     if (m->invert) c = 1.0f - c;
     return ss_clampf(c, 0.0f, 1.0f);
+}
+
+/* ss_mask_at as a geq expression, for a mask on a clip's grade.
+ *
+ * ⚠ THE SAME FUNCTION TWICE, so change both or neither: the darkroom asks
+ * the C above per pixel, the video graph asks this per pixel of a matte. The
+ * pixel centre is (X+0.5)/W as above, the smoothstep is the same polynomial,
+ * and the constants are folded here rather than left to the expression.
+ *
+ * Scaled to 0..255 for an 8-bit plane and ROUNDED: geq truncates what it
+ * stores, which would put every coverage up to half a code low. */
+int ss_mask_expr(const ss_mask *m, char *out, size_t n)
+{
+    const char *ss = "ld(0)*ld(0)*(3-2*ld(0))";
+    int r;
+
+    if (m->type == SS_MASK_LINEAR) {
+        double dx = (double)m->x1 - m->x0, dy = (double)m->y1 - m->y0;
+        double len2 = dx * dx + dy * dy;
+        if (len2 < 1e-9)
+            r = snprintf(out, n, "%s", m->invert ? "0" : "255");
+        else
+            r = snprintf(out, n, "st(0,clip(%.9g*(X+0.5)/W%+.9g*(Y+0.5)/H%+.9g,0,1));"
+                                 "255*(%s%s)+0.5",
+                         dx / len2, dy / len2,
+                         -((double)m->x0 * dx + (double)m->y0 * dy) / len2,
+                         m->invert ? "1-" : "", ss);
+    } else {
+        double rx = m->x1 > 1e-6f ? m->x1 : 1e-6, ry = m->y1 > 1e-6f ? m->y1 : 1e-6;
+        double f = ss_clampf(m->feather, 0.01f, 1.0f);
+        /* Covered inside, so the smoothstep of the distance is what is NOT. */
+        r = snprintf(out, n, "st(0,clip((hypot(((X+0.5)/W%+.9g)/%.9g,((Y+0.5)/H%+.9g)/%.9g)"
+                             "%+.9g)/%.9g,0,1));255*(%s%s)+0.5",
+                     -(double)m->x0, rx, -(double)m->y0, ry, -(1.0 - f), f,
+                     m->invert ? "" : "1-", ss);
+    }
+    return (r < 0 || (size_t)r >= n) ? -1 : 0;
 }
 
 int ss_apply_mask(ss_image *im, const ss_mask *m)
