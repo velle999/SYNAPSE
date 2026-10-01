@@ -265,7 +265,13 @@ else
 fi
 
 # --help must work and must not need a display.
-if "$BIN" --help | grep -q 'syn-settings'; then
+#
+# ⚠ Matched against the captured text, never `"$BIN" --help | grep -q`. Under
+# pipefail that races: grep -q exits at the first line, and the rest of 6.6 KB
+# of usage meets a closed pipe. SIGPIPE makes the pipeline 141 and this check a
+# FAIL for a correct --help, every time in the ASan build and under load in the
+# plain one.
+if grep -q 'syn-settings' <<<"$("$BIN" --help)"; then
     ok "--help prints usage"
 else
     bad "--help printed nothing useful"

@@ -82,7 +82,11 @@ echo "syn-disks tests — $SD"
 says "$SD" --version | grep -q '^syn-disks '
 check "--version prints a version" $?
 
-says "$SD" --help | grep -q 'the SynapseOS disk utility'
+# A here-string, not `says … | grep -q`. says took the PROGRAM out of the pipe,
+# but the printf replaying its output is still in it, and 4.3 KB of usage is
+# more than one write: once grep -q has matched and gone, the rest is a
+# SIGPIPE. It lost that race once in a full parallel ASan run.
+grep -q 'the SynapseOS disk utility' <<<"$(says "$SD" --help)"
 check "--help prints usage" $?
 
 "$SD" not-a-command >/dev/null 2>&1
