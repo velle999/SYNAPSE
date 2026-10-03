@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=GeForce NOW
+Exec=syn-gfn
+Icon=syn-gfn
+Terminal=false
+# ⛔ HIDDEN, AND NAMED FOR A WINDOW, NOT FOR A MENU. NVIDIA's app (which
+# syn-gfn opens when it is installed) runs under Xwayland with the window class
+# GeForceNOW, and synui's dock resolves a window through a direct
+# <app_id>.desktop lookup that does NOT read StartupWMClass. Without a file of
+# exactly this basename the running window gets no icon, and pinning it saves
+# pin=GeForceNOW — whose miss falls back to running `GeForceNOW` as a command,
+# which does not exist, so the pinned icon silently does nothing.
+#
+# NoDisplay keeps it out of the menus: syn-gfn.desktop is the entry people
+# open, and this one only answers the dock.
+NoDisplay=true
+StartupWMClass=GeForceNOW

@@ -60,6 +60,27 @@ EOF
     chmod +x "$TMP/bin/$b"
 done
 
+# ⛔ AND flatpak, for the same reason and with more at stake. The launcher
+# opens NVIDIA's app (`flatpak run com.nvidia.geforcenow`) whenever `flatpak
+# info` finds it, and the desktop this suite is written on HAS it — so a real
+# flatpak on PATH turns every "plain run" below into a GeForce NOW window on
+# the suite-runner's screen. The stub says "not installed" unless
+# $TMP/native-installed exists, which keeps every browser test a browser test.
+cat > "$TMP/bin/flatpak" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    info) [ -e "$TMP/native-installed" ] && [ "\$2" = com.nvidia.geforcenow ] && exit 0
+          exit 1 ;;
+    run)  printf 'flatpak\n'               >  "$TMP/who"
+          printf '%s\n' "\$*"              >  "$TMP/argv"
+          printf '%s\n' "\$MANGOHUD"       >  "$TMP/mangohud"
+          printf '%s\n' "\$DISABLE_MANGOHUD" > "$TMP/disable_mangohud"
+          exit 0 ;;
+esac
+exit 1
+EOF
+chmod +x "$TMP/bin/flatpak"
+
 export PATH="$TMP/bin:/usr/bin:/bin"
 export XDG_DATA_HOME="$TMP/share"
 PROFILE="$TMP/share/syn-gfn"
@@ -238,6 +259,81 @@ rc=$(run --list-browsers)
 grep -qi "catalogue only" "$TMP/out" \
     && ok "--list-browsers separates streaming from catalogue-only" \
     || bad "--list-browsers does not distinguish the two families"
+
+# ── NVIDIA's own app ───────────────────────────────────────────────────────
+#
+# Installed, it is what a plain run opens — the menu entry, big screen's tile
+# and `syn-gfn` alike. Any browser option asks for the browser instead.
+touch "$TMP/native-installed"
+
+rm -f "$TMP/who" "$TMP/argv"
+rc=$(run)
+check "with NVIDIA's app installed, a plain run exits 0" 0 "$rc"
+check "…and opens the app, not a browser" "flatpak" "$(cat "$TMP/who" 2>/dev/null)"
+check "…as 'flatpak run com.nvidia.geforcenow', with nothing a browser takes" \
+      "run com.nvidia.geforcenow" "$(cat "$TMP/argv" 2>/dev/null)"
+check "MANGOHUD is off for the app too — it draws the stream with Vulkan" \
+      "0" "$(cat "$TMP/mangohud" 2>/dev/null)"
+check "…and DISABLE_MANGOHUD with it" \
+      "1" "$(cat "$TMP/disable_mangohud" 2>/dev/null)"
+
+for opt in --web --browser=vivaldi-stable --url=https://play.geforcenow.com \
+           "--profile=$TMP/web-profile" "-- --some-flag"; do
+    rm -f "$TMP/who"
+    # shellcheck disable=SC2086  # "-- --some-flag" is meant to split
+    rc=$(run $opt)
+    check "$opt uses a browser even with the app installed" \
+          "vivaldi-stable" "$(cat "$TMP/who" 2>/dev/null)"
+done
+
+rc=$(run --list-browsers)
+grep -q "com.nvidia.geforcenow *installed  <- would use this one" "$TMP/out" \
+    && ok "--list-browsers marks NVIDIA's app as the one it would use" \
+    || bad "--list-browsers does not put the app first ($(cat "$TMP/out"))"
+grep -q "<- with --web" "$TMP/out" \
+    && ok "…and the browser as the one --web would use" \
+    || bad "--list-browsers does not say which browser --web picks"
+
+# The app and no browser at all — the same PATH trick as the Firefox-only box:
+# nothing from /usr/bin, so no real browser or flatpak can answer.
+mkdir -p "$TMP/native-only"
+cp "$TMP/bin/flatpak" "$TMP/native-only/flatpak"
+for t in mkdir cat bash; do ln -sf "$(command -v $t)" "$TMP/native-only/$t"; done
+rm -f "$TMP/who"
+rc=$(PATH="$TMP/native-only" "$BASH_BIN" "$GFN" >"$TMP/out" 2>"$TMP/err"; echo $?)
+check "the app with no browser beside it still opens" 0 "$rc"
+check "…and it is the app" "flatpak" "$(cat "$TMP/who" 2>/dev/null)"
+rc=$(PATH="$TMP/native-only" "$BASH_BIN" "$GFN" --web >"$TMP/out" 2>"$TMP/err"; echo $?)
+check "--web with no browser fails" 1 "$rc"
+grep -qi "NVIDIA's app is installed" "$TMP/err" \
+    && ok "…pointing at the app that is right there" \
+    || bad "--web without a browser does not mention the app ($(cat "$TMP/err"))"
+
+rm -f "$TMP/native-installed"
+
+# Not installed, the help says how to get it, since it is not on Flathub.
+rc=$(run --help)
+grep -q "flatpak install --user GeForceNOW com.nvidia.geforcenow" "$TMP/out" \
+    && ok "--help carries the command that installs NVIDIA's app" \
+    || bad "--help does not say how to install the app"
+
+# ── The dock alias ─────────────────────────────────────────────────────────
+#
+# The app's window class is GeForceNOW, and synui's dock resolves a window by
+# <app_id>.desktop alone. A missing or renamed file is a running window with
+# no icon and a pin that runs `GeForceNOW` — a command that does not exist.
+ALIAS="$HERE/../GeForceNOW.desktop"
+if [ -r "$ALIAS" ]; then
+    ok "GeForceNOW.desktop exists for the dock"
+    grep -qx 'Exec=syn-gfn'   "$ALIAS" && ok "…launching syn-gfn" \
+                                       || bad "GeForceNOW.desktop does not run syn-gfn"
+    grep -qx 'Icon=syn-gfn'   "$ALIAS" && ok "…with syn-gfn's icon" \
+                                       || bad "GeForceNOW.desktop has another icon"
+    grep -qx 'NoDisplay=true' "$ALIAS" && ok "…and hidden from the menus" \
+                                       || bad "GeForceNOW.desktop would be a second menu entry"
+else
+    bad "no GeForceNOW.desktop beside the launcher"
+fi
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ] || exit 1

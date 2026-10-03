@@ -1,6 +1,12 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 #
-# syn-gfn — GeForce NOW as a dedicated web app.
+# syn-gfn — GeForce NOW: NVIDIA's own app when it is installed, otherwise a
+# dedicated web app.
+#
+# ⚠ NVIDIA'S APP IS NOT A DEPENDENCY EITHER. It ships from NVIDIA's own Flatpak
+# remote, not from a repository pacman can see, so the launcher looks for it at
+# runtime (`flatpak info com.nvidia.geforcenow`) and `syn-gfn --help` prints the
+# three commands that install it for one user.
 #
 # ⛔ NO BROWSER IN depends, AND THAT IS DELIBERATE. Nothing here needs one to
 # install, the launcher names what is missing and how to get it, and pulling a
@@ -19,8 +25,8 @@
 # Linux.
 pkgname=syn-gfn
 pkgver=0.1.0
-pkgrel=4
-pkgdesc="GeForce NOW in a browser that can hold the mouse — cloud gaming for SynapseOS"
+pkgrel=5
+pkgdesc="GeForce NOW for SynapseOS — NVIDIA's own app when installed, else a browser that can hold the mouse"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -29,7 +35,8 @@ depends=('bash')
 # automatic fullscreen) into the profile before the first launch. Without it
 # the app still runs — the browser simply asks, and a prompt raised while the
 # page is full screen with the pointer captured is a prompt nobody can see.
-optdepends=('python: pre-grant the keyboard/pointer-lock permissions'
+optdepends=("flatpak: NVIDIA's own GeForce NOW app (com.nvidia.geforcenow), opened first when installed"
+            'python: pre-grant the keyboard/pointer-lock permissions'
             'chromium: the browser to stream in'
             'vivaldi: the browser to stream in'
             'firefox: browse the catalogue (cannot stream on Linux yet)')
@@ -56,6 +63,9 @@ package() {
 
     install -Dm755 syn-gfn.sh      "$pkgdir/usr/bin/syn-gfn"
     install -Dm644 syn-gfn.desktop "$pkgdir/usr/share/applications/syn-gfn.desktop"
+    # Hidden; answers the dock for NVIDIA's app, whose window class is
+    # GeForceNOW. See the file itself.
+    install -Dm644 GeForceNOW.desktop "$pkgdir/usr/share/applications/GeForceNOW.desktop"
 
     # Scalable only, into hicolor: the dock and the menu ask for whatever size
     # they draw at, and hicolor is the theme every other icon theme inherits

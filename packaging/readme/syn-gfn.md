@@ -1,15 +1,32 @@
 # syn-gfn
 
-GeForce NOW as a dedicated web app, in its own browser profile.
+GeForce NOW: NVIDIA's own app when it is installed, otherwise a dedicated web
+app in its own browser profile.
 
 ```bash
 syn-gfn                      # launch it
-syn-gfn --list-browsers      # which browsers are installed, and which can stream
+syn-gfn --web                # a browser, even with NVIDIA's app installed
+syn-gfn --list-browsers      # what is installed, and which one it would use
 syn-gfn --browser=chromium
 syn-gfn --url=https://example.com -- --some-browser-flag
 ```
 
-## Why a launcher and not just a bookmark
+## NVIDIA's app
+
+When `com.nvidia.geforcenow` is installed, `syn-gfn` opens it. It decodes the
+stream on the graphics card and holds the mouse while you play. It is not on
+Flathub; install it for your user with:
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --user --if-not-exists GeForceNOW https://international.download.nvidia.com/GFNLinux/flatpak/geforcenow.flatpakrepo
+flatpak install --user GeForceNOW com.nvidia.geforcenow
+```
+
+Any browser option (`--browser`, `--profile`, `--url`, `--`) means the browser
+path, as does `--web`.
+
+## In a browser
 
 Cloud gaming needs two things an ordinary browser window does not give you:
 full-screen without the browser's own chrome, and the **Keyboard Lock API**,

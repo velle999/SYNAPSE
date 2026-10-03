@@ -1,10 +1,33 @@
 #!/usr/bin/env bash
 #
-# syn-gfn — GeForce NOW, in a browser that can hold your mouse.
+# syn-gfn — GeForce NOW: NVIDIA's own app when it is installed, otherwise a
+# browser that can hold your mouse.
 #
-# ⛔ THIS EXISTS BECAUSE THE ELECTRON CLIENT CANNOT DO THE TWO THINGS A GAME
-# STREAM IS. Measured against geforcenow-electron 3.0.2 (2026-08-24), the
-# Flathub build, on this desktop:
+# ⇒ NVIDIA'S APP COMES FIRST. NVIDIA ships a native Linux client,
+# com.nvidia.geforcenow (out of beta 2026-08), from its OWN Flatpak remote —
+# not Flathub, which is why a Flathub search finds only the community
+# Electron wrapper described below and the browser path was built without it
+# ever being compared. Measured on the desktop 2026-10-02 (RTX 3060, synui,
+# Fortnite):
+#
+#   * it runs through Xwayland, which is what NVIDIA asks for on its own GPUs
+#     ("Xorg (X11) for NVIDIA GPUs"), and fills the window it is given;
+#   * it decodes on the GPU through Vulkan Video ("Selected HEVC codec",
+#     "decode h.265") — the browser path on an NVIDIA card has no VA-API
+#     driver to do that with;
+#   * its pointer lock HOLDS: `synctl pointer` read `locked persistent
+#     bound:true` on every sample mid-match, and the app lets go by itself
+#     whenever the game shows a cursor;
+#   * 11 ms average round trip, 0.00% loss, 0.01% of frames dropped.
+#
+# Its window's app_id is `GeForceNOW`, not syn-gfn — see GeForceNOW.desktop
+# for what that means to the dock.
+#
+# The browser path stays, for every machine without the app and for --web.
+#
+# ⛔ THE BROWSER PATH EXISTS BECAUSE THE ELECTRON CLIENT CANNOT DO THE TWO
+# THINGS A GAME STREAM IS. Measured against geforcenow-electron 3.0.2
+# (2026-08-24), the Flathub build, on this desktop:
 #
 #   * Its Wayland branch hardcodes `--use-gl=egl`, a value Chromium 142
 #     removed — "Requested GL implementation (gl=none,angle=none) not found in
@@ -34,6 +57,30 @@ set -u
 
 URL_DEFAULT="https://play.geforcenow.com"
 PROFILE_DEFAULT="${XDG_DATA_HOME:-$HOME/.local/share}/syn-gfn"
+
+# ── NVIDIA's own app ────────────────────────────────────────────────────────
+#
+# `flatpak info` with no --user/--system looks in both installations, so a
+# per-user install (no root needed) and a system one are both found.
+NATIVE_APP="com.nvidia.geforcenow"
+NATIVE_REPO="https://international.download.nvidia.com/GFNLinux/flatpak/geforcenow.flatpakrepo"
+
+have_native() {
+    command -v flatpak >/dev/null 2>&1 || return 1
+    flatpak info "$NATIVE_APP" >/dev/null 2>&1
+}
+
+# ⚠ THE flathub LINE IS NOT DECORATION. NVIDIA's remote carries the app and
+# not its runtime (org.freedesktop.Platform//24.08, from Flathub). The desktop
+# was installed this way, --user with Flathub added --user first, so the steps
+# below are the ones known to work — no root, no polkit prompt.
+native_install_steps() {
+    cat <<EOF
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak remote-add --user --if-not-exists GeForceNOW $NATIVE_REPO
+    flatpak install --user GeForceNOW $NATIVE_APP
+EOF
+}
 
 # ── Which browsers can actually stream ──────────────────────────────────────
 #
@@ -85,16 +132,26 @@ engine_of() {  # engine_of <browser-command>
 
 usage() {
     cat <<EOF
-usage: syn-gfn [--browser=NAME] [--profile=DIR] [--url=URL] [-- <browser args>]
+usage: syn-gfn
+       syn-gfn --web [--browser=NAME] [--profile=DIR] [--url=URL] [-- <browser args>]
        syn-gfn --list-browsers
        syn-gfn --help
 
-  GeForce NOW as a dedicated web app, in its own browser profile.
+  GeForce NOW. Opens NVIDIA's own GeForce NOW app when it is installed;
+  otherwise a browser, as a dedicated web app in its own profile.
 
+  NVIDIA's app decodes the stream on the graphics card and holds the mouse
+  while you play. It is not on Flathub; install it for your user with:
+
+$(native_install_steps)
+
+  --web            use a browser even when NVIDIA's app is installed
+                   (--browser, --profile, --url and -- all imply it)
   --browser=NAME   use this browser instead of the first one found
   --profile=DIR    profile directory (default: $PROFILE_DEFAULT)
   --url=URL        open somewhere else (default: $URL_DEFAULT)
-  --list-browsers  print which browsers are installed, and which can stream
+  --list-browsers  print whether NVIDIA's app is installed, which browsers
+                   are, and which one would be used
   --                everything after this is passed to the browser unchanged
 
   ⚠ FIREFOX IS SUPPORTED BY GEFORCE NOW, ON WINDOWS. Since 2026-08-19 the
@@ -109,6 +166,8 @@ usage: syn-gfn [--browser=NAME] [--profile=DIR] [--url=URL] [-- <browser args>]
   Its own profile, never your browsing one: a stream is a full-screen thing
   that wants the keyboard, and it has no business sharing a session, a cookie
   jar or a window with the tabs you had open.
+
+  In a browser:
 
   ⚠ PRESS GEFORCE NOW'S OWN FULLSCREEN BUTTON, NOT F11. Escape only reaches
   the game while the PAGE holds the keyboard (navigator.keyboard.lock()), and
@@ -153,11 +212,22 @@ have_gecko() {
 }
 
 list_browsers() {
-    local b found=0 g
-    printf 'can stream, in preference order:\n'
+    local b found=0 native=0
+    printf "NVIDIA's app:\n"
+    if have_native; then
+        printf '  %-26s installed  <- would use this one\n' "$NATIVE_APP"
+        native=1
+    else
+        printf '  %-26s -          (not on Flathub; see syn-gfn --help)\n' "$NATIVE_APP"
+    fi
+
+    printf '\nbrowsers that can stream, in preference order:\n'
     for b in $STREAM_BROWSERS; do
         if command -v "$b" >/dev/null 2>&1; then
-            if [ "$found" -eq 0 ]; then
+            if [ "$found" -eq 0 ] && [ "$native" -eq 1 ]; then
+                printf '  %-26s installed  <- with --web\n' "$b"
+                found=1
+            elif [ "$found" -eq 0 ]; then
                 printf '  %-26s installed  <- would use this one\n' "$b"
                 found=1
             else
@@ -181,8 +251,9 @@ list_browsers() {
     printf '  and Firefox has no Keyboard Lock API, so Escape would not reach it.\n'
     printf '  syn-gfn --browser=firefox opens one anyway.\n'
 
-    if [ "$found" -eq 0 ]; then
-        printf '\n  Nothing here can stream. synpkg install chromium\n'
+    if [ "$found" -eq 0 ] && [ "$native" -eq 0 ]; then
+        printf "\n  Nothing here can stream. Install NVIDIA's app (syn-gfn --help),\n"
+        printf '  or a browser: synpkg install chromium\n'
     fi
 }
 
@@ -287,24 +358,50 @@ PROFILE="$PROFILE_DEFAULT"
 URL="$URL_DEFAULT"
 PASSTHROUGH=0
 EXTRA=""
+WEB=0
 
+# Every browser option implies --web: each one only means something to a
+# browser, so somebody who typed one is asking for the browser path, and
+# quietly opening NVIDIA's app instead would throw the option away.
 while [ $# -gt 0 ]; do
     if [ "$PASSTHROUGH" -eq 1 ]; then
         EXTRA="$EXTRA $1"; shift; continue
     fi
     case "$1" in
-        --browser=*)    BROWSER=${1#*=} ;;
-        --profile=*)    PROFILE=${1#*=} ;;
-        --url=*)        URL=${1#*=} ;;
+        --web)          WEB=1 ;;
+        --browser=*)    BROWSER=${1#*=}; WEB=1 ;;
+        --profile=*)    PROFILE=${1#*=}; WEB=1 ;;
+        --url=*)        URL=${1#*=}; WEB=1 ;;
         --list-browsers) list_browsers; exit 0 ;;
         -h|--help)      usage; exit 0 ;;
-        --)             PASSTHROUGH=1 ;;
+        --)             PASSTHROUGH=1; WEB=1 ;;
         *)  printf 'syn-gfn: unknown option %s\n' "$1" >&2
             printf '  try: syn-gfn --help\n' >&2
             exit 2 ;;
     esac
     shift
 done
+
+# ⚠ THE SESSION EXPORTS MANGOHUD=1, which loads MangoHud's Vulkan layer into
+# every Vulkan client — and a browser is one, and NVIDIA's app draws the
+# stream with Vulkan. On AMD that layer segfaults the client inside its own
+# vkCreateDevice hook and on NVIDIA it never does, which is how it took
+# synui-wpengine and synstudio down on the ThinkPad while the desktop stayed
+# happy. DISABLE_MANGOHUD is the manifest's own disable_environment and beats
+# the enable; MANGOHUD=0 goes with it for the OpenGL side. The same pair those
+# two launchers set, for the same reason.
+#
+# ⚠ NOT MEASURED AS A CRASH HERE. Vivaldi starts fine under MANGOHUD=1 on this
+# NVIDIA box — the startup crash that cost an evening was --start-fullscreen,
+# below. This is the AMD class, kept off because a cloud stream has no frame
+# times of its own worth measuring: the numbers that matter are the service's.
+export DISABLE_MANGOHUD=1 MANGOHUD=0
+
+# NVIDIA's app, when it is here and nobody asked for a browser. No arguments:
+# it keeps its own sign-in, settings and window, and takes no URL.
+if [ "$WEB" -eq 0 ] && have_native; then
+    exec flatpak run "$NATIVE_APP"
+fi
 
 if [ -n "$BROWSER" ]; then
     command -v "$BROWSER" >/dev/null 2>&1 || {
@@ -320,7 +417,13 @@ else
         # browser they DO have is not merely absent from a list, but cannot
         # stream on this platform and why, is the difference between a fix and
         # a shrug.
-        if gecko=$(have_gecko); then
+        #
+        # Reached with NVIDIA's app installed only through --web or a browser
+        # option, so the useful answer is that the app is right there.
+        if have_native; then
+            printf 'syn-gfn: no browser installed that can stream GeForce NOW\n' >&2
+            printf "  NVIDIA's app is installed: run syn-gfn with no options\n" >&2
+        elif gecko=$(have_gecko); then
             printf 'syn-gfn: %s cannot stream GeForce NOW on Linux.\n' "$gecko" >&2
             printf '\n' >&2
             printf '  NVIDIA and Mozilla added GeForce NOW to Firefox on 2026-08-19 —\n' >&2
@@ -328,11 +431,13 @@ else
             printf '  start a game, and it has no Keyboard Lock API, so Escape would\n' >&2
             printf '  open the browser menu instead of the game menu.\n' >&2
             printf '\n' >&2
-            printf '  To play:     synpkg install chromium\n' >&2
+            printf "  To play:     install NVIDIA's GeForce NOW app (syn-gfn --help)\n" >&2
+            printf '               or a browser: synpkg install chromium\n' >&2
             printf '  To look:     syn-gfn --browser=%s\n' "$gecko" >&2
         else
-            printf 'syn-gfn: no browser installed that can stream GeForce NOW\n' >&2
-            printf '  it needs one of:\n' >&2
+            printf 'syn-gfn: nothing installed that can stream GeForce NOW\n' >&2
+            printf "  install NVIDIA's GeForce NOW app (syn-gfn --help shows how),\n" >&2
+            printf '  or one of these browsers:\n' >&2
             printf '    %s\n' $STREAM_BROWSERS >&2
             printf '  e.g. synpkg install chromium\n' >&2
         fi
@@ -350,20 +455,6 @@ if [ "$ENGINE" = gecko ] && [ "$GECKO_CAN_STREAM" != 1 ]; then
 fi
 
 mkdir -p "$PROFILE" || exit 1
-
-# ⚠ THE SESSION EXPORTS MANGOHUD=1, which loads MangoHud's Vulkan layer into
-# every Vulkan client — and a browser is one. On AMD that layer segfaults the
-# client inside its own vkCreateDevice hook and on NVIDIA it never does, which
-# is how it took synui-wpengine and synstudio down on the ThinkPad while the
-# desktop stayed happy. DISABLE_MANGOHUD is the manifest's own
-# disable_environment and beats the enable; MANGOHUD=0 goes with it for the
-# OpenGL side. The same pair those two launchers set, for the same reason.
-#
-# ⚠ NOT MEASURED AS A CRASH HERE. Vivaldi starts fine under MANGOHUD=1 on this
-# NVIDIA box — the startup crash that cost an evening was --start-fullscreen,
-# below. This is the AMD class, kept off because a cloud stream has no frame
-# times of its own worth measuring: the numbers that matter are the service's.
-export DISABLE_MANGOHUD=1 MANGOHUD=0
 
 # ⚠ --class AND NOT --app. `--app=<url>` gives the cleaner window — no tab
 # strip — but Chromium derives the app_id from the URL and the profile

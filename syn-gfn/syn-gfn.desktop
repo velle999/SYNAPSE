@@ -2,7 +2,10 @@
 Type=Application
 Name=GeForce NOW
 GenericName=Cloud Gaming
-Comment=Stream your games over the network, in a browser that can hold the mouse
+Comment=Stream your games over the network
+# syn-gfn opens NVIDIA's own GeForce NOW app when it is installed, and a
+# browser otherwise — one entry for both, so the menu never offers a second
+# GeForce NOW that behaves differently.
 Exec=syn-gfn
 # Our own mark and deliberately not NVIDIA's: this is a launcher for their
 # service, not their client, and shipping their logo would say otherwise. See
@@ -14,6 +17,7 @@ Terminal=false
 # StartupWMClass; on a miss it runs the app_id as a command instead. syn-gfn
 # passes --class=syn-gfn to the browser so the window's app_id is syn-gfn, and
 # these two names have to keep matching for a pinned icon to launch anything.
+# NVIDIA's app reports GeForceNOW instead, which GeForceNOW.desktop answers.
 StartupWMClass=syn-gfn
 # One main category only: Game and Network are both main categories in the
 # spec, and an entry carrying two of them is listed twice in a menu that
