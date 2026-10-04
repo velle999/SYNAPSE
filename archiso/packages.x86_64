@@ -212,6 +212,9 @@ synstudio
 # ISO session therefore cannot stream; syn-gfn says so and says what to
 # install.
 syn-gfn
+# Mouse buttons rebound per game, without the vendor's Windows-only app: keys,
+# repeat while held, and auto-press toggles that stop when the game loses focus.
+syn-mouse
 # The settings app: displays, region, date and time, network, Bluetooth, power,
 # kernels, default applications, and where configuration lives. It was in
 # build-all.sh's component list, in syn-update's COMPONENTS and in the start

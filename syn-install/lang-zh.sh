@@ -619,6 +619,7 @@ declare -gA SYN_T=(
   ["Studio — photo darkroom and video"]="Studio — 照片暗房与视频"
   ["GeForce NOW — cloud gaming in a browser"]="GeForce NOW — 浏览器里的云游戏"
   ["Remote desktop — reach this machine from another"]="远程桌面 — 从另一台机器连接到这台"
+  ["Mouse Buttons — rebind a gaming mouse, per game"]="鼠标按键 — 按游戏重新映射游戏鼠标"
   ["Arsenal — BlackArch browser"]="Arsenal — BlackArch 浏览器"
   ["Speech engine — dictation and voice (~900 MB)"]="语音引擎 — 听写与朗读（~900 MB）"
   ["Chibi — voice companion"]="Chibi — 语音伙伴"

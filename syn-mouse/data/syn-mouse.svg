@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<!-- syn-mouse — a mouse, its thumb button lit, with the pulse of a repeat.
+     ⛔ THE <svg> ROOT IS THE FIRST THING IN THIS FILE, before any comment.
+     gdk-pixbuf sniffs only the opening bytes to decide what a file is. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3f4f"/>
+      <stop offset="1" stop-color="#1d2029"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 6c-7.7 0-12 5.6-12 13v10c0 7.7 5 13 12 13s12-5.3 12-13V19c0-7.4-4.3-13-12-13z"
+        fill="url(#body)" stroke="#9aa0ad" stroke-width="1.5"/>
+  <path d="M24 6v12" stroke="#9aa0ad" stroke-width="1.5"/>
+  <path d="M12 19h24" stroke="#9aa0ad" stroke-width="1.2" opacity="0.6"/>
+  <rect x="22.4" y="10" width="3.2" height="6" rx="1.6" fill="#5b8dd9"/>
+  <rect x="10.2" y="23" width="3.4" height="7" rx="1.5" fill="#9ece6a"/>
+  <path d="M5 26.5h3M3.5 22.5l3 1.5M3.5 30.5l3-1.5" stroke="#9ece6a" stroke-width="1.6"
+        stroke-linecap="round"/>
+</svg>

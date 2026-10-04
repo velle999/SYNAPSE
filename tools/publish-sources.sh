@@ -118,6 +118,7 @@ declare -A NOT_EXTERNAL=(
     [samsung-m2020]="the same — a printer driver packaged from Samsung's ULD"
     [limine-mkinitcpio-hook]="the same"
     [limine-snapper-sync]="the same"
+    [syn-mouse]="new, and not yet given a repository of its own; it runs on plain Arch, so publishing it is the open step rather than a reason to stay out"
 )
 
 # ⚠ WHAT GITHUB CALLS TOPICS, AND THE ONLY PLACE THEY ARE WRITTEN DOWN.

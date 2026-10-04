@@ -1,0 +1,80 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-mouse — rebind a mouse's buttons without the vendor's app, per game.
+#
+# A gaming mouse's extra buttons are programmed by a Windows-only vendor tool;
+# on Linux they arrive as BTN_SIDE, BTN_EXTRA and so on, and whatever the game
+# makes of those is all they can ever do. This takes them over while a named
+# app has focus and turns them into keys: held, repeated while held, an
+# auto-press TOGGLE that taps a key every few seconds until clicked again, or a
+# hold-down latch.
+#
+# ── how, in one paragraph ───────────────────────────────────────────────────
+#
+# A user daemon opens every real mouse under /dev/input, and while a profile is
+# in force it GRABS it (EVIOCGRAB) and re-emits everything through a uinput
+# twin that carries the same capabilities — so the cursor, the wheel's high-res
+# steps and every unbound button behave exactly as before, one read and one
+# write per frame. Bound buttons go to a second uinput device, a keyboard. With
+# no profile in force nothing is grabbed and the daemon only waits.
+#
+# ⛔ THE TOGGLES STOP WHEN THE GAME LOSES FOCUS. A key auto-pressed into the
+# browser somebody alt-tabbed to is the one failure this must never have, so
+# bindings stop the instant synui reports another window in front and resume
+# when the game comes back. `syn-mouse stop` turns everything off from anywhere.
+#
+# ⚠ THE LEFT BUTTON CAN ONLY BE BOUND IN A PROFILE FOR A NAMED APP. A profile
+# for "everywhere" that took the left button would take the one button that
+# could open this program to undo it.
+pkgname=syn-mouse
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Rebind mouse buttons per game without the vendor's app — keys, repeat, and auto-press toggles"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# ⛔ NOTHING BUT libc. The mouse is read with read() and re-emitted with write()
+# to /dev/uinput; a library on that path is latency on every frame of every game.
+depends=('glibc')
+
+makedepends=('meson' 'ninja' 'gcc' 'pkgconf')
+# check(): the daemon and CLI suites serve a fake synui with python3, and the
+# i18n suite builds catalogs with the gettext tools.
+checkdepends=('python' 'gettext')
+
+optdepends=('quickshell: the graphical window (syn-mouse gui)'
+            'libnotify: a notice when a toggle starts or stops'
+            'synui: profiles that follow the focused window')
+
+# ⚠ BUILT FROM THIS CHECKOUT ONLY, for now. tools/publish-sources.sh lists it in
+# NOT_EXTERNAL until it has a repository of its own.
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/$pkgname-$pkgver"
+    # ⛔ NO SUITE TOUCHES A REAL DEVICE. The daemon's mouse is a FIFO and its
+    # output a text file; the config and every socket are scratch paths. A suite
+    # that made a real uinput keyboard would type into the builder's desktop.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    meson install -C build --destdir="$pkgdir"
+
+    # ⚠ ON BY DEFAULT, as a user unit: it does nothing until a binding exists —
+    # no grab, no focus polling — and a binding that silently did nothing until
+    # somebody found the service would read as a broken program.
+    # `syn-mouse disable` masks it, which outranks this link.
+    install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"
+    ln -s ../syn-mouse.service \
+        "$pkgdir/usr/lib/systemd/user/default.target.wants/syn-mouse.service"
+}

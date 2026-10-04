@@ -279,7 +279,9 @@ pkgver=0.1.0
 # 64: the shipped update key now carries the release key's certification, so
 #   anyone who trusts the release key can check the update key with gpg. The
 #   key itself, and what syn-update accepts, are unchanged.
-pkgrel=64
+# 65: syn-mouse joins COMPONENTS. A component in no update list is frozen on
+#   every installed machine with nothing saying so.
+pkgrel=65
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

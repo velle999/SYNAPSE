@@ -470,6 +470,7 @@ FloatingWindow {
             { key: "comp_synconfine",  std: 1, full: 1, min: 1, label: root.t("syn-confine — the sandbox") },
             { key: "comp_fetch",       std: 1, full: 1, min: 1, label: root.t("fetch — the About OS readout") },
             { key: "comp_arcade",      std: 1, full: 1, min: 0, label: root.t("Arcade — overlay, pads, big screen") },
+            { key: "comp_mouse",       std: 1, full: 1, min: 0, label: root.t("Mouse Buttons — rebind a gaming mouse, per game") },
             { key: "comp_cliamp",      std: 1, full: 1, min: 0, label: root.t("cliamp — the music player") },
             { key: "comp_synplay",     std: 1, full: 1, min: 0, label: root.t("Player — playlists, shuffle and history, on mpv") },
             { key: "comp_synstudio",   std: 1, full: 1, min: 0, label: root.t("Studio — photo darkroom and video") },

@@ -1513,6 +1513,7 @@ SEL_COMPONENTS=(
     "comp_synconfine|1|1|core|syn-confine|Sandbox|Landlock jail"
     "comp_fetch|1|1|core|fetch|About OS|the OS readout"
     "comp_arcade|1|1|app|syn-arcade|Arcade|pads + overlay"
+    "comp_mouse|1|1|app|syn-mouse|Mouse Buttons|rebind buttons"
     "comp_cliamp|1|1|app|cliamp|cliamp|music player"
     "comp_synplay|1|1|app|syn-play|Player|playlists + mpv"
     "comp_synstudio|1|1|app|synstudio|Studio|photo + video"

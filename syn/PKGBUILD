@@ -58,7 +58,10 @@ pkgver=0.1.0
 #   took pkgrel back to 34, and pacman never downgrades, so every box that
 #   installed 35 kept /usr/lib/syn/syn-downloads and its user timer.
 #   ⛔ Never revert a pkgrel. Bump past the reverted one.
-pkgrel=36
+# 37: a `mouse` row in the Nix profile example, for syn-mouse — the ISO
+#   carries it now, so a profile that names every other component and not this
+#   one quietly leaves it out.
+pkgrel=37
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

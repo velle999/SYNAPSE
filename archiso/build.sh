@@ -362,6 +362,10 @@ PACKAGES=(
     # because wayvnc and wlopm are ordinary `extra` packages that the image
     # already knows how to pull.
     syn-remote
+    # syn-mouse — mouse buttons rebound per game. libc only, no ordering
+    # constraint. On the ISO because a live session is where somebody checks
+    # whether their mouse's extra buttons can do anything here.
+    syn-mouse
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

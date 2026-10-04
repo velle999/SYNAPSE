@@ -124,6 +124,7 @@
     fetch      = true;   # the About OS readout
 
     arcade   = true;     # syn-arcade: overlay, pads, big screen mode
+    mouse    = true;     # syn-mouse: mouse buttons rebound per game
     cliamp   = true;     # the player big screen mode drives
     synplay  = true;     # syn-play: playlists, shuffle and history over mpv
     synstudio = true;    # the darkroom: RAW develop, masks, graded video

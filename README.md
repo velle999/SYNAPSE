@@ -482,6 +482,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synstudio`** | The darkroom and edit suite. Develop a photograph or cut a sequence, in one application, because both halves decide colour in the same place: `src/colour.c` is the only code that resolves a pixel, and a clip's grade is baked to a 3D LUT and handed to ffmpeg, so the still you graded and the frame that is delivered agree by construction rather than by care (the test suite renders both paths and fails under 45 dB PSNR between them). Photographs are non-destructive: edits live in a `<file>.synstudio` sidecar and the original is never written. RAW from every common camera, local adjustment masks, twelve looks, scopes computed by the engine rather than a display filter, and a `match` that fits one shot to another *through the engine* so the answer is one the stack can actually produce. Video is a text document until you export it — tracks, clips, sixty transitions, twenty-seven effects, five title templates, per-clip motion and retiming, keyframed grades with masks, a sound chain with ducking and LUFS normalisation, stabilisation, delivery presets, a render queue, and deliveries converted and tagged for an sRGB screen or a Rec.709 broadcast display. The play button renders the *export* graph at 960 wide and plays that, rather than a second cheaper preview that might disagree about colour. Never links ffmpeg or libraw — subprocess and an argv array, because a pipe has no ABI. `synstudio gui`, or every one of those as a command. |
 | **`syn-gfn`** | GeForce NOW. Opens **NVIDIA's own GeForce NOW app** when it is installed (it is not on Flathub — `syn-gfn --help` prints the three commands that install it for one user, no root); otherwise runs the first Chromium-family browser on the machine in a profile of its own, with keyboard and pointer lock pre-granted for the site. `--web` uses the browser even with the app installed. No browser in `depends`. See [Gaming](#gaming). |
 | **`syn-remote`** | **The desktop, from somewhere else.** A wrapper over `wayvnc`, which is the wlroots-native VNC server — it captures through `zwlr_screencopy_manager_v1` and drives the seat through `zwp_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1`, all three of which synui hands to any native client. No portal, no prompt, and unattended access works. It adds the things a wrapper has to: it wakes a blanked screen when somebody connects, because **a blanked output cannot be captured at all**, holds the machine awake while they are there, and — because **a machine that is asleep answers nothing at all** — arms the wired card for a magic packet (`syn-remote wakeable on`) so a suspended machine can be woken over the network. It also streams the desktop to **Moonlight** through sunshine (`syn-remote stream on`), which is video rather than rectangles of pixels — and by default on a **display of its own**, a headless output synui grows on demand and sizes to whatever the connecting client asks for. Going the other way, it saves and opens somebody else's desktop (`add`/`trust`/`connect`), VNC or stream, waking it first when it is not answering. Loopback by default; TLS and a password always. See [Reaching this machine from another](#reaching-this-machine-from-another). |
+| **`syn-mouse`** | **Mouse buttons, rebound per game, without the vendor's app.** A profile names an app; while that app has focus, each button can press a key or a key combination, repeat it while held, **auto-press it every few seconds until clicked again**, or hold it down until clicked again. Everything else about the mouse is untouched. Bindings stop the moment another window comes to the front. `syn-mouse gui` opens the window; `syn-mouse stop` turns off everything that is on. See [Gaming](#gaming). |
 | **`syn-arcade`** | The game assistant. Four things: the **MangoHud overlay**, turned on, moved and turned off *inside a game that is already running* — `syn-arcade` rewrites the config file MangoHud watches with inotify, which reaches every running game at once, so an ordinary compositor keybind can drive it; **game controllers** outside Steam — what is plugged in, what it is called, a live button/stick test, a rumble check, and stick-drift calibration that sets the kernel's per-axis deadzone (so it fixes drift for every game at once, not one at a time); **SDL mapping overrides** for a pad whose buttons come out in the wrong places; and **big screen mode** (`syn-arcade big start`, `Super`+`F10`, or the pad's **Guide** button) — a ten-foot interface for a television, with your Steam library and its cover art, Big Picture, a browser, a terminal, music, any Plex or Jellyfin server on the network, headlines and the machine's own switches as tiles. It is drivable from a controller — including **as a mouse**, with an **on-screen keyboard**, in the browser — **steps aside for what it launches instead of closing**, and can open at login. `syn-arcade gui` opens the window. See [Gaming](#gaming). |
 | **`syn-scan`** | **The malware scanner.** Scans files at rest — a folder, a download, a game mod — with ClamAV, plus rootkit checks from `rkhunter` and `chkrootkit` when those are installed. It looks inside archives, which is where a Windows executable usually arrives on a machine that plays games: `synguard` watches what the system *does*, in the kernel, and never opens a file to see what is in it. Every engine's output comes back in one format, and anything flagged is **moved to quarantine, never deleted** — `syn-scan quarantine restore <id>` puts a file back at its original path with its original permissions. A weekly timer sweeps at idle priority, and **Settings ▸ Malware Scanning** is where that timer, the signature updates and the engines behind them are switched and read. `syn-scan scan ~/Downloads`, `syn-scan --tui`, `syn-scan gui`. ClamAV's `clamd` daemon is **off by default** — it holds the whole signature set in memory (~1 GB) and scanning does not need it; turn it on from Settings ▸ Malware Scanning, or with `systemctl enable --now clamav-daemon`, and `syn-scan` will use it — which takes a repeat scan from about six seconds to instant. |
 
@@ -2004,6 +2005,35 @@ machine, which is the failure the rule above exists to prevent. The on-screen
 keyboard types through `wtype`, the same virtual-keyboard client the bar's start
 menu already uses, and only while its keyboard is open.
 </details>
+
+**Mouse buttons** are rebound with `syn-mouse`, for mice whose extra buttons are
+otherwise programmed only by a Windows app. Open **Mouse Buttons** from the start
+menu (`syn-mouse gui`), pick the game's window to make a profile for it, then pick
+a button and what it does:
+
+| Mode | What the button does |
+| --- | --- |
+| Press a key | holds a key, or a combination like `shift+2`, while the button is held |
+| Repeat while held | presses the key every few seconds while the button is held |
+| Auto-press toggle | one click starts pressing the key every few seconds, the next click stops it |
+| Hold-down toggle | one click holds the key down, the next click lets it go |
+| Disabled | the button does nothing |
+
+```bash
+syn-mouse add "Diablo IV" --app steam_app_2344520   # a profile for one app
+syn-mouse bind "Diablo IV" back toggle 1 every 5    # thumb button: press 1 every 5 s
+syn-mouse bind "Diablo IV" forward repeat shift+2 every 0.5
+syn-mouse apps                                      # app ids of the open windows
+syn-mouse stop                                      # turn off everything that is on
+```
+
+A profile is in force only while its app is in front: toggles pause when another
+window comes forward and carry on when the game comes back. A profile with no app
+applies everywhere, and the left button can only be rebound in a profile for an
+app. A notice appears when a toggle starts or stops (`syn-mouse set notify off`
+turns that off). The service runs per user and needs the account to be in the
+`input` group, which the installer does; `syn-mouse status` names anything
+missing.
 
 **CachyOS Proton** comes with the installer's Steam option — `proton-cachyos-slr`,
 Valve's experimental branch plus the CachyOS patch set, built against the same

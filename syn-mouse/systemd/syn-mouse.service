@@ -1,0 +1,15 @@
+[Unit]
+Description=Mouse button bindings (syn-mouse)
+# ⛔ NO START LIMIT. This unit starts with the user manager, before the
+# compositor exists; the daemon waits for synui on its own and never needs a
+# restart for that. What a restart IS for — a crash — must not be able to use
+# up a five-in-ten-seconds budget and leave the bindings dead for the login.
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/bin/syn-mouse daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -629,6 +629,7 @@ declare -gA SYN_T=(
   ["Studio — photo darkroom and video"]="Studio — fotodonkerekamer en video"
   ["GeForce NOW — cloud gaming in a browser"]="GeForce NOW — cloudgamen in een browser"
   ["Remote desktop — reach this machine from another"]="Extern bureaublad — deze machine vanaf een andere bereiken"
+  ["Mouse Buttons — rebind a gaming mouse, per game"]="Muisknoppen — een gamingmuis opnieuw toewijzen, per spel"
   ["Arsenal — BlackArch browser"]="Arsenal — door BlackArch bladeren"
   ["Speech engine — dictation and voice (~900 MB)"]="Spraakengine — dicteren en voorlezen (~900 MB)"
   ["Chibi — voice companion"]="Chibi — spraakmaatje"

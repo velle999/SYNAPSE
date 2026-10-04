@@ -42,7 +42,8 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        vibe synapse-voice chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-vault syn-clean syn-play syn-scan
        syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote)
+       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote
+       syn-mouse)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -568,6 +569,14 @@ build_component syn-gfn
 # the server here, and a wrapper that installs without the thing that does the
 # work is a package that does not work. See its PKGBUILD.
 build_component syn-remote
+
+# syn-mouse — mouse buttons rebound per game, without the vendor's app. meson C
+# against libc alone, plus a quickshell window, so no ordering constraint.
+#
+# ⚠ Its suites never open a real device: the daemon's mouse is a FIFO and its
+# uinput output a text file (SYNMOUSE_INPUT / SYNMOUSE_OUTPUT), so a build can
+# never type into the desktop of whoever is running it.
+build_component syn-mouse
 
 # Vendored, boot-critical where it is installed, and never installed by this
 # script. See build_vendored_pkg.
