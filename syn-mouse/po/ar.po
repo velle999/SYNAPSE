@@ -17,474 +17,474 @@ msgstr ""
 "Language: ar\n"
 
 msgid "%1 (taken over)"
-msgstr ""
+msgstr "%1 (تحت السيطرة)"
 
 msgid "+ New profile"
-msgstr ""
+msgstr "+ ملف تعريف جديد"
 
 msgid "A profile for every app is in force wherever you are, so the left button cannot be rebound in it."
-msgstr ""
+msgstr "ملف التعريف الخاص بكل التطبيقات مفعّل في كل مكان، لذا لا يمكن إعادة تعيين الزر الأيسر فيه."
 
 msgid "A profile is a set of bindings for one game. It is in force only while that game's window is in front. Start the game, then pick its window here."
-msgstr ""
+msgstr "ملف التعريف مجموعة تعيينات للعبة واحدة، ولا يكون مفعّلًا إلا ما دامت نافذة تلك اللعبة في المقدمة. شغّل اللعبة ثم اختر نافذتها هنا."
 
 msgid "All of them"
-msgstr ""
+msgstr "جميعها"
 
 msgid "Auto-press toggle"
-msgstr ""
+msgstr "ضغط تلقائي (تبديل)"
 
 msgid "Back"
-msgstr ""
+msgstr "رجوع"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "تعذّر إنشاء أجهزة إدخال. يجب أن يكون هذا الحساب في مجموعة input: sudo usermod -aG input $USER، ثم سجّل الخروج وسجّل الدخول مجددًا."
 
 msgid "Choose a key first: click the key box and press it."
-msgstr ""
+msgstr "اختر مفتاحًا أولًا: انقر مربع المفتاح ثم اضغطه."
 
 msgid "Click a button to change what it does."
-msgstr ""
+msgstr "انقر زرًا لتغيير ما يفعله."
 
 msgid "Click again to delete %1"
-msgstr ""
+msgstr "انقر مرة أخرى لحذف %1"
 
 msgid "Click here, then press a key"
-msgstr ""
+msgstr "انقر هنا ثم اضغط مفتاحًا"
 
 msgid "Click: auto-press %1 every %2 s"
-msgstr ""
+msgstr "نقرة: يضغط %1 كل %2 ث"
 
 msgid "Click: hold %1 down"
-msgstr ""
+msgstr "نقرة: يُبقي %1 مضغوطًا"
 
 msgid "Create the profile for %1"
-msgstr ""
+msgstr "إنشاء ملف التعريف لـ %1"
 
 msgid "Create the profile for every app"
-msgstr ""
+msgstr "إنشاء ملف التعريف لكل التطبيقات"
 
 msgid "Delete this profile"
-msgstr ""
+msgstr "حذف ملف التعريف هذا"
 
 msgid "Disabled"
-msgstr ""
+msgstr "معطّل"
 
 msgid "Everywhere"
-msgstr ""
+msgstr "في كل مكان"
 
 msgid "For every app"
-msgstr ""
+msgstr "لكل التطبيقات"
 
 msgid "Forward"
-msgstr ""
+msgstr "تقدّم"
 
 msgid "Give the profile a name."
-msgstr ""
+msgstr "أعطِ ملف التعريف اسمًا."
 
 msgid "Hold-down toggle"
-msgstr ""
+msgstr "إبقاء مضغوطًا (تبديل)"
 
 msgid "In force in every app"
-msgstr ""
+msgstr "مفعّل في كل التطبيقات"
 
 msgid "In force while %1 is in front"
-msgstr ""
+msgstr "مفعّل ما دام %1 في المقدمة"
 
 msgid "In force: %1"
-msgstr ""
+msgstr "المفعّل: %1"
 
 msgid "Interval in seconds"
-msgstr ""
+msgstr "الفاصل بالثواني"
 
 msgid "Key"
-msgstr ""
+msgstr "المفتاح"
 
 msgid "Left click"
-msgstr ""
+msgstr "نقرة يسرى"
 
 msgid "Middle click"
-msgstr ""
+msgstr "نقرة وسطى"
 
 msgid "Mouse Buttons"
-msgstr ""
+msgstr "أزرار الفأرة"
 
 msgid "Name"
-msgstr ""
+msgstr "الاسم"
 
 msgid "No mouse it can read. If one is plugged in, this account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "لا توجد فأرة يمكن قراءتها. إن كانت هناك فأرة موصولة فيجب أن يكون هذا الحساب في مجموعة input: sudo usermod -aG input $USER، ثم سجّل الخروج وسجّل الدخول مجددًا."
 
 msgid "Normal"
-msgstr ""
+msgstr "عادي"
 
 msgid "Not running — your bindings do nothing until it is on."
-msgstr ""
+msgstr "لا يعمل — لن تفعل تعييناتك شيئًا حتى يُشغَّل."
 
 msgid "On: %1 is holding %2 down"
-msgstr ""
+msgstr "مفعّل: %1 يُبقي %2 مضغوطًا"
 
 msgid "On: %1 is pressing %2 every %3 s"
-msgstr ""
+msgstr "مفعّل: %1 يضغط %2 كل %3 ث"
 
 msgid "One click holds the key down; the next click lets go."
-msgstr ""
+msgstr "نقرة واحدة تُبقي المفتاح مضغوطًا، والنقرة التالية تحرّره."
 
 msgid "One click starts pressing the key every few seconds; the next click stops it. It pauses while you are in another window."
-msgstr ""
+msgstr "نقرة واحدة تبدأ ضغط المفتاح كل بضع ثوانٍ، والنقرة التالية توقفه. ويتوقف مؤقتًا ما دمت في نافذة أخرى."
 
 msgid "Paused until its app is in front: %1 holding %2 down"
-msgstr ""
+msgstr "متوقف مؤقتًا حتى يعود تطبيقه إلى المقدمة: %1 يُبقي %2 مضغوطًا"
 
 msgid "Paused until its app is in front: %1 pressing %2 every %3 s"
-msgstr ""
+msgstr "متوقف مؤقتًا حتى يعود تطبيقه إلى المقدمة: %1 يضغط %2 كل %3 ث"
 
 msgid "Press a key"
-msgstr ""
+msgstr "ضغط مفتاح"
 
 msgid "Press a key or a combination…"
-msgstr ""
+msgstr "اضغط مفتاحًا أو تركيبة…"
 
 msgid "Pressed again every few seconds for as long as you hold the button."
-msgstr ""
+msgstr "يُضغط من جديد كل بضع ثوانٍ ما دمت تضغط الزر."
 
 msgid "Presses %1"
-msgstr ""
+msgstr "يضغط %1"
 
 msgid "Refresh the window list"
-msgstr ""
+msgstr "تحديث قائمة النوافذ"
 
 msgid "Repeat while held"
-msgstr ""
+msgstr "التكرار أثناء الضغط"
 
 msgid "Repeats %1 every %2 s while held"
-msgstr ""
+msgstr "يكرر %1 كل %2 ث أثناء الضغط"
 
 msgid "Right click"
-msgstr ""
+msgstr "نقرة يمنى"
 
 msgid "Running. Nothing in force — the mouse is as it always is."
-msgstr ""
+msgstr "يعمل. لا شيء مفعّل — الفأرة كما هي دائمًا."
 
 msgid "Save"
-msgstr ""
+msgstr "حفظ"
 
 msgid "Save for %1"
-msgstr ""
+msgstr "حفظ لـ %1"
 
 msgid "Saved."
-msgstr ""
+msgstr "تم الحفظ."
 
 msgid "Show a notice when a toggle switches on or off"
-msgstr ""
+msgstr "إظهار إشعار عند تشغيل التبديل أو إيقافه"
 
 msgid "Stop everything that is on"
-msgstr ""
+msgstr "إيقاف كل ما هو مفعّل"
 
 msgid "The button does nothing at all."
-msgstr ""
+msgstr "لا يفعل الزر شيئًا على الإطلاق."
 
 msgid "The button does what it always did."
-msgstr ""
+msgstr "يفعل الزر ما كان يفعله دائمًا."
 
 msgid "The key is held down for as long as you hold the button."
-msgstr ""
+msgstr "يبقى المفتاح مضغوطًا ما دمت تضغط الزر."
 
 msgid "This account cannot read the mouse. Add it to the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "لا يستطيع هذا الحساب قراءة الفأرة. أضفه إلى مجموعة input: sudo usermod -aG input $USER، ثم سجّل الخروج وسجّل الدخول مجددًا."
 
 msgid "Turn on, now and at every login"
-msgstr ""
+msgstr "التشغيل الآن وعند كل تسجيل دخول"
 
 msgid "Which mouse:"
-msgstr ""
+msgstr "أي فأرة:"
 
 msgid "or a mouse click:"
-msgstr ""
+msgstr "أو نقرة فأرة:"
 
 msgid "say what the button should do: key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "حدّد ما يجب أن يفعله الزر: key أو repeat أو toggle أو latch أو off أو default"
 
 msgid "default takes nothing after it"
-msgstr ""
+msgstr "لا يُكتب شيء بعد default"
 
 msgid "unknown mode — use key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "وضع غير معروف — استخدم key أو repeat أو toggle أو latch أو off أو default"
 
 msgid "off takes nothing after it"
-msgstr ""
+msgstr "لا يُكتب شيء بعد off"
 
 msgid "which key? for example: shift, 1, f5, space, mouse1"
-msgstr ""
+msgstr "أي مفتاح؟ مثلًا: shift و1 وf5 وspace وmouse1"
 
 #, c-format
 msgid "'%.*s' is not a key name — `syn-mouse keys` lists them"
-msgstr ""
+msgstr "'%.*s' ليس اسم مفتاح — يعرضها `syn-mouse keys`"
 
 msgid "every how many seconds?"
-msgstr ""
+msgstr "كل كم ثانية؟"
 
 msgid "not a number of seconds — for example 5, 0.5 or 250ms"
-msgstr ""
+msgstr "ليس عددًا من الثواني — مثلًا 5 أو 0.5 أو 250ms"
 
 msgid "unexpected words after the binding"
-msgstr ""
+msgstr "كلمات غير متوقعة بعد التعيين"
 
 msgid "the interval has to be between 0.05 and 3600 seconds"
-msgstr ""
+msgstr "يجب أن يكون الفاصل بين 0.05 و3600 ثانية"
 
 msgid "the left button can only be rebound in a profile for an app — in one that applies everywhere you could no longer click to undo it"
-msgstr ""
+msgstr "لا يمكن إعادة تعيين الزر الأيسر إلا في ملف تعريف لتطبيق — ففي ملف يسري في كل مكان لن تستطيع النقر للتراجع عنه"
 
 #, c-format
 msgid "%s:%d: a section needs a name in [brackets]"
-msgstr ""
+msgstr "%s:%d: يحتاج القسم إلى اسم بين [قوسين معقوفين]"
 
 #, c-format
 msgid "%s:%d: expected name = value"
-msgstr ""
+msgstr "%s:%d: المتوقع اسم = قيمة"
 
 #, c-format
 msgid "%s:%d: unknown setting '%s'"
-msgstr ""
+msgstr "%s:%d: إعداد غير معروف '%s'"
 
 #, c-format
 msgid "%s:%d: '%s' is not a button name"
-msgstr ""
+msgstr "%s:%d: '%s' ليس اسم زر"
 
 #, c-format
 msgid "Pressing %s every %s s"
-msgstr ""
+msgstr "يضغط %s كل %s ث"
 
 #, c-format
 msgid "Stopped pressing %s"
-msgstr ""
+msgstr "توقف ضغط %s"
 
 #, c-format
 msgid "Holding %s down"
-msgstr ""
+msgstr "يُبقي %s مضغوطًا"
 
 #, c-format
 msgid "Let go of %s"
-msgstr ""
+msgstr "حُرّر %s"
 
 msgid "Left button"
-msgstr ""
+msgstr "الزر الأيسر"
 
 msgid "Right button"
-msgstr ""
+msgstr "الزر الأيمن"
 
 msgid "Middle button (wheel click)"
-msgstr ""
+msgstr "الزر الأوسط (نقرة العجلة)"
 
 msgid "Thumb button (back)"
-msgstr ""
+msgstr "زر الإبهام (رجوع)"
 
 msgid "Thumb button (forward)"
-msgstr ""
+msgstr "زر الإبهام (تقدّم)"
 
 msgid "Button 6"
-msgstr ""
+msgstr "الزر 6"
 
 msgid "Button 7"
-msgstr ""
+msgstr "الزر 7"
 
 msgid "Button 8"
-msgstr ""
+msgstr "الزر 8"
 
 msgid "Wheel up"
-msgstr ""
+msgstr "العجلة لأعلى"
 
 msgid "Wheel down"
-msgstr ""
+msgstr "العجلة لأسفل"
 
 msgid "Wheel tilt left"
-msgstr ""
+msgstr "إمالة العجلة لليسار"
 
 msgid "Wheel tilt right"
-msgstr ""
+msgstr "إمالة العجلة لليمين"
 
 #, c-format
 msgid "cannot read %s: %s"
-msgstr ""
+msgstr "تعذّرت قراءة %s: %s"
 
 #, c-format
 msgid "cannot write %s: %s"
-msgstr ""
+msgstr "تعذّرت الكتابة إلى %s: %s"
 
 msgid "saved, but the service is not running, so the mouse does not know yet — `syn-mouse enable` starts it"
-msgstr ""
+msgstr "حُفظ، لكن الخدمة لا تعمل، لذا لا تعرف الفأرة بعد — `syn-mouse enable` يشغّلها"
 
 msgid "a profile needs a name"
-msgstr ""
+msgstr "يحتاج ملف التعريف إلى اسم"
 
 msgid "that name is too long"
-msgstr ""
+msgstr "هذا الاسم طويل جدًا"
 
 msgid "a profile name cannot contain brackets, tabs or line breaks"
-msgstr ""
+msgstr "لا يمكن أن يحتوي اسم ملف التعريف على أقواس معقوفة أو علامات جدولة أو فواصل أسطر"
 
 msgid "a profile name cannot start or end with a space"
-msgstr ""
+msgstr "لا يمكن أن يبدأ اسم ملف التعريف أو ينتهي بمسافة"
 
 #, c-format
 msgid "no profile called '%s' — `syn-mouse profiles` lists them"
-msgstr ""
+msgstr "لا يوجد ملف تعريف باسم '%s' — يعرضها `syn-mouse profiles`"
 
 #, c-format
 msgid "unexpected '%s'"
-msgstr ""
+msgstr "غير متوقع: '%s'"
 
 msgid "that app id or title is too long"
-msgstr ""
+msgstr "معرّف التطبيق أو العنوان هذا طويل جدًا"
 
 #, c-format
 msgid "[%s] now applies everywhere\n"
-msgstr ""
+msgstr "[%s] يسري الآن في كل مكان\n"
 
 #, c-format
 msgid "added [%s], for everywhere\n"
-msgstr ""
+msgstr "أُضيف [%s]، لكل مكان\n"
 
 #, c-format
 msgid "[%s] now applies to %s\n"
-msgstr ""
+msgstr "[%s] يسري الآن على %s\n"
 
 #, c-format
 msgid "added [%s], for %s\n"
-msgstr ""
+msgstr "أُضيف [%s]، لـ %s\n"
 
 #, c-format
 msgid "removed [%s]\n"
-msgstr ""
+msgstr "أُزيل [%s]\n"
 
 #, c-format
 msgid "'%s' is not a button — `syn-mouse buttons` lists them"
-msgstr ""
+msgstr "'%s' ليس زرًا — يعرضها `syn-mouse buttons`"
 
 #, c-format
 msgid "[%s] %s does what it always did\n"
-msgstr ""
+msgstr "[%s] %s يفعل ما كان يفعله دائمًا\n"
 
 msgid "notify is on or off"
-msgstr ""
+msgstr "قيمة notify هي on أو off"
 
 msgid "No profiles yet. `syn-mouse add <name> --app <app id>` makes one."
-msgstr ""
+msgstr "لا توجد ملفات تعريف بعد. `syn-mouse add <name> --app <app id>` ينشئ واحدًا."
 
 #, c-format
 msgid "[%s] — everywhere\n"
-msgstr ""
+msgstr "[%s] — في كل مكان\n"
 
 #, c-format
 msgid "[%s] — %s, titled %s\n"
-msgstr ""
+msgstr "[%s] — %s، بعنوان %s\n"
 
 #, c-format
 msgid "[%s] — %s\n"
-msgstr ""
+msgstr "[%s] — %s\n"
 
 msgid "(nothing bound)"
-msgstr ""
+msgstr "(لا تعيينات)"
 
 msgid "  — cannot be read"
-msgstr ""
+msgstr "  — تتعذّر قراءته"
 
 msgid "No mouse found."
-msgstr ""
+msgstr "لم يُعثر على فأرة."
 
 msgid ""
 "This account cannot read the mouse. Add it to the input group, then log out and back in:\n"
 "  sudo usermod -aG input $USER"
-msgstr ""
+msgstr "لا يستطيع هذا الحساب قراءة الفأرة. أضفه إلى مجموعة input، ثم سجّل الخروج وسجّل الدخول مجددًا:\n  sudo usermod -aG input $USER"
 
 msgid "Join keys with + (shift+1). code:N sends key code N."
-msgstr ""
+msgstr "اربط المفاتيح بـ + (shift+1). يرسل code:N رمز المفتاح N."
 
 msgid "cannot ask synui which windows are open — is this a synui session?"
-msgstr ""
+msgstr "تعذّر سؤال synui عن النوافذ المفتوحة — هل هذه جلسة synui؟"
 
 msgid "syn-mouse is not running. `syn-mouse enable` starts it now and at every login."
-msgstr ""
+msgstr "syn-mouse لا يعمل. `syn-mouse enable` يشغّله الآن وعند كل تسجيل دخول."
 
 #, c-format
 msgid "syn-mouse is running (pid %s)\n"
-msgstr ""
+msgstr "syn-mouse يعمل (pid %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr ""
+msgstr "  التركيز  %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr ""
+msgstr "  التركيز  لا نافذة"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr ""
+msgstr "  المفعّل   [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr ""
+msgstr "  المفعّل   لا شيء — الفأرة كما هي دائمًا"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr ""
+msgstr "  الفأرة   %s — تحت السيطرة\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr ""
+msgstr "  الفأرة   %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr ""
+msgstr "  مشكلة    تعذّر إنشاء أجهزة إدخال — يجب أن يكون هذا الحساب في مجموعة input"
 
 msgid "  problem    no mouse it can read"
-msgstr ""
+msgstr "  مشكلة    لا توجد فأرة يمكن قراءتها"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr ""
+msgstr "  يعمل     %s في [%s]: يضغط %s كل %s ث\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr ""
+msgstr "  متوقف    %s في [%s]: يضغط %s كل %s ث، متى عاد [%s] مفعّلًا\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr ""
+msgstr "  يعمل     %s في [%s]: يُبقي %s مضغوطًا\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr ""
+msgstr "  متوقف    %s في [%s]: يُبقي %s مضغوطًا، متى عاد [%s] مفعّلًا\n"
 
 msgid "  `syn-mouse stop` switches them all off."
-msgstr ""
+msgstr "  `syn-mouse stop` يوقفها كلها."
 
 msgid "syn-mouse is not running, so nothing is on."
-msgstr ""
+msgstr "syn-mouse لا يعمل، لذا لا شيء مفعّل."
 
 msgid "Everything toggled on is off."
-msgstr ""
+msgstr "كل ما كان مفعّلًا أصبح متوقفًا."
 
 msgid "systemctl did not do it — see the message above"
-msgstr ""
+msgstr "لم ينفّذ systemctl ذلك — راجع الرسالة أعلاه"
 
 msgid "syn-mouse is on, now and at every login."
-msgstr ""
+msgstr "syn-mouse مفعّل، الآن وعند كل تسجيل دخول."
 
 msgid "syn-mouse is off, and stays off at login."
-msgstr ""
+msgstr "syn-mouse متوقف، ويبقى كذلك عند تسجيل الدخول."
 
 msgid "no display — syn-mouse gui needs a graphical session"
-msgstr ""
+msgstr "لا توجد شاشة — يحتاج syn-mouse gui إلى جلسة رسومية"
 
 msgid "quickshell is not installed — synpkg install quickshell"
-msgstr ""
+msgstr "quickshell غير مثبّت — synpkg install quickshell"
 
 msgid "could not start quickshell"
-msgstr ""
+msgstr "تعذّر تشغيل quickshell"
 
 msgid "`syn-mouse gui` opens the window; `syn-mouse --help` lists the commands."
-msgstr ""
+msgstr "`syn-mouse gui` يفتح النافذة، و`syn-mouse --help` يعرض الأوامر."
 
 #, c-format
 msgid "unknown command '%s'"
-msgstr ""
+msgstr "أمر غير معروف '%s'"

@@ -17,474 +17,474 @@ msgstr ""
 "Language: nl\n"
 
 msgid "%1 (taken over)"
-msgstr ""
+msgstr "%1 (overgenomen)"
 
 msgid "+ New profile"
-msgstr ""
+msgstr "+ Nieuw profiel"
 
 msgid "A profile for every app is in force wherever you are, so the left button cannot be rebound in it."
-msgstr ""
+msgstr "Een profiel voor alle apps is overal actief, dus de linkerknop kan daarin niet opnieuw worden toegewezen."
 
 msgid "A profile is a set of bindings for one game. It is in force only while that game's window is in front. Start the game, then pick its window here."
-msgstr ""
+msgstr "Een profiel is een set toewijzingen voor één spel. Het is alleen actief zolang het venster van dat spel op de voorgrond staat. Start het spel en kies dan hier het venster."
 
 msgid "All of them"
-msgstr ""
+msgstr "Allemaal"
 
 msgid "Auto-press toggle"
-msgstr ""
+msgstr "Automatisch drukken (schakelaar)"
 
 msgid "Back"
-msgstr ""
+msgstr "Terug"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Kan geen invoerapparaten aanmaken. Dit account moet in de groep input zitten: sudo usermod -aG input $USER, en daarna af- en weer aanmelden."
 
 msgid "Choose a key first: click the key box and press it."
-msgstr ""
+msgstr "Kies eerst een toets: klik in het toetsvak en druk erop."
 
 msgid "Click a button to change what it does."
-msgstr ""
+msgstr "Klik op een knop om te wijzigen wat die doet."
 
 msgid "Click again to delete %1"
-msgstr ""
+msgstr "Klik nogmaals om %1 te verwijderen"
 
 msgid "Click here, then press a key"
-msgstr ""
+msgstr "Klik hier en druk dan op een toets"
 
 msgid "Click: auto-press %1 every %2 s"
-msgstr ""
+msgstr "Klik: %1 elke %2 s automatisch indrukken"
 
 msgid "Click: hold %1 down"
-msgstr ""
+msgstr "Klik: %1 ingedrukt houden"
 
 msgid "Create the profile for %1"
-msgstr ""
+msgstr "Profiel voor %1 aanmaken"
 
 msgid "Create the profile for every app"
-msgstr ""
+msgstr "Profiel voor alle apps aanmaken"
 
 msgid "Delete this profile"
-msgstr ""
+msgstr "Dit profiel verwijderen"
 
 msgid "Disabled"
-msgstr ""
+msgstr "Uitgeschakeld"
 
 msgid "Everywhere"
-msgstr ""
+msgstr "Overal"
 
 msgid "For every app"
-msgstr ""
+msgstr "Voor alle apps"
 
 msgid "Forward"
-msgstr ""
+msgstr "Vooruit"
 
 msgid "Give the profile a name."
-msgstr ""
+msgstr "Geef het profiel een naam."
 
 msgid "Hold-down toggle"
-msgstr ""
+msgstr "Ingedrukt houden (schakelaar)"
 
 msgid "In force in every app"
-msgstr ""
+msgstr "Actief in alle apps"
 
 msgid "In force while %1 is in front"
-msgstr ""
+msgstr "Actief zolang %1 op de voorgrond staat"
 
 msgid "In force: %1"
-msgstr ""
+msgstr "Actief: %1"
 
 msgid "Interval in seconds"
-msgstr ""
+msgstr "Interval in seconden"
 
 msgid "Key"
-msgstr ""
+msgstr "Toets"
 
 msgid "Left click"
-msgstr ""
+msgstr "Linkerklik"
 
 msgid "Middle click"
-msgstr ""
+msgstr "Middelklik"
 
 msgid "Mouse Buttons"
-msgstr ""
+msgstr "Muisknoppen"
 
 msgid "Name"
-msgstr ""
+msgstr "Naam"
 
 msgid "No mouse it can read. If one is plugged in, this account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Geen leesbare muis. Als er een is aangesloten, moet dit account in de groep input zitten: sudo usermod -aG input $USER, en daarna af- en weer aanmelden."
 
 msgid "Normal"
-msgstr ""
+msgstr "Normaal"
 
 msgid "Not running — your bindings do nothing until it is on."
-msgstr ""
+msgstr "Draait niet — je toewijzingen doen niets tot het aanstaat."
 
 msgid "On: %1 is holding %2 down"
-msgstr ""
+msgstr "Aan: %1 houdt %2 ingedrukt"
 
 msgid "On: %1 is pressing %2 every %3 s"
-msgstr ""
+msgstr "Aan: %1 drukt elke %3 s op %2"
 
 msgid "One click holds the key down; the next click lets go."
-msgstr ""
+msgstr "Eén klik houdt de toets ingedrukt; de volgende klik laat hem los."
 
 msgid "One click starts pressing the key every few seconds; the next click stops it. It pauses while you are in another window."
-msgstr ""
+msgstr "Eén klik begint de toets om de paar seconden in te drukken; de volgende klik stopt het. Het pauzeert zolang je in een ander venster bent."
 
 msgid "Paused until its app is in front: %1 holding %2 down"
-msgstr ""
+msgstr "Gepauzeerd tot de app op de voorgrond staat: %1 houdt %2 ingedrukt"
 
 msgid "Paused until its app is in front: %1 pressing %2 every %3 s"
-msgstr ""
+msgstr "Gepauzeerd tot de app op de voorgrond staat: %1 drukt elke %3 s op %2"
 
 msgid "Press a key"
-msgstr ""
+msgstr "Toets indrukken"
 
 msgid "Press a key or a combination…"
-msgstr ""
+msgstr "Druk op een toets of een combinatie…"
 
 msgid "Pressed again every few seconds for as long as you hold the button."
-msgstr ""
+msgstr "Wordt om de paar seconden opnieuw ingedrukt zolang je de knop vasthoudt."
 
 msgid "Presses %1"
-msgstr ""
+msgstr "Drukt op %1"
 
 msgid "Refresh the window list"
-msgstr ""
+msgstr "Vensterlijst vernieuwen"
 
 msgid "Repeat while held"
-msgstr ""
+msgstr "Herhalen zolang ingedrukt"
 
 msgid "Repeats %1 every %2 s while held"
-msgstr ""
+msgstr "Herhaalt %1 elke %2 s zolang ingedrukt"
 
 msgid "Right click"
-msgstr ""
+msgstr "Rechterklik"
 
 msgid "Running. Nothing in force — the mouse is as it always is."
-msgstr ""
+msgstr "Draait. Niets actief — de muis werkt zoals altijd."
 
 msgid "Save"
-msgstr ""
+msgstr "Opslaan"
 
 msgid "Save for %1"
-msgstr ""
+msgstr "Opslaan voor %1"
 
 msgid "Saved."
-msgstr ""
+msgstr "Opgeslagen."
 
 msgid "Show a notice when a toggle switches on or off"
-msgstr ""
+msgstr "Een melding tonen wanneer een schakelaar aan- of uitgaat"
 
 msgid "Stop everything that is on"
-msgstr ""
+msgstr "Alles stoppen wat aanstaat"
 
 msgid "The button does nothing at all."
-msgstr ""
+msgstr "De knop doet helemaal niets."
 
 msgid "The button does what it always did."
-msgstr ""
+msgstr "De knop doet wat hij altijd deed."
 
 msgid "The key is held down for as long as you hold the button."
-msgstr ""
+msgstr "De toets blijft ingedrukt zolang je de knop vasthoudt."
 
 msgid "This account cannot read the mouse. Add it to the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Dit account kan de muis niet lezen. Voeg het toe aan de groep input: sudo usermod -aG input $USER, en daarna af- en weer aanmelden."
 
 msgid "Turn on, now and at every login"
-msgstr ""
+msgstr "Inschakelen, nu en bij elke aanmelding"
 
 msgid "Which mouse:"
-msgstr ""
+msgstr "Welke muis:"
 
 msgid "or a mouse click:"
-msgstr ""
+msgstr "of een muisklik:"
 
 msgid "say what the button should do: key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "zeg wat de knop moet doen: key, repeat, toggle, latch, off of default"
 
 msgid "default takes nothing after it"
-msgstr ""
+msgstr "na default mag niets volgen"
 
 msgid "unknown mode — use key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "onbekende modus — gebruik key, repeat, toggle, latch, off of default"
 
 msgid "off takes nothing after it"
-msgstr ""
+msgstr "na off mag niets volgen"
 
 msgid "which key? for example: shift, 1, f5, space, mouse1"
-msgstr ""
+msgstr "welke toets? bijvoorbeeld: shift, 1, f5, space, mouse1"
 
 #, c-format
 msgid "'%.*s' is not a key name — `syn-mouse keys` lists them"
-msgstr ""
+msgstr "'%.*s' is geen toetsnaam — `syn-mouse keys` geeft ze weer"
 
 msgid "every how many seconds?"
-msgstr ""
+msgstr "om de hoeveel seconden?"
 
 msgid "not a number of seconds — for example 5, 0.5 or 250ms"
-msgstr ""
+msgstr "geen aantal seconden — bijvoorbeeld 5, 0.5 of 250ms"
 
 msgid "unexpected words after the binding"
-msgstr ""
+msgstr "onverwachte woorden na de toewijzing"
 
 msgid "the interval has to be between 0.05 and 3600 seconds"
-msgstr ""
+msgstr "het interval moet tussen 0.05 en 3600 seconden liggen"
 
 msgid "the left button can only be rebound in a profile for an app — in one that applies everywhere you could no longer click to undo it"
-msgstr ""
+msgstr "de linkerknop kan alleen opnieuw worden toegewezen in een profiel voor een app — in een profiel dat overal geldt, zou je niet meer kunnen klikken om het terug te draaien"
 
 #, c-format
 msgid "%s:%d: a section needs a name in [brackets]"
-msgstr ""
+msgstr "%s:%d: een sectie heeft een naam tussen [haken] nodig"
 
 #, c-format
 msgid "%s:%d: expected name = value"
-msgstr ""
+msgstr "%s:%d: verwacht: naam = waarde"
 
 #, c-format
 msgid "%s:%d: unknown setting '%s'"
-msgstr ""
+msgstr "%s:%d: onbekende instelling '%s'"
 
 #, c-format
 msgid "%s:%d: '%s' is not a button name"
-msgstr ""
+msgstr "%s:%d: '%s' is geen knopnaam"
 
 #, c-format
 msgid "Pressing %s every %s s"
-msgstr ""
+msgstr "Drukt %s elke %s s in"
 
 #, c-format
 msgid "Stopped pressing %s"
-msgstr ""
+msgstr "Gestopt met %s indrukken"
 
 #, c-format
 msgid "Holding %s down"
-msgstr ""
+msgstr "Houdt %s ingedrukt"
 
 #, c-format
 msgid "Let go of %s"
-msgstr ""
+msgstr "%s losgelaten"
 
 msgid "Left button"
-msgstr ""
+msgstr "Linkerknop"
 
 msgid "Right button"
-msgstr ""
+msgstr "Rechterknop"
 
 msgid "Middle button (wheel click)"
-msgstr ""
+msgstr "Middelste knop (wielklik)"
 
 msgid "Thumb button (back)"
-msgstr ""
+msgstr "Duimknop (terug)"
 
 msgid "Thumb button (forward)"
-msgstr ""
+msgstr "Duimknop (vooruit)"
 
 msgid "Button 6"
-msgstr ""
+msgstr "Knop 6"
 
 msgid "Button 7"
-msgstr ""
+msgstr "Knop 7"
 
 msgid "Button 8"
-msgstr ""
+msgstr "Knop 8"
 
 msgid "Wheel up"
-msgstr ""
+msgstr "Wiel omhoog"
 
 msgid "Wheel down"
-msgstr ""
+msgstr "Wiel omlaag"
 
 msgid "Wheel tilt left"
-msgstr ""
+msgstr "Wiel naar links kantelen"
 
 msgid "Wheel tilt right"
-msgstr ""
+msgstr "Wiel naar rechts kantelen"
 
 #, c-format
 msgid "cannot read %s: %s"
-msgstr ""
+msgstr "kan %s niet lezen: %s"
 
 #, c-format
 msgid "cannot write %s: %s"
-msgstr ""
+msgstr "kan %s niet schrijven: %s"
 
 msgid "saved, but the service is not running, so the mouse does not know yet — `syn-mouse enable` starts it"
-msgstr ""
+msgstr "opgeslagen, maar de dienst draait niet, dus de muis weet het nog niet — `syn-mouse enable` start hem"
 
 msgid "a profile needs a name"
-msgstr ""
+msgstr "een profiel heeft een naam nodig"
 
 msgid "that name is too long"
-msgstr ""
+msgstr "die naam is te lang"
 
 msgid "a profile name cannot contain brackets, tabs or line breaks"
-msgstr ""
+msgstr "een profielnaam mag geen haken, tabs of regeleinden bevatten"
 
 msgid "a profile name cannot start or end with a space"
-msgstr ""
+msgstr "een profielnaam mag niet met een spatie beginnen of eindigen"
 
 #, c-format
 msgid "no profile called '%s' — `syn-mouse profiles` lists them"
-msgstr ""
+msgstr "geen profiel met de naam '%s' — `syn-mouse profiles` geeft ze weer"
 
 #, c-format
 msgid "unexpected '%s'"
-msgstr ""
+msgstr "onverwacht: '%s'"
 
 msgid "that app id or title is too long"
-msgstr ""
+msgstr "die app-id of titel is te lang"
 
 #, c-format
 msgid "[%s] now applies everywhere\n"
-msgstr ""
+msgstr "[%s] geldt nu overal\n"
 
 #, c-format
 msgid "added [%s], for everywhere\n"
-msgstr ""
+msgstr "[%s] toegevoegd, voor overal\n"
 
 #, c-format
 msgid "[%s] now applies to %s\n"
-msgstr ""
+msgstr "[%s] geldt nu voor %s\n"
 
 #, c-format
 msgid "added [%s], for %s\n"
-msgstr ""
+msgstr "[%s] toegevoegd, voor %s\n"
 
 #, c-format
 msgid "removed [%s]\n"
-msgstr ""
+msgstr "[%s] verwijderd\n"
 
 #, c-format
 msgid "'%s' is not a button — `syn-mouse buttons` lists them"
-msgstr ""
+msgstr "'%s' is geen knop — `syn-mouse buttons` geeft ze weer"
 
 #, c-format
 msgid "[%s] %s does what it always did\n"
-msgstr ""
+msgstr "[%s] %s doet wat hij altijd deed\n"
 
 msgid "notify is on or off"
-msgstr ""
+msgstr "notify is on of off"
 
 msgid "No profiles yet. `syn-mouse add <name> --app <app id>` makes one."
-msgstr ""
+msgstr "Nog geen profielen. `syn-mouse add <name> --app <app id>` maakt er een."
 
 #, c-format
 msgid "[%s] — everywhere\n"
-msgstr ""
+msgstr "[%s] — overal\n"
 
 #, c-format
 msgid "[%s] — %s, titled %s\n"
-msgstr ""
+msgstr "[%s] — %s, met titel %s\n"
 
 #, c-format
 msgid "[%s] — %s\n"
-msgstr ""
+msgstr "[%s] — %s\n"
 
 msgid "(nothing bound)"
-msgstr ""
+msgstr "(niets toegewezen)"
 
 msgid "  — cannot be read"
-msgstr ""
+msgstr "  — niet leesbaar"
 
 msgid "No mouse found."
-msgstr ""
+msgstr "Geen muis gevonden."
 
 msgid ""
 "This account cannot read the mouse. Add it to the input group, then log out and back in:\n"
 "  sudo usermod -aG input $USER"
-msgstr ""
+msgstr "Dit account kan de muis niet lezen. Voeg het toe aan de groep input en meld je daarna af en weer aan:\n  sudo usermod -aG input $USER"
 
 msgid "Join keys with + (shift+1). code:N sends key code N."
-msgstr ""
+msgstr "Combineer toetsen met + (shift+1). code:N stuurt toetscode N."
 
 msgid "cannot ask synui which windows are open — is this a synui session?"
-msgstr ""
+msgstr "kan synui niet vragen welke vensters open zijn — is dit een synui-sessie?"
 
 msgid "syn-mouse is not running. `syn-mouse enable` starts it now and at every login."
-msgstr ""
+msgstr "syn-mouse draait niet. `syn-mouse enable` start het nu en bij elke aanmelding."
 
 #, c-format
 msgid "syn-mouse is running (pid %s)\n"
-msgstr ""
+msgstr "syn-mouse draait (pid %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr ""
+msgstr "  focus       %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr ""
+msgstr "  focus       geen venster"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr ""
+msgstr "  actief      [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr ""
+msgstr "  actief      niets — de muis werkt zoals altijd"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr ""
+msgstr "  muis        %s — overgenomen\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr ""
+msgstr "  muis        %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr ""
+msgstr "  probleem    kan geen invoerapparaten aanmaken — dit account moet in de groep input zitten"
 
 msgid "  problem    no mouse it can read"
-msgstr ""
+msgstr "  probleem    geen leesbare muis"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr ""
+msgstr "  aan         %s in [%s]: drukt %s elke %s s in\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr ""
+msgstr "  gepauzeerd  %s in [%s]: drukt %s elke %s s in, zodra [%s] weer actief is\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr ""
+msgstr "  aan         %s in [%s]: houdt %s ingedrukt\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr ""
+msgstr "  gepauzeerd  %s in [%s]: houdt %s ingedrukt, zodra [%s] weer actief is\n"
 
 msgid "  `syn-mouse stop` switches them all off."
-msgstr ""
+msgstr "  `syn-mouse stop` zet ze allemaal uit."
 
 msgid "syn-mouse is not running, so nothing is on."
-msgstr ""
+msgstr "syn-mouse draait niet, dus er staat niets aan."
 
 msgid "Everything toggled on is off."
-msgstr ""
+msgstr "Alles wat aanstond, staat nu uit."
 
 msgid "systemctl did not do it — see the message above"
-msgstr ""
+msgstr "systemctl heeft het niet gedaan — zie het bericht hierboven"
 
 msgid "syn-mouse is on, now and at every login."
-msgstr ""
+msgstr "syn-mouse staat aan, nu en bij elke aanmelding."
 
 msgid "syn-mouse is off, and stays off at login."
-msgstr ""
+msgstr "syn-mouse staat uit en blijft uit bij het aanmelden."
 
 msgid "no display — syn-mouse gui needs a graphical session"
-msgstr ""
+msgstr "geen beeldscherm — syn-mouse gui heeft een grafische sessie nodig"
 
 msgid "quickshell is not installed — synpkg install quickshell"
-msgstr ""
+msgstr "quickshell is niet geïnstalleerd — synpkg install quickshell"
 
 msgid "could not start quickshell"
-msgstr ""
+msgstr "kan quickshell niet starten"
 
 msgid "`syn-mouse gui` opens the window; `syn-mouse --help` lists the commands."
-msgstr ""
+msgstr "`syn-mouse gui` opent het venster; `syn-mouse --help` geeft de opdrachten weer."
 
 #, c-format
 msgid "unknown command '%s'"
-msgstr ""
+msgstr "onbekende opdracht '%s'"

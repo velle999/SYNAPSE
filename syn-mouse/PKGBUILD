@@ -28,7 +28,19 @@
 # could open this program to undo it.
 pkgname=syn-mouse
 pkgver=0.1.0
-pkgrel=1
+# ── 0.1.0-2: thirteen languages ─────────────────────────────────────────────
+#
+# All 146 strings in de, fr, es, pt, it, nl, pl, ru, ja, zh, ko, hi and ar, from
+# ONE po/ compiled twice: a .mo for the binary and JSON for the window.
+#
+# ⛔ MODE WORDS, KEY NAMES AND `commands` STAY ENGLISH INSIDE THE SENTENCES.
+# "use key, repeat, toggle, latch, off or default" lists what `syn-mouse bind`
+# takes, so those words are the same in every language; only the prose around
+# them moves. The i18n suite proves no --rec record and no button name changes.
+#
+# ⚠ THE `status` LABELS ARE PADDED PER LANGUAGE, by display width — a CJK
+# character is two columns — so each language's lines align with each other.
+pkgrel=2
 pkgdesc="Rebind mouse buttons per game without the vendor's app — keys, repeat, and auto-press toggles"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -17,474 +17,474 @@ msgstr ""
 "Language: de\n"
 
 msgid "%1 (taken over)"
-msgstr ""
+msgstr "%1 (übernommen)"
 
 msgid "+ New profile"
-msgstr ""
+msgstr "+ Neues Profil"
 
 msgid "A profile for every app is in force wherever you are, so the left button cannot be rebound in it."
-msgstr ""
+msgstr "Ein Profil für alle Apps ist überall aktiv, deshalb kann die linke Taste darin nicht neu belegt werden."
 
 msgid "A profile is a set of bindings for one game. It is in force only while that game's window is in front. Start the game, then pick its window here."
-msgstr ""
+msgstr "Ein Profil ist eine Reihe von Belegungen für ein Spiel. Es ist nur aktiv, solange das Fenster dieses Spiels im Vordergrund ist. Starte das Spiel und wähle dann hier sein Fenster."
 
 msgid "All of them"
-msgstr ""
+msgstr "Alle"
 
 msgid "Auto-press toggle"
-msgstr ""
+msgstr "Auto-Drücken (Schalter)"
 
 msgid "Back"
-msgstr ""
+msgstr "Zurück"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Eingabegeräte können nicht angelegt werden. Dieses Konto muss in der Gruppe input sein: sudo usermod -aG input $USER, dann ab- und wieder anmelden."
 
 msgid "Choose a key first: click the key box and press it."
-msgstr ""
+msgstr "Wähle zuerst eine Taste: Klicke in das Tastenfeld und drücke sie."
 
 msgid "Click a button to change what it does."
-msgstr ""
+msgstr "Klicke auf eine Taste, um zu ändern, was sie tut."
 
 msgid "Click again to delete %1"
-msgstr ""
+msgstr "Zum Löschen von %1 erneut klicken"
 
 msgid "Click here, then press a key"
-msgstr ""
+msgstr "Hier klicken, dann eine Taste drücken"
 
 msgid "Click: auto-press %1 every %2 s"
-msgstr ""
+msgstr "Klick: %1 alle %2 s automatisch drücken"
 
 msgid "Click: hold %1 down"
-msgstr ""
+msgstr "Klick: %1 gedrückt halten"
 
 msgid "Create the profile for %1"
-msgstr ""
+msgstr "Profil für %1 anlegen"
 
 msgid "Create the profile for every app"
-msgstr ""
+msgstr "Profil für alle Apps anlegen"
 
 msgid "Delete this profile"
-msgstr ""
+msgstr "Dieses Profil löschen"
 
 msgid "Disabled"
-msgstr ""
+msgstr "Deaktiviert"
 
 msgid "Everywhere"
-msgstr ""
+msgstr "Überall"
 
 msgid "For every app"
-msgstr ""
+msgstr "Für alle Apps"
 
 msgid "Forward"
-msgstr ""
+msgstr "Vorwärts"
 
 msgid "Give the profile a name."
-msgstr ""
+msgstr "Gib dem Profil einen Namen."
 
 msgid "Hold-down toggle"
-msgstr ""
+msgstr "Gedrückt halten (Schalter)"
 
 msgid "In force in every app"
-msgstr ""
+msgstr "In allen Apps aktiv"
 
 msgid "In force while %1 is in front"
-msgstr ""
+msgstr "Aktiv, solange %1 im Vordergrund ist"
 
 msgid "In force: %1"
-msgstr ""
+msgstr "Aktiv: %1"
 
 msgid "Interval in seconds"
-msgstr ""
+msgstr "Abstand in Sekunden"
 
 msgid "Key"
-msgstr ""
+msgstr "Taste"
 
 msgid "Left click"
-msgstr ""
+msgstr "Linksklick"
 
 msgid "Middle click"
-msgstr ""
+msgstr "Mittelklick"
 
 msgid "Mouse Buttons"
-msgstr ""
+msgstr "Maustasten"
 
 msgid "Name"
-msgstr ""
+msgstr "Name"
 
 msgid "No mouse it can read. If one is plugged in, this account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Keine lesbare Maus. Wenn eine angeschlossen ist, muss dieses Konto in der Gruppe input sein: sudo usermod -aG input $USER, dann ab- und wieder anmelden."
 
 msgid "Normal"
-msgstr ""
+msgstr "Normal"
 
 msgid "Not running — your bindings do nothing until it is on."
-msgstr ""
+msgstr "Läuft nicht — deine Belegungen wirken erst, wenn es eingeschaltet ist."
 
 msgid "On: %1 is holding %2 down"
-msgstr ""
+msgstr "An: %1 hält %2 gedrückt"
 
 msgid "On: %1 is pressing %2 every %3 s"
-msgstr ""
+msgstr "An: %1 drückt %2 alle %3 s"
 
 msgid "One click holds the key down; the next click lets go."
-msgstr ""
+msgstr "Ein Klick hält die Taste gedrückt, der nächste lässt sie los."
 
 msgid "One click starts pressing the key every few seconds; the next click stops it. It pauses while you are in another window."
-msgstr ""
+msgstr "Ein Klick lässt die Taste alle paar Sekunden drücken, der nächste Klick hört damit auf. In einem anderen Fenster pausiert es."
 
 msgid "Paused until its app is in front: %1 holding %2 down"
-msgstr ""
+msgstr "Pausiert, bis seine App im Vordergrund ist: %1 hält %2 gedrückt"
 
 msgid "Paused until its app is in front: %1 pressing %2 every %3 s"
-msgstr ""
+msgstr "Pausiert, bis seine App im Vordergrund ist: %1 drückt %2 alle %3 s"
 
 msgid "Press a key"
-msgstr ""
+msgstr "Taste drücken"
 
 msgid "Press a key or a combination…"
-msgstr ""
+msgstr "Taste oder Kombination drücken…"
 
 msgid "Pressed again every few seconds for as long as you hold the button."
-msgstr ""
+msgstr "Wird alle paar Sekunden erneut gedrückt, solange du die Taste hältst."
 
 msgid "Presses %1"
-msgstr ""
+msgstr "Drückt %1"
 
 msgid "Refresh the window list"
-msgstr ""
+msgstr "Fensterliste aktualisieren"
 
 msgid "Repeat while held"
-msgstr ""
+msgstr "Wiederholen beim Halten"
 
 msgid "Repeats %1 every %2 s while held"
-msgstr ""
+msgstr "Wiederholt %1 alle %2 s beim Halten"
 
 msgid "Right click"
-msgstr ""
+msgstr "Rechtsklick"
 
 msgid "Running. Nothing in force — the mouse is as it always is."
-msgstr ""
+msgstr "Läuft. Nichts aktiv — die Maus verhält sich wie immer."
 
 msgid "Save"
-msgstr ""
+msgstr "Speichern"
 
 msgid "Save for %1"
-msgstr ""
+msgstr "Für %1 speichern"
 
 msgid "Saved."
-msgstr ""
+msgstr "Gespeichert."
 
 msgid "Show a notice when a toggle switches on or off"
-msgstr ""
+msgstr "Hinweis zeigen, wenn ein Schalter an- oder ausgeht"
 
 msgid "Stop everything that is on"
-msgstr ""
+msgstr "Alles Eingeschaltete stoppen"
 
 msgid "The button does nothing at all."
-msgstr ""
+msgstr "Die Taste tut gar nichts."
 
 msgid "The button does what it always did."
-msgstr ""
+msgstr "Die Taste tut, was sie immer getan hat."
 
 msgid "The key is held down for as long as you hold the button."
-msgstr ""
+msgstr "Die Taste bleibt gedrückt, solange du die Maustaste hältst."
 
 msgid "This account cannot read the mouse. Add it to the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Dieses Konto kann die Maus nicht lesen. Füge es der Gruppe input hinzu: sudo usermod -aG input $USER, dann ab- und wieder anmelden."
 
 msgid "Turn on, now and at every login"
-msgstr ""
+msgstr "Einschalten, jetzt und bei jeder Anmeldung"
 
 msgid "Which mouse:"
-msgstr ""
+msgstr "Welche Maus:"
 
 msgid "or a mouse click:"
-msgstr ""
+msgstr "oder ein Mausklick:"
 
 msgid "say what the button should do: key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "sag, was die Taste tun soll: key, repeat, toggle, latch, off oder default"
 
 msgid "default takes nothing after it"
-msgstr ""
+msgstr "nach default darf nichts folgen"
 
 msgid "unknown mode — use key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "unbekannter Modus — verwende key, repeat, toggle, latch, off oder default"
 
 msgid "off takes nothing after it"
-msgstr ""
+msgstr "nach off darf nichts folgen"
 
 msgid "which key? for example: shift, 1, f5, space, mouse1"
-msgstr ""
+msgstr "welche Taste? zum Beispiel: shift, 1, f5, space, mouse1"
 
 #, c-format
 msgid "'%.*s' is not a key name — `syn-mouse keys` lists them"
-msgstr ""
+msgstr "'%.*s' ist kein Tastenname — `syn-mouse keys` listet sie auf"
 
 msgid "every how many seconds?"
-msgstr ""
+msgstr "alle wie viele Sekunden?"
 
 msgid "not a number of seconds — for example 5, 0.5 or 250ms"
-msgstr ""
+msgstr "keine Sekundenangabe — zum Beispiel 5, 0.5 oder 250ms"
 
 msgid "unexpected words after the binding"
-msgstr ""
+msgstr "unerwartete Wörter nach der Belegung"
 
 msgid "the interval has to be between 0.05 and 3600 seconds"
-msgstr ""
+msgstr "der Abstand muss zwischen 0.05 und 3600 Sekunden liegen"
 
 msgid "the left button can only be rebound in a profile for an app — in one that applies everywhere you could no longer click to undo it"
-msgstr ""
+msgstr "die linke Taste kann nur in einem Profil für eine App neu belegt werden — in einem, das überall gilt, könntest du nicht mehr klicken, um es rückgängig zu machen"
 
 #, c-format
 msgid "%s:%d: a section needs a name in [brackets]"
-msgstr ""
+msgstr "%s:%d: ein Abschnitt braucht einen Namen in [Klammern]"
 
 #, c-format
 msgid "%s:%d: expected name = value"
-msgstr ""
+msgstr "%s:%d: erwartet wurde name = wert"
 
 #, c-format
 msgid "%s:%d: unknown setting '%s'"
-msgstr ""
+msgstr "%s:%d: unbekannte Einstellung '%s'"
 
 #, c-format
 msgid "%s:%d: '%s' is not a button name"
-msgstr ""
+msgstr "%s:%d: '%s' ist kein Tastenname"
 
 #, c-format
 msgid "Pressing %s every %s s"
-msgstr ""
+msgstr "Drückt %s alle %s s"
 
 #, c-format
 msgid "Stopped pressing %s"
-msgstr ""
+msgstr "Drückt %s nicht mehr"
 
 #, c-format
 msgid "Holding %s down"
-msgstr ""
+msgstr "Hält %s gedrückt"
 
 #, c-format
 msgid "Let go of %s"
-msgstr ""
+msgstr "%s losgelassen"
 
 msgid "Left button"
-msgstr ""
+msgstr "Linke Taste"
 
 msgid "Right button"
-msgstr ""
+msgstr "Rechte Taste"
 
 msgid "Middle button (wheel click)"
-msgstr ""
+msgstr "Mittlere Taste (Radklick)"
 
 msgid "Thumb button (back)"
-msgstr ""
+msgstr "Daumentaste (zurück)"
 
 msgid "Thumb button (forward)"
-msgstr ""
+msgstr "Daumentaste (vorwärts)"
 
 msgid "Button 6"
-msgstr ""
+msgstr "Taste 6"
 
 msgid "Button 7"
-msgstr ""
+msgstr "Taste 7"
 
 msgid "Button 8"
-msgstr ""
+msgstr "Taste 8"
 
 msgid "Wheel up"
-msgstr ""
+msgstr "Rad hoch"
 
 msgid "Wheel down"
-msgstr ""
+msgstr "Rad runter"
 
 msgid "Wheel tilt left"
-msgstr ""
+msgstr "Rad nach links kippen"
 
 msgid "Wheel tilt right"
-msgstr ""
+msgstr "Rad nach rechts kippen"
 
 #, c-format
 msgid "cannot read %s: %s"
-msgstr ""
+msgstr "%s kann nicht gelesen werden: %s"
 
 #, c-format
 msgid "cannot write %s: %s"
-msgstr ""
+msgstr "%s kann nicht geschrieben werden: %s"
 
 msgid "saved, but the service is not running, so the mouse does not know yet — `syn-mouse enable` starts it"
-msgstr ""
+msgstr "gespeichert, aber der Dienst läuft nicht, also weiß die Maus noch nichts davon — `syn-mouse enable` startet ihn"
 
 msgid "a profile needs a name"
-msgstr ""
+msgstr "ein Profil braucht einen Namen"
 
 msgid "that name is too long"
-msgstr ""
+msgstr "dieser Name ist zu lang"
 
 msgid "a profile name cannot contain brackets, tabs or line breaks"
-msgstr ""
+msgstr "ein Profilname darf keine Klammern, Tabulatoren oder Zeilenumbrüche enthalten"
 
 msgid "a profile name cannot start or end with a space"
-msgstr ""
+msgstr "ein Profilname darf nicht mit einem Leerzeichen beginnen oder enden"
 
 #, c-format
 msgid "no profile called '%s' — `syn-mouse profiles` lists them"
-msgstr ""
+msgstr "kein Profil namens '%s' — `syn-mouse profiles` listet sie auf"
 
 #, c-format
 msgid "unexpected '%s'"
-msgstr ""
+msgstr "unerwartet: '%s'"
 
 msgid "that app id or title is too long"
-msgstr ""
+msgstr "diese App-ID oder dieser Titel ist zu lang"
 
 #, c-format
 msgid "[%s] now applies everywhere\n"
-msgstr ""
+msgstr "[%s] gilt jetzt überall\n"
 
 #, c-format
 msgid "added [%s], for everywhere\n"
-msgstr ""
+msgstr "[%s] angelegt, für überall\n"
 
 #, c-format
 msgid "[%s] now applies to %s\n"
-msgstr ""
+msgstr "[%s] gilt jetzt für %s\n"
 
 #, c-format
 msgid "added [%s], for %s\n"
-msgstr ""
+msgstr "[%s] angelegt, für %s\n"
 
 #, c-format
 msgid "removed [%s]\n"
-msgstr ""
+msgstr "[%s] entfernt\n"
 
 #, c-format
 msgid "'%s' is not a button — `syn-mouse buttons` lists them"
-msgstr ""
+msgstr "'%s' ist keine Taste — `syn-mouse buttons` listet sie auf"
 
 #, c-format
 msgid "[%s] %s does what it always did\n"
-msgstr ""
+msgstr "[%s] %s tut, was sie immer getan hat\n"
 
 msgid "notify is on or off"
-msgstr ""
+msgstr "notify ist on oder off"
 
 msgid "No profiles yet. `syn-mouse add <name> --app <app id>` makes one."
-msgstr ""
+msgstr "Noch keine Profile. `syn-mouse add <name> --app <app id>` legt eins an."
 
 #, c-format
 msgid "[%s] — everywhere\n"
-msgstr ""
+msgstr "[%s] — überall\n"
 
 #, c-format
 msgid "[%s] — %s, titled %s\n"
-msgstr ""
+msgstr "[%s] — %s, mit dem Titel %s\n"
 
 #, c-format
 msgid "[%s] — %s\n"
-msgstr ""
+msgstr "[%s] — %s\n"
 
 msgid "(nothing bound)"
-msgstr ""
+msgstr "(nichts belegt)"
 
 msgid "  — cannot be read"
-msgstr ""
+msgstr "  — nicht lesbar"
 
 msgid "No mouse found."
-msgstr ""
+msgstr "Keine Maus gefunden."
 
 msgid ""
 "This account cannot read the mouse. Add it to the input group, then log out and back in:\n"
 "  sudo usermod -aG input $USER"
-msgstr ""
+msgstr "Dieses Konto kann die Maus nicht lesen. Füge es der Gruppe input hinzu und melde dich dann ab und wieder an:\n  sudo usermod -aG input $USER"
 
 msgid "Join keys with + (shift+1). code:N sends key code N."
-msgstr ""
+msgstr "Tasten mit + verbinden (shift+1). code:N sendet den Tastencode N."
 
 msgid "cannot ask synui which windows are open — is this a synui session?"
-msgstr ""
+msgstr "synui kann nicht nach den offenen Fenstern gefragt werden — ist das eine synui-Sitzung?"
 
 msgid "syn-mouse is not running. `syn-mouse enable` starts it now and at every login."
-msgstr ""
+msgstr "syn-mouse läuft nicht. `syn-mouse enable` startet es jetzt und bei jeder Anmeldung."
 
 #, c-format
 msgid "syn-mouse is running (pid %s)\n"
-msgstr ""
+msgstr "syn-mouse läuft (PID %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr ""
+msgstr "  Fokus     %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr ""
+msgstr "  Fokus     kein Fenster"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr ""
+msgstr "  aktiv     [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr ""
+msgstr "  aktiv     nichts — die Maus verhält sich wie immer"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr ""
+msgstr "  Maus      %s — übernommen\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr ""
+msgstr "  Maus      %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr ""
+msgstr "  Problem   Eingabegeräte können nicht angelegt werden — dieses Konto muss in der Gruppe input sein"
 
 msgid "  problem    no mouse it can read"
-msgstr ""
+msgstr "  Problem   keine lesbare Maus"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr ""
+msgstr "  an        %s in [%s]: drückt %s alle %s s\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr ""
+msgstr "  pausiert  %s in [%s]: drückt %s alle %s s, sobald [%s] wieder aktiv ist\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr ""
+msgstr "  an        %s in [%s]: hält %s gedrückt\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr ""
+msgstr "  pausiert  %s in [%s]: hält %s gedrückt, sobald [%s] wieder aktiv ist\n"
 
 msgid "  `syn-mouse stop` switches them all off."
-msgstr ""
+msgstr "  `syn-mouse stop` schaltet sie alle aus."
 
 msgid "syn-mouse is not running, so nothing is on."
-msgstr ""
+msgstr "syn-mouse läuft nicht, also ist nichts eingeschaltet."
 
 msgid "Everything toggled on is off."
-msgstr ""
+msgstr "Alles Eingeschaltete ist jetzt aus."
 
 msgid "systemctl did not do it — see the message above"
-msgstr ""
+msgstr "systemctl hat es nicht getan — siehe die Meldung oben"
 
 msgid "syn-mouse is on, now and at every login."
-msgstr ""
+msgstr "syn-mouse ist eingeschaltet, jetzt und bei jeder Anmeldung."
 
 msgid "syn-mouse is off, and stays off at login."
-msgstr ""
+msgstr "syn-mouse ist ausgeschaltet und bleibt es auch bei der Anmeldung."
 
 msgid "no display — syn-mouse gui needs a graphical session"
-msgstr ""
+msgstr "kein Display — syn-mouse gui braucht eine grafische Sitzung"
 
 msgid "quickshell is not installed — synpkg install quickshell"
-msgstr ""
+msgstr "quickshell ist nicht installiert — synpkg install quickshell"
 
 msgid "could not start quickshell"
-msgstr ""
+msgstr "quickshell konnte nicht gestartet werden"
 
 msgid "`syn-mouse gui` opens the window; `syn-mouse --help` lists the commands."
-msgstr ""
+msgstr "`syn-mouse gui` öffnet das Fenster; `syn-mouse --help` listet die Befehle auf."
 
 #, c-format
 msgid "unknown command '%s'"
-msgstr ""
+msgstr "unbekannter Befehl '%s'"

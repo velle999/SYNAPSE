@@ -17,474 +17,474 @@ msgstr ""
 "Language: hi\n"
 
 msgid "%1 (taken over)"
-msgstr ""
+msgstr "%1 (नियंत्रण में)"
 
 msgid "+ New profile"
-msgstr ""
+msgstr "+ नई प्रोफ़ाइल"
 
 msgid "A profile for every app is in force wherever you are, so the left button cannot be rebound in it."
-msgstr ""
+msgstr "हर ऐप के लिए बनी प्रोफ़ाइल हर जगह लागू रहती है, इसलिए उसमें बायाँ बटन फिर से असाइन नहीं किया जा सकता।"
 
 msgid "A profile is a set of bindings for one game. It is in force only while that game's window is in front. Start the game, then pick its window here."
-msgstr ""
+msgstr "प्रोफ़ाइल किसी एक गेम के लिए बाइंडिंग का सेट है। यह तभी लागू होती है जब उस गेम की विंडो सामने हो। गेम शुरू करें, फिर यहाँ उसकी विंडो चुनें।"
 
 msgid "All of them"
-msgstr ""
+msgstr "सभी"
 
 msgid "Auto-press toggle"
-msgstr ""
+msgstr "ऑटो-प्रेस (टॉगल)"
 
 msgid "Back"
-msgstr ""
+msgstr "वापस"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "इनपुट डिवाइस नहीं बनाए जा सकते। इस खाते को input समूह में होना चाहिए: sudo usermod -aG input $USER, फिर लॉग आउट करके दोबारा लॉग इन करें।"
 
 msgid "Choose a key first: click the key box and press it."
-msgstr ""
+msgstr "पहले एक कुंजी चुनें: कुंजी वाले बॉक्स पर क्लिक करें और उसे दबाएँ।"
 
 msgid "Click a button to change what it does."
-msgstr ""
+msgstr "कोई बटन क्या करे, यह बदलने के लिए उस पर क्लिक करें।"
 
 msgid "Click again to delete %1"
-msgstr ""
+msgstr "%1 को हटाने के लिए फिर से क्लिक करें"
 
 msgid "Click here, then press a key"
-msgstr ""
+msgstr "यहाँ क्लिक करें, फिर कोई कुंजी दबाएँ"
 
 msgid "Click: auto-press %1 every %2 s"
-msgstr ""
+msgstr "क्लिक: हर %2 सेकंड में %1 अपने-आप दबाएँ"
 
 msgid "Click: hold %1 down"
-msgstr ""
+msgstr "क्लिक: %1 दबाए रखें"
 
 msgid "Create the profile for %1"
-msgstr ""
+msgstr "%1 के लिए प्रोफ़ाइल बनाएँ"
 
 msgid "Create the profile for every app"
-msgstr ""
+msgstr "हर ऐप के लिए प्रोफ़ाइल बनाएँ"
 
 msgid "Delete this profile"
-msgstr ""
+msgstr "यह प्रोफ़ाइल हटाएँ"
 
 msgid "Disabled"
-msgstr ""
+msgstr "बंद"
 
 msgid "Everywhere"
-msgstr ""
+msgstr "हर जगह"
 
 msgid "For every app"
-msgstr ""
+msgstr "हर ऐप के लिए"
 
 msgid "Forward"
-msgstr ""
+msgstr "आगे"
 
 msgid "Give the profile a name."
-msgstr ""
+msgstr "प्रोफ़ाइल को एक नाम दें।"
 
 msgid "Hold-down toggle"
-msgstr ""
+msgstr "दबाए रखें (टॉगल)"
 
 msgid "In force in every app"
-msgstr ""
+msgstr "हर ऐप में लागू"
 
 msgid "In force while %1 is in front"
-msgstr ""
+msgstr "जब %1 सामने हो तब लागू"
 
 msgid "In force: %1"
-msgstr ""
+msgstr "लागू: %1"
 
 msgid "Interval in seconds"
-msgstr ""
+msgstr "अंतराल (सेकंड में)"
 
 msgid "Key"
-msgstr ""
+msgstr "कुंजी"
 
 msgid "Left click"
-msgstr ""
+msgstr "बायाँ क्लिक"
 
 msgid "Middle click"
-msgstr ""
+msgstr "बीच का क्लिक"
 
 msgid "Mouse Buttons"
-msgstr ""
+msgstr "माउस बटन"
 
 msgid "Name"
-msgstr ""
+msgstr "नाम"
 
 msgid "No mouse it can read. If one is plugged in, this account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "पढ़ने लायक कोई माउस नहीं मिला। अगर माउस लगा है, तो इस खाते को input समूह में होना चाहिए: sudo usermod -aG input $USER, फिर लॉग आउट करके दोबारा लॉग इन करें।"
 
 msgid "Normal"
-msgstr ""
+msgstr "सामान्य"
 
 msgid "Not running — your bindings do nothing until it is on."
-msgstr ""
+msgstr "नहीं चल रहा — इसे चालू करने तक आपकी बाइंडिंग कुछ नहीं करेंगी।"
 
 msgid "On: %1 is holding %2 down"
-msgstr ""
+msgstr "चालू: %1, %2 को दबाए हुए है"
 
 msgid "On: %1 is pressing %2 every %3 s"
-msgstr ""
+msgstr "चालू: %1 हर %3 सेकंड में %2 दबा रहा है"
 
 msgid "One click holds the key down; the next click lets go."
-msgstr ""
+msgstr "एक क्लिक कुंजी को दबाए रखता है; अगला क्लिक उसे छोड़ देता है।"
 
 msgid "One click starts pressing the key every few seconds; the next click stops it. It pauses while you are in another window."
-msgstr ""
+msgstr "एक क्लिक से कुंजी हर कुछ सेकंड में दबनी शुरू होती है; अगला क्लिक उसे रोक देता है। जब आप किसी दूसरी विंडो में हों, यह रुका रहता है।"
 
 msgid "Paused until its app is in front: %1 holding %2 down"
-msgstr ""
+msgstr "इसका ऐप सामने आने तक रुका: %1, %2 को दबाए हुए"
 
 msgid "Paused until its app is in front: %1 pressing %2 every %3 s"
-msgstr ""
+msgstr "इसका ऐप सामने आने तक रुका: %1 हर %3 सेकंड में %2 दबाता है"
 
 msgid "Press a key"
-msgstr ""
+msgstr "कुंजी दबाएँ"
 
 msgid "Press a key or a combination…"
-msgstr ""
+msgstr "कोई कुंजी या संयोजन दबाएँ…"
 
 msgid "Pressed again every few seconds for as long as you hold the button."
-msgstr ""
+msgstr "जब तक आप बटन दबाए रखते हैं, हर कुछ सेकंड में फिर से दबती है।"
 
 msgid "Presses %1"
-msgstr ""
+msgstr "%1 दबाता है"
 
 msgid "Refresh the window list"
-msgstr ""
+msgstr "विंडो सूची ताज़ा करें"
 
 msgid "Repeat while held"
-msgstr ""
+msgstr "दबाए रखने पर दोहराएँ"
 
 msgid "Repeats %1 every %2 s while held"
-msgstr ""
+msgstr "दबाए रखने पर हर %2 सेकंड में %1 दोहराता है"
 
 msgid "Right click"
-msgstr ""
+msgstr "दायाँ क्लिक"
 
 msgid "Running. Nothing in force — the mouse is as it always is."
-msgstr ""
+msgstr "चल रहा है। कुछ भी लागू नहीं — माउस हमेशा की तरह काम करता है।"
 
 msgid "Save"
-msgstr ""
+msgstr "सहेजें"
 
 msgid "Save for %1"
-msgstr ""
+msgstr "%1 के लिए सहेजें"
 
 msgid "Saved."
-msgstr ""
+msgstr "सहेजा गया।"
 
 msgid "Show a notice when a toggle switches on or off"
-msgstr ""
+msgstr "टॉगल चालू या बंद होने पर सूचना दिखाएँ"
 
 msgid "Stop everything that is on"
-msgstr ""
+msgstr "जो भी चालू है, सब रोकें"
 
 msgid "The button does nothing at all."
-msgstr ""
+msgstr "बटन कुछ भी नहीं करता।"
 
 msgid "The button does what it always did."
-msgstr ""
+msgstr "बटन वही करता है जो हमेशा करता था।"
 
 msgid "The key is held down for as long as you hold the button."
-msgstr ""
+msgstr "जब तक आप बटन दबाए रखते हैं, कुंजी दबी रहती है।"
 
 msgid "This account cannot read the mouse. Add it to the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "यह खाता माउस नहीं पढ़ सकता। इसे input समूह में जोड़ें: sudo usermod -aG input $USER, फिर लॉग आउट करके दोबारा लॉग इन करें।"
 
 msgid "Turn on, now and at every login"
-msgstr ""
+msgstr "अभी और हर लॉग इन पर चालू करें"
 
 msgid "Which mouse:"
-msgstr ""
+msgstr "कौन-सा माउस:"
 
 msgid "or a mouse click:"
-msgstr ""
+msgstr "या कोई माउस क्लिक:"
 
 msgid "say what the button should do: key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "बताएँ कि बटन क्या करे: key, repeat, toggle, latch, off या default"
 
 msgid "default takes nothing after it"
-msgstr ""
+msgstr "default के बाद कुछ नहीं आता"
 
 msgid "unknown mode — use key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "अज्ञात मोड — key, repeat, toggle, latch, off या default इस्तेमाल करें"
 
 msgid "off takes nothing after it"
-msgstr ""
+msgstr "off के बाद कुछ नहीं आता"
 
 msgid "which key? for example: shift, 1, f5, space, mouse1"
-msgstr ""
+msgstr "कौन-सी कुंजी? उदाहरण: shift, 1, f5, space, mouse1"
 
 #, c-format
 msgid "'%.*s' is not a key name — `syn-mouse keys` lists them"
-msgstr ""
+msgstr "'%.*s' कोई कुंजी नाम नहीं है — `syn-mouse keys` इनकी सूची दिखाता है"
 
 msgid "every how many seconds?"
-msgstr ""
+msgstr "हर कितने सेकंड में?"
 
 msgid "not a number of seconds — for example 5, 0.5 or 250ms"
-msgstr ""
+msgstr "यह सेकंड की संख्या नहीं है — उदाहरण: 5, 0.5 या 250ms"
 
 msgid "unexpected words after the binding"
-msgstr ""
+msgstr "बाइंडिंग के बाद अनपेक्षित शब्द"
 
 msgid "the interval has to be between 0.05 and 3600 seconds"
-msgstr ""
+msgstr "अंतराल 0.05 और 3600 सेकंड के बीच होना चाहिए"
 
 msgid "the left button can only be rebound in a profile for an app — in one that applies everywhere you could no longer click to undo it"
-msgstr ""
+msgstr "बायाँ बटन केवल किसी ऐप की प्रोफ़ाइल में फिर से असाइन किया जा सकता है — हर जगह लागू होने वाली प्रोफ़ाइल में आप उसे वापस लेने के लिए क्लिक नहीं कर पाएँगे"
 
 #, c-format
 msgid "%s:%d: a section needs a name in [brackets]"
-msgstr ""
+msgstr "%s:%d: सेक्शन का नाम [कोष्ठक] में होना चाहिए"
 
 #, c-format
 msgid "%s:%d: expected name = value"
-msgstr ""
+msgstr "%s:%d: नाम = मान अपेक्षित था"
 
 #, c-format
 msgid "%s:%d: unknown setting '%s'"
-msgstr ""
+msgstr "%s:%d: अज्ञात सेटिंग '%s'"
 
 #, c-format
 msgid "%s:%d: '%s' is not a button name"
-msgstr ""
+msgstr "%s:%d: '%s' कोई बटन नाम नहीं है"
 
 #, c-format
 msgid "Pressing %s every %s s"
-msgstr ""
+msgstr "%s हर %s सेकंड में दबाया जा रहा है"
 
 #, c-format
 msgid "Stopped pressing %s"
-msgstr ""
+msgstr "%s दबाना बंद हुआ"
 
 #, c-format
 msgid "Holding %s down"
-msgstr ""
+msgstr "%s दबाए रखा है"
 
 #, c-format
 msgid "Let go of %s"
-msgstr ""
+msgstr "%s छोड़ा गया"
 
 msgid "Left button"
-msgstr ""
+msgstr "बायाँ बटन"
 
 msgid "Right button"
-msgstr ""
+msgstr "दायाँ बटन"
 
 msgid "Middle button (wheel click)"
-msgstr ""
+msgstr "बीच का बटन (व्हील क्लिक)"
 
 msgid "Thumb button (back)"
-msgstr ""
+msgstr "अंगूठे वाला बटन (वापस)"
 
 msgid "Thumb button (forward)"
-msgstr ""
+msgstr "अंगूठे वाला बटन (आगे)"
 
 msgid "Button 6"
-msgstr ""
+msgstr "बटन 6"
 
 msgid "Button 7"
-msgstr ""
+msgstr "बटन 7"
 
 msgid "Button 8"
-msgstr ""
+msgstr "बटन 8"
 
 msgid "Wheel up"
-msgstr ""
+msgstr "व्हील ऊपर"
 
 msgid "Wheel down"
-msgstr ""
+msgstr "व्हील नीचे"
 
 msgid "Wheel tilt left"
-msgstr ""
+msgstr "व्हील बाईं ओर झुकाएँ"
 
 msgid "Wheel tilt right"
-msgstr ""
+msgstr "व्हील दाईं ओर झुकाएँ"
 
 #, c-format
 msgid "cannot read %s: %s"
-msgstr ""
+msgstr "%s पढ़ा नहीं जा सका: %s"
 
 #, c-format
 msgid "cannot write %s: %s"
-msgstr ""
+msgstr "%s लिखा नहीं जा सका: %s"
 
 msgid "saved, but the service is not running, so the mouse does not know yet — `syn-mouse enable` starts it"
-msgstr ""
+msgstr "सहेजा गया, पर सेवा नहीं चल रही, इसलिए माउस को अभी पता नहीं — `syn-mouse enable` इसे शुरू करता है"
 
 msgid "a profile needs a name"
-msgstr ""
+msgstr "प्रोफ़ाइल का नाम होना चाहिए"
 
 msgid "that name is too long"
-msgstr ""
+msgstr "यह नाम बहुत लंबा है"
 
 msgid "a profile name cannot contain brackets, tabs or line breaks"
-msgstr ""
+msgstr "प्रोफ़ाइल नाम में कोष्ठक, टैब या लाइन ब्रेक नहीं हो सकते"
 
 msgid "a profile name cannot start or end with a space"
-msgstr ""
+msgstr "प्रोफ़ाइल नाम स्पेस से शुरू या ख़त्म नहीं हो सकता"
 
 #, c-format
 msgid "no profile called '%s' — `syn-mouse profiles` lists them"
-msgstr ""
+msgstr "'%s' नाम की कोई प्रोफ़ाइल नहीं — `syn-mouse profiles` इनकी सूची दिखाता है"
 
 #, c-format
 msgid "unexpected '%s'"
-msgstr ""
+msgstr "अनपेक्षित '%s'"
 
 msgid "that app id or title is too long"
-msgstr ""
+msgstr "यह ऐप id या शीर्षक बहुत लंबा है"
 
 #, c-format
 msgid "[%s] now applies everywhere\n"
-msgstr ""
+msgstr "[%s] अब हर जगह लागू है\n"
 
 #, c-format
 msgid "added [%s], for everywhere\n"
-msgstr ""
+msgstr "[%s] जोड़ा गया, हर जगह के लिए\n"
 
 #, c-format
 msgid "[%s] now applies to %s\n"
-msgstr ""
+msgstr "[%s] अब %s पर लागू है\n"
 
 #, c-format
 msgid "added [%s], for %s\n"
-msgstr ""
+msgstr "[%s] जोड़ा गया, %s के लिए\n"
 
 #, c-format
 msgid "removed [%s]\n"
-msgstr ""
+msgstr "[%s] हटाया गया\n"
 
 #, c-format
 msgid "'%s' is not a button — `syn-mouse buttons` lists them"
-msgstr ""
+msgstr "'%s' कोई बटन नहीं है — `syn-mouse buttons` इनकी सूची दिखाता है"
 
 #, c-format
 msgid "[%s] %s does what it always did\n"
-msgstr ""
+msgstr "[%s] %s वही करता है जो हमेशा करता था\n"
 
 msgid "notify is on or off"
-msgstr ""
+msgstr "notify on या off होता है"
 
 msgid "No profiles yet. `syn-mouse add <name> --app <app id>` makes one."
-msgstr ""
+msgstr "अभी कोई प्रोफ़ाइल नहीं। `syn-mouse add <name> --app <app id>` एक बनाता है।"
 
 #, c-format
 msgid "[%s] — everywhere\n"
-msgstr ""
+msgstr "[%s] — हर जगह\n"
 
 #, c-format
 msgid "[%s] — %s, titled %s\n"
-msgstr ""
+msgstr "[%s] — %s, शीर्षक %s\n"
 
 #, c-format
 msgid "[%s] — %s\n"
-msgstr ""
+msgstr "[%s] — %s\n"
 
 msgid "(nothing bound)"
-msgstr ""
+msgstr "(कुछ भी असाइन नहीं)"
 
 msgid "  — cannot be read"
-msgstr ""
+msgstr "  — पढ़ा नहीं जा सकता"
 
 msgid "No mouse found."
-msgstr ""
+msgstr "कोई माउस नहीं मिला।"
 
 msgid ""
 "This account cannot read the mouse. Add it to the input group, then log out and back in:\n"
 "  sudo usermod -aG input $USER"
-msgstr ""
+msgstr "यह खाता माउस नहीं पढ़ सकता। इसे input समूह में जोड़ें, फिर लॉग आउट करके दोबारा लॉग इन करें:\n  sudo usermod -aG input $USER"
 
 msgid "Join keys with + (shift+1). code:N sends key code N."
-msgstr ""
+msgstr "कुंजियाँ + से जोड़ें (shift+1)। code:N कुंजी कोड N भेजता है।"
 
 msgid "cannot ask synui which windows are open — is this a synui session?"
-msgstr ""
+msgstr "synui से खुली विंडो के बारे में पूछा नहीं जा सका — क्या यह synui सत्र है?"
 
 msgid "syn-mouse is not running. `syn-mouse enable` starts it now and at every login."
-msgstr ""
+msgstr "syn-mouse नहीं चल रहा। `syn-mouse enable` इसे अभी और हर लॉग इन पर शुरू करता है।"
 
 #, c-format
 msgid "syn-mouse is running (pid %s)\n"
-msgstr ""
+msgstr "syn-mouse चल रहा है (pid %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr ""
+msgstr "  फ़ोकस   %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr ""
+msgstr "  फ़ोकस   कोई विंडो नहीं"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr ""
+msgstr "  लागू    [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr ""
+msgstr "  लागू    कुछ नहीं — माउस हमेशा की तरह है"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr ""
+msgstr "  माउस   %s — नियंत्रण में\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr ""
+msgstr "  माउस   %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr ""
+msgstr "  समस्या  इनपुट डिवाइस नहीं बन सकते — इस खाते को input समूह में होना चाहिए"
 
 msgid "  problem    no mouse it can read"
-msgstr ""
+msgstr "  समस्या  पढ़ने लायक कोई माउस नहीं"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr ""
+msgstr "  चालू    %s, [%s] में: %s हर %s सेकंड में\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr ""
+msgstr "  रुका    %s, [%s] में: %s हर %s सेकंड में — जब [%s] फिर लागू हो\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr ""
+msgstr "  चालू    %s, [%s] में: %s दबाए हुए\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr ""
+msgstr "  रुका    %s, [%s] में: %s दबाए हुए — जब [%s] फिर लागू हो\n"
 
 msgid "  `syn-mouse stop` switches them all off."
-msgstr ""
+msgstr "  `syn-mouse stop` इन सबको बंद कर देता है।"
 
 msgid "syn-mouse is not running, so nothing is on."
-msgstr ""
+msgstr "syn-mouse नहीं चल रहा, इसलिए कुछ भी चालू नहीं है।"
 
 msgid "Everything toggled on is off."
-msgstr ""
+msgstr "जो भी चालू था, सब बंद हो गया।"
 
 msgid "systemctl did not do it — see the message above"
-msgstr ""
+msgstr "systemctl ने यह नहीं किया — ऊपर का संदेश देखें"
 
 msgid "syn-mouse is on, now and at every login."
-msgstr ""
+msgstr "syn-mouse चालू है, अभी और हर लॉग इन पर।"
 
 msgid "syn-mouse is off, and stays off at login."
-msgstr ""
+msgstr "syn-mouse बंद है, और लॉग इन पर भी बंद रहेगा।"
 
 msgid "no display — syn-mouse gui needs a graphical session"
-msgstr ""
+msgstr "कोई डिस्प्ले नहीं — syn-mouse gui को ग्राफ़िकल सत्र चाहिए"
 
 msgid "quickshell is not installed — synpkg install quickshell"
-msgstr ""
+msgstr "quickshell इंस्टॉल नहीं है — synpkg install quickshell"
 
 msgid "could not start quickshell"
-msgstr ""
+msgstr "quickshell शुरू नहीं हो सका"
 
 msgid "`syn-mouse gui` opens the window; `syn-mouse --help` lists the commands."
-msgstr ""
+msgstr "`syn-mouse gui` विंडो खोलता है; `syn-mouse --help` कमांड की सूची दिखाता है।"
 
 #, c-format
 msgid "unknown command '%s'"
-msgstr ""
+msgstr "अज्ञात कमांड '%s'"

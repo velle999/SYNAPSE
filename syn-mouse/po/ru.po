@@ -17,474 +17,474 @@ msgstr ""
 "Language: ru\n"
 
 msgid "%1 (taken over)"
-msgstr ""
+msgstr "%1 (перехвачена)"
 
 msgid "+ New profile"
-msgstr ""
+msgstr "+ Новый профиль"
 
 msgid "A profile for every app is in force wherever you are, so the left button cannot be rebound in it."
-msgstr ""
+msgstr "Профиль для всех приложений действует везде, поэтому левую кнопку в нём переназначить нельзя."
 
 msgid "A profile is a set of bindings for one game. It is in force only while that game's window is in front. Start the game, then pick its window here."
-msgstr ""
+msgstr "Профиль — это набор назначений для одной игры. Он действует, только пока окно этой игры на переднем плане. Запустите игру, затем выберите здесь её окно."
 
 msgid "All of them"
-msgstr ""
+msgstr "Все"
 
 msgid "Auto-press toggle"
-msgstr ""
+msgstr "Автонажатие (переключатель)"
 
 msgid "Back"
-msgstr ""
+msgstr "Назад"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Не удаётся создать устройства ввода. Эта учётная запись должна входить в группу input: sudo usermod -aG input $USER, затем выйдите из сеанса и войдите снова."
 
 msgid "Choose a key first: click the key box and press it."
-msgstr ""
+msgstr "Сначала выберите клавишу: щёлкните по полю клавиши и нажмите её."
 
 msgid "Click a button to change what it does."
-msgstr ""
+msgstr "Щёлкните по кнопке, чтобы изменить её действие."
 
 msgid "Click again to delete %1"
-msgstr ""
+msgstr "Щёлкните ещё раз, чтобы удалить %1"
 
 msgid "Click here, then press a key"
-msgstr ""
+msgstr "Щёлкните здесь, затем нажмите клавишу"
 
 msgid "Click: auto-press %1 every %2 s"
-msgstr ""
+msgstr "Щелчок: нажимать %1 каждые %2 с"
 
 msgid "Click: hold %1 down"
-msgstr ""
+msgstr "Щелчок: удерживать %1"
 
 msgid "Create the profile for %1"
-msgstr ""
+msgstr "Создать профиль для %1"
 
 msgid "Create the profile for every app"
-msgstr ""
+msgstr "Создать профиль для всех приложений"
 
 msgid "Delete this profile"
-msgstr ""
+msgstr "Удалить этот профиль"
 
 msgid "Disabled"
-msgstr ""
+msgstr "Отключена"
 
 msgid "Everywhere"
-msgstr ""
+msgstr "Везде"
 
 msgid "For every app"
-msgstr ""
+msgstr "Для всех приложений"
 
 msgid "Forward"
-msgstr ""
+msgstr "Вперёд"
 
 msgid "Give the profile a name."
-msgstr ""
+msgstr "Дайте профилю имя."
 
 msgid "Hold-down toggle"
-msgstr ""
+msgstr "Удержание (переключатель)"
 
 msgid "In force in every app"
-msgstr ""
+msgstr "Действует во всех приложениях"
 
 msgid "In force while %1 is in front"
-msgstr ""
+msgstr "Действует, пока %1 на переднем плане"
 
 msgid "In force: %1"
-msgstr ""
+msgstr "Действует: %1"
 
 msgid "Interval in seconds"
-msgstr ""
+msgstr "Интервал в секундах"
 
 msgid "Key"
-msgstr ""
+msgstr "Клавиша"
 
 msgid "Left click"
-msgstr ""
+msgstr "Левый щелчок"
 
 msgid "Middle click"
-msgstr ""
+msgstr "Средний щелчок"
 
 msgid "Mouse Buttons"
-msgstr ""
+msgstr "Кнопки мыши"
 
 msgid "Name"
-msgstr ""
+msgstr "Имя"
 
 msgid "No mouse it can read. If one is plugged in, this account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Нет мыши, которую можно прочитать. Если мышь подключена, эта учётная запись должна входить в группу input: sudo usermod -aG input $USER, затем выйдите из сеанса и войдите снова."
 
 msgid "Normal"
-msgstr ""
+msgstr "Обычный"
 
 msgid "Not running — your bindings do nothing until it is on."
-msgstr ""
+msgstr "Не запущено — назначения не работают, пока служба не включена."
 
 msgid "On: %1 is holding %2 down"
-msgstr ""
+msgstr "Включено: %1 удерживает %2"
 
 msgid "On: %1 is pressing %2 every %3 s"
-msgstr ""
+msgstr "Включено: %1 нажимает %2 каждые %3 с"
 
 msgid "One click holds the key down; the next click lets go."
-msgstr ""
+msgstr "Один щелчок зажимает клавишу, следующий отпускает её."
 
 msgid "One click starts pressing the key every few seconds; the next click stops it. It pauses while you are in another window."
-msgstr ""
+msgstr "Один щелчок запускает нажатие клавиши каждые несколько секунд, следующий останавливает его. Пока вы в другом окне, оно на паузе."
 
 msgid "Paused until its app is in front: %1 holding %2 down"
-msgstr ""
+msgstr "На паузе, пока его приложение не на переднем плане: %1 удерживает %2"
 
 msgid "Paused until its app is in front: %1 pressing %2 every %3 s"
-msgstr ""
+msgstr "На паузе, пока его приложение не на переднем плане: %1 нажимает %2 каждые %3 с"
 
 msgid "Press a key"
-msgstr ""
+msgstr "Нажать клавишу"
 
 msgid "Press a key or a combination…"
-msgstr ""
+msgstr "Нажмите клавишу или сочетание…"
 
 msgid "Pressed again every few seconds for as long as you hold the button."
-msgstr ""
+msgstr "Нажимается снова каждые несколько секунд, пока вы держите кнопку."
 
 msgid "Presses %1"
-msgstr ""
+msgstr "Нажимает %1"
 
 msgid "Refresh the window list"
-msgstr ""
+msgstr "Обновить список окон"
 
 msgid "Repeat while held"
-msgstr ""
+msgstr "Повтор при удержании"
 
 msgid "Repeats %1 every %2 s while held"
-msgstr ""
+msgstr "Повторяет %1 каждые %2 с при удержании"
 
 msgid "Right click"
-msgstr ""
+msgstr "Правый щелчок"
 
 msgid "Running. Nothing in force — the mouse is as it always is."
-msgstr ""
+msgstr "Работает. Ничего не действует — мышь работает как обычно."
 
 msgid "Save"
-msgstr ""
+msgstr "Сохранить"
 
 msgid "Save for %1"
-msgstr ""
+msgstr "Сохранить для: %1"
 
 msgid "Saved."
-msgstr ""
+msgstr "Сохранено."
 
 msgid "Show a notice when a toggle switches on or off"
-msgstr ""
+msgstr "Показывать уведомление, когда переключатель включается или выключается"
 
 msgid "Stop everything that is on"
-msgstr ""
+msgstr "Остановить всё включённое"
 
 msgid "The button does nothing at all."
-msgstr ""
+msgstr "Кнопка ничего не делает."
 
 msgid "The button does what it always did."
-msgstr ""
+msgstr "Кнопка делает то же, что и всегда."
 
 msgid "The key is held down for as long as you hold the button."
-msgstr ""
+msgstr "Клавиша зажата, пока вы держите кнопку."
 
 msgid "This account cannot read the mouse. Add it to the input group: sudo usermod -aG input $USER, then log out and back in."
-msgstr ""
+msgstr "Эта учётная запись не может читать мышь. Добавьте её в группу input: sudo usermod -aG input $USER, затем выйдите из сеанса и войдите снова."
 
 msgid "Turn on, now and at every login"
-msgstr ""
+msgstr "Включить сейчас и при каждом входе"
 
 msgid "Which mouse:"
-msgstr ""
+msgstr "Какая мышь:"
 
 msgid "or a mouse click:"
-msgstr ""
+msgstr "или щелчок мыши:"
 
 msgid "say what the button should do: key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "укажите, что должна делать кнопка: key, repeat, toggle, latch, off или default"
 
 msgid "default takes nothing after it"
-msgstr ""
+msgstr "после default ничего не должно быть"
 
 msgid "unknown mode — use key, repeat, toggle, latch, off or default"
-msgstr ""
+msgstr "неизвестный режим — используйте key, repeat, toggle, latch, off или default"
 
 msgid "off takes nothing after it"
-msgstr ""
+msgstr "после off ничего не должно быть"
 
 msgid "which key? for example: shift, 1, f5, space, mouse1"
-msgstr ""
+msgstr "какая клавиша? например: shift, 1, f5, space, mouse1"
 
 #, c-format
 msgid "'%.*s' is not a key name — `syn-mouse keys` lists them"
-msgstr ""
+msgstr "'%.*s' — не имя клавиши; их список выводит `syn-mouse keys`"
 
 msgid "every how many seconds?"
-msgstr ""
+msgstr "каждые сколько секунд?"
 
 msgid "not a number of seconds — for example 5, 0.5 or 250ms"
-msgstr ""
+msgstr "это не число секунд — например, 5, 0.5 или 250ms"
 
 msgid "unexpected words after the binding"
-msgstr ""
+msgstr "лишние слова после назначения"
 
 msgid "the interval has to be between 0.05 and 3600 seconds"
-msgstr ""
+msgstr "интервал должен быть от 0.05 до 3600 секунд"
 
 msgid "the left button can only be rebound in a profile for an app — in one that applies everywhere you could no longer click to undo it"
-msgstr ""
+msgstr "левую кнопку можно переназначить только в профиле для приложения — в профиле, который действует везде, вы уже не смогли бы щёлкнуть, чтобы это отменить"
 
 #, c-format
 msgid "%s:%d: a section needs a name in [brackets]"
-msgstr ""
+msgstr "%s:%d: у раздела должно быть имя в [скобках]"
 
 #, c-format
 msgid "%s:%d: expected name = value"
-msgstr ""
+msgstr "%s:%d: ожидалось имя = значение"
 
 #, c-format
 msgid "%s:%d: unknown setting '%s'"
-msgstr ""
+msgstr "%s:%d: неизвестный параметр '%s'"
 
 #, c-format
 msgid "%s:%d: '%s' is not a button name"
-msgstr ""
+msgstr "%s:%d: '%s' — не имя кнопки"
 
 #, c-format
 msgid "Pressing %s every %s s"
-msgstr ""
+msgstr "Нажимаю %s каждые %s с"
 
 #, c-format
 msgid "Stopped pressing %s"
-msgstr ""
+msgstr "Больше не нажимаю %s"
 
 #, c-format
 msgid "Holding %s down"
-msgstr ""
+msgstr "Удерживаю %s"
 
 #, c-format
 msgid "Let go of %s"
-msgstr ""
+msgstr "%s отпущена"
 
 msgid "Left button"
-msgstr ""
+msgstr "Левая кнопка"
 
 msgid "Right button"
-msgstr ""
+msgstr "Правая кнопка"
 
 msgid "Middle button (wheel click)"
-msgstr ""
+msgstr "Средняя кнопка (нажатие колеса)"
 
 msgid "Thumb button (back)"
-msgstr ""
+msgstr "Кнопка под большой палец (назад)"
 
 msgid "Thumb button (forward)"
-msgstr ""
+msgstr "Кнопка под большой палец (вперёд)"
 
 msgid "Button 6"
-msgstr ""
+msgstr "Кнопка 6"
 
 msgid "Button 7"
-msgstr ""
+msgstr "Кнопка 7"
 
 msgid "Button 8"
-msgstr ""
+msgstr "Кнопка 8"
 
 msgid "Wheel up"
-msgstr ""
+msgstr "Колесо вверх"
 
 msgid "Wheel down"
-msgstr ""
+msgstr "Колесо вниз"
 
 msgid "Wheel tilt left"
-msgstr ""
+msgstr "Наклон колеса влево"
 
 msgid "Wheel tilt right"
-msgstr ""
+msgstr "Наклон колеса вправо"
 
 #, c-format
 msgid "cannot read %s: %s"
-msgstr ""
+msgstr "не удаётся прочитать %s: %s"
 
 #, c-format
 msgid "cannot write %s: %s"
-msgstr ""
+msgstr "не удаётся записать %s: %s"
 
 msgid "saved, but the service is not running, so the mouse does not know yet — `syn-mouse enable` starts it"
-msgstr ""
+msgstr "сохранено, но служба не запущена, поэтому мышь пока об этом не знает — `syn-mouse enable` запускает её"
 
 msgid "a profile needs a name"
-msgstr ""
+msgstr "у профиля должно быть имя"
 
 msgid "that name is too long"
-msgstr ""
+msgstr "это имя слишком длинное"
 
 msgid "a profile name cannot contain brackets, tabs or line breaks"
-msgstr ""
+msgstr "имя профиля не может содержать скобки, табуляции или переводы строк"
 
 msgid "a profile name cannot start or end with a space"
-msgstr ""
+msgstr "имя профиля не может начинаться или заканчиваться пробелом"
 
 #, c-format
 msgid "no profile called '%s' — `syn-mouse profiles` lists them"
-msgstr ""
+msgstr "профиля с именем '%s' нет — их список выводит `syn-mouse profiles`"
 
 #, c-format
 msgid "unexpected '%s'"
-msgstr ""
+msgstr "неожиданно: '%s'"
 
 msgid "that app id or title is too long"
-msgstr ""
+msgstr "этот id приложения или заголовок слишком длинный"
 
 #, c-format
 msgid "[%s] now applies everywhere\n"
-msgstr ""
+msgstr "[%s] теперь действует везде\n"
 
 #, c-format
 msgid "added [%s], for everywhere\n"
-msgstr ""
+msgstr "добавлен [%s], для всех мест\n"
 
 #, c-format
 msgid "[%s] now applies to %s\n"
-msgstr ""
+msgstr "[%s] теперь действует для %s\n"
 
 #, c-format
 msgid "added [%s], for %s\n"
-msgstr ""
+msgstr "добавлен [%s], для %s\n"
 
 #, c-format
 msgid "removed [%s]\n"
-msgstr ""
+msgstr "[%s] удалён\n"
 
 #, c-format
 msgid "'%s' is not a button — `syn-mouse buttons` lists them"
-msgstr ""
+msgstr "'%s' — не кнопка; их список выводит `syn-mouse buttons`"
 
 #, c-format
 msgid "[%s] %s does what it always did\n"
-msgstr ""
+msgstr "[%s] %s делает то же, что и всегда\n"
 
 msgid "notify is on or off"
-msgstr ""
+msgstr "notify принимает on или off"
 
 msgid "No profiles yet. `syn-mouse add <name> --app <app id>` makes one."
-msgstr ""
+msgstr "Профилей пока нет. `syn-mouse add <name> --app <app id>` создаёт профиль."
 
 #, c-format
 msgid "[%s] — everywhere\n"
-msgstr ""
+msgstr "[%s] — везде\n"
 
 #, c-format
 msgid "[%s] — %s, titled %s\n"
-msgstr ""
+msgstr "[%s] — %s, с заголовком %s\n"
 
 #, c-format
 msgid "[%s] — %s\n"
-msgstr ""
+msgstr "[%s] — %s\n"
 
 msgid "(nothing bound)"
-msgstr ""
+msgstr "(ничего не назначено)"
 
 msgid "  — cannot be read"
-msgstr ""
+msgstr "  — не читается"
 
 msgid "No mouse found."
-msgstr ""
+msgstr "Мышь не найдена."
 
 msgid ""
 "This account cannot read the mouse. Add it to the input group, then log out and back in:\n"
 "  sudo usermod -aG input $USER"
-msgstr ""
+msgstr "Эта учётная запись не может читать мышь. Добавьте её в группу input, затем выйдите из сеанса и войдите снова:\n  sudo usermod -aG input $USER"
 
 msgid "Join keys with + (shift+1). code:N sends key code N."
-msgstr ""
+msgstr "Объединяйте клавиши через + (shift+1). code:N отправляет код клавиши N."
 
 msgid "cannot ask synui which windows are open — is this a synui session?"
-msgstr ""
+msgstr "не удаётся спросить у synui, какие окна открыты, — это сеанс synui?"
 
 msgid "syn-mouse is not running. `syn-mouse enable` starts it now and at every login."
-msgstr ""
+msgstr "syn-mouse не запущен. `syn-mouse enable` запускает его сейчас и при каждом входе."
 
 #, c-format
 msgid "syn-mouse is running (pid %s)\n"
-msgstr ""
+msgstr "syn-mouse работает (pid %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr ""
+msgstr "  фокус      %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr ""
+msgstr "  фокус      нет окна"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr ""
+msgstr "  действует  [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr ""
+msgstr "  действует  ничего — мышь работает как обычно"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr ""
+msgstr "  мышь       %s — перехвачена\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr ""
+msgstr "  мышь       %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr ""
+msgstr "  проблема   не удаётся создать устройства ввода — учётная запись должна входить в группу input"
 
 msgid "  problem    no mouse it can read"
-msgstr ""
+msgstr "  проблема   нет мыши, которую можно прочитать"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr ""
+msgstr "  работает   %s в [%s]: нажимает %s каждые %s с\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr ""
+msgstr "  на паузе   %s в [%s]: нажимает %s каждые %s с, как только [%s] снова начнёт действовать\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr ""
+msgstr "  работает   %s в [%s]: удерживает %s\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr ""
+msgstr "  на паузе   %s в [%s]: удерживает %s, как только [%s] снова начнёт действовать\n"
 
 msgid "  `syn-mouse stop` switches them all off."
-msgstr ""
+msgstr "  `syn-mouse stop` выключает их все."
 
 msgid "syn-mouse is not running, so nothing is on."
-msgstr ""
+msgstr "syn-mouse не запущен, поэтому ничего не включено."
 
 msgid "Everything toggled on is off."
-msgstr ""
+msgstr "Всё включённое выключено."
 
 msgid "systemctl did not do it — see the message above"
-msgstr ""
+msgstr "systemctl этого не сделал — см. сообщение выше"
 
 msgid "syn-mouse is on, now and at every login."
-msgstr ""
+msgstr "syn-mouse включён — сейчас и при каждом входе."
 
 msgid "syn-mouse is off, and stays off at login."
-msgstr ""
+msgstr "syn-mouse выключен и не запустится при входе."
 
 msgid "no display — syn-mouse gui needs a graphical session"
-msgstr ""
+msgstr "нет дисплея — syn-mouse gui нужен графический сеанс"
 
 msgid "quickshell is not installed — synpkg install quickshell"
-msgstr ""
+msgstr "quickshell не установлен — synpkg install quickshell"
 
 msgid "could not start quickshell"
-msgstr ""
+msgstr "не удалось запустить quickshell"
 
 msgid "`syn-mouse gui` opens the window; `syn-mouse --help` lists the commands."
-msgstr ""
+msgstr "`syn-mouse gui` открывает окно; `syn-mouse --help` выводит список команд."
 
 #, c-format
 msgid "unknown command '%s'"
-msgstr ""
+msgstr "неизвестная команда '%s'"
