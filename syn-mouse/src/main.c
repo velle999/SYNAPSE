@@ -308,7 +308,7 @@ static int cmd_devices(void)
 			if (mouse_probe(names[i], name, sizeof name, &inputs)) {
 				snprintf(node, sizeof node, "/dev/input/%s", names[i]);
 				size_t off = 0;
-				for (int in = 0; in < IN_COUNT; in++)
+				for (int in = 0; in < IN_KEY_FIRST; in++)
 					if (inputs & (1u << in))
 						off += (size_t)snprintf(btns + off, sizeof btns - off, "%s%s",
 						                        off ? "," : "", input_name(in));
@@ -337,12 +337,18 @@ static int cmd_devices(void)
 static int cmd_buttons(void)
 {
 	rec_header("kind\tname\tlabel");
-	for (int in = 0; in < IN_COUNT; in++) {
+	for (int in = 0; in < IN_KEY_FIRST; in++) {
 		char *la = pct_encode(input_label(in));
 		rec_row("button\t%s\t%s", input_name(in), la);
 		free(la);
 		if (g_out != OUT_REC) printf("  %-11s %s\n", input_name(in), _(input_label(in)));
 	}
+	/* key:<name> is not a row: there are 255 of them, and which ones this
+	 * mouse sends is a question for the running daemon (`sent` in status). */
+	if (g_out != OUT_REC)
+		printf("\n%s\n", _("A button the mouse's own memory maps to a key sends that key instead, "
+		                   "and is bound as key:<name> — key:2 for the key 2. "
+		                   "`syn-mouse status` lists the keys it has seen the mouse send."));
 	return 0;
 }
 
@@ -469,6 +475,8 @@ static int cmd_status(void)
 			char *nm = pct_decode(f[1]);
 			printf(!strcmp(f[3], "1") ? _("  mouse      %s — taken over\n") : _("  mouse      %s\n"), nm);
 			free(nm);
+		} else if (!strcmp(f[0], "sent") && n >= 2 && !strncmp(f[1], "key:", 4)) {
+			printf(_("  sends      %s — a button sends this key; bind it as %s\n"), f[1] + 4, f[1]);
 		} else if (!strcmp(f[0], "problem") && n >= 2) {
 			if (!strcmp(f[1], "uinput"))
 				printf("%s\n", _("  problem    cannot create input devices — this account needs to be in the input group"));

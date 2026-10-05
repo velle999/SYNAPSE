@@ -7,14 +7,14 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-mouse\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "%1 (taken over)"
 msgstr "%1 (sob controlo)"
@@ -36,6 +36,9 @@ msgstr "Pressão automática (alternar)"
 
 msgid "Back"
 msgstr "Voltar"
+
+msgid "Button missing? If the mouse's own memory makes it send a key, press it once and it appears here."
+msgstr "Falta um botão? Se a memória do próprio rato o faz enviar uma tecla, prima-o uma vez e ele aparece aqui."
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
 msgstr "Não é possível criar dispositivos de entrada. Esta conta tem de estar no grupo input: sudo usermod -aG input $USER, e depois termine a sessão e volte a entrar."
@@ -174,6 +177,9 @@ msgstr "Guardar para %1"
 
 msgid "Saved."
 msgstr "Guardado."
+
+msgid "Sends the key %1"
+msgstr "Envia a tecla %1"
 
 msgid "Show a notice when a toggle switches on or off"
 msgstr "Mostrar um aviso quando um modo alternado liga ou desliga"
@@ -398,6 +404,9 @@ msgid ""
 "  sudo usermod -aG input $USER"
 msgstr "Esta conta não consegue ler o rato. Adicione-a ao grupo input e depois termine a sessão e volte a entrar:\n  sudo usermod -aG input $USER"
 
+msgid "A button the mouse's own memory maps to a key sends that key instead, and is bound as key:<name> — key:2 for the key 2. `syn-mouse status` lists the keys it has seen the mouse send."
+msgstr "Um botão que a memória do próprio rato associa a uma tecla envia essa tecla em vez disso, e atribui-se como key:<name> — key:2 para a tecla 2. `syn-mouse status` mostra as teclas que já viu o rato enviar."
+
 msgid "Join keys with + (shift+1). code:N sends key code N."
 msgstr "Junte teclas com + (shift+1). code:N envia o código de tecla N."
 
@@ -432,6 +441,10 @@ msgstr "  rato      %s — sob controlo\n"
 #, c-format
 msgid "  mouse      %s\n"
 msgstr "  rato      %s\n"
+
+#, c-format
+msgid "  sends      %s — a button sends this key; bind it as %s\n"
+msgstr "  envia     %s — um botão envia esta tecla; atribua-o como %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
 msgstr "  problema  não é possível criar dispositivos de entrada — esta conta tem de estar no grupo input"

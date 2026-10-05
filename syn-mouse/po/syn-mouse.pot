@@ -42,6 +42,11 @@ msgid "Back"
 msgstr ""
 
 msgid ""
+"Button missing? If the mouse's own memory makes it send a key, press it once "
+"and it appears here."
+msgstr ""
+
+msgid ""
 "Cannot create input devices. This account needs to be in the input group: "
 "sudo usermod -aG input $USER, then log out and back in."
 msgstr ""
@@ -183,6 +188,9 @@ msgid "Save for %1"
 msgstr ""
 
 msgid "Saved."
+msgstr ""
+
+msgid "Sends the key %1"
 msgstr ""
 
 msgid "Show a notice when a toggle switches on or off"
@@ -416,6 +424,12 @@ msgid ""
 "  sudo usermod -aG input $USER"
 msgstr ""
 
+msgid ""
+"A button the mouse's own memory maps to a key sends that key instead, and is "
+"bound as key:<name> — key:2 for the key 2. `syn-mouse status` lists the keys "
+"it has seen the mouse send."
+msgstr ""
+
 msgid "Join keys with + (shift+1). code:N sends key code N."
 msgstr ""
 
@@ -451,6 +465,10 @@ msgstr ""
 
 #, c-format
 msgid "  mouse      %s\n"
+msgstr ""
+
+#, c-format
+msgid "  sends      %s — a button sends this key; bind it as %s\n"
 msgstr ""
 
 msgid ""

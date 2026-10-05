@@ -8,6 +8,7 @@
 #include "i18n.h"
 
 #include <linux/input-event-codes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -18,7 +19,7 @@ static const struct {
 	const char *name;
 	const char *label;
 	uint16_t    code;
-} g_inputs[IN_COUNT] = {
+} g_inputs[IN_KEY_FIRST] = {
 	[IN_LEFT]        = { "left",       N_("Left button"),            BTN_LEFT },
 	[IN_RIGHT]       = { "right",      N_("Right button"),           BTN_RIGHT },
 	[IN_MIDDLE]      = { "middle",     N_("Middle button (wheel click)"), BTN_MIDDLE },
@@ -33,14 +34,37 @@ static const struct {
 	[IN_WHEEL_RIGHT] = { "wheelright", N_("Wheel tilt right"),       0 },
 };
 
-const char *input_name(int in)  { return in >= 0 && in < IN_COUNT ? g_inputs[in].name : "?"; }
-const char *input_label(int in) { return in >= 0 && in < IN_COUNT ? g_inputs[in].label : "?"; }
-uint16_t input_code(int in)     { return in >= 0 && in < IN_COUNT ? g_inputs[in].code : 0; }
+static int one_key(const char *tok, size_t len, uint16_t *out);
+
+const char *input_name(int in)
+{
+	if (in >= 0 && in < IN_KEY_FIRST) return g_inputs[in].name;
+	if (!input_is_key(in)) return "?";
+	/* Built once per code and kept: callers hold on to the pointer. */
+	static char names[256][24];
+	uint16_t code = input_key(in);
+	if (!names[code][0]) {
+		const char *k = key_name(code);
+		if (k) snprintf(names[code], sizeof names[code], "key:%s", k);
+		else   snprintf(names[code], sizeof names[code], "key:code:%u", code);
+	}
+	return names[code];
+}
+
+const char *input_label(int in) { return in >= 0 && in < IN_KEY_FIRST ? g_inputs[in].label : NULL; }
+uint16_t input_code(int in)     { return in >= 0 && in < IN_KEY_FIRST ? g_inputs[in].code : 0; }
 
 int input_from_name(const char *s)
 {
-	for (int i = 0; i < IN_COUNT; i++)
+	for (int i = 0; i < IN_KEY_FIRST; i++)
 		if (!strcasecmp(s, g_inputs[i].name)) return i;
+	/* key:2, key:f13, key:code:30 — a key the mouse itself sends. Only the
+	 * keyboard half's codes: the mouse's own buttons already have names. */
+	if (!strncasecmp(s, "key:", 4)) {
+		uint16_t code;
+		if (one_key(s + 4, strlen(s + 4), &code) != 0) return -1;
+		return input_from_key(code);
+	}
 	/* The spellings people already know from other tools. */
 	if (!strcasecmp(s, "mouse4") || !strcasecmp(s, "side"))  return IN_BACK;
 	if (!strcasecmp(s, "mouse5") || !strcasecmp(s, "extra")) return IN_FORWARD;

@@ -26,20 +26,35 @@
  * buttons a few mice have, and they are button7 and button6 here. Naming the
  * thumb buttons after the kernel would have made the two everybody has the
  * two nobody recognises. */
+/*
+ * ⚠ AND A KEY THE MOUSE ITSELF SENDS IS AN INPUT TOO: `key:2`. A gaming
+ * mouse's onboard memory — what the vendor's app writes — can make a button
+ * send a keyboard key from the mouse's own keyboard interface instead of a
+ * button from its pointer one. That button is never BTN_SIDE again until the
+ * vendor's app says so, and on Linux there is no vendor's app; the key it sends
+ * is the only handle there is. IN_KEY_FIRST + code, for codes 1 to 255.
+ */
 enum {
 	IN_LEFT, IN_RIGHT, IN_MIDDLE, IN_BACK, IN_FORWARD,
 	IN_BUTTON6, IN_BUTTON7, IN_BUTTON8,
 	IN_WHEEL_UP, IN_WHEEL_DOWN, IN_WHEEL_LEFT, IN_WHEEL_RIGHT,
-	IN_COUNT
+	IN_KEY_FIRST,
+	IN_COUNT = IN_KEY_FIRST + 256
 };
 #define IN_FIRST_WHEEL IN_WHEEL_UP
 
-const char *input_name(int in);              /* "back" */
-const char *input_label(int in);             /* N_("Thumb button (back)") */
+const char *input_name(int in);              /* "back", "key:2" */
+const char *input_label(int in);             /* N_("Thumb button (back)"); NULL for a key */
 int  input_from_name(const char *s);         /* -1 if unknown */
 int  input_from_code(uint16_t btn);          /* BTN_* -> IN_*, or -1 */
-uint16_t input_code(int in);                 /* IN_* -> BTN_*, 0 for a wheel */
-static inline bool input_is_wheel(int in) { return in >= IN_FIRST_WHEEL; }
+uint16_t input_code(int in);                 /* IN_* -> BTN_*, 0 for a wheel or a key */
+static inline bool input_is_wheel(int in) { return in >= IN_FIRST_WHEEL && in < IN_KEY_FIRST; }
+static inline bool input_is_key(int in)   { return in > IN_KEY_FIRST && in < IN_COUNT; }
+/* KEY_* sent by the mouse -> its input, or -1 outside 1..255. */
+static inline int input_from_key(unsigned code)
+{ return code >= 1 && code <= 255 ? IN_KEY_FIRST + (int)code : -1; }
+static inline uint16_t input_key(int in)
+{ return input_is_key(in) ? (uint16_t)(in - IN_KEY_FIRST) : 0; }
 
 /* ── what comes out: keys and mouse buttons ─────────────────────────────── */
 

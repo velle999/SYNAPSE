@@ -43,6 +43,25 @@
  * nowhere. Twins and the keyboard are made the first time a grab is wanted and
  * the grab waits TWIN_SETTLE_MS; after that they live as long as their mouse.
  *
+ * ── The mouse's keyboard half ───────────────────────────────────────────────
+ *
+ * ⚠ A BUTTON CAN COME OUT OF THE MOUSE AS A KEY. What a vendor's app writes
+ * into a gaming mouse's onboard memory survives every reboot and every OS: a
+ * Razer Viper set up in Synapse sends its rear thumb button as the key `2`, from
+ * a keyboard interface of its own, and never as BTN_SIDE. So each mouse's
+ * COMPANIONS are found too — input devices on the same USB device with the same
+ * vendor and product — and a binding on `key:2` takes that key from them.
+ *
+ * ⛔ NEVER THE REAL KEYBOARD. Same USB device AND same vendor:product is what
+ * keeps a keyboard on a shared receiver out: a Logitech receiver's keyboard is
+ * a different product behind it. Those two alone are not enough, though: a
+ * KEYBOARD with a mouse interface of its own passes both against its own keys,
+ * so only a mouse that is its USB device's first interface, speaking the boot
+ * mouse protocol, has companions at all (first_boot_mouse()). And a companion
+ * is grabbed only while the profile in force binds a key it can send;
+ * otherwise it is only listened to, so the window can say which keys the
+ * mouse sends.
+ *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -76,7 +95,7 @@
 
 extern char **environ;
 
-#define MAX_MICE          8
+#define MAX_MICE          16   /* a gaming mouse can be three devices */
 #define FOCUS_POLL_MS     250
 #define FOCUS_RETRY_MS    2000
 #define FOCUS_TIMEOUT_MS  1000
@@ -102,7 +121,12 @@ typedef struct {
 	unsigned long keybits[NLONGS(KEY_CNT)];
 	unsigned long relbits[NLONGS(REL_CNT)];
 	unsigned long mscbits[NLONGS(MSC_CNT)];
+	unsigned long absbits[NLONGS(ABS_CNT)];
 	unsigned long propbits[NLONGS(INPUT_PROP_CNT)];
+	char     usb[PATH_MAX];  /* the USB device it lends a keyboard half from, "" if none */
+
+	bool     companion;      /* the keyboard half of a mouse, not a mouse */
+	int      owner;          /* a companion's mouse, by id */
 
 	int      twin;           /* uinput fd, or -1 */
 	int64_t  twin_ready;
@@ -118,6 +142,8 @@ typedef struct {
 	/* Who is holding each of BTN_LEFT..BTN_TASK down on the twin — the hand
 	 * through forwarding, the engine through a binding, or both. */
 	uint8_t  hold[8];
+	/* A companion's keys, the same way: 0 up, 1 forwarded, 2 the engine's. */
+	uint8_t  kroute[256];
 
 	struct input_event ob[128];
 	int      on;
@@ -163,6 +189,9 @@ typedef struct {
 	char     title[512];
 
 	int      profile;        /* in force, -1 none, -2 not yet decided */
+	unsigned long bound_keys[NLONGS(256)];  /* key:N bound in the profile in force */
+	uint16_t seen[32];       /* keys a companion has sent, in the order first seen */
+	int      nseen;
 	bool     rematch;        /* focus or config changed: decide the profile again */
 	bool     app_profiles;   /* the config has a profile for an app: ask about focus */
 	unsigned mice_gen;       /* bumped whenever a mouse is removed */
@@ -351,8 +380,24 @@ static int twin_create(daemon_t *d, mouse_t *m, int64_t now)
 	ioctl(fd, UI_SET_EVBIT, EV_KEY);
 	for (unsigned c = 0; c < KEY_CNT; c++)
 		if (bit(m->keybits, c)) ioctl(fd, UI_SET_KEYBIT, c);
-	/* …plus the five buttons a binding can send, whatever this mouse has. */
-	for (unsigned c = BTN_LEFT; c <= BTN_EXTRA; c++) ioctl(fd, UI_SET_KEYBIT, c);
+	/* …plus the five buttons a binding can send, whatever this mouse has. A
+	 * companion's bindings send theirs through its mouse's twin instead. */
+	if (!m->companion)
+		for (unsigned c = BTN_LEFT; c <= BTN_EXTRA; c++) ioctl(fd, UI_SET_KEYBIT, c);
+	/* A companion can carry a volume axis or the like; a twin without it
+	 * would drop those events while the companion is held. */
+	if (m->companion && bit(m->evbits, EV_ABS)) {
+		ioctl(fd, UI_SET_EVBIT, EV_ABS);
+		for (unsigned c = 0; c < ABS_CNT; c++) {
+			if (!bit(m->absbits, c)) continue;
+			struct uinput_abs_setup as;
+			memset(&as, 0, sizeof as);
+			as.code = (uint16_t)c;
+			if (ioctl(m->fd, EVIOCGABS(c), &as.absinfo) < 0) continue;
+			ioctl(fd, UI_SET_ABSBIT, c);
+			ioctl(fd, UI_ABS_SETUP, &as);
+		}
+	}
 	if (bit(m->evbits, EV_REL)) {
 		ioctl(fd, UI_SET_EVBIT, EV_REL);
 		for (unsigned c = 0; c < REL_CNT; c++)
@@ -391,6 +436,9 @@ static void io_emit(void *ctx, int dev, uint16_t code, int value)
 	daemon_t *d = ctx;
 	if (!code_is_button(code)) { keys_emit(d, code, value); return; }
 	mouse_t *m = mouse_by_id(d, dev);
+	/* A binding on a companion's key that sends a mouse button: that button
+	 * belongs on the mouse's twin, which has it. */
+	if (m && m->companion) m = mouse_by_id(d, m->owner);
 	if (!m || m->twin < 0) {
 		for (int i = 0; i < d->nmice && (!m || m->twin < 0); i++) m = &d->mice[i];
 	}
@@ -525,24 +573,60 @@ static mouse_t *mouse_new(daemon_t *d)
 	return m;
 }
 
-static void mouse_add(daemon_t *d, const char *ev)
+/* The USB device an input device hangs off: the nearest sysfs parent with an
+ * idVendor of its own. False for anything not on USB. */
+static bool usb_of(const char *ev, char *out, size_t n)
 {
-	char node[PATH_MAX], name[128];
-	snprintf(node, sizeof node, "/dev/input/%s", ev);
-	for (int i = 0; i < d->nmice; i++)
-		if (!strcmp(d->mice[i].node, node)) return;
-	if (!mouse_probe(ev, name, sizeof name, NULL)) return;
-	if (!wanted_by_filter(d, name)) return;
+	char path[PATH_MAX], real[PATH_MAX], probe[PATH_MAX + 16];
+	snprintf(path, sizeof path, "/sys/class/input/%s/device", ev);
+	if (!realpath(path, real)) return false;
+	for (;;) {
+		char *slash = strrchr(real, '/');
+		if (!slash || slash == real || !strcmp(real, "/sys/devices")) return false;
+		snprintf(probe, sizeof probe, "%s/idVendor", real);
+		if (access(probe, F_OK) == 0) {
+			snprintf(probe, sizeof probe, "%s/busnum", real);
+			if (access(probe, F_OK) == 0) { snprintf(out, n, "%s", real); return true; }
+		}
+		*slash = '\0';
+	}
+}
 
+/* ⛔ THE MOUSE MUST BE WHAT THE USB DEVICE IS. A keyboard that also has a mouse
+ * interface — an LCTECH board carries one on interface 3 — would otherwise
+ * lend its own keyboard as that "mouse's" keyboard half, and binding key:2
+ * would take the real 2 key. A Viper's mouse is interface 0 with
+ * bInterfaceProtocol 2 (boot mouse); a keyboard's extra mouse interface and a
+ * combo receiver's second interface are neither. */
+static bool first_boot_mouse(const char *ev)
+{
+	char path[PATH_MAX], real[PATH_MAX], probe[PATH_MAX + 32], buf[16];
+	snprintf(path, sizeof path, "/sys/class/input/%s/device", ev);
+	if (!realpath(path, real)) return false;
+	for (;;) {
+		snprintf(probe, sizeof probe, "%s/bInterfaceNumber", real);
+		if (read_line_file(probe, buf, sizeof buf)) {
+			if (strtoul(buf, NULL, 16) != 0) return false;
+			snprintf(probe, sizeof probe, "%s/bInterfaceProtocol", real);
+			return read_line_file(probe, buf, sizeof buf) && strtoul(buf, NULL, 16) == 2;
+		}
+		char *slash = strrchr(real, '/');
+		if (!slash || slash == real || !strcmp(real, "/sys/devices")) return false;
+		*slash = '\0';
+	}
+}
+
+static mouse_t *open_device(daemon_t *d, const char *node, const char *name)
+{
 	int fd = open(node, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
 	if (fd < 0) {
 		/* EACCES right after the node appears is udev not having set its
 		 * group yet; the IN_ATTRIB that follows brings this back. */
 		if (errno != EACCES) say("cannot open %s (%s): %s", node, name, strerror(errno));
-		return;
+		return NULL;
 	}
 	mouse_t *m = mouse_new(d);
-	if (!m) { close(fd); return; }
+	if (!m) { close(fd); return NULL; }
 	m->fd = fd;
 	snprintf(m->node, sizeof m->node, "%s", node);
 	snprintf(m->name, sizeof m->name, "%s", name);
@@ -551,12 +635,82 @@ static void mouse_add(daemon_t *d, const char *ev)
 	ioctl(fd, EVIOCGBIT(EV_KEY, sizeof m->keybits), m->keybits);
 	ioctl(fd, EVIOCGBIT(EV_REL, sizeof m->relbits), m->relbits);
 	ioctl(fd, EVIOCGBIT(EV_MSC, sizeof m->mscbits), m->mscbits);
+	ioctl(fd, EVIOCGBIT(EV_ABS, sizeof m->absbits), m->absbits);
 	ioctl(fd, EVIOCGPROP(sizeof m->propbits), m->propbits);
 	/* Stamps on the clock this process reads, so "before the grab" is a
 	 * comparison and not a guess. */
 	int clk = CLOCK_MONOTONIC;
 	ioctl(fd, EVIOCSCLOCKID, &clk);
+	return m;
+}
+
+static bool have_node(const daemon_t *d, const char *node)
+{
+	for (int i = 0; i < d->nmice; i++)
+		if (!strcmp(d->mice[i].node, node)) return true;
+	return false;
+}
+
+/* A mouse's keyboard half: on the same USB device, the same vendor and
+ * product, and able to send a key a binding can take. */
+static void companion_add(daemon_t *d, const char *ev)
+{
+	char node[PATH_MAX], path[PATH_MAX], real[PATH_MAX], usb[PATH_MAX], buf[32];
+	snprintf(node, sizeof node, "/dev/input/%s", ev);
+	if (have_node(d, node)) return;
+	snprintf(path, sizeof path, "/sys/class/input/%s", ev);
+	if (!realpath(path, real) || strstr(real, "/devices/virtual/")) return;
+	if (!usb_of(ev, usb, sizeof usb)) return;
+
+	unsigned vendor = 0, product = 0;
+	snprintf(path, sizeof path, "/sys/class/input/%s/device/id/vendor", ev);
+	if (read_line_file(path, buf, sizeof buf)) vendor = (unsigned)strtoul(buf, NULL, 16);
+	snprintf(path, sizeof path, "/sys/class/input/%s/device/id/product", ev);
+	if (read_line_file(path, buf, sizeof buf)) product = (unsigned)strtoul(buf, NULL, 16);
+
+	int owner = -1;
+	char oname[128] = "";
+	for (int i = 0; i < d->nmice; i++) {
+		const mouse_t *m = &d->mice[i];
+		if (m->companion || m->fake || strcmp(m->usb, usb)) continue;
+		if (m->iid.vendor != vendor || m->iid.product != product) continue;
+		owner = m->id;
+		snprintf(oname, sizeof oname, "%s", m->name);
+	}
+	if (owner < 0) return;
+
+	unsigned long key[NLONGS(KEY_CNT)];
+	snprintf(path, sizeof path, "/sys/class/input/%s/device/capabilities/key", ev);
+	read_caps(path, key, NLONGS(KEY_CNT));
+	bool any = false;
+	for (unsigned c = 1; c < 256 && !any; c++) any = bit(key, c);
+	if (!any) return;
+
+	char name[128];
+	snprintf(path, sizeof path, "/sys/class/input/%s/device/name", ev);
+	if (!read_line_file(path, name, sizeof name)) snprintf(name, sizeof name, "%s", ev);
+	mouse_t *m = open_device(d, node, name);
+	if (!m) return;
+	m->companion = true;
+	m->owner = owner;
+	snprintf(m->usb, sizeof m->usb, "%s", usb);
+	say("found the keyboard half of %s (%s)", oname, node);
+}
+
+/* True when a new MOUSE was added — its companions may already be there. */
+static bool mouse_add(daemon_t *d, const char *ev)
+{
+	char node[PATH_MAX], name[128];
+	snprintf(node, sizeof node, "/dev/input/%s", ev);
+	if (have_node(d, node)) return false;
+	if (!mouse_probe(ev, name, sizeof name, NULL)) { companion_add(d, ev); return false; }
+	if (!wanted_by_filter(d, name)) return false;
+
+	mouse_t *m = open_device(d, node, name);
+	if (!m) return false;
+	if (!first_boot_mouse(ev) || !usb_of(ev, m->usb, sizeof m->usb)) m->usb[0] = '\0';
 	say("found %s (%s)", name, node);
+	return true;
 }
 
 static void mouse_add_fake(daemon_t *d, const char *path)
@@ -574,6 +728,23 @@ static void mouse_add_fake(daemon_t *d, const char *path)
 	m->relbits[0] = 1UL << REL_X | 1UL << REL_Y | 1UL << REL_WHEEL | 1UL << REL_HWHEEL;
 }
 
+/* SYNMOUSE_INPUT_KEYS: the fake mouse's keyboard half, a second FIFO. */
+static void companion_add_fake(daemon_t *d, const char *path, int owner)
+{
+	int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+	if (fd < 0) { say("cannot open %s: %s", path, strerror(errno)); return; }
+	mouse_t *m = mouse_new(d);
+	if (!m) { close(fd); return; }
+	m->fd = fd;
+	m->fake = true;
+	m->companion = true;
+	m->owner = owner;
+	snprintf(m->node, sizeof m->node, "%s", path);
+	snprintf(m->name, sizeof m->name, "test mouse");
+	for (unsigned c = 1; c < 256; c++) m->keybits[c / LBITS] |= 1UL << (c % LBITS);
+	m->evbits[0] = 1UL << EV_KEY;
+}
+
 static void mouse_remove(daemon_t *d, int i, int64_t now)
 {
 	mouse_t *m = &d->mice[i];
@@ -586,19 +757,30 @@ static void mouse_remove(daemon_t *d, int i, int64_t now)
 	d->mice_gen++;
 }
 
+/* A companion whose mouse is gone goes too: unplugged, or filtered out. */
+static void drop_orphans(daemon_t *d, int64_t now);
+
 static void scan_all(daemon_t *d)
 {
 	const char *fake = getenv("SYNMOUSE_INPUT");
 	if (fake && *fake) {
-		if (!d->nmice) mouse_add_fake(d, fake);
+		if (!d->nmice) {
+			mouse_add_fake(d, fake);
+			const char *fk = getenv("SYNMOUSE_INPUT_KEYS");
+			if (fk && *fk && d->nmice) companion_add_fake(d, fk, d->mice[0].id);
+		}
 		return;
 	}
-	DIR *dir = opendir("/dev/input");
-	if (!dir) return;
-	struct dirent *de;
-	while ((de = readdir(dir)))
-		if (!strncmp(de->d_name, "event", 5)) mouse_add(d, de->d_name);
-	closedir(dir);
+	/* ⚠ TWO PASSES: a companion is only recognised once its mouse is known,
+	 * and readdir() order puts event23 before event5 as often as not. */
+	for (int pass = 0; pass < 2; pass++) {
+		DIR *dir = opendir("/dev/input");
+		if (!dir) return;
+		struct dirent *de;
+		while ((de = readdir(dir)))
+			if (!strncmp(de->d_name, "event", 5)) mouse_add(d, de->d_name);
+		closedir(dir);
+	}
 }
 
 /* ── grabbing ────────────────────────────────────────────────────────────── */
@@ -607,14 +789,57 @@ static bool buttons_down(mouse_t *m)
 {
 	if (m->fake) {
 		for (int i = 0; i < IN_FIRST_WHEEL; i++) if (m->route[i]) return true;
+		for (int c = 0; c < 256; c++) if (m->kroute[c]) return true;
 		return false;
 	}
 	unsigned long k[NLONGS(KEY_CNT)];
 	memset(k, 0, sizeof k);
 	if (ioctl(m->fd, EVIOCGKEY(sizeof k), k) < 0) return true;
+	/* A companion's keys count the same as a mouse's buttons: a grab taken
+	 * between a key's press and its release strands it just the same. */
+	if (m->companion) {
+		for (size_t i = 0; i < NLONGS(KEY_CNT); i++) if (k[i]) return true;
+		return false;
+	}
 	for (unsigned c = BTN_MISC; c < BTN_JOYSTICK; c++)
 		if (bit(k, c)) return true;
 	return false;
+}
+
+/* Is this device to be held while the profile in force is? A mouse, always;
+ * a companion only when the profile binds a key it can send. */
+static bool wants_grab(const daemon_t *d, const mouse_t *m)
+{
+	if (!m->companion) return true;
+	for (size_t i = 0; i < NLONGS(256); i++)
+		if (m->keybits[i] & d->bound_keys[i]) return true;
+	return false;
+}
+
+static void note_bound_keys(daemon_t *d)
+{
+	memset(d->bound_keys, 0, sizeof d->bound_keys);
+	if (d->profile < 0) return;
+	for (unsigned c = 1; c < 256; c++)
+		if (engine_bound(&d->eng, input_from_key(c)))
+			d->bound_keys[c / LBITS] |= 1UL << (c % LBITS);
+}
+
+/* Which keys the mouse sends, for the window: it lists a `key:` row for each,
+ * so a button set up in the vendor's app shows up the first time it is
+ * pressed. Said once per key in the journal, which is how the next person
+ * finds out where their thumb button went. */
+static void note_seen(daemon_t *d, uint16_t code)
+{
+	if (code < 1 || code > 255) return;
+	for (int i = 0; i < d->nseen; i++) if (d->seen[i] == code) return;
+	if (d->nseen == (int)(sizeof d->seen / sizeof d->seen[0])) {
+		memmove(d->seen, d->seen + 1, sizeof d->seen[0] * (size_t)(d->nseen - 1));
+		d->nseen--;
+	}
+	d->seen[d->nseen++] = code;
+	say("the mouse sent the key %s — bind it as %s", input_name(input_from_key(code)) + 4,
+	    input_name(input_from_key(code)));
 }
 
 static void try_grab(daemon_t *d, mouse_t *m, int64_t now)
@@ -636,6 +861,7 @@ static void try_grab(daemon_t *d, mouse_t *m, int64_t now)
 	m->stale_us = mono_us();
 	m->dropping = false;
 	memset(m->route, 0, sizeof m->route);
+	memset(m->kroute, 0, sizeof m->kroute);
 	if (d->fake_out) fprintf(d->fake_out, "grab %d 1\n", m->id);
 }
 
@@ -652,11 +878,14 @@ static void try_ungrab(daemon_t *d, mouse_t *m, int64_t now, bool force)
 	 * reading the real mouse again. */
 	for (int i = 0; i < 8; i++)
 		if (m->hold[i]) { m->hold[i] = 1; twin_button(d, m, (uint16_t)(BTN_LEFT + i), 0, 1); }
+	for (int c = 1; c < 256; c++)
+		if (m->kroute[c] == 1) twin_put(d, m, EV_KEY, (uint16_t)c, 0);
 	twin_syn(d, m);
 
 	if (!m->fake) ioctl(m->fd, EVIOCGRAB, 0);
 	m->grabbed = false;
 	memset(m->route, 0, sizeof m->route);
+	memset(m->kroute, 0, sizeof m->kroute);
 	memset(m->hold, 0, sizeof m->hold);
 	if (d->fake_out) fprintf(d->fake_out, "grab %d 0\n", m->id);
 }
@@ -700,6 +929,28 @@ static void button(daemon_t *d, mouse_t *m, const struct input_event *ev, int64_
 	/* value 2 is key repeat, which a mouse button does not do */
 }
 
+/* A key from a companion: a `key:` binding takes it, anything else goes on
+ * to the companion's twin exactly as it came. */
+static void key_event(daemon_t *d, mouse_t *m, const struct input_event *ev, int64_t now)
+{
+	if (ev->value == 1) note_seen(d, ev->code);
+	int in = input_from_key(ev->code);
+	/* value 2 is the kernel's autorepeat, which the compositor makes for
+	 * itself; forwarding it would only be thrown away there. */
+	if (in < 0) { if (ev->value != 2) twin_put(d, m, EV_KEY, ev->code, ev->value); return; }
+	uint8_t *r = &m->kroute[ev->code];
+	if (ev->value == 1) {
+		if (*r) return;
+		bool took = engine_button(&d->eng, m->id, in, true, now);
+		*r = took ? 2 : 1;
+		if (!took) twin_put(d, m, EV_KEY, ev->code, 1);
+	} else if (ev->value == 0) {
+		if (*r == 2) engine_button(&d->eng, m->id, in, false, now);
+		else if (*r == 1) twin_put(d, m, EV_KEY, ev->code, 0);
+		*r = 0;
+	}
+}
+
 /* After SYN_DROPPED: the queue lost events, so ask the kernel what is down
  * now and settle every difference through the ordinary path. */
 static void resync(daemon_t *d, mouse_t *m, int64_t now)
@@ -708,6 +959,16 @@ static void resync(daemon_t *d, mouse_t *m, int64_t now)
 	unsigned long k[NLONGS(KEY_CNT)];
 	memset(k, 0, sizeof k);
 	if (ioctl(m->fd, EVIOCGKEY(sizeof k), k) < 0) return;
+	if (m->companion) {
+		for (unsigned c = 1; c < 256; c++) {
+			bool down = bit(k, c);
+			if (down == (m->kroute[c] != 0)) continue;
+			struct input_event ev = { .type = EV_KEY, .code = (uint16_t)c, .value = down };
+			key_event(d, m, &ev, now);
+		}
+		twin_syn(d, m);
+		return;
+	}
 	for (int in = 0; in < IN_FIRST_WHEEL; in++) {
 		uint16_t code = input_code(in);
 		bool down = bit(k, code);
@@ -733,7 +994,12 @@ static void handle(daemon_t *d, mouse_t *m, const struct input_event *ev, int64_
 		if (ev->code == SYN_REPORT) twin_syn(d, m);
 		return;
 	}
-	if (ev->type == EV_KEY) { button(d, m, ev, now); return; }
+	if (ev->type == EV_KEY) {
+		if (m->companion) key_event(d, m, ev, now);
+		else button(d, m, ev, now);
+		return;
+	}
+	if (m->companion) { twin_put(d, m, ev->type, ev->code, ev->value); return; }
 	if (ev->type == EV_REL && (ev->code == REL_WHEEL || ev->code == REL_HWHEEL ||
 	                           ev->code == REL_WHEEL_HI_RES || ev->code == REL_HWHEEL_HI_RES)) {
 		if (ev->value) wheel(d, m, ev, now);
@@ -754,9 +1020,10 @@ static void fake_read(daemon_t *d, mouse_t *m, int64_t now)
 		while ((nl = strchr(line, '\n'))) {
 			*nl = '\0';
 			unsigned type, code; int value;
-			if (sscanf(line, "%u %u %d", &type, &code, &value) == 3 && m->grabbed) {
+			if (sscanf(line, "%u %u %d", &type, &code, &value) == 3) {
 				struct input_event ev = { .type = (uint16_t)type, .code = (uint16_t)code, .value = value };
-				handle(d, m, &ev, now);
+				if (m->grabbed) handle(d, m, &ev, now);
+				else if (m->companion && type == EV_KEY && value == 1) note_seen(d, (uint16_t)code);
 			}
 			line = nl + 1;
 		}
@@ -776,6 +1043,12 @@ static void mouse_read(daemon_t *d, mouse_t *m, int64_t now)
 		size_t cnt = (size_t)n / sizeof evs[0];
 		for (size_t i = 0; i < cnt; i++) {
 			const struct input_event *ev = &evs[i];
+			/* Not held: the compositor has it already. Only which key it was
+			 * is of interest here. */
+			if (!m->grabbed) {
+				if (ev->type == EV_KEY && ev->value == 1) note_seen(d, ev->code);
+				continue;
+			}
 			int64_t t = (int64_t)ev->input_event_sec * 1000000 + ev->input_event_usec;
 			/* Queued before the grab: the compositor already had it. */
 			if (t <= m->stale_us) continue;
@@ -880,11 +1153,16 @@ static void decide(daemon_t *d, int64_t now)
 		else if (d->profile >= 0) say("no profile in force");
 		engine_activate(&d->eng, prof, now);
 		d->profile = prof;
+		note_bound_keys(d);
 	}
 
 	if (prof >= 0) {
 		d->ungrab_at = 0;
-		for (int i = 0; i < d->nmice; i++) try_grab(d, &d->mice[i], now);
+		for (int i = 0; i < d->nmice; i++) {
+			mouse_t *m = &d->mice[i];
+			if (wants_grab(d, m)) try_grab(d, m, now);
+			else try_ungrab(d, m, now, false);
+		}
 		return;
 	}
 	/* ⚠ LET GO A LITTLE LATER THAN THE BINDINGS DO. The bindings stopped
@@ -973,11 +1251,23 @@ static void reload(daemon_t *d, int64_t now, bool force)
 	if (strcmp(old_device, d->cfg.device)) {
 		for (int i = d->nmice - 1; i >= 0; i--) {
 			mouse_t *m = &d->mice[i];
-			if (m->fake || wanted_by_filter(d, m->name)) continue;
+			if (m->fake || m->companion || wanted_by_filter(d, m->name)) continue;
 			try_ungrab(d, m, now, true);
 			mouse_remove(d, i, now);
 		}
+		drop_orphans(d, now);
 		scan_all(d);
+	}
+}
+
+static void drop_orphans(daemon_t *d, int64_t now)
+{
+	for (int i = 0; i < d->nmice; i++) {
+		mouse_t *m = &d->mice[i];
+		if (!m->companion || mouse_by_id(d, m->owner)) continue;
+		try_ungrab(d, m, now, true);
+		mouse_remove(d, i, now);
+		i = -1;   /* the array moved: from the top */
 	}
 }
 
@@ -994,13 +1284,18 @@ static void status(daemon_t *d, FILE *f)
 	a = pct_encode(d->profile >= 0 ? d->cfg.p[d->profile].name : "");
 	fprintf(f, "profile\t%s\n", a);
 	free(a);
+	int nreal = 0;
 	for (int i = 0; i < d->nmice; i++) {
 		a = pct_encode(d->mice[i].name); b = pct_encode(d->mice[i].node);
-		fprintf(f, "mouse\t%s\t%s\t%d\n", a, b, d->mice[i].grabbed ? 1 : 0);
+		fprintf(f, "%s\t%s\t%s\t%d\n", d->mice[i].companion ? "mousekeys" : "mouse",
+		        a, b, d->mice[i].grabbed ? 1 : 0);
 		free(a); free(b);
+		nreal += !d->mice[i].companion;
 	}
 	if (d->uinput_err[0]) fprintf(f, "problem\tuinput\t%s\n", d->uinput_err);
-	if (!d->nmice) fprintf(f, "problem\tnomouse\t\n");
+	if (!nreal) fprintf(f, "problem\tnomouse\t\n");
+	for (int i = 0; i < d->nseen; i++)
+		fprintf(f, "sent\t%s\n", input_name(input_from_key(d->seen[i])));
 	for (int p = 0; p < d->cfg.n; p++) {
 		for (int in = 0; in < IN_COUNT; in++) {
 			if (!engine_is_on(&d->eng, p, in)) continue;
@@ -1090,7 +1385,7 @@ static int control_listen(daemon_t *d)
 static void watch_read(daemon_t *d, int64_t now)
 {
 	char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-	bool cfg = false;
+	bool cfg = false, newmouse = false;
 	for (;;) {
 		ssize_t n = read(d->ino, buf, sizeof buf);
 		if (n <= 0) break;
@@ -1101,9 +1396,11 @@ static void watch_read(daemon_t *d, int64_t now)
 			if (ie->wd == d->wd_cfg && !strcmp(ie->name, "bindings.conf")) cfg = true;
 			if (ie->wd == d->wd_dev && !strncmp(ie->name, "event", 5) &&
 			    (ie->mask & (IN_CREATE | IN_ATTRIB)))
-				mouse_add(d, ie->name);
+				newmouse |= mouse_add(d, ie->name);
 		}
 	}
+	/* A mouse plugged in after its own keyboard half was seen: look again. */
+	if (newmouse) scan_all(d);
 	if (cfg) reload(d, now, false);
 }
 
@@ -1178,7 +1475,8 @@ int daemon_run(void)
 		if (d->ffd >= 0) timeout_min(&next, d->fsent + FOCUS_TIMEOUT_MS);
 		if (d->profile >= 0)
 			for (int i = 0; i < d->nmice; i++)
-				if (!d->mice[i].grabbed) timeout_min(&next, now + GRAB_RETRY_MS);
+				if (!d->mice[i].grabbed && wants_grab(d, &d->mice[i]))
+					timeout_min(&next, now + GRAB_RETRY_MS);
 
 		struct pollfd pf[8 + MAX_MICE];
 		int np = 0, at_sig, at_ino, at_ctl, at_focus = -1, at_mouse[MAX_MICE];
@@ -1188,11 +1486,14 @@ int daemon_run(void)
 		if (d->ffd >= 0) pf[at_focus = np++] = (struct pollfd){ .fd = d->ffd, .events = POLLIN };
 		/* ⚠ A MOUSE NOT GRABBED IS NOT READ. The compositor is reading it,
 		 * and waking 8000 times a second to throw its frames away would be
-		 * the whole cost of this program spent on doing nothing. */
+		 * the whole cost of this program spent on doing nothing. A
+		 * companion is the exception: it says something only when a button
+		 * mapped to a key is pressed, and which key that was is what the
+		 * window needs to offer it. */
 		int nm = d->nmice;
 		for (int i = 0; i < nm; i++) {
 			at_mouse[i] = -1;
-			if (d->mice[i].grabbed || d->mice[i].fake)
+			if (d->mice[i].grabbed || d->mice[i].fake || d->mice[i].companion)
 				pf[at_mouse[i] = np++] = (struct pollfd){ .fd = d->mice[i].fd, .events = POLLIN };
 		}
 
@@ -1221,6 +1522,7 @@ int daemon_run(void)
 			if (re & POLLIN) mouse_read(d, &d->mice[i], now);
 			if (re & (POLLERR | POLLHUP | POLLNVAL)) mouse_remove(d, i, now);
 		}
+		if (gen != d->mice_gen) drop_orphans(d, now);
 	}
 
 	say("stopping");

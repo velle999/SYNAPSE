@@ -43,11 +43,13 @@ trap cleanup EXIT
 export SYNMOUSE_HOME=$T/cfg
 export SYNMOUSE_SOCKET=$S/ctl.sock
 export SYNMOUSE_INPUT=$T/mouse.fifo
+# The mouse's keyboard half: what its own memory makes a button send as a key.
+export SYNMOUSE_INPUT_KEYS=$T/mousekeys.fifo
 export SYNMOUSE_OUTPUT=$T/out
 export SYNMOUSE_SYNUI_SOCKET=$S/synui.sock
 export SYNMOUSE_UINPUT=$T/no-such-uinput
 mkdir -p "$SYNMOUSE_HOME" "$T/bin"
-mkfifo "$SYNMOUSE_INPUT"
+mkfifo "$SYNMOUSE_INPUT" "$SYNMOUSE_INPUT_KEYS"
 : > "$SYNMOUSE_OUTPUT"
 
 # notify-send, faked: what the toast would have said.
@@ -96,6 +98,7 @@ count() { grep -cxF "$1" "$SYNMOUSE_OUTPUT"; }
 # ⚠ NEVER BLOCKS: a FIFO write with no reader waits forever, and a daemon
 # that died is exactly the case this suite exists to report.
 ev() { printf '%s\n' "$@" | timeout 2 tee "$SYNMOUSE_INPUT" >/dev/null || bad "write to the mouse FIFO (daemon gone?)"; }
+evk() { printf '%s\n' "$@" | timeout 2 tee "$SYNMOUSE_INPUT_KEYS" >/dev/null || bad "write to the keys FIFO (daemon gone?)"; }
 SYN="0 0 0"
 
 cat > "$SYNMOUSE_HOME/bindings.conf" <<'EOF'
@@ -252,6 +255,48 @@ sleep 0.9
 n2=$(count "key 2 1")
 [ "$n1" = "$n2" ] && grep -qF 'Stopped pressing 1' "$T/notified"
 chk "rebinding the toggle's own button switches it off, and says so ($n1 -> $n2)" $?
+
+# ── a button the mouse sends as a key ───────────────────────────────────────
+# The fake mouse is id 1 and its keyboard half id 2.
+! grep -q '^grab 2' "$SYNMOUSE_OUTPUT"
+chk "no key: binding: the mouse's keyboard half is never taken" $?
+evk "1 3 1" "$SYN" "1 3 0" "$SYN"
+for _ in $(seq 40); do "$BIN" --rec status | q -P '^sent\tkey:2$' && break; sleep 0.05; done
+"$BIN" --rec status | q -P '^sent\tkey:2$'
+chk "a key it sends is reported by the name it is bound with" $?
+! grep -q '^twin 2' "$SYNMOUSE_OUTPUT"
+chk "…and, not taken, the key reaches the desktop untouched" $?
+"$BIN" status | q 'sends  *2 .*key:2'
+chk "status says which key the mouse sent" $?
+
+"$BIN" bind Game key:2 key e >/dev/null
+wait_out "grab 2 1" 3
+chk "binding key:2 takes the keyboard half" $?
+[ "$(grep -c '^grab 1 0' "$SYNMOUSE_OUTPUT")" = 1 ]
+chk "…and the mouse stays taken" $?
+evk "1 3 1" "$SYN"
+wait_out "key 18 1" 2
+chk "the key 2 from the mouse presses e" $?
+! grep -q '^twin 2 1 3 ' "$SYNMOUSE_OUTPUT"
+chk "…and the 2 itself never reaches the twin" $?
+evk "1 3 0" "$SYN"
+wait_out "key 18 0" 2
+chk "…and lets go of e with it" $?
+evk "1 4 1" "$SYN" "1 4 0" "$SYN"
+wait_out "twin 2 1 4 0" 2
+chk "a key it sends that is not bound goes on as it came" $?
+
+evk "1 4 1" "$SYN"
+wait_out "twin 2 1 4 1" 2
+"$BIN" unbind Game key:2 >/dev/null
+sleep 0.4
+! grep -q '^grab 2 0' "$SYNMOUSE_OUTPUT"
+chk "key:2 unbound while 3 is held down: the keyboard half waits for it" $?
+evk "1 4 0" "$SYN"
+wait_out "grab 2 0" 3
+chk "…and is let go once it is up" $?
+[ "$(grep -c '^grab 1 0' "$SYNMOUSE_OUTPUT")" = 1 ]
+chk "…while the mouse itself stays taken" $?
 
 # ── shutdown ────────────────────────────────────────────────────────────────
 ev "1 276 1" "$SYN"

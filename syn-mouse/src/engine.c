@@ -278,6 +278,10 @@ int64_t engine_tick(engine_t *e, int64_t now)
 
 	for (int in = 0; in < IN_COUNT; in++) {
 		slot_t *s = slot(e, e->active, in);
+		/* Called on every frame of a grabbed mouse, over 268 inputs since keys
+		 * joined them: a slot with no tap down and no press due has nothing
+		 * here to do. */
+		if (!s->tap_down && !s->next_ms) continue;
 		const action_t *a = act(e, e->active, in);
 
 		if (s->tap_down && now >= s->up_ms) tap_end(e, s, a);

@@ -61,12 +61,20 @@ grep -qx 'middle = latch shift' "$F"
 chk "key names are written lower-case" $?
 grep -qx 'wheelup = key f' "$F"
 chk "code:33 is written as its name, f" $?
+"$BIN" bind "Diablo IV" key:2 toggle e every 5 >/dev/null 2>&1
+grep -qx 'key:2 = toggle e every 5' "$F"
+chk "a key the mouse itself sends is bound as key:2" $?
+"$BIN" bind "Diablo IV" key:code:30 key x >/dev/null 2>&1
+grep -qx 'key:a = key x' "$F"
+chk "key:code:30 is written as its name, key:a" $?
 
 out=$("$BIN" --rec profiles)
 printf '%s\n' "$out" | q -x 'profile	Diablo IV	steam_app_2344520		0'
 chk "the profile record: name, app, title, everywhere" $?
 printf '%s\n' "$out" | q -x 'bind	Diablo IV	forward	repeat	shift+2	250'
 chk "a bind record carries the interval in milliseconds" $?
+printf '%s\n' "$out" | q -x 'bind	Diablo IV	key:2	toggle	e	5000'
+chk "a key the mouse sends has a bind record under its key: name" $?
 
 "$BIN" bind "Diablo IV" left key 1 >/dev/null 2>&1
 chk "the left button can be rebound in a profile for an app" $?
@@ -87,6 +95,10 @@ chk "an unknown key name is refused" $?
 chk "…naming the word it did not know" $?
 refuses bind "Diablo IV" thumb key 1
 chk "an unknown button is refused" $?
+refuses bind "Diablo IV" key:mouse1 key 1
+chk "key:mouse1 is refused: the mouse's own buttons have names" $?
+refuses bind "Diablo IV" key:shift+2 key 1
+chk "key:shift+2 is refused: a button sends one key" $?
 refuses bind Nope back key 1
 chk "a profile that does not exist is refused" $?
 refuses add "Bad [name]"
@@ -106,6 +118,9 @@ chk "a refused bind leaves the file exactly as it was" $?
 "$BIN" unbind "Diablo IV" wheelup >/dev/null 2>&1
 ! grep -q '^wheelup' "$F"
 chk "unbind takes the line out" $?
+"$BIN" unbind "Diablo IV" key:code:30 >/dev/null 2>&1
+! grep -q '^key:a' "$F" && grep -qx 'key:2 = toggle e every 5' "$F"
+chk "unbind a key: input by either spelling, and only that one" $?
 "$BIN" set notify off >/dev/null 2>&1 && grep -qx 'notify = off' "$F"
 chk "set notify off" $?
 "$BIN" set device "Viper" >/dev/null 2>&1 && grep -qx 'device = Viper' "$F"

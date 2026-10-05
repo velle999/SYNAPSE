@@ -35,7 +35,7 @@ ShellRoot {
     property var apps: []              // [{app, title}]
     property var keyNames: ({})        // code -> canonical name
     property var st: ({ running: false, focusKind: 0, app: "", title: "",
-                        profile: "", mice: [], problems: [], active: [] })
+                        profile: "", mice: [], problems: [], active: [], sent: [] })
 
     // ── what the person is doing ────────────────────────────────────────────
     property string page: "bind"       // "bind" | "new"
@@ -133,7 +133,7 @@ ShellRoot {
         stdout: StdioCollector {
             onStreamFinished: {
                 const s = { running: false, focusKind: 0, app: "", title: "",
-                            profile: "", mice: [], problems: [], active: [] }
+                            profile: "", mice: [], problems: [], active: [], sent: [] }
                 for (const f of root.rows(text)) {
                     if (f[0] === "daemon") s.running = f[1] !== "0"
                     if (f[0] === "focus" && f.length >= 4) {
@@ -144,6 +144,8 @@ ShellRoot {
                     if (f[0] === "mouse" && f.length >= 4)
                         s.mice.push({ name: root.disp(f[1]), taken: f[3] === "1" })
                     if (f[0] === "problem") s.problems.push(f[1])
+                    // a key the mouse itself sent: a button its own memory maps to a key
+                    if (f[0] === "sent" && f.length >= 2) s.sent.push(f[1])
                     if (f[0] === "active" && f.length >= 7)
                         s.active.push({ profile: root.disp(f[1]), button: f[2], mode: f[3],
                                         keys: root.disp(f[4]), ms: parseInt(f[5]) || 0,
@@ -418,7 +420,21 @@ ShellRoot {
         if (!Object.keys(have).length)
             for (const i of ["left", "right", "middle", "back", "forward", "wheelup", "wheeldown"])
                 have[i] = true
-        return root.buttons.filter(b => have[b.name])
+        const shown = root.buttons.filter(b => have[b.name])
+        // ⚠ A BUTTON THE MOUSE SENDS AS A KEY is listed by that key, once the
+        // daemon has heard it or a binding already names it: which keys a
+        // mouse's onboard memory sends is not something any file says.
+        const keys = root.st.sent.slice()
+        const bound = root.binds[root.cur] || {}
+        for (const n of Object.keys(bound))
+            if (n.startsWith("key:") && keys.indexOf(n) < 0) keys.push(n)
+        for (const n of keys)
+            shown.push({ name: n, key: n.slice(4) })
+        return shown
+    }
+    function buttonLabel(b) {
+        // i18n-dynamic: the button labels are marked N_() in src/keys.c
+        return b.key ? I18n.tr("Sends the key %1").arg(b.key) : I18n.tr(b.label)
     }
 
     readonly property var curProfile: {
@@ -622,9 +638,8 @@ ShellRoot {
                     // ⛔ A BUTTON IS ITS OWN LABEL: it names the
                     // button it is about to change.
                     label: {
-                        for (const b of root.buttons)
-                            // i18n-dynamic: the labels are marked N_() in src/keys.c
-                            if (b.name === root.sel) return I18n.tr("Save for %1").arg(I18n.tr(b.label))
+                        for (const b of root.shownButtons)
+                            if (b.name === root.sel) return I18n.tr("Save for %1").arg(root.buttonLabel(b))
                         return I18n.tr("Save")
                     }
                     onPressed: root.save()
@@ -955,8 +970,7 @@ ShellRoot {
                             border { width: 1; color: root.sel === bRow.modelData.name ? root.cAccent : root.cWash }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                // i18n-dynamic: the labels are marked N_() in src/keys.c
-                                text: I18n.tr(bRow.modelData.label)
+                                text: root.buttonLabel(bRow.modelData)
                                 color: root.cText
                                 font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
                             }
@@ -983,6 +997,14 @@ ShellRoot {
                             sourceComponent: editorComp
                           }
                         }
+                    }
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: I18n.tr("Button missing? If the mouse's own memory makes it send a key, press it once and it appears here.")
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                 }

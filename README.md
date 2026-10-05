@@ -2035,6 +2035,17 @@ turns that off). The service runs per user and needs the account to be in the
 `input` group, which the installer does; `syn-mouse status` names anything
 missing.
 
+A button the mouse's own memory sets to send a key (programmed earlier in the
+vendor's app, for example) arrives as that key instead of as a button. Press it
+once with the window open and it is listed as **Sends the key 2**, or whichever
+key it is; on the command line it is `key:2`. `syn-mouse status` lists the keys
+the mouse has sent. Only the mouse's own keyboard interface is taken over, never
+a separate keyboard.
+
+```bash
+syn-mouse bind "Diablo IV" key:2 toggle 1 every 5   # the button that sends 2
+```
+
 **CachyOS Proton** comes with the installer's Steam option — `proton-cachyos-slr`,
 Valve's experimental branch plus the CachyOS patch set, built against the same
 Steam Linux Runtime as Valve's own Proton. It installs into

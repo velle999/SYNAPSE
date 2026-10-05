@@ -7,14 +7,14 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-mouse\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "%1 (taken over)"
 msgstr "%1 (नियंत्रण में)"
@@ -36,6 +36,9 @@ msgstr "ऑटो-प्रेस (टॉगल)"
 
 msgid "Back"
 msgstr "वापस"
+
+msgid "Button missing? If the mouse's own memory makes it send a key, press it once and it appears here."
+msgstr "बटन नहीं दिख रहा? अगर माउस की अपनी मेमोरी उससे कोई कुंजी भिजवाती है, तो उसे एक बार दबाएँ और वह यहाँ दिखेगा।"
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
 msgstr "इनपुट डिवाइस नहीं बनाए जा सकते। इस खाते को input समूह में होना चाहिए: sudo usermod -aG input $USER, फिर लॉग आउट करके दोबारा लॉग इन करें।"
@@ -174,6 +177,9 @@ msgstr "%1 के लिए सहेजें"
 
 msgid "Saved."
 msgstr "सहेजा गया।"
+
+msgid "Sends the key %1"
+msgstr "कुंजी %1 भेजता है"
 
 msgid "Show a notice when a toggle switches on or off"
 msgstr "टॉगल चालू या बंद होने पर सूचना दिखाएँ"
@@ -398,6 +404,9 @@ msgid ""
 "  sudo usermod -aG input $USER"
 msgstr "यह खाता माउस नहीं पढ़ सकता। इसे input समूह में जोड़ें, फिर लॉग आउट करके दोबारा लॉग इन करें:\n  sudo usermod -aG input $USER"
 
+msgid "A button the mouse's own memory maps to a key sends that key instead, and is bound as key:<name> — key:2 for the key 2. `syn-mouse status` lists the keys it has seen the mouse send."
+msgstr "जिस बटन को माउस की अपनी मेमोरी किसी कुंजी से जोड़ देती है, वह उसकी जगह वह कुंजी भेजता है, और key:<name> के रूप में बाँधा जाता है — कुंजी 2 के लिए key:2। `syn-mouse status` उन कुंजियों की सूची दिखाता है जो माउस ने भेजी हैं।"
+
 msgid "Join keys with + (shift+1). code:N sends key code N."
 msgstr "कुंजियाँ + से जोड़ें (shift+1)। code:N कुंजी कोड N भेजता है।"
 
@@ -413,47 +422,51 @@ msgstr "syn-mouse चल रहा है (pid %s)\n"
 
 #, c-format
 msgid "  focus      %s (%s)\n"
-msgstr "  फ़ोकस   %s (%s)\n"
+msgstr "  फ़ोकस    %s (%s)\n"
 
 msgid "  focus      no window"
-msgstr "  फ़ोकस   कोई विंडो नहीं"
+msgstr "  फ़ोकस    कोई विंडो नहीं"
 
 #, c-format
 msgid "  in force   [%s]\n"
-msgstr "  लागू    [%s]\n"
+msgstr "  लागू     [%s]\n"
 
 msgid "  in force   nothing — the mouse is as it always is"
-msgstr "  लागू    कुछ नहीं — माउस हमेशा की तरह है"
+msgstr "  लागू     कुछ नहीं — माउस हमेशा की तरह है"
 
 #, c-format
 msgid "  mouse      %s — taken over\n"
-msgstr "  माउस   %s — नियंत्रण में\n"
+msgstr "  माउस    %s — नियंत्रण में\n"
 
 #, c-format
 msgid "  mouse      %s\n"
-msgstr "  माउस   %s\n"
+msgstr "  माउस    %s\n"
+
+#, c-format
+msgid "  sends      %s — a button sends this key; bind it as %s\n"
+msgstr "  भेजता है  %s — एक बटन यह कुंजी भेजता है; इसे %s के रूप में बाँधें\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
-msgstr "  समस्या  इनपुट डिवाइस नहीं बन सकते — इस खाते को input समूह में होना चाहिए"
+msgstr "  समस्या   इनपुट डिवाइस नहीं बन सकते — इस खाते को input समूह में होना चाहिए"
 
 msgid "  problem    no mouse it can read"
-msgstr "  समस्या  पढ़ने लायक कोई माउस नहीं"
+msgstr "  समस्या   पढ़ने लायक कोई माउस नहीं"
 
 #, c-format
 msgid "  on         %s in [%s]: pressing %s every %s s\n"
-msgstr "  चालू    %s, [%s] में: %s हर %s सेकंड में\n"
+msgstr "  चालू     %s, [%s] में: %s हर %s सेकंड में\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: pressing %s every %s s, once [%s] is in force again\n"
-msgstr "  रुका    %s, [%s] में: %s हर %s सेकंड में — जब [%s] फिर लागू हो\n"
+msgstr "  रुका     %s, [%s] में: %s हर %s सेकंड में — जब [%s] फिर लागू हो\n"
 
 #, c-format
 msgid "  on         %s in [%s]: holding %s down\n"
-msgstr "  चालू    %s, [%s] में: %s दबाए हुए\n"
+msgstr "  चालू     %s, [%s] में: %s दबाए हुए\n"
 
 #, c-format
 msgid "  paused     %s in [%s]: holding %s down, once [%s] is in force again\n"
-msgstr "  रुका    %s, [%s] में: %s दबाए हुए — जब [%s] फिर लागू हो\n"
+msgstr "  रुका     %s, [%s] में: %s दबाए हुए — जब [%s] फिर लागू हो\n"
 
 msgid "  `syn-mouse stop` switches them all off."
 msgstr "  `syn-mouse stop` इन सबको बंद कर देता है।"

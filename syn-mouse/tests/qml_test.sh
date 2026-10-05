@@ -80,6 +80,10 @@ grep -q 'Save for %1' "$QML"
 chk "the save button names the button it changes" $?
 grep -q 'Stop everything that is on' "$QML"
 chk "the stop button says what it stops" $?
+# ⚠ A BUTTON THE MOUSE'S OWN MEMORY SENDS AS A KEY has no fixed name; it is
+# listed from the keys the daemon has heard, and saved as key:<name>.
+grep -q 'f\[0\] === "sent"' "$QML" && grep -q 'Sends the key %1' "$QML"
+chk "a key the mouse sends gets a row of its own, from status" $?
 
 # ⚠ An object property is REBUILT, never mutated in place: assigning into a
 # var object emits no change signal, so every binding keeps the old value.

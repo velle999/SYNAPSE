@@ -7,14 +7,14 @@ msgid ""
 msgstr ""
 "Project-Id-Version: syn-mouse\n"
 "Report-Msgid-Bugs-To: \n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "%1 (taken over)"
 msgstr "%1 (übernommen)"
@@ -36,6 +36,9 @@ msgstr "Auto-Drücken (Schalter)"
 
 msgid "Back"
 msgstr "Zurück"
+
+msgid "Button missing? If the mouse's own memory makes it send a key, press it once and it appears here."
+msgstr "Fehlt eine Maustaste? Wenn der Speicher der Maus sie eine Tastaturtaste senden lässt, drück sie einmal, dann erscheint sie hier."
 
 msgid "Cannot create input devices. This account needs to be in the input group: sudo usermod -aG input $USER, then log out and back in."
 msgstr "Eingabegeräte können nicht angelegt werden. Dieses Konto muss in der Gruppe input sein: sudo usermod -aG input $USER, dann ab- und wieder anmelden."
@@ -174,6 +177,9 @@ msgstr "Für %1 speichern"
 
 msgid "Saved."
 msgstr "Gespeichert."
+
+msgid "Sends the key %1"
+msgstr "Sendet die Taste %1"
 
 msgid "Show a notice when a toggle switches on or off"
 msgstr "Hinweis zeigen, wenn ein Schalter an- oder ausgeht"
@@ -398,6 +404,9 @@ msgid ""
 "  sudo usermod -aG input $USER"
 msgstr "Dieses Konto kann die Maus nicht lesen. Füge es der Gruppe input hinzu und melde dich dann ab und wieder an:\n  sudo usermod -aG input $USER"
 
+msgid "A button the mouse's own memory maps to a key sends that key instead, and is bound as key:<name> — key:2 for the key 2. `syn-mouse status` lists the keys it has seen the mouse send."
+msgstr "Eine Maustaste, die der Speicher der Maus selbst auf eine Taste legt, sendet stattdessen diese Taste und wird als key:<name> belegt — key:2 für die Taste 2. `syn-mouse status` listet die Tasten auf, die die Maus bisher gesendet hat."
+
 msgid "Join keys with + (shift+1). code:N sends key code N."
 msgstr "Tasten mit + verbinden (shift+1). code:N sendet den Tastencode N."
 
@@ -432,6 +441,10 @@ msgstr "  Maus      %s — übernommen\n"
 #, c-format
 msgid "  mouse      %s\n"
 msgstr "  Maus      %s\n"
+
+#, c-format
+msgid "  sends      %s — a button sends this key; bind it as %s\n"
+msgstr "  sendet    %s — eine Maustaste sendet diese Taste; binde sie als %s\n"
 
 msgid "  problem    cannot create input devices — this account needs to be in the input group"
 msgstr "  Problem   Eingabegeräte können nicht angelegt werden — dieses Konto muss in der Gruppe input sein"

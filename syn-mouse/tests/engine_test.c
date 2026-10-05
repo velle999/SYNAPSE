@@ -329,6 +329,42 @@ static void test_seconds(void)
 	seconds_format(50, buf, sizeof buf);   CHECK(!strcmp(buf, "0.05"), "50 -> '%s'", buf);
 }
 
+/* A button the mouse's own memory turned into a key: bound as key:<name>, and
+ * from there on exactly like a button. */
+static void test_key_inputs(void)
+{
+	int two = input_from_name("key:2");
+	CHECK(two == input_from_key(KEY_2) && input_is_key(two), "key:2 is the key 2: %d", two);
+	CHECK(input_from_name("KEY:2") == two, "the prefix is case-blind");
+	CHECK(input_from_name("key:code:30") == input_from_key(KEY_A), "key:code:30 is the key a");
+	CHECK(input_from_name("key:mouse1") < 0, "key:mouse1 is a button, not a key the mouse sends");
+	CHECK(input_from_name("key:") < 0, "key: with nothing after it");
+	CHECK(input_from_name("key:nosuch") < 0, "key:nosuch");
+	CHECK(input_from_name("key:shift+2") < 0, "one key, not a combination");
+	CHECK(input_from_name("key:code:300") < 0, "a code past 255");
+	CHECK(!strcmp(input_name(two), "key:2"), "written back as key:2: '%s'", input_name(two));
+	CHECK(!strcmp(input_name(input_from_key(KEY_F13)), "key:f13"), "key:f13");
+	CHECK(!strcmp(input_name(input_from_key(0xf8)), "key:code:248"), "a key with no name: '%s'",
+	      input_name(input_from_key(0xf8)));
+	CHECK(input_label(two) == NULL && input_code(two) == 0 && !input_is_wheel(two),
+	      "a key input has no fixed label, button code or wheel");
+	CHECK(input_from_key(0) < 0 && input_from_key(256) < 0, "only codes 1..255");
+
+	fresh("[G]\napp = game\nkey:2 = toggle e every 1\nkey:3 = key mouse4\n");
+	CHECK(g_cfg.p[0].act[two].kind == ACT_TOGGLE, "key:2 = toggle reads into the profile");
+	CHECK(engine_bound(&E, two), "and is bound");
+	CHECK(!engine_bound(&E, input_from_key(KEY_4)), "key:4 is not");
+	click(two, 0);
+	run_to(0, 1990);
+	CHECK(!strcmp(keys_only(), "+e -e +e -e "), "the key 2 toggles e at 0 and 1 s: '%s'", keys_only());
+	click(two, 2000);
+	reset_log();
+	CHECK(engine_button(&E, 2, input_from_key(KEY_3), true, 2100), "key:3 is taken");
+	engine_button(&E, 2, input_from_key(KEY_3), false, 2200);
+	CHECK(!strcmp(g_log, "+mouse4@2 -mouse4@2 "), "and sends the back button, from that device: '%s'", g_log);
+	CHECK(balanced(), "key inputs: balanced");
+}
+
 static void test_config(void)
 {
 	cfg_from("notify = off\n"
@@ -341,6 +377,7 @@ static void test_config(void)
 	         "forward = repeat 2 every 0.5\n"
 	         "bogus = key 1\n"
 	         "middle = key nosuchkey\n"
+	         "key:2 = key e\n"
 	         "\n"
 	         "[Everywhere]\n"
 	         "left = key 2\n"                     /* refused: no app */
@@ -352,6 +389,7 @@ static void test_config(void)
 	CHECK(d && d->act[IN_LEFT].kind == ACT_KEY, "left before app= is kept in an app profile");
 	CHECK(d && d->act[IN_BACK].kind == ACT_TOGGLE && d->act[IN_BACK].interval_ms == 5000, "toggle every 5");
 	CHECK(d && d->act[IN_MIDDLE].kind == ACT_NONE, "a bad key name is skipped, not guessed");
+	CHECK(d && d->act[input_from_key(KEY_2)].kind == ACT_KEY, "a key the mouse sends, bound");
 	profile_t *e = config_find(&g_cfg, "Everywhere");
 	CHECK(e && e->act[IN_LEFT].kind == ACT_NONE, "left is refused in a profile for everywhere");
 	CHECK(e && e->act[IN_RIGHT].kind == ACT_LATCH, "right is fine there");
@@ -443,6 +481,7 @@ int main(void)
 	test_reactivate_other_profile();
 	test_combo();
 	test_seconds();
+	test_key_inputs();
 	test_config();
 	test_refusals();
 	test_json();

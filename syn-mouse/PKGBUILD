@@ -40,7 +40,21 @@ pkgver=0.1.0
 #
 # ⚠ THE `status` LABELS ARE PADDED PER LANGUAGE, by display width — a CJK
 # character is two columns — so each language's lines align with each other.
-pkgrel=2
+#
+# ── 0.1.0-3: buttons the mouse sends as keys ─────────────────────────────────
+#
+# A mouse whose onboard memory was programmed in the vendor's app can send a
+# KEY for a button: the Viper V3 Pro's thumb button arrives as the key 2 from
+# the mouse's own keyboard interface, not as BTN_SIDE, so binding `back` did
+# nothing. Such a button is bound by its key — `key:2`, `key:f13`,
+# `key:code:N` — and the window lists it the first time the mouse sends it.
+#
+# ⛔ ONLY THE MOUSE'S OWN KEYBOARD INTERFACES. A keyboard device counts as the
+# mouse's keyboard half only when it hangs off the same USB device AND has the
+# same vendor:product as a mouse in use, so a keyboard sharing a receiver is
+# never taken; and it is grabbed only while the profile in force binds a key
+# it can send.
+pkgrel=3
 pkgdesc="Rebind mouse buttons per game without the vendor's app — keys, repeat, and auto-press toggles"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
