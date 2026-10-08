@@ -1998,6 +1998,19 @@ test('weather_surfaces', weather_surfaces_t,
      depends : [synui_exe, synctl_exe],
      timeout : 180)
 
+# `weather_location`: the place is a file written at RUNTIME (the city picker,
+# omarchy-weather-location), and weather.c is the only fetcher every surface
+# shows. Read once at startup, a new city waited for the next login. Pins that a
+# rewrite is picked up by the next refresh, that the old city's reading goes
+# with it, and that a cached reading for another place is refused at startup.
+# Never touches the network: every proxy variable points at a closed port.
+weather_location_t = find_program('tests/weather_location.sh')
+test('weather_location', weather_location_t,
+     args    : [synui_exe.full_path(), synctl_exe.full_path(),
+                meson.current_source_dir() / 'systemd/omarchy-weather-location.sh'],
+     depends : [synui_exe, synctl_exe],
+     timeout : 60)
+
 # The accessibility control: ONE setting that makes the whole desktop bigger —
 # the compositor's panels, every application and the cursor together. Two
 # headless outputs, because "every screen" and "the focused screen" are

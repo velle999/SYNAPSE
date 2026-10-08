@@ -56,6 +56,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -111,6 +112,14 @@ static struct {
     int     have_coords;
     int     unit_f;              /* resolved from cfg->weather_unit */
 
+    /* Which version of the location file the place came from. `loc_gen`
+     * counts re-reads, and every answer is stamped with the one it was asked
+     * for (`got_gen`), so an answer for a place that has since been replaced
+     * can be recognised and dropped. */
+    ino_t           loc_ino;     /* 0: there was no file */
+    struct timespec loc_mtim;
+    unsigned        loc_gen;
+
     /* The reading. `when` is 0 until there has ever been one. */
     double  temp;
     int     code;                /* WMO weather code */
@@ -122,6 +131,7 @@ static struct {
     int     got_code;
     char    got_place[64];
     int     got_ok;
+    unsigned got_gen;
 } wx;
 
 /* ── The location file ───────────────────────────────────── */
@@ -213,11 +223,42 @@ static bool json_string(const char *doc, const char *key, char *out, size_t n)
     return o > 0;
 }
 
+/* The location file's identity on disk: inode and mtime, both zero when there
+ * is no file. omarchy-weather-location writes it temp+rename, so every --set is
+ * a new inode even inside one second; the mtime is what catches a hand edit
+ * made in place. */
+static void wx_loc_stamp(ino_t *ino, struct timespec *mtim)
+{
+    char path[512];
+    struct stat st;
+    *ino = 0;
+    mtim->tv_sec = mtim->tv_nsec = 0;
+    if (!wx_loc_path(path, sizeof(path)) || stat(path, &st) != 0) return;
+    *ino  = st.st_ino;
+    *mtim = st.st_mtim;
+}
+
+/* Has the file been rewritten (or created, or removed) since it was read? */
+static bool wx_loc_changed(void)
+{
+    ino_t ino;
+    struct timespec mtim;
+    wx_loc_stamp(&ino, &mtim);
+    return ino != wx.loc_ino ||
+           mtim.tv_sec != wx.loc_mtim.tv_sec ||
+           mtim.tv_nsec != wx.loc_mtim.tv_nsec;
+}
+
+/* Called before the thread exists, or with the lock held. */
 static void wx_read_location(void)
 {
     char path[512];
     wx.place[0]     = '\0';
     wx.have_coords  = 0;
+    wx.loc_gen++;
+    /* Stamped BEFORE the read: a write landing between the two then reads as
+     * a change on the next refresh, where stamping after would miss it. */
+    wx_loc_stamp(&wx.loc_ino, &wx.loc_mtim);
 
     if (!wx_loc_path(path, sizeof(path))) return;
     FILE *f = fopen(path, "re");
@@ -354,6 +395,14 @@ static void wx_cache_load(void)
 
     if (code < 0 || when <= 0) return;
 
+    /* ⚠ A READING FOR ANOTHER PLACE IS NOT A READING EITHER. A location set
+     * since the last session would otherwise open on the old city's
+     * temperature under the new city's name — and, being fresh, hold it there
+     * for a whole refresh interval, because a fresh reading is not re-asked.
+     * Case-blind, because a name-only location is stored as typed ("oslo") and
+     * cached as the geocoder spells it ("Oslo"). */
+    if (wx.place[0] && place[0] && strcasecmp(wx.place, place) != 0) return;
+
     /* ⚠ A CACHE WRITTEN IN THE OTHER UNIT IS NOT A READING. Someone who
      * switched to Fahrenheit would otherwise see 12°F on the next lock screen
      * and a plausible-looking wrong number is worse than a blank one. Converted
@@ -477,7 +526,9 @@ static bool wx_geocode(CURL *curl, const char *name, double *lat, double *lon,
 /* One full attempt: resolve a place if needed, then read the current
  * conditions. Runs on the thread; touches only `wx.got_*` (under the lock) and
  * the location fields it resolved. */
-static bool wx_fetch(CURL *curl)
+/* `*gen` is set to the location generation this fetch was for, whatever the
+ * outcome, so the caller can stamp the answer with it. */
+static bool wx_fetch(CURL *curl, unsigned *gen)
 {
     char place[64];
     double lat, lon;
@@ -488,6 +539,7 @@ static bool wx_fetch(CURL *curl)
     lat  = wx.lat;
     lon  = wx.lon;
     have = wx.have_coords;
+    *gen = wx.loc_gen;
     pthread_mutex_unlock(&wx.lock);
 
     /* Nothing configured at all: ask where this machine is, the same way, from
@@ -515,12 +567,18 @@ static bool wx_fetch(CURL *curl)
 
         /* Kept, so the next refresh is one request instead of three. Not
          * written back to the location file — that file is the user's, and
-         * this process is a reader of it. */
+         * this process is a reader of it.
+         *
+         * Only if the file has not been re-read meanwhile: these are the old
+         * place's coordinates, and storing them over the new place's would
+         * make every later refresh ask about the old city. */
         pthread_mutex_lock(&wx.lock);
-        wx.lat = lat;
-        wx.lon = lon;
-        wx.have_coords = 1;
-        if (!wx.place[0]) snprintf(wx.place, sizeof(wx.place), "%s", place);
+        if (wx.loc_gen == *gen) {
+            wx.lat = lat;
+            wx.lon = lon;
+            wx.have_coords = 1;
+            if (!wx.place[0]) snprintf(wx.place, sizeof(wx.place), "%s", place);
+        }
         pthread_mutex_unlock(&wx.lock);
     }
 
@@ -573,14 +631,14 @@ static void *wx_thread_fn(void *data)
         if (atomic_load(&wx.stop)) break;
         atomic_store(&wx.want, 0);
 
-        bool ok = wx_fetch(curl);
+        unsigned gen = 0;
+        bool ok = wx_fetch(curl, &gen);
         if (atomic_load(&wx.stop)) break;
 
-        if (!ok) {
-            pthread_mutex_lock(&wx.lock);
-            wx.got_ok = 0;
-            pthread_mutex_unlock(&wx.lock);
-        }
+        pthread_mutex_lock(&wx.lock);
+        if (!ok) wx.got_ok = 0;
+        wx.got_gen = gen;
+        pthread_mutex_unlock(&wx.lock);
 
         char byte = 1;
         if (write(wx.pipe[1], &byte, 1) < 0 && errno != EAGAIN)
@@ -602,6 +660,17 @@ static int wx_readable(int fd, uint32_t mask, void *data)
     while (read(fd, drain, sizeof(drain)) > 0) { }
 
     pthread_mutex_lock(&wx.lock);
+    /* ⚠ AN ANSWER FOR A PLACE THAT HAS SINCE BEEN REPLACED is dropped without a
+     * word — neither a reading nor a failure. Taken, it would put the old
+     * place's name back over the new one, and with no coordinates in the file
+     * that name is what the next fetch geocodes, so the old city would come
+     * straight back. The refresh that re-read the file has already asked for
+     * the new one. */
+    if (wx.got_gen != wx.loc_gen) {
+        wx.got_ok = 0;
+        pthread_mutex_unlock(&wx.lock);
+        return 0;
+    }
     int ok = wx.got_ok;
     if (ok) {
         wx.temp = wx.got_temp;
@@ -630,9 +699,26 @@ void weather_refresh(syn_server_t *s, bool force)
     if (!wx.running) return;
     if (!s->config.weather) return;
 
+    /* ⚠ THE LOCATION FILE IS RE-READ HERE TOO, when it has changed. It is
+     * written at runtime — `omarchy-weather-location --set`, or the radar
+     * plugin's city picker — and read once at startup it would leave this
+     * session asking about the old city until the next login, with the bar
+     * (which only shows what is fetched here) saying so the whole time. A
+     * stat per refresh is three an hour, plus one per click on the bar. A new
+     * place is always fetched straight away, however fresh the old reading. */
+    bool moved = wx_loc_changed();
+    if (moved) force = true;
+
     if (!force && wx.when && time(NULL) - wx.when < WX_REFRESH_SEC) return;
 
     pthread_mutex_lock(&wx.lock);
+    if (moved) {
+        wx_read_location();
+        /* The reading in hand is the old place's. Kept, it would be drawn
+         * under the new name until the fetch lands — or for as long as the
+         * network is down. */
+        wx.when = 0;
+    }
     /* ⚠ THE UNIT IS RE-READ HERE, not only at init. The Super+Z row writes
      * cfg->weather_unit_f and asks for a refresh; without this the request
      * would go out asking for the unit that was configured at STARTUP, and

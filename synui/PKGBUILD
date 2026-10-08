@@ -3792,7 +3792,20 @@ pkgver=0.1.0
 #   weather_surfaces also waits for the bar module, not just the card: the
 #   module lags the card, and the test failed 4 of 4 standalone runs on 629.
 #   It passes 5 of 5 here.
-pkgrel=630
+# 631: A WEATHER LOCATION SET AT RUNTIME TAKES EFFECT. weather.c read
+#   ~/.local/state/omarchy/settings/weather.json once, at startup, and it is the
+#   only fetcher the bar, the desktop card and the lock screen show — so
+#   `omarchy-weather-location --set`, or the radar plugin's city picker, changed
+#   nothing until the next login. Each refresh now stats the file and re-reads
+#   it when its inode or mtime has moved, fetching the new place at once. An
+#   answer still in flight for the old place is dropped, so it cannot put the
+#   old city's name back — and with a name-only file, that name is what the
+#   next fetch would have geocoded. At startup a cached reading for a different
+#   place is refused instead of being drawn under the new place's name, where
+#   its freshness held it for a full refresh interval.
+#   tests/weather_location.sh runs against a dead proxy: phases 1 and 4 are red
+#   on 630.
+pkgrel=631
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
