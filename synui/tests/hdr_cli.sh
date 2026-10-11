@@ -51,7 +51,10 @@ LOG="$TMP/synui.log"
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
 export SYNUI_OUTPUTS="$TMP/outputs.conf"
-printf 'animation_ms = 0\n' > "$SYNUI_CONFIG"
+# welcome_at_startup OFF: a scratch HOME is a first run, so synui would start the
+# welcome guide, a quickshell. This rig stops synui before that quickshell has
+# connected, and Qt aborts it with a core dump (two per guide).
+printf 'animation_ms = 0\nwelcome_at_startup = off\n' > "$SYNUI_CONFIG"
 
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
 export WLR_HEADLESS_OUTPUTS=1

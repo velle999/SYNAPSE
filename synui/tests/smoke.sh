@@ -52,7 +52,11 @@ command -v wayland-info >/dev/null || fail "wayland-info not installed (wayland-
 TMP=$(mktemp -d /tmp/synui-smoke.XXXXXX) || exit 1
 chmod 700 "$TMP"
 LOG="$TMP/synui.log"
-: > "$TMP/synuirc"
+# welcome_at_startup OFF: a scratch HOME is a first run, so synui would start the
+# welcome guide, a quickshell. Several phases stop synui before that quickshell has
+# connected, and Qt aborts it with a core dump (two per guide).
+# Every rc below carries the key, since each one is in force at a startup.
+printf 'welcome_at_startup = off\n' > "$TMP/synuirc"
 
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
@@ -204,6 +208,7 @@ fi
 
 # ── 5. Live config reload (SIGHUP) ─────────────────────────
 cat > "$TMP/synuirc" <<'EOF'
+welcome_at_startup = off
 gap = 20
 border_width = 4
 bind = super+shift+r spawn true
@@ -310,6 +315,7 @@ echo "ok 8 - dual-head boot: one desktop spanning both outputs"
 unset WAYLAND_DISPLAY
 LOG="$TMP/synui3.log"
 cat > "$TMP/synuirc" <<'EOF'
+welcome_at_startup = off
 autostart = sleep 120
 EOF
 "$SYNUI" >"$LOG" 2>&1 &
@@ -363,7 +369,7 @@ echo "ok 9 - spawned children get a clean signal slate and die on SIGTERM"
 # a menu item that just does nothing. So drive the real thing.
 unset WAYLAND_DISPLAY
 LOG="$TMP/synui4.log"
-: > "$TMP/synuirc"
+printf 'welcome_at_startup = off\n' > "$TMP/synuirc"
 "$SYNUI" >"$LOG" 2>&1 &
 SYNUI_PID=$!
 

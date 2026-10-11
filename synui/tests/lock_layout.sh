@@ -72,7 +72,11 @@ unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY SYNUI_SOCKET
 
 start_synui() {
     printf '%s\n' "$1" > "$SYNUI_CONFIG"
-    printf 'autostart =\ndock_enabled = off\ndesktop_icons = off\n' >> "$SYNUI_CONFIG"
+    # welcome_at_startup off: a scratch HOME is a first run, and the guide's
+    # quickshell is still connecting when stop_synui ends the compositor, so Qt
+    # aborts it with a core dump (two per guide, four per run).
+    printf 'autostart =\ndock_enabled = off\ndesktop_icons = off\nwelcome_at_startup = off\n' \
+        >> "$SYNUI_CONFIG"
     : > "$SYNUI_WINDOWS"
     "$SYNUI" -d >"$LOG" 2>&1 &
     SYNUI_PID=$!
