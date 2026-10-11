@@ -1510,6 +1510,44 @@ check_locale() {
         ok locale "$(ls */tests/*.sh tests/*.sh tools/*.sh */PKGBUILD 2>/dev/null | wc -l) file(s) — none reads a translated field name or month"
 }
 
+# A backtick inside an UNQUOTED heredoc is a command substitution, and help
+# text quotes commands in backticks. synui-widgets' --help ran `synctl weather
+# on` and `omarchy-weather-location --set "Oslo"` (and so did every typo, which
+# prints the same usage); syn-update's ran `pacman -Sy` and `pacman -R`. Each
+# heredoc was unquoted on purpose, to expand one variable, so the fix is to
+# escape the backtick (\`) — and a substitution that is meant uses $(…).
+check_heredoc() {
+    local files hits
+    files=$( { git ls-files '*.sh' '*.bash' '*PKGBUILD' '*.install'
+               git grep -lE '^#!.*[/ ](ba)?sh\b' -- ':!:*.*'; } 2>/dev/null | sort -u)
+    # Comment lines and $(( … )) are skipped before an opener is looked for:
+    # `a << b` in arithmetic is a shift, and `#… cat <<EOF` documents one.
+    # [^<] keeps a here-string (<<<) from reading as a heredoc.
+    hits=$(printf '%s\n' "$files" | xargs -r -d '\n' gawk '
+        FNR == 1 { inhd = 0 }
+        inhd {
+            line = $0; if (strip) sub(/^\t+/, "", line)
+            if (line == delim) { inhd = 0; next }
+            t = $0; gsub(/\\`/, "", t)
+            if (t ~ /`/) printf " %s:%d", FILENAME, FNR
+            next
+        }
+        /^[[:space:]]*#/ || /\(\(/ { next }
+        match($0, /(^|[^<])<<-?[A-Za-z_][A-Za-z_0-9]*/) {
+            op = substr($0, RSTART, RLENGTH); sub(/^[^<]/, "", op)
+            strip = (op ~ /^<<-/); delim = op; sub(/^<<-?/, "", delim); inhd = 1
+        }')
+
+    if [ -n "$hits" ]; then
+        fail heredoc "a backtick inside an unquoted heredoc runs as a command:$hits" \
+            "Printing that text executes whatever the backticks quote." \
+            "Fix: escape it (\\\`), or quote the delimiter (<<'EOF') if nothing" \
+            "in the heredoc needs to expand. A substitution that is meant uses \$(…)."
+        return
+    fi
+    ok heredoc "$(printf '%s\n' "$files" | grep -c .) shell file(s) — no backtick runs from inside a heredoc"
+}
+
 check_external_membership() {
     local bad=$FINDINGS ext notext name c
 
@@ -1646,6 +1684,7 @@ check_tarball
 check_external_membership
 check_external
 check_locale
+check_heredoc
 check_memory_index
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \
