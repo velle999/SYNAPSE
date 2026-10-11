@@ -2219,6 +2219,9 @@ cmd_ping_status() {
 }
 
 usage() {
+    # UNQUOTED so that $VERSION expands, which makes every backtick below a
+    # command substitution: escape them (\`), or printing the help runs what
+    # it quotes. It ran `pacman -Sy` and `pacman -R` until 66.
     cat <<HELP
 syn-update $VERSION — update an installed SynapseOS from git
 
@@ -2282,8 +2285,8 @@ Environment:
                             (default: /etc/synapseos/components.conf)
   SYN_UPDATE_DB_FRESH_SECS  How recently pacman's databases must have been synced
                             for apply to skip refreshing them (default: 600).
-                            Past that it runs `pacman -Sy`, which downloads only
-                            what changed; the expensive `-Syy` is kept for the
+                            Past that it runs \`pacman -Sy\`, which downloads only
+                            what changed; the expensive \`-Syy\` is kept for the
                             one case -Sy cannot fix — a cached signature older
                             than the database it signs — and for a -Sy that
                             comes back complaining about one.
@@ -2306,7 +2309,7 @@ alone, however far ahead of you the tree gets. Naming it installs it, once:
     syn-update apply vibe
 
 and from then on it updates with everything else. Removing a component with
-`pacman -R` is the same answer in the other direction and is kept the same way.
+\`pacman -R\` is the same answer in the other direction and is kept the same way.
 
 A component the tree has gained SINCE this machine last looked is different —
 nobody has declined it, so it installs on its own. That is how a new component

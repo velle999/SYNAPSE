@@ -281,7 +281,13 @@ pkgver=0.1.0
 #   key itself, and what syn-update accepts, are unchanged.
 # 65: syn-mouse joins COMPONENTS. A component in no update list is frozen on
 #   every installed machine with nothing saying so.
-pkgrel=65
+# 66: PRINTING THE HELP RAN PACMAN. usage() is an unquoted heredoc (it expands
+#   $VERSION), so the backticks around `pacman -Sy` and `pacman -R` in the
+#   text were command substitutions: `syn-update help` ran both, tried a
+#   command named `-Syy`, and printed the text with all three missing. As
+#   root the first is a real database sync. Escaped. tests/usage_test.sh is
+#   9 red on 65, 12 green here; preflight's new heredoc check gates the class.
+pkgrel=66
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
