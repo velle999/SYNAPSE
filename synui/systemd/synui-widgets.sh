@@ -25,6 +25,9 @@ POS="$CONF_HOME/synui/widgets.pos"
 
 WIDGETS="visualizer sysmon clock launcher postit pizza tux analog music weather"
 
+# ⚠ An UNQUOTED heredoc, so a backtick in it is a command substitution: escape
+# every one (\`). Until synui 632 this help RAN `synctl weather on` and
+# `omarchy-weather-location --set "Oslo"`, from --help and from every typo.
 usage() {
     cat <<EOF
 usage: synui-widgets [<widget>|all] [on|off|toggle]
@@ -60,14 +63,14 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
                                     one chosen player
   synui-widgets weather on          the temperature, the condition and where
                                     it was measured. ⚠ NEEDS THE WEATHER
-                                    SWITCHED ON — `synctl weather on` — which is
+                                    SWITCHED ON — \`synctl weather on\` — which is
                                     a separate thing on purpose: that one is the
                                     machine talking to the network, and this one
                                     is only whether the desktop draws what it
                                     already fetched. The same reading is on the
                                     lock screen and, as a temperature, on the
                                     bar. Set the place once with
-                                    `omarchy-weather-location --set "Oslo"`
+                                    \`omarchy-weather-location --set "Oslo"\`
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
@@ -83,7 +86,7 @@ The music widget is empty until something is playing; that is not a fault, it
 is a desktop with nothing making a noise on it. It needs no extra package — it
 reads MPRIS, which every media player on Linux publishes.
 
-The weather widget draws "No reading yet" until `synctl weather on` — nothing
+The weather widget draws "No reading yet" until \`synctl weather on\` — nothing
 here fetches anything. The compositor does the network on a thread of its own,
 twenty minutes apart, and every surface that shows the weather reads the one
 answer it publishes.

@@ -1672,6 +1672,14 @@ test('omarchy_shims', omarchy_shims_sh,
                 meson.current_source_dir() / 'systemd/omarchy-shell.sh'],
      timeout : 60)
 
+# Printing a helper's help must not run what the help quotes in backticks —
+# synui-widgets' did, and switched the weather on and moved it to Oslo.
+help_runs_nothing_sh = find_program('tests/help_runs_nothing.sh')
+test('help_runs_nothing', help_runs_nothing_sh,
+     args    : [meson.current_source_dir() / 'systemd/synui-widgets.sh',
+                meson.current_source_dir() / 'systemd/synui-plugins.sh'],
+     timeout : 60)
+
 plugin_host_sh = find_program('tests/plugin_host.sh')
 test('plugin_host', plugin_host_sh,
      args    : [synui_exe.full_path(),

@@ -84,6 +84,9 @@ SHELL_ROOT="${SYNUI_BAR:-/usr/share/synui/quickshell}"
 # ours. Both halves are fixed: ours first, and one row per id.
 DIRS="${SYNUI_PLUGIN_DIRS:-$CONF_HOME/synui/plugins:$CONF_HOME/omarchy/plugins:/usr/share/synui/plugins}"
 
+# ⚠ Both heredocs below are UNQUOTED, so a backtick in them is a command
+# substitution: escape every one (\`). Until synui 632 this help tried to run
+# commands named `add` and `browse`.
 usage() {
     cat <<EOF
 usage: synui-plugins [list|scan]
@@ -123,13 +126,13 @@ usage: synui-plugins [list|scan]
   refresh               fetch the community list now
   relink                make every plugin you installed reachable under the
                         ~/.config/omarchy/plugins/<id> path some of them
-                        hardcode to find their own helper scripts. `add` does
+                        hardcode to find their own helper scripts. \`add\` does
                         this; run it once for plugins installed before it did
   catalogue             browse as TSV — what the window reads
   tui                   all of it in the terminal, with arrow keys and /
   gui                   all of it in a window
 
-  What `browse` offers comes from two places: the widgets shipped with synui,
+  What \`browse\` offers comes from two places: the widgets shipped with synui,
   each loaded into a real bar before it was listed, and omarchyplugins.com's
   community registry, cached under ~/.cache/synui/plugins and refreshed when it
   is a week old. Everything from the registry is somebody else's claim about

@@ -3805,7 +3805,15 @@ pkgver=0.1.0
 #   its freshness held it for a full refresh interval.
 #   tests/weather_location.sh runs against a dead proxy: phases 1 and 4 are red
 #   on 630.
-pkgrel=631
+# 632: A HELPER'S HELP RAN THE COMMANDS IT QUOTES. synui-widgets' usage() is an
+#   unquoted heredoc, so every backtick in it was a command substitution:
+#   `synui-widgets --help`, and every typo (which prints the same usage), ran
+#   `synctl weather on` twice and `omarchy-weather-location --set "Oslo"` —
+#   switching the weather fetch on and, with 631 re-reading the location at
+#   once, moving the desktop's weather to Oslo. synui-plugins' help tried
+#   commands named `add` and `browse`. All five escaped.
+#   tests/help_runs_nothing.sh is 9 of 14 red on 631, 14 of 14 green here.
+pkgrel=632
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
