@@ -305,7 +305,10 @@ pkgver=0.1.0
 #   does not fix it is reported, not retried, until what is missing changes.
 # ⚠ A COMPONENTS CHANGE: the apply that installs this runs the old list; the
 #   next apply acts on the new one.
-pkgrel=67
+# 68: the window's name column is as wide as the longest name it shows.
+#   It was a fixed 170 px, and linux-wallpaperengine, new in 67's list,
+#   printed straight over its own version.
+pkgrel=68
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

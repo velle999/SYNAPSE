@@ -473,9 +473,26 @@ ShellRoot {
     }
 
     FloatingWindow {
+        id: updWin
         title: "SynapseOS Updates"
         minimumSize: Qt.size(760, 560)
         color: root.cBg
+
+        // The name column is as wide as the longest name it holds, measured in
+        // the face and size it is drawn in. It was a fixed 170 px, which
+        // linux-wallpaperengine — 21 characters — ran straight through into
+        // the version beside it; so would any name at a larger text scale.
+        TextMetrics {
+            id: nameMetrics
+            font.pixelSize: root.ui(13); font.family: "monospace"
+            text: {
+                let w = ""
+                for (const e of root.updates.concat(root.fresh))
+                    if (e.name.length > w.length) w = e.name
+                return w
+            }
+        }
+        readonly property real nameColumn: Math.max(170, Math.ceil(nameMetrics.advanceWidth) + 16)
 
         Component.onCompleted: root.check()
 
@@ -613,9 +630,7 @@ ShellRoot {
                             Text {
                                 text: modelData.name; color: root.cText
                                 font.pixelSize: root.ui(13); font.family: "monospace"
-                                // A column, not a font size: widths are not
-                                // scaled anywhere in the suite.
-                                width: 170
+                                width: updWin.nameColumn
                             }
                             Text {
                                 text: modelData.from + "  →  " + modelData.to
@@ -668,7 +683,7 @@ ShellRoot {
                             Text {
                                 text: modelData.name; color: root.cText
                                 font.pixelSize: root.ui(13); font.family: "monospace"
-                                width: 170
+                                width: updWin.nameColumn
                             }
                             Text {
                                 text: modelData.to + "   (not installed here)"
