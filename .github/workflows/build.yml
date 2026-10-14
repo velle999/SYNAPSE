@@ -13,13 +13,6 @@ on:
 permissions:
   contents: read
 
-# Pinned llama.cpp build tag. Local llama-staging is build 8274
-# (libllama.so.0.0.8274), but upstream never tagged b8273–b8275, so we
-# pin the nearest tag at or below it. Bump this to move synapd to a
-# newer llama.cpp; the cache key follows it automatically.
-env:
-  LLAMA_REF: b10241
-
 jobs:
   # ── Fast structural guards (no toolchain) ──────────────────
   # Catches the regressions the repo just recovered from: tracked build
@@ -166,6 +159,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # The llama.cpp release synapd is built against. synapse-llama/PKGBUILD's
+      # _llama_ref is the ONE pin — the package every machine installs is built
+      # from it — so CI reads it rather than carrying a second number that
+      # could drift. The cache key follows it.
+      - name: Read the llama.cpp pin
+        run: |
+          ref=$(sed -n 's/^_llama_ref=//p' synapse-llama/PKGBUILD)
+          [ -n "$ref" ] || { echo "no _llama_ref in synapse-llama/PKGBUILD" >&2; exit 1; }
+          echo "LLAMA_REF=$ref" >> "$GITHUB_ENV"
+
       - name: Cache llama.cpp staging
         id: llama-cache
         uses: actions/cache@v4
@@ -177,7 +180,7 @@ jobs:
         if: steps.llama-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth=1 --branch "$LLAMA_REF" \
-            https://github.com/ggerganov/llama.cpp /tmp/llama
+            https://github.com/ggml-org/llama.cpp /tmp/llama
           # CI needs the LIBRARIES ONLY — synapd/meson.build looks for
           # libllama, libggml and libggml-base in llama-staging/usr/lib plus the
           # headers, and links nothing else. Every binary llama.cpp can build is

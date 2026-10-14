@@ -57,10 +57,14 @@ sync_pacman_dbs() { echo "SYNC"; }
 sudo_keepalive_start() { echo "KEEPALIVE"; }
 # Stands in for build-all.sh: records the filter it was handed.
 build_all_recorder() { echo "BUILD [$*]"; }
+# Re-scans the machine's ELF files after a build. Recorded, so the ordering
+# assertions can see it runs after a successful build and never instead of one.
+relink_verify() { echo "RELINK_VERIFY"; }
 STUB
     echo "SRC=$repo"
     sed -n '/^COMPONENTS=(/,/^)/p' "$script"
-    echo 'BUILT=(); SELECT=(); DECLINED=()'
+    echo 'BUILT=(); SELECT=(); DECLINED=(); SHADOWED=()'
+    sed -n '/^declare -A REBUILD_WITH=(/,/^)/p' "$script"
     sed -n '/^component_deps() {/,/^}/p' "$script"
     # cmd_apply shells out to ./build-all.sh; point that at the recorder.
     sed -n '/^cmd_apply() {/,/^}/p' "$script" \
@@ -74,6 +78,7 @@ run_apply() {   # run_apply <changed-csv> <new-csv> <selected...>
         echo "CHANGED=($changed)"
         echo "NEW=($new)"
         echo "DECLINED=($DECLINED_CSV)"
+        echo "SHADOWED=($SHADOWED_CSV)"
         # `printf '"%s" ' "$@"` with NO arguments still applies the format once
         # and emits an empty string, which made SELECT one element long and sent
         # the no-names case down the subset path. Emit the array only when there
@@ -93,6 +98,7 @@ run_apply() {   # run_apply <changed-csv> <new-csv> <selected...>
 # fourth argument through them would mean editing tests this change must not
 # touch.
 DECLINED_CSV=""
+SHADOWED_CSV=""
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
@@ -113,7 +119,13 @@ case "$(deps_of vibe)" in
     *synapd*) ok "vibe depends on synapd" ;;
     *)        bad "vibe's dependency on synapd was not found" ;;
 esac
-check "a component with no component dependencies reports none" "" "$(deps_of synapd)"
+# synapse-llama is a component now, so synapd's link against it is an edge:
+# the library builds and installs first, then synapd against its headers.
+case "$(deps_of synapd)" in
+    *synapse-llama*) ok "synapd depends on synapse-llama" ;;
+    *)               bad "synapd's dependency on synapse-llama was not found" ;;
+esac
+check "a component with no component dependencies reports none" "" "$(deps_of synapse-llama)"
 
 # THE REGRESSION. `local c=$1 pk="$SRC/$c/PKGBUILD"` expands every word before
 # local assigns any of them, so $c is empty and pk names a file that does not
@@ -197,17 +209,28 @@ scan_harness() {
 warn() { echo "warn $*"; }
 buildable_names() { echo ""; }   # empty = scrape failed, block nothing
 pkgfield() { echo 9; }           # every component reads as 9-9 available
-# scan calls `pacman -Q <component>`; INSTALLED is the machine.
+# scan calls `pacman -Q <package>`; INSTALLED is the machine.
 pacman() {
-    case " $INSTALLED " in *" $2 "*) echo "$2 1-1"; return 0 ;; esac
+    case " $INSTALLED " in *" $2 "*) echo "$2 ${INST_VER:-1-1}"; return 0 ;; esac
     return 1
 }
-vercmp() { echo 1; }             # 9-9 is always newer than 1-1
+vercmp() { echo "${VERCMP:-1}"; }   # 9-9 is always newer than 1-1, unless told
+# The local repo and the ELF scan are tested on their own further down.
+shadowing_files() { :; }
+relink_scan() { [ -n "${RELINK_OUT:-}" ] && printf '%s\n' "$RELINK_OUT"; return 0; }
+in_select() { return 1; }
 STUB
     echo "SRC=$repo"
     sed -n '/^COMPONENTS=(/,/^)/p' "$script"
-    sed -n '/^declare -A UNSUPPORTED=(/,/^)/p' "$script"
+    sed -n '/^declare -A PKG_VARIANTS=(/,/^)/p' "$script"
+    sed -n '/^installed_pkg() {/,/^}/p' "$script"
+    sed -n '/^installed_ver() {/,/^}/p' "$script"
+    sed -n '/^declare -A PREDATES_MANIFEST=(/,/^)/p' "$script"
     sed -n '/^declare -A NEVER_ADD=(/,/^)/p' "$script"
+    sed -n '/^declare -A REBUILD_WITH=(/,/^)/p' "$script"
+    echo 'declare -A REBUILT_WITH=()'
+    echo "RELINK_FAILED=$tmp/relink-failed"
+    echo 'declare -A RELINK=() RELINK_STUCK=()'
     sed -n '/^MANIFEST=/p' "$script"
     echo 'declare -A COMP_KNOWN=(); MANIFEST_PRESENT=0'
     sed -n '/^load_manifest() {/,/^}/p' "$script"
@@ -307,6 +330,305 @@ out=$(scan_run "synui" "synui = selected")
 case "$out" in
     *syn-install*) bad "syn-install was queued: [$out]" ;;
     *)             ok "NEVER_ADD still outranks the manifest" ;;
+esac
+
+echo ""
+echo "=== a component is found under the package it actually built ==="
+#
+# `pacman -Q synapse-llama` FAILS on a CUDA machine — the package there is
+# synapse-llama-cuda, and -Q does not resolve provides. Read by its directory
+# name, the component looked absent: a candidate for a CPU build that
+# conflicts with the GPU one the machine runs.
+out=$(scan_run "synui synapse-llama-cuda" "synui = selected")
+in_field changed "$out" synapse-llama \
+    && ok "synapse-llama-cuda is the synapse-llama component, and it updates" \
+    || bad "the CUDA build was not recognised as synapse-llama: [$out]"
+in_field new "$out" synapse-llama \
+    && bad "a CUDA machine was offered the CPU synapse-llama as NEW: [$out]" \
+    || ok "...and the CPU build is not offered beside it"
+out=$(scan_run "synui synapse-llama-vulkan" "synui = selected")
+in_field changed "$out" synapse-llama \
+    && ok "so is synapse-llama-vulkan" \
+    || bad "the Vulkan build was not recognised as synapse-llama: [$out]"
+# synapse-llama-system satisfies synapd with Arch's llama.cpp. The real
+# synapse-llama conflicts with it, so it must never arrive there.
+out=$(scan_run "synui synapse-llama-system" "synui = selected")
+case "$out" in
+    *synapse-llama\ *) bad "a synapse-llama-system machine was given synapse-llama: [$out]" ;;
+    *)                 ok "a machine on synapse-llama-system is not given synapse-llama" ;;
+esac
+
+echo ""
+echo "=== components older than the manifest are not NEW ==="
+#
+# linux-wallpaperengine was on the ISO, behind the installer's Wallpapers row,
+# long before syn-update could build it. A machine without it already answered;
+# its absence from the manifest only means nothing was recording it then.
+# Reading it as NEW would start a 1.3 GB CEF build on every one of them.
+out=$(scan_run "synui" "synui = selected
+synapse-wallpapers = declined")
+in_field new "$out" linux-wallpaperengine \
+    && bad "linux-wallpaperengine was queued as NEW on a machine without it: [$out]" \
+    || ok "linux-wallpaperengine is never NEW"
+in_field dec "$out" linux-wallpaperengine \
+    && ok "...it is reported as declined, so naming it still installs it" \
+    || bad "linux-wallpaperengine vanished from the report: [$out]"
+
+echo ""
+echo "=== a library the system moved is a rebuild at the same version ==="
+#
+# ffmpeg 8 -> 9 moved libavcodec.so.62 to .so.63, and the wallpaper engine
+# stopped loading with its version unchanged — nothing a version compare can
+# see. scan() asks the ELF scan instead, and queues a rebuild at the version
+# already installed.
+relink_run() {   # relink_run <relink-scan-output> -> CHANGED rows and STUCK
+    {
+        scan_harness
+        echo "MANIFEST=$tmp/manifest.conf"
+        echo "INSTALLED='synui linux-wallpaperengine'"
+        echo "VERCMP=0; INST_VER=9-9"
+        printf 'RELINK_OUT=%q\n' "$1"
+        cat <<'RUN'
+scan
+[ ${#CHANGED[@]} -gt 0 ] && printf '%s\n' "${CHANGED[@]}"
+for k in "${!RELINK_STUCK[@]}"; do echo "STUCK $k ${RELINK_STUCK[$k]}"; done
+RUN
+    } > "$tmp/relink.sh"
+    printf 'synui = selected\nlinux-wallpaperengine = selected\n' > "$tmp/manifest.conf"
+    bash "$tmp/relink.sh" 2>/dev/null
+}
+rm -f "$tmp/relink-failed"
+check "nothing missing, nothing rebuilt" "" "$(relink_run "")"
+check "a missing soname rebuilds the component at the version it has" \
+      "linux-wallpaperengine 9-9 9-9" \
+      "$(relink_run "linux-wallpaperengine libavcodec.so.62")"
+check "a package that is not a current component is ignored" "" \
+      "$(relink_run "somebody-elses-package libavcodec.so.62")"
+# Tried once and not fixed: reported, never rebuilt again for the same thing.
+echo "linux-wallpaperengine libavcodec.so.62" > "$tmp/relink-failed"
+check "a relink that did not take is not retried" \
+      "STUCK linux-wallpaperengine libavcodec.so.62" \
+      "$(relink_run "linux-wallpaperengine libavcodec.so.62")"
+# ...until what is missing changes, which may be a fix worth trying.
+check "a different missing library is tried again" \
+      "linux-wallpaperengine 9-9 9-9" \
+      "$(relink_run "linux-wallpaperengine libavformat.so.62")"
+rm -f "$tmp/relink-failed"
+
+# missing_sonames_of against a fake machine: a fake ldd on PATH, a pacman -Ql
+# stub, and files that are or are not ELF. Only the soname-BUMP shape counts —
+# missing, with another version of the same library installed.
+so_tmp=$(mktemp -d)
+mkdir -p "$so_tmp/bin" "$so_tmp/lib" "$so_tmp/path"
+printf '\177ELF\002\001\001' > "$so_tmp/bin/wpe"        # links the old ffmpeg
+printf '\177ELF\002\001\001' > "$so_tmp/bin/plugin"     # an optional dep gone
+printf '#!/bin/sh\n'         > "$so_tmp/bin/script"     # not ELF at all
+printf 'not elf'             > "$so_tmp/bin/data"       # not executable
+chmod +x "$so_tmp/bin/wpe" "$so_tmp/bin/plugin" "$so_tmp/bin/script"
+touch "$so_tmp/lib/libavcodec.so.63"                     # the newer sibling
+cat > "$so_tmp/path/ldd" <<'LDD'
+#!/bin/sh
+for f; do
+    echo "$f:"
+    case $f in
+        */wpe)    printf '\tlibavcodec.so.62 => not found\n'
+                  printf '\tlibc.so.6 => /usr/lib/libc.so.6 (0x0)\n' ;;
+        */plugin) printf '\tlibgone.so.1 => not found\n' ;;
+        *)        printf '\tlibavcodec.so.61 => not found\n' ;;
+    esac
+done
+LDD
+chmod +x "$so_tmp/path/ldd"
+sonames_run() {
+    {
+        sed -n '/^missing_sonames_of() {/,/^}/p' "$script"
+        echo "RELINK_LIBDIR=$so_tmp/lib"
+        echo "PATH=$so_tmp/path:\$PATH"
+        cat <<PAC
+pacman() {
+    printf '%s\n' "wpe-pkg $so_tmp/bin/" "wpe-pkg $so_tmp/bin/wpe" \
+                  "wpe-pkg $so_tmp/bin/script" "wpe-pkg $so_tmp/bin/data" \
+                  "plug-pkg $so_tmp/bin/plugin"
+}
+PAC
+        echo 'missing_sonames_of wpe-pkg plug-pkg'
+    } > "$so_tmp/run.sh"
+    bash "$so_tmp/run.sh" 2>&1
+}
+check "a soname bump is found, and only that" \
+      "wpe-pkg libavcodec.so.62" "$(sonames_run)"
+rm -f "$so_tmp/lib/libavcodec.so.63"
+check "a library missing with no newer version is not a relink" "" "$(sonames_run)"
+rm -rf "$so_tmp"
+
+# The report: a relink is a CHANGED row (synpkg offers the update), and its
+# explanation carries no " -> ", which synpkg would read as a second row.
+relink_report() {
+    {
+        echo 'C_DIM=""; C_R=""'
+        echo 'say() { echo "$*"; }; info() { echo "info  $*"; }'
+        echo 'ok() { echo "ok    $*"; }; warn() { echo "warn  $*"; }'
+        echo 'CHANGED=("linux-wallpaperengine 9-9 9-9" "synapd 5-5 5-5"); HELD=()'
+        echo 'NEW=(); DECLINED=(); BLOCKED=(); SHADOWED=(); LOCAL_REPO=/repo'
+        echo 'declare -A REBUILT_WITH=([synapd]=synapse-llama)'
+        echo 'declare -A RELINK=([linux-wallpaperengine]=libavcodec.so.62)'
+        echo 'declare -A RELINK_STUCK=([synui]=libgone.so.1)'
+        echo 'MANIFEST_PRESENT=1; MANIFEST=/dev/null'
+        sed -n '/^report() {/,/^}/p' "$script"
+        echo 'report'
+    } > "$tmp/rr.sh"
+    bash "$tmp/rr.sh" 2>&1
+}
+out=$(relink_report)
+check "a relink is one table row, at the version it has" "1" \
+      "$(printf '%s\n' "$out" | grep -c 'linux-wallpaperengine.*9-9 *-> 9-9')"
+case "$(printf '%s\n' "$out" | grep 'rebuilt at the same version')" in
+    *" -> "*) bad "the relink note has an arrow, so synpkg reads it as a row: $out" ;;
+    *libavcodec.so.62*) ok "the relink says which library the system removed" ;;
+    *) bad "the relink was not explained: $out" ;;
+esac
+case "$(printf '%s\n' "$out" | grep 'rebuilt with synapse-llama')" in
+    *" -> "*) bad "the rebuilt-with note has an arrow: $out" ;;
+    *synapd*) ok "synapd's same-version rebuild says what it goes with" ;;
+    *) bad "synapd's same-version rebuild was not explained: $out" ;;
+esac
+case "$out" in
+    *"synui still cannot find libgone.so.1"*) ok "a relink that did not take is reported" ;;
+    *) bad "a stuck relink was not reported: $out" ;;
+esac
+
+# relink_verify: what the rebuild fixed is cleared, what it did not is kept,
+# and a component that was not built this run is not judged.
+verify_run() {   # verify_run <still-missing-output> <built...>
+    local still=$1; shift
+    {
+        echo 'ok() { echo "ok    $*"; }; warn() { echo "warn  $*"; }'
+        echo "RELINK_FAILED=$tmp/rv-failed"
+        echo 'installed_pkg() { echo "$1 9-9"; }'
+        printf 'missing_sonames_of() { [ -n %q ] && printf "%%s\\n" %q; return 0; }\n' "$still" "$still"
+        echo 'declare -A RELINK=([linux-wallpaperengine]=libavcodec.so.62)'
+        printf 'BUILT=(); for b in %s; do BUILT+=("$b"); done\n' "$*"
+        sed -n '/^relink_verify() {/,/^}/p' "$script"
+        echo 'relink_verify'
+    } > "$tmp/rv.sh"
+    bash "$tmp/rv.sh" 2>&1
+}
+printf 'synui libold.so.1\n' > "$tmp/rv-failed"
+out=$(verify_run "linux-wallpaperengine libavcodec.so.62" linux-wallpaperengine)
+case "$out" in
+    *"still cannot find libavcodec.so.62"*) ok "a rebuild that did not fix it says so" ;;
+    *) bad "a failed relink was not reported: $out" ;;
+esac
+check "...and is recorded, beside what was already there" \
+      "synui libold.so.1|linux-wallpaperengine libavcodec.so.62" \
+      "$(paste -sd'|' "$tmp/rv-failed")"
+out=$(verify_run "" linux-wallpaperengine)
+case "$out" in
+    *"relinked against the libraries now installed"*) ok "a rebuild that fixed it says so" ;;
+    *) bad "a fixed relink was not reported: $out" ;;
+esac
+check "...and its record is cleared, and only its own" \
+      "synui libold.so.1" "$(paste -sd'|' "$tmp/rv-failed")"
+out=$(verify_run "linux-wallpaperengine libavcodec.so.62" synui)
+check "a relink that was not built this run is not judged" "" "$out"
+rm -f "$tmp/rv-failed"
+
+# relink_verify runs after the build and the repo refresh, never instead.
+out=$(run_apply '"synui 1 2"' '""')
+case "$out" in
+    *BUILD*REFRESH*RELINK_VERIFY*) ok "the relink check follows the build and the refresh" ;;
+    *) bad "relink_verify is out of order or missing: $out" ;;
+esac
+
+echo ""
+echo "=== synapd is rebuilt whenever llama.cpp is ==="
+#
+# A new libllama under a synapd compiled against the old llama.h links, loads,
+# and crash-loops: the struct sizes changed and the soname did not. So building
+# synapse-llama takes synapd along, at the version it has if its own did not
+# move — in scan(), and in an apply that names synapse-llama alone.
+rw_run() {   # rw_run <synapse-llama-inst> <synapd-inst|-> -> CHANGED rows, then notes
+    {
+        scan_harness
+        echo "MANIFEST=$tmp/manifest.conf"
+        printf 'LL=%q; SD=%q\n' "$1" "$2"
+        cat <<'RUN'
+pacman() {
+    case $2 in
+        synapse-llama-cuda) echo "$2 $LL" ;;
+        synapd) [ "$SD" != - ] && echo "$2 $SD" || return 1 ;;
+        *) return 1 ;;
+    esac
+}
+vercmp() { [ "$1" = "$2" ] && echo 0 || echo 1; }
+scan
+[ ${#CHANGED[@]} -gt 0 ] && printf '%s\n' "${CHANGED[@]}"
+for k in "${!REBUILT_WITH[@]}"; do echo "WITH $k ${REBUILT_WITH[$k]}"; done
+RUN
+    } > "$tmp/rw.sh"
+    printf 'synapse-llama = selected\nsynapd = selected\n' > "$tmp/manifest.conf"
+    bash "$tmp/rw.sh" 2>/dev/null
+}
+check "a new llama.cpp takes the current synapd with it" \
+      "synapse-llama 1-1 9-9|synapd 9-9 9-9|WITH synapd synapse-llama" \
+      "$(rw_run 1-1 9-9 | paste -sd'|')"
+check "llama.cpp current: synapd is left alone" "" "$(rw_run 9-9 9-9)"
+check "no synapd installed: nothing is added" \
+      "synapse-llama 1-1 9-9" "$(rw_run 1-1 - | paste -sd'|')"
+check "synapd already moving: listed once, as its own update" \
+      "synapse-llama 1-1 9-9|synapd 1-1 9-9" "$(rw_run 1-1 1-1 | paste -sd'|')"
+
+# An apply that names synapse-llama alone builds synapd too.
+out=$(run_apply '"synapse-llama 1 2" "synapd 9 9"' '' synapse-llama)
+case "$out" in
+    *"BUILD [synapse-llama synapd]"*) ok "apply synapse-llama builds synapd with it" ;;
+    *) bad "naming synapse-llama alone left synapd out: $out" ;;
+esac
+# ...and naming synapd alone does not drag llama.cpp in: the rule is one-way.
+out=$(run_apply '"synapse-llama 1 2" "synapd 1 2"' '' synapd)
+case "$out" in
+    *"BUILD [synapd]"*) ok "apply synapd builds synapd alone" ;;
+    *) bad "naming synapd changed the build set: $out" ;;
+esac
+
+echo ""
+echo "=== a package another repository now carries is moved out of the way ==="
+#
+# The local [synapseos] repo sits above [cachyos], and pacman takes the first
+# repo that carries a name: an old limine-snapper-sync left there by the ISO
+# hid every newer one. Only when the other repository is actually configured —
+# without it, the local copy is the only place pacman can find the package.
+sh_tmp=$(mktemp -d)
+mkdir -p "$sh_tmp/repo"
+touch "$sh_tmp/repo/limine-snapper-sync-1.31.0-1-x86_64.pkg.tar.zst" \
+      "$sh_tmp/repo/limine-snapper-sync-gui-2.0-1-x86_64.pkg.tar.zst" \
+      "$sh_tmp/repo/synui-1.0-1-x86_64.pkg.tar.zst"
+shadow_run() {   # shadow_run <pacman.conf body>
+    printf '%s\n' "$1" > "$sh_tmp/pacman.conf"
+    {
+        sed -n '/^declare -A RETIRED=(/,/^)/p' "$script"
+        echo "LOCAL_REPO=$sh_tmp/repo; PACMAN_CONF=$sh_tmp/pacman.conf"
+        sed -n '/^shadowing_files() {/,/^}/p' "$script"
+        echo 'shadowing_files'
+    } > "$sh_tmp/run.sh"
+    bash "$sh_tmp/run.sh" 2>&1 | sed "s|$sh_tmp/repo/||"
+}
+check "with [cachyos] configured, the old copy is named, and nothing else" \
+      "limine-snapper-sync-1.31.0-1-x86_64.pkg.tar.zst" \
+      "$(shadow_run "$(printf '[synapseos]\nServer = file:///x\n[cachyos]\nInclude = /y')")"
+check "without [cachyos], the local copy stays" "" \
+      "$(shadow_run "$(printf '[synapseos]\nServer = file:///x\n#[cachyos]')")"
+rm -rf "$sh_tmp"
+
+# The one apply with nothing to build that still asks for a password: moving
+# those files is root work, and it is what makes the next -Syu see the update.
+SHADOWED_CSV='"limine-snapper-sync-1.31.0-1-x86_64.pkg.tar.zst"'
+out=$(run_apply '' '')
+SHADOWED_CSV=""
+case "$out" in
+    *BUILD*) bad "a shadowed package started a build: $out" ;;
+    *KEEPALIVE*REFRESH*) ok "a shadowed package alone is moved aside, with one password" ;;
+    *) bad "a shadowed package was not moved aside: $out" ;;
 esac
 
 echo ""
@@ -505,26 +827,15 @@ case "$out" in
     *"is not a SynapseOS component"*) ok "an unknown name is refused by name" ;;
     *) bad "an unknown component name was not refused: $out" ;;
 esac
-# An unbuildable one is explained rather than called a typo.
-# ⚠ NOT chibi any more. chibi was the example here until it moved into
-# COMPONENTS — its payload is large but its SOURCE changes, and this assertion
-# quietly became a test that the updater still refuses to update it.
-out=$(bash "$script" apply synapse-llama 2>&1)
-case "$out" in
-    *"cannot be built on an installed system"*) ok "an unsupported component explains itself" ;;
-    *) bad "synapse-llama was not explained: $out" ;;
-esac
-# ...and chibi is not one of them. It ships on the ISO and is rebuilt from its
-# own repo like nexus-chat and tepris; leaving it out froze every chibi fix on
-# every installed machine.
-out=$(bash "$script" apply chibi 2>&1)
-case "$out" in
-    *"cannot be built on an installed system"*)
-        bad "chibi is still refused by the updater: $out" ;;
-    *"is not a SynapseOS component"*)
-        bad "chibi is not registered with the updater at all: $out" ;;
-    *) ok "chibi is updatable" ;;
-esac
+# A package that moved to another repository is explained rather than called a
+# typo. Run through the extracted guard (name_guard, below), never the real
+# script: a name that PASSES the guard would go on to a real fetch and apply on
+# whatever machine runs the suite.
+#
+# ⚠ There is no "cannot be built on an installed system" any more. That was
+# UNSUPPORTED — synapse-llama, linux-wallpaperengine, limine-snapper-sync,
+# "moving with an ISO upgrade", which meant never. Every component on the ISO
+# updates now; these assertions are that it stays so.
 # Only apply takes names.
 out=$(bash "$script" check synui 2>&1)
 case "$out" in
@@ -754,6 +1065,9 @@ manifest_after() {   # manifest_after <installed-csv> <prior-manifest-body>
         echo 'COMPONENTS=(synui vibe tepris)'
         echo "pacman() { case \" $installed \" in *\" \$2 \"*) echo \"\$2 1.0-1\";; *) return 1;; esac; }"
         sed -n '/^declare -A COMP_KNOWN=()/,/^MANIFEST_PRESENT=0/p' "$script"
+        sed -n '/^declare -A PKG_VARIANTS=(/,/^)/p' "$script"
+        sed -n '/^installed_pkg() {/,/^}/p' "$script"
+        sed -n '/^installed_ver() {/,/^}/p' "$script"
         sed -n '/^load_manifest() {/,/^}/p' "$script"
         sed -n '/^install_manifest() {/,/^}/p' "$script"
         sed -n '/^save_manifest() {/,/^}/p' "$script"
@@ -825,8 +1139,8 @@ report_headline() {   # report_headline <changed-csv> <held-csv>
         echo 'say() { echo "$*"; }; info() { echo "info  $*"; }'
         echo 'ok() { echo "ok    $*"; }; warn() { echo "warn  $*"; }'
         echo "CHANGED=($1)"; echo "HELD=($2)"
-        echo 'NEW=(); DECLINED=(); BLOCKED=(); SKIPPED=()'
-        echo 'declare -A UNSUPPORTED=(); MANIFEST_PRESENT=1; MANIFEST=/dev/null'
+        echo 'NEW=(); DECLINED=(); BLOCKED=(); SHADOWED=(); LOCAL_REPO=/repo'
+        echo 'declare -A RELINK=() RELINK_STUCK=(); MANIFEST_PRESENT=1; MANIFEST=/dev/null'
         sed -n '/^report() {/,/^}/p' "$script"
         echo 'report'
     } > "$hold_tmp/r.sh"
@@ -859,14 +1173,20 @@ esac
 # everything else here is. `pacman` is a FUNCTION, which beats PATH — the
 # suite must never consult the packages actually installed on the machine
 # running it, or it would pass or fail depending on whose desk it is on.
-never_add_guard() {   # never_add_guard <name> <installed:yes|no>
+never_add_guard() {   # never_add_guard <name> <installed:yes|no|package>
     local tmp; tmp=$(mktemp -d)
     {
         echo 'die() { echo "fail  $*"; exit 1; }'
-        echo "pacman() { [ '$2' = yes ]; }"
+        # yes = installed under its own name; a package name = only THAT is.
+        case $2 in
+            yes|no) echo "pacman() { [ '$2' = yes ]; }" ;;
+            *)      echo "pacman() { [ \"\$2\" = '$2' ]; }" ;;
+        esac
         sed -n '/^declare -A NEVER_ADD=(/,/^)/p' "$script"
         sed -n '/^declare -A NEVER_ADD_HOW=(/,/^)/p' "$script"
-        echo 'declare -A UNSUPPORTED=()'
+        sed -n '/^declare -A RETIRED=(/,/^)/p' "$script"
+        sed -n '/^declare -A PKG_VARIANTS=(/,/^)/p' "$script"
+        sed -n '/^installed_pkg() {/,/^}/p' "$script"
         sed -n '/^COMPONENTS=(/,/^)/p' "$script"
         echo "SELECT=($1)"
         sed -n '/^for _s in "\${SELECT\[@\]}"; do/,/^done$/p' "$script"
@@ -897,6 +1217,32 @@ case "$(never_add_guard synui no)" in
     *"reached the command"*)
         ok "an ordinary component is not caught by the guard" ;;
     *)  bad "the guard refuses a component that is only declined" ;;
+esac
+
+# synapse-llama arrives with synapd, built for the GPU; an update never adds it.
+case "$(never_add_guard synapse-llama no)" in
+    *"installs it with synapd"*) ok "synapse-llama is never added by an update" ;;
+    *)  bad "naming synapse-llama on a machine without it was not refused" ;;
+esac
+# ...but on a CUDA machine it IS installed, under another package name, and
+# naming it must reach the update.
+case "$(never_add_guard synapse-llama synapse-llama-cuda)" in
+    *"reached the command"*) ok "synapse-llama on a CUDA machine updates by name" ;;
+    *)  bad "the guard mistook synapse-llama-cuda for no synapse-llama at all" ;;
+esac
+
+# Every component that was "not updatable from source" is updatable now.
+for c in synapse-llama linux-wallpaperengine chibi; do
+    case "$(never_add_guard "$c" yes)" in
+        *"reached the command"*) ok "$c is accepted by apply" ;;
+        *)  bad "$c is refused by apply: $(never_add_guard "$c" yes)" ;;
+    esac
+done
+
+# Packages another repository supplies now are explained, not called a typo.
+case "$(never_add_guard limine-snapper-sync yes)" in
+    *"comes from [cachyos]"*) ok "a retired package says where it comes from now" ;;
+    *)  bad "limine-snapper-sync was not explained: $(never_add_guard limine-snapper-sync yes)" ;;
 esac
 
 # Two rosters. A future entry added to one and not the other would print

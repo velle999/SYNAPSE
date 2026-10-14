@@ -22,7 +22,7 @@
 #      that they drift, and they have drifted five times.
 #
 #   4. KNOWN= is not the build list. A name there with no build_component /
-#      build_script_pkg / build_vendored_pkg rule is a legal argument that
+#      build_script_pkg rule is a legal argument that
 #      builds nothing and exits 0, so syn-update reports success, publishes
 #      nothing, and offers the identical update again on the next run, forever.
 #
@@ -63,8 +63,6 @@ cd "$(dirname "$0")/.."
 declare -A EXEMPT_INSTALLER=(
     [scenefx0.5]="a hard depends of synui, so pacman installs it with synui — naming it here as well would only be a second place to forget"
     [synapse-llama]="a hard depends of synapd, same as scenefx0.5 under synui"
-    [limine-mkinitcpio-hook]="installed conditionally, inside the chroot, only on a limine install (syn-install.sh: arch-chroot /mnt pacman -S ... limine-mkinitcpio-hook). It must NOT arrive on a GRUB box — its hook shadows mkinitcpio's"
-    [limine-snapper-sync]="limine + snapper only, chosen by the bootloader branch rather than the app list"
     # The one package whose absence from the target is the POINT. It ships
     # /usr/bin/syn-crypt, a disk partitioner; syn-update keeps it out of NEW[]
     # for the same reason, via its own NEVER_ADD.
@@ -78,16 +76,20 @@ declare -A EXEMPT_ISO=(
     [samsung-m2020]="Samsung's EULA licenses the driver to the end user, not to us for redistribution — \`syn printer samsung\` installs it on demand instead. The PKGBUILD still exists and still builds; it just fetches from Samsung."
 )
 
-# Directories with a PKGBUILD that are in NEITHER syn-update's COMPONENTS nor
-# its UNSUPPORTED map. Anything here is un-updatable on an installed system and
-# nothing else in the repo records that, so an entry needs a reason that
-# survives reading.
+# Directories with a PKGBUILD that are NOT in syn-update's COMPONENTS. Anything
+# here is un-updatable on an installed system and nothing else in the repo
+# records that, so an entry needs a reason that survives reading.
 #
 # This table was seeded with four when the script was written; three were
 # genuine gaps and are gone. fetch and synapse-wallpapers are in COMPONENTS
 # now — both are in packages.x86_64, so they were on every installed machine
-# and updatable on none. limine-snapper-sync is in UNSUPPORTED, where
-# syn-update reports the reason rather than skipping it in silence.
+# and updatable on none.
+#
+# syn-update also had a second list, UNSUPPORTED, of components it reported as
+# moving "with an ISO upgrade" — synapse-llama, linux-wallpaperengine and
+# limine-snapper-sync. Removed in 2026-10: the first two build on every machine
+# now, and the limine pair come from [cachyos] (syn-update's RETIRED). Every
+# PKGBUILD is in COMPONENTS or in this table; there is no third answer.
 declare -A UNREGISTERED=(
     # RETIRED, not missing. The 0.4 fork, superseded by scenefx0.5 when synui
     # moved to wlroots 0.20; synui's depends names scenefx0.5 and nothing in
@@ -310,14 +312,14 @@ if [ "$SELFTEST" -eq 1 ]; then
     cat >"$t/lists.sh" <<'LISTS'
 KNOWN=(alpha beta
        gamma)
-declare -A UNSUPPORTED=(
+declare -A NEVER_ADD=(
     [delta]="a reason"
 )
 LISTS
     st "read_array finds a wrapped array"      expect-pass \
         [ "$(read_array "$t/lists.sh" KNOWN | tr '\n' ' ')" = "alpha beta gamma " ]
     st "read_keys finds assoc keys"            expect-pass \
-        [ "$(read_keys "$t/lists.sh" UNSUPPORTED)" = "delta" ]
+        [ "$(read_keys "$t/lists.sh" NEVER_ADD)" = "delta" ]
     st "read_array fails on a missing name"    expect-fail \
         [ -n "$(read_array "$t/lists.sh" NOSUCHLIST)" ]
 
@@ -348,7 +350,7 @@ fi
 mapfile -t KNOWN      < <(read_array build-all.sh KNOWN)
 mapfile -t COMPONENTS < <(read_array syn-update/syn-update.sh COMPONENTS)
 mapfile -t ISO_PKGS   < <(read_array archiso/build.sh PACKAGES)
-mapfile -t UNSUP      < <(read_keys  syn-update/syn-update.sh UNSUPPORTED)
+mapfile -t RETIRED    < <(read_keys  syn-update/syn-update.sh RETIRED)
 mapfile -t NEVER_ADD  < <(read_keys  syn-update/syn-update.sh NEVER_ADD)
 mapfile -t RULES      < <(grep -oE '^build_(component|script_pkg|vendored_pkg) [A-Za-z0-9_.+-]+' \
                           build-all.sh | awk '{print $2}' | sort -u)
@@ -390,7 +392,7 @@ check_lists() {
             "build-all.sh: '$c' is in KNOWN= with no build rule" \
             "It is a legal argument that builds NOTHING and exits 0, so syn-update" \
             "reports success, publishes nothing, and offers the same update forever." \
-            "Add a build_component / build_script_pkg / build_vendored_pkg line."
+            "Add a build_component / build_script_pkg line."
     done
 
     # The mirror image: a rule for a name no argument can reach.
@@ -431,24 +433,29 @@ check_registration() {
         c=${d%/PKGBUILD}
         has "$c" "${COMPONENTS[@]}" && continue
 
-        # UNSUPPORTED is keyed by PACKAGE name, and one directory disagrees
-        # with its package (linux-wallpaperengine-pkg builds
-        # linux-wallpaperengine), so resolve the name rather than assume it.
-        local pkg
-        pkg=$(pkgfield "$c" pkgname 2>/dev/null || true)
-        has "$c" "${UNSUP[@]}" && continue
-        [ -n "$pkg" ] && has "$pkg" "${UNSUP[@]}" && continue
-
         if [ -n "${UNREGISTERED[$c]:-}" ]; then
             untriaged+=("$c")
             continue
         fi
 
         fail registration \
-            "'$c' has a PKGBUILD but is in neither COMPONENTS nor UNSUPPORTED" \
+            "'$c' has a PKGBUILD but is not in syn-update's COMPONENTS" \
             "A component in no update list is frozen on every installed machine and" \
-            "nothing says so. Add it to syn-update's COMPONENTS, or to UNSUPPORTED" \
-            "with the reason it cannot be built there."
+            "nothing says so. Add it to COMPONENTS (and build-all.sh's KNOWN= plus a" \
+            "build rule), or to this script's UNREGISTERED with the reason."
+    done
+
+    # RETIRED means another repository supplies it, and syn-update moves the
+    # local copies aside so that repository's newer versions can be seen. A
+    # retired name that is BUILT here again would put a local copy straight back
+    # in front of them — the shadowing RETIRED exists to undo.
+    for c in "${RETIRED[@]}"; do
+        if [ -f "$c/PKGBUILD" ] || has "$c" "${COMPONENTS[@]}" "${KNOWN[@]}" "${ISO_PKGS[@]}"; then
+            fail registration \
+                "syn-update: RETIRED names '$c', which this tree still builds or lists" \
+                "A retired package comes from another repository. Building it here puts" \
+                "a local copy back above that repository and hides its updates again."
+        fi
     done
 
     # The reverse: a list entry that is only a list entry.
@@ -467,7 +474,7 @@ check_registration() {
     fi
 
     [ "$FINDINGS" -eq "$bad" ] && ok registration \
-        "every PKGBUILD is in COMPONENTS, UNSUPPORTED, or declared"
+        "every PKGBUILD is in COMPONENTS or declared"
     return 0
 }
 
@@ -529,9 +536,9 @@ check_installer() {
           | tr ' ' '\n' | grep -vE '^$' | sort -u)
     [ -n "$sel" ] || { fail installer "could not read the component table from $inst"; return 0; }
 
-    # dir -> pkgname, because one disagrees (linux-wallpaperengine-pkg builds
-    # linux-wallpaperengine) and a name check that assumed they matched would
-    # report the working case as broken.
+    # dir -> pkgname, because they need not agree (linux-wallpaperengine was
+    # built out of linux-wallpaperengine-pkg/ until 2026-10) and a name check
+    # that assumed they matched would report the working case as broken.
     declare -A ours=()
     local d c n
     for d in */PKGBUILD; do

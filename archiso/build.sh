@@ -23,19 +23,19 @@
 #                   installer asks which model to fetch and downloads it onto
 #                   the target instead, so nothing is lost but the image size.
 #   --no-model      (default; kept for compatibility)
-#   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, rocm, vulkan, or
-#                   auto. Default is CPU-only: a CUDA/ROCm build links the
-#                   shipped libggml against the BUILD HOST's driver stack
-#                   (libcuda.so.1 / rocblas), and synapd dies with exit 127 on
-#                   any machine without that driver — including every VM.
+#   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, vulkan, or auto.
+#                   Default is CPU-only: a CUDA build links the shipped libggml
+#                   against the BUILD HOST's driver stack (libcuda.so.1), and
+#                   synapd dies with exit 127 on any machine without that
+#                   driver — including every VM.
 #                   'vulkan' (AMD/Intel) is the exception: it links only the
 #                   Vulkan loader, loads with no GPU, and one build runs on any
 #                   AMD/Intel card — so it is safe to offer broadly.
 #   --no-gpu        (default; kept for compatibility)
-#   --llama-only    Build and stage llama.cpp, then stop (no packages, no ISO).
-#                   This is the recovery path for the local GPU runtime:
-#                   sudo ./build.sh --gpu=cuda --llama-only, then reinstall
-#                   synapd. Restoring GPU should not cost a full ISO build.
+#   --llama-only    Build the synapse-llama package for --gpu and stage it,
+#                   then stop (no other packages, no ISO). To put a GPU build
+#                   on a machine, ./build-all.sh synapse-llama synapd does it
+#                   without an ISO build at all.
 #   --no-clean      Skip cleaning previous build artifacts
 #   --jobs N        Parallel build jobs (default: nproc)
 #   --no-sign       Do NOT sign the ISO. Signing is the DEFAULT, and the key is
@@ -77,9 +77,9 @@ WORK_DIR="${SCRIPT_DIR}/work"
 # else in archiso/ silently ships nothing and the installer falls back to
 # whatever stale copy exists in the overlay.
 LOCAL_REPO="${SCRIPT_DIR}/airootfs/local-repo"
-LLAMA_DIR="${BUILD_DIR}/llama.cpp"
-# Keep in sync with LLAMA_REF in .github/workflows/build.yml
-LLAMA_REF="b10241"
+# The llama.cpp release. Pinned in ONE place, synapse-llama/PKGBUILD, which
+# also owns the build recipe; read here only to say what is being built.
+LLAMA_REF="$(sed -n 's/^_llama_ref=//p' "${PROJECT_ROOT}/synapse-llama/PKGBUILD")"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
 # Where a gguf is parked when the ISO is not shipping one. It has to be OUTSIDE
 # airootfs/: mkarchiso packs that overlay whole, so a model left in MODEL_DIR
@@ -370,13 +370,12 @@ PACKAGES=(
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
     # still exists and still builds; it just fetches from Samsung now.
-    # Wallpaper Engine renderer (dir 'linux-wallpaperengine-pkg' builds pkg
-    # 'linux-wallpaperengine'). Git-sourced from a pinned commit, so it needs
+    # Wallpaper Engine renderer. Git-sourced from a pinned commit, so it needs
     # network, and cmake fetches a ~1.3 GB CEF blob at configure time into the
     # build dir — budget ~6 GB of /var/tmp scratch for it on top of the ISO.
     # Order does not matter: nothing depends on it (synui lists it nowhere),
     # it is on the ISO because packages.x86_64 names it.
-    linux-wallpaperengine-pkg
+    linux-wallpaperengine
     # SynapseOS' own Wallpaper Engine wallpapers (dendrite + Tux). Renders are
     # derived at build time, so this needs python-pillow/librsvg/ffmpeg/
     # adwaita-fonts — all upstream, and all picked up automatically by the
@@ -388,36 +387,8 @@ PACKAGES=(
     # what happened up to 0.2.6. The only witness is the package by name in
     # pkglist.x86_64.txt. See the 0.2.2 lesson in the release memory.
     synapse-wallpapers
-    # Bootable btrfs snapshots for limine, vendored from the AUR because it is
-    # in no official repo — the same reason scenefx0.5 is in this list. Order
-    # does not matter: nothing depends on it, it reaches the ISO because
-    # packages.x86_64 names it.
-    #
-    # THE EXPENSIVE ONE. A GraalVM native-image build: it downloads a ~300 MB
-    # GraalVM tarball, needs `gradle` (its own JDK, ~150 MiB), and the gradle
-    # step fetches plugins and Java dependencies from the NETWORK at build time.
-    # If a build fails here with no obvious cause, suspect the network before
-    # the code. See limine-snapper-sync/PKGBUILD for what it does and why the
-    # ESP is sized the way it is.
-    limine-snapper-sync
-    # Kernel boot entries for limine, from the SAME upstream project as
-    # limine-snapper-sync above — which already names it in its own optdepends.
-    # Vendored for the same reason: no official repo carries it.
-    #
-    # It is what makes a SECOND KERNEL BOOTABLE on a limine install. Arch's
-    # mkinitcpio hook builds the initramfs and nothing writes limine.conf, so
-    # without this `pacman -S linux-lts` yields a complete, correct, unbootable
-    # kernel while every surface reports success. GRUB has grub-mkconfig and
-    # systemd-boot has kernel-install, both in the base system; limine had
-    # nothing, which is why syn-settings' Kernel pane could only ever report
-    # the gap rather than close it.
-    #
-    # ANOTHER GraalVM native-image build, with everything that implies above —
-    # but it adds no new host requirement, since gradle is already in TOOL_PKG
-    # for limine-snapper-sync. Read limine-mkinitcpio-hook/PKGBUILD before
-    # touching anything that runs mkinitcpio: this package puts a wrapper at
-    # /usr/local/bin/mkinitcpio that PROMPTS interactively.
-    limine-mkinitcpio-hook
+    # limine-snapper-sync and limine-mkinitcpio-hook are NOT built here any
+    # more: they come from [cachyos] — see FROM_CACHYOS below.
 )
 
 step "Preflight checks"
@@ -499,7 +470,7 @@ fi
 # Two seconds here beats reading that backwards again — see packages.x86_64,
 # where each of these has its reason written out in full.
 declare -A ISO_NEVER_INSTALL=(
-    [limine-mkinitcpio-hook]="its /etc/pacman.d/hooks/90-mkinitcpio-install.hook shadows mkinitcpio's, so NEITHER /boot/vmlinuz-linux NOR the initramfs is built and mkarchiso dies later in _make_boot_on_iso9660. Keep it in the local repo (it is in PACKAGES); syn-install installs it into the target, which does boot limine."
+    [limine-mkinitcpio-hook]="its /etc/pacman.d/hooks/90-mkinitcpio-install.hook shadows mkinitcpio's, so NEITHER /boot/vmlinuz-linux NOR the initramfs is built and mkarchiso dies later in _make_boot_on_iso9660. Keep it in the local repo (FROM_CACHYOS puts it there); syn-install installs it into the target, which does boot limine."
 )
 for _pkg in "${!ISO_NEVER_INSTALL[@]}"; do
     if grep -qxa -- "${_pkg}" "${SCRIPT_DIR}/packages.x86_64"; then
@@ -521,13 +492,6 @@ declare -A TOOL_PKG=(
     [dialog]="dialog"
     [parted]="parted"
     [repo-add]="pacman"
-    # limine-snapper-sync is a GraalVM native-image build and this is its
-    # compiler. It has to be listed HERE rather than left to its PKGBUILD's
-    # makedepends, because packages are built with `makepkg -fd` — the -d skips
-    # dependency resolution and there is no -s, so nothing installs it. Without
-    # this line the ISO build runs for twenty minutes and then dies on
-    # "gradle: command not found".
-    [gradle]="gradle"
     # The Vulkan shader compiler. synapse-llama-vulkan is expected to build on
     # every release (see BUILD_VULKAN_PKG below), and it is an OPTIONAL package
     # — nothing depends on it, so a host without this does not fail the build,
@@ -541,8 +505,8 @@ declare -A TOOL_PKG=(
 # only: a host with shaderc installed passes every command check above and then
 # dies inside CMake with "Could NOT find Vulkan (missing: Vulkan_INCLUDE_DIR)",
 # several minutes in, after llama.cpp has already been cloned and configured.
-# The same lesson as gradle above, one step further along — for a package that
-# ships no binary the check has to look for what it actually puts on disk.
+# For a package that ships no binary the check has to look for what it actually
+# puts on disk.
 declare -A FILE_PKG=(
     [/usr/include/vulkan/vulkan.h]="vulkan-headers"
     # Required by ggml-vulkan from llama.cpp b10241 onward — see
@@ -705,11 +669,9 @@ if [[ "$WITH_GPU" == "auto" ]]; then
         log "Detected NVIDIA GPU — building llama.cpp with CUDA"
     elif lspci 2>/dev/null | grep -qiE "amd|radeon|advanced micro devices"; then
         # Vulkan, not ROCm: one build covers every AMD card (GCN/RDNA/APU) with
-        # no per-arch compile and only the mesa RADV ICD at runtime. ROCm stays
-        # an explicit opt-in (--gpu=rocm) for a known-supported card wanting
-        # peak throughput.
+        # no per-arch compile and only the mesa RADV ICD at runtime.
         WITH_GPU="vulkan"
-        log "Detected AMD GPU — building llama.cpp with Vulkan (portable; --gpu=rocm for peak perf)"
+        log "Detected AMD GPU — building llama.cpp with Vulkan"
     else
         WITH_GPU="cpu"
         log "No discrete GPU detected — building llama.cpp CPU-only"
@@ -718,7 +680,14 @@ fi
 
 case "$WITH_GPU" in
     cpu) ;;
-    cuda|rocm)
+    # ⚠ rocm WAS accepted here, and never produced an ISO: no synapse-llama-rocm
+    # package was ever defined, so the backend pin below named a package that
+    # did not exist and pacstrap failed at the end of the build. synapse-llama's
+    # PKGBUILD refuses a backend it does not package; this says so before any
+    # of the build is spent.
+    rocm)
+        err "--gpu=rocm: there is no ROCm build of synapse-llama — --gpu=vulkan is the AMD build" ;;
+    cuda)
         warn "GPU build ($WITH_GPU): the ISO will only run AI features on"
         warn "machines with the matching driver installed — synapd will fail"
         warn "to start anywhere else (VMs included). CPU is the safe default." ;;
@@ -726,17 +695,11 @@ case "$WITH_GPU" in
         warn "GPU build (vulkan): synapd loads everywhere (the loader tolerates"
         warn "no GPU), but only offloads where a Vulkan ICD + GPU exist — else it"
         warn "runs on the CPU. The ISO still ships CPU by default." ;;
-    *) err "Invalid --gpu value: $WITH_GPU (expected cuda, rocm, vulkan, or auto)" ;;
+    *) err "Invalid --gpu value: $WITH_GPU (expected cuda, vulkan, or auto)" ;;
 esac
 
-# Stage each backend into its own directory. The install is a wipe-and-replace
-# (see the rm -rf below — layered installs leave mismatched sonames), so a
-# single shared staging dir meant an ISO build, which is CPU-only by default,
-# silently destroyed the CUDA build this machine's synapd runs on. Keeping them
-# apart means building the ISO can never take the local GPU runtime down.
-# llama-staging stays as a symlink to the last build: synapd's PKGBUILD,
-# build-all.sh and /etc/ld.so.conf.d all reference that path by name.
-LLAMA_STAGING="${PROJECT_ROOT}/llama-staging-${WITH_GPU}"
+# llama-staging stays a symlink to the ISO backend's staged tree (stage_llama):
+# synapd/meson.build looks for it by that name.
 LLAMA_STAGING_LINK="${PROJECT_ROOT}/llama-staging"
 
 # ── Clean ─────────────────────────────────────────────────────
@@ -744,173 +707,52 @@ LLAMA_STAGING_LINK="${PROJECT_ROOT}/llama-staging"
 # per-stage stamp files AND the pacstrapped airootfs; a stale one from a
 # previous build makes mkarchiso skip straight to "Done!" — reusing the old
 # ISO with the old packages (e.g. an unbumped synui) and never picking up
-# freshly built ones. --no-clean is only meant to preserve the expensive
-# build/ (llama.cpp) compile.
+# freshly built ones. --no-clean keeps build/, which held the llama.cpp compile
+# until that moved into synapse-llama/PKGBUILD; nothing expensive lives there now.
 rm -rf "${WORK_DIR}"
 if [[ "$CLEAN" == "true" ]]; then
     step "Cleaning previous build"
     rm -rf "${BUILD_DIR}"
     log "Cleaned work/ and build/"
 else
-    log "Cleaned work/ (kept build/ — llama.cpp)"
+    log "Cleaned work/ (kept build/)"
 fi
 
 mkdir -p "${BUILD_DIR}" "${OUT_DIR}" "${LOCAL_REPO}" "${MODEL_DIR}"
 
-# ── Build llama.cpp ───────────────────────────────────────────
+# ── llama.cpp ─────────────────────────────────────────────────
 #
-# build_llama <backend> <repoint:yes|no>
+# Built by synapse-llama/PKGBUILD, through build_package below like every other
+# package. That PKGBUILD owns the recipe — the backend flags, GGML_NATIVE, the
+# check that refuses a CPU build wearing a GPU name — and the pin. Until 2026-10
+# the recipe lived HERE, as a cmake run into llama-staging-<backend>/ that the
+# PKGBUILD merely packaged. An installed machine has no ISO build, so syn-update
+# could never move llama.cpp at all: every machine ran its ISO's llama.cpp for
+# life. One recipe, in the package, is what lets every machine build it.
 #
-# A function because the ISO now needs TWO backends out of one run: the CPU
-# build it actually ships, and a CUDA build that is packaged but never
-# installed on the ISO — so that an installed system with an NVIDIA card has a
-# synapse-llama-cuda to switch to. Before this, nothing ever built that package
-# during a release, nothing shipped it, and every installed SynapseOS ran the
-# headline feature on the CPU no matter what card was in the machine.
+# stage_llama <backend> <repoint:yes|no>
 #
-# Each backend gets its own build dir (build-cpu/, build-cuda/). That is not
-# tidiness: `build/` was shared and reused across runs, and CMake option()
-# values are STICKY, so a cached GGML_CUDA=ON from an earlier cuda build made a
-# later "cpu" build silently reconfigure with CUDA still on — an ISO whose
-# synapd links libcuda.so.1 and therefore fails to start on any machine without
-# an NVIDIA driver. A directory that is only ever configured for one backend
-# cannot have that bug at all. The cache check below stays as a safety net, and
-# alternating backends no longer throws away either build's objects.
-build_llama() {
+# Unpacks the package just built into llama-staging-<backend>/. That tree is
+# what synapd compiles against on a host with no libllama of its own (see
+# synapd/meson.build, and the host check below), and what --llama-only leaves
+# behind. Each backend keeps its own directory, so building the CPU ISO can
+# never take a CUDA build out from under anything that uses one; the install is
+# a wipe-and-replace, because layering two builds leaves mismatched sonames.
+stage_llama() {
     local backend="$1" repoint="$2"
     local staging="${PROJECT_ROOT}/llama-staging-${backend}"
-    local bdir="${BUILD_DIR}/llama-build-${backend}"
+    local name=synapse-llama
+    case "$backend" in cuda|vulkan) name="synapse-llama-${backend}" ;; esac
 
-    step "Building llama.cpp (${backend})"
+    # -[0-9]: synapse-llama-<ver>, never synapse-llama-cuda-<ver>.
+    local pkg
+    pkg=$(ls -1t "${LOCAL_REPO}/${name}"-[0-9]*.pkg.tar.zst 2>/dev/null | head -1)
+    [[ -n "$pkg" ]] || err "no ${name} package in ${LOCAL_REPO} to stage"
 
-    if [[ ! -d "${LLAMA_DIR}" ]]; then
-        log "Cloning llama.cpp..."
-        git clone --depth=1 --branch "${LLAMA_REF}" \
-            https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
-    fi
-
-    cd "${LLAMA_DIR}"
-    log "(llama.cpp pinned at ${LLAMA_REF})"
-
-    # CUDA 13+ ships CCCL 3.4, which changed the cub/thrust APIs this pinned
-    # llama.cpp (${LLAMA_REF}) uses in argsort.cu / top-k.cu (cuda::make_*_iterator,
-    # DeviceTopK::MaxPairs) — the build fails with "namespace cuda has no member".
-    # ggml only reaches for cub as a fast path and has portable fallback kernels, so
-    # gate it off on CUDA 13+ (older toolkits keep cub). Idempotent, cuda-only —
-    # and harmless to a CPU build, which never compiles that file.
-    if [[ "$backend" == "cuda" ]]; then
-        local _cub_guard='ggml/src/ggml-cuda/common.cuh'
-        if grep -q 'CUDART_VERSION >= 11070$' "$_cub_guard" 2>/dev/null; then
-            log "Patching ggml to disable cub on CUDA 13+ (CCCL 3.4 API break)"
-            sed -i 's|\(CUDART_VERSION >= 11070\)$|\1 \&\& CUDART_VERSION < 13000|' "$_cub_guard"
-        fi
-    fi
-
-    # Safety net. Per-backend dirs mean this should never fire; it stays because
-    # the failure it catches is silent and shipped once.
-    if [[ -f "${bdir}/CMakeCache.txt" ]]; then
-        local _want_cuda=OFF; [[ "$backend" == cuda ]] && _want_cuda=ON
-        local _have_cuda
-        _have_cuda=$(sed -n 's/^GGML_CUDA:BOOL=//p' "${bdir}/CMakeCache.txt" | head -1)
-        if [[ -n "$_have_cuda" && "$_have_cuda" != "$_want_cuda" ]]; then
-            log "${bdir} was configured GGML_CUDA=${_have_cuda}, want ${_want_cuda} — wiping it"
-            rm -rf "${bdir}"
-        fi
-    fi
-
-    mkdir -p "${bdir}"
-    cd "${bdir}"
-
-    local CMAKE_ARGS=(
-        "-DCMAKE_BUILD_TYPE=Release"
-        "-DCMAKE_INSTALL_PREFIX=/usr"
-        "-DLLAMA_BUILD_TESTS=OFF"
-        "-DLLAMA_BUILD_EXAMPLES=ON"
-        # LLAMA_BUILD_SERVER, not LLAMA_SERVER — the latter is not an option
-        # llama.cpp defines, so it was a no-op that CMake silently accepted and
-        # then listed under "Manually-specified variables were not used by the
-        # project". The server was built anyway because the option defaults to
-        # ON for a standalone build, so this asked for nothing and got what it
-        # wanted by luck. Behaviour is unchanged; the flag now actually means it.
-        #
-        # It has to stay ON: synapse-llama's package() installs llama-cli,
-        # llama-server and llama-bench, and it does so with a soft
-        # `[ -x ... ] &&` that skips them WITHOUT failing — so a build that
-        # quietly stopped producing them would ship a package missing its CLI
-        # tools and say nothing. (Checked at b10241: all three still exist; the
-        # new unified `llama` binary is in addition to them, not a replacement.)
-        "-DLLAMA_BUILD_SERVER=ON"
-    )
-
-    # EVERY backend toggle is stated explicitly on EVERY path, never left to
-    # default — see the note above build_llama about sticky option() values.
-    case "$backend" in
-        cuda)
-            CMAKE_ARGS+=("-DGGML_CUDA=ON" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=OFF")
-            # Ensure CMake can find CUDA even under sudo (which strips env vars)
-            if [[ -d /opt/cuda ]]; then
-                CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
-            fi
-            ;;
-        rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DGGML_VULKAN=OFF" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
-        # Vulkan: portable AMD/Intel GPU backend. Needs glslc (shaderc) +
-        # Vulkan headers at build time to compile the compute shaders into
-        # libggml-vulkan.so; both are checked before this runs. GGML_NATIVE=OFF
-        # is REQUIRED here (unlike CUDA): the Vulkan build's whole point is that
-        # it loads with no GPU and FALLS BACK TO THE CPU — a reachable path, so
-        # baking the build host's AVX-512/AVX2 into it would SIGILL that fallback
-        # on baseline x86-64 (and in a VM without -cpu host). CUDA gets away
-        # without it only because its lib can't load at all without the GPU, so
-        # its CPU path is never reached. GGML_NATIVE only touches the CPU
-        # backend — it costs GPU users nothing.
-        vulkan) CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=ON" "-DGGML_NATIVE=OFF") ;;
-        # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
-        # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
-        # CPU without those extensions — VMs without -cpu host included.
-        # The ISO must run on baseline x86-64.
-        cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=OFF" "-DGGML_NATIVE=OFF") ;;
-    esac
-
-    # The Vulkan backend compiles GLSL compute shaders at build time; without
-    # glslc (shaderc) and the Vulkan headers CMake silently configures GGML_VULKAN
-    # back OFF and produces a CPU build wearing the vulkan name. Catch it here.
-    if [[ "$backend" == "vulkan" ]]; then
-        command -v glslc &>/dev/null \
-            || err "Vulkan build needs 'glslc' — install 'shaderc'."
-        # Checked separately from glslc because it is a separate package: this
-        # box had shaderc and no headers, which sailed past a glslc-only gate.
-        have_vulkan_headers \
-            || err "Vulkan build needs the Vulkan headers — install 'vulkan-headers'."
-        # A third separate package, required from b10241 on. This box had shaderc
-        # AND vulkan-headers AND spirv-TOOLS, and still died in CMake with
-        # 'Could not find a package configuration file provided by
-        # "SPIRV-Headers"' — the two gates above both passed.
-        have_spirv_headers \
-            || err "Vulkan build needs the SPIR-V headers — install 'spirv-headers' (spirv-tools is a different package)."
-    fi
-
-    log "CMake configure (GPU: ${backend})..."
-    cmake "${LLAMA_DIR}" "${CMAKE_ARGS[@]}"
-
-    log "Building llama.cpp (${JOBS} jobs)..."
-    make -j"${JOBS}"
-
-    log "Installing llama.cpp to staging area..."
-    # Wipe first: layering installs from different llama.cpp builds leaves
-    # mismatched libllama/libggml sonames that break linking against staging.
-    # Scoped to this backend's dir — never touches the other backends' builds.
     rm -rf "${staging}"
-    DESTDIR="${staging}" make install
-
-    # A cuda build that produced no cuda backend is a CPU build wearing the
-    # wrong name — and it would be packaged as synapse-llama-cuda and installed
-    # on exactly the machines that wanted the GPU. Fail loudly instead.
-    if [[ "$backend" == "vulkan" && ! -e "${staging}/usr/lib/libggml-vulkan.so" ]]; then
-        err "Vulkan build produced no libggml-vulkan.so — this is a CPU build. Refusing to package it as synapse-llama-vulkan."
-    fi
-    if [[ "$backend" == "cuda" && ! -e "${staging}/usr/lib/libggml-cuda.so" ]]; then
-        err "CUDA build produced no libggml-cuda.so — this is a CPU build. Refusing to package it as synapse-llama-cuda."
-    fi
+    mkdir -p "${staging}"
+    bsdtar -xf "$pkg" -C "${staging}" usr \
+        || err "could not unpack ${pkg} into ${staging}"
 
     if [[ "$repoint" == "yes" ]]; then
         # Before the split, llama-staging was a real directory. ln can't overwrite one,
@@ -923,26 +765,41 @@ build_llama() {
         fi
 
         # Repoint llama-staging at what we just built. If that steals the symlink from
-        # a GPU build, say so loudly: synapd resolves libllama through this path at
-        # runtime, so the machine silently drops to CPU inference until it is restored.
+        # a GPU build, say so loudly: synapd resolves libllama through this path when
+        # the host has none installed, so it would build against ${backend} from now on.
         local _prev
         _prev="$(readlink "${LLAMA_STAGING_LINK}" 2>/dev/null || true)"
         if [[ -n "$_prev" && "$_prev" != "$(basename "${staging}")" && "$_prev" != "llama-staging-cpu" ]]; then
             warn "llama-staging was pointing at ${_prev} — repointing it to the ${backend} build."
-            warn "Anything linking against llama-staging (synapd) now runs on ${backend}."
             warn "Restore with: ln -sfn ${_prev} ${LLAMA_STAGING_LINK}"
         fi
         # -n: don't descend into the existing symlink and nest the link inside its target
         ln -sfn "$(basename "${staging}")" "${LLAMA_STAGING_LINK}"
     fi
 
-    ok "llama.cpp (${backend}) built and staged to ${staging}"
-    cd "${SCRIPT_DIR}"
+    ok "llama.cpp ${LLAMA_REF} (${backend}) staged to ${staging}"
 }
 
-# The ISO's own backend. Repoints llama-staging, because that is the build
-# synapd on this host links against.
-build_llama "${WITH_GPU}" yes
+# ── synapd must be compiled against the llama.cpp this ISO ships ──
+#
+# synapd/meson.build takes the HOST's libllama when there is one, and only falls
+# back to llama-staging when there is not. So on a host with synapse-llama
+# installed, the ISO's synapd is compiled against the HOST's llama.h — and then
+# runs against the libllama this build packages. When the two differ, it links
+# and starts cleanly and then crashes: llama_context_params grows fields between
+# releases, so synapd hands llama_init_from_model() a struct that is too short,
+# and the constructor reads off the end of it. That crash-looped this machine
+# once, at the b8272 -> b10241 bump. Refuse the build instead of shipping it.
+_llama_want="$(cd "${PROJECT_ROOT}/synapse-llama" && bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s-%s" "$pkgver" "$pkgrel"')"
+# --llama-only builds no synapd, so it has nothing to protect here.
+if [[ "$LLAMA_ONLY" != "true" && -e /usr/lib/libllama.so ]]; then
+    _llama_owner="$(LC_ALL=C pacman -Qo /usr/lib/libllama.so 2>/dev/null | awk '{print $(NF-1), $NF}')"
+    case "$_llama_owner" in
+        "synapse-llama ${_llama_want}"|"synapse-llama-cuda ${_llama_want}"|"synapse-llama-vulkan ${_llama_want}") ;;
+        *) err "this host's /usr/lib/libllama.so is ${_llama_owner:-owned by no package}, but this ISO ships synapse-llama ${_llama_want} (llama.cpp ${LLAMA_REF}). synapd would be compiled against the host's llama.h and crash against the shipped library. Bring the host up to date first: syn-update apply synapse-llama synapd" ;;
+    esac
+fi
+unset _llama_want _llama_owner
 
 # ── The CUDA package (built, never installed on the ISO) ──────
 #
@@ -970,11 +827,6 @@ else
     warn "inference on the CPU with no way to switch. Install 'cuda' to fix."
 fi
 
-if [[ "$BUILD_CUDA_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
-    # repoint=no: this build is for packaging only. Stealing the llama-staging
-    # symlink would silently change what this host's synapd links against.
-    build_llama cuda no
-fi
 
 # ── The Vulkan package (built, never installed on the ISO) ────
 #
@@ -1005,22 +857,6 @@ else
     warn "inference on the CPU with no way to switch."
 fi
 
-if [[ "$BUILD_VULKAN_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
-    build_llama vulkan no
-fi
-
-if [[ "$LLAMA_ONLY" == "true" ]]; then
-    if [[ "$WITH_GPU" == "cuda" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-cuda.so" ]]; then
-        err "CUDA was requested but libggml-cuda.so is not in the staging lib dir — this is a CPU build."
-    fi
-    if [[ "$WITH_GPU" == "vulkan" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-vulkan.so" ]]; then
-        err "Vulkan was requested but libggml-vulkan.so is not in the staging lib dir — this is a CPU build."
-    fi
-    ok "--llama-only: stopping before packages/ISO."
-    log "Next: rebuild + reinstall synapd so it links against this staging, then"
-    log "verify with: grep -c nvidia /proc/\$(pidof synapd)/maps"
-    exit 0
-fi
 
 cd "${SCRIPT_DIR}"
 
@@ -1154,7 +990,7 @@ build_package() {
     # synapse-llama's PKGBUILD resolves its tree by backend so it can never
     # package a CPU build as the CUDA one. synapd looks for the bare name, so
     # provide that as a local symlink alongside.
-    if [[ -d "${staging}" ]]; then
+    if [[ "$pkg" != synapse-llama && -d "${staging}" ]]; then
         local _sname
         _sname="$(basename "${staging}")"
         rm -rf "${tmpbuild}/llama-staging" "${tmpbuild}/${_sname}"
@@ -1199,6 +1035,14 @@ build_package() {
 
     cp "${tmpbuild}"/*.pkg.tar.zst "${LOCAL_REPO}/"
 
+    # Before synapd, which PACKAGES builds next and which compiles against it.
+    # Only the ISO's own backend takes the llama-staging symlink.
+    if [[ "$pkg" == synapse-llama ]]; then
+        local _repoint=no
+        [[ "${llama_backend}" == "${WITH_GPU}" ]] && _repoint=yes
+        stage_llama "${llama_backend}" "${_repoint}"
+    fi
+
     ok "${pkg} built"
     cd "${SCRIPT_DIR}"
     rm -rf "${tmpbuild}"
@@ -1207,6 +1051,17 @@ build_package() {
 # Start from a clean repo so stale packages from a previous run can't
 # mask a failed build — pacstrap must see exactly what this run produced.
 rm -f "${LOCAL_REPO}"/*.pkg.tar.zst
+
+# --llama-only: the synapse-llama package for --gpu, staged, and nothing else.
+# Restoring a GPU build on a machine should not cost a full ISO build.
+if [[ "$LLAMA_ONLY" == "true" ]]; then
+    build_package synapse-llama
+    ok "--llama-only: stopping before the other packages and the ISO."
+    log "To run it on this machine: ./build-all.sh synapse-llama synapd"
+    log "(or syn-update apply synapse-llama synapd), then verify with:"
+    log "  grep -c nvidia /proc/\$(pidof synapd)/maps"
+    exit 0
+fi
 
 for pkg in "${PACKAGES[@]}"; do
     build_package "$pkg"
@@ -1233,6 +1088,48 @@ fi
 if [[ "$BUILD_VULKAN_PKG" == "true" ]]; then
     build_package synapse-llama vulkan
 fi
+
+# ── Packages taken from [cachyos], not built ─────────────────
+#
+# limine-snapper-sync and limine-mkinitcpio-hook are upstream's own packages,
+# unpatched, which [cachyos] carries and keeps current. Until 2026-10 they were
+# GraalVM native-image builds here — a ~300 MB download, gradle, and plugins
+# fetched from the network — producing the same thing, later.
+#
+# The INSTALLER still needs them from this repo. The live session's pacman knows
+# only [synapseos], and pacstrap installs limine-snapper-sync from it on a
+# limine + snapshots install. So they are downloaded into the local repo, with
+# their signatures checked against this host's keyring exactly as for anything
+# else mkarchiso takes from [cachyos].
+#
+# On the installed system they do NOT stay in /var/cache/synapseos: syn-install
+# moves them aside once [cachyos] is enabled, because [synapseos] is listed
+# above it and a copy there would hide every update [cachyos] publishes.
+FROM_CACHYOS=(limine-snapper-sync limine-mkinitcpio-hook)
+step "Fetching ${FROM_CACHYOS[*]} from [cachyos]"
+_cdir="$(mktemp -d)"
+# A pacman.conf of [cachyos] alone, from the profile's own section. The
+# profile's [synapseos] points at a file:// repo that has no database yet at
+# this point, and pacman -Sy fails as a whole when any one repo does.
+{
+    printf '[options]\nArchitecture = auto\nSigLevel = Required DatabaseOptional\n\n'
+    sed -n '/^\[cachyos\]/,/^$/p' "${SCRIPT_DIR}/pacman.conf"
+} > "${_cdir}/pacman.conf"
+mkdir -p "${_cdir}/db"
+pacman --config "${_cdir}/pacman.conf" --dbpath "${_cdir}/db" -Sy >/dev/null \
+    || err "could not sync [cachyos] to fetch ${FROM_CACHYOS[*]}"
+# -dd: only these two. Their dependencies (limine, snapper, …) are ordinary
+# packages pacstrap resolves from core/extra itself.
+pacman --config "${_cdir}/pacman.conf" --dbpath "${_cdir}/db" --cachedir "${LOCAL_REPO}" \
+    -Swdd --noconfirm "${FROM_CACHYOS[@]}" 2>&1 | sed 's/^/  /'
+rm -rf "${_cdir}"
+unset _cdir
+for _p in "${FROM_CACHYOS[@]}"; do
+    ls "${LOCAL_REPO}/${_p}"-[0-9]*.pkg.tar.zst &>/dev/null \
+        || err "${_p} did not arrive from [cachyos]; a limine install from this ISO would fail"
+done
+unset _p
+ok "${FROM_CACHYOS[*]} from [cachyos]"
 
 # ── Rebuild local repo database ───────────────────────────────
 step "Updating local pacman repo"

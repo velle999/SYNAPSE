@@ -172,7 +172,7 @@ else bad "unrecovered package not reported, or rc=$rc"; fi
 # 11
 if [ -f "$B" ]; then
     call=$(grep -n 'tools/restore-missing-files.sh" "$BASE" "${KNOWN\[@\]}"' "$B" | cut -d: -f1 | head -1)
-    last=$(grep -n -E '^(build_component|build_script_pkg|build_vendored_pkg) ' "$B" | tail -1 | cut -d: -f1)
+    last=$(grep -n -E '^(build_component|build_script_pkg) ' "$B" | tail -1 | cut -d: -f1)
     if [ -n "$call" ] && [ -n "$last" ] && [ "$call" -gt "$last" ]; then
         ok "build-all.sh runs it after its last install (line $call > $last), over KNOWN"
     else bad "build-all.sh does not call it after the last install (call=${call:-none}, last=$last)"; fi

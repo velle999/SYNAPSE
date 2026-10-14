@@ -51,7 +51,7 @@ done
 declare -A how
 while read -r fn name; do
     how[$name]=$fn
-done < <(sed -n -E 's/^[[:space:]]*(build_component|build_script_pkg|build_vendored_pkg)[[:space:]]+([A-Za-z0-9_.-]+).*/\1 \2/p' "$root/build-all.sh")
+done < <(sed -n -E 's/^[[:space:]]*(build_component|build_script_pkg)[[:space:]]+([A-Za-z0-9_.-]+).*/\1 \2/p' "$root/build-all.sh")
 
 if (( all )); then
     mapfile -t comps < <(printf '%s\n' "${!how[@]}" | sort)

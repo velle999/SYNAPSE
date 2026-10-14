@@ -405,10 +405,12 @@ armed.
 `syn-update` clones the project to `/var/lib/synapse-src` and rebuilds only the
 components whose `pkgver`/`pkgrel` moved, using `makepkg` — so it needs
 `base-devel`, and components are compiled on the target rather than downloaded.
-Components with a large prebuilt payload (`synapse-llama`,
-`linux-wallpaperengine`, `chibi`) are **reported rather than skipped silently**
-and move with an ISO upgrade instead. There is a GUI at **SynapseOS Updates** in
-the start menu, distinct from **Update System**, which is Arch.
+That includes llama.cpp (`synapse-llama`, built for the machine's own GPU) and
+`linux-wallpaperengine`. A component that stops loading because a system update
+replaced one of its libraries — an ffmpeg soname bump — is rebuilt at the
+version it already has. `limine-snapper-sync` and `limine-mkinitcpio-hook` come
+from `[cachyos]` and update with `pacman -Syu`. There is a GUI at **SynapseOS
+Updates** in the start menu, distinct from **Update System**, which is Arch.
 
 **You do not have to remember to check.** A systemd *user* timer runs
 `syn-update ping` — the same check, quietly, with the answer written to a small
@@ -1545,7 +1547,7 @@ synui-wallhaven set lydkg2               # download it and make it the wallpaper
 ```
 
 **Steam Workshop wallpapers** work too, through the `linux-wallpaperengine`
-package (built from `linux-wallpaperengine-pkg/`), **on the ISO since 0.2.1** —
+package (built from `linux-wallpaperengine/`), **on the ISO since 0.2.1** —
 nothing to install. It still needs Steam with Wallpaper Engine installed for its
 asset tree, which is not redistributable and so stays where Steam put it.
 Subscribed wallpapers show up in the `Super`+`W` picker, and
@@ -2461,8 +2463,7 @@ hardware; you can also switch at any time from the desktop's **AI backend** row
 
 The **Vulkan** build is deliberately portable — one package runs on any AMD
 (GCN/RDNA/APU) or Intel GPU with no per-card compile, which is why the ISO can
-offer it broadly. ROCm/HIP is an opt-in high-performance path for a known AMD
-card: build it with `sudo archiso/build.sh --gpu=rocm`.
+offer it broadly. There is no ROCm build; Vulkan is the AMD package.
 
 ---
 
@@ -2471,29 +2472,29 @@ card: build it with `sudo archiso/build.sh --gpu=rocm`.
 **Prerequisites** — an Arch (or Arch-based) host with `archiso`, `base-devel`,
 `meson`, `ninja`, `wlroots0.20`, `scenefx0.5`, `quickshell`, `qemu`, and `ovmf`.
 **Budget ~20 GB of free disk**, or ~32 GB if you embed a model. Roughly where it
-goes: `archiso/build/` holds llama.cpp plus a tree per backend (~3.1 GB),
-`archiso/work/` is mkarchiso's staging tree, the ISO it produces is ~4 GB
+goes: `archiso/work/` is mkarchiso's staging tree, the ISO it produces is ~4 GB
 without a model, `airootfs/local-repo` the built packages (~0.45 GB), and
 package builds want several GB of `/var/tmp` scratch at their peak —
-`linux-wallpaperengine` fetches a ~1.3 GB CEF blob and unpacks it. That last one
+`linux-wallpaperengine` fetches a ~1.3 GB CEF blob and unpacks it, and each
+llama.cpp backend takes 0.4–0.7 GB while it compiles (more for CUDA). That last one
 is transient: packages are built and cleaned up before `mkarchiso` starts, so it
 does not stack with the staging tree.
 
 A model costs its ~4.4 GB three times over — the overlay, the staging tree and
 the image — which is most of the difference between the two numbers.
 
-`archiso/build.sh` runs the whole pipeline: builds llama.cpp (pinned at tag
-`b10241`, matching CI and `synapse-llama`'s `_llama_ref`), packages every
-component through its `PKGBUILD` into a local pacman repo, and invokes
-`mkarchiso`.
+`archiso/build.sh` runs the whole pipeline: packages every component through
+its `PKGBUILD` into a local pacman repo, and invokes `mkarchiso`. llama.cpp is
+one of those packages — `synapse-llama/PKGBUILD` builds the upstream release
+named by its `_llama_ref` (currently `b11612`), and CI reads the same pin.
 
 ```bash
 sudo archiso/build.sh              # CPU llama.cpp, no model — what a release ships
-sudo archiso/build.sh --no-clean   # reuse the previous llama.cpp build
+sudo archiso/build.sh --no-clean   # keep build/ from the previous run
 sudo archiso/build.sh --with-model # embed a ~4.1 GB gguf in the image
 sudo archiso/build.sh --gpu=cuda   # NVIDIA backend for the ISO's own llama (needs cuda)
 sudo archiso/build.sh --gpu=vulkan # AMD/Intel backend (portable; needs shaderc)
-sudo archiso/build.sh --llama-only # build and stage llama.cpp, then stop
+sudo archiso/build.sh --llama-only # build the synapse-llama package for --gpu, then stop
 sudo archiso/build.sh --jobs=8     # parallel build jobs; defaults to nproc
 ```
 
@@ -2536,12 +2537,11 @@ For the inner loop, skip the ISO entirely:
 ./build-all.sh synui        # just one — the usual case
 ```
 
-It builds against the staged llama tree for whichever backend this host runs
-(`llama-staging-cpu`, `-cuda`, `-vulkan`), defaulting to the one already
-installed so a routine rebuild on a GPU box does not quietly try to replace the
-GPU package with a CPU one. Produce a staging tree with
-`sudo archiso/build.sh --gpu=cuda --llama-only`. It asks for `sudo` **up front**
-and then runs unattended.
+It builds `synapse-llama` for the backend this host already runs — CUDA, Vulkan
+or CPU — so a rebuild on a GPU box produces the GPU package again. CUDA kernels
+are compiled for the card in the machine only. Set `SYNAPSE_LLAMA_BACKEND=cuda`,
+`vulkan` or `cpu` to choose, and `SYNAPSE_LLAMA_CUDA_ARCH` to name other CUDA
+architectures. It asks for `sudo` **up front** and then runs unattended.
 
 ### Installing the desktop and its apps on plain Arch
 
@@ -2656,14 +2656,13 @@ SPDX identifiers, per component:
 | Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
 | `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |
 | `linux-wallpaperengine` | `GPL-3.0-or-later`, upstream — packaged from [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine) at a pinned commit |
-| `limine-mkinitcpio-hook` | `GPL-3.0`, upstream |
 | CEF / Chromium (bundled with `linux-wallpaperengine`) | `BSD-3-Clause`, © The Chromium Embedded Framework Authors and © The Chromium Authors — the renderer links `libcef.so` for web wallpapers, so it and its `.pak` data ship with the package |
 | `synapse-wallpapers` | `GPL-3.0-or-later` |
 | `commons-st-louis-night.jpg` | `CC-BY-SA-4.0`, © [Daniel Schwen](https://commons.wikimedia.org/wiki/File:Saint_Louis_night_expblend.jpg) — the Gateway Arch over the Mississippi, and what a fresh install boots onto. Shipped **byte-for-byte upstream's**: a verbatim copy owes attribution and nothing more, and re-encoding it would make it an adapted work |
 | `commons-st-louis-night-noir.jpg` | `CC-BY-SA-4.0` — SynapseOS's greyscale grade of the above, which makes it an **adapted** work: §3(b) forces the grade to CC BY-SA too and §3(a) still wants Schwen credited and the change indicated. Not a choice we got to make. Both notices ship as `/usr/share/licenses/synui/WALLPAPERS.md` |
 | `fetch` (the "About OS" tool) | `ISC`, upstream — packaged from [areofyl/fetch](https://github.com/areofyl/fetch) at a pinned commit, plus two local patches meant for upstream |
-| `limine-snapper-sync` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) |
-| GraalVM CE (linked into `limine-snapper-sync`) | `GPL-2.0-WITH-Classpath-exception-2.0`, © Oracle — it is a `native-image` build, so GraalVM's runtime is statically linked into the shipped binary rather than merely used to compile it |
+| `limine-snapper-sync`, `limine-mkinitcpio-hook` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) — CachyOS's builds, carried on the ISO for the installer and updated from `[cachyos]` |
+| GraalVM CE (linked into both of the above) | `GPL-2.0-WITH-Classpath-exception-2.0`, © Oracle — they are `native-image` builds, so GraalVM's runtime is statically linked into the shipped binaries rather than merely used to compile them |
 | `samsung-m2020` (**not shipped** — see below) | `custom:Samsung` — the PKGBUILD is here, the driver is not |
 
 **The Samsung printer driver is not shipped at all.** Samsung's EULA licenses

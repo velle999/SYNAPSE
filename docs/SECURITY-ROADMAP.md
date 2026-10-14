@@ -265,13 +265,11 @@ instead of in pip's random temp directory, the rest of its Python packages
 are pinned with a hash per file (`chibi/pydeps.lock`) instead of whatever PyPI
 held that day, and `src/pydeps` is emptied first — it had been accumulating
 every earlier build's packages, 288 MB of them. Two builds of one commit are
-bit-identical, debug package included. The one that is not, and one it cannot
-build:
+bit-identical, debug package included. The one that is not checked:
 
 | component | why | what would remove it |
 |---|---|---|
-| `limine-mkinitcpio-hook` | vendored upstream package; `limine-entry-tool` is a Kotlin/Native binary built by Gradle, and two builds differ in ten million bytes | upstream's to fix — this is one of the packages "we do not build" in every sense but the command |
-| `synapse-llama` | not checked: it packages the llama.cpp tree `archiso/build.sh` compiles from upstream into `llama-staging-*/`, which is not in the repository, so a clean clone cannot build it | `tools/iso-repro-diff.sh`, when two builds of one commit exist |
+| `synapse-llama` | builds from a clean clone — its PKGBUILD compiles the pinned llama.cpp release — but CMake downloads llama-server's web UI at configure time, the newest one when the release has none of its own, so two builds of one commit can embed different UI files | a UI asset pinned in `source=()`, or `LLAMA_USE_PREBUILT_UI=OFF` at the cost of the web UI; then `tools/iso-repro-diff.sh` on two builds |
 
 ⚠ **Same commit and same build PATH.** `.BUILDINFO` records the build
 directory, so two builds at different paths differ in exactly those two lines

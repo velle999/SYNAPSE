@@ -287,7 +287,25 @@ pkgver=0.1.0
 #   command named `-Syy`, and printed the text with all three missing. As
 #   root the first is a real database sync. Escaped. tests/usage_test.sh is
 #   9 red on 65, 12 green here; preflight's new heredoc check gates the class.
-pkgrel=66
+# ── 0.1.0-67: every component on the ISO updates ──────────────────────────────
+#
+# UNSUPPORTED is gone. synapse-llama, linux-wallpaperengine, limine-snapper-sync
+# and limine-mkinitcpio-hook were reported as moving "with an ISO upgrade",
+# which meant never: an installed machine kept its ISO's copies for life.
+# - synapse-llama and linux-wallpaperengine join COMPONENTS. synapse-llama is
+#   asked for under each package its directory builds (-cuda, -vulkan), since
+#   `pacman -Q synapse-llama` fails on a GPU machine; it stays NEVER_ADD.
+#   linux-wallpaperengine predates the manifest, so its absence reads as
+#   declined, never new — no 1.3 GB CEF build on a machine without it.
+# - The limine pair come from [cachyos] (RETIRED). An old copy in the local
+#   repo, which sits above [cachyos], hid every update there; it is moved to
+#   superseded/ by the next apply, which asks for a password for that alone.
+# - A component whose ELF needs a library a system update replaced under a new
+#   soname (ffmpeg 8 -> 9) is rebuilt at the version it has. A rebuild that
+#   does not fix it is reported, not retried, until what is missing changes.
+# ⚠ A COMPONENTS CHANGE: the apply that installs this runs the old list; the
+#   next apply acts on the new one.
+pkgrel=67
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

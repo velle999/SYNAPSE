@@ -104,8 +104,8 @@ changed components from this repository, so a security fix pushed here reaches
 existing machines without a new ISO. Two exceptions worth knowing when judging
 whether a fix has actually landed:
 
-- components in `syn-update`'s `UNSUPPORTED` map are **not** delivered that way
-  and move only with an ISO;
+- `limine-snapper-sync` and `limine-mkinitcpio-hook` are CachyOS's packages: a
+  fix to them arrives from `[cachyos]` with `pacman -Syu`, not from here;
 - `synapse_kmod` is a kernel module, so a machine has to reboot into the
   rebuilt one.
 

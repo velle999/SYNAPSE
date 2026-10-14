@@ -317,7 +317,7 @@ rtkit
 
 # Wallpaper Engine backgrounds (the Workshop rows in synui's Super+W picker,
 # driven by the synui-wpengine script this package also ships). Built from
-# linux-wallpaperengine-pkg/PKGBUILD against a pinned upstream commit; it is in
+# linux-wallpaperengine/PKGBUILD against a pinned upstream commit; it is in
 # no pacman repo, so pacstrap can only get it from our local-repo.
 #
 # synui does NOT depend on it — the picker simply shows no Workshop rows when
@@ -345,7 +345,8 @@ limine-snapper-sync
 # limine install needs — without it `pacman -S linux-lts` yields a complete,
 # correct, unbootable kernel. syn-install pacman -S's it into the TARGET at
 # install time (syn-install.sh), and it reaches that target through the local
-# repo, which build.sh fills from its own PACKAGES array. Being in the repo and
+# repo, which build.sh fills — for this package and limine-snapper-sync, by
+# downloading [cachyos]'s builds (FROM_CACHYOS). Being in the repo and
 # being in this file are separate things; only this file INSTALLS a package into
 # the live ISO. synapse-llama-cuda is in the repo and not here for the same
 # reason (build.sh).

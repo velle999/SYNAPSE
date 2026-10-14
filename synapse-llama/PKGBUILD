@@ -20,7 +20,8 @@
 # BACKEND SELECTION (build time):
 #   SYNAPSE_LLAMA_BACKEND=cuda   makepkg  ->  synapse-llama-cuda    (NVIDIA)
 #   SYNAPSE_LLAMA_BACKEND=vulkan makepkg  ->  synapse-llama-vulkan  (AMD/Intel)
-#   (unset / anything else)               ->  synapse-llama         (portable CPU)
+#   SYNAPSE_LLAMA_BACKEND=cpu, or unset   ->  synapse-llama         (portable CPU)
+#   anything else fails the build.
 #
 # Every GPU package declares provides+conflicts on synapse-llama, so pacman
 # REFUSES to replace a GPU build with a CPU one rather than doing it silently.
@@ -33,20 +34,36 @@
 # RDNA) or Intel GPU. That is why the ISO can offer it broadly without a
 # per-architecture compile.
 #
-# The libraries themselves are built by archiso/build.sh (which owns the CUDA
-# recipe — the CCCL/cub patch, the arch flags) and staged into
-# llama-staging-<backend>/. This PKGBUILD only packages that tree.
+# THIS PACKAGE BUILDS llama.cpp ITSELF, from the upstream release named below.
+#
+# It used to package a tree that archiso/build.sh compiled and staged into
+# llama-staging-<backend>/, so the recipe lived in the ISO build and nowhere
+# else. An installed machine has no ISO build, so syn-update could never move
+# llama.cpp at all: every installed SynapseOS ran whatever llama.cpp its ISO
+# carried, for life. The recipe lives here now, and syn-update builds this on
+# each machine like any other component. archiso/build.sh and build-all.sh both
+# run this PKGBUILD rather than carrying a copy of it.
+#
+# _llama_ref is the ONE pin. archiso/build.sh and .github/workflows/build.yml
+# read it from this file; there is no second number to keep in step.
 
 _backend="${SYNAPSE_LLAMA_BACKEND:-cpu}"
 
 pkgver=0.1.0
-pkgrel=3
-# The upstream llama.cpp commit build.sh pins. Keep in sync with LLAMA_REF.
-_llama_ref=b10241
+pkgrel=4
+# The upstream llama.cpp release this builds. The only pin — see above.
+_llama_ref=b11612
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('MIT')
 options=('!strip' '!debug')
+makedepends=('cmake')
+# The release tarball, not a git clone. makepkg cannot clone shallowly, and a
+# full llama.cpp history is several hundred MB on every machine that builds
+# this — for a tree it reads once. The tarball is ~38 MB and its checksum pins
+# the exact bytes, which a `#tag=` (movable upstream) does not.
+source=("llama.cpp-${_llama_ref}.tar.gz::https://github.com/ggml-org/llama.cpp/archive/refs/tags/${_llama_ref}.tar.gz")
+sha256sums=('4dd8a9ebd51aaa29c6757b4f6993059d42d2b9a69871c430d8597ddc4ae07540')
 
 case "$_backend" in
 cuda)
@@ -59,6 +76,7 @@ cuda)
     depends=('glibc' 'gcc-libs' 'cuda' 'nvidia-utils')
     provides=('synapse-llama')
     conflicts=('synapse-llama')
+    makedepends+=('cuda')
     ;;
 vulkan)
     pkgname=synapse-llama-vulkan
@@ -72,6 +90,11 @@ vulkan)
     depends=('glibc' 'gcc-libs' 'vulkan-icd-loader')
     provides=('synapse-llama')
     conflicts=('synapse-llama')
+    # The compute shaders are compiled at build time. Without glslc or the
+    # headers CMake quietly configures GGML_VULKAN back OFF and produces a CPU
+    # build wearing the vulkan name (package() refuses that). spirv-headers is
+    # its own package, required from b10241 on; spirv-tools does not provide it.
+    makedepends+=('shaderc' 'vulkan-headers' 'spirv-headers')
     ;;
 *)
     pkgname=synapse-llama
@@ -95,34 +118,104 @@ esac
 provides+=('llama-cpp' 'ggml')
 conflicts+=('llama-cpp' 'ggml')
 
-package() {
-    # Always resolve the BACKEND-NAMED dir, never the bare `llama-staging`
-    # symlink: that symlink just points at whatever was built last, so trusting
-    # it is how a CPU tree could get packaged as the CUDA build (or vice versa).
-    # $startdir/ is where archiso/build.sh copies it; ../ is the dev checkout.
-    local staging=""
-    local c
-    for c in "${startdir}/llama-staging-${_backend}" \
-             "${startdir}/../llama-staging-${_backend}"; do
-        [ -d "${c}/usr/lib" ] && { staging="$c"; break; }
-    done
+build() {
+    local args=(
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX=/usr
+        # The tarball has no .git, so llama.cpp's build-info falls back to
+        # "0 (unknown)" and `llama-server --version` stops saying which release
+        # is installed. The tag is that answer.
+        -DLLAMA_BUILD_NUMBER="${_llama_ref#b}"
+        -DLLAMA_BUILD_COMMIT="${_llama_ref}"
+        -DLLAMA_BUILD_TESTS=OFF
+        -DLLAMA_BUILD_EXAMPLES=OFF
+        # LLAMA_BUILD_SERVER, not LLAMA_SERVER — the latter is not an option
+        # llama.cpp defines, so CMake accepts it and does nothing. package()
+        # installs llama-cli, llama-server and llama-bench with a soft
+        # `[ -x ] &&` that skips a missing one WITHOUT failing, so a build that
+        # stopped producing them would ship without its CLI tools and say
+        # nothing. TOOLS and APP stay on for the same reason: the cli/server
+        # binaries link the -impl libraries the tools/ tree builds.
+        -DLLAMA_BUILD_SERVER=ON
+        -DLLAMA_BUILD_TOOLS=ON
+    )
 
-    [ -n "$staging" ] || {
-        echo "synapse-llama: no staged ${_backend} build found" >&2
-        echo "  build it first: sudo archiso/build.sh --gpu=${_backend} --llama-only" >&2
+    # EVERY backend toggle is stated on EVERY path, never left to a default.
+    # CMake option() values are sticky in a reused build dir, and a cached
+    # GGML_CUDA=ON once turned a "cpu" build into one whose libggml NEEDs
+    # libcuda.so.1 — a synapd that cannot start without an NVIDIA driver.
+    case "$_backend" in
+    cuda)
+        args+=(-DGGML_CUDA=ON -DGGML_HIP=OFF -DGGML_VULKAN=OFF)
+        # makepkg's environment need not carry /opt/cuda/bin (the profile.d
+        # script that adds it runs for login shells), and sudo strips it.
+        if [ -d /opt/cuda ]; then
+            args+=(-DCUDAToolkit_ROOT=/opt/cuda -DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc)
+        fi
+        # WHICH GPUs the kernels are compiled for. Unset, llama.cpp builds its
+        # own default list — seven architectures, PTX for the rest — which is
+        # what a package that may land on ANY NVIDIA card needs, and it is what
+        # the ISO gets. build-all.sh sets this to `native`: on an installed
+        # machine the package is built by and for the card in it, and one
+        # architecture instead of seven is several times faster. (The
+        # b10241-era build was native-only too; llama.cpp's default changed.)
+        if [ -n "${SYNAPSE_LLAMA_CUDA_ARCH:-}" ]; then
+            args+=(-DCMAKE_CUDA_ARCHITECTURES="${SYNAPSE_LLAMA_CUDA_ARCH}")
+        fi
+        ;;
+    # GGML_NATIVE=OFF on both of these. NATIVE bakes the BUILD HOST's
+    # instruction set (AVX2/AVX-512) into libggml-cpu, and synapd dies with
+    # SIGILL on a CPU without it — a VM without -cpu host included. The ISO
+    # builds the packages every machine installs first, so they must run on
+    # baseline x86-64. Vulkan needs it as much as CPU: with no usable GPU it
+    # falls back to the CPU backend, so that path is reachable. CUDA keeps the
+    # default because libggml-cuda cannot load at all without the GPU it was
+    # built on, so its CPU path is never the one running.
+    vulkan)
+        args+=(-DGGML_CUDA=OFF -DGGML_HIP=OFF -DGGML_VULKAN=ON -DGGML_NATIVE=OFF)
+        ;;
+    cpu)
+        args+=(-DGGML_CUDA=OFF -DGGML_HIP=OFF -DGGML_VULKAN=OFF -DGGML_NATIVE=OFF)
+        ;;
+    # Anything else would fall into a CPU build named synapse-llama, which is
+    # the silent mislabel package() exists to refuse. rocm is the one name that
+    # has reached here — archiso/build.sh accepts --gpu=rocm — and no ROCm
+    # package is defined: Vulkan is the AMD build.
+    *)
+        echo "synapse-llama: no '${_backend}' backend is packaged — cpu, cuda or vulkan" >&2
         return 1
-    }
+        ;;
+    esac
+
+    # ⚠ NETWORK AT CONFIGURE TIME, beyond source=(). llama-server embeds a web
+    # UI, and from ~b11000 that UI is no longer in the source tree: CMake
+    # downloads a prebuilt copy from upstream's Hugging Face bucket, checksum
+    # verified, for the release being built — or "latest" when that release has
+    # none, as b11612 does not. LLAMA_USE_PREBUILT_UI=OFF would drop the web UI
+    # that llama-server has always had here, so it is left on; the cost is that
+    # two builds of one release can embed different UI assets.
+
+    # A fresh build dir per backend, every time. See the note above args.
+    rm -rf "build-${_backend}"
+    cmake -S "llama.cpp-${_llama_ref}" -B "build-${_backend}" "${args[@]}"
+    cmake --build "build-${_backend}" --parallel "$(nproc)"
+}
+
+package() {
+    local stage="${srcdir}/stage-${_backend}"
+    rm -rf "$stage"
+    DESTDIR="$stage" cmake --install "${srcdir}/build-${_backend}"
 
     # A GPU package without its backend library is the exact silent failure
-    # this package exists to prevent (a CPU tree wearing a GPU name, installed
+    # this package exists to prevent (a CPU build wearing a GPU name, installed
     # on exactly the machines that wanted the GPU). Fail the build instead.
     local _need_lib=""
     case "$_backend" in
         cuda)   _need_lib=libggml-cuda.so ;;
         vulkan) _need_lib=libggml-vulkan.so ;;
     esac
-    if [ -n "$_need_lib" ] && [ ! -e "${staging}/usr/lib/${_need_lib}" ]; then
-        echo "synapse-llama: backend=${_backend} but ${_need_lib} is absent — that staging tree is a CPU build" >&2
+    if [ -n "$_need_lib" ] && [ ! -e "${stage}/usr/lib/${_need_lib}" ]; then
+        echo "synapse-llama: backend=${_backend} but ${_need_lib} is absent — this is a CPU build" >&2
         return 1
     fi
 
@@ -131,14 +224,17 @@ package() {
     # -a preserves the soname symlink chain (libfoo.so -> .so.0 -> .so.0.9.7).
     # Copying these as three identical regular files is what made ldconfig spam
     # "is not a symbolic link" on every pacman run.
-    cp -a "${staging}"/usr/lib/lib*.so* "${pkgdir}/usr/lib/"
-    cp -a "${staging}"/usr/include/*.h  "${pkgdir}/usr/include/"
+    cp -a "${stage}"/usr/lib/lib*.so* "${pkgdir}/usr/lib/"
+    cp -a "${stage}"/usr/include/*.h  "${pkgdir}/usr/include/"
 
     # synapd links libllama directly; the CLI tools are here because the ISO
     # previously shipped them and syn-model/debugging expect them on PATH.
     local b
     for b in llama-cli llama-server llama-bench; do
-        [ -x "${staging}/usr/bin/${b}" ] && install -Dm755 \
-            "${staging}/usr/bin/${b}" "${pkgdir}/usr/bin/${b}"
+        [ -x "${stage}/usr/bin/${b}" ] && install -Dm755 \
+            "${stage}/usr/bin/${b}" "${pkgdir}/usr/bin/${b}"
     done
+
+    install -Dm644 "${srcdir}/llama.cpp-${_llama_ref}/LICENSE" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

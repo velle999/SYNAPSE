@@ -94,9 +94,10 @@ for list in SEL_COMPONENTS; do
     for row in "${rows[@]}"; do
         IFS='|' read -r key std full group pkgs _ <<<"$row"
         for p in $pkgs; do
-            # By PKGNAME, not by directory: linux-wallpaperengine is built out
-            # of linux-wallpaperengine-pkg/, so checking for a directory of the
-            # same name reports a package that certainly exists as missing.
+            # By PKGNAME, not by directory: the two need not agree
+            # (linux-wallpaperengine was built out of linux-wallpaperengine-pkg/
+            # until 2026-10), and checking for a directory of the same name
+            # would report a package that certainly exists as missing.
             # What the ISO's local repo will actually carry is the pkgname.
             check "$key: $p is a pkgname in this tree" yes \
                   "$(grep -lxF "pkgname=$p" "$base"/*/PKGBUILD >/dev/null 2>&1 \

@@ -12,23 +12,28 @@ if [ -z "${LC_ALL:-}${LC_CTYPE:-}${LANG:-}" ]; then
     export LANG=C.UTF-8
 fi
 
-# Which llama backend the synapse-llama package is built from. The staged tree
-# (llama-staging-$SYNAPSE_LLAMA_BACKEND) is produced by:
-#     sudo archiso/build.sh --gpu=cuda --llama-only
+# Which llama backend synapse-llama is built for. Its PKGBUILD compiles
+# llama.cpp itself, for the backend named here.
 #
-# Default to whatever THIS host already runs, so a routine ./build-all.sh on a
-# GPU box rebuilds the GPU variant instead of quietly trying to replace it with
-# a CPU one. (It would not be quiet — synapse-llama-cuda conflicts with
-# synapse-llama, so pacman would refuse — but failing a full build over a
-# defaulted variable is a lousy way to find that out.)
+# Default to whatever THIS host already runs, so a routine ./build-all.sh — and
+# every syn-update on an installed machine — rebuilds the GPU variant instead of
+# trying to replace it with a CPU one. (It would not be quiet — the GPU builds
+# conflict with synapse-llama, so pacman would refuse — but failing a whole
+# update over a defaulted variable is a lousy way to find that out.)
 if [ -z "${SYNAPSE_LLAMA_BACKEND:-}" ]; then
     if pacman -Qq synapse-llama-cuda >/dev/null 2>&1; then
         SYNAPSE_LLAMA_BACKEND=cuda
+    elif pacman -Qq synapse-llama-vulkan >/dev/null 2>&1; then
+        SYNAPSE_LLAMA_BACKEND=vulkan
     else
         SYNAPSE_LLAMA_BACKEND=cpu
     fi
 fi
 export SYNAPSE_LLAMA_BACKEND
+# Here the package is built on, and for, the machine that installs it — so the
+# CUDA kernels are compiled for the card in it alone. See synapse-llama's
+# PKGBUILD; the ISO leaves this unset and gets every architecture.
+export SYNAPSE_LLAMA_CUDA_ARCH="${SYNAPSE_LLAMA_CUDA_ARCH-native}"
 echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 
 # Optional component filter: `./build-all.sh synapd` rebuilds only synapd.
@@ -41,8 +46,8 @@ KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe synapse-voice chibi samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks syn-cal
        syn-vault syn-clean syn-play syn-scan
-       syn-confine syn-edit syntty limine-mkinitcpio-hook fetch
-       synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote
+       syn-confine syn-edit syntty fetch
+       linux-wallpaperengine synapse-wallpapers syn-arcade cliamp synstudio syn-gfn syn-remote
        syn-mouse)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
@@ -208,59 +213,6 @@ build_script_pkg() {
     fi
 }
 
-# Bring an ALREADY-INSTALLED vendored package up to the tree's version.
-#
-# For limine-mkinitcpio-hook, which is vendored rather than ours. Two things
-# make it unlike every other rule here:
-#
-# 1. IT MUST NEVER ARRIVE UNINVITED. It depends on `limine`, so installing it
-#    would put a second bootloader on a GRUB box, and it ships
-#    /etc/pacman.d/hooks/90-mkinitcpio-install.hook, which SHADOWS Arch's own
-#    hook of that name, plus an interactive /usr/local/bin/mkinitcpio ahead of
-#    the real one on PATH. On a machine that does not boot limine that is a
-#    broken initramfs pipeline delivered as a build artifact. It reaches limine
-#    machines deliberately — syn-install during a limine install, or
-#    syn-settings' Kernel pane — and this script only ever moves it FORWARD.
-#    That is the same policy as syn-update's NEVER_ADD, enforced where the
-#    building happens, so `./build-all.sh` with no arguments cannot install it.
-#
-# 2. Building it is a GraalVM native-image build: a ~250 MB download and
-#    several minutes. Nobody should pay that to re-package the version they
-#    already run, so the installed version is compared first. The tree's
-#    version is composed from _pkgver, so it is read by SOURCING the PKGBUILD,
-#    not scraped — scraping it is what broke syn-update (it read the literal
-#    string ${_pkgver}${_extver}, which vercmp ranks above every real version).
-build_vendored_pkg() {
-    local name=$1
-    want "$name" || return 0
-
-    local inst avail
-    inst=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
-    if [ -z "$inst" ]; then
-        echo "=== $name: not installed here; not adding it (see the comment above) ==="
-        return 0
-    fi
-
-    # set +e +u INSIDE the subshell: this script runs under `set -e`, and a
-    # PKGBUILD is not written to be sourced by it — one command returning
-    # non-zero would take the whole build down instead of just this read.
-    avail=$( set +e +u; cd "$BASE/$name" && . ./PKGBUILD >/dev/null 2>&1 &&
-             printf '%s-%s' "$pkgver" "$pkgrel" ) || avail=""
-    case "$avail" in
-        *'$'*|-*|"")
-            echo "=== $name: cannot read the tree's version, leaving $inst alone ==="
-            return 0 ;;
-    esac
-
-    if [ "$(vercmp "$avail" "$inst")" -le 0 ]; then
-        echo "=== $name: $inst is already current (tree has $avail) ==="
-        return 0
-    fi
-
-    echo "=== $name: $inst -> $avail ==="
-    build_script_pkg "$name"
-}
-
 # ⛔ NO TERMINAL AND NO CACHED CREDENTIAL: stop here, before the first sudo.
 # A sudo that cannot reach a terminal fails the PAM conversation, pam_faillock
 # counts that as a wrong password, and three lock the account until a reboot.
@@ -291,9 +243,11 @@ done
 sudo mkdir -p /etc/synsh
 sudo touch /etc/synsh/synshrc
 
-# llama.cpp libraries — must be built and installed BEFORE synapd, which now
-# depends on it. build_script_pkg (no source tarball): it packages the tree that
-# archiso/build.sh staged.
+# llama.cpp libraries — must be built and installed BEFORE synapd, which links
+# them: synapd compiled against one llama.h and run against another libllama
+# passes a struct of the wrong size and crashes (see synapd's PKGBUILD).
+# build_script_pkg: the PKGBUILD downloads the llama.cpp release it pins and
+# compiles it for SYNAPSE_LLAMA_BACKEND, above.
 build_script_pkg synapse-llama
 
 # scenefx BEFORE synui, which links it. It was left out of this script for a
@@ -394,6 +348,14 @@ build_script_pkg cliamp
 # makedepends are python-pillow, librsvg, ffmpeg and adwaita-fonts, all
 # ordinary packages. Order does not matter — nothing depends on it.
 build_script_pkg synapse-wallpapers
+
+# linux-wallpaperengine — the Wallpaper Engine renderer the wallpapers above
+# are drawn by. Upstream's code at a pinned commit, with our packaging around
+# it (the CEF RUNPATH and licence). THE HEAVY ONE: cmake downloads ~1.3 GB of
+# CEF at configure time and the build needs ~6 GB of scratch. It only runs when
+# the PKGBUILD's version moves — and on an ffmpeg soname bump, which is what
+# stopped every live wallpaper at ffmpeg 9. Nothing depends on it.
+build_script_pkg linux-wallpaperengine
 
 # syn-confine BEFORE vibe, which DEPENDS on it — the same rule as scenefx
 # before synui above, and it is load-bearing rather than tidy. vibe's bash tool
@@ -577,10 +539,6 @@ build_component syn-remote
 # uinput output a text file (SYNMOUSE_INPUT / SYNMOUSE_OUTPUT), so a build can
 # never type into the desktop of whoever is running it.
 build_component syn-mouse
-
-# Vendored, boot-critical where it is installed, and never installed by this
-# script. See build_vendored_pkg.
-build_vendored_pkg limine-mkinitcpio-hook
 
 # ⛔ AFTER THE LAST INSTALL, AND OVER EVERY COMPONENT. Installing each package in
 # its own transaction, as everything above has to, deletes a file that moved

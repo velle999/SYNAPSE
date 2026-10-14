@@ -87,6 +87,9 @@ SRC="${SYN_UPDATE_SRC:-/var/lib/synapse-src}"
 
 LOCAL_REPO=/var/cache/synapseos
 
+# Read only to tell whether a RETIRED package's repository is configured here.
+PACMAN_CONF="${SYN_UPDATE_PACMAN_CONF:-/etc/pacman.conf}"
+
 # The git tree, when SRC is temporarily pointed somewhere that is not one.
 # Set only by cmd_check, which scans a mktemp -d of remote PKGBUILDs.
 SRC_GIT=""
@@ -98,27 +101,230 @@ SRC_GIT=""
 # syn-update is in this list on purpose: an updater that cannot update itself
 # can never ship its own fix, and would have to be repaired by reinstalling the
 # OS — the exact dead end this tool exists to remove.
-COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
+#
+# ⛔ EVERY COMPONENT ON THE ISO IS IN THIS LIST. There used to be a second list,
+# UNSUPPORTED, of components "not updatable from source on an installed system"
+# — synapse-llama, linux-wallpaperengine, limine-snapper-sync — which every
+# check reported as moving "with an ISO upgrade". In practice that meant never:
+# llama.cpp, the wallpaper engine and the snapshot tool stayed at whatever the
+# installing ISO carried, for the life of the machine. They are all built here
+# now (or, for the limine pair, come from [cachyos] — see RETIRED). A component
+# that cannot be updated is not a category this tool has any more; do not
+# bring one back.
+COMPONENTS=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
             nexus-chat tepris vibe synapse-voice chibi samsung-m2020 syn-arsenal synpkg synfiles
             syn-settings syn-disks syn-cal syn-vault syn-clean syn-play syn-edit syntty syn-confine
             syn-scan
-            limine-mkinitcpio-hook fetch synapse-wallpapers syn-arcade cliamp
+            fetch linux-wallpaperengine synapse-wallpapers syn-arcade cliamp
             synstudio syn-gfn syn-remote syn-mouse)
 
-# On the ISO but NOT updatable this way, with the reason. Reported rather than
-# skipped in silence: a component quietly frozen forever is exactly the bug
-# this tool exists to fix, and reintroducing it for a subset would be worse
-# than not covering them, because nothing would say so.
-declare -A UNSUPPORTED=(
-    [synapse-llama]="packaged from a tree that archiso/build.sh --llama-only stages; there is no staging tree on an installed system"
-    [linux-wallpaperengine]="cmake fetches a ~1.3 GB CEF blob and needs ~6 GB of scratch to build; its synui-wpengine control script now lives in synui, which IS updatable"
-    [limine-snapper-sync]="vendored upstream at a pinned tag, so there is no local source to ship; its gradle build fetches plugins and Java dependencies from the network and produces a GraalVM native-image, which is a long build for a package that can only ever come out identical"
+# The packages a component's directory can produce, when that is not just its
+# own name. Asked in order; the first one installed is the component.
+#
+# ⚠ `pacman -Q synapse-llama` FAILS on a machine running the CUDA build: the
+# package there is synapse-llama-cuda, and -Q does not resolve provides. Every
+# question this tool asks about a component goes through installed_pkg(), so a
+# GPU machine is not mistaken for one without llama.cpp — which would make it a
+# candidate for a CPU build that conflicts with the one it runs.
+declare -A PKG_VARIANTS=(
+    [synapse-llama]="synapse-llama synapse-llama-cuda synapse-llama-vulkan"
+)
+
+# Components compiled against another component's HEADERS, rebuilt whenever it
+# is — at the version they already have, if theirs did not move.
+#
+# ⛔ synapd and llama.cpp. llama_context_params gains fields between releases
+# and the soname does not change, so a synapd compiled against the old llama.h
+# links, loads, and hands the new library a struct that is too short: the
+# context constructor reads off its end and the daemon crash-loops on SIGSEGV.
+# That happened at the b8272 -> b10241 bump. Neither a version compare nor the
+# relink scan below can see it, and `syn-update apply synapse-llama` on its own
+# would have done it again on every machine that typed it.
+declare -A REBUILD_WITH=(
+    [synapse-llama]="synapd"
+)
+# dependent -> what it is being rebuilt with. Filled by scan().
+declare -A REBUILT_WITH=()
+
+# installed_pkg <component> -> "<package> <version>" for what is installed.
+installed_pkg() {
+    local p
+    for p in ${PKG_VARIANTS[$1]:-$1}; do
+        pacman -Q "$p" 2>/dev/null && return 0
+    done
+    return 1
+}
+
+# installed_ver <component> -> the installed version, or nothing.
+installed_ver() {
+    installed_pkg "$1" | awk '{print $2}'
+}
+
+# ── a library the system moved out from under a component ────────────────
+#
+# Every component is BUILT here against the libraries Arch has today, and Arch
+# rolls. When one of them changes its soname — ffmpeg 8 -> 9 moved
+# libavcodec.so.62 to .so.63 — every binary linked against the old name stops
+# loading, and nothing in a version compare can see it: the component's
+# pkgver-pkgrel did not move. That killed every live wallpaper on every machine
+# for days, the error landing in a log under /run that a reboot wipes.
+#
+# Arch answers it with a rebuild of everything that links the old name, done
+# centrally. Here the rebuild has to happen on each machine, so scan() asks:
+# does an installed component need a library the loader cannot find, where a
+# DIFFERENT version of that library is installed? That second condition is the
+# soname-bump signature, and it is what keeps an optional plugin's missing
+# dependency from queueing a rebuild on every run. Such a component is rebuilt
+# at the version it already has.
+
+# missing_sonames_of <package>... -> "<package> <soname>" per library one of
+# its ELF files needs, that the loader cannot find, and that is installed under
+# another version.
+#
+# ONE pacman call for every package, and ldd in parallel: chibi and
+# synapse-voice alone carry ~12,000 files, and one `pacman -Ql` per component
+# is a third of a second each before any file is opened.
+missing_sonames_of() {
+    [ $# -gt 0 ] || return 0
+    local p f magic so
+    local -A files=()
+    while read -r p f; do
+        case $f in
+            */) continue ;;
+            *.so|*.so.*) ;;
+            *) [ -x "$f" ] || continue ;;
+        esac
+        [ -f "$f" ] || continue
+        # The ELF magic, read with a builtin: no process per file.
+        IFS= read -r -n4 magic < "$f" 2>/dev/null || continue
+        [ "$magic" = $'\x7fELF' ] || continue
+        files[$p]+="$f"$'\n'
+    done < <(pacman -Ql "$@" 2>/dev/null)
+
+    for p in "${!files[@]}"; do
+        while read -r so; do
+            [ -n "$so" ] || continue
+            compgen -G "${RELINK_LIBDIR}/${so%%.so*}.so.*" >/dev/null &&
+                printf '%s %s\n' "$p" "$so"
+        done < <(printf '%s' "${files[$p]}" | tr '\n' '\0' |
+                 xargs -0 -r -P "$(nproc)" -n 16 ldd 2>/dev/null |
+                 awk '$2 == "=>" && $3 == "not" {print $1}' | sort -u)
+    done
+    return 0
+}
+
+# Where a soname's newer sibling would be. A seam for the test suite.
+RELINK_LIBDIR="${SYN_UPDATE_LIBDIR:-/usr/lib}"
+
+# The scan is cached against pacman's local database: a soname can only go
+# missing in a pacman transaction, and every transaction changes that
+# directory's mtime. So the ~5 s it costs is paid once after a system update,
+# not on every check the bar's badge runs.
+RELINK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/syn-update/relink"
+# Components a relink was TRIED for and did not fix, with what was still
+# missing. Without this, a component whose rebuild cannot cure it — a bundled
+# copy of the library, a makedepends pin — would be rebuilt on every apply
+# forever. Kept until the missing set changes, so a later fix still gets tried.
+RELINK_FAILED="${XDG_CACHE_HOME:-$HOME/.cache}/syn-update/relink-failed"
+PACMAN_LOCAL_DB="${SYN_UPDATE_PACMAN_LOCAL:-/var/lib/pacman/local}"
+
+# relink_scan <package>... -> the missing_sonames_of lines, cached.
+relink_scan() {
+    local stamp
+    stamp=$(stat -c %Y "$PACMAN_LOCAL_DB" 2>/dev/null) || stamp=""
+    # The cached answer is for a set of packages, so the set is part of the key.
+    local key="$stamp $*"
+    if [ -n "$stamp" ] && [ -r "$RELINK_CACHE" ] &&
+       [ "$(head -n1 "$RELINK_CACHE")" = "$key" ]; then
+        tail -n +2 "$RELINK_CACHE"
+        return 0
+    fi
+    local out
+    out=$(missing_sonames_of "$@")
+    if [ -n "$stamp" ] && mkdir -p "${RELINK_CACHE%/*}" 2>/dev/null; then
+        { printf '%s\n' "$key"; [ -n "$out" ] && printf '%s\n' "$out"; } \
+            > "$RELINK_CACHE" 2>/dev/null || true
+    fi
+    [ -n "$out" ] && printf '%s\n' "$out"
+    return 0
+}
+
+# component -> its missing sonames, space-separated. Filled by scan().
+declare -A RELINK=()
+# The same shape, for the ones a rebuild has already failed to fix.
+declare -A RELINK_STUCK=()
+
+# After a build: did each relink that was BUILT actually fix what it was for?
+# One that did not is written to RELINK_FAILED so the next scan reports it
+# instead of rebuilding it again; one that did is cleared from it.
+relink_verify() {
+    [ ${#RELINK[@]} -gt 0 ] || return 0
+    local c pk so b built
+    local -A comp_of=() still=()
+    for c in "${!RELINK[@]}"; do
+        built=0
+        for b in "${BUILT[@]}"; do [ "$b" = "$c" ] && built=1; done
+        [ "$built" = 1 ] || continue
+        pk=$(installed_pkg "$c" | awk '{print $1}')
+        [ -n "$pk" ] && comp_of[$pk]=$c
+    done
+    [ ${#comp_of[@]} -gt 0 ] || return 0
+
+    # Uncached on purpose: the build just changed the database the cache keys on.
+    while read -r pk so; do
+        [ -n "$so" ] && [ -n "${comp_of[$pk]:-}" ] || continue
+        c=${comp_of[$pk]}
+        still[$c]="${still[$c]:+${still[$c]} }$so"
+    done < <(missing_sonames_of $(printf '%s\n' "${!comp_of[@]}" | sort))
+
+    mkdir -p "${RELINK_FAILED%/*}" 2>/dev/null || return 0
+    local tmp; tmp=$(mktemp) || return 0
+    [ -r "$RELINK_FAILED" ] && cp "$RELINK_FAILED" "$tmp"
+    for c in "${comp_of[@]}"; do
+        grep -v "^$c " "$tmp" > "$tmp.n" 2>/dev/null; mv -f "$tmp.n" "$tmp"
+        if [ -n "${still[$c]:-}" ]; then
+            printf '%s %s\n' "$c" "${still[$c]}" >> "$tmp"
+            warn "$c was rebuilt and still cannot find ${still[$c]} — it will not be rebuilt for this again"
+        else
+            ok "$c relinked against the libraries now installed"
+        fi
+    done
+    mv -f "$tmp" "$RELINK_FAILED" 2>/dev/null || rm -f "$tmp"
+    return 0
+}
+
+# Components that were on the ISO, and offered at install time, long before
+# this tool could build them. On a machine without one, its absence from the
+# manifest does not mean the tree has GAINED it — only that nothing was keeping
+# a record of it then. So it reads as declined, never as new: an apply must not
+# start fetching a 1.3 GB CEF build on a machine whose owner unticked
+# Wallpapers. Naming it still installs it, like any declined component.
+declare -A PREDATES_MANIFEST=(
+    [linux-wallpaperengine]=1
+)
+
+# Packages this tree USED to build and now leaves to another repository, with
+# the repository that carries them.
+#
+# Their old copies in the local [synapseos] repo have to go. That repo sits
+# ABOVE [cachyos] in pacman.conf, and pacman takes the FIRST repo that carries a
+# name — so the limine-snapper-sync an ISO left in /var/cache/synapseos hid
+# every newer one [cachyos] published, and `pacman -Syu` never offered it.
+# retire_shadowing() moves them out of the indexed directory; from then on they
+# update with the rest of the system.
+#
+# Both are upstream's own packages, unpatched: limine-snapper-sync and
+# limine-mkinitcpio-hook, from the same project, which CachyOS packages and
+# keeps current. Building our own copy was a GraalVM native-image build to
+# produce the same thing, later.
+declare -A RETIRED=(
+    [limine-snapper-sync]=cachyos
+    [limine-mkinitcpio-hook]=cachyos
 )
 
 # In COMPONENTS — so it is UPDATED when present — but never ADDED to a system
-# that does not have it. Kept apart from UNSUPPORTED, which is about what cannot
-# be built here; this is about what must not arrive uninvited.
+# that does not have it.
 #
 # syn-install ships /usr/bin/syn-install and /usr/bin/syn-crypt: a disk
 # partitioner. It belongs to the ISO, and it is the one component a normal
@@ -128,20 +334,12 @@ declare -A UNSUPPORTED=(
 # footgun handed out as an update.
 declare -A NEVER_ADD=(
     [syn-install]="the ISO's disk installer; an installed system is not meant to have it"
-    # It writes limine boot entries, and it is boot-critical on a limine
-    # machine — so it belongs in COMPONENTS, where it stays current.
-    #
-    # But it must never ARRIVE on its own. It depends on `limine`, so adding it
-    # would install a second bootloader on a GRUB box; worse, it ships
-    # /etc/pacman.d/hooks/90-mkinitcpio-install.hook, which SHADOWS Arch's own
-    # hook of that name, and a wrapper at /usr/local/bin/mkinitcpio that comes
-    # first on PATH and prompts interactively. On a machine that does not boot
-    # limine that is a broken initramfs pipeline delivered as an update.
-    #
-    # It reaches limine machines two ways instead: syn-install installs it
-    # during a limine install, and syn-settings' Kernel pane offers it when it
-    # finds limine with no entry generator.
-    [limine-mkinitcpio-hook]="writes limine boot entries; on any other bootloader it would override the mkinitcpio hook and pull in limine"
+    # llama.cpp for synapd. It arrives as synapd's dependency, as whichever
+    # build syn-install picked for the GPU — CPU, CUDA or Vulkan — or not at
+    # all, on a machine that satisfies synapd with the distribution's own
+    # llama.cpp through synapse-llama-system. An update adding the CPU build to
+    # either kind of machine would be a conflict, not a fix.
+    [synapse-llama]="llama.cpp for synapd; it arrives with synapd, built for the machine's GPU"
     # A driver for ONE printer, the Samsung Xpress M2020W, which is an SPL
     # device the driverless-IPP path cannot see. It is in COMPONENTS because
     # the machines that do print with it must keep getting fixes.
@@ -166,7 +364,7 @@ declare -A NEVER_ADD=(
 # and a name given on the command line deserves the second one.
 declare -A NEVER_ADD_HOW=(
     [syn-install]="it comes with the ISO"
-    [limine-mkinitcpio-hook]="syn-install adds it during a limine install, and syn-settings' Kernel pane offers it"
+    [synapse-llama]="syn-install installs it with synapd"
     [samsung-m2020]="syn printer samsung"
 )
 
@@ -319,7 +517,7 @@ save_manifest() {
         say "# Written by syn-install, and rewritten by every \`syn-update apply\`."
         for c in "${COMPONENTS[@]}"; do
             [ -f "$SRC/$c/PKGBUILD" ] || continue
-            inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+            inst=$(installed_ver "$c")
             if [ -n "$inst" ]; then
                 # held is a THIRD state and it has to survive this rewrite.
                 # This function recomputes from `pacman -Q`, which can only see
@@ -1166,8 +1364,10 @@ pkgfield() {
 # and report() says so in its own section. It is never silent.
 CHANGED=()
 NEW=()
-SKIPPED=()
 BLOCKED=()
+# RETIRED packages whose old copies in the local repo still hide the newer ones
+# their repository carries. See RETIRED and shadowing_files().
+SHADOWED=()
 # Installed, out of date, and deliberately not being updated — `held` in the
 # manifest, put there by `syn-update ignore`.
 #
@@ -1269,7 +1469,7 @@ scan_remote() {
 }
 
 scan() {
-    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=(); DECLINED=(); HELD=()
+    CHANGED=(); NEW=(); BLOCKED=(); DECLINED=(); HELD=(); SHADOWED=()
 
     # Read before the loop, not per component: the file is one stat and the
     # loop asks about it twenty-five times.
@@ -1278,6 +1478,11 @@ scan() {
     # Empty means the scrape failed, not that nothing is buildable — an update
     # must not be withheld because a guard could not read its own input.
     local known; known=$(buildable_names)
+
+    RELINK=(); RELINK_STUCK=()
+    # "<component> <package>" for every installed component that is NOT already
+    # being rebuilt — the candidates for a relink.
+    local current=()
 
     local c ver rel avail inst
     for c in "${COMPONENTS[@]}"; do
@@ -1295,7 +1500,7 @@ scan() {
         [ -n "$ver" ] && [ -n "$rel" ] || { warn "$c: cannot read pkgver/pkgrel, skipping"; continue; }
         avail="$ver-$rel"
 
-        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+        inst=$(installed_ver "$c")
         # Not installed here. Reachable only for a component that DOES exist at
         # the revision being scanned — cmd_check drops the directory entirely
         # for one that does not, and the `-f PKGBUILD` guard above catches the
@@ -1308,7 +1513,8 @@ scan() {
             # The whole point of the manifest: an absence this machine has
             # already answered for is a CHOICE, and a choice is not an update.
             # No manifest at all is read the same way — see the comment there.
-            if [ "$MANIFEST_PRESENT" = 1 ] && [ -z "${COMP_KNOWN[$c]+set}" ]; then
+            if [ "$MANIFEST_PRESENT" = 1 ] && [ -z "${COMP_KNOWN[$c]+set}" ] &&
+               [ -z "${PREDATES_MANIFEST[$c]:-}" ]; then
                 NEW+=("$c $avail")
             else
                 DECLINED+=("$c $avail")
@@ -1328,16 +1534,60 @@ scan() {
             else
                 CHANGED+=("$c $inst $avail")
             fi
+        elif [ "${COMP_KNOWN[$c]:-}" != held ] || in_select "$c"; then
+            current+=("$c $(installed_pkg "$c" | awk '{print $1}')")
         fi
     done
 
-    # Anything installed and NOT buildable here. Sorted, because a bash
-    # associative array iterates in hash order and a list that reshuffles
-    # between runs looks like something changed when nothing did.
-    local p
-    while IFS= read -r p; do
-        pacman -Q "$p" >/dev/null 2>&1 && SKIPPED+=("$p")
-    done < <(printf '%s\n' "${!UNSUPPORTED[@]}" | sort)
+    # Current, and broken by a library that moved: rebuilt at the version it
+    # already has. A CHANGED row like any other, so apply, the GUI and synpkg
+    # need nothing new to act on it; report() says why the version is equal.
+    if [ ${#current[@]} -gt 0 ]; then
+        local -A comp_of=()
+        local e pk so
+        for e in "${current[@]}"; do comp_of[${e#* }]=${e%% *}; done
+        while read -r pk so; do
+            [ -n "$so" ] && [ -n "${comp_of[$pk]:-}" ] || continue
+            c=${comp_of[$pk]}
+            RELINK[$c]="${RELINK[$c]:+${RELINK[$c]} }$so"
+        done < <(relink_scan $(printf '%s\n' "${!comp_of[@]}" | sort))
+        for c in $(printf '%s\n' "${!RELINK[@]}" | sort); do
+            if [ -r "$RELINK_FAILED" ] && grep -qxF "$c ${RELINK[$c]}" "$RELINK_FAILED"; then
+                RELINK_STUCK[$c]=${RELINK[$c]}
+                unset "RELINK[$c]"
+                continue
+            fi
+            inst=$(installed_ver "$c")
+            CHANGED+=("$c $inst $inst")
+        done
+    fi
+
+    # Rebuilt with what they are compiled against (REBUILD_WITH). Last, so a
+    # library queued by the relink scan takes its dependents along too. A held
+    # dependent stays held: the hold is the user's answer.
+    REBUILT_WITH=()
+    local e lib dep queued q
+    for e in "${CHANGED[@]}"; do
+        lib=${e%% *}
+        for dep in ${REBUILD_WITH[$lib]:-}; do
+            queued=0
+            for q in "${CHANGED[@]}"; do [ "${q%% *}" = "$dep" ] && queued=1; done
+            [ "$queued" = 1 ] && continue
+            [ "${COMP_KNOWN[$dep]:-}" = held ] && ! in_select "$dep" && continue
+            inst=$(installed_ver "$dep")
+            [ -n "$inst" ] || continue
+            CHANGED+=("$dep $inst $inst")
+            REBUILT_WITH[$dep]=$lib
+        done
+    done
+
+    # Sorted, because a bash associative array iterates in hash order and a
+    # list that reshuffles between runs looks like something changed when
+    # nothing did.
+    local f
+    while IFS= read -r f; do
+        [ -n "$f" ] && SHADOWED+=("$(basename "$f")")
+    done < <(shadowing_files | sort)
 }
 
 # ── commands ─────────────────────────────────────────────────
@@ -1376,9 +1626,31 @@ report() {
             set -- $e
             printf '  %-16s %-14s -> %s\n' "$1" "$2" "$3"
         done
+        # No " -> " on these lines: synpkg and the GUI take every indented line
+        # with an arrow for a row of the table above.
+        local r
+        for r in $(printf '%s\n' "${!RELINK[@]}" | sort); do
+            say "  ${C_DIM}$r: rebuilt at the same version — a system update removed ${RELINK[$r]}${C_R}"
+        done
+        for r in $(printf '%s\n' "${!REBUILT_WITH[@]}" | sort); do
+            say "  ${C_DIM}$r: rebuilt with ${REBUILT_WITH[$r]}, whose headers it is compiled against${C_R}"
+        done
     fi
 
-    # Its own section, above SKIPPED: this is the one part of the report that
+    # A relink that was tried and did not take. Not rebuilt again until what is
+    # missing changes; loud, because the component is broken and a rebuild
+    # cannot fix it.
+    if [ ${#RELINK_STUCK[@]} -gt 0 ]; then
+        say ""
+        local st
+        for st in $(printf '%s\n' "${!RELINK_STUCK[@]}" | sort); do
+            warn "$st still cannot find ${RELINK_STUCK[$st]} after being rebuilt for it"
+        done
+        printf '    %s\n' "A rebuild did not fix this, so it is not retried. It is a packaging" >&2
+        printf '    %s\n' "problem in SynapseOS: please report it." >&2
+    fi
+
+    # Its own section, above DECLINED: this is the one part of the report that
     # adds software rather than moving it forward, and it should read that way.
     if [ ${#NEW[@]} -gt 0 ]; then
         say ""
@@ -1394,8 +1666,8 @@ report() {
 
     # NOT an update, and NOT a problem — the user's own answer, read back.
     #
-    # It gets a section rather than silence for the same reason UNSUPPORTED
-    # does: a component quietly left out forever is the bug this tool exists to
+    # It gets a section rather than silence: a component quietly left out
+    # forever is the bug this tool exists to
     # remove, and "syn-update decided not to install vibe" has to be something
     # you can read rather than something you deduce. It also carries the one
     # command that changes the answer, because the point of the record is that
@@ -1462,14 +1734,15 @@ report() {
         printf '    %s\n' "updates; these will not until the two lists agree." >&2
     fi
 
-    if [ ${#SKIPPED[@]} -gt 0 ]; then
+    # Not a fault, and fixed by the next apply — but said, because until then
+    # `pacman -Syu` keeps these at the old version and nothing else would
+    # explain why.
+    if [ ${#SHADOWED[@]} -gt 0 ]; then
         say ""
-        warn "not updatable from source on an installed system:"
-        local p
-        for p in "${SKIPPED[@]}"; do
-            printf '    %-24s %s\n' "$p" "${UNSUPPORTED[$p]}" >&2
-        done
-        printf '    %s\n' "These move with an ISO upgrade. syn-update will not touch them." >&2
+        info "${#SHADOWED[@]} old package file(s) in $LOCAL_REPO hide newer versions from another repository"
+        local sh
+        for sh in "${SHADOWED[@]}"; do printf '  %s\n' "$sh"; done
+        say "  ${C_DIM}The next apply moves them aside; pacman -Syu then updates them.${C_R}"
     fi
 }
 
@@ -1593,6 +1866,13 @@ cmd_apply() {
     if [ ${#names[@]} -eq 0 ]; then
         say ""
         ok "nothing to build"
+        # Nothing to build is not nothing to do when the local repo is still
+        # hiding a retired package's updates — that is root work, and the one
+        # case where an apply with no build asks for a password.
+        if [ ${#SHADOWED[@]} -gt 0 ]; then
+            sudo_keepalive_start || true
+            refresh_local_repo
+        fi
         # Nothing was built, but the badge may still be showing a count that
         # this run has just resolved — the tree moved, and what it was counting
         # was the tree being behind.
@@ -1644,6 +1924,19 @@ cmd_apply() {
             ok "nothing to build"
             return 0
         fi
+
+        # Not a warning like the dependency check below: a component compiled
+        # against another's headers GOES with it (REBUILD_WITH), because the
+        # one without the other is a crash, not a stale build.
+        local w wd
+        for w in "${want[@]}"; do
+            for wd in ${REBUILD_WITH[$w]:-}; do
+                case " ${names[*]} " in *" $wd "*) ;; *) continue ;; esac
+                case " ${want[*]} " in *" $wd "*) continue ;; esac
+                want+=("$wd")
+                info "also building $wd: it is compiled against $w"
+            done
+        done
 
         # THE ONE THING A SUBSET CAN GET WRONG. Building synui while scenefx0.5
         # is also out of date links it against the scenefx that is about to be
@@ -1700,6 +1993,7 @@ cmd_apply() {
     fi
 
     refresh_local_repo
+    relink_verify
 
     # Last, and only on success: the disk is now what the record describes.
     #
@@ -1766,15 +2060,18 @@ refresh_local_repo() {
     # Matched against the INSTALLED version rather than "newest built", so this
     # publishes what the machine is actually running and never advertises some
     # older build left in the tree.
-    local ver inst reconciled=0
+    #
+    # The NAME is matched as well as the version: synapse-llama's directory
+    # holds the CPU, CUDA and Vulkan builds side by side, at the same version,
+    # and only the one installed belongs in the repo.
+    local ver inst name reconciled=0
     for c in "${COMPONENTS[@]}"; do
-        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
-        [ -n "$inst" ] || continue
+        inst=$(installed_pkg "$c") || continue
         for pkg in "$SRC/$c/$c"-*.pkg.tar.zst; do
             [ -e "$pkg" ] || continue
             case $pkg in *-debug-*) continue ;; esac
-            read -r _ ver < <(pacman -Qp "$pkg" 2>/dev/null)
-            [ "$ver" = "$inst" ] || continue
+            read -r name ver < <(pacman -Qp "$pkg" 2>/dev/null)
+            [ "$name $ver" = "$inst" ] || continue
             [ -e "$LOCAL_REPO/$(basename "$pkg")" ] && continue
             sudo_safe cp -f "$pkg" "$LOCAL_REPO/" &&
                 reconciled=$((reconciled + 1))
@@ -1782,6 +2079,7 @@ refresh_local_repo() {
     done
 
     prune_superseded
+    retire_shadowing
     rebuild_db
     sudo_safe pacman -Sy --quiet --noconfirm >/dev/null 2>&1 || true
     [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
@@ -1860,6 +2158,40 @@ prune_superseded() {
     return 0
 }
 
+# The files in the local repo that are RETIRED packages (see RETIRED), one per
+# line. Read from the file names: "<name>-<digit>" cannot be mistaken for
+# another package, and nothing has to be unpacked to ask.
+#
+# Only for a retired name whose repository this machine actually has. Without
+# [cachyos], the local copy is the one place pacman can find the package — to
+# repair it, or to install it on a machine that switches to limine — so it
+# stays until the repository is there to take over.
+shadowing_files() {
+    [ -d "$LOCAL_REPO" ] || return 0
+    local n f
+    for n in "${!RETIRED[@]}"; do
+        grep -q "^\[${RETIRED[$n]}\]" "$PACMAN_CONF" 2>/dev/null || continue
+        for f in "$LOCAL_REPO/$n"-[0-9]*.pkg.tar.zst; do
+            [ -e "$f" ] && printf '%s\n' "$f"
+        done
+    done
+    return 0
+}
+
+# Move them out of the indexed directory, the same way prune_superseded does —
+# into superseded/, not deleted. The caller rebuilds the index.
+retire_shadowing() {
+    local f moved=0
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        sudo_safe mkdir -p "$LOCAL_REPO/superseded"
+        sudo_safe mv -f "$f" "$LOCAL_REPO/superseded/" && moved=$((moved + 1))
+    done < <(shadowing_files)
+    [ "$moved" -gt 0 ] &&
+        info "retired $moved package file(s) that now come from another repository -> $LOCAL_REPO/superseded"
+    return 0
+}
+
 # ── holding a component back ─────────────────────────────────────────────
 #
 # The state lives in the manifest, beside `selected` and `declined`, because it
@@ -1924,7 +2256,7 @@ cmd_ignore() {
         # Holding something not installed is meaningless: it is not being
         # updated either way, and `declined` already says so. Refusing beats
         # writing a state that reads as a decision nobody made.
-        if ! pacman -Q "$c" >/dev/null 2>&1; then
+        if ! installed_pkg "$c" >/dev/null; then
             warn "$c is not installed here, so there is no update to hold back"
             continue
         fi
@@ -1967,7 +2299,7 @@ cmd_ignored() {
     if [ "$TSV" = 1 ]; then
         printf 'component\tinstalled\n'
         for c in "${held[@]}"; do
-            inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+            inst=$(installed_ver "$c")
             printf '%s\t%s\n' "$c" "$inst"
         done
         [ ${#held[@]} -gt 0 ]
@@ -1986,7 +2318,7 @@ cmd_ignored() {
     info "${#held[@]} component(s) held back"
     printf '  %-16s %s\n' COMPONENT INSTALLED
     for c in "${held[@]}"; do
-        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+        inst=$(installed_ver "$c")
         printf '  %-16s %s\n' "$c" "${inst:-not installed}"
     done
     say "  ${C_DIM}Release one with: ${C_R}syn-update unignore <component>${C_R}"
@@ -2009,7 +2341,7 @@ cmd_status() {
     printf '  %-16s %s\n' COMPONENT INSTALLED
     local c inst note
     for c in "${COMPONENTS[@]}"; do
-        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+        inst=$(installed_ver "$c")
         if [ -n "$inst" ]; then
             printf '  %-16s %s\n' "$c" "$inst"
             continue
@@ -2319,9 +2651,15 @@ The record is /etc/synapseos/components.conf, written by the installer and
 rewritten by every apply. It is plain text and safe to edit.
 
 Components are rebuilt from source with makepkg, so this needs base-devel and
-each component's makedepends. Components with a large prebuilt payload
-(synapse-llama, linux-wallpaperengine) are not updated this way and move with an
-ISO upgrade instead; syn-update lists them rather than skipping quietly.
+each component's makedepends. Every component updates this way, including the
+large ones: synapse-llama compiles llama.cpp for this machine's GPU (with CUDA,
+a long build), and linux-wallpaperengine downloads about 1.3 GB of CEF and needs
+about 6 GB of scratch space. Each builds only when its version changes.
+
+limine-snapper-sync and limine-mkinitcpio-hook come from the [cachyos]
+repository and update with pacman -Syu. If the local [synapseos] repository
+still holds an older copy of either, check lists it and the next apply moves it
+aside so pacman can see the newer one.
 
 synapse-voice is updated here despite its payload. Its first build needs about
 half a gigabyte of voice and speech models, kept in the component directory
@@ -2375,15 +2713,14 @@ for _s in "${SELECT[@]}"; do
     # print "nothing to build" and exit 0 — the silent no-op the paragraph
     # above exists to refuse. Say where it actually comes from instead. Once it
     # IS installed the name is ordinary and updates it like any other.
-    if [ -n "${NEVER_ADD[$_s]:-}" ] && ! pacman -Qq "$_s" >/dev/null 2>&1; then
+    if [ -n "${NEVER_ADD[$_s]:-}" ] && ! installed_pkg "$_s" >/dev/null; then
         die "$_s is not added by an update:
     ${NEVER_ADD[$_s]}
   Install it with: ${NEVER_ADD_HOW[$_s]:-its own installer}"
     fi
-    if [ -n "${UNSUPPORTED[$_s]:-}" ]; then
-        die "$_s cannot be built on an installed system:
-    ${UNSUPPORTED[$_s]}
-  It moves with an ISO upgrade."
+    if [ -n "${RETIRED[$_s]:-}" ]; then
+        die "$_s is not built by SynapseOS any more; it comes from [${RETIRED[$_s]}].
+  pacman -Syu updates it with the rest of the system."
     fi
     case " ${COMPONENTS[*]} " in
         *" $_s "*) ;;

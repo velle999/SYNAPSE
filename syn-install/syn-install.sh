@@ -459,13 +459,14 @@ bootloader_supported() {
 
 # Can this bootloader boot a btrfs snapshot?
 #
-# GRUB only, and only because grub-btrfs is in the official repos. limine's
-# equivalent (limine-snapper-sync) is AUR, and systemd-boot has no equivalent at
-# all. The installer warns rather than silently dropping the feature.
+# GRUB, through grub-btrfs in the official repos, and limine, through
+# limine-snapper-sync from [cachyos] (the ISO's local repo carries a copy for the
+# install itself). systemd-boot has no equivalent at all. The installer warns
+# rather than silently dropping the feature.
 bootloader_supports_snapshots() {
     case "$1" in
         grub)   return 0 ;;   # grub-btrfs, official repos
-        limine) return 0 ;;   # limine-snapper-sync, vendored in-tree
+        limine) return 0 ;;   # limine-snapper-sync, [cachyos]
         *)      return 1 ;;
     esac
 }
@@ -3602,6 +3603,44 @@ CACHYEOF
 $(sed 's/^/    /' "$cachy_log" | tail -5)"
     fi
     rm -f "$cachy_log" /mnt/etc/pacman.conf.precachy
+fi
+
+# ── Hand the limine pair over to [cachyos] ────────────────
+#
+# limine-snapper-sync and limine-mkinitcpio-hook are [cachyos]'s packages. The
+# ISO carries copies in its local repo only so the live session — whose pacman
+# knows no [cachyos] — can pacstrap them, and they reached $CHROOT_REPO with
+# everything else above. Left there they would hide every update [cachyos]
+# publishes: [synapseos] is listed above it, and pacman takes the FIRST repo
+# that carries a name. So once [cachyos] is usable they are moved aside, the
+# same thing syn-update's RETIRED does on machines installed before this.
+#
+# Without [cachyos] they stay: the local copy is then the only place the limine
+# setup below can get limine-mkinitcpio-hook from.
+#
+# ⚠ BEFORE the `pacman -Sy` of the component install that follows, which is
+# what drops the moved files from the target's sync database. The limine setup
+# installs limine-mkinitcpio-hook by name much later; resolved against the
+# database synced above, it would be taken from [synapseos] and fail to fetch a
+# file that is no longer there.
+if [ "${cachy_ok:-0}" = 1 ]; then
+    _moved=0
+    for _p in "$CHROOT_REPO"/limine-snapper-sync-[0-9]*.pkg.tar.zst \
+              "$CHROOT_REPO"/limine-mkinitcpio-hook-[0-9]*.pkg.tar.zst; do
+        [ -e "$_p" ] || continue
+        mkdir -p "$CHROOT_REPO/superseded"
+        mv -f "$_p" "$CHROOT_REPO/superseded/" && _moved=1
+    done
+    if [ "$_moved" = 1 ]; then
+        arch-chroot /mnt bash -c "
+            cd /var/cache/synapseos && \
+            rm -f synapseos.db* synapseos.files* && \
+            repo-add synapseos.db.tar.gz *.pkg.tar.zst >/dev/null 2>&1 && \
+            ln -sf synapseos.db.tar.gz synapseos.db && \
+            ln -sf synapseos.files.tar.gz synapseos.files
+        " || warn "Could not re-index /var/cache/synapseos after moving the limine packages aside."
+    fi
+    unset _p _moved
 fi
 
 # synapse-llama carries libllama/libggml and is pulled in automatically as a

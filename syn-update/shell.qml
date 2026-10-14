@@ -297,7 +297,10 @@ ShellRoot {
     // there is no "from" version to show.
     property var fresh: []      // [{name, to}]
     property var commits: []    // ["hash subject"]
-    property var blocked: []    // ["name  reason"]
+    // Old copies in the local [synapseos] repo that hide a newer version of a
+    // package another repository now supplies. Apply moves them aside, so they
+    // are pending work like an update — see syn-update's RETIRED.
+    property var shadowed: []   // [{name}]
 
     function appendLog(t) {
         if (!t) return
@@ -318,7 +321,7 @@ ShellRoot {
      * tty, and under Process it is a pipe.
      */
     function parseCheck(text) {
-        const ups = [], cms = [], blk = [], nws = []
+        const ups = [], cms = [], shd = [], nws = []
         let section = ""
         root.upToDate = false
 
@@ -350,7 +353,7 @@ ShellRoot {
             // The section still has to be RECOGNISED, or its rows fall through
             // into whichever section came last.
             if (/component\(s\) available and NOT installed here/.test(line))  { section = "declined"; continue }
-            if (/not updatable from source/.test(line))                    { section = "blocked"; continue }
+            if (/hide newer versions from another repository/.test(line))  { section = "shadowed"; continue }
 
             if (section === "updates") {
                 // "  synui            0.1.0-203      -> 0.1.0-204"
@@ -370,16 +373,17 @@ ShellRoot {
                 if (m) cms.push({ hash: m[1], subject: m[2] })
                 continue
             }
-            if (section === "blocked") {
-                m = line.match(/^\s{4}(\S+)\s{2,}(.*)$/)
-                if (m) blk.push({ name: m[1], reason: m[2] })
+            if (section === "shadowed") {
+                // "  limine-snapper-sync-1.31.0-1-x86_64.pkg.tar.zst"
+                m = line.match(/^\s{2}(\S+\.pkg\.tar\.zst)\s*$/)
+                if (m) shd.push({ name: m[1] })
                 continue
             }
         }
 
         root.updates = ups
         root.commits = cms
-        root.blocked = blk
+        root.shadowed = shd
         root.fresh = nws
 
         // Counted together, because "apply" does both in one build-all.sh
@@ -391,6 +395,12 @@ ShellRoot {
             if (ups.length > 0) parts.push(ups.length + (ups.length === 1 ? " update" : " updates"))
             if (nws.length > 0) parts.push(nws.length + " new")
             root.statusLine = parts.join(", ") + " available"
+        } else if (shd.length > 0) {
+            // Nothing to build, and still something for Apply to do. Not
+            // "up to date": until Apply runs, pacman -Syu cannot see the newer
+            // versions these files hide.
+            root.upToDate = false
+            root.statusLine = "Old local packages to move aside"
         } else if (root.upToDate) {
             root.statusLine = "SynapseOS is up to date"
         } else {
@@ -435,8 +445,8 @@ ShellRoot {
         stdout: StdioCollector {
             onStreamFinished: { root.appendLog(this.text); root.parseCheck(this.text) }
         }
-        // The "not updatable" block and any git error go to stderr; it is part
-        // of the answer, not noise, so it is parsed and logged like stdout.
+        // Warnings and any git error go to stderr; they are part of the
+        // answer, not noise, so they are parsed and logged like stdout.
         stderr: StdioCollector {
             onStreamFinished: { root.appendLog(this.text); root.parseCheck(root.logText) }
         }
@@ -506,7 +516,7 @@ ShellRoot {
                         Text {
                             text: root.statusLine
                             color: root.upToDate ? root.cOk
-                                 : ((root.updates.length + root.fresh.length) > 0
+                                 : ((root.updates.length + root.fresh.length + root.shadowed.length) > 0
                                     ? root.cAccent : root.cText)
                             font.family: root.uiFont
                             font.pixelSize: root.ui(21)
@@ -544,7 +554,7 @@ ShellRoot {
                             // New components count. Gating Apply on updates
                             // alone left the button dead on a machine whose
                             // only pending work was an install.
-                            enabled: !root.busy && (root.updates.length + root.fresh.length) > 0
+                            enabled: !root.busy && (root.updates.length + root.fresh.length + root.shadowed.length) > 0
                             onClicked: applyProc.running = true
                         }
                     }
@@ -565,8 +575,8 @@ ShellRoot {
                      * — Math.min(…) — but the Column inside was neither clipped
                      * nor scrollable, so past the cap the rows carried on
                      * drawing OUTSIDE the card, over whatever sat beneath it.
-                     * Seven pending updates put syn-arcade on top of the "moves
-                     * with an ISO upgrade" heading below it. velle, 2026-08-28:
+                     * Seven pending updates put syn-arcade on top of the
+                     * heading of the card below it. velle, 2026-08-28:
                      * "update overflow is just escaping the box instead of
                      * scrolling."
                      *
@@ -718,11 +728,11 @@ ShellRoot {
                     }
                 }
 
-                // ── what this tool will NOT update ─────────
+                // ── old local copies Apply will move aside ─────────
                 Rectangle {
                     width: parent.width
-                    height: Math.min(root.ui(120), root.ui(30) + root.blocked.length * root.ui(20))
-                    visible: root.blocked.length > 0
+                    height: Math.min(root.ui(120), root.ui(30) + root.shadowed.length * root.ui(20))
+                    visible: root.shadowed.length > 0
                     color: "transparent"
                     radius: 8
                     border.color: root.cLine
@@ -732,10 +742,10 @@ ShellRoot {
                     // "Components to rebuild" card carries in full. This is the
                     // heading the overflowing rows were landing on top of.
                     Text {
-                        id: blockedHead
+                        id: shadowedHead
                         anchors { top: parent.top; left: parent.left; right: parent.right }
                         anchors.margins: 10
-                        text: "Not updated this way — these move with an ISO upgrade"
+                        text: "Older local copies — Apply moves them aside so pacman can update them"
                         color: root.cWarn; font.family: root.uiFont
                         font.pixelSize: root.ui(11); font.bold: true
                     }
@@ -744,14 +754,14 @@ ShellRoot {
                         // A view that scrolls says so — see SynScrollBar above.
                         ScrollBar.vertical: SynScrollBar {}
                         anchors {
-                            top: blockedHead.bottom; topMargin: 3
+                            top: shadowedHead.bottom; topMargin: 3
                             left: parent.left; leftMargin: 10
                             right: parent.right; rightMargin: 10
                             bottom: parent.bottom; bottomMargin: 10
                         }
                         clip: true
                         spacing: 3
-                        model: root.blocked
+                        model: root.shadowed
                         delegate: Text {
                             text: "• " + modelData.name
                             color: root.cDim; font.family: root.uiFont

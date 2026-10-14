@@ -82,7 +82,7 @@ EXTERNAL=(
     synpkg syn-arsenal syn-model syn-confine synguard syn-arcade syn-gfn
     syn-remote
     # the AI stack, and the package that lets a stranger satisfy it with the
-    # distribution's own llama.cpp instead of a tree only an ISO build stages
+    # distribution's own llama.cpp instead of synapse-llama's pinned build
     synapse-llama-system synapd synnet
 )
 
@@ -98,7 +98,7 @@ EXTERNAL=(
 # Resolving an entry means DELETING its line, exactly as the registration
 # table above works.
 declare -A NOT_EXTERNAL=(
-    [synapse-llama]="the pinned llama.cpp build itself — assembled from llama-staging/, which is a build output and not source; synapse-llama-system is what satisfies its name elsewhere"
+    [synapse-llama]="the pinned llama.cpp build itself — its PKGBUILD downloads upstream's release and compiles it, so there is no source of ours to publish; synapse-llama-system is what satisfies its name elsewhere"
     [synapse_kmod]="DKMS against a running kernel; it means something different on every machine and nothing on most"
     [syn-install]="installs SynapseOS onto a disk — it has no meaning on a machine that is not being turned into one"
     [syn-firstboot]="the first-boot wizard of a SynapseOS installation, for the same reason"
@@ -114,10 +114,8 @@ declare -A NOT_EXTERNAL=(
     [nexus-chat]="the same"
     [cliamp]="the same"
     [fetch]="the same"
-    [linux-wallpaperengine-pkg]="third-party packaging; the source is somebody else's repository"
+    [linux-wallpaperengine]="third-party packaging; the source is somebody else's repository"
     [samsung-m2020]="the same — a printer driver packaged from Samsung's ULD"
-    [limine-mkinitcpio-hook]="the same"
-    [limine-snapper-sync]="the same"
     [syn-mouse]="new, and not yet given a repository of its own; it runs on plain Arch, so publishing it is the open step rather than a reason to stay out"
 )
 

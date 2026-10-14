@@ -459,7 +459,11 @@ pkgver=0.1.0
 #   offered it would leave the machine without what the media had. ⚠ TWO LISTS:
 #   SEL_COMPONENTS here and the window's own copy in syn-install-gui.qml, plus
 #   the label in all thirteen catalogs.
-pkgrel=125
+# 126: limine-snapper-sync and limine-mkinitcpio-hook come from [cachyos]. The
+#   ISO still carries copies so the live session can pacstrap them; once
+#   [cachyos] is usable on the target they are moved out of its local repo,
+#   which sits above [cachyos] and would otherwise hide every update to them.
+pkgrel=126
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')

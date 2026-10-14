@@ -120,7 +120,14 @@ pkgver=0.1.0
 #   ⚠ A run overlapping another client's request is DISCARDED, not averaged in:
 #     STATUS reports the last request the daemon answered, whoever asked it, so
 #     the tool checks requests= moved by exactly one.
-pkgrel=56
+# 57: rebuilt against llama.cpp b11612 (synapse-llama 0.1.0-4). No source
+#   change, and none needed — built against b11612's headers with no warning
+#   from any llama call, meson test 8/8, and all four models in
+#   /var/lib/synapd/models load and decode through the same calls
+#   inference.c makes. The bump is what puts synapd in the same apply as the
+#   library, built after it: a synapd compiled against b10241's llama.h passes
+#   b11612 a llama_context_params of the old size (see ORDER MATTERS below).
+pkgrel=57
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
