@@ -363,6 +363,36 @@ grep -q '2 things need a look' <<<"$human" \
 grep -q 'rkhunter did not finish: Logfile directory is not writable' <<<"$human" \
   && ok "…and says rkhunter did not finish, and why" || bad "incomplete line" "$human"
 
+# ── 11b. what an engine says on stderr reaches the user, minus grep's nag ──
+#
+# rkhunter calls egrep, and GNU grep 3.8+ answers every call with "egrep:
+# warning: egrep is obsolescent; using grep -E" on stderr: 631 lines a weekly
+# sweep, 1142 in the desktop's journal in two weeks, burying anything rkhunter
+# actually had to say there. That one line (and fgrep's twin) is dropped; every
+# other stderr line still gets through, and the findings are untouched.
+# Its own stub dir: section 12 reuses the rkhunter of section 11.
+eg_stubs="$ROOT/stubs-egrep"; mkdir -p "$eg_stubs"
+cat > "$eg_stubs/rkhunter" <<'STUB'
+echo "egrep: warning: egrep is obsolescent; using grep -E" >&2
+echo "Warning: Hidden directory found: /dev/.udev"
+echo "egrep: warning: egrep is obsolescent; using grep -E" >&2
+echo "fgrep: warning: fgrep is obsolescent; using grep -F" >&2
+echo "rkhunter: a complaint that is not grep's" >&2
+echo "egrep: warning: egrep is obsolescent; using grep -E" >&2
+exit 1
+STUB
+chmod +x "$eg_stubs/rkhunter"
+eg_home="$ROOT/state-egrep"; mkdir -p "$eg_home"
+eg_out="$ROOT/egrep.out"
+eg_err=$(SYNSCAN_HOME="$eg_home" PATH="$eg_stubs" "$BIN" --rec --only rkhunter scan --system 2>&1 >"$eg_out")
+grep -q 'obsolescent' <<<"$eg_err" \
+  && bad "grep's obsolescence warning reached stderr" "$eg_err" \
+  || ok "grep's 'egrep is obsolescent' lines are dropped"
+grep -q "rkhunter: a complaint that is not grep's" <<<"$eg_err" \
+  && ok "…and the engine's own stderr still gets through" || bad "engine stderr lost" "$eg_err"
+[ "$(grep -c '^finding	rkhunter	suspect	' "$eg_out")" = 1 ] \
+  && ok "…and the warning on stdout is still one finding" || bad "finding count" "$(cat "$eg_out")"
+
 # ── 12. what the last scan found is kept, and status says what it was ──────
 #
 # Settings showed "1 outstanding" and nothing said what: only the count was

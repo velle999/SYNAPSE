@@ -34,6 +34,18 @@ pkgver=0.1.0
 # touched is invisible to it, and a Windows .exe is data to Linux until Wine
 # runs it, at which point the LSM sees wine opening a file. This box carries
 # 13,835 .exe/.dll/.msi under Games/, Downloads/, .wine/ and compatdata/.
+# ── 0.1.0-10: grep's nag, 631 lines a sweep ─────────────────────────────────
+#
+# rkhunter calls egrep, and GNU grep 3.8+ answers every call with "egrep:
+# warning: egrep is obsolescent; using grep -E" on stderr, which syn-scan passed
+# straight through: 631 lines per weekly sweep, 1142 in the desktop's journal
+# over two weeks, around whatever rkhunter itself had to say. An engine's
+# stderr now goes through a small filter process that drops exactly that line
+# (and fgrep's twin) and passes every other line through unchanged. Findings
+# come from stdout and are untouched. tests/scan_test.sh 11b: a stub rkhunter
+# interleaves the nag with a real complaint and a warning. Before: all four
+# nag lines on stderr. After: none, the complaint still there, one finding.
+#
 # ── 0.1.0-9: a path that is not there was not scanned ───────────────────────
 #
 # ⛔ `syn-scan scan <missing path>` SAID "Nothing found." AND EXITED 0. clamscan
@@ -212,7 +224,7 @@ pkgver=0.1.0
 # tests/qml_test.sh is the gate now: every file the window imports has to be
 # named in an install rule, the qmldir has to declare the singleton, and the
 # window has to import the module.
-pkgrel=9
+pkgrel=10
 pkgdesc='Scan files at rest for malware, and put what turns up aside'
 arch=('x86_64')
 url='https://github.com/velle999/syn-scan'

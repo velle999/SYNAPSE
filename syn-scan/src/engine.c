@@ -25,6 +25,42 @@
 #include <unistd.h>
 
 static pid_t g_child = -1;
+static pid_t g_errfilt = -1;
+
+/* ── what an engine says on stderr ─────────────────────────────────────────
+ *
+ * It reaches the user — that is where an engine says it could not read a
+ * directory — except for lines that say nothing about the scan. rkhunter calls
+ * egrep, and GNU grep 3.8+ answers each call with the first line below: 631
+ * lines per weekly sweep, 1142 in the desktop's journal over two weeks
+ * (2026-10-15), around whatever rkhunter itself had to say. Exact lines only;
+ * anything else an engine prints passes through untouched.
+ *
+ * A separate process, not a read in the parse loops: the parsers block on
+ * stdout, and an engine that filled the stderr pipe meanwhile would stall
+ * both. */
+static const char *const k_stderr_noise[] = {
+	"egrep: warning: egrep is obsolescent; using grep -E",
+	"fgrep: warning: fgrep is obsolescent; using grep -F",
+	NULL
+};
+
+static void stderr_filter(int in)
+{
+	FILE *f = fdopen(in, "r");
+	if (!f) _exit(0);
+	char *line = NULL; size_t cap = 0; ssize_t n;
+	while ((n = getline(&line, &cap, f)) > 0) {
+		size_t len = (size_t)n;
+		if (line[len - 1] == '\n') len--;
+		int noise = 0;
+		for (const char *const *k = k_stderr_noise; *k && !noise; k++)
+			noise = strlen(*k) == len && !memcmp(line, *k, len);
+		if (!noise) fwrite(line, 1, (size_t)n, stderr);
+	}
+	fflush(stderr);
+	_exit(0);
+}
 
 /* ⚠ LC_ALL=C IS THE WHOLE REASON THIS WRAPPER EXISTS. clamscan says "FOUND",
  * rkhunter says "Warning:", and both are translated — on a German desktop the
@@ -32,13 +68,29 @@ static pid_t g_child = -1;
  * read in C, always. */
 FILE *engine_popen(const char *const argv[])
 {
-	int fd[2];
+	int fd[2], ep[2] = { -1, -1 };
 	if (pipe(fd) != 0) { warn("pipe: %s", strerror(errno)); return NULL; }
+
+	/* Without the filter the engine's stderr is simply ours, as before. */
+	fflush(stderr);
+	if (pipe(ep) == 0) {
+		g_errfilt = fork();
+		if (g_errfilt == 0) {
+			close(fd[0]); close(fd[1]); close(ep[1]);
+			stderr_filter(ep[0]);
+		}
+		if (g_errfilt < 0) {
+			close(ep[0]); close(ep[1]);
+			ep[0] = ep[1] = -1;
+		}
+	}
 
 	pid_t pid = fork();
 	if (pid < 0) {
 		warn("fork: %s", strerror(errno));
 		close(fd[0]); close(fd[1]);
+		if (ep[0] >= 0) { close(ep[0]); close(ep[1]); }
+		if (g_errfilt > 0) { waitpid(g_errfilt, NULL, 0); g_errfilt = -1; }
 		return NULL;
 	}
 	if (pid == 0) {
@@ -46,8 +98,13 @@ FILE *engine_popen(const char *const argv[])
 		dup2(fd[1], STDOUT_FILENO);
 		/* Engines are chatty on stderr about things that are not findings
 		 * (unreadable dirs, missing optional checks). Keep it off the parse
-		 * path but let the user see it. */
+		 * path but let the user see it — through the filter above. */
 		close(fd[1]);
+		if (ep[1] >= 0) {
+			close(ep[0]);
+			dup2(ep[1], STDERR_FILENO);
+			close(ep[1]);
+		}
 		setenv("LC_ALL", "C", 1);
 		setenv("LANG", "C", 1);
 		unsetenv("LC_MESSAGES");
@@ -55,6 +112,7 @@ FILE *engine_popen(const char *const argv[])
 		_exit(127);
 	}
 	close(fd[1]);
+	if (ep[0] >= 0) { close(ep[0]); close(ep[1]); }
 	g_child = pid;
 	return fdopen(fd[0], "r");
 }
@@ -66,6 +124,11 @@ int engine_pclose(FILE *f)
 	if (g_child > 0) {
 		waitpid(g_child, &status, 0);
 		g_child = -1;
+	}
+	/* Done once every holder of the engine's stderr has exited. */
+	if (g_errfilt > 0) {
+		waitpid(g_errfilt, NULL, 0);
+		g_errfilt = -1;
 	}
 	return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
