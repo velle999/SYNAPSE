@@ -903,12 +903,26 @@ static struct kprobe kp_finit_module = {
 };
 
 /* ── setuid kprobe ────────────────────────────────────────── */
+/*
+ * ⚠ THE ONE-ARGUMENT CREDENTIAL CALLS ARE PROBED ON __sys_*, NOT ON THEIR
+ * SYSCALL WRAPPERS: setuid, setgid, setfsuid, setfsgid.
+ *
+ * Since 6.9, x86 dispatches syscalls through the switch in x64_sys_call(), and
+ * clang (the CachyOS kernel's compiler) inlines these one-line __x64_sys_*
+ * wrappers into it. x64_sys_call calls __sys_setuid directly, so a kprobe on
+ * __x64_sys_setuid registers fine and never fires: setuid(0) went unreported on
+ * the desktop's kernel, and kmod_vm_test caught it on 7.2.7-cachyos. Every
+ * path (x64, the ia32 compat entry, setuid16) calls __sys_setuid out of line
+ * on both the clang and the gcc kernel, so the probes sit there. That also
+ * brings in the 32-bit calls, which no probe saw before. These are plain C
+ * functions: the id is the first argument register itself, not a pt_regs
+ * pointer, so syscall_uregs() does not apply.
+ */
 static int setuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
-    struct pt_regs *u = syscall_uregs(regs);
-    uid_t target_uid = (uid_t)u->di;
+    uid_t target_uid = (uid_t)regs->di;
     /* Only interesting if escalating to root */
     if (target_uid != 0) return 0;
 
@@ -922,7 +936,7 @@ static int setuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 }
 
 static struct kprobe kp_setuid = {
-    .symbol_name = "__x64_sys_setuid",
+    .symbol_name = "__sys_setuid",
     .pre_handler = setuid_pre_handler,
 };
 
@@ -963,15 +977,13 @@ static int setresuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 static int setfsuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
-    struct pt_regs *u = syscall_uregs(regs);
-    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setfsuid, 0);
+    if (CRED_ID_ROOT(regs->di)) cred_report(__NR_setfsuid, 0);   /* __sys_setfsuid: see setuid */
     return 0;
 }
 static int setgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
-    struct pt_regs *u = syscall_uregs(regs);
-    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setgid, 0);
+    if (CRED_ID_ROOT(regs->di)) cred_report(__NR_setgid, 0);   /* __sys_setgid: see setuid */
     return 0;
 }
 static int setregid_pre_handler(struct kprobe *p, struct pt_regs *regs)
@@ -992,8 +1004,7 @@ static int setresgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 static int setfsgid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
-    struct pt_regs *u = syscall_uregs(regs);
-    if (CRED_ID_ROOT(u->di)) cred_report(__NR_setfsgid, 0);
+    if (CRED_ID_ROOT(regs->di)) cred_report(__NR_setfsgid, 0);   /* __sys_setfsgid: see setuid */
     return 0;
 }
 
@@ -1027,11 +1038,11 @@ static int capset_pre_handler(struct kprobe *p, struct pt_regs *regs)
 
 static struct kprobe kp_setreuid  = { .symbol_name = "__x64_sys_setreuid",  .pre_handler = setreuid_pre_handler  };
 static struct kprobe kp_setresuid = { .symbol_name = "__x64_sys_setresuid", .pre_handler = setresuid_pre_handler };
-static struct kprobe kp_setfsuid  = { .symbol_name = "__x64_sys_setfsuid",  .pre_handler = setfsuid_pre_handler  };
-static struct kprobe kp_setgid    = { .symbol_name = "__x64_sys_setgid",    .pre_handler = setgid_pre_handler    };
+static struct kprobe kp_setfsuid  = { .symbol_name = "__sys_setfsuid",      .pre_handler = setfsuid_pre_handler  };
+static struct kprobe kp_setgid    = { .symbol_name = "__sys_setgid",        .pre_handler = setgid_pre_handler    };
 static struct kprobe kp_setregid  = { .symbol_name = "__x64_sys_setregid",  .pre_handler = setregid_pre_handler  };
 static struct kprobe kp_setresgid = { .symbol_name = "__x64_sys_setresgid", .pre_handler = setresgid_pre_handler };
-static struct kprobe kp_setfsgid  = { .symbol_name = "__x64_sys_setfsgid",  .pre_handler = setfsgid_pre_handler  };
+static struct kprobe kp_setfsgid  = { .symbol_name = "__sys_setfsgid",      .pre_handler = setfsgid_pre_handler  };
 static struct kprobe kp_capset    = { .symbol_name = "__x64_sys_capset",    .pre_handler = capset_pre_handler    };
 
 /* ── mount ─────────────────────────────────────────────────── */

@@ -117,7 +117,19 @@ pkgver=0.1.0
 #   through llvmpipe: every monitor corrupted at login and synui sat near 800%
 #   CPU. A udev rule now unbinds any other DRM card on the nvidia PCI device
 #   when nvidia_drm registers.
-pkgrel=32
+# 33: SETUID(0) IS SEEN ON THE CLANG KERNEL. Since 6.9, x86 dispatches syscalls
+#   through the switch in x64_sys_call(), and the CachyOS kernel (clang,
+#   ThinLTO) inlines the one-argument __x64_sys_setuid/setgid/setfsuid/setfsgid
+#   wrappers into it and calls __sys_setuid etc. directly. The kprobes on the
+#   wrappers registered (25/25) and never fired: setuid(0), setgid(0),
+#   setfsuid(0) and setfsgid(0) went unreported on the desktop. The four
+#   probes now sit on __sys_*, which both the clang and the gcc kernel call out
+#   of line from every entry, 32-bit compat included (objdump of each
+#   vmlinux). tests/run-vm-tests.sh could not build on a clang kernel, so this
+#   was never tested there. It now passes LLVM=1 as dkms does. kmod_vm_test
+#   on 7.2.7-cachyos: 4 FAILs before, all four modes ok after. 7.2.9-arch: ok
+#   both before and after.
+pkgrel=33
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

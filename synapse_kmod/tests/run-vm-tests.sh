@@ -53,7 +53,12 @@ echo "run-vm-tests: kernel $kver, module from $src"
 mkdir -p "$work/kmod"
 cp -r "$src/Makefile" "$src/src" "$src/include" "$work/kmod/"
 find "$work/kmod" \( -name '*.o' -o -name '*.cmd' -o -name '*.ko' -o -name '*.mod*' \) -delete
-make -s -C "/usr/lib/modules/$kver/build" M="$work/kmod" modules >"$work/build.log" 2>&1 \
+# A clang-built kernel (CachyOS's) takes its modules from clang too: gcc refuses
+# its flags (-mllvm, -mretpoline-external-thunk), so the suite could not run on
+# the kernel the desktop boots. dkms makes the same test and passes LLVM=1.
+llvm=()
+grep -q '^CONFIG_CC_IS_CLANG=y' "/usr/lib/modules/$kver/build/.config" 2>/dev/null && llvm=(LLVM=1)
+make -s -C "/usr/lib/modules/$kver/build" "${llvm[@]}" M="$work/kmod" modules >"$work/build.log" 2>&1 \
     || { cat "$work/build.log" >&2; exit 2; }
 if grep -E 'warning:' "$work/build.log" | grep -v 'pahole version' >&2; then
     echo "run-vm-tests: the module built with warnings (above)" >&2
