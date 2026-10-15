@@ -98,7 +98,11 @@ check "…it reads through the wl_event_loop" $?
 sed -n '/static int read_cb/,/^}/p' "$CALEV" | grep -q "WL_EVENT_READABLE"
 r=$?
 sed -n '/static int read_cb/,/^}/p' "$CALEV" | awk '/WL_EVENT_READABLE/{r=NR} /WL_EVENT_HANGUP/{h=NR} END{exit !(r && h && r < h)}'
-[ $r = 0 ] && [ $? = 0 ]
+o=$?
+# ⚠ The order's status is kept in o: in `[ $r = 0 ] && [ $? = 0 ]`, $? was the
+# first test's own 0, so the order was never checked and a hangup handled
+# before the read passed.
+[ $r = 0 ] && [ $o = 0 ]
 check "…and reads before it acts on the hangup, not instead of it" $?
 
 # One fetch at a time, or holding an arrow key settles the panel on whichever
