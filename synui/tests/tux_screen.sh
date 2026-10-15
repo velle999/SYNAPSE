@@ -55,7 +55,13 @@ fi
 
 # Confirm it really is Qt 6 rather than a Qt 5 binary under a Qt 6 name: the
 # whole point of the search above is that the wrong one fails SILENTLY.
-case "$("$QML" --version 2>&1)" in
+#
+# ⚠ OFFSCREEN HERE TOO. `qml --version` builds its QGuiApplication BEFORE it
+# reads the flag, so with no display it aborts with no platform plugin and prints
+# nothing — and that nothing read as "not Qt 6", which skipped this test on every
+# headless run (the bug hunt's sandbox, a build box). With a display it opened a
+# Wayland connection to the live seat, which the render below is careful not to.
+case "$(QT_QPA_PLATFORM=offscreen "$QML" --version 2>&1)" in
     *" 6."*) ;;
     *) echo "SKIP: $QML is not Qt 6."; exit 77 ;;
 esac
