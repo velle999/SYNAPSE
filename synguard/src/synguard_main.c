@@ -74,6 +74,7 @@ static void signal_handler(int sig)
         rules_free(&g_state);
         rules_load(&g_state, g_state.config.rules_dir);
         sg_log(LOG_INFO, "synguard: reloaded %d rules", g_state.rules_count);
+        g_state.want_netwatch_reload = 1;
         break;
     case SIGPIPE:
         break;
@@ -263,6 +264,13 @@ static int run_event_loop(synguard_state_t *s)
          * primes the baseline — a daemon restarting with a non-zero counter
          * has not just refused anything.
          */
+        if (s->want_netwatch_reload) {
+            s->want_netwatch_reload = 0;
+            int n = netwatch_exempt_load(SG_NETWATCH_EXEMPT_PATH);
+            sg_log(LOG_INFO, "netwatch: %d exempt program(s) from %s", n < 0 ? 0 : n,
+                   SG_NETWATCH_EXEMPT_PATH);
+        }
+
         if (s->want_bpf_status) {
             s->want_bpf_status = 0;
             char st[256];
@@ -410,6 +418,13 @@ int main(int argc, char *argv[])
     if (synguard_init(&g_state) < 0) {
         sg_log(LOG_ERR, "synguard: init failed");
         return 1;
+    }
+
+    {
+        int n = netwatch_exempt_load(SG_NETWATCH_EXEMPT_PATH);
+        if (n > 0)
+            sg_log(LOG_INFO, "netwatch: %d exempt program(s) from %s", n,
+                   SG_NETWATCH_EXEMPT_PATH);
     }
 
     /* Connect to synapd */

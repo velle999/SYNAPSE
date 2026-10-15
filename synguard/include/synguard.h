@@ -368,6 +368,10 @@ typedef struct synguard_state {
      * done. A flag rather than the work itself, because the work logs and a
      * signal handler is not the place for it. */
     volatile sig_atomic_t want_bpf_status;
+    /* Set by SIGHUP, serviced in the main loop: re-read the netwatch exemption
+     * list. Not in the handler — the handler can land on the reader thread
+     * while it holds netwatch's lock. */
+    volatile sig_atomic_t want_netwatch_reload;
 
     sg_rule_t       *rules_head;
     int              rules_count;
@@ -450,6 +454,12 @@ int  kmod_parse_event(const char *line, sg_event_t *out);
  * threat level of the connect() in `e` (THREAT_NONE when nothing tripped) and
  * fills `reason`. */
 sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen);
+
+/* Programs netwatch does not alert on, by executable path; see
+ * etc/netwatch-exempt. Returns how many were read, or -1 when the file cannot
+ * be opened (then nothing is exempt). */
+#define SG_NETWATCH_EXEMPT_PATH "/etc/synguard/netwatch-exempt"
+int netwatch_exempt_load(const char *path);
 
 /* Rule engine */
 int          rules_load(synguard_state_t *s, const char *dir);

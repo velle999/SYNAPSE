@@ -1,0 +1,16 @@
+# /etc/synguard/netwatch-exempt — programs netwatch does not raise alerts for.
+#
+# netwatch watches each process's outbound connect()s for the shapes a worm
+# makes: a subnet sweep, a port scan (many hosts on non-web ports), a connect
+# flood. A few legitimate programs make those shapes by design. This file lists
+# them by the absolute path of their executable, one per line; `#` starts a
+# comment. The connections are still recorded and still go through the rules —
+# only netwatch's alert is dropped, and synguard logs that it was.
+#
+# The path is checked against /proc/<pid>/exe, never against the process name,
+# which any program can set to anything. Edits take effect on
+# `systemctl reload synguard` (SIGHUP).
+
+# Syncthing's relay pool connects to dozens of relays on 22067/22070 to measure
+# them, which reads as a port scan once per boot.
+/usr/bin/syncthing

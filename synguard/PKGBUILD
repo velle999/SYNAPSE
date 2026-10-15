@@ -181,7 +181,18 @@ pkgver=0.1.0
 #   1138 of 3652 exec reports named the decoy. After: 0 of 3662 on
 #   7.2.7-cachyos and 0 of 2989 on 7.2.9-arch. run-vm-bpf-tests.sh boots with
 #   preempt=full to match the desktop.
-pkgrel=50
+# 51: syncthing is not a port scanner. Its relay pool ranks relays by
+#   connecting to dozens of them on 22067/22070, which is a port scan by shape:
+#   5 "port scan" HIGH alerts in 5 boots on the desktop, every one syncthing.
+#   No threshold separates the two, so the program does: a new list,
+#   /etc/synguard/netwatch-exempt (shipped with /usr/bin/syncthing, kept across
+#   upgrades by backup=, reread on SIGHUP), is matched against the alerting
+#   pid's /proc/<pid>/exe, never its comm, which any process can set. An exempt
+#   alert is logged at info and not raised. tests/netwatch_test.c forks real
+#   children: the test binary listed by path is not alerted, the same scan
+#   under the comm "syncthing" still is, and a missing list exempts nothing.
+#   Against 50 the listed binary's scan alerts HIGH.
+pkgrel=51
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -192,6 +203,8 @@ depends=('glibc' 'systemd-libs' 'libbpf')
 # kernel — the whole reason enforcement went this way instead of into the kmod.
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config' 'clang' 'bpf')
 optdepends=('synapd: AI threat classification')
+# A local edit to the exemption list survives an upgrade (pacman writes .pacnew).
+backup=('etc/synguard/netwatch-exempt')
 # ⛔ THE RELEASE URL, AND IT CARRIES THE pkgrel. The filename before `::` is
 # what makepkg looks for on disk, so a build from this checkout uses the
 # tarball build-all.sh just collected and never downloads. The URL after it is
@@ -222,6 +235,7 @@ prepare() {
     local stale
     stale=$(find "$startdir/src" "$startdir/include" "$startdir/meson.build" \
                  "$startdir/systemd" "$startdir/rules" "$startdir/tests" \
+                 "$startdir/bpf" "$startdir/etc" \
                  -type f -newer "$tarball" \
                  -not -path "*/$pkgname-$pkgver/*" \
                  -print -quit 2>/dev/null)

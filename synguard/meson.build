@@ -253,5 +253,8 @@ test('bpf_override', bpf_override_test, timeout: 30)
 # there both shadows itself and clobbers local overrides on upgrade.
 
 install_subdir('rules', install_dir: '/etc/synguard', strip_directory: false)
+# Programs netwatch does not alert on; see the file. backup=() in the PKGBUILD
+# keeps a local edit across upgrades.
+install_data('etc/netwatch-exempt', install_dir: '/etc/synguard', install_mode: 'rw-r--r--')
 
 message('synguard @0@ configured.'.format(meson.project_version()))

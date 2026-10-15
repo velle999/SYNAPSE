@@ -400,6 +400,80 @@ struct nw_entry {
 static struct nw_entry nw_table[NW_TABLE];
 static pthread_mutex_t nw_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * Programs whose fan-out is their job (/etc/synguard/netwatch-exempt).
+ *
+ * Syncthing's relay pool connects to dozens of relays on 22067/22070 to rank
+ * them: 5 "port scan" HIGH alerts in 5 boots, every one of them syncthing
+ * (2026-10-15). The shape is exactly a scan's, so no threshold separates them —
+ * the program does.
+ *
+ * Matched on /proc/<pid>/exe, never on comm: a worm can name itself
+ * "syncthing" with one prctl(), but it cannot be /usr/bin/syncthing without
+ * root. Resolved only when an alert is about to fire (once per pid per window),
+ * so an ordinary connect pays nothing for it.
+ */
+#define NW_EXEMPT_MAX 32
+static char nw_exempt[NW_EXEMPT_MAX][256];
+static int  nw_exempt_n;
+
+int netwatch_exempt_load(const char *path)
+{
+    char list[NW_EXEMPT_MAX][256];
+    int n = 0;
+    FILE *f = fopen(path, "r");
+    int opened = f != NULL;
+    if (f) {
+        char line[512];
+        while (fgets(line, sizeof(line), f) && n < NW_EXEMPT_MAX) {
+            char *p = line;
+            while (*p == ' ' || *p == '\t') p++;
+            char *end = p + strcspn(p, "#\r\n");
+            while (end > p && (end[-1] == ' ' || end[-1] == '\t')) end--;
+            *end = '\0';
+            if (*p != '/') {                /* blank, comment, or not a path */
+                if (*p) sg_log(LOG_WARNING, "netwatch: %s: ignoring \"%s\" — "
+                                            "not an absolute path", path, p);
+                continue;
+            }
+            size_t len = (size_t)(end - p);
+            if (len >= sizeof(list[0])) {   /* a cut path could match another */
+                sg_log(LOG_WARNING, "netwatch: %s: ignoring a path of %zu "
+                                    "bytes — the limit is %zu", path, len,
+                       sizeof(list[0]) - 1);
+                continue;
+            }
+            memcpy(list[n], p, len + 1);
+            n++;
+        }
+        fclose(f);
+    }
+    pthread_mutex_lock(&nw_lock);
+    memcpy(nw_exempt, list, sizeof(list[0]) * (size_t)n);
+    nw_exempt_n = n;
+    pthread_mutex_unlock(&nw_lock);
+    return opened ? n : -1;
+}
+
+/* The listed path `pid` runs, or NULL. Called with nw_lock held. */
+static const char *nw_exempt_exe(uint32_t pid)
+{
+    if (nw_exempt_n == 0) return NULL;
+    char link[32], exe[256];
+    snprintf(link, sizeof(link), "/proc/%u/exe", pid);
+    ssize_t n = readlink(link, exe, sizeof(exe) - 1);
+    if (n <= 0 || (size_t)n >= sizeof(exe) - 1)
+        return NULL;                       /* gone, a kernel thread, or too long */
+    exe[n] = '\0';
+    /* A binary an upgrade replaced while it ran reads "<path> (deleted)". */
+    size_t len = (size_t)n, sfx = strlen(" (deleted)");
+    if (len > sfx && strcmp(exe + len - sfx, " (deleted)") == 0)
+        exe[len - sfx] = '\0';
+    for (int i = 0; i < nw_exempt_n; i++)
+        if (strcmp(exe, nw_exempt[i]) == 0) return nw_exempt[i];
+    return NULL;
+}
+
 static uint32_t nw_fnv1a(const char *s, size_t n)
 {
     uint32_t h = 2166136261u;
@@ -550,8 +624,16 @@ sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
                      "(last=%s)", ent->conn_count, ent->distinct,
                      NW_WINDOW_S, e->filename);
         }
-        if (threat != THREAT_NONE)
+        if (threat != THREAT_NONE) {
             ent->alerted = 1;
+            const char *ex = nw_exempt_exe(e->pid);
+            if (ex) {
+                /* Logged, not alerted: the journal still says it happened. */
+                sg_log(LOG_INFO, "netwatch: %s exempt (%s) — %s", ex,
+                       SG_NETWATCH_EXEMPT_PATH, reason);
+                threat = THREAT_NONE;
+            }
+        }
     }
     pthread_mutex_unlock(&nw_lock);
     return threat;

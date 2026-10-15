@@ -24,6 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #include "synguard.h"
 
@@ -298,6 +301,101 @@ static void test_reason_fits_the_secfeed(void)
           "the destination was truncated off the feed: \"%s\"", msg.reason);
 }
 
+/* ── 3. The exemption list ─────────────────────────────────────────────
+ *
+ * Syncthing's relay pool is a port scan by shape (5 HIGH alerts in 5 boots,
+ * all syncthing, 2026-10-15), so the program is exempted by its EXECUTABLE —
+ * /proc/<pid>/exe, which a process cannot fake — never by its name. The pids
+ * below are real children of this test, so that path is resolved for real: it
+ * is this test binary's own. */
+static pid_t child(void)
+{
+    pid_t p = fork();
+    if (p == 0) { pause(); _exit(0); }
+    return p;
+}
+
+static void reap(pid_t p) { kill(p, SIGKILL); waitpid(p, NULL, 0); }
+
+static sg_threat_t scan_from(pid_t pid, const char *comm, int base)
+{
+    char reason[200] = {0};
+    sg_threat_t worst = THREAT_NONE;
+    for (int i = 1; i <= 25; i++) {
+        char dest[64];
+        snprintf(dest, sizeof(dest), "10.%d.%d.9:22067", base + i, i);
+        sg_threat_t t = connect_to((uint32_t)pid, comm, dest, reason, sizeof(reason));
+        if (t > worst) worst = t;
+    }
+    return worst;
+}
+
+static int write_list(const char *path, const char *body)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fputs(body, f);
+    fclose(f);
+    return 0;
+}
+
+static void test_exempt_by_executable(void)
+{
+    printf("an exempt executable's scan is not alerted; its name alone is not enough\n");
+
+    char self[256];
+    ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+    if (n <= 0) { printf("  skip: no /proc/self/exe\n"); return; }
+    self[n] = '\0';
+
+    char path[] = "/tmp/netwatch-exempt-XXXXXX";
+    int fd = mkstemp(path);
+    if (fd < 0) { failures++; printf("  FAIL: mkstemp\n"); return; }
+    close(fd);
+
+    /* The shipped default: syncthing only. This test binary is not syncthing,
+     * even when it calls itself that. */
+    char longp[320];
+    memset(longp, 'a', sizeof(longp) - 2);
+    longp[0] = '/';
+    longp[sizeof(longp) - 2] = '\n';
+    longp[sizeof(longp) - 1] = '\0';
+    char shipped[600];
+    snprintf(shipped, sizeof(shipped), "# comment\n\n   /usr/bin/syncthing   "
+             "# trailing comment\nnot/absolute\n%s", longp);
+    write_list(path, shipped);
+    int got = netwatch_exempt_load(path);
+    CHECK(got == 1, "the shipped shape loads 1 path, ignoring comments, blanks, "
+          "a relative path and a %zu-byte one (got %d)", sizeof(longp) - 2, got);
+
+    pid_t a = child();
+    sg_threat_t t = scan_from(a, "syncthing", 20);
+    CHECK(t == THREAT_HIGH, "a process NAMED syncthing that is not /usr/bin/syncthing still alerts (got %d)", t);
+    reap(a);
+
+    /* Now list this binary itself: its scan is dropped. */
+    char body[400];
+    snprintf(body, sizeof(body), "/usr/bin/syncthing\n%s\n", self);
+    write_list(path, body);
+    got = netwatch_exempt_load(path);
+    CHECK(got == 2, "two paths loaded (got %d)", got);
+
+    pid_t b = child();
+    t = scan_from(b, "anything", 60);
+    CHECK(t == THREAT_NONE, "a listed executable's port scan is not alerted (got %d)", t);
+    reap(b);
+
+    /* A missing file exempts nothing. */
+    CHECK(netwatch_exempt_load("/nonexistent/netwatch-exempt") == -1,
+          "a missing list reports -1");
+    pid_t c = child();
+    t = scan_from(c, "anything", 100);
+    CHECK(t == THREAT_HIGH, "with no list the same scan alerts again (got %d)", t);
+    reap(c);
+
+    unlink(path);
+}
+
 int main(void)
 {
     printf("netwatch tests\n\n");
@@ -312,6 +410,7 @@ int main(void)
     test_flood_is_medium();
     test_loopback_ignored();
     test_reason_fits_the_secfeed();
+    test_exempt_by_executable();
 
     printf("\n%s\n", failures ? "FAILED" : "all passed");
     return failures ? 1 : 0;
