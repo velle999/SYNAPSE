@@ -30,6 +30,11 @@
  *   independently (LUT length, temperature, white level) and a cache that
  *   misses one of them returns a stale curve for a setting the user just moved.
  *
+ *   THE PIPELINE IS COMMITTED ON CHANGE, AND ONLY THEN. A frame that carries
+ *   it again costs a TEST_ONLY commit, a metadata blob and, in HDR, a cursor
+ *   re-render; a commit from anywhere else that touches it (a gamma client,
+ *   an enable, a modeset) must make the next frame send it again.
+ *
  * wlr_output_get_gamma_size() is stubbed for the reason nightlight_test.c
  * stubs it: it is the one input that decides whether a transform is accepted at
  * all, and the DRM backend is not reachable from a test.
@@ -89,6 +94,32 @@ int dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable)
     return 0;
 }
 
+/* The two calls that reach the backend. The commit stub does what wlroots does
+ * after a commit lands — emits the output's commit signal with the state — so
+ * hdr.c's watcher sees every commit here exactly as it would on a desk, its
+ * own included. `last_bits` is what the most recent commit carried. */
+static int tests;
+static uint32_t last_bits;
+static bool test_answer = true, commit_answer = true;
+
+bool wlr_output_test_state(struct wlr_output *output,
+                           const struct wlr_output_state *state)
+{
+    (void)output; (void)state;
+    tests++;
+    return test_answer;
+}
+
+bool wlr_output_commit_state(struct wlr_output *output,
+                             const struct wlr_output_state *state)
+{
+    if (!commit_answer) return false;
+    last_bits = state->committed;
+    struct wlr_output_event_commit ev = { .output = output, .state = state };
+    wl_signal_emit_mutable(&output->events.commit, &ev);
+    return true;
+}
+
 /* ── the reference curve ───────────────────────────────────────────────────
  *
  * Written out again rather than shared with hdr.c on purpose: a test that
@@ -115,6 +146,57 @@ static double ref_srgb_to_linear(double v)
 /* Two distinct non-NULL addresses. Nothing dereferences them — the gamma stub
  * is the only thing that ever looks at an output. */
 static struct wlr_output panel, external;
+
+/* The commit-on-change section's output: this one IS looked at — its commit
+ * signal carries hdr.c's watcher and its `enabled` decides whether a frame is
+ * asked for. */
+static struct wlr_output desk;
+
+#define COLOR_BITS (WLR_OUTPUT_STATE_COLOR_TRANSFORM | \
+                    WLR_OUTPUT_STATE_IMAGE_DESCRIPTION)
+
+/* One frame through the path every compositor commit takes: a plain state,
+ * handed to hdr_commit(). Returns what reached the backend. */
+static uint32_t frame(syn_server_t *s, syn_output_t *o)
+{
+    struct wlr_output_state st;
+    wlr_output_state_init(&st);
+    last_bits = 0;
+    hdr_commit(s, o, &st);
+    wlr_output_state_finish(&st);
+    return last_bits;
+}
+
+/* A commit made somewhere else in the compositor (or by a client) — not
+ * through hdr_commit(). `set` puts the one field on it. */
+static void foreign_commit(void (*set)(struct wlr_output_state *))
+{
+    struct wlr_output_state st;
+    wlr_output_state_init(&st);
+    set(&st);
+    wlr_output_commit_state(&desk, &st);
+    wlr_output_state_finish(&st);
+}
+
+static void set_gamma_ramp(struct wlr_output_state *st)
+{
+    wlr_output_state_set_color_transform(st, NULL);
+}
+
+static void set_enabled(struct wlr_output_state *st)
+{
+    wlr_output_state_set_enabled(st, true);
+}
+
+static void set_mode(struct wlr_output_state *st)
+{
+    wlr_output_state_set_custom_mode(st, 1920, 1080, 60000);
+}
+
+static void set_unrelated(struct wlr_output_state *st)
+{
+    wlr_output_state_set_adaptive_sync_enabled(st, true);
+}
 
 static float eval1(struct wlr_color_transform *tf, float v, int channel)
 {
@@ -338,6 +420,135 @@ int main(void)
         CHECK(hdr_pick_primaries(gamut[i].sup) == gamut[i].want,
               "%s: picked 0x%x, wanted 0x%x", gamut[i].what,
               hdr_pick_primaries(gamut[i].sup), gamut[i].want);
+
+    /*
+     * ── Committed on change, and re-sent after anyone else's commit ────────
+     *
+     * The pipeline is hardware state that stays until replaced, so a frame
+     * that carries it again only costs: a TEST_ONLY commit on every output, a
+     * new HDR_OUTPUT_METADATA blob, and on an HDR output a cursor re-render
+     * per frame (wlr_cursor redraws on any commit with an image description).
+     * Up to synui 633 every frame carried it.
+     *
+     * ⚠ AND THAT ALSO REPAIRED THINGS NOBODY TRACKED. A gamma client's ramp in
+     * the one transform slot, an output re-enabled on a different CRTC, a
+     * modeset — each was overwritten by the next frame. Commit-on-change is
+     * only correct together with the watcher that notices them, so both
+     * halves are pinned here.
+     */
+    s.config.night_light = false;
+    desk.enabled = true;
+    wl_signal_init(&desk.events.commit);
+    syn_output_t c = {0};
+    c.wlr_output = &desk;
+    c.hdr_primaries = WLR_COLOR_NAMED_PRIMARIES_BT2020;
+    hdr_watch_output(&c);
+
+    CHECK(!hdr_color_settled(&s, &c),
+          "a new output read as settled — its CRTC has never been given a LUT");
+    int t0 = tests, sched0 = scheduled;
+    uint32_t bits = frame(&s, &c);
+    CHECK(bits & WLR_OUTPUT_STATE_COLOR_TRANSFORM,
+          "a new output's first frame did not carry the colour transform");
+    CHECK(tests == t0 + 1, "the first colour commit was not tested first");
+    CHECK(scheduled == sched0, "hdr_commit()'s own colour commit asked for "
+          "another frame — the watcher took it for a foreign one");
+    CHECK(hdr_color_settled(&s, &c),
+          "hdr_commit()'s own colour commit left the output unsettled");
+
+    int stray = 0;
+    t0 = tests;
+    for (int i = 0; i < 100; i++)
+        if (frame(&s, &c) & COLOR_BITS) stray++;
+    CHECK(stray == 0, "%d of 100 steady frames re-sent the colour pipeline",
+          stray);
+    CHECK(tests == t0, "100 steady frames made %d TEST_ONLY commits",
+          tests - t0);
+
+    s.config.night_light = true;
+    CHECK(!hdr_color_settled(&s, &c), "night light going on read as settled");
+    CHECK(frame(&s, &c) & WLR_OUTPUT_STATE_COLOR_TRANSFORM,
+          "night light going on did not commit its ramp");
+    CHECK(!(frame(&s, &c) & COLOR_BITS),
+          "the frame after night light went on sent the ramp again");
+    s.config.night_light = false;
+    CHECK(frame(&s, &c) & WLR_OUTPUT_STATE_COLOR_TRANSFORM,
+          "night light going off did not commit identity — the screen would "
+          "stay warm");
+
+    c.hdr_on = 1;
+    c.hdr_white = HDR_SDR_WHITE_DEFAULT;
+    bits = frame(&s, &c);
+    CHECK((bits & COLOR_BITS) == COLOR_BITS,
+          "HDR going on did not send the curve and the description together "
+          "(0x%x)", bits);
+    stray = 0;
+    t0 = tests;
+    for (int i = 0; i < 100; i++)
+        if (frame(&s, &c) & WLR_OUTPUT_STATE_IMAGE_DESCRIPTION) stray++;
+    CHECK(stray == 0, "%d of 100 HDR frames re-sent the image description — "
+          "each one is a cursor re-render", stray);
+    CHECK(tests == t0, "100 HDR frames made %d TEST_ONLY commits", tests - t0);
+
+    struct {
+        const char *what;
+        void (*set)(struct wlr_output_state *);
+    } foreign[] = {
+        { "a gamma client's ramp",               set_gamma_ramp },
+        { "an enable (DPMS on, a new CRTC)",     set_enabled },
+        { "a modeset",                           set_mode },
+    };
+    for (size_t i = 0; i < sizeof foreign / sizeof foreign[0]; i++) {
+        int sched = scheduled;
+        foreign_commit(foreign[i].set);
+        CHECK(!hdr_color_settled(&s, &c),
+              "%s left the output settled — the HDR curve would not come back",
+              foreign[i].what);
+        CHECK(scheduled > sched, "%s asked for no frame — a still screen "
+              "would keep the wrong pipeline", foreign[i].what);
+        bits = frame(&s, &c);
+        CHECK((bits & COLOR_BITS) == COLOR_BITS,
+              "the frame after %s did not put the HDR pipeline back (0x%x)",
+              foreign[i].what, bits);
+        CHECK(hdr_color_settled(&s, &c), "still unsettled after %s was repaired",
+              foreign[i].what);
+    }
+    foreign_commit(set_unrelated);
+    CHECK(hdr_color_settled(&s, &c),
+          "a commit touching nothing colour-related unsettled the output");
+
+    /* A refusal is stamped, not retried per frame — which the comment above
+     * the stamp has always said and the per-frame test made untrue. */
+    c.hdr_on = 0;
+    frame(&s, &c);                          /* the way out of HDR */
+    s.config.night_light = true;
+    test_answer = false;
+    t0 = tests;
+    frame(&s, &c);
+    for (int i = 0; i < 50; i++) frame(&s, &c);
+    CHECK(tests == t0 + 1, "a refused ramp was tested %d times in 51 frames",
+          tests - t0);
+    test_answer = true;
+
+    /* A frame that never reached the hardware settles nothing — asked while
+     * the settings are unchanged and only the hardware is in doubt, which is
+     * the case where nothing else would bring the pipeline back. */
+    s.config.night_light = false;
+    frame(&s, &c);
+    foreign_commit(set_enabled);
+    commit_answer = false;
+    frame(&s, &c);
+    CHECK(!hdr_color_settled(&s, &c),
+          "a failed commit was taken as having delivered the pipeline");
+    commit_answer = true;
+    CHECK(frame(&s, &c) & WLR_OUTPUT_STATE_COLOR_TRANSFORM,
+          "the frame after a failed commit did not retry the pipeline");
+
+    hdr_output_removed(&c);
+    CHECK(wl_list_empty(&desk.events.commit.listener_list),
+          "the watcher is still on the commit signal — wlroots asserts it is "
+          "empty when the output is destroyed");
+    hdr_output_removed(&c);                 /* twice is harmless */
 
     hdr_shutdown();
 

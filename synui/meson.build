@@ -693,6 +693,21 @@ test('blur_damage_rotated', blur_damage_rig,
 test('blur_damage_stale', blur_damage_rig,
      args : ['--noise', '0', '--tol', '2', '--stale'], timeout : 120)
 
+# A compositor-drawn scene buffer replaced by one of the same size keeps its
+# texture and has the new pixels uploaded at the next render (scenefx0.5's 0003
+# patch) — synui's cat, titlebars and panels all redraw that way. Every frame is
+# read back and compared exactly with the buffer that was set: partial damage,
+# the same buffer redrawn in place, two sets before one render, a size change,
+# unmap/remap, 200 whole redraws. scene_reupload_stale is the negative control:
+# no damage given must leave old pixels showing, or the rig cannot see staleness;
+# it SKIPs on a scenefx without the patch. Needs a renderer; skips (77) without.
+scene_reupload_rig = executable('scene_reupload_rig',
+  ['tests/scene_reupload_rig.c'],
+  dependencies : [scenefx, wlroots, wayland, pixman, libdrm_dep],
+  build_by_default : false)
+test('scene_reupload', scene_reupload_rig, timeout : 60)
+test('scene_reupload_stale', scene_reupload_rig, args : ['--stale'], timeout : 60)
+
 # Every preview image the picker can be asked to draw, through the real
 # decoders. The preview pane fails silently by design (it draws "Preview
 # unavailable" and moves on), so nothing at runtime would report a decoder

@@ -6270,19 +6270,32 @@ struct syn_output {
      * night light temperature, the LUT length it was built at, whether the
      * connector is in HDR10 and at what SDR white level.
      *
-     * The transform is a CRTC LUT the kernel keeps until it is replaced, so it
-     * is committed on CHANGE rather than every frame: re-uploading a
-     * 1024-entry blob at the refresh rate is real work for a value that almost
-     * never moves, while *never* committing again would leave the screen warm
-     * after night light was switched off.
+     * The transform is a CRTC LUT the kernel keeps until it is replaced, and the
+     * image description is connector state kept the same way, so both are
+     * committed on CHANGE rather than every frame: a frame carrying them costs
+     * a TEST_ONLY commit before the real one, a fresh HDR_OUTPUT_METADATA blob,
+     * and — because wlr_cursor re-renders the cursor on every commit with an
+     * image description — a cursor texture, at the refresh rate, for values
+     * that almost never move. *Never* committing again would leave the screen
+     * warm after night light was switched off.
      *
      * ⚠ EVERY FIELD IS PART OF THE COMPARISON, including the ones that look
      * like detail. `dim` is here because a connector that had no CRTC when it
      * was first asked reports a gamma size of 0, takes the fallback length and
      * is refused — and with only the temperature compared, that refusal was
-     * stamped once and never retried when the CRTC arrived. The zero value is
-     * already true for a freshly created output: no transform, no HDR. */
+     * stamped once and never retried when the CRTC arrived. */
     syn_color_state_t        committed_color;
+
+    /* hdr.c: committed_color no longer says what the hardware holds, because a
+     * commit that did not come through hdr_commit() touched it — an enable (a
+     * re-enabled output may come back on a different CRTC, whose LUT is not
+     * ours), a modeset, or a gamma client's ramp in the one transform slot.
+     * hdr_watch_commit() sets it from the output's commit signal; the next
+     * frame puts the pipeline back and clears it. True for a new output, whose
+     * CRTC has never been given anything. */
+    bool                     color_stale;
+    bool                     color_in_commit;   /* hdr_commit()'s own commits */
+    struct wl_listener       color_watch;       /* wlr_output.events.commit */
 
     /* hdr.c: HDR10 output on this connector.
      *
@@ -9884,6 +9897,19 @@ struct wlr_color_transform *hdr_color_transform(syn_server_t *s, syn_output_t *o
 
 syn_color_state_t hdr_color_state(syn_server_t *s, syn_output_t *o);
 bool hdr_color_state_eq(const syn_color_state_t *a, const syn_color_state_t *b);
+
+/* True when this output already carries the pipeline it should: nothing has
+ * moved since the last colour commit, and no other commit has touched colour,
+ * enable or mode since. A settled output's frames commit without the colour
+ * fields; an unsettled one owes a commit even on a still screen. */
+bool hdr_color_settled(syn_server_t *s, syn_output_t *o);
+
+/* Start (and stop) watching an output's commits for ones that make
+ * committed_color untrustworthy. hdr_output_added() starts it; output_destroy
+ * must stop it, because wlroots asserts an output's signals are empty when it
+ * is destroyed. Safe on an output that was never watched. */
+void hdr_watch_output(syn_output_t *o);
+void hdr_output_removed(syn_output_t *o);
 
 /* Commit `st` with this output's colour pipeline on it — the one transform slot
  * and, on an output that has been in HDR, the image description. Both commit

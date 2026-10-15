@@ -29,8 +29,10 @@
  * behind the glass, a client repainting a corner of itself, a fullscreen game
  * opening over everything and closing again.
  *
- *   --stale   negative control: swap the wallpaper with NO damage at frame 40.
- *             A must then disagree with B, or the rig cannot see staleness.
+ *   --stale   negative control: swap the wallpaper with NO damage at frame 40
+ *             (a half-size buffer at the same destination size, so the
+ *             texture cannot be kept). A must then disagree with B, or the
+ *             rig cannot see staleness.
  *
  * Exit: 0 = every frame identical (with --stale: some frame differed),
  * 1 = otherwise, or a render error; 77 = no renderer.
@@ -292,10 +294,13 @@ int main(int argc, char **argv)
     }
     struct wlr_scene_tree *root = &rig.scene->tree;
 
-    /* Wallpaper. */
+    /* Wallpaper, shown at a destination size as synui's wallpaper.c shows it —
+     * which is also what lets --stale swap in a buffer of another size without
+     * the node's geometry changing (and so without the scene damaging it). */
     struct mem_buffer *wall = mb_new(lw, lh);
     paint_pattern(wall, 1);
     struct wlr_scene_buffer *wall_n = wlr_scene_buffer_create(root, &wall->base);
+    wlr_scene_buffer_set_dest_size(wall_n, lw, lh);
     wlr_buffer_drop(&wall->base);
 
     /* An ordinary window that gets dragged behind the glass. */
@@ -410,9 +415,17 @@ int main(int argc, char **argv)
         if (f >= 170 && f < 200)
             wlr_scene_node_set_position(&frame->node, gx - (f - 170) * 3, gy + (f - 170) * 2);
 
-        /* Negative control: a wallpaper change nobody reported. */
+        /* Negative control: a wallpaper change nobody reported.
+         *
+         * ⚠ THE NEW BUFFER IS A DIFFERENT SIZE ON PURPOSE. Since scenefx0.5
+         * 0.5-4 (patch 0003) a same-size buffer set with empty damage keeps
+         * its texture and uploads nothing, so it is invisible on BOTH outputs
+         * and the control would see nothing. A buffer of another size cannot
+         * keep the texture; at the wallpaper's fixed destination size it
+         * changes no geometry and is given no damage, so only a whole repaint
+         * shows it — on 0.5-3 and 0.5-4 alike. */
         if (stale && f == 40) {
-            struct mem_buffer *nw = mb_new(lw, lh);
+            struct mem_buffer *nw = mb_new(lw / 2, lh / 2);
             paint_pattern(nw, 5);
             pixman_region32_t none;
             pixman_region32_init(&none);

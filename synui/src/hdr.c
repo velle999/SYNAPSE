@@ -458,6 +458,56 @@ bool hdr_color_state_eq(const syn_color_state_t *a, const syn_color_state_t *b)
            a->hdr == b->hdr && a->white == b->white;
 }
 
+bool hdr_color_settled(syn_server_t *s, syn_output_t *o)
+{
+    syn_color_state_t want = hdr_color_state(s, o);
+    return !o->color_stale && hdr_color_state_eq(&want, &o->committed_color);
+}
+
+/*
+ * Every commit on this output passes through here, hdr_commit()'s own
+ * included. The ones that did not come from hdr_commit() and touched what the
+ * pipeline lives in make committed_color a guess, so the next frame re-sends it.
+ *
+ * ⚠ THIS IS WHAT USED TO HAPPEN BY ACCIDENT. When every frame carried the
+ * pipeline, a gamma client's ramp or an output coming back from DPMS on a new
+ * CRTC was overwritten within a frame without anything having to notice.
+ * Committing on change only is safe because this notices instead.
+ *
+ * wlroots strips fields equal to the current state before emitting, so an
+ * enable of an enabled output or a re-commit of the same mode never gets here.
+ */
+#define HDR_COLOR_FIELDS (WLR_OUTPUT_STATE_ENABLED | WLR_OUTPUT_STATE_MODE | \
+                          WLR_OUTPUT_STATE_COLOR_TRANSFORM |                 \
+                          WLR_OUTPUT_STATE_IMAGE_DESCRIPTION)
+
+static void hdr_watch_commit(struct wl_listener *l, void *data)
+{
+    syn_output_t *o = wl_container_of(l, o, color_watch);
+    const struct wlr_output_event_commit *ev = data;
+    if (o->color_in_commit || !(ev->state->committed & HDR_COLOR_FIELDS))
+        return;
+    o->color_stale = true;
+    /* A colour change has no damage of its own; without a frame a still
+     * screen would keep the foreign ramp until something else repainted. */
+    if (o->wlr_output->enabled)
+        wlr_output_schedule_frame(o->wlr_output);
+}
+
+void hdr_watch_output(syn_output_t *o)
+{
+    o->color_stale = true;
+    o->color_watch.notify = hdr_watch_commit;
+    wl_signal_add(&o->wlr_output->events.commit, &o->color_watch);
+}
+
+void hdr_output_removed(syn_output_t *o)
+{
+    if (!o->color_watch.notify) return;
+    wl_list_remove(&o->color_watch.link);
+    o->color_watch.notify = NULL;
+}
+
 /*
  * Put this output's whole colour pipeline onto `st` and commit it.
  *
@@ -475,6 +525,18 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
 {
     struct wlr_output *wo = o->wlr_output;
     syn_color_state_t want = hdr_color_state(s, o);
+
+    /*
+     * ⚠ SETTLED: THE FRAME GOES OUT WITHOUT THE COLOUR FIELDS. The CRTC keeps
+     * its LUT and the connector its HDR metadata until a commit replaces them
+     * (every atomic commit re-sends the blobs it holds), so a frame that
+     * carried them again bought nothing and cost a TEST_ONLY commit, a new
+     * HDR_OUTPUT_METADATA blob and a cursor re-render (wlr_cursor redraws on
+     * any commit with an image description). hdr_watch_commit() is what makes
+     * "settled" true: anything else that touches the pipeline unsettles it.
+     */
+    if (!o->color_stale && hdr_color_state_eq(&want, &o->committed_color))
+        return wlr_output_commit_state(wo, st);
 
     /* Which description this output owes the display, if any. An output that
      * has never been in HDR is left alone entirely — DP-2 here refuses an HDR10
@@ -503,6 +565,7 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
      */
     bool colour_ok = false, committed_try = false, ok = false;
     struct wlr_output_state try = {0};
+    o->color_in_commit = true;
     if (!hdr_lost && wlr_output_state_copy(&try, st)) {
         wlr_output_state_set_color_transform(&try, tf);
         bool desc_ok = !have_desc ? true
@@ -517,8 +580,15 @@ bool hdr_commit(syn_server_t *s, syn_output_t *o, struct wlr_output_state *st)
         wlr_output_state_finish(&try);
     }
     if (!committed_try) ok = wlr_output_commit_state(wo, st);
+    o->color_in_commit = false;
 
+    /* Nothing reached the hardware: still unsettled, so the next frame asks
+     * again rather than trusting a stamp from before. */
     if (!ok) return false;
+
+    /* Every path from here stamps committed_color with what the hardware was
+     * given or refused, so it is the truth again until something else commits. */
+    o->color_stale = false;
 
     if (colour_ok) {
         o->committed_color = want;
@@ -712,6 +782,7 @@ int hdr_set_white(syn_server_t *s, syn_output_t *o, int nits)
  */
 void hdr_output_added(syn_server_t *s, syn_output_t *o)
 {
+    hdr_watch_output(o);
     hdr_probe(s, o);
     if (!o->hdr_want) return;
     o->hdr_want = 0;

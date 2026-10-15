@@ -3831,7 +3831,25 @@ pkgver=0.1.0
 #   both. With scene_ink on (its 400 ms readbacks): 53% and 35%.
 #   Also: synui-record is #!/bin/bash. It uses arrays, and as #!/bin/sh it
 #   fails to parse wherever /bin/sh is dash ("(" unexpected at line 138).
-pkgrel=633
+# 634: THE COLOUR PIPELINE IS COMMITTED WHEN IT CHANGES, NOT EVERY FRAME.
+#   hdr_commit() put the night-light transform and the HDR image description
+#   on every frame. The LUT itself was elided by wlroots, but each frame on
+#   each output still cost a TEST_ONLY commit, a new HDR_OUTPUT_METADATA blob
+#   on the HDR monitor, and a cursor re-render (wlr_cursor redraws on every
+#   commit carrying an image description; ~5% of the main thread live). A
+#   settled output's frames now go out without the colour fields. A listener
+#   on the output's commit signal unsettles it when any other commit touches
+#   enable, mode, transform or description (DPMS, a modeset, a gamma client)
+#   and schedules a frame, which puts the pipeline back. tests/hdr_test.c
+#   pins both halves; 8 mutants fail it. Headless has no LUT or HDR, so the
+#   saving does not show in a headless rig: same CPU as 633 there.
+#   With it: tests/scene_reupload_rig.c, the proof for scenefx0.5 0.5-4 (a
+#   redrawn compositor buffer keeps its texture), and blur_damage_stale's
+#   control reworked — its undamaged same-size wallpaper swap is invisible
+#   on 0.5-4, so it swaps in a half-size buffer at the same destination size.
+#   scenefx 0.5-4, headless, three outputs as on the desk, cat on, foot open,
+#   4 alternating rounds: 102 -> 84 per mille of a core (633), 104 -> 90 (634).
+pkgrel=634
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

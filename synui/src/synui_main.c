@@ -611,9 +611,9 @@ static void scene_commit_colour(syn_output_t *output)
     /* wlr_scene_output_commit()'s own guard — with the addition that a colour
      * change is worth a commit even when nothing on screen moved. Night light
      * going on, the LUT length changing, HDR being switched on, the SDR white
-     * level moving: none of them damage a pixel. */
-    syn_color_state_t want = hdr_color_state(s, output);
-    if (hdr_color_state_eq(&want, &output->committed_color) &&
+     * level moving, another commit having touched the pipeline: none of them
+     * damage a pixel. */
+    if (hdr_color_settled(s, output) &&
         !wlr_scene_output_needs_frame(scene_output))
         return;
 
@@ -773,9 +773,9 @@ static void output_frame(struct wl_listener *listener, void *data)
      * mean have moved — so on a still screen the commit below would be skipped
      * and the toggle would do nothing until something else happened to repaint.
      * Damage the output for it. Night light, the LUT length, HDR and the SDR
-     * white level are all in the comparison; see syn_color_state_t. */
-    syn_color_state_t colour_now = hdr_color_state(output->server, output);
-    if (!hdr_color_state_eq(&colour_now, &output->committed_color))
+     * white level are all in the comparison; see syn_color_state_t. So is a
+     * commit from elsewhere that touched the pipeline (color_stale). */
+    if (!hdr_color_settled(output->server, output))
         syn_output_damage_whole(output);
 
     /* GLES post-process pass when available; plain scene commit otherwise
@@ -851,6 +851,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * a shutdown that skips this leaks both (which LeakSanitizer will say so
      * about, loudly, on the next asan run). */
     cube_output_destroy(output);
+    hdr_output_removed(output);
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
