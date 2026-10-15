@@ -27,6 +27,11 @@
 #define SG_BPF_KERNEL 1
 #include "sg_bpf.h"
 
+/* Declared here too: a vmlinux.h from a bpftool older than 7.4 carries no
+ * kfunc prototypes. See sg_evaluate() for why they are needed. */
+extern void bpf_preempt_disable(void) __ksym;
+extern void bpf_preempt_enable(void) __ksym;
+
 char LICENSE[] SEC("license") = "GPL";
 
 /* Paths too deep for the buffer: bpf_d_path failed, so we could not evaluate
@@ -409,12 +414,33 @@ static __always_inline void sg_report(struct sg_scratch *sc, __u32 len,
 static __always_inline int sg_evaluate(struct path *p, __u8 evt, __u32 flags)
 {
 	__u32 zero = 0;
+
+	/*
+	 * ⚠ PREEMPTION IS OFF FOR AS LONG AS THE SCRATCH SLOT IS IN USE.
+	 *
+	 * sg_scratch_map is per-CPU, and a non-sleepable LSM program runs with
+	 * migration disabled but is still PREEMPTIBLE under PREEMPT_RCU (Dynamic
+	 * Preempt: full, the shipped kernel's mode). An exec preempted after
+	 * bpf_d_path met a file_open from another task on the same CPU, which
+	 * overwrote the slot, and the exec was then matched, reported and judged
+	 * under THAT path. On the desktop that produced "quickshell exec
+	 * /proc/stat" and "bash exec /dev/urandom" alerts, and
+	 * quarantine-exec-from-dev froze the caller. bpf_report_test's stress
+	 * reproduces it in the VM (1138 of 3652 exec reports under the decoy's
+	 * path before this). The window ends at sg_report(), the last reader of
+	 * the slot. The kfuncs need Linux 6.10. On an older kernel the object
+	 * fails to load and the gate fails open, which status reports.
+	 */
+	bpf_preempt_disable();
 	struct sg_scratch *sc = bpf_map_lookup_elem(&sg_scratch_map, &zero);
-	if (!sc)
+	if (!sc) {
+		bpf_preempt_enable();
 		return 0;
+	}
 
 	long n = bpf_d_path(p, sc->path.p, SG_BPF_PATH_MAX);
 	if (n <= 0) {
+		bpf_preempt_enable();
 		__sync_fetch_and_add(&sg_path_too_long, 1);
 		return 0;
 	}
@@ -424,6 +450,7 @@ static __always_inline int sg_evaluate(struct path *p, __u8 evt, __u32 flags)
 	/* Reported whatever the gate decides below: a refused open is still an
 	 * attempt somebody should see. */
 	sg_report(sc, (__u32)(n - 1), evt, flags);
+	bpf_preempt_enable();
 
 	if (idx < 0)
 		return 0;		/* the overwhelmingly common case */

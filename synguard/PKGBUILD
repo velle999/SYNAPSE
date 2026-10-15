@@ -165,7 +165,23 @@ pkgver=0.1.0
 #   without a socket type, so the port is the only tell. tests/netwatch_test.c
 #   feeds 75 port-0 probes (v6, v4 across /24s, and one /24 that tripped the
 #   sweep rule on 48) and expects no alert.
-pkgrel=49
+# 50: an exec is judged under its own path. Both LSM hooks resolve the path
+#   into one per-CPU scratch slot and read it back for the rule lookup and the
+#   report. The programs are preemptible under PREEMPT_RCU (Dynamic Preempt:
+#   full, the shipped kernel's mode), so an exec preempted after the resolve
+#   met another task's file_open on the same CPU, which overwrote the slot.
+#   The exec was then reported, matched and acted on under THAT path: 87
+#   alerts like "quickshell exec /proc/stat" and "bash exec /dev/urandom" over 7
+#   boots on the desktop, 28 more this boot, and quarantine-exec-from-dev tried
+#   to freeze the caller 4 times, refused each time only because the pid had
+#   moved on. A deny rule read the same slot. sg_evaluate() now holds preemption
+#   off (bpf_preempt_disable, Linux 6.10+) from the lookup of the slot to
+#   its last read. tests/bpf_report_test.c gains a stress: a SCHED_FIFO task
+#   opens a decoy the exec watch covers, on the CPU of an exec loop. Before:
+#   1138 of 3652 exec reports named the decoy. After: 0 of 3662 on
+#   7.2.7-cachyos and 0 of 2989 on 7.2.9-arch. run-vm-bpf-tests.sh boots with
+#   preempt=full to match the desktop.
+pkgrel=50
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

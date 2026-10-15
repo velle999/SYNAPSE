@@ -18,10 +18,13 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <sched.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <linux/io_uring.h>
 #include <sys/mman.h>
@@ -41,10 +44,32 @@ static int failures, checks;
 static struct sg_bpf_report got[MAXR];
 static int ngot;
 
+/* The scratch-race stress at the end counts instead of collecting: it makes
+ * thousands of exec reports, and only their paths matter. */
+#define RACE_BIN "/tmp/kft-bin"
+static int race_on;
+static long race_ok, race_stolen;
+static char race_example[SG_BPF_PATH_MAX];
+
 static void collect(void *ctx, const struct sg_bpf_report *r)
 {
     (void)ctx;
+    if (race_on && r->evt == 0x01) {
+        if (strcmp(r->path, RACE_BIN) == 0)
+            race_ok++;
+        else if (race_stolen++ == 0)
+            snprintf(race_example, sizeof(race_example), "%s", r->path);
+        return;
+    }
     if (ngot < MAXR) got[ngot++] = *r;
+}
+
+static void pin_cpu(int cpu)
+{
+    cpu_set_t s;
+    CPU_ZERO(&s);
+    CPU_SET(cpu, &s);
+    sched_setaffinity(0, sizeof(s), &s);
 }
 
 static void drain(void)
@@ -261,6 +286,80 @@ int main(int argc, char **argv)
 
     unsigned long long dropped = sg_bpf_reports_dropped();
     CHECK(dropped == 0, "no report was dropped (%llu)", dropped);
+
+    /*
+     * An exec is reported under ITS OWN binary, never under a path some other
+     * task was opening at the time.
+     *
+     * Both hooks resolve the path into one per-CPU scratch slot and read it back
+     * for the rule lookup and the report. A non-sleepable LSM program runs with
+     * migration disabled but stays PREEMPTIBLE under PREEMPT_RCU (Dynamic
+     * Preempt: full, the shipped kernel's mode). An exec preempted between the
+     * resolve and the read therefore met a file_open from another task on the
+     * same CPU, which overwrote the slot. The exec was then matched and reported
+     * under that path: on velle's desktop, 87 "exec /proc/stat" or "exec
+     * /dev/urandom" alerts over 7 boots, and quarantine-exec-from-dev froze the
+     * caller. The deny decision reads the same slot, so it judged the wrong
+     * path too.
+     *
+     * The stress below opens a decoy that the exec watch also covers, from a
+     * SCHED_FIFO task on the exec loop's CPU that wakes every ~20 us. An RT
+     * wakeup preempts the running task at once, mid-hook included, so the
+     * window is hit thousands of times instead of the desktop's few a day
+     * (a CFS opener in its place: 0 in 4195 execs). A clean program
+     * reports RACE_BIN only.
+     */
+    touch(RACE_BIN "-decoy");
+    pin_cpu(1);
+    race_on = 1;
+    pid_t kids[3];
+    if ((kids[0] = fork()) == 0) {
+        pin_cpu(0);
+        struct sched_param sp = { .sched_priority = 10 };
+        sched_setscheduler(0, SCHED_FIFO, &sp);
+        struct timespec nap = { 0, 20000 };
+        for (;;) {
+            try_open(RACE_BIN "-decoy", O_RDONLY);
+            nanosleep(&nap, NULL);
+        }
+    }
+    if ((kids[1] = fork()) == 0) {
+        pin_cpu(0);
+        for (;;) try_open(RACE_BIN "-decoy", O_RDONLY);
+    }
+    if ((kids[2] = fork()) == 0) {
+        pin_cpu(0);
+        setpgid(0, 0);
+        for (;;) {
+            pid_t k = fork();
+            if (k == 0) {
+                char a0[] = RACE_BIN, a1[] = "--child";
+                char *av[] = { a0, a1, NULL };
+                execv(a0, av);
+                _exit(127);
+            }
+            if (k > 0) waitpid(k, NULL, 0);
+        }
+    }
+    unsigned long long race_drop0 = sg_bpf_reports_dropped();
+    for (int i = 0; i < 4000; i++) {     /* ~8 s */
+        sg_bpf_poll_reports();
+        usleep(2000);
+    }
+    kill(-kids[2], SIGKILL);
+    for (int i = 0; i < 3; i++) {
+        kill(kids[i], SIGKILL);
+        waitpid(kids[i], NULL, 0);
+    }
+    drain();
+    race_on = 0;
+    printf("INFO scratch race: %ld exec report(s) under %s, %ld under another path, "
+           "%llu dropped\n", race_ok, RACE_BIN, race_stolen,
+           sg_bpf_reports_dropped() - race_drop0);
+    CHECK(race_ok > 1000, "the exec stress ran (%ld exec reports)", race_ok);
+    CHECK(race_stolen == 0,
+          "no exec report carries another task's path (%ld did, e.g. \"%s\")",
+          race_stolen, race_example);
 
     sg_bpf_shutdown();
     printf("\n%d check(s), %d failure(s)\n", checks, failures);

@@ -92,11 +92,14 @@ accel=(-machine accel=tcg)
 log="$work/console.log" res="$work/results.log"
 : >"$log"; : >"$res"
 echo "run-vm-bpf-tests: booting $kver"
+# preempt=full is the shipped kernel's mode (Dynamic Preempt: full). It keeps the
+# LSM programs preemptible, which is what bpf_report_test's scratch-race stress
+# needs in order to reproduce what the desktop does.
 timeout 600 qemu-system-x86_64 "${accel[@]}" -m 1024 -smp 2 \
     -display none -no-reboot -nodefaults \
     -serial "file:$log" -serial "file:$res" \
     -kernel "/usr/lib/modules/$kver/vmlinuz" -initrd "$work/initramfs.cpio" \
-    -append "console=ttyS0 panic=-1 loglevel=4 lsm=landlock,lockdown,yama,integrity,bpf" \
+    -append "console=ttyS0 panic=-1 loglevel=4 lsm=landlock,lockdown,yama,integrity,bpf preempt=full" \
     >/dev/null 2>&1 || true
 
 tr -d '\r' <"$res" | sed 's/^/  /'
