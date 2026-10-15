@@ -61,7 +61,18 @@ pkgver=0.1.0
 # 37: a `mouse` row in the Nix profile example, for syn-mouse — the ISO
 #   carries it now, so a profile that names every other component and not this
 #   one quietly leaves it out.
-pkgrel=37
+# 38: the ESP random seed is written only for a boot loader that reads one.
+#   systemd's systemd-boot-random-seed.service runs whenever LoaderFeatures
+#   EXISTS, and limine sets it (0x200f) without the random-seed bit, so on
+#   every limine install bootctl refreshed /boot/loader/random-seed, which
+#   limine never opens, and logged two "world accessible, which is a security
+#   hole" errors per boot (23 on the desktop over its retained journal). A
+#   drop-in adds ExecCondition=/usr/lib/syn/syn-boot-seed, which reads the
+#   LoaderFeatures and StubFeatures bits systemd defines for it (1<<6, 1<<4) and
+#   skips the unit when neither is set. systemd-boot and systemd-stub run it
+#   as before. tests/boot_seed_test.sh: limine's real value skips, either bit
+#   runs, and `systemd-analyze verify --root` proves systemd applies the drop-in.
+pkgrel=38
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -109,8 +120,12 @@ source=("syn.sh"
         "nix-flake.nix"
         "nix-home.nix"
         "nix-render.nix"
-        "nix-profile-example.nix")
+        "nix-profile-example.nix"
+        "syn-boot-seed.sh"
+        "syn-boot-seed.conf")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -184,4 +199,11 @@ package() {
     install -Dm644 "$srcdir/nix-render.nix" "$pkgdir/usr/share/syn/nix/render.nix"
     install -Dm644 "$srcdir/nix-profile-example.nix" \
                    "$pkgdir/usr/share/syn/nix/profile-example.nix"
+
+    # The ESP random seed, only for a boot loader that reads it: the drop-in
+    # gives systemd's own unit an ExecCondition, and the condition is the
+    # script. Not in /usr/bin — only the unit runs it.
+    install -Dm755 "$srcdir/syn-boot-seed.sh" "$pkgdir/usr/lib/syn/syn-boot-seed"
+    install -Dm644 "$srcdir/syn-boot-seed.conf" \
+        "$pkgdir/usr/lib/systemd/system/systemd-boot-random-seed.service.d/syn-boot-seed.conf"
 }
