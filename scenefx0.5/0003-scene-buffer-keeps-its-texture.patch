@@ -1,0 +1,186 @@
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Subject: [PATCH] scene: a same-size compositor buffer keeps its texture
+
+wlr_scene_buffer_set_buffer_with_options() drops the node's texture every
+time it is given a buffer, even the same buffer redrawn in place:
+
+    scene_buffer_set_buffer(scene_buffer, buffer);
+    scene_buffer_set_texture(scene_buffer, NULL);
+
+and the next render creates a new one from the whole buffer. For a client
+buffer that never matters (its texture lives on the wlr_client_buffer and is
+updated in place by wlr_client_buffer_apply_damage). For a buffer the
+COMPOSITOR draws -- a titlebar, a panel, an animated widget -- it is a
+glDeleteTextures, a glGenTextures and a full glTexImage2D per redraw.
+
+On NVIDIA it is worse than that. set_buffer runs outside any render pass, so
+the destroy makes the EGL context current and then releases it back to
+EGL_NO_CONTEXT, and the driver spin-waits for the GPU in that release
+(__vdso_clock_gettime under eglMakeCurrent in a perf profile). synui's cat
+redraws 60 times a second, so it paid that 60 times a second; profiled live
+(RTX 3060, 610.57.04, three outputs) the destroy alone was 5.5% of synui's
+main thread.
+
+With this patch a non-client buffer replaced by one of the same size keeps
+the texture, and the damaged region of the new buffer is uploaded into it
+(wlr_texture_update_from_buffer -> glTexSubImage2D) the next time the node
+is rendered -- inside the render pass, where the context is already current.
+Damage from several replacements before one render is unioned and uploaded
+from the last buffer. Anything the upload cannot take (another size, damage
+outside the buffer, a format change, a buffer with no CPU access) fails in
+wlr_texture_update_from_buffer and falls back to what scenefx always did: a
+fresh texture from the whole buffer.
+
+The pending state lives in a wlr_addon on the node, not in struct
+wlr_scene_buffer: scenefx's public `corners` and `blur` fields sit after
+WLR_PRIVATE, and a binary built against the old header must not see them
+move. No API or ABI change.
+
+Proved by synui's tests/scene_reupload_rig.c: every frame read back and
+compared exactly with the buffer that was set, through partial damage, the
+same buffer redrawn in place, two sets before one render, a size change,
+unmap/remap and 200 whole redraws. Its --stale control (no damage given)
+leaves 1280 old pixels showing with this patch and none without it; mutants
+that drop the damage union or skip the upload fail it.
+
+Not upstream; SynapseOS only.
+
+--- a/types/scene/wlr_scene.c	2026-06-28 00:36:32.000000000 -0500
++++ b/types/scene/wlr_scene.c	2026-10-15 13:34:53.489359275 -0500
+@@ -963,6 +963,100 @@
+ 	}
+ }
+ 
++/*
++ * SynapseOS: a compositor-drawn buffer that is replaced by another of the same
++ * size keeps its texture, and the new pixels are uploaded into it on the next
++ * render instead of the texture being destroyed now and a new one created then.
++ *
++ * Why it matters: wlr_scene_buffer_set_buffer() runs outside any render pass,
++ * so destroying the texture there costs a make-current / restore pair of its
++ * own, and on NVIDIA releasing the context back to EGL_NO_CONTEXT spin-waits
++ * for the GPU. A widget redrawn 60 times a second paid that 60 times a second
++ * on top of a glGenTextures + full glTexImage2D per step. The upload below runs
++ * inside the pass (scene_buffer_get_texture), where the context is already
++ * current, and is a glTexSubImage2D of the damaged region.
++ *
++ * Client buffers are untouched: their textures live on the wlr_client_buffer
++ * and never in scene_buffer->texture. The state lives in an addon on the node
++ * so struct wlr_scene_buffer keeps its layout (its public scenefx fields sit
++ * after WLR_PRIVATE, and a binary built against the old header must not see
++ * them move).
++ */
++struct scene_buffer_pending_upload {
++	struct wlr_addon addon;
++	pixman_region32_t damage; // buffer-local
++};
++
++static void pending_upload_addon_destroy(struct wlr_addon *addon) {
++	struct scene_buffer_pending_upload *up = wl_container_of(addon, up, addon);
++	wlr_addon_finish(&up->addon);
++	pixman_region32_fini(&up->damage);
++	free(up);
++}
++
++static const struct wlr_addon_interface pending_upload_addon_impl = {
++	.name = "scenefx_scene_buffer_pending_upload",
++	.destroy = pending_upload_addon_destroy,
++};
++
++static struct scene_buffer_pending_upload *scene_buffer_pending_upload(
++		struct wlr_scene_buffer *scene_buffer) {
++	struct wlr_addon *addon = wlr_addon_find(&scene_buffer->node.addons,
++		scene_buffer, &pending_upload_addon_impl);
++	if (addon == NULL) {
++		return NULL;
++	}
++	struct scene_buffer_pending_upload *up = wl_container_of(addon, up, addon);
++	return up;
++}
++
++static void scene_buffer_drop_pending_upload(struct wlr_scene_buffer *scene_buffer) {
++	struct scene_buffer_pending_upload *up =
++		scene_buffer_pending_upload(scene_buffer);
++	if (up != NULL) {
++		pending_upload_addon_destroy(&up->addon);
++	}
++}
++
++/*
++ * Called with the new buffer already set. Returns true if the current texture
++ * was kept and will be refreshed from `buffer` on the next render; false if the
++ * caller has to drop it as before.
++ */
++static bool scene_buffer_keep_texture(struct wlr_scene_buffer *scene_buffer,
++		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
++	struct wlr_texture *texture = scene_buffer->texture;
++	if (texture == NULL || buffer == NULL ||
++			wlr_client_buffer_get(buffer) != NULL ||
++			texture->width != (uint32_t)buffer->width ||
++			texture->height != (uint32_t)buffer->height) {
++		scene_buffer_drop_pending_upload(scene_buffer);
++		return false;
++	}
++
++	struct scene_buffer_pending_upload *up =
++		scene_buffer_pending_upload(scene_buffer);
++	if (up == NULL) {
++		up = calloc(1, sizeof(*up));
++		if (up == NULL) {
++			return false;
++		}
++		pixman_region32_init(&up->damage);
++		wlr_addon_init(&up->addon, &scene_buffer->node.addons, scene_buffer,
++			&pending_upload_addon_impl);
++	}
++	// Several buffers may replace each other before a frame is rendered; the
++	// last one holds every pixel, so the union of their damage is uploaded
++	// from it.
++	if (damage != NULL) {
++		pixman_region32_union(&up->damage, &up->damage, damage);
++	} else {
++		pixman_region32_union_rect(&up->damage, &up->damage,
++			0, 0, buffer->width, buffer->height);
++	}
++	return true;
++}
++
+ static void scene_buffer_set_wait_timeline(struct wlr_scene_buffer *scene_buffer,
+ 		struct wlr_drm_syncobj_timeline *timeline, uint64_t point) {
+ 	wlr_drm_syncobj_timeline_unref(scene_buffer->wait_timeline);
+@@ -1406,7 +1500,9 @@
+ 	}
+ 
+ 	scene_buffer_set_buffer(scene_buffer, buffer);
+-	scene_buffer_set_texture(scene_buffer, NULL);
++	if (!scene_buffer_keep_texture(scene_buffer, buffer, options->damage)) {
++		scene_buffer_set_texture(scene_buffer, NULL);
++	}
+ 	scene_buffer_set_wait_timeline(scene_buffer,
+ 		options->wait_timeline, options->wait_point);
+ 
+@@ -1663,6 +1759,24 @@
+ 
+ static struct wlr_texture *scene_buffer_get_texture(
+ 		struct wlr_scene_buffer *scene_buffer, struct wlr_renderer *renderer) {
++	struct scene_buffer_pending_upload *up =
++		scene_buffer_pending_upload(scene_buffer);
++	if (up != NULL) {
++		bool updated = scene_buffer->texture != NULL &&
++			scene_buffer->buffer != NULL &&
++			wlr_texture_update_from_buffer(scene_buffer->texture,
++				scene_buffer->buffer, &up->damage);
++		scene_buffer_drop_pending_upload(scene_buffer);
++		if (!updated) {
++			// Not updatable (a format change, a buffer without CPU access):
++			// fall back to what scenefx always did, a fresh texture.
++			scene_buffer_set_texture(scene_buffer, NULL);
++		} else if (scene_buffer->own_buffer) {
++			scene_buffer->own_buffer = false;
++			wlr_buffer_unlock(scene_buffer->buffer);
++		}
++	}
++
+ 	if (scene_buffer->buffer == NULL || scene_buffer->texture != NULL) {
+ 		return scene_buffer->texture;
+ 	}
