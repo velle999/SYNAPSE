@@ -167,7 +167,13 @@ pkgver=0.1.0
 #   /sys/class/net, and anything else present there is wired. A device that has
 #   gone by the time the question is asked keeps the wireless icon, which is
 #   the case the warning is for. Seen on the 1.0.1 ISO in a VM.
-pkgrel=14
+# 15: synnet-ask stays off the login screen. Its .path and .timer are linked
+#   into the global user wants, so greetd's `greeter` (a system user, HOME=/)
+#   ran `synnet --ask` twice at boot on the desktop. Nothing could be asked
+#   there (no display, and no state dir under /), but nothing should run there
+#   at all. ConditionUser=!@system on all three units. preflight's userunits
+#   check refuses a package-enabled user unit without it.
+pkgrel=15
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL-2.0-or-later')

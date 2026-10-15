@@ -1,5 +1,7 @@
 [Unit]
 Description=Mouse button bindings (syn-mouse)
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 # ⛔ NO START LIMIT. This unit starts with the user manager, before the
 # compositor exists; the daemon waits for synui on its own and never needs a
 # restart for that. What a restart IS for — a crash — must not be able to use

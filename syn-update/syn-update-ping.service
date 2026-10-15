@@ -1,5 +1,7 @@
 [Unit]
 Description=SynapseOS — check for updates
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 # A check is a git fetch. Without this the timer fires at login before the
 # network is up, writes status=error, and the indicator says "could not check"
 # for however long the interval is.

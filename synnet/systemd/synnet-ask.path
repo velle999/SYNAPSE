@@ -1,5 +1,7 @@
 [Unit]
 Description=Ask about each new network as it is joined
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 
 [Path]
 # synnet rewrites this whenever it re-applies the firewall — on every

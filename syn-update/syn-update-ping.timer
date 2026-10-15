@@ -1,5 +1,7 @@
 [Unit]
 Description=SynapseOS — check for updates periodically
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 
 [Timer]
 # Not at the login stampede: a desktop starting up has enough to do without a

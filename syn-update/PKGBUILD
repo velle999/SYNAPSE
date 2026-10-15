@@ -308,7 +308,12 @@ pkgver=0.1.0
 # 68: the window's name column is as wide as the longest name it shows.
 #   It was a fixed 170 px, and linux-wallpaperengine, new in 67's list,
 #   printed straight over its own version.
-pkgrel=68
+# 69: the update ping is not the greeter's. syn-update-ping.timer is linked
+#   into the global timers.target.wants, so greetd's `greeter` (a system user,
+#   HOME=/) started it too; three minutes at the login screen would have run
+#   `syn-update ping` there. ConditionUser=!@system on the timer and the service.
+#   preflight's userunits check refuses a package-enabled user unit without it.
+pkgrel=69
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -54,7 +54,15 @@ pkgver=0.1.0
 # same vendor:product as a mouse in use, so a keyboard sharing a receiver is
 # never taken; and it is grabbed only while the profile in force binds a key
 # it can send.
-pkgrel=3
+#
+# 4: NOT AT THE LOGIN SCREEN. The unit is linked into default.target.wants
+# under /usr/lib/systemd/user, so every user manager started it, the
+# greeter's included. greetd's `greeter` (uid 963, HOME=/) ran the daemon for
+# the 23 s of the login screen on the desktop: it opened and listened to an
+# input device and loaded //.config/syn-mouse/bindings.conf. The unit carries
+# ConditionUser=!@system now. preflight's userunits check refuses a
+# package-enabled user unit without it (it failed on this one).
+pkgrel=4
 pkgdesc="Rebind mouse buttons per game without the vendor's app — keys, repeat, and auto-press toggles"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

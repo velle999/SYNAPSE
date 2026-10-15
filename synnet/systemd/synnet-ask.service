@@ -1,5 +1,7 @@
 [Unit]
 Description=Ask whether to trust a network synnet has not been told about
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 
 [Service]
 Type=oneshot

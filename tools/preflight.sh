@@ -1555,6 +1555,36 @@ check_heredoc() {
     ok heredoc "$(printf '%s\n' "$files" | grep -c .) shell file(s) — no backtick runs from inside a heredoc"
 }
 
+# A user unit a PACKAGE links into /usr/lib/systemd/user/*.wants starts in EVERY
+# user manager, the greeter's included: greetd's `greeter` (uid 963, HOME=/) ran
+# syn-mouse at the login screen, where it opened input devices and loaded
+# //.config/syn-mouse/bindings.conf, along with synnet-ask and the update ping.
+# ConditionUser=!@system keeps such a unit to the people who log in.
+check_userunits() {
+    local bad=$FINDINGS n=0 pk c u f
+    while IFS= read -r pk; do
+        c=$(dirname "$pk")
+        for u in $(grep -oE 'usr/lib/systemd/user/[A-Za-z0-9_.-]+\.wants/[A-Za-z0-9@_.-]+\.(service|timer|path|socket)' "$pk" |
+                   sed 's|.*/||' | sort -u); do
+            n=$((n + 1))
+            f=$(git ls-files -- "$c" | grep -E "(^|/)${u//./\\.}\$" | head -1)
+            if [ -z "$f" ]; then
+                fail userunits "$pk enables $u for every user, and no tracked file is called that" \
+                    "Fix: track the unit, or drop the .wants link."
+                continue
+            fi
+            grep -qE '^[[:space:]]*ConditionUser=!@system[[:space:]]*$' "$f" && continue
+            fail userunits "$f is enabled for EVERY user ($pk), the greeter included" \
+                "The package links it into a .wants directory under /usr/lib/systemd/user," \
+                "so the login screen's system user starts it too." \
+                "Fix: add ConditionUser=!@system to its [Unit] section."
+        done
+    done < <(git ls-files '*/PKGBUILD')
+    [ "$FINDINGS" -eq "$bad" ] && ok userunits \
+        "$n user unit(s) enabled by a package — each kept off system users (the greeter)"
+    return 0
+}
+
 check_external_membership() {
     local bad=$FINDINGS ext notext name c
 
@@ -1692,6 +1722,7 @@ check_external_membership
 check_external
 check_locale
 check_heredoc
+check_userunits
 check_memory_index
 if [ "$AT_REST" -eq 1 ]; then
     note pkgrel "not checked — no staged set to read (--at-rest)" \

@@ -1,5 +1,7 @@
 [Unit]
 Description=Ask about an untrusted network once after login
+# Not for system users: the greeter (greetd, HOME=/) has a user manager too.
+ConditionUser=!@system
 
 [Timer]
 # The network usually came up before anyone logged in, when there was nobody
