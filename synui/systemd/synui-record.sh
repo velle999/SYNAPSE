@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # synui-record — start/stop a screen recording (Super+Shift+R).
 #
 # One key does both, because a recorder you have to stop from somewhere else is

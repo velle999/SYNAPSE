@@ -328,6 +328,7 @@ synui_exe = executable('synui',
     'src/launcher.c',
     'src/record.c',
     'src/cat.c',
+    'src/cat_pace.c',
     'src/cat_draw.c',
     'src/kde_blur.c',
     xdg_shell_h,
@@ -656,6 +657,41 @@ cat_render_test = executable('cat_render_test',
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])
+
+# How often the cat moves (cat_pace.c): 60 steps a second whatever the screen,
+# driven with the vblank times of a 144, 165, 60 and 30 Hz monitor. Before
+# pkgrel 633 the cat redrew on every frame, so on a 144 Hz monitor with glass on
+# it cost a full-output blur 144 times a second.
+cat_pace_test = executable('cat_pace_test',
+  ['tests/cat_pace_test.c', 'src/cat_pace.c'],
+  include_directories : include_directories('src'),
+  dependencies : [libm],   # ceil() in the test's vblank model
+  build_by_default : false)
+test('cat_pace', cat_pace_test)
+
+# Blur without the whole-output repaint (pkgrel 633). Two headless outputs on
+# one scene of synui's glass — the masked window blur, the halo ring, a blurred
+# panel, with the cat walking, a window dragged behind the glass, a client
+# repainting part of itself and a game opening on top. One renders with scenefx's
+# own blur damage, the other repaints whole, and every frame is compared. The
+# committed buffers are held the way a screen holds them, so the partial side
+# really renders into 2- and 3-frame-old buffers. Needs a GPU render node; skips
+# (77) without a renderer. Dither noise is off (it lands at different positions
+# in a partial render, up to ±5 levels, by design); --tol 2 is rounding.
+# blur_damage_stale is the negative control: a wallpaper swap with no damage MUST
+# show up as differing frames, or the rig cannot see staleness at all. --stale
+# inverts the verdict inside the rig, not through should_fail, which would also
+# pass a crash.
+blur_damage_rig = executable('blur_damage_rig',
+  ['tests/blur_damage_rig.c'],
+  dependencies : [scenefx, wlroots, wayland, pixman, libdrm_dep],
+  build_by_default : false)
+test('blur_damage', blur_damage_rig,
+     args : ['--noise', '0', '--tol', '2'], timeout : 120)
+test('blur_damage_rotated', blur_damage_rig,
+     args : ['--noise', '0', '--tol', '2', '--transform', '3', '--hold', '1'], timeout : 120)
+test('blur_damage_stale', blur_damage_rig,
+     args : ['--noise', '0', '--tol', '2', '--stale'], timeout : 120)
 
 # Every preview image the picker can be asked to draw, through the real
 # decoders. The preview pane fails silently by design (it draws "Preview

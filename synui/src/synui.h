@@ -6328,8 +6328,8 @@ struct syn_output {
                                                * whole-output damage anyway */
     int64_t                  edge_dmg_log_ms; /* last summary, CLOCK_MONOTONIC ms */
 
-    /* synui_main.c: this frame asked for a WHOLE-output repaint (blur, the
-     * matrix wallpaper, a night light change). Recorded because adding it to
+    /* synui_main.c: this frame asked for a WHOLE-output repaint (the matrix
+     * wallpaper, a colour change). Recorded because adding it to
      * the scene's damage ring is only half of saying so — see
      * syn_output_damage_whole(). Cleared by the commit that honours it. */
     bool                     damage_whole_pending;
@@ -6822,6 +6822,9 @@ struct syn_server {
         double x, y;                     /* layout coords (roughly its feet) */
         double tx, ty;                   /* where it is headed */
         double last_t;                   /* clock of the last simulation step */
+        double due;                      /* when the next step is (cat_pace.c);
+                                          * 0 = start a fresh cadence */
+        struct wl_event_source *timer;   /* wakes an output for that step */
         double state_until;              /* when the current sit/nap ends */
         double phase;                    /* walk cycle */
         double blink_until;

@@ -513,12 +513,12 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box)
  * Poking the ring directly therefore re-renders the output while telling the
  * commit that only the scene's own node damage changed. That helper is static
  * in scenefx and there is no public wlr_scene_output_damage_whole(), which is
- * how the three call sites here came to reach for the ring instead.
+ * how the call sites here came to reach for the ring instead.
  *
- * Measured consequence, DP-3 with blur on (so the add_whole below runs EVERY
- * frame): the committed damage still stopped exactly border_width short of the
- * right edge, and the 396 trace logged "0 frame(s) reached the edge" for
- * minutes on end. If the whole-output damage had reached the state, not one
+ * Measured consequence, DP-3 with blur on (so an add_whole ran EVERY frame, as
+ * it did until pkgrel 633): the committed damage still stopped exactly
+ * border_width short of the right edge, and the 396 trace logged "0 frame(s)
+ * reached the edge" for minutes on end. If the whole-output damage had reached the state, not one
  * frame could have missed. See project_synui_right_edge_stale_strip.
  *
  * The ring add stays — it is what makes the scene re-render — and the flag is
@@ -749,27 +749,24 @@ static void output_frame(struct wl_listener *listener, void *data)
     }
 
     /*
-     * Backdrop blur forces a whole-output repaint, for the same reason the CRT
-     * pass does (effects.c) — and it has to be done HERE because the CRT pass is
-     * skipped entirely when no filter is enabled, so its add_whole never ran and
-     * the flash came straight back the moment glass shipped without CRT.
+     * ⚠ BLUR NO LONGER REPAINTS THE WHOLE OUTPUT (pkgrel 633).
      *
-     * scenefx compensates for blur edge artifacts by saving the pixels around
-     * each blurred region and painting them back afterwards, and it reads them
-     * out of the buffer it is *currently rendering into*
-     * (fx_renderer_read_to_buffer(..., render_pass->buffer) in fx_pass.c). Under
-     * partial damage that buffer is one of 2–3 rotating swapchain buffers whose
-     * undamaged area still holds a frame from several vsyncs ago — so the
-     * "restore" step paints genuinely stale content back over the window. That
-     * is the wallpaper flash on a click in Dolphin, and the glimpse of the window
-     * behind a game: not a transient, but old pixels being copied forward.
+     * From pkgrel 140 to 632 this damaged the whole output on every frame while
+     * blur was on. scenefx 0.4 hid blur edge artifacts by copying pixels forward
+     * out of the buffer it was rendering into, and under partial damage that
+     * buffer could hold a frame from several vsyncs ago: the wallpaper flash on
+     * a click in Dolphin, the glimpse of the window behind a game.
      *
-     * Repainting whole means the buffer never carries a stale region for that
-     * step to find. It costs a full repaint per frame, but only while blur is on
-     * — which is already the expensive path — and only on outputs with damage.
+     * scenefx 0.5 blurs through wlr_scene_blur nodes and grows the damage around
+     * them itself (apply_blur_region, wlr_scene.c). tests/blur_damage_rig.c
+     * renders synui's glass — a masked window blur, the halo ring, a blurred
+     * panel — with the cat, a drag, a client's partial repaint and a game
+     * opening on top, on a 2- and 3-buffer swapchain, and compares every frame
+     * with a whole repaint: equal to within 1-2 levels of rounding, where a
+     * stale pixel shows as 56. So the override had stopped buying anything
+     * except its cost: a full-output blur on every frame the cat or the
+     * visualiser asked for, 57-80% of a core on an idle desktop (2026-10-15).
      */
-    if (output->server->config.blur)
-        syn_output_damage_whole(output);
 
     /* A colour change has no damage of its own — the pixels are identical, only
      * the LUT they are scanned out through and what the connector is told they

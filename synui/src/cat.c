@@ -5,9 +5,15 @@
  * whatever happens to be in the way. Super+Shift+C toggles it.
  *
  * Everything here is cairo: there is no sprite sheet, no asset to ship, and no
- * image to decode. The cat is redrawn every frame from its current pose (walk
- * phase, tail sway, ear twitch, blink), so the "animation" is just a handful of
- * sines evaluated against the clock.
+ * image to decode. The cat is redrawn from its current pose (walk phase, tail
+ * sway, ear twitch, blink) 60 times a second, so the "animation" is just a
+ * handful of sines evaluated against the clock.
+ *
+ * 60, not the refresh rate (cat_pace.c). It used to ask for the next frame from
+ * every frame it drew — 144 redraws a second on a 144 Hz monitor, and with glass
+ * on each one was a full-output blur. Now a timer wakes the output under it when
+ * the next step is due, and a frame that arrives early for any other reason
+ * leaves the cat where it is.
  *
  * Two properties matter and are easy to get wrong:
  *
@@ -34,6 +40,7 @@
 #include <scenefx/types/wlr_scene.h>
 
 #include "synui.h"
+#include "cat_pace.h"
 
 #define CAT_SPEED      70.0    /* px/sec while walking */
 #define CAT_ARRIVE     6.0     /* px; close enough to the target */
@@ -175,6 +182,39 @@ static void cat_render(syn_server_t *s, double now)
         s->cat.buf->point_accepts_input = cat_no_input;
 }
 
+/* Ask for a frame on the outputs the cat is over. If it is over none of them
+ * (an output vanished mid-stride), ask everyone, or the animation would stall
+ * with no one left to drive it. */
+static void cat_wake_outputs(syn_server_t *s)
+{
+    struct wlr_box cb = {
+        .x = (int)(s->cat.x - CAT_W / 2.0),
+        .y = (int)(s->cat.y - CAT_H + 6),
+        .width = CAT_W, .height = CAT_H,
+    };
+    bool any = false;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        struct wlr_box b;
+        output_box_of(s, o, &b);
+        if (wlr_box_intersection(&(struct wlr_box){0}, &b, &cb)) {
+            wlr_output_schedule_frame(o->wlr_output);
+            any = true;
+        }
+    }
+    if (!any)
+        wl_list_for_each(o, &s->outputs, link)
+            wlr_output_schedule_frame(o->wlr_output);
+}
+
+static int cat_timer_fired(void *data)
+{
+    syn_server_t *s = data;
+    if (s->cat.enabled && s->cat.tree && !s->power.blanked && !s->power.locked)
+        cat_wake_outputs(s);
+    return 0;
+}
+
 /* ── Public ──────────────────────────────────────────────── */
 
 bool cat_tick(syn_output_t *o, double now)
@@ -189,17 +229,21 @@ bool cat_tick(syn_output_t *o, double now)
      * power_notify_activity), so this only stops the pointless repainting. */
     if (s->power.blanked || s->power.locked) {
         wlr_scene_node_set_enabled(&s->cat.tree->node, false);
+        if (s->cat.timer) wl_event_source_timer_update(s->cat.timer, 0);
+        s->cat.due = 0;                  /* a fresh cadence when it comes back */
         return false;
     }
     if (!s->cat.tree->node.enabled)
         wlr_scene_node_set_enabled(&s->cat.tree->node, true);
 
     /* output_frame runs once per output, but the cat is one animal in one
-     * layout. Let whichever output gets the first frame of this instant own the
-     * simulation step; the others just draw what it produced. */
-    if (now > s->cat.last_t) {
+     * layout: the first output whose frame finds a step due takes it, and the
+     * scene damage that step makes brings a frame to every output it touches.
+     * A frame between steps (another output's, a window's) leaves it alone. */
+    if (cat_pace_due(&s->cat.due, now)) {
         double dt = now - s->cat.last_t;
         if (dt > 0.05) dt = 0.05;        /* a stall must not teleport the cat */
+        if (dt < 0.0)  dt = 0.0;
         s->cat.last_t = now;
 
         cat_advance(s, dt, now);
@@ -214,28 +258,14 @@ bool cat_tick(syn_output_t *o, double now)
         wlr_scene_node_raise_to_top(&s->cat.tree->node);
     }
 
-    /* Keep frames coming only on the outputs the cat is actually over. If it is
-     * over none of them (an output vanished mid-stride), fall back to asking
-     * everyone, or the animation would stall with no one left to drive it. */
-    struct wlr_box ob;
-    output_box_of(s, o, &ob);
-    struct wlr_box cb = {
-        .x = (int)(s->cat.x - CAT_W / 2.0),
-        .y = (int)(s->cat.y - CAT_H + 6),
-        .width = CAT_W, .height = CAT_H,
-    };
-    bool over_this = wlr_box_intersection(&(struct wlr_box){0}, &ob, &cb);
-
-    if (over_this) return true;
-
-    syn_output_t *other;
-    wl_list_for_each(other, &s->outputs, link) {
-        struct wlr_box b;
-        output_box_of(s, other, &b);
-        if (wlr_box_intersection(&(struct wlr_box){0}, &b, &cb))
-            return false;      /* someone else has it — they will drive us */
-    }
-    return true;               /* nobody does; keep this output ticking */
+    /* The next step comes from the timer, not from asking for the next frame.
+     * Re-armed on every tick, so whichever frame took the step sets it. */
+    if (s->cat.timer)
+        wl_event_source_timer_update(s->cat.timer,
+                                     cat_pace_wait_ms(s->cat.due, now));
+    else
+        return true;   /* no timer (allocation failed): the old frame chaining */
+    return false;
 }
 
 void cat_toggle(syn_server_t *s)
@@ -245,6 +275,8 @@ void cat_toggle(syn_server_t *s)
     if (!s->cat.enabled) {
         if (s->cat.tree)
             wlr_scene_node_set_enabled(&s->cat.tree->node, false);
+        if (s->cat.timer)
+            wl_event_source_timer_update(s->cat.timer, 0);
         wlr_log(WLR_INFO, "synui: cat mode off");
         return;
     }
@@ -254,6 +286,10 @@ void cat_toggle(syn_server_t *s)
         if (!s->cat.tree) { s->cat.enabled = 0; return; }
         srand((unsigned)time(NULL) ^ (unsigned)getpid());
     }
+    /* Freed with the event loop at wl_display_destroy, like dock.c's timers. */
+    if (!s->cat.timer)
+        s->cat.timer = wl_event_loop_add_timer(
+            wl_display_get_event_loop(s->display), cat_timer_fired, s);
 
     /* Start on the focused output rather than at the layout origin, which on a
      * multi-head setup is often a monitor you are not looking at. */
@@ -266,13 +302,14 @@ void cat_toggle(syn_server_t *s)
     s->cat.phase = 0;
     s->cat.blink_until = 0;
     s->cat.last_t = cat_now();
+    s->cat.due = 0;
     cat_pick_target(s, &s->cat.tx, &s->cat.ty);
 
     wlr_scene_node_set_enabled(&s->cat.tree->node, true);
     wlr_scene_node_raise_to_top(&s->cat.tree->node);
     wlr_log(WLR_INFO, "synui: cat mode on");
 
-    /* Kick the first frame; after that cat_tick keeps them coming. */
+    /* Kick the first frame; after that the cat's timer asks for them. */
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link)
         wlr_output_schedule_frame(o->wlr_output);

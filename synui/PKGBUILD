@@ -3813,7 +3813,25 @@ pkgver=0.1.0
 #   once, moving the desktop's weather to Oslo. synui-plugins' help tried
 #   commands named `add` and `browse`. All five escaped.
 #   tests/help_runs_nothing.sh is 9 of 14 red on 631, 14 of 14 green here.
-pkgrel=632
+# 633: AN IDLE DESKTOP STOPS BURNING A CORE ON THE CAT. Two halves:
+#   - Blur no longer damages the whole output every frame. That was 140's
+#     answer to scenefx 0.4 copying stale swapchain pixels forward; 0.5 blurs
+#     through wlr_scene_blur nodes and expands the damage itself. With it, every
+#     frame anything asked for was a full-output blur: synui's main thread sat
+#     at 57-80% of a core with two idle windows (70% in fx_render_pass_add_blur).
+#     tests/blur_damage_rig.c renders synui's glass under scenefx's own damage
+#     and under a whole repaint, on a 2- and 3-buffer swapchain, rotated and
+#     scaled: every frame equal within 1-2 levels; a stale control shows 56.
+#   - The cat steps 60 times a second (cat_pace.c) on a timer, instead of
+#     redrawing on every frame at the refresh rate (144 on a 144 Hz monitor).
+#     tests/cat_pace_test.c drives it at 144/165/60/30 Hz; a cat that steps
+#     every frame fails it.
+#   Headless, 2560x1440 at 144 Hz, a glass terminal open, the cat on, with
+#   scene_ink off: synui 44% of a core on 632, 21% here. Cat off: 0% on
+#   both. With scene_ink on (its 400 ms readbacks): 53% and 35%.
+#   Also: synui-record is #!/bin/bash. It uses arrays, and as #!/bin/sh it
+#   fails to parse wherever /bin/sh is dash ("(" unexpected at line 138).
+pkgrel=633
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
