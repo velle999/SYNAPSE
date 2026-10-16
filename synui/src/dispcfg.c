@@ -287,14 +287,21 @@ static bool dispcfg_common_mode(syn_server_t *s, int *out_w, int *out_h)
     return true;
 }
 
-/* Put this output into w×h at its best refresh for that size. */
-static void dispcfg_set_mode(syn_output_t *o, int w, int h)
+/*
+ * Put this output into w×h. A refresh > 0 asks for that exact mode — the one
+ * Duplicate took the screen out of — and only falls back to the best refresh
+ * at that size when the screen no longer offers it (a different monitor on
+ * the same connector). refresh == 0 is Duplicate itself choosing.
+ */
+static void dispcfg_set_mode(syn_output_t *o, int w, int h, int refresh)
 {
-    struct wlr_output_mode *m, *best = NULL;
+    struct wlr_output_mode *m, *best = NULL, *exact = NULL;
     wl_list_for_each(m, &o->wlr_output->modes, link) {
         if (m->width != w || m->height != h) continue;
+        if (refresh > 0 && m->refresh == refresh && !exact) exact = m;
         if (!best || m->refresh > best->refresh) best = m;
     }
+    if (exact) best = exact;
     if (!best) return;
     if (o->wlr_output->current_mode == best) return;
 
@@ -323,12 +330,17 @@ static void dispcfg_save_mode(syn_output_t *o)
     o->saved_mode_refresh = m->refresh;
 }
 
+/* The exact mode back, refresh included. saved_mode_refresh used to be
+ * recorded and never read: leaving Duplicate re-chose "the best refresh at
+ * that size", so a TV the user had at 4K@30 came back at 4K@60 — a mode it may
+ * not show at all (kernel 7.2's amdgpu sends a 4:2:0-only 4K@60 as RGB, and a
+ * 340 MHz TV input goes to "no signal"). */
 static void dispcfg_restore_mode(syn_output_t *o)
 {
     if (o->saved_mode_w <= 0) return;
-    int w = o->saved_mode_w, h = o->saved_mode_h;
+    int w = o->saved_mode_w, h = o->saved_mode_h, r = o->saved_mode_refresh;
     o->saved_mode_w = o->saved_mode_h = o->saved_mode_refresh = 0;
-    dispcfg_set_mode(o, w, h);
+    dispcfg_set_mode(o, w, h, r);
 }
 
 /*
@@ -381,7 +393,7 @@ static void dispcfg_apply_mode(syn_server_t *s)
     }
     wl_list_for_each(o, &s->outputs, link) {
         dispcfg_save_mode(o);
-        dispcfg_set_mode(o, w, h);
+        dispcfg_set_mode(o, w, h, 0);
     }
 }
 

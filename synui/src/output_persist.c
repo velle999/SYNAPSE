@@ -297,6 +297,17 @@ void output_persist_save(syn_server_t *s)
         e->width     = wo->width;
         e->height    = wo->height;
         e->refresh   = wo->refresh;
+        /* ⚠ Under Duplicate the mode on screen is BORROWED — the largest one
+         * every screen shares — and saved_mode_* holds the screen's own.
+         * Writing the borrowed one made it the screen's own at the next login,
+         * where Duplicate saved it again as the mode to give back, so leaving
+         * Duplicate (or picking "external only") left a TV at the mirror
+         * resolution for good. */
+        if (o->saved_mode_w > 0) {
+            e->width   = o->saved_mode_w;
+            e->height  = o->saved_mode_h;
+            e->refresh = o->saved_mode_refresh;
+        }
         e->transform = (int)wo->transform;
         e->scale     = wo->scale;
         e->x         = box.x;

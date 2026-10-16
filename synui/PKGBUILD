@@ -3849,7 +3849,23 @@ pkgver=0.1.0
 #   on 0.5-4, so it swaps in a half-size buffer at the same destination size.
 #   scenefx 0.5-4, headless, three outputs as on the desk, cat on, foot open,
 #   4 alternating rounds: 102 -> 84 per mille of a core (633), 104 -> 90 (634).
-pkgrel=634
+# 635: LEAVING DUPLICATE GIVES A SCREEN ITS OWN MODE BACK, REFRESH INCLUDED.
+#   Two bugs in the Duplicate round trip, found chasing a TV that went black
+#   in "external only":
+#   - dispcfg_restore_mode() recorded saved_mode_refresh and never read it. It
+#     re-chose "the best refresh at that size", so a TV at 4K@30 came back at
+#     4K@60. It now restores the exact mode, falling back to the best refresh
+#     only when the screen no longer offers it.
+#   - output_persist_save() wrote the BORROWED Duplicate mode (the largest one
+#     every screen shares) into outputs.conf as the screen's own. At the next
+#     login the TV came up at 1080p, Duplicate saved that as the mode to give
+#     back, and the TV's real mode was gone for good. It now writes
+#     saved_mode_* while Duplicate holds the screen.
+#   The black TV itself is kernel 7.2's amdgpu: a mode the sink takes only as
+#   YCbCr 4:2:0 (4K@60 on a 340 MHz HDMI input) is sent as RGB, and the TV
+#   shows no signal. That is not fixed in mainline 7.2.x stable through 7.2.9.
+#   force_yuv420_output in amdgpu debugfs, or a pre-7.2 kernel, brings it back.
+pkgrel=635
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
