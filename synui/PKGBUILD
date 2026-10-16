@@ -3865,7 +3865,20 @@ pkgver=0.1.0
 #   YCbCr 4:2:0 (4K@60 on a 340 MHz HDMI input) is sent as RGB, and the TV
 #   shows no signal. That is not fixed in mainline 7.2.x stable through 7.2.9.
 #   force_yuv420_output in amdgpu debugfs, or a pre-7.2 kernel, brings it back.
-pkgrel=635
+# 636: SYN-RGB READS OPENRGB 1.0'S DEVICE LIST. 1.0 made `--list-devices` names
+#   only and moved the zones and modes to a new `--list-detailed`. syn-rgb
+#   builds its per-device mode map from the `Modes:` lines, so under 1.0 every
+#   listing parsed to an empty map, and map_settle (522) took an empty listing
+#   against the four-device map left from rc3 as a bus still enumerating. Every
+#   push from the 1.0 upgrade on sat out the full 20s settle wait, never
+#   rewrote the map, and when the stale map's push failed it waited again and
+#   fell through to the blanket `--mode direct`: about 42s per wallpaper
+#   change, minutes behind in a burst, and the Aura mainboard put back in the
+#   mode it drops when syn-rgb exits (the 435 bug). list_devices() asks
+#   `--help` whether `--list-detailed` exists, so rc3 still gets
+#   `--list-devices`. tests/syn_rgb.sh's stub is now 1.0 by default, with
+#   RGBOLD=1 for rc3: 34 of 34 pass, and 635's syn-rgb fails 16 of them.
+pkgrel=636
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

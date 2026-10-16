@@ -169,6 +169,30 @@ sdk_server_up() {
     (exec 3<>"/dev/tcp/127.0.0.1/$SDK_PORT") 2>/dev/null
 }
 
+# ⛔ OPENRGB 1.0 SPLIT THE LISTING, AND THE HALF THAT KEPT THE OLD NAME HAS NO
+# MODES IN IT. 1.0rc3's `--list-devices` printed every device's zones, LEDs and
+# `Modes:` line; 1.0's prints `N: name` and nothing else, and the detail moved
+# to a new `--list-detailed`. map_parse keys on `Modes:`, so 1.0 parsed to an
+# EMPTY map — and an empty listing against a four-device map is exactly what
+# map_settle reads as a bus still enumerating. Every push from the 1.0 upgrade
+# on sat out the whole settle wait, twice (once to refresh, once after the stale
+# map's push failed), never wrote a map, and fell through to the blanket
+# `--mode direct`: the mode the Aura mainboard forgets the moment we exit.
+#
+# Asked rather than assumed, because rc3 has no `--list-detailed` and an
+# installed box can be on either. `--help` returns before any bus probe.
+LIST_FLAG=
+list_devices() {
+    if [ -z "$LIST_FLAG" ]; then
+        if "$RGB" --help 2>/dev/null | grep -q -e '--list-detailed'; then
+            LIST_FLAG=--list-detailed
+        else
+            LIST_FLAG=--list-devices
+        fi
+    fi
+    "$RGB" "$LIST_FLAG"
+}
+
 # The map: `index<TAB>mode<TAB>name`, one line per device, and a plain file so
 # somebody who wants their keyboard on a different mode can say so with an
 # editor.
@@ -262,7 +286,7 @@ map_settle() {   # map_settle FILE — grow FILE until the bus has all of it
         }
         sleep 1
         try=$((try + 1))
-        "$RGB" --list-devices 2>/dev/null | map_parse > "$tmp"
+        list_devices 2>/dev/null | map_parse > "$tmp"
         if [ "$(map_count "$tmp")" -gt "$n" ]; then
             mv "$tmp" "$best"
             n=$(map_count "$best")
@@ -281,7 +305,7 @@ map_build() {   # map_build [LISTING] — parse a listing, or fetch and settle o
     tmp=$MAP.tmp.$$
     if [ -z "$out" ]; then
         given=0
-        out=$("$RGB" --list-devices 2>/dev/null) || return 1
+        out=$(list_devices 2>/dev/null) || return 1
     fi
     printf '%s\n' "$out" | map_parse > "$tmp"
     # ⚠ A listing somebody ASKED for is not second-guessed. `syn-rgb devices` is
@@ -461,7 +485,7 @@ case ${1:-status} in
             # ⚠ ONE PROBE, BOTH JOBS: the listing a human asked to see is the
             # same listing the map is built from, so this doubles as the repair
             # for a map that has gone stale.
-            listing=$("$RGB" --list-devices) || exit 1
+            listing=$(list_devices) || exit 1
             printf '%s\n' "$listing"
             map_build "$listing" || true ;;
     status)

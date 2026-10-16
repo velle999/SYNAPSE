@@ -26,14 +26,30 @@ cat > "$TMP/bin/openrgb" <<'STUB'
 # to learn which devices can hold a colour on their own; a listing logged as a
 # push would make every "how many times did it touch the hardware" assertion
 # below read one too high.
+#
+# ⛔ THE STUB IS OPENRGB 1.0 UNLESS RGBOLD=1 MAKES IT 1.0rc3. 1.0's
+# `--list-devices` is names only and the modes moved to `--list-detailed`;
+# rc3 has no `--list-detailed` and its `--list-devices` is the detailed one.
+# syn-rgb tells them apart by `--help`, so the stub's help is part of the act.
 case "$*" in
-    *--list-devices*)
+    --help)
+        echo "-l,  --list-devices      Displays a simple list of active devices"
+        [ -n "${RGBOLD:-}" ] ||
+            echo "-ld  --list-detailed     Displays a detailed list of active devices"
+        exit 0 ;;
+    *--list-devices*|*--list-detailed*)
         echo "openrgb $*" >> "$RGBLIST"
+        brief=
+        case "$*" in *--list-devices*) [ -n "${RGBOLD:-}" ] || brief=1 ;; esac
+        dev() {   # dev INDEX NAME MODES
+            if [ -n "$brief" ]; then printf '%s: %s\n' "$1" "$2"
+            else printf '%s: %s\n  Modes: %s\n\n' "$1" "$2" "$3"; fi
+        }
         # Two devices, and the difference between them is the whole point: RAM
         # that offers Direct and nothing else, and a mainboard that also has a
         # Static its own controller runs.
-        printf '0: Stub DRAM\n  Modes: [Direct] Custom '"'"'Color Shift'"'"'\n\n'
-        printf '1: Stub Mainboard\n  Modes: [Direct] Off Static Breathing\n\n'
+        dev 0 'Stub DRAM' "[Direct] Custom 'Color Shift'"
+        dev 1 'Stub Mainboard' '[Direct] Off Static Breathing'
         # A third device that is absent (RGBGONE unset), present (RGBGONE=1),
         # or LATE: RGBLATE=N holds it back until the Nth listing, which is what
         # the SDK server does at login — it answers with the controllers it has
@@ -41,7 +57,7 @@ case "$*" in
         if [ -n "${RGBGONE:-}" ]; then
             n=$(wc -l < "$RGBLIST")
             if [ -z "${RGBLATE:-}" ] || [ "$n" -ge "${RGBLATE:-0}" ]; then
-                printf '2: Stub Keyboard\n  Modes: [Direct] Static\n\n'
+                dev 2 'Stub Keyboard' '[Direct] Static'
             fi
         fi
         exit 0 ;;
@@ -235,6 +251,24 @@ check "a device that stayed away is dropped" "2" \
 check "and the colour lands on what is left" \
       "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" \
       "$(tail -1 "$RGBLOG")"
+
+# ---- 1.0 and 1.0rc3 list their devices differently ----------------------
+#
+# ⛔ 1.0's `--list-devices` HAS NO MODES IN IT. Parsed as if it were rc3's it is
+# an empty map, and an empty listing against a known map is what the settle
+# wait reads as a bus still enumerating: every push sat out the whole wait,
+# never wrote a map, and fell through to the blanket `--mode direct` that the
+# Aura mainboard forgets. Everything above ran against 1.0; this is rc3.
+: > "$RGBLOG"; : > "$RGBLIST"
+rm -f "$TMP/cfg/synui/rgb.devices"
+RGBOLD=1 "$SCRIPT" apply >/dev/null
+check "rc3 is asked for --list-devices" "openrgb --list-devices" "$(head -1 "$RGBLIST")"
+check "and its listing still builds the map" \
+      "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" "$(tail -1 "$RGBLOG")"
+: > "$RGBLIST"
+SYN_RGB_SDK=yes "$SCRIPT" apply 2>/dev/null >/dev/null
+check "1.0 is asked for --list-detailed" "openrgb --list-detailed" "$(head -1 "$RGBLIST")"
+check "and a complete 1.0 listing is not waited on" "1" "$(probes)"
 
 # ---- a device with no Direct mode ---------------------------------------
 #
