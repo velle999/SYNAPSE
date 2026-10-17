@@ -1792,13 +1792,6 @@ msgstr ""
 msgid "the guide button will no longer open big screen mode (%s)\n"
 msgstr "кнопка Guide больше не будет открывать режим большого экрана (%s)\n"
 
-msgid ""
-"\n"
-"A watcher already running stays until you log out."
-msgstr ""
-"\n"
-"Уже запущенный сторож останется до выхода из сеанса."
-
 #, c-format
 msgid "nothing to remove (%s does not exist)\n"
 msgstr "удалять нечего (%s не существует)\n"
@@ -2883,6 +2876,13 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: не удалось создать виртуальный указатель\n"
+
+#~ msgid ""
+#~ "\n"
+#~ "A watcher already running stays until you log out."
+#~ msgstr ""
+#~ "\n"
+#~ "Уже запущенный сторож останется до выхода из сеанса."
 
 #~ msgid "Start  ▸  keyboard"
 #~ msgstr "Start  ▸  клавиатура"

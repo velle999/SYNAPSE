@@ -1758,13 +1758,6 @@ msgstr ""
 msgid "the guide button will no longer open big screen mode (%s)\n"
 msgstr "Guide 버튼이 더 이상 큰 화면 모드를 열지 않습니다 (%s)\n"
 
-msgid ""
-"\n"
-"A watcher already running stays until you log out."
-msgstr ""
-"\n"
-"이미 실행 중인 감시기는 로그아웃할 때까지 남아 있습니다."
-
 #, c-format
 msgid "nothing to remove (%s does not exist)\n"
 msgstr "제거할 것이 없습니다 (%s이(가) 없습니다)\n"
@@ -2822,6 +2815,13 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: 가상 포인터를 만들 수 없었습니다\n"
+
+#~ msgid ""
+#~ "\n"
+#~ "A watcher already running stays until you log out."
+#~ msgstr ""
+#~ "\n"
+#~ "이미 실행 중인 감시기는 로그아웃할 때까지 남아 있습니다."
 
 #~ msgid "Start  ▸  keyboard"
 #~ msgstr "Start  ▸  키보드"

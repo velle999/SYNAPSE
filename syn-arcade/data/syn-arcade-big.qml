@@ -37,6 +37,7 @@
 //     finished with the browser.
 //   · GUIDE, at any time, from the controller. Its stream is still running
 //     while this is hidden, which is the whole reason hiding beats quitting.
+//     Unless `big guide off` has given the button to Steam — see guideProc.
 //   · `syn-arcade big show` — which is what Super+F10 now sends.
 //
 // While hidden the window is not merely transparent, it is not MAPPED: a
@@ -522,6 +523,41 @@ ShellRoot {
         }
     }
 
+    // ── whether Guide is ours from in front of something else ──────────────
+    //
+    // `big guide off` hands the pad's Guide button to Steam, whose overlay is
+    // on the same button. While stepped aside this is the only thing still
+    // reading it, so off has to mean this as well — or Guide opens Steam's
+    // overlay and puts the television over the game in the same press.
+    //
+    // ⚠ READ AT THE PRESS, not once at startup. The setting is changed from
+    // the desktop app or a terminal while this is resident, and a value kept
+    // from launch is exactly the bug: the setting says off and Guide still
+    // comes up. `guideOn` is only what the hint pill shows; the press waits
+    // for its own answer.
+    property bool guideOn: true
+
+    Process {
+        id: guideProc
+        command: [shell.bin, "big", "guide", "status"]
+        running: true
+        // Set by a press, so a read the hint started is not a lost press.
+        property bool andComeBack: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.guideOn = this.text.trim() === "on"
+                if (guideProc.andComeBack && shell.guideOn && shell.away)
+                    shell.comeBack()
+                guideProc.andComeBack = false
+            }
+        }
+    }
+
+    function guidePressedAway() {
+        guideProc.andComeBack = true
+        guideProc.running = true
+    }
+
     // ── the keybind, and anything else that wants a word with us ────────────
     //
     // `big listen` prints what is written to a FIFO. Super+F10 runs
@@ -587,6 +623,7 @@ ShellRoot {
         shell.oskOpen = false
         shell.hintShown = true
         hintTimer.restart()
+        guideProc.running = true	// so the pill does not offer an off Guide
     }
 
     // ── the applications that are only worth running while they are VISIBLE ──
@@ -2853,7 +2890,7 @@ ShellRoot {
     // two buttons are ours, and both have to be, because they are the way back
     // from a full-screen application on a machine with no keyboard in reach.
     function navAway(cmd) {
-        if (cmd === "guide") { shell.comeBack(); return }
+        if (cmd === "guide") { shell.guidePressedAway(); return }
 
         // ⚠ ABOVE THE KEYBOARD BRANCH, or it would be swallowed as a letter
         // whenever the on-screen keyboard happened to be open — and this is
@@ -5357,7 +5394,11 @@ ShellRoot {
                              : kwin.modelData === Quickshell.screens[0]
             }
 
-            visible: chosen && shell.away && (shell.oskOpen || shell.hintShown)
+            // ⚠ An empty pill is no pill. With Guide off and no keyboard
+            // there is nothing to teach, and a mapped overlay over a game for
+            // the length of the hint costs a composite pass per frame.
+            visible: chosen && shell.away
+                     && (shell.oskOpen || (shell.hintShown && hintText.text !== ""))
 
             anchors { left: true; right: true; bottom: true }
             implicitHeight: shell.oskOpen ? kb.implicitHeight : hintRow.height + u * 1.2
@@ -5421,13 +5462,17 @@ ShellRoot {
                     font.family: shell.uiFont
                     text: {
                         // ⚠ Guide and Start are BUTTONS; the words after the
-                        // arrow are what they do.
-                        const t = I18n.tr("Guide  ▸  big screen")
+                        // arrow are what they do. Guide only while it is ours
+                        // — see guideProc.
+                        const parts = []
+                        if (shell.guideOn)
+                            parts.push(I18n.tr("Guide  ▸  big screen"))
                         // ⚠ "HOLD Start", because a press is the application's
                         // — see navAway(). The pill is the only place the
                         // gesture is taught, so it has to say which it is.
-                        return keysProc.running
-                            ? t + "      " + I18n.tr("Hold Start  ▸  keyboard") : t
+                        if (keysProc.running)
+                            parts.push(I18n.tr("Hold Start  ▸  keyboard"))
+                        return parts.join("      ")
                     }
                 }
             }

@@ -183,6 +183,13 @@ if [ "\${1:-}" = big ] && [ "\${2:-}" = transport ]; then
     esac
     exit 0
 fi
+# The Guide setting, from a file the rig can flip. The real answer comes from
+# the syn-arcade block in synuirc, and this rig's synuirc has none — which
+# reads as "off" and would keep Guide from ever bringing the interface back.
+if [ "\${1:-}" = big ] && [ "\${2:-}" = guide ] && [ "\${3:-status}" = status ]; then
+    cat "$TMP/guide.state" 2>/dev/null || echo on
+    exit 0
+fi
 exec "$REAL" "\$@"
 STUB
 chmod +x "$TMP/bin/syn-arcade"
@@ -1024,6 +1031,23 @@ shot 04-away
 say guide 0.9
 shot 05-back
 
+# ── Guide handed to Steam ───────────────────────────────────────────────────
+#
+# `big guide off` gives the pad's Guide button to Steam, whose overlay is on it
+# too. While stepped aside this shell is the only thing still reading it, so
+# off must keep the interface away — and the pill must stop offering it.
+# ⛔ COUNTED: comeBack() asks for `big recent`, so a new one in calls.log is
+# the interface coming back.
+echo off > "$TMP/guide.state"
+say guide 1.0                 # on screen, Guide still steps aside
+GUIDE_BEFORE=$(grep -c '^big recent' "$TMP/calls.log")
+say guide 1.0                 # …and with it off, must not come back
+shot 05g-guide-off-away
+GUIDE_OFF=$(grep -c '^big recent' "$TMP/calls.log")
+echo on > "$TMP/guide.state"
+say guide 1.0                 # turned on again while away: comes back
+GUIDE_ON=$(grep -c '^big recent' "$TMP/calls.log")
+
 # Walk to the Apps shelf (Web, Terminal, Controllers) and press A. The stub
 # turns `big run` into a sleep, so "an application is running" is true with no
 # application involved.
@@ -1085,6 +1109,14 @@ echo "── music transport ──"
 cat "$TMP/music.log" 2>/dev/null || echo "(nothing)"
 echo "── the media buttons ──"
 cat "$TMP/transport.log" 2>/dev/null || echo "(nothing)"
+echo "── Guide handed to Steam ──"
+if [ "${GUIDE_OFF:-0}" -gt "${GUIDE_BEFORE:-0}" ]; then
+    echo "GUIDE OFF: Guide brought the interface back with the setting off"
+elif [ "${GUIDE_ON:-0}" -le "${GUIDE_OFF:-0}" ]; then
+    echo "GUIDE OFF: stayed away, but turning it back on did NOT bring it back"
+else
+    echo "GUIDE OFF: stayed away while off, came back once it was on"
+fi
 echo "── the remote, with an application in front ──"
 if [ "${REMOTE_AFTER:-0}" -gt "${REMOTE_BEFORE:-0}" ] &&
    tail -n 1 "$TMP/transport.log" 2>/dev/null | grep -aq 'next'; then

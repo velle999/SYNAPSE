@@ -1072,7 +1072,6 @@ int binds_guard_set(bool on)
 	} else {
 		printf(_("the guide button will no longer open big screen mode "
 		         "(%s)\n"), user);
-		puts(_("\nA watcher already running stays until you log out."));
 	}
 	return EX_OK;
 }

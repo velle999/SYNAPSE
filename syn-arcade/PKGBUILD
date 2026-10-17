@@ -1421,7 +1421,7 @@ pkgver=0.1.0
 #   opens by itself long after the button was let go.
 #   ⚠ The hint pill along the bottom is the only place the gesture is taught, so
 #   it says `Hold Start ▸ keyboard` — one msgid, thirteen catalogs.
-pkgrel=59
+pkgrel=60
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

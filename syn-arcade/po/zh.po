@@ -1700,13 +1700,6 @@ msgstr ""
 msgid "the guide button will no longer open big screen mode (%s)\n"
 msgstr "Guide 键不会再打开大屏幕模式了（%s）\n"
 
-msgid ""
-"\n"
-"A watcher already running stays until you log out."
-msgstr ""
-"\n"
-"已经在跑的守护进程会一直留到你注销为止。"
-
 #, c-format
 msgid "nothing to remove (%s does not exist)\n"
 msgstr "没有可移除的（%s 不存在）\n"
@@ -2743,6 +2736,13 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: 无法创建虚拟指针\n"
+
+#~ msgid ""
+#~ "\n"
+#~ "A watcher already running stays until you log out."
+#~ msgstr ""
+#~ "\n"
+#~ "已经在跑的守护进程会一直留到你注销为止。"
 
 #~ msgid "Start  ▸  keyboard"
 #~ msgstr "Start  ▸  键盘"

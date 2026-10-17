@@ -1795,13 +1795,6 @@ msgstr ""
 msgid "the guide button will no longer open big screen mode (%s)\n"
 msgstr "die Guide-Taste öffnet den Großbildmodus nicht mehr (%s)\n"
 
-msgid ""
-"\n"
-"A watcher already running stays until you log out."
-msgstr ""
-"\n"
-"Ein bereits laufender Wächter bleibt, bis du dich abmeldest."
-
 #, c-format
 msgid "nothing to remove (%s does not exist)\n"
 msgstr "nichts zu entfernen (%s existiert nicht)\n"
@@ -2886,6 +2879,13 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: konnte keinen virtuellen Zeiger erzeugen\n"
+
+#~ msgid ""
+#~ "\n"
+#~ "A watcher already running stays until you log out."
+#~ msgstr ""
+#~ "\n"
+#~ "Ein bereits laufender Wächter bleibt, bis du dich abmeldest."
 
 #~ msgid "Start  ▸  keyboard"
 #~ msgstr "Start  ▸  Tastatur"

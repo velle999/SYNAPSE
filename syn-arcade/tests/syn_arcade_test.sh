@@ -4426,6 +4426,19 @@ check "a login-time refresh leaves it off" $?
 says "$SA" big guide status | grep -qx "off"
 check "status reads it back" $?
 
+# ⚠ OFF TAKES EFFECT AT THE NEXT PRESS, not the next login. Two things read the
+# button — the watcher started at login, and the resident shell while it is
+# stepped aside — and both have to ask the setting when it is pressed, or "off"
+# still puts big screen mode over the Steam overlay it was turned off for.
+grep -A12 '^static void guard_press' src/big.c | has 'if (!binds_guard_get())'
+check "the desktop watcher asks the setting at each press" $?
+
+grep -q 'if (cmd === "guide") { shell.guidePressedAway(); return }' "$BIGQML"
+check "...and so does Guide from in front of an application" $?
+
+grep -q 'command: \[shell.bin, "big", "guide", "status"\]' "$BIGQML"
+check "...through the same setting" $?
+
 # The upgrade path, which is the failure this whole marker scheme exists
 # alongside: a block written by an OLDER syn-arcade has no guard line and no
 # marker, and refresh must ADD the line — while keeping the keys the user

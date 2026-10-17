@@ -1786,13 +1786,6 @@ msgstr ""
 msgid "the guide button will no longer open big screen mode (%s)\n"
 msgstr "de Guide-knop opent de grootbeeldmodus niet meer (%s)\n"
 
-msgid ""
-"\n"
-"A watcher already running stays until you log out."
-msgstr ""
-"\n"
-"Een wachter die al draait blijft tot je je afmeldt."
-
 #, c-format
 msgid "nothing to remove (%s does not exist)\n"
 msgstr "niets te verwijderen (%s bestaat niet)\n"
@@ -2872,6 +2865,13 @@ msgstr ""
 
 msgid "syn-arcade: could not create a virtual pointer\n"
 msgstr "syn-arcade: kon geen virtuele aanwijzer maken\n"
+
+#~ msgid ""
+#~ "\n"
+#~ "A watcher already running stays until you log out."
+#~ msgstr ""
+#~ "\n"
+#~ "Een wachter die al draait blijft tot je je afmeldt."
 
 #~ msgid "Start  ▸  keyboard"
 #~ msgstr "Start  ▸  toetsenbord"

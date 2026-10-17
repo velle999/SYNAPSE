@@ -9355,6 +9355,14 @@ static bool guard_running(void)
 
 static void guard_press(void)
 {
+	/* ⚠ THE SETTING IS ASKED AT THE PRESS, not taken from having been
+	 * started. `big guide off` is how somebody hands the button to Steam,
+	 * whose overlay is on it too — and this process was started at login,
+	 * so a watcher that only went away at the next one put big screen mode
+	 * over the game on the first press after "off". It stays running either
+	 * way: holding the pads open is still its job. */
+	if (!binds_guard_get())
+		return;
 	big_start(NULL, true);
 }
 
