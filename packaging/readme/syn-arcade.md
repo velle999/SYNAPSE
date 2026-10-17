@@ -59,6 +59,11 @@ A Media Center remote works as a remote: its buttons drive the interface, and
 the five that reach no application at all — OK, ⏭, ⏮, Guide and Power — keep
 working with a film or a browser in front of it.
 
+The YouTube tile and Jellyfin server tiles open each site's television
+interface, which the arrows and OK drive, full screen in a browser profile of
+its own. Sign in once on the television: YouTube shows a code for
+`yt.be/activate`, and Jellyfin takes a Quick Connect code.
+
 ## Requires
 
 `mangohud` for the overlay and `projectm-pulseaudio` for the music

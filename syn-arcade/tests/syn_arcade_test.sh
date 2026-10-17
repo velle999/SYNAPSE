@@ -5551,6 +5551,108 @@ fi
 rm -f "$BGH/syn-arcade/big.conf"
 
 echo
+echo "── the television browser: YouTube and Jellyfin for the remote ──"
+#
+# Both sites serve an interface built for a remote — arrows walk a grid, OK
+# presses the highlighted thing — but only to a browser that says it is a
+# television; the desktop pages are built for a mouse, and on them the remote's
+# arrows just scroll. So these two tiles open in a profile of their own with a
+# television's user agent. Measured on the live sites before this was written:
+#   YouTube  /tv is served to a Tizen agent and NOT to Firefox's own agent with
+#            SMART-TV added, which gets a page that redirects to youtube.com;
+#   Jellyfin turns its TV layout on for any agent containing "tv", but reads
+#            "tizen" as a Samsung set — its exit path calls tizen.application
+#            and its codec list is built for that set — so it must get the
+#            browser's own agent with SMART-TV on the end instead.
+#
+# ⛔ A STUB BROWSER, first on PATH: a tile press launches whatever the name
+# resolves to, and the real Firefox would open on the developer's display.
+TVS="$T/tvstub"; TVLOG="$T/tv.log"; TVDATA="$T/tvdata"
+mkdir -p "$TVS"
+cat > "$TVS/firefox" <<'STUB'
+#!/bin/sh
+[ "$1" = --version ] && { echo "Mozilla Firefox 157.0.1"; exit 0; }
+printf '%s\n' "$@" > "$TVLOG"
+STUB
+chmod +x "$TVS/firefox"
+export TVLOG
+tvrun() {
+    rm -f "$TVLOG"
+    PATH="$TVS:$PATH" XDG_DATA_HOME="$TVDATA" XDG_CONFIG_HOME="$BGH" \
+        HOME="$BGH" "$SA" big run "$@" >/dev/null 2>&1
+    i=0; while [ ! -s "$TVLOG" ] && [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done
+}
+tvargs() { tr '\n' ' ' < "$TVLOG" 2>/dev/null; }
+
+rm -f "$BGH/syn-arcade/big.conf"
+tvrun youtube
+case "$(tvargs)" in
+    "--profile $TVDATA/syn-arcade/tv-youtube-firefox --kiosk https://www.youtube.com/tv ")
+        ok "YouTube opens /tv in a profile of its own, in kiosk mode" ;;
+    *)  bad "YouTube's tile ran: $(tvargs)" ;;
+esac
+UJS="$TVDATA/syn-arcade/tv-youtube-firefox/user.js"
+has -s 'general.useragent.override", "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0)' "$UJS" \
+    && ok "…with the Tizen agent YouTube serves its television app to" \
+    || bad "YouTube's profile has no Tizen agent: $(cat "$UJS" 2>/dev/null)"
+# Each of these, left on, is a screen over the page with no way off it in kiosk.
+has -s 'browser.shell.checkDefaultBrowser", false' "$UJS" &&
+has -s 'browser.aboutwelcome.enabled", false' "$UJS" &&
+has -s 'homepage_override.mstone", "ignore"' "$UJS"
+check "…and nothing a first start or an update would open over it" $?
+
+MEDIA="$XDG_CACHE_HOME/syn-arcade/media.tsv"
+MEDIA_SAVED=$(cat "$MEDIA" 2>/dev/null)
+printf 'id\tname\turl\tsource\tkind\ticonfile\tpointer\tkeys\njellyfin-1\tDen\thttp://example.com:8096\tjellyfin\tserver\t\t1\t1\nplex-1\tDen\thttp://example.com:32400/web\tplex\tserver\t\t1\t0\n' \
+    > "$MEDIA"
+tvrun jellyfin-1
+case "$(tvargs)" in
+    "--profile $TVDATA/syn-arcade/tv-jellyfin-firefox --kiosk http://example.com:8096 ")
+        ok "a Jellyfin server opens in a television profile of its own" ;;
+    *)  bad "the Jellyfin tile ran: $(tvargs)" ;;
+esac
+JJS="$TVDATA/syn-arcade/tv-jellyfin-firefox/user.js"
+has -s 'Gecko/20100101 Firefox/157.0 SMART-TV"' "$JJS" \
+    && ok "…as the browser it is, with its own version, marked SMART-TV" \
+    || bad "Jellyfin's agent: $(grep useragent "$JJS" 2>/dev/null)"
+if [ ! -s "$JJS" ]; then
+    bad "Jellyfin's profile has no user.js to check for Tizen"
+elif has -i tizen "$JJS"; then
+    bad "Jellyfin's profile says Tizen — it would build a Samsung set's codec list"
+else
+    ok "…and never Tizen, which Jellyfin would take for a Samsung set"
+fi
+
+# Plex is untried on a television agent, so it keeps the ordinary page.
+tvrun plex-1
+[ "$(tvargs)" = "http://example.com:32400/web " ] \
+    && ok "a Plex server still opens the ordinary way" \
+    || bad "the Plex tile ran: $(tvargs)"
+printf '%s\n' "$MEDIA_SAVED" > "$MEDIA"
+
+# Switched off is still gone: the television route must not bring back a tile
+# the person removed.
+wa youtube off >/dev/null
+tvrun youtube
+[ ! -s "$TVLOG" ] && ok "YouTube switched off opens nothing" \
+    || bad "a switched-off YouTube launched: $(tvargs)"
+rm -f "$BGH/syn-arcade/big.conf"
+
+# A browser with no television form gets the desktop site, not nothing.
+# ⚠ PATH IS THE STUB DIRECTORY ALONE so that the real Firefox cannot be found
+# ahead of it; nothing below needs anything else on PATH.
+TVS2="$T/tvstub2"; mkdir -p "$TVS2"
+sed 's/^\[ "$1" = --version \].*$//' "$TVS/firefox" > "$TVS2/epiphany"
+chmod +x "$TVS2/epiphany"
+rm -f "$TVLOG"
+PATH="$TVS2" XDG_DATA_HOME="$TVDATA" XDG_CONFIG_HOME="$BGH" HOME="$BGH" \
+    "$SA" big run youtube >/dev/null 2>&1
+i=0; while [ ! -s "$TVLOG" ] && [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done
+[ "$(tvargs)" = "https://www.youtube.com/ " ] \
+    && ok "a browser with no television form opens the desktop site" \
+    || bad "with only Epiphany, YouTube ran: $(tvargs)"
+
+echo
 echo "── settings: what the television shows, and the power row ──"
 #
 # The page behind Start ▸ Settings. The shell draws whatever this table says,

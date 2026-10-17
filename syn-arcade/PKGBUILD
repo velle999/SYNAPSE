@@ -1421,7 +1421,36 @@ pkgver=0.1.0
 #   opens by itself long after the button was let go.
 #   ⚠ The hint pill along the bottom is the only place the gesture is taught, so
 #   it says `Hold Start ▸ keyboard` — one msgid, thirteen catalogs.
-pkgrel=60
+# 61: YOUTUBE AND JELLYFIN ON THE TELEVISION ARE THEIR TELEVISION APPS. Both
+#   tiles opened the desktop site, which is built for a mouse: the remote's
+#   arrows only scrolled the page. Both sites have an interface built for a
+#   remote — arrows walk a grid, OK presses the highlighted thing, Back goes back
+#   — and serve it only to a browser that says it is a television.
+#
+#   ⛔ ONE AGENT CANNOT SERVE BOTH. YouTube serves /tv to a Tizen agent and NOT
+#   to Firefox's own agent with SMART-TV added, which gets a 5.7KB page that
+#   redirects to youtube.com. Jellyfin turns its TV layout on for any agent
+#   containing "tv", but takes "tizen" for a Samsung set: its exit path calls
+#   tizen.application and its codec list is built for that set. So each site
+#   gets a profile of its own under ~/.local/share/syn-arcade/ — tv-youtube- and
+#   tv-jellyfin-<browser> — with its own agent: Tizen for YouTube, the browser's
+#   own with SMART-TV on the end for Jellyfin.
+#   ⚠ A SEPARATE PROFILE IS A SEPARATE INSTANCE, so the desktop browser's tabs,
+#   history and sign-ins are untouched, and the first visit signs in once:
+#   yt.be/activate for YouTube, Quick Connect for Jellyfin.
+#   ⚠ user.js IS REWRITTEN AT EVERY LAUNCH, and turns off the default-browser
+#   question, the welcome page and the what's-new page — in kiosk mode any of
+#   them is a screen over the site with no way off it.
+#   Firefox and LibreWolf take --profile/--kiosk; Chromium, Brave and Chrome take
+#   --user-data-dir/--user-agent/--app. Any other browser opens the desktop site
+#   as before. Plex is untried on a television agent and keeps the ordinary page.
+#   Measured in a headless nested session with Firefox: arrows, OK (Return, from
+#   `big nav`), Back (XF86Back is history back, which both TV interfaces follow)
+#   and the gamepad pointer all work on both; Pause works on YouTube.
+#   ⚠ NOT YET: YouTube's television app ignores the remote's Play, Stop, ⏪ and
+#   ⏩ under Firefox, which delivers them with keyCode 0 (Stop: 3). OK on the
+#   player's play button resumes.
+pkgrel=61
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

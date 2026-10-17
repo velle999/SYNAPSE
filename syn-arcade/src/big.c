@@ -687,6 +687,13 @@ static int big_games(bool rec, bool all)
  * page rather than a program, and the cache that says which page. */
 static int big_stop(void);
 static int big_open(const char *url, bool wait_for_it);
+/* The two sites with an interface built for a remote, opened in the browser
+ * dressed as a television — see tv_open(). TV_NO_FORM is its answer for a
+ * browser it has no television form of, and the caller then opens the page
+ * the ordinary way. */
+enum { TV_YOUTUBE, TV_JELLYFIN };
+#define TV_NO_FORM (-1)
+static int tv_open(int site, const char *url, bool wait_for_it);
 /* Whether a shelf or a Start menu row is switched on — the settings table is
  * further down this file, and apps_table() is the first thing that asks. */
 static bool setting_shown(const char *key);
@@ -2596,13 +2603,33 @@ static int big_run(const char *id, bool wait_for_it)
 		return spawn_wait(argv, true, false);
 	}
 
+	/* YouTube's own television interface, ahead of the table's command:
+	 * that one is the desktop site, and it is what runs only when this
+	 * browser has no television form. See tv_open(). */
+	if (strcmp(id, "youtube") == 0 && webapp_enabled("youtube")) {
+		int rc = tv_open(TV_YOUTUBE, "https://www.youtube.com/tv",
+				 wait_for_it);
+		if (rc != TV_NO_FORM)
+			return rc;
+	}
+
 	/* A media server found on the network is a tile with no program behind
 	 * it — the answer is a web page. Its URL comes back out of the same
-	 * cache `big media` wrote, so the shell never hands us one. */
+	 * cache `big media` wrote, so the shell never hands us one.
+	 *
+	 * Jellyfin's in its television layout, which the remote's arrows
+	 * drive. Plex's stays the ordinary page: nothing here has been able to
+	 * try what a Plex server serves a television. */
 	if (strncmp(id, "plex-", 5) == 0 || strncmp(id, "jellyfin-", 9) == 0) {
 		char url[512];
-		if (media_url(id, url, sizeof(url)))
+		if (media_url(id, url, sizeof(url))) {
+			if (strncmp(id, "jellyfin-", 9) == 0) {
+				int rc = tv_open(TV_JELLYFIN, url, wait_for_it);
+				if (rc != TV_NO_FORM)
+					return rc;
+			}
 			return big_open(url, wait_for_it);
+		}
 		fprintf(stderr, _("syn-arcade: no media server called '%s' — "
 				"`syn-arcade big media --refresh` looks again\n"), id);
 		return EX_USAGE;
@@ -2842,6 +2869,153 @@ static int big_open(const char *url, bool wait_for_it)
 	 * A headline is a browser window, and a browser window is the case the
 	 * `full` column exists for — nothing about a web page fills a
 	 * television by itself. So this one is always true. */
+	return spawn_wait(argv, true, false);
+}
+
+/* ── the browser, dressed as a television ────────────────────────────────── */
+
+/*
+ * YouTube and Jellyfin both have an interface built for a remote control —
+ * a grid that the arrows walk, OK on the highlighted thing, Back to where you
+ * were — and both decide whether to serve it from the user agent. The desktop
+ * pages they serve otherwise are built for a mouse: on them the remote's
+ * arrows scroll, and nothing is ever highlighted for OK to press. So these
+ * two open in a browser that says it is a television, and the remote, which
+ * already reaches the page (OK as a Return, see navRemote() in the shell),
+ * browses them the way it browses big screen mode itself.
+ *
+ * ⚠ ONE USER AGENT CANNOT DO BOTH, measured rather than assumed:
+ *   YouTube  serves youtube.com/tv only to a TV platform it recognises. A
+ *            Tizen string gets the app; Firefox's own string with SMART-TV
+ *            added gets the 5 KB page that sends a desktop browser back to
+ *            youtube.com after ten seconds.
+ *   Jellyfin turns its TV layout on for any agent containing "tv" — and it
+ *            ALSO reads "tizen" as a Samsung television: it calls
+ *            tizen.application to exit and builds its codec list for that
+ *            set, which is wrong for the browser actually playing the file.
+ *            So it gets the browser's own agent with SMART-TV on the end,
+ *            and still sees Firefox when it asks what can be played.
+ * Hence a profile per site, each with its own agent — and its own sign-in,
+ * which is no loss: they are different accounts anyway. YouTube signs in by
+ * phone (yt.be/activate shows a code on the screen) and Jellyfin by Quick
+ * Connect, so neither needs typing on the television.
+ *
+ * ⚠ A PROFILE OF ITS OWN, NEVER THE PERSON'S. Firefox has no per-site agent
+ * and no flag for one; general.useragent.override in their everyday profile
+ * would make every site they visit at the desk think it was a television. The
+ * separate profile is also a separate Firefox: --kiosk applies to it even
+ * with their own browser already open, where handing a URL to the running one
+ * would open an ordinary window.
+ *
+ * The gamepad is unaffected — the tiles still carry `pointer`, and both
+ * interfaces take a click as readily as an arrow.
+ *
+ * Returns TV_NO_FORM for a browser there is no television form of (Epiphany,
+ * Falkon) and when the profile cannot be written; the caller then opens the
+ * ordinary page, which still works with the controller as a mouse.
+ */
+static const struct {
+	const char *name;	/* the profile's directory, under syn-arcade/ */
+	const char *ua;		/* NULL: the browser's own, marked SMART-TV */
+} tv_sites[] = {
+	[TV_YOUTUBE]  = { "tv-youtube",
+		"Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 "
+		"(KHTML, like Gecko) 76.0.3809.146/6.0 TV Safari/537.36" },
+	[TV_JELLYFIN] = { "tv-jellyfin", NULL },
+};
+
+/* The browser's major version from `<browser> --version`, or `fallback`. Only
+ * the tokens matter to the sites reading it, so a version that cannot be read
+ * costs nothing but accuracy. */
+static void tv_browser_major(const char *br, char *out, size_t n,
+			     const char *fallback)
+{
+	char *argv[] = { (char *)br, (char *)"--version", NULL };
+	char *text = run_capture(argv, 5);
+	const char *p = text;
+	while (p && *p && !isdigit((unsigned char)*p))
+		p++;
+	size_t len = 0;
+	while (p && isdigit((unsigned char)p[len]))
+		len++;
+	if (len && len < n)
+		snprintf(out, n, "%.*s", (int)len, p);
+	else
+		snprintf(out, n, "%s", fallback);
+	free(text);
+}
+
+static int tv_open(int site, const char *url, bool wait_for_it)
+{
+	const char *br = browser_prog();
+	if (!br || !url_ok(url))
+		return TV_NO_FORM;
+
+	bool gecko = strcmp(br, "firefox") == 0 || strcmp(br, "librewolf") == 0;
+	bool blink = strcmp(br, "chromium") == 0 || strcmp(br, "brave") == 0 ||
+		     strcmp(br, "google-chrome-stable") == 0;
+	if (!gecko && !blink)
+		return TV_NO_FORM;
+
+	char ua[256];
+	if (tv_sites[site].ua) {
+		snprintf(ua, sizeof(ua), "%s", tv_sites[site].ua);
+	} else {
+		char v[16];
+		tv_browser_major(br, v, sizeof(v), "140");
+		if (gecko)
+			snprintf(ua, sizeof(ua), "Mozilla/5.0 (X11; Linux x86_64; "
+				 "rv:%s.0) Gecko/20100101 Firefox/%s.0 SMART-TV",
+				 v, v);
+		else
+			snprintf(ua, sizeof(ua), "Mozilla/5.0 (X11; Linux x86_64) "
+				 "AppleWebKit/537.36 (KHTML, like Gecko) "
+				 "Chrome/%s.0.0.0 Safari/537.36 SMART-TV", v);
+	}
+
+	/* Per browser as well as per site: a Firefox profile and a Chromium
+	 * one are different formats in the same kind of directory. */
+	char rel[128], dir[SYN_PATH];
+	snprintf(rel, sizeof(rel), "syn-arcade/%s-%s", tv_sites[site].name, br);
+	if (!data_path(dir, sizeof(dir), rel))
+		return TV_NO_FORM;
+
+	if (gecko) {
+		/* user.js is read at every start and wins over prefs.js, so
+		 * the agent is set again each time rather than trusted to
+		 * have stayed. The rest keeps a first start from opening
+		 * something over the page: the default-browser question, the
+		 * welcome tour, the data-collection notice, the "what's new"
+		 * tab after an update — in kiosk mode any of them is a screen
+		 * with no way off it. */
+		char js[SYN_PATH + 16], text[1024];
+		snprintf(js, sizeof(js), "%s/user.js", dir);
+		snprintf(text, sizeof(text),
+			 "// syn-arcade rewrites this at every launch of %s from big screen mode.\n"
+			 "user_pref(\"general.useragent.override\", \"%s\");\n"
+			 "user_pref(\"browser.shell.checkDefaultBrowser\", false);\n"
+			 "user_pref(\"browser.aboutwelcome.enabled\", false);\n"
+			 "user_pref(\"datareporting.policy.dataSubmissionEnabled\", false);\n"
+			 "user_pref(\"browser.startup.homepage_override.mstone\", \"ignore\");\n",
+			 site == TV_YOUTUBE ? "YouTube" : "Jellyfin", ua);
+		if (write_file_inplace(js, text) < 0)
+			return TV_NO_FORM;
+
+		char *argv[] = { (char *)br, (char *)"--profile", dir,
+				 (char *)"--kiosk", (char *)url, NULL };
+		if (!wait_for_it)
+			return spawn_detached(argv);
+		return spawn_wait(argv, true, false);
+	}
+
+	char a_dir[SYN_PATH + 32], a_ua[300], a_app[2100];
+	snprintf(a_dir, sizeof(a_dir), "--user-data-dir=%s", dir);
+	snprintf(a_ua, sizeof(a_ua), "--user-agent=%s", ua);
+	snprintf(a_app, sizeof(a_app), "--app=%s", url);
+	char *argv[] = { (char *)br, a_dir, a_ua, a_app,
+			 (char *)"--start-fullscreen", NULL };
+	if (!wait_for_it)
+		return spawn_detached(argv);
 	return spawn_wait(argv, true, false);
 }
 
