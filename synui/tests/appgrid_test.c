@@ -78,7 +78,7 @@ void synui_spawn(const char *cmd)
 /* No icon theme in a sandbox, and none wanted: what this file tests is which
  * entries exist and in what order, and a decode would make every case depend on
  * whatever icons happen to be installed on the machine running it. */
-cairo_surface_t *icon_decode_named(const char *name) { (void)name; return NULL; }
+cairo_surface_t *icon_decode_named(const char *name, int px) { (void)name; (void)px; return NULL; }
 
 static char scratch[256];      /* the sandbox root */
 static char cfg_dir[320];      /* its XDG_CONFIG_HOME/synui */

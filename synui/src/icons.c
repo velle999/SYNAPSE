@@ -82,7 +82,7 @@ static float g_icon_accent[3] = { 0.00f, 0.85f, 0.75f };
 /* ── PNG decode ───────────────────────────────────────────── */
 
 /*
- * A PNG, rasterized down to ICON_RASTER_SIZE if the file is bigger than that.
+ * A PNG, rasterized down to `px` if the file is bigger than that.
  *
  * The cap is not cosmetic. The theme walk below prefers the LARGEST raster it
  * can find, because a 512px picture resampled into a 64px dock cell looks far
@@ -92,12 +92,15 @@ static float g_icon_accent[3] = { 0.00f, 0.85f, 0.75f };
  * for the largest file is a megabyte of ARGB per tile, resident for as long as
  * the page has been opened once.
  *
- * ICON_RASTER_SIZE is already the size every SVG is rendered at and no consumer
- * draws an icon larger, so this costs nothing on screen and bounds an icon at
- * 64KB. Aspect ratio is kept: a few icons in the wild are not square, and
- * squashing them to a box is a worse picture than the one we were given.
+ * `px` is the size the SVG of the same name would be rendered at, and the
+ * caller draws nothing larger, so this costs nothing on screen and bounds an
+ * icon at px*px*4 — 64KB at ICON_RASTER_SIZE, which is everything but the app
+ * grid on a screen big enough to draw its tiles past 128 (see
+ * icon_decode_named). Aspect ratio is kept: a few icons in the wild are not
+ * square, and squashing them to a box is a worse picture than the one we were
+ * given.
  */
-static cairo_surface_t *decode_png(const char *path)
+static cairo_surface_t *decode_png(const char *path, int px)
 {
     cairo_surface_t *surf = cairo_image_surface_create_from_png(path);
     if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
@@ -107,11 +110,11 @@ static cairo_surface_t *decode_png(const char *path)
 
     int w = cairo_image_surface_get_width(surf);
     int h = cairo_image_surface_get_height(surf);
-    if (w <= ICON_RASTER_SIZE && h <= ICON_RASTER_SIZE) return surf;
+    if (w <= px && h <= px) return surf;
 
     int nw, nh;
-    if (w >= h) { nw = ICON_RASTER_SIZE; nh = h * ICON_RASTER_SIZE / w; }
-    else        { nh = ICON_RASTER_SIZE; nw = w * ICON_RASTER_SIZE / h; }
+    if (w >= h) { nw = px; nh = h * px / w; }
+    else        { nh = px; nw = w * px / h; }
     if (nw < 1) nw = 1;
     if (nh < 1) nh = 1;
 
@@ -334,13 +337,13 @@ void icon_set_theme(const char *name)
  * rsvg_handle_new_from_file() builds a GFile and a parser per attempt; a stat
  * that fails costs a few microseconds and skips all of it.
  */
-static cairo_surface_t *try_icon_file(const char *path)
+static cairo_surface_t *try_icon_file(const char *path, int px)
 {
     if (access(path, R_OK) != 0) return NULL;
     size_t len = strlen(path);
     if (len > 4 && strcasecmp(path + len - 4, ".svg") == 0)
-        return decode_svg(path, ICON_RASTER_SIZE);
-    return decode_png(path);
+        return decode_svg(path, px);
+    return decode_png(path, px);
 }
 
 /*
@@ -640,7 +643,7 @@ static void icon_dirs_flush(void)
 
 /* One pass over the indexed directories. Split out so a miss can run it a
  * second time against a refreshed index without duplicating the ordering. */
-static cairo_surface_t *icon_scan_dirs(const char *name)
+static cairo_surface_t *icon_scan_dirs(const char *name, int px)
 {
     char path[512];
     for (int i = 0; i < g_icon_dirs_count; i++) {
@@ -656,49 +659,49 @@ static cairo_surface_t *icon_scan_dirs(const char *name)
          * (there is not, under scalable/). */
         if (g_icon_dirs[i].svg_first) {
             snprintf(path, sizeof(path), "%s/%s.svg", g_icon_dirs[i].path, name);
-            s = try_icon_file(path);
+            s = try_icon_file(path, px);
             if (s) return s;
             if (g_icon_dirs[i].png) {
                 snprintf(path, sizeof(path), "%s/%s.png", g_icon_dirs[i].path, name);
-                s = try_icon_file(path);
+                s = try_icon_file(path, px);
                 if (s) return s;
             }
         } else {
             if (g_icon_dirs[i].png) {
                 snprintf(path, sizeof(path), "%s/%s.png", g_icon_dirs[i].path, name);
-                s = try_icon_file(path);
+                s = try_icon_file(path, px);
                 if (s) return s;
             }
             snprintf(path, sizeof(path), "%s/%s.svg", g_icon_dirs[i].path, name);
-            s = try_icon_file(path);
+            s = try_icon_file(path, px);
             if (s) return s;
         }
     }
 
     /* The legacy drop, which belongs to no theme at all. */
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.png", name);
-    cairo_surface_t *s = try_icon_file(path);
+    cairo_surface_t *s = try_icon_file(path, px);
     if (s) return s;
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.svg", name);
-    return try_icon_file(path);
+    return try_icon_file(path, px);
 }
 
-static cairo_surface_t *find_and_decode_icon(const char *name)
+static cairo_surface_t *find_and_decode_icon(const char *name, int px)
 {
     if (!name || !*name) return NULL;
 
     /* Icon= may already be an absolute path. */
-    if (name[0] == '/') return try_icon_file(name);
+    if (name[0] == '/') return try_icon_file(name, px);
 
     icon_dirs_build();
 
-    cairo_surface_t *s = icon_scan_dirs(name);
+    cairo_surface_t *s = icon_scan_dirs(name, px);
     if (s) return s;
 
     /* Nothing matched — which is either a genuine absence or an index built
      * before the directory holding it existed. Cheap to tell the two apart,
      * and only ever done on the answer nobody wants. */
-    if (icon_dirs_refresh()) s = icon_scan_dirs(name);
+    if (icon_dirs_refresh()) s = icon_scan_dirs(name, px);
     return s;
 }
 
@@ -802,11 +805,12 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     if (!e.exec[0])
         snprintf(e.exec, sizeof(e.exec), "%s", app_id);
 
-    e.icon_surface = find_and_decode_icon(e.icon_hint[0] ? e.icon_hint : app_id);
+    e.icon_surface = find_and_decode_icon(e.icon_hint[0] ? e.icon_hint : app_id,
+                                          ICON_RASTER_SIZE);
     if (!e.icon_surface && e.icon_hint[0])
         /* Icon= pointed nowhere useful (SVG-only theme, etc) — try the bare
          * app_id too, since it's occasionally also the icon name. */
-        e.icon_surface = find_and_decode_icon(app_id);
+        e.icon_surface = find_and_decode_icon(app_id, ICON_RASTER_SIZE);
 
     /* Either name can be the one that identifies it as ours: Icon= is what
      * resolved the file, but an app whose .desktop names a generic icon is
@@ -864,7 +868,7 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *path)
     }
 
     if (e.icon_hint[0]) {
-        e.icon_surface = find_and_decode_icon(e.icon_hint);
+        e.icon_surface = find_and_decode_icon(e.icon_hint, ICON_RASTER_SIZE);
         /* Keyed by path here, so Icon= is the only name that means anything. */
         icon_theme_adopt(&e, e.icon_hint);
     }
@@ -891,10 +895,16 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *path)
  * hundred entries and pages through them, so routing it here would evict the
  * dock's icons on every arrow key and re-decode them on the next frame. It gets
  * the decode and owns the result.
+ *
+ * At the size it ASKS for, because it is the one consumer whose icons grow with
+ * the screen: a 4K page draws them at 192, and a 128 raster stretched to that
+ * is visibly soft. Never below ICON_RASTER_SIZE — that is what the theme walk's
+ * order and every other caller were tuned at, and a small screen drawing at 64
+ * still wants a 128 source to downsample.
  */
-cairo_surface_t *icon_decode_named(const char *name)
+cairo_surface_t *icon_decode_named(const char *name, int px)
 {
-    return find_and_decode_icon(name);
+    return find_and_decode_icon(name, px > ICON_RASTER_SIZE ? px : ICON_RASTER_SIZE);
 }
 
 void icon_provide_name(const char *app_id, const char *icon_name)
@@ -911,7 +921,7 @@ void icon_provide_name(const char *app_id, const char *icon_name)
     syn_icon_entry_t *e = (syn_icon_entry_t *)found;
     if (e->icon_surface) return;
 
-    e->icon_surface = find_and_decode_icon(icon_name);
+    e->icon_surface = find_and_decode_icon(icon_name, ICON_RASTER_SIZE);
     if (e->icon_surface) {
         snprintf(e->icon_hint, sizeof(e->icon_hint), "%s", icon_name);
         icon_theme_adopt(e, icon_name);

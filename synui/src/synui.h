@@ -960,9 +960,12 @@ typedef struct {
     /* Decoded on the first frame this entry is actually DRAWN on, not at scan
      * time: a box with 300 applications would otherwise decode 300 PNGs and
      * SVGs to show 24 of them, on a keypress. NULL after the attempt means the
-     * entry draws a monogram, which is also what a missing icon looks like. */
+     * entry draws a monogram, which is also what a missing icon looks like.
+     * `icon_px` is the raster size that attempt asked for, 0 before it — the
+     * tile grows with the screen, so a page opened on a bigger one decodes
+     * again rather than stretching the last answer. */
     cairo_surface_t *icon;
-    int  icon_tried;
+    int  icon_px;
 } syn_app_entry_t;
 
 typedef struct {
@@ -10263,9 +10266,10 @@ void appgrid_rescan(syn_server_t *s);
  * index — the two things the renderer asks. NULL for an index out of range. */
 int  appgrid_total(syn_server_t *s);
 syn_app_entry_t *appgrid_at(syn_server_t *s, int i);
-/* The icon for an entry, decoded on first use. NULL means "draw a monogram",
- * which the caller does with icon_draw_monogram() exactly as the dock does. */
-cairo_surface_t *appgrid_icon(syn_app_entry_t *e);
+/* The icon for an entry, decoded on first use at no less than `px` — the size
+ * the tile draws it. NULL means "draw a monogram", which the caller does with
+ * icon_draw_monogram() exactly as the dock does. */
+cairo_surface_t *appgrid_icon(syn_app_entry_t *e, int px);
 int  appgrid_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 int  appgrid_motion(syn_server_t *s, double lx, double ly);
 /* ⚠ `time_msec`, like every other panel on SYN_PANEL_LIST — NOT a button
@@ -10641,11 +10645,12 @@ void icon_provide_name(const char *app_id, const char *icon_name);
 void icon_draw_monogram(cairo_t *cr, const char *app_id,
                         double x, double y, double size);
 /* Decode the picture an `Icon=` value names — a theme name, or an absolute
- * path — at the icon theme's raster size, for a caller that keeps its OWN
+ * path — at `px`, or the icon theme's raster size if that is larger, for a
+ * caller that keeps its OWN
  * cache. The app grid does: icon_lookup()'s cache is 64 entries sized for the
  * dock's pinned+running set, and a page of applications would evict it on every
  * arrow key. Ownership passes to the caller (cairo_surface_destroy). */
-cairo_surface_t *icon_decode_named(const char *name);
+cairo_surface_t *icon_decode_named(const char *name, int px);
 /* Which icon theme to resolve names in first — synuirc's `bar_icon_theme`, the
  * one place this desktop records the set of pictures it is using. Pushed on
  * every config load; empty means "no opinion" and the built-in fallback order

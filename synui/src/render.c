@@ -2498,21 +2498,36 @@ void synui_render_appgrid(syn_server_t *s)
      * Derived from the output rather than fixed, so the page fills a 4K screen
      * and still fits a 1366x768 laptop. The cell is capped as well as floored:
      * uncapped, six columns of a 3840px screen give 600px tiles with a 96px
-     * icon marooned in the middle of each. */
-    const int SEARCH_H = 44, SEARCH_W = 460;
+     * icon marooned in the middle of each.
+     *
+     * ⚠ THE CAPS SCALE WITH THE SCREEN, and so does every other size on the
+     * page. Fixed caps were the marooned icon solved the other way round: a
+     * 4K page was a 1200px block of 12px labels in the middle of 3840px of
+     * dim, the same block a 1080p screen got — a page, unlike a menu, is read
+     * from across the room. `k` is the screen against 1080p, from whichever
+     * side is shorter so an ultrawide does not get tiles too tall for it, and
+     * never below 1: the floors below are what fit a small screen, and they
+     * were tuned at 1. It is the LOGICAL box, so a desktop already scaled 2x
+     * (Super+Ctrl+=) gets 1 here and is not scaled twice. */
+    double k = ob.width / 1920.0;
+    if (ob.height / 1080.0 < k) k = ob.height / 1080.0;
+    if (k < 1.0) k = 1.0;
+#define AG(v) ((int)((v) * k + 0.5))
+
+    const int SEARCH_H = AG(44), SEARCH_W = AG(460);
     const int top_pad  = ob.height / 12;
     int search_x = (ob.width - SEARCH_W) / 2;
     int search_y = top_pad;
 
     int grid_top = search_y + SEARCH_H + ob.height / 14;
-    int foot_h   = 56;                       /* the page dots and the hint */
+    int foot_h   = AG(56);                   /* the page dots and the hint */
     int avail_h  = ob.height - grid_top - foot_h;
     int avail_w  = (int)(ob.width * 0.80);
 
     int cell_w = avail_w / APPGRID_COLS;
     int cell_h = avail_h / APPGRID_ROWS;
-    if (cell_w > 200) cell_w = 200;
-    if (cell_h > 176) cell_h = 176;
+    if (cell_w > AG(200)) cell_w = AG(200);
+    if (cell_h > AG(176)) cell_h = AG(176);
     if (cell_w < 96)  cell_w = 96;
     if (cell_h < 90)  cell_h = 90;
 
@@ -2523,9 +2538,9 @@ void synui_render_appgrid(syn_server_t *s)
     int grid_y = grid_top + (avail_h - cell_h * APPGRID_ROWS) / 2;
     if (grid_y < grid_top) grid_y = grid_top;
 
-    int icon_px = cell_h - 46;               /* room for the label under it */
-    if (icon_px > cell_w - 24) icon_px = cell_w - 24;
-    if (icon_px > 96) icon_px = 96;
+    int icon_px = cell_h - AG(46);           /* room for the label under it */
+    if (icon_px > cell_w - AG(24)) icon_px = cell_w - AG(24);
+    if (icon_px > AG(96)) icon_px = AG(96);
     if (icon_px < 32) icon_px = 32;
 
     int first = g->page * APPGRID_PER_PAGE;
@@ -2541,7 +2556,7 @@ void synui_render_appgrid(syn_server_t *s)
      * and every printable key goes into it, so there is nothing to focus it
      * WITH — but a bare line of text at the top of a screen does not say "type
      * here", and the whole fast path of this panel is that you can. */
-    cairo_set_line_width(cr, 1);
+    cairo_set_line_width(cr, k);
     cairo_rounded_rect(cr, search_x, search_y, SEARCH_W, SEARCH_H, SEARCH_H / 2.0);
     set_ink(cr, INK_STRONG, 0.10);
     cairo_fill_preserve(cr);
@@ -2550,14 +2565,14 @@ void synui_render_appgrid(syn_server_t *s)
 
     cairo_select_font_face(cr, syn_text_ui_font(), CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 16);
+    cairo_set_font_size(cr, 16 * k);
     if (g->search_len > 0) {
         set_ink(cr, INK_STRONG, 0.95);
-        draw_clipped(cr, search_x + 22, search_y + SEARCH_H / 2 + 6,
-                     SEARCH_W - 44, g->search);
+        draw_clipped(cr, search_x + AG(22), search_y + SEARCH_H / 2 + AG(6),
+                     SEARCH_W - AG(44), g->search);
     } else {
         set_ink(cr, INK_DIM, 0.85);
-        cairo_move_to(cr, search_x + 22, search_y + SEARCH_H / 2 + 6);
+        cairo_move_to(cr, search_x + AG(22), search_y + SEARCH_H / 2 + AG(6));
         syn_show_text(cr, _("Type to search"));
     }
 
@@ -2567,7 +2582,7 @@ void synui_render_appgrid(syn_server_t *s)
      * grid that has not loaded look identical, and the one thing the user needs
      * to know is which of the two they are looking at. */
     if (total == 0) {
-        cairo_set_font_size(cr, 15);
+        cairo_set_font_size(cr, 15 * k);
         set_ink(cr, INK_MUTED, 0.9);
         const char *msg = g->search_len > 0 ? _("No applications match")
                                             : _("No applications found");
@@ -2592,7 +2607,8 @@ void synui_render_appgrid(syn_server_t *s)
             /* The selection is a plate under the tile, not a border around it:
              * a 1px outline on a 200px cell is invisible at arm's length, and
              * this page is meant to be read from further away than a menu. */
-            cairo_rounded_rect(cr, cx + 6, cy + 4, cell_w - 12, cell_h - 8, 16);
+            cairo_rounded_rect(cr, cx + AG(6), cy + AG(4),
+                               cell_w - AG(12), cell_h - AG(8), AG(16));
             set_ink(cr, INK_STRONG, 0.13);
             cairo_fill_preserve(cr);
             set_accent(cr, 0.55);
@@ -2600,9 +2616,9 @@ void synui_render_appgrid(syn_server_t *s)
         }
 
         double ix = cx + (cell_w - icon_px) / 2.0;
-        double iy = cy + 12;
+        double iy = cy + AG(12);
 
-        cairo_surface_t *icon = appgrid_icon(e);
+        cairo_surface_t *icon = appgrid_icon(e, icon_px);
         if (icon) {
             double sw = cairo_image_surface_get_width(icon);
             double sh = cairo_image_surface_get_height(icon);
@@ -2628,14 +2644,14 @@ void synui_render_appgrid(syn_server_t *s)
          * done by asking for the extents of what will actually be drawn — an
          * application called "LibreOffice Calc" is wider than its own cell and
          * centring on the full name would push the ellipsis off the tile. */
-        cairo_set_font_size(cr, 12);
+        cairo_set_font_size(cr, 12 * k);
         set_ink(cr, idx == g->selected ? INK_STRONG : INK_BODY, 0.95);
         {
-            double max_w = cell_w - 16;
+            double max_w = cell_w - AG(16);
             cairo_text_extents_t ext;
             syn_text_extents(cr, e->name, &ext);
             double w = ext.width < max_w ? ext.width : max_w;
-            draw_clipped(cr, cx + (cell_w - w) / 2.0, cy + 12 + icon_px + 22,
+            draw_clipped(cr, cx + (cell_w - w) / 2.0, iy + icon_px + AG(22),
                          max_w, e->name);
         }
     }
@@ -2647,10 +2663,10 @@ void synui_render_appgrid(syn_server_t *s)
      * nothing is indistinguishable from a key that did not work.
      */
     if (pages > 1) {
-        double dot_r = 4, gap = 18;
+        double dot_r = 4 * k, gap = 18 * k;
         double dots_w = (pages - 1) * gap;
         double dx = (ob.width - dots_w) / 2.0;
-        double dy = ob.height - foot_h + 12;
+        double dy = ob.height - foot_h + 12 * k;
         for (int p = 0; p < pages; p++) {
             if (p == g->page) set_accent(cr, 0.95);
             else              set_ink(cr, INK_RULE, 0.8);
@@ -2670,11 +2686,11 @@ void synui_render_appgrid(syn_server_t *s)
                     "%d applications \xc2\xb7 type to search \xc2\xb7 Enter opens "
                     "\xc2\xb7 Esc closes", total),
                  total);
-        cairo_set_font_size(cr, 12);
+        cairo_set_font_size(cr, 12 * k);
         set_ink(cr, INK_LABEL, 0.85);
         cairo_text_extents_t ext;
         syn_text_extents(cr, foot, &ext);
-        cairo_move_to(cr, (ob.width - ext.width) / 2.0, ob.height - 16);
+        cairo_move_to(cr, (ob.width - ext.width) / 2.0, ob.height - AG(16));
         syn_show_text(cr, foot);
     }
 
@@ -2691,8 +2707,9 @@ void synui_render_appgrid(syn_server_t *s)
      */
     if (g->menu_open && g->menu_app >= 0 && g->menu_app < g->count) {
         const syn_app_entry_t *me = &g->apps[g->menu_app];
-        int mw = 260;
-        int mh = APPGRID_MENU_H + 8 + APPGRID_MENU_ROWS_N * APPGRID_MENU_ROW_H;
+        int mw = AG(260);
+        int row_h = AG(APPGRID_MENU_ROW_H);
+        int mh = AG(APPGRID_MENU_H + 8) + APPGRID_MENU_ROWS_N * row_h;
         int mx, my;
 
         hit_place_popup(g->menu_x, g->menu_y, mw, mh, ob.width, ob.height,
@@ -2705,26 +2722,26 @@ void synui_render_appgrid(syn_server_t *s)
         cairo_rectangle(cr, mx, my, mw, mh);
         cairo_fill(cr);
         set_accent(cr, 0.55);
-        cairo_set_line_width(cr, 1.0);
-        cairo_rectangle(cr, mx + 0.5, my + 0.5, mw - 1, mh - 1);
+        cairo_set_line_width(cr, k);
+        cairo_rectangle(cr, mx + k / 2, my + k / 2, mw - k, mh - k);
         cairo_stroke(cr);
 
         /* Which application this is about, because the menu covers the tile it
          * was opened on — without the name, a menu offering to uninstall
          * something is a menu that has hidden WHAT. */
-        cairo_set_font_size(cr, 12);
+        cairo_set_font_size(cr, 12 * k);
         set_ink(cr, INK_LABEL, 0.85);
-        cairo_move_to(cr, mx + 14, my + 20);
+        cairo_move_to(cr, mx + AG(14), my + AG(20));
         syn_show_text(cr, me->name);
 
         for (int i = 0; i < APPGRID_MENU_ROWS_N; i++) {
-            int iy = my + APPGRID_MENU_H + 4 + i * APPGRID_MENU_ROW_H;
+            int iy = my + AG(APPGRID_MENU_H + 4) + i * row_h;
             if (i == g->menu_hover) {
                 set_accent(cr, 0.22);
-                cairo_rectangle(cr, mx + 3, iy, mw - 6, APPGRID_MENU_ROW_H);
+                cairo_rectangle(cr, mx + AG(3), iy, mw - AG(6), row_h);
                 cairo_fill(cr);
             }
-            cairo_set_font_size(cr, 13);
+            cairo_set_font_size(cr, 13 * k);
             /* ⚠ THE DESTRUCTIVE ROW SAYS SO IN COLOUR, and THROUGH set_hue
              * rather than as a literal rgba — the rule the task manager's Force
              * Quit row learned: a bare pale red is drawn at the same absolute
@@ -2732,15 +2749,16 @@ void synui_render_appgrid(syn_server_t *s)
              * silver. set_hue runs it through the same corrector the accent
              * goes through, so it stays red and stays legible. */
             set_hue(cr, 0.95, 0.55, 0.55, 1.0);
-            cairo_move_to(cr, mx + 14, iy + 18);
+            cairo_move_to(cr, mx + AG(14), iy + AG(18));
             syn_show_text(cr, _("Uninstall…"));
 
-            hit_add_spot(&g->menu_hit, mx + 3, iy, mw - 6, APPGRID_MENU_ROW_H);
+            hit_add_spot(&g->menu_hit, mx + AG(3), iy, mw - AG(6), row_h);
         }
     } else {
         hit_clear(&g->menu_hit);
     }
 
+#undef AG
     overlay_surface_pop(&saved_ink);
     cairo_destroy(cr);
     set_scene_buffer(&s->appgrid_ui.text_buf, s->appgrid_ui.tree, buf);

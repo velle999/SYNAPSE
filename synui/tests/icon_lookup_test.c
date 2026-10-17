@@ -108,15 +108,19 @@ static void put_svg(const char *rel)
     fclose(f);
 }
 
-/* Resolved, and at what size. -1 means "not found at all". */
-static int decoded_size(const char *name)
+/* Resolved, and at what size. -1 means "not found at all". `px` is what the
+ * caller asks for; decoded_size() asks for nothing, which is every caller but
+ * the app grid on a big screen. */
+static int decoded_size_px(const char *name, int px)
 {
-    cairo_surface_t *s = icon_decode_named(name);
+    cairo_surface_t *s = icon_decode_named(name, px);
     if (!s) return -1;
     int w = cairo_image_surface_get_width(s);
     cairo_surface_destroy(s);
     return w;
 }
+
+static int decoded_size(const char *name) { return decoded_size_px(name, 0); }
 
 int main(void)
 {
@@ -200,6 +204,23 @@ int main(void)
     put_svg("sys/icons/Sandbox/apps/scalable/vector-breeze.svg");
     check(decoded_size("vector-breeze") == 128,
           "…and so does one under <category>/scalable");
+
+    /* ── 5b. The app grid on a 4K screen asks for 192 ────────────────────
+     *
+     * Its tiles grow with the screen, and a 128 raster stretched into a 192px
+     * tile is visibly soft. So a size asked for above the raster size is the
+     * size that comes back — from a vector, and from a raster big enough to
+     * give it — and a small source is still not blown up, and a size below
+     * the raster size is still the raster size. */
+    check(decoded_size_px("vector-spec", 192) == 192,
+          "an SVG asked for at 192 rasterizes at 192, not 128");
+    check(decoded_size_px("big-only", 192) == 192,
+          "…a 512 PNG is capped at the 192 asked for");
+    check(decoded_size_px("mid-only", 192) == 192, "…so is a 256 one");
+    check(decoded_size_px("small-only", 192) == 64,
+          "…and a 64 PNG is still handed back at 64, not upscaled");
+    check(decoded_size_px("vector-spec", 64) == 128,
+          "a size asked for below the raster size gets the raster size");
 
     /* ── 6. The two ends ───────────────────────────────────────────────── */
     char abs_path[1024];

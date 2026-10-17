@@ -3878,7 +3878,20 @@ pkgver=0.1.0
 #   `--help` whether `--list-detailed` exists, so rc3 still gets
 #   `--list-devices`. tests/syn_rgb.sh's stub is now 1.0 by default, with
 #   RGBOLD=1 for rc3: 34 of 34 pass, and 635's syn-rgb fails 16 of them.
-pkgrel=636
+# 637: THE APPLICATION PAGE SCALES WITH THE SCREEN. Its tiles were capped at
+#   200x176, the icon at 96 and the text at 12-16px, so a 3840x2160 output at
+#   scale 1 drew the same 1200px block a 1080p one does, a third of the width,
+#   in the middle of the dim. Every size on the page is now multiplied by the
+#   screen against 1080p (the shorter side, never below 1): 2x at 4K, 1.33x at
+#   1440p, and 1080p and smaller unchanged (a headless 1080p capture differs
+#   from 636's in 8 pixels by one level inside the grid). It reads the LOGICAL
+#   box, so a desktop already scaled with Super+Ctrl+= is not scaled twice.
+#   The right-click menu and its hit rects scale with it. Icons are decoded at
+#   the size the tile draws them, not the fixed 128 raster: icon_decode_named()
+#   takes a size, appgrid_icon() re-decodes when a bigger screen asks for more,
+#   and every other caller still gets 128. Five new icon_lookup checks; three
+#   fail with the size ignored.
+pkgrel=637
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

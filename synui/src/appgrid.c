@@ -567,19 +567,23 @@ syn_app_entry_t *appgrid_at(syn_server_t *s, int i)
     return &g->apps[g->filt[i]];
 }
 
-cairo_surface_t *appgrid_icon(syn_app_entry_t *e)
+cairo_surface_t *appgrid_icon(syn_app_entry_t *e, int px)
 {
-    /* `icon_tried` and not a NULL check: an application whose Icon= names
-     * nothing on disk would otherwise be re-searched — several stat()s across
-     * every theme directory — on every frame it is on screen, which with a
-     * hover repaint is every pointer motion. */
-    if (!e->icon_tried) {
-        e->icon_tried = 1;
-        if (e->icon_hint[0]) e->icon = icon_decode_named(e->icon_hint);
+    /* `icon_px` and not a NULL check: an application whose Icon= names nothing
+     * on disk would otherwise be re-searched — several stat()s across every
+     * theme directory — on every frame it is on screen, which with a hover
+     * repaint is every pointer motion. It only ever GROWS: a page that has
+     * been opened on a 4K screen keeps the big decode and draws it smaller on
+     * the next one, rather than decoding twice per trip between two monitors. */
+    if (px > e->icon_px) {
+        e->icon_px = px;
+        if (e->icon) cairo_surface_destroy(e->icon);
+        e->icon = NULL;
+        if (e->icon_hint[0]) e->icon = icon_decode_named(e->icon_hint, px);
         /* Falling back to the id is what icon_lookup() does, and it is worth
          * it: a great many entries name their icon after themselves and simply
          * omit the line. */
-        if (!e->icon) e->icon = icon_decode_named(e->id);
+        if (!e->icon) e->icon = icon_decode_named(e->id, px);
     }
     return e->icon;
 }
