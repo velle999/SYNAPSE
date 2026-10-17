@@ -3891,7 +3891,22 @@ pkgver=0.1.0
 #   takes a size, appgrid_icon() re-decodes when a bigger screen asks for more,
 #   and every other caller still gets 128. Five new icon_lookup checks; three
 #   fail with the size ignored.
-pkgrel=637
+# 638: A THEME WITH ONLY A SMALL PICTURE GIVES WAY TO ONE WITH A SHARP ONE. The
+#   icon walk is theme-major, so the first theme holding a name at any size
+#   won: AdwaitaLegacy has accessories-calculator, preferences-system and 17
+#   more at 48px only, is searched before breeze, and breeze has them as
+#   vectors, so Calculator, Control Panel, Displays, Task Manager and the rest
+#   were 48px pictures stretched into 96px tiles (192 at 4K) and into every
+#   panel that draws them. A hit smaller than the size asked for is now held
+#   back while the walk looks on: a PNG counts when its own IHDR says it is
+#   big enough, a vector unless its directory is 24px or less, where breeze
+#   keeps near-black toolbar glyphs (edit-paste, network-wired) that vanish on
+#   a dark page. With nothing big enough the largest small one is drawn. On
+#   this box 19 of 272 icon names change, all to breeze's full-colour vectors;
+#   Wine's extracted icons stay as they are, since 32-64px is all there is.
+#   Five icon_lookup checks; the old walk fails three and dropping the glyph
+#   rule fails the fourth.
+pkgrel=638
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -122,6 +122,31 @@ static int decoded_size_px(const char *name, int px)
 
 static int decoded_size(const char *name) { return decoded_size_px(name, 0); }
 
+/* The decoded HEIGHT, which tells two candidates apart when both come back
+ * 128 wide: a non-square PNG keeps its aspect, a vector is square. */
+static int decoded_height(const char *name)
+{
+    cairo_surface_t *s = icon_decode_named(name, 0);
+    if (!s) return -1;
+    int h = cairo_image_surface_get_height(s);
+    cairo_surface_destroy(s);
+    return h;
+}
+
+/* A PNG of any shape, for the one check that needs to know which file won. */
+static void put_png_wh(const char *rel, int w, int h)
+{
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/%s", root, rel);
+    char dir[1024];
+    snprintf(dir, sizeof(dir), "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (slash) { *slash = '\0'; mkdirs(dir); }
+    cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_surface_write_to_png(sf, path);
+    cairo_surface_destroy(sf);
+}
+
 int main(void)
 {
     printf("icons: where a theme keeps its files, and what comes back\n");
@@ -221,6 +246,52 @@ int main(void)
           "…and a 64 PNG is still handed back at 64, not upscaled");
     check(decoded_size_px("vector-spec", 64) == 128,
           "a size asked for below the raster size gets the raster size");
+
+    /* ── 5c. A theme with only a small picture gives way ─────────────────
+     *
+     * The walk is theme-major, and Sandbox is searched before breeze. It used
+     * to be that the first theme with the name at ANY size won: AdwaitaLegacy's
+     * 48px `accessories-calculator` beat breeze's vector, and the grid drew it
+     * into a 96px tile. Now a too-small hit is held back while a later theme
+     * is asked for something big enough. */
+    /* ⚠ EVERY FILE FIRST, THEN ONE REBUILD OF THE INDEX. The index is built
+     * once and rebuilt only on a MISS, and a too-small hit is not a miss — so
+     * a breeze directory created after the Sandbox one was indexed would never
+     * be seen, and the glyph check below would pass for the wrong reason. A
+     * real machine has all of its themes at login; icon_set_theme() flushes
+     * the index the way a login would build it. */
+    put_png("sys/icons/Sandbox/48x48/legacy/legacy-small.png", 48);
+    put_svg("sys/icons/breeze/apps/48/legacy-small.svg");
+    put_png("sys/icons/Sandbox/48x48/apps/glyph-only.png", 48);
+    put_svg("sys/icons/breeze/actions/24/glyph-only.svg");
+    put_png("sys/icons/Sandbox/48x48/apps/thirty-two.png", 48);
+    put_svg("sys/icons/breeze/preferences/32/thirty-two.svg");
+    put_png("sys/icons/Sandbox/32x32/apps/two-small.png", 32);
+    put_png("sys/icons/hicolor/64x64/apps/two-small.png", 64);
+    put_png_wh("sys/icons/Sandbox/256x256/apps/both-big.png", 256, 200);
+    put_svg("sys/icons/breeze/apps/scalable/both-big.svg");
+    icon_set_theme("Sandbox");
+
+    check(decoded_size("legacy-small") == 128,
+          "an earlier theme's 48px PNG gives way to a later theme's vector");
+
+    /* …but not to a toolbar glyph. breeze's 24px actions are near-black line
+     * drawings, invisible scaled onto a dark page. */
+    check(decoded_size("glyph-only") == 48,
+          "…but not to a vector from a 24px directory, which is a glyph");
+    check(decoded_size("thirty-two") == 128,
+          "…a 32px directory's vector is a full picture, and does win");
+
+    /* Nothing big enough anywhere: the biggest of the small ones, not the
+     * first. */
+    check(decoded_size("two-small") == 64,
+          "with nothing big enough, the larger of two small PNGs is drawn");
+
+    /* And the order still decides between two that are both good enough: a
+     * 256x200 PNG in the earlier theme comes back 128x100, where breeze's
+     * square vector would be 128x128. */
+    check(decoded_height("both-big") == 100,
+          "an earlier theme that is big enough still beats a later vector");
 
     /* ── 6. The two ends ───────────────────────────────────────────────── */
     char abs_path[1024];

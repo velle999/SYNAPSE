@@ -346,6 +346,73 @@ static cairo_surface_t *try_icon_file(const char *path, int px)
     return decode_png(path, px);
 }
 
+/* A PNG's size from its IHDR — the larger side, or 0 when the file is not a
+ * PNG at all. Twenty-four bytes, so a candidate can be weighed before it is
+ * decoded: the walk below asks this of every hit, and decoding a picture only
+ * to throw it away for a better one is the cost it exists to avoid. */
+static int png_natural_px(const char *path)
+{
+    unsigned char h[24];
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    size_t n = fread(h, 1, sizeof(h), f);
+    fclose(f);
+    if (n < sizeof(h) || memcmp(h, "\x89PNG\r\n\x1a\n", 8) != 0 ||
+        memcmp(h + 12, "IHDR", 4) != 0)
+        return 0;
+    long w  = ((long)h[16] << 24) | (h[17] << 16) | (h[18] << 8) | h[19];
+    long hh = ((long)h[20] << 24) | (h[21] << 16) | (h[22] << 8) | h[23];
+    long m  = w > hh ? w : hh;
+    return m > 65535 ? 65535 : (int)m;
+}
+
+/* The best hit the walk has found that is SMALLER than what was asked for —
+ * kept, not decoded, in case nothing big enough turns up. */
+typedef struct {
+    char path[512];
+    int  px;        /* its natural size; -1 while there is none */
+} icon_small_t;
+
+/* A vector drawn for this size or smaller is a toolbar GLYPH, not an icon:
+ * breeze's actions/24, status/24 and devices/24 are flat one-colour line
+ * drawings, near-black, and scaled into a tile on a dark page they are close
+ * to invisible. From 32 up its directories hold full-colour pictures. */
+#define ICON_SVG_GLYPH_MAX 24
+
+/*
+ * One candidate in the walk: the decode if it is good enough to stop on,
+ * otherwise NULL — and a file that exists but is too small is recorded in
+ * `small` for the end of the walk instead. `nominal` is the size the file's
+ * directory is for, 0 when that is scalable/ or not known.
+ *
+ * ⚠ THIS IS WHAT LETS A LATER THEME WIN. The walk is theme-major, so without
+ * it the first theme to have the name at ANY size won outright: AdwaitaLegacy
+ * carries `accessories-calculator` and `preferences-system` at 48px and
+ * nothing larger, it is searched before breeze, and breeze has both as
+ * vectors — so the application grid drew a 48px picture into a 96px tile at
+ * 1080p and a 192px one at 4K. A PNG is big enough when its own header says
+ * it is at least `px`; an SVG is unless its directory marks it a glyph. When
+ * nothing is, the largest small one is drawn, which is the same file the walk
+ * returned before whenever there was only one.
+ */
+static cairo_surface_t *icon_try_candidate(const char *path, int px,
+                                           int nominal, icon_small_t *small)
+{
+    if (access(path, R_OK) != 0) return NULL;
+    size_t len = strlen(path);
+    bool svg = len > 4 && strcasecmp(path + len - 4, ".svg") == 0;
+    int natural = svg ? (nominal > 0 && nominal <= ICON_SVG_GLYPH_MAX ? nominal : px)
+                      : png_natural_px(path);
+    if (natural < px) {
+        if (natural > small->px) {
+            snprintf(small->path, sizeof(small->path), "%s", path);
+            small->px = natural;
+        }
+        return NULL;
+    }
+    return try_icon_file(path, px);
+}
+
 /*
  * ── Where icon themes live ──────────────────────────────────────────────────
  *
@@ -451,6 +518,7 @@ static struct {
     char path[448];
     bool png;          /* false under scalable/, which is SVG-only */
     bool svg_first;    /* the inverted layout probed .svg ahead of .png */
+    int  nominal;      /* the size the directory is for; 0 under scalable/ */
 } g_icon_dirs[ICON_DIRS_MAX];
 static int g_icon_dirs_count = -1;
 /* Cheap fingerprint of the indexed set, so a rebuild can answer "did anything
@@ -463,7 +531,8 @@ static bool is_dir(const char *path)
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-static void icon_dirs_add(const char *path, bool png, bool svg_first)
+static void icon_dirs_add(const char *path, bool png, bool svg_first,
+                          int nominal)
 {
     if (!is_dir(path)) return;
     if (g_icon_dirs_count >= ICON_DIRS_MAX) {
@@ -481,6 +550,7 @@ static void icon_dirs_add(const char *path, bool png, bool svg_first)
     snprintf(g_icon_dirs[g_icon_dirs_count].path,
              sizeof(g_icon_dirs[0].path), "%s", path);
     g_icon_dirs[g_icon_dirs_count].png       = png;
+    g_icon_dirs[g_icon_dirs_count].nominal   = nominal;
     g_icon_dirs[g_icon_dirs_count++].svg_first = svg_first;
 }
 
@@ -518,6 +588,12 @@ static void icon_dirs_build(void)
      * fallbacks, hicolor last because it is the per-application drop rather than
      * a designed set — an app that ships both usually wants its own, and gets
      * it, because `apps` is the first category tried at every size.
+     *
+     * ⚠ "FIRST HIT" MEANS FIRST BIG-ENOUGH HIT. A theme earlier in this list
+     * that has the name only at a size smaller than the caller asked for gives
+     * way to a later one that has it as a vector or a large raster — see
+     * icon_try_candidate(). The order still decides between two that are both
+     * good enough, and between two that are both too small.
      */
     const char *themes[6];
     int nthemes = 0;
@@ -583,17 +659,18 @@ static void icon_dirs_build(void)
 
             for (size_t z = 0; z < sizeof(sizes) / sizeof(sizes[0]); z++) {
                 bool scalable = strcmp(sizes[z].sized, "scalable") == 0;
+                int nominal = scalable ? 0 : atoi(sizes[z].bare);
                 for (size_t c = 0; c < sizeof(cats) / sizeof(cats[0]); c++) {
                     /* <theme>/<size>/<category>/ — the spec's layout. */
                     snprintf(path, sizeof(path), "%s/%s/%s/%s",
                              g_icon_roots[r], themes[t], sizes[z].sized, cats[c]);
-                    icon_dirs_add(path, !scalable, false);
+                    icon_dirs_add(path, !scalable, false, nominal);
 
                     /* <theme>/<category>/<size>/ — breeze's, the other way up
                      * and with the size spelt as a bare number. */
                     snprintf(path, sizeof(path), "%s/%s/%s/%s",
                              g_icon_roots[r], themes[t], cats[c], sizes[z].bare);
-                    icon_dirs_add(path, !scalable, true);
+                    icon_dirs_add(path, !scalable, true, nominal);
                 }
             }
         }
@@ -646,6 +723,7 @@ static void icon_dirs_flush(void)
 static cairo_surface_t *icon_scan_dirs(const char *name, int px)
 {
     char path[512];
+    icon_small_t small = { .path = "", .px = -1 };
     for (int i = 0; i < g_icon_dirs_count; i++) {
         cairo_surface_t *s;
         /* ⚠ THE TWO LAYOUTS DISAGREE ABOUT WHICH EXTENSION COMES FIRST, and the
@@ -659,31 +737,35 @@ static cairo_surface_t *icon_scan_dirs(const char *name, int px)
          * (there is not, under scalable/). */
         if (g_icon_dirs[i].svg_first) {
             snprintf(path, sizeof(path), "%s/%s.svg", g_icon_dirs[i].path, name);
-            s = try_icon_file(path, px);
+            s = icon_try_candidate(path, px, g_icon_dirs[i].nominal, &small);
             if (s) return s;
             if (g_icon_dirs[i].png) {
                 snprintf(path, sizeof(path), "%s/%s.png", g_icon_dirs[i].path, name);
-                s = try_icon_file(path, px);
+                s = icon_try_candidate(path, px, g_icon_dirs[i].nominal, &small);
                 if (s) return s;
             }
         } else {
             if (g_icon_dirs[i].png) {
                 snprintf(path, sizeof(path), "%s/%s.png", g_icon_dirs[i].path, name);
-                s = try_icon_file(path, px);
+                s = icon_try_candidate(path, px, g_icon_dirs[i].nominal, &small);
                 if (s) return s;
             }
             snprintf(path, sizeof(path), "%s/%s.svg", g_icon_dirs[i].path, name);
-            s = try_icon_file(path, px);
+            s = icon_try_candidate(path, px, g_icon_dirs[i].nominal, &small);
             if (s) return s;
         }
     }
 
     /* The legacy drop, which belongs to no theme at all. */
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.png", name);
-    cairo_surface_t *s = try_icon_file(path, px);
+    cairo_surface_t *s = icon_try_candidate(path, px, 0, &small);
     if (s) return s;
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.svg", name);
-    return try_icon_file(path, px);
+    s = icon_try_candidate(path, px, 0, &small);
+    if (s) return s;
+
+    /* Nothing big enough anywhere: the biggest of what there was. */
+    return small.path[0] ? try_icon_file(small.path, px) : NULL;
 }
 
 static cairo_surface_t *find_and_decode_icon(const char *name, int px)
