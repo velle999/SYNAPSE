@@ -1288,11 +1288,19 @@ static bool music_headless(void)
 /* ── The web services that have no application here ──────────────────────── */
 
 /*
- * Twitch, YouTube and Spotify ship no Linux desktop application worth putting
- * on a television — Spotify's is a browser in a wrapper, and the other two are
- * a web page and nothing else. What a ten-foot interface can do is open the
- * site the way an application would: one window, no tab strip, no address bar,
- * full screen, and the controller acting as the mouse and keyboard it needs.
+ * Twitch, YouTube, Spotify, Netflix and Paramount+ ship no Linux desktop
+ * application worth putting on a television — Spotify's is a browser in a
+ * wrapper, and the rest are a web page and nothing else. What a ten-foot
+ * interface can do is open the site the way an application would: one window,
+ * no tab strip, no address bar, full screen, and the controller acting as the
+ * mouse and keyboard it needs.
+ *
+ * ⚠ NETFLIX AND PARAMOUNT+ PLAY ONLY WITH DRM, which is the browser's and not
+ * ours. Firefox downloads the Widevine module by itself — the packaged prefs
+ * ship `media.gmp-widevinecdm.enabled` true — into the profile these tiles
+ * open, so nothing is set up here. Neither has a television interface at a
+ * URL the way youtube.com/tv is, so both open the desktop site like Twitch and
+ * Spotify, not a tv_open() profile.
  *
  * ⚠ pointer AND keys, BOTH true, and this is the trap the Plex tile fell into.
  * Those two columns are what tell the shell to bring up the controller-mouse
@@ -1305,9 +1313,13 @@ static bool music_headless(void)
  * means all of them, since somebody who never opens Twitch loses nothing by a
  * tile they do not press, and somebody who wants it gone can say so.
  *
- *   webapps = twitch,youtube      Spotify off
- *   webapps = none                all three off
- *   (unset)                       all three on
+ *   webapps = twitch,youtube      the other three off
+ *   webapps = none                all of them off
+ *   (unset)                       all of them on
+ *
+ * ⚠ So a service added to the table arrives ON where the line is unset and
+ * OFF where somebody has written a list — the list is what they chose, and a
+ * service they never saw is not in it.
  */
 struct webapp {
 	const char *id;
@@ -1316,9 +1328,11 @@ struct webapp {
 };
 
 static const struct webapp webapps[] = {
-	{ "twitch",  "Twitch",  "https://www.twitch.tv/" },
-	{ "youtube", "YouTube", "https://www.youtube.com/" },
-	{ "spotify", "Spotify", "https://open.spotify.com/" },
+	{ "twitch",    "Twitch",     "https://www.twitch.tv/" },
+	{ "youtube",   "YouTube",    "https://www.youtube.com/" },
+	{ "spotify",   "Spotify",    "https://open.spotify.com/" },
+	{ "netflix",   "Netflix",    "https://www.netflix.com/" },
+	{ "paramount", "Paramount+", "https://www.paramountplus.com/" },
 };
 #define WEBAPPS_N ((int)(sizeof(webapps) / sizeof(webapps[0])))
 
@@ -1365,9 +1379,9 @@ static bool webapp_enabled(const char *id)
  * chrome around it. Refusing to build the command would be a missing tile.
  *
  * ⛔ ONE BUFFER PER ENTRY, and NOT the single static icon_file() uses. The
- * caller builds all three rows in one loop and keeps every pointer, so a shared
- * buffer would leave Twitch and YouTube both holding the Spotify command — three
- * tiles that all open the same site, which looks like the sites being wrong.
+ * caller builds every row in one loop and keeps every pointer, so a shared
+ * buffer would leave Twitch and YouTube both holding the last command — tiles
+ * that all open the same site, which looks like the sites being wrong.
  * Keyed on the index rather than strdup'd so there is nothing to free.
  */
 static const char *webapp_cmd(int i)
@@ -1656,11 +1670,12 @@ static int apps_table(struct row *rows, int max)
 }
 
 /* ⚠ RAISED WITH THE WEBAPP TILES. apps_table() writes into a caller array of
- * this size and the three web services are three more rows on a machine that
+ * this size and the five web services are five more rows on a machine that
  * already had Steam, Heroic, Lutris, RetroArch, Moonlight, Greenlight, GFN,
- * music, Kodi, Plex, Jellyfin, the browser, a terminal and five system rows. It
- * is a stack array with no bounds check on the writes; overflowing it would
- * corrupt the caller's frame rather than drop a tile. */
+ * music, a disc, Kodi, Plex, Jellyfin, the browser, a terminal, Controllers,
+ * the Visualizer and five system rows — 26 at most, counted when Netflix and
+ * Paramount+ came. It is a stack array with no bounds check on the writes;
+ * overflowing it would corrupt the caller's frame rather than drop a tile. */
 #define APPS_MAX 40
 
 static int big_apps(bool rec)
@@ -10427,7 +10442,7 @@ static int big_settings(const char *id, const char *val, bool rec)
  *
  * The record carries `installed` so the window can say WHY a tile is missing.
  * Without a browser there is nothing to open these in, and a settings panel
- * offering three switches that do nothing is worse than one that explains
+ * offering switches that do nothing is worse than one that explains
  * itself.
  */
 static int big_webapps(const char *id, const char *onoff, bool rec)
@@ -10444,7 +10459,7 @@ static int big_webapps(const char *id, const char *onoff, bool rec)
 			return EX_OK;
 		}
 		for (int i = 0; i < WEBAPPS_N; i++)
-			printf("  %-8s %s\n", webapps[i].id,
+			printf("  %-10s %s\n", webapps[i].id,
 			       webapp_enabled(webapps[i].id) ? "on" : "off");
 		if (!br)
 			printf(_("  (no browser installed — these tiles cannot "
@@ -10901,7 +10916,7 @@ int cmd_big(int argc, char **argv)
 		return big_background(first_operand(rest_c, rest), rec,
 				      opt_present(rest_c, rest, "--path"));
 	/* Two operands, unlike every other setting verb here: which one, and
-	 * whether it is on. `big webapps` alone reports all three. */
+	 * whether it is on. `big webapps` alone reports all of them. */
 	if (!strcmp(sub, "webapps"))
 		return big_webapps(first_operand(rest_c, rest),
 				   second_operand(rest_c, rest), rec);

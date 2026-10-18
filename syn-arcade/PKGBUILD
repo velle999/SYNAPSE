@@ -1487,7 +1487,18 @@ pkgver=0.1.0
 #   `b` and chooses the key from the focused window: Escape when it is the
 #   browser tv_open() started on YouTube's profile, XF86Back for everything
 #   else (Jellyfin follows it, and Escape would leave fullscreen in mpv).
-pkgrel=64
+# 65: NETFLIX AND PARAMOUNT+ ARE WEB APPS. Two more rows in the table behind
+#   `big webapps` and the Web apps switches in the Big screen tab: a tile each
+#   on the media shelf, opened like Twitch — the browser full screen with no
+#   chrome, the controller as its mouse and keyboard — with a drawn glyph each.
+#   Both need DRM, which is the browser's: Firefox downloads Widevine by itself
+#   into the profile the tiles open. Neither has a television interface at a
+#   URL the way youtube.com/tv is, so both open the desktop site.
+#   ⚠ ON WHERE `webapps` IS UNSET, OFF WHERE A LIST IS WRITTEN — a list is what
+#   somebody chose, and these two were not on offer when they chose it.
+#   The switches wrap now (a Flow, like the Shelves row): five chips at a large
+#   text scale are wider than a narrow window.
+pkgrel=65
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

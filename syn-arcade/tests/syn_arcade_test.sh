@@ -5501,23 +5501,46 @@ echo "── web apps ──"
 wa() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big webapps "$@" 2>&1; }
 apps() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big apps --rec 2>/dev/null; }
 
+# Every id in the webapps[] table in src/big.c. A row added there and not here
+# goes untested — the loops below are the only check that it has a tile, the
+# pointer and keys columns, and a drawing.
+WEBAPP_IDS="twitch youtube spotify netflix paramount"
+
 rm -f "$BGH/syn-arcade/big.conf"
-for id in twitch youtube spotify; do
+for id in $WEBAPP_IDS; do
     case "$(wa)" in
         *"$id"*on*) ok "$id is on by default" ;;
         *) bad "$id is not on with no setting written: $(wa)" ;;
     esac
 done
+waids=$(wa | awk '$2 == "on" || $2 == "off" { printf "%s%s", s, $1; s = " " }')
+[ "$waids" = "$WEBAPP_IDS" ] \
+    && ok "the table and this list name the same web apps" \
+    || bad "big webapps lists '$waids', this suite tests '$WEBAPP_IDS'"
+
+# A list written before a service was in the table is what somebody chose, and
+# the new service was not on offer: it stays off until switched on.
+mkdir -p "$BGH/syn-arcade"
+printf 'webapps = twitch,youtube\n' > "$BGH/syn-arcade/big.conf"
+wastate() { printf '%s' "$(wa)" | awk -v i="$1" '$1 == i {print $2}'; }
+[ "$(wastate netflix)" = off ] && [ "$(wastate paramount)" = off ] \
+    && [ "$(wastate youtube)" = on ] \
+    && ok "an older written list leaves Netflix and Paramount+ off" \
+    || bad "an older list changed meaning: $(wa)"
+wa paramount on >/dev/null
+has "^webapps = twitch,youtube,paramount$" "$BGH/syn-arcade/big.conf" \
+    && ok "…and switching one on adds it to the list" \
+    || bad "paramount on wrote: $(cat "$BGH/syn-arcade/big.conf")"
+rm -f "$BGH/syn-arcade/big.conf"
 
 # ⛔ THE LAST ONE OFF MUST WRITE `none`, NEVER AN EMPTY VALUE. big_conf_get
 # ignores an assignment with nothing after the `=`, so an empty list reads back
-# as UNSET — which is all three ON, the exact opposite of what switching the
+# as UNSET — which is all of them ON, the exact opposite of what switching the
 # last one off asked for.
-for id in twitch youtube spotify; do wa "$id" off >/dev/null; done
+for id in $WEBAPP_IDS; do wa "$id" off >/dev/null; done
 has "^webapps = none$" "$BGH/syn-arcade/big.conf" \
     && ok "switching the last one off writes 'none', not an empty value" \
     || bad "the empty list was written back: $(cat "$BGH/syn-arcade/big.conf")"
-wastate() { printf '%s' "$(wa)" | awk -v i="$1" '$1 == i {print $2}'; }
 [ "$(wastate twitch)" = off ] \
     && ok "…and it reads back as off rather than defaulting on again" \
     || bad "'none' read back as the unset default"
@@ -5532,10 +5555,10 @@ wa youtube on >/dev/null
 # ⛔ pointer AND keys ON EVERY WEB TILE. This is the Plex tile's bug: a row
 # without those columns is a browser on a television with no mouse and no
 # keyboard, which looks like the site being broken rather than the tile.
-for id in twitch youtube spotify; do wa "$id" on >/dev/null; done
+for id in $WEBAPP_IDS; do wa "$id" on >/dev/null; done
 APPSREC=$(apps)
 if printf '%s' "$APPSREC" | cut -f1 | grep -Fxq twitch; then
-    for id in twitch youtube spotify; do
+    for id in $WEBAPP_IDS; do
         row=$(printf '%s\n' "$APPSREC" | awk -F'\t' -v i="$id" '$1 == i')
         if [ -z "$row" ]; then
             bad "$id has no row in \`big apps\` with a browser installed"

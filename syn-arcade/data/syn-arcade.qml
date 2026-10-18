@@ -2131,12 +2131,12 @@ FloatingWindow {
                             wrapMode: Text.WordWrap
                         }
 
-                        // ⚠ The three web services, and `installed` is why the
-                        // record carries a fourth column. Twitch, YouTube and
-                        // Spotify are opened in a browser told to behave like an
-                        // application; with no browser on the machine there is
-                        // nothing to open them in, and three switches that quietly
-                        // do nothing are worse than three that say why.
+                        // ⚠ The web services, and `installed` is why the record
+                        // carries a fourth column. Twitch, YouTube, Spotify,
+                        // Netflix and Paramount+ are opened in a browser told to
+                        // behave like an application; with no browser on the
+                        // machine there is nothing to open them in, and switches
+                        // that quietly do nothing are worse than ones that say why.
                         Text {
                             Layout.topMargin: 8
                             text: I18n.tr("Web apps")
@@ -2156,7 +2156,10 @@ FloatingWindow {
                             font.family: root.uiFont
                             wrapMode: Text.WordWrap
                         }
-                        RowLayout {
+                        // A Flow like the Shelves row below, not a RowLayout:
+                        // five chips at a large text scale are wider than a
+                        // narrow window, and a row would run off its edge.
+                        Flow {
                             Layout.fillWidth: true
                             spacing: 6
                             Repeater {
@@ -2174,7 +2177,6 @@ FloatingWindow {
                                         modelData.current === "on" ? "off" : "on"])
                                 }
                             }
-                            Item { Layout.fillWidth: true }
                         }
                         Text {
                             Layout.fillWidth: true

@@ -151,6 +151,8 @@ install_data(
   'data/icons/twitch.svg',
   'data/icons/youtube.svg',
   'data/icons/spotify.svg',
+  'data/icons/netflix.svg',
+  'data/icons/paramount.svg',
   'data/icons/firefox.svg',
   'data/icons/terminal.svg',
   'data/icons/syn-arcade.svg',
