@@ -697,7 +697,7 @@ static int tv_open(int site, const char *url, bool wait_for_it);
 /* Whether a shelf or a Start menu row is switched on — the settings table is
  * further down this file, and apps_table() is the first thing that asks. */
 static bool setting_shown(const char *key);
-static bool media_url(const char *id, char *out, size_t n);
+static bool media_url_live(const char *id, char *out, size_t n);
 
 static bool have(const char *prog)
 {
@@ -2622,7 +2622,7 @@ static int big_run(const char *id, bool wait_for_it)
 	 * try what a Plex server serves a television. */
 	if (strncmp(id, "plex-", 5) == 0 || strncmp(id, "jellyfin-", 9) == 0) {
 		char url[512];
-		if (media_url(id, url, sizeof(url))) {
+		if (media_url_live(id, url, sizeof(url))) {
 			if (strncmp(id, "jellyfin-", 9) == 0) {
 				int rc = tv_open(TV_JELLYFIN, url, wait_for_it);
 				if (rc != TV_NO_FORM)
@@ -3205,6 +3205,67 @@ static bool port_open(const char *host, int port, int ms)
 	return ok;
 }
 
+/* The port out of "http://192.168.1.50:32400/web", or the scheme's own. */
+static int url_port(const char *url)
+{
+	bool tls = strncmp(url, "https://", 8) == 0;
+	const char *p = strstr(url, "://");
+	p = p ? p + 3 : url;
+	p += strcspn(p, ":/");
+
+	int port = *p == ':' ? atoi(p + 1) : 0;
+	return port > 0 && port < 65536 ? port : (tls ? 443 : 80);
+}
+
+/*
+ * A server on THIS machine is opened on loopback, whatever address it
+ * announced itself with.
+ *
+ * ⚠ A SERVER ANNOUNCES WHICHEVER INTERFACE IT PICKED, AND A VPN TUNNEL IS ONE.
+ * Jellyfin's reply carries an "Address" naming one of its own interfaces, and
+ * with a VPN connected that was the tunnel's. The tile cached it, the VPN was
+ * not up after the next boot, and pressing Jellyfin opened a page that could
+ * not connect to a server that had been running the whole time. Loopback is
+ * the one address this machine has whichever networks are up — and since the
+ * browser keeps a sign-in per address, a stable one is also what keeps the
+ * television signed in.
+ *
+ * Only when loopback answers on that port, since a server can be told to bind
+ * one interface and nothing else. And http only: an https URL names the host
+ * its certificate was issued for, and 127.0.0.1 is not it.
+ */
+static void local_url(char *url, size_t n)
+{
+	char host[128];
+	if (strncmp(url, "http://", 7) != 0 ||
+	    !url_host(url, host, sizeof(host)) ||
+	    strcmp(host, "127.0.0.1") == 0 || !addr_is_local(host) ||
+	    !port_open("127.0.0.1", url_port(url), 200))
+		return;
+
+	static const char lo[] = "http://127.0.0.1";
+	const char *rest = url + 7 + strlen(host);
+	size_t want = sizeof(lo) - 1 + strlen(rest);
+	if (want >= n)
+		return;			/* would not fit: the announced one does */
+
+	memmove(url + sizeof(lo) - 1, rest, strlen(rest) + 1);
+	memcpy(url, lo, sizeof(lo) - 1);
+}
+
+/* Does the server behind this URL answer at all? A name rather than an
+ * address says yes: resolving it is the browser's business, not a reason to
+ * hold up a press. */
+static bool url_answers(const char *url)
+{
+	char host[128];
+	struct in_addr a;
+	if (!url_host(url, host, sizeof(host)) ||
+	    inet_pton(AF_INET, host, &a) != 1)
+		return true;
+	return port_open(host, url_port(url), 300);
+}
+
 #define DISCOVER_MS 900
 
 static int media_discover(server_t *out, int max)
@@ -3295,6 +3356,7 @@ static int media_discover(server_t *out, int max)
 					char url[256];
 					snprintf(url, sizeof(url), "http://%s:%s/web",
 						 ip, port);
+					local_url(url, sizeof(url));
 					servers_add(out, &n, max, "plex", name, url);
 				}
 			}
@@ -3309,9 +3371,11 @@ static int media_discover(server_t *out, int max)
 				char name[128] = "Jellyfin", addr[256] = "";
 				json_str(buf, NULL, "Name", name, sizeof(name));
 				if (json_str(buf, NULL, "Address", addr, sizeof(addr)) &&
-				    url_ok(addr))
+				    url_ok(addr)) {
+					local_url(addr, sizeof(addr));
 					servers_add(out, &n, max, "jellyfin",
 						    name, addr);
+				}
 			}
 		}
 	}
@@ -3377,51 +3441,14 @@ static bool cache_has_pointer(const char *path)
 }
 
 /*
- * The media servers, from the cache or from the network.
+ * Look again, and remember what was found.
  *
- * Cached because this is on the path of drawing a screen. Nine hundred
- * milliseconds is nothing when somebody asks for it and everything when it
- * happens every time the television comes on; the shell asks for the cached
- * answer immediately and refreshes behind it.
+ * Returns the records exactly as they were cached, for the caller to print and
+ * free, or NULL when they could not be built at all.
  */
-static int big_media(bool rec, bool refresh)
+static char *media_rescan(const char *path, server_t *found, int *n)
 {
-	char path[4096];
-	if (!cache_path(path, sizeof(path), "media.tsv"))
-		return EX_FAIL;
-
-	long age = file_age(path);
-	if (!refresh && age >= 0 && age < MEDIA_TTL && cache_has_pointer(path)) {
-		if (rec) {
-			if (cache_print(path))
-				return EX_OK;
-		} else {
-			char *text = read_file(path);
-			if (text) {
-				/* The cache is records; print them as prose. */
-				char *save = NULL;
-				int row = 0;
-				for (char *ln = strtok_r(text, "\n", &save); ln;
-				     ln = strtok_r(NULL, "\n", &save)) {
-					if (row++ == 0)
-						continue;	/* the header */
-					char *tab = strchr(ln, '\t');
-					if (!tab) continue;
-					*tab = '\0';
-					char *name = pct_decode(tab + 1);
-					char *tab2 = strchr(name, '\t');
-					if (tab2) *tab2 = '\0';
-					printf("%-12s %s\n", ln, name);
-					free(name);
-				}
-				free(text);
-				return EX_OK;
-			}
-		}
-	}
-
-	server_t found[MEDIA_MAX];
-	int n = media_discover(found, MEDIA_MAX);
+	*n = media_discover(found, MEDIA_MAX);
 
 	/* Built into a string first, so the same text is both printed and
 	 * cached and the two cannot drift. */
@@ -3467,7 +3494,7 @@ static int big_media(bool rec, bool refresh)
 		 * it. Ten minutes, not a reinstall. */
 		rec_frow(mem, 8, "id", "name", "url", "source", "kind",
 			 "iconfile", "pointer", "keys");
-		for (int i = 0; i < n; i++)
+		for (int i = 0; i < *n; i++)
 			rec_frow(mem, 8, found[i].id, found[i].name,
 				 found[i].url, found[i].source, "server",
 				 icon_file(found[i].source), "1", "1");
@@ -3480,6 +3507,56 @@ static int big_media(bool rec, bool refresh)
 		mkdir_parents(path);
 		write_file_inplace(path, buf);
 	}
+	return buf;
+}
+
+/*
+ * The media servers, from the cache or from the network.
+ *
+ * Cached because this is on the path of drawing a screen. Nine hundred
+ * milliseconds is nothing when somebody asks for it and everything when it
+ * happens every time the television comes on; the shell asks for the cached
+ * answer immediately and refreshes behind it.
+ */
+static int big_media(bool rec, bool refresh)
+{
+	char path[4096];
+	if (!cache_path(path, sizeof(path), "media.tsv"))
+		return EX_FAIL;
+
+	long age = file_age(path);
+	if (!refresh && age >= 0 && age < MEDIA_TTL && cache_has_pointer(path)) {
+		if (rec) {
+			if (cache_print(path))
+				return EX_OK;
+		} else {
+			char *text = read_file(path);
+			if (text) {
+				/* The cache is records; print them as prose. */
+				char *save = NULL;
+				int row = 0;
+				for (char *ln = strtok_r(text, "\n", &save); ln;
+				     ln = strtok_r(NULL, "\n", &save)) {
+					if (row++ == 0)
+						continue;	/* the header */
+					char *tab = strchr(ln, '\t');
+					if (!tab) continue;
+					*tab = '\0';
+					char *name = pct_decode(tab + 1);
+					char *tab2 = strchr(name, '\t');
+					if (tab2) *tab2 = '\0';
+					printf("%-12s %s\n", ln, name);
+					free(name);
+				}
+				free(text);
+				return EX_OK;
+			}
+		}
+	}
+
+	server_t found[MEDIA_MAX];
+	int n = 0;
+	char *buf = media_rescan(path, found, &n);
 
 	if (rec) {
 		if (buf)
@@ -3539,6 +3616,40 @@ static bool media_url(const char *id, char *out, size_t n)
 
 	free(text);
 	return hit;
+}
+
+/*
+ * The URL behind a media tile, as `big run` opens it: out of the cache, and
+ * looked for again if the cached address does not answer.
+ *
+ * ⚠ THE CACHE OUTLIVES THE ADDRESS. A server's address can go away underneath
+ * it — a VPN tunnel that is not up after a reboot, a lease that changed — and
+ * the shell draws the shelf from the cache first. Without this the press opens
+ * a page that cannot connect, for up to MEDIA_TTL, to a server that is running.
+ *
+ * Looked up again by id, which is what the shelf pressed. Ids are numbered in
+ * the order servers answer, so with two servers of one kind a rescan can
+ * renumber them; it costs one look on a dead address, never one on a live one.
+ * A rescan that does not find the id opens the old URL rather than nothing.
+ */
+static bool media_url_live(const char *id, char *out, size_t n)
+{
+	if (!media_url(id, out, n))
+		return false;
+	if (url_answers(out))
+		return true;
+
+	char path[4096];
+	if (cache_path(path, sizeof(path), "media.tsv")) {
+		server_t found[MEDIA_MAX];
+		int count = 0;
+		free(media_rescan(path, found, &count));
+	}
+
+	char again[512];
+	if (media_url(id, again, sizeof(again)))
+		snprintf(out, n, "%s", again);
+	return true;
 }
 
 /* ── music, driven rather than launched ──────────────────────────────────── */

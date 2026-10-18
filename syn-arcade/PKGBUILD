@@ -1464,7 +1464,22 @@ pkgver=0.1.0
 #   action Super+Q runs. ⚠ TWICE, NEVER ONCE: everywhere else in big screen
 #   mode a close is confirmed, and the second press is the confirmation. A
 #   single press still reaches the application as Delete.
-pkgrel=62
+# 63: A JELLYFIN ON THIS MACHINE OPENS ON LOOPBACK, AND A DEAD ADDRESS IS
+#   LOOKED FOR AGAIN. Jellyfin answers the discovery broadcast with the address
+#   of whichever interface it picked, and with a VPN connected that was the
+#   tunnel's. The tile cached it; after a reboot the VPN was not up, and pressing
+#   Jellyfin opened "unable to connect" to a server that was running.
+#   A server that answers from one of this machine's own addresses is now cached
+#   as http://127.0.0.1:<port>, the one address that does not come and go with
+#   the networks — for Plex's GDM reply too. ⚠ Only when loopback answers on
+#   that port, and only for http: an https URL names its certificate's host.
+#   ⚠ THE TELEVISION PROFILE SIGNS IN ONCE MORE. The browser keeps a sign-in per
+#   address, so the first press after this update asks for Quick Connect again.
+#   And `big run` checks a server tile's cached address before opening it: one
+#   that does not answer is rediscovered first, so a cache written before this
+#   build, or an address a remote server has since left, does not open a page
+#   that cannot connect for up to MEDIA_TTL.
+pkgrel=63
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

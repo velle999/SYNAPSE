@@ -1872,6 +1872,25 @@ check "...and does not probe localhost for a Plex it already found here" $?
 grep -q '!have_local_server(out, n, "jellyfin") &&' src/big.c
 check "...nor for a Jellyfin" $?
 
+# ── a server on this machine, under an address that went away ──────────────
+#
+# ⚠ A SERVER ANNOUNCES WHICHEVER INTERFACE IT PICKED, AND A VPN TUNNEL IS ONE.
+# Jellyfin answered the broadcast with the tunnel's address, the tile cached it,
+# and after a reboot without the VPN pressing Jellyfin opened "unable to
+# connect" to a server that was running. Structural for the reason above: no
+# server answers in here. Proven live, where `big media --refresh` with the VPN
+# down cached http://127.0.0.1:8096 for the server's own reply.
+grep -q 'local_url(addr, sizeof(addr));' src/big.c
+check "a Jellyfin found on this machine is opened on loopback" $?
+
+grep -q 'local_url(url, sizeof(url));' src/big.c
+check "...and so is a Plex" $?
+
+# The cache written by an older build still holds the dead address, and the
+# shell draws from the cache first. So the press itself checks.
+grep -q 'if (media_url_live(id, url, sizeof(url)))' src/big.c
+check "a server tile whose cached address is dead is looked for again" $?
+
 printf 'id\tname\turl\tsource\tkind\nplex-1\tLiving%%20Room\thttps://example.com:32400/web\tplex\tserver\n' \
     > "$XDG_CACHE_HOME/syn-arcade/media.tsv"
 
