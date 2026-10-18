@@ -3019,6 +3019,41 @@ static int tv_open(int site, const char *url, bool wait_for_it)
 	return spawn_wait(argv, true, false);
 }
 
+/*
+ * Whether a process is the browser tv_open() started for `site`.
+ *
+ * ⚠ TOLD BY THE PROFILE ON ITS COMMAND LINE, which tv_open() always passes —
+ * `--profile <dir>` to Firefox, `--user-data-dir=<dir>` to the Blink browsers —
+ * and which nothing else on the machine runs out of. Not by app_id, which is
+ * "firefox" for the person's own browser as well, and not by the title, which
+ * the page writes.
+ */
+static bool tv_process(long pid, int site)
+{
+	char rel[64], want[SYN_PATH];
+	snprintf(rel, sizeof(rel), "syn-arcade/%s-", tv_sites[site].name);
+	if (pid <= 1 || !data_path(want, sizeof(want), rel))
+		return false;
+
+	char path[64];
+	snprintf(path, sizeof(path), "/proc/%ld/cmdline", pid);
+	int fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return false;
+
+	/* NUL-separated, hence memmem and not read_file's string. */
+	char buf[16384];
+	size_t len = 0;
+	ssize_t r;
+	while (len < sizeof(buf) &&
+	       ((r = read(fd, buf + len, sizeof(buf) - len)) > 0 ||
+		(r < 0 && errno == EINTR)))
+		if (r > 0)
+			len += (size_t)r;
+	close(fd);
+	return memmem(buf, len, want, strlen(want)) != NULL;
+}
+
 /* ── media servers on the network ────────────────────────────────────────── */
 
 /*
@@ -8893,6 +8928,8 @@ static int big_news(bool rec, bool refresh)
  *   t <percent-encoded text>   type it literally
  *   k <keysym>                 press one key by XKB name — Return, BackSpace
  *   c <keysym>                 the same with ctrl held — c l is Ctrl+L
+ *   b                          Back, in the key the window in front takes for
+ *                              it — see back_keysym()
  */
 static bool keysym_ok(const char *s)
 {
@@ -8902,6 +8939,31 @@ static bool keysym_ok(const char *s)
 		if (!isalnum((unsigned char)*p) && *p != '_')
 			return false;
 	return true;
+}
+
+/*
+ * What Back is to the window in front.
+ *
+ * XF86Back, the browser's own back key, for everything but one: Firefox goes
+ * back a page on it and Jellyfin's television interface follows.
+ *
+ * ⛔ NOT YOUTUBE'S. Firefox on Linux delivers XF86Back as key "BrowserBack"
+ * with keyCode 0, and YouTube's television interface goes by keyCode — its
+ * table has 166 for BrowserBack and nothing for 0. It claims the press and does
+ * nothing with it, while Firefox's own history step still runs: measured on a
+ * playing video, the address went back to the search and the video kept
+ * playing. Escape (27) is the back it obeys, from a video, from search and from
+ * a menu, and in kiosk mode Escape does not leave fullscreen.
+ *
+ * ⚠ ASKED OF THE WINDOW, not of the tile the shell launched. A window brought
+ * back from the Running shelf is known there only as "firefox".
+ */
+static const char *back_keysym(void)
+{
+	struct focus f;
+	if (focused_window(&f) && f.any && tv_process(f.pid, TV_YOUTUBE))
+		return "Escape";
+	return "XF86Back";
 }
 
 static int keys_stream(void)
@@ -8920,6 +8982,12 @@ static int keys_stream(void)
 
 		char verb = line[0];
 		char *arg = line[1] == ' ' ? line + 2 : NULL;
+		/* The one instruction with no argument: which key this is, is
+		 * this file's to decide. */
+		if (verb == 'b' && !line[1]) {
+			verb = 'k';
+			arg = (char *)back_keysym();
+		}
 		if (!arg || !*arg)
 			continue;
 

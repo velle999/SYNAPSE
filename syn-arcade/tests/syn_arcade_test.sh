@@ -6292,9 +6292,50 @@ has 'shell.key("Return")' "$BGH/navremote.qml" \
     || bad "the remote's OK types nothing"
 # ⛔ An MCE remote's Back is KEY_EXIT, which reaches a browser as "Close" and
 # which neither Jellyfin's nor YouTube's television interface acts on.
-has 'case "back":   shell.key("XF86Back")' "$BGH/navremote.qml" \
-    && ok "…and Back becomes XF86Back, the browser's own back key" \
+has 'case "back":   shell.back()' "$BGH/navremote.qml" \
+    && ok "…and Back goes to \`big keys\` to become a key" \
     || bad "the remote's Back does nothing in a browser"
+
+# ⛔ …AND WHICH KEY IS ASKED OF THE WINDOW IN FRONT. YouTube's television
+# interface ignores XF86Back — Firefox hands it keyCode 0 and the interface goes
+# by keyCode — and obeys Escape. Everything else goes back on XF86Back, and
+# Escape would leave fullscreen in mpv. A stub wtype logs the press, a stub
+# synctl names the focused pid, and each "browser" is a process with its
+# profile on the command line, the way tv_open() starts one.
+BKS="$T/backstub"; BKLOG="$T/back.log"
+mkdir -p "$BKS"
+cat > "$BKS/wtype" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$BKLOG"
+STUB
+cat > "$BKS/synctl" <<'STUB'
+#!/bin/sh
+[ "$1" = activewindow ] || exit 1
+printf '{"app_id":"firefox","title":"x","focused":true,"pid":%s}\n' "$BKPID"
+STUB
+chmod +x "$BKS/wtype" "$BKS/synctl"
+sh -c 'while :; do sleep 1; done' firefox --profile \
+    "$TVDATA/syn-arcade/tv-youtube-firefox" --kiosk </dev/null >/dev/null 2>&1 &
+YTPID=$!
+sh -c 'while :; do sleep 1; done' firefox --profile \
+    "$TVDATA/syn-arcade/tv-jellyfin-firefox" --kiosk </dev/null >/dev/null 2>&1 &
+JFPID=$!
+backkey() {
+    rm -f "$BKLOG"
+    printf 'b\n' | BKPID=$1 BKLOG="$BKLOG" PATH="$BKS:$PATH" \
+        XDG_DATA_HOME="$TVDATA" "$SA" big keys >/dev/null 2>&1
+    cat "$BKLOG" 2>/dev/null
+}
+[ "$(backkey "$YTPID")" = "-k Escape" ] \
+    && ok "with YouTube's television interface in front, Back is Escape" \
+    || bad "YouTube's television interface got: $(backkey "$YTPID")"
+[ "$(backkey "$JFPID")" = "-k XF86Back" ] \
+    && ok "…with Jellyfin's it is XF86Back" \
+    || bad "Jellyfin's television interface got: $(backkey "$JFPID")"
+[ "$(backkey 0)" = "-k XF86Back" ] \
+    && ok "…and with no window to ask about, XF86Back" \
+    || bad "with no window to ask about, Back typed: $(backkey 0)"
+kill "$YTPID" "$JFPID" 2>/dev/null; wait "$YTPID" "$JFPID" 2>/dev/null
 has 'case "clear":  shell.clearPressed()' "$BGH/navremote.qml" \
     && ok "…and Clear goes to the close-on-twice counter" \
     || bad "the remote's Clear is not wired to close"

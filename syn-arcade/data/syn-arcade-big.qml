@@ -939,6 +939,9 @@ ShellRoot {
     function type(s)  { if (keysProc.running) keysProc.write("t " + encodeURIComponent(s) + "\n") }
     function key(n)   { if (keysProc.running) keysProc.write("k " + n + "\n") }
     function ctrl(n)  { if (keysProc.running) keysProc.write("c " + n + "\n") }
+    // Back in whichever key the window in front takes for it; `big keys`
+    // decides, see back_keysym() in big.c.
+    function back()   { if (keysProc.running) keysProc.write("b\n") }
 
     // The layouts. Four rows of characters and one row of the keys that are
     // not characters — which is where Address (Ctrl+L) lives, because a
@@ -2858,8 +2861,8 @@ ShellRoot {
      *
      * ⚠ EACH OF THESE TURNS INTO SOMETHING THE THING IN FRONT UNDERSTANDS —
      * that is the entire job. OK becomes a Return, which is what a Blu-ray
-     * menu, a browser and a web player all take; Back becomes XF86Back, the
-     * browser's own back key; skip becomes a transport
+     * menu, a browser and a web player all take; Back becomes the back key of
+     * what is in front; skip becomes a transport
      * press, which for a disc is a CHAPTER (big.c drives mpv over its own
      * socket for exactly that reason) and for anything else is MPRIS.
      *
@@ -2875,11 +2878,12 @@ ShellRoot {
 
         switch (cmd) {
         case "accept": shell.key("Return"); break
-        // ⚠ XF86Back, NOT Escape. It is the key a remote with a real Back
-        // button sends, so it means the same here: Firefox goes back a page and
-        // Jellyfin's and YouTube's television interfaces both follow it.
-        // Escape would leave fullscreen in mpv.
-        case "back":   shell.key("XF86Back"); break
+        // ⚠ NOT ONE KEY FOR EVERYTHING. XF86Back is the key a remote with a
+        // real Back button sends, and Firefox and Jellyfin's television
+        // interface follow it — but YouTube's ignores it and obeys Escape, and
+        // Escape would leave fullscreen in mpv. `big keys` asks which window is
+        // in front; see back_keysym() in big.c.
+        case "back":   shell.back(); break
         case "next":   shell.mediaCmd("next"); break
         case "prev":   shell.mediaCmd("prev"); break
         // Both ways back, and the reason there are two: Guide is the button

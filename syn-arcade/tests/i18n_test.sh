@@ -68,7 +68,11 @@ export XDG_CACHE_HOME="$tmp/cache";   mkdir -p "$XDG_CACHE_HOME"
 export XDG_RUNTIME_DIR="$tmp/run";    mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 export MANGOHUD_CONFIGFILE="$tmp/config/MangoHud/MangoHud.conf"
 export SYN_ARCADE_NO_NET=1
-unset WAYLAND_DISPLAY DISPLAY 2>/dev/null || true
+# ⚠ SYNUI_SOCKET TOO: synctl goes straight to it, so the moved XDG_RUNTIME_DIR
+# alone left `big windows --rec` reading the live compositor — twice, and a
+# window title that changed between the C run and the German one failed the
+# diff.
+unset WAYLAND_DISPLAY DISPLAY SYNUI_SOCKET 2>/dev/null || true
 
 # ── 1. the template is current, and nothing was mangled making it ──────────
 err=$("$root/po/pot.sh" "$root" "$root/po" "$tmp" 2>&1 >/dev/null | grep -v '^ ' | grep -v 'warning:')

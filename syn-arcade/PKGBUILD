@@ -1479,7 +1479,15 @@ pkgver=0.1.0
 #   that does not answer is rediscovered first, so a cache written before this
 #   build, or an address a remote server has since left, does not open a page
 #   that cannot connect for up to MEDIA_TTL.
-pkgrel=63
+# 64: THE REMOTE'S BACK GOES BACK IN YOUTUBE. 62 typed XF86Back for it, which
+#   Firefox delivers as "BrowserBack" with keyCode 0 — and YouTube's television
+#   interface goes by keyCode, so it swallowed the press. Firefox's own history
+#   step still ran: on a playing video the address went back to the search and
+#   the video kept playing. Escape is the back it obeys. `big keys` now takes
+#   `b` and chooses the key from the focused window: Escape when it is the
+#   browser tv_open() started on YouTube's profile, XF86Back for everything
+#   else (Jellyfin follows it, and Escape would leave fullscreen in mpv).
+pkgrel=64
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
