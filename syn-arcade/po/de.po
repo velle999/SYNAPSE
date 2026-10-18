@@ -128,6 +128,9 @@ msgstr "Schreibtisch"
 msgid "Don't start at login"
 msgstr "Nicht beim Anmelden starten"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "Bearbeiten"
 
@@ -330,6 +333,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "Noch nichts eingepackt."
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "Großbild öffnen"
 
@@ -504,6 +513,9 @@ msgstr "Wechsel zu %1…"
 msgid "System"
 msgstr "System"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "Übernehmen"
 
@@ -534,6 +546,9 @@ msgstr "Es liegt keine Disc im Laufwerk"
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "Diese Disc ist verschlüsselt — zum Abspielen wird %1 benötigt"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -598,6 +613,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "Welches Spiel?"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1369,12 +1387,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1419,6 +1431,24 @@ msgstr "%s: an\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s: aus\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "erster Bildschirm"
@@ -1495,6 +1525,13 @@ msgstr "  Hintergrund    %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  Web-Apps       %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

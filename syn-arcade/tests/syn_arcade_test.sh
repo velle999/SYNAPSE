@@ -1453,7 +1453,10 @@ apps=$("$SA" big apps --rec)
 printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($10 == "iconfile") ? 0 : 1 }'
 check "apps --rec has the resolved glyph path in column ten" $?
 
-printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($NF == "transient") ? 0 : 1 }'
+printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($11 == "transient") ? 0 : 1 }'
+check "...transient in column eleven" $?
+
+printf '%s\n' "$apps" | awk -F'\t' 'NR==1 { exit ($NF == "hidden") ? 0 : 1 }'
 check "...and the newest column on the end, where new columns go" $?
 
 # ⚠ The PATH, checked for existence, not merely for being non-empty. An
@@ -5590,6 +5593,84 @@ if apps | cut -f1 | grep -Fxq spotify; then
 else
     ok "a switched-off web app has no tile at all"
 fi
+rm -f "$BGH/syn-arcade/big.conf"
+
+echo
+echo "── tiles switched off ──"
+
+# A program on PATH is a tile; `big tiles` switches it off. moonlight is the
+# case it exists for — pulled in by syn-remote, unwanted on a box that never
+# streams — stubbed here so the suite does not depend on it being installed.
+TLB="$BGH/tiles-bin"; mkdir -p "$TLB"
+printf '#!/bin/sh\nexit 0\n' > "$TLB/moonlight"; chmod +x "$TLB/moonlight"
+tl() { PATH="$TLB:$PATH" XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big tiles "$@" 2>&1; }
+tlapps() { PATH="$TLB:$PATH" XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big apps --rec 2>/dev/null; }
+tlstate() { tl | awk -v i="$1" '$1 == i {print $2}'; }
+hidcol() { tlapps | awk -F'\t' -v i="$1" 'NR == 1 { for (c = 1; c <= NF; c++) if ($c == "hidden") h = c } $1 == i { print $h }'; }
+
+rm -f "$BGH/syn-arcade/big.conf"
+[ "$(tlstate moonlight)" = on ] \
+    && ok "an installed program's tile is on with nothing written" \
+    || bad "moonlight is not on by default: $(tl)"
+[ "$(hidcol moonlight)" = 0 ] \
+    && ok "…and \`big apps\` says it is not hidden" \
+    || bad "hidden column for moonlight: '$(hidcol moonlight)'"
+
+tl moonlight off >/dev/null
+has "^hide = moonlight$" "$BGH/syn-arcade/big.conf" \
+    && ok "switching it off writes it to the hide list" \
+    || bad "moonlight off wrote: $(cat "$BGH/syn-arcade/big.conf")"
+[ "$(tlstate moonlight)" = off ] && ok "…and it reads back as off" \
+    || bad "moonlight reads back as '$(tlstate moonlight)'"
+# ⚠ STILL IN THE TABLE, MARKED. The shell finds the Music tile's player, the
+# disc and a Recent window's name by id in this table; a hidden row taken out
+# of it would have taken those lookups with it.
+[ "$(hidcol moonlight)" = 1 ] \
+    && ok "…and \`big apps\` still has its row, with hidden = 1" \
+    || bad "hidden column for moonlight after off: '$(hidcol moonlight)'"
+
+# ⛔ A LIST OF WHAT IS OFF, so a program installed later is ON. The other way
+# round, installing Kodi on a machine where anything was switched would give
+# no Kodi tile.
+printf '#!/bin/sh\nexit 0\n' > "$TLB/kodi"; chmod +x "$TLB/kodi"
+[ "$(tlstate kodi)" = on ] \
+    && ok "a program installed after the list was written gets its tile" \
+    || bad "kodi arrived as '$(tlstate kodi)' with a hide list written"
+rm -f "$TLB/kodi"
+
+# An id already hidden is kept when its tile is not in the table today — the
+# disc tile is absent whenever the drive is empty — and it can be switched
+# back on from there.
+printf 'hide = disc,moonlight\n' > "$BGH/syn-arcade/big.conf"
+tl moonlight on >/dev/null
+has "^hide = disc$" "$BGH/syn-arcade/big.conf" \
+    && ok "switching one on keeps an id hidden for a tile that is not there" \
+    || bad "moonlight on wrote: $(cat "$BGH/syn-arcade/big.conf")"
+tl disc on >/dev/null 2>&1 \
+    && has "^hide = none$" "$BGH/syn-arcade/big.conf" \
+    && ok "…and that one switches back on too, leaving 'none'" \
+    || bad "disc on: $(tl disc on) / $(cat "$BGH/syn-arcade/big.conf")"
+[ "$(tlstate moonlight)" = on ] \
+    && ok "'none' reads as nothing hidden" \
+    || bad "'none' hid moonlight"
+
+# One owner per tile: a web app is `big webapps`, and the Start menu's rows
+# are `big settings` or the way out.
+tl twitch off >/dev/null 2>&1 \
+    && bad "big tiles switched a web app" \
+    || ok "a web app is refused, pointing at \`big webapps\`"
+tl quit off >/dev/null 2>&1 \
+    && bad "big tiles switched Quit off" \
+    || ok "Quit cannot be switched off"
+tl desktop off >/dev/null 2>&1 \
+    && bad "big tiles switched Desktop off" \
+    || ok "…nor Desktop"
+tl | grep -Eq '^ +(desktop|quit|sleep|visualizer) ' \
+    && bad "big tiles lists a Start menu row: $(tl)" \
+    || ok "no Start menu row is listed"
+tl no-such-tile off >/dev/null 2>&1 \
+    && bad "an unknown tile id was accepted" \
+    || ok "an unknown tile id is refused"
 rm -f "$BGH/syn-arcade/big.conf"
 
 echo

@@ -127,6 +127,9 @@ msgstr "바탕화면"
 msgid "Don't start at login"
 msgstr "로그인 시 시작 안 함"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "편집"
 
@@ -325,6 +328,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "아직 감싼 것이 없습니다."
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "큰 화면 열기"
 
@@ -499,6 +508,9 @@ msgstr "%1(으)로 전환 중…"
 msgid "System"
 msgstr "시스템"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "소유권 가져오기"
 
@@ -530,6 +542,9 @@ msgstr "드라이브에 디스크가 없습니다"
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "이 디스크는 암호화되어 있습니다 — 재생하려면 %1이(가) 필요합니다"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -593,6 +608,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "어떤 게임인가요?"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1337,12 +1355,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1386,6 +1398,24 @@ msgstr "%s: 켬\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s: 끔\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "첫 번째 화면"
@@ -1461,6 +1491,13 @@ msgstr "  배경           %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  웹 앱          %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

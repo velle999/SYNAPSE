@@ -1340,18 +1340,13 @@ static const struct webapp webapps[] = {
 };
 #define WEBAPPS_N ((int)(sizeof(webapps) / sizeof(webapps[0])))
 
-/* Is <id> in the `webapps` list? Unset means all; `none` means none. */
-static bool webapp_enabled(const char *id)
+/* Is <id> one of the comma-separated fields of <list>? <list> is scratch —
+ * the walk writes into it. Shared by `webapps` and `hide`. */
+static bool list_has(char *list, const char *id)
 {
-	char want[256];
-	if (!big_conf_get("webapps", want, sizeof(want)))
-		return true;
-	if (strcmp(want, "none") == 0)
-		return false;
-
 	/* Substring matching would let "youtube" answer for a list containing
 	 * only "youtube-music", so this walks the fields. */
-	for (char *p = want; *p; ) {
+	for (char *p = list; *p; ) {
 		while (*p == ' ' || *p == ',')
 			p++;
 		char *end = p;
@@ -1366,6 +1361,17 @@ static bool webapp_enabled(const char *id)
 		p = end;
 	}
 	return false;
+}
+
+/* Is <id> in the `webapps` list? Unset means all; `none` means none. */
+static bool webapp_enabled(const char *id)
+{
+	char want[256];
+	if (!big_conf_get("webapps", want, sizeof(want)))
+		return true;
+	if (strcmp(want, "none") == 0)
+		return false;
+	return list_has(want, id);
 }
 
 /*
@@ -1673,6 +1679,56 @@ static int apps_table(struct row *rows, int max)
 	return n;
 }
 
+/*
+ * ── tiles switched off ──
+ *
+ * Every tile above is there because its program is installed, and installed is
+ * not the same as wanted: syn-remote pulls in Moonlight for streaming, and
+ * somebody who never streams has a Moonlight tile on the Play shelf for good.
+ * `hide` in big.conf is the tiles somebody does not want, by id.
+ *
+ *   hide = moonlight,greenlight   those two not drawn
+ *   hide = none                   nothing hidden (also what unset means)
+ *
+ * ⚠ A LIST OF WHAT IS OFF — the opposite way round from `webapps`, and on
+ * purpose. These rows are DETECTED. A list of what is ON would keep every
+ * newly installed program's tile away on any machine where somebody had
+ * switched anything: install Kodi, find no Kodi tile. Hidden is what was
+ * chosen, so hidden is what is written down.
+ *
+ * ⚠ HIDDEN FROM THE SHELVES, NOT FROM THE TABLE. `big apps` still emits the
+ * row, with `hidden` set, and the shell leaves it off its shelves. The row is
+ * also how the shell finds the Music tile's player and glyph, the disc for the
+ * remote's play button, and our name for a window on the Recent bar — taking
+ * it out of the table would have taken those with it. `big run <id>` still
+ * runs it.
+ *
+ * ⛔ NOT THE WEB APPS, and nothing behind Start. A web app has its own switch
+ * (`big webapps`), and two switches for one tile is two owners. The Start
+ * menu's rows are `big settings` (Visualizer, power) or the way out (Desktop,
+ * Quit), which no switch may hide.
+ */
+static bool tile_hidden(const char *id)
+{
+	char list[512];
+	if (!big_conf_get("hide", list, sizeof(list)))
+		return false;
+	return list_has(list, id);
+}
+
+static bool is_webapp(const char *id)
+{
+	for (int i = 0; i < WEBAPPS_N; i++)
+		if (strcmp(webapps[i].id, id) == 0)
+			return true;
+	return false;
+}
+
+static bool tile_switchable(const struct row *r)
+{
+	return strcmp(r->shelf, "system") != 0 && !is_webapp(r->id);
+}
+
 /* ⚠ RAISED WITH THE WEBAPP TILES. apps_table() writes into a caller array of
  * this size and the seven web services are seven more rows on a machine that
  * already had Steam, Heroic, Lutris, RetroArch, Moonlight, Greenlight, GFN,
@@ -1701,25 +1757,33 @@ static int big_apps(bool rec)
 		 * path is a fact about this installation that is empty on a
 		 * machine where the drawing is missing; overwriting the name
 		 * with it would lose the identity in exactly the case where
-		 * somebody needs to know which glyph failed to ship. */
-		rec_row(11, "id", "name", "exec", "icon", "kind", "shelf",
-			"pointer", "keys", "full", "iconfile", "transient");
+		 * somebody needs to know which glyph failed to ship.
+		 *
+		 * `hidden` is on the end too: the tile is switched off with `big
+		 * tiles`, and the shell leaves it off the shelves. */
+		rec_row(12, "id", "name", "exec", "icon", "kind", "shelf",
+			"pointer", "keys", "full", "iconfile", "transient",
+			"hidden");
 		for (int i = 0; i < n; i++)
-			rec_row(11, rows[i].id, rows[i].name, rows[i].exec,
+			rec_row(12, rows[i].id, rows[i].name, rows[i].exec,
 				rows[i].icon, rows[i].kind, rows[i].shelf,
 				rows[i].pointer ? "1" : "0",
 				rows[i].keys ? "1" : "0",
 				rows[i].full ? "1" : "0",
 				icon_file(rows[i].icon),
-				rows[i].transient ? "1" : "0");
+				rows[i].transient ? "1" : "0",
+				tile_switchable(&rows[i]) &&
+				tile_hidden(rows[i].id) ? "1" : "0");
 	} else {
 		for (int i = 0; i < n; i++)
-			printf("%-10s %-8s %-20s %s%s%s%s\n", rows[i].id,
+			printf("%-10s %-8s %-20s %s%s%s%s%s\n", rows[i].id,
 			       rows[i].shelf, rows[i].name,
 			       rows[i].exec[0] ? rows[i].exec : "(built in)",
 			       rows[i].pointer ? "   [mouse]" : "",
 			       rows[i].full ? "   [fullscreen]" : "",
-			       rows[i].transient ? "   [ends on return]" : "");
+			       rows[i].transient ? "   [ends on return]" : "",
+			       tile_switchable(&rows[i]) &&
+			       tile_hidden(rows[i].id) ? "   [hidden]" : "");
 	}
 	return EX_OK;
 }
@@ -10519,6 +10583,110 @@ static int big_webapps(const char *id, const char *onoff, bool rec)
 }
 
 /*
+ * `big tiles` — every tile on a shelf that can be switched off, and switching
+ * one. See tile_hidden() for what off means.
+ *
+ *   big tiles                    each one, and whether it is on
+ *   big tiles moonlight off
+ *
+ * Listed in apps_table() order, which is the order the shelves draw them in.
+ */
+static int big_tiles(const char *id, const char *onoff, bool rec)
+{
+	struct row rows[APPS_MAX];
+	int n = apps_table(rows, APPS_MAX);
+
+	if (!id) {
+		if (rec)
+			rec_row(4, "id", "label", "shelf", "current");
+		for (int i = 0; i < n; i++) {
+			if (!tile_switchable(&rows[i]))
+				continue;
+			const char *cur = tile_hidden(rows[i].id) ? "off" : "on";
+			if (rec)
+				rec_row(4, rows[i].id, rows[i].name,
+					rows[i].shelf, cur);
+			else
+				printf("  %-12s %-4s %s\n", rows[i].id, cur,
+				       rows[i].name);
+		}
+		return EX_OK;
+	}
+
+	if (is_webapp(id)) {
+		fprintf(stderr, _("syn-arcade: %s is a web app — "
+				  "`big webapps %s on|off`\n"), id, id);
+		return EX_USAGE;
+	}
+
+	char list[512] = "", probe[512];
+	big_conf_get("hide", list, sizeof(list));
+	snprintf(probe, sizeof(probe), "%s", list);
+
+	/* ⚠ A TILE THAT IS ALREADY HIDDEN IS ACCEPTED even when it is not in the
+	 * table today, so it can always be switched back on: the disc tile is
+	 * gone whenever the drive is empty, and a program can be uninstalled
+	 * with its id still in the list. */
+	const char *name = NULL;
+	for (int i = 0; i < n; i++) {
+		if (strcmp(rows[i].id, id) != 0)
+			continue;
+		if (!tile_switchable(&rows[i])) {
+			fprintf(stderr, _("syn-arcade: '%s' is on the Start "
+					  "menu, not a shelf — its switches "
+					  "are in `big settings`\n"), id);
+			return EX_USAGE;
+		}
+		name = rows[i].name;
+	}
+	if (!name && !list_has(probe, id)) {
+		fprintf(stderr, _("syn-arcade: no tile called '%s' — "
+				  "`big tiles` lists them\n"), id);
+		return EX_USAGE;
+	}
+	if (!onoff || (strcmp(onoff, "on") && strcmp(onoff, "off"))) {
+		fprintf(stderr, _("syn-arcade: usage: big tiles <name> on|off\n"));
+		return EX_USAGE;
+	}
+	bool off = strcmp(onoff, "off") == 0;
+
+	/* Rebuilt from the LIST, not from the table, for the reason above: an
+	 * id hidden for a tile that is not there today is still somebody's
+	 * choice, and rebuilding from the table would drop it. */
+	char out[512] = "";
+	char *save = NULL;
+	for (char *t = strtok_r(list, ",", &save); t;
+	     t = strtok_r(NULL, ",", &save)) {
+		t = trim(t);
+		if (!*t || strcmp(t, "none") == 0 || strcmp(t, id) == 0)
+			continue;
+		if (out[0])
+			strncat(out, ",", sizeof(out) - strlen(out) - 1);
+		strncat(out, t, sizeof(out) - strlen(out) - 1);
+	}
+	if (off) {
+		if (out[0])
+			strncat(out, ",", sizeof(out) - strlen(out) - 1);
+		strncat(out, id, sizeof(out) - strlen(out) - 1);
+	}
+	/* `none` for the same reason `webapps` writes it: an empty value is
+	 * dropped by big_conf_get, and a `hide =` line nobody can read the
+	 * meaning of is worse than one that says it. */
+	if (!out[0])
+		snprintf(out, sizeof(out), "none");
+
+	if (big_conf_set("hide", out) != EX_OK) {
+		fputs(_("syn-arcade: could not write big.conf\n"), stderr);
+		return EX_FAIL;
+	}
+	if (off)
+		printf(_("%s: off\n"), name ? name : id);
+	else
+		printf(_("%s: on\n"), name ? name : id);
+	return EX_OK;
+}
+
+/*
  * Which screen big screen mode opens on: read, or set.
  *
  * The setting has existed since 0.1.0-11 and could only be spelled by editing
@@ -10725,6 +10893,24 @@ static int big_status(bool rec)
 		strncat(webbuf, _("  (no browser installed)"),
 			sizeof(webbuf) - strlen(webbuf) - 1);
 
+	/* The tiles switched off with `big tiles`, by name — the ones that are
+	 * installed; an id left in the list for a program that has gone draws
+	 * nothing either way. */
+	char hidbuf[256] = "";
+	{
+		struct row rows[APPS_MAX];
+		int n = apps_table(rows, APPS_MAX);
+		for (int i = 0; i < n; i++) {
+			if (!tile_switchable(&rows[i]) || !tile_hidden(rows[i].id))
+				continue;
+			if (hidbuf[0])
+				strncat(hidbuf, ", ",
+					sizeof(hidbuf) - strlen(hidbuf) - 1);
+			strncat(hidbuf, rows[i].name,
+				sizeof(hidbuf) - strlen(hidbuf) - 1);
+		}
+	}
+
 	if (rec) {
 		rec_row(3, "field", "value", "action");
 		rec_row(3, "running", running ? "yes" : "no",
@@ -10743,6 +10929,8 @@ static int big_status(bool rec)
 			: "NONE INSTALLED", "choice:big-player");
 		rec_row(3, "background", bgbuf, "choice:big-background");
 		rec_row(3, "web apps", webbuf, "choice:big-webapps");
+		rec_row(3, "hidden tiles", hidbuf[0] ? hidbuf : "none",
+			"choice:big-tiles");
 		rec_row(3, "cliamp", have("cliamp") ? "installed"
 			: "NOT INSTALLED", "detail");
 		rec_row(3, "Steam", steam_found ? root : "NOT FOUND", "detail");
@@ -10764,6 +10952,8 @@ static int big_status(bool rec)
 	     : "off (`syn-arcade big guide on`)");
 	printf(_("  background     %s\n"), bgbuf);
 	printf(_("  web apps       %s\n"), webbuf);
+	printf(_("  hidden tiles   %s\n"), hidbuf[0] ? hidbuf
+	       : _("none (`syn-arcade big tiles <name> off`)"));
 	printf(_("  music player   %s%s\n"), music_prog() ? music_prog() : "none installed",
 	       have("cliamp") ? "" : "   (cliamp not installed — the Music tile "
 				     "opens a window instead of playing)");
@@ -10924,6 +11114,10 @@ int cmd_big(int argc, char **argv)
 	if (!strcmp(sub, "webapps"))
 		return big_webapps(first_operand(rest_c, rest),
 				   second_operand(rest_c, rest), rec);
+	/* The same two operands, for every other tile on a shelf. */
+	if (!strcmp(sub, "tiles"))
+		return big_tiles(first_operand(rest_c, rest),
+				 second_operand(rest_c, rest), rec);
 	/* The settings page behind Start — which shelves are drawn, which of
 	 * the machine's own switches the menu offers, and what big screen mode
 	 * does about the screen going to sleep. Two operands like webapps: the

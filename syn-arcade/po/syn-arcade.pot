@@ -118,6 +118,9 @@ msgstr ""
 msgid "Don't start at login"
 msgstr ""
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr ""
 
@@ -295,6 +298,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr ""
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr ""
 
@@ -469,6 +478,9 @@ msgstr ""
 msgid "System"
 msgstr ""
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr ""
 
@@ -496,6 +508,9 @@ msgid "There is no disc in the drive"
 msgstr ""
 
 msgid "This disc is encrypted — %1 is needed to play it"
+msgstr ""
+
+msgid "Tiles"
 msgstr ""
 
 msgid ""
@@ -554,6 +569,9 @@ msgid "Whether the screen is allowed to sleep"
 msgstr ""
 
 msgid "Which game?"
+msgstr ""
+
+msgid "Which programs have a tile"
 msgstr ""
 
 msgid ""
@@ -1208,12 +1226,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1256,6 +1268,24 @@ msgstr ""
 
 #, c-format
 msgid "%s: off\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
 msgstr ""
 
 msgid "first screen"
@@ -1327,6 +1357,13 @@ msgstr ""
 
 #, c-format
 msgid "  web apps       %s\n"
+msgstr ""
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
 msgstr ""
 
 #, c-format

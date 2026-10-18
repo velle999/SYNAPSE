@@ -127,6 +127,9 @@ msgstr "डेस्कटॉप"
 msgid "Don't start at login"
 msgstr "लॉगिन पर शुरू न करें"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "संपादित करें"
 
@@ -323,6 +326,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "अभी कुछ भी रैप नहीं किया गया।"
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "बिग स्क्रीन खोलें"
 
@@ -497,6 +506,9 @@ msgstr "%1 पर स्विच हो रहा है…"
 msgid "System"
 msgstr "सिस्टम"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "स्वामित्व लें"
 
@@ -527,6 +539,9 @@ msgstr "ड्राइव में कोई डिस्क नहीं ह�
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "यह डिस्क एन्क्रिप्टेड है — चलाने के लिए %1 चाहिए"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -590,6 +605,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "कौन-सा गेम?"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1336,12 +1354,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1385,6 +1397,24 @@ msgstr "%s: चालू\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s: बंद\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "पहली स्क्रीन"
@@ -1460,6 +1490,13 @@ msgstr "  पृष्ठभूमि      %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  वेब ऐप         %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

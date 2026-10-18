@@ -1503,7 +1503,18 @@ pkgver=0.1.0
 #   each, the desktop site. Prime Video's id is `amazon` — the word somebody
 #   types after `big webapps` — and its label is the service's own name. Off
 #   where a `webapps` list is written, as 65's were.
-pkgrel=66
+# 67: EVERY TILE ON A SHELF CAN BE SWITCHED OFF. A program that is installed
+#   gets a tile, and installed is not wanted: syn-remote depends on Moonlight
+#   for streaming, so every machine had a Moonlight tile whether it streamed or
+#   not. `big tiles <id> on|off` and a Tiles row of switches on the Big screen
+#   tab, and Start ▸ Settings ▸ Tiles on the television. Written to big.conf
+#   as `hide = <ids>`, a list of what is OFF, so a program installed later
+#   still gets its tile. Web apps keep their own switches; Desktop and Quit
+#   have none. A hidden tile stays in `big apps` with a new `hidden` column on
+#   the end, so the Music tile's player, the disc and the Recent bar still
+#   find it by id. The television also re-reads its tiles when it comes back,
+#   so a switch flipped at the desk shows without restarting it.
+pkgrel=67
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

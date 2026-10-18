@@ -434,6 +434,7 @@ FloatingWindow {
     property var bigPlayers: []
     property var bigBackgrounds: []
     property var bigWebapps: []
+    property var bigTiles: []
     property var bigSettings: []
     property var bigAwake: []
 
@@ -474,6 +475,12 @@ FloatingWindow {
         id: bigWebappProc
         stdout: StdioCollector {
             onStreamFinished: root.bigWebapps = root.parseRecords(this.text)
+        }
+    }
+    Process {
+        id: bigTileProc
+        stdout: StdioCollector {
+            onStreamFinished: root.bigTiles = root.parseRecords(this.text)
         }
     }
     // ⚠ ONE READ FOR ALL THREE GROUPS. `big settings --rec` carries the group
@@ -739,6 +746,8 @@ FloatingWindow {
         bigBackgroundProc.running = true
         bigWebappProc.command = [root.bin, "big", "webapps", "--rec"]
         bigWebappProc.running = true
+        bigTileProc.command = [root.bin, "big", "tiles", "--rec"]
+        bigTileProc.running = true
         bigSettingProc.command = [root.bin, "big", "settings", "--rec"]
         bigSettingProc.running = true
         bigAwakeProc.command = [root.bin, "big", "choices", "keep_awake", "--rec"]
@@ -2129,6 +2138,45 @@ FloatingWindow {
                             font.pixelSize: root.ui(11)
                             font.family: root.uiFont
                             wrapMode: Text.WordWrap
+                        }
+
+                        // Every other tile on a shelf, from `big tiles`: the
+                        // programs installed here, one switch each. The same
+                        // command the television's Start ▸ Settings ▸ Tiles
+                        // page runs.
+                        Text {
+                            Layout.topMargin: 8
+                            text: I18n.tr("Tiles")
+                            color: root.ink
+                            font.pixelSize: root.ui(12)
+                            font.family: root.uiFont
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Each installed program gets a tile. "
+                                + "Switch off the ones you do not use.")
+                            color: root.dim
+                            font.pixelSize: root.ui(11)
+                            font.family: root.uiFont
+                            wrapMode: Text.WordWrap
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.bigTiles
+                                ArcChip {
+                                    required property var modelData
+                                    label: modelData.label
+                                    on: modelData.current === "on"
+                                    // Sends the opposite of what it shows, like
+                                    // the web apps below.
+                                    onPicked: root.run(["big", "tiles",
+                                        modelData.id,
+                                        modelData.current === "on" ? "off" : "on"])
+                                }
+                            }
                         }
 
                         // ⚠ The web services, and `installed` is why the record

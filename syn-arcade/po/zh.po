@@ -124,6 +124,9 @@ msgstr "桌面"
 msgid "Don't start at login"
 msgstr "登录时不启动"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "编辑"
 
@@ -319,6 +322,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "还没有封装任何东西。"
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "打开大屏幕"
 
@@ -493,6 +502,9 @@ msgstr "正在切换到 %1…"
 msgid "System"
 msgstr "系统"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "接管所有权"
 
@@ -523,6 +535,9 @@ msgstr "光驱里没有光盘"
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "这张光盘已加密 — 播放需要 %1"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -585,6 +600,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "哪个游戏？"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1292,12 +1310,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1341,6 +1353,24 @@ msgstr "%s：开\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s：关\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "第一个屏幕"
@@ -1414,6 +1444,13 @@ msgstr "  背景           %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  网页应用       %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

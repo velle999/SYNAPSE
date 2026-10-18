@@ -127,6 +127,9 @@ msgstr "デスクトップ"
 msgid "Don't start at login"
 msgstr "ログイン時に起動しない"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "編集"
 
@@ -327,6 +330,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "まだ何も包んでいません。"
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "ビッグスクリーンを開く"
 
@@ -501,6 +510,9 @@ msgstr "%1 に切り替え中…"
 msgid "System"
 msgstr "システム"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "自分のものにする"
 
@@ -532,6 +544,9 @@ msgstr "ドライブにディスクがありません"
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "このディスクは暗号化されています — 再生には %1 が必要です"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -595,6 +610,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "どのゲームですか？"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1346,12 +1364,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1396,6 +1408,24 @@ msgstr "%s: オン\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s: オフ\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "最初の画面"
@@ -1473,6 +1503,13 @@ msgstr "  背景           %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  ウェブアプリ   %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

@@ -127,6 +127,9 @@ msgstr "سطح المكتب"
 msgid "Don't start at login"
 msgstr "لا تبدأ عند تسجيل الدخول"
 
+msgid "Each installed program gets a tile. Switch off the ones you do not use."
+msgstr ""
+
 msgid "Edit"
 msgstr "تحرير"
 
@@ -323,6 +326,12 @@ msgstr ""
 msgid "Nothing wrapped yet."
 msgstr "لا شيء مغلَّف بعد."
 
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
 msgid "Open big screen"
 msgstr "افتح الشاشة الكبيرة"
 
@@ -497,6 +506,9 @@ msgstr "‏جارٍ التبديل إلى %1…"
 msgid "System"
 msgstr "النظام"
 
+msgid "TILES"
+msgstr ""
+
 msgid "Take ownership"
 msgstr "تملّكه"
 
@@ -527,6 +539,9 @@ msgstr "لا يوجد قرص في المشغّل"
 
 msgid "This disc is encrypted — %1 is needed to play it"
 msgstr "هذا القرص مشفَّر — يلزم %1 لتشغيله"
+
+msgid "Tiles"
+msgstr ""
 
 msgid ""
 "Tiles on the media shelf. They open in your browser as their own full-screen "
@@ -589,6 +604,9 @@ msgstr ""
 
 msgid "Which game?"
 msgstr "أيّ لعبة؟"
+
+msgid "Which programs have a tile"
+msgstr ""
 
 msgid ""
 "Which rows big screen mode draws. One switched off is not drawn and cannot "
@@ -1381,12 +1399,6 @@ msgid ""
 "synui's idle-inhibit helper\n"
 msgstr ""
 
-msgid "On"
-msgstr ""
-
-msgid "Off"
-msgstr ""
-
 msgid "Never"
 msgstr ""
 
@@ -1430,6 +1442,24 @@ msgstr "%s: مفعّل\n"
 #, c-format
 msgid "%s: off\n"
 msgstr "%s: معطّل\n"
+
+#, c-format
+msgid "syn-arcade: %s is a web app — `big webapps %s on|off`\n"
+msgstr ""
+
+#, c-format
+msgid ""
+"syn-arcade: '%s' is on the Start menu, not a shelf — its switches are in "
+"`big settings`\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: no tile called '%s' — `big tiles` lists them\n"
+msgstr ""
+
+#, c-format
+msgid "syn-arcade: usage: big tiles <name> on|off\n"
+msgstr ""
 
 msgid "first screen"
 msgstr "الشاشة الأولى"
@@ -1505,6 +1535,13 @@ msgstr "  الخلفية        %s\n"
 #, c-format
 msgid "  web apps       %s\n"
 msgstr "  تطبيقات الويب  %s\n"
+
+#, c-format
+msgid "  hidden tiles   %s\n"
+msgstr ""
+
+msgid "none (`syn-arcade big tiles <name> off`)"
+msgstr ""
 
 #, c-format
 msgid "  music player   %s%s\n"

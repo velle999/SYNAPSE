@@ -802,7 +802,7 @@ say menu 0.8
 say down; say down 0.5
 shot 03u-settings-row
 say accept 0.9
-shot 03v-settings-page        # Shelves / Start menu / Power
+shot 03v-settings-page        # Shelves / Tiles / Start menu / Screen
 say accept 0.9
 shot 03w-settings-shelves     # Running, Games, Recent, Play, Media, Apps, News
 
@@ -882,6 +882,51 @@ else
     SETTINGS_FAILED=1
 fi
 
+# ── the Tiles page: a program's tile switched off from the sofa ─────────────
+#
+# Row 0 is the first tile `big tiles` lists, which depends on what this machine
+# has installed (Steam here, the stubbed Lutris on a bare one), so the id is
+# asked of the same binary rather than assumed.
+first_tile=$("$REAL" big tiles --rec | awk -F'\t' 'NR == 2 { print $1 }')
+say menu 0.8
+say down; say down 0.5        # Settings
+say accept 0.9
+say down 0.5                  # Shelves → Tiles
+say accept 1.2
+shot 03zt-settings-tiles      # one row per installed program, On
+say accept 1.2                # the first one: on → off
+shot 03zu-tile-switched-off
+say menu 0.9
+shot 03zv-shelves-without-tile
+if grep -q "^hide = $first_tile\$" "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "tiles: big.conf says hide = $first_tile"
+else
+    echo "FAIL: the Tiles page did not write hide = $first_tile" >&2
+    SETTINGS_FAILED=1
+fi
+if cmp -s "$OUT/03za-shelves-with-games-back.png" \
+          "$OUT/03zv-shelves-without-tile.png"; then
+    echo "FAIL: switching $first_tile off changed NOTHING on screen" >&2
+    SETTINGS_FAILED=1
+else
+    echo "tiles: $first_tile went off its shelf"
+fi
+# And back on, the same way: a tile somebody switched off from four metres has
+# to be one they can get back from there.
+say menu 0.8
+say down; say down 0.5
+say accept 0.9                # settings
+say down 0.5
+say accept 1.2                # tiles
+say accept 1.2                # off → on
+say menu 0.9
+if grep -q '^hide = none$' "$TMP/syn-arcade/big.conf" 2>/dev/null; then
+    echo "tiles: switched back on, big.conf says hide = none"
+else
+    echo "FAIL: $first_tile did not come back on: $(grep '^hide' "$TMP/syn-arcade/big.conf")" >&2
+    SETTINGS_FAILED=1
+fi
+
 # ── the Power page, and a row that is not a switch ──────────────────────────
 #
 # ⚠ THE ONE ROW HERE WITH THREE VALUES, which is the whole reason the shell
@@ -891,7 +936,7 @@ fi
 say menu 0.8
 say down; say down 0.5        # Settings
 say accept 0.9
-say down; say down 0.5        # Shelves → Start menu → Power
+say down; say down; say down 0.5   # Shelves → Tiles → Start menu → Screen
 say accept 0.9
 shot 03zb-settings-power      # Keep the screen awake · While playing
 say accept 1.0                # playing → always

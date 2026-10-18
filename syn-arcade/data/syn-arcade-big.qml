@@ -735,6 +735,9 @@ ShellRoot {
         // …and the thing just closed is the newest entry on the Recent bar,
         // which big.c wrote while this was away.
         shell.refreshRecent()
+        // …and the tiles, which the desktop window's Tiles and Web apps
+        // switches change in big.conf while this is resident and away.
+        if (!appsProc.running) appsProc.running = true
 
         // ⚠ AND THE SELECTION GOES THERE. Without this the shelf is correct
         // and useless: coming back leaves the selection wherever it was, the
@@ -1038,8 +1041,13 @@ ShellRoot {
     // see `menuItems` below. They are still `shelf = system` in big.c, because
     // where a tile goes is still decided there — this file is what stopped
     // drawing them in a row.
+    //
+    // ⚠ A TILE SWITCHED OFF (`big tiles`) IS LEFT OUT HERE AND NOWHERE ELSE.
+    // big.c still sends its row, `hidden` set, because the lookups by id above
+    // — the Music tile's player and glyph, the disc for the remote's play
+    // button, our name for a window on the Recent bar — still need it.
     function byShelf(name) {
-        return shell.apps.filter(a => a.shelf === name)
+        return shell.apps.filter(a => a.shelf === name && a.hidden !== "1")
     }
 
     readonly property var shelves: {
@@ -1447,6 +1455,36 @@ ShellRoot {
         if (!settingsProc.running) settingsProc.running = true
     }
 
+    // ── the Tiles page ──────────────────────────────────────────────────────
+    //
+    // A switch per tile on a shelf, from `big tiles`. Drawn and walked exactly
+    // like a settings row — a name and On or Off — and `tile` is what tells
+    // cycleSetting to send `big tiles <id> on|off` instead of `big settings`.
+    // Read when the page opens: nothing else here needs it.
+    property var tileItems: []
+
+    Process {
+        id: tilesProc
+        command: [shell.bin, "big", "tiles", "--rec"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                shell.tileItems = shell.parseRecords(this.text).map(r => ({
+                    id: r.id, kind: "setting", tile: true,
+                    // A tile's name, drawn as the shelf draws it.
+                    name: r.label,
+                    value: r.current,
+                    valueLabel: r.current === "on" ? I18n.tr("On")
+                                                   : I18n.tr("Off")
+                }))
+                shell.menuBusy = ""
+            }
+        }
+    }
+
+    function refreshTiles() {
+        if (!tilesProc.running) tilesProc.running = true
+    }
+
     /*
      * What one setting is set to, as its ENGLISH id.
      *
@@ -1581,8 +1619,8 @@ ShellRoot {
     // list on a different page rather than a second panel: one delegate, one
     // set of keys, and a d-pad that cannot end up driving the thing underneath.
     property string menuPage: "main"	// main | source | albums | yt | ytmine
-					// settings | set-display | set-menu
-					// | set-power
+					// settings | set-display | set-tiles
+					// | set-menu | set-power
 
     /*
      * ⚠ WHICH PAGE IS ABOVE WHICH — because Back used to mean "main" and the
@@ -1595,6 +1633,7 @@ ShellRoot {
      */
     readonly property var menuUp: ({
         "set-display": "settings",
+        "set-tiles":   "settings",
         "set-menu":    "settings",
         "set-power":   "settings"
         // ⚠ `power` IS DELIBERATELY ABSENT. It is not reached by walking down
@@ -1623,6 +1662,9 @@ ShellRoot {
                 { id: "set-display", kind: "page", page: "set-display",
                   name: I18n.tr("Shelves"),
                   note: I18n.tr("Which rows the television shows") },
+                { id: "set-tiles", kind: "page", page: "set-tiles",
+                  name: I18n.tr("Tiles"),
+                  note: I18n.tr("Which programs have a tile") },
                 { id: "set-menu", kind: "page", page: "set-menu",
                   name: I18n.tr("Start menu"),
                   note: I18n.tr("What this menu offers") },
@@ -1632,6 +1674,8 @@ ShellRoot {
             ]
         if (shell.menuPage === "set-display")
             return shell.settingItems.filter(x => x.group === "display")
+        if (shell.menuPage === "set-tiles")
+            return shell.tileItems
         if (shell.menuPage === "set-menu")
             return shell.settingItems.filter(x => x.group === "menu")
         if (shell.menuPage === "set-power")
@@ -1703,6 +1747,10 @@ ShellRoot {
         if (page === "set-display" || page === "set-menu"
             || page === "set-power")
             shell.refreshSettings()
+        if (page === "set-tiles") {
+            shell.tileItems = []
+            shell.refreshTiles()
+        }
         if (page === "ytmine") {
             // ⚠ THIS ONE REALLY DOES CROSS THE INTERNET — yt-dlp asking
             // YouTube what the account has — so it is said out loud for the
@@ -2400,9 +2448,14 @@ ShellRoot {
      * changes a list this file holds a copy of. Without this the row would
      * flip to Off and the thing it hides would still be on the menu behind it.
      */
+    //
+    // A row off the Tiles page is two-valued and big.c's `big tiles` takes the
+    // value rather than `next`, so it is sent the opposite of what it shows.
     function cycleSetting(it) {
         if (settingSetProc.running) return
-        settingSetProc.command = [shell.bin, "big", "settings", it.id, "next"]
+        settingSetProc.command = it.tile
+            ? [shell.bin, "big", "tiles", it.id, it.value === "on" ? "off" : "on"]
+            : [shell.bin, "big", "settings", it.id, "next"]
         settingSetProc.running = true
     }
 
@@ -2410,6 +2463,7 @@ ShellRoot {
         id: settingSetProc
         onExited: {
             shell.refreshSettings()
+            if (shell.menuPage === "set-tiles") shell.refreshTiles()
             if (!appsProc.running) appsProc.running = true
         }
     }
@@ -4455,7 +4509,7 @@ ShellRoot {
                     // awake" beside "While playing" is a label and a value
                     // competing for one panel's width, and at 0.42 the label
                     // elided to "Keep the screen a…" — which is a setting
-                    // nobody can read the name of. All four of them, not just
+                    // nobody can read the name of. All five of them, not just
                     // the two that need it: a panel that changes width as you
                     // step between sibling pages reads as the interface
                     // flinching.
@@ -4464,6 +4518,7 @@ ShellRoot {
                                                      || shell.menuPage === "ytmine"
                                                      || shell.menuPage === "settings"
                                                      || shell.menuPage === "set-display"
+                                                     || shell.menuPage === "set-tiles"
                                                      || shell.menuPage === "set-menu"
                                                      || shell.menuPage === "set-power"
                     width: Math.min(parent.width * (wideMenu ? 0.60 : 0.42),
@@ -4497,6 +4552,7 @@ ShellRoot {
                                 // and "Visualizer · On" are the same row.
                                 if (shell.menuPage === "settings") return I18n.tr("SETTINGS")
                                 if (shell.menuPage === "set-display") return I18n.tr("SHELVES")
+                                if (shell.menuPage === "set-tiles") return I18n.tr("TILES")
                                 if (shell.menuPage === "set-menu") return I18n.tr("START MENU")
                                 // ⚠ SCREEN, not POWER — the Power BUTTON has a
                                 // page of its own now, and two panels headed
