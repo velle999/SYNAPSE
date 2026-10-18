@@ -1288,19 +1288,19 @@ static bool music_headless(void)
 /* ── The web services that have no application here ──────────────────────── */
 
 /*
- * Twitch, YouTube, Spotify, Netflix and Paramount+ ship no Linux desktop
- * application worth putting on a television — Spotify's is a browser in a
- * wrapper, and the rest are a web page and nothing else. What a ten-foot
+ * Twitch, YouTube, Spotify, Netflix, Paramount+, Prime Video and Crunchyroll
+ * ship no Linux desktop application worth putting on a television — Spotify's
+ * is a browser in a wrapper, and the rest are a web page and nothing else. What a ten-foot
  * interface can do is open the site the way an application would: one window,
  * no tab strip, no address bar, full screen, and the controller acting as the
  * mouse and keyboard it needs.
  *
- * ⚠ NETFLIX AND PARAMOUNT+ PLAY ONLY WITH DRM, which is the browser's and not
- * ours. Firefox downloads the Widevine module by itself — the packaged prefs
+ * ⚠ THE FOUR STREAMING SERVICES PLAY ONLY WITH DRM, which is the browser's and
+ * not ours. Firefox downloads the Widevine module by itself — the packaged prefs
  * ship `media.gmp-widevinecdm.enabled` true — into the profile these tiles
- * open, so nothing is set up here. Neither has a television interface at a
- * URL the way youtube.com/tv is, so both open the desktop site like Twitch and
- * Spotify, not a tv_open() profile.
+ * open, so nothing is set up here. None of them has a television interface at
+ * a URL the way youtube.com/tv is, so they open the desktop site like Twitch
+ * and Spotify, not a tv_open() profile.
  *
  * ⚠ pointer AND keys, BOTH true, and this is the trap the Plex tile fell into.
  * Those two columns are what tell the shell to bring up the controller-mouse
@@ -1313,7 +1313,7 @@ static bool music_headless(void)
  * means all of them, since somebody who never opens Twitch loses nothing by a
  * tile they do not press, and somebody who wants it gone can say so.
  *
- *   webapps = twitch,youtube      the other three off
+ *   webapps = twitch,youtube      the rest off
  *   webapps = none                all of them off
  *   (unset)                       all of them on
  *
@@ -1328,11 +1328,15 @@ struct webapp {
 };
 
 static const struct webapp webapps[] = {
-	{ "twitch",    "Twitch",     "https://www.twitch.tv/" },
-	{ "youtube",   "YouTube",    "https://www.youtube.com/" },
-	{ "spotify",   "Spotify",    "https://open.spotify.com/" },
-	{ "netflix",   "Netflix",    "https://www.netflix.com/" },
-	{ "paramount", "Paramount+", "https://www.paramountplus.com/" },
+	{ "twitch",      "Twitch",      "https://www.twitch.tv/" },
+	{ "youtube",     "YouTube",     "https://www.youtube.com/" },
+	{ "spotify",     "Spotify",     "https://open.spotify.com/" },
+	{ "netflix",     "Netflix",     "https://www.netflix.com/" },
+	{ "paramount",   "Paramount+",  "https://www.paramountplus.com/" },
+	/* `amazon`, not `primevideo`: the id is what a person types after `big
+	 * webapps`, and the label is what the service calls itself. */
+	{ "amazon",      "Prime Video", "https://www.primevideo.com/" },
+	{ "crunchyroll", "Crunchyroll", "https://www.crunchyroll.com/" },
 };
 #define WEBAPPS_N ((int)(sizeof(webapps) / sizeof(webapps[0])))
 
@@ -1670,11 +1674,11 @@ static int apps_table(struct row *rows, int max)
 }
 
 /* ⚠ RAISED WITH THE WEBAPP TILES. apps_table() writes into a caller array of
- * this size and the five web services are five more rows on a machine that
+ * this size and the seven web services are seven more rows on a machine that
  * already had Steam, Heroic, Lutris, RetroArch, Moonlight, Greenlight, GFN,
  * music, a disc, Kodi, Plex, Jellyfin, the browser, a terminal, Controllers,
- * the Visualizer and five system rows — 26 at most, counted when Netflix and
- * Paramount+ came. It is a stack array with no bounds check on the writes;
+ * the Visualizer and five system rows — 28 at most, counted when Prime Video
+ * and Crunchyroll came. It is a stack array with no bounds check on the writes;
  * overflowing it would corrupt the caller's frame rather than drop a tile. */
 #define APPS_MAX 40
 
@@ -10459,7 +10463,7 @@ static int big_webapps(const char *id, const char *onoff, bool rec)
 			return EX_OK;
 		}
 		for (int i = 0; i < WEBAPPS_N; i++)
-			printf("  %-10s %s\n", webapps[i].id,
+			printf("  %-12s %s\n", webapps[i].id,
 			       webapp_enabled(webapps[i].id) ? "on" : "off");
 		if (!br)
 			printf(_("  (no browser installed — these tiles cannot "

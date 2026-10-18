@@ -5504,7 +5504,7 @@ apps() { XDG_CONFIG_HOME="$BGH" HOME="$BGH" "$SA" big apps --rec 2>/dev/null; }
 # Every id in the webapps[] table in src/big.c. A row added there and not here
 # goes untested — the loops below are the only check that it has a tile, the
 # pointer and keys columns, and a drawing.
-WEBAPP_IDS="twitch youtube spotify netflix paramount"
+WEBAPP_IDS="twitch youtube spotify netflix paramount amazon crunchyroll"
 
 rm -f "$BGH/syn-arcade/big.conf"
 for id in $WEBAPP_IDS; do

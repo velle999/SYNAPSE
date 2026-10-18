@@ -1498,7 +1498,12 @@ pkgver=0.1.0
 #   somebody chose, and these two were not on offer when they chose it.
 #   The switches wrap now (a Flow, like the Shelves row): five chips at a large
 #   text scale are wider than a narrow window.
-pkgrel=65
+# 66: PRIME VIDEO AND CRUNCHYROLL ARE WEB APPS, the same way as 65's two: a
+#   switch each under Web apps, a tile each on the media shelf, a drawn glyph
+#   each, the desktop site. Prime Video's id is `amazon` — the word somebody
+#   types after `big webapps` — and its label is the service's own name. Off
+#   where a `webapps` list is written, as 65's were.
+pkgrel=66
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
