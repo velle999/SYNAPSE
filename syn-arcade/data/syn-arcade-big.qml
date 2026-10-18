@@ -2858,7 +2858,8 @@ ShellRoot {
      *
      * ⚠ EACH OF THESE TURNS INTO SOMETHING THE THING IN FRONT UNDERSTANDS —
      * that is the entire job. OK becomes a Return, which is what a Blu-ray
-     * menu, a browser and a web player all take; skip becomes a transport
+     * menu, a browser and a web player all take; Back becomes XF86Back, the
+     * browser's own back key; skip becomes a transport
      * press, which for a disc is a CHAPTER (big.c drives mpv over its own
      * socket for exactly that reason) and for anything else is MPRIS.
      *
@@ -2874,6 +2875,11 @@ ShellRoot {
 
         switch (cmd) {
         case "accept": shell.key("Return"); break
+        // ⚠ XF86Back, NOT Escape. It is the key a remote with a real Back
+        // button sends, so it means the same here: Firefox goes back a page and
+        // Jellyfin's and YouTube's television interfaces both follow it.
+        // Escape would leave fullscreen in mpv.
+        case "back":   shell.key("XF86Back"); break
         case "next":   shell.mediaCmd("next"); break
         case "prev":   shell.mediaCmd("prev"); break
         // Both ways back, and the reason there are two: Guide is the button
@@ -2882,9 +2888,35 @@ ShellRoot {
         // question this asks rather than an answer it gives.
         case "guide":  shell.comeBack(); break
         case "power":  shell.comeBack(); shell.openMenuOn("power"); break
+        case "clear":  shell.clearPressed(); break
         default: break
         }
     }
+
+    /*
+     * Clear, pressed twice, closes what is in front: synui's `close`, the same
+     * action super+q runs, so it ends the focused window however that window
+     * was opened.
+     *
+     * ⚠ TWICE, NEVER ONCE. Everywhere else on this screen a close is confirmed
+     * (see `closing`), because a button is easy to catch with a sleeve and the
+     * thing behind it may be a film halfway through. The second press inside
+     * clearTwiceMs is the confirmation.
+     */
+    readonly property int clearTwiceMs: 900
+    property double clearAt: 0
+
+    function clearPressed() {
+        const now = Date.now()
+        if (now - shell.clearAt <= shell.clearTwiceMs) {
+            shell.clearAt = 0
+            closeFocusedProc.running = true
+        } else {
+            shell.clearAt = now
+        }
+    }
+
+    Process { id: closeFocusedProc; command: ["synctl", "dispatch", "close"] }
 
     // While hidden, almost everything belongs to whatever is on screen. Only
     // two buttons are ours, and both have to be, because they are the way back

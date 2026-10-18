@@ -6129,7 +6129,7 @@ print(" ".join("%x" % w for w in reversed(words)))' "$@"
 }
 
 KEY_OK=352 KEY_INFO=358 KEY_POWER2=356 KEY_EPG=365 KEY_NEXT=407 KEY_PREVIOUS=412
-KEY_A=30 KEY_Z=44 KEY_PLAY=207 KEY_UP=103
+KEY_A=30 KEY_Z=44 KEY_PLAY=207 KEY_UP=103 KEY_EXIT=174 KEY_DELETE=111
 
 remote_mask() { rmask "$@" > "$RFX/sys/event99/device/capabilities/key"; }
 remote_say() {
@@ -6170,12 +6170,20 @@ nav_words() {
 }
 
 if command -v python3 >/dev/null 2>&1; then
-    remote_mask $KEY_OK $KEY_EPG $KEY_NEXT $KEY_PREVIOUS $KEY_POWER2 $KEY_PLAY $KEY_UP
-    out=$(nav_words $KEY_OK $KEY_NEXT $KEY_PREVIOUS $KEY_EPG $KEY_POWER2)
-    want="remote:accept remote:next remote:prev remote:guide remote:power"
+    remote_mask $KEY_OK $KEY_EPG $KEY_NEXT $KEY_PREVIOUS $KEY_POWER2 $KEY_PLAY $KEY_UP \
+                $KEY_EXIT $KEY_DELETE
+    out=$(nav_words $KEY_OK $KEY_EXIT $KEY_NEXT $KEY_PREVIOUS $KEY_EPG $KEY_POWER2)
+    want="remote:accept remote:back remote:next remote:prev remote:guide remote:power"
     [ "$(printf '%s' "$out" | tr '\n' ' ' | sed 's/ *$//')" = "$want" ] \
-        && ok "the five buttons no application can receive arrive as words" \
+        && ok "the six buttons no application acts on arrive as words" \
         || bad "the remote said: $(printf '%s' "$out" | tr '\n' ' ')"
+
+    # Clear is the one exception: Delete reaches the application, and the
+    # shell reads it too so that Clear twice can close what is in front.
+    out=$(nav_words $KEY_DELETE)
+    [ "$out" = "remote:clear" ] \
+        && ok "…and Clear arrives as a word as well, for close-on-twice" \
+        || bad "the remote's Clear said: $out"
 
     # ⛔ AND NOTHING ELSE, WHICH IS THE WHOLE RULE. Play, pause, stop, ⏪ and ⏩
     # DO reach the application — mpv binds every one of them out of the box —
@@ -6263,6 +6271,20 @@ awk '/function navRemote/,/^    }/' "$BIGQML" > "$BGH/navremote.qml"
 has 'shell.key("Return")' "$BGH/navremote.qml" \
     && ok "OK becomes a Return, which a menu and a browser both take" \
     || bad "the remote's OK types nothing"
+# ⛔ An MCE remote's Back is KEY_EXIT, which reaches a browser as "Close" and
+# which neither Jellyfin's nor YouTube's television interface acts on.
+has 'case "back":   shell.key("XF86Back")' "$BGH/navremote.qml" \
+    && ok "…and Back becomes XF86Back, the browser's own back key" \
+    || bad "the remote's Back does nothing in a browser"
+has 'case "clear":  shell.clearPressed()' "$BGH/navremote.qml" \
+    && ok "…and Clear goes to the close-on-twice counter" \
+    || bad "the remote's Clear is not wired to close"
+awk '/function clearPressed/,/^    }/' "$BIGQML" > "$BGH/clear.qml"
+has 'shell.clearTwiceMs' "$BGH/clear.qml" && has 'closeFocusedProc.running = true' "$BGH/clear.qml" \
+    && ok "Clear closes only on a second press inside the window" \
+    || bad "Clear closes without a second press"
+grep -q 'id: closeFocusedProc; command: \["synctl", "dispatch", "close"\]' "$BIGQML"
+check "…and what it runs is synui's close, the action super+q runs" $?
 has 'mediaCmd("next")' "$BGH/navremote.qml" \
     && ok "…and skip becomes a transport press" \
     || bad "the remote's skip does nothing while away"

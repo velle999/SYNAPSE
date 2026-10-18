@@ -1282,10 +1282,15 @@ typedef struct {
  *
  * ⛔ THE PROBLEM IS THE OTHER HALF OF THE TIME. Press a tile and the interface
  * steps aside; keyboard focus belongs to the film, the browser or the game, and
- * five of the remote's buttons then reach NOTHING AT ALL:
+ * six of the remote's buttons then reach NOTHING AT ALL:
  *
  *   OK        XKB spells it XF86OK and no application binds it;
- *   ⏭ / ⏮    KEY_NEXT and KEY_PREVIOUS have NO KEYSYM WHATSOEVER —
+ *   Back      an MCE remote's Back is KEY_EXIT, not KEY_BACK, and XKB spells
+ *             it XF86Close. Measured in Firefox: it arrives as key "Close",
+ *             keyCode 0, and Jellyfin's and YouTube's television interfaces
+ *             both ignore it — the most-pressed button on the remote did
+ *             nothing in either;
+ *   ⏭ / ⏮   KEY_NEXT and KEY_PREVIOUS have NO KEYSYM WHATSOEVER —
  *             xkeyboard-config maps nothing to those keycodes, so there is not
  *             even an unnamed symbol for an application to bind;
  *   Guide     XF86MediaSelectProgramGuide, likewise bound by nothing;
@@ -1296,7 +1301,7 @@ typedef struct {
  * on screen. So this reads them from the device and the shell acts on them
  * itself, exactly as it already does for the controller.
  *
- * ⛔ AND ONLY THOSE FIVE, WHICH IS THE WHOLE RULE. Play, pause, stop, fast
+ * ⛔ AND ONLY THOSE SIX, WHICH IS THE WHOLE RULE. Play, pause, stop, fast
  * forward and rewind DO have keysyms and DO reach the application — mpv binds
  * every one of them out of the box — so reading those here as well would act
  * on them twice: the film would pause and unpause on one press. The line is
@@ -1309,7 +1314,16 @@ typedef struct {
  *
  * ⚠ NOTHING IS GRABBED. No EVIOCGRAB: the application keeps receiving whatever
  * the compositor sends it, and this is a second reader of the same device. That
- * is also why the five above had to be chosen so carefully.
+ * is also why the six above had to be chosen so carefully — and why Back is
+ * KEY_EXIT only: a remote whose Back sends KEY_BACK already reaches a browser
+ * as XF86Back, and reading it here too would go back two pages.
+ *
+ * ⚠ CLEAR IS THE ONE EXCEPTION, and it is a shortcut rather than a rescue. An
+ * MCE remote's Clear is KEY_DELETE, which DOES reach the application. It is
+ * read here as well because the shell makes Clear pressed twice close what is
+ * in front (the action super+q runs), and the shell is the only reader that
+ * sees both presses whatever has focus. Each press still deletes in a text
+ * field, which a close a moment later makes moot.
  */
 #define NAV_REMOTE_MAX 4
 
@@ -1320,10 +1334,12 @@ typedef struct {
 
 static const struct { int code; const char *word; } remote_keys[] = {
 	{ KEY_OK,	"accept" },
+	{ KEY_EXIT,	"back"   },
 	{ KEY_NEXT,	"next"   },
 	{ KEY_PREVIOUS,	"prev"   },
 	{ KEY_EPG,	"guide"  },
 	{ KEY_POWER2,	"power"  },
+	{ KEY_DELETE,	"clear"  },
 };
 
 static const char *remote_word(int code)

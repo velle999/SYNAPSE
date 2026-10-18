@@ -1450,7 +1450,21 @@ pkgver=0.1.0
 #   ⚠ NOT YET: YouTube's television app ignores the remote's Play, Stop, ⏪ and
 #   ⏩ under Firefox, which delivers them with keyCode 0 (Stop: 3). OK on the
 #   player's play button resumes.
-pkgrel=61
+# 62: THE REMOTE'S BACK GOES BACK, AND CLEAR TWICE CLOSES WHAT IS IN FRONT.
+#   An MCE remote's Back is KEY_EXIT, not KEY_BACK, and xkb spells it XF86Close.
+#   Firefox delivers it as key "Close", keyCode 0, and Jellyfin's and YouTube's
+#   television interfaces both ignore it — 61 was measured with a typed
+#   XF86Back, which they do follow, and not with the remote. `big nav` now reads
+#   KEY_EXIT as the word `back`, and with an application in front the shell
+#   types XF86Back. Measured in a headless nested session against a fixture
+#   remote: Back took Jellyfin from a film's page back to Home.
+#   ⚠ KEY_EXIT ONLY. A remote whose Back sends KEY_BACK already reaches the
+#   browser as XF86Back; reading it here as well would go back two pages.
+#   Clear (KEY_DELETE) pressed twice within 900ms runs synui's `close`, the
+#   action Super+Q runs. ⚠ TWICE, NEVER ONCE: everywhere else in big screen
+#   mode a close is confirmed, and the second press is the confirmation. A
+#   single press still reaches the application as Delete.
+pkgrel=62
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
