@@ -1392,6 +1392,12 @@ prompt at all. The published list is applied to the keyboards, not merely
 recorded — the devices were attached before it was read, and a chip that named a
 layout the keys were not on would be worse than no chip.
 
+**Each monitor is remembered on its own** in `outputs.conf`, by its make,
+model and serial as well as the port it is plugged into. A different monitor on
+the same port starts at its own preferred mode, and the first one gets its own
+settings back when it returns. A monitor with a serial number keeps its settings
+when it moves to another port.
+
 **Screens** are one setting with three positions: `display_mode = extend |
 mirror | external`, cycled with `m` in `Super`+`D`, from Control panel ▸ Display
 ▸ Screens, or `synctl dispatch display_mode [name]` — and on a laptop, from
@@ -1414,7 +1420,7 @@ where a plain white window lands on HDR's absolute scale. That is not a
 brightness control: it moves only where ordinary desktop content sits inside an
 HDR signal, which is the difference between a desktop that looks normal next to
 an HDR video and one that looks washed out beside it. The mode and the level are
-remembered per connector, and restored at the next login only if that monitor
+remembered per monitor, and restored at the next login only if that monitor
 still accepts them.
 
 From a script it is `synctl hdr` for what each screen will take, and

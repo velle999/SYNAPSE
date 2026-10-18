@@ -7,13 +7,21 @@
  * scale, and position of every connected output to
  * ~/.config/synui/outputs.conf. On the next new_output — reboot or hotplug
  * — server_new_output() (synui_main.c) calls output_persist_apply() first;
- * if that connector name has a saved entry, its saved state is restored
- * instead of the preferred-mode / auto-placement default.
+ * if this monitor has a saved entry, its saved state is restored instead of
+ * the preferred-mode / auto-placement default.
  *
- * Outputs are keyed by connector name (e.g. "DP-1"), matching how the
- * display panel already refers to them. Entries for outputs that aren't
- * currently connected are preserved on save (merged from the file already
- * on disk) so unplugging a monitor doesn't lose its settings.
+ * An entry is keyed by connector name (e.g. "DP-1") AND by the monitor on it
+ * — make/model/serial from its EDID, see output_identity(). ⛔ THE CONNECTOR
+ * ALONE IS NOT A MONITOR. A laptop's one HDMI port is a TV one evening and a
+ * desk monitor the next morning: keyed by name, the desk monitor was handed
+ * the TV's 3840x2160 — a mode a 1440p panel will take and downscale, so it
+ * came up blurry at 60Hz instead of sharp at its own preferred mode, and
+ * nothing said why. Now a monitor nothing was saved for gets the preferred
+ * mode the caller already committed, and each one on the port keeps its own.
+ *
+ * Entries for outputs that aren't currently connected are preserved on save
+ * (merged from the file already on disk) so unplugging a monitor doesn't
+ * lose its settings.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -33,10 +41,21 @@
 
 #include "synui.h"
 
-#define OUTPUT_PERSIST_MAX 16
+/* Per MONITOR now, not per connector, so a laptop collects one for every
+ * screen it has been plugged into. When the table is full the oldest entry
+ * for a monitor that is not connected makes room — see table_new_entry(). */
+#define OUTPUT_PERSIST_MAX 32
 
 typedef struct {
     char  name[64];
+    /* The monitor this entry describes (output_identity()); "" is a screen
+     * that reports no make, model or serial. has_id is 0 only for a line
+     * written before entries carried one: it is matched by connector alone,
+     * as every entry used to be, and takes the identity of the first monitor
+     * it is applied to — so an existing desk keeps its layout through the
+     * upgrade. */
+    char  id[192];
+    int   has_id;
     int   enabled;
     int   width, height;
     int   refresh;      /* mHz; 0 = don't care when matching modes */
@@ -95,12 +114,132 @@ void output_persist_adopt_file(const char *path)
     table_loaded = 0;
 }
 
-static persist_entry_t *table_find(const char *name)
+/*
+ * Which monitor this is, as its EDID names it: "make/model/serial", each part
+ * with whitespace and '/' turned into '_' so the whole thing is one token on
+ * the line and the separators stay unambiguous. Empty when the output reports
+ * none of the three — a headless output, or a screen whose EDID could not be
+ * read — and such an output is matched by connector name alone.
+ */
+static void output_identity(const struct wlr_output *wo, char *buf, size_t len)
 {
+    const char *part[3] = { wo->make, wo->model, wo->serial };
+    size_t n = 0;
+    int any = 0;
+    for (int i = 0; i < 3; i++) {
+        if (i && n + 1 < len) buf[n++] = '/';
+        for (const char *p = part[i]; p && *p && n + 1 < len; p++) {
+            unsigned char c = (unsigned char)*p;
+            buf[n++] = (isspace(c) || iscntrl(c) || c == '/') ? '_' : (char)c;
+            any = 1;
+        }
+    }
+    buf[any ? n : 0] = '\0';
+}
+
+/* Does any OTHER connected output carry this identity? Two monitors that
+ * report the same serial — cloned EDIDs exist — cannot be told apart, so
+ * neither may claim an entry saved under a different connector. */
+static int identity_shared(syn_server_t *s, syn_output_t *self, const char *id)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (o == self || vdisplay_is(o)) continue;
+        char other[192];
+        output_identity(o->wlr_output, other, sizeof(other));
+        if (!strcmp(other, id)) return 1;
+    }
+    return 0;
+}
+
+/*
+ * The entry for this monitor on this connector, best evidence first:
+ *
+ *   1. saved for this monitor, on this connector;
+ *   2. saved for this monitor on ANOTHER connector — it was moved, or a dock
+ *      renumbered its ports (MST hands out DP-5/DP-6 by plug order). Only for
+ *      a monitor with a serial that no other connected screen shares: two
+ *      identical serial-less monitors are told apart by their ports, so for
+ *      them the port has to agree;
+ *   3. a line from before entries carried an identity, on this connector.
+ *
+ * ⚠ 2 and 3 ADOPT what they find — renamed to this connector, stamped with
+ * this identity — so the next save rewrites that entry instead of adding a
+ * second one, and so a legacy line is claimed by the first monitor it is
+ * applied to and is never handed to a different one afterwards.
+ *
+ * NULL is a monitor nothing was saved for, and that is the autodetect path:
+ * the caller's preferred mode and auto-placement stand.
+ */
+static persist_entry_t *table_lookup(syn_server_t *s, syn_output_t *output)
+{
+    struct wlr_output *wo = output->wlr_output;
+    char id[192];
+    output_identity(wo, id, sizeof(id));
+
     for (int i = 0; i < table_count; i++)
-        if (!strcmp(table[i].name, name))
+        if (table[i].has_id && !strcmp(table[i].id, id) &&
+            !strcmp(table[i].name, wo->name))
             return &table[i];
+
+    if (wo->serial && *wo->serial && !identity_shared(s, output, id))
+        for (int i = 0; i < table_count; i++)
+            if (table[i].has_id && !strcmp(table[i].id, id)) {
+                wlr_log(WLR_INFO, "synui: %s is the monitor last saved on %s "
+                                  "— its settings follow it", wo->name,
+                        table[i].name);
+                snprintf(table[i].name, sizeof(table[i].name), "%s", wo->name);
+                return &table[i];
+            }
+
+    for (int i = 0; i < table_count; i++)
+        if (!table[i].has_id && !strcmp(table[i].name, wo->name)) {
+            snprintf(table[i].id, sizeof(table[i].id), "%s", id);
+            table[i].has_id = 1;
+            return &table[i];
+        }
+
     return NULL;
+}
+
+/* Is this entry the one a connected output is using right now? */
+static int entry_is_live(syn_server_t *s, const persist_entry_t *e)
+{
+    if (!e->has_id) return 0;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (vdisplay_is(o)) continue;
+        char id[192];
+        output_identity(o->wlr_output, id, sizeof(id));
+        if (!strcmp(e->name, o->wlr_output->name) && !strcmp(e->id, id))
+            return 1;
+    }
+    return 0;
+}
+
+/*
+ * A blank entry at the end of the table. Full, the OLDEST entry for a monitor
+ * that is not connected makes room: entries are only ever appended, so the
+ * first one in the file is the one that has been there longest. NULL only if
+ * every entry belongs to a connected screen.
+ */
+static persist_entry_t *table_new_entry(syn_server_t *s)
+{
+    if (table_count >= OUTPUT_PERSIST_MAX) {
+        int victim = -1;
+        for (int i = 0; i < table_count && victim < 0; i++)
+            if (!entry_is_live(s, &table[i])) victim = i;
+        if (victim < 0) return NULL;
+        wlr_log(WLR_INFO, "synui: outputs.conf is full — forgetting the "
+                          "oldest monitor, %s %s", table[victim].name,
+                table[victim].has_id ? table[victim].id : "");
+        memmove(&table[victim], &table[victim + 1],
+                (size_t)(table_count - victim - 1) * sizeof(table[0]));
+        table_count--;
+    }
+    persist_entry_t *e = &table[table_count++];
+    memset(e, 0, sizeof(*e));
+    return e;
 }
 
 static void table_load(void)
@@ -135,7 +274,13 @@ static void table_load(void)
             if (!eq) continue;
             *eq = '\0';
             const char *val = eq + 1;
-            if      (!strcmp(tok, "enabled"))   e->enabled   = atoi(val);
+            if      (!strcmp(tok, "id")) {
+                /* "-" is how an identity-less screen is written down. */
+                snprintf(e->id, sizeof(e->id), "%s",
+                         strcmp(val, "-") ? val : "");
+                e->has_id = 1;
+            }
+            else if (!strcmp(tok, "enabled"))   e->enabled   = atoi(val);
             else if (!strcmp(tok, "width"))     e->width     = atoi(val);
             else if (!strcmp(tok, "height"))    e->height    = atoi(val);
             else if (!strcmp(tok, "refresh"))   e->refresh   = atoi(val);
@@ -155,7 +300,7 @@ static void table_load(void)
     fclose(f);
 }
 
-/* Restore a saved mode/transform/scale/position for this connector, if we
+/* Restore a saved mode/transform/scale/position for this monitor, if we
  * have one. Returns the layout entry (as wlr_output_layout_add_auto()
  * would) on success, or NULL if there's no saved entry or the backend
  * rejected it — in either case the caller's own preferred-mode default
@@ -173,7 +318,7 @@ struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
     if (vdisplay_is(output)) return NULL;
 
     table_load();
-    persist_entry_t *e = table_find(output->wlr_output->name);
+    persist_entry_t *e = table_lookup(s, output);
     if (!e) return NULL;
 
     struct wlr_output *wo = output->wlr_output;
@@ -256,12 +401,13 @@ void output_persist_save(syn_server_t *s)
          * display is never read back, so writing it would only fill the file
          * with HEADLESS-n entries that outlive the thing they describe. */
         if (vdisplay_is(o)) continue;
-        persist_entry_t *e = table_find(wo->name);
+        persist_entry_t *e = table_lookup(s, o);
         if (!e) {
-            if (table_count >= OUTPUT_PERSIST_MAX) continue;
-            e = &table[table_count++];
-            memset(e, 0, sizeof(*e));
+            e = table_new_entry(s);
+            if (!e) continue;
             snprintf(e->name, sizeof(e->name), "%s", wo->name);
+            output_identity(wo, e->id, sizeof(e->id));
+            e->has_id = 1;
         }
 
         struct wlr_box box;
@@ -319,14 +465,22 @@ void output_persist_save(syn_server_t *s)
      * — is demoted, so unplugging the old primary and promoting a new one
      * can't leave two claims in the file. If no connected output is primary
      * we leave the saved flags alone, so unplugging the primary monitor and
-     * plugging it back in restores it. */
-    const char *primary_name = NULL;
+     * plugging it back in restores it.
+     *
+     * ⚠ By ENTRY, not by connector name: the TV and the desk monitor that
+     * take turns on one HDMI port are two entries with the same name, and
+     * only the one on the desk right now is the primary. Looked up after the
+     * loop above, because making room in a full table moves entries. */
+    syn_output_t *prim = NULL;
     wl_list_for_each(o, &s->outputs, link)
-        if (o->primary) { primary_name = o->wlr_output->name; break; }
+        if (o->primary) { prim = o; break; }
 
-    if (primary_name)
+    if (prim) {
+        const persist_entry_t *pe = vdisplay_is(prim) ? NULL
+                                                       : table_lookup(s, prim);
         for (int i = 0; i < table_count; i++)
-            table[i].primary = !strcmp(table[i].name, primary_name);
+            table[i].primary = (&table[i] == pe);
+    }
 
     char path[256];
     outputs_path(path, sizeof(path));
@@ -353,14 +507,24 @@ void output_persist_save(syn_server_t *s)
                "# hdr=1 drives that monitor in HDR10 (Shift+D in the display\n"
                "# panel). hdr_white is the SDR white level in cd/m2 — where a\n"
                "# plain white window sits on PQ's absolute scale. It is only\n"
-               "# restored if the connector still accepts HDR at next login.\n");
+               "# restored if the connector still accepts HDR at next login.\n"
+               "#\n"
+               "# id= is the monitor (make/model/serial, from its EDID). Each\n"
+               "# monitor keeps its own line, so a different one plugged into\n"
+               "# the same port starts at its own preferred mode. A line with\n"
+               "# no id applies to whichever monitor is on that connector.\n");
     for (int i = 0; i < table_count; i++) {
         persist_entry_t *e = &table[i];
+        fprintf(f, "output %s ", e->name);
+        /* A legacy line stays one until a monitor claims it — written with
+         * an id it would stop matching anything. */
+        if (e->has_id)
+            fprintf(f, "id=%s ", e->id[0] ? e->id : "-");
         fprintf(f,
-                "output %s enabled=%d width=%d height=%d refresh=%d "
+                "enabled=%d width=%d height=%d refresh=%d "
                 "transform=%d scale=%.6f grid_x=%d grid_y=%d x=%d y=%d "
                 "primary=%d deep_color=%d hdr=%d hdr_white=%d\n",
-                e->name, e->enabled, e->width, e->height, e->refresh,
+                e->enabled, e->width, e->height, e->refresh,
                 e->transform, (double)e->scale, e->grid_x, e->grid_y,
                 e->x, e->y, e->primary, e->deep_color, e->hdr, e->hdr_white);
     }

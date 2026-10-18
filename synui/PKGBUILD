@@ -3906,7 +3906,20 @@ pkgver=0.1.0
 #   Wine's extracted icons stay as they are, since 32-64px is all there is.
 #   Five icon_lookup checks; the old walk fails three and dropping the glyph
 #   rule fails the fourth.
-pkgrel=638
+# 639: A MONITOR GETS ITS OWN SAVED MODE, NOT THE PORT'S. outputs.conf was keyed
+#   by connector name, so a laptop's HDMI-A-1 entry, written by a 4K TV, was
+#   applied to the 1440p monitor plugged into the same port the next day: its
+#   preferred 2560x1440 was committed and then replaced by the TV's 3840x2160,
+#   which that monitor also lists and downscales. Every line now carries id=
+#   (make/model/serial from the EDID), each monitor on a port keeps its own,
+#   and a monitor nothing was saved for keeps the preferred mode. A monitor
+#   with a serial keeps its line when it moves port (MST docks renumber
+#   them); serial-less twins are told apart by port. A line with no id still
+#   applies by connector and is claimed by the first monitor it lands on, so
+#   an existing desk keeps its layout. Primary is per monitor, the table is
+#   32 entries and makes room by forgetting the oldest unplugged monitor.
+#   tests/output_persist_test.c: 27 checks, 17 red on 638.
+pkgrel=639
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

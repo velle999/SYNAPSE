@@ -8055,8 +8055,10 @@ bool vdisplay_solo_live(syn_server_t *s);
 void vdisplay_output_gone(syn_server_t *s, syn_output_t *o);
 
 /* ── output_persist.c ────────────────────────────────────── */
-/* Restore this connector's saved mode/transform/scale/position (from
- * ~/.config/synui/outputs.conf) if one exists. Returns the layout entry on
+/* Restore the saved mode/transform/scale/position (from
+ * ~/.config/synui/outputs.conf) of the monitor on this connector — matched by
+ * its EDID make/model/serial as well as the connector name, so a different
+ * monitor on the same port keeps its preferred mode. Returns the layout entry on
  * success (as wlr_output_layout_add_auto() would), or NULL if there's
  * nothing saved / the backend rejected it — caller should fall back to
  * auto-placement. */

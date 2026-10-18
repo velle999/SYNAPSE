@@ -1382,6 +1382,18 @@ output_exile_test = executable('output_exile_test',
   build_by_default : false)
 test('output_exile', output_exile_test)
 
+# A saved monitor setting belongs to the monitor, not the port. Links
+# output_persist.c alone against stubs for the same reason output_exile does:
+# headless outputs carry no EDID, and the bug is two DIFFERENT monitors on ONE
+# connector — a TV's 4K handed to the 1440p desk monitor plugged in after it.
+output_persist_test = executable('output_persist_test',
+  ['tests/output_persist_test.c', 'src/output_persist.c', layer_shell_h],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('output_persist', output_persist_test)
+
 # The mission-control grid. Links overview.c alone — the layout is pure
 # arithmetic over an output box, and it is what both the renderer and the hit
 # test read, so "what you click is what you see" rests entirely on it.
