@@ -3919,7 +3919,18 @@ pkgver=0.1.0
 #   an existing desk keeps its layout. Primary is per monitor, the table is
 #   32 entries and makes room by forgetting the oldest unplugged monitor.
 #   tests/output_persist_test.c: 27 checks, 17 red on 638.
-pkgrel=639
+# 640: A SCREEN THAT COMES BACK INTO THE LAYOUT DRAWS FROM WHERE IT STANDS.
+#   Taking an output out of the layout (Built-in off, a lid closed at a desk,
+#   wlr-randr --off) destroys its layout entry and the scene pairing made in
+#   server_new_output() with it; putting it back made a new entry nothing
+#   paired. The layout, the cursor and wlr-randr agreed the screen had moved
+#   and the screen kept rendering its old spot: after one trip through
+#   Built-in off, moving a desk monitor above a laptop panel left the panel
+#   showing the monitor's top-left corner pixel for pixel, and grey at the
+#   halfway step. A listener on the layout's add event now pairs any output
+#   that already has a scene output. tests/scene_follows_layout.sh: 2 of 4
+#   red on 639.
+pkgrel=640
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

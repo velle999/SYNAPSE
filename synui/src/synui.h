@@ -7789,6 +7789,8 @@ struct syn_server {
 
     /* Listeners */
     struct wl_listener new_output;
+    /* An output coming BACK into the layout — see output_layout_readded(). */
+    struct wl_listener output_layout_add;
     struct wl_listener new_xdg_toplevel;
     struct wl_listener new_xdg_popup;
     struct wl_listener new_layer_surface;

@@ -935,6 +935,33 @@ static void output_destroy(struct wl_listener *listener, void *data)
         output_mgmt_update(server);
 }
 
+/*
+ * An output has been added to the layout. ⛔ THE SCENE DOES NOT FOLLOW IT BACK
+ * BY ITSELF. Taking an output out of the layout — "Built-in off", a lid closed
+ * at a desk, `wlr-randr --off` — destroys its wlr_output_layout_output, and
+ * the scene pair server_new_output() made with wlr_scene_output_layout_add_
+ * output() goes with it. Putting the output back makes a NEW layout entry that
+ * nothing pairs, so the screen went on rendering from wherever it last stood
+ * while the layout, the cursor and wlr-randr all agreed it had moved. On a
+ * ThinkPad that had been through "Built-in off" earlier, moving the LG above
+ * the built-in panel left the panel showing the LG's top-left corner — it was
+ * still drawing from (0,0) — and grey in between, when nothing stood there.
+ *
+ * A first appearance is still paired by server_new_output(): the layout entry
+ * is made before the scene output exists, which is why this skips an output
+ * with no scene_output yet. Every later add is a return, and is paired here,
+ * whichever of the callers above made it.
+ */
+static void output_layout_readded(struct wl_listener *listener, void *data)
+{
+    syn_server_t *server = wl_container_of(listener, server, output_layout_add);
+    struct wlr_output_layout_output *l_output = data;
+    syn_output_t *output = l_output->output->data;
+    if (!output || !output->scene_output) return;
+    wlr_scene_output_layout_add_output(server->scene_layout, l_output,
+                                       output->scene_output);
+}
+
 static void server_new_output(struct wl_listener *listener, void *data)
 {
     syn_server_t *server = wl_container_of(listener, server, new_output);
@@ -2475,6 +2502,8 @@ int synui_init(syn_server_t *s)
     /* Wire up listeners */
     s->new_output.notify = server_new_output;
     wl_signal_add(&s->backend->events.new_output, &s->new_output);
+    s->output_layout_add.notify = output_layout_readded;
+    wl_signal_add(&s->output_layout->events.add, &s->output_layout_add);
 
     s->new_xdg_toplevel.notify = server_new_xdg_toplevel;
     wl_signal_add(&s->xdg_shell->events.new_toplevel, &s->new_xdg_toplevel);
@@ -2846,6 +2875,7 @@ void synui_destroy(syn_server_t *s)
      * (wlr_cursor_destroy, etc.). Per-output/-keyboard/-view listeners are
      * removed by their own destroy handlers during the teardown below. */
     wl_list_remove(&s->new_output.link);
+    wl_list_remove(&s->output_layout_add.link);
     wl_list_remove(&s->new_input.link);
     wl_list_remove(&s->new_xdg_toplevel.link);
     wl_list_remove(&s->new_xdg_popup.link);

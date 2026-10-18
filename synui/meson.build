@@ -2111,6 +2111,16 @@ test('input_pin', input_pin_t,
      depends : [synui_exe, synctl_exe, vpointer_click],
      timeout : 120)
 
+# A screen that leaves the layout and comes back draws from where it now
+# stands. Taking an output out of the layout dropped its scene pairing, and
+# putting it back made one nothing paired: moved afterwards, it went on drawing
+# its old spot — a built-in panel showing the desk monitor's corner.
+scene_follows_layout_t = find_program('tests/scene_follows_layout.sh')
+test('scene_follows_layout', scene_follows_layout_t,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 90)
+
 display_scale_t = find_program('tests/display_scale.sh')
 test('display_scale', display_scale_t,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],
