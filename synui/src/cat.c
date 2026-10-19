@@ -268,6 +268,17 @@ bool cat_tick(syn_output_t *o, double now)
     return false;
 }
 
+/* Shutdown, before wl_display_destroy(): libwayland frees a source only when
+ * it is removed, so a session that ended with the cat out leaked its timer —
+ * smoke.sh test 15 under ASan. The scene tree goes with the scene. */
+void cat_finish(syn_server_t *s)
+{
+    if (s->cat.timer) {
+        wl_event_source_remove(s->cat.timer);
+        s->cat.timer = NULL;
+    }
+}
+
 void cat_toggle(syn_server_t *s)
 {
     s->cat.enabled = !s->cat.enabled;
@@ -286,7 +297,8 @@ void cat_toggle(syn_server_t *s)
         if (!s->cat.tree) { s->cat.enabled = 0; return; }
         srand((unsigned)time(NULL) ^ (unsigned)getpid());
     }
-    /* Freed with the event loop at wl_display_destroy, like dock.c's timers. */
+    /* Removed by cat_finish(): wl_event_loop_destroy() frees the loop, not the
+     * sources still on it. */
     if (!s->cat.timer)
         s->cat.timer = wl_event_loop_add_timer(
             wl_display_get_event_loop(s->display), cat_timer_fired, s);

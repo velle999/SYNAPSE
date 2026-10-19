@@ -181,6 +181,25 @@ static void set_ac(bool online)
     }
 }
 
+/* The fake /sys/class/drm output_sink_present() reads (meson points
+ * SYNUI_DRM_SYSFS_DIR here). ⚠ Without it the "DP-2" below was the build
+ * machine's own DP-2: power.c releases a head whose sink reads disconnected,
+ * so on a desk with that monitor unplugged every docked case found the monitor
+ * switched off. The card index is not part of the name power.c matches. */
+static void set_sink(const char *name, bool connected)
+{
+    char p[512], f[600];
+    snprintf(p, sizeof(p), "%s", SYNUI_DRM_SYSFS_DIR);
+    mkdir(p, 0700);
+    snprintf(p, sizeof(p), "%s/card0-%s", SYNUI_DRM_SYSFS_DIR, name);
+    mkdir(p, 0700);
+    snprintf(f, sizeof(f), "%s/status", p);
+    FILE *fp = fopen(f, "w");
+    assert(fp);
+    fprintf(fp, "%s\n", connected ? "connected" : "disconnected");
+    fclose(fp);
+}
+
 /* Drop every output add_output() allocated. Also called once at exit, so the
  * last case's outputs are not left behind either. */
 static void free_outputs(void)
@@ -205,6 +224,8 @@ static void reset(bool docked, bool on_ac)
     panel = add_output("eDP-1", &panel_out);
     monitor = docked ? add_output("DP-2", &monitor_out) : NULL;
     set_ac(on_ac);
+    set_sink("eDP-1", true);
+    set_sink("DP-2", true);
 
     memset(&srv->power, 0, sizeof(srv->power));
     srv->config.power_enabled = 1;
@@ -281,6 +302,19 @@ int main(void)
     CHECK(locked == 1, "lid lock did not lock");
     CHECK(!panel_out.enabled, "lid lock left the built-in panel lit");
     CHECK(monitor_out.enabled, "lid lock turned the external monitor off");
+
+    /*    A monitor whose sink has gone is released by the same pass — the
+     *    DP-3 resume fault output_sink_present() exists for — and lit again
+     *    once its connector reads connected. */
+    reset(true, false);
+    srv->config.lid_close_docked_action = SYN_LID_BLANK;
+    set_sink("DP-2", false);
+    power_lid_set(srv, true);
+    CHECK(!monitor_out.enabled, "a monitor with no sink was left driven");
+    set_sink("DP-2", true);
+    power_lid_set(srv, false);
+    CHECK(monitor_out.enabled && panel_out.enabled,
+          "a monitor whose sink came back was not lit again");
 
     /* 5. AC beats battery: same config as case 1, charger plugged in, and the
      *    lid must take the *other* row. This is the axis logind splits out as

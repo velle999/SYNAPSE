@@ -270,23 +270,34 @@ int main(int argc, char **argv)
 
     /* 2 — a different buffer of the same size, damage over what changed. */
     struct mem_buffer *b = mb_copy(a);
+    struct mem_buffer *c = NULL, *d = NULL, *e = NULL, *f = NULL, *cat = NULL;
     paint(b, 2, 10, 8, 50, 40);
+    /* ⚠ The control's verdict goes through the same teardown as the full run:
+     * returning from here leaked the display, the capture and both buffers,
+     * and under ASan LeakSanitizer turned the control's own pass into an
+     * abort. */
+    int stale_rc = -1;
     if (stale) {
         pixman_region32_t none;
         pixman_region32_init(&none);
         wlr_scene_buffer_set_buffer_with_damage(node, &b->base, &none);
         pixman_region32_fini(&none);
-        if (!render(&rig)) { printf("FAIL --stale: render failed\n"); return 1; }
-        long n = mismatches(&rig, b, X0, Y0);
-        if (n == 0) {
+        long n = render(&rig) ? mismatches(&rig, b, X0, Y0) : -1;
+        if (n < 0) {
+            printf("FAIL --stale: render failed\n");
+            stale_rc = 1;
+        } else if (n == 0) {
             printf("SKIP: --stale: this scenefx recreated the texture from the "
                    "whole buffer (no keep-texture patch), so nothing can be "
                    "stale here\n");
-            return 77;
+            stale_rc = 77;
+        } else {
+            printf("ok   --stale: %ld pixel(s) of the new buffer missing with no "
+                   "damage given — the texture was kept and only damage "
+                   "uploaded\n", n);
+            stale_rc = 0;
         }
-        printf("ok   --stale: %ld pixel(s) of the new buffer missing with no "
-               "damage given — the texture was kept and only damage uploaded\n", n);
-        return 0;
+        goto teardown;
     }
     set_with_damage(node, b, 10, 8, 50, 40);
     expect(&rig, "2 same size, partial damage", b, X0, Y0);
@@ -297,30 +308,29 @@ int main(int argc, char **argv)
     expect(&rig, "3 same buffer redrawn in place", b, X0, Y0);
 
     /* 4 — two replacements before one render: the union, from the last. */
-    struct mem_buffer *c = mb_copy(b);
+    c = mb_copy(b);
     paint(c, 4, 0, 0, 30, 30);
     set_with_damage(node, c, 0, 0, 30, 30);
-    struct mem_buffer *d = mb_copy(c);
+    d = mb_copy(c);
     paint(d, 5, 60, 30, 96, 64);
     set_with_damage(node, d, 60, 30, 96, 64);
     expect(&rig, "4 two sets, one render", d, X0, Y0);
 
     /* 5 — another size. */
-    struct mem_buffer *e = mb_new(W + 8, H - 4);
+    e = mb_new(W + 8, H - 4);
     paint_all(e, 6);
     wlr_scene_buffer_set_buffer(node, &e->base);
     expect(&rig, "5 another size", e, X0, Y0);
 
     /* 6 — unmapped and mapped again. */
     wlr_scene_buffer_set_buffer(node, NULL);
-    struct mem_buffer *f = mb_new(W + 8, H - 4);
+    f = mb_new(W + 8, H - 4);
     paint_all(f, 7);
     wlr_scene_buffer_set_buffer(node, &f->base);
     expect(&rig, "6 unmapped, mapped again", f, X0, Y0);
 
     /* 7 — the cat: a new whole buffer every step, set without damage. */
     long bad_steps = 0;
-    struct mem_buffer *cat = NULL;
     for (int i = 0; i < 200; i++) {
         struct mem_buffer *n = mb_new(W + 8, H - 4);
         paint_all(n, 100u + (unsigned)i);
@@ -337,12 +347,13 @@ int main(int argc, char **argv)
         printf("ok   7 200 whole redraws\n");
     }
 
+teardown:
     wlr_buffer_drop(&a->base);
     wlr_buffer_drop(&b->base);
-    wlr_buffer_drop(&c->base);
-    wlr_buffer_drop(&d->base);
-    wlr_buffer_drop(&e->base);
-    wlr_buffer_drop(&f->base);
+    if (c) wlr_buffer_drop(&c->base);
+    if (d) wlr_buffer_drop(&d->base);
+    if (e) wlr_buffer_drop(&e->base);
+    if (f) wlr_buffer_drop(&f->base);
     if (cat) wlr_buffer_drop(&cat->base);
     wlr_scene_node_destroy(&scene->tree.node);
     free(rig.cap);
@@ -351,6 +362,7 @@ int main(int argc, char **argv)
     wlr_backend_destroy(be);
     wl_display_destroy(dpy);
 
+    if (stale_rc >= 0) return stale_rc;
     if (failures) {
         printf("%d step(s) failed\n", failures);
         return 1;

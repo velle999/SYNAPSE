@@ -608,6 +608,39 @@ else
     echo "ok 14 # SKIP security_context_test not built"
 fi
 
+# ── 15. Shutdown with the cat out ──────────────────────────
+# The cat steps on a timer of its own (cat.c, pkgrel 633), on the display's
+# event loop. wl_event_loop_destroy() frees the loop and not the sources still
+# on it — libwayland says to remove every one first — and no instance above
+# ever had the cat out, so its timer was never once on a loop torn down here.
+unset WAYLAND_DISPLAY
+LOG="$TMP/synui-cat.log"
+printf 'welcome_at_startup = off\ncat = on\n' > "$TMP/synuirc"
+"$SYNUI" >"$LOG" 2>&1 &
+SYNUI_PID=$!
+i=0
+while ! grep -q "cat mode on" "$LOG"; do
+    [ $i -ge 100 ] && fail "cat: 'cat mode on' not logged within 10s"
+    kill -0 "$SYNUI_PID" 2>/dev/null || fail "cat: synui died during startup"
+    sleep 0.1
+    i=$((i + 1))
+done
+sleep 0.5      # steps taken, so the timer has been re-armed from a frame too
+kill -TERM "$SYNUI_PID"
+i=0
+while kill -0 "$SYNUI_PID" 2>/dev/null; do
+    [ $i -ge 100 ] && fail "cat: synui did not exit within 10s of SIGTERM"
+    sleep 0.1
+    i=$((i + 1))
+done
+wait "$SYNUI_PID"
+rc=$?
+[ "$rc" -eq 0 ] || fail "cat: synui exited $rc shutting down with the cat out (expected 0)"
+if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
+    fail "cat: sanitizer error shutting down with the cat out"
+fi
+echo "ok 15 - shutdown with the cat out: clean exit, nothing leaked"
+
 SYNUI_PID=
 cleanup
 echo "PASS"

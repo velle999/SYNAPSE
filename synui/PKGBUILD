@@ -3930,7 +3930,26 @@ pkgver=0.1.0
 #   halfway step. A listener on the layout's add event now pairs any output
 #   that already has a scene output. tests/scene_follows_layout.sh: 2 of 4
 #   red on 639.
-pkgrel=640
+# 641: THE CAT'S TIMER IS REMOVED AT SHUTDOWN, AND lid_test READS ITS OWN
+#   CONNECTORS. (1) 633 gave the cat a step timer on the display's event loop
+#   and left it there: wl_event_loop_destroy() frees the loop, not the sources
+#   still on it, so a session that ended with the cat out leaked it (88 bytes,
+#   LeakSanitizer, wl_event_loop_add_timer <- cat_toggle). cat_finish() removes
+#   it beside dock_finish(). smoke.sh test 15 shuts down with `cat = on`: red
+#   on 640 under ASan, tests 1-14 unchanged. (2) output_sink_present() reads
+#   connector status from /sys/class/drm, and lid_test's external monitor is
+#   called DP-2, so the test asked the BUILD MACHINE's DP-2: on this desk, with
+#   that monitor unplugged, power.c released the test's monitor and 3 checks
+#   failed; with it plugged in they passed. SYNUI_DRM_SYSFS_DIR points the test
+#   at a directory it writes, as SYNUI_POWER_SUPPLY_DIR already did for the
+#   charger; the shipped binary still reads /sys/class/drm. A new case unplugs
+#   the test's DP-2 under a lid blank and plugs it back: a sink-blind mutant
+#   fails it. (3) scene_reupload_rig --stale (634's negative control) returned
+#   its verdict from the middle of main() and leaked the display, the capture
+#   and two buffers, so under ASan LeakSanitizer aborted the control it had
+#   just passed (305640 bytes, 7 allocations); it now leaves through the same
+#   teardown as the full run. The shipped compositor changes only in (1).
+pkgrel=641
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -2926,6 +2926,7 @@ void synui_destroy(syn_server_t *s)
     bt_finish(s);
     clock_finish(s);
     dock_finish(s);
+    cat_finish(s);
     screensaver_finish(s);
     mpris_finish(s);
     /* Joins the fetch thread. Its stop flag doubles as the libcurl progress

@@ -9092,6 +9092,8 @@ void cat_paint(cairo_t *cr, const cat_pose_t *pose);   /* faces right */
 void cat_toggle(syn_server_t *s);
 /* Advance + redraw the kitty; true if this output wants another frame. */
 bool cat_tick(syn_output_t *o, double now);
+/* Shutdown: removes the cat's step timer from the event loop. */
+void cat_finish(syn_server_t *s);
 /* Shutdown: restart synapd if we suspended it, so synui exiting mid-game
  * doesn't leave the box with no AI. */
 void game_finish(syn_server_t *s);

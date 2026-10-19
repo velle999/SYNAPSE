@@ -213,12 +213,21 @@ bool output_is_internal(struct wlr_output *o)
  * Unknown deliberately reads as PRESENT. If sysfs cannot be opened or the
  * connector is not found, answering "gone" would blank every output on resume
  * — far worse than the fault this is here to avoid. Only an explicit
- * "disconnected" counts against a head. */
+ * "disconnected" counts against a head.
+ *
+ * ⚠ SYNUI_DRM_SYSFS_DIR IS lid_test's, as SYNUI_POWER_SUPPLY_DIR is. Reading
+ * the real /sys/class/drm, the test's fake "DP-2" was whatever the machine
+ * running it had on its own DP-2: red on a desk whose DP-2 monitor was
+ * unplugged, green on one where it was plugged in. Nothing in the build sets it. */
+#ifndef SYNUI_DRM_SYSFS_DIR
+#define SYNUI_DRM_SYSFS_DIR "/sys/class/drm"
+#endif
+
 static bool output_sink_present(struct wlr_output *o)
 {
     if (!o || !o->name[0]) return true;
 
-    DIR *dir = opendir("/sys/class/drm");
+    DIR *dir = opendir(SYNUI_DRM_SYSFS_DIR);
     if (!dir) return true;
 
     bool present = true;
@@ -229,7 +238,7 @@ static bool output_sink_present(struct wlr_output *o)
         if (!dash || strcmp(dash + 1, o->name) != 0) continue;
 
         char path[PATH_MAX];
-        snprintf(path, sizeof(path), "/sys/class/drm/%s/status", de->d_name);
+        snprintf(path, sizeof(path), SYNUI_DRM_SYSFS_DIR "/%s/status", de->d_name);
         FILE *f = fopen(path, "re");
         if (f) {
             char st[32] = {0};

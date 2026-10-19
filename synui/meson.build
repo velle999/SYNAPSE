@@ -1543,7 +1543,9 @@ test('edid_hdr', edid_hdr_test)
 # SYNUI_POWER_SUPPLY_DIR aims power_on_ac() at a scratch tree the test builds,
 # since there is no other way to exercise the on-battery branch on a machine
 # that is plugged in. Only this target defines it; the shipped binary keeps the
-# real /sys/class/power_supply.
+# real /sys/class/power_supply. SYNUI_DRM_SYSFS_DIR is the same for the
+# connector status output_sink_present() reads: without it the test's "DP-2"
+# was the build machine's own DP-2, and an unplugged one there failed the test.
 lid_test = executable('lid_test',
   # hit.c is linked in rather than stubbed: it is pure geometry with no wlroots
   # in it, so the pointer handlers power.c grew are exercised for real.
@@ -1552,7 +1554,9 @@ lid_test = executable('lid_test',
   dependencies : [scenefx, cairo, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_POWER_SUPPLY_DIR="' + meson.current_build_dir() +
-            '/lid_test_power_supply"'],
+            '/lid_test_power_supply"',
+            '-DSYNUI_DRM_SYSFS_DIR="' + meson.current_build_dir() +
+            '/lid_test_drm"'],
   build_by_default : false)
 test('lid', lid_test)
 
