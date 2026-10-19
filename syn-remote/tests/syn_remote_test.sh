@@ -1346,15 +1346,34 @@ livepid=$!
 tries=0
 while [ ! -S "$livesock" ] && [ "$tries" -lt 50 ]; do sleep 0.1; tries=$((tries + 1)); done
 printf 'wayland-live\n' > "$XDG_RUNTIME_DIR/synui-display"
+# ⛔ THE STAND-IN WAITS FOR THE WATCHER, as the real server does by outliving it.
+# cmd_run backgrounds watcher_main and then EXECS wayvnc, so the watcher is this
+# process's child. A stand-in that exited at once orphaned it, and it went on
+# calling wayvncctl after this section had ended. Section 21 rewrites that stub:
+# CI caught the rewrite mid-exec ("wayvncctl: Text file busy"), the old stub
+# stayed, and 21 failed with "the watcher rig never opened an event stream". A
+# later call ran 21's stub instead and leaked its `sleep 120` past the suite.
+# ⚠ Python, because sh's `wait` knows only children it started itself, and
+# BOUNDED, so a watcher that never ends fails here by name instead of hanging.
 cat > "$stub/wayvnc" <<EOF
-#!/bin/sh
-printf '%s\n' "\$*" > "$T/wayvnc-args"
-exit 0
+#!/usr/bin/env python3
+import os, sys, time
+with open("$T/wayvnc-args", "w") as f:
+    f.write(" ".join(sys.argv[1:]) + "\\n")
+deadline = time.monotonic() + 10
+while time.monotonic() < deadline:
+    try:
+        pid, _ = os.waitpid(-1, os.WNOHANG)
+    except ChildProcessError:
+        sys.exit(0)
+    if pid == 0:
+        time.sleep(0.05)
+sys.exit("STUB WAYVNC: the watcher was still running 10s after it started")
 EOF
 chmod +x "$stub/wayvnc"
-cat > "$stub/wayvncctl" <<'EOF'
+cat > "$stub/wayvncctl" <<EOF
 #!/bin/sh
-case "$*" in *output-list*) printf '[]\n' ;; *event-receive*) exit 1 ;; esac
+case "\$*" in *output-list*) printf '[]\n' ;; *event-receive*) echo stream >> "$T/streams20b"; exit 1 ;; esac
 exit 0
 EOF
 chmod +x "$stub/wayvncctl"
@@ -1364,7 +1383,7 @@ cat > "$stub/synctl" <<'EOF'
 EOF
 chmod +x "$stub/synctl"
 ( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
-rm -f "$T/wayvnc-args" "$BOUND_F"
+rm -f "$T/wayvnc-args" "$BOUND_F" "$T/streams20b"
 ( unset WAYLAND_DISPLAY
   export SYN_REMOTE_SESSION_WAIT=2 SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
   SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
@@ -1377,9 +1396,14 @@ grep -q -- '--output=DP-3' "$T/wayvnc-args" 2>/dev/null \
     || bad "wayvnc was started without --output=DP-3: [$(cat "$T/wayvnc-args" 2>/dev/null)]"
 check "...and records it as the screen it can be switched back to" "DP-3" \
       "$(cat "$BOUND_F" 2>/dev/null)"
+# ⛔ AND THE WATCHER IT STARTED WAS DONE BEFORE THIS SECTION MOVED ON. One round
+# (SYN_REMOTE_WATCH_RETRIES=1) asks for exactly one event stream; a watcher still
+# running here is one still exec'ing wayvncctl when section 21 rewrites it.
+check "...and the watcher it started had finished when run returned" 1 \
+      "$(grep -c stream "$T/streams20b" 2>/dev/null)"
 # ...and a screen synui does not have is never named, since wayvnc exits on one.
 ( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output DP-9 ) >/dev/null 2>&1
-rm -f "$T/wayvnc-args"
+rm -f "$T/wayvnc-args" "$T/streams20b"
 ( unset WAYLAND_DISPLAY
   export SYN_REMOTE_SESSION_WAIT=2 SYN_REMOTE_WATCH_RETRIES=1 SYN_REMOTE_WATCH_BACKOFF=0
   SYN_REMOTE_SOURCE_ONLY=1 . "$SR"
@@ -1391,6 +1415,8 @@ grep -q -- '--output' "$T/wayvnc-args" 2>/dev/null \
     && bad "run named a screen synui does not have: [$(cat "$T/wayvnc-args")]" \
     || ok "...and names no screen that is not there"
 check "...and records that it chose none" "" "$(cat "$BOUND_F" 2>/dev/null)"
+check "...and that watcher had finished too" 1 \
+      "$(grep -c stream "$T/streams20b" 2>/dev/null)"
 ( SYN_REMOTE_SOURCE_ONLY=1 . "$SR"; set_setting output auto ) >/dev/null 2>&1
 rm -f "$stub/synctl"
 kill "$livepid" 2>/dev/null; wait "$livepid" 2>/dev/null

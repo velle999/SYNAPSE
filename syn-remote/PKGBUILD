@@ -314,7 +314,17 @@ pkgver=0.1.0
 #   pam_faillock be added — wayvnc runs as the user and the tally is root's.
 #   `auth pam` prints that the sign-in has no lockout; the comments that
 #   claimed one are corrected. syn_remote_test: red against 18, ok on 19.
-pkgrel=19
+# 20: THE SUITE NO LONGER LEAVES SECTION 20b's WATCHER RUNNING. cmd_run
+#   backgrounds the watcher and execs wayvnc, and the wayvnc stand-in exited at
+#   once, so the watcher was orphaned and went on exec'ing wayvncctl into
+#   section 21, which rewrites that stub. CI on a8db9630 hit the rewrite
+#   mid-exec ("Text file busy"): the old stub stayed, and 1 of 245 failed with
+#   "the watcher rig never opened an event stream". Otherwise the orphan ran
+#   21's stub and left an untagged `sleep 120` behind every run (3 of 3 here).
+#   The stand-in now reaps its children, bounded at 10 s, and two checks say
+#   the watcher had finished when run returned: red 3/3 on 19, 249/249 5/5 on
+#   20 with no stray. Test-only; the shipped script is unchanged.
+pkgrel=20
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
