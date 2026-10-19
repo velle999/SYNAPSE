@@ -6325,6 +6325,87 @@ if command -v python3 >/dev/null 2>&1; then
     [ -z "$out" ] \
         && ok "a keyboard is not a remote, whatever else is in its key map" \
         || bad "a device with letters on it was read as a remote: $out"
+
+    # ⛔ A REMOTE STAYS OPEN BETWEEN RESCANS. Up to 67 the two-second hotplug
+    # rescan closed and reopened every remote whether anything had changed or
+    # not — 60 to 90 opens a minute of two receivers, all day, and every one is
+    # an input-device open synguard alerts on (2286 alert lines in one boot).
+    #
+    # Proven on the FIFO itself: hold the node open as the writer, then swap a
+    # fresh FIFO in under the same name. A rescan that reopens opens the NEW
+    # one and closes ours, so a write to ours finds no reader (EPIPE). One that
+    # leaves an unchanged set alone still reads ours, and the press arrives.
+    KFX="$T/remotekeep"
+    mkdir -p "$KFX/sys/event99/device/capabilities" "$KFX/dev"
+    rmask $KEY_OK $KEY_EPG $KEY_NEXT $KEY_PREVIOUS \
+        > "$KFX/sys/event99/device/capabilities/key"
+    rm -f "$KFX/dev/event99"; mkfifo "$KFX/dev/event99"
+    ( SYN_ARCADE_SYSFS="$KFX/sys" SYN_ARCADE_DEV="$KFX/dev" \
+      timeout 5 "$SA" big nav > "$KFX/out.txt" 2>/dev/null ) &
+    keeppid=$!
+    kept=$(python3 -c '
+import os, struct, sys, time
+node = sys.argv[1]
+fd = -1
+for _ in range(30):
+    try:
+        fd = os.open(node, os.O_WRONLY | os.O_NONBLOCK)
+        break
+    except OSError:
+        time.sleep(0.1)
+if fd < 0:
+    print("never opened")
+    sys.exit(0)
+os.rename(node, node + ".was")
+os.mkfifo(node)
+time.sleep(2.8)          # past the first rescan, NAV_RESCAN_MS after start
+try:
+    for value in (1, 0):
+        os.write(fd, struct.pack("qqHHi", 0, 0, 1, 352, value))
+        os.write(fd, struct.pack("qqHHi", 0, 0, 0, 0, 0))
+    print("kept")
+except BrokenPipeError:
+    print("reopened")
+time.sleep(0.4)' "$KFX/dev/event99" 2>/dev/null)
+    wait $keeppid 2>/dev/null
+    [ "$kept" = kept ] \
+        && ok "a rescan with nothing plugged or unplugged leaves the remote open" \
+        || bad "the rescan did not keep the remote's descriptor: $kept"
+    grep -qx 'remote:accept' "$KFX/out.txt" \
+        && ok "…and a press on the descriptor it kept still arrives" \
+        || bad "the kept remote said: $(tr '\n' ' ' < "$KFX/out.txt")"
+
+    # …and a remote that appears later is still found, which is what the rescan
+    # is for: a CEC one shows up when the television is switched on.
+    rm -rf "$KFX/sys/event98" "$KFX/dev/event98" "$KFX/dev/event99.was"
+    rm -f "$KFX/dev/event99"; mkfifo "$KFX/dev/event99"
+    ( SYN_ARCADE_SYSFS="$KFX/sys" SYN_ARCADE_DEV="$KFX/dev" \
+      timeout 6 "$SA" big nav > "$KFX/out.txt" 2>/dev/null ) &
+    keeppid=$!
+    sleep 0.3
+    mkdir -p "$KFX/sys/event98/device/capabilities"
+    cp "$KFX/sys/event99/device/capabilities/key" \
+       "$KFX/sys/event98/device/capabilities/key"
+    mkfifo "$KFX/dev/event98"
+    python3 -c '
+import os, struct, sys, time
+fd = -1
+for _ in range(50):      # the next rescan is up to NAV_RESCAN_MS away
+    try:
+        fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
+        break
+    except OSError:
+        time.sleep(0.1)
+if fd < 0:
+    sys.exit(0)
+for value in (1, 0):
+    os.write(fd, struct.pack("qqHHi", 0, 0, 1, 365, value))
+    os.write(fd, struct.pack("qqHHi", 0, 0, 0, 0, 0))
+time.sleep(0.4)' "$KFX/dev/event98" 2>/dev/null || true
+    wait $keeppid 2>/dev/null
+    grep -qx 'remote:guide' "$KFX/out.txt" \
+        && ok "…while a remote plugged in after the start is still opened" \
+        || bad "a remote that appeared later was never read: $(tr '\n' ' ' < "$KFX/out.txt")"
 else
     ok "(skipped the remote fixture: no python3)"
 fi

@@ -1371,6 +1371,28 @@ static bool looks_like_remote(const mask_t *key)
 	return tv && !letters && !pad;
 }
 
+/* Is this event node a remote, and where is its device node? Asked of sysfs
+ * alone: nothing is opened. */
+static bool remote_node(const char *name, char *node, size_t len)
+{
+	/* The id has to fit navremote_t's; no event node's name comes close. */
+	if (event_index(name) < 0 ||
+	    strlen(name) >= sizeof(((navremote_t *)0)->id))
+		return false;
+
+	char caps[1024];
+	if (snprintf(caps, sizeof(caps), "%s/%s/device/capabilities/key",
+		     sysfs_root(), name) >= (int)sizeof(caps))
+		return false;
+
+	mask_t key = {0};
+	mask_load(&key, caps);
+	if (!looks_like_remote(&key))
+		return false;
+
+	return snprintf(node, len, "%s/%s", dev_root(), name) < (int)len;
+}
+
 /* Open every remote there is. Returns how many. */
 static int remote_open(navremote_t *out, int max)
 {
@@ -1381,22 +1403,8 @@ static int remote_open(navremote_t *out, int max)
 	int count = 0;
 	struct dirent *e;
 	while (count < max && (e = readdir(d))) {
-		if (event_index(e->d_name) < 0)
-			continue;
-
-		char caps[1024];
-		if (snprintf(caps, sizeof(caps), "%s/%s/device/capabilities/key",
-			     sysfs_root(), e->d_name) >= (int)sizeof(caps))
-			continue;
-
-		mask_t key = {0};
-		mask_load(&key, caps);
-		if (!looks_like_remote(&key))
-			continue;
-
 		char node[1024];
-		if (snprintf(node, sizeof(node), "%s/%s", dev_root(),
-			     e->d_name) >= (int)sizeof(node))
+		if (!remote_node(e->d_name, node, sizeof(node)))
 			continue;
 
 		/* Quiet on failure, for the same reason nav_open() is: a
@@ -1412,6 +1420,38 @@ static int remote_open(navremote_t *out, int max)
 			continue;
 		}
 		count++;
+	}
+	closedir(d);
+	return count;
+}
+
+/*
+ * How many remotes remote_open() would open now — asked of sysfs and
+ * access(2), never of open(2).
+ *
+ * ⛔ THIS IS WHAT A RESCAN COMPARES, NOT A FRESH OPEN. Every open of an input
+ * device is an event synguard alerts on, and up to 67 the two-second rescan
+ * closed and reopened every remote whether anything had changed or not: 60 to
+ * 90 alerts a minute with two receivers attached, all day. A remote that goes
+ * away is not this function's to notice — its descriptor reports POLLHUP,
+ * which reopens the set on its own.
+ *
+ * ⚠ access(), so a node open() would refuse is not counted. Counted, it could
+ * never match what is open, and every rescan would reopen the set again.
+ */
+static int remote_count(int max)
+{
+	DIR *d = opendir(sysfs_root());
+	if (!d)
+		return 0;
+
+	int count = 0;
+	struct dirent *e;
+	while (count < max && (e = readdir(d))) {
+		char node[1024];
+		if (remote_node(e->d_name, node, sizeof(node)) &&
+		    access(node, R_OK) == 0)
+			count++;
 	}
 	closedir(d);
 	return count;
@@ -1829,10 +1869,12 @@ int pads_nav_stream(void)
 			if (pfd[i].revents & (POLLERR | POLLHUP))
 				relist = true;	/* unplugged mid-session */
 
-		/* The remote is reopened whole on the same tick, and for the
-		 * same reason: a USB receiver replugged into another port is a
+		/* The remotes are rescanned on the same tick, and for the same
+		 * reason: a USB receiver replugged into another port is a
 		 * different eventN, and a CEC one appears when the television
-		 * is switched on rather than when this starts. */
+		 * is switched on rather than when this starts. Reopened only
+		 * when one has gone or the count has changed, the same rule
+		 * as the pads — see remote_count(). */
 		bool rrelist = false;
 		for (int i = 0; i < rcount; i++)
 			if (pfd[count + i].revents & (POLLERR | POLLHUP))
@@ -1858,8 +1900,11 @@ int pads_nav_stream(void)
 				nav_close(pads, count);
 				count = nav_open(pads, NAV_MAX);
 			}
-			remote_close(remotes, rcount);
-			rcount = remote_open(remotes, NAV_REMOTE_MAX);
+			if (rrelist ||
+			    remote_count(NAV_REMOTE_MAX) != rcount) {
+				remote_close(remotes, rcount);
+				rcount = remote_open(remotes, NAV_REMOTE_MAX);
+			}
 			rescan_at = now + NAV_RESCAN_MS;
 		} else if (rrelist) {
 			remote_close(remotes, rcount);

@@ -1514,7 +1514,17 @@ pkgver=0.1.0
 #   the end, so the Music tile's player, the disc and the Recent bar still
 #   find it by id. The television also re-reads its tiles when it comes back,
 #   so a switch flipped at the desk shows without restarting it.
-pkgrel=67
+# 68: A REMOTE STAYS OPEN BETWEEN RESCANS. `big nav`'s two-second hotplug
+#   rescan closed and reopened every remote whether anything had changed or
+#   not, and every open of an input device is one synguard alerts on: 62309
+#   opens of two receivers in one 25-hour boot, 60-90 a minute, 2301 synguard
+#   lines in the journal. The rescan now counts remotes from sysfs and
+#   access(2) — neither opens anything — and reopens the set only when the
+#   count changed or one hung up, the rule the pads already followed.
+#   syn_arcade_test: a FIFO remote held open across a rescan, with a fresh FIFO
+#   swapped in under its name — 67 reopened (EPIPE on the held end), 68 keeps
+#   it and the press arrives; a remote added after the start is still read.
+pkgrel=68
 pkgdesc="SynapseOS game assistant: in-game overlay, controller setup and gaming shortcuts"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
