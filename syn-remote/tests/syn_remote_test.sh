@@ -124,6 +124,18 @@ set_setting pam off
 write_wayvnc_config
 grep -q '^password=' "$wv" && ok "...and comes back when PAM is off" || bad "password not restored"
 
+# ⛔ AND IT SAYS THERE IS NO LOCKOUT, because there is none: wayvnc's PAM
+# service is pam_unix alone, and wayvnc runs as the user, where pam_faillock
+# cannot keep a tally. Up to 18 this was presented as "the same three-try
+# lockout as any other login".
+printf 'auth required pam_unix.so nodelay deny=3 unlock_time=600\n' > "$T/wayvnc.pam"
+out=$(SYN_REMOTE_WAYVNC_PAM="$T/wayvnc.pam" SYN_REMOTE_SOURCE_ONLY=1 \
+      bash -c '. "$0"; cmd_auth pam' "$SR" 2>&1)
+printf '%s\n' "$out" | grep -q 'has no lockout' \
+    && ok "auth pam says the sign-in has no lockout" \
+    || bad "auth pam does not say there is no lockout: $out"
+set_setting pam off
+
 # ── 5. the record ─────────────────────────────────────────
 #
 # ⚠ NEVER TRANSLATED, and matched on by the window: the first row names the

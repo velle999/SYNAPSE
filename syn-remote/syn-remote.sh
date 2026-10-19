@@ -49,6 +49,8 @@ CERT="$CONF_DIR/cert.pem"
 KEY="$CONF_DIR/key.pem"
 SETTINGS="$CONF_DIR/syn-remote.conf"
 UNIT=syn-remote.service
+# wayvnc's PAM service. Overridable so the suite can run without wayvnc.
+WAYVNC_PAM="${SYN_REMOTE_WAYVNC_PAM:-/etc/pam.d/wayvnc}"
 IDLE_INHIBIT=/usr/lib/synui/synui-idle-inhibit
 # The one file anything else reads to know somebody is watching. In the runtime
 # dir because it describes THIS session and must not outlive it.
@@ -285,9 +287,8 @@ write_wayvnc_config() {
         printf 'private_key_file=%s\n' "$KEY"
         if [ "$(setting pam off)" = on ]; then
             # PAM overrides username/password and authenticates against this
-            # machine's own accounts — one fewer secret to keep, and it is
-            # subject to the same lockout as every other login (deny=3 in
-            # /etc/pam.d/wayvnc).
+            # machine's own accounts — one fewer secret to keep, and NO
+            # lockout: see cmd_auth.
             echo 'enable_pam=true'
         else
             printf 'username=%s\n' "$(setting username "${USER:-$(id -un)}")"
@@ -964,12 +965,19 @@ cmd_password() {
 cmd_auth() {
     case "${1:-}" in
         pam)
-            # ⚠ /etc/pam.d/wayvnc is pam_unix with deny=3 — the same lockout as
-            # any other login on this machine, which is the point of using it.
-            [ -r /etc/pam.d/wayvnc ] ||
+            # ⛔ NO LOCKOUT, AND NONE IS POSSIBLE HERE. /etc/pam.d/wayvnc (the
+            # wayvnc package's) is pam_unix alone. Its deny=3 and unlock_time
+            # are pam_tally2's options, gone from Linux-PAM since 1.5: pam_unix
+            # logs "unrecognized option" for both and ignores them, and its
+            # nodelay drops the failure delay too. pam_faillock cannot be added
+            # either — wayvnc runs as the user, and the tally is root's, in
+            # /run/faillock. Wrong guesses cost nothing, so the generated
+            # password stays the default and this says so.
+            [ -r "$WAYVNC_PAM" ] ||
                 die "wayvnc ships no PAM policy on this machine"
             set_setting pam on
-            printf 'Sign in with your own account password.\n' ;;
+            printf 'Sign in with your own account password.\n'
+            printf 'This sign-in has no lockout: wrong passwords are neither counted nor delayed.\n' ;;
         password)
             set_setting pam off
             ensure_credentials

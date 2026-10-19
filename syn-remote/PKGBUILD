@@ -306,7 +306,15 @@ pkgver=0.1.0
 #   synctl answering some other session is never asked to unpin anything. A synui
 #   too old to pin still streams, and says what it needs. The absolute device is
 #   left alone: it already addresses the whole desktop in sunshine's coordinates.
-pkgrel=18
+# 19: `auth pam` HAS NO LOCKOUT, AND NOW SAYS SO. It was presented as "the same
+#   three-try lockout as any other login". /etc/pam.d/wayvnc (the wayvnc
+#   package's) is pam_unix with deny=3 and unlock_time=600, which are
+#   pam_tally2's options: pam_unix logs "unrecognized option" for both on every
+#   sign-in and ignores them, and its nodelay drops the failure delay. Nor can
+#   pam_faillock be added — wayvnc runs as the user and the tally is root's.
+#   `auth pam` prints that the sign-in has no lockout; the comments that
+#   claimed one are corrected. syn_remote_test: red against 18, ok on 19.
+pkgrel=19
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
