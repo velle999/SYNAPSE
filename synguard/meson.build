@@ -252,7 +252,13 @@ test('bpf_override', bpf_override_test, timeout: 30)
 # /usr/lib; /etc/systemd/system is the ADMIN's space, and a package writing
 # there both shadows itself and clobbers local overrides on upgrade.
 
-install_subdir('rules', install_dir: '/etc/synguard', strip_directory: false)
+# The rules are installed by the PKGBUILD too, to /etc/synguard/rules.d — NOT
+# here. This used to install_subdir() them to /etc/synguard/rules as well: a
+# second copy nothing reads, 0644 in a 0755 directory, beside the 0750 rules.d
+# that exists to keep the policy from other users.
+test('rules_owner', find_program('tests/rules_owner.sh'),
+  args: [meson.project_build_root()], timeout: 30)
+
 # Programs netwatch does not alert on; see the file. backup=() in the PKGBUILD
 # keeps a local edit across upgrades.
 install_data('etc/netwatch-exempt', install_dir: '/etc/synguard', install_mode: 'rw-r--r--')

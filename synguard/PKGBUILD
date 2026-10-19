@@ -192,7 +192,14 @@ pkgver=0.1.0
 #   children: the test binary listed by path is not alerted, the same scan
 #   under the comm "syncthing" still is, and a missing list exempts nothing.
 #   Against 50 the listed binary's scan alerts HIGH.
-pkgrel=51
+# 52: the rules are installed once. meson's install_subdir() put a second copy
+#   of every shipped rule in /etc/synguard/rules — a directory nothing reads
+#   (the daemon reads rules.d), 0755 with every file 0644 — next to the 0750
+#   rules.d below, so the policy was world-readable one directory over. That
+#   install is gone, and pacman removes the old copy on upgrade (not backup=).
+#   tests/rules_owner.sh reads meson's install manifest: red on 51
+#   ("/etc/synguard/rules"), ok on 52.
+pkgrel=52
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
