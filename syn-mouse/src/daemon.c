@@ -173,6 +173,7 @@ typedef struct {
 	char     uinput_err[32]; /* errno name of the last failure, "" if none */
 
 	int      ino, wd_dev, wd_cfg;
+	char     dev_dir[PATH_MAX];  /* what wd_dev watches: /dev/input, or the test FIFO's directory */
 	int      sigfd;
 	int      ctl;
 	char    *ctl_path;
@@ -759,6 +760,22 @@ static void mouse_remove(daemon_t *d, int i, int64_t now)
 
 /* A companion whose mouse is gone goes too: unplugged, or filtered out. */
 static void drop_orphans(daemon_t *d, int64_t now);
+
+/* ⚠ A MOUSE NOT GRABBED IS NOT POLLED, so its fd never reports the unplug:
+ * the node leaving the directory is the only word of it. A dead entry kept
+ * its node name, and the mouse plugged back in under that name — the kernel
+ * hands out the lowest free eventN, so it usually is — was taken by
+ * have_node() for the one already there. Never opened, never grabbed again;
+ * a binding on it did nothing until the daemon restarted. */
+static bool node_gone(daemon_t *d, const char *node, int64_t now)
+{
+	for (int i = 0; i < d->nmice; i++)
+		if (!strcmp(d->mice[i].node, node)) {
+			mouse_remove(d, i, now);
+			return true;
+		}
+	return false;
+}
 
 static void scan_all(daemon_t *d)
 {
@@ -1385,7 +1402,8 @@ static int control_listen(daemon_t *d)
 static void watch_read(daemon_t *d, int64_t now)
 {
 	char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-	bool cfg = false, newmouse = false;
+	bool cfg = false, newmouse = false, gone = false;
+	const char *fake = getenv("SYNMOUSE_INPUT");
 	for (;;) {
 		ssize_t n = read(d->ino, buf, sizeof buf);
 		if (n <= 0) break;
@@ -1394,11 +1412,20 @@ static void watch_read(daemon_t *d, int64_t now)
 			p += sizeof *ie + ie->len;
 			if (!ie->len) continue;
 			if (ie->wd == d->wd_cfg && !strcmp(ie->name, "bindings.conf")) cfg = true;
-			if (ie->wd == d->wd_dev && !strncmp(ie->name, "event", 5) &&
-			    (ie->mask & (IN_CREATE | IN_ATTRIB)))
+			if (ie->wd != d->wd_dev) continue;
+			/* In the order they happened: an unplug and a replug under the
+			 * same name in one read are a removal, then an add. */
+			char node[PATH_MAX + NAME_MAX + 2];
+			snprintf(node, sizeof node, "%s/%s", d->dev_dir, ie->name);
+			if (ie->mask & IN_DELETE)
+				gone |= node_gone(d, node, now);
+			else if (fake && *fake)
+				newmouse |= !strcmp(node, fake);   /* the test mouse, made anew */
+			else if (!strncmp(ie->name, "event", 5))
 				newmouse |= mouse_add(d, ie->name);
 		}
 	}
+	if (gone) drop_orphans(d, now);
 	/* A mouse plugged in after its own keyboard half was seen: look again. */
 	if (newmouse) scan_all(d);
 	if (cfg) reload(d, now, false);
@@ -1451,8 +1478,19 @@ int daemon_run(void)
 	mkdir(d->cfg_dir, 0755);
 	d->ino = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
 	d->wd_cfg = inotify_add_watch(d->ino, d->cfg_dir, IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE);
-	d->wd_dev = getenv("SYNMOUSE_INPUT") ? -1
-	          : inotify_add_watch(d->ino, "/dev/input", IN_CREATE | IN_ATTRIB);
+	/* IN_DELETE is what tells an unplugged mouse that is not grabbed — see
+	 * node_gone(). Under the test seam the FIFO's directory stands in for
+	 * /dev/input, so removing and remaking the FIFO is an unplug and a replug. */
+	const char *fake = getenv("SYNMOUSE_INPUT");
+	if (fake && !*fake) fake = NULL;            /* as scan_all() reads it */
+	const char *slash = fake ? strrchr(fake, '/') : NULL;
+	if (slash)
+		snprintf(d->dev_dir, sizeof d->dev_dir, "%.*s", (int)(slash - fake), fake);
+	else if (!fake)
+		snprintf(d->dev_dir, sizeof d->dev_dir, "/dev/input");
+	d->wd_dev = d->dev_dir[0] ? inotify_add_watch(d->ino, d->dev_dir,
+	                                              IN_CREATE | IN_ATTRIB | IN_DELETE)
+	                          : -1;
 
 	say("syn-mouse %s", SYNMOUSE_VERSION);
 	reload(d, now_ms(), true);

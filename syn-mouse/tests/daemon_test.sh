@@ -315,6 +315,37 @@ unbalanced=$(awk '$1=="key"{k[$2]+= ($3?1:-1)} $1=="twin"&&$3==1{t[$4]+=($5?1:-1
 [ -z "$unbalanced" ]
 chk "over the whole run, every press has its release${unbalanced:+ (not: $unbalanced)}" $?
 
+# ── unplugged while not taken, and plugged back in ──────────────────────────
+# ⚠ A MOUSE NOT TAKEN IS NOT READ, so nothing on its own fd says it went: only
+# the device directory does. Missing that, the daemon kept the dead node, and
+# the mouse coming back under the SAME name — the kernel hands out the lowest
+# free eventN — was taken for the one already there: never opened, never taken
+# again. Here the FIFO is the node, removed and made anew. A fresh daemon, so
+# the ids are known: the mouse is 1 and its keyboard half 2, then 3 and 4.
+echo "unplugged and plugged back in"
+: > "$SYNMOUSE_OUTPUT"
+focus '{"app_id":"other","title":"Other"}'
+"$BIN" daemon 2> "$T/log2" & DPID=$!
+for _ in $(seq 60); do "$BIN" --rec status | q '^daemon	[1-9]' && break; sleep 0.05; done
+sleep 0.4
+! grep -q '^grab' "$SYNMOUSE_OUTPUT"
+chk "another app has focus: nothing is taken" $?
+rm -f "$SYNMOUSE_INPUT"
+for _ in $(seq 40); do grep -qF "lost test mouse ($SYNMOUSE_INPUT)" "$T/log2" && break; sleep 0.05; done
+grep -qF "lost test mouse ($SYNMOUSE_INPUT)" "$T/log2"
+chk "the mouse is unplugged while not taken: the daemon lets it go" $?
+mkfifo "$SYNMOUSE_INPUT"
+focus '{"app_id":"game","title":"The Game"}'
+wait_out "grab 3 1" 3
+chk "plugged back in under the same name: it is opened again and taken" $?
+ev "1 276 1" "$SYN" "1 276 0" "$SYN"
+wait_out "key 42 0" 2
+chk "…and a bound button on it works" $?
+kill -TERM "$DPID"; wait "$DPID" 2>/dev/null; DPID=
+
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
-if [ "$fail" != 0 ]; then echo "--- daemon log"; cat "$T/log"; fi
+if [ "$fail" != 0 ]; then
+    echo "--- daemon log"; cat "$T/log"
+    [ -s "$T/log2" ] && { echo "--- second daemon log"; cat "$T/log2"; }
+fi
 [ "$fail" = 0 ]

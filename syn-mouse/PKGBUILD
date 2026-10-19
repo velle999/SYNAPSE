@@ -62,7 +62,21 @@ pkgver=0.1.0
 # input device and loaded //.config/syn-mouse/bindings.conf. The unit carries
 # ConditionUser=!@system now. preflight's userunits check refuses a
 # package-enabled user unit without it (it failed on this one).
-pkgrel=4
+#
+# 5: A MOUSE UNPLUGGED WHILE NOT GRABBED IS LET GO. Only a grabbed mouse is
+# polled, and /dev/input was watched for IN_CREATE and IN_ATTRIB only, so
+# nothing told the daemon an ungrabbed mouse had gone. On the desktop the
+# Viper V3 Pro dropped off USB at 01:58 and came back at 12:27 as event2
+# again: the daemon logged its two keyboard halves lost and found, but kept
+# the mouse's dead fd (/proc/<pid>/fd: "event2 (deleted)"), and have_node()
+# took the new event2 for that one. A binding would then never grab it:
+# EVIOCGKEY on the dead fd fails, buttons_down() says "held", and the grab
+# retried every 30 ms for good. IN_DELETE now removes whatever was read from
+# that node (node_gone()), so the replug is a new device. daemon_test.sh's
+# "unplugged and plugged back in" removes and remakes the test FIFO — the
+# seam now watches the FIFO's directory the way the daemon watches
+# /dev/input: 4 fail on 4, 54/54 on 5 (5 runs, and under ASan+UBSan).
+pkgrel=5
 pkgdesc="Rebind mouse buttons per game without the vendor's app — keys, repeat, and auto-press toggles"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
