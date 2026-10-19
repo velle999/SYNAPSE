@@ -2181,9 +2181,9 @@ certificate, a key and a password together — there is no password-without-TLS,
 which is the right way round for VNC.
 
 Sign-in is a generated 20-character password by default, or your own account
-password through PAM (`syn-remote auth pam`), which brings the same three-try
-lockout as any other login on the machine. Settings ▸ **Remote Desktop** is the
-same thing in a window.
+password through PAM (`syn-remote auth pam`). The PAM sign-in has no lockout:
+wrong passwords are neither counted nor delayed, so the generated password is
+the stronger choice. Settings ▸ **Remote Desktop** is the same thing in a window.
 
 #### Streaming it instead
 
