@@ -1836,6 +1836,173 @@ grep -q '^StartLimitIntervalSec=0' "$unit" &&
 check "...and restarts always, not on-failure" "Restart=always" \
       "$(grep '^Restart=' "$unit")"
 
+# ⛔ sunshine's OWN UNIT MUST NOT RUN A SECOND SERVER. The "Sunshine" menu entry
+# starts app-dev.lizardbyte.app.Sunshine, which reads ~/.config/sunshine and has
+# none of the pairings: with ours stopped it took the ports and every paired
+# client was told it was not paired. The drop-in turns that unit into a way of
+# starting ours.
+dropin="$here/../sunshine-stock-unit.conf"
+grep -qx 'Wants=syn-remote-stream.service' "$dropin" &&
+    ok "starting sunshine's own unit starts syn-remote-stream" ||
+    bad "the stock unit does not pull in syn-remote-stream"
+grep -qx 'ExecStart=' "$dropin" && grep -qx 'ExecStartPre=' "$dropin" &&
+    ok "...after clearing its ExecStart and its five-second sleep" ||
+    bad "the drop-in does not reset the stock unit's ExecStart/ExecStartPre"
+grep -E '^ExecStart(Pre)?=.*sunshine' "$dropin" &&
+    bad "the drop-in still runs a sunshine of its own" ||
+    ok "...so it runs no sunshine of its own"
+# ⚠ A Conflicts= would make the menu entry stop the paired server to start the
+# unpaired one.
+grep -q '^Conflicts=' "$dropin" "$unit" &&
+    bad "a Conflicts= between the two units would let the menu entry stop ours" ||
+    ok "...and neither unit conflicts with the other"
+grep -q 'app-dev.lizardbyte.app.Sunshine.service.d/syn-remote.conf' "$here/../PKGBUILD" &&
+    ok "...and the package installs it as that unit's drop-in" ||
+    bad "the PKGBUILD does not install the drop-in under the stock unit's .d"
+
+# ── 28. pairing a client ──────────────────────────────────
+#
+# ⛔ sunshine 2026.10 REFUSED EVERY PIN THIS SENT. POST /api/pin now needs the
+# `pairing_id` of one waiting request — without it the answer is 400 "pairing_id
+# must contain exactly 32 hexadecimal characters" — and GET on the same path lists
+# them. An older sunshine has no GET there and takes the PIN alone. Both are
+# driven here against a stand-in that speaks HTTPS on loopback, because that is
+# the only way to see what the script actually sends.
+fsun="$T/sun"; mkdir -p "$fsun"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=127.0.0.1 \
+    -keyout "$fsun/key.pem" -out "$fsun/cert.pem" >/dev/null 2>&1
+cat > "$T/fakesun.py" <<'EOF'
+import base64, http.server, json, os, ssl, sys
+d = sys.argv[1]
+AUTH = "Basic " + base64.b64encode(b"synapse:pairtest").decode()
+def rd(name, default=""):
+    try:
+        return open(os.path.join(d, name)).read().strip()
+    except OSError:
+        return default
+def log(name, line):
+    with open(os.path.join(d, name), "a") as f:
+        f.write(line + "\n")
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+    def reply(self, code, obj=None, raw=None):
+        data = raw if raw is not None else json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+    def do_GET(self):
+        log("gets.log", self.path)
+        if self.headers.get("Authorization") != AUTH:
+            return self.reply(401, {"status": False, "error": "unauthorized"})
+        if rd("mode") == "old" or self.path != "/api/pin":
+            return self.reply(404, raw=b"<html>Not Found</html>")
+        self.reply(200, {"pairings": json.loads(rd("pairings", "[]"))})
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+        log("posts.log", body)
+        if self.headers.get("Authorization") != AUTH:
+            return self.reply(401, {"status": False, "error": "unauthorized"})
+        req, mode = json.loads(body), rd("mode")
+        if mode == "old":
+            return self.reply(200, {"status": "true" if req.get("pin") == "1234" else "false"})
+        if mode == "reject":
+            return self.reply(400, {"status": False, "error": "stand-in refusal"})
+        if len(req.get("pairing_id", "")) != 32:
+            return self.reply(400, {"status": False, "status_code": 400, "error":
+                "pairing_id must contain exactly 32 hexadecimal characters"})
+        ids = [p["id"] for p in json.loads(rd("pairings", "[]"))]
+        self.reply(200, {"status": req["pairing_id"] in ids and req.get("pin") == "1234"})
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain(sys.argv[2], sys.argv[3])
+srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+with open(os.path.join(d, "port.tmp"), "w") as f:
+    f.write(str(srv.server_address[1]))
+os.rename(os.path.join(d, "port.tmp"), os.path.join(d, "port"))
+srv.serve_forever()
+EOF
+python3 -I "$T/fakesun.py" "$fsun" "$fsun/cert.pem" "$fsun/key.pem" 2>/dev/null &
+sunpid=$!
+for _ in $(seq 1 50); do [ -s "$fsun/port" ] && break; sleep 0.1; done
+
+if [ ! -s "$fsun/port" ]; then
+    bad "the stand-in sunshine never came up — no pairing case ran"
+else
+    oldport=$(setting stream_port "")
+    set_setting stream_port $(( $(cat "$fsun/port") - 1 ))
+    set_setting stream_password pairtest
+    ida=0123456789abcdef0123456789abcdef idb=fedcba9876543210fedcba9876543210
+    waiting() {   # waiting <address>...  — the requests the stand-in lists
+        local a id sep="" out="["
+        for a in "$@"; do
+            case "$a" in *.30) id=$idb ;; *) id=$ida ;; esac
+            out="$out$sep{\"address\":\"$a\",\"id\":\"$id\",\"name\":\"roth\"}"; sep=,
+        done
+        printf '%s]' "$out" > "$fsun/pairings"
+    }
+    pair() { : > "$fsun/posts.log"; SR_TEST_STREAM_ACTIVE=yes "$SR" stream pair "$@" 2>&1; }
+    posted() { python3 -I -c 'import json,sys
+l=[x for x in open(sys.argv[1]).read().splitlines() if x]
+print(json.loads(l[-1]).get(sys.argv[2], "<absent>") if l else "<no POST>")' "$fsun/posts.log" "$1"; }
+
+    echo new > "$fsun/mode"
+    waiting 192.0.2.29
+    out=$(pair 1234); rc=$?
+    [ "$rc" -eq 0 ] && grep -qx 'Paired.' <<<"$out" &&
+        ok "sunshine 2026.10: one client waiting is paired" ||
+        bad "one waiting client was not paired (rc $rc): $out"
+    check "...with that request's pairing_id" "$ida" "$(posted pairing_id)"
+    check "...and the PIN" "1234" "$(posted pin)"
+
+    waiting
+    out=$(pair 1234); rc=$?
+    [ "$rc" -ne 0 ] && grep -q 'waiting to pair' <<<"$out" &&
+        ok "nobody waiting is refused, saying so" ||
+        bad "a PIN with nobody waiting was not refused by name (rc $rc): $out"
+    check "...and no PIN is sent to anybody" "<no POST>" "$(posted pin)"
+
+    # ⚠ THE PIN IS THE KEY ONE CLIENT'S PAIRING IS ENCRYPTED WITH; offered to
+    # the wrong request it fails that client, so it is never guessed.
+    waiting 192.0.2.29 192.0.2.30
+    out=$(pair 1234); rc=$?
+    [ "$rc" -ne 0 ] && grep -q '192.0.2.29' <<<"$out" && grep -q '192.0.2.30' <<<"$out" &&
+        ok "two waiting is refused, listing both addresses" ||
+        bad "two waiting clients were not refused with both listed (rc $rc): $out"
+    check "...without sending the PIN to either" "<no POST>" "$(posted pin)"
+    out=$(pair 1234 192.0.2.30); rc=$?
+    [ "$rc" -eq 0 ] && check "...and the address picks one" "$idb" "$(posted pairing_id)" ||
+        bad "pairing by address failed (rc $rc): $out"
+    out=$(pair 1234 192.0.2.99); rc=$?
+    [ "$rc" -ne 0 ] && grep -q 'at 192.0.2.99' <<<"$out" &&
+        ok "an address that is not waiting is refused by name" ||
+        bad "an address nobody is waiting from was not refused (rc $rc): $out"
+
+    waiting 192.0.2.29
+    out=$(pair 9999); rc=$?
+    [ "$rc" -ne 0 ] && grep -q 'not accepted' <<<"$out" &&
+        ok "a PIN sunshine turns down is reported as turned down" ||
+        bad "a refused PIN was not reported (rc $rc): $out"
+
+    echo reject > "$fsun/mode"
+    out=$(pair 1234); rc=$?
+    [ "$rc" -ne 0 ] && grep -q 'stand-in refusal' <<<"$out" &&
+        ok "a 400 carries sunshine's own reason, not just Bad Request" ||
+        bad "sunshine's reason was dropped (rc $rc): $out"
+
+    # ⚠ AND AN OLDER sunshine STILL PAIRS: no GET there, so the PIN goes alone.
+    echo old > "$fsun/mode"
+    out=$(pair 1234); rc=$?
+    [ "$rc" -eq 0 ] && grep -qx 'Paired.' <<<"$out" &&
+        ok "an older sunshine, with no list to read, is still paired" ||
+        bad "pairing against an older sunshine failed (rc $rc): $out"
+    check "...without a pairing_id it would not know" "<absent>" "$(posted pairing_id)"
+
+    set_setting stream_port "${oldport:-$DEFAULT_STREAM_PORT}"
+fi
+kill "$sunpid" 2>/dev/null; wait "$sunpid" 2>/dev/null
+
 echo ""
 if [ "$fail" -eq 0 ]; then echo "all $pass syn-remote checks passed"; else echo "$fail of $((pass+fail)) failed"; fi
 exit $(( fail > 0 ))

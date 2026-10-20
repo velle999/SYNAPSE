@@ -2639,9 +2639,9 @@ cmd_stream_tune() {
 # ⚠ python3 rather than curl: python3 is already a dependency (it is the
 # certificate fetcher) and curl is not.
 cmd_stream_pair() {
-    local pin=${1:-}
+    local pin=${1:-} from=${2:-}
     case "$pin" in
-        ""|*[!0-9]*) die "usage: $PROG stream pair <PIN>   — the four digits Moonlight is showing" ;;
+        ""|*[!0-9]*) die "usage: $PROG stream pair <PIN> [address]   — the four digits Moonlight is showing" ;;
     esac
     systemctl --user is-active "$STREAM_UNIT" >/dev/null 2>&1 ||
         die "streaming is not running — start it first:  $PROG stream start"
@@ -2655,26 +2655,70 @@ cmd_stream_pair() {
     # ⛔ VERIFICATION OFF, AND ONLY BECAUSE THIS IS LOOPBACK. sunshine's web
     # certificate is self-signed and nothing has pinned it; what stops this
     # being a hole is the address, which is this machine talking to itself.
-    python3 - "$user" "$pass" "$port" "$pin" <<'PY'
-import base64, json, ssl, sys, urllib.request
+    #
+    # ⛔ sunshine 2026.10 PAIRS ONE NAMED REQUEST, NOT WHOEVER IS WAITING. A PIN
+    # posted without a `pairing_id` is refused 400, "pairing_id must contain
+    # exactly 32 hexadecimal characters", so every pairing from here and from
+    # Settings failed against it. A GET on the same path lists the requests that
+    # are waiting, each with the client's address. An older sunshine has no GET
+    # there and takes the PIN alone, which is what is still sent when that list
+    # cannot be read. ⚠ THE PIN GOES TO ONE REQUEST ONLY: it is the key that
+    # client's pairing is encrypted with, so offering it to the wrong one fails
+    # that client outright. With two waiting, the address says which.
+    python3 - "$user" "$pass" "$port" "$pin" "$from" <<'PY'
+import base64, json, ssl, sys, urllib.error, urllib.request
 
-user, pw, port, pin = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+user, pw, port, pin, want = (sys.argv[1], sys.argv[2], int(sys.argv[3]),
+                             sys.argv[4], sys.argv[5])
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
+auth = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
 
-body = json.dumps({"pin": pin, "name": "syn-remote"}).encode()
-req = urllib.request.Request(f"https://127.0.0.1:{port}/api/pin", data=body,
-                             method="POST")
-req.add_header("Content-Type", "application/json")
-req.add_header("Authorization", "Basic " +
-               base64.b64encode(f"{user}:{pw}".encode()).decode())
-try:
+def call(body=None):
+    req = urllib.request.Request(f"https://127.0.0.1:{port}/api/pin", data=body,
+                                 method="GET" if body is None else "POST")
+    req.add_header("Authorization", auth)
+    if body is not None:
+        req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-        answer = json.loads(r.read().decode() or "{}")
-except Exception as e:
-    print(f"syn-remote: sunshine would not take the PIN: {e}", file=sys.stderr)
+        return json.loads(r.read().decode() or "{}")
+
+def refuse(why):
+    print(f"syn-remote: {why}", file=sys.stderr)
     sys.exit(1)
+
+try:
+    waiting = call().get("pairings")
+except Exception:
+    waiting = None
+
+body = {"pin": pin, "name": "syn-remote"}
+if isinstance(waiting, list):
+    if want:
+        waiting = [w for w in waiting if w.get("address") == want]
+    if not waiting:
+        refuse("no Moonlight client" + (f" at {want}" if want else "") +
+               " is waiting to pair — start pairing on the client, then give "
+               "the PIN it shows")
+    if len(waiting) > 1:
+        refuse(f"{len(waiting)} Moonlight clients are waiting to pair:\n" +
+               "".join(f"  {w.get('address', '?')}  ({w.get('name', '?')})\n"
+                       for w in waiting) +
+               f"say which by its address:  syn-remote stream pair {pin} <address>")
+    body["pairing_id"] = waiting[0].get("id", "")
+
+try:
+    answer = call(json.dumps(body).encode())
+except urllib.error.HTTPError as e:
+    # The status line alone is "Bad Request"; sunshine says why in the body.
+    try:
+        why = json.loads(e.read().decode() or "{}").get("error", "")
+    except Exception:
+        why = ""
+    refuse(f"sunshine would not take the PIN: {e}" + (f" — {why}" if why else ""))
+except Exception as e:
+    refuse(f"sunshine would not take the PIN: {e}")
 
 # ⚠ ANSWERED HONESTLY. sunshine returns 200 with {"status":"false"} for a PIN
 # that was wrong or that nobody was waiting on — an exit status alone would
@@ -2682,9 +2726,7 @@ except Exception as e:
 if str(answer.get("status", "")).lower() == "true":
     print("Paired.")
 else:
-    print("syn-remote: that PIN was not accepted — it expires, so ask Moonlight "
-          "for a new one", file=sys.stderr)
-    sys.exit(1)
+    refuse("that PIN was not accepted — it expires, so ask Moonlight for a new one")
 PY
 }
 
@@ -2840,8 +2882,10 @@ Streaming this desktop (sunshine, for Moonlight):
   syn-remote stream solo on|off   turn this machine's own screens off while
                                somebody is streaming
   syn-remote stream tune [encoder|latency] [value]
-  syn-remote stream pair <PIN> accept the PIN a Moonlight client is showing
-  syn-remote stream web        the address, user and password of sunshine's own
+  syn-remote stream pair <PIN> [address]
+                               accept the PIN a Moonlight client is showing —
+                               the address picks one when several are waiting
+  syn-remote stream web       the address, user and password of sunshine's own
                                settings page
 
 Video, not rectangles of pixels: the GPU encodes the frame, so a desktop at

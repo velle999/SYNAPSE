@@ -324,7 +324,30 @@ pkgver=0.1.0
 #   The stand-in now reaps its children, bounded at 10 s, and two checks say
 #   the watcher had finished when run returned: red 3/3 on 19, 249/249 5/5 on
 #   20 with no stray. Test-only; the shipped script is unchanged.
-pkgrel=20
+# 21: PAIRING WORKS AGAINST sunshine 2026.10, AND THE MENU ENTRY NO LONGER
+#   BREAKS IT. Two faults, found together when a client that had been streaming
+#   could not reconnect:
+#
+#   ⛔ `stream pair` WAS REFUSED 400. sunshine 2026.1006 pairs one named request:
+#     POST /api/pin without a `pairing_id` answers "pairing_id must contain
+#     exactly 32 hexadecimal characters", so `stream pair` and Settings' Pair a
+#     Moonlight client both failed. It now reads the waiting requests (GET
+#     /api/pin), sends the PIN to the one that is waiting, refuses when none is,
+#     and with several asks for the address (`stream pair <PIN> <address>`). An
+#     older sunshine, which has no GET there, is still sent the PIN alone.
+#     Refusals now carry sunshine's own reason rather than "Bad Request".
+#   ⛔ THE "Sunshine" MENU ENTRY STARTED A SECOND, UNPAIRED SERVER. It starts
+#     app-dev.lizardbyte.app.Sunshine, which reads ~/.config/sunshine and has no
+#     pairing state; with syn-remote-stream stopped it took the ports and every
+#     paired client was told it was not paired. A drop-in now makes that unit
+#     start syn-remote-stream.service and run no sunshine of its own.
+#
+#   syn_remote_test: section 28 drives `stream pair` against a stand-in
+#   sunshine over TLS, both APIs — red 10 of 13 on 20, and the three that pass
+#   on 20 are the older-sunshine path, which is the point; section 27 pins the
+#   drop-in (red 3 of 5 on 20). 267/267 on 21. Against the real 2026.1006 on the
+#   reference desktop, the list read and the nobody-waiting refusal both work.
+pkgrel=21
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -411,6 +434,12 @@ package() {
     # would be a unit that stops something nobody asked it to stop.
     install -Dm644 syn-remote-stream.service \
         "$pkgdir/usr/lib/systemd/user/syn-remote-stream.service"
+
+    # ⛔ AND sunshine's OWN UNIT IS POINTED AT IT. The "Sunshine" menu entry
+    # starts app-dev.lizardbyte.app.Sunshine, a second server with none of the
+    # pairings; this drop-in makes that unit start syn-remote-stream instead.
+    install -Dm644 sunshine-stock-unit.conf \
+        "$pkgdir/usr/lib/systemd/user/app-dev.lizardbyte.app.Sunshine.service.d/syn-remote.conf"
 
     install -Dm755 syn-remote-gui.sh "$pkgdir/usr/bin/syn-remote-gui"
     install -Dm644 shell.qml "$pkgdir/usr/share/syn-remote/shell.qml"
