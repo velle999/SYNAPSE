@@ -2279,6 +2279,8 @@ syn-remote connect desk                  # open it — waking it first if it is 
 syn-remote add tv 192.168.1.30 --stream  # a Moonlight host, on sunshine's port
 syn-remote trust tv                      # pair with it: it shows a PIN, the
                                          # other machine accepts it
+syn-remote resolution screen|moonlight   # a stream opens at this screen's size
+                                         # (default), or at Moonlight's own setting
 syn-remote gui | tui                     # the same list, in a window or a terminal
 ```
 

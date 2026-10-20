@@ -1972,6 +1972,48 @@ cmd_trust() {
 
 # ── Opening one ───────────────────────────────────────────
 
+# The screen a stream is about to open on, in pixels: WxH, or nothing. The
+# FOCUSED one, because that is where synui puts a new window; the primary one
+# if nothing is focused.
+#
+# ⚠ size × scale. synctl reports the layout size, which is the mode divided by
+# the scale — a 3840x2160 panel at 1.25 is [3072, 1728] there, and streaming
+# THAT would be the soft picture this exists to prevent, one step smaller.
+focused_screen_size() {
+    have synctl || return 1
+    synctl outputs 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(1)
+o = next((o for o in d if o.get("focused")), None) or \
+    next((o for o in d if o.get("primary")), None)
+try:
+    w, h = o["size"]
+    s = float(o.get("scale") or 1)
+except Exception: sys.exit(1)
+if w <= 0 or h <= 0 or s <= 0: sys.exit(1)
+print("%dx%d" % (round(w * s), round(h * s)), end="")
+' 2>/dev/null | grep . || return 1
+}
+
+# How big a Moonlight stream opens: the screen it opens on, or whatever
+# Moonlight's own settings say.
+cmd_resolution() {
+    local v=${1:-}
+    if [ -z "$v" ]; then
+        printf '%s\n' "$(setting connect_resolution screen)"
+        return 0
+    fi
+    case "$v" in screen|moonlight) ;; *) die "usage: $PROG resolution screen|moonlight" ;; esac
+    set_setting connect_resolution "$v" || die "could not save that"
+    if [ "$v" = screen ]; then
+        printf 'A stream opens at the size of the screen it opens on.\n'
+        note "Moonlight picks the bitrate for that size."
+    else
+        printf 'A stream opens at the resolution and bitrate set in Moonlight.\n'
+    fi
+}
+
 cmd_connect() {
     local nowake=no
     case "${1:-}" in --no-wake) nowake=yes; shift ;; esac
@@ -2049,9 +2091,21 @@ cmd_connect() {
     # saved address — is the same for both, which is the reason `connect` is one
     # verb and not two.
     if [ "$kind" = stream ]; then
+        # ⛔ AT THE SIZE OF THE SCREEN IT OPENS ON. Moonlight's own default is
+        # 1920x1080 whatever it is drawn on, so a 2560x1440 monitor was sent a
+        # 1080p picture and stretched it to fit — every line of text soft. With
+        # no --bitrate beside it, Moonlight works out the bitrate for the size
+        # it is given, which is also why `resolution moonlight` exists: a size
+        # here replaces the resolution AND the bitrate in Moonlight's settings.
+        local size=""
+        [ "$(setting connect_resolution screen)" = screen ] &&
+            size=$(focused_screen_size || true)
         # ⚠ "Desktop" is the app sunshine ships in its default list and the one
         # `syn-remote stream` serves. Moonlight exits with an error naming the
         # apps it did find if a host has been given a different set.
+        if [ -n "$size" ]; then
+            exec moonlight stream "$host" "Desktop" --resolution "$size"
+        fi
         exec moonlight stream "$host" "Desktop"
     fi
 
@@ -2818,6 +2872,15 @@ cmd_tui() {
         # what `p` is called as well as what it does.
         printf '\n  ↑/↓ choose   Enter connect   w wake   p %s   d forget   q quit\n' \
                "$([ "${kinds[$sel]}" = stream ] && echo 'pair' || echo 'password')"
+        # On a streaming row only: a VNC viewer shows the far screen at its own
+        # size, so there is nothing to choose for one.
+        if [ "${kinds[$sel]}" = stream ]; then
+            if [ "$(setting connect_resolution screen)" = screen ]; then
+                printf "  r use Moonlight's own resolution — streams open at this screen's size now\n"
+            else
+                printf "  r match this screen — streams open at Moonlight's resolution now\n"
+            fi
+        fi
 
         IFS= read -rsn1 key || break
         case "$key" in
@@ -2842,6 +2905,14 @@ cmd_tui() {
                    ( cmd_trust "${names[$sel]}" )
                else
                    cmd_saved "${names[$sel]}" set
+               fi
+               printf '\n  [any key]'; IFS= read -rsn1 ;;
+            r) [ "${kinds[$sel]}" = stream ] || continue
+               printf '\n'
+               if [ "$(setting connect_resolution screen)" = screen ]; then
+                   cmd_resolution moonlight
+               else
+                   cmd_resolution screen
                fi
                printf '\n  [any key]'; IFS= read -rsn1 ;;
             d) printf '\n'; cmd_forget "${names[$sel]}"; return 0 ;;
@@ -2906,6 +2977,10 @@ Reaching somebody else's desktop:
                                `connect` opens with Moonlight and `trust` pairs
                                with rather than pinning a certificate
   syn-remote connect <name>    open it — waking it first if it is asleep
+  syn-remote resolution screen|moonlight
+                               how big a Moonlight stream opens: the size of
+                               the screen it opens on (default), or the
+                               resolution and bitrate set in Moonlight
   syn-remote wake <name>       just wake it, without opening anything
   syn-remote saved <name> [set|clear]   the password it is opened with
   syn-remote trust <name> [--renew]    check and pin its certificate
@@ -2958,6 +3033,7 @@ case "${1:-status}" in
     forget)     shift; cmd_forget "$@" ;;
     saved)      shift; cmd_saved "$@" ;;
     connect|view) shift; cmd_connect "$@" ;;
+    resolution) shift; cmd_resolution "$@" ;;
     wake)       shift; cmd_wake "$@" ;;
     trust)      shift; cmd_trust "$@" ;;
     fingerprint) shift; cmd_fingerprint "$@" ;;

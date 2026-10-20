@@ -1819,6 +1819,59 @@ SYN_REMOTE_WAKE_WAIT=1 "$SR" connect lounge --no-wake >/dev/null 2>&1
 grep -q '^moonlight stream 192.0.2.80 Desktop' "$SR_SYNCTL_LOG" &&
     ok "connect opens a stream host with moonlight" ||
     bad "a streaming host was not handed to moonlight: $(cat "$SR_SYNCTL_LOG")"
+
+# ⛔ AT THE SIZE OF THE SCREEN IT OPENS ON. Moonlight's own default is 1080p
+# whatever it is drawn on, which a 1440p monitor stretches into a soft picture.
+# synctl reports the LAYOUT size, so a scaled screen has to be multiplied back
+# out to the pixels the stream should carry.
+cp "$stub/synctl" "$T/synctl.before26"
+cat > "$stub/synctl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    outputs) cat "$SR_FOCUS" ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$stub/synctl"
+export SR_FOCUS="$T/focus.json"
+mlargs() {   # mlargs — what connect handed moonlight, minus the host and app
+    : > "$SR_SYNCTL_LOG"
+    "$SR" connect lounge --no-wake >/dev/null 2>&1
+    sed -n 's/^moonlight stream 192\.0\.2\.80 Desktop *//p' "$SR_SYNCTL_LOG"
+}
+check "a fresh install opens streams at the screen's size" "screen" "$("$SR" resolution)"
+printf '%s' '[{"name":"eDP-1","size":[1920,1080],"scale":1.0,"primary":false,"focused":false},
+             {"name":"HDMI-A-1","size":[2560,1440],"scale":1.0,"primary":true,"focused":true}]' > "$SR_FOCUS"
+check "a stream opens at the focused screen's size" "--resolution 2560x1440" "$(mlargs)"
+printf '%s' '[{"name":"HDMI-A-1","size":[3072,1728],"scale":1.25,"primary":true,"focused":true}]' > "$SR_FOCUS"
+check "...in pixels, not the scaled layout size" "--resolution 3840x2160" "$(mlargs)"
+printf '%s' '[{"name":"eDP-1","size":[1920,1080],"scale":1.0,"primary":true,"focused":false},
+             {"name":"DP-2","size":[2560,1440],"scale":1.0,"primary":false,"focused":false}]' > "$SR_FOCUS"
+check "...the primary screen's when none is focused" "--resolution 1920x1080" "$(mlargs)"
+printf '%s' '[{"name":"DP-3","primary":true,"virtual":false}]' > "$SR_FOCUS"
+check "a synctl with no sizes in its answer leaves the size to moonlight" "" "$(mlargs)"
+# ⚠ A FARM WITHOUT ONE, not the stub moved aside: the real synctl is still in
+# /usr/bin on any SynapseOS machine running this suite.
+nosc="$T/nosynctl"; mkdir -p "$nosc"
+for f in /usr/bin/*; do ln -s "$f" "$nosc/" 2>/dev/null; done
+rm -f "$nosc/synctl"
+mkdir -p "$T/stub26"; cp "$stub/moonlight" "$T/stub26/"
+check "...and so does a machine with no synctl at all" "" "$(PATH="$T/stub26:$nosc" mlargs)"
+
+# ⚠ AND MOONLIGHT'S OWN SETTINGS STILL COUNT FOR SOMEBODY WHO WANTS THEM. A
+# size on the command line replaces both the resolution and the bitrate saved
+# there, so `resolution moonlight` is the way back to them.
+printf '%s' '[{"name":"HDMI-A-1","size":[2560,1440],"scale":1.0,"primary":true,"focused":true}]' > "$SR_FOCUS"
+"$SR" resolution moonlight >/dev/null 2>&1
+check "resolution moonlight is saved" "moonlight" "$("$SR" resolution)"
+check "...and hands moonlight no size at all" "" "$(mlargs)"
+out=$("$SR" resolution banana 2>&1)
+grep -q 'screen|moonlight' <<<"$out" && ok "a resolution that is neither is refused" \
+                                     || bad "any word was accepted as a resolution"
+check "...leaving the saved one alone" "moonlight" "$("$SR" resolution)"
+"$SR" resolution screen >/dev/null 2>&1
+check "...and screen brings the size back" "--resolution 2560x1440" "$(mlargs)"
+mv "$T/synctl.before26" "$stub/synctl"
 : > "$SR_SYNCTL_LOG"
 "$SR" trust lounge >/dev/null 2>&1
 grep -q '^moonlight pair 192.0.2.80' "$SR_SYNCTL_LOG" &&

@@ -18,6 +18,7 @@ syn-remote add desk 192.168.1.20 velle   # a machine to reach
 syn-remote trust desk        # check its certificate, once, before the first connection
 syn-remote connect desk      # open it — waking it first if it is asleep
 syn-remote add tv 192.168.1.60 --stream  # …a Moonlight host, opened with Moonlight
+syn-remote resolution moonlight  # …at Moonlight's own resolution, not this screen's size
 syn-remote gui | tui         # the same list, in a window or in the terminal
 ```
 

@@ -372,6 +372,10 @@ ShellRoot {
 
     property string problem: ""
 
+    // `syn-remote resolution`: "screen" or "moonlight".
+    property string streamSize: "screen"
+    readonly property bool anyStream: root.hosts.some(h => h.kind === "stream")
+
     readonly property var chosen: {
         for (const h of root.hosts)
             if (h.name === root.selected) return h
@@ -382,6 +386,7 @@ ShellRoot {
         root.busy = true
         root.problem = ""
         listProc.running = true
+        sizeProc.running = true
     }
 
     function parseHosts(text) {
@@ -485,6 +490,35 @@ ShellRoot {
             onStreamFinished: if (this.text) root.problem = String(this.text).trim()
         }
         onExited: root.busy = false
+    }
+
+    Process {
+        id: sizeProc
+        command: ["syn-remote", "resolution"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.streamSize =
+                String(this.text).trim() === "moonlight" ? "moonlight" : "screen"
+        }
+    }
+
+    /*
+     * ⛔ NOT actProc. A Connect to a streaming host leaves actProc running
+     * Moonlight for as long as the stream lasts, and run() starts by setting
+     * running = false — so switching this through run() would end the stream
+     * it was pressed beside.
+     */
+    Process {
+        id: sizeSet
+        running: false
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.problem = String(this.text).trim()
+        }
+        onExited: sizeProc.running = true
+    }
+    function setStreamSize(v) {
+        sizeSet.command = ["syn-remote", "resolution", v]
+        sizeSet.running = true
     }
 
     /*
@@ -614,7 +648,7 @@ ShellRoot {
                 // ── the list ───────────────────────────────
                 Rectangle {
                     width: parent.width
-                    height: parent.height - root.ui(160)
+                    height: parent.height - root.ui(root.anyStream ? 208 : 160)
                     radius: root.ui(8)
                     color: root.cSunken
                     border.width: 1
@@ -834,6 +868,34 @@ ShellRoot {
                         text: "Forget this connection"
                         tint: root.cWarn
                         onClicked: root.run(["syn-remote", "forget", root.chosen.name])
+                    }
+                }
+
+                // ── how big a Moonlight stream opens ───────
+                //
+                // Only once there is a Moonlight host to open. The sentence says
+                // what happens now, and the button says what pressing it does.
+                Row {
+                    width: parent.width
+                    spacing: root.ui(8)
+                    visible: root.anyStream
+
+                    Act {
+                        text: root.streamSize === "screen"
+                              ? "Use Moonlight's own resolution"
+                              : "Match this screen"
+                        onClicked: root.setStreamSize(
+                            root.streamSize === "screen" ? "moonlight" : "screen")
+                    }
+                    Text {
+                        height: root.ui(34)
+                        verticalAlignment: Text.AlignVCenter
+                        text: root.streamSize === "screen"
+                              ? "Moonlight streams open at the size of the screen they open on."
+                              : "Moonlight streams open at the resolution and bitrate set in Moonlight."
+                        color: root.cDim
+                        font.family: root.uiFont
+                        font.pixelSize: root.ui(12)
                     }
                 }
 

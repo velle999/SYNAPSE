@@ -347,7 +347,25 @@ pkgver=0.1.0
 #   on 20 are the older-sunshine path, which is the point; section 27 pins the
 #   drop-in (red 3 of 5 on 20). 267/267 on 21. Against the real 2026.1006 on the
 #   reference desktop, the list read and the nobody-waiting refusal both work.
-pkgrel=21
+# 22: A STREAM OPENS AT THE SIZE OF THE SCREEN IT OPENS ON.
+#   ⛔ `connect` handed Moonlight no size, so it streamed at its own default,
+#     1920x1080 whatever it was drawn on: a 2560x1440 monitor was sent a 1080p
+#     picture and stretched it, and every line of text was soft. `connect` now
+#     passes --resolution for the focused screen (the primary one if none is),
+#     in pixels — synctl's layout size times its scale — and Moonlight works
+#     out the bitrate for that size. With no synctl, or no size in its answer,
+#     nothing is passed and Moonlight's own settings apply as before.
+#   ⚠ `resolution moonlight` keeps Moonlight's own settings in charge. A size on
+#     the command line replaces the resolution AND the bitrate saved there, so
+#     somebody who set those gets them back with it. The window has the switch
+#     below its buttons, on its own Process: run() would end the stream that
+#     Connect left running in actProc. The TUI has it on `r`.
+#
+#   syn_remote_test: section 26 drives connect against a synctl stand-in —
+#   focused, scaled, primary-only, sizeless and absent — and the setting; red
+#   8 of 11 on 21 (the three that pass are the no-size cases, which 21 already
+#   got right), 278/278 on 22.
+pkgrel=22
 pkgdesc="Remote desktop for SynapseOS — VNC or a Moonlight stream on a display of its own, with the screen woken, the machine held awake while somebody is connected, and a magic packet to wake it when it is not"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
