@@ -1456,41 +1456,6 @@ ISO_FILE=$(ls -t "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
 [[ -n "$ISO_FILE" ]] || err "ISO not found in ${OUT_DIR}"
 ok "ISO built: ${ISO_FILE}"
 
-# ── Hand the output back BEFORE signing ──────────────────────
-#
-# ⛔ BEFORE, not after. The .asc is written next to the ISO by the invoking
-# user, while out/ is created by mkarchiso as ROOT — so on a machine where out/
-# did not already exist from an earlier build, the signature died on a directory
-# it could not write, at the end of the build. It has only ever worked here
-# because out/ was already velle's from a previous run.
-#
-# The chown further down still runs: it covers the checksum files, which are
-# written after this point.
-if [[ -n "${SUDO_USER:-}" ]]; then
-    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" \
-        "${OUT_DIR}" "${ISO_FILE}" 2>/dev/null || true
-fi
-
-# ── Sign ──────────────────────────────────────────────────────
-#
-# ⚠ ONE OWNER. Which key, as which user, and the verify that follows all live in
-# sign-iso.sh — which is also what you run to sign an image that was built
-# without a signature. This block used to carry its own copy of the gpg
-# invocation, and two copies of "sign the release correctly" is one more than
-# can be kept true.
-if [[ "$SIGN" == "true" ]]; then
-    step "Signing ISO"
-    # ⚠ The failure message names the recovery, because the ISO is FINE: a
-    # detached signature does not touch the image, so a failure here costs a
-    # passphrase, never a rebuild.
-    "${SCRIPT_DIR}/sign-iso.sh" "${ISO_FILE}" \
-        || err "signing failed — the ISO itself is built and intact.
-     Nothing needs rebuilding. Sign it with:
-       ./archiso/sign-iso.sh $(basename "${ISO_FILE}")"
-else
-    warn "Unsigned build (--no-sign) — sign it later with ./archiso/sign-iso.sh"
-fi
-
 # ── Checksums ─────────────────────────────────────────────────
 step "Generating checksums"
 cd "${OUT_DIR}"
@@ -1501,6 +1466,10 @@ ok "sha256: $(cat "$(basename "${ISO_FILE}").sha256" | cut -d' ' -f1)"
 # ── Fix output ownership ─────────────────────────────────────
 # mkarchiso runs as root, so fix ownership of output files
 # so the user who invoked sudo can read/test the ISO without issues.
+#
+# ⛔ BEFORE signing: the .asc is written next to the ISO by the invoking user,
+# and out/ is created by mkarchiso as ROOT, so a signature attempted first died
+# on a directory it could not write.
 if [[ -n "${SUDO_USER:-}" ]]; then
     # Chown the out/ dir too, not just its files: publish-release.sh runs as
     # the normal user and writes the split .part* files into out/, which fails
@@ -1508,6 +1477,32 @@ if [[ -n "${SUDO_USER:-}" ]]; then
     chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" \
         "${OUT_DIR}" "${OUT_DIR}"/*.iso "${OUT_DIR}"/*.sha256 "${OUT_DIR}"/*.b2sum 2>/dev/null || true
     ok "Output dir + files owned by ${SUDO_USER}"
+fi
+
+# ── Sign ──────────────────────────────────────────────────────
+#
+# ⚠ ONE OWNER. Which key, as which user, and the verify that follows all live in
+# sign-iso.sh — which is also what you run to sign an image that was built
+# without a signature. This block used to carry its own copy of the gpg
+# invocation, and two copies of "sign the release correctly" is one more than
+# can be kept true.
+#
+# ⛔ LAST, after the checksums and the handback. Signing is the one step that
+# waits on a person, and a failure here exits the build: when it ran before the
+# checksums, a cancelled prompt left out/ with no .sha256 or .b2sum, which
+# publish-release.sh requires. Now everything else is already on disk and the
+# signature is the only thing a failure can leave missing.
+if [[ "$SIGN" == "true" ]]; then
+    step "Signing ISO"
+    # ⚠ The failure message names the recovery, because the ISO is FINE: a
+    # detached signature does not touch the image, so a failure here costs a
+    # passphrase, never a rebuild.
+    "${SCRIPT_DIR}/sign-iso.sh" "${ISO_FILE}" \
+        || err "signing failed — the ISO and its checksums are built and intact.
+     Nothing needs rebuilding. Sign it with:
+       ./archiso/sign-iso.sh $(basename "${ISO_FILE}")"
+else
+    warn "Unsigned build (--no-sign) — sign it later with ./archiso/sign-iso.sh"
 fi
 
 # ── Summary ───────────────────────────────────────────────────

@@ -140,9 +140,29 @@ if [[ -f "${ISO}.asc" && "$FORCE" != "true" ]]; then
     warn "${ISO}.asc does not verify — replacing it"
 fi
 
+# ⛔ THE PASSPHRASE PROMPT TIMES OUT; THIS DOES NOT. gpg-agent sets no
+# pinentry timeout by default, so pinentry falls back to its own — 60 s on
+# this machine's pinentry-gtk — and gpg then fails with "signing failed:
+# Timeout". build.sh signs at the END of an hour-long build, which is exactly
+# when nobody is at the screen. A timeout is not a refusal, so the prompt is
+# opened again, as many times as it takes; Cancel in the prompt is how to stop.
+#
+# Read from --status-fd, not stderr: the message is translated, and the
+# FAILURE line carries the gpg-error code. Its low 16 bits are the error
+# (62 is GPG_ERR_TIMEOUT, 99 GPG_ERR_CANCELED); the high bits name the source.
 echo "signing $(basename "$ISO") with ${KEY} ..."
-gpg --detach-sign --armor --yes --local-user "$KEY" "$ISO" \
-    || err "signing failed — is ${KEY} in $(id -un)'s keyring, and did the passphrase prompt reach you?"
+asked=0
+while :; do
+    status="$(gpg --status-fd 3 --detach-sign --armor --yes --local-user "$KEY" "$ISO" 3>&1 1>&2)" \
+        && break
+    code="$(sed -n 's/^\[GNUPG:\] FAILURE [^ ]* \([0-9][0-9]*\).*/\1/p' <<<"$status" | tail -1)"
+    if [[ -n "$code" ]] && (( (code & 0xFFFF) == 62 )); then
+        asked=$((asked + 1))
+        warn "the passphrase prompt timed out (${asked}) — opening it again; Cancel it to stop"
+        continue
+    fi
+    err "signing failed — is ${KEY} in $(id -un)'s keyring, and did the passphrase prompt reach you?"
+done
 
 # ⛔ VERIFIED IMMEDIATELY, against the file that will actually ship. gpg exits 0
 # on plenty of things that are not a good signature over this ISO, and an

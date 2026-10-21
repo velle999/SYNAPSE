@@ -92,7 +92,10 @@ the thing you ask for — `--no-sign` — rather than the thing you get by
 forgetting. `SYNAPSE_SIGNING_KEY=<fpr> sudo -E ./build.sh` still overrides
 *which* key, for a build that is not signing with the project key.
 
-The key's passphrase is prompted for, so a signing build is not unattended.
+The key's passphrase is prompted for at the end of the build, after the
+checksums are written. When the prompt times out it opens again, until the
+passphrase is entered or the prompt is cancelled; a cancelled build has
+everything but the `.asc`, which `./sign-iso.sh` adds.
 
 ### Signing after the fact
 
@@ -283,7 +286,8 @@ build.sh
   ├── 4. Local repo     (repo-add → synapseos.db)
   ├── 5. Model          (swept off the image; --with-model embeds one)
   ├── 6. mkarchiso      (squashfs + ISO assembly)
-  └── 7. Checksums      (sha256, b2sum)
+  ├── 7. Checksums      (sha256, b2sum)
+  └── 8. Signature      (sign-iso.sh → .asc; --no-sign skips it)
 ```
 
 ## GPU Support
