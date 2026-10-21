@@ -276,10 +276,23 @@ if (( ! skip_ia )); then
     # traceback, several screens long, whose last line is the only useful one.
     # Worse, it would do that AFTER the R2 upload had already run, so a 4.6 GB
     # transfer would be followed by a crash that reads like a bug in this script.
-    if ! ia configure --check >/dev/null 2>&1; then
-        echo "publish-mirrors: 'ia' is installed but not logged in — Archive upload cannot run." >&2
-        echo "  Run:  ia configure        (archive.org account; writes ~/.config/internetarchive/ia.ini)" >&2
-        echo "  (or re-run with --skip-ia to publish to R2 only)" >&2
+    #
+    # ⛔ AND NOT ANSWERING IS NOT LOGGED OUT. The check fails the same way when
+    # archive.org is down, and the advice for one is wrong for the other:
+    # `ia configure` rewrites an ia.ini that was fine. A connection failure is
+    # told apart by the exception requests raises — its class name, which is
+    # not translated — and R2 is usually done by then, so the retry skips it.
+    if ! ia_check="$(ia configure --check 2>&1)"; then
+        if grep -qE 'ConnectTimeout|ConnectionError|ReadTimeout|NameResolutionError|Max retries exceeded' <<<"$ia_check"; then
+            echo "publish-mirrors: archive.org is not answering — Archive upload cannot run now." >&2
+            echo "  $(tail -n1 <<<"$ia_check" | cut -d: -f1)" >&2
+            echo "  The login is not the problem. Try again later, Archive only:" >&2
+            echo "    ./archiso/publish-mirrors.sh ${ver} --skip-r2" >&2
+        else
+            echo "publish-mirrors: 'ia' is installed but not logged in — Archive upload cannot run." >&2
+            echo "  Run:  ia configure        (archive.org account; writes ~/.config/internetarchive/ia.ini)" >&2
+            echo "  (or re-run with --skip-ia to publish to R2 only)" >&2
+        fi
         exit 1
     fi
 
