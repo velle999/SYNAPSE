@@ -21,6 +21,10 @@ B=$here/../../archiso/build.sh
 [ -f "$S" ] || { echo "  ABORT no sign-iso.sh at $S"; exit 1; }
 command -v gpg >/dev/null && command -v gpgconf >/dev/null \
     || { echo "  SKIP  gpg is not installed"; exit 77; }
+# sign-iso.sh refuses a root login by design: the key lives in a person's
+# keyring. CI's container is root, so the workflow runs this as its builder.
+[ "$(id -u)" != 0 ] \
+    || { echo "  SKIP  root — sign-iso.sh refuses root; run this as a user"; exit 77; }
 
 pass=0; fail=0
 ok()  { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }

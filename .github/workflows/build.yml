@@ -395,10 +395,11 @@ jobs:
       # build.sh signs at the end of an hour-long build, and pinentry gives up
       # after 60 s on its own. A timeout opens the prompt again; Cancel stops;
       # and signing comes after the checksums, so a cancel leaves only the .asc
-      # missing. A throwaway keyring and a stand-in pinentry.
+      # missing. A throwaway keyring and a stand-in pinentry. As builder:
+      # sign-iso.sh refuses a root login, and this container is root.
       - name: a timed-out signing prompt is asked again
         run: |
-          ./tools/tests/sign_iso_test.sh || rc=$?
+          su builder -c ./tools/tests/sign_iso_test.sh || rc=$?
           [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
 
       # The language chosen at boot, and the two places it has to reach: the
