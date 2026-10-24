@@ -88,6 +88,20 @@ exit 0
 STUB
 chmod +x "$TMP/bin/openrgb"
 
+# ⛔ `on` and `off` enable and disable the bridge's user units with
+# `systemctl --user ... --now`. Without this stand-in a run outside a sandbox
+# reached the REAL user manager: one afternoon's runs on a desktop stopped and
+# restarted its OpenRGB SDK server twelve times. It lives in a directory of its
+# own because $TMP/bin is where the missing-openrgb case looks.
+mkdir -p "$TMP/sysbin"
+cat > "$TMP/sysbin/systemctl" <<'STUB'
+#!/bin/sh
+echo "systemctl $*" >> "$SYSTEMCTL_LOG"
+STUB
+chmod +x "$TMP/sysbin/systemctl"
+export PATH=$TMP/sysbin:$PATH
+export SYSTEMCTL_LOG=$TMP/systemctl.log
+
 export XDG_CONFIG_HOME=$TMP/cfg
 export SYN_RGB_BIN=$TMP/bin/openrgb
 export RGBLOG=$TMP/log
@@ -126,7 +140,11 @@ check "a fresh install is off" "no" \
 check "and applying does nothing at all" "0" "$(calls)"
 
 # ---- on follows the wallpaper -------------------------------------------
+: > "$SYSTEMCTL_LOG"
 "$SCRIPT" on >/dev/null
+check "on enables the bridge's units" \
+      "systemctl --user enable --now syn-rgb.path|systemctl --user enable --now syn-rgb-server.service" \
+      "$(paste -sd'|' "$SYSTEMCTL_LOG")"
 check "on pushes the accent" "openrgb -d 0 -m direct -c 9B610F -d 1 -m static -c 9B610F" "$(tail -1 "$RGBLOG")"
 wallpaper yes '#3355FF'
 "$SCRIPT" apply >/dev/null
@@ -252,6 +270,30 @@ check "and the colour lands on what is left" \
       "openrgb -d 0 -m direct -c 3355FF -d 1 -m static -c 3355FF" \
       "$(tail -1 "$RGBLOG")"
 
+# ⚠ A RUN KILLED IN THAT WAIT LEAVES ITS TEMPORARIES. They are named for its
+# pid, and nothing else ever removed them: a desktop had two such pairs in its
+# config, from two logins. The next build removes the ones whose process is
+# gone, and leaves a running build's alone.
+MAPF=$TMP/cfg/synui/rgb.devices
+SYN_RGB_SDK=yes RGBGONE=1 "$SCRIPT" apply 2>/dev/null >/dev/null
+SYN_RGB_SDK=yes "$SCRIPT" apply 2>/dev/null >/dev/null &
+victim=$!
+i=0
+while [ ! -e "$MAPF.tmp.$victim.probe" ] && [ "$i" -lt 50 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+kill -TERM "$victim" 2>/dev/null
+wait "$victim" 2>/dev/null
+check "a build killed while it waits leaves its temporaries" "2" \
+      "$(ls "$MAPF".tmp."$victim"* 2>/dev/null | wc -l | tr -d ' ')"
+: > "$MAPF.tmp.$$"
+SYN_RGB_SDK=yes RGBGONE=1 "$SCRIPT" apply 2>/dev/null >/dev/null
+check "and the next build removes them" "0" \
+      "$(ls "$MAPF".tmp."$victim"* 2>/dev/null | wc -l | tr -d ' ')"
+check "but not a running build's" "yes" \
+      "$([ -e "$MAPF.tmp.$$" ] && echo yes || echo no)"
+rm -f "$MAPF.tmp.$$"
+
 # ---- 1.0 and 1.0rc3 list their devices differently ----------------------
 #
 # ⛔ 1.0's `--list-devices` HAS NO MODES IN IT. Parsed as if it were rc3's it is
@@ -294,7 +336,11 @@ check "dark is black" "openrgb -d 0 -m direct -c 000000 -d 1 -m static -c 000000
 
 # ⚠ Turning the bridge off does NOT blank the lights: that is `dark`, and it is
 # its own word. Off means stop following.
+: > "$SYSTEMCTL_LOG"
 "$SCRIPT" off >/dev/null
+check "off disables them" \
+      "systemctl --user disable --now syn-rgb.path|systemctl --user disable --now syn-rgb-server.service" \
+      "$(paste -sd'|' "$SYSTEMCTL_LOG")"
 before=$(calls)
 wallpaper yes '#00FF00'
 "$SCRIPT" apply >/dev/null

@@ -299,9 +299,18 @@ map_settle() {   # map_settle FILE — grow FILE until the bus has all of it
 }
 
 map_build() {   # map_build [LISTING] — parse a listing, or fetch and settle one
-    local out=${1:-} given=1 tmp rc=1
+    local out=${1:-} given=1 tmp rc=1 f pid
     have_openrgb || return 1
     mkdir -p "$CFG"
+    # ⚠ A build killed in the settle wait (a logout, a stop) leaves $MAP.tmp.PID
+    # and its .probe behind, and nothing else ever removes them. Each build
+    # removes the ones whose process is gone.
+    for f in "$MAP".tmp.*; do
+        [ -e "$f" ] || continue
+        pid=${f#"$MAP".tmp.}; pid=${pid%%.*}
+        case "$pid" in ''|*[!0-9]*) continue ;; esac
+        [ -d "/proc/$pid" ] || rm -f "$f"
+    done
     tmp=$MAP.tmp.$$
     if [ -z "$out" ]; then
         given=0

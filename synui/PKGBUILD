@@ -3949,7 +3949,31 @@ pkgver=0.1.0
 #   and two buffers, so under ASan LeakSanitizer aborted the control it had
 #   just passed (305640 bytes, 7 allocations); it now leaves through the same
 #   teardown as the full run. The shipped compositor changes only in (1).
-pkgrel=641
+# 642: SIGTERM ENDS SYNUI WITH ITS SYNGUARD FEED BACKED UP, AND SYN-RGB
+#   CLEARS WHAT A KILLED RUN LEFT. (1) secfeed's thread hands each verdict to
+#   the main thread over a pipe that is drained only on frames, 32 a frame. An
+#   idle compositor sent a burst fills it (409 records), the thread blocks in
+#   write(), and secfeed_stop()'s shutdown() of the socket does not reach it:
+#   the join waited for ever. In the full ASan suite, smoke.sh's idle
+#   section-13 instance, subscribed to the build machine's own synguard, hung
+#   like that until meson killed it at 540 s, 3 of 3 runs (main thread in
+#   futex_wait, the feed thread in anon_pipe_write). secfeed_stop() now closes
+#   the pipe's read end before the join, so that write fails with EPIPE.
+#   tests/secfeed_shutdown.sh blocks the thread on the pipe with a stand-in
+#   synguard (SYNUI_SECFEED_SOCKET, a test seam; unset, the feed is still
+#   /run/synguard.sock): red 3/3 on 641 plus the seam, green 3/3. (2)
+#   smoke.sh's INT/TERM trap cleaned up and let the script run on, so a run
+#   meson timed out started another synui in a removed $TMP; it exits now, and
+#   its three plain waits on a synui have the 10 s deadline the others had.
+#   (3) syn-rgb: a run killed in the settle wait left rgb.devices.tmp.PID and
+#   its .probe in ~/.config/synui (two pairs on one desktop, from 09-22 and
+#   10-08). Each map build removes the ones whose process is gone.
+#   tests/syn_rgb.sh kills a build mid-wait: red on 641 (36/1), green. (4)
+#   syn_rgb.sh ran `syn-rgb on`/`off` against the REAL user manager whenever it
+#   ran outside a sandbox (twelve SDK-server restarts in two minutes on a
+#   desktop); a systemctl stand-in is first on PATH, and the two checks on
+#   what it was asked fail without it.
+pkgrel=642
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

@@ -54,13 +54,18 @@ typedef struct {
 } secfeed_msg_t;
 #pragma pack(pop)
 
+/* The feed's socket: synguard's, unless SYNUI_SECFEED_SOCKET names a stand-in
+ * (tests/secfeed_shutdown.sh). Read in secfeed_start(), on the main thread —
+ * a getenv() on the feed thread would race the main thread's setenv()s. */
+static char feed_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
+
 /* ── Background subscriber thread ─────────────────────────── */
 static int secfeed_connect(void)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0) return -1;
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
-    strncpy(addr.sun_path, SECFEED_SOCKET, sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, feed_path, sizeof(addr.sun_path) - 1);
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(fd);
         return -1;
@@ -115,8 +120,11 @@ static void *secfeed_thread_fn(void *arg)
         if (msg.magic != SECFEED_MAGIC || msg.version != SECFEED_VERSION)
             continue;   /* skip malformed/foreign records */
 
-        /* Hand off to the main thread (atomic: record < PIPE_BUF). */
-        if (write(s->sec_pipe[1], &msg, sizeof(msg)) != (ssize_t)sizeof(msg))
+        /* Hand off to the main thread (atomic: record < PIPE_BUF). Blocks
+         * while the pipe is full; secfeed_stop() ends that by closing the
+         * read end, and that EPIPE is not an error. */
+        if (write(s->sec_pipe[1], &msg, sizeof(msg)) != (ssize_t)sizeof(msg) &&
+            !atomic_load(&s->sec_stop))
             wlr_log(WLR_ERROR, "synui: secfeed pipe write failed");
     }
 
@@ -133,6 +141,9 @@ void secfeed_start(syn_server_t *s)
         s->sec_pipe[0] = s->sec_pipe[1] = -1;
         return;
     }
+    const char *path = getenv("SYNUI_SECFEED_SOCKET");
+    snprintf(feed_path, sizeof(feed_path), "%s",
+             path && *path ? path : SECFEED_SOCKET);
     /* O_CLOEXEC so forked+exec'd children (autostart, AI "CMD:") don't hold
      * the pipe open past our own close. */
     if (pipe2(s->sec_pipe, O_CLOEXEC) < 0) {
@@ -153,7 +164,15 @@ void secfeed_start(syn_server_t *s)
 /* Shut the feed thread down: raise the stop flag, then shutdown() the feed
  * socket so a blocking recv returns immediately (a reconnect sleep exits
  * within ~100ms via the sliced wait). Join, then close the hand-off pipe.
- * Safe to call unconditionally. */
+ * Safe to call unconditionally.
+ *
+ * ⚠ The pipe's READ end is closed BEFORE the join. The pipe is drained only on
+ * frames (secfeed_dispatch, 32 a frame), so an idle compositor that is sent a
+ * burst of verdicts leaves the thread blocked in write() on a full pipe, which
+ * shutdown() of the socket does not reach: the join waited for ever and SIGTERM
+ * never finished (tests/secfeed_shutdown.sh). With no reader left, that write
+ * fails with EPIPE (SIGPIPE is ignored, see main()) and the thread sees
+ * sec_stop. */
 void secfeed_stop(syn_server_t *s)
 {
     if (s->sec_running) {
@@ -161,6 +180,7 @@ void secfeed_stop(syn_server_t *s)
         int fd = atomic_load(&s->sec_fd);
         if (fd >= 0)
             shutdown(fd, SHUT_RDWR);
+        if (s->sec_pipe[0] >= 0) { close(s->sec_pipe[0]); s->sec_pipe[0] = -1; }
         pthread_join(s->sec_thread, NULL);
         s->sec_running = 0;
     }

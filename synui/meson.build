@@ -640,6 +640,14 @@ test('smoke',
   args : smoke_args,
   timeout : 180)
 
+# synguard's verdict feed backed up against an idle compositor: the feed thread
+# blocked in write() on its hand-off pipe, and synui_destroy()'s join never
+# returned. A stand-in synguard sends the burst through SYNUI_SECFEED_SOCKET.
+test('secfeed_shutdown', find_program('tests/secfeed_shutdown.sh'),
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 60)
+
 # The kitty (cat.c). Links only the drawing half — cat_draw.c is pure cairo, no
 # wlroots — and renders every pose to a contact sheet. As a test it can only
 # assert the mechanical parts (each pose drew something, inside its canvas, and

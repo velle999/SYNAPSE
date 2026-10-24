@@ -40,7 +40,25 @@ cleanup() {
     [ -n "${FOOT_PID:-}" ] && kill -9 "$FOOT_PID" 2>/dev/null
     [ -n "${TMP:-}" ] && rm -rf "$TMP"
 }
-trap cleanup INT TERM
+# ⚠ And exit: a trap that only cleans up lets the script run on. When meson's
+# timeout sent TERM, this removed $TMP and the next section started another
+# synui into a directory that was gone, until the KILL a second later.
+trap 'cleanup; exit 1' INT TERM
+
+# Stop the instance under test, with the same 10 s deadline as every other
+# shutdown here. Three plain `wait`s on a synui had none, and one that did not
+# exit held the suite until meson killed it at 540 s, saying nothing.
+stop_synui() {   # stop_synui <what>
+    kill -TERM "$SYNUI_PID" 2>/dev/null
+    i=0
+    while kill -0 "$SYNUI_PID" 2>/dev/null; do
+        [ $i -ge 100 ] && fail "$1: synui did not exit within 10s of SIGTERM"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    wait "$SYNUI_PID" 2>/dev/null
+    SYNUI_PID=
+}
 
 command -v wayland-info >/dev/null || fail "wayland-info not installed (wayland-utils)"
 
@@ -524,7 +542,7 @@ if [ -n "$X11_REMAP" ] && [ -x "$X11_REMAP" ] && command -v Xwayland >/dev/null 
         i=$((i + 1))
     done
     if [ -z "$XDISP" ]; then
-        kill -TERM "$SYNUI_PID" 2>/dev/null; wait "$SYNUI_PID" 2>/dev/null
+        stop_synui "remap test, no Xwayland"
         echo "ok 13 # SKIP Xwayland did not start"
     else
         WAYLAND_DISPLAY="$SOCK" DISPLAY="$XDISP" "$X11_REMAP" 6 >/dev/null 2>&1 \
@@ -547,8 +565,7 @@ if [ -n "$X11_REMAP" ] && [ -x "$X11_REMAP" ] && command -v Xwayland >/dev/null 
                 WAYLAND_DISPLAY="$SOCK" "$SYNCTL" scene 2>/dev/null)
         LEAKED=$(printf '%s' "$SCENE" | sed -n 's/.*"leaked":\([-0-9]*\).*/\1/p')
 
-        kill -TERM "$SYNUI_PID" 2>/dev/null
-        wait "$SYNUI_PID" 2>/dev/null
+        stop_synui "remap test"
 
         [ -n "$LEAKED" ] \
             || fail "remap test: synctl scene gave nothing (got: $SCENE)"
@@ -600,9 +617,7 @@ if [ -x "$SECCTX" ]; then
     echo "$SECOUT" | sed 's/^/    /'
     echo "ok 14 - a security-context client is denied the privileged globals"
 
-    kill "$SYNUI_PID" 2>/dev/null
-    wait "$SYNUI_PID" 2>/dev/null
-    SYNUI_PID=
+    stop_synui secctx
     rm -f "$LOG"
 else
     echo "ok 14 # SKIP security_context_test not built"
