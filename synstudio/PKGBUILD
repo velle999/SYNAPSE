@@ -1712,7 +1712,17 @@ pkgver=0.1.0
 #   conversion rounds a code value differently, and that check guards an
 #   alpha a few values off, so it reads a lossless PNG export now. 921
 #   assertions, 15 mutations each caught, clean under ASan+UBSan+LSan.
-pkgrel=55
+#
+# 56: a keyed value that is too long says so.
+#   A title option that reads $size or $colour is kept whole so a command can
+#   re-send it every frame the row moves, in a 160-byte template. A value
+#   longer than that was refused as "more than 24 options read the size or
+#   the colour" when it was the only one. The two limits have their own
+#   messages now: "drawtext fontsize: a value that reads the size or the
+#   colour is longer than 159 characters". tests/run.sh: a 165-character
+#   fontsize=$size+0+0... is refused with "longer than" (FAIL before, PASS
+#   after).
+pkgrel=56
 
 pkgdesc="SynapseOS darkroom and edit suite: RAW develop, masks, and a graded video timeline with a cutting room"
 arch=('x86_64')

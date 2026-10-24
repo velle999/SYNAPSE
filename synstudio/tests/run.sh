@@ -1296,6 +1296,10 @@ ttbad "a name nobody declared is refused"        "not a parameter" \
       'drawtext=$font:$line1:x=$nope'
 ttbad "a parameter cannot take a token's name"   "token's name" \
       'drawtext=$font:$line1' 'param   size  1  0  2  Size'
+# One keyed option whose value is too long to keep for re-sending is said to be
+# too long, not to be one of "more than 24 options" (it was the only one).
+ttbad "a keyed value too long to re-send says so" "longer than" \
+      "drawtext=\$font:\$line1:fontsize=\$size$(printf '+0%.0s' $(seq 1 80))"
 
 check "five templates ship" "5" "$($BIN titles | wc -l)"
 for n in $($BIN titles | cut -f1); do

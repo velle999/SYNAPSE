@@ -437,11 +437,18 @@ static int tt_walk(const ss_fx *tt, ss_fx *meta, const double *vals,
                      * have to re-send, whole, every frame it changes. */
                     if (meta && (uses & TT_MOVING)) {
                         ss_fx_target *t;
-                        if (meta->ntarget >= SS_MAX_FX_TARGETS ||
-                            vl >= sizeof t->tmpl) {
+                        if (meta->ntarget >= SS_MAX_FX_TARGETS) {
                             if (err) snprintf(err, errn, "more than %d options "
                                               "read the size or the colour",
                                               SS_MAX_FX_TARGETS);
+                            return -1;
+                        }
+                        if (vl >= sizeof t->tmpl) {
+                            if (err) snprintf(err, errn, "%s %.*s: a value that "
+                                              "reads the size or the colour is "
+                                              "longer than %zu characters",
+                                              fname, (int)ol, a,
+                                              sizeof t->tmpl - 1);
                             return -1;
                         }
                         t = &meta->target[meta->ntarget++];
