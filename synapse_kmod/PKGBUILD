@@ -143,7 +143,23 @@ pkgver=0.1.0
 #   tests/run-vm-tests.sh has a fifth mode, toggle: 30 s of off/on flips.
 #   integrity_alerts 0 -> 2 before; 0 -> 0 after on 7.2.7-cachyos and
 #   7.2.9-arch, all five modes ok.
-pkgrel=34
+# 35: A NEW FILESYSTEM IS NOT A BIND MOUNT. util-linux's mount(8) uses the new
+#   mount API whenever the kernel has it: a new filesystem is fsopen -> fsmount
+#   -> move_mount(fd, "", ..., MOVE_MOUNT_F_EMPTY_PATH), and a bind is
+#   open_tree(OPEN_TREE_CLONE) -> the same move_mount. The move_mount probe
+#   reported every one, so each automount of a data disk raised
+#   escalate-bind-mount: 220 of 240 such alerts in one desktop boot
+#   (2026-10-19..24) were its two NTFS disks, mounts that rule's own comment
+#   says are not reported. A move_mount from an fd whose mount is the root of
+#   its own superblock (fsmount's) is skipped now; a bind of a file or of a
+#   directory inside a filesystem is still reported, and so is a btrfs
+#   subvolume mount. A clone of a filesystem's own root is skipped too, and
+#   the VM suite reports that as a GAP: it equals mounting the filesystem
+#   again.
+#   tests/run-vm-tests.sh main: the fsmount case FAILED before and passes
+#   after; the open_tree file and directory binds pass before and after, on
+#   7.2.7-cachyos and 7.2.9-arch.
+pkgrel=35
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

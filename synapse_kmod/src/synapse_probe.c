@@ -34,6 +34,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/namei.h>
@@ -1085,6 +1086,38 @@ static int mount_pre_handler(struct kprobe *p, struct pt_regs *regs)
     return 0;
 }
 
+/*
+ * Is the detached mount behind `fd` a whole filesystem, root and all?
+ *
+ * The new mount API ends a new filesystem and a bind the same way:
+ * fsopen -> fsmount -> move_mount(fd, "", ..., MOVE_MOUNT_F_EMPTY_PATH), and
+ * open_tree(OPEN_TREE_CLONE) -> the same move_mount. util-linux's mount(8)
+ * takes that path whenever the kernel has it, so every automount of a data
+ * disk arrived as a "bind": 220 of the 240 escalate-bind-mount alerts in one
+ * boot on the desktop were its two NTFS disks. fsmount's mount is its
+ * superblock's root; a bind of a file or of a directory inside a filesystem
+ * is not, and that is the bind the rule is for. A clone of a filesystem's own
+ * root reads as new here, and is equivalent to mounting that filesystem
+ * again, which is not reported either. A btrfs subvolume is not its
+ * superblock's root, so a subvolume mount is still reported.
+ *
+ * fget_raw/fput: the fd table holds its own reference, so fput never drops
+ * the last one here, and neither sleeps.
+ */
+static bool move_source_is_whole_fs(int fd)
+{
+    struct file *f = fget_raw((unsigned int)fd);
+    bool whole = false;
+
+    if (!f) return false;
+    if (f->f_path.mnt && f->f_path.mnt->mnt_sb &&
+        f->f_path.dentry == f->f_path.mnt->mnt_root &&
+        f->f_path.mnt->mnt_root == f->f_path.mnt->mnt_sb->s_root)
+        whole = true;
+    fput(f);
+    return whole;
+}
+
 /* move_mount(from_dfd, from_path, to_dfd, to_path, flags): the new mount API
  * attaches with this, so it is a mount by any other name. */
 static int move_mount_pre_handler(struct kprobe *p, struct pt_regs *regs)
@@ -1092,6 +1125,8 @@ static int move_mount_pre_handler(struct kprobe *p, struct pt_regs *regs)
     if (!synapse_events_enabled()) return 0;
     if (!in_host_mntns()) return 0;
     struct pt_regs *u = syscall_uregs(regs);
+    if ((u->r8 & MOVE_MOUNT_F_EMPTY_PATH) && move_source_is_whole_fs((int)u->di))
+        return 0;   /* a new filesystem, attached */
     mount_report(__NR_move_mount, (const char __user *)u->r10, MS_MOVE);
     return 0;
 }

@@ -129,7 +129,8 @@ A value outside its range fails the load.
 - `setuid`, `setreuid`, `setresuid`, `setfsuid`, `setgid`, `setregid`,
   `setresgid`, `setfsgid` — a change to root (uid or gid 0)
 - `capset` — a non-root process switching on an administrator-class capability
-- `mount`, `move_mount` — a bind or a move in the host's mount namespace
+- `mount`, `move_mount` — a bind or a move in the host's mount namespace (a
+  new filesystem being mounted is not reported)
 - `kill`, `tkill`, `tgkill` — a terminating or stopping signal to pid 1,
   `synguard`, `synnet` or `synapd`, or to every process, from anything but pid 1
 

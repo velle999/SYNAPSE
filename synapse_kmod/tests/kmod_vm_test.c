@@ -523,6 +523,54 @@ static void test_mount(int dev)
     EXPECT(find_line("/kft-host", " 20 "), "mount: a bind in the host namespace is reported");
     EXPECT(!find_line("/kft-private", NULL),
            "mount: a bind inside a private mount namespace is not");
+
+    /* The new mount API, which util-linux's mount(8) uses whenever the kernel
+     * has it: a new filesystem is fsopen -> fsmount -> move_mount, a bind is
+     * open_tree(OPEN_TREE_CLONE) -> move_mount. Both end in the same
+     * move_mount(fd, "", ..., MOVE_MOUNT_F_EMPTY_PATH), and only the bind is
+     * what escalate-bind-mount is about. */
+    mkdir("/kft-newfs", 0755);
+    mkdir("/kft-newbind", 0755);
+    mkdir("/kft-src/sub", 0755);
+    mkdir("/kft-subbind", 0755);
+    close(open("/kft-src/file", O_CREAT | O_WRONLY, 0644));
+    close(open("/kft-filebind", O_CREAT | O_WRONLY, 0644));
+    p = fork();
+    if (p == 0) {
+        /* /tmp is main()'s tmpfs, so cloning it clones a filesystem's root. */
+        char newfs[] = "/kft-newfs", newbind[] = "/kft-newbind", src[] = "/tmp";
+        char sub[] = "/kft-src/sub", subbind[] = "/kft-subbind";
+        char file[] = "/kft-src/file", filebind[] = "/kft-filebind";
+        int fs = fsopen("tmpfs", FSOPEN_CLOEXEC);
+        if (fs >= 0 && fsconfig(fs, FSCONFIG_CMD_CREATE, NULL, NULL, 0) == 0) {
+            int m = fsmount(fs, FSMOUNT_CLOEXEC, 0);
+            if (m >= 0)
+                move_mount(m, "", AT_FDCWD, newfs, MOVE_MOUNT_F_EMPTY_PATH);
+        }
+        int t = open_tree(AT_FDCWD, src, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC);
+        if (t >= 0) move_mount(t, "", AT_FDCWD, newbind, MOVE_MOUNT_F_EMPTY_PATH);
+        t = open_tree(AT_FDCWD, sub, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC);
+        if (t >= 0) move_mount(t, "", AT_FDCWD, subbind, MOVE_MOUNT_F_EMPTY_PATH);
+        t = open_tree(AT_FDCWD, file, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC);
+        if (t >= 0) move_mount(t, "", AT_FDCWD, filebind, MOVE_MOUNT_F_EMPTY_PATH);
+        _exit(0);
+    }
+    reap(p);
+    drain(dev);
+    struct stat st;
+    INFO("mount: new-API tmpfs %s on /kft-newfs",
+         stat("/kft-newfs", &st) == 0 && st.st_dev != 0 ? "attached" : "NOT attached");
+    EXPECT(!find_line("/kft-newfs", " 20 "),
+           "mount: a new filesystem attached with fsmount + move_mount is not reported");
+    EXPECT(find_line("/kft-subbind", " 20 "),
+           "mount: a directory bound with open_tree(CLONE) + move_mount is reported");
+    EXPECT(find_line("/kft-filebind", " 20 "),
+           "mount: a file bound over another with open_tree(CLONE) + move_mount is reported");
+    if (find_line("/kft-newbind", " 20 "))
+        INFO("mount: a clone of a filesystem's own root (/kft-newbind) is reported");
+    else
+        GAP("mount: a clone of a filesystem's ROOT attached with move_mount is not reported "
+            "(it is indistinguishable from a new filesystem there, which is not reported either)");
 }
 
 /* signals: a terminating signal to something called synguard is reported, from
