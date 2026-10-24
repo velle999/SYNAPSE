@@ -142,15 +142,24 @@ export MPV_HOME="$T/mpv"
 mkdir -p "$MPV_HOME"
 printf 'ao=null\nvo=null\nreally-quiet=yes\n' > "$MPV_HOME/mpv.conf"
 
-# A real file mpv will actually open: one second of silence.
+# Real files mpv will actually open: thirty seconds of silence, and one second
+# for the folders below that need many copies.
+# ⚠ THE ONE THAT IS PLAYED OUTLASTS THE CASES THAT READ IT. At one second, a
+# loaded machine (the ASan pass, suites in parallel) got to the queue after the
+# first file had ended and mpv had moved on, so "which row is current" said row
+# 1 and failed on timing alone.
 SILENT="$T/Videos/Silence One.wav"
-python3 - "$SILENT" <<'PY'
+SHORT="$T/short.wav"
+python3 - "$SILENT" "$SHORT" <<'PY'
 import struct, sys
-n, rate = 8000, 8000
-data = b"\x80" * n
-hdr = b"RIFF" + struct.pack("<I", 36 + n) + b"WAVEfmt " + struct.pack(
-    "<IHHIIHH", 16, 1, 1, rate, rate, 1, 8) + b"data" + struct.pack("<I", n)
-open(sys.argv[1], "wb").write(hdr + data)
+def wav(path, secs):
+    rate = 8000
+    n = rate * secs
+    hdr = b"RIFF" + struct.pack("<I", 36 + n) + b"WAVEfmt " + struct.pack(
+        "<IHHIIHH", 16, 1, 1, rate, rate, 1, 8) + b"data" + struct.pack("<I", n)
+    open(path, "wb").write(hdr + b"\x80" * n)
+wav(sys.argv[1], 30)
+wav(sys.argv[2], 1)
 PY
 cp "$SILENT" "$T/Videos/Silence Two.wav"
 
@@ -209,10 +218,10 @@ contains "...and so is the undo, which restores the order added" "Unshuffled" "$
 # the `replace` case and proves nothing.
 
 mkdir -p "$T/Library/Album A/Disc 2" "$T/Library/Album B"
-cp "$SILENT" "$T/Library/Album A/01 One.wav"
-cp "$SILENT" "$T/Library/Album A/02 Two.wav"
-cp "$SILENT" "$T/Library/Album A/Disc 2/05 Five.wav"
-cp "$SILENT" "$T/Library/Album B/03 Three.wav"
+cp "$SHORT" "$T/Library/Album A/01 One.wav"
+cp "$SHORT" "$T/Library/Album A/02 Two.wav"
+cp "$SHORT" "$T/Library/Album A/Disc 2/05 Five.wav"
+cp "$SHORT" "$T/Library/Album B/03 Three.wav"
 # ⚠ Artwork sits beside the tracks in every real music folder, and mpv's default
 # directory filter includes images — recursion is what makes that bite.
 touch "$T/Library/Album B/cover.jpg"
@@ -296,7 +305,7 @@ check "...with every track in the folder now a row of its own" "4" \
 # temporary path as well as a long one.
 
 mkdir -p "$T/Big/Tracks"
-python3 - "$SILENT" "$T/Big/Tracks" <<'BIG'
+python3 - "$SHORT" "$T/Big/Tracks" <<'BIG'
 import os, sys
 data = open(sys.argv[1], "rb").read()
 for i in range(800):

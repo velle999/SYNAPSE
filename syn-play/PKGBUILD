@@ -106,7 +106,18 @@ pkgver=0.1.0
 # .qml alone leaves that import unresolvable, which quickshell reports as a
 # WARNING and then refuses the file — so every assertion would have been made
 # about a window that never drew.
-pkgrel=9
+# ── 0.1.0-10: the queue test no longer races the file it plays ─────────────
+#
+# tests/cli_test.sh played a ONE-SECOND fixture and then read which queue row
+# was current. Under load (the ASan pass, with other suites running beside it)
+# the first file had ended and mpv had moved on to row 1 before the read, so
+# "...and the queue marks which row is current" failed with nothing wrong —
+# and check() runs that suite on every machine that builds this package. The
+# played fixture is 30 s now; the folders that need many copies (800 for the
+# library-sized queue) take a separate 1 s file. With 1.2 s of delay inserted
+# before the read: red before, green after. 54/54 plain and under ASan; meson
+# test 5/5. Test-only: the program is unchanged.
+pkgrel=10
 pkgdesc="Playlists, shuffle, quick open and history for mpv — window, terminal UI and command line"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
