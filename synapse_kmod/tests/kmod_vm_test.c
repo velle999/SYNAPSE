@@ -24,6 +24,7 @@
  *   drop    a 16-slot ring: lapping, the in-band "!dropped" marker, lseek
  *   ring0   load with synapse_ring_size=0, then cause an event
  *   unload  flip synapse_events at runtime, rmmod, open the device again
+ *   toggle  flip events_enabled off and on across several watchdog ticks
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-only
@@ -50,6 +51,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <linux/reboot.h>
 
 #define KO        "/synapse_kmod.ko"
@@ -725,6 +727,34 @@ static void mode_unload(void)
     }
 }
 
+/* Game mode switches capture off at every game and back on after it. The
+ * watchdog (every 5 s) counts a disarmed probe as tampering, and turning
+ * capture back on re-arms the probes one at a time: a tick inside that loop
+ * must not report the module's own write as a blinding attempt. Flip for long
+ * enough that several ticks land mid-flip. */
+static void mode_toggle(void)
+{
+    int rc = load_module("synapse_ring_size=4096");
+    EXPECT(rc == 0, "load (rc=%d)", rc);
+    if (rc) return;
+
+    long a0 = stat_field("integrity_alerts");
+    struct timespec t0, t;
+    int flips = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    do {
+        write_str(SYSK "config", "events_enabled=0");
+        write_str(SYSK "config", "events_enabled=1");
+        flips++;
+        clock_gettime(CLOCK_MONOTONIC, &t);
+    } while (t.tv_sec - t0.tv_sec < 30);
+    long a1 = stat_field("integrity_alerts");
+    INFO("toggle: %d off/on flips in 30 s", flips);
+    EXPECT(a0 == 0 && a1 == 0,
+           "toggle: turning capture back on is not reported as tampering (integrity_alerts %ld -> %ld)",
+           a0, a1);
+}
+
 int main(void)
 {
     char cmd[512] = {0};
@@ -756,6 +786,7 @@ int main(void)
     else if (!strcmp(mode, "drop"))   mode_drop();
     else if (!strcmp(mode, "ring0"))  mode_ring0();
     else if (!strcmp(mode, "unload")) mode_unload();
+    else if (!strcmp(mode, "toggle")) mode_toggle();
     else FAIL("unknown mode %s", mode);
 
     power_off();

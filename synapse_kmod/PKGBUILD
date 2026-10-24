@@ -129,7 +129,21 @@ pkgver=0.1.0
 #   was never tested there. It now passes LLVM=1 as dkms does. kmod_vm_test
 #   on 7.2.7-cachyos: 4 FAILs before, all four modes ok after. 7.2.9-arch: ok
 #   both before and after.
-pkgrel=33
+# 34: GAME MODE'S OWN SWITCH IS NOT TAMPERING. Turning capture back on
+#   (events_enabled=1, which game mode writes after every game) set the
+#   monitoring flag first and then re-armed the probes one at a time.
+#   enable_kprobe() patches text under a mutex, so that takes tens of
+#   milliseconds, and the watchdog's integrity check (every 5 s) landing inside
+#   it counted the probes not yet re-armed: "SECURITY: 9 monitoring probe(s)
+#   disarmed — possible tampering/blinding attempt", logged for the module's
+#   own write (desktop 2026-10-20 01:59:47, the second synui-kmod-events on
+#   ran; 1 of 17 game exits that boot). A flip now runs under a mutex inside an
+#   odd/even sequence count, and the check skips any scan that overlaps one. A
+#   probe found disarmed while nothing is flipping is still counted.
+#   tests/run-vm-tests.sh has a fifth mode, toggle: 30 s of off/on flips.
+#   integrity_alerts 0 -> 2 before; 0 -> 0 after on 7.2.7-cachyos and
+#   7.2.9-arch, all five modes ok.
+pkgrel=34
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

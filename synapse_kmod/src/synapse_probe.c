@@ -40,6 +40,7 @@
 #include <linux/path.h>
 #include <linux/dcache.h>
 #include <linux/atomic.h>
+#include <linux/mutex.h>
 #include <linux/ktime.h>
 #include <linux/syscalls.h>
 #include <linux/socket.h>
@@ -1228,26 +1229,46 @@ static bool probe_registered[ARRAY_SIZE(all_probes)];
 /* ── Enable / disable ─────────────────────────────────────── */
 static bool g_probes_enabled = true;
 
+/*
+ * Odd while a flip is re-arming or disarming the probes. enable_kprobe()
+ * takes a mutex and patches text, so a flip is one probe at a time over tens
+ * of milliseconds, and the watchdog's integrity check (softirq, every 5 s)
+ * landing inside it saw probes that were legitimately still off and logged
+ * "possible tampering" for our own write — game mode flips capture off and
+ * on around every game. The check skips any scan that overlaps a flip.
+ */
+static atomic_t g_probes_flip_seq = ATOMIC_INIT(0);
+static DEFINE_MUTEX(g_probes_flip_lock);   /* one sysfs writer at a time */
+
 void synapse_probe_set_enabled(bool enabled)
 {
-    if (enabled == g_probes_enabled) return;
-    g_probes_enabled = enabled;
+    mutex_lock(&g_probes_flip_lock);
+    if (enabled == g_probes_enabled) goto out;
 
-    if (!g_ring.events) return;
+    atomic_inc(&g_probes_flip_seq);
+    smp_mb__after_atomic();
+    WRITE_ONCE(g_probes_enabled, enabled);
 
-    if (enabled) {
-        for (int i = 0; i < (int)N_PROBES; i++)
-            if (probe_registered[i]) enable_kprobe(all_probes[i]);
-        for (int i = 0; i < (int)N_KRETPROBES; i++)
-            if (kretprobe_registered[i]) enable_kretprobe(all_kretprobes[i]);
-        pr_info("synapse_kmod: probes enabled\n");
-    } else {
-        for (int i = 0; i < (int)N_PROBES; i++)
-            if (probe_registered[i]) disable_kprobe(all_probes[i]);
-        for (int i = 0; i < (int)N_KRETPROBES; i++)
-            if (kretprobe_registered[i]) disable_kretprobe(all_kretprobes[i]);
-        pr_info("synapse_kmod: probes disabled\n");
+    if (g_ring.events) {
+        if (enabled) {
+            for (int i = 0; i < (int)N_PROBES; i++)
+                if (probe_registered[i]) enable_kprobe(all_probes[i]);
+            for (int i = 0; i < (int)N_KRETPROBES; i++)
+                if (kretprobe_registered[i]) enable_kretprobe(all_kretprobes[i]);
+            pr_info("synapse_kmod: probes enabled\n");
+        } else {
+            for (int i = 0; i < (int)N_PROBES; i++)
+                if (probe_registered[i]) disable_kprobe(all_probes[i]);
+            for (int i = 0; i < (int)N_KRETPROBES; i++)
+                if (kretprobe_registered[i]) disable_kretprobe(all_kretprobes[i]);
+            pr_info("synapse_kmod: probes disabled\n");
+        }
     }
+
+    smp_mb__before_atomic();
+    atomic_inc(&g_probes_flip_seq);
+out:
+    mutex_unlock(&g_probes_flip_lock);
 }
 
 /* ── Self-integrity: are our probes still armed? ──────────── */
@@ -1265,8 +1286,11 @@ void synapse_probe_set_enabled(bool enabled)
 int synapse_probe_integrity_check(void)
 {
     int i, tampered = 0;
+    int seq = atomic_read(&g_probes_flip_seq);
 
-    if (!g_probes_enabled) return 0;   /* we disabled them on purpose */
+    if (seq & 1) return 0;              /* a flip is re-arming or disarming them */
+    smp_rmb();
+    if (!READ_ONCE(g_probes_enabled)) return 0;   /* we disabled them on purpose */
 
     for (i = 0; i < (int)N_PROBES; i++) {
         if (!probe_registered[i]) continue;
@@ -1284,6 +1308,8 @@ int synapse_probe_integrity_check(void)
             (all_kretprobes[i]->kp.flags & (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE)))
             tampered++;
 
+    smp_rmb();
+    if (atomic_read(&g_probes_flip_seq) != seq) return 0;   /* a flip began mid-scan */
     return tampered;
 }
 

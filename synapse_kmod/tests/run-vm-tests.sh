@@ -31,7 +31,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$(realpath "$0")")" && pwd)
 src=${KMOD_SRC:-$(dirname "$here")}
 modes=("$@")
-[[ ${#modes[@]} -gt 0 ]] || modes=(main drop ring0 unload)
+[[ ${#modes[@]} -gt 0 ]] || modes=(main drop ring0 unload toggle)
 
 # A kernel we can both build against and boot.
 pick_kernel() {
