@@ -1,0 +1,52 @@
+From 1a1d170aca4857e97f1a693e5d91a350a31565df Mon Sep 17 00:00:00 2001
+From: louzt <davidmirelesll@outlook.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 10/28] upstream #619: fix(scripting): release
+ OpaqueScriptableObjectAdapter when the JS object is finalized
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/619 (by louzt) until it is merged upstream.
+---
+ .../Adapters/ScriptableObjectAdapter.cpp          | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index f62ad1d8..ced542bd 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -18,6 +18,8 @@ struct OpaqueScriptableObjectAdapter {
+     WallpaperEngine::Scripting::ScriptableObject& object;
+ };
+ 
++void scriptableobject_finalizer (JSRuntime* rt, JSValueConst val);
++
+ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver) {
+     JSClassID classId = 0;
+ 
+@@ -70,6 +72,7 @@ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::str
+     this->registerType (
+ 	{
+ 	    .class_name = m_name.c_str (),
++	    .finalizer = scriptableobject_finalizer,
+ 	    .exotic = &m_exoticMethods,
+ 	}
+     );
+@@ -85,6 +88,18 @@ JSValue ScriptableObjectAdapter::instantiate (ScriptableObject& object) {
+     return result;
+ }
+ 
++void scriptableobject_finalizer (JSRuntime* rt, JSValueConst val) {
++    JSClassID classId = 0;
++
++    const auto* container = static_cast<OpaqueScriptableObjectAdapter*> (JS_GetAnyOpaque (val, &classId));
++
++    if (container == nullptr || container->magic != SCRIPTABLE_OPAQUE_MAGIC) {
++	return;
++    }
++
++    delete container;
++}
++
+ JSValue ScriptableObjectAdapter::instantiate (DynamicValue& value) {
+     throw std::runtime_error ("Cannot create a ScriptableObject instance from a DynamicValue");
+ }
+\ No newline at end of file

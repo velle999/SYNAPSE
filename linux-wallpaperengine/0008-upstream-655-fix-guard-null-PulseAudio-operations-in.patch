@@ -1,0 +1,44 @@
+From bc4168b10c3160acb27046b0449cc88722ebb422 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=EA=B9=80=ED=83=9C=ED=98=84?= <thk@vazilcompany.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 08/28] upstream #655: fix: guard null PulseAudio operations in
+ playing detector
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/655 (by dkwlsdl3) until it is merged upstream.
+---
+ .../Drivers/Detectors/PulseAudioPlayingDetector.cpp    | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
+index 3d32b189..6910bf46 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
++++ b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
+@@ -30,7 +30,9 @@ void defaultSinkInfoCallback (pa_context* context, const pa_server_info* info, v
+ 
+     pa_operation* op = pa_context_get_sink_input_info_list (context, sinkInputInfoCallback, userdata);
+ 
+-    pa_operation_unref (op);
++    if (op != nullptr) {
++	pa_operation_unref (op);
++    }
+ }
+ 
+ PulseAudioPlayingDetector::PulseAudioPlayingDetector (
+@@ -74,6 +76,10 @@ void PulseAudioPlayingDetector::update () {
+     // start discovery of sinks
+     pa_operation* op = pa_context_get_server_info (this->m_context, defaultSinkInfoCallback, this);
+ 
++    if (op == nullptr) {
++	return;
++    }
++
+     // wait until all the operations are done
+     while (pa_operation_get_state (op) == PA_OPERATION_RUNNING) {
+ 	pa_mainloop_iterate (this->m_mainloop, 1, nullptr);
+@@ -81,4 +87,4 @@ void PulseAudioPlayingDetector::update () {
+ 
+     pa_operation_unref (op);
+ }
+-} // namespace WallpaperEngine::Audio::Drivers::Detectors
+\ No newline at end of file
++} // namespace WallpaperEngine::Audio::Drivers::Detectors

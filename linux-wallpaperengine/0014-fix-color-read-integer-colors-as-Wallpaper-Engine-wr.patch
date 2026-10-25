@@ -1,0 +1,159 @@
+From 3317911d5f001f75ef07ec0767bfbc1ac3f769fd Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 14/28] fix(color): read integer colors as Wallpaper Engine
+ writes them
+
+Wallpaper Engine writes colors as normalized floats and drops the
+decimal point when every component is whole, so "1 1 1" is white and
+"1 0 0" is red. Every integer form was read as 0-255 bytes, which made
+those near-black. In the test corpus 434 integer colors have no
+component above 1, and 5 (older scenes) are real bytes like "254 22 5";
+a component above 1 is what tells them apart.
+
+Hex colors had two more faults: "#rrggbb" was decoded as rrggbbaa, so
+red read as 0 and blue became the alpha, and the value was parsed with
+stoi, which overflows for any red at or above 0x80.
+
+Tests pin integer, byte, float and hex parsing.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ CMakeLists.txt                                |  3 +-
+ .../Data/Builders/ColorBuilder.cpp            | 27 ++++++--
+ .../Testing/Cases/ColorBuilder.cpp            | 61 +++++++++++++++++++
+ 3 files changed, 84 insertions(+), 7 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8c10efb7..29058330 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -570,7 +570,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Harnesses/RenderHarness.h
+         src/WallpaperEngine/Testing/Cases/MouseCoordinates.cpp
+         src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+-        src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp)
++        src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
++        src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Builders/ColorBuilder.cpp b/src/WallpaperEngine/Data/Builders/ColorBuilder.cpp
+index e13a2d53..477fd854 100644
+--- a/src/WallpaperEngine/Data/Builders/ColorBuilder.cpp
++++ b/src/WallpaperEngine/Data/Builders/ColorBuilder.cpp
+@@ -36,12 +36,16 @@ WallpaperEngine::Data::Builders::ColorBuilder::parse (const std::string& value,
+ 		"{}{}{}{}{}{}{}{}", number.at (0), number.at (0), number.at (1), number.at (1), number.at (2),
+ 		number.at (2), number.at (3), number.at (3)
+ 	    );
+-	} else if (number.size () != 6 && number.size () != 8) {
++	} else if (number.size () == 6) {
++	    // #rrggbb carries no alpha; without this it was decoded as rrggbbaa, so red
++	    // read as 0 and the blue byte became the alpha
++	    number = std::format ("{}{:02x}", number, static_cast<int> (alpha * 255));
++	} else if (number.size () != 8) {
+ 	    sLog.exception ("Invalid CSS color notation for ", value);
+ 	}
+ 
+-	// parse hex color
+-	const auto color = std::stoi (number, nullptr, 16);
++	// parse hex color; unsigned, since anything with red >= 0x80 overflows an int
++	const auto color = std::stoul (number, nullptr, 16);
+ 
+ 	return WallpaperEngine::Data::Model::Color (
+ 	    (color >> 24 & 0xFF) / 255.0f, (color >> 16 & 0xFF) / 255.0f, (color >> 8 & 0xFF) / 255.0f,
+@@ -55,11 +59,22 @@ WallpaperEngine::Data::Builders::ColorBuilder::parse (const std::string& value,
+ 	throw std::invalid_argument ("Invalid color value");
+     }
+ 
++    // Wallpaper Engine writes colors as normalized floats, and drops the decimal point
++    // when every component is a whole number: "1 1 1" is white, "1 0 0" is red. Older
++    // scenes do carry 0-255 bytes ("254 22 5"), so integers only mean bytes when one of
++    // them is above 1 -- reading every integer form as bytes made "1 1 1" near-black.
+     if (copy.find ('.') == std::string::npos) {
+-	const auto final = vectorSize == 3 ? glm::ivec4 (VectorBuilder::parse<glm::ivec3> (copy), alpha * 255)
+-					   : VectorBuilder::parse<glm::ivec4> (copy);
++	const auto ints = vectorSize == 3 ? glm::ivec4 (VectorBuilder::parse<glm::ivec3> (copy), 1)
++					  : VectorBuilder::parse<glm::ivec4> (copy);
++	const bool bytes = ints.r > 1 || ints.g > 1 || ints.b > 1 || (vectorSize == 4 && ints.a > 1);
+ 
+-	return { final.r / 255.0f, final.g / 255.0f, final.b / 255.0f, final.a / 255.0f };
++	if (bytes) {
++	    return { ints.r / 255.0f, ints.g / 255.0f, ints.b / 255.0f,
++		     vectorSize == 3 ? alpha : ints.a / 255.0f };
++	}
++
++	return { static_cast<float> (ints.r), static_cast<float> (ints.g), static_cast<float> (ints.b),
++		 vectorSize == 3 ? alpha : static_cast<float> (ints.a) };
+     }
+ 
+     return Model::Color (
+diff --git a/src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp b/src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+new file mode 100644
+index 00000000..3a0c3cae
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+@@ -0,0 +1,61 @@
++#include <catch2/catch_approx.hpp>
++#include <catch2/catch_test_macros.hpp>
++
++#include "WallpaperEngine/Data/Builders/ColorBuilder.h"
++
++using Catch::Approx;
++using WallpaperEngine::Data::Builders::ColorBuilder;
++
++TEST_CASE ("Whole-number colors are normalized, not bytes") {
++    // what Wallpaper Engine writes when every component happens to be whole
++    const auto white = ColorBuilder::parse ("1 1 1");
++    CHECK (white.r == Approx (1.0f));
++    CHECK (white.g == Approx (1.0f));
++    CHECK (white.b == Approx (1.0f));
++    CHECK (white.a == Approx (1.0f));
++
++    const auto red = ColorBuilder::parse ("1 0 0");
++    CHECK (red.r == Approx (1.0f));
++    CHECK (red.g == Approx (0.0f));
++    CHECK (red.b == Approx (0.0f));
++}
++
++TEST_CASE ("Integer colors above 1 are still read as bytes") {
++    // older scenes carry 0-255 values
++    const auto c = ColorBuilder::parse ("254 22 5");
++    CHECK (c.r == Approx (254 / 255.0f));
++    CHECK (c.g == Approx (22 / 255.0f));
++    CHECK (c.b == Approx (5 / 255.0f));
++    CHECK (c.a == Approx (1.0f));
++
++    // one component over 1 is enough to make the whole value bytes
++    const auto d = ColorBuilder::parse ("255 0 1");
++    CHECK (d.b == Approx (1 / 255.0f));
++}
++
++TEST_CASE ("Float colors are unchanged") {
++    const auto c = ColorBuilder::parse ("0 0.949 0.972");
++    CHECK (c.r == Approx (0.0f));
++    CHECK (c.g == Approx (0.949f));
++    CHECK (c.b == Approx (0.972f));
++}
++
++TEST_CASE ("Six-digit hex colors are rrggbb with full alpha") {
++    const auto c = ColorBuilder::parse ("#ff8000");
++    CHECK (c.r == Approx (1.0f));
++    CHECK (c.g == Approx (128 / 255.0f));
++    CHECK (c.b == Approx (0.0f));
++    CHECK (c.a == Approx (1.0f));
++}
++
++TEST_CASE ("Hex colors with red at or above 0x80 parse") {
++    // these overflowed std::stoi and threw
++    const auto full = ColorBuilder::parse ("#ff000080");
++    CHECK (full.r == Approx (1.0f));
++    CHECK (full.a == Approx (128 / 255.0f));
++
++    const auto shorthand = ColorBuilder::parse ("#f00");
++    CHECK (shorthand.r == Approx (1.0f));
++    CHECK (shorthand.g == Approx (0.0f));
++    CHECK (shorthand.a == Approx (1.0f));
++}

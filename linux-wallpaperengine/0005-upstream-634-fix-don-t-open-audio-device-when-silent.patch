@@ -1,0 +1,27 @@
+From cd20f32a59e126ce09841e46f7f8c996055cbf4d Mon Sep 17 00:00:00 2001
+From: ElXreno <elxreno@gmail.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 05/28] upstream #634: fix: don't open audio device when
+ --silent is used
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/634 (by ElXreno) until it is merged upstream.
+---
+ src/WallpaperEngine/Audio/Drivers/SDLAudioDriver.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/WallpaperEngine/Audio/Drivers/SDLAudioDriver.cpp b/src/WallpaperEngine/Audio/Drivers/SDLAudioDriver.cpp
+index 297a6069..189cea22 100644
+--- a/src/WallpaperEngine/Audio/Drivers/SDLAudioDriver.cpp
++++ b/src/WallpaperEngine/Audio/Drivers/SDLAudioDriver.cpp
+@@ -79,6 +79,11 @@ SDLAudioDriver::SDLAudioDriver (
+ ) : AudioDriver (applicationContext, detector, recorder), m_audioSpec () {
+     this->m_streamListMutex = SDL_CreateMutex ();
+ 
++    if (!applicationContext.settings.audio.enabled) {
++	sLog.out ("Audio is disabled, not opening any audio device");
++	return;
++    }
++
+     if (SDL_InitSubSystem (SDL_INIT_AUDIO) < 0) {
+ 	sLog.error ("Cannot initialize SDL audio system, SDL_GetError: ", SDL_GetError ());
+ 	sLog.error ("Continuing without audio support");

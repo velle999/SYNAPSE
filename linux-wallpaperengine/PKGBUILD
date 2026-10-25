@@ -1,6 +1,44 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 15: 28 patches on the pinned commit, applied in prepare(). Upstream main has
+# not moved since b016d7d1 and its fixes sit in open pull requests, so 0001-0013
+# and 0020 are those PRs as they stand (each names its PR; drop one when
+# upstream merges it) and the rest are SynapseOS's own. Measured on the 139
+# renderable wallpapers of a real Workshop library, one engine per output on a
+# nested headless synui: 101 rendered correctly before, 130 after, and none
+# got worse.
+#
+#   - Web wallpapers render (0 of 11 did). #687 gets CEF's windowless
+#     rendering going; 0015 takes back the --in-process-gpu it adds, which on
+#     NVIDIA killed 10 of the 11; 0018 implements the Wallpaper Engine web API
+#     the pages are written against (their properties, the audio spectrum),
+#     without which they sit black on their loading screen; 0017 lets the
+#     wallpaper's files be found under a folder with a space in its name and
+#     lets a <video> play. The web presets render with them (0 of 14 did), and
+#     with 0024 a preset's own image or video shows: the page may load the
+#     local files its properties name, and nothing else.
+#   - Scene property scripts run (#698). Upstream broke them in June: no
+#     update() has run since, so 1693 scripts across 29 wallpapers sat at their
+#     static values, and createScriptProperties(), which 716 of them call,
+#     returned nothing. Text layer scripts can import the built-in modules
+#     (0021) and reach the scene through thisScene (0026), and
+#     engine.registerAudioBuffers exists (0027): 168 scripts across 15
+#     wallpapers read the audio spectrum through it and threw without it.
+#   - Text with a space in it shows (0025). It was read as a vector, so 46
+#     text layers across 13 wallpapers drew nothing.
+#   - JSON with trailing commas and comments loads (0019). Wallpaper Engine
+#     writes both, down to its own stock fluid simulation effect.
+#   - A scene with an "auto" projection fills the screen instead of one
+#     quadrant of it (0022). Integer colors read the way Wallpaper Engine
+#     writes them (0014), and a text box nobody filled in no longer aborts the
+#     wallpaper (0016).
+#   - Leaks and crashes: a GL fence per video frame (#696), a PulseAudio
+#     capture stream per device event (#694), album art (#644, #700), null
+#     PulseAudio operations (#655), malformed binary assets (#631), and a
+#     page, a text layer script that fails every frame, or a script probing a
+#     layer for what it lacks no longer floods the log (0023, 0026, 0028).
+#
 # 14: a REBUILD and nothing else. ffmpeg 8 -> 9 moved libavcodec from .so.62 to
 # .so.63 (and libavformat, libavutil, libswresample with it), and this package
 # links all four directly, so the engine stopped starting the moment ffmpeg
@@ -21,7 +59,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=14
+pkgrel=15
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -60,8 +98,36 @@ _commit=b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d
 
 # The synui-wpengine control script moved to the synui package: this one cannot
 # be rebuilt on an installed system, so a shell-script fix here was unshippable.
-source=("git+$url.git#commit=$_commit")
-sha256sums=('SKIP')
+source=("git+$url.git#commit=$_commit"
+        "0001-upstream-687-fix-web-get-CEF-web-wallpapers-running-.patch"
+        "0002-upstream-696-fix-stop-leaking-a-GL-fence-sync-object.patch"
+        "0003-upstream-692-fix-don-t-treat-particle-None-on-text-o.patch"
+        "0004-upstream-652-fix-accept-scalar-values-where-a-vector.patch"
+        "0005-upstream-634-fix-don-t-open-audio-device-when-silent.patch"
+        "0006-upstream-668-fix-wayland-exit-when-the-compositor-cl.patch"
+        "0007-upstream-694-fix-stop-leaking-PulseAudio-capture-str.patch"
+        "0008-upstream-655-fix-guard-null-PulseAudio-operations-in.patch"
+        "0009-upstream-644-fix-album-art-avoid-GL-4.5-glGetnTexIma.patch"
+        "0010-upstream-619-fix-scripting-release-OpaqueScriptableO.patch"
+        "0011-upstream-618-fix-scripting-correct-inverted-vector-c.patch"
+        "0012-upstream-631-Harden-binary-parsers-against-malformed.patch"
+        "0013-upstream-700-fix-unregister-ScriptEngine-album-art-l.patch"
+        "0014-fix-color-read-integer-colors-as-Wallpaper-Engine-wr.patch"
+        "0015-fix-web-keep-Chromium-s-GPU-work-in-its-own-process.patch"
+        "0016-fix-data-a-text-input-without-a-value-is-an-empty-st.patch"
+        "0017-fix-web-decode-request-paths-and-answer-range-reques.patch"
+        "0018-feat-web-implement-Wallpaper-Engine-s-web-wallpaper-.patch"
+        "0019-fix-data-read-wallpaper-JSON-with-comments-and-trail.patch"
+        "0020-upstream-698-fix-property-script-lifecycle-layer-bin.patch"
+        "0021-fix-scripting-text-layer-scripts-can-import-the-buil.patch"
+        "0022-fix-render-size-an-auto-projection-from-the-scene-s-.patch"
+        "0023-fix-web-log-each-distinct-console-message-once.patch"
+        "0024-feat-web-let-a-page-load-the-local-files-its-propert.patch"
+        "0025-fix-data-text-with-a-space-in-it-stays-text.patch"
+        "0026-fix-scripting-text-layer-scripts-see-the-scene.patch"
+        "0027-feat-scripting-engine.registerAudioBuffers.patch"
+        "0028-fix-scripting-a-script-asking-a-layer-for-something-.patch")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about
@@ -77,6 +143,15 @@ _libdir=/usr/lib/$pkgname
 prepare() {
     cd "$srcdir/$pkgname"
     git submodule update --init --recursive --depth 1
+
+    # `git apply`, not `git am`: am commits, and so needs a committer identity
+    # the ISO's unprivileged build user does not have (see fetch/PKGBUILD). It
+    # still fails loudly on a patch that no longer applies, which is the signal
+    # to drop one upstream has merged.
+    local p
+    for p in "$srcdir"/0*.patch; do
+        git apply -v "$p"
+    done
 }
 
 build() {
@@ -101,8 +176,26 @@ build() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DCMAKE_C_FLAGS="$CFLAGS" \
-        -DCMAKE_CXX_FLAGS="$CXXFLAGS"
+        -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+        -DCEF_NO_SANDBOX=OFF \
+        -DBUILD_TESTING=ON
     cmake --build build -j"$(nproc)"
+}
+
+# CEF_NO_SANDBOX=OFF turns Chromium's sandbox ON. Through pkgrel 14 the engine
+# hard-coded settings.no_sandbox = true, so every web wallpaper, which is
+# third-party Workshop content, ran with no sandbox at all. #687 makes that a
+# build option and defaults it to no sandbox, for systems without a working
+# one; here the user-namespace sandbox works (see chrome-sandbox below): a
+# web wallpaper's renderers run under seccomp-bpf, each in a PID namespace of
+# its own, and its GPU and utility processes under seccomp-bpf.
+#
+# The tests cover the color, property, value, JSON, web-property and local-file
+# handling the patches change, and need no display or GPU. BUILD_TESTING
+# compiles the engine's sources a second time for them.
+check() {
+    cd "$srcdir/$pkgname"
+    build/output/tests
 }
 
 package() {

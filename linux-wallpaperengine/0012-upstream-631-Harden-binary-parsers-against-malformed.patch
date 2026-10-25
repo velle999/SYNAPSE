@@ -1,0 +1,456 @@
+From be3efaca1728dc315398ff38d5d43360b37d5058 Mon Sep 17 00:00:00 2001
+From: kelfen62-jpg <291307947+kelfen62-jpg@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 12/28] upstream #631: Harden binary parsers against malformed
+ Workshop assets
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/631 (by kelfen62-jpg) until it is merged upstream.
+---
+ CMakeLists.txt                                |   3 +-
+ .../Data/Parsers/PackageParser.cpp            |   8 +
+ .../Data/Parsers/TextureParser.cpp            |  29 +++-
+ .../Data/Utils/BinaryReader.cpp               |  63 +++++--
+ src/WallpaperEngine/Data/Utils/BinaryReader.h |  14 ++
+ src/WallpaperEngine/Data/Utils/MemoryStream.h |  27 ++-
+ .../Testing/Cases/BinaryParserHardening.cpp   | 156 ++++++++++++++++++
+ 7 files changed, 276 insertions(+), 24 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 59d3fcef..8c10efb7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -569,7 +569,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Harnesses/RenderHarness.cpp
+         src/WallpaperEngine/Testing/Harnesses/RenderHarness.h
+         src/WallpaperEngine/Testing/Cases/MouseCoordinates.cpp
+-        src/WallpaperEngine/Testing/Cases/PropertyParser.cpp)
++        src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
++        src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Parsers/PackageParser.cpp b/src/WallpaperEngine/Data/Parsers/PackageParser.cpp
+index 53f0293e..6410fc3f 100644
+--- a/src/WallpaperEngine/Data/Parsers/PackageParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/PackageParser.cpp
+@@ -33,6 +33,14 @@ FileEntryList PackageParser::parseFileList (const BinaryReader& stream) {
+     FileEntryList result = {};
+     const uint32_t filesCount = stream.nextUInt32 ();
+ 
++    // each entry is at least a 4-byte name length + 4-byte offset + 4-byte length, so a file list
++    // cannot contain more entries than remaining()/12; refuse (and avoid reserving) beyond that so a
++    // bogus count in an untrusted package cannot request a multi-gigabyte allocation
++    if (const std::streamsize maxEntries = stream.remaining () / 12;
++	static_cast<std::streamsize> (filesCount) > maxEntries) {
++	sLog.exception ("Package declares ", filesCount, " files but only room for ", maxEntries);
++    }
++
+     result.reserve (filesCount);
+ 
+     for (uint32_t i = 0; i < filesCount; i++) {
+diff --git a/src/WallpaperEngine/Data/Parsers/TextureParser.cpp b/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
+index 07065f23..f47c37ef 100644
+--- a/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
+@@ -70,6 +70,26 @@ MipmapSharedPtr TextureParser::parseMipmap (const BinaryReader& file, const Text
+ 	result->uncompressedSize = result->compressedSize;
+     }
+ 
++    // sizes come straight from an untrusted .tex file: reject negatives (which would turn into a
++    // huge size_t in new[]) and anything larger than the data actually left in the stream
++    if (result->compressedSize < 0 || result->uncompressedSize < 0) {
++	sLog.exception ("Texture mipmap has a negative size");
++    }
++
++    // upper bound on a single decompressed mipmap; a genuine texture never approaches this, but it
++    // stops a tiny compressed payload from forcing a multi-gigabyte allocation before decompression
++    constexpr int MAX_MIPMAP_BYTES = 1 << 30; // 1 GiB
++    if (result->uncompressedSize > MAX_MIPMAP_BYTES) {
++	sLog.exception ("Texture mipmap uncompressed size ", result->uncompressedSize, " exceeds sane limit");
++    }
++
++    // the bytes we are about to read from the file (compressed payload, or the raw payload otherwise)
++    // must actually exist in what remains of the stream
++    const std::streamsize toRead = (result->compression == 1) ? result->compressedSize : result->uncompressedSize;
++    if (toRead > file.remaining ()) {
++	sLog.exception ("Texture mipmap claims ", toRead, " bytes but only ", file.remaining (), " remain");
++    }
++
+     result->uncompressedData = std::unique_ptr<char[]> (new char[result->uncompressedSize]);
+ 
+     if (result->compression == 1) {
+@@ -268,8 +288,13 @@ void TextureParser::parseAnimations (Texture& header, const BinaryReader& file)
+ 
+     // ensure gif width and height is right for TEXS0001, TEXS0002
+     if (header.animatedVersion == AnimatedVersion_TEXS0001 || header.animatedVersion == AnimatedVersion_TEXS0002) {
+-	header.gifWidth = (*header.frames.begin ())->width1;
+-	header.gifHeight = (*header.frames.begin ())->height1;
++	// a frame count of zero would otherwise dereference begin() on an empty vector
++	if (header.frames.empty ()) {
++	    sLog.exception ("Animated texture declares no frames");
++	}
++
++	header.gifWidth = header.frames.front ()->width1;
++	header.gifHeight = header.frames.front ()->height1;
+     }
+ 
+     // Calculate spritesheet grid dimensions from animation frames
+diff --git a/src/WallpaperEngine/Data/Utils/BinaryReader.cpp b/src/WallpaperEngine/Data/Utils/BinaryReader.cpp
+index 883358a4..6e8f83f1 100644
+--- a/src/WallpaperEngine/Data/Utils/BinaryReader.cpp
++++ b/src/WallpaperEngine/Data/Utils/BinaryReader.cpp
+@@ -3,28 +3,41 @@
+ 
+ #include "BinaryReader.h"
+ 
++#include "WallpaperEngine/Logging/Log.h"
++
+ #include <cstring>
+ 
+ using namespace WallpaperEngine::Data::Utils;
+ 
+ BinaryReader::BinaryReader (ReadStreamSharedPtr file) : m_input (std::move (file)) { }
+ 
+-uint32_t BinaryReader::nextUInt32 () const {
+-    char buffer[4];
++void BinaryReader::readExact (char* out, std::streamsize size) const {
++    this->m_input->read (out, size);
+ 
+-    this->m_input->read (buffer, 4);
++    if (this->m_input->gcount () != size) {
++	sLog.exception ("Unexpected end of stream: wanted ", size, " bytes, got ", this->m_input->gcount ());
++    }
++}
+ 
+-    if constexpr (std::endian::native == std::endian::little) {
+-	return (buffer[3] & 0xFF) << 24 | (buffer[2] & 0xFF) << 16 | (buffer[1] & 0xFF) << 8 | (buffer[0] & 0xFF);
+-    } else {
+-	return (buffer[0] & 0xFF) << 24 | (buffer[1] & 0xFF) << 16 | (buffer[2] & 0xFF) << 8 | (buffer[3] & 0xFF);
++std::streamsize BinaryReader::remaining () const {
++    const std::streampos current = this->m_input->tellg ();
++
++    if (current < 0) {
++	// non-seekable or errored stream: we cannot bound safely, report nothing left
++	return 0;
+     }
++
++    this->m_input->seekg (0, std::ios::end);
++    const std::streampos end = this->m_input->tellg ();
++    this->m_input->seekg (current, std::ios::beg);
++
++    return end - current;
+ }
+ 
+-int BinaryReader::nextInt () const {
+-    char buffer[4];
++uint32_t BinaryReader::nextUInt32 () const {
++    char buffer[4] = {0};
+ 
+-    this->m_input->read (buffer, 4);
++    this->readExact (buffer, 4);
+ 
+     if constexpr (std::endian::native == std::endian::little) {
+ 	return (buffer[3] & 0xFF) << 24 | (buffer[2] & 0xFF) << 16 | (buffer[1] & 0xFF) << 8 | (buffer[0] & 0xFF);
+@@ -33,19 +46,28 @@ int BinaryReader::nextInt () const {
+     }
+ }
+ 
++int BinaryReader::nextInt () const { return static_cast<int> (this->nextUInt32 ()); }
++
+ float BinaryReader::nextFloat () const {
+     float result;
+     static_assert (std::endian::native == std::endian::little, "Only little endian is supported for floats");
+ 
+-    this->m_input->read (reinterpret_cast<char*> (&result), sizeof (result));
++    this->readExact (reinterpret_cast<char*> (&result), sizeof (result));
+ 
+     return result;
+ }
+ 
+ std::string BinaryReader::nextNullTerminatedString () const {
+     std::string output;
++    char c;
++
++    // read one byte at a time until the terminator or end of stream; get() reports EOF via the
++    // stream state so a missing terminator can no longer spin forever on an indeterminate byte
++    while (this->m_input->get (c)) {
++	if (c == '\0') {
++	    break;
++	}
+ 
+-    while (const auto c = this->next ()) {
+ 	output += c;
+     }
+ 
+@@ -53,19 +75,26 @@ std::string BinaryReader::nextNullTerminatedString () const {
+ }
+ 
+ std::string BinaryReader::nextSizedString () const {
+-    uint32_t length = this->nextUInt32 ();
++    const uint32_t length = this->nextUInt32 ();
++
++    if (static_cast<std::streamsize> (length) > this->remaining ()) {
++	sLog.exception ("Sized string length ", length, " exceeds remaining stream size ", this->remaining ());
++    }
++
+     std::string output (length, '\0');
+ 
+-    this->m_input->read (output.data (), length);
++    this->readExact (output.data (), length);
+ 
+     return output;
+ }
+ 
+-void BinaryReader::next (char* out, size_t size) const { this->m_input->read (out, size); }
++void BinaryReader::next (char* out, size_t size) const {
++    this->readExact (out, static_cast<std::streamsize> (size));
++}
+ 
+ char BinaryReader::next () const {
+-    char buffer;
+-    this->m_input->read (&buffer, 1);
++    char buffer = 0;
++    this->readExact (&buffer, 1);
+     return buffer;
+ }
+ 
+diff --git a/src/WallpaperEngine/Data/Utils/BinaryReader.h b/src/WallpaperEngine/Data/Utils/BinaryReader.h
+index ed6596b0..f9eb8147 100644
+--- a/src/WallpaperEngine/Data/Utils/BinaryReader.h
++++ b/src/WallpaperEngine/Data/Utils/BinaryReader.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <ios>
+ #include <iosfwd>
+ #include <memory>
+ 
+@@ -20,9 +21,22 @@ public:
+     void next (char* out, size_t size) const;
+     [[nodiscard]] char next () const;
+ 
++    /**
++     * @return the number of bytes left between the current position and the end of the stream.
++     *         Used to reject length/count fields from untrusted files that claim more data than
++     *         the file actually contains before any allocation happens.
++     */
++    [[nodiscard]] std::streamsize remaining () const;
++
+     [[nodiscard]] std::istream& base () const;
+ 
+ private:
++    /**
++     * Reads exactly @p size bytes into @p out, throwing if the stream ends early instead of
++     * silently leaving the destination (partially) uninitialized.
++     */
++    void readExact (char* out, std::streamsize size) const;
++
+     ReadStreamSharedPtr m_input;
+ };
+ 
+diff --git a/src/WallpaperEngine/Data/Utils/MemoryStream.h b/src/WallpaperEngine/Data/Utils/MemoryStream.h
+index aefba914..23af6d02 100644
+--- a/src/WallpaperEngine/Data/Utils/MemoryStream.h
++++ b/src/WallpaperEngine/Data/Utils/MemoryStream.h
+@@ -12,14 +12,33 @@ struct MemoryStream : std::istream, private std::streambuf {
+ 
+     std::streambuf::pos_type
+     seekoff (std::streambuf::off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which) override {
++	char* const begin = this->eback ();
++	char* const end = this->egptr ();
++	char* target = nullptr;
++
+ 	if (dir == std::ios_base::cur) {
+-	    gbump (off);
++	    target = this->gptr () + off;
+ 	} else if (dir == std::ios_base::end) {
+-	    setg (eback (), egptr () + off, egptr ());
++	    target = end + off;
+ 	} else if (dir == std::ios_base::beg) {
+-	    setg (eback (), eback () + off, egptr ());
++	    target = begin + off;
++	} else {
++	    return std::streambuf::pos_type (std::streambuf::off_type (-1));
++	}
++
++	// reject seeks that would move the get pointer outside [begin, end]; a malformed offset from
++	// an untrusted package must fail the seek, not leave gptr dangling for the next read
++	if (target < begin || target > end) {
++	    return std::streambuf::pos_type (std::streambuf::off_type (-1));
+ 	}
+-	return gptr () - eback ();
++
++	this->setg (begin, target, end);
++	return target - begin;
++    }
++
++    std::streambuf::pos_type
++    seekpos (std::streambuf::pos_type pos, std::ios_base::openmode which) override {
++	return this->seekoff (pos, std::ios_base::beg, which);
+     }
+ 
+     std::unique_ptr<char[]> m_buffer;
+diff --git a/src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp b/src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+new file mode 100644
+index 00000000..05e7892c
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+@@ -0,0 +1,156 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <cstring>
++#include <memory>
++#include <string>
++
++#include "WallpaperEngine/Data/Assets/Package.h"
++#include "WallpaperEngine/Data/Parsers/PackageParser.h"
++#include "WallpaperEngine/Data/Parsers/TextureParser.h"
++#include "WallpaperEngine/Data/Utils/BinaryReader.h"
++#include "WallpaperEngine/Data/Utils/MemoryStream.h"
++
++using namespace WallpaperEngine::Data::Utils;
++using namespace WallpaperEngine::Data::Parsers;
++
++namespace {
++// ---- little-endian buffer builders ----
++void u32 (std::string& b, uint32_t v) {
++    b.push_back (char (v & 0xFF));
++    b.push_back (char ((v >> 8) & 0xFF));
++    b.push_back (char ((v >> 16) & 0xFF));
++    b.push_back (char ((v >> 24) & 0xFF));
++}
++
++// texture magics are read as 9 bytes and compared with strncmp(..., 9): 8 chars + NUL
++void magic (std::string& b, const char* m) {
++    b.append (m, 8);
++    b.push_back ('\0');
++}
++
++std::shared_ptr<std::istream> streamOf (const std::string& bytes) {
++    auto buf = std::make_unique<char[]> (bytes.size ());
++    std::memcpy (buf.get (), bytes.data (), bytes.size ());
++    return std::make_shared<MemoryStream> (std::move (buf), bytes.size ());
++}
++
++std::shared_ptr<BinaryReader> reader (const std::string& bytes) {
++    return std::make_shared<BinaryReader> (streamOf (bytes));
++}
++
++// a complete, valid single-mipmap texture body; flags 0 = static, 4 = animated (IsGif)
++std::string validTexture (uint32_t flags, int compressedSize, const std::string& payload) {
++    std::string b;
++    magic (b, "TEXV0005");
++    magic (b, "TEXI0001");
++    u32 (b, 0 /* ARGB8888 */);
++    u32 (b, flags);
++    u32 (b, 4);
++    u32 (b, 4);
++    u32 (b, 4);
++    u32 (b, 4);
++    u32 (b, 0 /* ignored */);
++    magic (b, "TEXB0001");
++    u32 (b, 1 /* imageCount */);
++    u32 (b, 1 /* mipmapCount */);
++    u32 (b, 1 /* mip width */);
++    u32 (b, 1 /* mip height */);
++    u32 (b, uint32_t (compressedSize)); // compression stays 0 for TEXB0001
++    b += payload;
++    return b;
++}
++} // namespace
++
++TEST_CASE ("BinaryReader rejects truncated reads instead of returning garbage") {
++    std::string b;
++    b.push_back (0x11);
++    b.push_back (0x22); // only 2 of the 4 bytes a uint32 needs
++
++    REQUIRE_THROWS (reader (b)->nextUInt32 ());
++}
++
++TEST_CASE ("BinaryReader reads a complete uint32") {
++    std::string b;
++    u32 (b, 0xDEADBEEF);
++
++    REQUIRE (reader (b)->nextUInt32 () == 0xDEADBEEF);
++}
++
++TEST_CASE ("BinaryReader null-terminated string stops at end of stream") {
++    // no terminator present: must return what it read rather than spin on an indeterminate byte
++    std::string b = "abc";
++
++    REQUIRE (reader (b)->nextNullTerminatedString () == "abc");
++}
++
++TEST_CASE ("BinaryReader sized string round-trips and rejects oversized lengths") {
++    SECTION ("valid length") {
++	std::string b;
++	u32 (b, 3);
++	b += "abc";
++
++	REQUIRE (reader (b)->nextSizedString () == "abc");
++    }
++
++    SECTION ("length beyond the stream is rejected before allocating") {
++	std::string b;
++	u32 (b, 0xFFFFFFFF);
++
++	REQUIRE_THROWS (reader (b)->nextSizedString ());
++    }
++}
++
++TEST_CASE ("MemoryStream refuses seeks outside the buffer") {
++    SECTION ("in-range seek succeeds") {
++	auto r = reader (std::string (4, 'x'));
++	r->base ().seekg (2, std::ios::beg);
++
++	REQUIRE (r->base ().good ());
++	REQUIRE (r->base ().tellg () == 2);
++    }
++
++    SECTION ("out-of-range seek fails cleanly") {
++	auto r = reader (std::string (4, 'x'));
++	r->base ().seekg (1000, std::ios::beg);
++
++	REQUIRE (r->base ().fail ());
++    }
++}
++
++TEST_CASE ("PackageParser bounds the declared file count") {
++    SECTION ("empty but well-formed package parses") {
++	std::string b;
++	u32 (b, 8);
++	b += "PKGV0001";
++	u32 (b, 0 /* filesCount */);
++
++	REQUIRE_NOTHROW (PackageParser::parse (streamOf (b)));
++    }
++
++    SECTION ("absurd file count is rejected instead of reserving gigabytes") {
++	std::string b;
++	u32 (b, 8);
++	b += "PKGV0001";
++	u32 (b, 0xFFFFFFFF);
++
++	REQUIRE_THROWS (PackageParser::parse (streamOf (b)));
++    }
++}
++
++TEST_CASE ("TextureParser validates untrusted sizes and counts") {
++    SECTION ("a valid static texture parses") {
++	REQUIRE_NOTHROW (TextureParser::parse (*reader (validTexture (0, 4, std::string (4, '\0')))));
++    }
++
++    SECTION ("a negative mipmap size is rejected before new[]") {
++	REQUIRE_THROWS (TextureParser::parse (*reader (validTexture (0, -1, ""))));
++    }
++
++    SECTION ("an animated texture with zero frames does not dereference an empty vector") {
++	std::string b = validTexture (4 /* IsGif */, 4, std::string (4, '\0'));
++	magic (b, "TEXS0001");
++	u32 (b, 0 /* frameCount */);
++
++	REQUIRE_THROWS (TextureParser::parse (*reader (b)));
++    }
++}

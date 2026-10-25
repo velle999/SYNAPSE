@@ -1,0 +1,39 @@
+From b205a54ea198e030af0e410fd1593abad59cbbbf Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 15/28] fix(web): keep Chromium's GPU work in its own process
+
+#687 adds --in-process-gpu, which runs Chromium's GPU thread, and ANGLE
+with it, inside the engine process on top of the EGL display the Wayland
+video driver already owns. On NVIDIA the driver's eglMakeCurrent then
+fails ("Failed to make egl current") and 10 of the 11 web wallpapers in
+the test corpus died at start, most with a SIGSEGV. With the separate GPU
+process all of them start.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp b/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
+index 784050da..fff2ed3f 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
+@@ -31,10 +31,12 @@ void BrowserApp::OnBeforeCommandLineProcessing (const CefString& process_type, C
+     command_line->AppendSwitch ("--no-sandbox");
+     command_line->AppendSwitch ("--disable-gpu-sandbox");
+ #endif
+-    // Avoid a separate GPU process: it often fails under Wayland/Wayland-adjacent
+-    // compositors with windowless rendering (error_code=1002, "GPU process isn't
+-    // usable"), which leaves web wallpapers black.
+-    command_line->AppendSwitch ("--in-process-gpu");
++    // NOT --in-process-gpu. It runs Chromium's GPU thread, and with it ANGLE, inside
++    // this process, on top of the EGL display the Wayland driver already owns. On
++    // NVIDIA the driver's eglMakeCurrent then fails ("Failed to make egl current")
++    // and 10 of 11 web wallpapers died at start, most of them with a SIGSEGV. The
++    // separate GPU process renders all of them.
++
+     command_line->AppendSwitch ("--disable-gpu-shader-disk-cache");
+     command_line->AppendSwitch ("--disable-site-isolation-trials");
+     command_line->AppendSwitch ("--disable-web-security");

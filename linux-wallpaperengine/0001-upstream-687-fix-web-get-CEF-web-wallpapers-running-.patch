@@ -1,0 +1,380 @@
+From 7e5cbc468a6aa81615fafa449f9f618c5edb1175 Mon Sep 17 00:00:00 2001
+From: Batty251 <114543336+AlexC1991@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 01/28] upstream #687: fix(web): get CEF web wallpapers running
+ under windowless rendering
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/687 (by AlexC1991) until it is merged upstream.
+---
+ CMakeLists.txt                                | 27 ++++++
+ .../Render/Wallpapers/CWeb.cpp                |  7 +-
+ .../WebBrowser/CEF/BrowserApp.cpp             | 29 ++++++-
+ .../WebBrowser/CEF/RenderHandler.cpp          |  4 +-
+ .../WebBrowser/WebBrowserContext.cpp          | 82 +++++++++++--------
+ .../WebBrowser/WebBrowserContext.h            |  4 +
+ src/main.cpp                                  | 55 +++++++++++++
+ 7 files changed, 168 insertions(+), 40 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 11565a1f..59d3fcef 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -44,6 +44,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ set(KISSFFT_TEST OFF)
+ set(KISSFFT_TOOLS OFF)
+ 
++# Disable Chromium's setuid sandbox helpers. Default ON: local/AUR builds rarely
++# ship a working setuid chrome-sandbox, and CefInitialize fails without this.
++# Packagers with a proper sandbox helper can configure -DCEF_NO_SANDBOX=OFF.
++option(CEF_NO_SANDBOX "Disable CEF/Chromium process sandbox (needed without setuid chrome-sandbox)" ON)
++
+ # Download CEF of specified version for current platform
+ # Specify the CEF distribution version.
+ set(CEF_VERSION "135.0.17+gcbc1c5b+chromium-135.0.7049.52")
+@@ -629,6 +634,13 @@ endif()
+ target_compile_definitions(linux-wallpaperengine-lib PUBLIC ERRORONLY=${ERRORONLY})
+ target_compile_definitions(linux-wallpaperengine-lib PUBLIC DEMOMODE=${DEMOMODE})
+ 
++if(CEF_NO_SANDBOX)
++    target_compile_definitions(linux-wallpaperengine-lib PUBLIC CEF_NO_SANDBOX)
++    message(STATUS "CEF_NO_SANDBOX=ON (settings.no_sandbox and --no-sandbox/--disable-gpu-sandbox)")
++else()
++    message(STATUS "CEF_NO_SANDBOX=OFF (Chromium sandbox enabled; requires setuid chrome-sandbox)")
++endif()
++
+ if (BUILD_TESTING)
+     # tests should give as much output as possible
+     target_compile_definitions(tests PRIVATE ERRORONLY=0)
+@@ -687,6 +699,19 @@ REPLACED_SET_EXECUTABLE_TARGET_PROPERTIES(linux-wallpaperengine-lib)
+ add_executable(linux-wallpaperengine
+     src/main.cpp)
+ 
++# libcef must load *before* libc so Chromium's close() interposer can resolve
++# via dlsym(RTLD_NEXT, "close"). Without this, every web wallpaper dies with
++# "close symbol missing" + SIGTRAP (upstream issue #628).
++# Force an early DT_NEEDED entry; --as-needed would otherwise drop it because
++# main.cpp does not reference CEF symbols directly.
++target_link_options(linux-wallpaperengine PRIVATE
++    "LINKER:--push-state,--no-as-needed"
++    "${TARGET_OUTPUT_DIRECTORY}/libcef.so"
++    "LINKER:--pop-state"
++)
++# Run from the build tree with the libcef copy in output/, next to icudtl.dat and the .pak
++# files. Otherwise the CEF SDK's Release/ folder comes first and ICU data can't be found.
++set_target_properties(linux-wallpaperengine PROPERTIES BUILD_RPATH "${TARGET_OUTPUT_DIRECTORY}")
+ target_link_libraries (linux-wallpaperengine PUBLIC linux-wallpaperengine-lib)
+ 
+ # Install the main executable and shared library via install(TARGETS)
+@@ -700,7 +725,9 @@ install(TARGETS linux-wallpaperengine-lib
+ 
+ # Install everything else from the output directory (CEF resources, helper binaries, etc.)
+ # but exclude the files already handled by install(TARGETS) above.
++# USE_SOURCE_PERMISSIONS keeps chrome-sandbox and the other helper binaries executable
+ install(DIRECTORY ${TARGET_OUTPUT_DIRECTORY}/ DESTINATION .
++    USE_SOURCE_PERMISSIONS
+     PATTERN "linux-wallpaperengine" EXCLUDE
+     PATTERN "liblinux-wallpaperengine-lib.so" EXCLUDE
+ )
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+index d1749535..8f0a688d 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+@@ -27,7 +27,8 @@ CWeb::CWeb (
+ 
+     CefBrowserSettings browserSettings;
+     // documentaion says that 60 fps is maximum value
+-    browserSettings.windowless_frame_rate = std::max (60, context.getApp ().getContext ().settings.render.maximumFPS);
++    // follow --fps, with 60 as CEF's ceiling (std::max forced every web wallpaper to >= 60 fps)
++    browserSettings.windowless_frame_rate = std::min (60, context.getApp ().getContext ().settings.render.maximumFPS);
+ 
+     this->m_client = new WebBrowser::CEF::BrowserClient (m_renderHandler);
+     // use the custom scheme for the wallpaper's files
+@@ -118,6 +119,6 @@ void CWeb::updateMouse (const glm::ivec4& viewport) {
+ CWeb::~CWeb () {
+     CefDoMessageLoopWork ();
+     this->m_browser->GetHost ()->CloseBrowser (true);
+-
+-    delete this->m_renderHandler;
++    // m_renderHandler is ref-counted and still owned by the BrowserClient's CefRefPtr;
++    // deleting it here made CefShutdown () release freed memory ("pure virtual method called").
+ }
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp b/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
+index 93c82ed6..784050da 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserApp.cpp
+@@ -1,4 +1,8 @@
+ #include "BrowserApp.h"
++
++#include <cstdlib>
++#include <ranges>
++#include <string>
+ #include "WallpaperEngine/Logging/Log.h"
+ 
+ using namespace WallpaperEngine::WebBrowser::CEF;
+@@ -22,6 +26,15 @@ void BrowserApp::OnBeforeCommandLineProcessing (const CefString& process_type, C
+ 	"--disable-features",
+ 	"IsolateOrigins,HardwareMediaKeyHandling,WebContentsOcclusion,RendererCodeIntegrityEnabled,site-per-process"
+     );
++    // Pair with settings.no_sandbox in WebBrowserContext (CMake CEF_NO_SANDBOX).
++#if defined(CEF_NO_SANDBOX)
++    command_line->AppendSwitch ("--no-sandbox");
++    command_line->AppendSwitch ("--disable-gpu-sandbox");
++#endif
++    // Avoid a separate GPU process: it often fails under Wayland/Wayland-adjacent
++    // compositors with windowless rendering (error_code=1002, "GPU process isn't
++    // usable"), which leaves web wallpapers black.
++    command_line->AppendSwitch ("--in-process-gpu");
+     command_line->AppendSwitch ("--disable-gpu-shader-disk-cache");
+     command_line->AppendSwitch ("--disable-site-isolation-trials");
+     command_line->AppendSwitch ("--disable-web-security");
+@@ -47,8 +60,18 @@ if (process_type.empty()) {
+ }
+ 
+ void BrowserApp::OnBeforeChildProcessLaunch (CefRefPtr<CefCommandLine> command_line) {
+-    // add back any parameters we had before so the new process can load up everything needed
+-    for (int i = 1; i < this->getApplication ().getContext ().getArgc (); i++) {
+-	command_line->AppendArgument (this->getApplication ().getContext ().getArgv ()[i]);
++    // Do NOT re-append the full wallpaper-engine argv. That used to force every
++    // CEF child to re-enter ApplicationContext/WallpaperApplication (and often
++    // crash). Instead pass only the custom scheme IDs so EarlyCefSubprocessApp
++    // in main.cpp can register matching wp{id} schemes.
++    std::string schemeIds;
++    for (const auto& workshopId : this->getHandlerFactories () | std::views::keys) {
++	if (!schemeIds.empty ()) {
++	    schemeIds.push_back (',');
++	}
++	schemeIds += workshopId;
++    }
++    if (!schemeIds.empty ()) {
++	command_line->AppendSwitchWithValue ("wp-schemes", schemeIds);
+     }
+ }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/RenderHandler.cpp b/src/WallpaperEngine/WebBrowser/CEF/RenderHandler.cpp
+index fc31baad..7cfc1ce3 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/RenderHandler.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/RenderHandler.cpp
+@@ -24,4 +24,6 @@ int RenderHandler::getWidth () const { return this->m_webdata->getWidth (); }
+ 
+ int RenderHandler::getHeight () const { return this->m_webdata->getHeight (); }
+ 
+-GLuint RenderHandler::texture () const { return this->m_webdata->getWallpaperFramebuffer (); }
+\ No newline at end of file
++// Must be the color texture attached to the wallpaper FBO — not the FBO name
++// itself. Binding the FBO id as GL_TEXTURE_2D leaves the wallpaper black.
++GLuint RenderHandler::texture () const { return this->m_webdata->getWallpaperTexture (); }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/WebBrowser/WebBrowserContext.cpp b/src/WallpaperEngine/WebBrowser/WebBrowserContext.cpp
+index 1b2da224..9f4f3285 100644
+--- a/src/WallpaperEngine/WebBrowser/WebBrowserContext.cpp
++++ b/src/WallpaperEngine/WebBrowser/WebBrowserContext.cpp
+@@ -4,45 +4,46 @@
+ #include "WallpaperEngine/WebBrowser/CEF/SubprocessApp.h"
+ #include "include/cef_app.h"
+ #include "include/cef_render_handler.h"
++#include <cstdlib>
+ #include <filesystem>
+-#include <random>
++#include <system_error>
++#include <unistd.h>
+ 
+ using namespace WallpaperEngine::WebBrowser;
+ 
+-// TODO: THIS IS USED TO GENERATE A RANDOM FOLDER FOR THE CHROME PROFILE, MAYBE A DIFFERENT APPROACH WOULD BE BETTER?
+-namespace uuid {
+-static std::random_device rd;
+-static std::mt19937 gen (rd ());
+-static std::uniform_int_distribution<> dis (0, 15);
+-static std::uniform_int_distribution<> dis2 (8, 11);
++namespace {
++/**
++ * Per-run Chromium profile folder: $XDG_RUNTIME_DIR/linux-wallpaperengine/cef-<pid>
++ * (falls back to the system temp dir). It is removed again in ~WebBrowserContext; folders
++ * left behind by runs that crashed are cleaned up the next time a browser starts.
++ */
++std::filesystem::path profileRoot () {
++    const char* runtime = std::getenv ("XDG_RUNTIME_DIR");
++    std::filesystem::path base = (runtime != nullptr && *runtime != '\0' && std::filesystem::is_directory (runtime))
++				     ? std::filesystem::path (runtime)
++				     : std::filesystem::temp_directory_path ();
++    return base / "linux-wallpaperengine";
++}
+ 
+-std::string generate_uuid_v4 () {
+-    std::stringstream ss;
+-    int i;
+-    ss << std::hex;
+-    for (i = 0; i < 8; i++) {
+-	ss << dis (gen);
+-    }
+-    ss << "-";
+-    for (i = 0; i < 4; i++) {
+-	ss << dis (gen);
+-    }
+-    ss << "-4";
+-    for (i = 0; i < 3; i++) {
+-	ss << dis (gen);
+-    }
+-    ss << "-";
+-    ss << dis2 (gen);
+-    for (i = 0; i < 3; i++) {
+-	ss << dis (gen);
++void removeStaleProfiles (const std::filesystem::path& root) {
++    std::error_code ec;
++    for (const auto& entry : std::filesystem::directory_iterator (root, ec)) {
++	const std::string name = entry.path ().filename ().string ();
++	if (!entry.is_directory () || name.rfind ("cef-", 0) != 0) {
++	    continue;
++	}
++	const std::string pid = name.substr (4);
++	if (pid.empty () || pid.find_first_not_of ("0123456789") != std::string::npos) {
++	    continue;
++	}
++	// still owned by a running engine
++	if (std::filesystem::exists ("/proc/" + pid)) {
++	    continue;
++	}
++	std::filesystem::remove_all (entry.path (), ec);
+     }
+-    ss << "-";
+-    for (i = 0; i < 12; i++) {
+-	ss << dis (gen);
+-    };
+-    return ss.str ();
+-}
+ }
++} // namespace
+ 
+ WebBrowserContext::WebBrowserContext (WallpaperEngine::Application::WallpaperApplication& wallpaperApplication) :
+     m_browserApplication (nullptr), m_wallpaperApplication (wallpaperApplication) {
+@@ -75,7 +76,13 @@ WebBrowserContext::WebBrowserContext (WallpaperEngine::Application::WallpaperApp
+ 
+     // Configurate Chromium
+     CefSettings settings;
+-    std::string cache_path = (std::filesystem::temp_directory_path () / uuid::generate_uuid_v4 ()).string ();
++    const std::filesystem::path root = profileRoot ();
++    std::error_code ec;
++    std::filesystem::create_directories (root, ec);
++    std::filesystem::permissions (root, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, ec);
++    removeStaleProfiles (root);
++    this->m_cachePath = root / ("cef-" + std::to_string (getpid ()));
++    const std::string cache_path = this->m_cachePath.string ();
+     // CefString(&settings.locales_dir_path) = "OffScreenCEF/godot/locales";
+     // CefString(&settings.resources_dir_path) = "OffScreenCEF/godot/";
+     // CefString(&settings.framework_dir_path) = "OffScreenCEF/godot/";
+@@ -83,6 +90,10 @@ WebBrowserContext::WebBrowserContext (WallpaperEngine::Application::WallpaperApp
+     //  CefString(&settings.browser_subprocess_path) = "path/to/client"
+     cef_string_utf8_to_utf16 (cache_path.c_str (), cache_path.length (), &settings.root_cache_path);
+     settings.windowless_rendering_enabled = true;
++    // Gated by CMake option CEF_NO_SANDBOX (default ON). Local/AUR builds rarely
++    // have chrome-sandbox setuid-root; without no_sandbox, CefInitialize often
++    // dies before the first web wallpaper paint. Packagers with a working
++    // setuid helper can configure -DCEF_NO_SANDBOX=OFF.
+ #if defined(CEF_NO_SANDBOX)
+     settings.no_sandbox = true;
+ #endif
+@@ -97,4 +108,9 @@ WebBrowserContext::WebBrowserContext (WallpaperEngine::Application::WallpaperApp
+ WebBrowserContext::~WebBrowserContext () {
+     sLog.out ("Shutting down CEF");
+     CefShutdown ();
++
++    if (!this->m_cachePath.empty ()) {
++	std::error_code ec;
++	std::filesystem::remove_all (this->m_cachePath, ec);
++    }
+ }
+diff --git a/src/WallpaperEngine/WebBrowser/WebBrowserContext.h b/src/WallpaperEngine/WebBrowser/WebBrowserContext.h
+index 729d1d5a..427f09cb 100644
+--- a/src/WallpaperEngine/WebBrowser/WebBrowserContext.h
++++ b/src/WallpaperEngine/WebBrowser/WebBrowserContext.h
+@@ -1,5 +1,7 @@
+ #pragma once
+ 
++#include <filesystem>
++
+ #include "WallpaperEngine/Application/ApplicationContext.h"
+ #include "WallpaperEngine/Application/WallpaperApplication.h"
+ #include "include/cef_app.h"
+@@ -22,5 +24,7 @@ private:
+     CefRefPtr<CefApp> m_browserApplication = nullptr;
+     CefRefPtr<CefCommandLine> m_commandLine = nullptr;
+     WallpaperEngine::Application::WallpaperApplication& m_wallpaperApplication;
++    /** Per-run Chromium profile folder, removed on shutdown */
++    std::filesystem::path m_cachePath;
+ };
+ } // namespace WallpaperEngine::WebBrowser
+diff --git a/src/main.cpp b/src/main.cpp
+index 908ab69f..acd77761 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -4,6 +4,8 @@
+ #include "WallpaperEngine/Application/ApplicationContext.h"
+ #include "WallpaperEngine/Application/WallpaperApplication.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include "include/cef_app.h"
++#include "include/cef_command_line.h"
+ 
+ WallpaperEngine::Application::WallpaperApplication* app;
+ 
+@@ -20,8 +22,61 @@ void initLogging () {
+     sLog.addError (new std::ostream (std::cerr.rdbuf ()));
+ }
+ 
++// Minimal CEF app used when this binary is re-exec'd as a Chromium child
++// (--type=utility/gpu/renderer/...). Going through full WallpaperApplication
++// first breaks those children (arg parse failures / crash loops) so network
++// and GPU services never stay up — web wallpapers stay black.
++//
++// Custom schemes must match the browser process (SubprocessApp). BrowserApp
++// passes them via --wp-schemes=id1,id2 on child launches.
++class EarlyCefSubprocessApp : public CefApp {
++public:
++    void OnRegisterCustomSchemes (CefRawPtr<CefSchemeRegistrar> registrar) override {
++	const CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine ();
++	if (!commandLine || !commandLine->HasSwitch ("wp-schemes")) {
++	    return;
++	}
++	const std::string schemes = commandLine->GetSwitchValue ("wp-schemes").ToString ();
++	std::size_t start = 0;
++	while (start < schemes.size ()) {
++	    const std::size_t comma = schemes.find (',', start);
++	    const std::string id = schemes.substr (
++		start, comma == std::string::npos ? std::string::npos : comma - start
++	    );
++	    if (!id.empty ()) {
++		// Keep flags in sync with SubprocessApp::OnRegisterCustomSchemes.
++		registrar->AddCustomScheme (
++		    "wp" + id,
++		    CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE | CEF_SCHEME_OPTION_FETCH_ENABLED
++		);
++	    }
++	    if (comma == std::string::npos) {
++		break;
++	    }
++	    start = comma + 1;
++	}
++    }
++
++private:
++    IMPLEMENT_REFCOUNTING (EarlyCefSubprocessApp);
++};
++
+ int main (int argc, char* argv[]) {
+     try {
++	// Hand off to CEF immediately for Chromium child processes.
++	{
++	    const CefMainArgs main_args (argc, argv);
++	    CefRefPtr<CefCommandLine> commandLine = CefCommandLine::CreateCommandLine ();
++	    commandLine->InitFromArgv (argc, argv);
++	    if (commandLine->HasSwitch ("type")) {
++		CefRefPtr<CefApp> subprocessApp = new EarlyCefSubprocessApp ();
++		const int exit_code = CefExecuteProcess (main_args, subprocessApp, nullptr);
++		if (exit_code >= 0) {
++		    return exit_code;
++		}
++	    }
++	}
++
+ 	// if type parameter is specified, this is a subprocess, so no logging should be enabled from our side
+ 	bool enableLogging = true;
+ 	const std::string typeZygote = "--type=zygote";

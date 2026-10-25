@@ -1,0 +1,204 @@
+From aac2bf915d21e62aa562373906ec7b896d4c4ac1 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:50:58 -0500
+Subject: [PATCH 27/28] feat(scripting): engine.registerAudioBuffers
+
+The engine defined the AUDIO_RESOLUTION constants but not the function
+scripts pass them to, so every script that reads the audio spectrum
+threw at its first line and never ran: 168 scripts across 15 wallpapers
+in the test corpus. registerAudioBuffers (16, 32 or 64) now returns
+left, right and average arrays that the engine refills from the audio
+capture before every update (); the capture is mono, so the three
+match, as they do for the shaders.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Scripting/EngineObject.cpp                | 100 ++++++++++++++++++
+ src/WallpaperEngine/Scripting/EngineObject.h  |  13 +++
+ 2 files changed, 113 insertions(+)
+
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index a61c6e83..50b4a8ac 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -1,8 +1,12 @@
+ #include "EngineObject.h"
+ #include "ScriptEngine.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include "WallpaperEngine/Audio/AudioContext.h"
++#include "WallpaperEngine/Audio/Drivers/Recorders/PlaybackRecorder.h"
+ #include "WallpaperEngine/Render/Wallpapers/CScene.h"
+ 
++#include <cmath>
++#include <cstring>
+ #include <ranges>
+ 
+ using namespace WallpaperEngine::Scripting;
+@@ -20,6 +24,25 @@ JSValue engine_open_user_shortcut (JSContext* ctx, JSValueConst this_val, int ar
+     return JS_UNDEFINED;
+ }
+ 
++// engine.registerAudioBuffers (engine.AUDIO_RESOLUTION_16): the audio spectrum as arrays
++// the engine refills before every update ()
++JSValue engine_register_audio_buffers (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    JSClassID classId = 0;
++    auto* engine = static_cast<EngineObject*> (JS_GetAnyOpaque (this_val, &classId));
++
++    if (engine == nullptr) {
++	return JS_ThrowTypeError (ctx, "registerAudioBuffers called on something that is not the engine");
++    }
++
++    int32_t resolution = 16;
++
++    if (argc > 0 && JS_ToInt32 (ctx, &resolution, argv [0]) < 0) {
++	return JS_EXCEPTION;
++    }
++
++    return engine->registerAudioBuffers (resolution);
++}
++
+ JSValue engine_get_frametime (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+     return JS_NewFloat64 (ctx, g_Time - g_TimeLast);
+ }
+@@ -210,6 +233,11 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+ 	),
+ 	JS_PROP_ENUMERABLE
+     );
++    JS_DefinePropertyValueStr (
++	this->m_engine.getContext (), this->m_instance, "registerAudioBuffers",
++	JS_NewCFunction (this->m_engine.getContext (), engine_register_audio_buffers, "registerAudioBuffers", 1),
++	JS_PROP_ENUMERABLE
++    );
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_instance, "openUserShortcut",
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_open_user_shortcut, "openUserShortcut", 0),
+@@ -227,6 +255,12 @@ EngineObject::~EngineObject () {
+ 	JS_FreeValue (this->m_engine.getContext (), interval.callback);
+     }
+ 
++    for (const auto& buffers : this->m_audioBuffers) {
++	JS_FreeValue (this->m_engine.getContext (), buffers.left);
++	JS_FreeValue (this->m_engine.getContext (), buffers.right);
++	JS_FreeValue (this->m_engine.getContext (), buffers.average);
++    }
++
+     engineInstances.erase (this->m_instanceId);
+     this->m_intervals.clear ();
+     this->m_timeouts.clear ();
+@@ -279,9 +313,75 @@ void EngineObject::clearTimeout (uint32_t id) {
+     this->m_timeouts.erase (id);
+ }
+ 
++JSValue EngineObject::registerAudioBuffers (int resolution) {
++    JSContext* ctx = this->m_engine.getContext ();
++    // the capture keeps 16, 32 and 64 band spectrums
++    AudioBuffers buffers { .resolution = resolution <= 16 ? 16 : resolution <= 32 ? 32 : 64 };
++    JSValue length = JS_NewInt32 (ctx, buffers.resolution);
++    JSValue result = JS_NewObject (ctx);
++
++    const std::pair<const char*, JSValue*> arrays [] = {
++	{ "left", &buffers.left }, { "right", &buffers.right }, { "average", &buffers.average }
++    };
++
++    for (const auto& [name, array] : arrays) {
++	*array = JS_NewTypedArray (ctx, 1, &length, JS_TYPED_ARRAY_FLOAT32);
++
++	if (JS_IsException (*array)) {
++	    JS_FreeValue (ctx, buffers.left);
++	    JS_FreeValue (ctx, buffers.right);
++	    JS_FreeValue (ctx, result);
++	    return JS_EXCEPTION;
++	}
++
++	JS_SetPropertyStr (ctx, result, name, JS_DupValue (ctx, *array));
++    }
++
++    this->fillAudioBuffers (buffers);
++    this->m_audioBuffers.push_back (buffers);
++
++    return result;
++}
++
++void EngineObject::fillAudioBuffers (const AudioBuffers& buffers) const {
++    JSContext* ctx = this->m_engine.getContext ();
++    const auto& recorder = this->m_scene.getAudioContext ().getRecorder ();
++    const float* spectrum = buffers.resolution == 16 ? recorder.audio16
++	: buffers.resolution == 32		     ? recorder.audio32
++						     : recorder.audio64;
++
++    // the capture is mono, so left, right and average are the same, as the shaders get them
++    for (const JSValue array : { buffers.left, buffers.right, buffers.average }) {
++	size_t offset = 0, length = 0, elementSize = 0, size = 0;
++	JSValue buffer = JS_GetTypedArrayBuffer (ctx, array, &offset, &length, &elementSize);
++
++	if (JS_IsException (buffer)) {
++	    JS_FreeValue (ctx, JS_GetException (ctx));
++	    continue;
++	}
++
++	uint8_t* bytes = JS_GetArrayBuffer (ctx, &size, buffer);
++
++	// a script may have detached or resized the array; leave it alone then
++	if (bytes != nullptr && length == buffers.resolution * sizeof (float) && offset + length <= size) {
++	    auto* values = reinterpret_cast<float*> (bytes + offset);
++
++	    for (int i = 0; i < buffers.resolution; i++) {
++		values [i] = std::isfinite (spectrum [i]) ? spectrum [i] : 0.0f;
++	    }
++	}
++
++	JS_FreeValue (ctx, buffer);
++    }
++}
++
+ void EngineObject::tick () {
+     const auto now = std::chrono::steady_clock::now ();
+ 
++    for (const auto& buffers : this->m_audioBuffers) {
++	this->fillAudioBuffers (buffers);
++    }
++
+     // check any interval and run them if needed
+     for (auto& timeout : this->m_intervals | std::views::values) {
+ 	if (timeout.next > now) {
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.h b/src/WallpaperEngine/Scripting/EngineObject.h
+index 521a2ff2..19e1c6db 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.h
++++ b/src/WallpaperEngine/Scripting/EngineObject.h
+@@ -3,6 +3,7 @@
+ 
+ #include <chrono>
+ #include <map>
++#include <vector>
+ 
+ namespace WallpaperEngine::Render::Wallpapers {
+ class CScene;
+@@ -24,8 +25,19 @@ public:
+     void clearInterval (uint32_t id);
+ 
+     void tick ();
++    /** The arrays engine.registerAudioBuffers () hands a script, filled from the audio capture */
++    JSValue registerAudioBuffers (int resolution);
+ 
+ protected:
++    struct AudioBuffers {
++	int resolution;
++	JSValue left = JS_UNDEFINED;
++	JSValue right = JS_UNDEFINED;
++	JSValue average = JS_UNDEFINED;
++    };
++
++    void fillAudioBuffers (const AudioBuffers& buffers) const;
++
+     struct Timeout {
+ 	JSValue callback;
+ 	std::chrono::milliseconds duration;
+@@ -36,6 +48,7 @@ protected:
+     uint32_t m_nextIntervalId = 0;
+     std::map<uint32_t, Timeout> m_intervals;
+     std::map<uint32_t, Timeout> m_timeouts;
++    std::vector<AudioBuffers> m_audioBuffers;
+     Render::Wallpapers::CScene& m_scene;
+     ScriptEngine& m_engine;
+ 

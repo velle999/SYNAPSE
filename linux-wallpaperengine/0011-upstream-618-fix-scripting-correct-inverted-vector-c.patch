@@ -1,0 +1,24 @@
+From 425f12aac426e8959139644cde65967904325fc9 Mon Sep 17 00:00:00 2001
+From: louzt <davidmirelesll@outlook.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 11/28] upstream #618: fix(scripting): correct inverted vector
+ component validation in jsToDynamicValue
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/618 (by louzt) until it is merged upstream.
+---
+ src/WallpaperEngine/Scripting/ScriptEngine.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index e690b92d..0f59e4a3 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -153,7 +153,7 @@ static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source)
+ 	    JS_FreeValue (ctx, w);
+ 	});
+ 
+-	if (!JS_IsNumber (x) || JS_IsNumber (y)) {
++	if (!JS_IsNumber (x) || !JS_IsNumber (y)) {
+ 	    sLog.exception ("Vector's x and y components must be numbers");
+ 	}
+ 

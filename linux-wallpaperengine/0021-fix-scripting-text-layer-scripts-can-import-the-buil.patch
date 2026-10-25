@@ -1,0 +1,79 @@
+From 65b974580b00335f4862ebb7cfdae09baab37cef Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:14:22 -0500
+Subject: [PATCH 21/28] fix(scripting): text layer scripts can import the
+ built-in modules
+
+Text layer scripts are plain scripts, where an import is a syntax error,
+so "import * as WEMath from 'WEMath'" failed the whole script with
+"Unexpected token '*'". The built-in modules are now published to those
+scripts, and their namespace imports rewritten to use them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Scripting/ScriptEngine.cpp                | 35 +++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 666df2ac..dd3b0f7b 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -27,6 +27,7 @@
+ #include <optional>
+ #include <poll.h>
+ #include <ranges>
++#include <regex>
+ #include <signal.h>
+ #include <spawn.h>
+ #include <sstream>
+@@ -347,8 +348,36 @@ void ScriptEngine::ensureLayerRegistry () {
+     JSContext* ctx = this->m_context;
+     JSValue globalObj = JS_GetGlobalObject (ctx);
+     JS_SetPropertyStr (ctx, globalObj, "__textLayers", JS_NewObject (ctx));
++    JS_SetPropertyStr (ctx, globalObj, "__weModules", JS_NewObject (ctx));
+     JS_FreeValue (ctx, globalObj);
+     this->m_layerRegistryReady = true;
++
++    // layer scripts run as plain scripts, where import is a syntax error, so the
++    // built-in modules they import are published here and their imports rewritten
++    std::ostringstream modules;
++    int index = 0;
++
++    for (const auto& name : this->m_modules | std::views::keys) {
++	modules << "import * as m" << index << " from '" << name << "';\n"
++		<< "globalThis.__weModules['" << name << "'] = m" << index << ";\n";
++	index++;
++    }
++
++    const std::string source = modules.str ();
++    JSValue evaluation =
++	JS_Eval (ctx, source.c_str (), source.size (), "<layer-script-modules>", JS_EVAL_TYPE_MODULE);
++
++    if (!JS_IsException (evaluation) && JS_PromiseState (ctx, evaluation) == JS_PROMISE_REJECTED) {
++	JS_Throw (ctx, JS_PromiseResult (ctx, evaluation));
++	JS_FreeValue (ctx, evaluation);
++	evaluation = JS_EXCEPTION;
++    }
++
++    if (JS_IsException (evaluation)) {
++	logJSException (ctx, "layer script modules");
++    }
++
++    JS_FreeValue (ctx, evaluation);
+ }
+ 
+ ScriptLayerHandle ScriptEngine::createLayerScript (
+@@ -391,6 +420,12 @@ ScriptLayerHandle ScriptEngine::createLayerScript (
+ 	body.erase (pos, 7);
+     }
+ 
++    // import * as WEMath from 'WEMath'; failed the whole script with "Unexpected token '*'"
++    static const std::regex importStatement (
++	R"(import\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*(['"])([^'"]+)\2\s*;?)"
++    );
++    body = std::regex_replace (body, importStatement, "var $1 = globalThis.__weModules[$2$3$2];");
++
+     // The IIFE gives every layer its own closure for top-level vars and
+     // functions, so two layers that both define `function update()` or a
+     // top-level `var scriptProperties` don't clobber each other. Lifecycle

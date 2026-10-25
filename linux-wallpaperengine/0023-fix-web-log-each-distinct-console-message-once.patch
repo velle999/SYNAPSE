@@ -1,0 +1,89 @@
+From cdbb2253e735f8a93e3374fde310335328814df7 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:14:53 -0500
+Subject: [PATCH 23/28] fix(web): log each distinct console message once
+
+A web page that logs every frame filled the engine's log in seconds
+(380 lines from one wallpaper). Each message is now logged once per
+source line, and after 100 distinct messages the page's console is no
+longer logged, which the log says.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../WebBrowser/CEF/BrowserClient.cpp          | 21 +++++++++++++++++--
+ .../WebBrowser/CEF/BrowserClient.h            | 11 ++++++++--
+ 2 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
+index 09012c16..f285b514 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
+@@ -18,10 +18,27 @@ bool BrowserClient::OnConsoleMessage (
+     int line
+ ) {
+     // pages log every frame at info level; only what went wrong is worth keeping
+-    if (level >= LOGSEVERITY_WARNING && level != LOGSEVERITY_DISABLE) {
+-	sLog.error ("web console: ", message.ToString (), " (", source.ToString (), ":", line, ")");
++    if (level < LOGSEVERITY_WARNING || level == LOGSEVERITY_DISABLE || this->m_consoleMuted) {
++	return false;
+     }
+ 
++    // once each: a page that throws every frame would otherwise grow the log, which
++    // synui-wpengine keeps in $XDG_RUNTIME_DIR (RAM), by tens of lines a second
++    // for as long as the wallpaper runs (workshop 2948489634)
++    const std::string where = source.ToString () + ":" + std::to_string (line);
++
++    if (!this->m_consoleSeen.insert (message.ToString () + "\n" + where).second) {
++	return false;
++    }
++
++    if (this->m_consoleSeen.size () > MAX_CONSOLE_MESSAGES) {
++	this->m_consoleMuted = true;
++	sLog.error ("web console: more than ", MAX_CONSOLE_MESSAGES, " different messages, no more are logged");
++	return false;
++    }
++
++    sLog.error ("web console: ", message.ToString (), " (", where, ")");
++
+     return false;
+ }
+ 
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
+index c3a17107..f95e4330 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <string>
++#include <unordered_set>
+ 
+ #include "include/cef_client.h"
+ #include "include/cef_display_handler.h"
+@@ -23,8 +24,9 @@ public:
+     void OnLoadEnd (CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
+ 
+     /**
+-     * A page's warnings and errors go to the engine's log. They are the only account of
+-     * why a web wallpaper drew nothing, and Chromium otherwise discards them.
++     * A page's warnings and errors go to the engine's log, each one once. They are the
++     * only account of why a web wallpaper drew nothing, and Chromium otherwise
++     * discards them.
+      */
+     bool OnConsoleMessage (
+ 	CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message, const CefString& source,
+@@ -37,8 +39,13 @@ public:
+     CefRefPtr<CefRenderHandler> m_renderHandler = nullptr;
+ 
+ private:
++    /** How many different console messages are logged before the rest are dropped */
++    static constexpr size_t MAX_CONSOLE_MESSAGES = 100;
++
+     std::string m_propertiesScript;
+     bool m_loaded = false;
++    std::unordered_set<std::string> m_consoleSeen;
++    bool m_consoleMuted = false;
+ 
+     IMPLEMENT_REFCOUNTING (BrowserClient);
+ };

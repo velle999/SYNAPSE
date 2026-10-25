@@ -1,0 +1,1111 @@
+From 64c0d54203091a9d78e77b8e3a2d49b22b3e761e Mon Sep 17 00:00:00 2001
+From: jsilverhand48 <57627031+jsilverhand48@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 11:13:32 -0500
+Subject: [PATCH 20/28] upstream #698: fix: property script lifecycle, layer
+ bindings, text transforms and shaders
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/698 (by jsilverhand48) until it is merged upstream.
+
+Both commits of the pull request (57d6b72d), squashed. Resolved against
+the series: text padding stays #652's two-component vector (it already
+reads the number and the "x y" forms), jsToDynamicValue keeps #618's
+corrected check and returns instead of throwing, and the ILayer
+finalizer #619 added is the only one.
+---
+ src/WallpaperEngine/Render/Objects/CImage.cpp |  18 +-
+ src/WallpaperEngine/Render/Objects/CImage.h   |  18 +-
+ src/WallpaperEngine/Render/Objects/CText.cpp  |  54 +++---
+ src/WallpaperEngine/Render/Objects/CText.h    |   3 +
+ .../Render/Shaders/ShaderUnit.cpp             | 171 +++++++++++++++++-
+ .../Render/Shaders/ShaderUnit.h               |  22 +++
+ .../Adapters/ScriptableObjectAdapter.cpp      |  23 ++-
+ .../Scripting/Adapters/VectorAdapter.cpp      |  66 ++++++-
+ .../Scripting/EngineObject.cpp                |  27 ++-
+ .../Scripting/ScriptEngine.cpp                | 154 ++++++++++++----
+ src/WallpaperEngine/Scripting/ScriptEngine.h  |  39 +++-
+ .../Scripting/ScriptPropertiesObject.cpp      |   5 +-
+ .../Scripting/ScriptableObject.cpp            |  14 +-
+ .../Scripting/ScriptableObject.h              |  15 +-
+ 14 files changed, 539 insertions(+), 90 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index be0baca3..23e8e5c1 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -129,6 +129,10 @@ CImage::ResolvedTransform CImage::localTransform (const Object& object) {
+ }
+ 
+ CImage::ResolvedTransform CImage::resolveTransform (const Object& object) const {
++    return resolveTransform (this->getScene (), object);
++}
++
++CImage::ResolvedTransform CImage::resolveTransform (const Wallpapers::CScene& scene, const Object& object) {
+     constexpr int kMaxParentDepth = 32;
+ 
+     // Walk up the parent chain leaf-first, bounded by kMaxParentDepth to guard
+@@ -143,7 +147,7 @@ CImage::ResolvedTransform CImage::resolveTransform (const Object& object) const
+ 	    sLog.error ("Parent transform chain is too deep; possible cycle at object id=", current->id);
+ 	    break;
+ 	}
+-	const auto* parentObject = this->getScene ().getObject (current->parent.value ());
++	const auto* parentObject = scene.getObject (current->parent.value ());
+ 	if (parentObject == nullptr) {
+ 	    break;
+ 	}
+@@ -182,6 +186,8 @@ CImage::CImage (Wallpapers::CScene& scene, const Image& image) :
+     this->registerProperty ("alpha", *image.alpha->value);
+     this->registerProperty ("color", *image.color->value);
+     this->registerProperty ("parallaxDepth", *image.parallaxDepth->value);
++    // read-only for scripts, e.g. bounce/clamp scripts use it to keep the layer on screen
++    this->registerConstant ("size", DynamicValue (image.size));
+ 
+     // get scene width and height to calculate positions
+     auto scene_width = static_cast<float> (scene.getWidth ());
+@@ -575,8 +581,18 @@ void CImage::setupPuppetGeometryCallback (Effects::CPass* pass) const {
+ 		    previousClearColor[0], previousClearColor[1], previousClearColor[2], previousClearColor[3]
+ 		);
+ 	    }
++	    // The puppet mesh is flat, and updatePuppetPositionBuffer flips Y to go from
++	    // MDL space (Y up) to copy space, which reverses the triangle winding. With the
++	    // material's "cullmode": "normal" every triangle then counts as back facing and
++	    // the whole layer vanishes (e.g. workshop 3521337568). Culling a 2D mesh never
++	    // removes anything that should be hidden, so disable it for this draw only.
++	    const GLboolean cullWasEnabled = glIsEnabled (GL_CULL_FACE);
++	    glDisable (GL_CULL_FACE);
+ 	    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, this->m_puppetIndices);
+ 	    glDrawElements (GL_TRIANGLES, this->m_puppetIndexCount, GL_UNSIGNED_SHORT, nullptr);
++	    if (cullWasEnabled) {
++		glEnable (GL_CULL_FACE);
++	    }
+ 	},
+ 	[pass] () {
+ 	    const GLint position = glGetAttribLocation (pass->getProgramID (), "a_Position");
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.h b/src/WallpaperEngine/Render/Objects/CImage.h
+index 07eeda27..d2778658 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.h
++++ b/src/WallpaperEngine/Render/Objects/CImage.h
+@@ -56,17 +56,25 @@ public:
+      */
+     void pinpongFramebuffer (std::shared_ptr<const CFBO>* drawTo, std::shared_ptr<const TextureProvider>* asInput);
+ 
+-protected:
+-    void setupPasses ();
+-
+-    void updateScreenSpacePosition ();
+-
++    /** An object's transform in scene space after folding in every parent */
+     struct ResolvedTransform {
+ 	glm::vec3 origin;
+ 	glm::vec3 scale;
+ 	float angle;
+     };
+ 
++    /**
++     * Resolves `object`'s scene-space transform by walking its parent chain. Parent scale and
++     * rotation apply to the child's offset; works for any object type (images, text, groups).
++     */
++    [[nodiscard]] static ResolvedTransform
++    resolveTransform (const Wallpapers::CScene& scene, const WallpaperEngine::Data::Model::Object& object);
++
++protected:
++    void setupPasses ();
++
++    void updateScreenSpacePosition ();
++
+     [[nodiscard]] ResolvedTransform resolveTransform (const WallpaperEngine::Data::Model::Object& object) const;
+ 
+     /**
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index 8368634f..251ac4d1 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -1,5 +1,8 @@
+ #include "CText.h"
+ 
++#include <algorithm>
++#include <cmath>
++
+ #include <filesystem>
+ #include <vector>
+ 
+@@ -10,6 +13,7 @@
+ #include <glm/gtc/type_ptr.hpp>
+ 
+ #include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Render/Objects/CImage.h"
+ #include "WallpaperEngine/Data/Model/Object.h"
+ #include "WallpaperEngine/Data/Model/UserSetting.h"
+ #include "WallpaperEngine/Logging/Log.h"
+@@ -81,8 +85,9 @@ CText::CText (Wallpapers::CScene& scene, const Text& text) :
+     this->registerProperty ("scale", *text.scale->value);
+     this->registerProperty ("visible", *text.visible->value);
+     this->registerProperty ("pointSize", *text.pointSize->value);
+-    this->registerProperty ("text", *text.text->value);
+-    this->registerProperty ("pointSize", *text.pointSize->value);
++    // the text script runs through ScriptEngine::createLayerScript (see setup), not as a property script
++    this->registerProperty ("text", *text.text->value, false);
++    this->registerConstant ("size", DynamicValue (text.size));
+ }
+ 
+ CText::~CText () {
+@@ -201,15 +206,21 @@ bool CText::loadSystemFont () {
+     return true;
+ }
+ 
++float CText::scenePixelSize () const {
++    // derived from the text boxes WE saves: "12:34" at 32pt with padding 32 is 387x219, which only
++    // matches glyphs rasterized at 32 * 300 / 72 = 133px
++    constexpr float kPointsToPixels = 300.0f / 72.0f;
++    return m_text.pointSize->value->getFloat () * kPointsToPixels;
++}
++
+ unsigned int CText::computeEffectivePixelSize () const {
+-    // WE text objects often come with scale ~0.09 that, combined with a modest
+-    // pointsize, would rasterize glyphs to ~2px on screen (invisible). Rasterize
+-    // at higher resolution so that after the model scale is applied in render()
+-    // the on-screen size matches the intended pointsize.
+-    const glm::vec3 initialScale = m_text.scale->value->getVec3 ();
+-    const float avgScale = (initialScale.x + initialScale.y) * 0.5f;
+-    const float compensate = (avgScale > 0.0f && avgScale < 1.0f) ? std::min (1.0f / avgScale, 32.0f) : 1.0f;
+-    return std::max<unsigned int> (1u, static_cast<unsigned int> (m_text.pointSize->value->getFloat () * compensate));
++    // rasterize at the size the glyphs end up in scene space; render() scales the quad back by
++    // scenePixelSize () / pixelSize so the on-screen size doesn't depend on this choice
++    constexpr float kMaxPixelSize = 1024.0f;
++    const glm::vec3 scale = CImage::resolveTransform (getScene (), m_text).scale;
++    const float avgScale = (std::abs (scale.x) + std::abs (scale.y)) * 0.5f;
++    const float pixels = std::clamp (scenePixelSize () * avgScale, 1.0f, kMaxPixelSize);
++    return static_cast<unsigned int> (std::lround (pixels));
+ }
+ 
+ void CText::initScriptLayer () {
+@@ -404,25 +415,26 @@ void CText::render () {
+ 
+     const glm::vec4 color = m_text.color->value->getVec4 ();
+     const float alpha = m_text.alpha->value->getFloat ();
+-    const glm::vec3 scale = m_text.scale->value->getVec3 ();
+-    const glm::vec3 origin = m_text.origin->value->getVec3 ();
+-
+-    // WE uses a Y-down coordinate system (origin at top-left, y increases downward).
+-    // The final FBO is presented to screen with vflip=true on Wayland/GLFW, which maps
+-    // GL y- to screen top and GL y+ to screen bottom. This effectively inverts Y again,
+-    // so we need: gl_y = origin.y - scene_h/2  (not the CImage-style scene_h/2 - origin.y).
+-    // CImage pre-compensates for X11 (no vflip) and gets corrected by the Wayland vflip.
+-    // CText renders with direct vflip-aware coordinates.
++    // origin and scale include every parent (text is often a child of a clock or media group)
++    const auto transform = CImage::resolveTransform (getScene (), m_text);
++    const glm::vec3 scale = transform.scale;
++    const glm::vec3 origin = transform.origin;
++
++    // WE scene space is Y-up (origin at bottom-left), same as images. This quad's GL space has
++    // -y at the screen top (see uploadQuadVertices), so mirror y around the centre like CImage does.
+     const float scene_w = getScene ().getCamera ().getWidth ();
+     const float scene_h = getScene ().getCamera ().getHeight ();
+     const glm::vec3 gl_origin = {
+ 	origin.x - scene_w * 0.5f,
+-	origin.y - scene_h * 0.5f,
++	scene_h * 0.5f - origin.y,
+ 	origin.z,
+     };
+ 
++    // the texture holds glyphs at m_lastPixelSize, scale the quad so the font is scenePixelSize () * scale
++    const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
++
+     glm::mat4 model = glm::translate (glm::mat4 (1.0f), gl_origin);
+-    model = glm::scale (model, scale);
++    model = glm::scale (model, scale * glm::vec3 (rasterToScene, rasterToScene, 1.0f));
+ 
+     const glm::mat4 mvp = getScene ().getCamera ().getProjection () * getScene ().getCamera ().getLookAt () * model;
+ 
+diff --git a/src/WallpaperEngine/Render/Objects/CText.h b/src/WallpaperEngine/Render/Objects/CText.h
+index 06c413f0..ec67450c 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.h
++++ b/src/WallpaperEngine/Render/Objects/CText.h
+@@ -57,6 +57,9 @@ private:
+     bool initFreeType ();
+     bool loadEmbeddedFont ();
+     bool loadSystemFont ();
++    /** Font size in scene pixels, Wallpaper Engine rasterizes `pointsize` at 300 DPI */
++    float scenePixelSize () const;
++    /** Pixel size to rasterize glyphs at so they stay sharp at the resolved (parent-inclusive) scale */
+     unsigned int computeEffectivePixelSize () const;
+     void initScriptLayer ();
+ 
+diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+index fcc03fcd..bd44fd01 100644
+--- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
++++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+@@ -3,9 +3,11 @@
+ #include "WallpaperEngine/Logging/Log.h"
+ #include <exception>
+ #include <regex>
++#include <sstream>
+ #include <stack>
+ #include <string>
+ #include <utility>
++#include <vector>
+ 
+ #include "GLSLContext.h"
+ #include "WallpaperEngine/Assets/AssetLoadException.h"
+@@ -414,6 +416,168 @@ std::string ShaderUnit::applyLinkedVaryingCompatibility (std::string source) con
+     return source;
+ }
+ 
++std::string ShaderUnit::applyLinkedVaryingDeclarations (std::string source) const {
++    if (this->m_type != GLSLContext::UnitType_Fragment || this->m_link == nullptr) {
++	return source;
++    }
++
++    // Wallpaper Engine makes every vertex varying visible to the fragment stage, so a workshop
++    // fragment shader can read one it never declares. Workshop 3636723645's fog effect reads
++    // v_Normal under "LIGHTING": 1 while only fog.vert declares it; glslang then rejects the
++    // pass and the whole image layer is dropped, leaving the scene blank.
++    const std::regex vertexVarying (R"(\bvarying\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
++    const std::string& linked = this->m_link->m_preprocessed;
++    std::string declarations;
++
++    for (auto it = std::sregex_iterator (linked.begin (), linked.end (), vertexVarying); it != std::sregex_iterator ();
++	 ++it) {
++	const std::string type = (*it)[1].str ();
++	const std::string name = (*it)[2].str ();
++	const std::regex declared (R"(\bvarying\s+[A-Za-z_][A-Za-z0-9_]*\s+)" + name + R"(\s*;)");
++	const std::regex used ("\\b" + name + "\\b");
++
++	if (std::regex_search (source, declared) || !std::regex_search (source, used)
++	    || declarations.find (" " + name + ";") != std::string::npos) {
++	    continue;
++	}
++
++	declarations += "varying " + type + " " + name + ";\n";
++    }
++
++    if (declarations.empty ()) {
++	return source;
++    }
++
++    sLog.out ("Declared vertex varyings missing from fragment shader ", this->m_file, ":\n", declarations);
++
++    // #extension directives must precede any declaration, so insert after the last one
++    size_t insertAt = 0;
++    const size_t extension = source.rfind ("#extension");
++    if (extension != std::string::npos) {
++	const size_t lineEnd = source.find ('\n', extension);
++	insertAt = lineEnd == std::string::npos ? source.size () : lineEnd + 1;
++    }
++
++    source.insert (insertAt, declarations);
++    return source;
++}
++
++std::string ShaderUnit::applyPackedArrayIndexCompatibility (std::string source) const {
++    // Workshop 3784295445's audio ring (video.frag) reads "float g_AudioSpectrum64Left[64]" as
++    // g_AudioSpectrum64Left[barID / 4][barID % 4] with a float barID. HLSL accepts that; GLSL
++    // rejects indexing a float, so the layer failed to compile and the ring never drew.
++    const std::regex floatArray (R"(\buniform\s+float\s+([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*\d+\s*\]\s*;)");
++    std::vector<std::string> names;
++    for (auto it = std::sregex_iterator (source.begin (), source.end (), floatArray); it != std::sregex_iterator ();
++	 ++it) {
++	names.push_back ((*it)[1].str ());
++    }
++
++    const std::string original = source;
++    for (const auto& name : names) {
++	// NAME[x / 4][x % 4] addresses element x exactly
++	const std::regex packedSame ("\\b" + name + R"(\s*\[\s*([^\[\]]+?)\s*/\s*4\s*\]\s*\[\s*\1\s*%\s*4\s*\])");
++	source = std::regex_replace (source, packedSame, name + "[int($1)]");
++	// any other NAME[a][b] means float4 element a, component b
++	const std::regex packed ("\\b" + name + R"(\s*\[([^\[\]]+)\]\s*\[([^\[\]]+)\])");
++	source = std::regex_replace (source, packed, name + "[int($1) * 4 + int($2)]");
++    }
++
++    if (source != original) {
++	sLog.out ("Applied packed float array index compatibility in ", this->m_file);
++    }
++
++    return source;
++}
++
++std::string ShaderUnit::applyWritableVaryingCompatibility (std::string source) const {
++    // Workshop 3784295445's Simple_Audio_Bars.frag flips v_TexCoord in place
++    // (v_TexCoord = v_TexCoord.yx). GLSL rejects writes to shader inputs.
++    if (this->m_type != GLSLContext::UnitType_Fragment) {
++	return source;
++    }
++
++    const std::regex varyingDecl (R"(\bvarying\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
++    std::vector<std::pair<std::string, std::string>> varyings;
++    for (auto it = std::sregex_iterator (source.begin (), source.end (), varyingDecl); it != std::sregex_iterator ();
++	 ++it) {
++	varyings.emplace_back ((*it)[1].str (), (*it)[2].str ());
++    }
++
++    std::string initializers;
++    for (const auto& [type, name] : varyings) {
++	// "name =", "name.xy +=", ... but not "name =="
++	const std::regex written ("\\b" + name + R"((\s*\.\s*[xyzwrgba]+)?\s*[-+*/]?=[^=])");
++	if (!std::regex_search (source, written)) {
++	    continue;
++	}
++
++	const std::string copy = "lwe_writable_" + name;
++	source = std::regex_replace (source, std::regex ("\\b" + name + "\\b"), copy);
++	// restore the input declaration and declare the writable copy next to it
++	source = std::regex_replace (
++	    source, std::regex (R"(\bvarying\s+)" + type + R"(\s+)" + copy + R"(\s*;)"),
++	    "varying " + type + " " + name + ";\n" + type + " " + copy + ";"
++	);
++	initializers += "\t" + copy + " = " + name + ";\n";
++    }
++
++    if (initializers.empty ()) {
++	return source;
++    }
++
++    std::smatch mainMatch;
++    if (!std::regex_search (source, mainMatch, std::regex (R"(\bvoid\s+main\s*\(\s*(void)?\s*\)\s*\{)"))) {
++	sLog.error ("Could not find main() to initialize writable varyings in ", this->m_file);
++	return source;
++    }
++
++    source.insert (mainMatch.position () + mainMatch.length (), "\n" + initializers);
++    sLog.out ("Applied writable varying compatibility in ", this->m_file);
++    return source;
++}
++
++std::string ShaderUnit::balancePreprocessorConditionals (std::string source) const {
++    // Workshop 3784295445's Simple_Audio_Bars.vert has one #endif more than it has #if lines.
++    std::istringstream lines (source);
++    std::string line;
++    std::string balanced;
++    int depth = 0;
++    int dropped = 0;
++
++    balanced.reserve (source.size ());
++    while (std::getline (lines, line)) {
++	const size_t first = line.find_first_not_of (" \t");
++	const std::string directive = first == std::string::npos ? "" : line.substr (first);
++
++	if (directive.starts_with ("#if")) {
++	    depth++;
++	} else if (directive.starts_with ("#endif")) {
++	    if (depth == 0) {
++		// fixed text instead of echoing the line: workshop files often end lines in \r,
++		// which glslang treats as a newline, leaving anything after it as code
++		balanced += "// unmatched #endif removed by linux-wallpaperengine\n";
++		dropped++;
++		continue;
++	    }
++	    depth--;
++	}
++
++	balanced += line + '\n';
++    }
++
++    if (dropped == 0 && depth == 0) {
++	return source;
++    }
++
++    for (; depth > 0; depth--) {
++	balanced += "#endif // closed by linux-wallpaperengine\n";
++    }
++
++    sLog.out ("Balanced preprocessor conditionals in ", this->m_file, " (", dropped, " unmatched #endif removed)");
++    return balanced;
++}
++
+ std::string ShaderUnit::applyFragmentTexCoordCompatibility (std::string source) const {
+     if (this->m_type != GLSLContext::UnitType_Fragment) {
+ 	return source;
+@@ -714,8 +878,11 @@ const std::string& ShaderUnit::compile () {
+     }
+ 
+     // this should be the rest of the shader
+-    this->m_final
+-	+= this->applyFragmentTexCoordCompatibility (this->applyLinkedVaryingCompatibility (this->m_preprocessed));
++    this->m_final += this->balancePreprocessorConditionals (
++	this->applyWritableVaryingCompatibility (this->applyPackedArrayIndexCompatibility (this->applyFragmentTexCoordCompatibility (
++	    this->applyLinkedVaryingDeclarations (this->applyLinkedVaryingCompatibility (this->m_preprocessed))
++	)))
++    );
+ 
+     // the pass itself handles shader compilation, the unit doesn't have enough information for this step
+     return this->m_final;
+diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.h b/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
+index 0a5d5d64..dad0c8ee 100644
+--- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
++++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
+@@ -100,10 +100,32 @@ private:
+      * Adjusts vertex varyings when a workshop shader declares a narrower vertex type than its fragment peer.
+      */
+     [[nodiscard]] std::string applyLinkedVaryingCompatibility (std::string source) const;
++    /**
++     * Declares, in a fragment shader, varyings it reads but only the linked vertex shader declares.
++     * Wallpaper Engine shares vertex varyings with the fragment stage implicitly, so workshop
++     * shaders may rely on that (e.g. a fog effect using v_Normal under its LIGHTING combo).
++     */
++    [[nodiscard]] std::string applyLinkedVaryingDeclarations (std::string source) const;
+     /**
+      * Adjusts fragment shaders that use wide texture coordinates as vec2 values in Wallpaper Engine effects.
+      */
+     [[nodiscard]] std::string applyFragmentTexCoordCompatibility (std::string source) const;
++    /**
++     * Rewrites HLSL style packed indexing of float array uniforms (NAME[i / 4][i % 4], as if the
++     * array were float4[N / 4]) into a single GLSL index. Wallpaper Engine compiles shaders to
++     * HLSL where workshop authors can get away with it.
++     */
++    [[nodiscard]] std::string applyPackedArrayIndexCompatibility (std::string source) const;
++    /**
++     * Gives fragment shaders a writable copy of every varying they assign to. HLSL lets shaders
++     * modify their inputs; GLSL does not, so uses are redirected to a global copied in main().
++     */
++    [[nodiscard]] std::string applyWritableVaryingCompatibility (std::string source) const;
++    /**
++     * Drops #endif lines with no open conditional and closes conditionals left open at the end.
++     * Wallpaper Engine's preprocessor tolerates both; glslang aborts the whole shader.
++     */
++    [[nodiscard]] std::string balancePreprocessorConditionals (std::string source) const;
+ 
+     /**
+      * Parses a COMBO value to add the proper define to the code
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index ced542bd..f08f5ee8 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -41,7 +41,8 @@ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSA
+ 	// find the property inside, otherwise return undefined
+ 	auto& property = container->object.getProperty (name);
+ 
+-	return container->adapter.getEngine ().dynamicToJs (property);
++	// scripts get copies (like Wallpaper Engine), so `let s = thisLayer.size; s.x *= 2;` doesn't resize the layer
++	return container->adapter.getEngine ().dynamicToJsCopy (property);
+     } catch (const std::exception& e) {
+ 	return JS_UNDEFINED;
+     }
+@@ -64,11 +65,27 @@ int scriptableobject_property_set (
+ 	return -1;
+     }
+ 
+-    return 0;
++    ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
++
++    // `thisLayer.alpha = 0.5` etc. writes straight into the property; unknown names are ignored
++    // (returning false would throw a TypeError, scripts run in strict mode)
++    try {
++	auto& property = container->object.getProperty (name);
++	WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, property);
++    } catch (const std::exception& e) {
++	// property not exposed by this layer
++    }
++
++    return 1;
+ }
+ 
+ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::string name) :
+-    ObjectAdapter (engine), m_exoticMethods (), m_name (std::move (name)) {
++    ObjectAdapter (engine),
++    m_exoticMethods ({
++	.get_property = scriptableobject_property_get,
++	.set_property = scriptableobject_property_set,
++    }),
++    m_name (std::move (name)) {
+     this->registerType (
+ 	{
+ 	    .class_name = m_name.c_str (),
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+index 1162bf24..9c8b6e03 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+@@ -4,6 +4,8 @@
+ #include "WallpaperEngine/Data/Utils/SFINAE.h"
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ 
++#include <algorithm>
++#include <ranges>
+ #include <variant>
+ 
+ using namespace WallpaperEngine::Data::Utils;
+@@ -368,16 +370,16 @@ template JSValue vector_length<2> (JSContext* ctx, JSValueConst this_val, int ar
+ template JSValue vector_length<3> (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+ template JSValue vector_length<4> (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+ 
++/**
++ * `new VecN ()`, `new VecN (scalar)`, `new VecN (x, y[, z[, w]])` or `new VecN (otherVector)`.
++ * Missing components default to zero, like Wallpaper Engine.
++ */
+ template <int components>
+ JSValue vector_constructor (JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv, int magic) {
+-    if (argc == 0) {
+-	return JS_EXCEPTION;
+-    }
+-
+     auto it = vectorAdapterInstances<components>.find (magic);
+ 
+     if (it == vectorAdapterInstances<components>.end ()) {
+-	return JS_EXCEPTION;
++	return JS_ThrowInternalError (ctx, "Vec%d adapter not found", components);
+     }
+ 
+     JSValue result = it->second.instantiate ();
+@@ -386,7 +388,42 @@ JSValue vector_constructor (JSContext* ctx, JSValueConst new_target, int argc, J
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
+-    container->value.update (vector_get<components> (ctx, argv[0]), DynamicValue::UpdateSource::Initialization);
++    if (argc == 0) {
++	return result;
++    }
++
++    try {
++	if (argc == 1) {
++	    container->value.update (
++		vector_get<components> (ctx, argv[0]), DynamicValue::UpdateSource::Initialization
++	    );
++	    return result;
++	}
++
++	double values[4] = { 0.0, 0.0, 0.0, 0.0 };
++
++	for (int i = 0; i < std::min (argc, components); i++) {
++	    if (JS_ToFloat64 (ctx, &values[i], argv[i]) < 0) {
++		JS_FreeValue (ctx, result);
++		return JS_EXCEPTION;
++	    }
++	}
++
++	if constexpr (components == 2) {
++	    container->value.update (glm::vec2 (values[0], values[1]), DynamicValue::UpdateSource::Initialization);
++	} else if constexpr (components == 3) {
++	    container->value.update (
++		glm::vec3 (values[0], values[1], values[2]), DynamicValue::UpdateSource::Initialization
++	    );
++	} else {
++	    container->value.update (
++		glm::vec4 (values[0], values[1], values[2], values[3]), DynamicValue::UpdateSource::Initialization
++	    );
++	}
++    } catch (const std::exception& e) {
++	JS_FreeValue (ctx, result);
++	return JS_ThrowTypeError (ctx, "Vec%d: %s", components, e.what ());
++    }
+ 
+     return result;
+ }
+@@ -403,8 +440,15 @@ template <int components> void vector_finalizer (JSRuntime* rt, JSValueConst val
+ 	return;
+     }
+ 
+-    // free container and the associated DynamicValue if temporal
+-    if (container->id != InvalidVectorInstanceId) {
++    // free container and the associated DynamicValue if temporal. On shutdown the adapters are
++    // destroyed (taking their values with them) before the runtime's final GC reaches vectors
++    // scripts still hold, so only call back into an adapter that still exists
++    const bool adapterAlive = std::ranges::any_of (
++	vectorAdapterInstances<components> | std::views::values,
++	[container] (const auto& adapter) { return &adapter == &container->adapter; }
++    );
++
++    if (container->id != InvalidVectorInstanceId && adapterAlive) {
+ 	container->adapter.free (container->id);
+     }
+ 
+@@ -924,7 +968,11 @@ VectorAdapter<components>::VectorAdapter (ScriptEngine& engine) :
+     );
+ 
+     JS_SetClassProto (this->m_engine.getContext (), this->m_classId, m_prototype);
+-    JS_FreeValue (this->m_engine.getContext (), ctor);
++    // expose the constructor as a global (`new Vec3 (...)`), the global object takes the reference
++    JS_DefinePropertyValueStr (
++	this->m_engine.getContext (), this->m_engine.getGlobalThis (), this->m_name.c_str (), ctor,
++	JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE
++    );
+ }
+ 
+ template <int components> VectorAdapter<components>::~VectorAdapter () {
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index b8399fa5..a61c6e83 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -1,6 +1,7 @@
+ #include "EngineObject.h"
+ #include "ScriptEngine.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include "WallpaperEngine/Render/Wallpapers/CScene.h"
+ 
+ #include <ranges>
+ 
+@@ -31,6 +32,23 @@ JSValue engine_get_daytime (JSContext* ctx, JSValueConst this_val, int argc, JSV
+     return JS_NewFloat64 (ctx, g_Daytime);
+ }
+ 
++// scene (canvas) size in scene units, a Vec2 copy the script is free to modify
++JSValue engine_get_canvas_size (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    JSClassID classId = 0;
++    const auto* engine = static_cast<EngineObject*> (JS_GetAnyOpaque (this_val, &classId));
++
++    if (engine == nullptr) {
++	return JS_UNDEFINED;
++    }
++
++    const auto& scene = engine->getScene ();
++    DynamicValue size (
++	glm::vec2 (static_cast<float> (scene.getWidth ()), static_cast<float> (scene.getHeight ()))
++    );
++
++    return engine->getEngine ().dynamicToJsCopy (size);
++}
++
+ JSValue engine_stop_interval (
+     JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic, JSValueConst* func_data
+ ) {
+@@ -161,6 +179,11 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_get_daytime, "get", 0),
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_set_value, "set", 1), JS_PROP_ENUMERABLE
+     );
++    JS_DefinePropertyGetSet (
++	this->m_engine.getContext (), this->m_instance, JS_NewAtom (this->m_engine.getContext (), "canvasSize"),
++	JS_NewCFunction (this->m_engine.getContext (), engine_get_canvas_size, "get", 0),
++	JS_NewCFunction (this->m_engine.getContext (), engine_set_value, "set", 1), JS_PROP_ENUMERABLE
++    );
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_instance, "AUDIO_RESOLUTION_16",
+ 	JS_NewInt32 (this->m_engine.getContext (), 16), JS_PROP_ENUMERABLE
+@@ -176,14 +199,14 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_instance, "setInterval",
+ 	JS_NewCFunctionMagic (
+-	    this->m_engine.getContext (), engine_set_interval, "setInterval", 2, JS_CFUNC_generic, this->m_instanceId
++	    this->m_engine.getContext (), engine_set_interval, "setInterval", 2, JS_CFUNC_generic_magic, this->m_instanceId
+ 	),
+ 	JS_PROP_ENUMERABLE
+     );
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_instance, "setTimeout",
+ 	JS_NewCFunctionMagic (
+-	    this->m_engine.getContext (), engine_set_timeout, "setTimeout", 2, JS_CFUNC_generic, this->m_instanceId
++	    this->m_engine.getContext (), engine_set_timeout, "setTimeout", 2, JS_CFUNC_generic_magic, this->m_instanceId
+ 	),
+ 	JS_PROP_ENUMERABLE
+     );
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index b4ff0489..666df2ac 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -106,7 +106,24 @@ JSValue ScriptEngine::dynamicToJs (DynamicValue& value) const {
+     }
+ }
+ 
+-static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source) {
++JSValue ScriptEngine::dynamicToJsCopy (DynamicValue& value) const {
++    switch (value.getType ()) {
++	case DynamicValue::Vec2:
++	    return this->m_adapters.vec2->instantiate (value, true);
++	case DynamicValue::Vec3:
++	    return this->m_adapters.vec3->instantiate (value, true);
++	case DynamicValue::Vec4:
++	    return this->m_adapters.vec4->instantiate (value, true);
++	default:
++	    return this->dynamicToJs (value);
++    }
++}
++
++/**
++ * Applies a script's return value to the property it drives.
++ * undefined (a script that mutated in place or returned nothing) leaves the value untouched.
++ */
++void ScriptEngine::jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source) {
+     if (JS_IsException (val)) {
+ 	return;
+     }
+@@ -114,7 +131,11 @@ static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source)
+     // scalar types returned directly
+     int tag = JS_VALUE_GET_TAG (val);
+ 
+-    if (tag == JS_TAG_UNDEFINED || tag == JS_TAG_UNINITIALIZED || tag == JS_TAG_NULL) {
++    if (tag == JS_TAG_UNDEFINED || tag == JS_TAG_UNINITIALIZED) {
++	return;
++    }
++
++    if (tag == JS_TAG_NULL) {
+ 	source.update (DynamicValue::UpdateSource::Script);
+ 	return;
+     }
+@@ -126,6 +147,7 @@ static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source)
+ 
+     if (tag == JS_TAG_BOOL) {
+ 	source.update (static_cast<bool> (JS_VALUE_GET_BOOL (val)), DynamicValue::UpdateSource::Script);
++	return;
+     }
+ 
+     if (JS_TAG_IS_FLOAT64 (tag)) {
+@@ -153,11 +175,12 @@ static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source)
+ 	    JS_FreeValue (ctx, w);
+ 	});
+ 
++	// not a vector-like object, nothing sensible to store
+ 	if (!JS_IsNumber (x) || !JS_IsNumber (y)) {
+-	    sLog.exception ("Vector's x and y components must be numbers");
++	    return;
+ 	}
+ 
+-	double xVal = 0.0f, yVal = 0.0f, zVal = 0.0f, wVal = 0.0f;
++	double xVal = 0.0, yVal = 0.0, zVal = 0.0, wVal = 0.0;
+ 
+ 	JS_ToFloat64 (ctx, &xVal, x);
+ 	JS_ToFloat64 (ctx, &yVal, y);
+@@ -167,11 +190,15 @@ static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& source)
+ 	    return;
+ 	}
+ 
++	JS_ToFloat64 (ctx, &zVal, z);
++
+ 	if (!JS_IsNumber (w)) {
+ 	    source.update (glm::vec3 (xVal, yVal, zVal), DynamicValue::UpdateSource::Script);
+ 	    return;
+ 	}
+ 
++	JS_ToFloat64 (ctx, &wVal, w);
++
+ 	source.update (glm::vec4 (xVal, yVal, zVal, wVal), DynamicValue::UpdateSource::Script);
+     }
+ }
+@@ -254,6 +281,7 @@ ScriptEngine::~ScriptEngine () {
+ 
+     for (const auto& module : this->m_scriptModules | std::views::values) {
+ 	JS_FreeValue (this->m_context, module.module);
++	JS_FreeValue (this->m_context, module.thisLayer);
+     }
+ 
+     JS_FreeValue (this->m_context, this->m_globalThis);
+@@ -554,6 +582,11 @@ void ScriptEngine::destroyLayer (ScriptLayerHandle handle) {
+ }
+ 
+ JSValue ScriptEngine::call (JSValue module, int argc, JSValue argv[], const char* name) {
++    // modules that failed to load have no namespace object
++    if (!JS_IsObject (module)) {
++	return JS_UNDEFINED;
++    }
++
+     // check if there's an update method and run it
+     JSValue function = JS_GetPropertyStr (this->m_context, module, name);
+     ScopeGuard guard ([&] () { JS_FreeValue (this->m_context, function); });
+@@ -565,6 +598,42 @@ JSValue ScriptEngine::call (JSValue module, int argc, JSValue argv[], const char
+     return JS_Call (this->m_context, function, module, argc, argv);
+ }
+ 
++void ScriptEngine::logModuleException (const std::string& key, LoadedModule& module, const char* stage) {
++    JSValue exc = JS_GetException (this->m_context);
++    ScopeGuard guard ([&] { JS_FreeValue (this->m_context, exc); });
++
++    if (module.errorLogged) {
++	return;
++    }
++
++    module.errorLogged = true;
++    const char* str = JS_ToCString (this->m_context, exc);
++    sLog.error ("ScriptEngine [", key, " ", stage, "]: ", str ? str : "<unknown error>");
++    JS_FreeCString (this->m_context, str);
++}
++
++void ScriptEngine::runModuleFunction (const std::string& key, LoadedModule& module, const char* name) {
++    this->m_runningModule = &module;
++    // every property script reads `thisLayer` from the global scope, point it at this module's layer
++    JS_SetPropertyStr (
++	this->m_context, this->m_globalThis, "thisLayer", JS_DupValue (this->m_context, module.thisLayer)
++    );
++
++    JSValue args[] = { this->dynamicToJsCopy (module.value) };
++    JSValue result = this->call (module.module, 1, args, name);
++    ScopeGuard guard ([this, args, result] () {
++	JS_FreeValue (this->m_context, result);
++	JS_FreeValue (this->m_context, args[0]);
++    });
++
++    if (JS_IsException (result)) {
++	this->logModuleException (key, module, name);
++	return;
++    }
++
++    jsToDynamicValue (this->m_context, result, module.value);
++}
++
+ void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentValue, ScriptableObject& object) {
+     const auto source = currentValue.getScriptSource ();
+ 
+@@ -572,46 +641,61 @@ void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentVal
+ 	return;
+     }
+ 
+-    auto it = this->m_scriptModules.find (key);
+-
+-    if (it != this->m_scriptModules.end ()) {
++    if (this->m_scriptModules.contains (key)) {
+ 	return;
+     }
+ 
+-    // load the script and store it
+-    JSValue module = JS_Eval (this->m_context, source->c_str (), source->size (), key.c_str (), JS_EVAL_TYPE_MODULE);
+-
+     auto inserted = this->m_scriptModules.emplace (
+ 	key,
+ 	LoadedModule {
+ 	    .value = currentValue,
+-	    .module = module,
++	    .module = JS_UNDEFINED,
++	    .thisLayer = this->m_adapters.object->instantiate (object),
+ 	}
+     );
++    auto& loaded = inserted.first->second;
++
++    // the module's top level usually calls createScriptProperties().finish(),
++    // which binds to the running module, so set it (and thisLayer) up front
++    this->m_runningModule = &loaded;
++    JS_SetPropertyStr (
++	this->m_context, this->m_globalThis, "thisLayer", JS_DupValue (this->m_context, loaded.thisLayer)
++    );
+ 
+-    if (!inserted.second) {
++    // JS_Eval on a module returns the evaluation promise, not the exports, so
++    // compile first to keep the module definition and read its namespace after
++    JSValue compiled = JS_Eval (
++	this->m_context, source->c_str (), source->size (), key.c_str (),
++	JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY
++    );
++
++    if (JS_IsException (compiled)) {
++	this->logModuleException (key, loaded, "compile");
+ 	return;
+     }
+ 
+-    JS_SetPropertyStr (this->m_context, this->m_globalThis, "thisLayer", this->m_adapters.object->instantiate (object));
++    auto* definition = static_cast<JSModuleDef*> (JS_VALUE_GET_PTR (compiled));
++    JSValue evaluation = JS_EvalFunction (this->m_context, compiled);
++
++    if (JS_IsException (evaluation)) {
++	this->logModuleException (key, loaded, "load");
++	return;
++    }
+ 
+-    // script properties do not need update as they're connected directly to the source data
+-    this->m_runningModule = &inserted.first->second;
++    const bool rejected = JS_PromiseState (this->m_context, evaluation) == JS_PROMISE_REJECTED;
+ 
+-    // check if there's an update method and run it
+-    JSValue args[] = { this->dynamicToJs (currentValue) };
+-    JSValue result = this->call (module, 1, args, "update");
++    if (rejected) {
++	JS_Throw (this->m_context, JS_PromiseResult (this->m_context, evaluation));
++	this->logModuleException (key, loaded, "load");
++    }
+ 
+-    ScopeGuard guard2 ([this, args, result] () {
+-	JS_FreeValue (this->m_context, result);
+-	JS_FreeValue (this->m_context, args[0]);
+-    });
++    JS_FreeValue (this->m_context, evaluation);
+ 
+-    if (JS_IsException (result)) {
++    if (rejected) {
+ 	return;
+     }
+ 
+-    jsToDynamicValue (this->m_context, result, currentValue);
++    loaded.module = JS_GetModuleNamespace (this->m_context, definition);
+ }
+ 
+ void ScriptEngine::tick () {
+@@ -620,22 +704,18 @@ void ScriptEngine::tick () {
+ 
+     // run any pending notifications
+ 
+-    // run all update methods
+-    for (auto& module : this->m_scriptModules | std::views::values) {
+-	this->m_runningModule = &module;
+-
+-	JSValue args[] = { this->dynamicToJs (module.value) };
+-	JSValue result = this->call (module.module, 1, args, "update");
+-	ScopeGuard guard ([result, args, this] () {
+-	    JS_FreeValue (this->m_context, result);
+-	    JS_FreeValue (this->m_context, args[0]);
+-	});
+-
+-	if (JS_IsException (result)) {
++    // run init once, then update every frame
++    for (auto& [key, module] : this->m_scriptModules) {
++	if (!JS_IsObject (module.module)) {
+ 	    continue;
+ 	}
+ 
+-	jsToDynamicValue (this->m_context, result, module.value);
++	if (!module.initialized) {
++	    module.initialized = true;
++	    this->runModuleFunction (key, module, "init");
++	}
++
++	this->runModuleFunction (key, module, "update");
+     }
+ }
+ 
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index 8fba5b7f..c44aa089 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -44,9 +44,19 @@ static constexpr ScriptLayerHandle kInvalidLayerHandle = 0;
+ 
+ class ScriptEngine {
+ public:
++    /**
++     * A property script (e.g. a scripted "origin") loaded as an ES module.
++     *
++     * `module` is the module namespace (holds the exports such as init/update),
++     * or JS_UNDEFINED when loading failed. `thisLayer` is the ILayer object the
++     * script sees as the global `thisLayer` while any of its functions run.
++     */
+     struct LoadedModule {
+ 	DynamicValue& value;
+ 	JSValue module;
++	JSValue thisLayer;
++	bool initialized = false;
++	bool errorLogged = false;
+     };
+     struct JSObjectAdapters {
+ 	std::unique_ptr<Adapters::VectorAdapter<4>> vec4;
+@@ -65,19 +75,34 @@ public:
+     JSValue getGlobalThis () const { return m_globalThis; }
+     LoadedModule* getRunningModule () const { return m_runningModule; }
+     JSValue dynamicToJs (DynamicValue& value) const;
++    /**
++     * Like dynamicToJs, but vectors are detached copies instead of live
++     * bindings, so scripts can modify them without touching engine state
++     * (Wallpaper Engine hands scripts copies, e.g. `thisLayer.size`).
++     */
++    JSValue dynamicToJsCopy (DynamicValue& value) const;
++    /**
++     * Stores a script value (number, bool, string or {x, y[, z[, w]]} object) into `target`.
++     * undefined leaves `target` untouched, null clears it.
++     */
++    static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& target);
+ 
+     /**
+-     * Evaluate a WallpaperEngine script's update() function.
++     * Load a property script (ES module) for the given object property.
++     *
++     * The module's top level runs immediately. Its `init(value)` export runs
++     * on the first tick() and `update(value)` on every tick(); a return value
++     * from either replaces the property value.
+      *
+-     * @param key The full JS script text (ES6 module with export function update(value))
+-     * @param currentValue The current value to pass to update()
+-     * @return The modified value from update(), or a copy of currentValue on error
++     * @param key Unique module key (property name + object id)
++     * @param currentValue The property value the script drives
++     * @param object The object exposed to the script as `thisLayer`
+      */
+     void queueScript (const std::string& key, DynamicValue& currentValue, ScriptableObject& object);
+ 
+     /**
+      * Runs a frame tick in the javascript engine. Dispatches any pending events,
+-     * timeouts, intervals AND calls any update() functions.
++     * timeouts, intervals AND calls any init()/update() functions.
+      */
+     void tick ();
+ 
+@@ -140,6 +165,10 @@ public:
+ 
+ private:
+     JSValue call (JSValue module, int argc, JSValueConst argv[], const char* name);
++    /** Calls `name` on a property script with a copy of its value and applies the result */
++    void runModuleFunction (const std::string& key, LoadedModule& module, const char* name);
++    /** Logs the pending JS exception once per module so per-frame errors don't spam */
++    void logModuleException (const std::string& key, LoadedModule& module, const char* stage);
+ 
+     void installBuiltins ();
+ 
+diff --git a/src/WallpaperEngine/Scripting/ScriptPropertiesObject.cpp b/src/WallpaperEngine/Scripting/ScriptPropertiesObject.cpp
+index f25e7882..9e396ccf 100644
+--- a/src/WallpaperEngine/Scripting/ScriptPropertiesObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptPropertiesObject.cpp
+@@ -58,7 +58,8 @@ JSValue scriptpropertiescreator_add (JSContext* ctx, JSValueConst this_val, int
+     // no need to do anything, any add call should just return itself
+     // we'll set them either way as what comes in the DynamicValue
+     // TODO: PROPERLY IMPLEMENT THIS CHAIN AT SOME POINT
+-    return this_val;
++    // returning this_val hands a new reference to the caller, it must be dup'd or the chain frees the builder early
++    return JS_DupValue (ctx, this_val);
+ }
+ 
+ JSValue scriptpropertiescreator_finish (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+@@ -169,7 +170,7 @@ ScriptPropertiesObject::ScriptPropertiesObject (ScriptEngine& engine, Render::Wa
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_engine.getGlobalThis (), "createScriptProperties",
+ 	JS_NewCFunctionMagic (
+-	    this->m_engine.getContext (), scriptpropertiescreator_create, "createScriptProperties", 0, JS_CFUNC_generic,
++	    this->m_engine.getContext (), scriptpropertiescreator_create, "createScriptProperties", 0, JS_CFUNC_generic_magic,
+ 	    m_instanceId
+ 	),
+ 	JS_PROP_ENUMERABLE
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index bfd4be81..8853f17f 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -30,14 +30,24 @@ const std::map<std::string, ScriptableObject::PropertyEntry>& ScriptableObject::
+     return this->m_properties;
+ }
+ 
+-void ScriptableObject::registerProperty (const std::string& name, DynamicValue& value) {
++void ScriptableObject::registerProperty (const std::string& name, DynamicValue& value, bool runScript) {
+     auto inserted = this->m_properties.emplace (
+ 	name, PropertyEntry { .key = name + "_" + std::to_string (this->getId ()), .value = value }
+     );
+ 
+-    if (!inserted.second) {
++    if (!inserted.second || !runScript) {
+ 	return;
+     }
+ 
+     this->getScene ().getScriptEngine ().queueScript (inserted.first->second.key, inserted.first->second.value, *this);
+ }
++
++void ScriptableObject::registerConstant (const std::string& name, const DynamicValue& value) {
++    if (this->m_properties.contains (name)) {
++	return;
++    }
++
++    auto& stored = this->m_constants[name];
++    stored = std::make_unique<DynamicValue> (value);
++    this->registerProperty (name, *stored, false);
++}
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.h b/src/WallpaperEngine/Scripting/ScriptableObject.h
+index 3d658938..55b12b2d 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.h
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.h
+@@ -2,6 +2,10 @@
+ #include "WallpaperEngine/Data/Model/Types.h"
+ #include "WallpaperEngine/Render/CObject.h"
+ 
++#include <map>
++#include <memory>
++#include <string>
++
+ namespace WallpaperEngine::Render::Wallpapers {
+ class CScene;
+ }
+@@ -22,9 +26,18 @@ public:
+     const std::map<std::string, PropertyEntry>& getProperties () const;
+ 
+ protected:
+-    void registerProperty (const std::string& name, DynamicValue& value);
++    /**
++     * Exposes a property to scripts as `thisLayer.<name>`.
++     *
++     * @param runScript When true and the value carries a script, the script is loaded and
++     *        driven by the ScriptEngine. Pass false when the owner runs the script itself.
++     */
++    void registerProperty (const std::string& name, DynamicValue& value, bool runScript = true);
++    /** Exposes a fixed value (e.g. the layer size) to scripts; the object owns the storage */
++    void registerConstant (const std::string& name, const DynamicValue& value);
+ 
+ private:
+     std::map<std::string, PropertyEntry> m_properties;
++    std::map<std::string, std::unique_ptr<DynamicValue>> m_constants;
+ };
+ }
+\ No newline at end of file

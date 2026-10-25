@@ -1,0 +1,84 @@
+From e3efe5f7df8dae5f89e4d3867a9d43c268006c47 Mon Sep 17 00:00:00 2001
+From: Greg Gage <zedle@zedle.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 07/28] upstream #694: fix: stop leaking PulseAudio capture
+ streams on sink/source events
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/694 (by zedle) until it is merged upstream.
+---
+ .../Recorders/PulseAudioPlaybackRecorder.cpp  | 25 ++++++++++++++++---
+ .../Recorders/PulseAudioPlaybackRecorder.h    |  2 ++
+ 2 files changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
+index 5831d4ae..0cd7574e 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
++++ b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
+@@ -107,18 +107,36 @@ void pa_server_info_cb (pa_context* ctx, const pa_server_info* info, void* userd
+     spec.rate = 44100;
+     spec.channels = 1;
+ 
++    std::string monitor_name (info->default_sink_name);
++    monitor_name += ".monitor";
++
++    // Every sink/source event lands here; keep a healthy stream that already
++    // records the default sink's monitor instead of opening another one.
+     if (recorder->captureStream) {
++	const pa_stream_state_t state = pa_stream_get_state (recorder->captureStream);
++	// A ready stream can be moved to another source: check where it records now.
++	// One still connecting is checked against the source it was asked for.
++	const char* device = state == PA_STREAM_READY ? pa_stream_get_device_name (recorder->captureStream) : nullptr;
++	const bool current = state == PA_STREAM_READY ? (device != nullptr && monitor_name == device)
++						      : (state == PA_STREAM_CREATING && recorder->monitorName == monitor_name);
++	if (current) {
++	    return;
++	}
++    }
++
++    // unref alone leaves a connected stream recording on the server: disconnect first.
++    if (recorder->captureStream) {
++	pa_stream_disconnect (recorder->captureStream);
+ 	pa_stream_unref (recorder->captureStream);
++	recorder->captureStream = nullptr;
+     }
++    recorder->monitorName = monitor_name;
+ 
+     recorder->captureStream = pa_stream_new (ctx, "output monitor", &spec, nullptr);
+ 
+     pa_stream_set_state_callback (recorder->captureStream, &pa_stream_notify_cb, userdata);
+     pa_stream_set_read_callback (recorder->captureStream, &pa_stream_read_cb, userdata);
+ 
+-    std::string monitor_name (info->default_sink_name);
+-    monitor_name += ".monitor";
+-
+     // setup latency
+     pa_buffer_attr attr {};
+ 
+@@ -199,6 +217,7 @@ PulseAudioPlaybackRecorder::PulseAudioPlaybackRecorder () :
+ 
+ PulseAudioPlaybackRecorder::~PulseAudioPlaybackRecorder () {
+     if (m_captureData.captureStream) {
++	pa_stream_disconnect (m_captureData.captureStream);
+ 	pa_stream_unref (m_captureData.captureStream);
+     }
+ 
+diff --git a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.h b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.h
+index ac6c0341..86e1ec5d 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.h
++++ b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.h
+@@ -3,6 +3,7 @@
+ #include "PlaybackRecorder.h"
+ #include "kiss_fftr.h"
+ #include <pulse/pulseaudio.h>
++#include <string>
+ 
+ #define WAVE_BUFFER_SIZE 1024
+ 
+@@ -21,6 +22,7 @@ public:
+ 	size_t currentWritePointer;
+ 	bool fullFrameReady;
+ 	pa_stream* captureStream;
++	std::string monitorName;
+     };
+ 
+     PulseAudioPlaybackRecorder ();

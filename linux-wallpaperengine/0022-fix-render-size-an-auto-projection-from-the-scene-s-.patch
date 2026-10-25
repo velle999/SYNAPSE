@@ -1,0 +1,52 @@
+From 2aa48e5522ab71e3c602f61010fcc46b2b24a2bc Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:14:53 -0500
+Subject: [PATCH 22/28] fix(render): size an auto projection from the scene's
+ bottom-left corner
+
+A scene whose camera projection is "auto" is sized from its images. The
+extent was taken as reaching both ways from the origin, but scene
+coordinates start at the bottom-left corner, so the scene came out
+twice its size and drew in one quadrant of the screen (the GIF imports
+1106482654 and 1680940087). The scene now reaches to each image's far
+edge; an image with no size of its own is centred on its origin, as
+Wallpaper Engine's GIF import writes it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Render/Wallpapers/CScene.cpp                | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CScene.cpp b/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
+index ab63d78e..dd470973 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
+@@ -51,16 +51,21 @@ CScene::CScene (
+ 		continue;
+ 	    }
+ 
+-	    const glm::vec3 origin = image->origin->value->getVec3 ();
++	    const glm::vec2 origin = image->origin->value->getVec3 ();
+ 	    const glm::vec2 halfSize = image->size / 2.0f;
+-
+-	    maxExtent.x = glm::max (maxExtent.x, glm::abs (origin.x) + halfSize.x);
+-	    maxExtent.y = glm::max (maxExtent.y, glm::abs (origin.y) + halfSize.y);
++	    // scene coordinates start at the bottom-left corner, so the scene reaches to
++	    // the image's far edge; one with no size of its own is centred on its origin,
++	    // as the GIF import writes it. Treating the extent as reaching both ways from 0
++	    // doubled the scene and drew GIF scenes in one quadrant (workshop 1106482654,
++	    // 1680940087)
++	    const glm::vec2 extent = halfSize.x > 0.0f && halfSize.y > 0.0f ? origin + halfSize : origin * 2.0f;
++
++	    maxExtent = glm::max (maxExtent, extent);
+ 	}
+ 
+ 	if (maxExtent.x > 0.0f && maxExtent.y > 0.0f) {
+-	    width = maxExtent.x * 2.0f;
+-	    height = maxExtent.y * 2.0f;
++	    width = maxExtent.x;
++	    height = maxExtent.y;
+ 	} else {
+ 	    width = this->getContext ().getOutput ().getFullWidth ();
+ 	    height = this->getContext ().getOutput ().getFullHeight ();

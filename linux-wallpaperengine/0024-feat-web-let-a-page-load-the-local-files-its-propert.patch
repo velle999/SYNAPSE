@@ -1,0 +1,414 @@
+From 2d2bd2d2bb98161a527f3de27a799d162c7c42b4 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:20:51 -0500
+Subject: [PATCH 24/28] feat(web): let a page load the local files its
+ properties name
+
+Pages load a file or directory property as "file:///" + value, and
+Chromium refuses a file: URL to a page of another scheme, so a preset's
+own image or video (kept in the preset's folder, not the wallpaper's)
+never appeared: the Nezuko presets of 1081733658 showed the visualizer
+on black.
+
+The web API shim now maps those URLs to a path under the page's own
+scheme, which the scheme handler serves only for a file one of the
+properties names, or one directly inside a folder a directory property
+names. Paths are made canonical first, so neither ".." nor a symlink
+reaches anything else; everything else is refused and logged. Staying
+on the page's origin keeps a canvas the file is drawn into readable.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Render/Wallpapers/CWeb.cpp                |  3 +
+ .../Testing/Cases/WebProperties.cpp           | 44 +++++++++
+ .../WebBrowser/CEF/WPSchemeHandler.cpp        | 39 +++++++-
+ src/WallpaperEngine/WebBrowser/CEF/WebApi.h   | 94 +++++++++++++++++++
+ .../WebBrowser/CEF/WebProperties.cpp          | 57 +++++++++++
+ .../WebBrowser/CEF/WebProperties.h            | 22 +++++
+ 6 files changed, 258 insertions(+), 1 deletion(-)
+
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+index 2216009f..57b140ad 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+@@ -141,6 +141,9 @@ std::string CWeb::buildPropertiesScript () const {
+ 	[&project] (const std::filesystem::path& path) { return project.assetLocator->physicalPath (path); }
+     );
+ 
++    // before the browser exists, so it is in place for the page's first request
++    WebProperties::allowLocalFiles (project.workshopId, payload.localFiles);
++
+     return WebProperties::script (payload);
+ }
+ 
+diff --git a/src/WallpaperEngine/Testing/Cases/WebProperties.cpp b/src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+index 20df6d93..a5b0f327 100644
+--- a/src/WallpaperEngine/Testing/Cases/WebProperties.cpp
++++ b/src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+@@ -3,6 +3,7 @@
+ #include <algorithm>
+ #include <filesystem>
+ #include <fstream>
++#include <set>
+ #include <stdexcept>
+ #include <string>
+ #include <unistd.h>
+@@ -166,3 +167,46 @@ TEST_CASE ("The web properties script is one call that survives any property tex
+     const auto arguments = script.substr (std::string (WebApi::deliverPrefix).size ());
+     CHECK (std::ranges::all_of (arguments, [] (const unsigned char c) { return c < 0x80; }));
+ }
++
++TEST_CASE ("A web page may load only the local files its properties name") {
++    const auto root = std::filesystem::temp_directory_path () / ("lwe-weblocal-" + std::to_string (getpid ()));
++    std::filesystem::remove_all (root);
++    std::filesystem::create_directories (root / "preset" / "files");
++    std::filesystem::create_directories (root / "slides");
++    std::ofstream (root / "preset" / "files" / "picture.jpg") << "p";
++    std::ofstream (root / "preset" / "secret.txt") << "s";
++    std::ofstream (root / "slides" / "one.png") << "1";
++    std::filesystem::create_symlink (root / "preset" / "secret.txt", root / "slides" / "link.png");
++
++    const auto payload = WebProperties::build (
++	project ({
++	    { "background", { { "type", "file" }, { "value", "" } } },
++	    { "slides", { { "type", "directory" }, { "value", "" } } },
++	    { "missing", { { "type", "file" }, { "value", "" } } },
++	}),
++	{
++	    { "background", (root / "preset" / "files" / "picture.jpg").string () },
++	    { "slides", (root / "slides").string () },
++	    { "missing", (root / "preset" / "gone.jpg").string () },
++	},
++	30, noFiles
++    );
++
++    // the symlink in the named folder points outside it, so it reaches nothing
++    CHECK (payload.localFiles == std::set<std::filesystem::path> {
++	std::filesystem::canonical (root / "preset" / "files" / "picture.jpg"),
++	std::filesystem::canonical (root / "slides" / "one.png"),
++    });
++
++    const std::string id = "lwe-test-" + std::to_string (getpid ());
++    WebProperties::allowLocalFiles (id, { std::filesystem::canonical (root / "preset" / "files" / "picture.jpg") });
++
++    CHECK (WebProperties::isLocalFileAllowed (id, root / "preset" / "files" / "picture.jpg"));
++    CHECK (WebProperties::isLocalFileAllowed (id, root / "preset" / "files" / ".." / "files" / "picture.jpg"));
++    CHECK_FALSE (WebProperties::isLocalFileAllowed (id, root / "preset" / "secret.txt"));
++    CHECK_FALSE (WebProperties::isLocalFileAllowed (id, root / "preset" / "files"));
++    CHECK_FALSE (WebProperties::isLocalFileAllowed (id, root / "preset" / "gone.jpg"));
++    CHECK_FALSE (WebProperties::isLocalFileAllowed ("another-wallpaper", root / "preset" / "files" / "picture.jpg"));
++
++    std::filesystem::remove_all (root);
++}
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
+index 9d78fe76..58db7ba9 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
+@@ -1,15 +1,43 @@
+ #include "WPSchemeHandler.h"
+ #include "WallpaperEngine/Assets/AssetLoadException.h"
+ #include <filesystem>
++#include <fstream>
+ #include <iostream>
+ 
+ #include "MimeTypes.h"
+ #include "include/cef_parser.h"
+ 
+ #include "WallpaperEngine/Data/Model/Project.h"
++#include "WallpaperEngine/Logging/Log.h"
++#include "WebProperties.h"
+ 
+ using namespace WallpaperEngine::WebBrowser::CEF;
+ 
++namespace {
++/**
++ * Opens a local file a page asked for through WebProperties::LOCAL_PREFIX, if one of
++ * its properties names it; anything else is not found.
++ */
++ReadStreamSharedPtr openLocal (const std::string& workshopId, std::string path) {
++    // "file:///" + "/home/..." arrives with its slashes doubled; the path is absolute either way
++    path.erase (0, path.find_first_not_of ('/'));
++    const std::filesystem::path local = "/" + path;
++
++    if (!WebProperties::isLocalFileAllowed (workshopId, local)) {
++	sLog.error ("web: refused a local file no property names: ", local.string ());
++	return nullptr;
++    }
++
++    auto stream = std::make_shared<std::ifstream> (local, std::ios::binary);
++
++    if (!*stream) {
++	return nullptr;
++    }
++
++    return stream;
++}
++} // namespace
++
+ WPSchemeHandler::WPSchemeHandler (const Project& project) :
+     m_project (project), m_assetLoader (*this->m_project.assetLocator) { }
+ 
+@@ -59,7 +87,16 @@ bool WPSchemeHandler::Open (CefRefPtr<CefRequest> request, bool& handle_request,
+ 	    this->m_mimeType = mime;
+ 	}
+ 
+-	this->m_contents = this->m_assetLoader.read (file);
++	if (file.starts_with (WebProperties::LOCAL_PREFIX)) {
++	    this->m_contents = openLocal (this->m_project.workshopId, file.substr (WebProperties::LOCAL_PREFIX.size ()));
++	} else {
++	    this->m_contents = this->m_assetLoader.read (file);
++	}
++
++	if (!this->m_contents) {
++	    handle_request = true;
++	    return true;
++	}
+ 
+ 	// the length is what lets CEF answer Range requests (it skips and trims itself);
+ 	// without one a <video> source is refused outright (MEDIA_ERR_SRC_NOT_SUPPORTED,
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebApi.h b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+index 6e91431c..5d3838ed 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+@@ -102,6 +102,100 @@ inline constexpr const char* shim = R"JS(
+     ['Properties', 'Thumbnail', 'Playback', 'Timeline'].forEach (function (kind) {
+         window['wallpaperRegisterMedia' + kind + 'Listener'] = function () {};
+     });
++
++    // Pages load the files their properties name as "file:///" + value, which Chromium
++    // refuses to a page of this scheme. Those URLs are mapped onto the page's own
++    // origin, where the engine serves the files the properties name and nothing else.
++    // Kept to the places pages put such a URL: element sources, styles, fetch and XHR.
++    var local = '/__wpe_local__/';
++
++    function mapUrl (url) {
++        if (typeof url !== 'string' || url.slice (0, 8).toLowerCase () !== 'file:///') {
++            return url;
++        }
++        return location.protocol + '//' + location.host + local + url.slice (8);
++    }
++
++    function mapCss (text) {
++        if (typeof text !== 'string') {
++            return text;
++        }
++        return text.replace (/url\(\s*(['"]?)file:\/\/\//gi, function (match, quote) {
++            return 'url(' + quote + location.protocol + '//' + location.host + local;
++        });
++    }
++
++    function wrapSetter (proto, name, map) {
++        var descriptor = proto && Object.getOwnPropertyDescriptor (proto, name);
++        if (!descriptor || !descriptor.set) {
++            return;
++        }
++        Object.defineProperty (proto, name, {
++            configurable: true,
++            enumerable: descriptor.enumerable,
++            get: descriptor.get,
++            set: function (value) { descriptor.set.call (this, map (value)); }
++        });
++    }
++
++    wrapSetter (window.HTMLImageElement && HTMLImageElement.prototype, 'src', mapUrl);
++    wrapSetter (window.HTMLMediaElement && HTMLMediaElement.prototype, 'src', mapUrl);
++    wrapSetter (window.HTMLSourceElement && HTMLSourceElement.prototype, 'src', mapUrl);
++    wrapSetter (window.HTMLVideoElement && HTMLVideoElement.prototype, 'poster', mapUrl);
++    wrapSetter (window.Element && Element.prototype, 'innerHTML', function (html) {
++        return typeof html === 'string' ? html.replace (/(["'(])file:\/\/\//gi, function (match, open) {
++            return open + location.protocol + '//' + location.host + local;
++        }) : html;
++    });
++    ['background', 'backgroundImage', 'cssText', 'content', 'listStyleImage', 'borderImage',
++     'borderImageSource', 'maskImage', 'webkitMaskImage'].forEach (function (name) {
++        wrapSetter (window.CSSStyleDeclaration && CSSStyleDeclaration.prototype, name, mapCss);
++    });
++
++    if (window.CSSStyleDeclaration) {
++        var setProperty = CSSStyleDeclaration.prototype.setProperty;
++        CSSStyleDeclaration.prototype.setProperty = function (name, value, priority) {
++            return setProperty.call (this, name, mapCss (value), priority);
++        };
++    }
++
++    if (window.Element) {
++        var setAttribute = Element.prototype.setAttribute;
++        Element.prototype.setAttribute = function (name, value) {
++            var attribute = String (name).toLowerCase ();
++            if (attribute === 'src' || attribute === 'poster' || attribute === 'href') {
++                value = mapUrl (typeof value === 'string' ? value : String (value));
++            } else if (attribute === 'style') {
++                value = mapCss (typeof value === 'string' ? value : String (value));
++            }
++            return setAttribute.call (this, name, value);
++        };
++    }
++
++    if (window.fetch) {
++        var fetch = window.fetch;
++        window.fetch = function (input, init) {
++            return fetch.call (this, typeof input === 'string' ? mapUrl (input) : input, init);
++        };
++    }
++
++    if (window.XMLHttpRequest) {
++        var open = XMLHttpRequest.prototype.open;
++        XMLHttpRequest.prototype.open = function (method, url) {
++            var args = Array.prototype.slice.call (arguments);
++            args[1] = mapUrl (typeof url === 'string' ? url : String (url));
++            return open.apply (this, args);
++        };
++    }
++
++    if (window.Audio) {
++        var NativeAudio = window.Audio;
++        var Audio = function Audio (src) {
++            return arguments.length ? new NativeAudio (mapUrl (src)) : new NativeAudio ();
++        };
++        Audio.prototype = NativeAudio.prototype;
++        window.Audio = Audio;
++    }
+ }) ();
+ )JS";
+ 
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
+index f18838cb..793f1f83 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
+@@ -4,6 +4,7 @@
+ #include <algorithm>
+ #include <charconv>
+ #include <cmath>
++#include <mutex>
+ #include <system_error>
+ 
+ using namespace WallpaperEngine::WebBrowser::CEF;
+@@ -11,6 +12,36 @@ using namespace WallpaperEngine::WebBrowser::CEF;
+ namespace {
+ using WallpaperEngine::Data::JSON::JSON;
+ 
++// written while a web wallpaper is set up, read from CEF's IO thread
++std::mutex localFilesMutex;
++std::map<std::string, std::set<std::filesystem::path>> localFiles;
++
++/**
++ * Adds path to files, canonical, if it is a regular file and, when within is given,
++ * really inside that folder: a symlink in a folder must not reach outside it
++ */
++void addLocalFile (
++    std::set<std::filesystem::path>& files, const std::filesystem::path& path,
++    const std::filesystem::path& within = {}
++) {
++    std::error_code ec;
++    const auto canonical = std::filesystem::canonical (path, ec);
++
++    if (ec || !std::filesystem::is_regular_file (canonical, ec)) {
++	return;
++    }
++
++    if (!within.empty ()) {
++	const auto [end, rest] = std::ranges::mismatch (within, canonical);
++
++	if (end != within.end ()) {
++	    return;
++	}
++    }
++
++    files.insert (canonical);
++}
++
+ /**
+  * --set-property values are always strings; hand the page the type project.json gives
+  * the property. A combo keeps a number when the project wrote one, since pages compare
+@@ -101,14 +132,21 @@ WebProperties::Payload WebProperties::build (
+ 	    if (type == "directory") {
+ 		std::error_code ec;
+ 		JSON list = JSON::array ();
++		const auto folder = std::filesystem::canonical (path, ec);
+ 
+ 		for (const auto& entry : std::filesystem::directory_iterator (path, ec)) {
+ 		    if (entry.is_regular_file (ec)) {
+ 			list.push_back (entry.path ().string ());
++
++			if (!folder.empty ()) {
++			    addLocalFile (payload.localFiles, entry.path (), folder);
++			}
+ 		    }
+ 		}
+ 
+ 		payload.files [name] = list;
++	    } else if (path.is_absolute ()) {
++		addLocalFile (payload.localFiles, path);
+ 	    }
+ 	}
+ 
+@@ -118,6 +156,25 @@ WebProperties::Payload WebProperties::build (
+     return payload;
+ }
+ 
++void WebProperties::allowLocalFiles (const std::string& workshopId, const std::set<std::filesystem::path>& files) {
++    std::scoped_lock lock (localFilesMutex);
++    localFiles [workshopId].insert (files.begin (), files.end ());
++}
++
++bool WebProperties::isLocalFileAllowed (const std::string& workshopId, const std::filesystem::path& file) {
++    std::error_code ec;
++    const auto canonical = std::filesystem::canonical (file, ec);
++
++    if (ec) {
++	return false;
++    }
++
++    std::scoped_lock lock (localFilesMutex);
++    const auto it = localFiles.find (workshopId);
++
++    return it != localFiles.end () && it->second.contains (canonical);
++}
++
+ std::string WebProperties::script (const Payload& payload) {
+     // replace, not throw: a project.json string that is not valid UTF-8 must not cost
+     // the page every other property
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+index 4f16c875..5df5ec21 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+@@ -3,7 +3,9 @@
+ #include <filesystem>
+ #include <functional>
+ #include <map>
++#include <set>
+ #include <string>
++#include <string_view>
+ 
+ #include "WallpaperEngine/Data/JSON.h"
+ 
+@@ -18,8 +20,28 @@ struct Payload {
+     JSON user = JSON::object ();
+     /** The files of each directory property, for wallpaperRequestRandomFileForProperty */
+     JSON files = JSON::object ();
++    /** Every file the properties name, canonical: the only local files the page may load */
++    std::set<std::filesystem::path> localFiles;
+ };
+ 
++/**
++ * Where a page reaches the local files its properties name, under its own scheme's
++ * root. Pages load them as "file:///" + value, which Chromium refuses to a page of
++ * another scheme, so the web API shim maps those URLs here. It stays on the page's
++ * own origin so a canvas the file is drawn into can still be read back.
++ */
++inline constexpr std::string_view LOCAL_PREFIX = "__wpe_local__/";
++
++/** Lets the pages of a wallpaper load these local files too */
++void allowLocalFiles (const std::string& workshopId, const std::set<std::filesystem::path>& files);
++
++/**
++ * Whether a page of the wallpaper may load this local file: only if one of its
++ * properties names it, or names the folder it is in. The path is made canonical
++ * first, so neither ".." nor a symlink reaches anything else.
++ */
++[[nodiscard]] bool isLocalFileAllowed (const std::string& workshopId, const std::filesystem::path& file);
++
+ /** Turns a path inside the project into one on disk; throws when the project has no such file */
+ using Resolver = std::function<std::filesystem::path (const std::filesystem::path&)>;
+ 

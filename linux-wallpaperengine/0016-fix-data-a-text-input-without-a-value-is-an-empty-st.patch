@@ -1,0 +1,62 @@
+From f9fe1a30c78f7fd052d77d25a41293474dfa482d Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 16/28] fix(data): a text input without a value is an empty
+ string
+
+The editor writes no value for a text box nobody has typed into, and
+parseTextInput required one, so the property threw and the whole
+wallpaper failed to load (workshop 884307090).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Data/Parsers/PropertyParser.cpp                |  7 ++++++-
+ .../Testing/Cases/PropertyParser.cpp               | 14 +++++++++++++-
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp b/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
+index d09591d5..cddbe381 100644
+--- a/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
+@@ -142,11 +142,16 @@ PropertySharedPtr PropertyParser::parseFile (const JSON& it, const std::string&
+ }
+ 
+ PropertySharedPtr PropertyParser::parseTextInput (const JSON& it, const std::string& name) {
++    // a text input the user has never typed into is written without a value (workshop
++    // 884307090), and requiring one aborted the whole wallpaper; it is an empty string
++    const auto value = it.find ("value");
++    const bool present = value != it.end () && !value->is_null ();
++
+     return std::make_shared<PropertyTextInput> (
+ 	PropertyData {
+ 	    .name = name,
+ 	    .text = it.optional<std::string> ("text", ""),
+ 	},
+-	it.require ("value", "Property must have a value").dump ()
++	present ? value->dump () : JSON (std::string ()).dump ()
+     );
+ }
+diff --git a/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp b/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+index c0bf921f..7c8fa53c 100644
+--- a/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
++++ b/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+@@ -30,4 +30,16 @@ TEST_CASE ("Directory properties are parsed as file-like properties") {
+ 
+     REQUIRE (property != nullptr);
+     CHECK (property->dump ().find ("folder - file") != std::string::npos);
+-}
+\ No newline at end of file
++}
++TEST_CASE ("Text input properties without a value are an empty string") {
++    // the editor writes no value for a text box nobody has typed into (workshop 884307090)
++    const JSON propertyData = {
++	{ "type", "textinput" },
++	{ "text", "City Weather" },
++    };
++
++    const auto property = PropertyParser::parse (propertyData, "weather_city");
++
++    REQUIRE (property != nullptr);
++    CHECK (property->getType () == DynamicValue::String);
++}

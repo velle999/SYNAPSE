@@ -1,0 +1,33 @@
+From ef35480e958d863f1185107e150b2794f437b1e1 Mon Sep 17 00:00:00 2001
+From: ElXreno <elxreno@gmail.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 06/28] upstream #668: fix(wayland): exit when the compositor
+ closes the last layer surface
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/668 (by ElXreno) until it is merged upstream.
+---
+ .../Render/Drivers/WaylandOpenGLDriver.cpp            | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/WallpaperEngine/Render/Drivers/WaylandOpenGLDriver.cpp b/src/WallpaperEngine/Render/Drivers/WaylandOpenGLDriver.cpp
+index e4b722d9..2242ddf2 100644
+--- a/src/WallpaperEngine/Render/Drivers/WaylandOpenGLDriver.cpp
++++ b/src/WallpaperEngine/Render/Drivers/WaylandOpenGLDriver.cpp
+@@ -258,6 +258,17 @@ void WaylandOpenGLDriver::onLayerClose (Output::WaylandOutputViewport* viewport)
+     // remove the output from the list
+     std::erase (this->m_screens, viewport);
+ 
++    // outputs the user did not ask for stay in the list without a layer surface, so check for
++    // an actual drawing target: with none left there are no frame callbacks to wake us up and
++    // wl_display_dispatch would block forever
++    const bool anyLayerSurface = std::ranges::any_of (
++	this->m_screens, [] (const auto* screen) { return screen->layerSurface != nullptr; }
++    );
++
++    if (!anyLayerSurface) {
++	this->m_requestedExit = true;
++    }
++
+     // reset the viewports
+     this->getOutput ().reset ();
+ 

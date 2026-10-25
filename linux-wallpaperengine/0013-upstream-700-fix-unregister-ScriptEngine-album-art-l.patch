@@ -1,0 +1,23 @@
+From 811db0eb12a50a03366f224dbdc07d2fa1e841b9 Mon Sep 17 00:00:00 2001
+From: dajiaohuang <mikewushuwen@outlook.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 13/28] upstream #700: fix: unregister ScriptEngine album art
+ listener
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/700 (by dajiaohuang) until it is merged upstream.
+---
+ src/WallpaperEngine/Scripting/ScriptEngine.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 0f59e4a3..b4ff0489 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -250,6 +250,7 @@ ScriptEngine::ScriptEngine (Wallpapers::CScene& scene, Media::MediaSource& media
+ 
+ ScriptEngine::~ScriptEngine () {
+     this->m_unregisterMediaUpdateCallback ();
++    this->m_unregisterAlbumArtUpdateCallback ();
+ 
+     for (const auto& module : this->m_scriptModules | std::views::values) {
+ 	JS_FreeValue (this->m_context, module.module);

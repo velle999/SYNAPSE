@@ -1,0 +1,855 @@
+From b7d49f39d53be586ae8d118fcd6b45ecccc032e0 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 18/28] feat(web): implement Wallpaper Engine's web wallpaper
+ API
+
+Web wallpapers are written against an API the engine provides and none
+of it existed: pages that call wallpaperRegisterAudioListener at load
+threw and aborted their setup, and pages that build themselves in
+wallpaperPropertyListener.applyUserProperties were never called. Ten of
+the eleven web wallpapers in the test corpus rendered black.
+
+- Install the API into the main frame's V8 context before the page's
+  scripts run (OnContextCreated in the render process): the property
+  listener (replayed for a listener assigned after delivery), the audio
+  listener, wallpaperRequestRandomFileForProperty, and the media
+  listeners, which report media integration as unavailable.
+- After the main frame loads, deliver applyGeneralProperties ({fps}) and
+  applyUserProperties from project.json, typed as project.json types
+  them, with --set-property overrides applied, the defaults Wallpaper
+  Engine gives unset values, and file and directory values made
+  absolute. The delivery runs as a global-scope script so a listener
+  declared with let or const is found.
+- Feed audio listeners the 64-band spectrum for both channels each frame
+  when the project supports audio processing.
+- Log the page's console warnings and errors; they are the only account
+  of why a web wallpaper drew nothing.
+
+The payload is built by WebProperties, which has no CEF dependency and
+is covered by unit tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ CMakeLists.txt                                |   6 +-
+ .../Render/Wallpapers/CWeb.cpp                |  73 +++++++-
+ src/WallpaperEngine/Render/Wallpapers/CWeb.h  |  10 ++
+ .../Testing/Cases/WebProperties.cpp           | 168 ++++++++++++++++++
+ .../WebBrowser/CEF/BrowserClient.cpp          |  38 +++-
+ .../WebBrowser/CEF/BrowserClient.h            |  31 +++-
+ src/WallpaperEngine/WebBrowser/CEF/WebApi.h   | 126 +++++++++++++
+ .../WebBrowser/CEF/WebProperties.cpp          | 128 +++++++++++++
+ .../WebBrowser/CEF/WebProperties.h            |  43 +++++
+ src/main.cpp                                  |  26 ++-
+ 10 files changed, 641 insertions(+), 8 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+ create mode 100644 src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+ create mode 100644 src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
+ create mode 100644 src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 29058330..bbe073a8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -463,6 +463,9 @@ set(COMMON_SOURCES
+     src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandlerFactory.h
+     src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
+     src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.h
++    src/WallpaperEngine/WebBrowser/CEF/WebApi.h
++    src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
++    src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+     src/WallpaperEngine/WebBrowser/WebBrowserContext.cpp
+     src/WallpaperEngine/WebBrowser/WebBrowserContext.h
+ 
+@@ -571,7 +574,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/MouseCoordinates.cpp
+         src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+         src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+-        src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp)
++        src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
++        src/WallpaperEngine/Testing/Cases/WebProperties.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+index 8f0a688d..f53c44b0 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+@@ -3,9 +3,15 @@
+ // https://github.com/andmcgregor/cefgui
+ #include "CWeb.h"
+ #include "WallpaperEngine/WebBrowser/CEF/WPSchemeHandlerFactory.h"
++#include "WallpaperEngine/WebBrowser/CEF/WebProperties.h"
+ 
+ #include "WallpaperEngine/Data/Model/Project.h"
+ #include "WallpaperEngine/Data/Model/Wallpaper.h"
++#include "WallpaperEngine/Logging/Log.h"
++
++#include <charconv>
++#include <cmath>
++#include <filesystem>
+ 
+ using namespace WallpaperEngine::Render;
+ using namespace WallpaperEngine::Render::Wallpapers;
+@@ -30,7 +36,7 @@ CWeb::CWeb (
+     // follow --fps, with 60 as CEF's ceiling (std::max forced every web wallpaper to >= 60 fps)
+     browserSettings.windowless_frame_rate = std::min (60, context.getApp ().getContext ().settings.render.maximumFPS);
+ 
+-    this->m_client = new WebBrowser::CEF::BrowserClient (m_renderHandler);
++    this->m_client = new WebBrowser::CEF::BrowserClient (m_renderHandler, this->buildPropertiesScript ());
+     // use the custom scheme for the wallpaper's files
+     const std::string htmlURL = WPSchemeHandlerFactory::generateSchemeName (this->getWeb ().project.workshopId)
+ 	+ "://root/" + this->getWeb ().filename;
+@@ -65,6 +71,8 @@ void CWeb::renderFrame (const glm::ivec4& viewport) {
+ 
+     // ensure the virtual mouse position is up to date
+     this->updateMouse (viewport);
++    // queued before the message loop runs, so the page sees it this frame
++    this->pushAudio ();
+     // use the scene's framebuffer by default
+     glBindFramebuffer (GL_FRAMEBUFFER, this->getWallpaperFramebuffer ());
+     // ensure we render over the whole framebuffer
+@@ -116,6 +124,69 @@ void CWeb::updateMouse (const glm::ivec4& viewport) {
+     this->m_rightClick = rightClick;
+ }
+ 
++std::string CWeb::buildPropertiesScript () const {
++    const auto& project = this->getWeb ().project;
++    const auto& settings = this->getContext ().getApp ().getContext ().settings;
++    WebProperties::JSON raw = WebProperties::JSON::object ();
++
++    try {
++	raw = WebProperties::JSON::parse (project.assetLocator->readString ("project.json"));
++    } catch (const std::exception& e) {
++	// the page still gets its general properties
++	sLog.error ("Cannot read the web wallpaper's properties: ", e.what ());
++    }
++
++    const auto payload = WebProperties::build (
++	raw, settings.general.properties, settings.render.maximumFPS,
++	[&project] (const std::filesystem::path& path) { return project.assetLocator->physicalPath (path); }
++    );
++
++    return WebProperties::script (payload);
++}
++
++void CWeb::pushAudio () {
++    if (!this->getWeb ().project.supportsAudioProcessing || !this->m_client->isLoaded ()) {
++	return;
++    }
++
++    // the engine's audio refreshes once per frame; this keeps it there if several
++    // viewports render the same page
++    const auto now = std::chrono::steady_clock::now ();
++
++    if (now - this->m_lastAudioPush < std::chrono::milliseconds (30)) {
++	return;
++    }
++
++    this->m_lastAudioPush = now;
++
++    const auto& recorder = this->getAudioContext ().getRecorder ();
++    // 64 bands per channel, left then right; the capture is mono, so both halves match.
++    // to_chars and not printf: a locale with a decimal comma would break the script.
++    std::string script = "window.__wpeHost&&window.__wpeHost.audio([";
++    char buffer [16];
++
++    for (int i = 0; i < 128; i++) {
++	float band = recorder.audio64 [i % 64];
++	band = std::isfinite (band) ? std::clamp (band, 0.0f, 1.0f) : 0.0f;
++
++	const auto [end, error] = std::to_chars (buffer, buffer + sizeof (buffer), band, std::chars_format::fixed, 3);
++
++	if (i > 0) {
++	    script += ',';
++	}
++
++	if (error == std::errc ()) {
++	    script.append (buffer, end);
++	} else {
++	    script += '0';
++	}
++    }
++
++    script += "])";
++
++    this->m_browser->GetMainFrame ()->ExecuteJavaScript (script, CefString (), 0);
++}
++
+ CWeb::~CWeb () {
+     CefDoMessageLoopWork ();
+     this->m_browser->GetHost ()->CloseBrowser (true);
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CWeb.h b/src/WallpaperEngine/Render/Wallpapers/CWeb.h
+index f27fd506..344dc9d6 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CWeb.h
++++ b/src/WallpaperEngine/Render/Wallpapers/CWeb.h
+@@ -5,6 +5,7 @@
+ #include <glm/glm.hpp>
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <memory>
+ #include <string>
+ #include <utility>
+@@ -39,6 +40,13 @@ public:
+ protected:
+     void renderFrame (const glm::ivec4& viewport) override;
+     void updateMouse (const glm::ivec4& viewport);
++    /** Hands the page this frame's audio spectrum, if it is an audio-reactive project */
++    void pushAudio ();
++    /**
++     * The script that hands the page its properties: project.json's user properties with
++     * any --set-property overrides applied, in the shape applyUserProperties receives
++     */
++    [[nodiscard]] std::string buildPropertiesScript () const;
+     const Web& getWeb () const { return *this->getWallpaperData ().as<Web> (); }
+ 
+     friend class CWallpaper;
+@@ -57,5 +65,7 @@ private:
+ 
+     glm::vec2 m_mousePosition = {};
+     glm::vec2 m_mousePositionLast = {};
++
++    std::chrono::steady_clock::time_point m_lastAudioPush = {};
+ };
+ }
+diff --git a/src/WallpaperEngine/Testing/Cases/WebProperties.cpp b/src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+new file mode 100644
+index 00000000..20df6d93
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+@@ -0,0 +1,168 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <algorithm>
++#include <filesystem>
++#include <fstream>
++#include <stdexcept>
++#include <string>
++#include <unistd.h>
++#include <vector>
++
++#include "WallpaperEngine/WebBrowser/CEF/WebApi.h"
++#include "WallpaperEngine/WebBrowser/CEF/WebProperties.h"
++
++using WallpaperEngine::Data::JSON::JSON;
++namespace WebApi = WallpaperEngine::WebBrowser::CEF::WebApi;
++namespace WebProperties = WallpaperEngine::WebBrowser::CEF::WebProperties;
++
++namespace {
++const WebProperties::Resolver noFiles = [] (const std::filesystem::path& path) -> std::filesystem::path {
++    throw std::runtime_error ("not in the project: " + path.string ());
++};
++
++JSON project (JSON properties) { return { { "general", { { "properties", std::move (properties) } } } }; }
++} // namespace
++
++TEST_CASE ("Web properties are typed as project.json types them") {
++    const auto payload = WebProperties::build (
++	project ({
++	    { "enabled", { { "type", "bool" }, { "value", true } } },
++	    { "speed", { { "type", "slider" }, { "value", 0.25 } } },
++	    { "tint", { { "type", "color" }, { "value", "0.5 0.25 1" } } },
++	}),
++	{}, 30, noFiles
++    );
++
++    CHECK (payload.general == JSON { { "fps", 30 } });
++    CHECK (payload.user ["enabled"] == JSON { { "value", true } });
++    CHECK (payload.user ["speed"] == JSON { { "value", 0.25 } });
++    CHECK (payload.user ["tint"] == JSON { { "value", "0.5 0.25 1" } });
++    CHECK (payload.files.empty ());
++}
++
++TEST_CASE ("Web properties the user never set get the defaults pages expect") {
++    const auto payload = WebProperties::build (
++	project ({
++	    { "clock", { { "type", "Bool" } } },
++	    { "city", { { "type", "textinput" }, { "value", nullptr } } },
++	    { "image", { { "type", "file" } } },
++	    { "heading", { { "type", "text" } } },
++	    { "section", { { "type", "group" }, { "value", nullptr } } },
++	}),
++	{}, 30, noFiles
++    );
++
++    // the type is matched case-insensitively, as Wallpaper Engine does
++    CHECK (payload.user ["clock"] == JSON { { "value", false } });
++    CHECK (payload.user ["city"] == JSON { { "value", "" } });
++    CHECK (payload.user ["image"] == JSON { { "value", "" } });
++    CHECK_FALSE (payload.user.contains ("heading"));
++    CHECK_FALSE (payload.user.contains ("section"));
++}
++
++TEST_CASE ("Web property overrides keep the property's type") {
++    const auto payload = WebProperties::build (
++	project ({
++	    { "enabled", { { "type", "bool" }, { "value", false } } },
++	    { "disabled", { { "type", "bool" }, { "value", true } } },
++	    { "speed", { { "type", "slider" }, { "value", 0.25 } } },
++	    { "count", { { "type", "slider" }, { "value", 3 } } },
++	    { "mode", { { "type", "combo" }, { "value", 1 } } },
++	    { "theme", { { "type", "combo" }, { "value", "dark" } } },
++	    { "city", { { "type", "textinput" } } },
++	    { "broken", { { "type", "slider" }, { "value", 1 } } },
++	}),
++	{
++	    { "enabled", "1" },
++	    { "disabled", "0" },
++	    { "speed", "0.75" },
++	    { "count", "7" },
++	    { "mode", "2" },
++	    { "theme", "light" },
++	    { "city", "Paris" },
++	    { "broken", "fast" },
++	},
++	30, noFiles
++    );
++
++    CHECK (payload.user ["enabled"]["value"] == true);
++    CHECK (payload.user ["disabled"]["value"] == false);
++    CHECK (payload.user ["speed"]["value"] == 0.75);
++    // pages compare these with === and switch, so an integer stays one
++    CHECK (payload.user ["count"]["value"].is_number_integer ());
++    CHECK (payload.user ["count"]["value"] == 7);
++    CHECK (payload.user ["mode"]["value"].is_number_integer ());
++    CHECK (payload.user ["mode"]["value"] == 2);
++    CHECK (payload.user ["theme"]["value"] == "light");
++    CHECK (payload.user ["city"]["value"] == "Paris");
++    CHECK (payload.user ["broken"]["value"] == "fast");
++}
++
++TEST_CASE ("Web file and directory properties are handed out absolute") {
++    const auto root = std::filesystem::temp_directory_path () / ("lwe-webproperties-" + std::to_string (getpid ()));
++    std::filesystem::remove_all (root);
++    std::filesystem::create_directories (root / "images" / "nested");
++    std::ofstream (root / "images" / "a.png") << "a";
++    std::ofstream (root / "images" / "b.png") << "b";
++    std::ofstream (root / "poster.png") << "p";
++
++    const WebProperties::Resolver resolve = [&root] (const std::filesystem::path& path) {
++	if (!std::filesystem::exists (root / path)) {
++	    throw std::runtime_error ("not in the project");
++	}
++
++	return root / path;
++    };
++
++    const auto payload = WebProperties::build (
++	project ({
++	    { "poster", { { "type", "file" }, { "value", "poster.png" } } },
++	    { "missing", { { "type", "file" }, { "value", "elsewhere.png" } } },
++	    { "absolute", { { "type", "file" }, { "value", "/usr/share/a.png" } } },
++	    { "slides", { { "type", "directory" }, { "value", "images" } } },
++	}),
++	{}, 30, resolve
++    );
++
++    CHECK (payload.user ["poster"]["value"] == (root / "poster.png").string ());
++    CHECK (payload.user ["missing"]["value"] == "elsewhere.png");
++    CHECK (payload.user ["absolute"]["value"] == "/usr/share/a.png");
++    CHECK (payload.user ["slides"]["value"] == (root / "images").string ());
++
++    // only the folder's files, not its subfolders
++    auto files = payload.files ["slides"].get<std::vector<std::string>> ();
++    std::ranges::sort (files);
++    CHECK (files == std::vector<std::string> { (root / "images" / "a.png").string (), (root / "images" / "b.png").string () });
++
++    std::filesystem::remove_all (root);
++}
++
++TEST_CASE ("Web wallpapers without properties still get general properties") {
++    for (const auto& raw : { JSON::object (), JSON { { "general", 5 } }, project ("none") }) {
++	const auto payload = WebProperties::build (raw, {}, 24, noFiles);
++
++	CHECK (payload.general == JSON { { "fps", 24 } });
++	CHECK (payload.user.empty ());
++    }
++}
++
++TEST_CASE ("The web properties script is one call that survives any property text") {
++    WebProperties::Payload payload;
++    payload.general = { { "fps", 30 } };
++    // a line separator ends a JavaScript string literal in older engines; invalid UTF-8
++    // made nlohmann throw and cost the page every property
++    payload.user = { { "title", { { "value", "caf\xc3\xa9 \xe2\x80\xa8 \xff" } } } };
++
++    const auto script = WebProperties::script (payload);
++
++    CHECK (script.starts_with (WebApi::deliverPrefix));
++    // no directory properties: the files argument is empty and closes the call
++    CHECK (script.ends_with (",{});"));
++    CHECK (script.find ("\\u00e9") != std::string::npos);
++    CHECK (script.find ("\\u2028") != std::string::npos);
++    CHECK (script.find ("\\ufffd") != std::string::npos);
++
++    // every byte after the prefix is ASCII, so the page's encoding cannot matter
++    const auto arguments = script.substr (std::string (WebApi::deliverPrefix).size ());
++    CHECK (std::ranges::all_of (arguments, [] (const unsigned char c) { return c < 0x80; }));
++}
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
+index 14618ce5..09012c16 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.cpp
+@@ -1,7 +1,41 @@
+ #include "BrowserClient.h"
+ 
++#include "WallpaperEngine/Logging/Log.h"
++
+ using namespace WallpaperEngine::WebBrowser::CEF;
+ 
+-BrowserClient::BrowserClient (CefRefPtr<CefRenderHandler> ptr) : m_renderHandler (std::move (ptr)) { }
++BrowserClient::BrowserClient (CefRefPtr<CefRenderHandler> ptr, std::string propertiesScript) :
++    m_renderHandler (std::move (ptr)), m_propertiesScript (std::move (propertiesScript)) { }
++
++CefRefPtr<CefRenderHandler> BrowserClient::GetRenderHandler () { return m_renderHandler; }
++
++CefRefPtr<CefLoadHandler> BrowserClient::GetLoadHandler () { return this; }
++
++CefRefPtr<CefDisplayHandler> BrowserClient::GetDisplayHandler () { return this; }
++
++bool BrowserClient::OnConsoleMessage (
++    CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message, const CefString& source,
++    int line
++) {
++    // pages log every frame at info level; only what went wrong is worth keeping
++    if (level >= LOGSEVERITY_WARNING && level != LOGSEVERITY_DISABLE) {
++	sLog.error ("web console: ", message.ToString (), " (", source.ToString (), ":", line, ")");
++    }
++
++    return false;
++}
++
++void BrowserClient::OnLoadEnd (CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) {
++    if (!frame->IsMain ()) {
++	return;
++    }
++
++    // a reload gets a fresh context and a fresh shim, so it is delivered to again
++    this->m_loaded = true;
++
++    if (!this->m_propertiesScript.empty ()) {
++	frame->ExecuteJavaScript (this->m_propertiesScript, frame->GetURL (), 0);
++    }
++}
+ 
+-CefRefPtr<CefRenderHandler> BrowserClient::GetRenderHandler () { return m_renderHandler; }
+\ No newline at end of file
++bool BrowserClient::isLoaded () const { return this->m_loaded; }
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
+index 499bb738..c3a17107 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/BrowserClient.h
+@@ -1,20 +1,45 @@
+ #pragma once
+ 
++#include <string>
++
+ #include "include/cef_client.h"
++#include "include/cef_display_handler.h"
++#include "include/cef_load_handler.h"
+ 
+ namespace WallpaperEngine::WebBrowser::CEF {
+ // *************************************************************************
+ //! \brief Provide access to browser-instance-specific callbacks. A single
+ //! CefClient instance can be shared among any number of browsers.
+ // *************************************************************************
+-class BrowserClient : public CefClient {
++class BrowserClient : public CefClient, public CefLoadHandler, public CefDisplayHandler {
+ public:
+-    explicit BrowserClient (CefRefPtr<CefRenderHandler> ptr);
++    explicit BrowserClient (CefRefPtr<CefRenderHandler> ptr, std::string propertiesScript = "");
+ 
+     [[nodiscard]] CefRefPtr<CefRenderHandler> GetRenderHandler () override;
++    [[nodiscard]] CefRefPtr<CefLoadHandler> GetLoadHandler () override;
++    [[nodiscard]] CefRefPtr<CefDisplayHandler> GetDisplayHandler () override;
++
++    /** Hands the page its properties once it has loaded, as Wallpaper Engine does */
++    void OnLoadEnd (CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
++
++    /**
++     * A page's warnings and errors go to the engine's log. They are the only account of
++     * why a web wallpaper drew nothing, and Chromium otherwise discards them.
++     */
++    bool OnConsoleMessage (
++	CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message, const CefString& source,
++	int line
++    ) override;
++
++    /** Whether a page has finished loading in the main frame yet */
++    [[nodiscard]] bool isLoaded () const;
+ 
+     CefRefPtr<CefRenderHandler> m_renderHandler = nullptr;
+ 
++private:
++    std::string m_propertiesScript;
++    bool m_loaded = false;
++
+     IMPLEMENT_REFCOUNTING (BrowserClient);
+ };
+-} // namespace WallpaperEngine::WebBrowser::CEF
+\ No newline at end of file
++} // namespace WallpaperEngine::WebBrowser::CEF
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebApi.h b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+new file mode 100644
+index 00000000..6e91431c
+--- /dev/null
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+@@ -0,0 +1,126 @@
++#pragma once
++
++namespace WallpaperEngine::WebBrowser::CEF::WebApi {
++/**
++ * The part of Wallpaper Engine's web API that a page calls into, installed into the main
++ * frame's V8 context before any of the page's own scripts run (OnContextCreated in the
++ * renderer). Pages register with these at load time and most of them build nothing
++ * until they are called back, so without it they sit black on their loading screen.
++ *
++ * The host side (BrowserClient / CWeb) drives it through window.__wpeHost:
++ *  - deliver (general, user, files, listener) once the page has loaded, and again on
++ *    reload; the listener is looked up by the CALLER, in global scope, so a page that
++ *    declares it with let/const is found too (WebProperties builds the call);
++ *  - audio (array) with 128 values, 64 bands for each channel, at the frame rate.
++ *
++ * A page that assigns wallpaperPropertyListener after delivery still gets its
++ * properties: the setter replays them, as Wallpaper Engine does for a late listener.
++ */
++inline constexpr const char* shim = R"JS(
++(function () {
++    if (window.__wpeHost) {
++        return;
++    }
++
++    var host = { general: null, user: null, delivered: false, listener: undefined, audioListeners: [], files: {} };
++
++    function call (target, name, argument) {
++        if (target && typeof target[name] === 'function') {
++            try {
++                target[name] (argument);
++            } catch (e) {
++                console.error (e);
++            }
++        }
++    }
++
++    host.apply = function (listener) {
++        if (host.general) {
++            call (listener, 'applyGeneralProperties', host.general);
++        }
++        if (host.user) {
++            call (listener, 'applyUserProperties', host.user);
++        }
++    };
++
++    host.deliver = function (general, user, files, listener) {
++        host.general = general;
++        host.user = user;
++        host.files = files || {};
++        host.delivered = true;
++        host.apply (listener !== undefined ? listener : host.listener);
++    };
++
++    host.audio = function (values) {
++        for (var i = 0; i < host.audioListeners.length; i++) {
++            try {
++                host.audioListeners[i] (values);
++            } catch (e) {
++                console.error (e);
++            }
++        }
++    };
++
++    Object.defineProperty (window, '__wpeHost', { value: host });
++
++    Object.defineProperty (window, 'wallpaperPropertyListener', {
++        configurable: true,
++        enumerable: true,
++        get: function () {
++            return host.listener;
++        },
++        set: function (listener) {
++            host.listener = listener;
++            if (host.delivered) {
++                setTimeout (function () { host.apply (listener); }, 0);
++            }
++        }
++    });
++
++    window.wallpaperRegisterAudioListener = function (callback) {
++        if (typeof callback === 'function') {
++            host.audioListeners.push (callback);
++        }
++    };
++
++    // ondemand directory properties: hand back one of the folder's files at random
++    window.wallpaperRequestRandomFileForProperty = function (name, callback) {
++        var list = host.files[name];
++        if (typeof callback !== 'function' || !list || list.length === 0) {
++            return;
++        }
++        var pick = list[Math.floor (Math.random () * list.length)];
++        setTimeout (function () { callback (name, pick); }, 0);
++    };
++
++    // there is no media integration: say so once, and accept the rest silently
++    window.wallpaperRegisterMediaStatusListener = function (callback) {
++        if (typeof callback === 'function') {
++            setTimeout (function () { callback ({ enabled: false }); }, 0);
++        }
++    };
++    ['Properties', 'Thumbnail', 'Playback', 'Timeline'].forEach (function (kind) {
++        window['wallpaperRegisterMedia' + kind + 'Listener'] = function () {};
++    });
++}) ();
++)JS";
++
++/**
++ * Hands the page its properties. Evaluated as a script of its own in the page's global
++ * scope, which is the only place a let/const-declared listener is visible from.
++ */
++inline constexpr const char* deliverPrefix = R"JS(
++(function (general, user, files) {
++    var host = window.__wpeHost;
++    if (!host) {
++        return;
++    }
++    var listener;
++    try {
++        listener = wallpaperPropertyListener;
++    } catch (e) {
++        listener = undefined;
++    }
++    host.deliver (general, user, files, listener);
++}) ()JS";
++} // namespace WallpaperEngine::WebBrowser::CEF::WebApi
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
+new file mode 100644
+index 00000000..f18838cb
+--- /dev/null
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.cpp
+@@ -0,0 +1,128 @@
++#include "WebProperties.h"
++#include "WebApi.h"
++
++#include <algorithm>
++#include <charconv>
++#include <cmath>
++#include <system_error>
++
++using namespace WallpaperEngine::WebBrowser::CEF;
++
++namespace {
++using WallpaperEngine::Data::JSON::JSON;
++
++/**
++ * --set-property values are always strings; hand the page the type project.json gives
++ * the property. A combo keeps a number when the project wrote one, since pages compare
++ * them with === and switch.
++ */
++JSON overrideValue (const std::string& type, const JSON& original, const std::string& value) {
++    if (type == "bool") {
++	return value == "1" || value == "true";
++    }
++
++    if (type == "slider" || (type == "combo" && original.is_number ())) {
++	double number = 0.0;
++	const auto [end, error] = std::from_chars (value.data (), value.data () + value.size (), number);
++
++	if (error == std::errc () && end == value.data () + value.size ()) {
++	    if (original.is_number_integer () && number == std::floor (number)) {
++		return static_cast<int64_t> (number);
++	    }
++
++	    return number;
++	}
++    }
++
++    return value;
++}
++} // namespace
++
++WebProperties::Payload WebProperties::build (
++    const JSON& project, const std::map<std::string, std::string>& overrides, const int fps, const Resolver& resolve
++) {
++    Payload payload;
++    const JSON* properties = nullptr;
++
++    payload.general = { { "fps", fps } };
++
++    if (const auto general = project.find ("general"); general != project.end () && general->is_object ()) {
++	if (const auto it = general->find ("properties"); it != general->end ()) {
++	    properties = &*it;
++	}
++    }
++
++    if (properties == nullptr || !properties->is_object ()) {
++	return payload;
++    }
++
++    for (const auto& [name, property] : properties->items ()) {
++	if (!property.is_object ()) {
++	    continue;
++	}
++
++	const auto typeIt = property.find ("type");
++	std::string type = typeIt != property.end () && typeIt->is_string () ? typeIt->get<std::string> () : "";
++	std::ranges::transform (type, type.begin (), [] (const unsigned char c) { return std::tolower (c); });
++
++	const auto valueIt = property.find ("value");
++	JSON value = valueIt != property.end () ? *valueIt : JSON ();
++
++	if (const auto override = overrides.find (name); override != overrides.end ()) {
++	    value = overrideValue (type, value, override->second);
++	}
++
++	// what Wallpaper Engine hands a page for a value the user never set
++	if (value.is_null ()) {
++	    if (type == "bool") {
++		value = false;
++	    } else if (type == "textinput" || type == "file" || type == "directory") {
++		value = "";
++	    } else {
++		// labels and groups carry nothing to apply
++		continue;
++	    }
++	}
++
++	// pages build "file:///" + value, so a path inside the project goes out absolute
++	if ((type == "file" || type == "directory") && value.is_string () && !value.get<std::string> ().empty ()) {
++	    std::filesystem::path path = value.get<std::string> ();
++
++	    if (path.is_relative ()) {
++		try {
++		    path = resolve (path);
++		} catch (const std::exception&) {
++		    // not part of the project: leave it as the page was given it
++		}
++	    }
++
++	    value = path.string ();
++
++	    if (type == "directory") {
++		std::error_code ec;
++		JSON list = JSON::array ();
++
++		for (const auto& entry : std::filesystem::directory_iterator (path, ec)) {
++		    if (entry.is_regular_file (ec)) {
++			list.push_back (entry.path ().string ());
++		    }
++		}
++
++		payload.files [name] = list;
++	    }
++	}
++
++	payload.user [name] = JSON { { "value", value } };
++    }
++
++    return payload;
++}
++
++std::string WebProperties::script (const Payload& payload) {
++    // replace, not throw: a project.json string that is not valid UTF-8 must not cost
++    // the page every other property
++    constexpr auto replace = JSON::error_handler_t::replace;
++
++    return std::string (WebApi::deliverPrefix) + payload.general.dump (-1, ' ', true, replace) + ","
++	+ payload.user.dump (-1, ' ', true, replace) + "," + payload.files.dump (-1, ' ', true, replace) + ");";
++}
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+new file mode 100644
+index 00000000..4f16c875
+--- /dev/null
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebProperties.h
+@@ -0,0 +1,43 @@
++#pragma once
++
++#include <filesystem>
++#include <functional>
++#include <map>
++#include <string>
++
++#include "WallpaperEngine/Data/JSON.h"
++
++namespace WallpaperEngine::WebBrowser::CEF::WebProperties {
++using WallpaperEngine::Data::JSON::JSON;
++
++/** What a web wallpaper is handed once it has loaded */
++struct Payload {
++    /** The argument to applyGeneralProperties */
++    JSON general = JSON::object ();
++    /** The argument to applyUserProperties: { name: { value } } for every property that carries one */
++    JSON user = JSON::object ();
++    /** The files of each directory property, for wallpaperRequestRandomFileForProperty */
++    JSON files = JSON::object ();
++};
++
++/** Turns a path inside the project into one on disk; throws when the project has no such file */
++using Resolver = std::function<std::filesystem::path (const std::filesystem::path&)>;
++
++/**
++ * Builds the payload from the project's project.json the way Wallpaper Engine hands it
++ * to a page: every value typed as project.json types it, --set-property overrides
++ * applied, unset values given the defaults the page expects, and file and directory
++ * values made absolute so a page's "file:///" + value finds them.
++ *
++ * @param project The parsed project.json
++ * @param overrides The --set-property values, by property name
++ * @param fps The frame rate the page is rendered at
++ * @param resolve Locates project files on disk
++ */
++[[nodiscard]] Payload build (
++    const JSON& project, const std::map<std::string, std::string>& overrides, int fps, const Resolver& resolve
++);
++
++/** The script that delivers a payload, to run in the page's global scope after it loads */
++[[nodiscard]] std::string script (const Payload& payload);
++} // namespace WallpaperEngine::WebBrowser::CEF::WebProperties
+diff --git a/src/main.cpp b/src/main.cpp
+index acd77761..1b29b4e9 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -4,8 +4,11 @@
+ #include "WallpaperEngine/Application/ApplicationContext.h"
+ #include "WallpaperEngine/Application/WallpaperApplication.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include "WallpaperEngine/WebBrowser/CEF/WebApi.h"
+ #include "include/cef_app.h"
+ #include "include/cef_command_line.h"
++#include "include/cef_render_process_handler.h"
++#include "include/cef_v8.h"
+ 
+ WallpaperEngine::Application::WallpaperApplication* app;
+ 
+@@ -29,8 +32,29 @@ void initLogging () {
+ //
+ // Custom schemes must match the browser process (SubprocessApp). BrowserApp
+ // passes them via --wp-schemes=id1,id2 on child launches.
+-class EarlyCefSubprocessApp : public CefApp {
++class EarlyCefSubprocessApp : public CefApp, public CefRenderProcessHandler {
+ public:
++    CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler () override { return this; }
++
++    // Wallpaper Engine's web API has to exist before the page's first script runs:
++    // pages call wallpaperRegisterAudioListener at load and a missing function throws
++    // and aborts the rest of their setup. Main frame only; embeds get nothing.
++    void OnContextCreated (
++	CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context
++    ) override {
++	if (!frame->IsMain ()) {
++	    return;
++	}
++
++	CefRefPtr<CefV8Value> result;
++	CefRefPtr<CefV8Exception> exception;
++
++	if (!context->Eval (WallpaperEngine::WebBrowser::CEF::WebApi::shim, CefString (), 0, result, exception)
++	    && exception) {
++	    std::cerr << "web api shim failed: " << exception->GetMessage ().ToString () << std::endl;
++	}
++    }
++
+     void OnRegisterCustomSchemes (CefRawPtr<CefSchemeRegistrar> registrar) override {
+ 	const CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine ();
+ 	if (!commandLine || !commandLine->HasSwitch ("wp-schemes")) {

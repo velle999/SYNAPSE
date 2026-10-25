@@ -1,0 +1,118 @@
+From ea14ce7455e34d435344eee57ebe01a45d096bef Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:41:52 -0500
+Subject: [PATCH 26/28] fix(scripting): text layer scripts see the scene
+
+A text layer script ran with a thisScene of its own that held only the
+frame timing, which hid the scene object: thisScene.getLayer () was
+not a function, and the script threw on every frame (over 1000 log
+lines in 30 seconds from the media-integration titles of 3123189054).
+thisScene is now the scene's own object behind the timing, a layer's
+script logs its first error only, and a scripted text is written back
+to the layer's property, which is what another layer reads through
+getLayer ().
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ src/WallpaperEngine/Render/Objects/CText.cpp  |  6 ++++
+ .../Scripting/ScriptEngine.cpp                | 32 +++++++++++++++----
+ src/WallpaperEngine/Scripting/ScriptEngine.h  |  3 ++
+ 3 files changed, 34 insertions(+), 7 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index 251ac4d1..849c566b 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -402,6 +402,12 @@ void CText::render () {
+ 	);
+ 	const std::string current = se.layerText (m_layerHandle);
+ 	renderedText = current.empty () ? std::string (" ") : current;
++
++	// other layers' scripts read this text through thisScene.getLayer (), which sees the
++	// property, not the script's own copy of it
++	if (current != m_text.text->value->getString ()) {
++	    m_text.text->value->update (current, DynamicValue::UpdateSource::Script);
++	}
+     }
+ 
+     const unsigned int pixelSize = computeEffectivePixelSize ();
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index dd3b0f7b..3aaf4126 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -438,12 +438,24 @@ ScriptLayerHandle ScriptEngine::createLayerScript (
+ 	<< "  var __id = " << id << ";\n"
+ 	<< "  var __props = Object.assign({}, globalThis.__layerSeedProps || {});\n"
+ 	<< "  var thisLayer = { text: String(globalThis.__layerSeedText || '') };\n"
+-	<< "  var thisScene = {\n"
+-	<< "    get time()        { var c = globalThis.__sceneCtx; return c ? c.time : 0; },\n"
+-	<< "    get currentTime() { var c = globalThis.__sceneCtx; return c ? c.time : 0; },\n"
+-	<< "    get dt()          { var c = globalThis.__sceneCtx; return c ? c.dt   : 0; },\n"
+-	<< "    get fps()         { var c = globalThis.__sceneCtx; return c ? c.fps  : 60; },\n"
+-	<< "  };\n"
++	// the scene's own object (getLayer () and the rest) behind the frame timing; a
++	// plain object here hid it, so every thisScene.getLayer () threw, every frame.
++	// The proxy's target is an empty object: the scene's methods are read-only and
++	// not configurable, and a proxy of it may not hand out bound copies of them
++	<< "  var __scene = globalThis.thisScene || {};\n"
++	<< "  var __timing = { time: 1, currentTime: 1, dt: 1, fps: 1 };\n"
++	<< "  var thisScene = new Proxy({}, {\n"
++	<< "    get: function(target, key) {\n"
++	<< "      var c = globalThis.__sceneCtx;\n"
++	<< "      if (key === 'time' || key === 'currentTime') return c ? c.time : 0;\n"
++	<< "      if (key === 'dt')  return c ? c.dt  : 0;\n"
++	<< "      if (key === 'fps') return c ? c.fps : 60;\n"
++	<< "      var v = __scene[key];\n"
++	<< "      return typeof v === 'function' ? v.bind(__scene) : v;\n"
++	<< "    },\n"
++	<< "    set: function(target, key, v) { __scene[key] = v; return true; },\n"
++	<< "    has: function(target, key) { return key in __timing || key in __scene; },\n"
++	<< "  });\n"
+ 	// Minimal WE `engine` shim. Real Wallpaper Engine exposes a broad API
+ 	// (media events, audio buffer, user input); we provide just enough for
+ 	// the common built-in text scripts to run without ReferenceError.
+@@ -532,8 +544,13 @@ void ScriptEngine::tickLayer (ScriptLayerHandle handle, double time, double delt
+ 	JSValue fn = JS_GetPropertyStr (ctx, layerObj, prop);
+ 	if (JS_IsFunction (ctx, fn)) {
+ 	    JSValue ret = JS_Call (ctx, fn, layerObj, 0, nullptr);
++	    // the first error a layer throws is logged; one thrown every frame filled the log
+ 	    if (JS_IsException (ret)) {
+-		logJSException (ctx, tag);
++		if (this->m_layerReported.insert (handle).second) {
++		    logJSException (ctx, tag);
++		} else {
++		    JS_FreeValue (ctx, JS_GetException (ctx));
++		}
+ 	    }
+ 	    JS_FreeValue (ctx, ret);
+ 	}
+@@ -614,6 +631,7 @@ void ScriptEngine::destroyLayer (ScriptLayerHandle handle) {
+     JS_FreeValue (ctx, delResult);
+ 
+     this->m_layerInitialized.erase (handle);
++    this->m_layerReported.erase (handle);
+ }
+ 
+ JSValue ScriptEngine::call (JSValue module, int argc, JSValue argv[], const char* name) {
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index c44aa089..219c1e21 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -12,6 +12,7 @@
+ #include <map>
+ #include <memory>
+ #include <optional>
++#include <set>
+ #include <string>
+ #include <unordered_map>
+ #include <unordered_set>
+@@ -195,6 +196,8 @@ private:
+     ScriptLayerHandle m_nextLayerId = 1;
+     bool m_layerRegistryReady = false;
+     std::map<ScriptLayerHandle, bool> m_layerInitialized;
++    /** Layers whose script has thrown already; only the first error is logged */
++    std::set<ScriptLayerHandle> m_layerReported;
+     bool m_builtinsInstalled = false;
+     Media::MediaSource& m_mediaSource;
+     std::function<void ()> m_unregisterMediaUpdateCallback;

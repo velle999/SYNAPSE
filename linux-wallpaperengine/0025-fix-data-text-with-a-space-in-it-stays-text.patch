@@ -1,0 +1,132 @@
+From 9b484b1f4d82c4cdea8322a4fe91a89ed9d0e58c Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 11:41:52 -0500
+Subject: [PATCH 25/28] fix(data): text with a space in it stays text
+
+A value was read as a vector whenever it had a space in it, so "Hello
+World" became a vector of zeroes with no text at all. A text layer
+showing it drew nothing (46 text layers across 13 wallpapers in the
+test corpus), and a script property such as the date format
+"{day}, {month} {date}, {year}" reached its script as a vector.
+A value with spaces is now a vector only when every part is a number.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ CMakeLists.txt                                |  3 +-
+ .../Data/Parsers/DynamicValueParser.cpp       | 31 ++++++++++++++-
+ .../Testing/Cases/DynamicValueParser.cpp      | 38 +++++++++++++++++++
+ 3 files changed, 70 insertions(+), 2 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ab7797a9..b52e1089 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -576,7 +576,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+         src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+         src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+-        src/WallpaperEngine/Testing/Cases/LenientJson.cpp)
++        src/WallpaperEngine/Testing/Cases/LenientJson.cpp
++        src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp b/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
+index 777fa1a2..4a7ffb5c 100644
+--- a/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
+@@ -1,10 +1,35 @@
+ #include "DynamicValueParser.h"
+ 
++#include <cstdlib>
++#include <sstream>
++
+ #include "UserSettingParser.h"
+ #include "WallpaperEngine/Data/Model/DynamicValue.h"
+ 
+ using namespace WallpaperEngine::Data::Parsers;
+ 
++namespace {
++/** Whether every space-separated part of str is a number, as in a vector's "0.5 0.25 1" */
++bool isNumberList (const std::string& str) {
++    std::istringstream parts (str);
++    std::string part;
++    bool any = false;
++
++    while (parts >> part) {
++	char* end = nullptr;
++	std::strtof (part.c_str (), &end);
++
++	if (end != part.c_str () + part.size ()) {
++	    return false;
++	}
++
++	any = true;
++    }
++
++    return any;
++}
++} // namespace
++
+ DynamicValueUniquePtr DynamicValueParser::parse (const json& data, const Properties& properties, bool expectColor) {
+     auto value = std::make_unique<DynamicValue> ();
+     auto valueIt = data;
+@@ -30,7 +55,11 @@ DynamicValueUniquePtr DynamicValueParser::parse (const json& data, const Propert
+ 	    std::string str = valueIt;
+ 	    int size = Builders::VectorBuilder::preparseSize (str);
+ 
+-	    if (size == 1) {
++	    // only numbers make a vector: text with a space in it ("Hello World", a script's
++	    // "{day}, {month} {date}") was read as one, and a text layer showing it drew nothing
++	    if (size > 1 && !isNumberList (str)) {
++		value->update (str, DynamicValue::UpdateSource::Initialization);
++	    } else if (size == 1) {
+ 		// scalar? text value?
+ 		std::size_t parsed = 0;
+ 		try {
+diff --git a/src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp b/src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+new file mode 100644
+index 00000000..723eb284
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+@@ -0,0 +1,38 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <glm/glm.hpp>
++
++#include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Data/Parsers/DynamicValueParser.h"
++
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::Data::Model::DynamicValue;
++using WallpaperEngine::Data::Model::Properties;
++using WallpaperEngine::Data::Parsers::DynamicValueParser;
++
++namespace {
++WallpaperEngine::Data::Model::DynamicValueUniquePtr parse (const JSON& value) {
++    const Properties none;
++
++    return DynamicValueParser::parse (value, none, false);
++}
++} // namespace
++
++TEST_CASE ("A value with spaces in it is text unless every part is a number") {
++    // a text layer's own text, and the date format a script reads from its properties
++    CHECK (parse ("Hello World")->getType () == DynamicValue::String);
++    CHECK (parse ("Hello World")->getString () == "Hello World");
++    CHECK (parse ("{day}, {month} {date}, {year}")->getString () == "{day}, {month} {date}, {year}");
++    CHECK (parse ("1 hour")->getString () == "1 hour");
++    CHECK (parse ({ { "value", "Merry Christmas" } })->getString () == "Merry Christmas");
++}
++
++TEST_CASE ("A value of numbers separated by spaces is still a vector") {
++    CHECK (parse ("0.5 0.25")->getType () == DynamicValue::Vec2);
++    CHECK (parse ("0.5 0.25")->getVec2 () == glm::vec2 (0.5f, 0.25f));
++    CHECK (parse ("1 2 3")->getType () == DynamicValue::Vec3);
++    CHECK (parse ("1 2 3")->getVec3 () == glm::vec3 (1.0f, 2.0f, 3.0f));
++    CHECK (parse ("-1 0.5 1e-3 4")->getType () == DynamicValue::Vec4);
++    CHECK (parse ("12")->getType () == DynamicValue::Float);
++    CHECK (parse ("12:34")->getType () == DynamicValue::String);
++}

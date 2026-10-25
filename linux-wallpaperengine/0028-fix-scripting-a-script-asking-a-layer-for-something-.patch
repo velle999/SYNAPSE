@@ -1,0 +1,94 @@
+From 92045449b6a168ce9aaf3449d88caece40908c39 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 12:10:16 -0500
+Subject: [PATCH 28/28] fix(scripting): a script asking a layer for something
+ it lacks is no error
+
+Scripts probe what a layer has, often every frame
+(thisLayer.getTextureAnimation), and each probe of a name the layer
+does not expose was logged as an error before it came back undefined:
+one wallpaper (3299228616) wrote 10530 such lines in 16 seconds, which
+at that rate grows the engine's log by over 150 MB an hour. The layer
+object now looks the name up without logging, and an unknown name is
+undefined to read and ignored to write, as before.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../Adapters/ScriptableObjectAdapter.cpp      | 21 ++++++++++++-------
+ .../Scripting/ScriptableObject.cpp            |  6 ++++++
+ .../Scripting/ScriptableObject.h              |  2 ++
+ 3 files changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index f08f5ee8..ead34176 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -37,12 +37,18 @@ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSA
+ 
+     ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
+ 
+-    try {
+-	// find the property inside, otherwise return undefined
+-	auto& property = container->object.getProperty (name);
++    // find the property inside, otherwise return undefined. Scripts probe for what a
++    // layer has (thisLayer.getTextureAnimation) every frame, so a miss is not logged:
++    // one wallpaper wrote 660 lines a second of them
++    auto* property = container->object.findProperty (name);
++
++    if (property == nullptr) {
++	return JS_UNDEFINED;
++    }
+ 
++    try {
+ 	// scripts get copies (like Wallpaper Engine), so `let s = thisLayer.size; s.x *= 2;` doesn't resize the layer
+-	return container->adapter.getEngine ().dynamicToJsCopy (property);
++	return container->adapter.getEngine ().dynamicToJsCopy (*property);
+     } catch (const std::exception& e) {
+ 	return JS_UNDEFINED;
+     }
+@@ -70,10 +76,11 @@ int scriptableobject_property_set (
+     // `thisLayer.alpha = 0.5` etc. writes straight into the property; unknown names are ignored
+     // (returning false would throw a TypeError, scripts run in strict mode)
+     try {
+-	auto& property = container->object.getProperty (name);
+-	WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, property);
++	if (auto* property = container->object.findProperty (name); property != nullptr) {
++	    WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, *property);
++	}
+     } catch (const std::exception& e) {
+-	// property not exposed by this layer
++	// a value this property cannot take
+     }
+ 
+     return 1;
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index 8853f17f..6ae5ac00 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -26,6 +26,12 @@ DynamicValue& ScriptableObject::getProperty (const std::string& name) {
+     return it->second.value;
+ }
+ 
++DynamicValue* ScriptableObject::findProperty (const std::string& name) {
++    const auto it = this->m_properties.find (name);
++
++    return it == this->m_properties.end () ? nullptr : &it->second.value;
++}
++
+ const std::map<std::string, ScriptableObject::PropertyEntry>& ScriptableObject::getProperties () const {
+     return this->m_properties;
+ }
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.h b/src/WallpaperEngine/Scripting/ScriptableObject.h
+index 55b12b2d..34147a8b 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.h
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.h
+@@ -22,6 +22,8 @@ public:
+     virtual ~ScriptableObject () = default;
+ 
+     DynamicValue& getProperty (const std::string& name);
++    /** The property scripts know by this name, or nullptr; a script asking for one is no error */
++    DynamicValue* findProperty (const std::string& name);
+ 
+     const std::map<std::string, PropertyEntry>& getProperties () const;
+ 

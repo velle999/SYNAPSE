@@ -1,0 +1,143 @@
+From 703c03930d57233d29ea7d25150391ed554dbfbf Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 17/28] fix(web): decode request paths and answer range
+ requests
+
+The wallpaper scheme handler looked files up by the raw, percent-encoded
+path, so any file under a directory with a space in its name was a 404
+(workshop 1081733658 loads "Arthesian Library/..." and every preset built
+on it stayed black). Decode the path, keeping separators encoded since
+Chromium has already resolved dot segments, and refuse any ".." segment.
+
+It also reported every response as unknown-length and had no Skip, so a
+<video> source was refused with MEDIA_ERR_SRC_NOT_SUPPORTED (workshop
+2681203626). Report the stream length, advertise byte ranges and
+implement Skip; CEF trims the range itself.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ .../WebBrowser/CEF/WPSchemeHandler.cpp        | 63 ++++++++++++++++++-
+ .../WebBrowser/CEF/WPSchemeHandler.h          |  5 ++
+ 2 files changed, 65 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
+index 8f29be8c..9d78fe76 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
++++ b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.cpp
+@@ -1,5 +1,6 @@
+ #include "WPSchemeHandler.h"
+ #include "WallpaperEngine/Assets/AssetLoadException.h"
++#include <filesystem>
+ #include <iostream>
+ 
+ #include "MimeTypes.h"
+@@ -28,10 +29,27 @@ bool WPSchemeHandler::Open (CefRefPtr<CefRequest> request, bool& handle_request,
+     }
+ 
+     const std::string host = CefString (&parts.host);
+-    const std::string path = CefString (&parts.path);
++    // The path arrives percent-encoded, so "Arthesian Library/Core/EventBus.js" was asked
++    // for as "Arthesian%20Library/..." and never found (workshop 1081733658 stayed black).
++    // Separators stay encoded: Chromium has already resolved the dot segments, and
++    // decoding a %2F or %2E%2E after that would reopen them.
++    const std::string path = CefURIDecode (
++				 CefString (&parts.path), true,
++				 static_cast<cef_uri_unescape_rule_t> (
++				     UU_NORMAL | UU_SPACES | UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS
++				 )
++    )
++				 .ToString ();
+ 
+     const std::string file = path.substr (1);
+ 
++    for (const auto& segment : std::filesystem::path (file)) {
++	if (segment == "..") {
++	    handle_request = true;
++	    return false;
++	}
++    }
++
+     try {
+ 	// try to read the file on the current container, if the file doesn't exists
+ 	// an exception will be thrown
+@@ -42,6 +60,17 @@ bool WPSchemeHandler::Open (CefRefPtr<CefRequest> request, bool& handle_request,
+ 	}
+ 
+ 	this->m_contents = this->m_assetLoader.read (file);
++
++	// the length is what lets CEF answer Range requests (it skips and trims itself);
++	// without one a <video> source is refused outright (MEDIA_ERR_SRC_NOT_SUPPORTED,
++	// workshop 2681203626)
++	const auto start = this->m_contents->tellg ();
++	this->m_contents->seekg (0, std::ios::end);
++	const auto end = this->m_contents->tellg ();
++	this->m_contents->seekg (start, std::ios::beg);
++	this->m_length = start >= 0 && end >= start ? static_cast<int64_t> (end - start) : -1;
++	this->m_contents->clear ();
++
+ 	callback->Continue ();
+     } catch (AssetLoadException&) {
+ #if !NDEBUG
+@@ -69,8 +98,36 @@ void WPSchemeHandler::GetResponseHeaders (
+     response->SetMimeType (this->m_mimeType);
+     response->SetStatus (200);
+ 
+-    // signals an unknown-length file
+-    response_length = -1;
++    if (this->m_length >= 0) {
++	response->SetHeaderByName ("Accept-Ranges", "bytes", true);
++    }
++
++    // -1 signals an unknown-length file
++    response_length = this->m_length;
++}
++
++bool WPSchemeHandler::Skip (int64_t bytes_to_skip, int64_t& bytes_skipped, CefRefPtr<CefResourceSkipCallback> callback) {
++    if (!this->m_contents || bytes_to_skip < 0) {
++	bytes_skipped = -2;
++	return false;
++    }
++
++    const auto position = this->m_contents->tellg ();
++
++    if (position < 0 || (this->m_length >= 0 && bytes_to_skip > this->m_length - static_cast<int64_t> (position))) {
++	bytes_skipped = -2;
++	return false;
++    }
++
++    this->m_contents->seekg (bytes_to_skip, std::ios::cur);
++
++    if (!*this->m_contents) {
++	bytes_skipped = -2;
++	return false;
++    }
++
++    bytes_skipped = bytes_to_skip;
++    return true;
+ }
+ 
+ void WPSchemeHandler::Cancel () { CEF_REQUIRE_IO_THREAD (); }
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.h b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.h
+index b71061d1..a62c10c5 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/WPSchemeHandler.h
+@@ -33,12 +33,17 @@ public:
+     bool
+     Read (void* data_out, int bytes_to_read, int& bytes_read, CefRefPtr<CefResourceReadCallback> callback) override;
+ 
++    /** Called by CEF for a Range request, which it can only make once the length is known */
++    bool Skip (int64_t bytes_to_skip, int64_t& bytes_skipped, CefRefPtr<CefResourceSkipCallback> callback) override;
++
+ private:
+     const Project& m_project;
+ 
+     const AssetLocator& m_assetLoader;
+     ReadStreamSharedPtr m_contents = nullptr;
+     std::string m_mimeType;
++    /** Size of m_contents, or -1 if the stream could not say */
++    int64_t m_length = -1;
+ 
+     IMPLEMENT_REFCOUNTING (WPSchemeHandler);
+     DISALLOW_COPY_AND_ASSIGN (WPSchemeHandler);

@@ -1,0 +1,354 @@
+From a515273731d5ad3efc897f8ed92baea9a74b7bb6 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Sun, 25 Oct 2026 10:54:03 -0500
+Subject: [PATCH 19/28] fix(data): read wallpaper JSON with comments and
+ trailing commas
+
+Wallpaper Engine's own reader accepts both, and its content relies on
+it: the stock effects/fluidsimulation/effect.json and
+presets/water/preset.json close a list with a trailing comma, and stock
+effect files carry commented-out keys. nlohmann rejects both, so any
+wallpaper using the fluid simulation effect failed to load with "parse
+error at line 403, column 2" (workshop 2901183422 bundles a copy; issue
+#396 is the same failure).
+
+parseLenient drops comments and trailing commas outside strings, keeps
+newlines so parse errors still name the file's own line, and is used
+wherever a wallpaper's files are read: project.json, scene, model,
+material, effect, particle and texture metadata. The engine's own config
+file and shader annotations stay strict.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Tp4kQtVREMqxYupDoiqth6
+---
+ CMakeLists.txt                                |  3 +-
+ .../Application/WallpaperApplication.cpp      |  4 +-
+ src/WallpaperEngine/Data/JSON.cpp             | 71 +++++++++++++++++++
+ src/WallpaperEngine/Data/JSON.h               | 12 ++++
+ .../Data/Parsers/EffectParser.cpp             |  2 +-
+ .../Data/Parsers/MaterialParser.cpp           |  2 +-
+ .../Data/Parsers/ModelParser.cpp              |  2 +-
+ .../Data/Parsers/ObjectParser.cpp             |  2 +-
+ .../Data/Parsers/TextureParser.cpp            |  3 +-
+ .../Data/Parsers/WallpaperParser.cpp          |  2 +-
+ .../Render/Wallpapers/CWeb.cpp                |  2 +-
+ .../Testing/Cases/LenientJson.cpp             | 61 ++++++++++++++++
+ 12 files changed, 156 insertions(+), 10 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index bbe073a8..ab7797a9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -575,7 +575,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+         src/WallpaperEngine/Testing/Cases/BinaryParserHardening.cpp
+         src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+-        src/WallpaperEngine/Testing/Cases/WebProperties.cpp)
++        src/WallpaperEngine/Testing/Cases/WebProperties.cpp
++        src/WallpaperEngine/Testing/Cases/LenientJson.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Application/WallpaperApplication.cpp b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+index c9107afc..a289cbce 100644
+--- a/src/WallpaperEngine/Application/WallpaperApplication.cpp
++++ b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+@@ -225,7 +225,7 @@ void WallpaperApplication::loadBackgrounds () {
+ 
+ ProjectUniquePtr WallpaperApplication::loadBackground (const std::string& bg) {
+     auto container = this->setupAssetLocator (bg);
+-    auto json = WallpaperEngine::Data::JSON::JSON::parse (container->readString ("project.json"));
++    auto json = WallpaperEngine::Data::JSON::parseLenient (container->readString ("project.json"));
+ 
+     // when a background is loaded, reset the screenshot variables
+     // this allows taking screenshots after a background changes
+@@ -348,7 +348,7 @@ bool WallpaperApplication::preflightWallpaper (const std::string& path) {
+     try {
+ 	// avoid mutating state, just ensure project.json parses
+ 	auto container = this->setupAssetLocator (path);
+-	const auto json = WallpaperEngine::Data::JSON::JSON::parse (container->readString ("project.json"));
++	const auto json = WallpaperEngine::Data::JSON::parseLenient (container->readString ("project.json"));
+ 	if (!json.contains ("type") || !json.contains ("file")) {
+ 	    sLog.error ("Preflight failed for ", path, ": missing required fields");
+ 	    return false;
+diff --git a/src/WallpaperEngine/Data/JSON.cpp b/src/WallpaperEngine/Data/JSON.cpp
+index 2016d393..b31cb75c 100644
+--- a/src/WallpaperEngine/Data/JSON.cpp
++++ b/src/WallpaperEngine/Data/JSON.cpp
+@@ -2,6 +2,9 @@
+ 
+ #include "WallpaperEngine/Data/Parsers/UserSettingParser.h"
+ 
++#include <algorithm>
++#include <cctype>
++
+ using namespace WallpaperEngine::Data::JSON;
+ using namespace WallpaperEngine::Data::Model;
+ using namespace WallpaperEngine::Data::Parsers;
+@@ -17,3 +20,71 @@ UserSettingUniquePtr JsonExtensions::color (const std::string& key, const Proper
+ 
+     return UserSettingParser::parse (value, properties, true);
+ }
++
++namespace {
++/** Where the comment starting at text [i] ends, or i when no comment starts there */
++size_t commentEnd (const std::string_view text, const size_t i) {
++    if (text.compare (i, 2, "//") == 0) {
++	return std::min (text.find ('\n', i), text.size ());
++    }
++
++    if (text.compare (i, 2, "/*") == 0) {
++	const auto end = text.find ("*/", i + 2);
++	return end == std::string_view::npos ? text.size () : end + 2;
++    }
++
++    return i;
++}
++} // namespace
++
++JSON WallpaperEngine::Data::JSON::parseLenient (const std::string_view text) {
++    std::string cleaned;
++    cleaned.reserve (text.size ());
++
++    for (size_t i = 0; i < text.size (); i++) {
++	const char c = text [i];
++
++	if (c == '"') {
++	    // copied whole, escapes included, so a comma or slash inside one is never touched
++	    const size_t start = i;
++
++	    for (i++; i < text.size () && text [i] != '"'; i++) {
++		if (text [i] == '\\') {
++		    i++;
++		}
++	    }
++
++	    cleaned.append (text.substr (start, i - start + 1));
++	    continue;
++	}
++
++	if (const auto end = commentEnd (text, i); end != i) {
++	    // only the newlines are kept, so an error still reports the file's own line
++	    cleaned.append (static_cast<size_t> (std::ranges::count (text.substr (i, end - i), '\n')), '\n');
++	    i = end - 1;
++	    continue;
++	}
++
++	if (c == ',') {
++	    size_t next = i + 1;
++
++	    while (next < text.size ()) {
++		if (std::isspace (static_cast<unsigned char> (text [next]))) {
++		    next++;
++		} else if (const auto end = commentEnd (text, next); end != next) {
++		    next = end;
++		} else {
++		    break;
++		}
++	    }
++
++	    if (next < text.size () && (text [next] == ']' || text [next] == '}')) {
++		continue;
++	    }
++	}
++
++	cleaned += c;
++    }
++
++    return JSON::parse (cleaned);
++}
+diff --git a/src/WallpaperEngine/Data/JSON.h b/src/WallpaperEngine/Data/JSON.h
+index 9e2b64e9..d57a970d 100644
+--- a/src/WallpaperEngine/Data/JSON.h
++++ b/src/WallpaperEngine/Data/JSON.h
+@@ -7,6 +7,7 @@
+ #include <nlohmann/json.hpp>
+ #include <optional>
+ #include <string>
++#include <string_view>
+ #include <utility>
+ 
+ #include "WallpaperEngine/Data/Builders/UserSettingBuilder.h"
+@@ -155,4 +156,15 @@ private:
+     [[nodiscard]] const base_type& base () const { return *static_cast<const base_type*> (this); }
+ };
+ 
++/**
++ * Parses a wallpaper's JSON the way Wallpaper Engine reads it, which accepts comments and
++ * trailing commas. Its own stock effects/fluidsimulation/effect.json closes an array with
++ * one, so every wallpaper using that effect failed to load (workshop 2901183422 bundles a
++ * copy). Strings are left untouched, and line numbers in parse errors still match the file.
++ *
++ * @param text The file's contents
++ *
++ * @return The parsed document
++ */
++[[nodiscard]] JSON parseLenient (std::string_view text);
+ } // namespace WallpaperEngine::Data::JSON
+diff --git a/src/WallpaperEngine/Data/Parsers/EffectParser.cpp b/src/WallpaperEngine/Data/Parsers/EffectParser.cpp
+index d3d9450c..7c71716b 100644
+--- a/src/WallpaperEngine/Data/Parsers/EffectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/EffectParser.cpp
+@@ -11,7 +11,7 @@ using namespace WallpaperEngine::Data::Parsers;
+ using namespace WallpaperEngine::Data::Model;
+ 
+ EffectUniquePtr EffectParser::load (const Project& project, const std::string& filename) {
+-    const auto effectJson = JSON::parse (project.assetLocator->readString (filename));
++    const auto effectJson = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString (filename));
+ 
+     return parse (effectJson, project);
+ }
+diff --git a/src/WallpaperEngine/Data/Parsers/MaterialParser.cpp b/src/WallpaperEngine/Data/Parsers/MaterialParser.cpp
+index 689fb803..a8a2e31d 100644
+--- a/src/WallpaperEngine/Data/Parsers/MaterialParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/MaterialParser.cpp
+@@ -10,7 +10,7 @@ using namespace WallpaperEngine::Data::Parsers;
+ using namespace WallpaperEngine::Data::Model;
+ 
+ MaterialUniquePtr MaterialParser::load (const Project& project, const std::string& filename) {
+-    const auto materialJson = JSON::parse (project.assetLocator->readString (filename));
++    const auto materialJson = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString (filename));
+ 
+     return parse (materialJson, filename, project);
+ }
+diff --git a/src/WallpaperEngine/Data/Parsers/ModelParser.cpp b/src/WallpaperEngine/Data/Parsers/ModelParser.cpp
+index 9e90b44f..84ee4f9a 100644
+--- a/src/WallpaperEngine/Data/Parsers/ModelParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ModelParser.cpp
+@@ -11,7 +11,7 @@ using namespace WallpaperEngine::Data::Parsers;
+ using namespace WallpaperEngine::Data::Model;
+ 
+ ModelUniquePtr ModelParser::load (const Project& project, const std::string& filename) {
+-    const auto model = JSON::parse (project.assetLocator->readString (filename));
++    const auto model = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString (filename));
+ 
+     return parse (model, project, filename);
+ }
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+index 51f92f30..95ecb0d6 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+@@ -345,7 +345,7 @@ ParticleUniquePtr ObjectParser::parseParticle (const JSON& it, const Project& pr
+ 	if (!particleFile.empty ()) {
+ 	    try {
+ 		particleJson
+-		    = WallpaperEngine::Data::JSON::JSON::parse (project.assetLocator->readString (particleFile));
++		    = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString (particleFile));
+ 	    } catch (std::runtime_error& e) {
+ 		sLog.error ("Cannot load particle file: ", particleFile, " - ", e.what ());
+ 	    }
+diff --git a/src/WallpaperEngine/Data/Parsers/TextureParser.cpp b/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
+index f47c37ef..1c794604 100644
+--- a/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/TextureParser.cpp
+@@ -5,6 +5,7 @@
+ #include <nlohmann/json.hpp>
+ 
+ #include "TextureParser.h"
++#include "WallpaperEngine/Data/JSON.h"
+ #include "WallpaperEngine/Data/Assets/Texture.h"
+ #include "WallpaperEngine/Logging/Log.h"
+ 
+@@ -402,7 +403,7 @@ void TextureParser::parseSpritesheetMetadata (
+ ) {
+     try {
+ 	std::string texJsonContent = metadataLoader (filename + ".tex-json");
+-	nlohmann::json texJson = nlohmann::json::parse (texJsonContent);
++	auto texJson = WallpaperEngine::Data::JSON::parseLenient (texJsonContent);
+ 
+ 	// Check for spritesheet sequences
+ 	if (texJson.contains ("spritesheetsequences") && texJson["spritesheetsequences"].is_array ()) {
+diff --git a/src/WallpaperEngine/Data/Parsers/WallpaperParser.cpp b/src/WallpaperEngine/Data/Parsers/WallpaperParser.cpp
+index c108a0df..ec7f7ff1 100644
+--- a/src/WallpaperEngine/Data/Parsers/WallpaperParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/WallpaperParser.cpp
+@@ -22,7 +22,7 @@ WallpaperUniquePtr WallpaperParser::parse (const JSON& file, Project& project) {
+ }
+ 
+ SceneUniquePtr WallpaperParser::parseScene (const JSON& file, Project& project) {
+-    const auto scene = JSON::parse (project.assetLocator->readString (file));
++    const auto scene = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString (file));
+     const auto camera = scene.require ("camera", "Scenes must have a camera section");
+     const auto general = scene.require ("general", "Scenes must have a general section");
+     const auto projection
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+index f53c44b0..2216009f 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CWeb.cpp
+@@ -130,7 +130,7 @@ std::string CWeb::buildPropertiesScript () const {
+     WebProperties::JSON raw = WebProperties::JSON::object ();
+ 
+     try {
+-	raw = WebProperties::JSON::parse (project.assetLocator->readString ("project.json"));
++	raw = WallpaperEngine::Data::JSON::parseLenient (project.assetLocator->readString ("project.json"));
+     } catch (const std::exception& e) {
+ 	// the page still gets its general properties
+ 	sLog.error ("Cannot read the web wallpaper's properties: ", e.what ());
+diff --git a/src/WallpaperEngine/Testing/Cases/LenientJson.cpp b/src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+new file mode 100644
+index 00000000..df64f0bf
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+@@ -0,0 +1,61 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <string>
++
++#include "WallpaperEngine/Data/JSON.h"
++
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::Data::JSON::parseLenient;
++
++TEST_CASE ("Wallpaper JSON accepts trailing commas") {
++    // the shape of Wallpaper Engine's stock effects/fluidsimulation/effect.json
++    const auto parsed = parseLenient (R"({
++	"dependencies" :
++	[
++		"shaders/effects/fluidsimulation_normal.frag",
++		"shaders/effects/fluidsimulation_normal.vert",
++	],
++	"group" : "simulate",
++})");
++
++    CHECK (parsed ["dependencies"].size () == 2);
++    CHECK (parsed ["group"] == "simulate");
++    CHECK (parseLenient ("[1, 2, ]") == JSON::array ({ 1, 2 }));
++    CHECK (parseLenient ("{\"a\": [ { }, ] ,\n}") == JSON { { "a", JSON::array ({ JSON::object () }) } });
++}
++
++TEST_CASE ("Wallpaper JSON accepts comments") {
++    // stock effects carry commented-out keys
++    const auto parsed = parseLenient (R"({
++	"name" : "Tint",
++	//"preview" : "preview/project.json",
++	/* a block, with a comma, ] */ "group" : "colorize", // last one
++})");
++
++    CHECK (parsed == JSON { { "name", "Tint" }, { "group", "colorize" } });
++}
++
++TEST_CASE ("Wallpaper JSON strings are never rewritten") {
++    const std::string text = R"({"url": "http://example.com/a,]", "quote": "\",}", "slashes": "/* // */", "end": "a\\"})";
++    const auto parsed = parseLenient (text);
++
++    CHECK (parsed == JSON::parse (text));
++    CHECK (parsed ["url"] == "http://example.com/a,]");
++    CHECK (parsed ["quote"] == "\",}");
++    CHECK (parsed ["slashes"] == "/* // */");
++    CHECK (parsed ["end"] == "a\\");
++}
++
++TEST_CASE ("Wallpaper JSON that is broken still fails, on the file's own line") {
++    CHECK_THROWS (parseLenient ("{\"a\": }"));
++    CHECK_THROWS (parseLenient ("[1 2]"));
++    CHECK_THROWS (parseLenient ("{\"open\": \"never closed"));
++
++    try {
++	(void) parseLenient ("{\n/* one\n two */\n\"a\": nope\n}");
++	FAIL ("parsed broken JSON");
++    } catch (const JSON::parse_error& e) {
++	INFO (e.what ());
++	CHECK (std::string (e.what ()).find ("line 4") != std::string::npos);
++    }
++}

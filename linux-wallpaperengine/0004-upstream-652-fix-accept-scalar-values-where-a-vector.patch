@@ -1,0 +1,64 @@
+From be05d12da80b6d0f6611c537416c4ab80fb01a4a Mon Sep 17 00:00:00 2001
+From: Liang Jun Chen <151501304+senti0726@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 10:53:51 -0500
+Subject: [PATCH 04/28] upstream #652: fix: accept scalar values where a vector
+ is expected
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/652 (by senti0726) until it is merged upstream.
+---
+ src/WallpaperEngine/Data/JSON.h                   | 11 ++++++++++-
+ src/WallpaperEngine/Data/Model/Object.h           |  5 +++--
+ src/WallpaperEngine/Data/Parsers/ObjectParser.cpp |  2 +-
+ 3 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/Data/JSON.h b/src/WallpaperEngine/Data/JSON.h
+index 7d99883e..9e2b64e9 100644
+--- a/src/WallpaperEngine/Data/JSON.h
++++ b/src/WallpaperEngine/Data/JSON.h
+@@ -45,7 +45,16 @@ public:
+     }
+     template <int length, typename type, glm::qualifier qualifier>
+     [[nodiscard]] glm::vec<length, type, qualifier> get () const {
+-	return VectorBuilder::parse<length, type, qualifier> (this->base ().get<std::string> ());
++	const auto& base = this->base ();
++
++	// Wallpaper Engine writes vectors as "x y z" strings, but it is not consistent about it:
++	// the same field can come through as a bare scalar (padding: 32 vs padding: "32.0 32.0"),
++	// which means the same value on every component. Accept both instead of throwing.
++	if (base.is_number ()) {
++	    return glm::vec<length, type, qualifier> (base.get<type> ());
++	}
++
++	return VectorBuilder::parse<length, type, qualifier> (base.get<std::string> ());
+     }
+     [[nodiscard]] Model::Color get () const { return ColorBuilder::parse (this->base ().get<std::string> ()); }
+     [[nodiscard]] base_type require (const std::string& key, const std::string& message) const {
+diff --git a/src/WallpaperEngine/Data/Model/Object.h b/src/WallpaperEngine/Data/Model/Object.h
+index c346aaba..8c9f5222 100644
+--- a/src/WallpaperEngine/Data/Model/Object.h
++++ b/src/WallpaperEngine/Data/Model/Object.h
+@@ -610,8 +610,9 @@ struct TextData {
+     std::string alignment;
+     /** Vertical alignment: "top", "center", "bottom" */
+     std::string verticalalign;
+-    /** Padding inside the bounding box */
+-    int padding;
++    /** Padding inside the bounding box (x, y). WE writes this either as a "x y" string or as a
++     *  bare scalar meaning both axes; JsonExtensions::get<vec> accepts both forms. */
++    glm::vec2 padding;
+     // TODO: PARSE LIMITS TOO!
+ };
+ 
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+index dde333b6..51f92f30 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+@@ -142,7 +142,7 @@ TextUniquePtr ObjectParser::parseText (const JSON& it, const Project& project, O
+ 	    .visible = it.user ("visible", project.properties, true),
+ 	    .alignment = it.optional ("horizontalalign", it.optional ("alignment", std::string ("center"))),
+ 	    .verticalalign = it.optional ("verticalalign", std::string ("center")),
+-	    .padding = it.optional ("padding", 0),
++	    .padding = it.optional ("padding", glm::vec2 (0.0f)),
+ 	}
+     );
+ }
