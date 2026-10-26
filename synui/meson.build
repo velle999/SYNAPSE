@@ -2645,6 +2645,17 @@ wpengine_mangohud = find_program('tests/wpengine_mangohud.sh')
 test('wpengine_mangohud', wpengine_mangohud,
      timeout : 60)
 
+# `wpengine_preset_files`: a preset keeps the images and videos it was saved
+# with in its OWN Workshop folder and names them relative to it, and the engine
+# resolves a relative value against the base wallpaper it renders — so a preset
+# came up as its base's default look, missing the very picture it was saved
+# for. resolve_bg() makes such a value the file's real path, and only when it is
+# really inside the preset's folder: a value that climbs out through ".." or a
+# symlink goes out as written. Sourced and stubbed, like the two above.
+wpengine_preset_files = find_program('tests/wpengine_preset_files.sh')
+test('wpengine_preset_files', wpengine_preset_files,
+     timeout : 60)
+
 # `tux_screen`: Tuxagotchi is almost entirely a PICTURE — a pixel penguin that
 # walks, blinks, eats, sleeps, sickens, ages and dies — and every other way of
 # looking at that picture means running a desktop and waiting hours for the pet

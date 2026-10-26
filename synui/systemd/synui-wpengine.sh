@@ -220,11 +220,20 @@ if not j.get("type") and isinstance(preset, dict) and j.get("dependency") is not
     except Exception:
         sys.exit(1)
     args.append(bg(dep))
+    # The files a preset carries ("files/picture.jpg") are relative to the PRESET's
+    # folder, and the engine resolves a relative value against the wallpaper it
+    # renders, so a preset's own image or video was never found. Such a value goes
+    # out as the file's real path -- and only when that is inside the preset folder.
+    here = os.path.realpath(find(wid))
     for k, v in preset.items():
         if v is None or isinstance(v, (dict, list)):
             continue
         if isinstance(v, bool):
             v = "1" if v else "0"
+        elif isinstance(v, str) and v and not os.path.isabs(v) and "://" not in v:
+            own = os.path.realpath(os.path.join(here, v))
+            if own.startswith(here + os.sep) and os.path.exists(own):
+                v = own
         args.append("--set-property")
         args.append("%s=%s" % (k, v))
 else:

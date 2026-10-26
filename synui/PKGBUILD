@@ -3973,7 +3973,18 @@ pkgver=0.1.0
 #   ran outside a sandbox (twelve SDK-server restarts in two minutes on a
 #   desktop); a systemctl stand-in is first on PATH, and the two checks on
 #   what it was asked fail without it.
-pkgrel=642
+# 643: A PRESET'S OWN IMAGE OR VIDEO REACHES THE ENGINE. A preset keeps the
+#   files it was saved with in its own Workshop folder and names them relative
+#   to it ("files/Nezuko1.jpg"). resolve_bg() passed them on verbatim, the
+#   engine looked for them in the base wallpaper's folder, and the preset came
+#   up as its base's default look: the Nezuko presets of the Customizable
+#   Module Visualizer showed the visualizer on black. A relative value naming a
+#   file or folder really inside the preset's folder now goes out as its real
+#   path; one that climbs out, through ".." or a symlink, goes out as written.
+#   linux-wallpaperengine 15 is what lets a web wallpaper's page load it.
+#   tests/wpengine_preset_files.sh: red on 642 (3 of 10), green; without the
+#   inside-the-folder check its two escape cases fail.
+pkgrel=643
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
