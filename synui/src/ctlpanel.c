@@ -1098,6 +1098,13 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Cursor size"), NULL,
       .key = "cursor_size", .off = CFG(cursor_size), .vtype = CTL_VAL_INT,
       .vmin = 8, .vmax = 256, .vstep = 4, .unit = "px", .apply = CTL_APPLY_CURSOR },
+    /* Read by cursor_hide.c each time it counts, so nothing to apply. */
+    { CTL_ROW_CURSOR_HIDE,  CTL_CAT_INPUT, CTL_KIND_VALUE, N_("Hide cursor in fullscreen"), NULL,
+      .key = "cursor_hide_fullscreen", .off = CFG(cursor_hide_fullscreen),
+      .vtype = CTL_VAL_INT, .vmin = 0, .vmax = 60, .vstep = 1, .unit = "s",
+      .vzero = N_("Off"), .apply = CTL_APPLY_NONE,
+      .help = N_("Seconds the pointer rests over a fullscreen video or game "
+              "before the cursor hides. Moving the mouse brings it back") },
 
     /* Display */
     { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  N_("Display settings"), "displays",

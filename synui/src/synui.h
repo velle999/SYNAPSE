@@ -1946,6 +1946,7 @@ typedef enum {
     CTL_ROW_POINTER_SMOOTHING,
     CTL_ROW_GESTURES,
     CTL_ROW_CURSOR_SIZE,
+    CTL_ROW_CURSOR_HIDE,
 
     CTL_ROW_NIGHTLIGHT_TEMP,
     CTL_ROW_DOCK_HEIGHT,
@@ -4254,6 +4255,10 @@ typedef struct {
      * pointer several times the size of synui's own. */
     char                  cursor_theme[64];
     int                   cursor_size;
+    /* Seconds the pointer rests over a fullscreen window before the cursor
+     * hides (synuirc `cursor_hide_fullscreen`, 0-60); 0 never hides it. See
+     * cursor_hide.c. */
+    int                   cursor_hide_fullscreen;
 
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
@@ -7155,6 +7160,20 @@ struct syn_server {
      * compared by pointer, never freed. See cursor_set_deco(). */
     const char       *deco_cursor;
 
+    /* cursor_hide.c: why the cursor is hidden (SYN_CURSOR_HIDE_* bits, 0 = it
+     * is shown), the image to put back when it is shown again, and the timer
+     * that hides it over a fullscreen window. */
+    struct {
+        uint32_t                why;
+        const char             *xcursor;   /* a literal; NULL = `surface` */
+        struct wlr_surface     *surface;   /* NULL = the client asked for none */
+        int32_t                 hot_x, hot_y;
+        struct wl_listener      surface_destroy;
+        struct wl_event_source *idle;
+        uint32_t                last_ms;   /* the last pointer activity */
+        bool                    armed;
+    } cursor_hide;
+
     /* Bumped by every CMD: launch. A capture stamps this at fork time and only
      * writes to the bar if it still matches at EOF, so a slow command cannot
      * overwrite the output of a newer one that already finished. */
@@ -7963,6 +7982,8 @@ void layer_glass_all(syn_server_t *s);
 /* Hide/show an output's TOP-layer panels so a fullscreen view can cover them. */
 void layer_update_occlusion(syn_server_t *s, syn_output_t *o);
 void layer_update_occlusion_all(syn_server_t *s);
+/* The fullscreen window on the desktop monitor `o` is showing, or NULL. */
+syn_view_t *output_fullscreen_view(syn_server_t *s, syn_output_t *o);
 
 /* ── view accessors (xdg / xwayland agnostic) ────────────── */
 struct wlr_surface *view_surface(syn_view_t *v);
@@ -8273,6 +8294,26 @@ void pointer_rebase(syn_server_t *s);
 /* Take the cursor image for the compositor's own chrome (`name` = an xcursor
  * name), or give it back to the client under the pointer (`name` = NULL). */
 void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec);
+
+/* cursor_hide.c. Every image the cursor is given goes through cursor_show_*,
+ * so a hidden cursor comes back as whatever it was last asked to be, without
+ * touching pointer focus. */
+enum {
+    SYN_CURSOR_HIDE_FULLSCREEN = 1u << 0,   /* resting over a fullscreen window */
+    SYN_CURSOR_HIDE_SAVER      = 1u << 1,   /* the screensaver is up */
+};
+void cursor_show_xcursor(syn_server_t *s, const char *name);
+void cursor_show_surface(syn_server_t *s, struct wlr_surface *surface,
+                         int32_t hot_x, int32_t hot_y);
+void cursor_hide(syn_server_t *s, uint32_t why);
+void cursor_unhide(syn_server_t *s, uint32_t why);
+/* Pointer motion, a button, the wheel or a pen: shows the cursor and restarts
+ * the fullscreen countdown. Keys do not call it. */
+void cursor_pointer_activity(syn_server_t *s);
+/* A window entered or left fullscreen, or what a monitor shows changed. */
+void cursor_fullscreen_changed(syn_server_t *s);
+void cursor_hide_init(syn_server_t *s);
+void cursor_hide_finish(syn_server_t *s);
 void focus_view(syn_server_t *s, syn_view_t *view,
                 struct wlr_surface *surface);
 syn_view_t *view_at(syn_server_t *s, double lx, double ly,

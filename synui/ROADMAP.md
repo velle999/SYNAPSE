@@ -214,6 +214,11 @@ installed) but the config-broadcast path is hit by any manager client.
       settle timer that applies the remainder when the pointer stops. Derived
       from elapsed time, so one setting means the same on a 125 Hz mouse and a
       1000 Hz one. Cursor only: relative-pointer clients still get raw motion.
+- [x] Cursor hiding (644): over a fullscreen window once the pointer has
+      rested `cursor_hide_fullscreen` seconds (default 3, 0 never), and while
+      the screensaver is up; pointer input brings it back, keys do not. The
+      image is remembered and re-applied, never recovered by bouncing pointer
+      focus, which would destroy a game's oneshot pointer lock.
 - [x] Configurable keymap: `xkb_rules/model/layout/variant/options`,
       `repeat_rate`, `repeat_delay` (empty = XKB_DEFAULT_* env / system).
 - [x] Configurable keybindings: the hardcoded bind table became data —

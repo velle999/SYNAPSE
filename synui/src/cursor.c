@@ -159,8 +159,9 @@ void cursor_apply(syn_server_t *s)
     /* ORDER MATTERS. Point the visible cursor at the NEW manager before
      * retiring the old one: the image currently on screen is owned by the old
      * manager, so destroying it first leaves the compositor briefly showing a
-     * buffer that has been freed. */
-    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+     * buffer that has been freed. A hidden cursor shows no image at all, and
+     * comes back from the new manager (cursor_hide.c). */
+    cursor_show_xcursor(s, "default");
 
     if (old) wlr_xcursor_manager_destroy(old);
 

@@ -1128,6 +1128,9 @@ void saver_show(syn_server_t *s)
     wl_event_source_timer_update(sv->t_frame, SAVER_TICK_MS);
 
     saver_render(s);
+    /* The picture is the whole screen; an arrow parked on it is not part of
+     * it. Any input that dismisses the saver shows the cursor again. */
+    cursor_hide(s, SYN_CURSOR_HIDE_SAVER);
     wlr_log(WLR_INFO, "synui: saver: showing (%s%s)",
             syn_saver_mode_names[mode],
             sv->over_lock ? ", over the lock" : "");
@@ -1142,6 +1145,7 @@ void saver_dismiss(syn_server_t *s, bool by_input)
      * still exists, and saver_wants_matrix() has to already be answering false
      * so nothing re-parents a node back into a tree that is about to go. */
     sv->active = 0;
+    cursor_unhide(s, SYN_CURSOR_HIDE_SAVER);
 
     if (sv->t_frame) {
         wl_event_source_remove(sv->t_frame);

@@ -3169,7 +3169,7 @@ void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec)
     if (name) {
         if (s->deco_cursor == name) return;   /* literals: compare by pointer */
         s->deco_cursor = name;
-        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, name);
+        cursor_show_xcursor(s, name);
         return;
     }
 
@@ -3190,7 +3190,7 @@ void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec)
 
     /* No focused client to ask (or focus is about to change anyway, which sends
      * an enter of its own): show the arrow rather than a stale resize cursor. */
-    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+    cursor_show_xcursor(s, "default");
 }
 
 /* Give pointer focus to whatever lies under the cursor and (de)activate the
@@ -3245,7 +3245,7 @@ void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
          * arrow is right for the wallpaper — but not over a resize edge, where
          * deco_hover_update has just claimed the cursor, and this would undo it. */
         if (!s->deco_cursor)
-            wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+            cursor_show_xcursor(s, "default");
         wlr_seat_pointer_notify_clear_focus(s->seat);
     }
     constraints_focus_surface(s, surface);
@@ -3469,7 +3469,7 @@ static void panel_pointer_claim_cursor(syn_server_t *s)
      * opened — deco_hover_update() is below the early return too, so nothing
      * else would take it back. */
     s->deco_cursor = NULL;
-    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+    cursor_show_xcursor(s, "default");
 }
 
 static bool panel_pointer_click(syn_server_t *s, double lx, double ly,
@@ -3680,6 +3680,7 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
                                    bool smoothable)
 {
     notify_activity(s);
+    cursor_pointer_activity(s);
 
     /* Moving the mouse wakes the lock screen. The rest of the function still
      * runs so the cursor tracks, but focus never reaches a window while locked
@@ -3836,6 +3837,10 @@ static bool seat_button_is_down(struct wlr_seat *seat, uint32_t button)
 static void pointer_button(syn_server_t *s, uint32_t time_msec,
                            uint32_t button, enum wl_pointer_button_state state)
 {
+    /* Before the saver can eat it: a click that only wakes the screen still
+     * shows a cursor that was hidden over a fullscreen window. */
+    cursor_pointer_activity(s);
+
     /* Same as the key path: the click that dismisses the saver must not also
      * press whatever was underneath it. */
     if (saver_ate_event(s)) return;
@@ -4354,6 +4359,7 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, cursor_axis);
     struct wlr_pointer_axis_event *event = data;
     notify_activity(s);
+    cursor_pointer_activity(s);
 
     if (s->bt.visible &&
         event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
@@ -4406,8 +4412,8 @@ static void server_request_cursor(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, request_cursor);
     struct wlr_seat_pointer_request_set_cursor_event *event = data;
     if (event->seat_client == s->seat->pointer_state.focused_client)
-        wlr_cursor_set_surface(s->cursor, event->surface,
-                               event->hotspot_x, event->hotspot_y);
+        cursor_show_surface(s, event->surface,
+                            event->hotspot_x, event->hotspot_y);
 }
 
 /* ── Touch ───────────────────────────────────────────────── */
@@ -4492,6 +4498,7 @@ static void tablet_warp_cursor(syn_server_t *s, struct wlr_tablet *tablet,
     wlr_scene_node_set_position(&s->drag_icon_tree->node,
                                 (int)s->cursor->x, (int)s->cursor->y);
     notify_activity(s);
+    cursor_pointer_activity(s);
 
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }

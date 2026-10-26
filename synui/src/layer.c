@@ -316,19 +316,24 @@ void layer_arrange_output(syn_output_t *output)
  * usable area (and therefore the tiling of every non-fullscreen window) is
  * unchanged — fullscreen views are laid out from the full output box, not the
  * usable one, so they cover the vacated strip. */
-void layer_update_occlusion(syn_server_t *s, syn_output_t *o)
+syn_view_t *output_fullscreen_view(syn_server_t *s, syn_output_t *o)
 {
-    if (!o) return;
-
-    int hide = 0;
     syn_view_t *v;
     /* The desktop THIS monitor is showing — the panels being uncovered are its
      * panels, so a fullscreen window on the focused screen's desktop says
      * nothing about them. */
     wl_list_for_each(v, &output_active_workspace(s, o)->windows, link) {
         if (v->output != o) continue;   /* only this monitor's windows cover it */
-        if (v->mapped && v->fullscreen && !v->minimized) { hide = 1; break; }
+        if (v->mapped && v->fullscreen && !v->minimized) return v;
     }
+    return NULL;
+}
+
+void layer_update_occlusion(syn_server_t *s, syn_output_t *o)
+{
+    if (!o) return;
+
+    int hide = output_fullscreen_view(s, o) != NULL;
 
     syn_layer_surface_t *ls;
     wl_list_for_each(ls, &o->layer_surfaces, link) {
@@ -348,6 +353,11 @@ void layer_update_occlusion_all(syn_server_t *s)
      * or under the fullscreen window (dock_apply_position reads the same rule),
      * so restack the docks whenever occlusion is recomputed. */
     dock_relayout(s);
+
+    /* And whether the cursor is resting over a fullscreen window: a film put
+     * fullscreen from the keyboard starts the count to hiding it, and leaving
+     * one shows it again with no nudge needed. */
+    cursor_fullscreen_changed(s);
 }
 
 /* ── Layer surface events ────────────────────────────────── */

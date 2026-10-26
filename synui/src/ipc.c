@@ -314,6 +314,26 @@ static void cmd_pointer(syn_server_t *s, ipc_buf_t *b)
     bprintf(b, ",\"buttons\":%u", s->seat->pointer_state.button_count);
     bprintf(b, ",\"smoothing\":%d", s->config.pointer_smoothing);
 
+    /* Why the cursor is not drawn, if it is not (cursor_hide.c). An empty list
+     * is a drawn cursor — which may still be a client's own empty image. */
+    bputs(b, ",\"hidden\":[");
+    if (s->cursor_hide.why & SYN_CURSOR_HIDE_FULLSCREEN)
+        bputs(b, "\"fullscreen\"");
+    if (s->cursor_hide.why & SYN_CURSOR_HIDE_SAVER)
+        bputs(b, (s->cursor_hide.why & SYN_CURSOR_HIDE_FULLSCREEN)
+                     ? ",\"screensaver\"" : "\"screensaver\"");
+    bprintf(b, "],\"hide_after\":%d", s->config.cursor_hide_fullscreen);
+    /* The image it shows, or comes back as: an xcursor name, a client's own
+     * surface, or none because the client asked for none. */
+    bputs(b, ",\"image\":");
+    if (s->cursor_hide.xcursor) {
+        char name[80];
+        snprintf(name, sizeof(name), "xcursor:%s", s->cursor_hide.xcursor);
+        bjson_str(b, name);
+    } else {
+        bputs(b, s->cursor_hide.surface ? "\"surface\"" : "\"none\"");
+    }
+
     bputs(b, ",\"pointer_focus\":");
     json_surface_owner(b, s, pfocus);
     bputs(b, ",\"keyboard_focus\":");

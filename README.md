@@ -1460,6 +1460,13 @@ fraction, so it means the same thing on a 125 Hz office mouse and a 1000 Hz
 gaming one. It reaches the **cursor only**: a game holding a locked pointer
 still reads raw motion, and a tablet stays under its stylus.
 
+**The cursor hides** over a fullscreen window — a video, a stream, a game —
+once the pointer has rested on it for `cursor_hide_fullscreen` seconds (`0`–`60`,
+3 by default, `0` never; *Input → Hide cursor in fullscreen*), and for as long
+as the screensaver is up. Moving the mouse, a click, the wheel or a pen brings
+it straight back; a key does not, so pausing a film from the keyboard keeps the
+picture clear. A game's locked pointer is unaffected.
+
 **Animations** are two settings, not one, under *Windows → Animation* in the
 control panel (`Super`+`C`) or in `synuirc`. A window opening can be `off`,
 `fade` or `rise` (it glides up `anim_rise_px` into place); switching desktop can

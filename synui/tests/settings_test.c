@@ -321,6 +321,8 @@ static void test_defaults(void)
     assert(d->clip_csd_margin == 1);
     assert(d->shadow == 1);
     assert(d->alt_tab_preview == 1);
+    /* Shipped ON: the cursor leaves a film alone after 3 s of rest. */
+    assert(d->cursor_hide_fullscreen == 3);
     /* syntty since a1d0dc6 — this assertion still said kitty and had been
      * failing the suite ever since, which is exactly the "a default moved
      * without its comment moving" case the block above exists to catch. */
@@ -430,6 +432,7 @@ static void test_round_trip(void)
         { "night_light_temp",  "3200"    },
         { "repeat_rate",       "40"      },
         { "cursor_size",       "32"      },
+        { "cursor_hide_fullscreen", "7"  },
         { "terminal",          "foot"    },
     };
 
@@ -454,6 +457,7 @@ static void test_round_trip(void)
     assert(c.night_light_temp == 3200);
     assert(c.repeat_rate == 40);
     assert(c.cursor_size == 32);
+    assert(c.cursor_hide_fullscreen == 7);
     assert(strcmp(c.terminal, "foot") == 0);
 
     printf("  round trip ......... ok (%u keys)\n",

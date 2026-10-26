@@ -3984,7 +3984,25 @@ pkgver=0.1.0
 #   linux-wallpaperengine 15 is what lets a web wallpaper's page load it.
 #   tests/wpengine_preset_files.sh: red on 642 (3 of 10), green; without the
 #   inside-the-folder check its two escape cases fail.
-pkgrel=643
+# 644: THE CURSOR GETS OUT OF THE WAY OF A FILM AND THE SCREENSAVER. A film, a
+#   stream or the screensaver had the arrow parked on it until somebody nudged
+#   the mouse. It now hides once the pointer has rested over a fullscreen
+#   window for `cursor_hide_fullscreen` seconds (default 3, 0 never; Control
+#   panel > Input > Hide cursor in fullscreen), and for as long as the
+#   screensaver is up. Motion, a button, the wheel or a pen brings it back; a
+#   key does not. Leaving fullscreen shows it with no motion. New
+#   src/cursor_hide.c. HIDING NEVER TOUCHES POINTER FOCUS: every image the
+#   cursor is given goes through cursor_show_*(), which remember it, and the
+#   cursor comes back as that image — clearing focus to make the client set it
+#   again would destroy a fullscreen game's oneshot pointer lock (512).
+#   output_fullscreen_view() is the bar's rule, now shared. `synctl pointer`
+#   reports "hidden", "hide_after" and "image".
+#   tests/cursor_hide.sh (9 checks, two compositors). Mutation-proven: a
+#   focus-bounce unhide fails "pointer focus never moved" (enter 1 -> 2), and
+#   without the fullscreen recheck "leaving fullscreen shows it" fails.
+#   stubborn_client grows a `cursor surface|none` argument and prints
+#   enter/leave.
+pkgrel=644
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port

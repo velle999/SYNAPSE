@@ -1912,7 +1912,7 @@ static void handle_request_set_shape(struct wl_listener *listener, void *data)
 
     const char *name = wlr_cursor_shape_v1_name(event->shape);
     if (name)
-        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, name);
+        cursor_show_xcursor(s, name);
 }
 
 /* ── xdg-toplevel-icon-v1 ────────────────────────────────── */
@@ -2461,6 +2461,9 @@ int synui_init(syn_server_t *s)
         s->config.cursor_theme[0] ? s->config.cursor_theme : NULL,
         s->config.cursor_size > 0 ? s->config.cursor_size : 24);
     wlr_xcursor_manager_load(s->cursor_mgr, 1);
+    /* Before anything gives the cursor an image: every image goes through
+     * cursor_show_*(), which need this. */
+    cursor_hide_init(s);
 
     /* Children inherit these, so an app launched from the menu agrees with the
      * compositor rather than falling back to whatever the session wrapper
@@ -2690,7 +2693,7 @@ int synui_run(syn_server_t *s)
     }
 
     /* Set initial cursor image so it's visible immediately */
-    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+    cursor_show_xcursor(s, "default");
 
 
     /* The greeter takes over here: draw the login panel (same as the lock
@@ -2913,6 +2916,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->gamma_set.link);
 
     saver_finish(s);
+    cursor_hide_finish(s);
     power_finish(s);
     gpu_mon_finish(s);
     taskmgr_finish(s);

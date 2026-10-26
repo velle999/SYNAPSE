@@ -81,6 +81,9 @@
  * XCURSOR_THEME, which is what synui did before the picker existed:
  *   cursor_theme = Adwaita      (a directory under any icons dir with cursors/)
  *   cursor_size  = 24           (8-256; pinned so Xwayland clients match)
+ *   cursor_hide_fullscreen = 3  (0-60 seconds the pointer rests over a
+ *                                fullscreen window before the cursor hides;
+ *                                0 never. The screensaver always hides it)
  * The picker writes cursor.state, which overrides these lines the same way
  * wallpaper.state overrides `wallpaper` — delete it to hand control back.
  * Install themes with synui-cursor(1); it also handles the source-tree archives
@@ -463,7 +466,12 @@
  *                                 ways that are hard to explain afterwards, and
  *                                 a mistyped 2400 leaves a pointer covering a
  *                                 third of the screen with no visible undo)
- *   snap_zone = 28               (2-200 px; how close to an edge a DRAG arms
+ *   cursor_hide_fullscreen = 3   (0-60 seconds the pointer rests over a
+ *                                 fullscreen window — a film, a stream — before
+ *                                 the cursor hides; 0 never. Moving the mouse
+ *                                 brings it back. Over the screensaver it is
+ *                                 always hidden)
+ *   snap_zone = 28              (2-200 px; how close to an edge a DRAG arms
  *                                 the snap. Raise it on a high-DPI panel, or if
  *                                 a fast pointer crosses the band)
  *   panel_follow_pointer = on|off  (does a panel open on the monitor the
@@ -1907,6 +1915,9 @@ static void config_set_defaults(syn_config_t *cfg)
      * 24 matches the size the compositor was previously hardcoded to. */
     cfg->cursor_theme[0] = '\0';
     cfg->cursor_size     = 24;
+    /* Long enough not to vanish while you are aiming at a player's controls,
+     * short enough to be gone before the film is under way. */
+    cfg->cursor_hide_fullscreen = 3;
 
     /* ⚠ NO font family is defaulted here, because synui no longer holds one —
      * font.state does, and config_apply_ui_font() reads it at the end of a
@@ -2958,6 +2969,12 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (px < 8)   px = 8;
         if (px > 256) px = 256;
         cfg->cursor_size = px;
+    }
+    else if (strcmp(key, "cursor_hide_fullscreen") == 0) {
+        int secs = atoi(val);
+        if (secs < 0)  secs = 0;
+        if (secs > 60) secs = 60;
+        cfg->cursor_hide_fullscreen = secs;
     }
     else if (strcmp(key, "xkb_layout") == 0)
         strncpy(cfg->xkb_layout, val, sizeof(cfg->xkb_layout) - 1);

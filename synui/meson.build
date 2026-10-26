@@ -312,6 +312,7 @@ synui_exe = executable('synui',
     'src/wppick.c',
     'src/wpthumb.c',
     'src/cursor.c',
+    'src/cursor_hide.c',
     'src/fontpick.c',
     'src/appgrid.c',
     'src/emoji.c',
@@ -2841,6 +2842,19 @@ test('fullscreen_output', fullscreen_output_t,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
                 synctl_exe.full_path()],
      depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
+# `cursor_hide`: the cursor hides once the pointer rests over a fullscreen
+# window, and while the screensaver is up — and hiding and showing it never
+# move pointer focus, because over a game that destroys a oneshot pointer
+# lock. A real pointer (vpointer_click) for the motion that shows it again,
+# and a client that sets its own cursor, and one that asks for none, so the
+# image that comes back can be told apart from the compositor's arrow.
+cursor_hide_t = find_program('tests/cursor_hide.sh')
+test('cursor_hide', cursor_hide_t,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path(), vpointer_click.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe, vpointer_click],
      timeout : 120)
 
 # Super+arrows (window_move_key): that the window MOVES rather than just

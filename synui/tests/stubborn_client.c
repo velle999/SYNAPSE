@@ -40,7 +40,13 @@
  * it falls — and the compositor must not chase it. Measured against foot, which
  * commits 2 px under on height and 14 px at the worst.
  *
- * Usage: stubborn_client [drop] [seconds] [premax] [snap]  (defaults: 1 2 0 0)
+ * With `cursor` = `surface` it sets a cursor image of its own on every pointer
+ * enter, and with `none` it asks for no cursor at all, the way mpv and a game
+ * hide theirs. It prints `enter` and `leave` as pointer focus comes and goes,
+ * so a harness can tell a compositor that bounced focus from one that did not.
+ *
+ * Usage: stubborn_client [drop] [seconds] [premax] [snap] [cursor]
+ *        (defaults: 1 2 0 0, and the compositor's cursor)
  */
 #define _GNU_SOURCE           /* memfd_create */
 #include <errno.h>
@@ -63,6 +69,10 @@
 static struct wl_compositor *compositor;
 static struct wl_shm        *shm;
 static struct xdg_wm_base   *wm_base;
+static struct wl_seat       *seat;
+static struct wl_pointer    *pointer;
+static struct wl_surface    *cursor_surf;
+static const char           *cursor_mode;   /* NULL, "surface" or "none" */
 
 static struct wl_surface   *surface;
 static struct xdg_surface  *xsurf;
@@ -119,6 +129,51 @@ static void paint(void)
     printf("commit %dx%d\n", width, height);
     fflush(stdout);
 }
+
+/* ── pointer ─────────────────────────────────────────────── */
+static void ptr_enter(void *d, struct wl_pointer *p, uint32_t serial,
+                      struct wl_surface *s, wl_fixed_t x, wl_fixed_t y)
+{
+    (void)d; (void)s; (void)x; (void)y;
+    if (cursor_mode && strcmp(cursor_mode, "surface") == 0) {
+        if (!cursor_surf) {
+            cursor_surf = wl_compositor_create_surface(compositor);
+            struct wl_buffer *buf = make_buffer(16, 16);
+            if (buf) {
+                wl_buffer_add_listener(buf, &buf_listener, NULL);
+                wl_surface_attach(cursor_surf, buf, 0, 0);
+                wl_surface_damage_buffer(cursor_surf, 0, 0, 16, 16);
+                wl_surface_commit(cursor_surf);
+            }
+        }
+        wl_pointer_set_cursor(p, serial, cursor_surf, 0, 0);
+    } else if (cursor_mode && strcmp(cursor_mode, "none") == 0) {
+        wl_pointer_set_cursor(p, serial, NULL, 0, 0);
+    }
+    printf("enter\n");
+    fflush(stdout);
+}
+static void ptr_leave(void *d, struct wl_pointer *p, uint32_t serial,
+                      struct wl_surface *s)
+{
+    (void)d; (void)p; (void)serial; (void)s;
+    printf("leave\n");
+    fflush(stdout);
+}
+static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t,
+                       wl_fixed_t x, wl_fixed_t y)
+{ (void)d; (void)p; (void)t; (void)x; (void)y; }
+static void ptr_button(void *d, struct wl_pointer *p, uint32_t serial,
+                       uint32_t t, uint32_t button, uint32_t state)
+{ (void)d; (void)p; (void)serial; (void)t; (void)button; (void)state; }
+static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t axis,
+                     wl_fixed_t v)
+{ (void)d; (void)p; (void)t; (void)axis; (void)v; }
+/* Version 1 of wl_seat, so these five are every event the pointer can send. */
+static const struct wl_pointer_listener ptr_listener = {
+    .enter = ptr_enter, .leave = ptr_leave, .motion = ptr_motion,
+    .button = ptr_button, .axis = ptr_axis,
+};
 
 /* ── xdg-shell ───────────────────────────────────────────── */
 static void wm_ping(void *d, struct xdg_wm_base *b, uint32_t serial)
@@ -182,6 +237,8 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t name,
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (strcmp(iface, xdg_wm_base_interface.name) == 0)
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
+    else if (strcmp(iface, wl_seat_interface.name) == 0 && !seat)
+        seat = wl_registry_bind(r, name, &wl_seat_interface, 1);
 }
 static void reg_remove(void *d, struct wl_registry *r, uint32_t name)
 { (void)d; (void)r; (void)name; }
@@ -195,6 +252,7 @@ int main(int argc, char **argv)
     int secs   = argc > 2 ? atoi(argv[2]) : 2;
     int premax = argc > 3 ? atoi(argv[3]) : 0;
     if (argc > 4) snap = atoi(argv[4]);
+    if (argc > 5) cursor_mode = argv[5];
 
     struct wl_display *dpy = wl_display_connect(NULL);
     if (!dpy) { fprintf(stderr, "stubborn: no display\n"); return 1; }
@@ -208,6 +266,10 @@ int main(int argc, char **argv)
         return 1;
     }
     xdg_wm_base_add_listener(wm_base, &wm_listener, NULL);
+    if (seat) {
+        pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(pointer, &ptr_listener, NULL);
+    }
 
     surface  = wl_compositor_create_surface(compositor);
     xsurf    = xdg_wm_base_get_xdg_surface(wm_base, surface);
@@ -243,6 +305,9 @@ int main(int argc, char **argv)
     xdg_toplevel_destroy(toplevel);
     xdg_surface_destroy(xsurf);
     wl_surface_destroy(surface);
+    if (cursor_surf) wl_surface_destroy(cursor_surf);
+    if (pointer)     wl_pointer_destroy(pointer);
+    if (seat)        wl_seat_destroy(seat);
     xdg_wm_base_destroy(wm_base);
     wl_shm_destroy(shm);
     wl_compositor_destroy(compositor);
