@@ -1,0 +1,344 @@
+From 53bf6bd73047dbc7638a6a7cf8535a46f00ebe12 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 22:29:33 -0500
+Subject: [PATCH 46/46] feat(render): a layer or an effect a script shows or
+ hides draws accordingly
+
+An image layer wired its passes once, at load. A layer hidden then had no
+pass drawing onto the scene, so a script that showed it later (a media
+player's settings panel, a drag handle, a day/night controller: 49 layers
+in 7 wallpapers start hidden behind a script) drew into its own
+framebuffer and never appeared. An effect hidden at load was never built,
+and the visibility of one that was did nothing: the passes drew it anyway.
+Scripts on an effect's visibility did not run at all.
+
+The passes are now wired again whenever the layer or one of its effects
+is shown or hidden: those of a hidden effect are left out of the chain,
+each pass reads what the one before it drew, the last draws onto the
+scene, and the layer's blending moves to whichever pass that is. Nothing
+changes while the visibility does not, so no layer re-wires every frame.
+
+An effect hidden at load is built only when a script or a timeline drives
+its visibility, so effects that a user setting hides cost nothing.
+The effect's visibility script runs with the effect as thisObject.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/Objects/CImage.cpp | 125 ++++++++++++------
+ src/WallpaperEngine/Render/Objects/CImage.h   |  21 ++-
+ .../Adapters/ScriptableObjectAdapter.cpp      |   6 +-
+ .../Scripting/ScriptableObject.cpp            |   3 +
+ 4 files changed, 112 insertions(+), 43 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index 4d0903ab..66e9ccb8 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -71,6 +71,11 @@ std::optional<glm::vec3> findMagentaCompositeTint (const Image& image, const std
+     return std::nullopt;
+ }
+ 
++/** Whether a script or a timeline can change this value while the wallpaper runs */
++bool drivenAtRuntime (const DynamicValue& value) {
++    return value.getScriptSource ().has_value () || value.getAnimation () != nullptr;
++}
++
+ struct PuppetMeshBlock {
+     size_t headerOffset = 0;
+     uint32_t vertexBytes = 0;
+@@ -409,8 +414,8 @@ CImage::~CImage () {
+     this->m_texture->decrementUsageCount ();
+ 
+     // delete passes first as they depend on the image's data
+-    for (auto* pass : this->m_passes) {
+-	delete pass;
++    for (const auto& entry : this->m_passes) {
++	delete entry.pass;
+     }
+ 
+     this->m_passes.clear ();
+@@ -631,7 +636,7 @@ void CImage::setup () {
+ 	// Some have attempted to declare effects with visible set to false.
+ 	bool allEffectsInvisible = true;
+ 	for (const auto& cur : this->m_image.effects) {
+-	    if (cur->visible->value->getBool ()) {
++	    if (cur->visible->value->getBool () || drivenAtRuntime (*cur->visible->value)) {
+ 		allEffectsInvisible = false;
+ 		break;
+ 	    }
+@@ -646,9 +651,10 @@ void CImage::setup () {
+ 
+     // copy pass to the composite layer
+     for (const auto& cur : this->getImage ().model->material->passes) {
+-	this->m_passes.push_back (
+-	    new CPass (*this, std::make_shared<FBOProvider> (this), *cur, std::nullopt, std::nullopt, std::nullopt)
+-	);
++	this->m_passes.push_back ({
++	    .pass = new CPass (*this, std::make_shared<FBOProvider> (this), *cur, std::nullopt, std::nullopt, std::nullopt),
++	    .effect = nullptr,
++	});
+     }
+ 
+     // prepare the passes list
+@@ -660,9 +666,9 @@ void CImage::setup () {
+ 		continue;
+ 	    }
+ 
+-	    // do not add non-visible effects, this might need some adjustements tho as some effects might not be
+-	    // visible but affect the output of the image...
+-	    if (!cur->visible->value->getBool ()) {
++	    // an effect hidden at load is built only if a script or a timeline can show it; the passes
++	    // of one that is hidden do not draw
++	    if (!cur->visible->value->getBool () && !drivenAtRuntime (*cur->visible->value)) {
+ 		continue;
+ 	    }
+ 
+@@ -715,9 +721,12 @@ void CImage::setup () {
+ 		    const auto& config = *this->m_virtualPassess.emplace_back (std::move (virtualPass));
+ 
+ 		    // build a pass for a copy shader
+-		    this->m_passes.push_back (new CPass (
+-			*this, fboProvider, config, std::nullopt, std::nullopt, (*curEffect)->target.value ()
+-		    ));
++		    this->m_passes.push_back ({
++			.pass = new CPass (
++			    *this, fboProvider, config, std::nullopt, std::nullopt, (*curEffect)->target.value ()
++			),
++			.effect = cur.get (),
++		    });
+ 		} else {
+ 		    for (auto& pass : (*curEffect)->material.value ()->passes) {
+ 			const auto override = curOverride != endOverride
+@@ -727,9 +736,10 @@ void CImage::setup () {
+ 			    ? *(*curEffect)->target
+ 			    : std::optional<std::reference_wrapper<std::string>> (std::nullopt);
+ 
+-			this->m_passes.push_back (
+-			    new CPass (*this, fboProvider, *pass, override, (*curEffect)->binds, target)
+-			);
++			this->m_passes.push_back ({
++			    .pass = new CPass (*this, fboProvider, *pass, override, (*curEffect)->binds, target),
++			    .effect = cur.get (),
++			});
+ 		    }
+ 
+ 		    if (curOverride != endOverride) {
+@@ -759,11 +769,14 @@ void CImage::setup () {
+ 	    );
+ 	    this->m_materials.compatibilityOverrides.emplace_back (std::move (tintOverride));
+ 
+-	    this->m_passes.push_back (new CPass (
+-		*this, std::make_shared<FBOProvider> (this),
+-		**this->m_materials.compatibilityMaterials.back ()->passes.begin (),
+-		*this->m_materials.compatibilityOverrides.back (), std::nullopt, std::nullopt
+-	    ));
++	    this->m_passes.push_back ({
++		.pass = new CPass (
++		    *this, std::make_shared<FBOProvider> (this),
++		    **this->m_materials.compatibilityMaterials.back ()->passes.begin (),
++		    *this->m_materials.compatibilityOverrides.back (), std::nullopt, std::nullopt
++		),
++		.effect = nullptr,
++	    });
+ 	}
+     }
+ 
+@@ -780,19 +793,18 @@ void CImage::setup () {
+             .textures = {},
+         });
+ 
+-	this->m_passes.push_back (new CPass (
+-	    *this, std::make_shared<FBOProvider> (this), **this->m_materials.colorBlending.material->passes.begin (),
+-	    *this->m_materials.colorBlending.override, std::nullopt, std::nullopt
+-	));
++	this->m_passes.push_back ({
++	    .pass = new CPass (
++		*this, std::make_shared<FBOProvider> (this),
++		**this->m_materials.colorBlending.material->passes.begin (),
++		*this->m_materials.colorBlending.override, std::nullopt, std::nullopt
++	    ),
++	    .effect = nullptr,
++	});
+     }
+ 
+-    // if there's more than one pass the blendmode has to be moved from the beginning to the end
+-    if (this->m_passes.size () > 1) {
+-	const auto first = this->m_passes.begin ();
+-	const auto last = this->m_passes.rbegin ();
+-
+-	(*last)->setBlendingMode ((*first)->getBlendingMode ());
+-	(*first)->setBlendingMode (BlendingMode_Normal);
++    for (auto& entry : this->m_passes) {
++	entry.blending = entry.pass->getBlendingMode ();
+     }
+ 
+     CRenderable::setup ();
+@@ -802,21 +814,40 @@ void CImage::setup () {
+ }
+ 
+ void CImage::setupPasses () {
++    this->m_wiredVisible = this->getImage ().visible->value->getBool ();
++    this->m_activePasses.clear ();
++
++    for (auto& entry : this->m_passes) {
++	entry.wiredVisible = entry.effect == nullptr || entry.effect->visible->value->getBool ();
++
++	if (entry.wiredVisible) {
++	    entry.pass->setBlendingMode (entry.blending);
++	    this->m_activePasses.push_back (entry.pass);
++	}
++    }
++
++    // the layer's blending is how it lands on the scene, so it moves from the first pass to the last
++    if (this->m_activePasses.size () > 1) {
++	this->m_activePasses.back ()->setBlendingMode (this->m_passes.front ().blending);
++	this->m_activePasses.front ()->setBlendingMode (BlendingMode_Normal);
++    }
++
++    // the chain starts over from the layer's first framebuffer: wiring it swaps them as it goes
++    this->m_currentMainFBO = this->m_mainFBO;
++    this->m_currentSubFBO = this->m_subFBO;
++
+     // do a pass on everything and setup proper inputs and values
+     std::shared_ptr<const CFBO> drawTo = this->m_currentMainFBO;
+     std::shared_ptr<const TextureProvider> asInput = this->getTexture ();
+     GLuint texcoord = this->getTexCoordCopy ();
+ 
+-    auto cur = this->m_passes.begin ();
+-    auto end = this->m_passes.end ();
++    auto cur = this->m_activePasses.begin ();
++    auto end = this->m_activePasses.end ();
+     bool first = true;
+     bool inTargetEffectSequence = false;
+     std::shared_ptr<const TextureProvider> effectInput = nullptr;
+ 
+     for (; cur != end; ++cur) {
+-	// TODO: PROPERLY CHECK EFFECT'S VISIBILITY AND TAKE IT INTO ACCOUNT
+-	// TODO: THIS REQUIRES ON-THE-FLY EVALUATION OF EFFECTS VISIBILITY TO FIGURE OUT
+-	// TODO: WHICH ONE IS THE LAST + A FEW OTHER THINGS
+ 	Effects::CPass* pass = *cur;
+ 	std::shared_ptr<const CFBO> prevDrawTo = drawTo;
+ 	bool writesToTarget = false;
+@@ -842,7 +873,6 @@ void CImage::setupPasses () {
+ 	// determine if it's the last element in the list as this is a screen-copy-like process
+ 	// TODO: PROPERLY CHECK IF THIS IS ALL THAT'S NEEDED
+ 	if (!writesToTarget && this->shouldRenderFinalPass (std::next (cur) == end)) {
+-	    // TODO: PROPERLY CHECK EFFECT'S VISIBILITY AND TAKE IT INTO ACCOUNT
+ 	    spacePosition = this->getSceneSpacePosition ();
+ 	    drawTo = this->getScene ().getFBO ();
+ 	    projection = &this->m_modelViewProjectionScreen;
+@@ -871,6 +901,16 @@ void CImage::setupPasses () {
+     }
+ }
+ 
++bool CImage::visibilityChanged () const {
++    if (this->m_wiredVisible != this->getImage ().visible->value->getBool ()) {
++	return true;
++    }
++
++    return std::ranges::any_of (this->m_passes, [] (const PassEntry& entry) {
++	return entry.effect != nullptr && entry.effect->visible->value->getBool () != entry.wiredVisible;
++    });
++}
++
+ bool CImage::shouldRenderFinalPass (bool isLastPass) const {
+     if (!isLastPass || !this->getImage ().visible->value->getBool ()) {
+ 	return false;
+@@ -936,6 +976,13 @@ void CImage::render () {
+ 	return;
+     }
+ 
++    // a layer hidden when its passes were wired drew nothing onto the scene, and a pass after a
++    // hidden effect read what that effect drew: a script or a timeline showing or hiding either
++    // changes which pass draws last
++    if (this->visibilityChanged ()) {
++	this->setupPasses ();
++    }
++
+     glColorMask (true, true, true, true);
+ 
+     // Always update screen transform (handles rotation + parallax dynamically)
+@@ -954,9 +1001,9 @@ void CImage::render () {
+     glPushDebugGroup (GL_DEBUG_SOURCE_APPLICATION, 0, -1, str.c_str ());
+ #endif /* DEBUG */
+ 
+-    auto cur = this->m_passes.begin ();
++    auto cur = this->m_activePasses.begin ();
+ 
+-    for (const auto end = this->m_passes.end (); cur != end; ++cur) {
++    for (const auto end = this->m_activePasses.end (); cur != end; ++cur) {
+ 	if (std::next (cur) == end) {
+ 	    glColorMask (true, true, true, false);
+ 	}
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.h b/src/WallpaperEngine/Render/Objects/CImage.h
+index d2778658..fb0cb460 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.h
++++ b/src/WallpaperEngine/Render/Objects/CImage.h
+@@ -71,7 +71,13 @@ public:
+     resolveTransform (const Wallpapers::CScene& scene, const WallpaperEngine::Data::Model::Object& object);
+ 
+ protected:
++    /**
++     * Wires the passes that draw now (every one but those of a hidden effect) into a chain: each
++     * reads what the one before drew, and the last draws onto the scene, with the layer's blending
++     */
+     void setupPasses ();
++    /** Whether the layer or one of its effects was shown or hidden since the passes were wired */
++    [[nodiscard]] bool visibilityChanged () const;
+ 
+     void updateScreenSpacePosition ();
+ 
+@@ -129,7 +135,20 @@ private:
+ 
+     const Image& m_image;
+ 
+-    std::vector<Effects::CPass*> m_passes = {};
++    /** A pass, and the effect it was built for: nullptr for the layer's own material and blending */
++    struct PassEntry {
++	Effects::CPass* pass = nullptr;
++	const ImageEffect* effect = nullptr;
++	/** the pass's own blending: the layer's moves to whichever pass draws last */
++	BlendingMode blending = BlendingMode_Normal;
++	/** whether the effect was visible when the passes were wired */
++	bool wiredVisible = true;
++    };
++    std::vector<PassEntry> m_passes = {};
++    /** the passes that draw, in order */
++    std::vector<Effects::CPass*> m_activePasses = {};
++    /** whether the layer was visible when the passes were wired */
++    bool m_wiredVisible = false;
+     std::vector<MaterialPassUniquePtr> m_virtualPassess = {};
+ 
+     glm::vec4 m_pos = {};
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index 6f3cc006..fa025184 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -270,9 +270,9 @@ int effect_property_set (
+ 
+     ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
+ 
+-    // `thisObject.color = shared.accentColor` writes the material property the passes draw with.
+-    // visible is kept for scripts to read back: the passes are built once, from the effects
+-    // visible at load. Unknown names are ignored, as on a layer
++    // `thisObject.color = shared.accentColor` writes the material property the passes draw with,
++    // and visible shows or hides the effect. An effect hidden at load is built only when its own
++    // visibility has a script or a timeline. Unknown names are ignored, as on a layer
+     try {
+ 	if (std::string_view (name) == "visible") {
+ 	    WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, container->effect.visible);
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index 944f0759..6e0cfea2 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -138,6 +138,9 @@ void ScriptableObject::registerEffect (const ImageEffect& effect) {
+ 	    );
+ 	}
+     }
++
++    // its visibility has scripts and keyframes too: the layer draws the effect while it is visible
++    this->registerDrivenValue ("effect" + std::to_string (effect.id) + ".visible", entry.visible, &entry);
+ }
+ 
+ void ScriptableObject::registerDrivenValue (

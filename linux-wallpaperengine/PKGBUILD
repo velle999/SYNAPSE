@@ -1,6 +1,24 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 18: 46 patches on the pinned commit, and the glslang one. 0046 is
+# SynapseOS's own: a layer or an effect that a script shows or hides draws
+# accordingly. A layer's passes were wired once, at load, so one hidden then
+# had no pass drawing onto the scene and never appeared when a script showed
+# it (49 layers in 7 wallpapers start hidden behind a script: settings
+# panels, drag handles, controllers); an effect hidden at load was never
+# built, and hiding a built one did nothing. The passes are wired again when
+# the visibility changes, and only then. An effect hidden at load is built
+# only when a script or a timeline drives its visibility.
+#
+# Measured as for 17 on the same 139 wallpapers: every verdict is the same
+# but one wallpaper whose first frame caught the rig before the engine's
+# surface was up; run three more times on each of 17 and 18, it drew from
+# the first frame every time. The two other cases whose measures moved are
+# the Matrix rain's particles, black on both, and a web page's audio
+# visualizer. The wallpapers with scripted visibility were compared frame by
+# frame and differ only by their own animation and clocks.
+#
 # 17: 45 patches on the pinned commit, and the glslang one. 0043-0045 are
 # SynapseOS's own: scripts and keyframes run on effect and particle values,
 # where 16 ran only those on a layer's own properties.
@@ -121,7 +139,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=17
+pkgrel=18
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -206,8 +224,9 @@ source=("git+$url.git#commit=$_commit"
         "0043-feat-scripting-effect-material-properties-run-their-.patch"
         "0044-feat-scripting-engine.userProperties.patch"
         "0045-feat-particles-instance-overrides-run-their-scripts-.patch"
+        "0046-feat-render-a-layer-or-an-effect-a-script-shows-or-h.patch"
         "glslang-0001-feat-narrow-the-longer-vector-in-component-wise-math.patch")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about
