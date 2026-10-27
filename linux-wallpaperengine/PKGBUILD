@@ -1,6 +1,13 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 22: the same patches; prepare() changed, so an update can build them.
+# makepkg reuses src/ between runs, and 15-21 each built once per checkout:
+# the next run failed on a patch that had already added its file, and a
+# build/ kept from an older release left stale objects behind (see
+# prepare()). The bump makes a box that built one of them on such a tree
+# build again from scratch.
+#
 # 21: 61 patches on the pinned commit, and the glslang one. 0054-0061 are
 # SynapseOS's own.
 #
@@ -228,7 +235,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=21
+pkgrel=22
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -345,7 +352,33 @@ _libdir=/usr/lib/$pkgname
 
 prepare() {
     cd "$srcdir/$pkgname"
-    git submodule update --init --recursive --depth 1
+
+    # makepkg keeps src/ between runs and resets this clone with `git checkout
+    # --force`, which restores tracked files and nothing else. A file a patch
+    # ADDED is untracked, so it survives, and the next run's `git apply` refuses
+    # to create it again ("already exists in working directory"). Submodules are
+    # not reset at all, so the glslang patch, already applied, no longer applies.
+    # Every build after the first in the same checkout — which is every update
+    # through /var/lib/synapse-src — died here. Put the clone and every
+    # submodule back to their pinned commits before patching.
+    #
+    # `-fd`, not `-fdx`: build/ is ignored, and is dealt with below.
+    git clean -fdq
+    git submodule update --init --recursive --depth 1 --force
+    git submodule foreach --recursive --quiet 'git clean -fdq'
+
+    # A build/ kept from the last run is stale in a way make cannot see. Right
+    # after prepare(), makepkg stamps every file under $srcdir with
+    # SOURCE_DATE_EPOCH (build-all.sh sets it), build/ included, so a patched
+    # source and the object compiled from the old one share an mtime and the
+    # object is never rebuilt. pkgrel 17 built that way on an update: it kept
+    # glslang from pkgrel 14, without its patch, and check() failed. Start
+    # build/ fresh every time. Keep build/cef: it holds only the CEF tarball
+    # (~370 MB) and its unpacked copy, nothing compiled, and cmake reuses both
+    # instead of downloading again.
+    if [ -d build ]; then
+        find build -mindepth 1 -maxdepth 1 ! -name cef -exec rm -rf {} +
+    fi
 
     # `git apply`, not `git am`: am commits, and so needs a committer identity
     # the ISO's unprivileged build user does not have (see fetch/PKGBUILD). It
