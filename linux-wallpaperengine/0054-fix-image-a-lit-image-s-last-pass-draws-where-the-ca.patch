@@ -1,0 +1,81 @@
+From f44f2ad0f9cd017e0b485525b1f764be57b31d70 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:25:54 -0500
+Subject: [PATCH 54/58] fix(image): a lit image's last pass draws where the
+ camera puts it
+
+A material with lighting (genericimage2, 3 and 4 with LIGHTING) places
+its vertices with g_ModelMatrix and g_ViewProjectionMatrix, not with the
+model-view-projection matrix. Every pass got the copy-space pair, an
+ortho over the image's size and identity. That matches the passes that
+draw into the image's own buffers, but not the last one, which draws
+onto the scene in scene space under the camera, so a lit image without
+effects drew over a quarter of the scene.
+
+The last pass now gets the two halves of the matrix it draws with: the
+layer's rotation and parallax as the model matrix, and the camera's
+projection and view as the view-projection matrix.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/Objects/CImage.cpp | 15 ++++++++++++---
+ src/WallpaperEngine/Render/Objects/CImage.h   |  3 +++
+ 2 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index 946a8970..cd7c7db9 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -890,6 +890,10 @@ void CImage::setupPasses () {
+ 	    drawTo = this->getScene ().getFBO ();
+ 	    projection = &this->m_modelViewProjectionScreen;
+ 	    inverseProjection = &this->m_modelViewProjectionScreenInverse;
++	    // a lit shader places the layer with the model and view-projection matrices, not with
++	    // the MVP: left in copy space, they drew it over a quarter of the scene
++	    pass->setModelMatrix (&this->m_modelMatrixScreen);
++	    pass->setViewProjectionMatrix (&this->m_viewProjectionMatrixScreen);
+ 	}
+ 
+ 	pass->setDestination (drawTo);
+@@ -1184,8 +1188,9 @@ void CImage::updateScreenSpacePosition () {
+ 	rotModel = glm::translate (rotModel, -this->m_sceneCenter);
+     }
+ 
+-    glm::mat4 mvp
+-	= this->getScene ().getCamera ().getProjection () * this->getScene ().getCamera ().getLookAt () * rotModel;
++    const glm::mat4 viewProjection
++	= this->getScene ().getCamera ().getProjection () * this->getScene ().getCamera ().getLookAt ();
++    glm::mat4 model = rotModel;
+ 
+     // Apply parallax displacement if enabled
+     if (this->getScene ().getScene ().camera.parallax.enabled
+@@ -1196,9 +1201,13 @@ void CImage::updateScreenSpacePosition () {
+ 	const float referenceSize = static_cast<float> (this->getScene ().getWidth ());
+ 	float x = (depth.x + parallaxAmount) * displacement->x * referenceSize;
+ 	float y = (depth.y + parallaxAmount) * displacement->y * referenceSize;
+-	mvp = glm::translate (mvp, { x, y, 0.0f });
++	model = glm::translate (model, { x, y, 0.0f });
+     }
+ 
++    const glm::mat4 mvp = viewProjection * model;
++
++    this->m_modelMatrixScreen = model;
++    this->m_viewProjectionMatrixScreen = viewProjection;
+     this->m_modelViewProjectionScreen = mvp;
+     this->m_modelViewProjectionScreenInverse = glm::inverse (mvp);
+     if (this->getImage ().model->passthrough) {
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.h b/src/WallpaperEngine/Render/Objects/CImage.h
+index 61654afa..2de61377 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.h
++++ b/src/WallpaperEngine/Render/Objects/CImage.h
+@@ -127,6 +127,9 @@ private:
+ 
+     glm::mat4 m_modelMatrix = {};
+     glm::mat4 m_viewProjectionMatrix = {};
++    /** The two halves of m_modelViewProjectionScreen: the layer's rotation and parallax, then the camera */
++    glm::mat4 m_modelMatrixScreen = {};
++    glm::mat4 m_viewProjectionMatrixScreen = {};
+ 
+     std::shared_ptr<const CFBO> m_mainFBO = nullptr;
+     std::shared_ptr<const CFBO> m_subFBO = nullptr;

@@ -1,0 +1,227 @@
+From 2511fcbf83462fc469ec2bb843c61a20442b81d2 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 09:07:37 -0500
+Subject: [PATCH 59/61] fix(text): a script sets a text's font and alignment
+
+A script can write a text layer's font, horizontalalign and
+verticalalign (lib.sceneScript.d.ts, ITextLayer), and Wallpaper Engine
+draws the next frame with them. These writes were ignored, as any name
+a layer does not have is ignored.
+
+A music widget mirrors its text container to put the title on the
+side of the album cover that faces the screen, and turns the title
+left-aligned so it starts there. Kept right-aligned, the title ended
+where it should have started and drew behind the cover. A clock's
+applyUserProperties sets the font and alignment the user picked, and
+the clock kept the ones the scene saved, whatever the settings said.
+
+The text now holds the three as properties a script sets and reads
+them every frame. A new font loads a new face, and a new alignment
+lays the lines out again.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/Objects/CText.cpp | 68 +++++++++++++++-----
+ src/WallpaperEngine/Render/Objects/CText.h   | 17 ++++-
+ 2 files changed, 67 insertions(+), 18 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index e86a7629..7f31cd5e 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -148,6 +148,14 @@ CText::CText (Wallpapers::CScene& scene, const Text& text) :
+     this->registerProperty ("pointSize", *text.pointSize->value);
+     this->registerProperty ("text", *text.text->value);
+     this->registerConstant ("size", DynamicValue (text.size));
++    // not saved as properties a script drives, but a script sets them: a music widget turns its
++    // title around with its container, a clock takes the font and alignment the user picked
++    this->registerConstant ("font", DynamicValue (text.font));
++    this->registerConstant ("horizontalalign", DynamicValue (text.alignment));
++    this->registerConstant ("verticalalign", DynamicValue (text.verticalalign));
++    m_font = &this->getProperty ("font");
++    m_horizontalAlign = &this->getProperty ("horizontalalign");
++    m_verticalAlign = &this->getProperty ("verticalalign");
+ 
+     if (text.composite != nullptr) {
+ 	// the image draws with the text's values, whatever drives them: a script, a timeline, a user setting
+@@ -195,7 +203,7 @@ void CText::setup () {
+ 	return;
+     }
+ 
+-    if (!loadEmbeddedFont () && !loadSystemFont ()) {
++    if (!loadFont (m_font->getString ())) {
+ 	return;
+     }
+ 
+@@ -223,16 +231,27 @@ bool CText::initFreeType () {
+     return false;
+ }
+ 
+-bool CText::loadEmbeddedFont () {
++bool CText::loadFont (const std::string& font) {
++    if (m_ftFace != nullptr) {
++	FT_Done_Face (m_ftFace);
++	m_ftFace = nullptr;
++    }
++
++    m_fontData.clear ();
++    m_loadedFont = font;
++    return loadEmbeddedFont (font) || loadSystemFont (font);
++}
++
++bool CText::loadEmbeddedFont (const std::string& font) {
+     // Wallpapers packed in .pkg don't expose physical paths, so we read the font
+     // into memory and use FT_New_Memory_Face. m_fontData must outlive the face.
+     // `systemfont_*` references signal "use a system font"; let the fallback handle them.
+-    if (m_text.font.empty () || m_text.font.rfind ("systemfont_", 0) == 0) {
++    if (font.empty () || font.rfind ("systemfont_", 0) == 0) {
+ 	return false;
+     }
+ 
+     try {
+-	auto stream = getAssetLocator ().read (m_text.font);
++	auto stream = getAssetLocator ().read (font);
+ 	stream->seekg (0, std::ios::end);
+ 	const auto size = stream->tellg ();
+ 	stream->seekg (0, std::ios::beg);
+@@ -246,18 +265,18 @@ bool CText::loadEmbeddedFont () {
+ 	    return true;
+ 	}
+ 
+-	sLog.error ("CText: FT_New_Memory_Face failed for '", m_text.font, "', falling back to system font");
++	sLog.error ("CText: FT_New_Memory_Face failed for '", font, "', falling back to system font");
+     } catch (const std::exception& e) {
+-	sLog.error ("CText: cannot read font '", m_text.font, "': ", e.what (), ", falling back to system font");
++	sLog.error ("CText: cannot read font '", font, "': ", e.what (), ", falling back to system font");
+     }
+ 
+     m_fontData.clear ();
+     return false;
+ }
+ 
+-bool CText::loadSystemFont () {
++bool CText::loadSystemFont (const std::string& font) {
+     std::string fontPath;
+-    for (const auto* candidates : { &systemFontCandidates (m_text.font), &kFontCandidates }) {
++    for (const auto* candidates : { &systemFontCandidates (font), &kFontCandidates }) {
+ 	for (const auto& candidate : *candidates) {
+ 	    if (fontPath.empty () && std::filesystem::exists (candidate)) {
+ 		fontPath = candidate;
+@@ -337,9 +356,11 @@ void CText::rebuildTextureFrom (const std::string& text) {
+     const int height = std::max (1, maxAscent + maxDescent + lineHeight * (lineCount - 1));
+     std::vector<uint8_t> pixels (static_cast<size_t> (width) * height, 0);
+ 
++    const std::string& alignment = m_horizontalAlign->getString ();
++
+     for (int index = 0; index < lineCount; ++index) {
+ 	const int slack = width - lineWidths [index];
+-	int penX = m_text.alignment == "left" ? 0 : m_text.alignment == "right" ? slack : slack / 2;
++	int penX = alignment == "left" ? 0 : alignment == "right" ? slack : slack / 2;
+ 	const int baseline = maxAscent + lineHeight * index;
+ 
+ 	for (const char32_t c : lines [index]) {
+@@ -385,6 +406,7 @@ void CText::rebuildTextureFrom (const std::string& text) {
+     m_textureSize = { width, height };
+     m_quadSize = { static_cast<float> (width), static_cast<float> (height) };
+     m_lastRenderedText = text;
++    m_rasterizedAlignment = alignment;
+     m_canvasDirty = true;
+ 
+     uploadQuadVertices ();
+@@ -480,11 +502,21 @@ void CText::render () {
+     const std::string renderedText = current.empty () ? std::string (" ") : current;
+ 
+     const unsigned int pixelSize = computeEffectivePixelSize ();
+-    if (pixelSize != m_lastPixelSize) {
++    const bool fontChanged = m_font->getString () != m_loadedFont;
++
++    if (fontChanged && !loadFont (m_font->getString ())) {
++	m_valid = false;
++#if !NDEBUG
++	glPopDebugGroup ();
++#endif /* DEBUG */
++	return;
++    }
++
++    if (fontChanged || pixelSize != m_lastPixelSize) {
+ 	m_lastPixelSize = pixelSize;
+ 	FT_Set_Pixel_Sizes (m_ftFace, 0, static_cast<FT_UInt> (m_lastPixelSize));
+ 	rebuildTextureFrom (renderedText);
+-    } else if (renderedText != m_lastRenderedText) {
++    } else if (renderedText != m_lastRenderedText || m_horizontalAlign->getString () != m_rasterizedAlignment) {
+ 	rebuildTextureFrom (renderedText);
+     }
+ 
+@@ -551,9 +583,13 @@ void CText::render () {
+ glm::vec3 CText::alignmentPivot () const {
+     // the alignment says which point of the text sits on the origin: a left-aligned label starts
+     // there and a right-aligned date ends there, whatever the text grows to (the quad's -y is the top)
++    const auto offset = [] (const std::string& alignment, const char* start, const char* end, float extent) {
++	return alignment == start ? extent * 0.5f : alignment == end ? -extent * 0.5f : 0.0f;
++    };
++
+     return {
+-	m_text.alignment == "left" ? m_quadSize.x * 0.5f : m_text.alignment == "right" ? -m_quadSize.x * 0.5f : 0.0f,
+-	m_text.verticalalign == "top" ? m_quadSize.y * 0.5f : m_text.verticalalign == "bottom" ? -m_quadSize.y * 0.5f : 0.0f,
++	offset (m_horizontalAlign->getString (), "left", "right", m_quadSize.x),
++	offset (m_verticalAlign->getString (), "top", "bottom", m_quadSize.y),
+ 	0.0f,
+     };
+ }
+@@ -562,9 +598,11 @@ glm::ivec2 CText::canvasSize () const {
+     const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
+     const glm::vec2 size = m_quadSize * rasterToScene;
+     // the canvas is centred on the anchor, so a text with an edge on it reaches the whole way to one side
++    const std::string& horizontal = m_horizontalAlign->getString ();
++    const std::string& vertical = m_verticalAlign->getString ();
+     const glm::vec2 reach = {
+-	m_text.alignment == "left" || m_text.alignment == "right" ? size.x : size.x * 0.5f,
+-	m_text.verticalalign == "top" || m_text.verticalalign == "bottom" ? size.y : size.y * 0.5f,
++	horizontal == "left" || horizontal == "right" ? size.x : size.x * 0.5f,
++	vertical == "top" || vertical == "bottom" ? size.y : size.y * 0.5f,
+     };
+ 
+     return glm::ivec2 (glm::ceil ((reach + m_text.padding) * 2.0f));
+diff --git a/src/WallpaperEngine/Render/Objects/CText.h b/src/WallpaperEngine/Render/Objects/CText.h
+index 2217904f..2175e087 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.h
++++ b/src/WallpaperEngine/Render/Objects/CText.h
+@@ -35,7 +35,8 @@ class CImage;
+  * A text layer. FreeType rasterizes the text (UTF-8, a line per '\n', the lines lined up by
+  * horizontalalign) into a single-channel texture, drawn with its own minimal GLSL shader on a
+  * quad whose alignment pins it to the origin. A script on `text` runs like any other property
+- * script, and the layer draws whatever it last returned.
++ * script, and the layer draws whatever it last returned. A script can also set its font and
++ * alignment (`thisLayer.horizontalalign = "left"`), and the next frame draws with them.
+  *
+  * A text with effects draws as an image instead (Text::composite): the glyphs go, in the text's
+  * color, onto a canvas centred on the point the alignment puts on the origin, and a CImage draws
+@@ -59,8 +60,10 @@ private:
+ 
+     // setup() helpers (kept small to keep the setup flow linear).
+     bool initFreeType ();
+-    bool loadEmbeddedFont ();
+-    bool loadSystemFont ();
++    /** Replaces the face with `font`: one the wallpaper ships, else a system font standing in for it */
++    bool loadFont (const std::string& font);
++    bool loadEmbeddedFont (const std::string& font);
++    bool loadSystemFont (const std::string& font);
+     /** Font size in scene pixels, Wallpaper Engine rasterizes `pointsize` at 300 DPI */
+     float scenePixelSize () const;
+     /** Pixel size to rasterize glyphs at so they stay sharp at the resolved (parent-inclusive) scale */
+@@ -76,6 +79,14 @@ private:
+     void renderComposite ();
+ 
+     const Text& m_text;
++    /** The layer's font and alignment, as the scene saved them or a script last set them */
++    const DynamicValue* m_font = nullptr;
++    const DynamicValue* m_horizontalAlign = nullptr;
++    const DynamicValue* m_verticalAlign = nullptr;
++    /** The font the face was loaded for */
++    std::string m_loadedFont;
++    /** The alignment the lines of the glyph texture were lined up by */
++    std::string m_rasterizedAlignment;
+     std::string m_lastRenderedText;
+     unsigned int m_lastPixelSize = 0;
+ 

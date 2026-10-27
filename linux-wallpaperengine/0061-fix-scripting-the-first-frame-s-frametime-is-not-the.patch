@@ -1,0 +1,52 @@
+From 2894d091d35e6d1ee76c5119811616ed8ff8b6cf Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 09:07:38 -0500
+Subject: [PATCH 61/61] fix(scripting): the first frame's frametime is not the
+ time spent loading
+
+The time of the previous frame started at 0, so the first frame's
+engine.frametime was every second since the renderer's clock started,
+loading included: 1.48 s for a music widget. Its progress bar fades
+the shared text color in over one second, timer += engine.frametime,
+and finished the fade in that one frame, leaving the color at the
+fade's start, black.
+
+The first frame now has a frametime of 0, which the API allows for a
+frame drawn without animating. The camera's parallax delay, which
+steps by the same difference, no longer jumps on the first frame.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Application/WallpaperApplication.cpp               | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Application/WallpaperApplication.cpp b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+index 5af47d77..1c267375 100644
+--- a/src/WallpaperEngine/Application/WallpaperApplication.cpp
++++ b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+@@ -871,6 +871,7 @@ void WallpaperApplication::setup () {
+ void WallpaperApplication::render () {
+     static time_t seconds;
+     static struct tm* timeinfo;
++    static bool timeStarted = false;
+ 
+     if (this->m_isPaused) {
+ 	usleep (FULLSCREEN_CHECK_WAIT_TIME);
+@@ -897,10 +898,13 @@ void WallpaperApplication::render () {
+ 	timeinfo = localtime (&seconds);
+ 	g_Daytime = static_cast<float> ((timeinfo->tm_hour * 60) + timeinfo->tm_min) / (24.0f * 60.0f);
+ 
+-	// keep track of the previous frame's time
+-	g_TimeLast = g_Time;
+ 	// calculate the current time value
+-	g_Time = m_videoDriver->getRenderTime ();
++	const float now = m_videoDriver->getRenderTime ();
++	// keep track of the previous frame's time. The first frame has none: the time spent loading
++	// is no frame, and a script fading over a second of frametimes finished in one that covered it
++	g_TimeLast = timeStarted ? g_Time : now;
++	g_Time = now;
++	timeStarted = true;
+ 	// update audio recorder
+ 	m_audioDriver->update ();
+ 	// update the media source

@@ -1,0 +1,94 @@
+From eeceb35cd970f29fe23f1931347ebb754d5de1ce Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:44:01 -0500
+Subject: [PATCH 57/58] fix(scripting): a vector's axes are its own properties
+
+A vector answered x, y, z and w from a property handler, so it had no
+own properties at all. A script that tells a vector from a number with
+value.hasOwnProperty ("x") took every vector for a number, and
+Object.keys and JSON.stringify saw an empty object.
+
+The axes are now the vector's own enumerable, writable properties.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/Adapters/VectorAdapter.cpp      | 58 +++++++++++++++++++
+ 1 file changed, 58 insertions(+)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+index 7f3ede64..77225da9 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+@@ -304,6 +304,62 @@ template int vector_property_set<4> (
+     JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst val, JSValueConst receiver, int flags
+ );
+ 
++/** A vector's axes, in order: a Vec2 has the first two */
++constexpr const char* vectorAxes[] = { "x", "y", "z", "w" };
++
++// a vector's axes are its own properties, as Wallpaper Engine's are: a script tells a vector from
++// a number with value.hasOwnProperty ("x"), and Object.keys and JSON.stringify list them
++template <int components>
++int vector_get_own_property (JSContext* ctx, JSPropertyDescriptor* desc, JSValueConst obj_val, JSAtom atom) {
++    JSClassID classId = 0;
++    auto* container = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (obj_val, &classId));
++
++    VEC_MAGIC_CHECK_ERROR (container, components);
++
++    const char* name = JS_AtomToCString (ctx, atom);
++
++    if (name == nullptr) {
++	return -1;
++    }
++
++    ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
++
++    for (int i = 0; i < components; i++) {
++	if (strcmp (name, vectorAxes[i]) != 0) {
++	    continue;
++	}
++
++	if (desc != nullptr) {
++	    desc->flags = JS_PROP_ENUMERABLE | JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE;
++	    desc->value = vector_property_get<components> (ctx, obj_val, atom, obj_val);
++	    desc->getter = JS_UNDEFINED;
++	    desc->setter = JS_UNDEFINED;
++	}
++
++	return true;
++    }
++
++    return false;
++}
++
++template <int components>
++int vector_get_own_property_names (JSContext* ctx, JSPropertyEnum** ptab, uint32_t* plen, JSValueConst obj_val) {
++    auto* tab = static_cast<JSPropertyEnum*> (js_malloc (ctx, sizeof (JSPropertyEnum) * components));
++
++    if (tab == nullptr) {
++	return -1;
++    }
++
++    for (int i = 0; i < components; i++) {
++	tab[i].is_enumerable = true;
++	tab[i].atom = JS_NewAtom (ctx, vectorAxes[i]);
++    }
++
++    *ptab = tab;
++    *plen = components;
++    return 0;
++}
++
+ template <int components> JSValue vector_copy (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+     JSClassID classId = 0;
+ 
+@@ -945,6 +1001,8 @@ VectorAdapter<components>::VectorAdapter (ScriptEngine& engine) :
+     ObjectAdapter (engine), m_instanceId (++VectorAdapterInstanceId), m_name ("Vec" + std::to_string (components)),
+     m_exoticMethods (
+ 	{
++	    .get_own_property = vector_get_own_property<components>,
++	    .get_own_property_names = vector_get_own_property_names<components>,
+ 	    .get_property = vector_property_get<components>,
+ 	    .set_property = vector_property_set<components>,
+ 	}

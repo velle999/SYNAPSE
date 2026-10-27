@@ -1,0 +1,591 @@
+From 45daf0b14d3de4e16cfb763714240cfa75855d90 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:44:01 -0500
+Subject: [PATCH 56/58] feat(scripting): Mat4, Mat3 and a layer's
+ getTransformMatrix
+
+A layer's getTransformMatrix () returns its world transform as a Mat4,
+and neither existed: a music widget reads which half of the screen it
+sits in from m[12] and m[13], and its init threw before it set what the
+rest of the widget reads.
+
+Mat4 and Mat3 are the scene-script builtins' (JavaScript), with
+Wallpaper Engine's whole API: identity, translation, scale, rotation
+about an axis and from Euler angles, basis vectors, lookAt, compose and
+decompose, add, subtract, multiply (by a matrix, a vector or a number),
+translate, rotate, scale, transformPoint, transformDirection, transpose,
+inverse, determinant, extractEuler, normalMatrix, copy, equals and
+toString. `m` is column-major, as glm keeps it, so a Mat4's translation
+is m[12], m[13] and m[14]. Angles are in degrees, Euler angles turn
+about x, then y, then z, and a matrix without an inverse inverts to the
+identity.
+
+getTransformMatrix is the layer's origin, angle and scale with its
+parents folded in, as the layer is drawn.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   3 +-
+ .../Adapters/ScriptableObjectAdapter.cpp      |  44 +++
+ .../Scripting/resources/builtins.js           | 327 ++++++++++++++++++
+ .../Testing/Cases/SceneScriptMatrices.cpp     | 125 +++++++
+ 4 files changed, 498 insertions(+), 1 deletion(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 88382410..4aee20b5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -590,7 +590,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+         src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+         src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+-        src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp)
++        src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
++        src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index fa025184..7466ae3c 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -3,6 +3,7 @@
+ #include <utility>
+ 
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
++#include "WallpaperEngine/Render/Objects/CImage.h"
+ #include "WallpaperEngine/Render/Objects/CRenderable.h"
+ #include "WallpaperEngine/Render/PropertyAnimation.h"
+ #include "WallpaperEngine/Scripting/ScriptEngine.h"
+@@ -10,6 +11,9 @@
+ 
+ #include <cmath>
+ #include <iterator>
++
++#include <glm/gtc/matrix_transform.hpp>
++#include <glm/gtc/type_ptr.hpp>
+ #include <optional>
+ #include <ranges>
+ #include <string_view>
+@@ -92,6 +96,43 @@ JSValue layer_get_parent (JSContext* ctx, JSValueConst this_val, int argc, JSVal
+     return layer == nullptr ? JS_UNDEFINED : container->adapter.instantiate (*layer);
+ }
+ 
++JSValue layer_get_transform_matrix (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = layer_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getTransformMatrix called on something that is not a layer");
++    }
++
++    // the layer's world transform, its parents folded in: translation, then its angle, then its scale
++    const auto transform = WallpaperEngine::Render::Objects::CImage::resolveTransform (
++	container->adapter.getEngine ().getScene (), container->object.getObject ()
++    );
++    glm::mat4 world = glm::translate (glm::mat4 (1.0f), transform.origin);
++    world = glm::rotate (world, transform.angle, glm::vec3 (0.0f, 0.0f, 1.0f));
++    world = glm::scale (world, transform.scale);
++
++    // a Mat4 of the builtins, whose m is column-major as glm's is
++    JSValue global = JS_GetGlobalObject (ctx);
++    JSValue constructor = JS_GetPropertyStr (ctx, global, "Mat4");
++    JSValue matrix = JS_CallConstructor (ctx, constructor, 0, nullptr);
++    JS_FreeValue (ctx, constructor);
++    JS_FreeValue (ctx, global);
++
++    if (JS_IsException (matrix)) {
++	return matrix;
++    }
++
++    JSValue elements = JS_GetPropertyStr (ctx, matrix, "m");
++    const float* values = glm::value_ptr (world);
++
++    for (uint32_t i = 0; i < 16; i++) {
++	JS_SetPropertyUint32 (ctx, elements, i, JS_NewFloat64 (ctx, values[i]));
++    }
++
++    JS_FreeValue (ctx, elements);
++    return matrix;
++}
++
+ JSValue layer_get_children (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+     auto* container = layer_opaque (this_val);
+ 
+@@ -594,6 +635,9 @@ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::str
+     this->m_methods.emplace ("getAnimation", JS_NewCFunction (ctx, layer_get_animation, "getAnimation", 1));
+     this->m_methods.emplace ("getParent", JS_NewCFunction (ctx, layer_get_parent, "getParent", 0));
+     this->m_methods.emplace ("getChildren", JS_NewCFunction (ctx, layer_get_children, "getChildren", 0));
++    this->m_methods.emplace (
++	"getTransformMatrix", JS_NewCFunction (ctx, layer_get_transform_matrix, "getTransformMatrix", 0)
++    );
+ 
+     JS_NewClassID (this->m_engine.getRuntime (), &this->m_effectClassId);
+     JS_NewClass (this->m_engine.getRuntime (), this->m_effectClassId, &effect_class);
+diff --git a/src/WallpaperEngine/Scripting/resources/builtins.js b/src/WallpaperEngine/Scripting/resources/builtins.js
+index fa05f401..613378a1 100644
+--- a/src/WallpaperEngine/Scripting/resources/builtins.js
++++ b/src/WallpaperEngine/Scripting/resources/builtins.js
+@@ -14,3 +14,330 @@ globalThis.MediaPlaybackEvent = globalThis.MediaPlaybackEvent || {
+   PLAYBACK_PLAYING: 1,
+   PLAYBACK_PAUSED: 2
+ };
++// Mat3 and Mat4, as Wallpaper Engine's scene scripts know them. `m` is column-major, as glm
++// keeps it: Mat4's translation is m[12], m[13] and m[14], Mat3's (a 2D transform) m[6] and m[7].
++// Angles are in degrees; Euler angles turn about x, then y, then z (Rx * Ry * Rz).
++(() => {
++  const EPSILON = 1e-6;
++  const RAD = Math.PI / 180;
++  const num = (value, fallback) => (typeof value === 'number' ? value : fallback);
++
++  // the n x n product a * b
++  const product = (a, b, n) => {
++    const out = new Array(n * n).fill(0);
++    for (let col = 0; col < n; col++)
++      for (let row = 0; row < n; row++) {
++        let sum = 0;
++        for (let k = 0; k < n; k++) sum += a[k * n + row] * b[col * n + k];
++        out[col * n + row] = sum;
++      }
++    return out;
++  };
++
++  const transposed = (m, n) => {
++    const out = new Array(n * n);
++    for (let col = 0; col < n; col++)
++      for (let row = 0; row < n; row++) out[row * n + col] = m[col * n + row];
++    return out;
++  };
++
++  // Gauss-Jordan with partial pivoting: the inverse and the determinant, or a null inverse
++  const invert = (m, n) => {
++    const a = transposed(m, n); // rows, to eliminate along
++    const inv = new Array(n * n).fill(0);
++    for (let i = 0; i < n; i++) inv[i * n + i] = 1;
++    let det = 1;
++    for (let col = 0; col < n; col++) {
++      let pivot = col;
++      for (let row = col + 1; row < n; row++)
++        if (Math.abs(a[row * n + col]) > Math.abs(a[pivot * n + col])) pivot = row;
++      const p = a[pivot * n + col];
++      if (Math.abs(p) < 1e-12) return { inverse: null, det: 0 };
++      if (pivot !== col) {
++        for (let k = 0; k < n; k++) {
++          [a[col * n + k], a[pivot * n + k]] = [a[pivot * n + k], a[col * n + k]];
++          [inv[col * n + k], inv[pivot * n + k]] = [inv[pivot * n + k], inv[col * n + k]];
++        }
++        det = -det;
++      }
++      det *= p;
++      for (let k = 0; k < n; k++) {
++        a[col * n + k] /= p;
++        inv[col * n + k] /= p;
++      }
++      for (let row = 0; row < n; row++) {
++        if (row === col) continue;
++        const f = a[row * n + col];
++        if (f === 0) continue;
++        for (let k = 0; k < n; k++) {
++          a[row * n + k] -= f * a[col * n + k];
++          inv[row * n + k] -= f * inv[col * n + k];
++        }
++      }
++    }
++    return { inverse: transposed(inv, n), det };
++  };
++
++  const determinant = (m, n) => invert(m, n).det;
++
++  class Mat4 {
++    constructor() {
++      this.m = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
++    }
++
++    static of(m) {
++      const out = new Mat4();
++      out.m = m.slice(0, 16);
++      return out;
++    }
++
++    static identity() { return new Mat4(); }
++
++    static fromTranslation(v) {
++      const out = new Mat4();
++      out.m[12] = num(v.x, 0);
++      out.m[13] = num(v.y, 0);
++      out.m[14] = num(v.z, 0);
++      return out;
++    }
++
++    static fromScale(v) {
++      const out = new Mat4();
++      out.m[0] = typeof v === 'number' ? v : num(v.x, 1);
++      out.m[5] = typeof v === 'number' ? v : num(v.y, 1);
++      out.m[10] = typeof v === 'number' ? v : num(v.z, 1);
++      return out;
++    }
++
++    static fromRotation(angle, axis) {
++      const length = Math.hypot(axis.x, axis.y, axis.z);
++      if (length < EPSILON) return new Mat4();
++      const x = axis.x / length, y = axis.y / length, z = axis.z / length;
++      const c = Math.cos(angle * RAD), s = Math.sin(angle * RAD), t = 1 - c;
++      return Mat4.of([
++        t * x * x + c, t * x * y + s * z, t * x * z - s * y, 0,
++        t * x * y - s * z, t * y * y + c, t * y * z + s * x, 0,
++        t * x * z + s * y, t * y * z - s * x, t * z * z + c, 0,
++        0, 0, 0, 1,
++      ]);
++    }
++
++    static fromEuler(x, y, z) {
++      if (typeof x === 'object') return Mat4.fromEuler(x.x, x.y, x.z);
++      return Mat4.fromRotation(num(x, 0), { x: 1, y: 0, z: 0 })
++        .multiply(Mat4.fromRotation(num(y, 0), { x: 0, y: 1, z: 0 }))
++        .multiply(Mat4.fromRotation(num(z, 0), { x: 0, y: 0, z: 1 }));
++    }
++
++    static fromBasis(right, up, forward) {
++      return Mat4.of([right.x, right.y, right.z, 0, up.x, up.y, up.z, 0, forward.x, forward.y, forward.z, 0, 0, 0, 0, 1]);
++    }
++
++    static lookAt(eye, center, up) {
++      const normalize = (v) => {
++        const l = Math.hypot(v.x, v.y, v.z) || 1;
++        return { x: v.x / l, y: v.y / l, z: v.z / l };
++      };
++      const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
++      const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
++      const f = normalize({ x: center.x - eye.x, y: center.y - eye.y, z: center.z - eye.z });
++      const s = normalize(cross(f, up));
++      const u = cross(s, f);
++      return Mat4.of([s.x, u.x, -f.x, 0, s.y, u.y, -f.y, 0, s.z, u.z, -f.z, 0, -dot(s, eye), -dot(u, eye), dot(f, eye), 1]);
++    }
++
++    static compose(translation, rotation, scale) {
++      return Mat4.fromTranslation(translation).multiply(Mat4.fromEuler(rotation)).multiply(Mat4.fromScale(scale));
++    }
++
++    translation(position) {
++      if (position !== undefined) {
++        this.m[12] = num(position.x, 0);
++        this.m[13] = num(position.y, 0);
++        this.m[14] = num(position.z, 0);
++      }
++      return new Vec3(this.m[12], this.m[13], this.m[14]);
++    }
++
++    right() { return new Vec3(this.m[0], this.m[1], this.m[2]); }
++    up() { return new Vec3(this.m[4], this.m[5], this.m[6]); }
++    forward() { return new Vec3(this.m[8], this.m[9], this.m[10]); }
++
++    add(other) { return Mat4.of(this.m.map((v, i) => v + other.m[i])); }
++    subtract(other) { return Mat4.of(this.m.map((v, i) => v - other.m[i])); }
++
++    multiply(value) {
++      if (typeof value === 'number') return Mat4.of(this.m.map((v) => v * value));
++      if (value instanceof Mat4) return Mat4.of(product(this.m, value.m, 4));
++      const v = [num(value.x, 0), num(value.y, 0), num(value.z, 0), num(value.w, 0)];
++      const out = [0, 1, 2, 3].map((row) => this.m[row] * v[0] + this.m[4 + row] * v[1] + this.m[8 + row] * v[2] + this.m[12 + row] * v[3]);
++      return new Vec4(out[0], out[1], out[2], out[3]);
++    }
++
++    translate(v) { return this.multiply(Mat4.fromTranslation(v)); }
++    rotate(angle, axis) { return this.multiply(Mat4.fromRotation(angle, axis)); }
++    scale(v) { return this.multiply(Mat4.fromScale(v)); }
++
++    transformPoint(v) {
++      const m = this.m, x = num(v.x, 0), y = num(v.y, 0), z = num(v.z, 0);
++      return new Vec3(m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]);
++    }
++
++    transformDirection(v) {
++      const m = this.m, x = num(v.x, 0), y = num(v.y, 0), z = num(v.z, 0);
++      return new Vec3(m[0] * x + m[4] * y + m[8] * z, m[1] * x + m[5] * y + m[9] * z, m[2] * x + m[6] * y + m[10] * z);
++    }
++
++    transpose() { return Mat4.of(transposed(this.m, 4)); }
++
++    // a matrix without an inverse gives the identity
++    inverse() {
++      const { inverse } = invert(this.m, 4);
++      return inverse === null ? new Mat4() : Mat4.of(inverse);
++    }
++
++    determinant() { return determinant(this.m, 4); }
++
++    extractEuler() {
++      // the rotation alone: each axis divided by its scale
++      const sx = Math.hypot(this.m[0], this.m[1], this.m[2]) || 1;
++      const sy = Math.hypot(this.m[4], this.m[5], this.m[6]) || 1;
++      const sz = Math.hypot(this.m[8], this.m[9], this.m[10]) || 1;
++      const r = (row, col) => this.m[col * 4 + row] / [sx, sy, sz][col];
++      const sinY = Math.max(-1, Math.min(1, r(0, 2)));
++      const y = Math.asin(sinY);
++      let x, z;
++      if (Math.abs(sinY) < 1 - EPSILON) {
++        x = Math.atan2(-r(1, 2), r(2, 2));
++        z = Math.atan2(-r(0, 1), r(0, 0));
++      } else {
++        // gimbal lock: x and z turn about the same axis, so z takes none of it
++        x = Math.atan2(r(2, 1), r(1, 1));
++        z = 0;
++      }
++      return new Vec3(x / RAD, y / RAD, z / RAD);
++    }
++
++    normalMatrix() { return Mat3.fromMat4(this).inverse().transpose(); }
++
++    decompose() {
++      let sx = Math.hypot(this.m[0], this.m[1], this.m[2]);
++      const sy = Math.hypot(this.m[4], this.m[5], this.m[6]);
++      const sz = Math.hypot(this.m[8], this.m[9], this.m[10]);
++      if (determinant(this.m, 4) < 0) sx = -sx;
++      const rotation = Mat4.of(this.m);
++      [sx, sy, sz].forEach((s, col) => {
++        for (let row = 0; row < 3; row++) rotation.m[col * 4 + row] /= s || 1;
++      });
++      return {
++        translation: new Vec3(this.m[12], this.m[13], this.m[14]),
++        rotation: rotation.extractEuler(),
++        scale: new Vec3(sx, sy, sz),
++      };
++    }
++
++    copy() { return Mat4.of(this.m); }
++    equals(other) { return this.m.every((v, i) => Math.abs(v - other.m[i]) <= EPSILON); }
++    toString() { return this.m.join(' '); }
++  }
++
++  class Mat3 {
++    constructor() {
++      this.m = [1, 0, 0, 0, 1, 0, 0, 0, 1];
++    }
++
++    static of(m) {
++      const out = new Mat3();
++      out.m = m.slice(0, 9);
++      return out;
++    }
++
++    static identity() { return new Mat3(); }
++
++    static fromTranslation(v) { return Mat3.of([1, 0, 0, 0, 1, 0, num(v.x, 0), num(v.y, 0), 1]); }
++
++    static fromScale(v) {
++      const x = typeof v === 'number' ? v : num(v.x, 1);
++      const y = typeof v === 'number' ? v : num(v.y, 1);
++      return Mat3.of([x, 0, 0, 0, y, 0, 0, 0, 1]);
++    }
++
++    static fromRotation(angle) {
++      const c = Math.cos(angle * RAD), s = Math.sin(angle * RAD);
++      return Mat3.of([c, s, 0, -s, c, 0, 0, 0, 1]);
++    }
++
++    static fromBasis(right, up) { return Mat3.of([right.x, right.y, 0, up.x, up.y, 0, 0, 0, 1]); }
++
++    static fromMat4(m4) {
++      const m = m4.m;
++      return Mat3.of([m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]]);
++    }
++
++    static compose(translation, rotation, scale) {
++      return Mat3.fromTranslation(translation).multiply(Mat3.fromRotation(rotation)).multiply(Mat3.fromScale(scale));
++    }
++
++    translation(position) {
++      if (position !== undefined) {
++        this.m[6] = num(position.x, 0);
++        this.m[7] = num(position.y, 0);
++      }
++      return new Vec2(this.m[6], this.m[7]);
++    }
++
++    angle() { return Math.atan2(this.m[1], this.m[0]) / RAD; }
++
++    add(other) { return Mat3.of(this.m.map((v, i) => v + other.m[i])); }
++    subtract(other) { return Mat3.of(this.m.map((v, i) => v - other.m[i])); }
++
++    multiply(value) {
++      if (typeof value === 'number') return Mat3.of(this.m.map((v) => v * value));
++      if (value instanceof Mat3) return Mat3.of(product(this.m, value.m, 3));
++      const v = [num(value.x, 0), num(value.y, 0), num(value.z, 0)];
++      const out = [0, 1, 2].map((row) => this.m[row] * v[0] + this.m[3 + row] * v[1] + this.m[6 + row] * v[2]);
++      return new Vec3(out[0], out[1], out[2]);
++    }
++
++    translate(v) { return this.multiply(Mat3.fromTranslation(v)); }
++    rotate(angle) { return this.multiply(Mat3.fromRotation(angle)); }
++    scale(v) { return this.multiply(Mat3.fromScale(v)); }
++
++    transformPoint(v) {
++      const m = this.m, x = num(v.x, 0), y = num(v.y, 0);
++      return new Vec2(m[0] * x + m[3] * y + m[6], m[1] * x + m[4] * y + m[7]);
++    }
++
++    transformDirection(v) {
++      const m = this.m, x = num(v.x, 0), y = num(v.y, 0);
++      return new Vec2(m[0] * x + m[3] * y, m[1] * x + m[4] * y);
++    }
++
++    transpose() { return Mat3.of(transposed(this.m, 3)); }
++    determinant() { return determinant(this.m, 3); }
++
++    // a matrix without an inverse gives the identity
++    inverse() {
++      const { inverse } = invert(this.m, 3);
++      return inverse === null ? new Mat3() : Mat3.of(inverse);
++    }
++
++    decompose() {
++      let sx = Math.hypot(this.m[0], this.m[1]);
++      const sy = Math.hypot(this.m[3], this.m[4]);
++      if (this.m[0] * this.m[4] - this.m[1] * this.m[3] < 0) sx = -sx;
++      return {
++        translation: new Vec2(this.m[6], this.m[7]),
++        rotation: Math.atan2(this.m[1] / (sx || 1), this.m[0] / (sx || 1)) / RAD,
++        scale: new Vec2(sx, sy),
++      };
++    }
++
++    copy() { return Mat3.of(this.m); }
++    equals(other) { return this.m.every((v, i) => Math.abs(v - other.m[i]) <= EPSILON); }
++    toString() { return this.m.join(' '); }
++  }
++
++  globalThis.Mat4 = globalThis.Mat4 || Mat4;
++  globalThis.Mat3 = globalThis.Mat3 || Mat3;
++})();
+diff --git a/src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp b/src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp
+new file mode 100644
+index 00000000..8799a0db
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp
+@@ -0,0 +1,125 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <string>
++
++#include "WallpaperEngine/Scripting/Builtins.generated.h"
++
++extern "C" {
++#include "quickjs.h"
++}
++
++using WallpaperEngine::Scripting::SCENE_SCRIPT_BUILTINS;
++
++namespace {
++/** A bare QuickJS context with the scene-script builtins, and plain vectors where the engine's go */
++struct Builtins {
++    JSRuntime* runtime = JS_NewRuntime ();
++    JSContext* context = JS_NewContext (runtime);
++
++    Builtins () {
++	evaluate (
++	    "class V { constructor (...a) { ['x', 'y', 'z', 'w'].slice (0, a.length).forEach ((k, i) => this[k] = "
++	    "a[i]); } }"
++	    "globalThis.Vec2 = V; globalThis.Vec3 = V; globalThis.Vec4 = V;"
++	);
++	evaluate (SCENE_SCRIPT_BUILTINS);
++    }
++
++    Builtins (const Builtins&) = delete;
++    Builtins& operator= (const Builtins&) = delete;
++
++    ~Builtins () {
++	JS_FreeContext (context);
++	JS_FreeRuntime (runtime);
++    }
++
++    /** What `source` evaluates to, as a string, or the exception it threw */
++    std::string evaluate (const std::string& source) const {
++	JSValue value = JS_Eval (context, source.c_str (), source.size (), "<test>", JS_EVAL_TYPE_GLOBAL);
++
++	if (JS_IsException (value)) {
++	    value = JS_GetException (context);
++	}
++
++	const char* text = JS_ToCString (context, value);
++	std::string result = text != nullptr ? text : "";
++	JS_FreeCString (context, text);
++	JS_FreeValue (context, value);
++	return result;
++    }
++};
++} // namespace
++
++TEST_CASE ("A Mat4 keeps its translation where a layer's world matrix has it") {
++    const Builtins js;
++
++    CHECK (js.evaluate ("new Mat4 ().toString ()") == "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1");
++    // a script reads a layer's position as m[12] and m[13]
++    CHECK (js.evaluate ("Mat4.fromTranslation (new Vec2 (960, 540)).m.slice (12).join (' ')") == "960 540 0 1");
++    CHECK (js.evaluate ("Mat4.fromTranslation (new Vec3 (1, 2, 3)).translation ().z") == "3");
++}
++
++TEST_CASE ("A Mat4 composes translation, rotation and scale, and takes them apart again") {
++    const Builtins js;
++
++    // turned 90 degrees about z, x goes where y was
++    CHECK (
++	js.evaluate (
++	    "const p = Mat4.fromTranslation (new Vec3 (1, 2, 0)).rotate (90, new Vec3 (0, 0, 1))"
++	    ".transformPoint (new Vec3 (1, 0, 0)); [p.x, p.y, p.z].map (Math.round).join (' ')"
++	)
++	== "1 3 0"
++    );
++    CHECK (
++	js.evaluate (
++	    "const d = Mat4.compose (new Vec3 (5, 6, 7), new Vec3 (10, 20, 30), new Vec3 (2, 3, 4)).decompose ();"
++	    "[d.translation.x, d.translation.y, d.translation.z, d.rotation.x, d.rotation.y, d.rotation.z,"
++	    " d.scale.x, d.scale.y, d.scale.z].map (v => Math.round (v * 1000) / 1000).join (' ')"
++	)
++	== "5 6 7 10 20 30 2 3 4"
++    );
++    CHECK (
++	js.evaluate (
++	    "const e = Mat4.fromEuler (10, 20, 30).extractEuler ();"
++	    "[e.x, e.y, e.z].map (v => Math.round (v * 1000) / 1000).join (' ')"
++	)
++	== "10 20 30"
++    );
++}
++
++TEST_CASE ("A Mat4 inverts, and a matrix without an inverse gives the identity") {
++    const Builtins js;
++
++    CHECK (
++	js.evaluate (
++	    "const c = Mat4.compose (new Vec3 (5, 6, 7), new Vec3 (10, 20, 30), new Vec3 (2, 3, 4));"
++	    "c.multiply (c.inverse ()).equals (Mat4.identity ())"
++	)
++	== "true"
++    );
++    CHECK (js.evaluate ("Math.round (Mat4.fromScale (new Vec3 (2, 3, 4)).determinant ())") == "24");
++    CHECK (js.evaluate ("Mat4.fromScale (0).inverse ().equals (Mat4.identity ())") == "true");
++    CHECK (
++	js.evaluate ("Mat4.fromScale (new Vec3 (2, 4, 8)).normalMatrix ().toString ()") == "0.5 0 0 0 0.25 0 0 0 0.125"
++    );
++}
++
++TEST_CASE ("A Mat3 is a 2D transform") {
++    const Builtins js;
++
++    CHECK (
++	js.evaluate (
++	    "const d = Mat3.compose (new Vec2 (3, 4), 30, new Vec2 (2, 2)).decompose ();"
++	    "[d.translation.x, d.translation.y, d.rotation, d.scale.x, d.scale.y]"
++	    ".map (v => Math.round (v * 1000) / 1000).join (' ')"
++	)
++	== "3 4 30 2 2"
++    );
++    CHECK (js.evaluate ("Math.round (Mat3.fromRotation (45).angle ())") == "45");
++    CHECK (
++	js.evaluate (
++	    "const p = Mat3.fromTranslation (new Vec2 (10, 0)).transformPoint (new Vec2 (1, 1)); p.x + ' ' + p.y"
++	)
++	== "11 1"
++    );
++}

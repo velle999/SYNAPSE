@@ -1,0 +1,494 @@
+From 5bcad27871358e82236e0ce47f5307b3cbf8ef87 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:32:08 -0500
+Subject: [PATCH 55/58] fix(media): media events carry what Wallpaper Engine's
+ do, times in seconds
+
+MPRIS gives a track's length and position in microseconds, and scripts
+were handed them as they came; MediaTimelineEvent is in seconds, so a
+progress bar crawled and a "3:35" duration read as a number of minutes
+in the millions. They are seconds now.
+
+MediaPropertiesEvent lacked albumArtist, subTitle, genres and
+contentType, and MediaThumbnailEvent lacked textColor. A script that
+falls back to the album artist when a track names no artist, and one
+that colors a progress bar with the text color, both threw on the first
+event. albumArtist and genres come from the player's metadata (genres
+separated by ", "); MPRIS names no subtitle or content type, so those
+are "". textColor is white, the only color of the fixed palette that
+contrasts with its primary color.
+
+DBusMediaSource::readMetadata reads a Metadata dictionary into a
+MediaInfo and says what changed, so tests build one without a bus. An
+artist list that comes empty now clears the last track's artist.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   3 +-
+ src/WallpaperEngine/Media/DBusMediaSource.cpp | 137 ++++++++++------
+ src/WallpaperEngine/Media/DBusMediaSource.h   |  17 ++
+ src/WallpaperEngine/Media/MediaSource.h       |   5 +
+ .../Scripting/ScriptEngine.cpp                |   9 ++
+ .../Testing/Cases/MediaMetadata.cpp           | 150 ++++++++++++++++++
+ 6 files changed, 271 insertions(+), 50 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1f1d2c1c..88382410 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -589,7 +589,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+         src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+         src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+-        src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp)
++        src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
++        src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Media/DBusMediaSource.cpp b/src/WallpaperEngine/Media/DBusMediaSource.cpp
+index 83a50f34..a4dd2de4 100644
+--- a/src/WallpaperEngine/Media/DBusMediaSource.cpp
++++ b/src/WallpaperEngine/Media/DBusMediaSource.cpp
+@@ -84,12 +84,70 @@ DBusMediaSource::~DBusMediaSource () {
+     dbus_connection_unref (this->m_connection);
+ }
+ 
+-void DBusMediaSource::parseMetadata (DBusMessageIter& variant) {
++namespace {
++/** The first string of an MPRIS string list (xesam:artist and the like), or "" */
++std::string firstString (DBusMessageIter& value) {
++    if (dbus_message_iter_get_arg_type (&value) != DBUS_TYPE_ARRAY) {
++	return "";
++    }
++
++    DBusMessageIter arr;
++    dbus_message_iter_recurse (&value, &arr);
++
++    if (dbus_message_iter_get_arg_type (&arr) != DBUS_TYPE_STRING) {
++	return "";
++    }
++
++    const char* first = nullptr;
++    dbus_message_iter_get_basic (&arr, &first);
++    return first ?: "";
++}
++
++/** Every string of an MPRIS string list, separated by ", " */
++std::string joinedStrings (DBusMessageIter& value) {
++    if (dbus_message_iter_get_arg_type (&value) != DBUS_TYPE_ARRAY) {
++	return "";
++    }
++
++    DBusMessageIter arr;
++    dbus_message_iter_recurse (&value, &arr);
++    std::string result;
++
++    while (dbus_message_iter_get_arg_type (&arr) == DBUS_TYPE_STRING) {
++	const char* item = nullptr;
++	dbus_message_iter_get_basic (&arr, &item);
++
++	if (item != nullptr && *item != '\0') {
++	    if (!result.empty ()) {
++		result += ", ";
++	    }
++	    result += item;
++	}
++
++	dbus_message_iter_next (&arr);
++    }
++
++    return result;
++}
++
++/** Stores `next` into `field`, and says whether that changed it */
++template <typename T> bool assign (T& field, const T& next) {
++    if (field == next) {
++	return false;
++    }
++
++    field = next;
++    return true;
++}
++} // namespace
++
++double DBusMediaSource::toSeconds (int64_t microseconds) { return static_cast<double> (microseconds) / 1000000.0; }
++
++DBusMediaSource::MetadataChanges DBusMediaSource::readMetadata (DBusMessageIter& variant, MediaInfo& info) {
+     DBusMessageIter dict;
+     dbus_message_iter_recurse (&variant, &dict);
+ 
+-    bool metadataUpdate = false;
+-    bool albumUpdate = false;
++    MetadataChanges changes;
+ 
+     while (dbus_message_iter_get_arg_type (&dict) == DBUS_TYPE_DICT_ENTRY) {
+ 	DBusMessageIter entry;
+@@ -108,77 +166,60 @@ void DBusMediaSource::parseMetadata (DBusMessageIter& variant) {
+ 	    const char* title = nullptr;
+ 	    dbus_message_iter_get_basic (&value, &title);
+ 
+-	    std::string titleStr = title ?: "";
+-
+-	    if (this->m_mediaInfo.title != titleStr) {
+-		this->m_mediaInfo.title = titleStr;
+-		metadataUpdate = true;
+-	    }
++	    changes.metadata |= assign (info.title, std::string (title ?: ""));
+ 	} else if (keyStr == "xesam:artist") {
+-	    DBusMessageIter arr;
+-
+-	    dbus_message_iter_recurse (&value, &arr);
+-
+-	    if (dbus_message_iter_get_arg_type (&arr) == DBUS_TYPE_STRING) {
+-		const char* artist = nullptr;
+-		dbus_message_iter_get_basic (&arr, &artist);
+-
+-		std::string artistStr = artist ?: "";
+-
+-		if (this->m_mediaInfo.artist != artistStr) {
+-		    this->m_mediaInfo.artist = artistStr;
+-		    metadataUpdate = true;
+-		}
+-	    }
++	    changes.metadata |= assign (info.artist, firstString (value));
++	} else if (keyStr == "xesam:albumArtist") {
++	    changes.metadata |= assign (info.albumArtist, firstString (value));
++	} else if (keyStr == "xesam:genre") {
++	    changes.metadata |= assign (info.genres, joinedStrings (value));
+ 	} else if (keyStr == "xesam:album") {
+ 	    const char* album = nullptr;
+ 	    dbus_message_iter_get_basic (&value, &album);
+ 
+-	    std::string albumStr = album ?: "";
+-
+-	    if (this->m_mediaInfo.album != albumStr) {
+-		this->m_mediaInfo.album = albumStr;
+-		albumUpdate = true;
+-	    }
++	    changes.albumArt |= assign (info.album, std::string (album ?: ""));
+ 	} else if (keyStr == "mpris:artUrl") {
+ 	    const char* artUrl = nullptr;
+ 	    dbus_message_iter_get_basic (&value, &artUrl);
+ 
+ 	    std::string artUrlStr = artUrl ?: "";
+ 
+-	    if (artUrlStr.empty () && this->m_mediaInfo.url.has_value ()) {
+-		this->m_mediaInfo.url.reset ();
+-		albumUpdate = true;
+-	    } else if (this->m_mediaInfo.url.has_value () && artUrlStr != *this->m_mediaInfo.url) {
+-		this->m_mediaInfo.url = artUrlStr;
+-		albumUpdate = true;
+-	    } else if (!this->m_mediaInfo.url.has_value ()) {
+-		this->m_mediaInfo.url = artUrlStr;
+-		albumUpdate = true;
++	    if (artUrlStr.empty () && info.url.has_value ()) {
++		info.url.reset ();
++		changes.albumArt = true;
++	    } else if (info.url.has_value () && artUrlStr != *info.url) {
++		info.url = artUrlStr;
++		changes.albumArt = true;
++	    } else if (!info.url.has_value ()) {
++		info.url = artUrlStr;
++		changes.albumArt = true;
+ 	    }
+ 	} else if (keyStr == "mpris:length") {
+ 	    int64_t length = 0;
+ 	    dbus_message_iter_get_basic (&value, &length);
+ 
+-	    if (this->m_mediaInfo.duration != length) {
+-		this->m_mediaInfo.duration = length;
+-		metadataUpdate = true;
+-	    }
++	    changes.metadata |= assign (info.duration, toSeconds (length));
+ 	}
+ 
+ 	dbus_message_iter_next (&dict);
+     }
+ 
++    return changes;
++}
++
++void DBusMediaSource::parseMetadata (DBusMessageIter& variant) {
++    const auto changes = readMetadata (variant, this->m_mediaInfo);
++
+     sLog.debug (
+ 	"Player metadata received: title=", this->m_mediaInfo.title, ",artist=", this->m_mediaInfo.artist,
+ 	",album=", this->m_mediaInfo.album, ",url=", this->m_mediaInfo.url.has_value () ? *this->m_mediaInfo.url : ""
+     );
+ 
+-    if (metadataUpdate) {
++    if (changes.metadata) {
+ 	this->fireMetadataListeners ();
+     }
+ 
+-    if (albumUpdate) {
++    if (changes.albumArt) {
+ 	this->fireAlbumArtListeners ();
+     }
+ }
+@@ -211,8 +252,7 @@ void DBusMediaSource::parsePosition (DBusMessageIter& variant) {
+     int64_t position = 0;
+     dbus_message_iter_get_basic (&variant, &position);
+ 
+-    if (this->m_mediaInfo.position != position) {
+-	this->m_mediaInfo.position = position;
++    if (assign (this->m_mediaInfo.position, toSeconds (position))) {
+ 	this->fireMetadataListeners ();
+     }
+ }
+@@ -363,8 +403,7 @@ void DBusMediaSource::performUpdate () {
+     dbus_int64_t position = 0;
+     dbus_message_iter_get_basic (&variant, &position);
+ 
+-    if (this->m_mediaInfo.position != position) {
+-	this->m_mediaInfo.position = position;
++    if (assign (this->m_mediaInfo.position, toSeconds (position))) {
+ 	this->fireMetadataListeners ();
+     }
+ }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Media/DBusMediaSource.h b/src/WallpaperEngine/Media/DBusMediaSource.h
+index 8bc6a180..9b3a4bfb 100644
+--- a/src/WallpaperEngine/Media/DBusMediaSource.h
++++ b/src/WallpaperEngine/Media/DBusMediaSource.h
+@@ -9,6 +9,23 @@ public:
+     explicit DBusMediaSource (std::chrono::milliseconds updateInterval);
+     ~DBusMediaSource () override;
+ 
++    /** What reading a player's metadata changed */
++    struct MetadataChanges {
++	bool metadata = false;
++	bool albumArt = false;
++    };
++
++    /**
++     * Reads a player's Metadata dictionary into `info`
++     *
++     * @param variant The dictionary, as a PropertiesChanged signal or a Get reply carries it
++     * @param info The media info to update
++     * @return What changed
++     */
++    static MetadataChanges readMetadata (DBusMessageIter& variant, MediaInfo& info);
++    /** MPRIS gives times in microseconds, scripts take seconds */
++    static double toSeconds (int64_t microseconds);
++
+     void parseMetadata (DBusMessageIter& variant);
+     void parsePlaybackStatus (DBusMessageIter& variant, const char* sender);
+     void parsePosition (DBusMessageIter& variant);
+diff --git a/src/WallpaperEngine/Media/MediaSource.h b/src/WallpaperEngine/Media/MediaSource.h
+index 300a30ca..5e53f0fa 100644
+--- a/src/WallpaperEngine/Media/MediaSource.h
++++ b/src/WallpaperEngine/Media/MediaSource.h
+@@ -19,8 +19,13 @@ public:
+ 	std::string title;
+ 	std::string artist;
+ 	std::string album;
++	std::string albumArtist;
++	/** Every genre the player names, separated by ", " */
++	std::string genres;
+ 	std::optional<std::string> url;
++	/** In seconds, as scripts are given it */
+ 	double duration;
++	/** In seconds, as scripts are given it */
+ 	double position;
+ 	bool available;
+     };
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index dd851b31..7e06c2bf 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -554,12 +554,15 @@ void ScriptEngine::notifyMediaUpdate (const Media::MediaSource::MediaInfo& media
+     DynamicValue secondaryColorValue (glm::vec3 (0.0f, 0.0f, 0.0f));
+     DynamicValue tertiaryColorValue (glm::vec3 (0.25f, 0.25f, 0.25f));
+     DynamicValue highContrastColorValue (glm::vec3 (1.0f, 1.0f, 1.0f));
++    // the text color contrasts with the primary color: of these, only white does
++    DynamicValue textColorValue (glm::vec3 (1.0f, 1.0f, 1.0f));
+ 
+     // TODO: PROCESS THESE COLORS INSTEAD OF HARDCODING THEM
+     JSValue primaryColor = this->m_adapters.vec3->instantiate (primaryColorValue, true);
+     JSValue secondaryColor = this->m_adapters.vec3->instantiate (secondaryColorValue, true);
+     JSValue tertiaryColor = this->m_adapters.vec3->instantiate (tertiaryColorValue, true);
+     JSValue highContrastColor = this->m_adapters.vec3->instantiate (highContrastColorValue, true);
++    JSValue textColor = this->m_adapters.vec3->instantiate (textColorValue, true);
+ 
+     JSValue propertiesEvent = JS_NewObject (ctx);
+ 
+@@ -567,6 +570,11 @@ void ScriptEngine::notifyMediaUpdate (const Media::MediaSource::MediaInfo& media
+     JS_SetPropertyStr (ctx, propertiesEvent, "title", JS_NewString (ctx, media.title.c_str ()));
+     JS_SetPropertyStr (ctx, propertiesEvent, "artist", JS_NewString (ctx, media.artist.c_str ()));
+     JS_SetPropertyStr (ctx, propertiesEvent, "albumTitle", JS_NewString (ctx, media.album.c_str ()));
++    JS_SetPropertyStr (ctx, propertiesEvent, "albumArtist", JS_NewString (ctx, media.albumArtist.c_str ()));
++    JS_SetPropertyStr (ctx, propertiesEvent, "genres", JS_NewString (ctx, media.genres.c_str ()));
++    // MPRIS names neither, and a script reads "" as none
++    JS_SetPropertyStr (ctx, propertiesEvent, "subTitle", JS_NewString (ctx, ""));
++    JS_SetPropertyStr (ctx, propertiesEvent, "contentType", JS_NewString (ctx, ""));
+ 
+     JSValue playbackEvent = JS_NewObject (ctx);
+ 
+@@ -584,6 +592,7 @@ void ScriptEngine::notifyMediaUpdate (const Media::MediaSource::MediaInfo& media
+     JS_SetPropertyStr (ctx, mediaThumbnailEvent, "secondaryColor", secondaryColor);
+     JS_SetPropertyStr (ctx, mediaThumbnailEvent, "tertiaryColor", tertiaryColor);
+     JS_SetPropertyStr (ctx, mediaThumbnailEvent, "highContrastColor", highContrastColor);
++    JS_SetPropertyStr (ctx, mediaThumbnailEvent, "textColor", textColor);
+ 
+     JSValue propertiesArgs[] = { propertiesEvent };
+     JSValue playbackArgs[] = { playbackEvent };
+diff --git a/src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp b/src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
+new file mode 100644
+index 00000000..612add5a
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
+@@ -0,0 +1,150 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <cstdint>
++#include <initializer_list>
++#include <string>
++
++#include <dbus/dbus.h>
++
++#include "WallpaperEngine/Media/DBusMediaSource.h"
++
++using WallpaperEngine::Media::DBusMediaSource;
++using WallpaperEngine::Media::MediaSource;
++
++namespace {
++/** A Metadata dictionary as an MPRIS player sends it, built without a bus to send it on */
++class Metadata {
++public:
++    Metadata () :
++	m_message (
++	    dbus_message_new_signal ("/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties", "PropertiesChanged")
++	) {
++	dbus_message_iter_init_append (this->m_message, &this->m_args);
++	dbus_message_iter_open_container (&this->m_args, DBUS_TYPE_ARRAY, "{sv}", &this->m_dict);
++    }
++
++    Metadata (const Metadata&) = delete;
++    Metadata& operator= (const Metadata&) = delete;
++
++    ~Metadata () { dbus_message_unref (this->m_message); }
++
++    Metadata& string (const char* key, const char* value) {
++	DBusMessageIter entry, variant;
++	this->open (key, "s", entry, variant);
++	dbus_message_iter_append_basic (&variant, DBUS_TYPE_STRING, &value);
++	this->close (entry, variant);
++	return *this;
++    }
++
++    Metadata& strings (const char* key, std::initializer_list<const char*> values) {
++	DBusMessageIter entry, variant, list;
++	this->open (key, "as", entry, variant);
++	dbus_message_iter_open_container (&variant, DBUS_TYPE_ARRAY, "s", &list);
++	for (const char* value : values) {
++	    dbus_message_iter_append_basic (&list, DBUS_TYPE_STRING, &value);
++	}
++	dbus_message_iter_close_container (&variant, &list);
++	this->close (entry, variant);
++	return *this;
++    }
++
++    Metadata& int64 (const char* key, int64_t value) {
++	DBusMessageIter entry, variant;
++	this->open (key, "x", entry, variant);
++	dbus_message_iter_append_basic (&variant, DBUS_TYPE_INT64, &value);
++	this->close (entry, variant);
++	return *this;
++    }
++
++    /** Reads the dictionary into `info`, as a PropertiesChanged signal's Metadata is read */
++    DBusMediaSource::MetadataChanges readInto (MediaSource::MediaInfo& info) {
++	if (!this->m_closed) {
++	    dbus_message_iter_close_container (&this->m_args, &this->m_dict);
++	    this->m_closed = true;
++	}
++
++	DBusMessageIter read;
++	dbus_message_iter_init (this->m_message, &read);
++	return DBusMediaSource::readMetadata (read, info);
++    }
++
++private:
++    void open (const char* key, const char* signature, DBusMessageIter& entry, DBusMessageIter& variant) {
++	dbus_message_iter_open_container (&this->m_dict, DBUS_TYPE_DICT_ENTRY, nullptr, &entry);
++	dbus_message_iter_append_basic (&entry, DBUS_TYPE_STRING, &key);
++	dbus_message_iter_open_container (&entry, DBUS_TYPE_VARIANT, signature, &variant);
++    }
++
++    void close (DBusMessageIter& entry, DBusMessageIter& variant) {
++	dbus_message_iter_close_container (&entry, &variant);
++	dbus_message_iter_close_container (&this->m_dict, &entry);
++    }
++
++    DBusMessage* m_message;
++    DBusMessageIter m_args {};
++    DBusMessageIter m_dict {};
++    bool m_closed = false;
++};
++
++MediaSource::MediaInfo nothingPlaying () {
++    return {
++	.playbackState = MediaSource::Stopped,
++	.duration = 0.0,
++	.position = 0.0,
++	.available = false,
++    };
++}
++} // namespace
++
++TEST_CASE ("A player's times reach scripts in seconds") {
++    auto info = nothingPlaying ();
++
++    // a 3:35.5 track: MPRIS counts microseconds, and a script formats minutes from seconds
++    Metadata ().int64 ("mpris:length", 215500000).readInto (info);
++
++    CHECK (info.duration == 215.5);
++    CHECK (DBusMediaSource::toSeconds (83000000) == 83.0);
++    CHECK (DBusMediaSource::toSeconds (0) == 0.0);
++}
++
++TEST_CASE ("A player's metadata carries its album artist and genres") {
++    auto info = nothingPlaying ();
++
++    Metadata ()
++	.string ("xesam:title", "Harder, Better, Faster, Stronger")
++	.strings ("xesam:artist", { "Daft Punk", "Kanye West" })
++	.strings ("xesam:albumArtist", { "Daft Punk" })
++	.strings ("xesam:genre", { "Electronic", "", "House" })
++	.string ("xesam:album", "Discovery")
++	.readInto (info);
++
++    CHECK (info.title == "Harder, Better, Faster, Stronger");
++    CHECK (info.artist == "Daft Punk");
++    CHECK (info.albumArtist == "Daft Punk");
++    CHECK (info.genres == "Electronic, House");
++    CHECK (info.album == "Discovery");
++}
++
++TEST_CASE ("Reading a player's metadata says what it changed") {
++    auto info = nothingPlaying ();
++
++    auto changes = Metadata ().string ("xesam:title", "One More Time").readInto (info);
++    CHECK (changes.metadata);
++    CHECK_FALSE (changes.albumArt);
++
++    changes = Metadata ().string ("xesam:title", "One More Time").readInto (info);
++    CHECK_FALSE (changes.metadata);
++
++    changes = Metadata ().strings ("xesam:albumArtist", { "Daft Punk" }).readInto (info);
++    CHECK (changes.metadata);
++
++    changes = Metadata ().string ("xesam:album", "Discovery").readInto (info);
++    CHECK_FALSE (changes.metadata);
++    CHECK (changes.albumArt);
++
++    // a track without an artist does not keep the last one's
++    info.artist = "Daft Punk";
++    changes = Metadata ().strings ("xesam:artist", {}).readInto (info);
++    CHECK (changes.metadata);
++    CHECK (info.artist.empty ());
++}

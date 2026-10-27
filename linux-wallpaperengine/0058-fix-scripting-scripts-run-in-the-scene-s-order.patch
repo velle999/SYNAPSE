@@ -1,0 +1,98 @@
+From 04f47664a5765652f67e652bd7b4e2b60e7e7a7a Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:44:01 -0500
+Subject: [PATCH 58/58] fix(scripting): scripts run in the scene's order
+
+Scripts were kept in a map keyed by property and layer ("color_447"),
+and ran init, update and every event in that key's alphabetical order:
+every color script before any origin script, whatever the scene said.
+A script that reads in init what another layer's init put in `shared`
+ran before it whenever its property sorted first, and read undefined.
+
+They now run in the order the scene loaded them, which is its objects'
+order, dependencies first.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Scripting/ScriptEngine.cpp | 14 +++++++++++---
+ src/WallpaperEngine/Scripting/ScriptEngine.h   |  6 ++++++
+ 2 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 7e06c2bf..b7c9018c 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -310,6 +310,7 @@ ScriptEngine::~ScriptEngine () {
+     this->m_sceneObject.reset ();
+     this->m_scriptPropertiesObject.reset ();
+     this->m_modules.clear ();
++    this->m_scriptOrder.clear ();
+     this->m_scriptModules.clear ();
+ 
+     if (this->m_context) {
+@@ -414,7 +415,9 @@ void ScriptEngine::callHandler (
+ void ScriptEngine::initializeModules () {
+     std::vector<std::pair<const std::string*, LoadedModule*>> initialized;
+ 
+-    for (auto& [key, module] : this->m_scriptModules) {
++    for (auto* entry : this->m_scriptOrder) {
++	auto& [key, module] = *entry;
++
+ 	if (!JS_IsObject (module.module) || module.initialized) {
+ 	    continue;
+ 	}
+@@ -489,6 +492,7 @@ void ScriptEngine::queueScript (
+ 	}
+     );
+     auto& loaded = inserted.first->second;
++    this->m_scriptOrder.push_back (&*inserted.first);
+ 
+     // the module's top level usually calls createScriptProperties().finish(),
+     // which binds to the running module, so set it (and thisLayer) up front
+@@ -538,7 +542,9 @@ void ScriptEngine::tick () {
+     this->m_engineObject->tick ();
+ 
+     // then update every frame
+-    for (auto& [key, module] : this->m_scriptModules) {
++    for (auto* entry : this->m_scriptOrder) {
++	auto& [key, module] = *entry;
++
+ 	if (!JS_IsObject (module.module)) {
+ 	    continue;
+ 	}
+@@ -612,7 +618,9 @@ void ScriptEngine::notifyMediaUpdate (const Media::MediaSource::MediaInfo& media
+     // a handler reads thisLayer, thisObject and its script properties as update () does: the
+     // globals were left on whichever module ran last, and a handler's exception sat pending
+     // in the context until some other module's error report collected it
+-    for (auto& [key, module] : this->m_scriptModules) {
++    for (auto* entry : this->m_scriptOrder) {
++	auto& [key, module] = *entry;
++
+ 	for (const auto& [name, args] : handlers) {
+ 	    this->callHandler (key, module, name, 1, args);
+ 	}
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index 8fbbc67e..2e0e4177 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -15,6 +15,7 @@
+ #include <string>
+ #include <unordered_map>
+ #include <unordered_set>
++#include <vector>
+ 
+ #include "WallpaperEngine/Data/Model/DynamicValue.h"
+ #include "WallpaperEngine/Data/Model/Types.h"
+@@ -155,6 +156,11 @@ private:
+ 
+     std::map<std::string, std::unique_ptr<Modules::ScriptModule>> m_modules = {};
+     std::map<std::string, LoadedModule> m_scriptModules = {};
++    /**
++     * The scripts in the order the scene loaded them, its objects' order: they init, update and
++     * take events in it, as one script reads what an earlier one put in `shared`
++     */
++    std::vector<std::pair<const std::string, LoadedModule>*> m_scriptOrder = {};
+ 
+     LoadedModule* m_runningModule = nullptr;
+ 
