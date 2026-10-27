@@ -1,0 +1,76 @@
+From b61def4f93db4f18e450a5df3530c32d5451b0ca Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 15:24:51 -0500
+Subject: [PATCH 29/42] fix(web): map local files a page names through
+ element.style
+
+A page that sets `element.style.background = "url('file:///...')"` kept
+the file: URL, which Chromium refuses to a page of the wp scheme: the
+preset 2088821374 showed the visualizer of 884307090 on black instead of
+its photo. Chromium answers a style's own properties through a named
+property interceptor, so wrapping accessors on CSSStyleDeclaration's
+prototype caught cssText and nothing else.
+
+The shim now watches style attributes, which every such write updates,
+and rewrites one that names a local file before the next frame is
+styled. Elements styled before they were attached are checked when they
+are added.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/WebBrowser/CEF/WebApi.h | 41 +++++++++++++++++++--
+ 1 file changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/WebBrowser/CEF/WebApi.h b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+index 5d3838ed..ebd1dd57 100644
+--- a/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
++++ b/src/WallpaperEngine/WebBrowser/CEF/WebApi.h
+@@ -147,10 +147,43 @@ inline constexpr const char* shim = R"JS(
+             return open + location.protocol + '//' + location.host + local;
+         }) : html;
+     });
+-    ['background', 'backgroundImage', 'cssText', 'content', 'listStyleImage', 'borderImage',
+-     'borderImageSource', 'maskImage', 'webkitMaskImage'].forEach (function (name) {
+-        wrapSetter (window.CSSStyleDeclaration && CSSStyleDeclaration.prototype, name, mapCss);
+-    });
++    wrapSetter (window.CSSStyleDeclaration && CSSStyleDeclaration.prototype, 'cssText', mapCss);
++
++    // `element.style.background = ...` cannot be wrapped: Chromium answers a style's
++    // own properties through a named-property interceptor, not accessors on the
++    // prototype. The write still lands in the element's style attribute, so that is
++    // watched instead and rewritten when it names a local file, before the next
++    // frame is styled (workshop 2088821374, a preset's photo behind 884307090).
++    function mapStyleOf (element) {
++        var text = element.getAttribute ('style');
++        if (!text || text.toLowerCase ().indexOf ('file:///') === -1) {
++            return;
++        }
++        var mapped = mapCss (text);
++        // only on a change: the rewrite is itself a mutation, and is observed
++        if (mapped !== text) {
++            element.style.cssText = mapped;
++        }
++    }
++
++    if (window.MutationObserver) {
++        new MutationObserver (function (records) {
++            records.forEach (function (record) {
++                if (record.type === 'attributes') {
++                    mapStyleOf (record.target);
++                    return;
++                }
++                // an element styled before it was attached changed no observed attribute
++                record.addedNodes.forEach (function (node) {
++                    if (node.nodeType !== Node.ELEMENT_NODE) {
++                        return;
++                    }
++                    mapStyleOf (node);
++                    node.querySelectorAll ('[style*="file:///" i]').forEach (mapStyleOf);
++                });
++            });
++        }).observe (document, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
++    }
+ 
+     if (window.CSSStyleDeclaration) {
+         var setProperty = CSSStyleDeclaration.prototype.setProperty;

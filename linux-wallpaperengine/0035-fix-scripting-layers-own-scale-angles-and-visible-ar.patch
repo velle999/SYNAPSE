@@ -1,0 +1,63 @@
+From 6e00af3fd1e5d9368e7bc51b89cbc51d54856caf Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:07:19 -0500
+Subject: [PATCH 35/42] fix(scripting): layers' own scale, angles and visible
+ are what scripts drive
+
+ScriptableObject registered every object's group transform (groupScale,
+groupAngles, groupVisible) under "scale", "angles" and "visible" before
+an image, text or particle registered its own, and the first
+registration of a name wins. So a script on an image's angles, or the
+value thisLayer.angles a script assigned, landed in a group value the
+renderer never reads. An analog clock's hands sat at 12:00:00
+(workshop 2832169432), and across 139 wallpapers that is 135 scale
+scripts in 12 of them, 16 angles scripts in 5 and 306 visible scripts
+in 11, plus text scale and visibility.
+
+The base class now registers the group values only for objects that
+have nothing of their own: all three for a group, angles for a text
+layer, which has no angles of its own.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/ScriptableObject.cpp            | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index 1a58d6ea..e2ff1a6c 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -1,6 +1,7 @@
+ #include "ScriptableObject.h"
+ 
+ #include "ScriptEngine.h"
++#include "WallpaperEngine/Data/Model/Object.h"
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ 
+ #include <ranges>
+@@ -11,9 +12,21 @@ using namespace WallpaperEngine::Scripting;
+ ScriptableObject::ScriptableObject (Wallpapers::CScene& scene, const Object& object) : CObject (scene, object) {
+     // register common dynamic values
+     this->registerProperty ("origin", *object.origin->value);
+-    this->registerProperty ("scale", *object.groupScale->value);
+-    this->registerProperty ("angles", *object.groupAngles->value);
+-    this->registerProperty ("visible", *object.groupVisible->value);
++
++    // An image, text or particle reads its OWN scale, angles and visible, parsed from the
++    // same JSON as these group values, and registers them itself. The first registration
++    // of a name wins, so registering these here bound every script (and every scripted
++    // property: an analog clock's hands, 306 visibility scripts) to values nothing drew.
++    const bool ownTransform = object.is<Image> () || object.is<Particle> ();
++
++    if (!ownTransform && !object.is<Text> ()) {
++	this->registerProperty ("scale", *object.groupScale->value);
++	this->registerProperty ("visible", *object.groupVisible->value);
++    }
++
++    if (!ownTransform) {
++	this->registerProperty ("angles", *object.groupAngles->value);
++    }
+     // the name the editor gave it, which scripts look layers up and sort them by
+     this->registerConstant ("name", DynamicValue (object.name));
+ }

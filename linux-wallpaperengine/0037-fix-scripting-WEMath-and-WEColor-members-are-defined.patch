@@ -1,0 +1,281 @@
+From e2cbe31c3a6183ae0d32a5d44dda56e701c77bb7 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:26:20 -0500
+Subject: [PATCH 37/42] fix(scripting): WEMath and WEColor members are defined
+
+Both modules did QuickJS's two export steps in each other's place. The
+constructor set the values before any export name existed, which fails
+without an error, and the module's init declared the names, which
+QuickJS only calls when a script evaluates the module, after the
+import has linked. So `import * as WEMath from 'WEMath'` gave a
+namespace whose every member was undefined. 20 scripts in 8 wallpapers
+import WEMath and 9 in 8 import WEColor; every call ended the script
+as "not a function". The names are now declared when the module is
+made, and the values are set in init.
+
+WEColor's hue also runs from 0 to 1, the way scripts write it
+(`Date.now () / 2000 * speed % 1`). hsv2rgb read it as degrees, so a
+rainbow never left the first sixtieth of the wheel and stayed red, and
+rgb2hsv answered degrees back. WEMath.mix and smoothStep given
+something other than three numbers throw a TypeError instead of
+failing without an error.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/Modules/ColorModule.cpp         | 87 +++++++++++--------
+ .../Scripting/Modules/MathModule.cpp          | 75 ++++++++--------
+ 2 files changed, 87 insertions(+), 75 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/Modules/ColorModule.cpp b/src/WallpaperEngine/Scripting/Modules/ColorModule.cpp
+index 09412df6..4e0d3bd0 100644
+--- a/src/WallpaperEngine/Scripting/Modules/ColorModule.cpp
++++ b/src/WallpaperEngine/Scripting/Modules/ColorModule.cpp
+@@ -2,6 +2,9 @@
+ 
+ #include "WallpaperEngine/Scripting/ScriptEngine.h"
+ 
++#include <algorithm>
++#include <cmath>
++
+ using namespace WallpaperEngine::Scripting::Modules;
+ 
+ #define min_f(a, b, c) (fminf (a, fminf (b, c)))
+@@ -10,15 +13,10 @@ using namespace WallpaperEngine::Scripting::Modules;
+ static uint32_t ColorModuleInstanceId = 0;
+ std::map<uint32_t, ColorModule&> colorModules;
+ 
+-int wecolor_init (JSContext* ctx, JSModuleDef* m) {
+-
+-    JS_AddModuleExport (ctx, m, "rgb2hsv");
+-    JS_AddModuleExport (ctx, m, "hsv2rgb");
+-    JS_AddModuleExport (ctx, m, "normalizeColor");
+-    JS_AddModuleExport (ctx, m, "expandColor");
+-
+-    return 0;
+-}
++namespace {
++/** WEColor's exports: declared when the module is made, so that a script's import links against them */
++constexpr const char* colorExports[] = { "rgb2hsv", "hsv2rgb", "normalizeColor", "expandColor" };
++} // namespace
+ 
+ JSValue wecolor_rgb2hsv (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+     if (argc != 1) {
+@@ -69,6 +67,9 @@ JSValue wecolor_rgb2hsv (JSContext* ctx, JSValueConst this_val, int argc, JSValu
+ 	h += 360.0f;
+     }
+ 
++    // hue from 0 to 1, as hsv2rgb takes it
++    h /= 360.0f;
++
+     const auto it = colorModules.find (magic);
+ 
+     if (it == colorModules.end ()) {
+@@ -106,8 +107,17 @@ JSValue wecolor_hsv2rgb (JSContext* ctx, JSValueConst this_val, int argc, JSValu
+     // conversion code from https://gist.github.com/yoggy/8999625
+     float r, g, b; // 0.0-1.0
+ 
+-    int hi = (int)(xVal / 60.0f) % 6;
+-    float f = (xVal / 60.0f) - hi;
++    // hue runs from 0 to 1 around the wheel, as scripts write it (`Date.now () / 2000 % 1`); read
++    // as degrees, it never left the first sixtieth of the wheel and a rainbow stayed red
++    double hue = std::isfinite (xVal) ? std::fmod (xVal, 1.0) : 0.0;
++
++    if (hue < 0.0) {
++	hue += 1.0;
++    }
++
++    const double sector = hue * 6.0;
++    int hi = static_cast<int> (sector) % 6;
++    float f = static_cast<float> (sector - hi);
+     float p = zVal * (1.0f - yVal);
+     float q = zVal * (1.0f - yVal * f);
+     float t = zVal * (1.0f - yVal * (1.0f - f));
+@@ -227,39 +237,48 @@ JSValue wecolor_expandcolor (JSContext* ctx, JSValueConst this_val, int argc, JS
+     return value;
+ }
+ 
+-ColorModule::ColorModule (ScriptEngine& engine) : ScriptModule (engine, "WEColor", wecolor_init) {
+-    this->m_instanceId = ++ColorModuleInstanceId;
++/**
++ * QuickJS calls this the first time a script evaluates the module, after linking it: the values
++ * go in here, against the names the constructor declared (see wemath_init, which had the same
++ * order backwards and every member undefined)
++ */
++int wecolor_init (JSContext* ctx, JSModuleDef* m) {
++    const auto it = std::ranges::find_if (colorModules, [m] (const auto& entry) {
++	return entry.second.getDefinition () == m;
++    });
++
++    if (it == colorModules.end ()) {
++	return -1;
++    }
++
++    // the functions find this module, and through it the engine, by its instance id
++    const int instanceId = static_cast<int> (it->first);
+ 
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "rgb2hsv",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wecolor_rgb2hsv, "rgb2hsv", 1, JS_CFUNC_generic_magic, this->m_instanceId
+-	)
++	ctx, m, "rgb2hsv", JS_NewCFunctionMagic (ctx, wecolor_rgb2hsv, "rgb2hsv", 1, JS_CFUNC_generic_magic, instanceId)
+     );
+-
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "hsv2rgb",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wecolor_hsv2rgb, "hsv2rgb", 1, JS_CFUNC_generic_magic, this->m_instanceId
+-	)
++	ctx, m, "hsv2rgb", JS_NewCFunctionMagic (ctx, wecolor_hsv2rgb, "hsv2rgb", 1, JS_CFUNC_generic_magic, instanceId)
+     );
+-
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "normalizeColor",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wecolor_normalizecolor, "normalizeColor", 1, JS_CFUNC_generic_magic,
+-	    this->m_instanceId
+-	)
++	ctx, m, "normalizeColor",
++	JS_NewCFunctionMagic (ctx, wecolor_normalizecolor, "normalizeColor", 1, JS_CFUNC_generic_magic, instanceId)
+     );
+-
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "expandColor",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wecolor_expandcolor, "expandColor", 1, JS_CFUNC_generic_magic,
+-	    this->m_instanceId
+-	)
++	ctx, m, "expandColor",
++	JS_NewCFunctionMagic (ctx, wecolor_expandcolor, "expandColor", 1, JS_CFUNC_generic_magic, instanceId)
+     );
+ 
++    return 0;
++}
++
++ColorModule::ColorModule (ScriptEngine& engine) : ScriptModule (engine, "WEColor", wecolor_init) {
++    this->m_instanceId = ++ColorModuleInstanceId;
++
++    for (const char* name : colorExports) {
++	JS_AddModuleExport (this->getEngine ().getContext (), this->getDefinition (), name);
++    }
++
+     colorModules.emplace (this->m_instanceId, *this);
+ }
+ 
+diff --git a/src/WallpaperEngine/Scripting/Modules/MathModule.cpp b/src/WallpaperEngine/Scripting/Modules/MathModule.cpp
+index b3f5a82b..23a07cf2 100644
+--- a/src/WallpaperEngine/Scripting/Modules/MathModule.cpp
++++ b/src/WallpaperEngine/Scripting/Modules/MathModule.cpp
+@@ -2,6 +2,8 @@
+ 
+ #include "WallpaperEngine/Scripting/ScriptEngine.h"
+ 
++#include <algorithm>
++
+ using namespace WallpaperEngine::Scripting::Modules;
+ 
+ #define min_f(a, b, c) (fminf (a, fminf (b, c)))
+@@ -10,23 +12,14 @@ using namespace WallpaperEngine::Scripting::Modules;
+ static uint32_t MathModuleInstanceId = 0;
+ std::map<uint32_t, MathModule&> mathModules;
+ 
+-int wemath_init (JSContext* ctx, JSModuleDef* m) {
+-
+-    JS_AddModuleExport (ctx, m, "smoothStep");
+-    JS_AddModuleExport (ctx, m, "mix");
+-    JS_AddModuleExport (ctx, m, "deg2rad");
+-    JS_AddModuleExport (ctx, m, "rad2deg");
+-
+-    return 0;
+-}
++namespace {
++/** WEMath's exports: declared when the module is made, so that a script's import links against them */
++constexpr const char* mathExports[] = { "smoothStep", "mix", "deg2rad", "rad2deg" };
++} // namespace
+ 
+ JSValue wemath_smoothstep (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+-    if (argc != 3) {
+-	return JS_EXCEPTION;
+-    }
+-
+-    if (!JS_IsNumber (argv[0]) || !JS_IsNumber (argv[1]) || !JS_IsNumber (argv[2])) {
+-	return JS_EXCEPTION;
++    if (argc != 3 || !JS_IsNumber (argv[0]) || !JS_IsNumber (argv[1]) || !JS_IsNumber (argv[2])) {
++	return JS_ThrowTypeError (ctx, "WEMath.smoothStep takes three numbers");
+     }
+ 
+     double edge0 = 0.0f;
+@@ -41,12 +34,8 @@ JSValue wemath_smoothstep (JSContext* ctx, JSValueConst this_val, int argc, JSVa
+ }
+ 
+ JSValue wemath_mix (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+-    if (argc != 3) {
+-	return JS_EXCEPTION;
+-    }
+-
+-    if (!JS_IsNumber (argv[0]) || !JS_IsNumber (argv[1]) || !JS_IsNumber (argv[2])) {
+-	return JS_EXCEPTION;
++    if (argc != 3 || !JS_IsNumber (argv[0]) || !JS_IsNumber (argv[1]) || !JS_IsNumber (argv[2])) {
++	return JS_ThrowTypeError (ctx, "WEMath.mix takes three numbers");
+     }
+ 
+     double a = 0.0f;
+@@ -60,33 +49,37 @@ JSValue wemath_mix (JSContext* ctx, JSValueConst this_val, int argc, JSValueCons
+     return JS_NewFloat64 (ctx, glm::mix (a, b, value));
+ }
+ 
+-MathModule::MathModule (ScriptEngine& engine) : ScriptModule (engine, "WEMath", wemath_init) {
+-    this->m_instanceId = ++MathModuleInstanceId;
++/**
++ * QuickJS calls this the first time a script evaluates the module, after linking it: the values
++ * go in here, against the names the constructor declared. It was the other way round, setting
++ * values before any name existed (which fails without a word) and declaring the names after the
++ * import had linked, so every member of WEMath was undefined.
++ */
++int wemath_init (JSContext* ctx, JSModuleDef* m) {
++    const auto it = std::ranges::find_if (mathModules, [m] (const auto& entry) {
++	return entry.second.getDefinition () == m;
++    });
++    const int instanceId = it == mathModules.end () ? 0 : static_cast<int> (it->first);
+ 
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "smoothStep",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wemath_smoothstep, "smoothStep", 3, JS_CFUNC_generic_magic,
+-	    this->m_instanceId
+-	)
++	ctx, m, "smoothStep",
++	JS_NewCFunctionMagic (ctx, wemath_smoothstep, "smoothStep", 3, JS_CFUNC_generic_magic, instanceId)
+     );
+-
+     JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "mix",
+-	JS_NewCFunctionMagic (
+-	    this->getEngine ().getContext (), wemath_mix, "mix", 1, JS_CFUNC_generic_magic, this->m_instanceId
+-	)
++	ctx, m, "mix", JS_NewCFunctionMagic (ctx, wemath_mix, "mix", 3, JS_CFUNC_generic_magic, instanceId)
+     );
++    JS_SetModuleExport (ctx, m, "deg2rad", JS_NewFloat64 (ctx, 0.01745329251994329576923690768489));
++    JS_SetModuleExport (ctx, m, "rad2deg", JS_NewFloat64 (ctx, 57.295779513082320876798154814105));
+ 
+-    JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "deg2rad",
+-	JS_NewFloat64 (this->getEngine ().getContext (), 0.01745329251994329576923690768489)
+-    );
++    return 0;
++}
+ 
+-    JS_SetModuleExport (
+-	this->getEngine ().getContext (), this->getDefinition (), "rad2deg",
+-	JS_NewFloat64 (this->getEngine ().getContext (), 57.295779513082320876798154814105)
+-    );
++MathModule::MathModule (ScriptEngine& engine) : ScriptModule (engine, "WEMath", wemath_init) {
++    this->m_instanceId = ++MathModuleInstanceId;
++
++    for (const char* name : mathExports) {
++	JS_AddModuleExport (this->getEngine ().getContext (), this->getDefinition (), name);
++    }
+ 
+     mathModules.emplace (this->m_instanceId, *this);
+ }

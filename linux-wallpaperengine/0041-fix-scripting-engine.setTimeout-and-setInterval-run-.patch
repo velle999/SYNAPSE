@@ -1,0 +1,275 @@
+From fecdea0221c7ef56008a8ed5911ef4ff222f99b8 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:29:01 -0500
+Subject: [PATCH 41/42] fix(scripting): engine.setTimeout and setInterval run,
+ and cancel
+
+The engine object was never put in the map its timer functions look
+it up in. Only the destructor touched the map, so every setTimeout and
+setInterval returned an exception that nothing had thrown and ended
+the script as "[uninitialized]". 5 scripts in 2 wallpapers start
+timers (Swimming Kirby's media panel, a vinyl's album cover that hides
+a second after a track change).
+
+With the map filled, three more faults would have followed:
+
+  - The callback was kept without a reference of its own and then
+    freed when the timer fired, a use-after-free.
+  - The cancel function setTimeout returns read the timer id from its
+    argument. Scripts call it bare (`stop ()`), so every cancel failed.
+    It now reads the id it was made with.
+  - The tick ran callbacks while iterating the timer maps, so a
+    callback that cancelled a timer erased from a map under the loop.
+    Due timers are now collected first and run by id. A timeout is
+    gone before its callback runs, and an interval's callback is held
+    while it runs.
+
+A callback that throws is logged once instead of leaving its exception
+pending for another script's error report to collect. A timer given
+something other than a function is a TypeError.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/EngineObject.cpp                | 120 +++++++++++-------
+ src/WallpaperEngine/Scripting/EngineObject.h  |   3 +
+ 2 files changed, 78 insertions(+), 45 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index 8daec6b7..76c2bf44 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -80,19 +80,17 @@ JSValue engine_get_canvas_size (JSContext* ctx, JSValueConst this_val, int argc,
+ JSValue engine_stop_interval (
+     JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic, JSValueConst* func_data
+ ) {
+-    if (argc != 1) {
+-	return JS_EXCEPTION;
+-    }
+-
+     const auto it = engineInstances.find (magic);
+ 
+     if (it == engineInstances.end ()) {
+-	return JS_EXCEPTION;
++	return JS_UNDEFINED;
+     }
+ 
+     int id = 0;
+ 
+-    JS_ToInt32 (ctx, &id, argv[0]);
++    // the id this function was made to cancel. Scripts call it bare (`stop ()`), and it read
++    // an argument instead, so every cancel failed and the timer ran anyway
++    JS_ToInt32 (ctx, &id, func_data[0]);
+ 
+     it->second.clearInterval (id);
+ 
+@@ -102,19 +100,17 @@ JSValue engine_stop_interval (
+ JSValue engine_stop_timeout (
+     JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic, JSValueConst* func_data
+ ) {
+-    if (argc != 1) {
+-	return JS_EXCEPTION;
+-    }
+-
+     const auto it = engineInstances.find (magic);
+ 
+     if (it == engineInstances.end ()) {
+-	return JS_EXCEPTION;
++	return JS_UNDEFINED;
+     }
+ 
+     int id = 0;
+ 
+-    JS_ToInt32 (ctx, &id, argv[0]);
++    // the id this function was made to cancel. Scripts call it bare (`stop ()`), and it read
++    // an argument instead, so every cancel failed and the timer ran anyway
++    JS_ToInt32 (ctx, &id, func_data[0]);
+ 
+     it->second.clearTimeout (id);
+ 
+@@ -122,8 +118,8 @@ JSValue engine_stop_timeout (
+ }
+ 
+ JSValue engine_set_interval (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+-    if (argc < 1) {
+-	return JS_EXCEPTION;
++    if (argc < 1 || !JS_IsFunction (ctx, argv[0])) {
++	return JS_ThrowTypeError (ctx, "setInterval takes a function");
+     }
+ 
+     int delay = 0;
+@@ -133,18 +129,14 @@ JSValue engine_set_interval (JSContext* ctx, JSValueConst this_val, int argc, JS
+     }
+ 
+     JSValue function = argv[0];
+-
+-    if (!JS_IsFunction (ctx, function)) {
+-	return JS_EXCEPTION;
+-    }
+-
+     const auto it = engineInstances.find (magic);
+ 
+     if (it == engineInstances.end ()) {
+-	return JS_EXCEPTION;
++	return JS_ThrowInternalError (ctx, "engine object not found");
+     }
+ 
+-    int id = it->second.reserveNextIntervalId (function, delay);
++    // kept until it fires or is cancelled, both of which free it
++    int id = it->second.reserveNextIntervalId (JS_DupValue (ctx, function), delay);
+ 
+     JSValue args[] = { JS_NewInt32 (ctx, id) };
+ 
+@@ -152,8 +144,8 @@ JSValue engine_set_interval (JSContext* ctx, JSValueConst this_val, int argc, JS
+ }
+ 
+ JSValue engine_set_timeout (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+-    if (argc < 1) {
+-	return JS_EXCEPTION;
++    if (argc < 1 || !JS_IsFunction (ctx, argv[0])) {
++	return JS_ThrowTypeError (ctx, "setTimeout takes a function");
+     }
+ 
+     int delay = 0;
+@@ -163,18 +155,14 @@ JSValue engine_set_timeout (JSContext* ctx, JSValueConst this_val, int argc, JSV
+     }
+ 
+     JSValue function = argv[0];
+-
+-    if (!JS_IsFunction (ctx, function)) {
+-	return JS_EXCEPTION;
+-    }
+-
+     const auto it = engineInstances.find (magic);
+ 
+     if (it == engineInstances.end ()) {
+-	return JS_EXCEPTION;
++	return JS_ThrowInternalError (ctx, "engine object not found");
+     }
+ 
+-    int id = it->second.reserveNextTimeoutId (function, delay);
++    // kept until it fires or is cancelled, both of which free it
++    int id = it->second.reserveNextTimeoutId (JS_DupValue (ctx, function), delay);
+ 
+     JSValue args[] = { JS_NewInt32 (ctx, id) };
+ 
+@@ -187,6 +175,9 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+     JS_NewClassID (this->m_engine.getRuntime (), &this->m_classId);
+     JS_NewClass (this->m_engine.getRuntime (), this->m_classId, &this->m_definition);
+     this->m_instance = JS_NewObjectClass (this->m_engine.getContext (), this->m_classId);
++    // setTimeout and setInterval find this object by its id; only the destructor ever touched
++    // the map, so every timer a script started threw (and returned nothing to cancel it with)
++    engineInstances.emplace (this->m_instanceId, *this);
+ 
+     JS_DupValue (this->m_engine.getContext (), this->m_instance);
+ 
+@@ -401,33 +392,72 @@ void EngineObject::tick () {
+ 	this->fillAudioBuffers (buffers);
+     }
+ 
+-    // check any interval and run them if needed
+-    for (auto& timeout : this->m_intervals | std::views::values) {
+-	if (timeout.next > now) {
++    JSContext* ctx = this->m_engine.getContext ();
++    // what is due, run by id afterwards: a callback can cancel a timer (its own too) or start
++    // one, which changes the map under a loop over it
++    std::vector<uint32_t> due;
++
++    for (const auto& [id, interval] : this->m_intervals) {
++	if (interval.next <= now) {
++	    due.push_back (id);
++	}
++    }
++
++    for (const auto id : due) {
++	const auto it = this->m_intervals.find (id);
++
++	// cancelled by a callback that ran before it
++	if (it == this->m_intervals.end ()) {
+ 	    continue;
+ 	}
+ 
+-	timeout.next = now + timeout.duration;
++	it->second.next = now + it->second.duration;
+ 
+-	JS_Call (this->m_engine.getContext (), timeout.callback, JS_NULL, 0, nullptr);
++	// held, as the callback may cancel its own interval and free it
++	JSValue callback = JS_DupValue (ctx, it->second.callback);
++	this->runCallback (callback);
++	JS_FreeValue (ctx, callback);
+     }
+ 
+-    std::vector<uint32_t> removeTimeouts;
++    due.clear ();
+ 
+-    // check any timeout and run them if needed
+-    for (auto& [id, timeout] : this->m_timeouts) {
+-	if (timeout.next > now) {
+-	    continue;
++    for (const auto& [id, timeout] : this->m_timeouts) {
++	if (timeout.next <= now) {
++	    due.push_back (id);
+ 	}
++    }
+ 
+-	JS_Call (this->m_engine.getContext (), timeout.callback, JS_NULL, 0, nullptr);
++    for (const auto id : due) {
++	const auto it = this->m_timeouts.find (id);
+ 
+-	JS_FreeValue (this->m_engine.getContext (), timeout.callback);
++	if (it == this->m_timeouts.end ()) {
++	    continue;
++	}
+ 
+-	removeTimeouts.push_back (id);
++	// gone before it runs, so cancelling it from inside its own callback is a no-op
++	JSValue callback = it->second.callback;
++	this->m_timeouts.erase (it);
++	this->runCallback (callback);
++	JS_FreeValue (ctx, callback);
+     }
++}
++
++void EngineObject::runCallback (JSValue callback) {
++    JSContext* ctx = this->m_engine.getContext ();
++    JSValue result = JS_Call (ctx, callback, JS_NULL, 0, nullptr);
++
++    if (JS_IsException (result)) {
++	JSValue exception = JS_GetException (ctx);
+ 
+-    for (auto id : removeTimeouts) {
+-	this->m_timeouts.erase (id);
++	if (!this->m_callbackErrorLogged) {
++	    this->m_callbackErrorLogged = true;
++	    const char* str = JS_ToCString (ctx, exception);
++	    sLog.error ("ScriptEngine [timer]: ", str ? str : "<unknown error>");
++	    JS_FreeCString (ctx, str);
++	}
++
++	JS_FreeValue (ctx, exception);
+     }
++
++    JS_FreeValue (ctx, result);
+ }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.h b/src/WallpaperEngine/Scripting/EngineObject.h
+index 19e1c6db..2fb2f0cf 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.h
++++ b/src/WallpaperEngine/Scripting/EngineObject.h
+@@ -37,6 +37,8 @@ protected:
+     };
+ 
+     void fillAudioBuffers (const AudioBuffers& buffers) const;
++    /** Calls a timer's callback, logging the first error a timer throws instead of leaving it pending */
++    void runCallback (JSValue callback);
+ 
+     struct Timeout {
+ 	JSValue callback;
+@@ -49,6 +51,7 @@ protected:
+     std::map<uint32_t, Timeout> m_intervals;
+     std::map<uint32_t, Timeout> m_timeouts;
+     std::vector<AudioBuffers> m_audioBuffers;
++    bool m_callbackErrorLogged = false;
+     Render::Wallpapers::CScene& m_scene;
+     ScriptEngine& m_engine;
+ 

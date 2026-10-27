@@ -1,6 +1,41 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 16: 42 patches on the pinned commit, and one on the glslang fork it builds as
+# a submodule (glslang-0001, applied inside it). 0029-0042 and the glslang
+# patch are SynapseOS's own; the note for 15 below still describes 0001-0028.
+# Measured the same way on the same 139 wallpapers: the classifier passes the
+# same 130 as for 15, because these fixes work inside wallpapers that already
+# drew something. None got worse: every case's frame, log and image measures
+# were compared with the run before this batch, and each one that moved was
+# looked at.
+#
+#   - Scene scripts can use what they are written against. Vector methods
+#     (a.add (b), mix, dot) were unreachable and ended every script that
+#     called one (0030); once reachable they ran with their operands swapped
+#     and a bad argument took the whole engine down (0034). A vector can be
+#     built from a smaller one (0038). WEMath and WEColor exported nothing,
+#     so 20 scripts in 8 wallpapers and 9 in 8 failed on their first call
+#     (0037). Timers never ran (0041). Layers answer getTextureAnimation,
+#     getParent, getChildren and name, the scene enumerateLayers, and the
+#     engine its device checks (0031-0033).
+#   - Every script's init () runs before any update (), and each is handed
+#     the user's settings through applyUserProperties (), which 88 scripts in
+#     12 wallpapers read theirs from and which was never called (0040).
+#   - What a script sets on a layer's scale, angles or visible reaches the
+#     layer (0035): it landed in a group value nothing reads, so an analog
+#     clock's hands sat at 12:00, and 135 scale, 16 angles and 306 visible
+#     scripts went nowhere.
+#   - Timeline animations play (0039): 37 keyframed properties in 10
+#     wallpapers, layers that fade in at load among them, sat still. A hidden
+#     group hides its layers (0036), so a wallpaper with a group per language
+#     shows one language instead of all of them stacked.
+#   - Shaders written to HLSL's rules compile: a const local set from a
+#     uniform (0042) and math on two vectors of different sizes
+#     (glslang-0001). The second left the cat out of a Halloween wallpaper
+#     and the first an ASCII-art wallpaper without its ASCII filter.
+#   - A web preset's photo set through element.style shows (0029).
+#
 # 15: 28 patches on the pinned commit, applied in prepare(). Upstream main has
 # not moved since b016d7d1 and its fixes sit in open pull requests, so 0001-0013
 # and 0020 are those PRs as they stand (each names its PR; drop one when
@@ -59,7 +94,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=15
+pkgrel=16
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -126,8 +161,23 @@ source=("git+$url.git#commit=$_commit"
         "0025-fix-data-text-with-a-space-in-it-stays-text.patch"
         "0026-fix-scripting-text-layer-scripts-see-the-scene.patch"
         "0027-feat-scripting-engine.registerAudioBuffers.patch"
-        "0028-fix-scripting-a-script-asking-a-layer-for-something-.patch")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        "0028-fix-scripting-a-script-asking-a-layer-for-something-.patch"
+        "0029-fix-web-map-local-files-a-page-names-through-element.patch"
+        "0030-fix-scripting-vector-methods-are-reachable-from-a-ve.patch"
+        "0031-feat-scripting-layer-texture-animations-parents-and-.patch"
+        "0032-feat-scripting-layer-names-and-enumerateLayers-getLa.patch"
+        "0033-feat-scripting-engine.isScreensaver-and-the-other-de.patch"
+        "0034-fix-scripting-a-vector-method-s-bad-argument-is-the-.patch"
+        "0035-fix-scripting-layers-own-scale-angles-and-visible-ar.patch"
+        "0036-fix-render-a-hidden-group-hides-the-layers-in-it.patch"
+        "0037-fix-scripting-WEMath-and-WEColor-members-are-defined.patch"
+        "0038-fix-scripting-a-vector-built-from-a-smaller-one-and-.patch"
+        "0039-feat-render-layer-properties-timeline-animations-pla.patch"
+        "0040-fix-scripting-every-script-is-initialised-before-any.patch"
+        "0041-fix-scripting-engine.setTimeout-and-setInterval-run-.patch"
+        "0042-fix-shaders-a-const-local-may-take-a-value-known-onl.patch"
+        "glslang-0001-feat-narrow-the-longer-vector-in-component-wise-math.patch")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about
@@ -151,6 +201,13 @@ prepare() {
     local p
     for p in "$srcdir"/0*.patch; do
         git apply -v "$p"
+    done
+
+    # Patches to the glslang fork are commits of that repository, exported from
+    # it, so their paths are relative to the submodule and they apply from
+    # inside it.
+    for p in "$srcdir"/glslang-*.patch; do
+        git -C src/External/glslang-WallpaperEngine apply -v "$p"
     done
 }
 
@@ -191,8 +248,10 @@ build() {
 # its own, and its GPU and utility processes under seccomp-bpf.
 #
 # The tests cover the color, property, value, JSON, web-property and local-file
-# handling the patches change, and need no display or GPU. BUILD_TESTING
-# compiles the engine's sources a second time for them.
+# handling the patches change, the texture and timeline animation clocks, and
+# the HLSL habits the shader compiler accepts (which exercises the glslang
+# patch too), and need no display or GPU. BUILD_TESTING compiles the engine's
+# sources a second time for them.
 check() {
     cd "$srcdir/$pkgname"
     build/output/tests

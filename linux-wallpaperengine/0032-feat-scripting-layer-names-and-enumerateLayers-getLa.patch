@@ -1,0 +1,93 @@
+From a41d6c98b9411150ef1d1e014659cc9d47cd22f4 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 15:40:23 -0500
+Subject: [PATCH 32/42] feat(scripting): layer names and enumerateLayers;
+ getLayer misses are undefined
+
+- thisLayer.name, which the music player widget (2499516781, in six
+  wallpapers) filters thisScene.enumerateLayers () by.
+- thisScene.enumerateLayers (): every layer a script can reach, in
+  render order.
+- getLayer with a name no layer has returned an exception it never
+  threw, ending the calling script as "[uninitialized]" even where it
+  checked what it got back. It answers undefined now.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Scripting/SceneObject.cpp | 34 +++++++++++++++++--
+ .../Scripting/ScriptableObject.cpp            |  2 ++
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/SceneObject.cpp b/src/WallpaperEngine/Scripting/SceneObject.cpp
+index 8972ba04..03470601 100644
+--- a/src/WallpaperEngine/Scripting/SceneObject.cpp
++++ b/src/WallpaperEngine/Scripting/SceneObject.cpp
+@@ -134,8 +134,8 @@ JSValue get_cameraparallaxmouseinfluence (JSContext* ctx, JSValueConst this_val,
+ }
+ 
+ JSValue get_layer (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    if (argc != 1) {
+-	return JS_EXCEPTION;
++    if (argc < 1) {
++	return JS_ThrowTypeError (ctx, "getLayer needs a layer name or id");
+     }
+ 
+     auto* container = get_opaque (this_val);
+@@ -184,7 +184,31 @@ JSValue get_layer (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst
+ 	}
+     }
+ 
+-    return JS_EXCEPTION;
++    // no such layer is an answer, not an error: JS_EXCEPTION with nothing thrown ended the
++    // calling script as "[uninitialized]", even one that checks what it got back
++    return JS_UNDEFINED;
++}
++
++// every layer a script can reach, in render order
++JSValue enumerate_layers (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = get_opaque (this_val);
++    JSValue result = JS_NewArray (ctx);
++    uint32_t index = 0;
++
++    for (const auto* object : container->getScene ().getObjectsByRenderOrder ()) {
++	if (!object->is<ScriptableObject> ()) {
++	    continue;
++	}
++
++	JS_SetPropertyUint32 (
++	    ctx, result, index++,
++	    container->getEngine ().getAdapters ().object->instantiate (
++		const_cast<ScriptableObject&> (*object->as<ScriptableObject> ())
++	    )
++	);
++    }
++
++    return result;
+ }
+ 
+ JSValue scene_set_value (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) { return JS_EXCEPTION; }
+@@ -304,6 +328,10 @@ SceneObject::SceneObject (ScriptEngine& engine, Render::Wallpapers::CScene& scen
+ 	this->m_engine.getContext (), this->m_instance, "getLayer",
+ 	JS_NewCFunction (this->m_engine.getContext (), get_layer, "getLayer", 1), JS_PROP_ENUMERABLE
+     );
++    JS_DefinePropertyValueStr (
++	this->m_engine.getContext (), this->m_instance, "enumerateLayers",
++	JS_NewCFunction (this->m_engine.getContext (), enumerate_layers, "enumerateLayers", 0), JS_PROP_ENUMERABLE
++    );
+     // TODO: ADD REST OF THE METHODS
+ }
+ 
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index 6ae5ac00..1a58d6ea 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -14,6 +14,8 @@ ScriptableObject::ScriptableObject (Wallpapers::CScene& scene, const Object& obj
+     this->registerProperty ("scale", *object.groupScale->value);
+     this->registerProperty ("angles", *object.groupAngles->value);
+     this->registerProperty ("visible", *object.groupVisible->value);
++    // the name the editor gave it, which scripts look layers up and sort them by
++    this->registerConstant ("name", DynamicValue (object.name));
+ }
+ 
+ DynamicValue& ScriptableObject::getProperty (const std::string& name) {

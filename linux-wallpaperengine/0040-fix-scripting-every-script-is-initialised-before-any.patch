@@ -1,0 +1,226 @@
+From bb471e1d22054ff27db37b081da50f1e6c32e2fd Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:26:20 -0500
+Subject: [PATCH 40/42] fix(scripting): every script is initialised before any
+ runs, and is handed the user's settings
+
+init () ran lazily, on each script's first frame and in map order, so
+a script whose update () or media handler read `shared` state another
+script sets in its init () found it unset. The music player in Black
+and white (workshop 3447974852) builds a regex from
+shared.maxTitleLineTxt, which Player Options sets in init, and threw on
+the first track. Now every script's init () runs before any update (),
+timer or event, as in Wallpaper Engine.
+
+applyUserProperties () was never called. 88 scripts in 12 wallpapers
+export it and read their settings there, such as the tilt of a
+cursor-following face, whether the player plays at startup, and the
+accent colour. Each script now gets it once after init, with every
+user property of the wallpaper by name.
+
+thisObject is defined: in a layer property's script it is the layer,
+as thisLayer is. Media event handlers run with their own module bound
+(thisLayer, thisObject and createScriptProperties pointed at whichever
+module had run last). An exception a handler throws is logged under
+that script's name. Before, it stayed pending in the context until the
+next module's error report collected it as its own.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/ScriptEngine.cpp                | 115 ++++++++++++++----
+ src/WallpaperEngine/Scripting/ScriptEngine.h  |  15 +++
+ 2 files changed, 105 insertions(+), 25 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 3aaf4126..46f635e2 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -8,6 +8,9 @@
+ #include "ScriptableObject.h"
+ #include "WallpaperEngine/Audio/AudioContext.h"
+ #include "WallpaperEngine/Audio/Drivers/Recorders/PlaybackRecorder.h"
++#include "WallpaperEngine/Data/Model/Project.h"
++#include "WallpaperEngine/Data/Model/Property.h"
++#include "WallpaperEngine/Data/Model/Wallpaper.h"
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ #include "WallpaperEngine/Logging/Log.h"
+ #include "WallpaperEngine/Render/CObject.h"
+@@ -665,12 +668,75 @@ void ScriptEngine::logModuleException (const std::string& key, LoadedModule& mod
+     JS_FreeCString (this->m_context, str);
+ }
+ 
+-void ScriptEngine::runModuleFunction (const std::string& key, LoadedModule& module, const char* name) {
++void ScriptEngine::bindModule (LoadedModule& module) {
+     this->m_runningModule = &module;
+-    // every property script reads `thisLayer` from the global scope, point it at this module's layer
++    // every property script reads `thisLayer` and `thisObject` from the global scope
+     JS_SetPropertyStr (
+ 	this->m_context, this->m_globalThis, "thisLayer", JS_DupValue (this->m_context, module.thisLayer)
+     );
++    JS_SetPropertyStr (
++	this->m_context, this->m_globalThis, "thisObject", JS_DupValue (this->m_context, module.thisLayer)
++    );
++}
++
++void ScriptEngine::callHandler (
++    const std::string& key, LoadedModule& module, const char* name, int argc, JSValue* argv
++) {
++    if (!JS_IsObject (module.module)) {
++	return;
++    }
++
++    this->bindModule (module);
++
++    JSValue result = this->call (module.module, argc, argv, name);
++
++    // an exception left pending would be reported later as some other module's error
++    if (JS_IsException (result)) {
++	this->logModuleException (key, module, name);
++    }
++
++    JS_FreeValue (this->m_context, result);
++}
++
++void ScriptEngine::initializeModules () {
++    std::vector<std::pair<const std::string*, LoadedModule*>> initialized;
++
++    for (auto& [key, module] : this->m_scriptModules) {
++	if (!JS_IsObject (module.module) || module.initialized) {
++	    continue;
++	}
++
++	module.initialized = true;
++	this->runModuleFunction (key, module, "init");
++	initialized.emplace_back (&key, &module);
++    }
++
++    if (initialized.empty ()) {
++	return;
++    }
++
++    JSValue properties = this->userPropertiesToJs ();
++    JSValue args[] = { properties };
++
++    for (const auto& [key, module] : initialized) {
++	this->callHandler (*key, *module, "applyUserProperties", 1, args);
++    }
++
++    JS_FreeValue (this->m_context, properties);
++}
++
++JSValue ScriptEngine::userPropertiesToJs () {
++    JSValue result = JS_NewObject (this->m_context);
++
++    for (const auto& [name, property] : this->m_scene.getScene ().project.properties) {
++	JS_SetPropertyStr (this->m_context, result, name.c_str (), this->dynamicToJsCopy (*property));
++    }
++
++    return result;
++}
++
++void ScriptEngine::runModuleFunction (const std::string& key, LoadedModule& module, const char* name) {
++    this->bindModule (module);
+ 
+     JSValue args[] = { this->dynamicToJsCopy (module.value) };
+     JSValue result = this->call (module.module, 1, args, name);
+@@ -710,10 +776,7 @@ void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentVal
+ 
+     // the module's top level usually calls createScriptProperties().finish(),
+     // which binds to the running module, so set it (and thisLayer) up front
+-    this->m_runningModule = &loaded;
+-    JS_SetPropertyStr (
+-	this->m_context, this->m_globalThis, "thisLayer", JS_DupValue (this->m_context, loaded.thisLayer)
+-    );
++    this->bindModule (loaded);
+ 
+     // JS_Eval on a module returns the evaluation promise, not the exports, so
+     // compile first to keep the module definition and read its namespace after
+@@ -752,22 +815,18 @@ void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentVal
+ }
+ 
+ void ScriptEngine::tick () {
++    // every script's init, before anything else runs one
++    this->initializeModules ();
++
+     // run intervals
+     this->m_engineObject->tick ();
+ 
+-    // run any pending notifications
+-
+-    // run init once, then update every frame
++    // then update every frame
+     for (auto& [key, module] : this->m_scriptModules) {
+ 	if (!JS_IsObject (module.module)) {
+ 	    continue;
+ 	}
+ 
+-	if (!module.initialized) {
+-	    module.initialized = true;
+-	    this->runModuleFunction (key, module, "init");
+-	}
+-
+ 	this->runModuleFunction (key, module, "update");
+     }
+ }
+@@ -815,17 +874,23 @@ void ScriptEngine::notifyMediaUpdate (const Media::MediaSource::MediaInfo& media
+     JSValue mediaTimelineArgs[] = { mediaTimelineEvent };
+     JSValue mediaThumbnailArgs[] = { mediaThumbnailEvent };
+ 
+-    for (auto& module : this->m_scriptModules | std::views::values) {
+-	// call all methods
+-	JSValue result1 = this->call (module.module, 1, propertiesArgs, "mediaPropertiesChanged");
+-	JSValue result2 = this->call (module.module, 1, playbackArgs, "mediaPlaybackChanged");
+-	JSValue result3 = this->call (module.module, 1, mediaTimelineArgs, "mediaTimelineChanged");
+-	JSValue result4 = this->call (module.module, 1, mediaThumbnailArgs, "mediaThumbnailChanged");
+-
+-	JS_FreeValue (ctx, result1);
+-	JS_FreeValue (ctx, result2);
+-	JS_FreeValue (ctx, result3);
+-	JS_FreeValue (ctx, result4);
++    const std::pair<const char*, JSValue*> handlers[] = {
++	{ "mediaPropertiesChanged", propertiesArgs },
++	{ "mediaPlaybackChanged", playbackArgs },
++	{ "mediaTimelineChanged", mediaTimelineArgs },
++	{ "mediaThumbnailChanged", mediaThumbnailArgs },
++    };
++
++    // a media session can be found before the first frame, and the handlers read what init set up
++    this->initializeModules ();
++
++    // a handler reads thisLayer, thisObject and its script properties as update () does: the
++    // globals were left on whichever module ran last, and a handler's exception sat pending
++    // in the context until some other module's error report collected it
++    for (auto& [key, module] : this->m_scriptModules) {
++	for (const auto& [name, args] : handlers) {
++	    this->callHandler (key, module, name, 1, args);
++	}
+     }
+ 
+     // free all created objects as we don't keep a ref to them anymore
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index 219c1e21..ca55404d 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -168,6 +168,21 @@ private:
+     JSValue call (JSValue module, int argc, JSValueConst argv[], const char* name);
+     /** Calls `name` on a property script with a copy of its value and applies the result */
+     void runModuleFunction (const std::string& key, LoadedModule& module, const char* name);
++    /**
++     * Makes `module` the running one: createScriptProperties () binds to it, and the globals
++     * thisLayer and thisObject are its layer (a layer property's script belongs to the layer)
++     */
++    void bindModule (LoadedModule& module);
++    /** Calls the handler `name` a property script exports, if it does, logging what it throws */
++    void callHandler (const std::string& key, LoadedModule& module, const char* name, int argc, JSValue* argv);
++    /**
++     * Runs init () on every script that has not run it, then hands each of them the user's
++     * settings through applyUserProperties (), as Wallpaper Engine does at load: before any
++     * update () or event, since one script's init sets up the `shared` state another reads
++     */
++    void initializeModules ();
++    /** Every user property of the wallpaper, by name, as applyUserProperties () takes them */
++    JSValue userPropertiesToJs ();
+     /** Logs the pending JS exception once per module so per-frame errors don't spam */
+     void logModuleException (const std::string& key, LoadedModule& module, const char* stage);
+ 

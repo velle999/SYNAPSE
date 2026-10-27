@@ -1,0 +1,54 @@
+From ff7d3670dc7d50342024ba2ba7b617cdffb3d52d Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 15:40:23 -0500
+Subject: [PATCH 33/42] feat(scripting): engine.isScreensaver () and the other
+ device checks
+
+isDesktopDevice, isMobileDevice, isWallpaper, isScreensaver and
+isRunningInEditor answer what this engine always is: a desktop
+wallpaper outside the editor. The music player widget asks
+isScreensaver () in its init.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/EngineObject.cpp                | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index 50b4a8ac..8daec6b7 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -43,6 +43,11 @@ JSValue engine_register_audio_buffers (JSContext* ctx, JSValueConst this_val, in
+     return engine->registerAudioBuffers (resolution);
+ }
+ 
++// isDesktopDevice () and the like: what this engine always is, a desktop wallpaper outside the editor
++JSValue engine_fixed_answer (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
++    return JS_NewBool (ctx, magic != 0);
++}
++
+ JSValue engine_get_frametime (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+     return JS_NewFloat64 (ctx, g_Time - g_TimeLast);
+ }
+@@ -243,6 +248,20 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_open_user_shortcut, "openUserShortcut", 0),
+ 	JS_PROP_ENUMERABLE
+     );
++
++    for (const auto& [name, answer] : std::initializer_list<std::pair<const char*, bool>> {
++	     { "isDesktopDevice", true },
++	     { "isMobileDevice", false },
++	     { "isWallpaper", true },
++	     { "isScreensaver", false },
++	     { "isRunningInEditor", false },
++	 }) {
++	JS_DefinePropertyValueStr (
++	    this->m_engine.getContext (), this->m_instance, name,
++	    JS_NewCFunctionMagic (this->m_engine.getContext (), engine_fixed_answer, name, 0, JS_CFUNC_generic_magic, answer),
++	    JS_PROP_ENUMERABLE
++	);
++    }
+     // TODO: ADD THE REST OF THE DEFINITION!
+ }
+ 

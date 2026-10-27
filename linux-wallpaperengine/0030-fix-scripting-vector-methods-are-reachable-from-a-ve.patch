@@ -1,0 +1,52 @@
+From ce2d624e630da673622b9c9ac0c2b1200709e4f7 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 15:40:23 -0500
+Subject: [PATCH 30/42] fix(scripting): vector methods are reachable from a
+ vector
+
+A Vec2/Vec3/Vec4 answered x, y, z and w and returned an exception for
+every other name, without throwing one. QuickJS does not fall back to
+the prototype for a class that answers its own property gets, so
+`a.add (b)`, `subtract`, `multiply`, `toString` and the rest ended
+the calling script as "[uninitialized]": the player mover of
+3447974852 and SandBlack (3047405322) never ran.
+
+Any other name now comes from the vector prototype, or is undefined.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp | 5 ++++-
+ src/WallpaperEngine/Scripting/Adapters/VectorAdapter.h   | 3 +++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+index 9c8b6e03..7fc1fe19 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+@@ -192,7 +192,10 @@ JSValue vector_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom,
+ 	}
+     }
+ 
+-    return JS_EXCEPTION;
++    // anything else is the prototype's (add, subtract, toString...) or undefined. QuickJS
++    // never looks at the prototype itself for a class that answers its own property gets,
++    // so every vector method ended the script with an exception nothing had thrown
++    return JS_GetProperty (ctx, container->adapter.getPrototype (), atom);
+ }
+ 
+ template JSValue vector_property_get<2> (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver);
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.h b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.h
+index 0ccb5e4b..a86282b3 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.h
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.h
+@@ -20,6 +20,9 @@ public:
+ 
+     void free (uint32_t vectorId);
+ 
++    /** Holds the vector methods (add, subtract, toString...) */
++    [[nodiscard]] JSValueConst getPrototype () const { return m_prototype; }
++
+ private:
+     JSValue m_prototype;
+     uint32_t m_instanceId;

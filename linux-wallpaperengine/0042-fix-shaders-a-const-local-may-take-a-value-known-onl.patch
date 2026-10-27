@@ -1,0 +1,207 @@
+From 4ca0e51396c24aa47891ac59f1b93bcd7c724882 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 19:53:11 -0500
+Subject: [PATCH 42/42] fix(shaders): a const local may take a value known only
+ at run time
+
+HLSL's const only makes a local read-only, so effects set const locals
+from uniforms. GLSL 330 wants a constant expression there, and the
+layer failed to compile. The ASCII-art filter (workshop 2582854209)
+sizes its character grid that way, so 3593224238 showed its planet
+without the filter it is built around.
+
+The shader header now enables GL_ARB_shading_language_420pack, which
+allows it. Only glslang reads the header; the driver is handed the
+GLSL 330 that SPIRV-Cross writes out, so it needs nothing new.
+
+The new tests compile both HLSL habits the corpus relies on through
+the shader units: this one, and math on two vectors of different
+sizes, which the glslang patch shipped alongside narrows. A shape
+HLSL rejects too still fails.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   3 +-
+ .../Render/Shaders/ShaderUnit.cpp             |   3 +
+ .../Testing/Cases/ShaderCompatibility.cpp     | 141 ++++++++++++++++++
+ 3 files changed, 146 insertions(+), 1 deletion(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 24e8f598..91fe48c8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -584,7 +584,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+         src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+         src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+-        src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp)
++        src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
++        src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+index bd44fd01..cdf3ca5a 100644
+--- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
++++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+@@ -21,8 +21,11 @@
+ #include "WallpaperEngine/Data/Builders/VectorBuilder.h"
+ #include "WallpaperEngine/FileSystem/Container.h"
+ 
++// 420pack lets a const local take a value known only at run time, as HLSL's const does
++// (workshop 3593224238's ASCII effect). Only glslang reads it: the driver gets plain 330
+ #define SHADER_HEADER(filename)                                                                                        \
+     "#version 330\n"                                                                                                   \
++    "#extension GL_ARB_shading_language_420pack : enable\n"                                                            \
+     "// ======================================================\n"                                                      \
+     "// Processed shader "                                                                                             \
+ 	+ filename                                                                                                     \
+diff --git a/src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp b/src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+new file mode 100644
+index 00000000..d62dd667
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+@@ -0,0 +1,141 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <memory>
++#include <string>
++
++#include "WallpaperEngine/Assets/AssetLocator.h"
++#include "WallpaperEngine/FileSystem/Container.h"
++#include "WallpaperEngine/Render/Shaders/GLSLContext.h"
++#include "WallpaperEngine/Render/Shaders/Shader.h"
++
++using WallpaperEngine::Assets::AssetLocator;
++using WallpaperEngine::FileSystem::Container;
++using WallpaperEngine::Render::Shaders::GLSLContext;
++using WallpaperEngine::Render::Shaders::Shader;
++
++namespace {
++// an effect's two shaders, compiled the way a pass compiles them: through the shader units'
++// preprocessing and header, then glslang. Both come back empty when glslang rejects either
++std::pair<std::string, std::string> compile (const std::string& vertex, const std::string& fragment) {
++    auto container = std::make_unique<Container> ();
++
++    container->getVFS ().add ("shaders/effect.vert", vertex);
++    container->getVFS ().add ("shaders/effect.frag", fragment);
++
++    const AssetLocator locator (std::move (container));
++    Shader shader (locator, "effect", {}, {}, {}, {}, {});
++
++    return GLSLContext::get ().toGlsl (shader.vertex (), shader.fragment ());
++}
++
++constexpr const char* passThroughVertex = R"(
++uniform mat4 g_ModelViewProjectionMatrix;
++
++attribute vec3 a_Position;
++attribute vec2 a_TexCoord;
++
++varying vec2 v_TexCoord;
++
++void main() {
++	gl_Position = mul(vec4(a_Position, 1.0), g_ModelViewProjectionMatrix);
++	v_TexCoord = a_TexCoord;
++}
++)";
++
++constexpr const char* passThroughFragment = R"(
++uniform sampler2D g_Texture0;
++
++varying vec2 v_TexCoord;
++
++void main() {
++	gl_FragColor = texSample2D(g_Texture0, v_TexCoord);
++}
++)";
++} // namespace
++
++TEST_CASE ("Math on two vectors of different sizes narrows the longer one, as HLSL does") {
++    // an eye that follows the cursor (workshop 2973943998, used by 3062175991): its offset is a
++    // vec4 times a vec2, so the layer it sits on failed to compile and never drew
++    const auto [vertex, fragment] = compile (
++	R"(
++uniform mat4 g_ModelViewProjectionMatrix;
++uniform vec2 g_Scale;
++
++attribute vec3 a_Position;
++attribute vec2 a_TexCoord;
++
++varying vec2 v_TexCoord;
++varying vec4 v_PointerUV;
++varying vec2 v_TexCoordIris;
++
++void main() {
++	gl_Position = mul(vec4(a_Position, 1.0), g_ModelViewProjectionMatrix);
++	v_TexCoord = a_TexCoord;
++	v_PointerUV = vec4(a_TexCoord, 0.0, 1.0);
++	vec2 da = v_PointerUV * g_Scale * 0.001;
++	v_TexCoordIris = da + a_Position;
++}
++)",
++	R"(
++uniform sampler2D g_Texture0;
++
++varying vec2 v_TexCoord;
++varying vec2 v_TexCoordIris;
++
++void main() {
++	gl_FragColor = texSample2D(g_Texture0, v_TexCoord + v_TexCoordIris);
++}
++)"
++    );
++
++    CHECK_FALSE (vertex.empty ());
++    CHECK_FALSE (fragment.empty ());
++}
++
++TEST_CASE ("A const local can take a value known only when the shader runs") {
++    // an ASCII-art filter (workshop 2582854209, used by 3593224238) sizes its character grid
++    // from the texture's resolution into const locals, as HLSL allows
++    const auto [vertex, fragment] = compile (
++	passThroughVertex,
++	R"(
++uniform sampler2D g_Texture0;
++uniform vec4 g_Texture0Resolution;
++
++varying vec2 v_TexCoord;
++
++void main() {
++	const vec2 newResolution = g_Texture0Resolution.xy * 0.125;
++	const vec2 scaledCoord = v_TexCoord * newResolution;
++	gl_FragColor = texSample2D(g_Texture0, round(scaledCoord) / newResolution);
++}
++)"
++    );
++
++    CHECK_FALSE (vertex.empty ());
++    CHECK_FALSE (fragment.empty ());
++}
++
++TEST_CASE ("Shaders GLSL already accepts compile as before, and a real error is still one") {
++    const auto [vertex, fragment] = compile (passThroughVertex, passThroughFragment);
++
++    CHECK_FALSE (vertex.empty ());
++    CHECK_FALSE (fragment.empty ());
++
++    // a vec2 where a vec3 is needed narrows nothing: HLSL rejects it too
++    const auto [badVertex, badFragment] = compile (
++	passThroughVertex,
++	R"(
++uniform sampler2D g_Texture0;
++
++varying vec2 v_TexCoord;
++
++void main() {
++	vec3 color = v_TexCoord;
++	gl_FragColor = vec4(color, 1.0);
++}
++)"
++    );
++
++    CHECK (badVertex.empty ());
++    CHECK (badFragment.empty ());
++}

@@ -1,0 +1,1444 @@
+From d46499e42655e9927f54a258cbec560761de9dcd Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:26:20 -0500
+Subject: [PATCH 39/42] feat(render): layer properties' timeline animations
+ play
+
+The editor keyframes a property on the value itself:
+
+    "alpha": { "value": 1, "animation": { "c0": [...], "options":
+               { "fps": 30, "length": 120, "mode": "single" } } }
+
+Nothing read "animation", so each property sat at its static value.
+In the library that is 37 properties in 10 wallpapers: layers that
+should fade in at load stayed invisible (six in each of the two Music
+Dialogue wallpapers), a cover that should fade out after four seconds
+stayed, and origins, light intensities and scales that pulse or drift
+stood still.
+
+The parser reads each curve (c0 to c3, one per component) with its
+keyframes and handles, and the loop, mirror or single mode, frame
+rate, length, startpaused and relative options. A scriptable layer
+plays each animated property's curve into it every frame, before the
+scripts that read it run. Its clock starts the first time it plays,
+so an intro runs from the start whenever the wallpaper loads. Between
+keyframes the curve is a cubic Bezier. A handle's x is in thirds of
+its segment, so the editor's default flat handles give a smoothstep
+ease and a segment without handles is straight. A relative animation
+adds to the value the editor placed.
+
+Scripts reach an animation through ILayer.getAnimation (name), and
+with no name the one on the script's own property, as the media
+widgets do (`thisObject.getAnimation ().play ()` on a track change).
+IAnimation answers what ITextureAnimation does (play, pause, stop,
+isPlaying, getFrame, setFrame, frameCount, duration, rate) plus name
+and fps, through the same functions.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   6 +-
+ .../Data/Model/DynamicValue.cpp               |   6 +
+ src/WallpaperEngine/Data/Model/DynamicValue.h |   9 +
+ .../Data/Model/TimelineAnimation.h            |  50 ++++
+ src/WallpaperEngine/Data/Model/Types.h        |   1 +
+ .../Data/Parsers/DynamicValueParser.cpp       | 106 ++++++++
+ .../Render/PropertyAnimation.cpp              | 255 ++++++++++++++++++
+ .../Render/PropertyAnimation.h                |  77 ++++++
+ .../Render/Wallpapers/CScene.cpp              |   7 +
+ .../Adapters/ScriptableObjectAdapter.cpp      | 245 +++++++++++++----
+ .../Adapters/ScriptableObjectAdapter.h        |   6 +
+ .../Scripting/ScriptableObject.cpp            |  37 ++-
+ .../Scripting/ScriptableObject.h              |  14 +
+ .../Testing/Cases/PropertyAnimation.cpp       | 234 ++++++++++++++++
+ 14 files changed, 994 insertions(+), 59 deletions(-)
+ create mode 100644 src/WallpaperEngine/Data/Model/TimelineAnimation.h
+ create mode 100644 src/WallpaperEngine/Render/PropertyAnimation.cpp
+ create mode 100644 src/WallpaperEngine/Render/PropertyAnimation.h
+ create mode 100644 src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7d396553..24e8f598 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -436,6 +436,8 @@ set(COMMON_SOURCES
+     src/WallpaperEngine/Render/TextureProvider.h
+     src/WallpaperEngine/Render/TextureAnimation.cpp
+     src/WallpaperEngine/Render/TextureAnimation.h
++    src/WallpaperEngine/Render/PropertyAnimation.cpp
++    src/WallpaperEngine/Render/PropertyAnimation.h
+ 
+     src/WallpaperEngine/Render/Objects/CRenderable.cpp
+     src/WallpaperEngine/Render/Objects/CRenderable.h
+@@ -483,6 +485,7 @@ set(COMMON_SOURCES
+     src/WallpaperEngine/Data/Model/Model.h
+     src/WallpaperEngine/Data/Model/UserSetting.h
+     src/WallpaperEngine/Data/Model/DynamicValue.h
++    src/WallpaperEngine/Data/Model/TimelineAnimation.h
+     src/WallpaperEngine/Data/Model/DynamicValue.cpp
+     src/WallpaperEngine/Data/Model/Property.h
+     src/WallpaperEngine/Data/Utils/TypeCaster.h
+@@ -580,7 +583,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+         src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+         src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+-        src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp)
++        src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
++        src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Model/DynamicValue.cpp b/src/WallpaperEngine/Data/Model/DynamicValue.cpp
+index d41028f0..07b40045 100644
+--- a/src/WallpaperEngine/Data/Model/DynamicValue.cpp
++++ b/src/WallpaperEngine/Data/Model/DynamicValue.cpp
+@@ -296,6 +296,12 @@ void DynamicValue::setProperties (std::map<std::string, UserSettingUniquePtr> pr
+     this->m_properties = std::move (properties);
+ }
+ 
++void DynamicValue::setAnimation (std::shared_ptr<const TimelineAnimation> animation) {
++    this->m_animation = std::move (animation);
++}
++
++const std::shared_ptr<const TimelineAnimation>& DynamicValue::getAnimation () const { return this->m_animation; }
++
+ void DynamicValue::propagate (UpdateSource source) const {
+     for (const auto& callback : this->m_listeners) {
+ 	callback (*this, source);
+diff --git a/src/WallpaperEngine/Data/Model/DynamicValue.h b/src/WallpaperEngine/Data/Model/DynamicValue.h
+index 4843dcad..27defea7 100644
+--- a/src/WallpaperEngine/Data/Model/DynamicValue.h
++++ b/src/WallpaperEngine/Data/Model/DynamicValue.h
+@@ -136,6 +136,14 @@ public:
+      * Updates the script properties associated with this dynamic value
+      */
+     void setProperties (std::map<std::string, UserSettingUniquePtr> properties);
++    /**
++     * Associates the timeline animation the editor saved on this value
++     */
++    void setAnimation (std::shared_ptr<const TimelineAnimation> animation);
++    /**
++     * @return The timeline animation that drives this value, or nullptr
++     */
++    [[nodiscard]] const std::shared_ptr<const TimelineAnimation>& getAnimation () const;
+ 
+ private:
+     /**
+@@ -159,5 +167,6 @@ private:
+     std::optional<ConditionInfo> m_condition = std::nullopt;
+     /** All the properties this script takes in */
+     std::map<std::string, UserSettingUniquePtr> m_properties;
++    std::shared_ptr<const TimelineAnimation> m_animation = nullptr;
+ };
+ }
+diff --git a/src/WallpaperEngine/Data/Model/TimelineAnimation.h b/src/WallpaperEngine/Data/Model/TimelineAnimation.h
+new file mode 100644
+index 00000000..5d7cec3b
+--- /dev/null
++++ b/src/WallpaperEngine/Data/Model/TimelineAnimation.h
+@@ -0,0 +1,50 @@
++#pragma once
++
++#include <string>
++#include <vector>
++
++#include <glm/vec2.hpp>
++
++namespace WallpaperEngine::Data::Model {
++/** One point on a timeline animation's curve, as the editor saves it */
++struct Keyframe {
++    float frame = 0.0f;
++    float value = 0.0f;
++    /**
++     * The curve's handles either side of the point: x in thirds of the segment they reach
++     * into, y in the property's own units. A handle that is not enabled leaves that end of
++     * the segment a straight line.
++     */
++    glm::vec2 back = {};
++    bool backEnabled = false;
++    glm::vec2 front = {};
++    bool frontEnabled = false;
++};
++
++/**
++ * A property's timeline animation: keyframes the editor stores on the value itself,
++ * `"alpha": { "value": 1, "animation": { "c0": [...], "options": {...} } }`.
++ */
++struct TimelineAnimation {
++    enum class Mode {
++	/** from the start again at the end */
++	Loop,
++	/** back and forth */
++	Mirror,
++	/** once, then holds the last frame */
++	Single,
++    };
++
++    std::string name;
++    float fps = 30.0f;
++    /** in frames; keyframes may lie past it, and are never reached */
++    float length = 0.0f;
++    Mode mode = Mode::Loop;
++    /** waits for a script to play () it */
++    bool startPaused = false;
++    /** the curve adds to the property's own value instead of replacing it */
++    bool relative = false;
++    /** one curve per component (c0, c1, c2, c3), each sorted by frame */
++    std::vector<std::vector<Keyframe>> channels;
++};
++} // namespace WallpaperEngine::Data::Model
+diff --git a/src/WallpaperEngine/Data/Model/Types.h b/src/WallpaperEngine/Data/Model/Types.h
+index 2d39d3fa..81aafc1e 100644
+--- a/src/WallpaperEngine/Data/Model/Types.h
++++ b/src/WallpaperEngine/Data/Model/Types.h
+@@ -21,6 +21,7 @@ struct ImageEffectPassOverride;
+ class Particle;
+ class Text;
+ class DynamicValue;
++struct TimelineAnimation;
+ class Property;
+ class PropertySlider;
+ class PropertyBoolean;
+diff --git a/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp b/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
+index 4a7ffb5c..0288cc1b 100644
+--- a/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/DynamicValueParser.cpp
+@@ -5,6 +5,9 @@
+ 
+ #include "UserSettingParser.h"
+ #include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Data/Model/TimelineAnimation.h"
++
++#include <algorithm>
+ 
+ using namespace WallpaperEngine::Data::Parsers;
+ 
+@@ -28,6 +31,105 @@ bool isNumberList (const std::string& str) {
+ 
+     return any;
+ }
++
++// read by type, so a field the editor wrote some other way falls back instead of throwing
++float numberOr (const json& object, const char* key, float fallback) {
++    const auto it = object.find (key);
++
++    return it != object.end () && it->is_number () ? it->get<float> () : fallback;
++}
++
++bool flagOr (const json& object, const char* key, bool fallback) {
++    const auto it = object.find (key);
++
++    return it != object.end () && it->is_boolean () ? it->get<bool> () : fallback;
++}
++
++std::string textOr (const json& object, const char* key, const std::string& fallback) {
++    const auto it = object.find (key);
++
++    return it != object.end () && it->is_string () ? it->get<std::string> () : fallback;
++}
++
++/** One handle of a keyframe, its direction and whether the curve uses it */
++std::pair<glm::vec2, bool> parseHandle (const json& keyframe, const char* key) {
++    const auto it = keyframe.find (key);
++
++    if (it == keyframe.end () || !it->is_object ()) {
++	return { glm::vec2 (0.0f), false };
++    }
++
++    return { glm::vec2 (numberOr (*it, "x", 0.0f), numberOr (*it, "y", 0.0f)), flagOr (*it, "enabled", false) };
++}
++
++/** The timeline animation saved on a value, or nullptr when it has none that can play */
++std::shared_ptr<const TimelineAnimation> parseAnimation (const json& data) {
++    const auto animationIt = data.find ("animation");
++
++    if (animationIt == data.end () || !animationIt->is_object ()) {
++	return nullptr;
++    }
++
++    const auto& animation = *animationIt;
++    auto result = std::make_shared<TimelineAnimation> ();
++
++    if (const auto options = animation.find ("options"); options != animation.end () && options->is_object ()) {
++	const auto mode = textOr (*options, "mode", "loop");
++
++	result->name = textOr (*options, "name", "");
++	result->fps = numberOr (*options, "fps", 30.0f);
++	result->length = numberOr (*options, "length", 0.0f);
++	result->startPaused = flagOr (*options, "startpaused", false);
++	result->mode = mode == "mirror"	    ? TimelineAnimation::Mode::Mirror
++	    : mode == "single" ? TimelineAnimation::Mode::Single
++			       : TimelineAnimation::Mode::Loop;
++    }
++
++    result->relative = flagOr (animation, "relative", false);
++
++    // c0, c1, c2 and c3: one curve per component of the value
++    for (int channel = 0; channel < 4; channel++) {
++	const auto curve = animation.find ("c" + std::to_string (channel));
++
++	if (curve == animation.end () || !curve->is_array ()) {
++	    break;
++	}
++
++	auto& keyframes = result->channels.emplace_back ();
++
++	for (const auto& point : *curve) {
++	    if (!point.is_object ()) {
++		continue;
++	    }
++
++	    const auto [back, backEnabled] = parseHandle (point, "back");
++	    const auto [front, frontEnabled] = parseHandle (point, "front");
++
++	    keyframes.push_back (
++		Keyframe {
++		    .frame = numberOr (point, "frame", 0.0f),
++		    .value = numberOr (point, "value", 0.0f),
++		    .back = back,
++		    .backEnabled = backEnabled,
++		    .front = front,
++		    .frontEnabled = frontEnabled,
++		}
++	    );
++	}
++
++	std::ranges::stable_sort (keyframes, {}, &Keyframe::frame);
++    }
++
++    const bool anyKeyframes = std::ranges::any_of (result->channels, [] (const auto& keyframes) {
++	return !keyframes.empty ();
++    });
++
++    if (!anyKeyframes || result->fps <= 0.0f || result->length <= 0.0f) {
++	return nullptr;
++    }
++
++    return result;
++}
+ } // namespace
+ 
+ DynamicValueUniquePtr DynamicValueParser::parse (const json& data, const Properties& properties, bool expectColor) {
+@@ -105,5 +207,9 @@ DynamicValueUniquePtr DynamicValueParser::parse (const json& data, const Propert
+ 	value->setScriptSource (scriptSource.value ());
+     }
+ 
++    if (data.is_object ()) {
++	value->setAnimation (parseAnimation (data));
++    }
++
+     return value;
+ }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Render/PropertyAnimation.cpp b/src/WallpaperEngine/Render/PropertyAnimation.cpp
+new file mode 100644
+index 00000000..0087d226
+--- /dev/null
++++ b/src/WallpaperEngine/Render/PropertyAnimation.cpp
+@@ -0,0 +1,255 @@
++#include "PropertyAnimation.h"
++
++#include <algorithm>
++#include <cmath>
++#include <iterator>
++#include <utility>
++
++using namespace WallpaperEngine::Data::Model;
++using namespace WallpaperEngine::Render;
++
++namespace {
++float bezier (float p0, float p1, float p2, float p3, float t) {
++    const float u = 1.0f - t;
++
++    return u * u * u * p0 + 3.0f * u * u * t * p1 + 3.0f * u * t * t * p2 + t * t * t * p3;
++}
++} // namespace
++
++PropertyAnimation::PropertyAnimation (std::shared_ptr<const TimelineAnimation> timeline, DynamicValue& value) :
++    m_timeline (std::move (timeline)), m_value (value), m_base (value) { }
++
++void PropertyAnimation::apply (double now) {
++    this->start (now);
++
++    // a single animation stops on its last frame (or its first, played backwards)
++    if (this->m_playing && this->atEnd (this->position (now))) {
++	this->m_position = this->m_rate >= 0.0 ? this->m_timeline->length : 0.0;
++	this->m_since = now;
++	this->m_playing = false;
++    }
++
++    const auto frame = static_cast<float> (this->getFrame (now));
++    const auto& channels = this->m_timeline->channels;
++    const auto component = [&] (size_t index, float base) {
++	if (index >= channels.size () || channels [index].empty ()) {
++	    return base;
++	}
++
++	const float curve = evaluate (channels [index], frame);
++
++	return this->m_timeline->relative ? base + curve : curve;
++    };
++
++    switch (this->m_base.getType ()) {
++	case DynamicValue::Vec4: {
++	    const auto& base = this->m_base.getVec4 ();
++	    this->m_value.update (
++		glm::vec4 (component (0, base.x), component (1, base.y), component (2, base.z), component (3, base.w)),
++		DynamicValue::UpdateSource::Script
++	    );
++	    break;
++	}
++	case DynamicValue::Vec3: {
++	    const auto& base = this->m_base.getVec3 ();
++	    this->m_value.update (
++		glm::vec3 (component (0, base.x), component (1, base.y), component (2, base.z)),
++		DynamicValue::UpdateSource::Script
++	    );
++	    break;
++	}
++	case DynamicValue::Vec2: {
++	    const auto& base = this->m_base.getVec2 ();
++	    this->m_value.update (
++		glm::vec2 (component (0, base.x), component (1, base.y)), DynamicValue::UpdateSource::Script
++	    );
++	    break;
++	}
++	case DynamicValue::Float:
++	    this->m_value.update (component (0, this->m_base.getFloat ()), DynamicValue::UpdateSource::Script);
++	    break;
++	case DynamicValue::Int:
++	    this->m_value.update (
++		static_cast<int> (std::lround (component (0, static_cast<float> (this->m_base.getInt ())))),
++		DynamicValue::UpdateSource::Script
++	    );
++	    break;
++	case DynamicValue::Boolean:
++	    this->m_value.update (
++		component (0, this->m_base.getBool () ? 1.0f : 0.0f) >= 0.5f, DynamicValue::UpdateSource::Script
++	    );
++	    break;
++	default:
++	    // text has nothing a curve can drive
++	    break;
++    }
++}
++
++const std::string& PropertyAnimation::getName () const { return this->m_timeline->name; }
++
++double PropertyAnimation::getFps () const { return this->m_timeline->fps; }
++
++size_t PropertyAnimation::getFrameCount () const { return static_cast<size_t> (this->m_timeline->length); }
++
++double PropertyAnimation::getDuration () const { return this->m_timeline->length / this->m_timeline->fps; }
++
++double PropertyAnimation::getFrame (double now) const {
++    const double length = this->m_timeline->length;
++    const double played = this->position (now);
++
++    switch (this->m_timeline->mode) {
++	case TimelineAnimation::Mode::Single:
++	    return std::clamp (played, 0.0, length);
++	case TimelineAnimation::Mode::Mirror: {
++	    // fmod keeps the sign, and a negative rate runs the position below zero
++	    double cycle = std::fmod (played, 2.0 * length);
++
++	    if (cycle < 0.0) {
++		cycle += 2.0 * length;
++	    }
++
++	    return cycle <= length ? cycle : 2.0 * length - cycle;
++	}
++	case TimelineAnimation::Mode::Loop:
++	default: {
++	    double cycle = std::fmod (played, length);
++
++	    if (cycle < 0.0) {
++		cycle += length;
++	    }
++
++	    return cycle;
++	}
++    }
++}
++
++bool PropertyAnimation::isPlaying () const { return this->m_playing; }
++
++double PropertyAnimation::getRate () const { return this->m_rate; }
++
++void PropertyAnimation::play (double now) {
++    this->start (now);
++
++    if (this->m_playing) {
++	return;
++    }
++
++    // a transition a media widget runs on every track change plays again from its start
++    if (this->atEnd (this->m_position)) {
++	this->m_position = this->m_rate >= 0.0 ? 0.0 : this->m_timeline->length;
++    }
++
++    this->m_since = now;
++    this->m_playing = true;
++}
++
++void PropertyAnimation::pause (double now) {
++    this->start (now);
++
++    if (this->m_playing) {
++	this->m_position = this->position (now);
++	this->m_since = now;
++	this->m_playing = false;
++    }
++}
++
++void PropertyAnimation::stop (double now) {
++    this->start (now);
++    this->m_position = 0.0;
++    this->m_since = now;
++    this->m_playing = false;
++}
++
++void PropertyAnimation::setFrame (double now, double frame) {
++    this->start (now);
++    this->m_position = this->m_timeline->mode == TimelineAnimation::Mode::Single
++	? std::clamp (frame, 0.0, static_cast<double> (this->m_timeline->length))
++	: frame;
++    this->m_since = now;
++}
++
++void PropertyAnimation::setRate (double now, double rate) {
++    this->start (now);
++    this->m_position = this->position (now);
++    this->m_since = now;
++    this->m_rate = rate;
++}
++
++float PropertyAnimation::evaluate (const std::vector<Keyframe>& curve, float frame) {
++    if (curve.empty ()) {
++	return 0.0f;
++    }
++
++    if (frame <= curve.front ().frame) {
++	return curve.front ().value;
++    }
++
++    if (frame >= curve.back ().frame) {
++	return curve.back ().value;
++    }
++
++    const auto next = std::ranges::upper_bound (curve, frame, {}, &Keyframe::frame);
++    const auto& to = *next;
++    const auto& from = *std::prev (next);
++    const float span = to.frame - from.frame;
++
++    if (span <= 0.0f) {
++	return to.value;
++    }
++
++    // a handle's x is in thirds of the segment, so the editor's default handles (flat, x 1)
++    // ease in and out, and a disabled one sits a third of the way along the straight line
++    // between the keyframes: a segment with neither is linear
++    const glm::vec2 p0 (from.frame, from.value);
++    const glm::vec2 p3 (to.frame, to.value);
++    const glm::vec2 straight = (p3 - p0) / 3.0f;
++    glm::vec2 p1 = from.frontEnabled ? p0 + glm::vec2 (from.front.x * span / 3.0f, from.front.y) : p0 + straight;
++    glm::vec2 p2 = to.backEnabled ? p3 + glm::vec2 (to.back.x * span / 3.0f, to.back.y) : p3 - straight;
++
++    // handles kept inside the segment keep x moving forward, so every frame has one value
++    p1.x = std::clamp (p1.x, p0.x, p3.x);
++    p2.x = std::clamp (p2.x, p0.x, p3.x);
++
++    float low = 0.0f;
++    float high = 1.0f;
++    float t = 0.5f;
++
++    for (int step = 0; step < 32; step++) {
++	t = (low + high) / 2.0f;
++
++	if (bezier (p0.x, p1.x, p2.x, p3.x, t) < frame) {
++	    low = t;
++	} else {
++	    high = t;
++	}
++    }
++
++    return bezier (p0.y, p1.y, p2.y, p3.y, t);
++}
++
++double PropertyAnimation::position (double now) const {
++    if (!this->m_playing) {
++	return this->m_position;
++    }
++
++    return this->m_position + (now - this->m_since) * this->m_timeline->fps * this->m_rate;
++}
++
++void PropertyAnimation::start (double now) {
++    if (this->m_started) {
++	return;
++    }
++
++    this->m_started = true;
++    this->m_playing = !this->m_timeline->startPaused;
++    this->m_position = 0.0;
++    this->m_since = now;
++}
++
++bool PropertyAnimation::atEnd (double position) const {
++    if (this->m_timeline->mode != TimelineAnimation::Mode::Single) {
++	return false;
++    }
++
++    return this->m_rate >= 0.0 ? position >= this->m_timeline->length : position <= 0.0;
++}
+diff --git a/src/WallpaperEngine/Render/PropertyAnimation.h b/src/WallpaperEngine/Render/PropertyAnimation.h
+new file mode 100644
+index 00000000..1418ac2f
+--- /dev/null
++++ b/src/WallpaperEngine/Render/PropertyAnimation.h
+@@ -0,0 +1,77 @@
++#pragma once
++
++#include <cstddef>
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Data/Model/TimelineAnimation.h"
++
++namespace WallpaperEngine::Render {
++/**
++ * Plays a property's timeline animation into the property: a layer fading in, sliding into
++ * place or pulsing, as the editor keyframed it.
++ *
++ * Its clock starts the first time it is applied or a script touches it, so an intro plays
++ * from its start whenever the wallpaper loads. A script takes it over through IAnimation
++ * (play, pause, stop, setFrame), as the media widgets do to run a transition per track.
++ *
++ * Times are the render clock (g_Time) the caller passes in, so nothing here reads a clock.
++ */
++class PropertyAnimation {
++public:
++    PropertyAnimation (
++	std::shared_ptr<const Data::Model::TimelineAnimation> timeline, Data::Model::DynamicValue& value
++    );
++
++    /** Writes the curve's value at render time `now` into the property */
++    void apply (double now);
++
++    [[nodiscard]] const std::string& getName () const;
++    [[nodiscard]] double getFps () const;
++    [[nodiscard]] size_t getFrameCount () const;
++    /** Seconds the animation runs for, once through */
++    [[nodiscard]] double getDuration () const;
++    /** The frame showing at `now`, fractional between whole frames */
++    [[nodiscard]] double getFrame (double now) const;
++    [[nodiscard]] bool isPlaying () const;
++    [[nodiscard]] double getRate () const;
++
++    /** Continues from where it was paused or stopped; a single animation that ended starts over */
++    void play (double now);
++    /** Holds the current frame */
++    void pause (double now);
++    /** Holds the first frame */
++    void stop (double now);
++    /** Moves to `frame`, without changing whether it plays */
++    void setFrame (double now, double frame);
++    /** Plays at `rate` times the normal speed from here on; negative plays backwards */
++    void setRate (double now, double rate);
++
++    /**
++     * The curve's value at `frame`: a cubic Bézier between each pair of keyframes, held before
++     * the first and after the last
++     */
++    [[nodiscard]] static float evaluate (const std::vector<Data::Model::Keyframe>& curve, float frame);
++
++private:
++    /** Frames played at `now`, before wrapping */
++    [[nodiscard]] double position (double now) const;
++    /** Starts the clock at the first call, paused if the editor saved it that way */
++    void start (double now);
++    /** Whether a single animation has played through, at this position */
++    [[nodiscard]] bool atEnd (double position) const;
++
++    std::shared_ptr<const Data::Model::TimelineAnimation> m_timeline;
++    Data::Model::DynamicValue& m_value;
++    /** The property's own value, which a relative animation adds to and a missing curve keeps */
++    Data::Model::DynamicValue m_base;
++    bool m_started = false;
++    bool m_playing = true;
++    double m_rate = 1.0;
++    /** position at m_since */
++    double m_position = 0.0;
++    double m_since = 0.0;
++};
++} // namespace WallpaperEngine::Render
+diff --git a/src/WallpaperEngine/Render/Wallpapers/CScene.cpp b/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
+index dd470973..a6e50fee 100644
+--- a/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
++++ b/src/WallpaperEngine/Render/Wallpapers/CScene.cpp
+@@ -325,6 +325,13 @@ void CScene::renderFrame (const glm::ivec4& viewport) {
+ 	    = glm::mix (this->m_parallaxDisplacement, (centeredMouse * amount) * influence, delay);
+     }
+ 
++    // play the layers' timeline animations, before the scripts that read and override them
++    for (auto* object : this->m_objects | std::views::values) {
++	if (auto* scriptable = dynamic_cast<Scripting::ScriptableObject*> (object); scriptable != nullptr) {
++	    scriptable->applyAnimations (g_Time);
++	}
++    }
++
+     // run a tick in the javascript logic
+     this->getScriptEngine ().tick ();
+ 
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index b74233ee..75fb756f 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -4,12 +4,15 @@
+ 
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ #include "WallpaperEngine/Render/Objects/CRenderable.h"
++#include "WallpaperEngine/Render/PropertyAnimation.h"
+ #include "WallpaperEngine/Scripting/ScriptEngine.h"
+ #include "WallpaperEngine/Scripting/ScriptableObject.h"
+ 
+ #include <cmath>
+ #include <iterator>
+ #include <ranges>
++#include <type_traits>
++#include <variant>
+ 
+ extern float g_Time;
+ 
+@@ -18,7 +21,7 @@ using namespace WallpaperEngine::Data::Utils;
+ using namespace WallpaperEngine::Scripting::Adapters;
+ 
+ #define SCRIPTABLE_OPAQUE_MAGIC 0xdeadbeef
+-#define TEXTURE_ANIMATION_OPAQUE_MAGIC 0x7e47a417
++#define ANIMATION_OPAQUE_MAGIC 0x7e47a417
+ 
+ struct OpaqueScriptableObjectAdapter {
+     unsigned int magic;
+@@ -26,9 +29,10 @@ struct OpaqueScriptableObjectAdapter {
+     WallpaperEngine::Scripting::ScriptableObject& object;
+ };
+ 
+-struct OpaqueTextureAnimation {
++/** An ITextureAnimation or an IAnimation, which answer the same play, pause, stop and frame calls */
++struct OpaqueAnimation {
+     unsigned int magic;
+-    WallpaperEngine::Render::TextureAnimation& animation;
++    std::variant<WallpaperEngine::Render::TextureAnimation*, WallpaperEngine::Render::PropertyAnimation*> animation;
+ };
+ 
+ void scriptableobject_finalizer (JSRuntime* rt, JSValueConst val);
+@@ -100,112 +104,190 @@ JSValue layer_get_children (JSContext* ctx, JSValueConst this_val, int argc, JSV
+     return result;
+ }
+ 
+-WallpaperEngine::Render::TextureAnimation* animation_opaque (JSValueConst value) {
++JSValue layer_get_animation (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = layer_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getAnimation called on something that is not a layer");
++    }
++
++    std::string name;
++
++    if (argc > 0 && JS_IsString (argv [0])) {
++	const char* str = JS_ToCString (ctx, argv [0]);
++
++	if (str == nullptr) {
++	    return JS_EXCEPTION;
++	}
++
++	name = str;
++	JS_FreeCString (ctx, str);
++    }
++
++    return container->adapter.propertyAnimation (container->object, name);
++}
++
++OpaqueAnimation* animation_opaque (JSValueConst value) {
+     JSClassID classId = 0;
+-    auto* container = static_cast<OpaqueTextureAnimation*> (JS_GetAnyOpaque (value, &classId));
++    auto* container = static_cast<OpaqueAnimation*> (JS_GetAnyOpaque (value, &classId));
+ 
+-    return container != nullptr && container->magic == TEXTURE_ANIMATION_OPAQUE_MAGIC ? &container->animation
+-										       : nullptr;
++    return container != nullptr && container->magic == ANIMATION_OPAQUE_MAGIC ? container : nullptr;
+ }
+ 
+ void animation_finalizer (JSRuntime* rt, JSValueConst val) {
+     JSClassID classId = 0;
+-    const auto* container = static_cast<OpaqueTextureAnimation*> (JS_GetAnyOpaque (val, &classId));
++    const auto* container = static_cast<OpaqueAnimation*> (JS_GetAnyOpaque (val, &classId));
+ 
+-    if (container != nullptr && container->magic == TEXTURE_ANIMATION_OPAQUE_MAGIC) {
++    if (container != nullptr && container->magic == ANIMATION_OPAQUE_MAGIC) {
+ 	delete container;
+     }
+ }
+ 
+-#define ANIMATION_OR_THROW(ctx, this_val)                                                                              \
+-    auto* animation = animation_opaque (this_val);                                                                    \
+-    if (animation == nullptr) {                                                                                        \
+-	return JS_ThrowTypeError (ctx, "not a texture animation");                                                     \
++/** Runs `body` on the animation behind `this_val`, whichever kind it is */
++template <typename Body> JSValue with_animation (JSContext* ctx, JSValueConst this_val, Body&& body) {
++    auto* container = animation_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "not an animation");
+     }
+ 
++    return std::visit (std::forward<Body> (body), container->animation);
++}
++
++/** The animation behind `this_val` if it is of kind T, or nullptr */
++template <typename T> T* animation_as (JSValueConst this_val) {
++    auto* container = animation_opaque (this_val);
++    auto** animation = container == nullptr ? nullptr : std::get_if<T*> (&container->animation);
++
++    return animation == nullptr ? nullptr : *animation;
++}
++
+ JSValue animation_get_frame_count (JSContext* ctx, JSValueConst this_val) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    return JS_NewInt64 (ctx, static_cast<int64_t> (animation->getFrameCount ()));
++    return with_animation (ctx, this_val, [ctx] (auto* animation) {
++	return JS_NewInt64 (ctx, static_cast<int64_t> (animation->getFrameCount ()));
++    });
+ }
+ 
+ JSValue animation_get_duration (JSContext* ctx, JSValueConst this_val) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    return JS_NewFloat64 (ctx, animation->getDuration ());
++    return with_animation (ctx, this_val, [ctx] (auto* animation) {
++	return JS_NewFloat64 (ctx, animation->getDuration ());
++    });
+ }
+ 
+ JSValue animation_get_rate (JSContext* ctx, JSValueConst this_val) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    return JS_NewFloat64 (ctx, animation->getRate ());
++    return with_animation (ctx, this_val, [ctx] (auto* animation) {
++	return JS_NewFloat64 (ctx, animation->getRate ());
++    });
+ }
+ 
+ JSValue animation_set_rate (JSContext* ctx, JSValueConst this_val, JSValueConst value) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+     double rate = 1.0;
+ 
+     if (JS_ToFloat64 (ctx, &rate, value) < 0) {
+ 	return JS_EXCEPTION;
+     }
+ 
+-    if (std::isfinite (rate)) {
+-	animation->setRate (g_Time, rate);
+-    }
++    return with_animation (ctx, this_val, [rate] (auto* animation) {
++	if (std::isfinite (rate)) {
++	    animation->setRate (g_Time, rate);
++	}
+ 
+-    return JS_UNDEFINED;
++	return JS_UNDEFINED;
++    });
+ }
+ 
+ // the read-only ones: a script assigning one is ignored, as for a layer's unknown properties
+ JSValue animation_set_ignored (JSContext* ctx, JSValueConst this_val, JSValueConst value) { return JS_UNDEFINED; }
+ 
+ JSValue animation_play (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    animation->play (g_Time);
+-    return JS_UNDEFINED;
++    return with_animation (ctx, this_val, [] (auto* animation) {
++	animation->play (g_Time);
++	return JS_UNDEFINED;
++    });
+ }
+ 
+ JSValue animation_pause (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    animation->pause (g_Time);
+-    return JS_UNDEFINED;
++    return with_animation (ctx, this_val, [] (auto* animation) {
++	animation->pause (g_Time);
++	return JS_UNDEFINED;
++    });
+ }
+ 
+ JSValue animation_stop (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    animation->stop (g_Time);
+-    return JS_UNDEFINED;
+-}
+-
+-JSValue animation_join (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    animation->join ();
+-    return JS_UNDEFINED;
++    return with_animation (ctx, this_val, [] (auto* animation) {
++	animation->stop (g_Time);
++	return JS_UNDEFINED;
++    });
+ }
+ 
+ JSValue animation_is_playing (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    return JS_NewBool (ctx, animation->isPlaying ());
++    return with_animation (ctx, this_val, [ctx] (auto* animation) {
++	return JS_NewBool (ctx, animation->isPlaying ());
++    });
+ }
+ 
+ JSValue animation_get_frame (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+-    return JS_NewInt64 (ctx, static_cast<int64_t> (animation->getFrame (g_Time)));
++    return with_animation (ctx, this_val, [ctx] (auto* animation) {
++	return JS_NewFloat64 (ctx, static_cast<double> (animation->getFrame (g_Time)));
++    });
+ }
+ 
+ JSValue animation_set_frame (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    ANIMATION_OR_THROW (ctx, this_val);
+     double frame = 0.0;
+ 
+     if (argc > 0 && JS_ToFloat64 (ctx, &frame, argv [0]) < 0) {
+ 	return JS_EXCEPTION;
+     }
+ 
+-    // `shared.flag * 1` and the like arrive as NaN when the flag is not set yet
+-    if (std::isfinite (frame)) {
+-	animation->setFrame (g_Time, static_cast<long long> (std::floor (frame)));
++    return with_animation (ctx, this_val, [frame] (auto* animation) {
++	// `shared.flag * 1` and the like arrive as NaN when the flag is not set yet
++	if (!std::isfinite (frame)) {
++	    return JS_UNDEFINED;
++	}
++
++	// a sprite sheet shows whole frames; a property's curve has a value between them
++	if constexpr (std::is_same_v<std::remove_pointer_t<decltype (animation)>, WallpaperEngine::Render::TextureAnimation>) {
++	    animation->setFrame (g_Time, static_cast<long long> (std::floor (frame)));
++	} else {
++	    animation->setFrame (g_Time, frame);
++	}
++
++	return JS_UNDEFINED;
++    });
++}
++
++JSValue animation_join (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* animation = animation_as<WallpaperEngine::Render::TextureAnimation> (this_val);
++
++    if (animation == nullptr) {
++	return JS_ThrowTypeError (ctx, "not a texture animation");
+     }
+ 
++    animation->join ();
+     return JS_UNDEFINED;
+ }
+ 
++JSValue animation_get_name (JSContext* ctx, JSValueConst this_val) {
++    auto* animation = animation_as<WallpaperEngine::Render::PropertyAnimation> (this_val);
++
++    if (animation == nullptr) {
++	return JS_ThrowTypeError (ctx, "not a timeline animation");
++    }
++
++    return JS_NewString (ctx, animation->getName ().c_str ());
++}
++
++JSValue animation_get_fps (JSContext* ctx, JSValueConst this_val) {
++    auto* animation = animation_as<WallpaperEngine::Render::PropertyAnimation> (this_val);
++
++    if (animation == nullptr) {
++	return JS_ThrowTypeError (ctx, "not a timeline animation");
++    }
++
++    return JS_NewFloat64 (ctx, animation->getFps ());
++}
++
++// what ITextureAnimation and IAnimation both answer
+ const JSCFunctionListEntry animation_functions [] = {
+     JS_CGETSET_DEF ("frameCount", animation_get_frame_count, animation_set_ignored),
+     JS_CGETSET_DEF ("duration", animation_get_duration, animation_set_ignored),
+@@ -213,16 +295,44 @@ const JSCFunctionListEntry animation_functions [] = {
+     JS_CFUNC_DEF ("play", 0, animation_play),
+     JS_CFUNC_DEF ("pause", 0, animation_pause),
+     JS_CFUNC_DEF ("stop", 0, animation_stop),
+-    JS_CFUNC_DEF ("join", 0, animation_join),
+     JS_CFUNC_DEF ("isPlaying", 0, animation_is_playing),
+     JS_CFUNC_DEF ("getFrame", 0, animation_get_frame),
+     JS_CFUNC_DEF ("setFrame", 1, animation_set_frame),
+ };
+ 
+-const JSClassDef animation_class = {
++const JSCFunctionListEntry texture_animation_functions [] = {
++    JS_CFUNC_DEF ("join", 0, animation_join),
++};
++
++const JSCFunctionListEntry property_animation_functions [] = {
++    JS_CGETSET_DEF ("name", animation_get_name, animation_set_ignored),
++    JS_CGETSET_DEF ("fps", animation_get_fps, animation_set_ignored),
++};
++
++const JSClassDef texture_animation_class = {
+     .class_name = "ITextureAnimation",
+     .finalizer = animation_finalizer,
+ };
++
++const JSClassDef property_animation_class = {
++    .class_name = "IAnimation",
++    .finalizer = animation_finalizer,
++};
++
++/** A class whose prototype holds the shared animation calls and `extra` */
++template <size_t count>
++void register_animation_class (
++    JSContext* ctx, JSRuntime* rt, JSClassID& classId, const JSClassDef& definition,
++    const JSCFunctionListEntry (&extra) [count]
++) {
++    JS_NewClassID (rt, &classId);
++    JS_NewClass (rt, classId, &definition);
++
++    JSValue prototype = JS_NewObject (ctx);
++    JS_SetPropertyFunctionList (ctx, prototype, animation_functions, std::size (animation_functions));
++    JS_SetPropertyFunctionList (ctx, prototype, extra, count);
++    JS_SetClassProto (ctx, classId, prototype);
++}
+ } // namespace
+ 
+ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver) {
+@@ -311,15 +421,18 @@ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::str
+     this->m_methods.emplace (
+ 	"getTextureAnimation", JS_NewCFunction (ctx, layer_get_texture_animation, "getTextureAnimation", 0)
+     );
++    this->m_methods.emplace ("getAnimation", JS_NewCFunction (ctx, layer_get_animation, "getAnimation", 1));
+     this->m_methods.emplace ("getParent", JS_NewCFunction (ctx, layer_get_parent, "getParent", 0));
+     this->m_methods.emplace ("getChildren", JS_NewCFunction (ctx, layer_get_children, "getChildren", 0));
+ 
+-    JS_NewClassID (this->m_engine.getRuntime (), &this->m_textureAnimationClassId);
+-    JS_NewClass (this->m_engine.getRuntime (), this->m_textureAnimationClassId, &animation_class);
+-
+-    JSValue prototype = JS_NewObject (ctx);
+-    JS_SetPropertyFunctionList (ctx, prototype, animation_functions, std::size (animation_functions));
+-    JS_SetClassProto (ctx, this->m_textureAnimationClassId, prototype);
++    register_animation_class (
++	ctx, this->m_engine.getRuntime (), this->m_textureAnimationClassId, texture_animation_class,
++	texture_animation_functions
++    );
++    register_animation_class (
++	ctx, this->m_engine.getRuntime (), this->m_propertyAnimationClassId, property_animation_class,
++	property_animation_functions
++    );
+ }
+ 
+ ScriptableObjectAdapter::~ScriptableObjectAdapter () {
+@@ -354,13 +467,31 @@ JSValue ScriptableObjectAdapter::textureAnimation (ScriptableObject& object) con
+     }
+ 
+     JS_SetOpaque (
+-	result,
+-	new OpaqueTextureAnimation { .magic = TEXTURE_ANIMATION_OPAQUE_MAGIC, .animation = renderable->getTextureAnimation () }
++	result, new OpaqueAnimation { .magic = ANIMATION_OPAQUE_MAGIC, .animation = &renderable->getTextureAnimation () }
+     );
+ 
+     return result;
+ }
+ 
++JSValue ScriptableObjectAdapter::propertyAnimation (ScriptableObject& object, const std::string& name) const {
++    const auto* running = this->m_engine.getRunningModule ();
++    auto* animation = object.findAnimation (name, running == nullptr ? nullptr : &running->value);
++
++    if (animation == nullptr) {
++	return JS_UNDEFINED;
++    }
++
++    JSValue result = JS_NewObjectClass (this->m_engine.getContext (), this->m_propertyAnimationClassId);
++
++    if (JS_IsException (result)) {
++	return result;
++    }
++
++    JS_SetOpaque (result, new OpaqueAnimation { .magic = ANIMATION_OPAQUE_MAGIC, .animation = animation });
++
++    return result;
++}
++
+ JSValue ScriptableObjectAdapter::instantiate (ScriptableObject& object) {
+     JSValue result = this->ObjectAdapter::instantiate (object);
+     JS_SetOpaque (
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+index 16b40301..1a04bc67 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+@@ -20,6 +20,11 @@ public:
+     JSValue findMethod (const std::string& name) const;
+     /** An ITextureAnimation over the layer's sprite sheet or GIF, or JS_UNDEFINED if it has none */
+     JSValue textureAnimation (ScriptableObject& object) const;
++    /**
++     * An IAnimation over one of the layer's timeline animations (ScriptableObject::findAnimation
++     * picks which, for the script running now), or JS_UNDEFINED if it has none
++     */
++    JSValue propertyAnimation (ScriptableObject& object, const std::string& name) const;
+ 
+ private:
+     JSClassExoticMethods m_exoticMethods;
+@@ -27,5 +32,6 @@ private:
+     /** ILayer's methods, made once and handed out by the property lookup */
+     std::map<std::string, JSValue> m_methods;
+     JSClassID m_textureAnimationClassId = 0;
++    JSClassID m_propertyAnimationClassId = 0;
+ };
+ }
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index e2ff1a6c..60b2043e 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -4,6 +4,7 @@
+ #include "WallpaperEngine/Data/Model/Object.h"
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ 
++#include <algorithm>
+ #include <ranges>
+ 
+ using namespace WallpaperEngine::Render;
+@@ -56,13 +57,47 @@ void ScriptableObject::registerProperty (const std::string& name, DynamicValue&
+ 	name, PropertyEntry { .key = name + "_" + std::to_string (this->getId ()), .value = value }
+     );
+ 
+-    if (!inserted.second || !runScript) {
++    if (!inserted.second) {
++	return;
++    }
++
++    if (const auto& timeline = value.getAnimation (); timeline != nullptr) {
++	this->m_animations.emplace_back (name, std::make_unique<PropertyAnimation> (timeline, value));
++    }
++
++    if (!runScript) {
+ 	return;
+     }
+ 
+     this->getScene ().getScriptEngine ().queueScript (inserted.first->second.key, inserted.first->second.value, *this);
+ }
+ 
++void ScriptableObject::applyAnimations (double now) {
++    for (const auto& animation : this->m_animations | std::views::values) {
++	animation->apply (now);
++    }
++}
++
++PropertyAnimation* ScriptableObject::findAnimation (const std::string& name, const DynamicValue* script) {
++    if (this->m_animations.empty ()) {
++	return nullptr;
++    }
++
++    if (!name.empty ()) {
++	const auto named = std::ranges::find_if (this->m_animations, [&name] (const auto& entry) {
++	    return entry.second->getName () == name;
++	});
++
++	return named == this->m_animations.end () ? nullptr : named->second.get ();
++    }
++
++    const auto own = std::ranges::find_if (this->m_animations, [this, script] (const auto& entry) {
++	return script != nullptr && this->findProperty (entry.first) == script;
++    });
++
++    return own == this->m_animations.end () ? this->m_animations.front ().second.get () : own->second.get ();
++}
++
+ void ScriptableObject::registerConstant (const std::string& name, const DynamicValue& value) {
+     if (this->m_properties.contains (name)) {
+ 	return;
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.h b/src/WallpaperEngine/Scripting/ScriptableObject.h
+index 34147a8b..9884608c 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.h
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.h
+@@ -1,10 +1,13 @@
+ #pragma once
+ #include "WallpaperEngine/Data/Model/Types.h"
+ #include "WallpaperEngine/Render/CObject.h"
++#include "WallpaperEngine/Render/PropertyAnimation.h"
+ 
+ #include <map>
+ #include <memory>
+ #include <string>
++#include <utility>
++#include <vector>
+ 
+ namespace WallpaperEngine::Render::Wallpapers {
+ class CScene;
+@@ -27,6 +30,15 @@ public:
+ 
+     const std::map<std::string, PropertyEntry>& getProperties () const;
+ 
++    /** Plays every timeline animation on this layer's properties into them, at render time `now` */
++    void applyAnimations (double now);
++    /**
++     * A timeline animation on this layer: the one the editor named `name`, or with no name the
++     * one on the property `script` belongs to (a property script asking for its own), falling
++     * back to the layer's first. nullptr if it has none.
++     */
++    Render::PropertyAnimation* findAnimation (const std::string& name, const DynamicValue* script);
++
+ protected:
+     /**
+      * Exposes a property to scripts as `thisLayer.<name>`.
+@@ -41,5 +53,7 @@ protected:
+ private:
+     std::map<std::string, PropertyEntry> m_properties;
+     std::map<std::string, std::unique_ptr<DynamicValue>> m_constants;
++    /** each animated property's animation, in the order the properties were registered */
++    std::vector<std::pair<std::string, std::unique_ptr<Render::PropertyAnimation>>> m_animations;
+ };
+ }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp b/src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
+new file mode 100644
+index 00000000..74249114
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
+@@ -0,0 +1,234 @@
++#include <catch2/catch_approx.hpp>
++#include <catch2/catch_test_macros.hpp>
++
++#include <glm/glm.hpp>
++
++#include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Data/Model/TimelineAnimation.h"
++#include "WallpaperEngine/Data/Parsers/DynamicValueParser.h"
++#include "WallpaperEngine/Render/PropertyAnimation.h"
++
++using Catch::Approx;
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::Data::Model::DynamicValue;
++using WallpaperEngine::Data::Model::Keyframe;
++using WallpaperEngine::Data::Model::Properties;
++using WallpaperEngine::Data::Model::TimelineAnimation;
++using WallpaperEngine::Data::Parsers::DynamicValueParser;
++using WallpaperEngine::Render::PropertyAnimation;
++
++namespace {
++WallpaperEngine::Data::Model::DynamicValueUniquePtr parse (const char* text) {
++    const Properties none;
++
++    return DynamicValueParser::parse (JSON::parse (text), none, false);
++}
++
++// a cover that fades out over four seconds once the wallpaper loads (workshop 3147346398), with
++// the editor's default handles: enabled, flat, one unit long
++constexpr const char* fadeOut = R"({
++    "value": 1.0,
++    "animation": {
++        "c0": [
++            { "frame": 120, "value": 0,
++              "back": { "enabled": true, "x": -1, "y": 0 }, "front": { "enabled": true, "x": 1, "y": 0 } },
++            { "frame": 0, "value": 1,
++              "back": { "enabled": true, "x": -1, "y": 0 }, "front": { "enabled": true, "x": 1, "y": 0 } }
++        ],
++        "options": { "fps": 30, "length": 120, "mode": "single", "wraploop": null }
++    }
++})";
++
++Keyframe point (float frame, float value) { return Keyframe { .frame = frame, .value = value }; }
++
++Keyframe smoothPoint (float frame, float value) {
++    return Keyframe {
++	.frame = frame,
++	.value = value,
++	.back = glm::vec2 (-1.0f, 0.0f),
++	.backEnabled = true,
++	.front = glm::vec2 (1.0f, 0.0f),
++	.frontEnabled = true,
++    };
++}
++
++std::shared_ptr<TimelineAnimation> timeline (TimelineAnimation::Mode mode, float fps, float length) {
++    auto result = std::make_shared<TimelineAnimation> ();
++
++    result->mode = mode;
++    result->fps = fps;
++    result->length = length;
++
++    return result;
++}
++} // namespace
++
++TEST_CASE ("A value's timeline animation is read off the value, sorted by frame") {
++    const auto value = parse (fadeOut);
++    const auto& animation = value->getAnimation ();
++
++    REQUIRE (animation != nullptr);
++    CHECK (value->getFloat () == 1.0f);
++    CHECK (animation->mode == TimelineAnimation::Mode::Single);
++    CHECK (animation->fps == 30.0f);
++    CHECK (animation->length == 120.0f);
++    CHECK_FALSE (animation->startPaused);
++    CHECK_FALSE (animation->relative);
++    REQUIRE (animation->channels.size () == 1);
++    REQUIRE (animation->channels [0].size () == 2);
++    CHECK (animation->channels [0][0].frame == 0.0f);
++    CHECK (animation->channels [0][0].value == 1.0f);
++    CHECK (animation->channels [0][0].frontEnabled);
++    CHECK (animation->channels [0][1].frame == 120.0f);
++}
++
++TEST_CASE ("A value without keyframes, or with nothing to play, has no animation") {
++    CHECK (parse (R"({ "value": 1.0 })")->getAnimation () == nullptr);
++    CHECK (parse (R"("1 2 3")")->getAnimation () == nullptr);
++    CHECK (parse (R"({ "value": 1.0, "animation": { "c0": [], "options": { "fps": 30, "length": 60 } } })")
++	       ->getAnimation ()
++	   == nullptr);
++    // fields written some other way fall back instead of aborting the wallpaper
++    const auto odd = parse (
++	R"({ "value": 1.0, "animation": { "c0": [ { "frame": "x", "value": 2 } ], "options": { "fps": "fast", "length": 60, "name": 5 } } })"
++    );
++
++    REQUIRE (odd->getAnimation () != nullptr);
++    CHECK (odd->getAnimation ()->fps == 30.0f);
++    CHECK (odd->getAnimation ()->name.empty ());
++}
++
++TEST_CASE ("The curve holds outside its keyframes and is straight without handles") {
++    const std::vector<Keyframe> curve = { point (10.0f, 2.0f), point (20.0f, 4.0f) };
++
++    CHECK (PropertyAnimation::evaluate (curve, 0.0f) == 2.0f);
++    CHECK (PropertyAnimation::evaluate (curve, 10.0f) == 2.0f);
++    CHECK (PropertyAnimation::evaluate (curve, 15.0f) == Approx (3.0f).margin (1e-4));
++    CHECK (PropertyAnimation::evaluate (curve, 12.5f) == Approx (2.5f).margin (1e-4));
++    CHECK (PropertyAnimation::evaluate (curve, 20.0f) == 4.0f);
++    CHECK (PropertyAnimation::evaluate (curve, 99.0f) == 4.0f);
++}
++
++TEST_CASE ("The editor's default handles ease in and out") {
++    const std::vector<Keyframe> curve = { smoothPoint (0.0f, 0.0f), smoothPoint (100.0f, 1.0f) };
++
++    // flat handles a third of the segment long: the smoothstep curve, 3t² - 2t³
++    CHECK (PropertyAnimation::evaluate (curve, 25.0f) == Approx (0.15625f).margin (1e-4));
++    CHECK (PropertyAnimation::evaluate (curve, 50.0f) == Approx (0.5f).margin (1e-4));
++    CHECK (PropertyAnimation::evaluate (curve, 75.0f) == Approx (0.84375f).margin (1e-4));
++    // and it never leaves the range the keyframes span
++    for (int frame = 0; frame <= 100; frame++) {
++	const float value = PropertyAnimation::evaluate (curve, static_cast<float> (frame));
++
++	CHECK (value >= 0.0f);
++	CHECK (value <= 1.0f);
++    }
++}
++
++TEST_CASE ("A single animation plays once from the first time it is applied, then holds") {
++    const auto value = parse (fadeOut);
++    PropertyAnimation animation (value->getAnimation (), *value);
++
++    // late in a session: the clock starts here, not at the render clock's zero
++    animation.apply (1000.0);
++    CHECK (value->getFloat () == Approx (1.0f));
++    CHECK (animation.isPlaying ());
++
++    animation.apply (1002.0);
++    CHECK (animation.getFrame (1002.0) == Approx (60.0));
++    CHECK (value->getFloat () == Approx (0.5f).margin (1e-4));
++
++    animation.apply (1010.0);
++    CHECK (value->getFloat () == Approx (0.0f).margin (1e-6));
++    CHECK_FALSE (animation.isPlaying ());
++    CHECK (animation.getFrame (1010.0) == Approx (120.0));
++
++    // play () on one that ended runs it again from the start
++    animation.play (1020.0);
++    animation.apply (1020.0);
++    CHECK (value->getFloat () == Approx (1.0f));
++    CHECK (animation.isPlaying ());
++}
++
++TEST_CASE ("A mirrored animation goes back and forth, a looping one starts over") {
++    DynamicValue mirrored (0.66f);
++    auto pulse = timeline (TimelineAnimation::Mode::Mirror, 30.0f, 60.0f);
++    pulse->channels = { { point (0.0f, 0.0f), point (60.0f, 1.8f) } };
++    PropertyAnimation mirror (pulse, mirrored);
++
++    mirror.apply (0.0);
++    CHECK (mirrored.getFloat () == 0.0f);
++    mirror.apply (1.0);
++    CHECK (mirrored.getFloat () == Approx (0.9f).margin (1e-4));
++    mirror.apply (2.0);
++    CHECK (mirrored.getFloat () == Approx (1.8f).margin (1e-4));
++    mirror.apply (3.0);
++    CHECK (mirrored.getFloat () == Approx (0.9f).margin (1e-4));
++    mirror.apply (4.0);
++    CHECK (mirrored.getFloat () == Approx (0.0f).margin (1e-4));
++    CHECK (mirror.isPlaying ());
++
++    DynamicValue looped (0.0f);
++    auto ramp = timeline (TimelineAnimation::Mode::Loop, 30.0f, 60.0f);
++    ramp->channels = { { point (0.0f, 0.0f), point (60.0f, 1.8f) } };
++    PropertyAnimation loop (ramp, looped);
++
++    loop.apply (0.0);
++    loop.apply (2.5);
++    CHECK (loop.getFrame (2.5) == Approx (15.0));
++    CHECK (looped.getFloat () == Approx (0.45f).margin (1e-4));
++}
++
++TEST_CASE ("A relative animation moves the value from where the editor put it") {
++    // an origin keyframed by offsets, with no curve for z (workshop 2590512455)
++    DynamicValue origin (glm::vec3 (1475.0f, 819.0f, 7.0f));
++    auto drift = timeline (TimelineAnimation::Mode::Mirror, 2.0f, 16.0f);
++    drift->relative = true;
++    drift->channels = { { point (0.0f, 0.0f), point (16.0f, -127.0f) }, { point (0.0f, 0.0f), point (16.0f, 117.0f) } };
++    PropertyAnimation animation (drift, origin);
++
++    animation.apply (0.0);
++    CHECK (origin.getVec3 () == glm::vec3 (1475.0f, 819.0f, 7.0f));
++
++    animation.apply (8.0);
++    CHECK (origin.getVec3 ().x == Approx (1348.0f).margin (1e-2));
++    CHECK (origin.getVec3 ().y == Approx (936.0f).margin (1e-2));
++    CHECK (origin.getVec3 ().z == 7.0f);
++}
++
++TEST_CASE ("A paused animation waits for a script, which can pause, stop and move it") {
++    // a transition a media widget plays on every track change (workshop 3441873795)
++    DynamicValue alpha (0.0f);
++    auto transition = timeline (TimelineAnimation::Mode::Single, 30.0f, 30.0f);
++    transition->startPaused = true;
++    transition->channels = { { point (0.0f, 0.0f), point (30.0f, 1.0f) } };
++    PropertyAnimation animation (transition, alpha);
++
++    animation.apply (5.0);
++    animation.apply (50.0);
++    CHECK_FALSE (animation.isPlaying ());
++    CHECK (alpha.getFloat () == 0.0f);
++
++    animation.play (50.0);
++    animation.apply (50.5);
++    CHECK (alpha.getFloat () == Approx (0.5f).margin (1e-4));
++
++    animation.pause (50.5);
++    animation.apply (60.0);
++    CHECK (alpha.getFloat () == Approx (0.5f).margin (1e-4));
++
++    animation.setFrame (60.0, 6.0);
++    animation.apply (60.0);
++    CHECK (alpha.getFloat () == Approx (0.2f).margin (1e-4));
++    // past either end of a single animation lands on that end
++    animation.setFrame (60.0, 99.0);
++    CHECK (animation.getFrame (60.0) == Approx (30.0));
++
++    animation.stop (61.0);
++    animation.apply (70.0);
++    CHECK (alpha.getFloat () == 0.0f);
++    CHECK_FALSE (animation.isPlaying ());
++
++    CHECK (animation.getFrameCount () == 30);
++    CHECK (animation.getDuration () == Approx (1.0));
++}

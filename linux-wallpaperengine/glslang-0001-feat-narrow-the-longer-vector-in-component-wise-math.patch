@@ -1,0 +1,87 @@
+From 25e58cf2d2aec1a33bd87878abb1a4e07b15dfd8 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 19:53:11 -0500
+Subject: [PATCH] feat: narrow the longer vector in component-wise math, as
+ HLSL does
+
+Wallpaper Engine's shaders follow HLSL's rules, where adding,
+subtracting, multiplying, dividing or taking the modulo of two vectors
+of different sizes narrows the longer one: float4 * float2 is a
+float2. GLSL has no such operation, so a shader that relies on it
+failed to compile and its layer never drew. The cursor-following eye
+effect (workshop 2973943998) multiplies a vec4 by a vec2, which left
+the cat out of workshop 3062175991.
+
+On GLSL source the longer operand is now narrowed with the same shape
+conversion an assignment already uses. Every expression this reaches
+was a compile error before, so shaders that compiled already compile
+as they did.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ glslang/MachineIndependent/Intermediate.cpp   | 31 +++++++++++++++++++
+ .../MachineIndependent/localintermediate.h    |  1 +
+ 2 files changed, 32 insertions(+)
+
+diff --git a/glslang/MachineIndependent/Intermediate.cpp b/glslang/MachineIndependent/Intermediate.cpp
+index 2f9b2bc0..0b7479d5 100644
+--- a/glslang/MachineIndependent/Intermediate.cpp
++++ b/glslang/MachineIndependent/Intermediate.cpp
+@@ -1061,6 +1061,7 @@ void TIntermediate::addBiShapeConversion(TOperator op, TIntermTyped*& lhsNode, T
+         break;
+     case EShSourceGlsl:
+     default:
++        addVectorTruncation(op, lhsNode, rhsNode);
+         return;
+     }
+ 
+@@ -1137,6 +1138,36 @@ void TIntermediate::addBiShapeConversion(TOperator op, TIntermTyped*& lhsNode, T
+     rhsNode = addShapeConversion(lhsNode->getType(), rhsNode);
+ }
+ 
++// ALMAMU: Wallpaper Engine's shaders follow HLSL's rules, where component-wise math on two
++// vectors of different sizes narrows the longer one (float4 * float2 is a float2). GLSL has
++// no such operation, so the longer one is narrowed here the same way an assignment narrows it.
++// Shapes GLSL already accepts never reach the narrowing, so they compile as before.
++//
++void TIntermediate::addVectorTruncation(TOperator op, TIntermTyped*& lhsNode, TIntermTyped*& rhsNode)
++{
++    switch (op) {
++    case EOpAdd:
++    case EOpSub:
++    case EOpMul:
++    case EOpDiv:
++    case EOpMod:
++        break;
++    default:
++        return;
++    }
++
++    if (!lhsNode->isVector() || !rhsNode->isVector())
++        return;
++
++    const int lhsSize = lhsNode->getVectorSize();
++    const int rhsSize = rhsNode->getVectorSize();
++
++    if (lhsSize > rhsSize)
++        lhsNode = addShapeConversion(TType(lhsNode->getBasicType(), EvqTemporary, rhsSize), lhsNode);
++    else if (rhsSize > lhsSize)
++        rhsNode = addShapeConversion(TType(rhsNode->getBasicType(), EvqTemporary, lhsSize), rhsNode);
++}
++
+ // Convert the node's shape of type for the given type, as allowed by the
+ // operation involved: 'op'.
+ //
+diff --git a/glslang/MachineIndependent/localintermediate.h b/glslang/MachineIndependent/localintermediate.h
+index 50ef6d5a..0dd91b53 100644
+--- a/glslang/MachineIndependent/localintermediate.h
++++ b/glslang/MachineIndependent/localintermediate.h
+@@ -531,6 +531,7 @@ public:
+     TIntermTyped* addUniShapeConversion(TOperator, const TType&, TIntermTyped*);
+     TIntermTyped* addConversion(TBasicType convertTo, TIntermTyped* node) const;
+     void addBiShapeConversion(TOperator, TIntermTyped*& lhsNode, TIntermTyped*& rhsNode);
++    void addVectorTruncation(TOperator, TIntermTyped*& lhsNode, TIntermTyped*& rhsNode);
+     TIntermTyped* addShapeConversion(const TType&, TIntermTyped*);
+     TIntermTyped* addBinaryMath(TOperator, TIntermTyped* left, TIntermTyped* right, const TSourceLoc&);
+     TIntermTyped* addAssign(TOperator op, TIntermTyped* left, TIntermTyped* right, const TSourceLoc&);

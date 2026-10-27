@@ -1,0 +1,148 @@
+From d4488922798eb7f48244b4808d5cb778db08c9d1 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:07:19 -0500
+Subject: [PATCH 36/42] fix(render): a hidden group hides the layers in it
+
+A group is a placeholder object here: it draws nothing, so its
+visible value, usually a user setting, was never applied. Wallpapers
+use a group per language or per clock position and show one of them
+through a combo property. Lonely Cat (workshop 3299228616) drew every
+language's clock and every clock position on top of each other.
+
+An image, text or particle layer now draws only while every layer
+above it is visible, each judged by its own value (a group's group
+visibility, an image's image visibility). The walk up the parents is
+bounded, as CImage's transform walk is, against a parent cycle.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/CObject.cpp        | 45 ++++++++++++++++++-
+ src/WallpaperEngine/Render/CObject.h          |  5 +++
+ src/WallpaperEngine/Render/Objects/CImage.cpp |  2 +-
+ .../Render/Objects/CParticle.cpp              |  2 +-
+ src/WallpaperEngine/Render/Objects/CText.cpp  |  2 +-
+ 5 files changed, 52 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/CObject.cpp b/src/WallpaperEngine/Render/CObject.cpp
+index ae3623d5..9aadad57 100644
+--- a/src/WallpaperEngine/Render/CObject.cpp
++++ b/src/WallpaperEngine/Render/CObject.cpp
+@@ -1,11 +1,32 @@
+ #include "CObject.h"
+ 
++#include "WallpaperEngine/Data/Model/Object.h"
++
+ #include <utility>
+ 
+ using namespace WallpaperEngine;
+ using namespace WallpaperEngine::Render;
+ using namespace WallpaperEngine::Render::Wallpapers;
+ 
++namespace {
++/** The visibility each kind of object renders with; a group has only the group value */
++bool isVisible (const Object& object) {
++    if (object.is<Image> ()) {
++	return object.as<Image> ()->visible->value->getBool ();
++    }
++
++    if (object.is<Text> ()) {
++	return object.as<Text> ()->visible->value->getBool ();
++    }
++
++    if (object.is<Particle> ()) {
++	return object.as<Particle> ()->visible->value->getBool ();
++    }
++
++    return object.groupVisible->value->getBool ();
++}
++} // namespace
++
+ CObject::CObject (Wallpapers::CScene& scene, const Object& object) :
+     Helpers::ContextAware (scene), m_scene (scene), m_object (object) { }
+ 
+@@ -18,4 +39,26 @@ const AssetLocator& CObject::getAssetLocator () const { return this->getScene ()
+ 
+ int CObject::getId () const { return this->m_object.id; }
+ 
+-const Object& CObject::getObject () const { return this->m_object; }
+\ No newline at end of file
++const Object& CObject::getObject () const { return this->m_object; }
++
++bool CObject::isHiddenByParent () const {
++    // bounded like CImage::resolveTransform, against a parent cycle
++    constexpr int kMaxParentDepth = 32;
++    const Object* current = &this->m_object;
++
++    for (int depth = 0; current->parent.has_value () && depth < kMaxParentDepth; depth++) {
++	const auto* parent = this->m_scene.getObject (current->parent.value ());
++
++	if (parent == nullptr) {
++	    return false;
++	}
++
++	current = &parent->getObject ();
++
++	if (!isVisible (*current)) {
++	    return true;
++	}
++    }
++
++    return false;
++}
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Render/CObject.h b/src/WallpaperEngine/Render/CObject.h
+index 4f09c76e..3f55d00f 100644
+--- a/src/WallpaperEngine/Render/CObject.h
++++ b/src/WallpaperEngine/Render/CObject.h
+@@ -23,6 +23,11 @@ public:
+     [[nodiscard]] const AssetLocator& getAssetLocator () const;
+     [[nodiscard]] int getId () const;
+     [[nodiscard]] const Object& getObject () const;
++    /**
++     * Whether a layer above this one is hidden, which hides this one with it. A group's
++     * visibility is often a user setting: one group per language, per clock position.
++     */
++    [[nodiscard]] bool isHiddenByParent () const;
+ 
+ private:
+     Wallpapers::CScene& m_scene;
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index 23e8e5c1..c423feba 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -928,7 +928,7 @@ void CImage::render () {
+ 	return;
+     }
+ 
+-    if (!this->getImage ().visible->value->getBool ()) {
++    if (!this->getImage ().visible->value->getBool () || this->isHiddenByParent ()) {
+ 	return;
+     }
+ 
+diff --git a/src/WallpaperEngine/Render/Objects/CParticle.cpp b/src/WallpaperEngine/Render/Objects/CParticle.cpp
+index 444752aa..0fcb1dea 100644
+--- a/src/WallpaperEngine/Render/Objects/CParticle.cpp
++++ b/src/WallpaperEngine/Render/Objects/CParticle.cpp
+@@ -170,7 +170,7 @@ void CParticle::setup () {
+ }
+ 
+ void CParticle::render () {
+-    if (!m_initialized || !m_particle.visible->value->getBool ()) {
++    if (!m_initialized || !m_particle.visible->value->getBool () || this->isHiddenByParent ()) {
+ 	return;
+     }
+ 
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index 849c566b..c563b8cb 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -385,7 +385,7 @@ void CText::render () {
+     if (!m_valid) {
+ 	return;
+     }
+-    if (!m_text.visible->value->getBool ()) {
++    if (!m_text.visible->value->getBool () || this->isHiddenByParent ()) {
+ 	return;
+     }
+ 

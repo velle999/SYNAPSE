@@ -1,0 +1,820 @@
+From 3b38ccbb8980feca6f7bdd020f966e3fd15b2c40 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 15:40:23 -0500
+Subject: [PATCH 31/42] feat(scripting): layer texture animations, parents and
+ children
+
+ILayer had properties and no methods, so every call on a layer threw
+"not a function". It now has:
+
+- getTextureAnimation (): an ITextureAnimation over a sprite sheet or
+  GIF texture (frameCount, duration, rate, play, pause, stop, join,
+  isPlaying, getFrame, setFrame). A layer follows the shared render
+  time until a script takes its animation over, then keeps its own
+  position, rate and play state, as Wallpaper Engine does. The AM/PM
+  sprite of 3299228616 cycled between both; its script pins the right
+  one every frame (10530 log lines in 30 s before 0028).
+- getParent () and getChildren (), for the layers scripts can reach
+  (groups are not scriptable yet, so a group parent is undefined).
+
+The animation clock is its own class with unit tests; the renderer
+reads the layer's own texture from it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   5 +-
+ .../Render/Objects/CRenderable.cpp            |  11 +-
+ .../Render/Objects/CRenderable.h              |   5 +
+ .../Render/Objects/Effects/CPass.cpp          |  21 ++
+ .../Render/TextureAnimation.cpp               | 129 +++++++++
+ src/WallpaperEngine/Render/TextureAnimation.h |  58 ++++
+ .../Adapters/ScriptableObjectAdapter.cpp      | 261 +++++++++++++++++-
+ .../Adapters/ScriptableObjectAdapter.h        |  16 +-
+ .../Testing/Cases/TextureAnimation.cpp        | 122 ++++++++
+ 9 files changed, 624 insertions(+), 4 deletions(-)
+ create mode 100644 src/WallpaperEngine/Render/TextureAnimation.cpp
+ create mode 100644 src/WallpaperEngine/Render/TextureAnimation.h
+ create mode 100644 src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b52e1089..7d396553 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -434,6 +434,8 @@ set(COMMON_SOURCES
+     src/WallpaperEngine/Render/AlbumTexture.h
+     src/WallpaperEngine/Render/AlbumTexture.cpp
+     src/WallpaperEngine/Render/TextureProvider.h
++    src/WallpaperEngine/Render/TextureAnimation.cpp
++    src/WallpaperEngine/Render/TextureAnimation.h
+ 
+     src/WallpaperEngine/Render/Objects/CRenderable.cpp
+     src/WallpaperEngine/Render/Objects/CRenderable.h
+@@ -577,7 +579,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/ColorBuilder.cpp
+         src/WallpaperEngine/Testing/Cases/WebProperties.cpp
+         src/WallpaperEngine/Testing/Cases/LenientJson.cpp
+-        src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp)
++        src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
++        src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Render/Objects/CRenderable.cpp b/src/WallpaperEngine/Render/Objects/CRenderable.cpp
+index f4efc349..8ed7688b 100644
+--- a/src/WallpaperEngine/Render/Objects/CRenderable.cpp
++++ b/src/WallpaperEngine/Render/Objects/CRenderable.cpp
+@@ -31,11 +31,20 @@ void CRenderable::setup () {
+     // calculate full animation time (if any)
+     this->m_animationTime = 0.0f;
+ 
++    std::vector<double> frameTimes;
++
+     for (const auto& cur : this->getTexture ()->getFrames ()) {
+ 	this->m_animationTime += cur->frametime;
++	frameTimes.push_back (cur->frametime);
+     }
++
++    this->m_textureAnimation = TextureAnimation (std::move (frameTimes));
+ }
+ 
+ std::shared_ptr<const TextureProvider> CRenderable::getTexture () const { return this->m_texture; }
+ 
+-double CRenderable::getAnimationTime () const { return this->m_animationTime; }
+\ No newline at end of file
++double CRenderable::getAnimationTime () const { return this->m_animationTime; }
++
++TextureAnimation& CRenderable::getTextureAnimation () { return this->m_textureAnimation; }
++
++const TextureAnimation& CRenderable::getTextureAnimation () const { return this->m_textureAnimation; }
+\ No newline at end of file
+diff --git a/src/WallpaperEngine/Render/Objects/CRenderable.h b/src/WallpaperEngine/Render/Objects/CRenderable.h
+index f9c835c2..5eab285e 100644
+--- a/src/WallpaperEngine/Render/Objects/CRenderable.h
++++ b/src/WallpaperEngine/Render/Objects/CRenderable.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "WallpaperEngine/Render/CObject.h"
+ #include "WallpaperEngine/Render/FBOProvider.h"
++#include "WallpaperEngine/Render/TextureAnimation.h"
+ #include "WallpaperEngine/Render/Objects/Effects/CPass.h"
+ #include "WallpaperEngine/Render/Wallpapers/CScene.h"
+ 
+@@ -19,6 +20,9 @@ public:
+     [[nodiscard]] std::shared_ptr<const TextureProvider> getTexture () const;
+ 
+     [[nodiscard]] double getAnimationTime () const;
++    /** Where the layer's sprite sheet or GIF texture is in its loop; scripts can take it over */
++    [[nodiscard]] TextureAnimation& getTextureAnimation ();
++    [[nodiscard]] const TextureAnimation& getTextureAnimation () const;
+ 
+     void setup () override;
+ 
+@@ -33,6 +37,7 @@ protected:
+     void detectTexture ();
+ 
+     double m_animationTime = 0.0;
++    TextureAnimation m_textureAnimation;
+ 
+     std::shared_ptr<const TextureProvider> m_texture = nullptr;
+     const Material& m_material;
+diff --git a/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp b/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
+index e93c2937..28a3085a 100644
+--- a/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
++++ b/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
+@@ -251,6 +251,27 @@ CPass::resolveTextureAnimationState (const std::shared_ptr<const TextureProvider
+ 	return state;
+     }
+ 
++    // the layer's own texture plays on the layer's clock, which a script may have taken over
++    if (texture == this->m_renderable.getTexture ()) {
++	const auto& frames = texture->getFrames ();
++	const auto index = this->m_renderable.getTextureAnimation ().getFrame (g_Time);
++
++	if (index < frames.size ()) {
++	    const auto& frameCur = frames [index];
++
++	    state.currentTexture = frameCur->frameNumber;
++	    state.translation.x = frameCur->x / texture->getTextureWidth (state.currentTexture);
++	    state.translation.y = frameCur->y / texture->getTextureHeight (state.currentTexture);
++
++	    state.rotation.x = frameCur->width1 / static_cast<float> (texture->getTextureWidth (state.currentTexture));
++	    state.rotation.y = frameCur->width2 / static_cast<float> (texture->getTextureWidth (state.currentTexture));
++	    state.rotation.z = frameCur->height2 / static_cast<float> (texture->getTextureHeight (state.currentTexture));
++	    state.rotation.w = frameCur->height1 / static_cast<float> (texture->getTextureHeight (state.currentTexture));
++	}
++
++	return state;
++    }
++
+     double currentRenderTime = fmod (
+ 	static_cast<double> (this->getContext ().getDriver ().getRenderTime ()), this->m_renderable.getAnimationTime ()
+     );
+diff --git a/src/WallpaperEngine/Render/TextureAnimation.cpp b/src/WallpaperEngine/Render/TextureAnimation.cpp
+new file mode 100644
+index 00000000..f93e0717
+--- /dev/null
++++ b/src/WallpaperEngine/Render/TextureAnimation.cpp
+@@ -0,0 +1,129 @@
++#include "TextureAnimation.h"
++
++#include <cmath>
++#include <numeric>
++#include <utility>
++
++using namespace WallpaperEngine::Render;
++
++TextureAnimation::TextureAnimation (std::vector<double> frameTimes) :
++    m_frameTimes (std::move (frameTimes)),
++    m_duration (std::accumulate (m_frameTimes.begin (), m_frameTimes.end (), 0.0)) { }
++
++size_t TextureAnimation::getFrameCount () const { return this->m_frameTimes.size (); }
++
++double TextureAnimation::getDuration () const { return this->m_duration; }
++
++size_t TextureAnimation::getFrame (double now) const {
++    if (this->m_frameTimes.empty () || this->m_duration <= 0.0) {
++	return 0;
++    }
++
++    double t = std::fmod (this->position (now), this->m_duration);
++
++    // fmod keeps the sign, and a negative rate runs the position below zero
++    if (t < 0.0) {
++	t += this->m_duration;
++    }
++
++    // summed in the same order setFrame sums, so a frame's start lands in that frame and
++    // not, by a rounding error, at the end of the one before
++    double end = 0.0;
++
++    for (size_t frame = 0; frame < this->m_frameTimes.size (); frame++) {
++	end += this->m_frameTimes [frame];
++
++	if (t < end) {
++	    return frame;
++	}
++    }
++
++    // only rounding gets here, at the very end of the loop
++    return this->m_frameTimes.size () - 1;
++}
++
++bool TextureAnimation::isPlaying () const { return !this->m_detached || this->m_playing; }
++
++double TextureAnimation::getRate () const { return this->m_detached ? this->m_rate : 1.0; }
++
++void TextureAnimation::play (double now) {
++    this->detach (now);
++
++    if (!this->m_playing) {
++	this->m_since = now;
++	this->m_playing = true;
++    }
++}
++
++void TextureAnimation::pause (double now) {
++    this->detach (now);
++
++    if (this->m_playing) {
++	this->m_position = this->position (now);
++	this->m_since = now;
++	this->m_playing = false;
++    }
++}
++
++void TextureAnimation::stop (double now) {
++    this->detach (now);
++    this->m_position = 0.0;
++    this->m_since = now;
++    this->m_playing = false;
++}
++
++void TextureAnimation::setFrame (double now, long long frame) {
++    this->detach (now);
++
++    const auto count = static_cast<long long> (this->m_frameTimes.size ());
++
++    if (count == 0) {
++	return;
++    }
++
++    frame %= count;
++
++    if (frame < 0) {
++	frame += count;
++    }
++
++    this->m_position = std::accumulate (this->m_frameTimes.begin (), this->m_frameTimes.begin () + frame, 0.0);
++    this->m_since = now;
++}
++
++void TextureAnimation::setRate (double now, double rate) {
++    this->detach (now);
++    this->m_position = this->position (now);
++    this->m_since = now;
++    this->m_rate = rate;
++}
++
++void TextureAnimation::join () {
++    this->m_detached = false;
++    this->m_playing = true;
++    this->m_rate = 1.0;
++}
++
++double TextureAnimation::position (double now) const {
++    if (!this->m_detached) {
++	return now;
++    }
++
++    if (!this->m_playing) {
++	return this->m_position;
++    }
++
++    return this->m_position + (now - this->m_since) * this->m_rate;
++}
++
++void TextureAnimation::detach (double now) {
++    if (this->m_detached) {
++	return;
++    }
++
++    this->m_position = now;
++    this->m_since = now;
++    this->m_detached = true;
++    this->m_playing = true;
++    this->m_rate = 1.0;
++}
+diff --git a/src/WallpaperEngine/Render/TextureAnimation.h b/src/WallpaperEngine/Render/TextureAnimation.h
+new file mode 100644
+index 00000000..397cf40d
+--- /dev/null
++++ b/src/WallpaperEngine/Render/TextureAnimation.h
+@@ -0,0 +1,58 @@
++#pragma once
++
++#include <cstddef>
++#include <vector>
++
++namespace WallpaperEngine::Render {
++/**
++ * Where a sprite sheet or GIF texture is in its loop.
++ *
++ * Every layer follows the shared render time until a script takes its animation over
++ * (ITextureAnimation): from then on it keeps its own position, rate and play state, as
++ * Wallpaper Engine does, until join () hands it back to the shared time.
++ *
++ * Times are the render clock (g_Time) the caller passes in, so nothing here reads a clock.
++ */
++class TextureAnimation {
++public:
++    TextureAnimation () = default;
++    /** @param frameTimes how long each frame shows, in seconds, in play order */
++    explicit TextureAnimation (std::vector<double> frameTimes);
++
++    [[nodiscard]] size_t getFrameCount () const;
++    [[nodiscard]] double getDuration () const;
++
++    /** The frame showing at render time `now`, 0 for a texture without frames */
++    [[nodiscard]] size_t getFrame (double now) const;
++    [[nodiscard]] bool isPlaying () const;
++    [[nodiscard]] double getRate () const;
++
++    /** Continues from where it was paused or stopped */
++    void play (double now);
++    /** Holds the current frame */
++    void pause (double now);
++    /** Holds the first frame */
++    void stop (double now);
++    /** Moves to the start of `frame`, counted around the loop, without changing whether it plays */
++    void setFrame (double now, long long frame);
++    /** Plays at `rate` times the normal speed from here on; negative plays backwards */
++    void setRate (double now, double rate);
++    /** Follows the shared render time again */
++    void join ();
++
++private:
++    /** Seconds into the animation at `now`, before wrapping to the loop */
++    [[nodiscard]] double position (double now) const;
++    /** Takes over from the shared time, at the position it was showing */
++    void detach (double now);
++
++    std::vector<double> m_frameTimes;
++    double m_duration = 0.0;
++    bool m_detached = false;
++    bool m_playing = true;
++    double m_rate = 1.0;
++    /** position at m_since */
++    double m_position = 0.0;
++    double m_since = 0.0;
++};
++} // namespace WallpaperEngine::Render
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index ead34176..b74233ee 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -3,14 +3,22 @@
+ #include <utility>
+ 
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
++#include "WallpaperEngine/Render/Objects/CRenderable.h"
+ #include "WallpaperEngine/Scripting/ScriptEngine.h"
+ #include "WallpaperEngine/Scripting/ScriptableObject.h"
+ 
++#include <cmath>
++#include <iterator>
++#include <ranges>
++
++extern float g_Time;
++
+ using namespace WallpaperEngine::Data::Model;
+ using namespace WallpaperEngine::Data::Utils;
+ using namespace WallpaperEngine::Scripting::Adapters;
+ 
+ #define SCRIPTABLE_OPAQUE_MAGIC 0xdeadbeef
++#define TEXTURE_ANIMATION_OPAQUE_MAGIC 0x7e47a417
+ 
+ struct OpaqueScriptableObjectAdapter {
+     unsigned int magic;
+@@ -18,8 +26,205 @@ struct OpaqueScriptableObjectAdapter {
+     WallpaperEngine::Scripting::ScriptableObject& object;
+ };
+ 
++struct OpaqueTextureAnimation {
++    unsigned int magic;
++    WallpaperEngine::Render::TextureAnimation& animation;
++};
++
+ void scriptableobject_finalizer (JSRuntime* rt, JSValueConst val);
+ 
++namespace {
++OpaqueScriptableObjectAdapter* layer_opaque (JSValueConst value) {
++    JSClassID classId = 0;
++    auto* container = static_cast<OpaqueScriptableObjectAdapter*> (JS_GetAnyOpaque (value, &classId));
++
++    return container != nullptr && container->magic == SCRIPTABLE_OPAQUE_MAGIC ? container : nullptr;
++}
++
++/** The scriptable layer with this id, if there is one: groups are not scriptable yet */
++WallpaperEngine::Scripting::ScriptableObject* scriptable_layer (ScriptableObjectAdapter& adapter, int id) {
++    const auto* object = adapter.getEngine ().getScene ().getObject (id);
++
++    if (object == nullptr || !object->is<WallpaperEngine::Scripting::ScriptableObject> ()) {
++	return nullptr;
++    }
++
++    return const_cast<WallpaperEngine::Scripting::ScriptableObject*> (
++	object->as<WallpaperEngine::Scripting::ScriptableObject> ()
++    );
++}
++
++JSValue layer_get_texture_animation (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = layer_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getTextureAnimation called on something that is not a layer");
++    }
++
++    return container->adapter.textureAnimation (container->object);
++}
++
++JSValue layer_get_parent (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = layer_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getParent called on something that is not a layer");
++    }
++
++    const auto& parent = container->object.getObject ().parent;
++    auto* layer = parent.has_value () ? scriptable_layer (container->adapter, parent.value ()) : nullptr;
++
++    return layer == nullptr ? JS_UNDEFINED : container->adapter.instantiate (*layer);
++}
++
++JSValue layer_get_children (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = layer_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getChildren called on something that is not a layer");
++    }
++
++    JSValue result = JS_NewArray (ctx);
++    uint32_t index = 0;
++
++    for (const auto* object : container->adapter.getEngine ().getScene ().getObjectsByRenderOrder ()) {
++	if (object->getObject ().parent != container->object.getId ()) {
++	    continue;
++	}
++
++	if (auto* child = scriptable_layer (container->adapter, object->getId ()); child != nullptr) {
++	    JS_SetPropertyUint32 (ctx, result, index++, container->adapter.instantiate (*child));
++	}
++    }
++
++    return result;
++}
++
++WallpaperEngine::Render::TextureAnimation* animation_opaque (JSValueConst value) {
++    JSClassID classId = 0;
++    auto* container = static_cast<OpaqueTextureAnimation*> (JS_GetAnyOpaque (value, &classId));
++
++    return container != nullptr && container->magic == TEXTURE_ANIMATION_OPAQUE_MAGIC ? &container->animation
++										       : nullptr;
++}
++
++void animation_finalizer (JSRuntime* rt, JSValueConst val) {
++    JSClassID classId = 0;
++    const auto* container = static_cast<OpaqueTextureAnimation*> (JS_GetAnyOpaque (val, &classId));
++
++    if (container != nullptr && container->magic == TEXTURE_ANIMATION_OPAQUE_MAGIC) {
++	delete container;
++    }
++}
++
++#define ANIMATION_OR_THROW(ctx, this_val)                                                                              \
++    auto* animation = animation_opaque (this_val);                                                                    \
++    if (animation == nullptr) {                                                                                        \
++	return JS_ThrowTypeError (ctx, "not a texture animation");                                                     \
++    }
++
++JSValue animation_get_frame_count (JSContext* ctx, JSValueConst this_val) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    return JS_NewInt64 (ctx, static_cast<int64_t> (animation->getFrameCount ()));
++}
++
++JSValue animation_get_duration (JSContext* ctx, JSValueConst this_val) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    return JS_NewFloat64 (ctx, animation->getDuration ());
++}
++
++JSValue animation_get_rate (JSContext* ctx, JSValueConst this_val) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    return JS_NewFloat64 (ctx, animation->getRate ());
++}
++
++JSValue animation_set_rate (JSContext* ctx, JSValueConst this_val, JSValueConst value) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    double rate = 1.0;
++
++    if (JS_ToFloat64 (ctx, &rate, value) < 0) {
++	return JS_EXCEPTION;
++    }
++
++    if (std::isfinite (rate)) {
++	animation->setRate (g_Time, rate);
++    }
++
++    return JS_UNDEFINED;
++}
++
++// the read-only ones: a script assigning one is ignored, as for a layer's unknown properties
++JSValue animation_set_ignored (JSContext* ctx, JSValueConst this_val, JSValueConst value) { return JS_UNDEFINED; }
++
++JSValue animation_play (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    animation->play (g_Time);
++    return JS_UNDEFINED;
++}
++
++JSValue animation_pause (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    animation->pause (g_Time);
++    return JS_UNDEFINED;
++}
++
++JSValue animation_stop (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    animation->stop (g_Time);
++    return JS_UNDEFINED;
++}
++
++JSValue animation_join (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    animation->join ();
++    return JS_UNDEFINED;
++}
++
++JSValue animation_is_playing (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    return JS_NewBool (ctx, animation->isPlaying ());
++}
++
++JSValue animation_get_frame (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    return JS_NewInt64 (ctx, static_cast<int64_t> (animation->getFrame (g_Time)));
++}
++
++JSValue animation_set_frame (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    ANIMATION_OR_THROW (ctx, this_val);
++    double frame = 0.0;
++
++    if (argc > 0 && JS_ToFloat64 (ctx, &frame, argv [0]) < 0) {
++	return JS_EXCEPTION;
++    }
++
++    // `shared.flag * 1` and the like arrive as NaN when the flag is not set yet
++    if (std::isfinite (frame)) {
++	animation->setFrame (g_Time, static_cast<long long> (std::floor (frame)));
++    }
++
++    return JS_UNDEFINED;
++}
++
++const JSCFunctionListEntry animation_functions [] = {
++    JS_CGETSET_DEF ("frameCount", animation_get_frame_count, animation_set_ignored),
++    JS_CGETSET_DEF ("duration", animation_get_duration, animation_set_ignored),
++    JS_CGETSET_DEF ("rate", animation_get_rate, animation_set_rate),
++    JS_CFUNC_DEF ("play", 0, animation_play),
++    JS_CFUNC_DEF ("pause", 0, animation_pause),
++    JS_CFUNC_DEF ("stop", 0, animation_stop),
++    JS_CFUNC_DEF ("join", 0, animation_join),
++    JS_CFUNC_DEF ("isPlaying", 0, animation_is_playing),
++    JS_CFUNC_DEF ("getFrame", 0, animation_get_frame),
++    JS_CFUNC_DEF ("setFrame", 1, animation_set_frame),
++};
++
++const JSClassDef animation_class = {
++    .class_name = "ITextureAnimation",
++    .finalizer = animation_finalizer,
++};
++} // namespace
++
+ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver) {
+     JSClassID classId = 0;
+ 
+@@ -43,7 +248,7 @@ JSValue scriptableobject_property_get (JSContext* ctx, JSValueConst obj_val, JSA
+     auto* property = container->object.findProperty (name);
+ 
+     if (property == nullptr) {
+-	return JS_UNDEFINED;
++	return container->adapter.findMethod (name);
+     }
+ 
+     try {
+@@ -100,6 +305,60 @@ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::str
+ 	    .exotic = &m_exoticMethods,
+ 	}
+     );
++
++    JSContext* ctx = this->m_engine.getContext ();
++
++    this->m_methods.emplace (
++	"getTextureAnimation", JS_NewCFunction (ctx, layer_get_texture_animation, "getTextureAnimation", 0)
++    );
++    this->m_methods.emplace ("getParent", JS_NewCFunction (ctx, layer_get_parent, "getParent", 0));
++    this->m_methods.emplace ("getChildren", JS_NewCFunction (ctx, layer_get_children, "getChildren", 0));
++
++    JS_NewClassID (this->m_engine.getRuntime (), &this->m_textureAnimationClassId);
++    JS_NewClass (this->m_engine.getRuntime (), this->m_textureAnimationClassId, &animation_class);
++
++    JSValue prototype = JS_NewObject (ctx);
++    JS_SetPropertyFunctionList (ctx, prototype, animation_functions, std::size (animation_functions));
++    JS_SetClassProto (ctx, this->m_textureAnimationClassId, prototype);
++}
++
++ScriptableObjectAdapter::~ScriptableObjectAdapter () {
++    for (const auto& method : this->m_methods | std::views::values) {
++	JS_FreeValue (this->m_engine.getContext (), method);
++    }
++}
++
++WallpaperEngine::Scripting::ScriptableObject* ScriptableObjectAdapter::unwrap (JSValueConst value) {
++    auto* container = layer_opaque (value);
++
++    return container == nullptr ? nullptr : &container->object;
++}
++
++JSValue ScriptableObjectAdapter::findMethod (const std::string& name) const {
++    const auto it = this->m_methods.find (name);
++
++    return it == this->m_methods.end () ? JS_UNDEFINED : JS_DupValue (this->m_engine.getContext (), it->second);
++}
++
++JSValue ScriptableObjectAdapter::textureAnimation (ScriptableObject& object) const {
++    auto* renderable = dynamic_cast<Render::Objects::CRenderable*> (&object);
++
++    if (renderable == nullptr || renderable->getTexture () == nullptr || !renderable->getTexture ()->isAnimated ()) {
++	return JS_UNDEFINED;
++    }
++
++    JSValue result = JS_NewObjectClass (this->m_engine.getContext (), this->m_textureAnimationClassId);
++
++    if (JS_IsException (result)) {
++	return result;
++    }
++
++    JS_SetOpaque (
++	result,
++	new OpaqueTextureAnimation { .magic = TEXTURE_ANIMATION_OPAQUE_MAGIC, .animation = renderable->getTextureAnimation () }
++    );
++
++    return result;
+ }
+ 
+ JSValue ScriptableObjectAdapter::instantiate (ScriptableObject& object) {
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+index ea8bc32a..16b40301 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+@@ -1,17 +1,31 @@
+ #pragma once
+ 
++#include <map>
++#include <string>
++
+ #include "ObjectAdapter.h"
+ 
+ namespace WallpaperEngine::Scripting::Adapters {
+ class ScriptableObjectAdapter : public ObjectAdapter {
+ public:
+     explicit ScriptableObjectAdapter (ScriptEngine& engine, std::string name);
++    ~ScriptableObjectAdapter () override;
+ 
+     JSValue instantiate (ScriptableObject& object) override;
+     JSValue instantiate (Data::Model::DynamicValue& value) override;
+ 
++    /** The layer behind an ILayer value, or nullptr for anything else */
++    static ScriptableObject* unwrap (JSValueConst value);
++    /** The ILayer method of this name (a new reference), or JS_UNDEFINED */
++    JSValue findMethod (const std::string& name) const;
++    /** An ITextureAnimation over the layer's sprite sheet or GIF, or JS_UNDEFINED if it has none */
++    JSValue textureAnimation (ScriptableObject& object) const;
++
+ private:
+     JSClassExoticMethods m_exoticMethods;
+     std::string m_name;
++    /** ILayer's methods, made once and handed out by the property lookup */
++    std::map<std::string, JSValue> m_methods;
++    JSClassID m_textureAnimationClassId = 0;
+ };
+-}
+\ No newline at end of file
++}
+diff --git a/src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp b/src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+new file mode 100644
+index 00000000..2f5c70d8
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+@@ -0,0 +1,122 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include "WallpaperEngine/Render/TextureAnimation.h"
++
++using WallpaperEngine::Render::TextureAnimation;
++
++namespace {
++// three frames of 0.1 s, 0.2 s and 0.3 s: frame 1 starts at 0.1, frame 2 at 0.3, the loop is 0.6
++TextureAnimation threeFrames () { return TextureAnimation ({ 0.1, 0.2, 0.3 }); }
++} // namespace
++
++TEST_CASE ("A texture animation follows the shared render time until a script takes it over") {
++    const auto animation = threeFrames ();
++
++    CHECK (animation.getFrameCount () == 3);
++    CHECK (animation.getDuration () == 0.1 + 0.2 + 0.3);
++    CHECK (animation.isPlaying ());
++    CHECK (animation.getRate () == 1.0);
++
++    CHECK (animation.getFrame (0.0) == 0);
++    CHECK (animation.getFrame (0.05) == 0);
++    CHECK (animation.getFrame (0.15) == 1);
++    CHECK (animation.getFrame (0.45) == 2);
++    // and loops
++    CHECK (animation.getFrame (0.65) == 0);
++    CHECK (animation.getFrame (100.0 * 0.6 + 0.35) == 2);
++}
++
++TEST_CASE ("setFrame lands on that frame, whatever the time, and keeps playing") {
++    auto animation = threeFrames ();
++
++    // late in a long session, where the shared time is in frame 0
++    animation.setFrame (1000.2, 1);
++    CHECK (animation.getFrame (1000.2) == 1);
++    CHECK (animation.isPlaying ());
++    CHECK (animation.getFrame (1000.2 + 0.25) == 2);
++
++    animation.setFrame (1000.5, 2);
++    CHECK (animation.getFrame (1000.5) == 2);
++
++    // counted around the loop
++    animation.setFrame (1000.5, 4);
++    CHECK (animation.getFrame (1000.5) == 1);
++    animation.setFrame (1000.5, -1);
++    CHECK (animation.getFrame (1000.5) == 2);
++}
++
++TEST_CASE ("A frame set every frame holds, as a clock's AM/PM sprite needs") {
++    auto animation = TextureAnimation ({ 0.05, 0.05 });
++
++    for (int tick = 0; tick < 60; tick++) {
++	const double now = 10.0 + tick / 30.0;
++
++	animation.setFrame (now, 1);
++	CHECK (animation.getFrame (now + 1.0 / 60.0) == 1);
++    }
++}
++
++TEST_CASE ("pause holds the current frame and play continues from it") {
++    auto animation = threeFrames ();
++
++    // 0.1 into the loop, then 0.25 of play: 0.35, in frame 2
++    animation.setFrame (50.0, 1);
++    animation.pause (50.25);
++    CHECK_FALSE (animation.isPlaying ());
++    CHECK (animation.getFrame (50.25) == 2);
++    CHECK (animation.getFrame (80.0) == 2);
++
++    animation.play (80.0);
++    CHECK (animation.isPlaying ());
++    CHECK (animation.getFrame (80.0) == 2);
++    // 0.35 + 0.3 wraps to 0.05
++    CHECK (animation.getFrame (80.0 + 0.3) == 0);
++}
++
++TEST_CASE ("stop goes back to the first frame and play starts from it") {
++    auto animation = threeFrames ();
++
++    animation.stop (7.45);
++    CHECK_FALSE (animation.isPlaying ());
++    CHECK (animation.getFrame (7.45) == 0);
++    CHECK (animation.getFrame (9.0) == 0);
++
++    animation.play (9.0);
++    CHECK (animation.getFrame (9.0 + 0.15) == 1);
++}
++
++TEST_CASE ("rate scales the speed from where the animation is, and may run backwards") {
++    auto animation = threeFrames ();
++
++    animation.setFrame (20.0, 0);
++    animation.setRate (20.0, 2.0);
++    CHECK (animation.getRate () == 2.0);
++    CHECK (animation.getFrame (20.075) == 1);
++    CHECK (animation.getFrame (20.16) == 2);
++
++    animation.setFrame (30.0, 0);
++    animation.setRate (30.0, -1.0);
++    CHECK (animation.getFrame (30.05) == 2);
++    CHECK (animation.getFrame (30.4) == 1);
++}
++
++TEST_CASE ("join hands the animation back to the shared time") {
++    auto animation = threeFrames ();
++
++    animation.stop (3.0);
++    animation.setRate (3.0, 4.0);
++    animation.join ();
++
++    CHECK (animation.isPlaying ());
++    CHECK (animation.getRate () == 1.0);
++    CHECK (animation.getFrame (0.45) == 2);
++}
++
++TEST_CASE ("A texture without frames shows frame 0 and ignores control") {
++    auto animation = TextureAnimation ();
++
++    animation.setFrame (1.0, 3);
++    animation.play (1.0);
++    CHECK (animation.getFrameCount () == 0);
++    CHECK (animation.getFrame (5.0) == 0);
++}

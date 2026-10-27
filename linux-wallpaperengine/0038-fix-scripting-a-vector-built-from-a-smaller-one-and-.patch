@@ -1,0 +1,60 @@
+From 85841bd0cffce6a8990ef3d0a7627c5e7d220a9a Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:26:20 -0500
+Subject: [PATCH 38/42] fix(scripting): a vector built from a smaller one and
+ the rest
+
+`new Vec3 (engine.canvasSize, 1)` read the Vec2 as one number, so the
+vector was NaN in x and every value computed from it was too (a face
+that tilts toward the cursor, workshop 2235507313). A constructor's
+arguments are now numbers or vectors, each vector giving its
+components in order, until the new vector is full.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/Adapters/VectorAdapter.cpp      | 30 ++++++++++++++++---
+ 1 file changed, 26 insertions(+), 4 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+index ced0fe31..7f3ede64 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+@@ -423,11 +423,33 @@ JSValue vector_constructor (JSContext* ctx, JSValueConst new_target, int argc, J
+ 	}
+ 
+ 	double values[4] = { 0.0, 0.0, 0.0, 0.0 };
++	int filled = 0;
++
++	// numbers, or a smaller vector and then the rest, as in new Vec3 (engine.canvasSize, 1):
++	// read as one number, the vector made the whole result NaN
++	for (int i = 0; i < argc && filled < components; i++) {
++	    if (!JS_IsObject (argv[i])) {
++		if (JS_ToFloat64 (ctx, &values[filled++], argv[i]) < 0) {
++		    JS_FreeValue (ctx, result);
++		    return JS_EXCEPTION;
++		}
++
++		continue;
++	    }
++
++	    for (const char* axis : { "x", "y", "z", "w" }) {
++		JSValue part = JS_GetPropertyStr (ctx, argv[i], axis);
++		const bool number = JS_IsNumber (part);
+ 
+-	for (int i = 0; i < std::min (argc, components); i++) {
+-	    if (JS_ToFloat64 (ctx, &values[i], argv[i]) < 0) {
+-		JS_FreeValue (ctx, result);
+-		return JS_EXCEPTION;
++		if (number) {
++		    JS_ToFloat64 (ctx, &values[filled++], part);
++		}
++
++		JS_FreeValue (ctx, part);
++
++		if (!number || filled >= components) {
++		    break;
++		}
+ 	    }
+ 	}
+ 

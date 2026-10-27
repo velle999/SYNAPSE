@@ -1,0 +1,283 @@
+From 3f77b61cfd771354601a6565c379fde533c59365 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 16:07:19 -0500
+Subject: [PATCH 34/42] fix(scripting): a vector method's bad argument is the
+ script's error
+
+The vector methods converted their argument with vector_get, which
+throws a C++ exception for anything that is not a number or a vector
+of that size. Thrown from inside a QuickJS C function, it unwound
+through the interpreter and ended the wallpaper. Swimming Kirby
+(workshop 3441873795) mixes toward a colour its media script has not
+set yet, `shared.miPrimaryColor.mix (shared.miTextBgColor, t)`, and
+died on its first frame once vector methods became reachable. The
+argument is now converted first, and a bad one is a TypeError for
+that script alone, as it is in Wallpaper Engine.
+
+The methods also ran with their operands swapped: a.subtract (b) was
+b - a, a.divide (b) was b / a, a.mix (b, t) went from b to a, and
+a.cross (b) was b x a. Nothing noticed, because nothing could reach
+them. They now run this-first. dot () answers a number rather than a
+vector with the product in every component, mix () with the wrong
+arguments throws instead of failing without an error, and equals ()
+answers false for anything that is not a vector of its size.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Scripting/Adapters/VectorAdapter.cpp      | 108 ++++++++++++++----
+ 1 file changed, 84 insertions(+), 24 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+index 7fc1fe19..ced0fe31 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/VectorAdapter.cpp
+@@ -5,6 +5,7 @@
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ 
+ #include <algorithm>
++#include <optional>
+ #include <ranges>
+ #include <variant>
+ 
+@@ -157,6 +158,21 @@ template auto vector_get<2> (DynamicValue& value) -> decltype (auto);
+ template auto vector_get<3> (DynamicValue& value) -> decltype (auto);
+ template auto vector_get<4> (DynamicValue& value) -> decltype (auto);
+ 
++/**
++ * A vector method's argument as a vector of this size, or nothing with a TypeError thrown for the
++ * script. vector_get's C++ exception, thrown on through QuickJS's C frames, ended the whole
++ * wallpaper instead of the one script, as `color.mix (shared.notSetYet, t)` did.
++ */
++template <int components>
++auto vector_argument (JSContext* ctx, JSValueConst source) -> std::optional<decltype (vector_new<components> ())> {
++    try {
++	return vector_get<components> (ctx, source);
++    } catch (const std::exception& e) {
++	JS_ThrowTypeError (ctx, "Vec%d: %s", components, e.what ());
++	return std::nullopt;
++    }
++}
++
+ template <int components>
+ JSValue vector_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver) {
+     JSClassID classId = 0;
+@@ -336,7 +352,10 @@ template <int components> JSValue vector_equals (JSContext* ctx, JSValueConst th
+     JSValue other = argv[0];
+     auto* otherContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (other, &classId));
+ 
+-    VEC_MAGIC_CHECK_EXCEPTION (otherContainer, components);
++    // anything but a vector of this size is not equal to it
++    if (!otherContainer || otherContainer->magic != (int)(VEC_OPAQUE_MAGIC + components)) {
++	return JS_FALSE;
++    }
+ 
+     const auto vector = vector_get<components> (container->value);
+     const auto otherVector = vector_get<components> (otherContainer->value);
+@@ -494,13 +513,19 @@ template <int components> JSValue vector_add (JSContext* ctx, JSValueConst this_
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	vector_get<components> (ctx, argv[0]) + vector_get<components> (container->value),
++	vector_get<components> (container->value) + *argument,
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -522,13 +547,19 @@ JSValue vector_subtract (JSContext* ctx, JSValueConst this_val, int argc, JSValu
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	vector_get<components> (ctx, argv[0]) - vector_get<components> (container->value),
++	vector_get<components> (container->value) - *argument,
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -550,13 +581,19 @@ JSValue vector_multiply (JSContext* ctx, JSValueConst this_val, int argc, JSValu
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	vector_get<components> (ctx, argv[0]) * vector_get<components> (container->value),
++	vector_get<components> (container->value) * *argument,
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -577,13 +614,19 @@ template <int components> JSValue vector_divide (JSContext* ctx, JSValueConst th
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	vector_get<components> (ctx, argv[0]) / vector_get<components> (container->value),
++	vector_get<components> (container->value) / *argument,
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -604,17 +647,14 @@ template <int components> JSValue vector_dot (JSContext* ctx, JSValueConst this_
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
+-    JSValue newVector = container->adapter.instantiate ();
+-    const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+-
+-    VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
++    const auto argument = vector_argument<components> (ctx, argv[0]);
+ 
+-    newContainer->value.update (
+-	glm::dot (vector_get<components> (ctx, argv[0]), vector_get<components> (container->value)),
+-	DynamicValue::UpdateSource::Initialization
+-    );
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
+ 
+-    return newVector;
++    // a number, as in Wallpaper Engine: this answered a vector with the product in every component
++    return JS_NewFloat64 (ctx, glm::dot (vector_get<components> (container->value), *argument));
+ }
+ 
+ template JSValue vector_dot<2> (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+@@ -631,13 +671,19 @@ template <int components> JSValue vector_cross (JSContext* ctx, JSValueConst thi
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	glm::cross (vector_get<components> (ctx, argv[0]), vector_get<components> (container->value)),
++	glm::cross (vector_get<components> (container->value), *argument),
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -647,12 +693,8 @@ template <int components> JSValue vector_cross (JSContext* ctx, JSValueConst thi
+ template JSValue vector_cross<3> (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+ 
+ template <int components> JSValue vector_mix (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+-    if (argc != 2) {
+-	return JS_EXCEPTION;
+-    }
+-
+-    if (!JS_IsNumber (argv[1])) {
+-	return JS_EXCEPTION;
++    if (argc != 2 || !JS_IsNumber (argv[1])) {
++	return JS_ThrowTypeError (ctx, "Vec%d.mix takes a vector and an amount", components);
+     }
+ 
+     double amount = 0.0f;
+@@ -664,13 +706,19 @@ template <int components> JSValue vector_mix (JSContext* ctx, JSValueConst this_
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	glm::mix (vector_get<components> (ctx, argv[0]), vector_get<components> (container->value), amount),
++	glm::mix (vector_get<components> (container->value), *argument, amount),
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -691,13 +739,19 @@ template <int components> JSValue vector_min (JSContext* ctx, JSValueConst this_
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	glm::min (vector_get<components> (ctx, argv[0]), vector_get<components> (container->value)),
++	glm::min (vector_get<components> (container->value), *argument),
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
+@@ -718,13 +772,19 @@ template <int components> JSValue vector_max (JSContext* ctx, JSValueConst this_
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (container, components);
+ 
++    const auto argument = vector_argument<components> (ctx, argv[0]);
++
++    if (!argument.has_value ()) {
++	return JS_EXCEPTION;
++    }
++
+     JSValue newVector = container->adapter.instantiate ();
+     const auto* newContainer = static_cast<VectorOpaqueContainer<components>*> (JS_GetAnyOpaque (newVector, &classId));
+ 
+     VEC_MAGIC_CHECK_EXCEPTION (newContainer, components);
+ 
+     newContainer->value.update (
+-	glm::max (vector_get<components> (ctx, argv[0]), vector_get<components> (container->value)),
++	glm::max (vector_get<components> (container->value), *argument),
+ 	DynamicValue::UpdateSource::Initialization
+     );
+ 
