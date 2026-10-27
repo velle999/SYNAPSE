@@ -1,0 +1,68 @@
+From 5090a0d7e196644cbb2854acfb23183bef52419f Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 23:36:46 -0500
+Subject: [PATCH 48/50] fix(data): a text input property is its text, not its
+ JSON
+
+parseTextInput stored `value->dump ()`, the JSON form of the value, so a
+text box's "JAN FEB MAR" reached scripts and text layers as
+"\"JAN FEB MAR\"", quotes included. A widget wallpaper that places its
+panels from text boxes ("1920/1980") parsed every position as NaN and
+drew nothing at all; a date that splits its month names, or uses the
+user's "\n" as a separator, drew the quotes; and text layers bound
+straight to a text box carried them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Data/Parsers/PropertyParser.cpp                |  9 ++++++++-
+ .../Testing/Cases/PropertyParser.cpp               | 14 ++++++++++++++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp b/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
+index cddbe381..21068fb6 100644
+--- a/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/PropertyParser.cpp
+@@ -146,12 +146,19 @@ PropertySharedPtr PropertyParser::parseTextInput (const JSON& it, const std::str
+     // 884307090), and requiring one aborted the whole wallpaper; it is an empty string
+     const auto value = it.find ("value");
+     const bool present = value != it.end () && !value->is_null ();
++    // the text itself: dump () quoted it, and a script splitting "JAN FEB" or using "\n" as a
++    // separator got the quotes along with it
++    std::string text;
++
++    if (present) {
++	text = value->is_string () ? value->get<std::string> () : value->dump ();
++    }
+ 
+     return std::make_shared<PropertyTextInput> (
+ 	PropertyData {
+ 	    .name = name,
+ 	    .text = it.optional<std::string> ("text", ""),
+ 	},
+-	present ? value->dump () : JSON (std::string ()).dump ()
++	text
+     );
+ }
+diff --git a/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp b/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+index 7c8fa53c..52f6a187 100644
+--- a/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
++++ b/src/WallpaperEngine/Testing/Cases/PropertyParser.cpp
+@@ -43,3 +43,17 @@ TEST_CASE ("Text input properties without a value are an empty string") {
+     REQUIRE (property != nullptr);
+     CHECK (property->getType () == DynamicValue::String);
+ }
++
++TEST_CASE ("Text input properties hold the text itself, not its JSON") {
++    const JSON propertyData = {
++	{ "type", "textinput" },
++	{ "text", "Month names" },
++	{ "value", "JAN FEB \\n" },
++    };
++
++    const auto property = PropertyParser::parse (propertyData, "monthnames");
++
++    REQUIRE (property != nullptr);
++    CHECK (property->getType () == DynamicValue::String);
++    CHECK (property->getString () == "JAN FEB \\n");
++}

@@ -1,6 +1,35 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 19: 50 patches on the pinned commit, and the glslang one. 0047-0050 are
+# SynapseOS's own, and make text layers work: clocks, dates, now-playing
+# titles, widget labels.
+#
+#   - A string a property script returned was stored as `true` (0047): a
+#     const char* picked DynamicValue's bool overload. A text whose script
+#     returns a number (`date.getDate ()`) shows the number, as Wallpaper
+#     Engine does.
+#   - A text box's user setting reached scripts with its JSON quotes on
+#     (0048). A widget wallpaper that places its panels from "1920/1980"
+#     parsed every position as NaN and drew nothing at all.
+#   - A text layer's script ran in a runtime of its own, without
+#     applyUserProperties, `shared`, the media events or most of `engine`
+#     (0049): 176 scripts in 22 wallpapers, and a date drew its month as
+#     "undefined". It now runs like any other property script.
+#   - Text broke no lines, read bytes instead of UTF-8, ignored its
+#     alignment and angle, and took a depth from its z that put a clock and
+#     a day name outside the camera (0050). `systemfont_consolas`, which
+#     lays calendars out in columns, gets a monospaced face.
+#
+# A text layer still draws without its effects (a blurred glow behind a
+# clock).
+#
+# Measured as for 18 on the same 139 wallpapers: every verdict is the same
+# but the one whose first frame caught the rig early under 18, which drew
+# from the first frame this time. The 23 wallpapers with text were compared
+# frame by frame with 18: what differs is the text these patches fix, and
+# their own clocks and animation.
+#
 # 18: 46 patches on the pinned commit, and the glslang one. 0046 is
 # SynapseOS's own: a layer or an effect that a script shows or hides draws
 # accordingly. A layer's passes were wired once, at load, so one hidden then
@@ -139,7 +168,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=18
+pkgrel=19
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -225,8 +254,12 @@ source=("git+$url.git#commit=$_commit"
         "0044-feat-scripting-engine.userProperties.patch"
         "0045-feat-particles-instance-overrides-run-their-scripts-.patch"
         "0046-feat-render-a-layer-or-an-effect-a-script-shows-or-h.patch"
+        "0047-fix-scripting-a-string-a-script-returns-stays-a-stri.patch"
+        "0048-fix-data-a-text-input-property-is-its-text-not-its-J.patch"
+        "0049-feat-text-a-text-layer-s-script-runs-like-any-other-.patch"
+        "0050-feat-text-text-keeps-its-lines-alignment-angle-and-f.patch"
         "glslang-0001-feat-narrow-the-longer-vector-in-component-wise-math.patch")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about

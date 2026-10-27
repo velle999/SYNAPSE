@@ -1,0 +1,163 @@
+From 649a2c796b804058f3a92e745f700ae4253de3d9 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 23:36:31 -0500
+Subject: [PATCH 47/50] fix(scripting): a string a script returns stays a
+ string
+
+jsToDynamicValue stored a returned string with
+`update (str == nullptr ? "" : str, ...)`. The argument is a const char*,
+and DynamicValue has no overload for one: the built-in pointer-to-bool
+conversion beats the user-defined one to std::string, so update (bool)
+ran and every string a script produced was stored as `true`. A text a
+script wrote (`thisLayer.text = ...`, or `getLayer ('Title').text = ...`
+from a media widget) read back empty.
+
+A string QuickJS built by concatenation, longer than 512 characters,
+is a rope with a tag of its own, and was not stored at all.
+
+A number or a boolean returned for a text value is stored as the text
+JavaScript would print, so a script returning `date.getDate ()` shows
+"26".
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |  1 +
+ .../Scripting/ScriptEngine.cpp                | 14 +++-
+ .../Testing/Cases/ScriptValues.cpp            | 82 +++++++++++++++++++
+ 3 files changed, 95 insertions(+), 2 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 91fe48c8..3577b92f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -585,6 +585,7 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/DynamicValueParser.cpp
+         src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+         src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
++        src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+         src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp)
+ endif()
+ 
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 7d8a6870..1336dfbd 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -144,6 +144,14 @@ void ScriptEngine::jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue&
+ 	return;
+     }
+ 
++    // text stays text: a text layer whose script returns date.getDate () shows "26", as Wallpaper Engine does
++    if (source.getType () == DynamicValue::UnderlyingType::String && (JS_IsNumber (val) || JS_IsBool (val))) {
++	const char* str = JS_ToCString (ctx, val);
++	source.update (std::string (str == nullptr ? "" : str), DynamicValue::UpdateSource::Script);
++	JS_FreeCString (ctx, str);
++	return;
++    }
++
+     if (tag == JS_TAG_INT) {
+ 	source.update (JS_VALUE_GET_INT (val), DynamicValue::UpdateSource::Script);
+ 	return;
+@@ -159,9 +167,11 @@ void ScriptEngine::jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue&
+ 	return;
+     }
+ 
+-    if (tag == JS_TAG_STRING) {
++    // a string built by concatenation can be a rope; and a const char* would pick update (bool),
++    // a built-in conversion beating std::string's, storing every string a script returns as true
++    if (JS_IsString (val)) {
+ 	const char* str = JS_ToCString (ctx, val);
+-	source.update (str == nullptr ? "" : str, DynamicValue::UpdateSource::Script);
++	source.update (std::string (str == nullptr ? "" : str), DynamicValue::UpdateSource::Script);
+ 	JS_FreeCString (ctx, str);
+ 	return;
+     }
+diff --git a/src/WallpaperEngine/Testing/Cases/ScriptValues.cpp b/src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+new file mode 100644
+index 00000000..319cec9e
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+@@ -0,0 +1,82 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <string>
++
++#include "WallpaperEngine/Data/Model/DynamicValue.h"
++#include "WallpaperEngine/Scripting/ScriptEngine.h"
++
++extern "C" {
++#include "quickjs.h"
++}
++
++using WallpaperEngine::Data::Model::DynamicValue;
++using WallpaperEngine::Scripting::ScriptEngine;
++
++namespace {
++/** A bare QuickJS context, to store what a script returns without a scene around it */
++struct Context {
++    JSRuntime* runtime = JS_NewRuntime ();
++    JSContext* context = JS_NewContext (runtime);
++
++    Context () = default;
++    Context (const Context&) = delete;
++    Context& operator= (const Context&) = delete;
++
++    ~Context () {
++	JS_FreeContext (context);
++	JS_FreeRuntime (runtime);
++    }
++
++    /** Evaluates `source` and stores its value into `target`, as a property script's return value is */
++    int store (const std::string& source, DynamicValue& target) const {
++	JSValue value = JS_Eval (context, source.c_str (), source.size (), "<test>", JS_EVAL_TYPE_GLOBAL);
++	const int tag = JS_VALUE_GET_TAG (value);
++	ScriptEngine::jsToDynamicValue (context, value, target);
++	JS_FreeValue (context, value);
++	return tag;
++    }
++};
++} // namespace
++
++TEST_CASE ("A string a script returns is stored as that string") {
++    const Context js;
++    DynamicValue text (std::string ("00:00"));
++
++    js.store ("'12:34'", text);
++    CHECK (text.getType () == DynamicValue::String);
++    CHECK (text.getString () == "12:34");
++
++    // QuickJS hands back a concatenation longer than 512 characters as a rope, not a string
++    const std::string expected = std::string (600, 'a') + std::string (600, 'b');
++    const int tag = js.store ("'a'.repeat (600) + 'b'.repeat (600)", text);
++    CHECK (tag == JS_TAG_STRING_ROPE);
++    CHECK (text.getType () == DynamicValue::String);
++    CHECK (text.getString () == expected);
++}
++
++TEST_CASE ("A number a text script returns is shown as JavaScript writes it") {
++    const Context js;
++    DynamicValue text (std::string ("00"));
++
++    js.store ("new Date (2026, 9, 26).getDate ()", text);
++    CHECK (text.getType () == DynamicValue::String);
++    CHECK (text.getString () == "26");
++
++    js.store ("1.5", text);
++    CHECK (text.getString () == "1.5");
++
++    js.store ("true", text);
++    CHECK (text.getString () == "true");
++}
++
++TEST_CASE ("A number a script returns for a number stays a number") {
++    const Context js;
++    DynamicValue alpha (0.5f);
++
++    js.store ("0.25", alpha);
++    CHECK (alpha.getType () == DynamicValue::Float);
++    CHECK (alpha.getFloat () == 0.25f);
++
++    js.store ("undefined", alpha);
++    CHECK (alpha.getFloat () == 0.25f);
++}

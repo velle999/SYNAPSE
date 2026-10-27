@@ -1,0 +1,645 @@
+From 92633bbd853acd8ccc059274cc4055fcdef23f0b Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 23:38:13 -0500
+Subject: [PATCH 49/50] feat(text): a text layer's script runs like any other
+ property script
+
+A text layer's script ran in a runtime of its own: a closure with a
+stand-in thisLayer holding only `text`, an engine with frametime and
+time, and none of the rest. 176 scripts in 22 wallpapers drive a text
+this way (clocks, dates, now-playing titles), and in that runtime:
+
+- applyUserProperties () never ran, so a date drew its month as
+  "undefined" and ignored the separator and names the user set (13
+  scripts, 8 wallpapers);
+- `shared` (39 scripts) and the media events (20 scripts) were absent,
+  and so were engine.userProperties, canvasSize, the timers and the
+  audio buffers;
+- thisLayer had no other property and no methods.
+
+The text is now a property like origin or alpha: its script is queued
+with the rest, sees the real thisLayer, thisScene and engine, gets init,
+applyUserProperties, update and the media events in Wallpaper Engine's
+order, and the layer draws what the property holds. A write to the
+text from another layer's script reaches the layer too. The separate
+runtime is gone.
+
+engine.registerAsset () exists: it marks a file the editor packs with the
+wallpaper, and returns the path. A day-name script calls it fifteen times
+at load and stopped at the first.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Data/Model/Object.h       |   4 +-
+ src/WallpaperEngine/Render/Objects/CText.cpp  |  47 +--
+ src/WallpaperEngine/Render/Objects/CText.h    |  18 +-
+ .../Scripting/EngineObject.cpp                |  10 +
+ .../Scripting/ScriptEngine.cpp                | 299 ------------------
+ src/WallpaperEngine/Scripting/ScriptEngine.h  |  66 ----
+ 6 files changed, 19 insertions(+), 425 deletions(-)
+
+diff --git a/src/WallpaperEngine/Data/Model/Object.h b/src/WallpaperEngine/Data/Model/Object.h
+index 8c9f5222..faaff792 100644
+--- a/src/WallpaperEngine/Data/Model/Object.h
++++ b/src/WallpaperEngine/Data/Model/Object.h
+@@ -585,9 +585,7 @@ public:
+ };
+ 
+ /**
+- * Text object data. Phase 1 of text support covers only static text;
+- * dynamic (script-driven) text captures the script source for a future
+- * pass but renders whatever initial value the scene provides.
++ * Text object data. A script on `text` (a clock, a date) runs like any property script.
+  */
+ struct TextData {
+     /** Initial text content to render (for scripted text, this is the `value` placeholder) */
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index c563b8cb..b3cd2ee5 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -19,7 +19,6 @@
+ #include "WallpaperEngine/Logging/Log.h"
+ #include "WallpaperEngine/Render/Camera.h"
+ #include "WallpaperEngine/Render/Wallpapers/CScene.h"
+-#include "WallpaperEngine/Scripting/ScriptEngine.h"
+ 
+ using namespace WallpaperEngine::Render::Objects;
+ 
+@@ -85,16 +84,11 @@ CText::CText (Wallpapers::CScene& scene, const Text& text) :
+     this->registerProperty ("scale", *text.scale->value);
+     this->registerProperty ("visible", *text.visible->value);
+     this->registerProperty ("pointSize", *text.pointSize->value);
+-    // the text script runs through ScriptEngine::createLayerScript (see setup), not as a property script
+-    this->registerProperty ("text", *text.text->value, false);
++    this->registerProperty ("text", *text.text->value);
+     this->registerConstant ("size", DynamicValue (text.size));
+ }
+ 
+ CText::~CText () {
+-    if (m_layerHandle != Scripting::kInvalidLayerHandle) {
+-	this->getScene ().getScriptEngine ().destroyLayer (m_layerHandle);
+-	m_layerHandle = Scripting::kInvalidLayerHandle;
+-    }
+     if (m_vbo != 0) {
+ 	glDeleteBuffers (1, &m_vbo);
+     }
+@@ -140,10 +134,6 @@ void CText::setup () {
+     // glyph texture has non-zero dimensions until the script produces a value.
+     rebuildTextureFrom (text.empty () ? std::string (" ") : text);
+ 
+-    if (scripted) {
+-	initScriptLayer ();
+-    }
+-
+     m_valid = m_texture != 0 && m_program != 0 && m_vao != 0;
+ }
+ 
+@@ -223,22 +213,6 @@ unsigned int CText::computeEffectivePixelSize () const {
+     return static_cast<unsigned int> (std::lround (pixels));
+ }
+ 
+-void CText::initScriptLayer () {
+-    const auto& script = m_text.text->value->getScriptSource ();
+-
+-    if (!script.has_value ()) {
+-	return;
+-    }
+-
+-    m_layerHandle = this->getScene ().getScriptEngine ().createLayerScript (
+-	*script, m_text.text->value->getProperties (), m_text.text->value->getString ()
+-    );
+-
+-    if (m_layerHandle == Scripting::kInvalidLayerHandle) {
+-	sLog.error ("CText: createLayerScript failed for '", m_text.name, "'");
+-    }
+-}
+-
+ void CText::rebuildTextureFrom (const std::string& text) {
+     // Two-pass rasterization: first measure the bounding box, then rasterize
+     // every glyph into a single grayscale bitmap. Phase 1 renders one line —
+@@ -393,22 +367,9 @@ void CText::render () {
+     std::string str = "Text " + this->getObject ().name + " (" + std::to_string (this->getObject ().id) + ")";
+     glPushDebugGroup (GL_DEBUG_SOURCE_APPLICATION, 0, -1, str.c_str ());
+ #endif /* DEBUG */
+-    std::string renderedText = m_lastRenderedText;
+-    if (m_layerHandle != Scripting::kInvalidLayerHandle) {
+-	auto& se = this->getScene ().getScriptEngine ();
+-	se.tickLayer (
+-	    m_layerHandle, static_cast<double> (getScene ().getTime ()),
+-	    static_cast<double> (getScene ().getDeltaTime ()), static_cast<double> (getScene ().getFps ())
+-	);
+-	const std::string current = se.layerText (m_layerHandle);
+-	renderedText = current.empty () ? std::string (" ") : current;
+-
+-	// other layers' scripts read this text through thisScene.getLayer (), which sees the
+-	// property, not the script's own copy of it
+-	if (current != m_text.text->value->getString ()) {
+-	    m_text.text->value->update (current, DynamicValue::UpdateSource::Script);
+-	}
+-    }
++    // the text's script ran with every other property script, before any layer drew
++    const std::string& current = m_text.text->value->getString ();
++    const std::string renderedText = current.empty () ? std::string (" ") : current;
+ 
+     const unsigned int pixelSize = computeEffectivePixelSize ();
+     if (pixelSize != m_lastPixelSize) {
+diff --git a/src/WallpaperEngine/Render/Objects/CText.h b/src/WallpaperEngine/Render/Objects/CText.h
+index ec67450c..a9235fdb 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.h
++++ b/src/WallpaperEngine/Render/Objects/CText.h
+@@ -8,7 +8,6 @@
+ #include <glm/vec4.hpp>
+ 
+ #include "WallpaperEngine/Render/CObject.h"
+-#include "WallpaperEngine/Scripting/ScriptEngine.h"
+ #include "WallpaperEngine/Scripting/ScriptableObject.h"
+ 
+ // Forward-declare FreeType types to avoid leaking the header into users.
+@@ -25,17 +24,10 @@ namespace WallpaperEngine::Render::Objects {
+ using namespace WallpaperEngine::Data::Model;
+ 
+ /**
+- * Phase 1 text renderer.
+- *
+- * Renders static text objects as a single FreeType-rasterized RGBA texture
+- * drawn on a textured quad with its own minimal GLSL shader. Does NOT go
+- * through CRenderable / materials / passes — Phase 1 does not need effects.
+- *
+- * Phase 2 (scripted/dynamic text, alignment from properties, effect passes)
+- * is intentionally not implemented here. When the scene provides a dynamic
+- * `text: { script: "..." }` object this class captures the script source in
+- * the data model but renders an empty string — the Wallpaper Engine JS
+- * runtime required to evaluate it is out of scope for Phase 1.
++ * A text layer. FreeType rasterizes the text into a single-channel texture drawn on a quad
++ * centered on the origin, with its own minimal GLSL shader. A script on `text` runs like any
++ * other property script, and the layer draws whatever it last returned. Does NOT go through
++ * CRenderable / materials / passes, so the layer's effects are not drawn.
+  */
+ class CText final : virtual public CObject, public Scripting::ScriptableObject {
+ public:
+@@ -61,12 +53,10 @@ private:
+     float scenePixelSize () const;
+     /** Pixel size to rasterize glyphs at so they stay sharp at the resolved (parent-inclusive) scale */
+     unsigned int computeEffectivePixelSize () const;
+-    void initScriptLayer ();
+ 
+     const Text& m_text;
+     std::string m_lastRenderedText;
+     unsigned int m_lastPixelSize = 0;
+-    Scripting::ScriptLayerHandle m_layerHandle = Scripting::kInvalidLayerHandle;
+ 
+     FT_Library m_ftLibrary = nullptr;
+     FT_Face m_ftFace = nullptr;
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index bb4172d6..ae88861e 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -24,6 +24,12 @@ JSValue engine_open_user_shortcut (JSContext* ctx, JSValueConst this_val, int ar
+     return JS_UNDEFINED;
+ }
+ 
++// engine.registerAsset ('fonts/x.ttf') only marks a file the editor has to ship with the wallpaper,
++// which is already on disk here; hand the path back
++JSValue engine_register_asset (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    return argc > 0 ? JS_DupValue (ctx, argv [0]) : JS_UNDEFINED;
++}
++
+ // engine.registerAudioBuffers (engine.AUDIO_RESOLUTION_16): the audio spectrum as arrays
+ // the engine refills before every update ()
+ JSValue engine_register_audio_buffers (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+@@ -253,6 +259,10 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_open_user_shortcut, "openUserShortcut", 0),
+ 	JS_PROP_ENUMERABLE
+     );
++    JS_DefinePropertyValueStr (
++	this->m_engine.getContext (), this->m_instance, "registerAsset",
++	JS_NewCFunction (this->m_engine.getContext (), engine_register_asset, "registerAsset", 1), JS_PROP_ENUMERABLE
++    );
+ 
+     for (const auto& [name, answer] : std::initializer_list<std::pair<const char*, bool>> {
+ 	     { "isDesktopDevice", true },
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 1336dfbd..dd851b31 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -30,10 +30,8 @@
+ #include <optional>
+ #include <poll.h>
+ #include <ranges>
+-#include <regex>
+ #include <signal.h>
+ #include <spawn.h>
+-#include <sstream>
+ #include <string_view>
+ #include <sys/wait.h>
+ #include <unistd.h>
+@@ -351,303 +349,6 @@ void ScriptEngine::installBuiltins () {
+     this->m_builtinsInstalled = true;
+ }
+ 
+-// ---------------------------------------------------------------------------
+-// Layer-script API (Phase 2)
+-// ---------------------------------------------------------------------------
+-
+-void ScriptEngine::ensureLayerRegistry () {
+-    if (this->m_layerRegistryReady || !this->m_context) {
+-	return;
+-    }
+-    JSContext* ctx = this->m_context;
+-    JSValue globalObj = JS_GetGlobalObject (ctx);
+-    JS_SetPropertyStr (ctx, globalObj, "__textLayers", JS_NewObject (ctx));
+-    JS_SetPropertyStr (ctx, globalObj, "__weModules", JS_NewObject (ctx));
+-    JS_FreeValue (ctx, globalObj);
+-    this->m_layerRegistryReady = true;
+-
+-    // layer scripts run as plain scripts, where import is a syntax error, so the
+-    // built-in modules they import are published here and their imports rewritten
+-    std::ostringstream modules;
+-    int index = 0;
+-
+-    for (const auto& name : this->m_modules | std::views::keys) {
+-	modules << "import * as m" << index << " from '" << name << "';\n"
+-		<< "globalThis.__weModules['" << name << "'] = m" << index << ";\n";
+-	index++;
+-    }
+-
+-    const std::string source = modules.str ();
+-    JSValue evaluation =
+-	JS_Eval (ctx, source.c_str (), source.size (), "<layer-script-modules>", JS_EVAL_TYPE_MODULE);
+-
+-    if (!JS_IsException (evaluation) && JS_PromiseState (ctx, evaluation) == JS_PROMISE_REJECTED) {
+-	JS_Throw (ctx, JS_PromiseResult (ctx, evaluation));
+-	JS_FreeValue (ctx, evaluation);
+-	evaluation = JS_EXCEPTION;
+-    }
+-
+-    if (JS_IsException (evaluation)) {
+-	logJSException (ctx, "layer script modules");
+-    }
+-
+-    JS_FreeValue (ctx, evaluation);
+-}
+-
+-ScriptLayerHandle ScriptEngine::createLayerScript (
+-    const std::string& scriptSource, std::map<std::string, UserSettingUniquePtr>& initialScriptProps,
+-    const std::string& initialText
+-) {
+-    if (!this->m_context) {
+-	sLog.error ("ScriptEngine: No JS context available");
+-	return kInvalidLayerHandle;
+-    }
+-
+-    this->ensureLayerRegistry ();
+-
+-    JSContext* ctx = this->m_context;
+-    JSValue globalObj = JS_GetGlobalObject (ctx);
+-
+-    // Seed initial scriptProperties and text as temporary globals the IIFE reads.
+-    JSValue seedProps = JS_NewObject (ctx);
+-
+-    for (auto& [name, dynVal] : initialScriptProps) {
+-	JS_SetPropertyStr (ctx, seedProps, name.c_str (), this->dynamicToJs (*dynVal->value));
+-    }
+-
+-    JS_SetPropertyStr (ctx, globalObj, "__layerSeedProps", seedProps);
+-    JS_SetPropertyStr (ctx, globalObj, "__layerSeedText", JS_NewString (ctx, initialText.c_str ()));
+-
+-    const ScriptLayerHandle id = this->m_nextLayerId++;
+-
+-    // Same stripping logic as evaluate(): WE scripts come as ES6 modules but
+-    // QuickJS is easier to drive as plain script evaluation.
+-    std::string body = scriptSource;
+-    size_t pos;
+-    while ((pos = body.find ("'use strict';")) != std::string::npos) {
+-	body.erase (pos, 13);
+-    }
+-    while ((pos = body.find ("\"use strict\";")) != std::string::npos) {
+-	body.erase (pos, 13);
+-    }
+-    while ((pos = body.find ("export ")) != std::string::npos) {
+-	body.erase (pos, 7);
+-    }
+-
+-    // import * as WEMath from 'WEMath'; failed the whole script with "Unexpected token '*'"
+-    static const std::regex importStatement (
+-	R"(import\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*(['"])([^'"]+)\2\s*;?)"
+-    );
+-    body = std::regex_replace (body, importStatement, "var $1 = globalThis.__weModules[$2$3$2];");
+-
+-    // The IIFE gives every layer its own closure for top-level vars and
+-    // functions, so two layers that both define `function update()` or a
+-    // top-level `var scriptProperties` don't clobber each other. Lifecycle
+-    // hooks are captured into globalThis.__textLayers[id] so tick/destroy can
+-    // reach them later. `typeof init === 'function'` is safe even when
+-    // `init` was never declared — bare-identifier `typeof` never throws.
+-    std::ostringstream wrapper;
+-    wrapper
+-	<< "(function() {\n"
+-	<< "  var __id = " << id << ";\n"
+-	<< "  var __props = Object.assign({}, globalThis.__layerSeedProps || {});\n"
+-	<< "  var thisLayer = { text: String(globalThis.__layerSeedText || '') };\n"
+-	// the scene's own object (getLayer () and the rest) behind the frame timing; a
+-	// plain object here hid it, so every thisScene.getLayer () threw, every frame.
+-	// The proxy's target is an empty object: the scene's methods are read-only and
+-	// not configurable, and a proxy of it may not hand out bound copies of them
+-	<< "  var __scene = globalThis.thisScene || {};\n"
+-	<< "  var __timing = { time: 1, currentTime: 1, dt: 1, fps: 1 };\n"
+-	<< "  var thisScene = new Proxy({}, {\n"
+-	<< "    get: function(target, key) {\n"
+-	<< "      var c = globalThis.__sceneCtx;\n"
+-	<< "      if (key === 'time' || key === 'currentTime') return c ? c.time : 0;\n"
+-	<< "      if (key === 'dt')  return c ? c.dt  : 0;\n"
+-	<< "      if (key === 'fps') return c ? c.fps : 60;\n"
+-	<< "      var v = __scene[key];\n"
+-	<< "      return typeof v === 'function' ? v.bind(__scene) : v;\n"
+-	<< "    },\n"
+-	<< "    set: function(target, key, v) { __scene[key] = v; return true; },\n"
+-	<< "    has: function(target, key) { return key in __timing || key in __scene; },\n"
+-	<< "  });\n"
+-	// Minimal WE `engine` shim. Real Wallpaper Engine exposes a broad API
+-	// (media events, audio buffer, user input); we provide just enough for
+-	// the common built-in text scripts to run without ReferenceError.
+-	// `frametime` is the per-frame delta in seconds (what InsertFPS reads).
+-	<< "  var engine = {\n"
+-	<< "    get frametime() { var c = globalThis.__sceneCtx; return c ? c.dt : 0; },\n"
+-	<< "    get time()      { var c = globalThis.__sceneCtx; return c ? c.time : 0; },\n"
+-	<< "  };\n"
+-	<< "  function createScriptProperties() {\n"
+-	<< "    var builder = {\n"
+-	<< "      addSlider:   function(o){ if (!(o.name in __props)) __props[o.name] = o.value; return builder; },\n"
+-	<< "      addCheckbox: function(o){ if (!(o.name in __props)) __props[o.name] = o.value; return builder; },\n"
+-	<< "      addCombo:    function(o){ if (!(o.name in __props)) __props[o.name] = o.value; return builder; },\n"
+-	<< "      addColor:    function(o){ if (!(o.name in __props)) __props[o.name] = o.value; return builder; },\n"
+-	<< "      addText:     function(o){ if (!(o.name in __props)) __props[o.name] = o.value; return builder; },\n"
+-	<< "      finish:      function(){ return __props; }\n"
+-	<< "    };\n"
+-	<< "    return builder;\n"
+-	<< "  }\n"
+-	<< body
+-	<< "\n"
+-	// `_tick` wraps the user's `update()` so both WE text conventions work:
+-	//   A) `export function update() { thisLayer.text = …; }` (mutates in place)
+-	//   B) `export function update(value) { …; return value; }` (returns new text)
+-	// We pass the current text in, and if the return value is a string we
+-	// adopt it as the new `thisLayer.text`. Non-string / undefined return
+-	// leaves `thisLayer.text` as whatever the function assigned itself.
+-	<< "  globalThis.__textLayers[__id] = {\n"
+-	<< "    thisLayer: thisLayer,\n"
+-	<< "    thisScene: thisScene,\n"
+-	<< "    _init:    (typeof init    === 'function') ? init    : null,\n"
+-	<< "    _destroy: (typeof destroy === 'function') ? destroy : null,\n"
+-	<< "    _tick:    (typeof update  === 'function')\n"
+-	<< "              ? function() {\n"
+-	<< "                  var r = update(thisLayer.text);\n"
+-	<< "                  if (typeof r === 'string') thisLayer.text = r;\n"
+-	<< "                }\n"
+-	<< "              : null,\n"
+-	<< "    _scriptProperties: (typeof scriptProperties !== 'undefined') ? scriptProperties : __props\n"
+-	<< "  };\n"
+-	<< "})();\n";
+-
+-    const std::string evalScript = wrapper.str ();
+-    JSValue result = JS_Eval (ctx, evalScript.c_str (), evalScript.size (), "<layer-script>", JS_EVAL_TYPE_GLOBAL);
+-
+-    // Unset seeds so they don't leak into the next createLayerScript call.
+-    JS_SetPropertyStr (ctx, globalObj, "__layerSeedProps", JS_UNDEFINED);
+-    JS_SetPropertyStr (ctx, globalObj, "__layerSeedText", JS_UNDEFINED);
+-    JS_FreeValue (ctx, globalObj);
+-
+-    if (JS_IsException (result)) {
+-	logJSException (ctx, "createLayerScript");
+-	JS_FreeValue (ctx, result);
+-	return kInvalidLayerHandle;
+-    }
+-    JS_FreeValue (ctx, result);
+-
+-    this->m_layerInitialized[id] = false;
+-    return id;
+-}
+-
+-void ScriptEngine::tickLayer (ScriptLayerHandle handle, double time, double deltaTime, double fps) {
+-    if (!this->m_context || handle == kInvalidLayerHandle) {
+-	return;
+-    }
+-    JSContext* ctx = this->m_context;
+-    JSValue globalObj = JS_GetGlobalObject (ctx);
+-
+-    JSValue sceneCtx = JS_NewObject (ctx);
+-    JS_SetPropertyStr (ctx, sceneCtx, "time", JS_NewFloat64 (ctx, time));
+-    JS_SetPropertyStr (ctx, sceneCtx, "dt", JS_NewFloat64 (ctx, deltaTime));
+-    JS_SetPropertyStr (ctx, sceneCtx, "fps", JS_NewFloat64 (ctx, fps));
+-    JS_SetPropertyStr (ctx, globalObj, "__sceneCtx", sceneCtx);
+-
+-    JSValue layers = JS_GetPropertyStr (ctx, globalObj, "__textLayers");
+-    JSValue layerObj = JS_GetPropertyUint32 (ctx, layers, static_cast<uint32_t> (handle));
+-    JS_FreeValue (ctx, layers);
+-
+-    if (JS_IsUndefined (layerObj) || JS_IsNull (layerObj)) {
+-	JS_FreeValue (ctx, layerObj);
+-	JS_FreeValue (ctx, globalObj);
+-	return;
+-    }
+-
+-    auto callHook = [&] (const char* prop, const char* tag) {
+-	JSValue fn = JS_GetPropertyStr (ctx, layerObj, prop);
+-	if (JS_IsFunction (ctx, fn)) {
+-	    JSValue ret = JS_Call (ctx, fn, layerObj, 0, nullptr);
+-	    // the first error a layer throws is logged; one thrown every frame filled the log
+-	    if (JS_IsException (ret)) {
+-		if (this->m_layerReported.insert (handle).second) {
+-		    logJSException (ctx, tag);
+-		} else {
+-		    JS_FreeValue (ctx, JS_GetException (ctx));
+-		}
+-	    }
+-	    JS_FreeValue (ctx, ret);
+-	}
+-	JS_FreeValue (ctx, fn);
+-    };
+-
+-    auto it = this->m_layerInitialized.find (handle);
+-    if (it != this->m_layerInitialized.end () && !it->second) {
+-	callHook ("_init", "layer.init");
+-	it->second = true;
+-    }
+-    callHook ("_tick", "layer.update");
+-
+-    JS_FreeValue (ctx, layerObj);
+-    JS_FreeValue (ctx, globalObj);
+-}
+-
+-std::string ScriptEngine::layerText (ScriptLayerHandle handle) {
+-    if (!this->m_context || handle == kInvalidLayerHandle) {
+-	return {};
+-    }
+-    JSContext* ctx = this->m_context;
+-    JSValue globalObj = JS_GetGlobalObject (ctx);
+-    JSValue layers = JS_GetPropertyStr (ctx, globalObj, "__textLayers");
+-    JSValue layerObj = JS_GetPropertyUint32 (ctx, layers, static_cast<uint32_t> (handle));
+-
+-    std::string result;
+-    if (!JS_IsUndefined (layerObj) && !JS_IsNull (layerObj)) {
+-	JSValue thisLayer = JS_GetPropertyStr (ctx, layerObj, "thisLayer");
+-	JSValue textVal = JS_GetPropertyStr (ctx, thisLayer, "text");
+-	if (!JS_IsUndefined (textVal) && !JS_IsNull (textVal)) {
+-	    const char* cstr = JS_ToCString (ctx, textVal);
+-	    if (cstr) {
+-		result.assign (cstr);
+-		JS_FreeCString (ctx, cstr);
+-	    }
+-	}
+-	JS_FreeValue (ctx, textVal);
+-	JS_FreeValue (ctx, thisLayer);
+-    }
+-
+-    JS_FreeValue (ctx, layerObj);
+-    JS_FreeValue (ctx, layers);
+-    JS_FreeValue (ctx, globalObj);
+-    return result;
+-}
+-
+-void ScriptEngine::destroyLayer (ScriptLayerHandle handle) {
+-    if (!this->m_context || handle == kInvalidLayerHandle) {
+-	return;
+-    }
+-    JSContext* ctx = this->m_context;
+-    JSValue globalObj = JS_GetGlobalObject (ctx);
+-    JSValue layers = JS_GetPropertyStr (ctx, globalObj, "__textLayers");
+-    JSValue layerObj = JS_GetPropertyUint32 (ctx, layers, static_cast<uint32_t> (handle));
+-
+-    if (!JS_IsUndefined (layerObj) && !JS_IsNull (layerObj)) {
+-	JSValue fn = JS_GetPropertyStr (ctx, layerObj, "_destroy");
+-	if (JS_IsFunction (ctx, fn)) {
+-	    JSValue ret = JS_Call (ctx, fn, layerObj, 0, nullptr);
+-	    if (JS_IsException (ret)) {
+-		logJSException (ctx, "layer.destroy");
+-	    }
+-	    JS_FreeValue (ctx, ret);
+-	}
+-	JS_FreeValue (ctx, fn);
+-    }
+-    JS_FreeValue (ctx, layerObj);
+-    JS_FreeValue (ctx, layers);
+-    JS_FreeValue (ctx, globalObj);
+-
+-    // Remove the entry from globalThis.__textLayers so GC can reclaim its closures.
+-    const std::string delScript = "delete globalThis.__textLayers[" + std::to_string (handle) + "];";
+-    JSValue delResult = JS_Eval (ctx, delScript.c_str (), delScript.size (), "<layer-destroy>", JS_EVAL_TYPE_GLOBAL);
+-    if (JS_IsException (delResult)) {
+-	logJSException (ctx, "layer.destroy.delete");
+-    }
+-    JS_FreeValue (ctx, delResult);
+-
+-    this->m_layerInitialized.erase (handle);
+-    this->m_layerReported.erase (handle);
+-}
+-
+ JSValue ScriptEngine::call (JSValue module, int argc, JSValue argv[], const char* name) {
+     // modules that failed to load have no namespace object
+     if (!JS_IsObject (module)) {
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index 0fd85ce2..8fbbc67e 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -12,7 +12,6 @@
+ #include <map>
+ #include <memory>
+ #include <optional>
+-#include <set>
+ #include <string>
+ #include <unordered_map>
+ #include <unordered_set>
+@@ -40,10 +39,6 @@ namespace Adapters {
+ }
+ using namespace WallpaperEngine::Data::Model;
+ 
+-// Opaque handle returned by createLayerScript. 0 means invalid / not created.
+-using ScriptLayerHandle = int;
+-static constexpr ScriptLayerHandle kInvalidLayerHandle = 0;
+-
+ class ScriptEngine {
+ public:
+     /**
+@@ -120,59 +115,6 @@ public:
+      */
+     void tick ();
+ 
+-    // -------------------------------------------------------------------
+-    // Layer-script API (Phase 2 — dynamic text)
+-    // -------------------------------------------------------------------
+-    //
+-    // Wallpaper Engine text-object scripts follow a lifecycle pattern that
+-    // cannot be evaluated with the simple `update(value) -> value` contract
+-    // above. They typically look like:
+-    //
+-    //   'use strict';
+-    //   export var scriptProperties = createScriptProperties()…finish();
+-    //   export function init()   { /* subscribe to events, cache data    */ }
+-    //   export function update() { thisLayer.text = computeCurrentText(); }
+-    //
+-    // The script mutates a `thisLayer` object in place instead of returning
+-    // a value, and lifecycle functions are optional. The API below keeps
+-    // per-layer state alive across frames so `init()` runs once and
+-    // `update()` re-runs every tick.
+-
+-    /**
+-     * Create a persistent "layer script" from a WE text-object script.
+-     *
+-     * @param scriptSource The full JS script text.
+-     * @param initialScriptProps Initial values for scriptProperties entries.
+-     *        Ownership stays with the caller; we only snapshot current values.
+-     * @param initialText Initial value of `thisLayer.text` (usually the
+-     *        static placeholder carried in the JSON).
+-     * @return A positive handle, or kInvalidLayerHandle if evaluation failed.
+-     */
+-    ScriptLayerHandle createLayerScript (
+-	const std::string& scriptSource, std::map<std::string, UserSettingUniquePtr>& initialScriptProps,
+-	const std::string& initialText
+-    );
+-
+-    /**
+-     * Advance a layer by one frame.
+-     *
+-     * On the first call, invokes `init()` (if defined) before `update()`.
+-     * Updates a `thisScene` context visible to the script (time, fps).
+-     * Silently no-ops if the handle is invalid.
+-     */
+-    void tickLayer (ScriptLayerHandle handle, double time, double deltaTime, double fps);
+-
+-    /**
+-     * Read the current value of `thisLayer.text` for the given layer.
+-     * Returns an empty string if the handle is invalid.
+-     */
+-    std::string layerText (ScriptLayerHandle handle);
+-
+-    /**
+-     * Tear down a layer: invokes `destroy()` (if defined) and frees state.
+-     */
+-    void destroyLayer (ScriptLayerHandle handle);
+-
+     const JSObjectAdapters& getAdapters () const { return m_adapters; }
+     const Render::Wallpapers::CScene& getScene () const { return m_scene; }
+     const std::map<std::string, std::unique_ptr<Modules::ScriptModule>>& getModules () const { return m_modules; }
+@@ -201,9 +143,6 @@ private:
+ 
+     void notifyMediaUpdate (const Media::MediaSource::MediaInfo& media);
+ 
+-    // Installs globalThis.__layers and related helpers. Called lazily.
+-    void ensureLayerRegistry ();
+-
+     JSRuntime* m_runtime = nullptr;
+     JSContext* m_context = nullptr;
+     JSValue m_globalThis;
+@@ -219,11 +158,6 @@ private:
+ 
+     LoadedModule* m_runningModule = nullptr;
+ 
+-    ScriptLayerHandle m_nextLayerId = 1;
+-    bool m_layerRegistryReady = false;
+-    std::map<ScriptLayerHandle, bool> m_layerInitialized;
+-    /** Layers whose script has thrown already; only the first error is logged */
+-    std::set<ScriptLayerHandle> m_layerReported;
+     bool m_builtinsInstalled = false;
+     Media::MediaSource& m_mediaSource;
+     std::function<void ()> m_unregisterMediaUpdateCallback;

@@ -1,0 +1,323 @@
+From 1a5061665950f50ed19ebb93b1892377f5ecfb91 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 23:38:41 -0500
+Subject: [PATCH 50/50] feat(text): text keeps its lines, alignment, angle and
+ font
+
+A text layer rasterized its string as one line of bytes, centred on its
+origin, at its origin's depth:
+
+- "\n" broke no line, so a date set to stack day, month and year drew
+  them side by side (9 layers carry a line break, more get one from a
+  script). Lines now break, and line up by horizontalalign.
+- Each byte was a character, so anything past ASCII drew as junk: a
+  degree sign, an accented month, Japanese (21 layers). The text is read
+  as UTF-8.
+- The alignment says which point of the text sits on the origin, as it
+  does for an image: a left-aligned label starts there and a right-aligned
+  date ends there, so a widget's title stays at the left of its panel
+  however long it is (105 of 237 text layers are not centred).
+- The angle was ignored (22 layers are turned). It applies as an image's
+  does.
+- The origin's z went into the depth, and a clock at z 20 or a day name
+  at z 94 fell outside the camera's range and never drew. Like an image,
+  a text now leaves z out.
+- `systemfont_consolas`, the font of 75 layers laying out calendars and
+  tables in columns, fell back to a proportional face. Wallpaper
+  Engine's monospaced and serif system fonts now get a monospaced or
+  serif stand-in.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/Objects/CImage.cpp |   2 +
+ src/WallpaperEngine/Render/Objects/CText.cpp  | 170 ++++++++++++++----
+ src/WallpaperEngine/Render/Objects/CText.h    |   9 +-
+ 3 files changed, 139 insertions(+), 42 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index 66e9ccb8..b778bde5 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -125,6 +125,8 @@ CImage::ResolvedTransform CImage::localTransform (const Object& object) {
+     } else if (object.is<Text> ()) {
+ 	const auto* text = object.as<Text> ();
+ 	scale = text->scale->value->getVec3 ();
++	// a text keeps its angles where a group does
++	angle = object.groupAngles->value->getVec3 ().z;
+     } else {
+ 	scale = object.groupScale->value->getVec3 ();
+ 	angle = object.groupAngles->value->getVec3 ().z;
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index b3cd2ee5..4833f261 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -4,6 +4,7 @@
+ #include <cmath>
+ 
+ #include <filesystem>
++#include <string>
+ #include <vector>
+ 
+ #include <ft2build.h>
+@@ -23,16 +24,43 @@
+ using namespace WallpaperEngine::Render::Objects;
+ 
+ namespace {
+-// TODO: Phase 2 – load font from wallpaper's materials/fonts/ using AssetLocator
+-// Phase 1 uses a system font instead of the font shipped by the wallpaper.
+-// Wallpaper Engine bundles .ttf files in `materials/fonts/`; wiring those in
+-// is deferred to Phase 2 along with dynamic/scripted text.
++// the font for a `systemfont_*` reference, and for a font the wallpaper ships that does not load
+ const std::vector<std::string> kFontCandidates = {
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+     "/usr/share/fonts/TTF/DejaVuSans.ttf",
+     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+ };
++// `systemfont_consolas` lays out tables and calendars in columns, which only a monospaced font keeps
++const std::vector<std::string> kMonospaceFontCandidates = {
++    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
++    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
++    "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
++    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
++};
++const std::vector<std::string> kSerifFontCandidates = {
++    "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
++    "/usr/share/fonts/TTF/DejaVuSerif.ttf",
++    "/usr/share/fonts/dejavu/DejaVuSerif.ttf",
++    "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
++};
++
++/** The Windows fonts Wallpaper Engine offers as system fonts, by the kind of face that stands in for them */
++const std::vector<std::string>& systemFontCandidates (const std::string& font) {
++    static const std::vector<std::string> monospace = { "consolas", "courier", "lucidaconsole" };
++    static const std::vector<std::string> serif = { "times", "georgia", "garamond", "cambria" };
++    const auto names = [&font] (const std::vector<std::string>& families) {
++	return std::ranges::any_of (families, [&font] (const std::string& family) {
++	    return font.find (family) != std::string::npos;
++	});
++    };
++
++    if (names (monospace)) {
++	return kMonospaceFontCandidates;
++    }
++
++    return names (serif) ? kSerifFontCandidates : kFontCandidates;
++}
+ 
+ const char* kVertexShader = R"glsl(
+ #version 330 core
+@@ -58,6 +86,36 @@ void main() {
+ }
+ )glsl";
+ 
++/** The code points of a UTF-8 string; a byte that does not start a valid sequence stands for itself */
++std::u32string decodeUtf8 (const std::string& text) {
++    std::u32string result;
++    size_t i = 0;
++
++    while (i < text.size ()) {
++	const auto lead = static_cast<unsigned char> (text [i]);
++	const size_t length = lead < 0x80 ? 1 : (lead >> 5) == 0x6 ? 2 : (lead >> 4) == 0xE ? 3 : (lead >> 3) == 0x1E ? 4 : 0;
++	char32_t codePoint = length == 1 ? lead : length == 2 ? lead & 0x1F : length == 3 ? lead & 0x0F : lead & 0x07;
++	bool valid = length > 0 && i + length <= text.size ();
++
++	for (size_t k = 1; valid && k < length; ++k) {
++	    const auto next = static_cast<unsigned char> (text [i + k]);
++	    valid = (next & 0xC0) == 0x80;
++	    codePoint = (codePoint << 6) | (next & 0x3F);
++	}
++
++	if (!valid) {
++	    result.push_back (lead);
++	    ++i;
++	    continue;
++	}
++
++	result.push_back (codePoint);
++	i += length;
++    }
++
++    return result;
++}
++
+ GLuint compileShader (GLenum type, const char* source) {
+     GLuint shader = glCreateShader (type);
+     glShaderSource (shader, 1, &source, nullptr);
+@@ -179,10 +237,11 @@ bool CText::loadEmbeddedFont () {
+ 
+ bool CText::loadSystemFont () {
+     std::string fontPath;
+-    for (const auto& candidate : kFontCandidates) {
+-	if (std::filesystem::exists (candidate)) {
+-	    fontPath = candidate;
+-	    break;
++    for (const auto* candidates : { &systemFontCandidates (m_text.font), &kFontCandidates }) {
++	for (const auto& candidate : *candidates) {
++	    if (fontPath.empty () && std::filesystem::exists (candidate)) {
++		fontPath = candidate;
++	    }
+ 	}
+     }
+     if (fontPath.empty ()) {
+@@ -214,54 +273,76 @@ unsigned int CText::computeEffectivePixelSize () const {
+ }
+ 
+ void CText::rebuildTextureFrom (const std::string& text) {
+-    // Two-pass rasterization: first measure the bounding box, then rasterize
+-    // every glyph into a single grayscale bitmap. Phase 1 renders one line —
+-    // multi-line wrapping, alignment, and padding come with Phase 2.
++    // Two-pass rasterization: first measure every line, then rasterize every glyph into a single
++    // grayscale bitmap. Lines break at '\n' and line up with each other by horizontalalign.
+     //
+     // Safe to call repeatedly: GL handles (texture, VAO, VBO) are reused when
+     // already allocated, so dynamic/scripted text can regenerate the glyph
+     // bitmap every time the rendered string changes without leaking.
+     FT_GlyphSlot slot = m_ftFace->glyph;
+ 
+-    int penX = 0;
++    std::vector<std::u32string> lines (1);
++    for (const char32_t c : decodeUtf8 (text)) {
++	if (c == U'\n') {
++	    lines.emplace_back ();
++	} else if (c != U'\r') {
++	    lines.back ().push_back (c);
++	}
++    }
++
++    std::vector<int> lineWidths;
++    int width = 1;
+     int maxAscent = 0;
+     int maxDescent = 0;
+ 
+-    for (unsigned char c : text) {
+-	if (FT_Load_Char (m_ftFace, static_cast<FT_ULong> (c), FT_LOAD_RENDER) != 0) {
+-	    continue;
++    for (const auto& line : lines) {
++	int penX = 0;
++	for (const char32_t c : line) {
++	    if (FT_Load_Char (m_ftFace, static_cast<FT_ULong> (c), FT_LOAD_RENDER) != 0) {
++		continue;
++	    }
++	    penX += slot->advance.x >> 6;
++	    maxAscent = std::max (maxAscent, slot->bitmap_top);
++	    maxDescent = std::max (maxDescent, static_cast<int> (slot->bitmap.rows) - slot->bitmap_top);
+ 	}
+-	penX += slot->advance.x >> 6;
+-	maxAscent = std::max (maxAscent, slot->bitmap_top);
+-	maxDescent = std::max (maxDescent, static_cast<int> (slot->bitmap.rows) - slot->bitmap_top);
++	lineWidths.push_back (penX);
++	width = std::max (width, penX);
+     }
+ 
+-    const int width = std::max (1, penX);
+-    const int height = std::max (1, maxAscent + maxDescent);
++    const int lineHeight = static_cast<int> (m_ftFace->size->metrics.height >> 6);
++    const int lineCount = static_cast<int> (lines.size ());
++    const int height = std::max (1, maxAscent + maxDescent + lineHeight * (lineCount - 1));
+     std::vector<uint8_t> pixels (static_cast<size_t> (width) * height, 0);
+ 
+-    penX = 0;
+-    for (unsigned char c : text) {
+-	if (FT_Load_Char (m_ftFace, static_cast<FT_ULong> (c), FT_LOAD_RENDER) != 0) {
+-	    continue;
+-	}
++    for (int index = 0; index < lineCount; ++index) {
++	const int slack = width - lineWidths [index];
++	int penX = m_text.alignment == "left" ? 0 : m_text.alignment == "right" ? slack : slack / 2;
++	const int baseline = maxAscent + lineHeight * index;
+ 
+-	const auto& bmp = slot->bitmap;
+-	const int originX = penX + slot->bitmap_left;
+-	const int originY = maxAscent - slot->bitmap_top;
++	for (const char32_t c : lines [index]) {
++	    if (FT_Load_Char (m_ftFace, static_cast<FT_ULong> (c), FT_LOAD_RENDER) != 0) {
++		continue;
++	    }
+ 
+-	for (unsigned int row = 0; row < bmp.rows; ++row) {
+-	    for (unsigned int col = 0; col < bmp.width; ++col) {
+-		const int dstX = originX + static_cast<int> (col);
+-		const int dstY = originY + static_cast<int> (row);
+-		if (dstX < 0 || dstX >= width || dstY < 0 || dstY >= height) {
+-		    continue;
++	    const auto& bmp = slot->bitmap;
++	    const int originX = penX + slot->bitmap_left;
++	    const int originY = baseline - slot->bitmap_top;
++
++	    for (unsigned int row = 0; row < bmp.rows; ++row) {
++		for (unsigned int col = 0; col < bmp.width; ++col) {
++		    const int dstX = originX + static_cast<int> (col);
++		    const int dstY = originY + static_cast<int> (row);
++		    if (dstX < 0 || dstX >= width || dstY < 0 || dstY >= height) {
++			continue;
++		    }
++		    // glyphs that overhang into their neighbour keep the stronger coverage
++		    auto& dst = pixels[static_cast<size_t> (dstY) * width + dstX];
++		    dst = std::max (dst, bmp.buffer[row * bmp.pitch + col]);
+ 		}
+-		pixels[static_cast<size_t> (dstY) * width + dstX] = bmp.buffer[row * bmp.pitch + col];
+ 	    }
+-	}
+ 
+-	penX += slot->advance.x >> 6;
++	    penX += slot->advance.x >> 6;
++	}
+     }
+ 
+     const bool firstUpload = (m_texture == 0);
+@@ -389,19 +470,32 @@ void CText::render () {
+ 
+     // WE scene space is Y-up (origin at bottom-left), same as images. This quad's GL space has
+     // -y at the screen top (see uploadQuadVertices), so mirror y around the centre like CImage does.
++    // z is left out, as images leave it: the order layers draw in puts one on top of another, and
++    // a clock at z 20 sat outside the camera's depth range and never drew
+     const float scene_w = getScene ().getCamera ().getWidth ();
+     const float scene_h = getScene ().getCamera ().getHeight ();
+     const glm::vec3 gl_origin = {
+ 	origin.x - scene_w * 0.5f,
+ 	scene_h * 0.5f - origin.y,
+-	origin.z,
++	0.0f,
+     };
+ 
+     // the texture holds glyphs at m_lastPixelSize, scale the quad so the font is scenePixelSize () * scale
+     const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
+ 
++    // the alignment says which point of the text sits on the origin: a left-aligned label starts
++    // there and a right-aligned date ends there, whatever the text grows to (the quad's -y is the top)
++    const glm::vec3 pivot = {
++	m_text.alignment == "left" ? m_quadSize.x * 0.5f : m_text.alignment == "right" ? -m_quadSize.x * 0.5f : 0.0f,
++	m_text.verticalalign == "top" ? m_quadSize.y * 0.5f : m_text.verticalalign == "bottom" ? -m_quadSize.y * 0.5f : 0.0f,
++	0.0f,
++    };
++
+     glm::mat4 model = glm::translate (glm::mat4 (1.0f), gl_origin);
++    // y is mirrored here, so the angle turns the other way, as it does for images
++    model = glm::rotate (model, -transform.angle, glm::vec3 (0.0f, 0.0f, 1.0f));
+     model = glm::scale (model, scale * glm::vec3 (rasterToScene, rasterToScene, 1.0f));
++    model = glm::translate (model, pivot);
+ 
+     const glm::mat4 mvp = getScene ().getCamera ().getProjection () * getScene ().getCamera ().getLookAt () * model;
+ 
+diff --git a/src/WallpaperEngine/Render/Objects/CText.h b/src/WallpaperEngine/Render/Objects/CText.h
+index a9235fdb..d17572c6 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.h
++++ b/src/WallpaperEngine/Render/Objects/CText.h
+@@ -24,10 +24,11 @@ namespace WallpaperEngine::Render::Objects {
+ using namespace WallpaperEngine::Data::Model;
+ 
+ /**
+- * A text layer. FreeType rasterizes the text into a single-channel texture drawn on a quad
+- * centered on the origin, with its own minimal GLSL shader. A script on `text` runs like any
+- * other property script, and the layer draws whatever it last returned. Does NOT go through
+- * CRenderable / materials / passes, so the layer's effects are not drawn.
++ * A text layer. FreeType rasterizes the text (UTF-8, a line per '\n', the lines lined up by
++ * horizontalalign) into a single-channel texture, drawn with its own minimal GLSL shader on a
++ * quad whose alignment pins it to the origin. A script on `text` runs like any other property
++ * script, and the layer draws whatever it last returned. Does NOT go through CRenderable /
++ * materials / passes, so the layer's effects are not drawn.
+  */
+ class CText final : virtual public CObject, public Scripting::ScriptableObject {
+ public:
