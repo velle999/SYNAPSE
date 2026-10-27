@@ -1,0 +1,620 @@
+From ed47898c6878fe09c4372e84073180f9ce896bfd Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 21:38:57 -0500
+Subject: [PATCH 43/45] feat(scripting): effect material properties run their
+ scripts and animations
+
+An image effect's shader constants carry scripts and keyframes of their
+own: a tint cycling through the rainbow, god rays following the music, a
+media widget's play button taking the accent colour. None of them ran;
+the passes drew the static value from scene.json.
+
+Each image now registers its effects with the script engine. Every pass
+constant that carries a script is loaded as a property script, and every
+one with a timeline is played with the layer's own animations. The
+passes bind their uniforms to the same values, so what a script returns
+or a curve plays is what the shader draws.
+
+A script on an effect property sees the effect as thisObject (IEffect),
+as Wallpaper Engine binds it, and the layer as thisLayer. IEffect has:
+- name and visible;
+- the effect's material properties by name, read and written, a write
+  reaching every pass that has the property;
+- getAnimation (name?), with no name the animation on the property the
+  script drives;
+- setMaterialProperty (name, value).
+
+Binding thisObject to the layer instead would let a media widget's
+`thisObject.color = shared.accentColor` recolour the whole layer.
+
+Effect visibility stays as loaded: the passes are built once, from the
+effects visible at load, so a script can read visible and write it, but
+the effect is not added or removed while the wallpaper runs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Render/Objects/CImage.cpp |   4 +
+ .../Render/PropertyAnimation.cpp              |   2 +
+ .../Render/PropertyAnimation.h                |   2 +
+ .../Adapters/ScriptableObjectAdapter.cpp      | 218 +++++++++++++++++-
+ .../Adapters/ScriptableObjectAdapter.h        |  11 +
+ .../Scripting/ScriptEngine.cpp                |   9 +-
+ src/WallpaperEngine/Scripting/ScriptEngine.h  |  14 +-
+ .../Scripting/ScriptableObject.cpp            |  48 +++-
+ .../Scripting/ScriptableObject.h              |  27 +++
+ 9 files changed, 320 insertions(+), 15 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index c423feba..4d0903ab 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -189,6 +189,10 @@ CImage::CImage (Wallpapers::CScene& scene, const Image& image) :
+     // read-only for scripts, e.g. bounce/clamp scripts use it to keep the layer on screen
+     this->registerConstant ("size", DynamicValue (image.size));
+ 
++    for (const auto& effect : image.effects) {
++	this->registerEffect (*effect);
++    }
++
+     // get scene width and height to calculate positions
+     auto scene_width = static_cast<float> (scene.getWidth ());
+     auto scene_height = static_cast<float> (scene.getHeight ());
+diff --git a/src/WallpaperEngine/Render/PropertyAnimation.cpp b/src/WallpaperEngine/Render/PropertyAnimation.cpp
+index 0087d226..551816a8 100644
+--- a/src/WallpaperEngine/Render/PropertyAnimation.cpp
++++ b/src/WallpaperEngine/Render/PropertyAnimation.cpp
+@@ -127,6 +127,8 @@ bool PropertyAnimation::isPlaying () const { return this->m_playing; }
+ 
+ double PropertyAnimation::getRate () const { return this->m_rate; }
+ 
++const DynamicValue& PropertyAnimation::getValue () const { return this->m_value; }
++
+ void PropertyAnimation::play (double now) {
+     this->start (now);
+ 
+diff --git a/src/WallpaperEngine/Render/PropertyAnimation.h b/src/WallpaperEngine/Render/PropertyAnimation.h
+index 1418ac2f..9d1c5d7c 100644
+--- a/src/WallpaperEngine/Render/PropertyAnimation.h
++++ b/src/WallpaperEngine/Render/PropertyAnimation.h
+@@ -37,6 +37,8 @@ public:
+     [[nodiscard]] double getFrame (double now) const;
+     [[nodiscard]] bool isPlaying () const;
+     [[nodiscard]] double getRate () const;
++    /** The property the animation plays into */
++    [[nodiscard]] const Data::Model::DynamicValue& getValue () const;
+ 
+     /** Continues from where it was paused or stopped; a single animation that ended starts over */
+     void play (double now);
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+index 75fb756f..6f3cc006 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.cpp
+@@ -10,7 +10,9 @@
+ 
+ #include <cmath>
+ #include <iterator>
++#include <optional>
+ #include <ranges>
++#include <string_view>
+ #include <type_traits>
+ #include <variant>
+ 
+@@ -22,6 +24,7 @@ using namespace WallpaperEngine::Scripting::Adapters;
+ 
+ #define SCRIPTABLE_OPAQUE_MAGIC 0xdeadbeef
+ #define ANIMATION_OPAQUE_MAGIC 0x7e47a417
++#define EFFECT_OPAQUE_MAGIC 0xeffec7ed
+ 
+ struct OpaqueScriptableObjectAdapter {
+     unsigned int magic;
+@@ -29,6 +32,14 @@ struct OpaqueScriptableObjectAdapter {
+     WallpaperEngine::Scripting::ScriptableObject& object;
+ };
+ 
++/** An IEffect: one of a layer's image effects, as the scripts on its properties see it */
++struct OpaqueEffect {
++    unsigned int magic;
++    ScriptableObjectAdapter& adapter;
++    WallpaperEngine::Scripting::ScriptableObject& layer;
++    const WallpaperEngine::Scripting::ScriptableEffect& effect;
++};
++
+ /** An ITextureAnimation or an IAnimation, which answer the same play, pause, stop and frame calls */
+ struct OpaqueAnimation {
+     unsigned int magic;
+@@ -104,6 +115,24 @@ JSValue layer_get_children (JSContext* ctx, JSValueConst this_val, int argc, JSV
+     return result;
+ }
+ 
++/** The name getAnimation was asked for, empty for none; nullopt when reading it threw */
++std::optional<std::string> animation_name (JSContext* ctx, int argc, JSValueConst* argv) {
++    if (argc == 0 || !JS_IsString (argv [0])) {
++	return std::string ();
++    }
++
++    const char* str = JS_ToCString (ctx, argv [0]);
++
++    if (str == nullptr) {
++	return std::nullopt;
++    }
++
++    std::string name = str;
++    JS_FreeCString (ctx, str);
++
++    return name;
++}
++
+ JSValue layer_get_animation (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+     auto* container = layer_opaque (this_val);
+ 
+@@ -111,22 +140,163 @@ JSValue layer_get_animation (JSContext* ctx, JSValueConst this_val, int argc, JS
+ 	return JS_ThrowTypeError (ctx, "getAnimation called on something that is not a layer");
+     }
+ 
+-    std::string name;
++    const auto name = animation_name (ctx, argc, argv);
++
++    return name.has_value () ? container->adapter.propertyAnimation (container->object, *name) : JS_EXCEPTION;
++}
++
++OpaqueEffect* effect_opaque (JSValueConst value) {
++    JSClassID classId = 0;
++    auto* container = static_cast<OpaqueEffect*> (JS_GetAnyOpaque (value, &classId));
++
++    return container != nullptr && container->magic == EFFECT_OPAQUE_MAGIC ? container : nullptr;
++}
++
++void effect_finalizer (JSRuntime* rt, JSValueConst val) {
++    if (const auto* container = effect_opaque (val); container != nullptr) {
++	delete container;
++    }
++}
++
++/** Writes `val` into the material property `name` of every pass that has it; false if none does */
++bool effect_write (JSContext* ctx, const OpaqueEffect& container, const std::string& name, JSValueConst val) {
++    const auto it = container.effect.properties.find (name);
++
++    if (it == container.effect.properties.end ()) {
++	return false;
++    }
++
++    for (auto* value : it->second) {
++	WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, *value);
++    }
++
++    return true;
++}
++
++// the timeline animations of the effect's properties are the layer's: getAnimation () with no
++// name is the one on the property the running script drives
++JSValue effect_get_animation (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = effect_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "getAnimation called on something that is not an effect");
++    }
++
++    const auto name = animation_name (ctx, argc, argv);
++
++    return name.has_value () ? container->adapter.propertyAnimation (container->layer, *name) : JS_EXCEPTION;
++}
++
++JSValue effect_set_material_property (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    auto* container = effect_opaque (this_val);
++
++    if (container == nullptr) {
++	return JS_ThrowTypeError (ctx, "setMaterialProperty called on something that is not an effect");
++    }
++
++    if (argc < 2) {
++	return JS_UNDEFINED;
++    }
++
++    const char* name = JS_ToCString (ctx, argv [0]);
++
++    if (name == nullptr) {
++	return JS_EXCEPTION;
++    }
++
++    ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
++
++    try {
++	effect_write (ctx, *container, name, argv [1]);
++    } catch (const std::exception& e) {
++	// a value this property cannot take
++    }
++
++    return JS_UNDEFINED;
++}
++
++JSValue effect_property_get (JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst receiver) {
++    auto* container = effect_opaque (obj_val);
++
++    if (container == nullptr) {
++	return JS_EXCEPTION;
++    }
++
++    const char* name = JS_AtomToCString (ctx, atom);
++
++    if (name == nullptr) {
++	return JS_EXCEPTION;
++    }
++
++    ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
++
++    const auto& effect = container->effect;
++    const std::string_view key = name;
++
++    if (key == "name") {
++	return JS_NewString (ctx, effect.name.c_str ());
++    }
+ 
+-    if (argc > 0 && JS_IsString (argv [0])) {
+-	const char* str = JS_ToCString (ctx, argv [0]);
++    if (key == "visible") {
++	return JS_NewBool (ctx, effect.visible.getBool ());
++    }
+ 
+-	if (str == nullptr) {
+-	    return JS_EXCEPTION;
++    // a material property reads as the first pass that has it draws it
++    if (const auto it = effect.properties.find (name); it != effect.properties.end ()) {
++	try {
++	    return container->adapter.getEngine ().dynamicToJsCopy (*it->second.front ());
++	} catch (const std::exception& e) {
++	    return JS_UNDEFINED;
+ 	}
++    }
++
++    return container->adapter.findEffectMethod (name);
++}
++
++int effect_property_set (
++    JSContext* ctx, JSValueConst obj_val, JSAtom atom, JSValueConst val, JSValueConst receiver, int flags
++) {
++    auto* container = effect_opaque (obj_val);
++
++    if (container == nullptr) {
++	return -1;
++    }
++
++    const char* name = JS_AtomToCString (ctx, atom);
++
++    if (name == nullptr) {
++	return -1;
++    }
++
++    ScopeGuard guard ([=] { JS_FreeCString (ctx, name); });
+ 
+-	name = str;
+-	JS_FreeCString (ctx, str);
++    // `thisObject.color = shared.accentColor` writes the material property the passes draw with.
++    // visible is kept for scripts to read back: the passes are built once, from the effects
++    // visible at load. Unknown names are ignored, as on a layer
++    try {
++	if (std::string_view (name) == "visible") {
++	    WallpaperEngine::Scripting::ScriptEngine::jsToDynamicValue (ctx, val, container->effect.visible);
++	} else {
++	    effect_write (ctx, *container, name, val);
++	}
++    } catch (const std::exception& e) {
++	// a value this property cannot take
+     }
+ 
+-    return container->adapter.propertyAnimation (container->object, name);
++    return 1;
+ }
+ 
++JSClassExoticMethods effect_exotic_methods = {
++    .get_property = effect_property_get,
++    .set_property = effect_property_set,
++};
++
++const JSClassDef effect_class = {
++    .class_name = "IEffect",
++    .finalizer = effect_finalizer,
++    .exotic = &effect_exotic_methods,
++};
++
+ OpaqueAnimation* animation_opaque (JSValueConst value) {
+     JSClassID classId = 0;
+     auto* container = static_cast<OpaqueAnimation*> (JS_GetAnyOpaque (value, &classId));
+@@ -425,6 +595,13 @@ ScriptableObjectAdapter::ScriptableObjectAdapter (ScriptEngine& engine, std::str
+     this->m_methods.emplace ("getParent", JS_NewCFunction (ctx, layer_get_parent, "getParent", 0));
+     this->m_methods.emplace ("getChildren", JS_NewCFunction (ctx, layer_get_children, "getChildren", 0));
+ 
++    JS_NewClassID (this->m_engine.getRuntime (), &this->m_effectClassId);
++    JS_NewClass (this->m_engine.getRuntime (), this->m_effectClassId, &effect_class);
++    this->m_effectMethods.emplace ("getAnimation", JS_NewCFunction (ctx, effect_get_animation, "getAnimation", 1));
++    this->m_effectMethods.emplace (
++	"setMaterialProperty", JS_NewCFunction (ctx, effect_set_material_property, "setMaterialProperty", 2)
++    );
++
+     register_animation_class (
+ 	ctx, this->m_engine.getRuntime (), this->m_textureAnimationClassId, texture_animation_class,
+ 	texture_animation_functions
+@@ -439,6 +616,10 @@ ScriptableObjectAdapter::~ScriptableObjectAdapter () {
+     for (const auto& method : this->m_methods | std::views::values) {
+ 	JS_FreeValue (this->m_engine.getContext (), method);
+     }
++
++    for (const auto& method : this->m_effectMethods | std::views::values) {
++	JS_FreeValue (this->m_engine.getContext (), method);
++    }
+ }
+ 
+ WallpaperEngine::Scripting::ScriptableObject* ScriptableObjectAdapter::unwrap (JSValueConst value) {
+@@ -453,6 +634,27 @@ JSValue ScriptableObjectAdapter::findMethod (const std::string& name) const {
+     return it == this->m_methods.end () ? JS_UNDEFINED : JS_DupValue (this->m_engine.getContext (), it->second);
+ }
+ 
++JSValue ScriptableObjectAdapter::findEffectMethod (const std::string& name) const {
++    const auto it = this->m_effectMethods.find (name);
++
++    return it == this->m_effectMethods.end () ? JS_UNDEFINED : JS_DupValue (this->m_engine.getContext (), it->second);
++}
++
++JSValue ScriptableObjectAdapter::effect (ScriptableObject& layer, const ScriptableEffect& entry) {
++    JSValue result = JS_NewObjectClass (this->m_engine.getContext (), this->m_effectClassId);
++
++    if (JS_IsException (result)) {
++	return result;
++    }
++
++    JS_SetOpaque (
++	result,
++	new OpaqueEffect { .magic = EFFECT_OPAQUE_MAGIC, .adapter = *this, .layer = layer, .effect = entry }
++    );
++
++    return result;
++}
++
+ JSValue ScriptableObjectAdapter::textureAnimation (ScriptableObject& object) const {
+     auto* renderable = dynamic_cast<Render::Objects::CRenderable*> (&object);
+ 
+diff --git a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+index 1a04bc67..b93e34fd 100644
+--- a/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
++++ b/src/WallpaperEngine/Scripting/Adapters/ScriptableObjectAdapter.h
+@@ -5,6 +5,10 @@
+ 
+ #include "ObjectAdapter.h"
+ 
++namespace WallpaperEngine::Scripting {
++struct ScriptableEffect;
++}
++
+ namespace WallpaperEngine::Scripting::Adapters {
+ class ScriptableObjectAdapter : public ObjectAdapter {
+ public:
+@@ -25,12 +29,19 @@ public:
+      * picks which, for the script running now), or JS_UNDEFINED if it has none
+      */
+     JSValue propertyAnimation (ScriptableObject& object, const std::string& name) const;
++    /** An IEffect over one of the layer's effects: what a script on one of its properties sees as thisObject */
++    JSValue effect (ScriptableObject& layer, const ScriptableEffect& entry);
++    /** The IEffect method of this name (a new reference), or JS_UNDEFINED */
++    JSValue findEffectMethod (const std::string& name) const;
+ 
+ private:
+     JSClassExoticMethods m_exoticMethods;
+     std::string m_name;
+     /** ILayer's methods, made once and handed out by the property lookup */
+     std::map<std::string, JSValue> m_methods;
++    /** IEffect's, likewise */
++    std::map<std::string, JSValue> m_effectMethods;
++    JSClassID m_effectClassId = 0;
+     JSClassID m_textureAnimationClassId = 0;
+     JSClassID m_propertyAnimationClassId = 0;
+ };
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.cpp b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+index 46f635e2..7d8a6870 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.cpp
+@@ -286,6 +286,7 @@ ScriptEngine::~ScriptEngine () {
+     for (const auto& module : this->m_scriptModules | std::views::values) {
+ 	JS_FreeValue (this->m_context, module.module);
+ 	JS_FreeValue (this->m_context, module.thisLayer);
++	JS_FreeValue (this->m_context, module.thisObject);
+     }
+ 
+     JS_FreeValue (this->m_context, this->m_globalThis);
+@@ -675,7 +676,8 @@ void ScriptEngine::bindModule (LoadedModule& module) {
+ 	this->m_context, this->m_globalThis, "thisLayer", JS_DupValue (this->m_context, module.thisLayer)
+     );
+     JS_SetPropertyStr (
+-	this->m_context, this->m_globalThis, "thisObject", JS_DupValue (this->m_context, module.thisLayer)
++	this->m_context, this->m_globalThis, "thisObject",
++	JS_DupValue (this->m_context, JS_IsUndefined (module.thisObject) ? module.thisLayer : module.thisObject)
+     );
+ }
+ 
+@@ -753,7 +755,9 @@ void ScriptEngine::runModuleFunction (const std::string& key, LoadedModule& modu
+     jsToDynamicValue (this->m_context, result, module.value);
+ }
+ 
+-void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentValue, ScriptableObject& object) {
++void ScriptEngine::queueScript (
++    const std::string& key, DynamicValue& currentValue, ScriptableObject& object, const ScriptableEffect* effect
++) {
+     const auto source = currentValue.getScriptSource ();
+ 
+     if (!source.has_value ()) {
+@@ -770,6 +774,7 @@ void ScriptEngine::queueScript (const std::string& key, DynamicValue& currentVal
+ 	    .value = currentValue,
+ 	    .module = JS_UNDEFINED,
+ 	    .thisLayer = this->m_adapters.object->instantiate (object),
++	    .thisObject = effect != nullptr ? this->m_adapters.object->effect (object, *effect) : JS_UNDEFINED,
+ 	}
+     );
+     auto& loaded = inserted.first->second;
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index ca55404d..54a44947 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -34,6 +34,7 @@ class CScene;
+ 
+ namespace WallpaperEngine::Scripting {
+ class ScriptPropertiesObject;
++struct ScriptableEffect;
+ namespace Adapters {
+     class ScriptableObjectAdapter;
+ }
+@@ -56,6 +57,8 @@ public:
+ 	DynamicValue& value;
+ 	JSValue module;
+ 	JSValue thisLayer;
++	/** what the script is bound to when that is not the layer (an IEffect), or JS_UNDEFINED */
++	JSValue thisObject = JS_UNDEFINED;
+ 	bool initialized = false;
+ 	bool errorLogged = false;
+     };
+@@ -98,8 +101,13 @@ public:
+      * @param key Unique module key (property name + object id)
+      * @param currentValue The property value the script drives
+      * @param object The object exposed to the script as `thisLayer`
++     * @param effect The effect the property belongs to, exposed as `thisObject`; with none, the
++     *        property is the layer's own and `thisObject` is the layer too
+      */
+-    void queueScript (const std::string& key, DynamicValue& currentValue, ScriptableObject& object);
++    void queueScript (
++	const std::string& key, DynamicValue& currentValue, ScriptableObject& object,
++	const ScriptableEffect* effect = nullptr
++    );
+ 
+     /**
+      * Runs a frame tick in the javascript engine. Dispatches any pending events,
+@@ -169,8 +177,8 @@ private:
+     /** Calls `name` on a property script with a copy of its value and applies the result */
+     void runModuleFunction (const std::string& key, LoadedModule& module, const char* name);
+     /**
+-     * Makes `module` the running one: createScriptProperties () binds to it, and the globals
+-     * thisLayer and thisObject are its layer (a layer property's script belongs to the layer)
++     * Makes `module` the running one: createScriptProperties () binds to it, the global
++     * thisLayer is its layer, and thisObject what its property belongs to (the layer, or an effect)
+      */
+     void bindModule (LoadedModule& module);
+     /** Calls the handler `name` a property script exports, if it does, logging what it throws */
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.cpp b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+index 60b2043e..944f0759 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.cpp
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.cpp
+@@ -1,7 +1,9 @@
+ #include "ScriptableObject.h"
+ 
+ #include "ScriptEngine.h"
++#include "WallpaperEngine/Data/Model/Effect.h"
+ #include "WallpaperEngine/Data/Model/Object.h"
++#include "WallpaperEngine/Data/Model/UserSetting.h"
+ #include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ 
+ #include <algorithm>
+@@ -91,8 +93,8 @@ PropertyAnimation* ScriptableObject::findAnimation (const std::string& name, con
+ 	return named == this->m_animations.end () ? nullptr : named->second.get ();
+     }
+ 
+-    const auto own = std::ranges::find_if (this->m_animations, [this, script] (const auto& entry) {
+-	return script != nullptr && this->findProperty (entry.first) == script;
++    const auto own = std::ranges::find_if (this->m_animations, [script] (const auto& entry) {
++	return script != nullptr && &entry.second->getValue () == script;
+     });
+ 
+     return own == this->m_animations.end () ? this->m_animations.front ().second.get () : own->second.get ();
+@@ -107,3 +109,45 @@ void ScriptableObject::registerConstant (const std::string& name, const DynamicV
+     stored = std::make_unique<DynamicValue> (value);
+     this->registerProperty (name, *stored, false);
+ }
++
++void ScriptableObject::registerEffect (const ImageEffect& effect) {
++    auto& entry = *this->m_effects.emplace_back (std::make_unique<ScriptableEffect> (ScriptableEffect {
++	.name = effect.name.empty () && effect.effect != nullptr ? effect.effect->name : effect.name,
++	.visible = *effect.visible->value,
++    }));
++
++    // every property is in place before the first script loads: a module's top level runs
++    // as it is queued, and may read the effect
++    for (const auto& pass : effect.passOverrides) {
++	for (const auto& [name, setting] : pass->constants) {
++	    if (setting != nullptr && setting->value != nullptr) {
++		entry.properties [name].push_back (setting->value.get ());
++	    }
++	}
++    }
++
++    for (size_t pass = 0; pass < effect.passOverrides.size (); pass++) {
++	for (const auto& [name, setting] : effect.passOverrides [pass]->constants) {
++	    if (setting == nullptr || setting->value == nullptr) {
++		continue;
++	    }
++
++	    this->registerDrivenValue (
++		"effect" + std::to_string (effect.id) + "." + std::to_string (pass) + "." + name, *setting->value,
++		&entry
++	    );
++	}
++    }
++}
++
++void ScriptableObject::registerDrivenValue (
++    const std::string& key, DynamicValue& value, const ScriptableEffect* effect
++) {
++    if (const auto& timeline = value.getAnimation (); timeline != nullptr) {
++	this->m_animations.emplace_back (key, std::make_unique<PropertyAnimation> (timeline, value));
++    }
++
++    this->getScene ().getScriptEngine ().queueScript (
++	key + "_" + std::to_string (this->getId ()), value, *this, effect
++    );
++}
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.h b/src/WallpaperEngine/Scripting/ScriptableObject.h
+index 9884608c..4d9df672 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.h
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.h
+@@ -14,6 +14,17 @@ class CScene;
+ }
+ 
+ namespace WallpaperEngine::Scripting {
++/**
++ * An image effect as scripts see it (IEffect): a script on one of its properties gets it as
++ * thisObject, and reads and writes its material properties by name, as the passes draw them.
++ */
++struct ScriptableEffect {
++    std::string name;
++    DynamicValue& visible;
++    /** every pass's value for each material property, so that a write reaches all of them */
++    std::map<std::string, std::vector<DynamicValue*>> properties;
++};
++
+ class ScriptableObject : virtual public CObject {
+ public:
+     struct PropertyEntry {
+@@ -49,11 +60,27 @@ protected:
+     void registerProperty (const std::string& name, DynamicValue& value, bool runScript = true);
+     /** Exposes a fixed value (e.g. the layer size) to scripts; the object owns the storage */
+     void registerConstant (const std::string& name, const DynamicValue& value);
++    /**
++     * Runs the scripts and plays the timeline animations on an effect's material properties
++     * (a tint cycling through the rainbow, god rays following the music). The passes read the
++     * same values, so what a script writes is what the shader draws. Each script sees this
++     * layer as thisLayer and the effect as thisObject.
++     */
++    void registerEffect (const ImageEffect& effect);
+ 
+ private:
++    /**
++     * Runs the script and plays the timeline animation on a value this layer draws with but
++     * that is not one of its properties. `key` names the script in the log and is unique on
++     * the layer; `effect`, when given, is the script's thisObject.
++     */
++    void registerDrivenValue (const std::string& key, DynamicValue& value, const ScriptableEffect* effect);
++
+     std::map<std::string, PropertyEntry> m_properties;
+     std::map<std::string, std::unique_ptr<DynamicValue>> m_constants;
+     /** each animated property's animation, in the order the properties were registered */
+     std::vector<std::pair<std::string, std::unique_ptr<Render::PropertyAnimation>>> m_animations;
++    /** the effects whose properties scripts drive; their scripts hold on to them */
++    std::vector<std::unique_ptr<ScriptableEffect>> m_effects;
+ };
+ }
+\ No newline at end of file

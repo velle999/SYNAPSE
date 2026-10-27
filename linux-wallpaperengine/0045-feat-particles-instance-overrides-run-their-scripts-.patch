@@ -1,0 +1,142 @@
+From 66cb138c3951a013a86fb19bc937e756dcedc844 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 21:46:22 -0500
+Subject: [PATCH 45/45] feat(particles): instance overrides run their scripts
+ and animations
+
+A particle layer's instance overrides (alpha, size, lifetime, rate,
+speed, count, color, colorn) carry scripts and keyframes like any other
+property, most often an emission rate or dot size following the music.
+None of them ran.
+
+The particle layer now registers each override with the script engine,
+which runs its script and plays its timeline into the value.
+
+The box and sphere emitters copied the rate (and the sphere emitter
+the lifetime) when they were built. They now read both every frame,
+like the speed, colour, size and alpha a new particle already took, so
+what a script returns is what is drawn. Count still sizes the particle
+pool once, at load.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ .../Render/Objects/CParticle.cpp              | 33 ++++++++++++++-----
+ .../Scripting/ScriptableObject.h              |  6 ++--
+ 2 files changed, 28 insertions(+), 11 deletions(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CParticle.cpp b/src/WallpaperEngine/Render/Objects/CParticle.cpp
+index 0fcb1dea..a2634d7c 100644
+--- a/src/WallpaperEngine/Render/Objects/CParticle.cpp
++++ b/src/WallpaperEngine/Render/Objects/CParticle.cpp
+@@ -25,6 +25,21 @@ CParticle::CParticle (Wallpapers::CScene& scene, const Particle& particle) :
+     this->registerProperty ("visible", *particle.visible->value);
+     this->registerProperty ("parallaxDepth", *particle.parallaxDepth->value);
+ 
++    // the instance overrides carry scripts and keyframes too (an emission rate following the
++    // music); the emitters read them live, so what a script returns is what is drawn
++    const auto& overrides = particle.instanceOverride;
++
++    for (const auto& [name, setting] : {
++	     std::pair { "alpha", &overrides.alpha }, std::pair { "size", &overrides.size },
++	     std::pair { "lifetime", &overrides.lifetime }, std::pair { "rate", &overrides.rate },
++	     std::pair { "speed", &overrides.speed }, std::pair { "count", &overrides.count },
++	     std::pair { "color", &overrides.color }, std::pair { "colorn", &overrides.colorn }
++	 }) {
++	if (*setting != nullptr && (*setting)->value != nullptr) {
++	    this->registerDrivenValue (std::string ("instance.") + name, *(*setting)->value);
++	}
++    }
++
+     this->detectTexture ();
+     // Initialize random number generator with time-based seed
+     std::random_device rd;
+@@ -368,7 +383,8 @@ void CParticle::setupEmitters () {
+ }
+ 
+ EmitterFunc CParticle::createBoxEmitter (const ParticleEmitter& emitter) {
+-    float rate = emitter.rate * m_particle.instanceOverride.rate->value->getFloat ();
++    // read each frame: a script or a timeline may drive it
++    const DynamicValue* rateOverride = m_particle.instanceOverride.rate->value.get ();
+ 
+     glm::vec3 transformedEmitterOrigin = emitter.origin;
+     transformedEmitterOrigin.y = -transformedEmitterOrigin.y;
+@@ -388,7 +404,7 @@ EmitterFunc CParticle::createBoxEmitter (const ParticleEmitter& emitter) {
+     bool randomPeriodicEmission = (emitter.flags & 4) != 0;
+ 
+     return
+-	[this, emitter, transformedEmitterOrigin, controlPointIndex, rate, flippedDirections, limitOnePerFrame,
++	[this, emitter, transformedEmitterOrigin, controlPointIndex, rateOverride, flippedDirections, limitOnePerFrame,
+ 	 randomPeriodicEmission, emissionTimer = 0.0f, delayTimer = emitter.delay, durationTimer = 0.0f,
+ 	 periodicTimer = 0.0f, periodicDuration = 0.0f, periodicDelay = 0.0f, emitting = false,
+ 	 instantaneousEmitted = false] (std::vector<ParticleInstance>& particles, uint32_t& count, float dt) mutable {
+@@ -447,7 +463,7 @@ EmitterFunc CParticle::createBoxEmitter (const ParticleEmitter& emitter) {
+ 
+ 	    // Rate-based emission with optional cap at 1 per frame
+ 	    if (emitter.rate > 0.0f) {
+-		emissionTimer += dt * rate;
++		emissionTimer += dt * emitter.rate * rateOverride->getFloat ();
+ 		uint32_t rateEmit = static_cast<uint32_t> (emissionTimer);
+ 		emissionTimer -= static_cast<float> (rateEmit);
+ 		// limitOnePerFrame (flags bit 1): cap at 1 to prevent rope artifacts
+@@ -520,8 +536,9 @@ EmitterFunc CParticle::createBoxEmitter (const ParticleEmitter& emitter) {
+ }
+ 
+ EmitterFunc CParticle::createSphereEmitter (const ParticleEmitter& emitter) {
+-    float rate = emitter.rate * m_particle.instanceOverride.rate->value->getFloat ();
+-    float lifetime = 1.0f * m_particle.instanceOverride.lifetime->value->getFloat ();
++    // read each frame: a script or a timeline may drive them
++    const DynamicValue* rateOverride = m_particle.instanceOverride.rate->value.get ();
++    const DynamicValue* lifetimeOverride = m_particle.instanceOverride.lifetime->value.get ();
+ 
+     // Convert emitter origin from screen space (Y down) to centered space (Y up)
+     glm::vec3 transformedEmitterOrigin = emitter.origin;
+@@ -539,7 +556,7 @@ EmitterFunc CParticle::createSphereEmitter (const ParticleEmitter& emitter) {
+ 
+     bool limitOnePerFrame = (emitter.flags & 2) != 0;
+ 
+-    return [this, emitter, transformedEmitterOrigin, controlPointIndex, rate, lifetime, limitOnePerFrame,
++    return [this, emitter, transformedEmitterOrigin, controlPointIndex, rateOverride, lifetimeOverride, limitOnePerFrame,
+ 	    emissionTimer = 0.0f,
+ 	    remaining
+ 	    = emitter.instantaneous] (std::vector<ParticleInstance>& particles, uint32_t& count, float dt) mutable {
+@@ -548,7 +565,7 @@ EmitterFunc CParticle::createSphereEmitter (const ParticleEmitter& emitter) {
+ 	}
+ 
+ 	// Rate-based emission with optional cap at 1 per frame
+-	emissionTimer += dt * rate;
++	emissionTimer += dt * emitter.rate * rateOverride->getFloat ();
+ 	uint32_t toEmit = static_cast<uint32_t> (emissionTimer);
+ 	emissionTimer -= static_cast<float> (toEmit);
+ 	// limitOnePerFrame (flags bit 1): cap at 1 to prevent rope artifacts
+@@ -643,7 +660,7 @@ EmitterFunc CParticle::createSphereEmitter (const ParticleEmitter& emitter) {
+ 	    p.color = glm::vec3 (1.0f) * m_particle.instanceOverride.colorn->value->getVec3 ();
+ 	    p.alpha = 1.0f * m_particle.instanceOverride.alpha->value->getFloat ();
+ 	    p.size = 20.0f * m_particle.instanceOverride.size->value->getFloat ();
+-	    p.lifetime = lifetime;
++	    p.lifetime = lifetimeOverride->getFloat ();
+ 	    p.age = 0.0f;
+ 	    p.alive = true;
+ 	    p.frame = -1.0f;
+diff --git a/src/WallpaperEngine/Scripting/ScriptableObject.h b/src/WallpaperEngine/Scripting/ScriptableObject.h
+index 4d9df672..3174deb6 100644
+--- a/src/WallpaperEngine/Scripting/ScriptableObject.h
++++ b/src/WallpaperEngine/Scripting/ScriptableObject.h
+@@ -67,14 +67,14 @@ protected:
+      * layer as thisLayer and the effect as thisObject.
+      */
+     void registerEffect (const ImageEffect& effect);
+-
+-private:
+     /**
+      * Runs the script and plays the timeline animation on a value this layer draws with but
+      * that is not one of its properties. `key` names the script in the log and is unique on
+      * the layer; `effect`, when given, is the script's thisObject.
+      */
+-    void registerDrivenValue (const std::string& key, DynamicValue& value, const ScriptableEffect* effect);
++    void registerDrivenValue (const std::string& key, DynamicValue& value, const ScriptableEffect* effect = nullptr);
++
++private:
+ 
+     std::map<std::string, PropertyEntry> m_properties;
+     std::map<std::string, std::unique_ptr<DynamicValue>> m_constants;

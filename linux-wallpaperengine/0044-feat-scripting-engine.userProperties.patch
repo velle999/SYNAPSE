@@ -1,0 +1,77 @@
+From 1bf877b46c8b13a981354244e33979806fbee551 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 26 Oct 2026 21:40:57 -0500
+Subject: [PATCH 44/45] feat(scripting): engine.userProperties
+
+Scripts read the wallpaper's user properties through
+engine.userProperties as well as through applyUserProperties (). A
+day/night scene that chooses its lighting from a "timeofday" combo
+threw on every frame reading it, and showed night whatever the setting.
+
+Each read returns the properties as they stand, as applyUserProperties
+() is handed them, so a change the user makes reaches the next update ().
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ src/WallpaperEngine/Scripting/EngineObject.cpp | 14 ++++++++++++++
+ src/WallpaperEngine/Scripting/ScriptEngine.h   |  7 +++++--
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/src/WallpaperEngine/Scripting/EngineObject.cpp b/src/WallpaperEngine/Scripting/EngineObject.cpp
+index 76c2bf44..bb4172d6 100644
+--- a/src/WallpaperEngine/Scripting/EngineObject.cpp
++++ b/src/WallpaperEngine/Scripting/EngineObject.cpp
+@@ -77,6 +77,15 @@ JSValue engine_get_canvas_size (JSContext* ctx, JSValueConst this_val, int argc,
+     return engine->getEngine ().dynamicToJsCopy (size);
+ }
+ 
++// a copy as it stands now, so a script reading engine.userProperties.timeofday each frame
++// sees the user change it
++JSValue engine_get_user_properties (JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
++    JSClassID classId = 0;
++    const auto* engine = static_cast<EngineObject*> (JS_GetAnyOpaque (this_val, &classId));
++
++    return engine == nullptr ? JS_UNDEFINED : engine->getEngine ().userPropertiesToJs ();
++}
++
+ JSValue engine_stop_interval (
+     JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic, JSValueConst* func_data
+ ) {
+@@ -203,6 +212,11 @@ EngineObject::EngineObject (ScriptEngine& engine, Render::Wallpapers::CScene& sc
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_get_canvas_size, "get", 0),
+ 	JS_NewCFunction (this->m_engine.getContext (), engine_set_value, "set", 1), JS_PROP_ENUMERABLE
+     );
++    JS_DefinePropertyGetSet (
++	this->m_engine.getContext (), this->m_instance, JS_NewAtom (this->m_engine.getContext (), "userProperties"),
++	JS_NewCFunction (this->m_engine.getContext (), engine_get_user_properties, "get", 0),
++	JS_NewCFunction (this->m_engine.getContext (), engine_set_value, "set", 1), JS_PROP_ENUMERABLE
++    );
+     JS_DefinePropertyValueStr (
+ 	this->m_engine.getContext (), this->m_instance, "AUDIO_RESOLUTION_16",
+ 	JS_NewInt32 (this->m_engine.getContext (), 16), JS_PROP_ENUMERABLE
+diff --git a/src/WallpaperEngine/Scripting/ScriptEngine.h b/src/WallpaperEngine/Scripting/ScriptEngine.h
+index 54a44947..0fd85ce2 100644
+--- a/src/WallpaperEngine/Scripting/ScriptEngine.h
++++ b/src/WallpaperEngine/Scripting/ScriptEngine.h
+@@ -90,6 +90,11 @@ public:
+      * undefined leaves `target` untouched, null clears it.
+      */
+     static void jsToDynamicValue (JSContext* ctx, JSValue val, DynamicValue& target);
++    /**
++     * Every user property of the wallpaper, by name: what applyUserProperties () is handed,
++     * and engine.userProperties reads
++     */
++    JSValue userPropertiesToJs ();
+ 
+     /**
+      * Load a property script (ES module) for the given object property.
+@@ -189,8 +194,6 @@ private:
+      * update () or event, since one script's init sets up the `shared` state another reads
+      */
+     void initializeModules ();
+-    /** Every user property of the wallpaper, by name, as applyUserProperties () takes them */
+-    JSValue userPropertiesToJs ();
+     /** Logs the pending JS exception once per module so per-frame errors don't spam */
+     void logModuleException (const std::string& key, LoadedModule& module, const char* stage);
+ 
