@@ -1,6 +1,28 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
+# 20: 53 patches on the pinned commit, and the glslang one. 0051-0053 are
+# SynapseOS's own.
+#
+#   - A text layer's effects draw (0052): 27 text layers in 10 wallpapers
+#     carry them, mostly a blur that softens a clock, and also chromatic
+#     aberration, VHS, film grain, water, shake and tint. The text draws, in
+#     its color, onto a canvas of its own, and an image draws that canvas
+#     through the layer's effects, as Wallpaper Engine draws it. It needed
+#     0051 first: a file the engine adds to a scene read whole only the
+#     first time it was opened.
+#   - Music player widgets keep their scripts on a solid layer sized 0x0,
+#     which drew at the scene's size and covered the wallpaper in white
+#     (0053). It draws nothing now.
+#
+# Measured as for 19 on the same 139 wallpapers with 0051-0052: every
+# verdict matches 18's but two, on wallpapers without text (one the rig
+# caught early under 18, one an animation caught at another frame). The ten
+# with text effects were compared with their previews. 0053 was measured on
+# the four wallpapers with such a layer: two now draw as their previews, one
+# draws its background on a quarter of the screen only (a fault of its own
+# that the white hid), and one hides the layer and is unchanged.
+#
 # 19: 50 patches on the pinned commit, and the glslang one. 0047-0050 are
 # SynapseOS's own, and make text layers work: clocks, dates, now-playing
 # titles, widget labels.
@@ -168,7 +190,7 @@ pkgver=0.1.0
 # `depends` names ffmpeg unversioned, which is correct — this is a soname
 # coupling, not a version one, and the answer to a soname bump is a rebuild.
 # Expect to bump this line again the next time ffmpeg rolls a major.
-pkgrel=19
+pkgrel=20
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -258,8 +280,11 @@ source=("git+$url.git#commit=$_commit"
         "0048-fix-data-a-text-input-property-is-its-text-not-its-J.patch"
         "0049-feat-text-a-text-layer-s-script-runs-like-any-other-.patch"
         "0050-feat-text-text-keeps-its-lines-alignment-angle-and-f.patch"
+        "0051-fix-filesystem-a-virtual-file-reads-whole-every-time.patch"
+        "0052-feat-text-a-text-layer-s-effects-draw.patch"
+        "0053-fix-image-a-solid-layer-sized-0x0-draws-nothing.patch"
         "glslang-0001-feat-narrow-the-longer-vector-in-component-wise-math.patch")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about

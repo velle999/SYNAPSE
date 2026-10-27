@@ -1,0 +1,208 @@
+From 6308234d6b8cea6e9298f892f891ca48a07e7227 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:11:08 -0500
+Subject: [PATCH 53/53] fix(image): a solid layer sized 0x0 draws nothing
+
+Music player widgets keep their scripts (the player's settings, the
+accent color it shares) on a solid layer the scene sizes 0x0. A solid
+layer with no size of its own was drawn at the scene's size, so these
+covered the whole wallpaper in white.
+
+A 0x0 size the scene gives now draws nothing: the layer is built with a
+1x1 texture so its FBOs are valid, and setup leaves it uninitialised as
+it does a passthrough image without effects, while its scripts still
+run. A solid layer the scene gives no size at all still covers the
+scene. Image::sized records which of the two the scene said.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |  3 +-
+ src/WallpaperEngine/Data/Model/Object.h       |  2 +
+ .../Data/Parsers/ObjectParser.cpp             |  1 +
+ src/WallpaperEngine/Render/Objects/CImage.cpp | 15 +++-
+ src/WallpaperEngine/Render/Objects/CImage.h   |  2 +
+ .../Testing/Cases/SolidLayerSize.cpp          | 89 +++++++++++++++++++
+ 6 files changed, 109 insertions(+), 3 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index df63a433..1f1d2c1c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -588,7 +588,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+         src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+         src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+-        src/WallpaperEngine/Testing/Cases/TextComposite.cpp)
++        src/WallpaperEngine/Testing/Cases/TextComposite.cpp
++        src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Model/Object.h b/src/WallpaperEngine/Data/Model/Object.h
+index fd8f0cce..967706ff 100644
+--- a/src/WallpaperEngine/Data/Model/Object.h
++++ b/src/WallpaperEngine/Data/Model/Object.h
+@@ -111,6 +111,8 @@ struct ImageData {
+     std::string alignment;
+     /** The size of the image in pixels */
+     glm::vec2 size;
++    /** Whether the scene gives the image a size at all; a solid layer without one covers the scene */
++    bool sized;
+     /** Parallax depth used for parallax scrolling */
+     UserSettingUniquePtr parallaxDepth;
+     /** The color blending mode for this image */
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+index 63bb0f8e..113c241b 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+@@ -211,6 +211,7 @@ ObjectParser::parseImage (const JSON& it, const Project& project, ObjectData bas
+ 	    .color = it.color ("color", properties, Builders::ColorBuilder::White),
+ 	    .alignment = it.optional ("horizontalalign", it.optional ("alignment", std::string ("center"))),
+ 	    .size = it.user ("size", properties, glm::vec2 (0.0f))->value->getVec2 (),
++	    .sized = it.contains ("size"),
+ 	    .parallaxDepth = it.user ("parallaxDepth", properties, glm::vec2 (0.0f)),
+ 	    .colorBlendMode = it.user ("colorBlendMode", properties, 0),
+ 	    .brightness = it.user ("brightness", properties, 1.0f),
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.cpp b/src/WallpaperEngine/Render/Objects/CImage.cpp
+index b778bde5..946a8970 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.cpp
++++ b/src/WallpaperEngine/Render/Objects/CImage.cpp
+@@ -214,8 +214,15 @@ CImage::CImage (Wallpapers::CScene& scene, const Image& image) :
+     // detect texture (if any)
+     if (this->m_texture == nullptr) {
+ 	if (this->m_image.model->solidlayer && size.x == 0.0f && size.y == 0.0f) {
+-	    size.x = scene_width;
+-	    size.y = scene_height;
++	    if (this->m_image.sized) {
++		// sized 0x0 on purpose: music player widgets keep their scripts on one, and drawn at
++		// the scene's size it covered the wallpaper in white. A 1x1 texture keeps its FBOs valid
++		this->m_drawsNothing = true;
++		size = { 1.0f, 1.0f };
++	    } else {
++		size.x = scene_width;
++		size.y = scene_height;
++	    }
+ 	}
+ 	// if (this->m_image->isSolid ()) // layer receives cursor events:
+ 	// https://docs.wallpaperengine.io/en/scene/scenescript/reference/event/cursor.html same applies to effects
+@@ -626,6 +633,10 @@ void CImage::setup () {
+ 	return;
+     }
+ 
++    if (this->m_drawsNothing) {
++	return;
++    }
++
+     // TODO: CHECK ORDER OF THINGS, 2419444134'S ID 27 DEPENDS ON 104'S COMPOSITE_A WHEN OUR LAST RENDER IS ON
+     // COMPOSITE_B
+     // TODO: SUPPORT PASSTHROUGH (IT'S A SHADER)
+diff --git a/src/WallpaperEngine/Render/Objects/CImage.h b/src/WallpaperEngine/Render/Objects/CImage.h
+index fb0cb460..61654afa 100644
+--- a/src/WallpaperEngine/Render/Objects/CImage.h
++++ b/src/WallpaperEngine/Render/Objects/CImage.h
+@@ -156,6 +156,8 @@ private:
+     glm::vec2 m_size = {};
+ 
+     bool m_initialized = false;
++    /** A solid layer sized 0x0, which holds scripts and has nothing to draw */
++    bool m_drawsNothing = false;
+ 
+     struct {
+ 	struct {
+diff --git a/src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp b/src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+new file mode 100644
+index 00000000..290f5a94
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+@@ -0,0 +1,89 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <memory>
++
++#include "WallpaperEngine/Assets/AssetLocator.h"
++#include "WallpaperEngine/Data/Model/Object.h"
++#include "WallpaperEngine/Data/Model/Project.h"
++#include "WallpaperEngine/Data/Model/Wallpaper.h"
++#include "WallpaperEngine/Data/Parsers/ObjectParser.h"
++#include "WallpaperEngine/FileSystem/Container.h"
++
++using WallpaperEngine::Assets::AssetLocator;
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::Data::Model::Image;
++using WallpaperEngine::Data::Model::Project;
++using WallpaperEngine::Data::Parsers::ObjectParser;
++using WallpaperEngine::FileSystem::Container;
++
++namespace {
++// a project whose assets hold the solid layer model the editor gives a solid color layer
++Project projectWithSolidLayer () {
++    auto container = std::make_unique<Container> ();
++
++    container->getVFS ().add (
++	"models/util/solidlayer.json",
++	JSON { { "material", "materials/util/solidlayer.json" }, { "solidlayer", true } }
++    );
++    container->getVFS ().add (
++	"materials/util/solidlayer.json", JSON { { "passes", JSON::array ({ { { "shader", "genericimage2" } } }) } }
++    );
++
++    Project project {};
++    project.assetLocator = std::make_unique<AssetLocator> (std::move (container));
++    return project;
++}
++
++// the shape of the layer a music player widget keeps its scripts on
++JSON playerOptions () {
++    return {
++	{ "id", 83923 },
++	{ "name", "Player Options" },
++	{ "image", "models/util/solidlayer.json" },
++	{ "origin", "960.00000 540.00000 0.00000" },
++	{ "size", "0.00000 0.00000" },
++	{ "solid", false },
++	{ "visible", { { "script", "export function init (value) { return value; }" }, { "value", true } } },
++    };
++}
++
++const Image& asImage (const std::unique_ptr<WallpaperEngine::Data::Model::Object>& object) {
++    REQUIRE (object != nullptr);
++    REQUIRE (object->is<Image> ());
++    return *object->as<Image> ();
++}
++} // namespace
++
++TEST_CASE ("A solid layer sized 0x0 is told apart from one without a size") {
++    const auto project = projectWithSolidLayer ();
++    const auto sizedObject = ObjectParser::parse (playerOptions (), project);
++    const auto& sized = asImage (sizedObject);
++
++    CHECK (sized.model->solidlayer);
++    CHECK (sized.sized);
++    CHECK (sized.size.x == 0.0f);
++    CHECK (sized.size.y == 0.0f);
++
++    JSON layer = playerOptions ();
++    layer.erase ("size");
++    const auto unsizedObject = ObjectParser::parse (layer, project);
++    const auto& unsized = asImage (unsizedObject);
++
++    CHECK (unsized.model->solidlayer);
++    CHECK_FALSE (unsized.sized);
++    CHECK (unsized.size.x == 0.0f);
++    CHECK (unsized.size.y == 0.0f);
++}
++
++TEST_CASE ("A solid layer keeps the size the scene gives it") {
++    const auto project = projectWithSolidLayer ();
++    JSON layer = playerOptions ();
++    layer ["size"] = "1920.00000 64.00000";
++
++    const auto object = ObjectParser::parse (layer, project);
++    const auto& image = asImage (object);
++
++    CHECK (image.sized);
++    CHECK (image.size.x == 1920.0f);
++    CHECK (image.size.y == 64.0f);
++}

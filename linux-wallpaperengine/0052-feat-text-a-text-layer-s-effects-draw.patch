@@ -1,0 +1,638 @@
+From 9d6e54fb52f308a51bd9f70defa01dd39acf42f2 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:11:01 -0500
+Subject: [PATCH 52/53] feat(text): a text layer's effects draw
+
+A text layer drew its glyphs straight onto the scene, so the effects on
+it never ran. 27 text layers in 10 wallpapers carry them: mostly a blur
+that softens a clock or a date, and also chromatic aberration, VHS, film
+grain, water ripples and waves, shake and tint.
+
+Wallpaper Engine draws such a text the way it draws an image, and now so
+does this engine. The glyphs go, in the text's color, onto a canvas that
+fits the text and its padding and is centred on the point its alignment
+puts on the origin. A CImage then draws that canvas through the layer's
+effects, alpha and blending. The image is parsed from the text's own
+JSON (ObjectParser::textComposite) and points at a virtual model whose
+texture is the canvas. The values the text drives (origin, scale,
+angles, alpha, color, visible) carry no script on the image: they follow
+the text's, so each script runs once.
+
+When the text outgrows its canvas (a day name longer than the one the
+wallpaper was saved with), the canvas is rebuilt a quarter larger. The
+old image stays alive, because a script on one of its effects keeps it as
+thisLayer.
+
+The canvas is transparent black off the glyphs: an effect that shifts a
+color channel shows on the glyphs' edges only then. A text also leaves
+the scene's vertex array bound, as particles do, where it unbound it
+mid-frame.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |   3 +-
+ .../Application/WallpaperApplication.cpp      |  16 ++
+ src/WallpaperEngine/Data/Model/Object.h       |   2 +
+ .../Data/Parsers/ObjectParser.cpp             |  48 +++++
+ .../Data/Parsers/ObjectParser.h               |   8 +
+ src/WallpaperEngine/Render/Objects/CText.cpp  | 171 ++++++++++++++++--
+ src/WallpaperEngine/Render/Objects/CText.h    |  37 +++-
+ .../Testing/Cases/TextComposite.cpp           |  92 ++++++++++
+ 8 files changed, 361 insertions(+), 16 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index f25be78b..df63a433 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -587,7 +587,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
+         src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+         src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
+-        src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp)
++        src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
++        src/WallpaperEngine/Testing/Cases/TextComposite.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Application/WallpaperApplication.cpp b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+index a289cbce..5af47d77 100644
+--- a/src/WallpaperEngine/Application/WallpaperApplication.cpp
++++ b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+@@ -157,6 +157,22 @@ AssetLocatorUniquePtr WallpaperApplication::setupAssetLocator (const std::string
+ 	    ) } }
+     );
+ 
++    // a text layer with effects draws as an image of its text: ObjectParser points each one at this
++    // model and gives it its own canvas as the first texture
++    vfs.add ("models/wpenginelinux/text.json", { { "material", "materials/wpenginelinux/text.json" } });
++
++    vfs.add (
++	"materials/wpenginelinux/text.json",
++	{ { "passes",
++	    JSON::array (
++		{ { { "blending", "translucent" },
++		    { "cullmode", "nocull" },
++		    { "depthtest", "disabled" },
++		    { "depthwrite", "disabled" },
++		    { "shader", "genericimage2" } } }
++	    ) } }
++    );
++
+     vfs.add (
+ 	"shaders/commands/copy.frag",
+ 	"uniform sampler2D g_Texture0;\n"
+diff --git a/src/WallpaperEngine/Data/Model/Object.h b/src/WallpaperEngine/Data/Model/Object.h
+index faaff792..fd8f0cce 100644
+--- a/src/WallpaperEngine/Data/Model/Object.h
++++ b/src/WallpaperEngine/Data/Model/Object.h
+@@ -611,6 +611,8 @@ struct TextData {
+     /** Padding inside the bounding box (x, y). WE writes this either as a "x y" string or as a
+      *  bare scalar meaning both axes; JsonExtensions::get<vec> accepts both forms. */
+     glm::vec2 padding;
++    /** With effects, the image the text draws as (see ObjectParser::textComposite), else nullptr */
++    ImageUniquePtr composite;
+     // TODO: PARSE LIMITS TOO!
+ };
+ 
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+index 95ecb0d6..63bb0f8e 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+@@ -128,7 +128,54 @@ SoundUniquePtr ObjectParser::parseSound (const JSON& it, ObjectData base) {
+     );
+ }
+ 
++std::optional<JSON> ObjectParser::textComposite (const JSON& it) {
++    const auto effects = it.find ("effects");
++
++    if (effects == it.end () || !effects->is_array () || effects->empty ()) {
++	return std::nullopt;
++    }
++
++    JSON image = it;
++    const auto id = it.require<int> ("id", "Object must have an id");
++
++    image ["image"] = "models/wpenginelinux/text.json";
++    image ["instance"] = { { "textures", JSON::array ({ "_rt_textLayer_" + std::to_string (id) }) } };
++    // the canvas is centred on the point the text's alignment puts on the origin, and sized by it
++    image ["alignment"] = "center";
++    image.erase ("horizontalalign");
++    image.erase ("size");
++
++    for (const auto* key : { "origin", "scale", "angles", "alpha", "color", "visible" }) {
++	const auto value = image.find (key);
++
++	if (value == image.end () || !value->is_object ()) {
++	    continue;
++	}
++
++	if (const auto plain = value->find ("value"); plain != value->end ()) {
++	    *value = JSON (*plain);
++	} else {
++	    image.erase (key);
++	}
++    }
++
++    return image;
++}
++
+ TextUniquePtr ObjectParser::parseText (const JSON& it, const Project& project, ObjectData base) {
++    ImageUniquePtr composite = nullptr;
++
++    // a text whose effects don't load still draws, without them
++    try {
++	if (const auto json = textComposite (it); json.has_value ()) {
++	    if (auto object = parse (*json, project); object != nullptr && object->is<Image> ()) {
++		composite.reset (static_cast<Image*> (object.release ()));
++	    }
++	}
++    } catch (const std::exception& e) {
++	sLog.error ("Text ", base.id, " draws without its effects: ", e.what ());
++    }
++
+     return std::make_unique<Text> (
+ 	std::move (base),
+ 	TextData {
+@@ -143,6 +190,7 @@ TextUniquePtr ObjectParser::parseText (const JSON& it, const Project& project, O
+ 	    .alignment = it.optional ("horizontalalign", it.optional ("alignment", std::string ("center"))),
+ 	    .verticalalign = it.optional ("verticalalign", std::string ("center")),
+ 	    .padding = it.optional ("padding", glm::vec2 (0.0f)),
++	    .composite = std::move (composite),
+ 	}
+     );
+ }
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.h b/src/WallpaperEngine/Data/Parsers/ObjectParser.h
+index 7e1c81e5..07d1f131 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.h
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <optional>
+ #include <vector>
+ 
+ #include "WallpaperEngine/Data/JSON.h"
+@@ -16,6 +17,13 @@ using namespace WallpaperEngine::Data::Model;
+ class ObjectParser {
+ public:
+     static ObjectUniquePtr parse (const JSON& it, const Project& project);
++    /**
++     * The image a text object with effects draws as, or nullopt without effects. Its texture is
++     * the text's canvas, `_rt_textLayer_<id>`, centred on the point the text's alignment puts on
++     * its origin. The values the text owns (origin, scale, angles, alpha, color, visible) carry no
++     * script or animation here: the text runs those, and its renderer connects them over.
++     */
++    static std::optional<JSON> textComposite (const JSON& it);
+ 
+ private:
+     static std::vector<int> parseDependencies (const JSON& it);
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index 4833f261..e86a7629 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -10,6 +10,7 @@
+ #include <ft2build.h>
+ #include FT_FREETYPE_H
+ 
++#include <glm/common.hpp>
+ #include <glm/gtc/matrix_transform.hpp>
+ #include <glm/gtc/type_ptr.hpp>
+ 
+@@ -18,6 +19,7 @@
+ #include "WallpaperEngine/Data/Model/Object.h"
+ #include "WallpaperEngine/Data/Model/UserSetting.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include "WallpaperEngine/Render/CFBO.h"
+ #include "WallpaperEngine/Render/Camera.h"
+ #include "WallpaperEngine/Render/Wallpapers/CScene.h"
+ 
+@@ -82,7 +84,9 @@ uniform vec4 uColor;
+ out vec4 FragColor;
+ void main() {
+     float coverage = texture(uTexture, vUV).r;
+-    FragColor = vec4(uColor.rgb, uColor.a * coverage);
++    // no color where there is no glyph: an effect that moves a channel (chromatic aberration, VHS)
++    // fringes the glyphs only if what lies beside them is black
++    FragColor = vec4(coverage > 0.0 ? uColor.rgb : vec3(0.0), uColor.a * coverage);
+ }
+ )glsl";
+ 
+@@ -144,6 +148,17 @@ CText::CText (Wallpapers::CScene& scene, const Text& text) :
+     this->registerProperty ("pointSize", *text.pointSize->value);
+     this->registerProperty ("text", *text.text->value);
+     this->registerConstant ("size", DynamicValue (text.size));
++
++    if (text.composite != nullptr) {
++	// the image draws with the text's values, whatever drives them: a script, a timeline, a user setting
++	auto& image = *text.composite;
++	image.origin->value->connect (text.origin->value.get ());
++	image.scale->value->connect (text.scale->value.get ());
++	image.angles->value->connect (text.groupAngles->value.get ());
++	image.alpha->value->connect (text.alpha->value.get ());
++	image.color->value->connect (text.color->value.get ());
++	image.visible->value->connect (text.visible->value.get ());
++    }
+ }
+ 
+ CText::~CText () {
+@@ -193,6 +208,11 @@ void CText::setup () {
+     rebuildTextureFrom (text.empty () ? std::string (" ") : text);
+ 
+     m_valid = m_texture != 0 && m_program != 0 && m_vao != 0;
++
++    if (m_valid && m_text.composite != nullptr) {
++	// the box Wallpaper Engine saved fits the text as it was written, with its padding
++	buildComposite (glm::max (canvasSize (), glm::ivec2 (glm::ceil (m_text.size))));
++    }
+ }
+ 
+ bool CText::initFreeType () {
+@@ -266,7 +286,10 @@ unsigned int CText::computeEffectivePixelSize () const {
+     // rasterize at the size the glyphs end up in scene space; render() scales the quad back by
+     // scenePixelSize () / pixelSize so the on-screen size doesn't depend on this choice
+     constexpr float kMaxPixelSize = 1024.0f;
+-    const glm::vec3 scale = CImage::resolveTransform (getScene (), m_text).scale;
++    // an image's effects work in its own pixels and the image is scaled after, so a text with
++    // effects keeps its glyphs at scene size
++    const glm::vec3 scale
++	= m_text.composite != nullptr ? glm::vec3 (1.0f) : CImage::resolveTransform (getScene (), m_text).scale;
+     const float avgScale = (std::abs (scale.x) + std::abs (scale.y)) * 0.5f;
+     const float pixels = std::clamp (scenePixelSize () * avgScale, 1.0f, kMaxPixelSize);
+     return static_cast<unsigned int> (std::lround (pixels));
+@@ -362,6 +385,7 @@ void CText::rebuildTextureFrom (const std::string& text) {
+     m_textureSize = { width, height };
+     m_quadSize = { static_cast<float> (width), static_cast<float> (height) };
+     m_lastRenderedText = text;
++    m_canvasDirty = true;
+ 
+     uploadQuadVertices ();
+ }
+@@ -422,6 +446,9 @@ void CText::uploadQuadVertices () {
+ 	glGenVertexArrays (1, &m_vao);
+ 	glGenBuffers (1, &m_vbo);
+     }
++    // a text that changes rebuilds this mid-frame, and the layers after it draw with the scene's vertex array
++    GLint previousVertexArray = 0;
++    glGetIntegerv (GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
+     glBindVertexArray (m_vao);
+     glBindBuffer (GL_ARRAY_BUFFER, m_vbo);
+     glBufferData (GL_ARRAY_BUFFER, sizeof (verts), verts, GL_DYNAMIC_DRAW);
+@@ -433,7 +460,7 @@ void CText::uploadQuadVertices () {
+ 	    1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof (float), reinterpret_cast<void*> (2 * sizeof (float))
+ 	);
+     }
+-    glBindVertexArray (0);
++    glBindVertexArray (previousVertexArray);
+ }
+ 
+ void CText::render () {
+@@ -461,6 +488,14 @@ void CText::render () {
+ 	rebuildTextureFrom (renderedText);
+     }
+ 
++    if (m_composite != nullptr) {
++	renderComposite ();
++#if !NDEBUG
++	glPopDebugGroup ();
++#endif /* DEBUG */
++	return;
++    }
++
+     const glm::vec4 color = m_text.color->value->getVec4 ();
+     const float alpha = m_text.alpha->value->getFloat ();
+     // origin and scale include every parent (text is often a child of a clock or media group)
+@@ -483,19 +518,11 @@ void CText::render () {
+     // the texture holds glyphs at m_lastPixelSize, scale the quad so the font is scenePixelSize () * scale
+     const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
+ 
+-    // the alignment says which point of the text sits on the origin: a left-aligned label starts
+-    // there and a right-aligned date ends there, whatever the text grows to (the quad's -y is the top)
+-    const glm::vec3 pivot = {
+-	m_text.alignment == "left" ? m_quadSize.x * 0.5f : m_text.alignment == "right" ? -m_quadSize.x * 0.5f : 0.0f,
+-	m_text.verticalalign == "top" ? m_quadSize.y * 0.5f : m_text.verticalalign == "bottom" ? -m_quadSize.y * 0.5f : 0.0f,
+-	0.0f,
+-    };
+-
+     glm::mat4 model = glm::translate (glm::mat4 (1.0f), gl_origin);
+     // y is mirrored here, so the angle turns the other way, as it does for images
+     model = glm::rotate (model, -transform.angle, glm::vec3 (0.0f, 0.0f, 1.0f));
+     model = glm::scale (model, scale * glm::vec3 (rasterToScene, rasterToScene, 1.0f));
+-    model = glm::translate (model, pivot);
++    model = glm::translate (model, alignmentPivot ());
+ 
+     const glm::mat4 mvp = getScene ().getCamera ().getProjection () * getScene ().getCamera ().getLookAt () * model;
+ 
+@@ -510,10 +537,128 @@ void CText::render () {
+     glBindTexture (GL_TEXTURE_2D, m_texture);
+     glUniform1i (m_uTexture, 0);
+ 
++    // the scene's vertex array stays bound for the layers after this one, as CParticle leaves it
++    GLint previousVertexArray = 0;
++    glGetIntegerv (GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
+     glBindVertexArray (m_vao);
+     glDrawArrays (GL_TRIANGLES, 0, 6);
+-    glBindVertexArray (0);
++    glBindVertexArray (previousVertexArray);
+ #if !NDEBUG
+     glPopDebugGroup ();
+ #endif /* DEBUG */
+ }
++
++glm::vec3 CText::alignmentPivot () const {
++    // the alignment says which point of the text sits on the origin: a left-aligned label starts
++    // there and a right-aligned date ends there, whatever the text grows to (the quad's -y is the top)
++    return {
++	m_text.alignment == "left" ? m_quadSize.x * 0.5f : m_text.alignment == "right" ? -m_quadSize.x * 0.5f : 0.0f,
++	m_text.verticalalign == "top" ? m_quadSize.y * 0.5f : m_text.verticalalign == "bottom" ? -m_quadSize.y * 0.5f : 0.0f,
++	0.0f,
++    };
++}
++
++glm::ivec2 CText::canvasSize () const {
++    const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
++    const glm::vec2 size = m_quadSize * rasterToScene;
++    // the canvas is centred on the anchor, so a text with an edge on it reaches the whole way to one side
++    const glm::vec2 reach = {
++	m_text.alignment == "left" || m_text.alignment == "right" ? size.x : size.x * 0.5f,
++	m_text.verticalalign == "top" || m_text.verticalalign == "bottom" ? size.y : size.y * 0.5f,
++    };
++
++    return glm::ivec2 (glm::ceil ((reach + m_text.padding) * 2.0f));
++}
++
++bool CText::buildComposite (glm::ivec2 size) {
++    if (m_composite != nullptr) {
++	m_outgrownComposites.push_back (std::move (m_composite));
++    }
++
++    m_canvasSize = size;
++    // the image's first texture, by the name ObjectParser::textComposite gave it
++    m_canvas = getScene ().create (
++	"_rt_textLayer_" + std::to_string (m_text.id), TextureFormat_ARGB8888, TextureFlags_ClampUVs, 1.0f,
++	glm::vec2 (size), glm::vec2 (size)
++    );
++    m_canvasDirty = true;
++
++    try {
++	m_composite = std::make_unique<CImage> (getScene (), *m_text.composite);
++	m_composite->setup ();
++    } catch (const std::exception& e) {
++	sLog.error ("Text ", m_text.id, " draws without its effects: ", e.what ());
++	m_composite.reset ();
++	return false;
++    }
++
++    return true;
++}
++
++void CText::renderComposite () {
++    const glm::ivec2 needed = canvasSize ();
++
++    // with room to spare, so a clock or a day name that gets a little longer doesn't rebuild it again
++    if ((needed.x > m_canvasSize.x || needed.y > m_canvasSize.y)
++	&& !buildComposite (glm::max (m_canvasSize, needed + needed / 4))) {
++	return;
++    }
++
++    // Wallpaper Engine draws the glyphs in the text's color, and its effects work on colored text;
++    // the image applies the alpha
++    const glm::vec3 color = glm::vec3 (m_text.color->value->getVec4 ());
++
++    if (m_canvasDirty || color != m_canvasColor) {
++	m_canvasDirty = false;
++	m_canvasColor = color;
++
++	GLint previousFramebuffer = 0;
++	GLint previousVertexArray = 0;
++	GLint previousViewport [4] = {};
++	GLfloat previousClearColor [4] = {};
++	GLboolean previousColorMask [4] = {};
++	glGetIntegerv (GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
++	glGetIntegerv (GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
++	glGetIntegerv (GL_VIEWPORT, previousViewport);
++	glGetFloatv (GL_COLOR_CLEAR_VALUE, previousClearColor);
++	glGetBooleanv (GL_COLOR_WRITEMASK, previousColorMask);
++	const GLboolean previousDepthTest = glIsEnabled (GL_DEPTH_TEST);
++
++	glBindFramebuffer (GL_FRAMEBUFFER, m_canvas->getFramebuffer ());
++	glViewport (0, 0, m_canvasSize.x, m_canvasSize.y);
++	// an image's last pass leaves alpha unwritten, and the glyphs on the canvas are their alpha
++	glColorMask (GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
++	glDisable (GL_DEPTH_TEST);
++	glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
++	glClear (GL_COLOR_BUFFER_BIT);
++	glDisable (GL_BLEND);
++
++	const float rasterToScene = scenePixelSize () / static_cast<float> (std::max (m_lastPixelSize, 1u));
++	const glm::vec2 half = glm::vec2 (m_canvasSize) * 0.5f;
++	glm::mat4 mvp = glm::ortho (-half.x, half.x, -half.y, half.y);
++	mvp = glm::scale (mvp, glm::vec3 (rasterToScene, rasterToScene, 1.0f));
++	mvp = glm::translate (mvp, alignmentPivot ());
++
++	glUseProgram (m_program);
++	glUniformMatrix4fv (m_uMVP, 1, GL_FALSE, glm::value_ptr (mvp));
++	glUniform4f (m_uColor, color.r, color.g, color.b, 1.0f);
++	glActiveTexture (GL_TEXTURE0);
++	glBindTexture (GL_TEXTURE_2D, m_texture);
++	glUniform1i (m_uTexture, 0);
++	glBindVertexArray (m_vao);
++	glDrawArrays (GL_TRIANGLES, 0, 6);
++
++	glBindVertexArray (previousVertexArray);
++	glBindFramebuffer (GL_FRAMEBUFFER, previousFramebuffer);
++	glViewport (previousViewport [0], previousViewport [1], previousViewport [2], previousViewport [3]);
++	glClearColor (previousClearColor [0], previousClearColor [1], previousClearColor [2], previousClearColor [3]);
++	glColorMask (previousColorMask [0], previousColorMask [1], previousColorMask [2], previousColorMask [3]);
++	if (previousDepthTest) {
++	    glEnable (GL_DEPTH_TEST);
++	}
++    }
++
++    // the scene plays the timelines of the layers it holds, and this image is the text's own
++    m_composite->applyAnimations (getScene ().getTime ());
++    m_composite->render ();
++}
+diff --git a/src/WallpaperEngine/Render/Objects/CText.h b/src/WallpaperEngine/Render/Objects/CText.h
+index d17572c6..2217904f 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.h
++++ b/src/WallpaperEngine/Render/Objects/CText.h
+@@ -1,10 +1,12 @@
+ #pragma once
+ 
++#include <memory>
+ #include <string>
+ #include <vector>
+ 
+ #include <GL/glew.h>
+ #include <glm/vec2.hpp>
++#include <glm/vec3.hpp>
+ #include <glm/vec4.hpp>
+ 
+ #include "WallpaperEngine/Render/CObject.h"
+@@ -16,6 +18,10 @@ struct FT_FaceRec_;
+ typedef struct FT_LibraryRec_* FT_Library;
+ typedef struct FT_FaceRec_* FT_Face;
+ 
++namespace WallpaperEngine::Render {
++class CFBO;
++}
++
+ namespace WallpaperEngine::Render::Wallpapers {
+ class CScene;
+ }
+@@ -23,12 +29,17 @@ class CScene;
+ namespace WallpaperEngine::Render::Objects {
+ using namespace WallpaperEngine::Data::Model;
+ 
++class CImage;
++
+ /**
+  * A text layer. FreeType rasterizes the text (UTF-8, a line per '\n', the lines lined up by
+  * horizontalalign) into a single-channel texture, drawn with its own minimal GLSL shader on a
+  * quad whose alignment pins it to the origin. A script on `text` runs like any other property
+- * script, and the layer draws whatever it last returned. Does NOT go through CRenderable /
+- * materials / passes, so the layer's effects are not drawn.
++ * script, and the layer draws whatever it last returned.
++ *
++ * A text with effects draws as an image instead (Text::composite): the glyphs go, in the text's
++ * color, onto a canvas centred on the point the alignment puts on the origin, and a CImage draws
++ * that canvas with the layer's alpha, effects and blending, as Wallpaper Engine draws an image.
+  */
+ class CText final : virtual public CObject, public Scripting::ScriptableObject {
+ public:
+@@ -54,6 +65,15 @@ private:
+     float scenePixelSize () const;
+     /** Pixel size to rasterize glyphs at so they stay sharp at the resolved (parent-inclusive) scale */
+     unsigned int computeEffectivePixelSize () const;
++    /** The model matrix's last step: moves the quad so the point its alignment names is at 0,0 */
++    glm::vec3 alignmentPivot () const;
++
++    /** The canvas the current text needs: its farthest reach from the anchor on both sides, and padding */
++    glm::ivec2 canvasSize () const;
++    /** Builds the image the text draws as, on a canvas of `size`; false if it could not be built */
++    bool buildComposite (glm::ivec2 size);
++    /** Draws the glyphs onto the canvas, then the image that carries the layer's effects */
++    void renderComposite ();
+ 
+     const Text& m_text;
+     std::string m_lastRenderedText;
+@@ -75,6 +95,19 @@ private:
+     glm::ivec2 m_textureSize = { 0, 0 };
+     glm::vec2 m_quadSize = { 0.0f, 0.0f };
+ 
++    std::unique_ptr<CImage> m_composite;
++    /**
++     * The images built for canvases the text outgrew. They no longer draw, but a script on one of
++     * their effects runs on with it as thisLayer, so they live as long as the text does
++     */
++    std::vector<std::unique_ptr<CImage>> m_outgrownComposites;
++    std::shared_ptr<const CFBO> m_canvas;
++    glm::ivec2 m_canvasSize = { 0, 0 };
++    /** Whether the glyphs changed since they were drawn onto the canvas */
++    bool m_canvasDirty = true;
++    /** The color the glyphs on the canvas were drawn in */
++    glm::vec3 m_canvasColor = { 0.0f, 0.0f, 0.0f };
++
+     bool m_valid = false;
+ };
+ } // namespace WallpaperEngine::Render::Objects
+diff --git a/src/WallpaperEngine/Testing/Cases/TextComposite.cpp b/src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+new file mode 100644
+index 00000000..3c48e70a
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+@@ -0,0 +1,92 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include "WallpaperEngine/Data/Parsers/ObjectParser.h"
++
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::Data::Parsers::ObjectParser;
++
++namespace {
++// the shape of a clock in a workshop wallpaper: a script on the text, user settings on its looks
++JSON clockWithEffects () {
++    return {
++	{ "id", 97 },
++	{ "name", "Clock" },
++	{ "parent", 12 },
++	{ "text", { { "script", "export function update () { return '12:34'; }" }, { "value", "00:00" } } },
++	{ "horizontalalign", "left" },
++	{ "verticalalign", "center" },
++	{ "size", "1748.00000 508.00000" },
++	{ "padding", 32 },
++	{ "origin", { { "script", "export function update (value) { return value; }" }, { "value", "100 200 0" } } },
++	{ "scale", "2 2 1" },
++	{ "angles", { { "animation", { { "c0", JSON::array () } } }, { "value", "0 0 0.5" } } },
++	{ "color", { { "user", "colorclock" }, { "value", "0.5 0.25 1" } } },
++	{ "alpha", { { "user", "opacityclock" }, { "value", 0.75 } } },
++	{ "visible", { { "user", "showclock" }, { "value", true } } },
++	{ "brightness", 1.5 },
++	{ "effects",
++	  JSON::array ({ {
++	      { "file", "effects/workshop/2981960200/blurprecise/effect.json" },
++	      { "id", 98 },
++	      { "visible", { { "user", "clockblur" }, { "value", true } } },
++	      { "passes", JSON::array ({ { { "constantshadervalues", { { "scale", "1.28 1.28" } } } } }) },
++	  } }) },
++    };
++}
++} // namespace
++
++TEST_CASE ("A text without effects draws as text") {
++    JSON text = clockWithEffects ();
++
++    text.erase ("effects");
++    CHECK_FALSE (ObjectParser::textComposite (text).has_value ());
++
++    text ["effects"] = JSON::array ();
++    CHECK_FALSE (ObjectParser::textComposite (text).has_value ());
++}
++
++TEST_CASE ("A text with effects draws as an image of its own canvas") {
++    const auto image = ObjectParser::textComposite (clockWithEffects ());
++
++    REQUIRE (image.has_value ());
++    CHECK ((*image) ["image"] == "models/wpenginelinux/text.json");
++    CHECK ((*image) ["instance"] ["textures"] == JSON::array ({ "_rt_textLayer_97" }));
++    CHECK ((*image) ["id"] == 97);
++    CHECK ((*image) ["parent"] == 12);
++    // its effects are the text's, user settings and all
++    CHECK ((*image) ["effects"] == clockWithEffects () ["effects"]);
++}
++
++TEST_CASE ("The canvas sets the image's size and is centred on the text's anchor") {
++    const auto image = ObjectParser::textComposite (clockWithEffects ());
++
++    REQUIRE (image.has_value ());
++    CHECK ((*image) ["alignment"] == "center");
++    CHECK_FALSE (image->contains ("horizontalalign"));
++    CHECK_FALSE (image->contains ("size"));
++}
++
++TEST_CASE ("The values the text drives reach the image without their scripts") {
++    const auto image = ObjectParser::textComposite (clockWithEffects ());
++
++    REQUIRE (image.has_value ());
++    // a script, a timeline or a user setting stays with the text, which runs it once
++    CHECK ((*image) ["origin"] == "100 200 0");
++    CHECK ((*image) ["angles"] == "0 0 0.5");
++    CHECK ((*image) ["color"] == "0.5 0.25 1");
++    CHECK ((*image) ["alpha"] == 0.75);
++    CHECK ((*image) ["visible"] == true);
++    CHECK ((*image) ["scale"] == "2 2 1");
++    // what only an image has is its own
++    CHECK ((*image) ["brightness"] == 1.5);
++}
++
++TEST_CASE ("A text value without a plain value is left to the text") {
++    JSON text = clockWithEffects ();
++    text ["alpha"] = { { "user", "opacityclock" } };
++
++    const auto image = ObjectParser::textComposite (text);
++
++    REQUIRE (image.has_value ());
++    CHECK_FALSE (image->contains ("alpha"));
++}

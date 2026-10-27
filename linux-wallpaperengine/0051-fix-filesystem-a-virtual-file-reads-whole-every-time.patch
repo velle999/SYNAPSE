@@ -1,0 +1,131 @@
+From a3d7bc1cfad176138cf9b9b31b8335aa9718af9e Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Tue, 27 Oct 2026 08:10:45 -0500
+Subject: [PATCH 51/53] fix(filesystem): a virtual file reads whole every time
+ it is opened
+
+VirtualAdapter::open handed every caller the same stream, and the first
+to read it left it at its end, so the next caller to open the file read
+nothing. The files the engine adds itself were each read once per scene,
+which hid it; every text layer with effects opens the same model (the
+next commit), and all but the first failed to parse it.
+
+Each open now gets a stream of its own over a copy of the bytes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrYdVZ7ULsVD9WKX2Az4Mw
+---
+ CMakeLists.txt                                |  3 +-
+ src/WallpaperEngine/Data/Utils/MemoryStream.h | 10 +++++
+ .../FileSystem/Adapters/Virtual.cpp           |  4 +-
+ .../Testing/Cases/VirtualFiles.cpp            | 45 +++++++++++++++++++
+ 4 files changed, 60 insertions(+), 2 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3577b92f..f25be78b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -586,7 +586,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/TextureAnimation.cpp
+         src/WallpaperEngine/Testing/Cases/PropertyAnimation.cpp
+         src/WallpaperEngine/Testing/Cases/ScriptValues.cpp
+-        src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp)
++        src/WallpaperEngine/Testing/Cases/ShaderCompatibility.cpp
++        src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Data/Utils/MemoryStream.h b/src/WallpaperEngine/Data/Utils/MemoryStream.h
+index 23af6d02..0d89fb73 100644
+--- a/src/WallpaperEngine/Data/Utils/MemoryStream.h
++++ b/src/WallpaperEngine/Data/Utils/MemoryStream.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <cstring>
+ #include <iostream>
+ #include <memory>
+ 
+@@ -41,6 +42,15 @@ struct MemoryStream : std::istream, private std::streambuf {
+ 	return this->seekoff (pos, std::ios_base::beg, which);
+     }
+ 
++    /** A stream of its own over a copy of the same bytes, to be read from the start */
++    [[nodiscard]] std::shared_ptr<MemoryStream> copy () const {
++	const auto size = static_cast<size_t> (this->egptr () - this->eback ());
++	auto buffer = std::make_unique<char[]> (size);
++	std::memcpy (buffer.get (), this->eback (), size);
++
++	return std::make_shared<MemoryStream> (std::move (buffer), size);
++    }
++
+     std::unique_ptr<char[]> m_buffer;
+ };
+ 
+diff --git a/src/WallpaperEngine/FileSystem/Adapters/Virtual.cpp b/src/WallpaperEngine/FileSystem/Adapters/Virtual.cpp
+index ecb9d7e9..1993b59c 100644
+--- a/src/WallpaperEngine/FileSystem/Adapters/Virtual.cpp
++++ b/src/WallpaperEngine/FileSystem/Adapters/Virtual.cpp
+@@ -14,7 +14,9 @@ ReadStreamSharedPtr VirtualAdapter::open (const std::filesystem::path& path) con
+ 	throw std::filesystem::filesystem_error ("Cannot find file", path, std::error_code ());
+     }
+ 
+-    return file->second;
++    // every reader gets a stream of its own: the first left a shared one at its end, and the
++    // next (the second text layer with effects to load the same model) read nothing
++    return file->second->copy ();
+ }
+ 
+ bool VirtualAdapter::exists (const std::filesystem::path& path) const { return this->files.contains (path); }
+diff --git a/src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp b/src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+new file mode 100644
+index 00000000..fadc9571
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/VirtualFiles.cpp
+@@ -0,0 +1,45 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include <iterator>
++#include <string>
++
++#include "WallpaperEngine/FileSystem/Adapters/Virtual.h"
++
++using WallpaperEngine::Data::JSON::JSON;
++using WallpaperEngine::FileSystem::Adapters::VirtualAdapter;
++
++namespace {
++std::string readAll (std::istream& stream) {
++    return { std::istreambuf_iterator<char> (stream), std::istreambuf_iterator<char> () };
++}
++} // namespace
++
++TEST_CASE ("A virtual file reads whole every time it is opened") {
++    VirtualAdapter adapter;
++    const JSON model = { { "material", "materials/wpenginelinux/text.json" } };
++    adapter.add ("models/wpenginelinux/text.json", model);
++
++    // every text layer with effects loads this model: the second used to read nothing
++    const auto first = adapter.open ("models/wpenginelinux/text.json");
++    const auto second = adapter.open ("models/wpenginelinux/text.json");
++
++    CHECK (readAll (*first) == model.dump ());
++    CHECK (readAll (*second) == model.dump ());
++    CHECK (readAll (*adapter.open ("models/wpenginelinux/text.json")) == model.dump ());
++}
++
++TEST_CASE ("Streams opened from one virtual file read independently") {
++    VirtualAdapter adapter;
++    adapter.add ("shaders/commands/copy.frag", std::string ("uniform sampler2D g_Texture0;"));
++
++    const auto first = adapter.open ("shaders/commands/copy.frag");
++    const auto second = adapter.open ("shaders/commands/copy.frag");
++    std::string word;
++
++    *first >> word;
++    CHECK (word == "uniform");
++    *second >> word;
++    CHECK (word == "uniform");
++    *first >> word;
++    CHECK (word == "sampler2D");
++}
