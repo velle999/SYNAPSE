@@ -1,0 +1,65 @@
+From b68ed1cc5c3e20f4a03b45e72eb21d5e3f1bf142 Mon Sep 17 00:00:00 2001
+From: velle <velle2386@gmail.com>
+Date: Tue, 27 Oct 2026 20:41:53 -0500
+Subject: [PATCH 65/65] fix(audio): the audio recorder gives up on a PulseAudio
+ server that does not answer
+
+The recorder's constructor waited for PA_CONTEXT_READY with a blocking
+pa_mainloop_iterate. A server that refuses the handshake leaves the
+context FAILED and one that never answers leaves it connecting, so in
+both the engine never got as far as drawing. It now waits at most two
+seconds, stops at once on a failed context, and runs without audio.
+It never blocks past the deadline: the same prepare/poll/dispatch steps
+upstream #704 uses for the playing detector.
+
+Proof on a headless rig, topo 2156479578 with PULSE_SERVER pointing at
+no socket, a stale socket and a socket that accepts and never answers:
+the previous build shows nothing in all three, this one draws. With the
+real server both draw.
+---
+ .../Recorders/PulseAudioPlaybackRecorder.cpp  | 26 ++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
+index 0cd7574e..be9def99 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
++++ b/src/WallpaperEngine/Audio/Drivers/Recorders/PulseAudioPlaybackRecorder.cpp
+@@ -1,5 +1,6 @@
+ #include "PulseAudioPlaybackRecorder.h"
+ #include "WallpaperEngine/Logging/Log.h"
++#include <chrono>
+ #include <cmath>
+ #include <cstring>
+ #include <glm/common.hpp>
+@@ -209,9 +210,28 @@ PulseAudioPlaybackRecorder::PulseAudioPlaybackRecorder () :
+ 	return;
+     }
+ 
+-    // wait until the context is ready
+-    while (pa_context_get_state (this->m_context) != PA_CONTEXT_READY) {
+-	pa_mainloop_iterate (this->m_mainloop, 1, nullptr);
++    // wait until the context is ready. A server that refuses the handshake leaves it FAILED and one
++    // that never answers leaves it connecting, and waiting for READY in either kept the engine
++    // from ever drawing; give up on audio instead, as the playing detector does (upstream #649)
++    const auto deadline = std::chrono::steady_clock::now () + std::chrono::seconds (2);
++    pa_context_state_t state;
++
++    while ((state = pa_context_get_state (this->m_context)) != PA_CONTEXT_READY) {
++	const auto now = std::chrono::steady_clock::now ();
++
++	if (!PA_CONTEXT_IS_GOOD (state) || now >= deadline) {
++	    sLog.error ("PulseAudio did not answer. Audio processing is disabled");
++	    return;
++	}
++
++	const auto remaining = std::chrono::duration_cast<std::chrono::microseconds> (deadline - now);
++
++	// same steps as pa_mainloop_iterate, but never blocks past the deadline
++	if (pa_mainloop_prepare (this->m_mainloop, static_cast<int> (remaining.count ())) < 0
++	    || pa_mainloop_poll (this->m_mainloop) < 0 || pa_mainloop_dispatch (this->m_mainloop) < 0) {
++	    sLog.error ("PulseAudio did not answer. Audio processing is disabled");
++	    return;
++	}
+     }
+ }
+ 

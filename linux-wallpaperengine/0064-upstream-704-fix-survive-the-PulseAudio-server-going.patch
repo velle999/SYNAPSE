@@ -1,0 +1,488 @@
+From bbe3380b1cd7c1c4111bcf755bc4bc5cf6201472 Mon Sep 17 00:00:00 2001
+From: Zack Finer <14876446+ziggityzack@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 20:39:32 -0500
+Subject: [PATCH 64/65] upstream #704: fix: survive the PulseAudio server going
+ away in the audio playing detector
+
+Carried from https://github.com/Almamu/linux-wallpaperengine/pull/704 (by ziggityzack) until it is merged upstream.
+
+Both commits of the pull request (5c647602), squashed. It contains
+#655's NULL guards, which the series already carries, so the detector
+files are taken from the pull request whole. Fixes upstream #649: with
+no PulseAudio server answering, the detector's constructor waited for
+PA_CONTEXT_READY forever and the engine never drew.
+---
+ CMakeLists.txt                                |   3 +-
+ .../Detectors/PulseAudioPlayingDetector.cpp   | 142 +++++++++---
+ .../Detectors/PulseAudioPlayingDetector.h     |  33 ++-
+ .../Cases/PulseAudioPlayingDetector.cpp       | 203 ++++++++++++++++++
+ 4 files changed, 350 insertions(+), 31 deletions(-)
+ create mode 100644 src/WallpaperEngine/Testing/Cases/PulseAudioPlayingDetector.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5c47c9db..b5d3329c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -594,7 +594,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+         src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
+         src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp
+-        src/WallpaperEngine/Testing/Cases/FrameClock.cpp)
++        src/WallpaperEngine/Testing/Cases/FrameClock.cpp
++        src/WallpaperEngine/Testing/Cases/PulseAudioPlayingDetector.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
+index 6910bf46..6e3c7226 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
++++ b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.cpp
+@@ -4,6 +4,17 @@
+ #include <unistd.h>
+ 
+ namespace WallpaperEngine::Audio::Drivers::Detectors {
++namespace {
++    // how long the server gets to accept a new connection
++    constexpr std::chrono::milliseconds CONNECT_TIMEOUT { 2000 };
++    // how long one query for playing streams may hold up a frame
++    constexpr std::chrono::milliseconds QUERY_TIMEOUT { 100 };
++    // how long to wait before trying to reach the server again
++    constexpr std::chrono::seconds RECONNECT_INTERVAL { 5 };
++    // upper bound of server events handled at the start of each frame
++    constexpr int MAX_EVENTS_PER_FRAME = 32;
++} // namespace
++
+ void sinkInputInfoCallback (pa_context* context, const pa_sink_input_info* info, int eol, void* userdata) {
+     auto* detector = static_cast<PulseAudioPlayingDetector*> (userdata);
+ 
+@@ -23,45 +34,82 @@ void sinkInputInfoCallback (pa_context* context, const pa_sink_input_info* info,
+     }
+ }
+ 
+-void defaultSinkInfoCallback (pa_context* context, const pa_server_info* info, void* userdata) {
+-    if (info == nullptr) {
+-	return;
+-    }
+-
+-    pa_operation* op = pa_context_get_sink_input_info_list (context, sinkInputInfoCallback, userdata);
+-
+-    if (op != nullptr) {
+-	pa_operation_unref (op);
+-    }
+-}
+-
+ PulseAudioPlayingDetector::PulseAudioPlayingDetector (
+     Application::ApplicationContext& appContext,
+     const Render::Drivers::Detectors::FullScreenDetector& fullscreenDetector
+ ) : AudioPlayingDetector (appContext, fullscreenDetector) {
+     this->m_mainloop = pa_mainloop_new ();
+     this->m_mainloopApi = pa_mainloop_get_api (this->m_mainloop);
+-    this->m_context = pa_context_new (this->m_mainloopApi, "wallpaperengine");
+ 
+-    pa_context_connect (this->m_context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+-
+-    // lock until pulseaudio allows connection
+-    while (pa_context_get_state (this->m_context) != PA_CONTEXT_READY) {
+-	pa_mainloop_iterate (this->m_mainloop, 1, nullptr);
+-    }
++    this->connect ();
+ }
+ 
+ PulseAudioPlayingDetector::~PulseAudioPlayingDetector () {
+-    if (this->m_context) {
+-	pa_context_disconnect (this->m_context);
+-	pa_context_unref (this->m_context);
+-    }
++    this->disconnect ();
+ 
+     if (this->m_mainloop) {
+ 	pa_mainloop_free (this->m_mainloop);
+     }
+ }
+ 
++bool PulseAudioPlayingDetector::isConnected () const {
++    return this->m_context != nullptr && pa_context_get_state (this->m_context) == PA_CONTEXT_READY;
++}
++
++template <typename Predicate>
++bool PulseAudioPlayingDetector::iterateUntil (Predicate done, const std::chrono::milliseconds timeout) {
++    const auto deadline = std::chrono::steady_clock::now () + timeout;
++
++    while (!done ()) {
++	const auto now = std::chrono::steady_clock::now ();
++
++	if (now >= deadline) {
++	    return false;
++	}
++
++	const auto remaining = std::chrono::duration_cast<std::chrono::microseconds> (deadline - now);
++
++	// same steps as pa_mainloop_iterate, but never blocks past the deadline
++	if (pa_mainloop_prepare (this->m_mainloop, static_cast<int> (remaining.count ())) < 0
++	    || pa_mainloop_poll (this->m_mainloop) < 0 || pa_mainloop_dispatch (this->m_mainloop) < 0) {
++	    return done ();
++	}
++    }
++
++    return true;
++}
++
++void PulseAudioPlayingDetector::connect () {
++    const auto now = std::chrono::steady_clock::now ();
++
++    this->m_connectStarted = now;
++    this->m_nextConnectAttempt = now + RECONNECT_INTERVAL;
++    this->m_context = pa_context_new (this->m_mainloopApi, "wallpaperengine");
++
++    if (this->m_context == nullptr || pa_context_connect (this->m_context, nullptr, PA_CONTEXT_NOFLAGS, nullptr) < 0) {
++	this->connectionFailed ();
++    }
++}
++
++void PulseAudioPlayingDetector::disconnect () {
++    if (this->m_context == nullptr) {
++	return;
++    }
++
++    pa_context_disconnect (this->m_context);
++    pa_context_unref (this->m_context);
++    this->m_context = nullptr;
++}
++
++void PulseAudioPlayingDetector::connectionFailed () {
++    if (!this->m_unreachable) {
++	sLog.error ("Cannot reach the PulseAudio server, detection of playing audio paused until it's back");
++    }
++
++    this->m_unreachable = true;
++    this->disconnect ();
++}
++
+ void PulseAudioPlayingDetector::update () {
+     if (!this->getApplicationContext ().settings.audio.automute) {
+ 	return this->setIsPlaying (false);
+@@ -73,18 +121,56 @@ void PulseAudioPlayingDetector::update () {
+     // reset playing state
+     this->setIsPlaying (false);
+ 
+-    // start discovery of sinks
+-    pa_operation* op = pa_context_get_server_info (this->m_context, defaultSinkInfoCallback, this);
++    // handle whatever the server sent since the last frame without waiting for more
++    for (int event = 0; event < MAX_EVENTS_PER_FRAME && pa_mainloop_iterate (this->m_mainloop, 0, nullptr) > 0;
++	 event++) { }
++
++    // the server can go away at any time (e.g. when it's restarted), so keep reconnecting until it's back
++    if (!this->isConnected ()) {
++	if (this->m_context == nullptr) {
++	    if (std::chrono::steady_clock::now () >= this->m_nextConnectAttempt) {
++		this->connect ();
++	    }
++
++	    return;
++	}
++
++	const bool connecting = PA_CONTEXT_IS_GOOD (pa_context_get_state (this->m_context));
++
++	// a server that doesn't finish the handshake in time is treated like a missing one
++	if (!connecting || std::chrono::steady_clock::now () - this->m_connectStarted >= CONNECT_TIMEOUT) {
++	    this->connectionFailed ();
++	}
++
++	return;
++    }
++
++    if (this->m_unreachable) {
++	sLog.out ("Reconnected to the PulseAudio server, detection of playing audio resumed");
++	this->m_unreachable = false;
++    }
++
++    // libpulse returns no operation when the connection has died since the last frame
++    pa_operation* op = pa_context_get_sink_input_info_list (this->m_context, sinkInputInfoCallback, this);
+ 
+     if (op == nullptr) {
++	this->connectionFailed ();
+ 	return;
+     }
+ 
+-    // wait until all the operations are done
+-    while (pa_operation_get_state (op) == PA_OPERATION_RUNNING) {
+-	pa_mainloop_iterate (this->m_mainloop, 1, nullptr);
++    // wait until the list is complete, the callback marks anything that's playing
++    const bool done
++	= this->iterateUntil ([op] { return pa_operation_get_state (op) != PA_OPERATION_RUNNING; }, QUERY_TIMEOUT);
++
++    if (!done) {
++	pa_operation_cancel (op);
+     }
+ 
+     pa_operation_unref (op);
++
++    // a server that stops answering is dropped too, instead of holding up every frame
++    if (!done) {
++	this->connectionFailed ();
++    }
+ }
+ } // namespace WallpaperEngine::Audio::Drivers::Detectors
+diff --git a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.h b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.h
+index 8abdf978..4eaad0a5 100644
+--- a/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.h
++++ b/src/WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.h
+@@ -1,8 +1,7 @@
+ #pragma once
+ 
+ #include "AudioPlayingDetector.h"
+-#include <condition_variable>
+-#include <mutex>
++#include <chrono>
+ #include <pulse/pulseaudio.h>
+ 
+ namespace WallpaperEngine::Audio::Drivers::Detectors {
+@@ -15,9 +14,39 @@ public:
+ 
+     void update () override;
+ 
++    /**
++     * @return If there's a ready connection to the PulseAudio server
++     */
++    [[nodiscard]] bool isConnected () const;
++
+ private:
++    /**
++     * Starts connecting to the PulseAudio server, update () carries on with it without blocking
++     */
++    void connect ();
++    /**
++     * Drops the current connection to the PulseAudio server, if any
++     */
++    void disconnect ();
++    /**
++     * Gives up on the current connection, a new one is attempted later
++     */
++    void connectionFailed ();
++    /**
++     * Runs the mainloop until done returns true or the timeout passes
++     *
++     * @return If done returned true before the timeout
++     */
++    template <typename Predicate> bool iterateUntil (Predicate done, std::chrono::milliseconds timeout);
++
+     pa_mainloop* m_mainloop = nullptr;
+     pa_mainloop_api* m_mainloopApi = nullptr;
+     pa_context* m_context = nullptr;
++    /** When the current connection attempt started */
++    std::chrono::steady_clock::time_point m_connectStarted {};
++    /** No new connection is attempted before this point, so a missing server isn't retried every frame */
++    std::chrono::steady_clock::time_point m_nextConnectAttempt {};
++    /** If the server couldn't be reached, so the failure is only logged once */
++    bool m_unreachable = false;
+ };
+ } // namespace WallpaperEngine::Audio::Drivers::Detectors
+diff --git a/src/WallpaperEngine/Testing/Cases/PulseAudioPlayingDetector.cpp b/src/WallpaperEngine/Testing/Cases/PulseAudioPlayingDetector.cpp
+new file mode 100644
+index 00000000..5a329ff9
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/PulseAudioPlayingDetector.cpp
+@@ -0,0 +1,203 @@
++#include <catch2/catch_test_macros.hpp>
++
++#include "WallpaperEngine/Application/ApplicationContext.h"
++#include "WallpaperEngine/Audio/Drivers/Detectors/PulseAudioPlayingDetector.h"
++#include "WallpaperEngine/Render/Drivers/Detectors/FullScreenDetector.h"
++
++#include <algorithm>
++#include <chrono>
++#include <cstdlib>
++#include <cstring>
++#include <filesystem>
++#include <memory>
++#include <string>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <thread>
++#include <unistd.h>
++
++using namespace WallpaperEngine;
++using Application::ApplicationContext;
++using Audio::Drivers::Detectors::PulseAudioPlayingDetector;
++using Render::Drivers::Detectors::FullScreenDetector;
++
++namespace {
++const char* detectorArgv[] = { "linux-wallpaperengine" };
++
++// generous so a busy CI runner doesn't trip them; what they catch is blocking for seconds
++// (forever before the fix, or a connect attempt waiting out its 2 second timeout)
++constexpr std::chrono::milliseconds MAX_CONSTRUCT_TIME { 500 };
++constexpr std::chrono::milliseconds MAX_UPDATE_TIME { 250 };
++
++std::filesystem::path makeTempDir () {
++    char path[] = "/tmp/lwe-pulse-test-XXXXXX";
++
++    REQUIRE (mkdtemp (path) != nullptr);
++
++    return path;
++}
++
++/**
++ * Points libpulse at the given server while in scope, restoring whatever was set before
++ */
++class ScopedPulseServer {
++public:
++    explicit ScopedPulseServer (const std::string& server) {
++	if (const char* previous = std::getenv ("PULSE_SERVER")) {
++	    m_previous = previous;
++	    m_hadPrevious = true;
++	}
++
++	setenv ("PULSE_SERVER", server.c_str (), 1);
++    }
++
++    ~ScopedPulseServer () {
++	if (m_hadPrevious) {
++	    setenv ("PULSE_SERVER", m_previous.c_str (), 1);
++	} else {
++	    unsetenv ("PULSE_SERVER");
++	}
++    }
++
++private:
++    std::string m_previous;
++    bool m_hadPrevious = false;
++};
++
++/**
++ * A unix socket that takes connections but never answers, like a server that's stuck
++ */
++class SilentServer {
++public:
++    SilentServer () : m_dir (makeTempDir ()) {
++	const std::string path = (m_dir / "native").string ();
++	sockaddr_un address {};
++
++	address.sun_family = AF_UNIX;
++	strncpy (address.sun_path, path.c_str (), sizeof (address.sun_path) - 1);
++
++	m_fd = socket (AF_UNIX, SOCK_STREAM, 0);
++
++	REQUIRE (m_fd >= 0);
++	REQUIRE (bind (m_fd, reinterpret_cast<sockaddr*> (&address), sizeof (address)) == 0);
++	REQUIRE (listen (m_fd, 8) == 0);
++
++	m_address = "unix:" + path;
++    }
++
++    ~SilentServer () {
++	close (m_fd);
++	std::filesystem::remove_all (m_dir);
++    }
++
++    [[nodiscard]] const std::string& address () const { return m_address; }
++
++private:
++    std::filesystem::path m_dir;
++    std::string m_address;
++    int m_fd = -1;
++};
++
++class AlwaysFullscreen final : public FullScreenDetector {
++public:
++    using FullScreenDetector::FullScreenDetector;
++
++    [[nodiscard]] bool anythingFullscreen () const override { return true; }
++};
++
++template <typename Function> std::chrono::milliseconds timed (Function function) {
++    const auto start = std::chrono::steady_clock::now ();
++
++    function ();
++
++    return std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::steady_clock::now () - start);
++}
++
++/**
++ * Updates the detector like the render loop does for the given time
++ *
++ * @return The longest a single update took
++ */
++std::chrono::milliseconds runFrames (PulseAudioPlayingDetector& detector, const std::chrono::milliseconds duration) {
++    const auto end = std::chrono::steady_clock::now () + duration;
++    std::chrono::milliseconds worst { 0 };
++
++    while (std::chrono::steady_clock::now () < end) {
++	worst = std::max (worst, timed ([&] { detector.update (); }));
++	std::this_thread::sleep_for (std::chrono::milliseconds (10));
++    }
++
++    return worst;
++}
++} // namespace
++
++TEST_CASE ("PulseAudioPlayingDetector keeps going when no server is running") {
++    const auto dir = makeTempDir ();
++    ScopedPulseServer server ("unix:" + (dir / "missing").string ());
++    ApplicationContext context (1, const_cast<char**> (detectorArgv));
++    FullScreenDetector fullscreen (context);
++
++    // this used to wait forever for the connection to become ready
++    std::unique_ptr<PulseAudioPlayingDetector> detector;
++    const auto constructTime
++	= timed ([&] { detector = std::make_unique<PulseAudioPlayingDetector> (context, fullscreen); });
++
++    CHECK (constructTime < MAX_CONSTRUCT_TIME);
++
++    // this used to abort in libpulse, as the dead connection hands back no operation
++    const auto worstUpdate = runFrames (*detector, std::chrono::milliseconds (1500));
++
++    CHECK (worstUpdate < MAX_UPDATE_TIME);
++    CHECK_FALSE (detector->isConnected ());
++    CHECK_FALSE (detector->anythingPlaying ());
++
++    detector.reset ();
++    std::filesystem::remove_all (dir);
++}
++
++TEST_CASE ("PulseAudioPlayingDetector doesn't hang on a server that never answers") {
++    SilentServer silent;
++    ScopedPulseServer server (silent.address ());
++    ApplicationContext context (1, const_cast<char**> (detectorArgv));
++    FullScreenDetector fullscreen (context);
++
++    std::unique_ptr<PulseAudioPlayingDetector> detector;
++    const auto constructTime
++	= timed ([&] { detector = std::make_unique<PulseAudioPlayingDetector> (context, fullscreen); });
++
++    CHECK (constructTime < MAX_CONSTRUCT_TIME);
++
++    // long enough for the connection attempt to time out, without any frame waiting on it
++    const auto worstUpdate = runFrames (*detector, std::chrono::milliseconds (3000));
++
++    CHECK (worstUpdate < MAX_UPDATE_TIME);
++    CHECK_FALSE (detector->isConnected ());
++    CHECK_FALSE (detector->anythingPlaying ());
++}
++
++TEST_CASE ("PulseAudioPlayingDetector settings still apply without a server") {
++    const auto dir = makeTempDir ();
++    ScopedPulseServer server ("unix:" + (dir / "missing").string ());
++    ApplicationContext context (1, const_cast<char**> (detectorArgv));
++
++    SECTION ("anything fullscreen counts as playing") {
++	AlwaysFullscreen fullscreen (context);
++	PulseAudioPlayingDetector detector (context, fullscreen);
++
++	detector.update ();
++
++	CHECK (detector.anythingPlaying ());
++    }
++
++    SECTION ("automute turned off never counts as playing") {
++	AlwaysFullscreen fullscreen (context);
++	PulseAudioPlayingDetector detector (context, fullscreen);
++
++	context.settings.audio.automute = false;
++	detector.update ();
++
++	CHECK_FALSE (detector.anythingPlaying ());
++    }
++
++    std::filesystem::remove_all (dir);
++}

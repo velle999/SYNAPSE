@@ -1,0 +1,270 @@
+From 9535025421da27ffa6f406516dda6d28481551df Mon Sep 17 00:00:00 2001
+From: velle <velle2386@gmail.com>
+Date: Tue, 27 Oct 2026 20:39:11 -0500
+Subject: [PATCH 62/65] fix(render): the render clock stops while no frame is
+ drawn
+
+The engine draws when the compositor sends a frame callback, and none
+come while the wallpaper is covered; it also stops drawing while it
+pauses for a fullscreen window. g_Time was the wall clock, so the first
+frame after either stepped engine.frametime, every timeline animation
+and every particle system by the whole wait: a script fading over a
+second of frametimes finished in that one frame, and particles were
+simulated for minutes in one step.
+
+FrameClock moves the render clock by one frame when a frame comes more
+than half a second after the last, or before it (the wall clock is the
+system clock and can be set back). It also keeps the first frame's step
+at zero, which the static timeStarted flag did before.
+
+Proof: a fixture whose script logs any frametime over 0.5 s, frozen
+with SIGSTOP for 10 s on a headless rig: the previous build logs
+"frametime 10.023", this one nothing.
+---
+ CMakeLists.txt                                |  5 +-
+ .../Application/WallpaperApplication.cpp      | 12 ++--
+ .../Application/WallpaperApplication.h        |  4 ++
+ src/WallpaperEngine/Render/FrameClock.cpp     | 31 +++++++++
+ src/WallpaperEngine/Render/FrameClock.h       | 39 +++++++++++
+ .../Testing/Cases/FrameClock.cpp              | 67 +++++++++++++++++++
+ 6 files changed, 149 insertions(+), 9 deletions(-)
+ create mode 100644 src/WallpaperEngine/Render/FrameClock.cpp
+ create mode 100644 src/WallpaperEngine/Render/FrameClock.h
+ create mode 100644 src/WallpaperEngine/Testing/Cases/FrameClock.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4aee20b5..5c47c9db 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -436,6 +436,8 @@ set(COMMON_SOURCES
+     src/WallpaperEngine/Render/TextureProvider.h
+     src/WallpaperEngine/Render/TextureAnimation.cpp
+     src/WallpaperEngine/Render/TextureAnimation.h
++    src/WallpaperEngine/Render/FrameClock.cpp
++    src/WallpaperEngine/Render/FrameClock.h
+     src/WallpaperEngine/Render/PropertyAnimation.cpp
+     src/WallpaperEngine/Render/PropertyAnimation.h
+ 
+@@ -591,7 +593,8 @@ if(BUILD_TESTING)
+         src/WallpaperEngine/Testing/Cases/TextComposite.cpp
+         src/WallpaperEngine/Testing/Cases/SolidLayerSize.cpp
+         src/WallpaperEngine/Testing/Cases/MediaMetadata.cpp
+-        src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp)
++        src/WallpaperEngine/Testing/Cases/SceneScriptMatrices.cpp
++        src/WallpaperEngine/Testing/Cases/FrameClock.cpp)
+ endif()
+ 
+ add_library(
+diff --git a/src/WallpaperEngine/Application/WallpaperApplication.cpp b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+index 1c267375..4b3ca39a 100644
+--- a/src/WallpaperEngine/Application/WallpaperApplication.cpp
++++ b/src/WallpaperEngine/Application/WallpaperApplication.cpp
+@@ -871,7 +871,6 @@ void WallpaperApplication::setup () {
+ void WallpaperApplication::render () {
+     static time_t seconds;
+     static struct tm* timeinfo;
+-    static bool timeStarted = false;
+ 
+     if (this->m_isPaused) {
+ 	usleep (FULLSCREEN_CHECK_WAIT_TIME);
+@@ -898,13 +897,10 @@ void WallpaperApplication::render () {
+ 	timeinfo = localtime (&seconds);
+ 	g_Daytime = static_cast<float> ((timeinfo->tm_hour * 60) + timeinfo->tm_min) / (24.0f * 60.0f);
+ 
+-	// calculate the current time value
+-	const float now = m_videoDriver->getRenderTime ();
+-	// keep track of the previous frame's time. The first frame has none: the time spent loading
+-	// is no frame, and a script fading over a second of frametimes finished in one that covered it
+-	g_TimeLast = timeStarted ? g_Time : now;
+-	g_Time = now;
+-	timeStarted = true;
++	// the render clock, which stops while no frame is drawn (see FrameClock)
++	this->m_clock.tick (m_videoDriver->getRenderTime ());
++	g_TimeLast = static_cast<float> (this->m_clock.getLastTime ());
++	g_Time = static_cast<float> (this->m_clock.getTime ());
+ 	// update audio recorder
+ 	m_audioDriver->update ();
+ 	// update the media source
+diff --git a/src/WallpaperEngine/Application/WallpaperApplication.h b/src/WallpaperEngine/Application/WallpaperApplication.h
+index 1d1302a9..1cb92764 100644
+--- a/src/WallpaperEngine/Application/WallpaperApplication.h
++++ b/src/WallpaperEngine/Application/WallpaperApplication.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <algorithm>
+ #include <chrono>
+ #include <random>
+ 
+@@ -10,6 +11,7 @@
+ #include "WallpaperEngine/Render/Drivers/Detectors/FullScreenDetector.h"
+ #include "WallpaperEngine/Render/Drivers/GLFWOpenGLDriver.h"
+ #include "WallpaperEngine/Render/Drivers/Output/GLFWWindowOutput.h"
++#include "WallpaperEngine/Render/FrameClock.h"
+ #include "WallpaperEngine/Render/RenderContext.h"
+ 
+ #include "WallpaperEngine/Audio/Drivers/SDLAudioDriver.h"
+@@ -181,6 +183,8 @@ private:
+     bool m_screenShotTaken = false;
+     uint32_t m_nextFrameScreenshot = 0;
+     std::chrono::steady_clock::time_point m_pauseStart {};
++    /** a frame after a wait longer than half a second moves the render clock by one frame */
++    Render::FrameClock m_clock { 1.0 / std::max (1, m_context.settings.render.maximumFPS), 0.5 };
+     GLuint m_destinationFramebuffer = 0;
+ };
+ } // namespace WallpaperEngine::Application
+diff --git a/src/WallpaperEngine/Render/FrameClock.cpp b/src/WallpaperEngine/Render/FrameClock.cpp
+new file mode 100644
+index 00000000..2eebfb64
+--- /dev/null
++++ b/src/WallpaperEngine/Render/FrameClock.cpp
+@@ -0,0 +1,31 @@
++#include "FrameClock.h"
++
++using namespace WallpaperEngine::Render;
++
++FrameClock::FrameClock (double frameStep, double longestStep) :
++    m_frameStep (frameStep),
++    m_longestStep (longestStep) { }
++
++void FrameClock::tick (double wall) {
++    double now = wall - this->m_stopped;
++
++    if (!this->m_started) {
++	this->m_started = true;
++	this->m_lastTime = this->m_time = now;
++	return;
++    }
++
++    const double step = now - this->m_time;
++
++    if (step > this->m_longestStep || step < 0.0) {
++	this->m_stopped += step - this->m_frameStep;
++	now = this->m_time + this->m_frameStep;
++    }
++
++    this->m_lastTime = this->m_time;
++    this->m_time = now;
++}
++
++double FrameClock::getTime () const { return this->m_time; }
++
++double FrameClock::getLastTime () const { return this->m_lastTime; }
+diff --git a/src/WallpaperEngine/Render/FrameClock.h b/src/WallpaperEngine/Render/FrameClock.h
+new file mode 100644
+index 00000000..165d2039
+--- /dev/null
++++ b/src/WallpaperEngine/Render/FrameClock.h
+@@ -0,0 +1,39 @@
++#pragma once
++
++namespace WallpaperEngine::Render {
++/**
++ * The render clock (g_Time) and the previous frame's time (g_TimeLast), from the wall clock.
++ *
++ * The clock stops while no frame is drawn. A frame is drawn when the compositor sends a frame
++ * callback, and none come while the wallpaper is covered or while the engine pauses for a
++ * fullscreen window. On the wall clock alone, the next frame then stepped every script timer,
++ * timeline animation and particle system by the whole wait at once. A step longer than
++ * `longestStep`, or one backwards (the wall clock is the system clock and can be set back),
++ * counts as one frame of `frameStep` instead, as if the clock had been paused.
++ *
++ * The first frame has no previous one: the time spent loading is no frame, so its step is 0.
++ */
++class FrameClock {
++public:
++    /**
++     * @param frameStep how far the clock moves for a frame after a wait, in seconds
++     * @param longestStep the longest step a drawn frame takes, in seconds
++     */
++    FrameClock (double frameStep, double longestStep);
++
++    /** Moves the clock to wall-clock time `wall`, in seconds */
++    void tick (double wall);
++
++    [[nodiscard]] double getTime () const;
++    [[nodiscard]] double getLastTime () const;
++
++private:
++    double m_frameStep;
++    double m_longestStep;
++    /** wall-clock time the clock has spent stopped */
++    double m_stopped = 0.0;
++    double m_time = 0.0;
++    double m_lastTime = 0.0;
++    bool m_started = false;
++};
++} // namespace WallpaperEngine::Render
+diff --git a/src/WallpaperEngine/Testing/Cases/FrameClock.cpp b/src/WallpaperEngine/Testing/Cases/FrameClock.cpp
+new file mode 100644
+index 00000000..4ba941af
+--- /dev/null
++++ b/src/WallpaperEngine/Testing/Cases/FrameClock.cpp
+@@ -0,0 +1,67 @@
++#include <catch2/catch_approx.hpp>
++#include <catch2/catch_test_macros.hpp>
++
++#include "WallpaperEngine/Render/FrameClock.h"
++
++using Catch::Approx;
++using WallpaperEngine::Render::FrameClock;
++
++namespace {
++constexpr double FRAME = 1.0 / 30.0;
++FrameClock clock30 () { return FrameClock (FRAME, 0.5); }
++} // namespace
++
++TEST_CASE ("The first frame takes no step, whatever loading took") {
++    auto clock = clock30 ();
++
++    clock.tick (1.48);
++    CHECK (clock.getTime () == Approx (1.48));
++    CHECK (clock.getLastTime () == Approx (1.48));
++}
++
++TEST_CASE ("Drawn frames follow the wall clock") {
++    auto clock = clock30 ();
++
++    clock.tick (1.0);
++    clock.tick (1.0 + FRAME);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (FRAME));
++
++    // a slow frame, still a frame
++    clock.tick (1.0 + FRAME + 0.4);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (0.4));
++    CHECK (clock.getTime () == Approx (1.0 + FRAME + 0.4));
++}
++
++TEST_CASE ("A wait without frames does not pass on the clock") {
++    auto clock = clock30 ();
++
++    clock.tick (2.0);
++    clock.tick (2.0 + FRAME);
++    // covered, or paused for a fullscreen window, for ten minutes
++    clock.tick (602.0);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (FRAME));
++    CHECK (clock.getTime () == Approx (2.0 + 2 * FRAME));
++
++    // and frames after it follow the wall clock again, from where it stopped
++    clock.tick (602.0 + FRAME);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (FRAME));
++    CHECK (clock.getTime () == Approx (2.0 + 3 * FRAME));
++
++    // a second wait adds to the first
++    clock.tick (700.0);
++    clock.tick (700.0 + FRAME);
++    CHECK (clock.getTime () == Approx (2.0 + 5 * FRAME));
++}
++
++TEST_CASE ("A wall clock set back is one frame, not a step backwards") {
++    auto clock = clock30 ();
++
++    clock.tick (5000.0);
++    clock.tick (5000.0 + FRAME);
++    clock.tick (1000.0);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (FRAME));
++    CHECK (clock.getTime () == Approx (5000.0 + 2 * FRAME));
++
++    clock.tick (1000.0 + FRAME);
++    CHECK (clock.getTime () - clock.getLastTime () == Approx (FRAME));
++}

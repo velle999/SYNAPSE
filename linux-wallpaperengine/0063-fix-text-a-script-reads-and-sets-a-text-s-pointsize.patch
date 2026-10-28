@@ -1,0 +1,26 @@
+From 69cbbd6fd921413d8718b6263e85efd2871ac67d Mon Sep 17 00:00:00 2001
+From: velle <velle2386@gmail.com>
+Date: Tue, 27 Oct 2026 20:39:16 -0500
+Subject: [PATCH 63/65] fix(text): a script reads and sets a text's pointsize
+
+The property was registered as "pointSize". Wallpaper Engine's
+SceneScript API (ITextLayer in lib.sceneScript.d.ts) and the scene file
+both call it "pointsize", so thisLayer.pointsize was undefined and a
+write to it was dropped.
+---
+ src/WallpaperEngine/Render/Objects/CText.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/WallpaperEngine/Render/Objects/CText.cpp b/src/WallpaperEngine/Render/Objects/CText.cpp
+index 7f31cd5e..616700ef 100644
+--- a/src/WallpaperEngine/Render/Objects/CText.cpp
++++ b/src/WallpaperEngine/Render/Objects/CText.cpp
+@@ -145,7 +145,7 @@ CText::CText (Wallpapers::CScene& scene, const Text& text) :
+     this->registerProperty ("origin", *text.origin->value);
+     this->registerProperty ("scale", *text.scale->value);
+     this->registerProperty ("visible", *text.visible->value);
+-    this->registerProperty ("pointSize", *text.pointSize->value);
++    this->registerProperty ("pointsize", *text.pointSize->value);
+     this->registerProperty ("text", *text.text->value);
+     this->registerConstant ("size", DynamicValue (text.size));
+     // not saved as properties a script drives, but a script sets them: a music widget turns its
