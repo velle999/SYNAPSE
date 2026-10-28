@@ -87,6 +87,11 @@ SRC="${SYN_UPDATE_SRC:-/var/lib/synapse-src}"
 
 LOCAL_REPO=/var/cache/synapseos
 
+# How many retired versions of each package $LOCAL_REPO/superseded keeps. With
+# the installed one in $LOCAL_REPO itself that is the last three, which is what
+# paccache keeps by default. See trim_superseded.
+SUPERSEDED_KEEP=2
+
 # Read only to tell whether a RETIRED package's repository is configured here.
 PACMAN_CONF="${SYN_UPDATE_PACMAN_CONF:-/etc/pacman.conf}"
 
@@ -2080,6 +2085,7 @@ refresh_local_repo() {
 
     prune_superseded
     retire_shadowing
+    trim_superseded
     rebuild_db
     sudo_safe pacman -Sy --quiet --noconfirm >/dev/null 2>&1 || true
     [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
@@ -2130,9 +2136,8 @@ rebuild_db() {
 # package without hesitating, and `-Syuu` would take the whole system back.
 #
 # A repo entry that can only ever offer a downgrade has no upside, so move those
-# files out of the indexed directory. Moved rather than deleted: they are the
-# only copy of what the installing ISO shipped, which is occasionally worth
-# having, and they are small.
+# files out of the indexed directory. Moved rather than deleted, so the last few
+# versions stay at hand to go back to; trim_superseded bounds how many.
 prune_superseded() {
     local f name ver inst moved=0
     shopt -s nullglob
@@ -2189,6 +2194,36 @@ retire_shadowing() {
     done < <(shadowing_files)
     [ "$moved" -gt 0 ] &&
         info "retired $moved package file(s) that now come from another repository -> $LOCAL_REPO/superseded"
+    return 0
+}
+
+# Delete all but the SUPERSEDED_KEEP most recently retired files of each
+# package in superseded/.
+#
+# Every apply retires the version it replaced, so without this the directory
+# grew by one package per component per update and was never emptied: the dev
+# box had 959 files and 15 GB there, eleven of them 770 MB chibi builds.
+#
+# "Most recent" is by mtime. A file gets its mtime when it is published into
+# $LOCAL_REPO and mv keeps it, so the newest are the versions this machine ran
+# last, which is what going back wants even after a downgrade or a hold.
+trim_superseded() {
+    local dir="$LOCAL_REPO/superseded" f base name removed=0
+    local -A seen=()
+    [ -d "$dir" ] || return 0
+    while IFS= read -r f; do
+        base=${f##*/}
+        # <name>-<pkgver>-<pkgrel>-<arch>.pkg.tar.zst. pacman allows no dash in
+        # the last three, so the name is what is left without them — dashes in
+        # the name (syn-install, synui-debug) included.
+        name=${base%-*-*-*.pkg.tar.zst}
+        [ "$name" != "$base" ] || continue
+        seen[$name]=$(( ${seen[$name]:-0} + 1 ))
+        [ "${seen[$name]}" -gt "$SUPERSEDED_KEEP" ] || continue
+        sudo_safe rm -f "$f" "$f.sig" && removed=$((removed + 1))
+    done < <(ls -1t "$dir"/*.pkg.tar.zst 2>/dev/null)
+    [ "$removed" -gt 0 ] &&
+        info "deleted $removed old package file(s) from $dir, keeping the last $SUPERSEDED_KEEP of each"
     return 0
 }
 

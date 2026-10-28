@@ -313,7 +313,15 @@ pkgver=0.1.0
 #   HOME=/) started it too; three minutes at the login screen would have run
 #   `syn-update ping` there. ConditionUser=!@system on the timer and the service.
 #   preflight's userunits check refuses a package-enabled user unit without it.
-pkgrel=69
+# 70: superseded/ keeps the last two versions of each package and deletes the
+#   rest. Every apply retired the version it replaced there and nothing ever
+#   removed one: 959 files, 15 GB on the dev box. Kept by when each was
+#   published, so a downgrade's predecessor stays. The apply that installs
+#   this runs the old script; the next one trims. tests/superseded_trim_test.sh.
+#   build-all.sh (in the tree, so the next apply already has it) now removes a
+#   script package's previous build before makepkg, as it always did for the
+#   others: /var/lib/synapse-src held 264 old packages, 12.5 GB.
+pkgrel=70
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')

@@ -384,6 +384,12 @@ jobs:
           ./syn-update/tests/signed_update_test.sh || rc=$?
           [ "${rc:-0}" = 0 ] || [ "${rc:-0}" = 77 ] || exit "$rc"
 
+      # Every apply retires the version it replaced into superseded/, which
+      # grew without end until trim_superseded. Plain files in a scratch
+      # directory, so it needs nothing from the runner.
+      - name: syn-update keeps the last two retired packages
+        run: ./syn-update/tests/superseded_trim_test.sh
+
       # build-all.sh installs one package per transaction, and pacman deletes a
       # file that moved between packages when its old owner upgrades later —
       # synapse-voice lost both speech models that way. The heal it runs after

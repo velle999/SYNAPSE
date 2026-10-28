@@ -202,6 +202,10 @@ build_script_pkg() {
     # is /var/lib/synapse-src on every installed machine. Write permission back,
     # not rm: some script packages keep tracked files under src/.
     [ -d src ] && chmod -R u+w src 2>/dev/null
+    # The previous build's packages go, as build_component's do. Nothing else
+    # removed them: /var/lib/synapse-src on the dev box held every chibi,
+    # syn-update and syn-install it had ever built, 264 files and 12.5 GB.
+    rm -f "$BASE/$name"/*.pkg.tar.zst
     makepkg -sf --noconfirm --config "$BASE/tools/makepkg-build-all.conf"
     local pkg
     pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
